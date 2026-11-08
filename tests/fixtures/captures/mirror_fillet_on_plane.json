@@ -1,0 +1,239 @@
+{
+  "_comment": "Rounded edge on the mirror plane maps onto itself: nothing left to copy.",
+  "capture": 1,
+  "fusion": "2.0.0",
+  "design": "Test",
+  "up_axis": "z",
+  "target": {
+    "token": "t1",
+    "name": "Body1",
+    "box": {
+      "min": [
+        -20,
+        -10,
+        0
+      ],
+      "max": [
+        20,
+        10,
+        10
+      ]
+    },
+    "volume_mm3": 1000.0
+  },
+  "items": [
+    {
+      "index": 0,
+      "name": "Sketch1",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "component_root": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 1,
+      "name": "Extrude1",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "component_root": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "operation": "newBody",
+        "profiles": [
+          {
+            "sketch": "Sketch1",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      -20,
+                      -10
+                    ],
+                    "end": [
+                      20,
+                      -10
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      20,
+                      -10
+                    ],
+                    "end": [
+                      20,
+                      10
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      20,
+                      10
+                    ],
+                    "end": [
+                      -20,
+                      10
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      -20,
+                      10
+                    ],
+                    "end": [
+                      -20,
+                      -10
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 10.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [
+          {
+            "token": "t1",
+            "name": "Body1"
+          }
+        ],
+        "target_box_before": null,
+        "end_offset": 10.0
+      }
+    },
+    {
+      "index": 2,
+      "name": "Sketch2",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "component_root": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 3,
+      "name": "Fillet1",
+      "type": "FilletFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "component_root": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "rolling_ball": true,
+        "sets": [
+          {
+            "kind": "constant",
+            "radius": 2.0,
+            "continuity": "tangent",
+            "input_kinds": [
+              "edge"
+            ],
+            "edges": [
+              {
+                "token": "e0",
+                "closed": false,
+                "points": [
+                  [
+                    0,
+                    -10,
+                    10
+                  ]
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "index": 4,
+      "name": "Mirror1",
+      "type": "MirrorFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "component_root": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "entity_type": "features",
+        "sources": [
+          3
+        ],
+        "plane": {
+          "point": [
+            0,
+            0,
+            0
+          ],
+          "normal": [
+            1,
+            0,
+            0
+          ]
+        },
+        "combine": false
+      }
+    }
+  ]
+}

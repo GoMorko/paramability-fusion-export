@@ -1,0 +1,389 @@
+{
+  "_comment": "Boss and a hole, then the whole body mirrored and joined.",
+  "capture": 1,
+  "fusion": "2.0.0",
+  "design": "Test",
+  "up_axis": "z",
+  "target": {
+    "token": "t1",
+    "name": "Body1",
+    "box": {
+      "min": [
+        -20,
+        -10,
+        0
+      ],
+      "max": [
+        20,
+        10,
+        10
+      ]
+    },
+    "volume_mm3": 1000.0
+  },
+  "items": [
+    {
+      "index": 0,
+      "name": "Sketch1",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "component_root": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 1,
+      "name": "Extrude1",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "component_root": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "operation": "newBody",
+        "profiles": [
+          {
+            "sketch": "Sketch1",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      -20,
+                      -10
+                    ],
+                    "end": [
+                      20,
+                      -10
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      20,
+                      -10
+                    ],
+                    "end": [
+                      20,
+                      10
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      20,
+                      10
+                    ],
+                    "end": [
+                      -20,
+                      10
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      -20,
+                      10
+                    ],
+                    "end": [
+                      -20,
+                      -10
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 10.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [
+          {
+            "token": "t1",
+            "name": "Body1"
+          }
+        ],
+        "target_box_before": null,
+        "end_offset": 10.0
+      }
+    },
+    {
+      "index": 2,
+      "name": "Sketch2",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "component_root": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 3,
+      "name": "Extrude2",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "component_root": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "operation": "join",
+        "profiles": [
+          {
+            "sketch": "Sketch2",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                10
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "circle",
+                    "center": [
+                      -10,
+                      0
+                    ],
+                    "radius": 3
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 5.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [
+          {
+            "token": "t1",
+            "name": "Body1"
+          }
+        ],
+        "target_box_before": {
+          "min": [
+            -20,
+            -10,
+            0
+          ],
+          "max": [
+            20,
+            10,
+            10
+          ]
+        },
+        "end_offset": 5.0
+      }
+    },
+    {
+      "index": 4,
+      "name": "Sketch5",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "component_root": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 5,
+      "name": "Extrude5",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "component_root": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "operation": "cut",
+        "profiles": [
+          {
+            "sketch": "Sketch5",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                10
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "circle",
+                    "center": [
+                      10,
+                      0
+                    ],
+                    "radius": 2
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": -4.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [
+          {
+            "token": "t1",
+            "name": "Body1"
+          }
+        ],
+        "target_box_before": {
+          "min": [
+            -20,
+            -10,
+            0
+          ],
+          "max": [
+            20,
+            10,
+            10
+          ]
+        },
+        "end_offset": -4.0
+      }
+    },
+    {
+      "index": 6,
+      "name": "Mirror1",
+      "type": "MirrorFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "component_root": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "entity_type": "bodies",
+        "sources": [],
+        "plane": {
+          "point": [
+            0,
+            0,
+            0
+          ],
+          "normal": [
+            1,
+            0,
+            0
+          ]
+        },
+        "combine": true
+      }
+    }
+  ]
+}
