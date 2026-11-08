@@ -1,0 +1,41 @@
+"""Unit helpers. Fusion stores lengths in cm and angles in radians."""
+import math
+
+LENGTH_UNITS = {"mm", "cm", "m", "in", "ft", "um"}
+ANGLE_UNITS = {"deg", "rad", "degree", "degrees", "radian", "radians"}
+
+_NORMAL = {"degree": "deg", "degrees": "deg", "radian": "rad", "radians": "rad"}
+
+
+def unit_kind(unit):
+    """Return 'length', 'angle' or 'count' for a Fusion unit string."""
+    u = (unit or "").strip().lower()
+    if u in LENGTH_UNITS:
+        return "length"
+    if u in ANGLE_UNITS:
+        return "angle"
+    return "count"
+
+
+def manifest_unit(unit):
+    """Return the manifest unit: 'mm', 'deg' or ''."""
+    kind = unit_kind(unit)
+    return {"length": "mm", "angle": "deg"}.get(kind, "")
+
+
+def cm_to_mm(value):
+    return value * 10.0
+
+
+def rad_to_deg(value):
+    return math.degrees(value)
+
+
+def to_manifest_value(value, unit):
+    """Convert a Fusion internal value (cm, rad, plain) to manifest numbers, rounded to 6 places."""
+    kind = unit_kind(unit)
+    if kind == "length":
+        value = cm_to_mm(value)
+    elif kind == "angle":
+        value = rad_to_deg(value)
+    return round(value, 6)

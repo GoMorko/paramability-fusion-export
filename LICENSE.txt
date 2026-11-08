@@ -1,0 +1,4 @@
+PLACEHOLDER: the owner picks a licence before the first push.
+
+Replace this file with the full text of the chosen licence. The sibling add-in
+(slicer-aware-3mf-export) uses GNU GPL version 3.
