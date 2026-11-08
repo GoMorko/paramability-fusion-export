@@ -1,0 +1,25 @@
+{
+  "_comment": "Capture version 2 is not supported.",
+  "capture": 2,
+  "fusion": "2.0.0",
+  "design": "Test",
+  "up_axis": "z",
+  "target": {
+    "token": "t1",
+    "name": "Body1",
+    "box": {
+      "min": [
+        0,
+        0,
+        0
+      ],
+      "max": [
+        40,
+        20,
+        10
+      ]
+    },
+    "volume_mm3": 8000.0
+  },
+  "items": []
+}

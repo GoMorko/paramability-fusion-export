@@ -1,0 +1,175 @@
+{
+  "features": [
+    {
+      "combine": "new",
+      "distance": 10,
+      "id": "body",
+      "kind": "extrude",
+      "label": "Block",
+      "sketch": {
+        "on": {
+          "normal": [0, 0, 1],
+          "origin": [0, 0, 0],
+          "xDir": [1, 0, 0]
+        },
+        "outer": {
+          "center": [0, 0],
+          "height": 30,
+          "kind": "rect",
+          "width": 40
+        }
+      }
+    },
+    {
+      "combine": "add",
+      "distance": 6,
+      "id": "boss",
+      "kind": "extrude",
+      "label": "Flat sided boss",
+      "sketch": {
+        "on": {
+          "normal": [0, 0, 1],
+          "origin": [0, 0, 10],
+          "xDir": [1, 0, 0]
+        },
+        "outer": {
+          "center": [10, 0],
+          "kind": "circle",
+          "radius": 6
+        }
+      },
+      "within": {
+        "on": {
+          "normal": [0, 0, 1],
+          "origin": [0, 0, 0],
+          "xDir": [1, 0, 0]
+        },
+        "outer": {
+          "center": [10, 0],
+          "height": 20,
+          "kind": "rect",
+          "width": 8
+        }
+      }
+    },
+    {
+      "combine": "cut",
+      "extent": "through",
+      "id": "slot",
+      "kind": "extrude",
+      "label": "Short slot",
+      "sketch": {
+        "on": {
+          "normal": [0, 0, 1],
+          "origin": [0, 0, 10],
+          "xDir": [1, 0, 0]
+        },
+        "outer": {
+          "center": [0, 0],
+          "height": 4,
+          "kind": "rect",
+          "width": 36
+        }
+      },
+      "within": {
+        "on": {
+          "normal": [0, 0, 1],
+          "origin": [0, 0, 0],
+          "xDir": [1, 0, 0]
+        },
+        "outer": {
+          "center": [0, 0],
+          "kind": "circle",
+          "radius": 5
+        }
+      }
+    },
+    {
+      "angleDeg": 360,
+      "axis": {
+        "dir": [0, 1],
+        "point": [0, 0]
+      },
+      "combine": "add",
+      "id": "collar",
+      "kind": "revolve",
+      "label": "Collar pieces",
+      "sketch": {
+        "on": {
+          "normal": [0, 1, 0],
+          "origin": [-12, 0, 10],
+          "xDir": [1, 0, 0]
+        },
+        "outer": {
+          "kind": "polygon",
+          "points": [
+            [3, -1.5],
+            [5, -1.5],
+            [5, 1.5],
+            [3, 1.5]
+          ]
+        }
+      },
+      "within": {
+        "on": {
+          "normal": [0, 0, 1],
+          "origin": [0, 0, 0],
+          "xDir": [1, 0, 0]
+        },
+        "outer": {
+          "center": [-12, 0],
+          "height": 6,
+          "kind": "rect",
+          "width": 20
+        }
+      }
+    },
+    {
+      "combine": "cut",
+      "id": "pocket",
+      "kind": "loft",
+      "label": "Half cone pocket",
+      "sections": [
+        {
+          "on": {
+            "normal": [0, 0, 1],
+            "origin": [0, 0, 4],
+            "xDir": [1, 0, 0]
+          },
+          "outer": {
+            "center": [0, 10],
+            "kind": "circle",
+            "radius": 2
+          }
+        },
+        {
+          "on": {
+            "normal": [0, 0, 1],
+            "origin": [0, 0, 11],
+            "xDir": [1, 0, 0]
+          },
+          "outer": {
+            "center": [0, 10],
+            "kind": "circle",
+            "radius": 4
+          }
+        }
+      ],
+      "within": {
+        "on": {
+          "normal": [0, 0, 1],
+          "origin": [0, 0, 0],
+          "xDir": [1, 0, 0]
+        },
+        "outer": {
+          "center": [2, 10],
+          "height": 10,
+          "kind": "rect",
+          "width": 4
+        }
+      }
+    }
+  ],
+  "schema": "paramability.recipe",
+  "version": 10
+}
