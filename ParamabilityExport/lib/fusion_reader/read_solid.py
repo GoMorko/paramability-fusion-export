@@ -130,7 +130,7 @@ def _line_axis(line):
     return {"point": geo.point(line.startPoint), "dir": geo.unit_vector(_Delta(line.startPoint, line.endPoint))}
 
 
-def _axis(entity):
+def axis_of(entity):
     """Axis of a revolve from a sketch line, construction axis, linear edge or cylindrical face."""
     name = geo.type_name(entity)
     if name == "SketchLine":
@@ -170,7 +170,7 @@ def revolve_before(feature, ctx):
     return {
         "operation": _operation(feature.operation),
         "profiles": read_profiles(feature.profile),
-        "axis": geo.safe(lambda: _axis(feature.axis), {"kind": "other"}),
+        "axis": geo.safe(lambda: axis_of(feature.axis), {"kind": "other"}),
         "project_axis": geo.safe(lambda: bool(feature.isProjectAxis), False),
         "extent": _revolve_extent(feature.extentDefinition),
         "participants": geo.safe(lambda: geo.body_refs(feature.participantBodies), []),
