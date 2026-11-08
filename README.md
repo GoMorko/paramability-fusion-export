@@ -25,6 +25,12 @@ The button "Export for Paramability" shows in the Utilities tab.
 6. Open the file in Paramability with Open.
 
 One size saves a plain part. Two or more sizes save a part with a dropdown.
+
+With one size, "Export as a recipe" (on by default) also copies the modeling steps: sketches, extrudes, revolves,
+holes, fillets, chamfers, shells, patterns and mirrors of one body. Paramability then opens the part as steps you can
+edit. When a step cannot be copied, the file keeps the shape as a plain part and the message after the export names
+the first step that stopped it. A copy of what the add-in read from Fusion is saved inside the file as `report.json`.
+
 After the export, a cancel or a size that does not build, your parameters are set back to their old values.
 
 ## How it works
@@ -40,6 +46,9 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 ## Limits
 
 - One solid body per export.
+- A recipe covers the picked body only, built from the root component. Thin extrudes, spline outlines, variable fillets,
+  symmetric patterns, sweeps, lofts and other steps are not copied yet: the file then holds a plain part.
+- To read the steps, the add-in moves the timeline marker through the design and puts it back at the end.
 - Only plain number parameters can be columns. A parameter worked out by a formula cannot, and neither can one in a unit this export cannot convert (units other than mm, cm, m, in, ft, deg, rad or none).
 - Paramability opens up to 256 MB per size and 1 GB per file. The export stops with a message above that.
 - Only bodies of the top level of the design can be picked, not bodies inside a component.

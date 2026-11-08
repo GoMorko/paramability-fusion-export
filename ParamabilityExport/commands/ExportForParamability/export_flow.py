@@ -9,9 +9,11 @@ from ...lib.export_plan.apply import RowBuildError
 from ...lib.export_plan.assemble import build_package
 from ...lib.export_plan.naming import (
     addin_version, design_title, package_file_name, saved_message, writer_text)
+from ...lib.export_plan.recipe_export import plan_single_export, recipe_saved_message
 from ...lib.export_plan.runner import ExportCancelled, RowExport
 from ...lib.export_plan.sizes_text import pick_default_index, read_sizes
 from ...lib.fusion_reader import design_info
+from ...lib.fusion_reader.capture import MarkerError, read_capture
 from ...lib.fusion_reader.rows import DesignParameterStore
 from ...lib.export_plan.errors import StepExportError
 from ...lib.export_plan.temp_copy import marker_at_end, MARKER_MESSAGE
@@ -50,8 +52,21 @@ def run_export(design, parameters, form):
     token = body.entityToken
     store = DesignParameterStore(design)
 
+    as_recipe = bool(form.get("as_recipe")) and len(read.rows) == 1
+    captured = {}
+
     def export_step(path):
-        export_body_step(design, resolve_body(design, token, body), path)
+        current = resolve_body(design, token, body)
+        export_body_step(design, current, path)
+        if as_recipe:
+            # Read while the size values are applied, so the recipe matches the STEP. A failure only costs the recipe.
+            try:
+                captured["value"] = read_capture(design, current, up_axis=form["up_axis"])
+            except MarkerError:
+                raise
+            except Exception as exc:
+                log(f"capture failed: {exc!r}")
+                captured["value"] = exc
 
     job = RowExport(store, units, export_step)
     try:
@@ -62,14 +77,21 @@ def run_export(design, parameters, form):
             writer = writer_text(
                 addin_version(os.path.join(_ADDIN_DIR, config.ADDIN_NAME + ".manifest")),
                 design_info.fusion_version(app))
-            manifest, files = build_package(
-                title, writer, results, read.columns, parameters, default_index,
-                form["choice_name"], form["up_axis"])
+            if as_recipe:
+                manifest, files, _report = plan_single_export(
+                    captured.get("value", RuntimeError("The steps were not read.")), results[0]["step_file"],
+                    title, writer, form["up_axis"])
+                message = recipe_saved_message(manifest, os.path.basename(out_path))
+            else:
+                manifest, files = build_package(
+                    title, writer, results, read.columns, parameters, default_index,
+                    form["choice_name"], form["up_axis"])
+                message = saved_message(len(results), os.path.basename(out_path))
             write_package(out_path, manifest, files)
-        message_box(saved_message(len(results), os.path.basename(out_path)))
+        message_box(message)
     except ExportCancelled:
         message_box("Export cancelled. Your parameters are back to their values.")
-    except (RowBuildError, StepExportError, PackageCapError) as exc:
+    except (RowBuildError, StepExportError, PackageCapError, MarkerError) as exc:
         message_box(f"{exc}\n\nNothing was saved. Your parameters are back to their values.", error=True)
     except Exception:
         error_box("The export stopped. Nothing was saved.")

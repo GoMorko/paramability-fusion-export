@@ -49,6 +49,22 @@ def build_step_only_manifest(name, writer, up_axis="z", notes=None):
     }
 
 
+def build_recipe_manifest(name, writer, up_axis="z", notes=None, checks=None):
+    """A translated part: the STEP files plus recipe.json. checks: [{'values': {...}, 'step': 'checks/x.step'}]."""
+    return {
+        "schema": SCHEMA,
+        "version": VERSION,
+        "kind": "recipe",
+        "name": name,
+        "upAxis": up_axis,
+        "writer": writer,
+        "notes": list(notes or []),
+        "part": "part.step",
+        "recipe": "recipe.json",
+        "checks": [dict(c) for c in (checks or [])],
+    }
+
+
 def row_step_path(number):
     return f"rows/{number:02d}.step"
 

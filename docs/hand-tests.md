@@ -59,6 +59,38 @@ The add-in exports the picked body alone. The choice is the constant `MULTI_BODY
 - [ ] The numbers of the picked size show in the Variables panel.
 - [ ] A one size export opens as a plain part.
 
+## 7. Recipe export (one size, "Export as a recipe" on)
+
+Run in Fusion, then open each file in Paramability with Open. "Matches" means the toast "Matches your Fusion part."
+When a design surprises you, send `report.json` from inside the file (a zip): its `capture` becomes a test fixture.
+The calls and enum names these tests pin are in the "Capture reader calls to watch" parts below.
+
+- [ ] **Plate**: a sketched rectangle with a pocket, two through holes and an L shaped boss. Lands as a recipe and
+      matches. Put two features in a timeline group to check that groups are walked.
+- [ ] **Tilted sketch**: a boss on a sketch on an angled construction plane, offset from the origin. Matches.
+- [ ] **Turned knob**: a full revolve, a 90 degree revolve cut, a symmetric 120 degree revolve. Matches.
+- [ ] **Extrude directions**: a flipped one sided extrude, a two sided extrude, a symmetric extrude with "full
+      length" on and off, a 5 degree taper, a cut "through all" one way, a join "to" a parallel face. Matches.
+- [ ] **Holes**: a blind hole with a 118 degree tip, the same with a flat drill point, a through counterbore, a
+      through countersink, a hole on three sketch points. Matches; the step list shows a revolve for the tipped hole.
+- [ ] **Bin**: a box shelled with the top open (2 mm), outer vertical edges filleted, a 3 by 2 pattern of magnet
+      holes with one copy suppressed, a circular pattern of slots over 90 degrees, a mirrored boss. Matches; the
+      pattern has one copy left out.
+- [ ] **Combine**: a separate cylinder body cut from the main body with Combine. Matches.
+- [ ] **Marker and document**: after each export the timeline marker is at the end, the design is unchanged, and
+      Fusion's undo list and "unsaved changes" mark are as before (or, if moving the marker marks the document
+      changed, note it). Cancel, and a forced error during the read, leave the marker at the end and the parameters
+      as they were.
+- [ ] **Fixed shape**: a part with an emboss, and one with a variable radius fillet. Each saves as a fixed shape
+      (plain CAD part) and the message after the export names that feature.
+- [ ] **Y up**: a design made with the Y up preference, exported with "Y up". It stands upright; after a size edit
+      in Paramability the rebuild still stands upright.
+- [ ] **Speed**: a design with about 100 timeline items exports in under a minute.
+- [ ] **Several sizes**: a two row export still lands as size choices (one shape per size), and the "Export as a
+      recipe" box is hidden while the sizes box holds two or more rows.
+- [ ] **Single size with values**: one row that changes a parameter. The recipe and the STEP both hold the changed
+      value, and the parameter is back to its old value after the export.
+
 ## Fusion calls to watch
 
 These were written from the API reference and never run:
@@ -108,3 +140,33 @@ read the capture in `report.json`.
 - `TimelineObject.isGroup`: group objects are skipped; check that grouped features still appear as items.
 - Moving `Timeline.markerPosition` once per item: the marker ends at the end, the document is not marked changed and
   the undo list is as before.
+
+## Capture reader calls to watch (fillet, chamfer, shell, patterns, mirror)
+
+These members and values were written from the API reference or plan and never run. Run the fillet (edges, face and
+tangent chain inputs, two radii), chamfer (equal, two distances, distance and angle), shell (open top, body input),
+rectangular pattern (row, grid, flipped direction, suppressed copy), circular pattern and mirror designs, and read the
+capture in `report.json`.
+
+- Enum names are matched by text: `SurfaceContinuityTypes` (fillet continuity), `ChamferCornerTypes`, `ShellTypes`,
+  `PatternEntityTypes`, `PatternDistanceTypes`. An unreadable member gives `other` for fillet continuity and pattern
+  distance type, `chamfer` for the corner type and `sharp` for the shell type; an unknown name gives `other`.
+- Edge set type names are matched by text: `ConstantRadius`, `VariableRadius`, `ChordLength`, `Asymmetric` or
+  `DoubleRadius` (fillet); `EqualDistance`, `TwoDistances`, `DistanceAndAngle` (chamfer). The member names
+  `ChamferEdgeSet.distanceOne`, `distanceTwo`, `angle`, `isFlipped`.
+- `FilletEdgeSet.isTangentChain` (default true when unreadable) and `FilletFeature.isRollingBallCorner`.
+- `BRepEdge.tangentiallyConnectedEdges` and `BRepFace.tangentiallyConnectedFaces`: whether the list includes the edge
+  or face itself (the reader adds it first and drops repeats, so both work). `BRepFace.edges`.
+- `ShellFeature.inputEntities` holding faces or a body, `isTangentChain`, `outsideThickness`.
+- `RectangularPatternFeature.directionOne` and `directionTwo` as vectors; when absent the reader falls back to
+  `directionOneEntity` and `directionTwoEntity` (sketch line, construction axis, linear edge, planar face). Check which
+  one the capture used: a null `direction_one` means neither was readable. The pattern direction sign for a flipped
+  pattern.
+- `quantityOne`, `quantityTwo`, `quantity` as unitless model parameters; `distanceOne`, `distanceTwo` as lengths;
+  `totalAngle` as an angle; `isSymmetricInDirectionOne`, `isSymmetricInDirectionTwo`, `isSymmetric`.
+- `patternElements` read with the marker just after the item: `PatternElement.id`, `isSuppressed`, `transform`. The
+  first element is the identity; compare each origin with the lattice step. Whether suppressed copies are listed.
+- `suppressedElementsIds` as a list of integers.
+- `CircularPatternFeature.axis` (construction axis, sketch line, linear edge, cylindrical face).
+- `Feature.timelineObject.index` of each pattern or mirror input feature matches the item `index` in the capture.
+- `MirrorFeature.patternEntityType`, `mirrorPlane` (construction plane or planar face), `isCombine`.

@@ -13,6 +13,7 @@ CHOICE_ID = "pm_choice"
 DEFAULT_ID = "pm_default"
 UP_ID = "pm_up"
 NOTICE_ID = "pm_notice"
+RECIPE_ID = "pm_recipe"
 
 UP_LABELS = {"z": "Z up", "y": "Y up"}
 DEFAULT_CHOICE_NAME = "Size"
@@ -44,6 +45,11 @@ def build(command, parameters, body, up_axis):
     status = inputs.addTextBoxCommandInput(STATUS_ID, "", "", 3, True)
     status.isVisible = False
 
+    recipe = inputs.addBoolValueInput(RECIPE_ID, "Export as a recipe", True, "", True)
+    recipe.tooltip = "Copy the modeling steps so Paramability can rebuild the part."
+    recipe.tooltipDescription = (
+        "Works with a single size. Steps that cannot be copied save the part as a fixed shape instead. "
+        "With two or more sizes the file holds one shape per size.")
     inputs.addStringValueInput(CHOICE_ID, "Dropdown name", DEFAULT_CHOICE_NAME)
     default = inputs.addDropDownCommandInput(DEFAULT_ID, "Default size", adsk.core.DropDownStyles.TextListDropDownStyle)
     default.listItems.add("Default", True)
@@ -65,6 +71,7 @@ def read_form(inputs):
         "sizes_text": inputs.itemById(SIZES_ID).text,
         "choice_name": inputs.itemById(CHOICE_ID).value.strip(),
         "default_name": default_item.name if default_item else "",
+        "as_recipe": bool(inputs.itemById(RECIPE_ID).value),
         "up_axis": "y" if up_item and up_item.name == UP_LABELS["y"] else "z",
     }
 
@@ -73,11 +80,13 @@ def refresh(inputs, parameters):
     """Rebuild the default size list from the sizes text and show the first problem, if any."""
     read = read_sizes(inputs.itemById(SIZES_ID).text, parameters)
     status = inputs.itemById(STATUS_ID)
+    recipe = inputs.itemById(RECIPE_ID)
     if read.problems:
         status.text = "\n".join(read.problems[:3])
         status.isVisible = True
         return
     status.isVisible = False
+    recipe.isVisible = len(read.rows) <= 1
     dropdown = inputs.itemById(DEFAULT_ID)
     current = dropdown.selectedItem.name if dropdown.selectedItem else ""
     index = pick_default_index(read.rows, current)
