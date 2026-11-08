@@ -1,8 +1,175 @@
-"""Hole and thread handler (HoleFeature, ThreadFeature). Stub: refuses until its unit lands."""
+"""Hole and thread handlers (HoleFeature, ThreadFeature).
+
+A hole with a flat end, or through all the way, is a recipe `hole`. A blind hole with a drill tip has no recipe
+`hole` form, so it becomes a revolve cut of the hole's profile (shank, optional step or cone, and the cone of the
+tip) turned about the hole axis. Measured `end_points` and `side_cylinders` check the stored direction and size.
+"""
+import math
+
+from . import vec
 from .result import Refusal
 
 TYPES = ("HoleFeature", "ThreadFeature")
 
+MARGIN_MM = 0.01
+DIAMETER_TOL = 1e-3
+BEHIND_TOL = 1e-6
+FLAT_TIP_DEG = 179.999
+MIN_COUNTERSINK_DEG, MAX_COUNTERSINK_DEG = 60.0, 120.0
+TAPPED = ("tapped", "taperTapped")
+
+
+def _n(value):
+    return round(value, 9) + 0.0
+
+
+def _vec(values):
+    return [_n(v) for v in values]
+
+
+def _is_flat(tip_deg):
+    return tip_deg is None or tip_deg >= FLAT_TIP_DEG
+
+
+def _perpendicular(direction):
+    """A unit vector square to `direction`: d x world X, or d x world Y when d is close to X."""
+    other = [0.0, 1.0, 0.0] if abs(direction[0]) > 0.9 else [1.0, 0.0, 0.0]
+    return vec.unit(vec.cross(direction, other))
+
+
+def _direction(data, ctx):
+    """Unit hole direction (into the material), negated when a measured end lies behind the positions."""
+    direction = vec.unit(data["direction"])
+    positions = data["positions"]
+    for at, end in enumerate(data.get("end_points") or []):
+        start = positions[min(at, len(positions) - 1)]
+        if vec.dot(vec.sub(end, start), direction) < -BEHIND_TOL:
+            ctx.note("Fusion stored the hole direction the other way; the measured end of the hole was used.")
+            return vec.scale(direction, -1.0)
+    return direction
+
+
+def _check_size(data, ctx, count, diameter):
+    """Note when the measured cylinder faces disagree with the stored diameter or number of holes."""
+    cylinders = list(data.get("side_cylinders") or [])
+    if not cylinders:
+        return
+    bore = data.get("counterbore")
+    if bore:
+        cylinders = [c for c in cylinders if abs(2 * c["radius"] - bore["diameter"]) > DIAMETER_TOL] or cylinders
+    if len(cylinders) != count or any(abs(2 * c["radius"] - diameter) > DIAMETER_TOL for c in cylinders):
+        ctx.note("The measured size of this hole differs from its stored size; the stored size was used.")
+
+
+def _diameter(data, ctx):
+    """Diameter to cut: the stored one, or for a tapped hole the measured drill size, or a Refusal."""
+    if data.get("tap_type") not in TAPPED:
+        return float(data["diameter"])
+    if data.get("thread_modeled"):
+        return Refusal("Modeled threads are not copied yet.")
+    cylinders = data.get("side_cylinders") or []
+    ctx.note("The thread of this hole is not copied; it was cut as a plain hole.")
+    return 2.0 * float(cylinders[0]["radius"]) if cylinders else float(data["diameter"])
+
+
+def _tip_profile(diameter, depth, tip_deg, counterbore, countersink):
+    """Outline in (radial, depth) coordinates, or a Refusal. `depth` runs to the shoulder, not the tip."""
+    radius = diameter / 2.0
+    apex = depth + radius / math.tan(math.radians(tip_deg) / 2.0)
+    points = [(0.0, -MARGIN_MM)]
+    if counterbore:
+        wide = counterbore["diameter"] / 2.0
+        if not (wide > radius and 0 < counterbore["depth"] < depth):
+            return Refusal("The counterbore of this hole does not fit its size.")
+        points += [(wide, -MARGIN_MM), (wide, counterbore["depth"]), (radius, counterbore["depth"])]
+    elif countersink:
+        half = math.tan(math.radians(countersink["angle_deg"]) / 2.0)
+        wide = countersink["diameter"] / 2.0
+        if not (wide > radius and 0 < countersink["angle_deg"] < 180 and (wide - radius) / half < depth):
+            return Refusal("The countersink of this hole does not fit its size.")
+        points += [(wide + MARGIN_MM * half, -MARGIN_MM), (radius, (wide - radius) / half)]
+    else:
+        points.append((radius, -MARGIN_MM))
+    points += [(radius, depth), (0.0, apex)]
+    return [[_n(x), _n(y)] for x, y in points]
+
+
+def _hole_step(position, direction, diameter, depth, counterbore, countersink):
+    step = {"kind": "hole", "origin": _vec(position), "direction": _vec(direction), "diameter": _n(diameter),
+            "depth": None if depth is None else _n(depth)}
+    if counterbore:
+        step["counterbore"] = {"diameter": _n(counterbore["diameter"]), "depth": _n(counterbore["depth"])}
+    if countersink:
+        step["countersink"] = {"diameter": _n(countersink["diameter"]), "angleDeg": _n(countersink["angle_deg"])}
+    return step
+
+
+def _tip_step(position, direction, profile):
+    across = _perpendicular(direction)
+    return {
+        "kind": "revolve",
+        "sketch": {
+            "on": {"origin": _vec(position), "normal": _vec(vec.cross(across, direction)), "xDir": _vec(across)},
+            "outer": {"kind": "polygon", "points": profile},
+        },
+        "axis": {"point": [0, 0], "dir": [0, 1]},
+        "combine": "cut",
+    }
+
+
+def _handle_hole(data, ctx):
+    if "read_error" in data:
+        return Refusal("This hole could not be read from Fusion.")
+    if not data.get("positions") or not data.get("direction") or not data.get("diameter"):
+        return Refusal("This hole has no readable position or size.")
+    hole_type = data.get("hole_type", "simple")
+    counterbore = data.get("counterbore") if hole_type == "counterbore" else None
+    countersink = data.get("countersink") if hole_type == "countersink" else None
+    if hole_type not in ("simple", "counterbore", "countersink") or (
+        (hole_type == "counterbore" and not counterbore) or (hole_type == "countersink" and not countersink)
+    ):
+        return Refusal("This kind of hole is not copied yet.")
+    extent = data.get("extent") or {}
+    if extent.get("kind") not in ("distance", "throughAll"):
+        return Refusal("This way of setting the hole depth is not copied yet.")
+    through = extent["kind"] == "throughAll"
+    depth = None if through else float(extent["depth"])
+    if not through and not depth > 0:
+        return Refusal("This hole has no depth.")
+
+    diameter = _diameter(data, ctx)
+    if isinstance(diameter, Refusal):
+        return diameter
+    direction = _direction(data, ctx)
+    _check_size(data, ctx, len(data["positions"]), diameter)
+
+    tip = data.get("tip_angle_deg")
+    tipped = not through and not _is_flat(tip)
+    if tipped:
+        if not 0 < tip < 180:
+            return Refusal("The drill tip of this hole is not copied.")
+        profile = _tip_profile(diameter, depth, float(tip), counterbore, countersink)
+        if isinstance(profile, Refusal):
+            return profile
+        return [_tip_step(p, direction, profile) for p in data["positions"]]
+
+    if counterbore and not (counterbore["diameter"] > diameter and (through or 0 < counterbore["depth"] < depth)):
+        return Refusal("The counterbore of this hole does not fit its size.")
+    if countersink and not (
+        countersink["diameter"] > diameter
+        and MIN_COUNTERSINK_DEG <= countersink["angle_deg"] <= MAX_COUNTERSINK_DEG
+    ):
+        return Refusal("The countersink of this hole does not fit its size.")
+    return [_hole_step(p, direction, diameter, depth, counterbore, countersink) for p in data["positions"]]
+
 
 def handle(item, ctx):
-    return Refusal("Steps of this kind are not copied yet.")
+    data = item.get("data") or {}
+    if item.get("type") == "ThreadFeature":
+        if "read_error" in data:
+            return Refusal("This thread could not be read from Fusion.")
+        if data.get("modeled"):
+            return Refusal("Modeled threads are not copied yet.")
+        ctx.note("The thread is not copied; the exported shape has none either.")
+        return []
+    return _handle_hole(data, ctx)
