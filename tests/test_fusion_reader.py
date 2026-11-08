@@ -9,6 +9,7 @@ from lib.fusion_reader.rows import DesignParameterStore, apply_row, restore, sav
 PARAMS = [
     dict(name="width", expression="20 mm", value=2.0, unit="mm", comment="Clip width", isFavorite=True),
     dict(name="depth", expression="width / 2", value=1.0, unit="mm", comment=None, isFavorite=False),
+    dict(name="speed", expression="5 kg", value=5.0, unit="kg", comment="", isFavorite=True),
     dict(name="angle", expression="30 deg", value=0.5235987755982988, unit="deg", comment="", isFavorite=True),
 ]
 
@@ -16,9 +17,9 @@ PARAMS = [
 class ReaderTest(unittest.TestCase):
     def test_lists_parameters_as_plain_dicts(self):
         listed = list_user_parameters(FakeDesign(PARAMS))
-        self.assertEqual([p["kind"] for p in listed], ["length", "derived", "angle"])
+        self.assertEqual([p["kind"] for p in listed], ["length", "derived", "unsupported", "angle"])
         self.assertAlmostEqual(listed[0]["display_value"], 20.0)
-        self.assertAlmostEqual(listed[2]["display_value"], 30.0)
+        self.assertAlmostEqual(listed[3]["display_value"], 30.0)
         self.assertEqual(listed[1]["comment"], "")
         self.assertTrue(listed[0]["is_favorite"])
 

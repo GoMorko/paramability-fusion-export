@@ -10,11 +10,18 @@ class UnitsTest(unittest.TestCase):
         self.assertEqual(units.unit_kind("deg"), "angle")
         self.assertEqual(units.unit_kind(""), "count")
         self.assertEqual(units.unit_kind(None), "count")
+        self.assertEqual(units.unit_kind("mm/s"), "unknown")
+        self.assertEqual(units.unit_kind("kg"), "unknown")
 
     def test_manifest_unit(self):
         self.assertEqual(units.manifest_unit("in"), "mm")
         self.assertEqual(units.manifest_unit("rad"), "deg")
         self.assertEqual(units.manifest_unit("Unitless"), "")
+
+    def test_unknown_unit_is_never_converted_as_a_count(self):
+        self.assertEqual(units.manifest_unit("mm/s"), "")
+        with self.assertRaises(ValueError):
+            units.to_manifest_value(3, "mm/s")
 
     def test_conversions(self):
         self.assertAlmostEqual(units.cm_to_mm(2.5), 25.0)

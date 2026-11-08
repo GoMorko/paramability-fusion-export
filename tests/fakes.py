@@ -78,3 +78,46 @@ class FakeDesign:
     def computeAll(self):
         self.computed += 1
         return True
+
+
+class FakeEntity:
+    def __init__(self, timeline, token):
+        self._timeline = timeline
+        self.entityToken = token
+
+    def deleteMe(self):
+        self._timeline.items = [i for i in self._timeline.items if i.entity is not self]
+        return True
+
+
+class FakeTimelineItem:
+    def __init__(self, entity):
+        self.entity = entity
+
+
+class FakeTimeline:
+    """Timeline of tokens. New items insert at the marker, like Fusion."""
+
+    def __init__(self, tokens, marker=None):
+        self.items = [FakeTimelineItem(FakeEntity(self, t)) for t in tokens]
+        self.marker = len(self.items) if marker is None else marker
+
+    @property
+    def count(self):
+        return len(self.items)
+
+    @property
+    def markerPosition(self):
+        return self.marker
+
+    def item(self, i):
+        return self.items[i]
+
+    def insert_at_marker(self, token):
+        entity = FakeEntity(self, token)
+        self.items.insert(self.marker, FakeTimelineItem(entity))
+        self.marker += 1
+        return entity
+
+    def tokens(self):
+        return [i.entity.entityToken for i in self.items]

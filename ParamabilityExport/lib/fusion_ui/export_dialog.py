@@ -1,7 +1,9 @@
 """The Export for Paramability dialog: builds the inputs and reads them back."""
 import adsk.core
 
-from ..export_plan.sizes_text import others_line, pick_default_index, prefill_sizes_text, read_sizes
+from ..fusion_reader.bodies import is_root_body
+from ..export_plan.sizes_text import (
+    others_line, pick_default_index, prefill_sizes_text, read_sizes, settable_parameters)
 
 BODY_ID = "pm_body"
 SIZES_ID = "pm_sizes"
@@ -27,7 +29,7 @@ def build(command, parameters, body, up_axis):
     """Add all inputs. parameters come from fusion_reader.parameters; body may be None."""
     inputs = command.commandInputs
     selection = inputs.addSelectionInput(BODY_ID, "Body", "Pick the body to export.")
-    selection.addSelectionFilter(adsk.core.SelectionCommandInput.SolidBodies)
+    selection.addSelectionFilter("SolidBodies")
     selection.setSelectionLimits(1, 1)
     if body is not None:
         selection.addSelection(body)
@@ -37,7 +39,7 @@ def build(command, parameters, body, up_axis):
     sizes.tooltipDescription = (
         "The first column is the size name. The other columns are user parameters. "
         "Leave a cell empty to keep the current value.")
-    columns = [p["name"] for p in parameters if p["is_favorite"] and p["kind"] != "derived"]
+    columns = [p["name"] for p in settable_parameters(parameters) if p["is_favorite"]]
     inputs.addTextBoxCommandInput(OTHERS_ID, "", others_line(parameters, columns), 2, True)
     status = inputs.addTextBoxCommandInput(STATUS_ID, "", "", 3, True)
     status.isVisible = False
@@ -48,7 +50,8 @@ def build(command, parameters, body, up_axis):
     up = inputs.addDropDownCommandInput(UP_ID, "Design up direction", adsk.core.DropDownStyles.TextListDropDownStyle)
     for key in ("z", "y"):
         up.listItems.add(UP_LABELS[key], key == up_axis)
-    up.tooltipDescription = "Pick Y up if the part lies on its side after opening in Paramability."
+    up.tooltipDescription = (
+        "Starts from the Fusion setting for new designs. Pick Y up if the part lies on its side in Paramability.")
 
 
 def read_form(inputs):
@@ -83,9 +86,14 @@ def refresh(inputs, parameters):
         dropdown.listItems.add(row["name"], i == index)
 
 
-def inputs_valid(inputs, parameters):
+def allow_preselect(args, root):
+    """Only bodies of the root component can be picked."""
+    args.isSelectable = is_root_body(args.selection.entity, root)
+
+
+def inputs_valid(inputs, parameters, root):
     form = read_form(inputs)
-    if form["body"] is None:
+    if form["body"] is None or not is_root_body(form["body"], root):
         return False
     if not 1 <= len(form["choice_name"]) <= MAX_CHOICE_NAME:
         return False

@@ -1,7 +1,9 @@
 """Run every size row: apply, export a STEP, and always restore the parameters."""
 import os
 
+from ..package.caps import check_step_size, check_total_size
 from .apply import RowBuildError, apply_row_values
+from .errors import StepExportError
 from .restore import restore_parameters
 
 
@@ -30,9 +32,10 @@ class RowExport:
         try:
             baseline = set(self.store.error_items())
             results = []
-            total = len(rows)
+            count = len(rows)
+            total = 0
             for index, row in enumerate(rows, start=1):
-                if not progress(index, total, row["name"]):
+                if not progress(index, count, row["name"]):
                     raise ExportCancelled()
                 try:
                     values = apply_row_values(self.store, self.units, row["values"], baseline)
@@ -41,7 +44,11 @@ class RowExport:
                 path = os.path.join(tmpdir, f"{index:02d}.step")
                 self.export_step(path)
                 if not os.path.isfile(path):
-                    raise RuntimeError(f"Fusion did not write the STEP file for size \"{row['name']}\".")
+                    raise StepExportError(f"Fusion did not write the STEP file for size \"{row['name']}\".")
+                size = os.path.getsize(path)
+                total += size
+                check_step_size(f"Size \"{row['name']}\"", size)
+                check_total_size(total)
                 results.append({"name": row["name"], "values": values, "step_file": path})
             return results
         finally:

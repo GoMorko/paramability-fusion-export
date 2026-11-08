@@ -13,10 +13,13 @@ from ...lib.export_plan.runner import ExportCancelled, RowExport
 from ...lib.export_plan.sizes_text import pick_default_index, read_sizes
 from ...lib.fusion_reader import design_info
 from ...lib.fusion_reader.rows import DesignParameterStore
-from ...lib.fusion_reader.step_export import StepExportError, export_body_step, resolve_body
+from ...lib.export_plan.errors import StepExportError
+from ...lib.export_plan.temp_copy import marker_at_end, MARKER_MESSAGE
+from ...lib.fusion_reader.step_export import export_body_step, resolve_body
 from ...lib.fusion_ui.file_dialog import ask_save_path
 from ...lib.fusion_ui.log import error_box, log, message_box
 from ...lib.fusion_ui.progress import ProgressDialog
+from ...lib.package.caps import PackageCapError
 from ...lib.package.writer import write_package
 
 _ADDIN_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -34,6 +37,10 @@ def run_export(design, parameters, form):
         message_box("Pick a body to export.")
         return
 
+    if not marker_at_end(design.timeline):
+        message_box(MARKER_MESSAGE)
+        return
+
     title = design_title(design_info.document_name(app))
     out_path = ask_save_path(package_file_name(title))
     if out_path is None:
@@ -48,7 +55,7 @@ def run_export(design, parameters, form):
 
     job = RowExport(store, units, export_step)
     try:
-        with tempfile.TemporaryDirectory(prefix="paramability_") as tmp:
+        with tempfile.TemporaryDirectory(prefix="paramability_", ignore_cleanup_errors=True) as tmp:
             with ProgressDialog("Export for Paramability") as progress:
                 results = job.run(read.rows, tmp, progress.step)
             default_index = pick_default_index(read.rows, form["default_name"])
@@ -62,7 +69,7 @@ def run_export(design, parameters, form):
         message_box(saved_message(len(results), os.path.basename(out_path)))
     except ExportCancelled:
         message_box("Export cancelled. Your parameters are back to their values.")
-    except (RowBuildError, StepExportError) as exc:
+    except (RowBuildError, StepExportError, PackageCapError) as exc:
         message_box(f"{exc}\n\nNothing was saved. Your parameters are back to their values.", error=True)
     except Exception:
         error_box("The export stopped. Nothing was saved.")

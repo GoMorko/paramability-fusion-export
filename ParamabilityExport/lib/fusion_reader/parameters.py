@@ -7,7 +7,8 @@ def list_user_parameters(design):
     """One dict per user parameter.
 
     Keys: name, expression, value (Fusion internal cm or rad), display_value (in the parameter's own unit),
-    unit, comment, is_favorite, kind (length, angle, count, or derived when the expression is a formula).
+    unit, comment, is_favorite, kind (length, angle, count; derived when the expression is a formula; unsupported
+    when the unit is not in the unit tables).
     """
     out = []
     params = design.userParameters
@@ -15,7 +16,12 @@ def list_user_parameters(design):
         p = params.item(i)
         unit = p.unit or ""
         expression = p.expression or ""
-        kind = unit_kind(unit) if is_plain_number(expression) else "derived"
+        if not is_plain_number(expression):
+            kind = "derived"
+        else:
+            kind = unit_kind(unit)
+            if kind == "unknown":
+                kind = "unsupported"
         out.append({
             "name": p.name,
             "expression": expression,

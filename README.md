@@ -6,10 +6,10 @@ file holds several sizes of the same part.
 ## Install
 
 1. Get the folder: clone this repository, or download the release zip and unzip it.
-2. In Fusion, open Utilities, then Add-Ins (or press Shift+S).
-3. On the Add-Ins tab, click the green plus.
-4. Pick the `ParamabilityExport` folder.
-5. Select it in the list, click Run. Tick "Run on startup" to load it each time.
+2. In Fusion, click the Utilities tab, then Scripts and Add-Ins.
+3. In the dialog, click the plus icon near the top of the list and choose "Script or add-in from device".
+4. Pick the `ParamabilityExport` folder (the folder itself, not a file in it). Fusion remembers the location.
+5. Find it in the list and click Run. Turn on "Run on Startup" to load it each time.
 
 The button "Export for Paramability" shows in the Utilities tab.
 
@@ -33,14 +33,16 @@ For each size the add-in sets the parameters, lets Fusion rebuild, writes a STEP
 on. All numbers in the file are in millimetres and degrees.
 
 When the design holds more than the picked body, the add-in copies the picked body into a temporary component,
-exports that, and deletes it. This route is a choice, not a proven fact: owner hand test 3 in
-`docs/hand-tests.md` decides it. To ask the designer to hide or move other bodies instead, set `MULTI_BODY_ROUTE`
+exports that, and deletes it. The export stops if the timeline marker is not at the end. This route is a choice,
+not a proven fact: section 3 of `docs/hand-tests.md` decides it. To ask the designer to hide or move other bodies instead, set `MULTI_BODY_ROUTE`
 in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`.
 
 ## Limits
 
 - One solid body per export.
-- Only plain number parameters can be columns. A parameter worked out by a formula cannot.
+- Only plain number parameters can be columns. A parameter worked out by a formula cannot, and neither can one in a unit this export cannot convert (units other than mm, cm, m, in, ft, deg, rad or none).
+- Paramability opens up to 256 MB per size and 1 GB per file. The export stops with a message above that.
+- Only bodies of the top level of the design can be picked, not bodies inside a component.
 - The design needs history (a parametric design).
 - Made for the current Fusion release.
 - This is version 0.1.0. The Fusion side has not been run by a tool: see `docs/hand-tests.md`.

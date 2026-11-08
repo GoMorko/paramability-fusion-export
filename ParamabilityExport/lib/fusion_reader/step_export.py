@@ -1,15 +1,14 @@
 """Write one body of the root component as a STEP file."""
 import adsk.core
 
+from ..export_plan.errors import StepExportError
+from ..export_plan.temp_copy import remove_temporary_copy, require_marker_at_end, timeline_tokens
+
 ROUTE_TEMP_COMPONENT = "temp_component"
 ROUTE_ASK_DESIGNER = "ask_designer"
 
-# What to do when the root holds more than the picked body. Switch after hand test 3 (docs/hand-tests.md).
+# What to do when the root holds more than the picked body. Section 3 of docs/hand-tests.md says when to switch.
 MULTI_BODY_ROUTE = ROUTE_TEMP_COMPONENT
-
-
-class StepExportError(Exception):
-    """The STEP file could not be written. The message is a plain sentence."""
 
 
 def _count(collection, only_solid=True):
@@ -46,23 +45,6 @@ def _export_component(design, component, path):
         raise StepExportError("Fusion could not write the STEP file.")
 
 
-def _remove_temporary(design, occurrence, timeline_before):
-    """Delete the temporary occurrence and any timeline items the copy added. Failures are ignored."""
-    try:
-        occurrence.deleteMe()
-    except Exception:
-        pass
-    try:
-        timeline = design.timeline
-        for i in reversed(range(timeline_before, timeline.count)):
-            try:
-                timeline.item(i).entity.deleteMe()
-            except Exception:
-                pass
-    except Exception:
-        pass
-
-
 def export_body_step(design, body, path, route=None):
     """Export body to path. The root export is used when the body is the only solid body in the design."""
     route = route or MULTI_BODY_ROUTE
@@ -73,13 +55,12 @@ def export_body_step(design, body, path, route=None):
     if route == ROUTE_ASK_DESIGNER:
         raise StepExportError(
             "The design holds more than one solid body. Hide or move the other bodies, then try again.")
-    try:
-        timeline_before = design.timeline.count
-    except Exception:
-        timeline_before = 0
+    timeline = design.timeline
+    require_marker_at_end(timeline)
+    tokens_before = timeline_tokens(timeline)
     occurrence = root.occurrences.addNewComponent(adsk.core.Matrix3D.create())
     try:
         body.copyToComponent(occurrence)
         _export_component(design, occurrence.component, path)
     finally:
-        _remove_temporary(design, occurrence, timeline_before)
+        remove_temporary_copy(timeline, occurrence, tokens_before)

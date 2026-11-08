@@ -5,7 +5,9 @@ note the Fusion version and system.
 
 ## 1. Install
 
-- [ ] Follow the README install steps on macOS (and Windows if you have it).
+- [ ] Follow the README install steps on macOS (and Windows if you have it). Confirm each step matches the current
+      Fusion dialog: Utilities tab, Scripts and Add-Ins, plus icon, "Script or add-in from device", Run, "Run on
+      Startup". The steps came from Autodesk's help pages, not from a Fusion window. Fix the README if a label differs.
 - [ ] The button "Export for Paramability" shows in the Utilities tab, in the panel "Paramability", with an icon.
 - [ ] Stop the add-in in the Add-Ins dialog: the button goes away and the panel is removed.
 
@@ -21,6 +23,7 @@ Use a design with two favourite user parameters (for example `width` in mm and `
       item, nothing is saved and the parameters are back.
 - [ ] Watch these calls: expressions are written as text such as `40 mm`. If your Fusion uses a comma as the decimal
       mark, check that `12.5` rows still set the right number.
+- [ ] A user parameter in an unusual unit (for example mm/s) is listed as "not supported" and refused as a column.
 - [ ] A formula parameter (for example `depth = width / 2`) as a column is refused with a plain message.
 
 ## 3. Several bodies in the root
@@ -32,7 +35,9 @@ The add-in exports the picked body alone. The choice is the constant `MULTI_BODY
 - [ ] The design timeline has no leftover items after the export (the temporary copy is removed).
 - [ ] If the copy route adds items to the timeline, fails, or the STEP holds more than the picked body, set
       `MULTI_BODY_ROUTE = ROUTE_ASK_DESIGNER`. The dialog then asks the designer to hide or move the other bodies.
-- [ ] A body inside a child component is not offered (the picker lists bodies of the root only).
+- [ ] A body inside a child component cannot be picked (it is greyed out in the viewport).
+- [ ] Roll the timeline marker back and click OK: the export stops with "Move the timeline marker to the end", and no
+      feature of the design is deleted.
 
 ## 4. Y up design
 
@@ -59,7 +64,9 @@ The add-in exports the picked body alone. The choice is the constant `MULTI_BODY
 These were written from the API reference and never run:
 
 - `BRepBody.copyToComponent` into a new occurrence (hand test 3).
-- Deleting the temporary occurrence and the timeline items the copy adds (hand test 3).
+- Deleting the temporary occurrence and the timeline items the copy adds, by entity token (hand test 3).
+- `Timeline.markerPosition` equal to `Timeline.count` when the marker is at the end.
+- The `preSelect` event and `isSelectable` for the body picker.
 - `Design.findEntityByToken` to find the body again after each recompute.
 - `ExportManager.createSTEPExportOptions` with a component, and `execute`.
 - Editable multi line `TextBoxCommandInput` and its `inputChanged` event (the default size list refreshes from it).

@@ -63,6 +63,22 @@ class _Validate(adsk.core.ValidateInputsEventHandler):
             args.areInputsValid = False
 
 
+class _PreSelect(adsk.core.SelectionEventHandler):
+    def __init__(self, callback):
+        super().__init__()
+        self._callback = callback
+
+    def notify(self, args):
+        try:
+            self._callback(args)
+        except Exception:
+            args.isSelectable = False
+
+
+def on_pre_select(event, callback, handlers):
+    event.add(handlers.keep(_PreSelect(callback)))
+
+
 def on_command_created(event, callback, handlers):
     event.add(handlers.keep(_Created(callback)))
 

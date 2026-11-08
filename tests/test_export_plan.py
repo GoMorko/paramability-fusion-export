@@ -10,9 +10,10 @@ from lib.export_plan.assemble import build_package
 from lib.export_plan.expressions import format_expression, is_plain_number
 from lib.export_plan.naming import (
     addin_version, design_title, package_file_name, saved_message, with_extension, writer_text)
+from lib.export_plan.errors import StepExportError
 from lib.export_plan.restore import restore_order, restore_parameters
 from lib.export_plan.runner import ExportCancelled, RowExport
-from lib.export_plan.sizes_text import prefill_sizes_text, read_sizes
+from lib.export_plan.sizes_text import others_line, prefill_sizes_text, read_sizes
 from lib.package.manifest import validate_manifest
 from lib.package.writer import write_package
 
@@ -77,6 +78,15 @@ class SizesTextTest(unittest.TestCase):
     def test_formula_column_refused(self):
         read = read_sizes("name,depth\nA,5", PARAMS)
         self.assertIn("depth", read.problems[0])
+
+    def test_unsupported_unit_refused_and_not_prefilled(self):
+        speed = {"name": "speed", "expression": "5 mm/s", "value": 5.0, "display_value": 5.0, "unit": "mm/s",
+                 "comment": "", "is_favorite": True, "kind": "unsupported"}
+        params = PARAMS + [speed]
+        self.assertNotIn("speed", prefill_sizes_text(params))
+        read = read_sizes("name,speed\nA,5", params)
+        self.assertIn("mm/s", read.problems[0])
+        self.assertIn("speed (unit mm/s not supported)", others_line(params, ["width"]))
 
     def test_two_sizes_without_columns_refused(self):
         read = read_sizes("name\nA\nB", PARAMS)
@@ -182,7 +192,7 @@ class RunnerRestoreGuaranteeTest(unittest.TestCase):
     def test_missing_step_file_is_an_error(self):
         store = FakeStore(ORIGINAL)
         job, _, error = self.run_job(store, lambda path: None)
-        self.assertIsInstance(error, RuntimeError)
+        self.assertIsInstance(error, StepExportError)
         self.assertEqual(store.exprs, ORIGINAL)
 
     def test_formula_overwritten_by_a_row_is_restored_after_its_inputs(self):

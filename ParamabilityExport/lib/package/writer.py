@@ -4,12 +4,16 @@ import os
 import tempfile
 import zipfile
 
+from .caps import check_package_caps
+
 
 def write_package(out_path, manifest, files):
     """Write manifest.json first, then each entry of files ({entry path: bytes or a file path to read}).
 
+    Raises PackageCapError first when the package is above the sizes Paramability opens.
     The zip goes to a temp file beside the target, then replaces it, so a failed export never leaves half a file.
     """
+    check_package_caps(files)
     out_dir = os.path.dirname(os.path.abspath(out_path))
     fd, tmp_path = tempfile.mkstemp(suffix=".tmp", dir=out_dir)
     os.close(fd)

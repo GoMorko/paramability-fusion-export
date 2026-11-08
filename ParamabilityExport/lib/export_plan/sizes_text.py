@@ -14,9 +14,12 @@ class SizesRead:
     problems: list = field(default_factory=list)
 
 
+SETTABLE_KINDS = ("length", "angle", "count")
+
+
 def settable_parameters(params):
-    """Parameters a size row may set: plain numbers, not formulas."""
-    return [p for p in params if p["kind"] != "derived"]
+    """Parameters a size row may set: plain numbers in a known unit, not formulas."""
+    return [p for p in params if p["kind"] in SETTABLE_KINDS]
 
 
 def prefill_sizes_text(params):
@@ -37,6 +40,8 @@ def others_line(params, columns):
         label = p["name"]
         if p["kind"] == "derived":
             label += " (formula)"
+        elif p["kind"] == "unsupported":
+            label += f" (unit {p['unit']} not supported)"
         elif p["unit"]:
             label += f" ({p['unit']})"
         parts.append(label)
@@ -60,8 +65,13 @@ def read_sizes(text, params):
     columns = header_columns(text)
     by_name = {p["name"]: p for p in params}
     for col in columns:
-        if by_name[col]["kind"] == "derived":
+        kind = by_name[col]["kind"]
+        if kind == "derived":
             problems.append(f"\"{col}\" is worked out by a formula, so it cannot be a column.")
+        elif kind == "unsupported":
+            problems.append(
+                f"\"{col}\" uses the unit {by_name[col]['unit']}, which this export cannot convert. "
+                "Use a parameter in mm, cm, m, in, ft, deg or rad, or one without a unit.")
     if len(rows) > 1 and not columns:
         problems.append("Add at least one parameter column, or the sizes would all be the same.")
     if problems:

@@ -79,9 +79,10 @@ def _on_created(args):
     _command_handlers.clear()
     handlers.on_input_changed(
         command.inputChanged, lambda a: export_dialog.refresh(a.inputs, parameters), _command_handlers)
+    handlers.on_pre_select(command.preSelect, lambda a: export_dialog.allow_preselect(a, root), _command_handlers)
     handlers.on_validate(
         command.validateInputs,
-        lambda a: setattr(a, "areInputsValid", export_dialog.inputs_valid(a.inputs, parameters)),
+        lambda a: setattr(a, "areInputsValid", export_dialog.inputs_valid(a.inputs, parameters, root)),
         _command_handlers)
     handlers.on_execute(
         command.execute,
