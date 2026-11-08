@@ -1,0 +1,623 @@
+{
+  "_comment": "Synthetic: 40 edges r 0.5 in one feature, more than one pick can hold.",
+  "capture": 1,
+  "fusion": "2.0.0",
+  "design": "Test",
+  "up_axis": "z",
+  "target": {
+    "token": "t1",
+    "name": "Body1",
+    "box": {
+      "min": [
+        0,
+        0,
+        0
+      ],
+      "max": [
+        40,
+        20,
+        10
+      ]
+    },
+    "volume_mm3": 1000.0
+  },
+  "items": [
+    {
+      "index": 0,
+      "name": "Sketch1",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "component_root": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 1,
+      "name": "Extrude1",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "component_root": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "operation": "newBody",
+        "profiles": [
+          {
+            "sketch": "Sketch1",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      40,
+                      20
+                    ],
+                    "end": [
+                      0,
+                      20
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      40,
+                      0
+                    ],
+                    "end": [
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      40,
+                      0
+                    ],
+                    "end": [
+                      40,
+                      20
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      0,
+                      20
+                    ],
+                    "end": [
+                      0,
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 10.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [
+          {
+            "token": "t1",
+            "name": "Body1"
+          }
+        ],
+        "target_box_before": null,
+        "end_offset": 10.0
+      }
+    },
+    {
+      "index": 2,
+      "name": "Fillet1",
+      "type": "FilletFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "component_root": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "rolling_ball": true,
+        "sets": [
+          {
+            "kind": "constant",
+            "radius": 0.5,
+            "continuity": "tangent",
+            "input_kinds": [
+              "edge"
+            ],
+            "edges": [
+              {
+                "token": "m0",
+                "closed": false,
+                "points": [
+                  [
+                    1.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m1",
+                "closed": false,
+                "points": [
+                  [
+                    3.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m2",
+                "closed": false,
+                "points": [
+                  [
+                    5.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m3",
+                "closed": false,
+                "points": [
+                  [
+                    7.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m4",
+                "closed": false,
+                "points": [
+                  [
+                    9.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m5",
+                "closed": false,
+                "points": [
+                  [
+                    11.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m6",
+                "closed": false,
+                "points": [
+                  [
+                    13.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m7",
+                "closed": false,
+                "points": [
+                  [
+                    15.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m8",
+                "closed": false,
+                "points": [
+                  [
+                    17.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m9",
+                "closed": false,
+                "points": [
+                  [
+                    19.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m10",
+                "closed": false,
+                "points": [
+                  [
+                    21.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m11",
+                "closed": false,
+                "points": [
+                  [
+                    23.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m12",
+                "closed": false,
+                "points": [
+                  [
+                    25.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m13",
+                "closed": false,
+                "points": [
+                  [
+                    27.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m14",
+                "closed": false,
+                "points": [
+                  [
+                    29.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m15",
+                "closed": false,
+                "points": [
+                  [
+                    31.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m16",
+                "closed": false,
+                "points": [
+                  [
+                    33.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m17",
+                "closed": false,
+                "points": [
+                  [
+                    35.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m18",
+                "closed": false,
+                "points": [
+                  [
+                    37.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m19",
+                "closed": false,
+                "points": [
+                  [
+                    39.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m20",
+                "closed": false,
+                "points": [
+                  [
+                    41.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m21",
+                "closed": false,
+                "points": [
+                  [
+                    43.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m22",
+                "closed": false,
+                "points": [
+                  [
+                    45.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m23",
+                "closed": false,
+                "points": [
+                  [
+                    47.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m24",
+                "closed": false,
+                "points": [
+                  [
+                    49.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m25",
+                "closed": false,
+                "points": [
+                  [
+                    51.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m26",
+                "closed": false,
+                "points": [
+                  [
+                    53.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m27",
+                "closed": false,
+                "points": [
+                  [
+                    55.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m28",
+                "closed": false,
+                "points": [
+                  [
+                    57.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m29",
+                "closed": false,
+                "points": [
+                  [
+                    59.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m30",
+                "closed": false,
+                "points": [
+                  [
+                    61.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m31",
+                "closed": false,
+                "points": [
+                  [
+                    63.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m32",
+                "closed": false,
+                "points": [
+                  [
+                    65.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m33",
+                "closed": false,
+                "points": [
+                  [
+                    67.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m34",
+                "closed": false,
+                "points": [
+                  [
+                    69.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m35",
+                "closed": false,
+                "points": [
+                  [
+                    71.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m36",
+                "closed": false,
+                "points": [
+                  [
+                    73.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m37",
+                "closed": false,
+                "points": [
+                  [
+                    75.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m38",
+                "closed": false,
+                "points": [
+                  [
+                    77.0,
+                    0,
+                    10
+                  ]
+                ]
+              },
+              {
+                "token": "m39",
+                "closed": false,
+                "points": [
+                  [
+                    79.0,
+                    0,
+                    10
+                  ]
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

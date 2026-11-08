@@ -1,0 +1,149 @@
+import unittest
+
+from tests import context  # noqa: F401
+from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, translate_fixture
+
+from lib.translator import picks, translate
+
+
+def verdict_of(result, index):
+    return [v for v in result.items if v["index"] == index][0]
+
+
+def variant(name, edit):
+    """Translate a fixture after `edit(data)` changed the data of its last item."""
+    capture = load_capture(name)
+    edit(capture["items"][-1]["data"])
+    return translate(capture)
+
+
+class PicksTest(unittest.TestCase):
+    def test_closed_edge_keeps_both_points_in_order(self):
+        edges = [{"points": [[1, 2, 3]]}, {"points": [[4, 5, 6], [7, 8, 9]]}]
+        self.assertEqual(picks.near_points(edges), [[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+
+    def test_face_points(self):
+        self.assertEqual(picks.face_points([{"token": "f", "point": [1, 2, 3]}]), [[1, 2, 3]])
+
+    def test_groups_never_cut_an_edge(self):
+        edges = [{"points": [[0, 0, 0]] * 2} for _ in range(17)]
+        groups = picks.edge_groups(edges)
+        self.assertEqual([len(g) for g in groups], [16, 1])
+
+
+class FilletTest(unittest.TestCase):
+    def test_four_edges_use_captured_points(self):
+        result = translate_fixture("fillet_four_edges")
+        (step,) = steps_of(result.recipe, "round")
+        expected = [e["points"][0] for e in load_capture("fillet_four_edges")["items"][-1]["data"]["sets"][0]["edges"]]
+        self.assertEqual(step["edges"]["near"], expected)
+        self.assertEqual(step["size"], 2)
+        self.assertNotIn("edgeSizes", step)
+        self.assertEqual(verdict_of(result, 2)["verdict"], "translated")
+        assert_schema_ok(self, result.recipe)
+
+    def test_two_radii_list_a_size_per_point(self):
+        (step,) = steps_of(translate_fixture("fillet_two_radii").recipe, "round")
+        self.assertEqual((step["size"], step["edgeSizes"]), (2, [2, 2, 3, 3]))
+
+    def test_closed_edge_gets_two_points(self):
+        result = translate_fixture("fillet_closed_edge")
+        (step,) = steps_of(result.recipe, "round")
+        self.assertEqual(len(step["edges"]["near"]), 2)
+        assert_schema_ok(self, result.recipe)
+
+    def test_many_edges_split_into_steps_with_a_note(self):
+        result = translate_fixture("fillet_many_edges")
+        rounds = steps_of(result.recipe, "round")
+        self.assertEqual([len(s["edges"]["near"]) for s in rounds], [32, 8])
+        self.assertEqual(verdict_of(result, 2)["verdict"], "translatedWithNote")
+        self.assertEqual(verdict_of(result, 2)["steps"], ["round_2", "round_2_2"])
+        assert_schema_ok(self, result.recipe)
+
+    def test_setback_corners_translate_with_a_note(self):
+        result = translate_fixture("fillet_setback")
+        self.assertEqual(len(steps_of(result.recipe, "round")), 1)
+        self.assertEqual(verdict_of(result, 2)["verdict"], "translatedWithNote")
+
+    def test_refusals(self):
+        for name, word in (("fillet_variable", "changing radius"), ("fillet_g2", "curvature"),
+                           ("fillet_feature_input", "another step")):
+            result = translate_fixture(name)
+            self.assertIsNone(result.recipe, name)
+            self.assertIn(word, result.refusal["reason"], name)
+            self.assertEqual(result.refusal["index"], 2)
+
+    def test_other_set_kinds_and_bad_radius_refuse(self):
+        for edit in (lambda d: d["sets"][0].update(kind="chordLength"),
+                     lambda d: d["sets"][0].update(kind="other"),
+                     lambda d: d["sets"][0].update(radius=0),
+                     lambda d: d.update(sets=[]),
+                     lambda d: d["sets"][0].update(edges=[{"token": "x", "closed": False, "points": []}])):
+            self.assertIsNone(variant("fillet_four_edges", edit).recipe)
+
+    def test_unreadable_continuity_translates_with_a_note(self):
+        result = variant("fillet_four_edges", lambda d: d["sets"][0].update(continuity="other"))
+        self.assertEqual(verdict_of(result, 2)["verdict"], "translatedWithNote")
+
+
+class ChamferTest(unittest.TestCase):
+    def test_equal_distance(self):
+        result = translate_fixture("chamfer_equal")
+        (step,) = steps_of(result.recipe, "bevel")
+        self.assertEqual(step["size"], 1)
+        self.assertEqual(len(step["edges"]["near"]), 4)
+        self.assertNotIn("sizeOn", step)
+        assert_schema_ok(self, result.recipe)
+
+    def test_equal_pair_and_45_degrees_give_one_size(self):
+        self.assertEqual(steps_of(translate_fixture("chamfer_two_equal").recipe, "bevel")[0]["size"], 1.5)
+        self.assertEqual(steps_of(translate_fixture("chamfer_angle_45").recipe, "bevel")[0]["size"], 2)
+
+    def test_uneven_refuses(self):
+        result = translate_fixture("chamfer_uneven")
+        self.assertIsNone(result.recipe)
+        self.assertIn("two sizes", result.refusal["reason"])
+        angled = variant("chamfer_angle_45", lambda d: d["sets"][0].update(angle_deg=30.0))
+        self.assertIsNone(angled.recipe)
+
+    def test_other_corner_type_notes(self):
+        result = variant("chamfer_equal", lambda d: d.update(corner_type="miter"))
+        self.assertEqual(verdict_of(result, 2)["verdict"], "translatedWithNote")
+
+    def test_sets_of_two_sizes_make_one_bevel_each(self):
+        def edit(data):
+            second = dict(data["sets"][0], distance=2.0, edges=[{"token": "x", "closed": False, "points": [[1, 2, 3]]}])
+            data["sets"].append(second)
+        result = variant("chamfer_equal", edit)
+        self.assertEqual([s["size"] for s in steps_of(result.recipe, "bevel")], [1, 2])
+        self.assertEqual(verdict_of(result, 2)["verdict"], "translatedWithNote")
+
+    def test_unknown_set_kind_refuses(self):
+        self.assertIsNone(variant("chamfer_equal", lambda d: d["sets"][0].update(kind="other")).recipe)
+
+
+class ShellTest(unittest.TestCase):
+    def test_open_top(self):
+        result = translate_fixture("shell_open_top")
+        (step,) = steps_of(result.recipe, "shell")
+        self.assertEqual((step["thickness"], step["openFaces"]), (2, {"near": [[20, 10, 10]]}))
+        assert_schema_ok(self, result.recipe)
+
+    def test_refusals(self):
+        for name, word in (("shell_outside", "outward"), ("shell_closed", "Closed hollow"),
+                           ("shell_rounded", "rounded")):
+            result = translate_fixture(name)
+            self.assertIsNone(result.recipe, name)
+            self.assertIn(word, result.refusal["reason"], name)
+
+    def test_no_faces_or_no_thickness_refuse(self):
+        self.assertIsNone(variant("shell_open_top", lambda d: d.update(faces=[])).recipe)
+        self.assertIsNone(variant("shell_open_top", lambda d: d.update(inside=0.0)).recipe)
+
+    def test_too_many_faces_refuse(self):
+        faces = [{"token": "f%d" % i, "point": [i, 0, 10]} for i in range(33)]
+        self.assertIsNone(variant("shell_open_top", lambda d: d.update(faces=faces)).recipe)
+
+
+if __name__ == "__main__":
+    unittest.main()

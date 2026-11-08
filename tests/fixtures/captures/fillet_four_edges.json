@@ -1,0 +1,227 @@
+{
+  "_comment": "Plate 40 x 20 x 10, the four vertical edges rounded r 2.",
+  "capture": 1,
+  "fusion": "2.0.0",
+  "design": "Test",
+  "up_axis": "z",
+  "target": {
+    "token": "t1",
+    "name": "Body1",
+    "box": {
+      "min": [
+        0,
+        0,
+        0
+      ],
+      "max": [
+        40,
+        20,
+        10
+      ]
+    },
+    "volume_mm3": 1000.0
+  },
+  "items": [
+    {
+      "index": 0,
+      "name": "Sketch1",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "component_root": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 1,
+      "name": "Extrude1",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "component_root": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "operation": "newBody",
+        "profiles": [
+          {
+            "sketch": "Sketch1",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      40,
+                      20
+                    ],
+                    "end": [
+                      0,
+                      20
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      40,
+                      0
+                    ],
+                    "end": [
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      40,
+                      0
+                    ],
+                    "end": [
+                      40,
+                      20
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      0,
+                      20
+                    ],
+                    "end": [
+                      0,
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 10.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [
+          {
+            "token": "t1",
+            "name": "Body1"
+          }
+        ],
+        "target_box_before": null,
+        "end_offset": 10.0
+      }
+    },
+    {
+      "index": 2,
+      "name": "Fillet1",
+      "type": "FilletFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "component_root": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "rolling_ball": true,
+        "sets": [
+          {
+            "kind": "constant",
+            "radius": 2.0,
+            "continuity": "tangent",
+            "input_kinds": [
+              "edge"
+            ],
+            "edges": [
+              {
+                "token": "e0",
+                "closed": false,
+                "points": [
+                  [
+                    0,
+                    0,
+                    5
+                  ]
+                ]
+              },
+              {
+                "token": "e1",
+                "closed": false,
+                "points": [
+                  [
+                    40,
+                    0,
+                    5
+                  ]
+                ]
+              },
+              {
+                "token": "e2",
+                "closed": false,
+                "points": [
+                  [
+                    40,
+                    20,
+                    5
+                  ]
+                ]
+              },
+              {
+                "token": "e3",
+                "closed": false,
+                "points": [
+                  [
+                    0,
+                    20,
+                    5
+                  ]
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
