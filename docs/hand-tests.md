@@ -74,3 +74,37 @@ These were written from the API reference and never run:
 - `FeatureHealthStates.ErrorFeatureHealthState` on timeline items after `computeAll`.
 - The modeling orientation preference as the up direction.
 - Toolbar tab id `ToolsTab` for the Utilities tab.
+
+## Capture reader calls to watch (extrude, revolve, hole, combine, thread, sketch profiles)
+
+These members and values were written from the API reference or plan and never run. Each has a measured value in
+the capture or a fallback to an `other` entry, so a wrong guess shows up in `report.json` rather than as a wrong part.
+Run the plate, tilted sketch, turned knob, extrude directions, holes and combine designs of the F3 hand tests and
+read the capture in `report.json`.
+
+- Enum names are matched by text: `FeatureOperations`, `FeatureExtentTypes`, `HoleTypes`, `HoleTapTypes`,
+  `FeatureHealthStates`. Unknown names fall back to `other` (operation), `one` (extent) or `simple` (hole).
+- `ProfileCurve.geometry` space. The reader treats geometry with every point at z near 0 as sketch space, else maps it
+  with `Sketch.modelToSketchSpace`. A sketch lying in a model plane with turned axes cannot be told apart this way;
+  `GEOMETRY_SPACE` in `read_sketch.py` can be set to `"sketch"` or `"model"`.
+- `Matrix3D.getAsCoordinateSystem()` returning `(origin, xAxis, yAxis, zAxis)` in Python.
+- `CurveEvaluator3D.getParameterExtents` and `getPointAtParameter` (arc middle point, 200 samples of free curves, edge
+  points); `SurfaceEvaluator.getNormalAtPoint` (revolve start face normal).
+- Model parameters read through `.value` (distances, taper angles, angles, hole sizes, offsets). A plain number is
+  also accepted.
+- `ExtrudeFeature.symmetricExtent` with `distance`, `isFullLength`, `taperAngle`; `taperAngleOne`, `taperAngleTwo`.
+- `ExtrudeFeature.startExtent`: `OffsetStartDefinition.offset`; the entity member name of the from-entity start
+  definition (`entity` is assumed); `ToEntityExtentDefinition.entity` and `.offset`.
+- `ThroughAllExtentDefinition.isPositiveDirection`, and the type name of the "all" extent (`AllExtentDefinition`).
+- A flipped one sided extrude storing a negative distance: compare `side_one.distance` with `end_offset`.
+- `RevolveFeature.axis` (sketch line, construction axis, linear edge, cylindrical face), `isProjectAxis`,
+  `extentDefinition` (`AngleExtentDefinition.angle`, `isSymmetric`; `TwoSidesAngleExtentDefinition.angleOne`,
+  `angleTwo`), `startFaces` and the sign of `start_face_normal`.
+- `HoleFeature.thread.isModeled`, `holePositionDefinition.sketchPoints[i].worldGeometry`, `position`, `direction`
+  (into the material or out), `tipAngle` for a flat drill point, `participantBodies`, `sideFaces`, `endFaces`.
+- `CombineFeature.targetBody`, `toolBodies`, `isKeepToolBodies`; `ThreadFeature.isModeled`.
+- `participantBodies` on extrude and revolve (may be unreadable; then the list is empty).
+- `Design.findEntityByToken` for the picked body at each marker position, with a name fallback in the root component.
+- `TimelineObject.isGroup`: group objects are skipped; check that grouped features still appear as items.
+- Moving `Timeline.markerPosition` once per item: the marker ends at the end, the document is not marked changed and
+  the undo list is as before.
