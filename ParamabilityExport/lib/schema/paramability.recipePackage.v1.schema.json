@@ -1,0 +1,270 @@
+{
+  "anyOf": [
+    {
+      "properties": {
+        "choiceName": {
+          "description": "Label of the dropdown (default \"Size\").",
+          "maxLength": 60,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "valueRows"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "type": "string"
+        },
+        "notes": {
+          "description": "Short plain sentences for the person. The app shows the first one when the file opens.",
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 5,
+          "type": "array"
+        },
+        "parameters": {
+          "items": {
+            "properties": {
+              "label": {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "unit": {
+                "description": "Millimetres, degrees or \"\" for a count (default \"\").",
+                "enum": [
+                  "mm",
+                  "deg",
+                  ""
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "type": "object"
+          },
+          "maxItems": 32,
+          "type": "array"
+        },
+        "rows": {
+          "items": {
+            "properties": {
+              "default": {
+                "type": "boolean"
+              },
+              "name": {
+                "maxLength": 60,
+                "minLength": 1,
+                "type": "string"
+              },
+              "step": {
+                "description": "Relative path inside the zip: segments of letters, digits, _ . - joined by /, no \"..\". STEP files end in .step or .stp, the recipe in .json. Every path is unique.",
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "values": {
+                "additionalProperties": {
+                  "maximum": 1000000,
+                  "minimum": -1000000,
+                  "type": "number"
+                },
+                "description": "Numbers in mm or degrees keyed by the names in `parameters`.",
+                "type": "object"
+              }
+            },
+            "required": [
+              "name",
+              "values",
+              "step"
+            ],
+            "type": "object"
+          },
+          "maxItems": 32,
+          "minItems": 2,
+          "type": "array"
+        },
+        "schema": {
+          "const": "paramability.recipePackage"
+        },
+        "upAxis": {
+          "description": "Which axis points up in the STEP files (default \"z\"). A recipe is always written Z up.",
+          "enum": [
+            "z",
+            "y"
+          ],
+          "type": "string"
+        },
+        "version": {
+          "const": 1
+        },
+        "writer": {
+          "maxLength": 200,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "schema",
+        "version",
+        "name",
+        "rows"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "checks": {
+          "items": {
+            "properties": {
+              "step": {
+                "description": "Relative path inside the zip: segments of letters, digits, _ . - joined by /, no \"..\". STEP files end in .step or .stp, the recipe in .json. Every path is unique.",
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "values": {
+                "additionalProperties": {
+                  "maximum": 1000000,
+                  "minimum": -1000000,
+                  "type": "number"
+                },
+                "description": "Size values (mm), at least one, this check file was exported at, keyed by the recipe size names.",
+                "type": "object"
+              }
+            },
+            "required": [
+              "values",
+              "step"
+            ],
+            "type": "object"
+          },
+          "maxItems": 16,
+          "type": "array"
+        },
+        "kind": {
+          "const": "recipe"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "type": "string"
+        },
+        "notes": {
+          "description": "Short plain sentences for the person. The app shows the first one when the file opens.",
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 5,
+          "type": "array"
+        },
+        "part": {
+          "description": "Relative path inside the zip: segments of letters, digits, _ . - joined by /, no \"..\". STEP files end in .step or .stp, the recipe in .json. Every path is unique.",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "recipe": {
+          "description": "Relative path inside the zip: segments of letters, digits, _ . - joined by /, no \"..\". STEP files end in .step or .stp, the recipe in .json. Every path is unique.",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "schema": {
+          "const": "paramability.recipePackage"
+        },
+        "upAxis": {
+          "description": "Which axis points up in the STEP files (default \"z\"). A recipe is always written Z up.",
+          "enum": [
+            "z",
+            "y"
+          ],
+          "type": "string"
+        },
+        "version": {
+          "const": 1
+        },
+        "writer": {
+          "maxLength": 200,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "schema",
+        "version",
+        "name",
+        "part",
+        "recipe"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "stepOnly"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "type": "string"
+        },
+        "notes": {
+          "description": "Short plain sentences for the person. The app shows the first one when the file opens.",
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 5,
+          "type": "array"
+        },
+        "part": {
+          "description": "Relative path inside the zip: segments of letters, digits, _ . - joined by /, no \"..\". STEP files end in .step or .stp, the recipe in .json. Every path is unique.",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "schema": {
+          "const": "paramability.recipePackage"
+        },
+        "upAxis": {
+          "description": "Which axis points up in the STEP files (default \"z\"). A recipe is always written Z up.",
+          "enum": [
+            "z",
+            "y"
+          ],
+          "type": "string"
+        },
+        "version": {
+          "const": 1
+        },
+        "writer": {
+          "maxLength": 200,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "schema",
+        "version",
+        "name",
+        "part"
+      ],
+      "type": "object"
+    }
+  ]
+}
