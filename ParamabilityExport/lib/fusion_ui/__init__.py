@@ -1,1 +1,1 @@
-"""Fusion UI helpers (handler list, log, error box). Needs adsk."""
+"""Fusion UI helpers: event handlers, log and message boxes, progress, dialogs. Needs adsk."""

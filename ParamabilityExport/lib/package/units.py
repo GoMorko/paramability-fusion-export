@@ -39,3 +39,17 @@ def to_manifest_value(value, unit):
     elif kind == "angle":
         value = rad_to_deg(value)
     return round(value, 6)
+
+
+_PER_CM = {"mm": 10.0, "cm": 1.0, "m": 0.01, "in": 1 / 2.54, "ft": 1 / 30.48, "um": 10000.0}
+
+
+def internal_to_unit(value, unit):
+    """Convert a Fusion internal value (cm, rad, plain) to the number Fusion shows in the given unit."""
+    kind = unit_kind(unit)
+    if kind == "length":
+        return value * _PER_CM[(unit or "").strip().lower()]
+    if kind == "angle":
+        u = _NORMAL.get((unit or "").strip().lower(), (unit or "").strip().lower())
+        return value if u == "rad" else rad_to_deg(value)
+    return value
