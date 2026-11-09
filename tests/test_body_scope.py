@@ -40,6 +40,16 @@ def capture():
     }
 
 
+def in_components(cap):
+    """The same capture with the steps of Body2 in component cB and the rest in cA."""
+    for it in cap["items"]:
+        it["component"] = "cB" if it["name"] in ("Sketch2", "Extrude2") else "cA"
+    for p in cap["parameters"]["model"]:
+        made = p["created_by"]
+        made["component"] = "cB" if made.get("sketch") == "Sketch2" or made.get("name") == "Extrude2" else "cA"
+    return cap
+
+
 class BodyScopeTest(unittest.TestCase):
     def test_steps_of_the_picked_body_only(self):
         self.assertEqual([i["name"] for i in body_items(capture())], ["Extrude1", "Pattern1"])
@@ -56,6 +66,16 @@ class BodyScopeTest(unittest.TestCase):
 
     def test_sketches_only_other_bodies_use(self):
         self.assertEqual(other_sketches(capture()), {"Sketch2"})
+
+    def test_sketch_and_step_names_are_matched_with_their_component(self):
+        cap = in_components(capture())
+        cap["items"][2]["name"], cap["items"][3]["name"] = "Sketch1", "Extrude1"
+        cap["items"][3]["data"]["profiles"] = [{"sketch": "Sketch1"}]
+        cap["parameters"]["model"][2]["created_by"]["sketch"] = "Sketch1"
+        cap["parameters"]["model"][3]["created_by"]["name"] = "Extrude1"
+        self.assertEqual(other_sketches(cap), {"cB/Sketch1"})
+        kept = {p["name"] for p in scoped_model_params(cap)}
+        self.assertEqual(kept, {"d1", "d2", "d4", "d5", "d6", "d7"})
 
     def test_quantity_parameters_come_from_the_steps_of_the_body(self):
         self.assertEqual([r["name"] for r in quantity_refs(capture())], ["d9"])

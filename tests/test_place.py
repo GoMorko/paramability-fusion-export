@@ -9,7 +9,8 @@ from tests.schema_check import check_recipe, load_schema
 from tests.translator_helpers import FIXTURES, assert_schema_ok, load_capture, steps_of, translate_fixture
 
 from lib.translator import CaptureError, translate
-from lib.translator import zup
+from lib.translator import place
+from lib.translator.values import Sized
 
 POS_VEC_REFS = ("#/$defs/Pos3", "#/$defs/Vec3")
 TWO_D_ONLY = ("#/$defs/SketchLoop",)
@@ -58,12 +59,15 @@ class TurnTest(unittest.TestCase):
         self.assertEqual(on["origin"], [5.0, 2.0, 3.0])
 
     def test_no_negative_zero(self):
-        self.assertEqual(json.dumps(zup.turn_point([1, 2, 0])), "[1, 0.0, 2]")
+        turned = place.place(sample_recipe(), place.TURN_Z_UP)["features"][2]["origin"]
+        self.assertEqual(json.dumps(turned), "[1.0, -3.0, 2.0]")
+        flat = {"features": [{"kind": "hole", "origin": [1, 2, 0]}]}
+        self.assertEqual(json.dumps(place.place(flat, place.TURN_Z_UP)["features"][0]["origin"]), "[1.0, 0.0, 2.0]")
 
     def test_input_recipe_is_kept(self):
         recipe = translate_fixture("extrude_plate").recipe
         before = copy.deepcopy(recipe)
-        zup.turn_z_up(recipe)
+        place.place(recipe, place.TURN_Z_UP)
         self.assertEqual(recipe, before)
 
 
@@ -77,11 +81,12 @@ class FieldTableTest(unittest.TestCase):
             kind = step["properties"]["kind"]["const"]
             kinds.add(kind)
             paths = schema_paths(step, defs)
-            if kind in zup.FIELDS:
-                self.assertEqual(paths, {tuple(p) for p in zup.FIELDS[kind]}, kind)
-            else:
-                self.assertIn(kind, zup.NOT_WRITTEN)
-        self.assertEqual(kinds, set(zup.FIELDS) | set(zup.NOT_WRITTEN))
+            if kind in place.NOT_WRITTEN:
+                continue
+            listed = {tuple(p) for p in place.POSITIONS.get(kind, [])} | {tuple(p) for p in place.DIRECTIONS.get(kind, [])}
+            self.assertEqual(paths, listed, kind)
+            self.assertFalse({tuple(p) for p in place.POSITIONS.get(kind, [])} & {tuple(p) for p in place.DIRECTIONS.get(kind, [])})
+        self.assertEqual(kinds, set(place.POSITIONS) | set(place.DIRECTIONS) | set(place.NOT_WRITTEN))
 
 
 def sample_recipe():
@@ -107,7 +112,7 @@ class SampleTurnTest(unittest.TestCase):
     def test_every_written_field_turns_and_nothing_else(self):
         recipe = sample_recipe()
         assert_schema_ok(self, recipe)
-        turned = zup.turn_z_up(recipe)
+        turned = place.place(recipe, place.TURN_Z_UP)
         assert_schema_ok(self, turned)
         by_id = {s["id"]: s for s in turned["features"]}
         self.assertEqual(by_id["e"]["sketch"]["on"], {"origin": [1.0, -3.0, 2.0], "normal": [0.0, 0.0, 1.0], "xDir": [1.0, 0.0, 0.0]})
@@ -126,7 +131,60 @@ class SampleTurnTest(unittest.TestCase):
 
     def test_turning_back_gives_the_original(self):
         recipe = sample_recipe()
-        self.assertEqual(zup.turn_back(zup.turn_z_up(recipe)), recipe)
+        self.assertEqual(place.place(place.place(recipe, place.TURN_Z_UP), place.TURN_Z_UP.inverse()), recipe)
+
+
+def hole_at(*origin, direction=(0.0, 0.0, 1.0)):
+    return {"features": [{"kind": "hole", "origin": list(origin), "direction": list(direction), "diameter": 4}]}
+
+
+def sized(expr, n, *reads):
+    value = Sized(expr=expr)
+    value.n, value.reads = n, reads
+    return value
+
+
+QUARTER_ABOUT_X = {"origin": [10, 0, 0], "x": [1, 0, 0], "y": [0, 0, 1], "z": [0, -1, 0]}
+
+
+class MoveTest(unittest.TestCase):
+    def test_a_moved_part_keeps_plain_formulas(self):
+        frame = {"origin": [100, 50, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
+        recipe = hole_at(1, 2, sized("0.5 * h", 16, "h"))
+        out = place.place(recipe, place.from_frame(frame))["features"][0]["origin"]
+        self.assertEqual(out, [101.0, 52.0, {"expr": "0.5 * h"}])
+        self.assertEqual(out[2].reads, ("h",))
+
+    def test_a_turned_part_writes_affine_formulas_and_directions_ignore_the_move(self):
+        move = place.from_frame(QUARTER_ABOUT_X)
+        out = place.place(hole_at(1, 2, sized("h", 30, "h"), direction=(0.0, 0.0, 1.0)), move)["features"][0]
+        self.assertEqual(out["origin"], [11.0, {"expr": "-h"}, 2.0])
+        self.assertEqual(out["direction"], [0.0, -1.0, 0.0])
+
+    def test_move_then_turn_is_one_pass_and_inverts(self):
+        move = place.from_frame(QUARTER_ABOUT_X).then(place.TURN_Z_UP)
+        recipe = hole_at(1, 2, 3)
+        out = place.place(recipe, move)["features"][0]["origin"]
+        self.assertEqual(out, [11.0, -2.0, -3.0])
+        self.assertEqual(place.place(place.place(recipe, move), move.inverse()), recipe)
+
+    def test_identity_returns_a_copy(self):
+        recipe = hole_at(1, 2, 3)
+        out = place.place(recipe, place.move_for({"up_axis": "z", "target": {}}))
+        self.assertEqual(out, recipe)
+        self.assertIsNot(out, recipe)
+
+    def test_rounding_noise_in_a_turn_is_snapped(self):
+        frame = {"origin": [0, 0, 0], "x": [6e-17, 1, 0], "y": [-1, 6e-17, 0], "z": [0, 0, 1]}
+        out = place.place(hole_at(5, 0, 0), place.from_frame(frame))["features"][0]["origin"]
+        self.assertEqual(out, [0.0, 5.0, 0.0])
+
+    def test_frames_that_are_not_a_rotation_are_named(self):
+        good = {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
+        self.assertIsNone(place.frame_problem(good))
+        self.assertIn("scaled", place.frame_problem({**good, "x": [2, 0, 0]}))
+        self.assertIn("mirrored", place.frame_problem({**good, "z": [0, 0, -1]}))
+        self.assertIn("numbers", place.frame_problem({**good, "origin": [0, 0]}))
 
 
 class FixturesTest(unittest.TestCase):
@@ -146,7 +204,7 @@ class FixturesTest(unittest.TestCase):
                 continue
             checked += 1
             self.assertEqual(check_recipe(turned.recipe), [], name)
-            self.assertEqual(zup.turn_back(turned.recipe), flat.recipe, name)
+            self.assertEqual(place.place(turned.recipe, place.TURN_Z_UP.inverse()), flat.recipe, name)
         self.assertGreater(checked, 5)
 
 

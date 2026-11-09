@@ -10,7 +10,7 @@ from tests.test_translate_sized import CUBE, H, param, run
 from lib.params.expressions import evaluate
 from lib.translator import translate
 from lib.translator.values import _env
-from lib.translator.zup import turn_point
+from lib.translator import place
 
 HEIGHT = "FilterBox_height_mm"
 TOP = [40, 30, 32]
@@ -105,7 +105,8 @@ class PicksTest(unittest.TestCase):
     def test_a_formula_point_turns_with_a_y_up_design(self):
         point = copy.deepcopy(run(tray(lambda c: c["items"][2]["data"]["faces"].append(
             {"token": "f2", "point": [80, 30, 16]})))[0].recipe["features"][1]["openFaces"]["near"][0])
-        self.assertEqual(turn_point(point), [40, {"expr": "-" + HEIGHT}, 30])
+        turned = place.place({"features": [{"kind": "hole", "origin": point}]}, place.TURN_Z_UP)
+        self.assertEqual(turned["features"][0]["origin"], [40, {"expr": "-" + HEIGHT}, 30])
 
 
 class ReachTest(unittest.TestCase):

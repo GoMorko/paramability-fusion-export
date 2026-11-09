@@ -1,8 +1,11 @@
 """Walks the timeline and returns the capture: one JSON-safe dict the translator reads (docs/capture-format.md).
 
 Per timeline position k the marker is set to k once. At that position the walk finishes item k - 1 (bodies, health,
-what the feature produced) and starts item k (its inputs, the target body's box before it). The marker always ends
-at the end of the timeline.
+what the feature produced, whether the target changed) and starts item k (its inputs). The marker always ends at the
+end of the timeline.
+
+The target is the native body of its component, so every value is in component coordinates; `placement` says where
+the component sits in the assembly. Feature readers run only for items of the target's component.
 
 Feature readers come in pairs `(before, after)` (see read_solid). Modules read_finish and read_repeat add theirs
 through a module level READERS dict; a missing module means those types give `data: {}`.
@@ -13,8 +16,15 @@ from ..export_plan.temp_copy import require_marker_at_end
 from . import read_geometry as geo
 from . import read_solid
 from .parameters import list_model_parameters, list_user_parameters
+from .placement import occurrence_path, read_placement
 
-CAPTURE_VERSION = 2
+CAPTURE_VERSION = 3
+
+# A target counts as changed by an item when its box moves by more than this (mm) or its volume by more than the
+# larger of VOLUME_TOLERANCE_MM3 and VOLUME_RELATIVE of it.
+BOX_TOLERANCE_MM = 1e-4
+VOLUME_TOLERANCE_MM3 = 1e-4
+VOLUME_RELATIVE = 1e-9
 
 _OPTIONAL_READER_MODULES = ("read_finish", "read_repeat")
 
@@ -53,10 +63,47 @@ def _is_group(obj):
     return bool(geo.safe(lambda: obj.isGroup, False)) or geo.type_name(obj).endswith("TimelineGroup")
 
 
-def _root_bodies(ctx):
-    """Bodies of the root component at the current marker position (an unreadable list raises)."""
-    bodies = ctx.root.bRepBodies
+def _component_bodies(ctx):
+    """Bodies of the target's component at the current marker position (an unreadable list raises)."""
+    bodies = ctx.component.bRepBodies
     return [geo.body_ref(bodies.item(i)) for i in range(bodies.count)]
+
+
+def _native_entity(obj):
+    """(entity, is_proxy): the timeline entity made native when Fusion hands it over as an occurrence proxy."""
+    entity = geo.safe(lambda: obj.entity, None)
+    if entity is not None and geo.safe(lambda: entity.assemblyContext, None) is not None:
+        native = geo.safe(lambda: entity.nativeObject, None)
+        return (native or entity), True
+    return entity, False
+
+
+def _target_state(ctx):
+    """(exists, { box, volume_mm3 } or None): the target at the current marker position; None when unreadable."""
+    body = ctx.find_target()
+    if body is None:
+        return False, None
+    state = geo.safe(lambda: {"box": geo.box_of(body), "volume_mm3": round(body.volume * 1000.0, 6) + 0.0}, None)
+    return True, state
+
+
+def _box_numbers(box):
+    return box["min"] + box["max"]
+
+
+def _target_changed(before, after):
+    """True or False, or None when either side is unreadable or the target exists on neither side."""
+    if not before[0] and not after[0]:
+        return None
+    if before[0] != after[0]:
+        return True
+    a, b = before[1], after[1]
+    if a is None or b is None:
+        return None
+    if any(abs(x - y) > BOX_TOLERANCE_MM for x, y in zip(_box_numbers(a["box"]), _box_numbers(b["box"]))):
+        return True
+    tolerance = max(VOLUME_TOLERANCE_MM3, VOLUME_RELATIVE * abs(a["volume_mm3"]))
+    return abs(a["volume_mm3"] - b["volume_mm3"]) > tolerance
 
 
 def _start_item(timeline, ctx, readers, index, items, group_indices):
@@ -65,7 +112,7 @@ def _start_item(timeline, ctx, readers, index, items, group_indices):
     if _is_group(obj):
         group_indices.add(index)
         return
-    entity = geo.safe(lambda: obj.entity, None)
+    entity, is_proxy = _native_entity(obj)
     item = {
         "index": index,
         "name": geo.safe(lambda: obj.name, ""),
@@ -73,20 +120,28 @@ def _start_item(timeline, ctx, readers, index, items, group_indices):
         "suppressed": bool(geo.safe(lambda: obj.isSuppressed, False)),
         "health": "ok",
         "message": "",
-        "component_root": True,
+        "component": "",
+        "in_target_component": True,
         "bodies_after": [],
+        "target_changed": None,
         "data": {},
     }
+    if is_proxy:
+        item["entity_context"] = "proxy"
     items[index] = item
-    if entity is None or item["suppressed"]:
+    if entity is None:
         return
-    item["component_root"] = geo.safe(
-        lambda: entity.parentComponent.entityToken == ctx.root.entityToken, True)
-    bodies_before = geo.safe(lambda: _root_bodies(ctx), None)
+    token = geo.safe(lambda: entity.parentComponent.entityToken, None)
+    if token:
+        item["component"] = token
+        item["in_target_component"] = token == ctx.component_token
+    if item["suppressed"]:
+        return
+    bodies_before = geo.safe(lambda: _component_bodies(ctx), None)
     if bodies_before is not None:
         item["bodies_before"] = bodies_before
     before = (readers.get(item["type"]) or (None, None))[0]
-    if before is not None:
+    if before is not None and item["in_target_component"]:
         try:
             item["data"] = before(entity, ctx)
         except Exception as exc:
@@ -108,20 +163,24 @@ def _bodies_after(item, entity):
         return None
 
 
-def _finish_item(timeline, ctx, readers, index, items):
-    """Marker is just after `index`: read bodies, health and what the feature produced."""
+def _finish_item(timeline, ctx, readers, index, items, states):
+    """Marker is just after `index`: read bodies, health, whether the target changed and what the feature produced.
+
+    `states` is the target state before and after the item (see `_target_state`).
+    """
     item = items.get(index)
     if item is None:
         return
     obj = timeline.item(index)
     item["health"] = geo.safe(lambda: _health(obj.healthState), "ok")
     item["message"] = geo.safe(lambda: obj.errorOrWarningMessage or "", "")
-    entity = geo.safe(lambda: obj.entity, None)
+    entity, _ = _native_entity(obj)
     if entity is None or item["suppressed"]:
         return
+    item["target_changed"] = _target_changed(*states)
     item["bodies_after"] = _bodies_after(item, entity)
     after = (readers.get(item["type"]) or (None, None))[1]
-    if after is not None and "read_error" not in item["data"]:
+    if after is not None and item["in_target_component"] and "read_error" not in item["data"]:
         try:
             item["data"].update(after(entity, ctx, item["data"]) or {})
         except Exception as exc:
@@ -167,16 +226,55 @@ def _app_details():
         return "", "", "z"
 
 
-def _parameters(design):
+def _path_components(ctx):
+    """The target's component, then the component of each occurrence out to the top, then the root (no repeats)."""
+    components = [ctx.component]
+    for occurrence in occurrence_path(ctx.picked):
+        components.append(geo.safe(lambda: occurrence.component, None))
+    components.append(ctx.root)
+    found, seen = [], set()
+    for component in components:
+        token = geo.safe(lambda: component.entityToken, None)
+        if component is not None and token not in seen:
+            seen.add(token)
+            found.append(component)
+    return found
+
+
+def _model_parameters(ctx):
+    """Model parameters of the components on the target's path, merged by name (the nearest component wins)."""
+    merged = {}
+    for component in _path_components(ctx):
+        for parameter in geo.safe(lambda: list_model_parameters(component), []):
+            merged.setdefault(parameter["name"], parameter)
+    return list(merged.values())
+
+
+def _parameters(design, ctx):
     """{ user, model } parameters (Fusion internal units) and the design's default length unit; empty when unreadable."""
     user = geo.safe(lambda: list_user_parameters(design), [])
-    model = geo.safe(lambda: list_model_parameters(design.rootComponent), [])
+    model = geo.safe(lambda: _model_parameters(ctx), [])
     unit = geo.safe(lambda: str(design.fusionUnitsManager.defaultLengthUnits).strip(), "") or "mm"
     return {"user": user, "model": model}, unit
 
 
+def _target_record(ctx, final):
+    """The TARGET of the envelope: the native body, its component and its place in the assembly."""
+    return {
+        **ctx.target_ref,
+        "box": geo.box_of(final),
+        "volume_mm3": round(final.volume * 1000.0, 6) + 0.0,
+        "component": {
+            "token": ctx.component_token,
+            "name": geo.safe(lambda: ctx.component.name, "") or "",
+            "root": ctx.is_root_component,
+        },
+        "placement": read_placement(ctx.picked, ctx.root, ctx.component),
+    }
+
+
 def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_readers=None):
-    """Capture of `design` for the picked `body`.
+    """Capture of `design` for the picked `body` (the occurrence proxy of a body inside a component, or a root body).
 
     Refuses (StepExportError) unless the marker is at the end. fusion, name and up_axis come from the running app
     when not given. extra_readers adds feature readers (type name to (before, after)).
@@ -190,18 +288,22 @@ def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_reade
     readers.update(extra_readers or {})
     items = {}
     group_indices = set()
+    previous = (False, None)
     try:
         for k in range(count + 1):
             timeline.markerPosition = k
+            state = _target_state(ctx)
             if k > 0:
-                _finish_item(timeline, ctx, readers, k - 1, items)
+                _finish_item(timeline, ctx, readers, k - 1, items, (previous, state))
+            previous = state
             if k < count:
                 _start_item(timeline, ctx, readers, k, items, group_indices)
     finally:
         _restore_marker(timeline, count)
     _check_groups(timeline, count, items, group_indices)
-    final = ctx.find_target() or body
-    parameters, design_units = _parameters(design)
+    final = ctx.find_target() or ctx.target
+    parameters, design_units = _parameters(design, ctx)
+    target = _target_record(ctx, final)
     app_fusion, app_name, app_up = _app_details() if None in (fusion, name, up_axis) else ("", "", "z")
     return {
         "capture": CAPTURE_VERSION,
@@ -210,10 +312,7 @@ def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_reade
         "up_axis": app_up if up_axis is None else up_axis,
         "design_units": design_units,
         "parameters": parameters,
-        "target": {
-            **ctx.target_ref,
-            "box": geo.box_of(final),
-            "volume_mm3": round(final.volume * 1000.0, 6) + 0.0,
-        },
+        "targets": [target],
+        "target": target,
         "items": [items[i] for i in sorted(items)],
     }

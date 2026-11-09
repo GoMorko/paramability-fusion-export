@@ -3,15 +3,18 @@
 The capture is the plain dict the reader (`lib/fusion_reader/`) returns for one design, and the only input of the
 pure translator (`lib/translator/`). Fixtures in `tests/fixtures/captures/` use this format, so every translator test
 runs without Fusion. They are written by hand or saved from real designs: the export writes the capture into
-`report.json` (section 6). The reader writes capture number 2; the translator reads 1 and 2 (number 1 has no
-`parameters`, `design_units` or `params`). It refuses any other number, or a capture that lacks `capture`, `target` or
-`items`, with a `CaptureError`.
+`report.json` (section 6). The reader writes capture number 3; the translator reads 1, 2 and 3 (number 1 has no
+`parameters`, `design_units` or `params`; numbers 1 and 2 have no `targets`, `placement` or component fields, and their
+items carry `component_root`). It refuses any other number, or a capture that lacks `capture`, `target` or `items`,
+with a `CaptureError`.
 
 ## 1. Rules for every value
 
 - Lengths in mm (Fusion cm times 10), angles in degrees (Fusion radians times 180 / pi), through
   `lib/package/units.py`. Unitless values stay.
-- 3D values are in the design's model frame, before any up axis turn. Points and vectors are `[x, y, z]` lists.
+- 3D values are in the coordinates of the target's component (the native body's own frame; for a body in the root
+  component these are the design's model coordinates), before any up axis turn. `target.placement` (section 2)
+  maps them to the root. Points and vectors are `[x, y, z]` lists.
 - 2D sketch values are in the sketch's own frame: `[x, y]` in mm.
 - A frame is `{ "origin": [..], "x": [..], "y": [..], "z": [..] }` (unit axes, model frame), read with
   `Matrix3D.getAsCoordinateSystem()`.
@@ -27,23 +30,67 @@ runs without Fusion. They are written by hand or saved from real designs: the ex
 
 ```json
 {
-  "capture": 2,
+  "capture": 3,
   "fusion": "2.0.21508",
   "design": "Cable clip",
   "up_axis": "z",
   "design_units": "mm",
   "parameters": { "user": [ PARAMETER, ... ], "model": [ PARAMETER, ... ] },
-  "target": { "token": "...", "name": "Body1", "box": { "min": [0, 0, 0], "max": [40, 20, 10] }, "volume_mm3": 8000.0 },
+  "targets": [ TARGET ],
+  "target": TARGET,
   "items": [ ITEM, ... ]
 }
 ```
 
+TARGET:
+
+```json
+{
+  "token": "...", "name": "Body1",
+  "box": { "min": [0, 0, 0], "max": [40, 20, 10] }, "volume_mm3": 8000.0,
+  "component": { "token": "...", "name": "Tray", "root": false },
+  "placement": PLACEMENT
+}
+```
+
+`target` is the first of `targets` (the same object; a later version lists several bodies there). The token, name, box
+and volume are those of the **native** body (component coordinates), not of the occurrence proxy that the person
+picked. `component` is the component that owns the body. `placement` is `null` for a body of the root component;
+otherwise:
+
+```json
+"placement": {
+  "path": "Box:1+Tray:2",
+  "frame": { "origin": [100, 50, 0], "x": [0, 1, 0], "y": [-1, 0, 0], "z": [0, 0, 1] },
+  "source": "transform2",
+  "checked_points": 3,
+  "uses": 2,
+  "linked": false
+}
+```
+
+- `frame` maps component coordinates to root coordinates (mm, before any up axis turn). `path` is
+  `Occurrence.fullPathName`.
+- `source` names the candidate that passed (`lib/fusion_reader/placement.py`): `transform2` (the picked occurrence's
+  own transform), `path_transform2` (the native occurrence transforms from the top down, multiplied), or the same with
+  `transform` for the retired member when `transform2` cannot be read.
+- A candidate passes when its frame is a pure rotation plus move (unit, perpendicular, right handed axes within 1e-9;
+  no scale or mirror) and up to 3 native vertices (face points when the body has fewer than 3 vertices), mapped by
+  it, land on the same vertices of the proxy within 1e-3 mm. `checked_points` is how many were compared.
+- `uses` is the number of occurrences of the component in the design; `linked` is true when an occurrence on the path
+  comes from a linked design (`Occurrence.isReferencedComponent`).
+- When no candidate passes, or the body was not picked through an occurrence, the record is
+  `{ "path", "error": "<reason>", "uses", "linked" }` without `frame` and `source`; the export then lands a fixed shape.
+
 `design_units` is the design's default length unit (`fusionUnitsManager.defaultLengthUnits`, `mm` when unreadable); a
 bare number in a length formula is read in it. `parameters.user` is `list_user_parameters(design)` and
-`parameters.model` is `list_model_parameters(rootComponent)` (`lib/fusion_reader/parameters.py`: name, expression, value
+`parameters.model` is `list_model_parameters(component)` (`lib/fusion_reader/parameters.py`: name, expression, value
 in Fusion's internal cm and radians, unit, kind, favourite, dependency lists, and for model parameters `role` and
-`created_by` as `{ kind, token, name, sketch }`, where `sketch` is the name of the sketch that holds a sketch dimension
-(`SketchDimension.parentSketch`) and empty otherwise). Both are empty lists when unreadable. The export builds its size table from them
+`created_by` as `{ kind, token, name, sketch, component }`, where `sketch` is the name of the sketch that holds a sketch
+dimension (`SketchDimension.parentSketch`) and empty otherwise, and `component` is the token of the component the maker
+lives in: the sketch's component for a dimension, else the component the parameter is listed from) for the target's
+component, then for each component on its occurrence path up to the root, merged by name (the nearest component wins).
+Both are empty lists when unreadable. The export builds its size table from them
 (`lib/params/size_table.py`); the translator reads only `data.params` of the items and, through the size table,
 the `created_by` kinds.
 
@@ -51,8 +98,8 @@ the `created_by` kinds.
 item in order. Group objects are skipped; the children of a group are listed as ordinary items, and the reader raises
 when a group lists a child the walk did not reach.
 
-What the translator trusts: `target.token` and `target.name` (to follow the body), the item fields in section 5,
-and the item level `target_box_before` boxes (through all cuts, mirrors). It never reads `target.box` or
+What the translator trusts: `target.token` and `target.name` (to follow the body), `target.placement`, the item fields
+in section 5, and the item level `target_box_before` boxes (through all cuts, mirrors). It never reads `target.box` or
 `target.volume_mm3`; they are kept for a later geometry check against the rebuilt recipe. In fixtures both are
 computed from the capture by `scripts/fixture_geometry.py` (needs numpy; box within one 0.2 mm voxel, volume within
 about 0.5 percent). `volume_mm3` is null when the part has steps that script does not model (rounds, chamfers, shells,
@@ -69,8 +116,10 @@ ITEM:
   "suppressed": false,
   "health": "ok",
   "message": "",
-  "component_root": true,
+  "component": "<component token>",
+  "in_target_component": true,
   "bodies_after": [{ "token": "...", "name": "Body1" }],
+  "target_changed": true,
   "data": { }
 }
 ```
@@ -79,7 +128,15 @@ ITEM:
   `ExtrudeFeature`). Items without an entity: `"type": "none"`.
 - `health`: from `TimelineObject.healthState` (`ok`, `warning`, `error`); `message` from
   `errorOrWarningMessage`.
-- `component_root`: the feature's `parentComponent` is the root component.
+- `component`: the token of the feature's `parentComponent` (read on the native entity; empty when unreadable).
+  `in_target_component`: it equals `target.component.token` (true when unreadable). Feature readers run only for items
+  in the target's component; the other items keep `"data": {}` with their `bodies_after`, health and message.
+- `entity_context`: `"proxy"` only when `TimelineObject.entity` came as an occurrence proxy and was turned native
+  (`nativeObject`) before reading; absent otherwise.
+- `bodies_before` (not for suppressed items): the bodies of the target's component at the marker before the item.
+- `target_changed`: whether the native target's box (1e-4 mm) or volume changed from the marker before the item to the
+  marker after it. `true` also when the target appears or disappears; `null` when it exists on neither side or a
+  measure could not be read.
 - `bodies_after`: `feature.bodies` read with the marker just after the item. `null` (with an item level
   `"read_error": "bodies: ..."`) when the bodies cannot be read; it is not the same as `[]`, which says the item
   makes no body. The driver must not treat `null` as helper geometry.
@@ -93,8 +150,9 @@ ITEM:
 `lib/fusion_reader/capture.py`, `read_capture(design, body) -> dict`:
 
 1. Refuse unless `timeline.markerPosition == timeline.count` (existing `marker_at_end`).
-2. For `k` from 0 to `count`: set `timeline.markerPosition = k`. Read `bodies_after` of item `k - 1` and the
-   inputs of item `k` (profiles, edges, faces, tool bodies, the target box before it). One recompute per item.
+2. For `k` from 0 to `count`: set `timeline.markerPosition = k`. Read the target's box and volume once. Read
+   `bodies_after` and `target_changed` of item `k - 1` and, for items of the target's component, the inputs of item `k`
+   (profiles, edges, faces, tool bodies, the target box before it). One recompute per item.
 3. `finally`: `timeline.moveToEnd()`, then check `markerPosition == count`.
    After that, each `timeline.timelineGroups` entry (`startIndex` to `endIndex`) must be covered by the walk;
    else `read_capture` raises `CaptureReadError` and the export lands as a fixed shape.
@@ -338,6 +396,24 @@ for extrudes).
 
 **ThreadFeature**: `{ "modeled": bool }` (`isModeled`).
 
+### Inputs from another component (`foreign`)
+
+A record whose entity does not belong to the target's component carries `"foreign": true`; the key is absent
+otherwise. An entity is foreign when it has an `assemblyContext` (it is seen through an occurrence) or its component
+token differs from `target.component.token` (`foreign()` in `lib/fusion_reader/read_geometry.py`; the component is read
+from `parentComponent`, `component`, `body.parentComponent` or `parentSketch.parentComponent`, whichever answers). An
+entity whose component cannot be read is not marked.
+
+| Where | Record |
+|---|---|
+| Extrude and revolve `profiles[]` | the profile entry (its profile or sketch is foreign) |
+| Extrude `start` and `side_one` / `side_two` of kind `fromEntity` / `toEntity` | the extent entry (the picked face or plane) |
+| `participants[]` of extrude, revolve and hole | the body ref |
+| Combine `target` and `tools[]` | the body ref |
+| Fillet and chamfer `sets[].edges[]` | the edge record (`edge.body`) |
+| Shell `faces[]` | the face record (`face.body`); a foreign body input sets `"foreign": true` on the data itself |
+| Revolve and circular pattern `axis`, mirror `plane` | the axis or plane |
+
 ### Parameters behind values (`data.params`)
 
 A value that Fusion keeps as a model parameter is listed in the item's `data.params`: capture field path to
@@ -444,3 +520,10 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | The members in the `params` table return a `ModelParameter` (name, expression, value): `DistanceExtentDefinition.distance`, `taperAngleOne` and `taperAngleTwo`, `OffsetStartDefinition.offset`, the `HoleFeature` size members, `ConstantRadiusFilletEdgeSet.radius`, chamfer set distances, `insideThickness`, pattern `quantityOne`, `distanceOne` and the circular ones | a member that is not one adds nothing and the value stays a number; the sizes hand test logs which members gave a parameter |
 | `ModelParameter.createdBy` kinds and `name` for a sketch dimension | the kind comes from the type name; the sketch rule needs only the kind |
 | `ToEntityExtentDefinition.entity` and `FromEntityStartDefinition.entity` give the picked face (`BRepFace`, read for `pointOnFace`) or construction plane | an unreadable face point fixes the sizes written before the extrude; the "Pick points that follow sizes" hand test |
+| `BRepBody.nativeObject`, `BRepBody.assemblyContext` of a picked body inside a component; `Feature.assemblyContext`, `Feature.nativeObject` of timeline entities | the target is the native body and a proxy entity is turned native; `entity_context` logs when it was a proxy; the "Bodies inside components" hand tests |
+| `Occurrence.transform2` of a nested proxy is relative to the root or to the parent | `placement.source` says which candidate passed the point check (`transform2` or `path_transform2`) |
+| Vertex and face point geometry of a proxy body is in root coordinates, of the native body in component coordinates | the point check; a mismatch gives `placement.error` and a fixed shape |
+| `Occurrence.isReferencedComponent`, `Component.allOccurrencesByComponent` | `linked` and `uses`; a wrong value only changes a note or refusal |
+| `Sketch.transform`, `SketchPoint.worldGeometry` of a native component sketch are in component coordinates | the "Nested and turned" hand test compares one hole position |
+| `Sketch.parentComponent`, `ConstructionPlane.component`, `BRepFace.body`, `BRepEdge.body` | `foreign` reads them in a try; an unreadable one leaves the record unmarked |
+| `BRepBody.copyToComponent(proxy)` keeps the assembly place | the copy guard in `step_export.py` compares the bounding boxes (1e-3 mm) and refuses before writing |

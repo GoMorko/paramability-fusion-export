@@ -461,7 +461,8 @@ def evaluate(capture):
     Lenient.on = True
     Lenient.used = False
     for item in capture["items"]:
-        if item.get("suppressed") or item.get("component_root") is False or item["type"] in ("Sketch", "none"):
+        outside = item.get("component_root") is False or item.get("in_target_component") is False
+        if item.get("suppressed") or outside or item["type"] in ("Sketch", "none"):
             continue
         data = item.get("data") or {}
         kind = item["type"]

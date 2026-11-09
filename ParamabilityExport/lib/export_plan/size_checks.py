@@ -13,6 +13,11 @@ from ..fusion_reader.sketches import moved_sketches
 MAX_CHECKS = 16
 _SAME = 1e-9
 
+# Key of the part's place in a sketch snapshot. Sketch keys hold " / ", so no sketch can take this one.
+PLACEMENT_KEY = "<placement>"
+# 1e-4 mm: the recompute noise Fusion leaves on an unchanged place (the numbers are mm and unit axes).
+PLACE_TOLERANCE = 1e-4
+
 
 def check_value(size):
     """The value one check uses: the top of the range, or the bottom when the top is the current value. None when
@@ -64,12 +69,37 @@ def build_failure_reason(label, value):
     return f"{label} stays fixed: Fusion cannot build the part when it is {value:g}."
 
 
-def read_checks(checks, results, baseline_sketches, sketch_by_check, labels):
+def frame_numbers(frame):
+    """A placement frame {origin, x, y, z} as the flat list stored under PLACEMENT_KEY in a snapshot."""
+    return [float(v) for key in ("origin", "x", "y", "z") for v in frame[key]]
+
+
+def place_reason(label, part):
+    return (f"{label} stays fixed: it moves {part} in the assembly. "
+            "Parts that move with sizes come in a later version.")
+
+
+def place_moved(before, after):
+    """The part's place changed between two snapshots. A place that was not read in one of them is no move."""
+    old, new = before.get(PLACEMENT_KEY), after.get(PLACEMENT_KEY)
+    if old is None or new is None:
+        return False
+    return len(old) != len(new) or any(abs(a - b) > PLACE_TOLERANCE for a, b in zip(old, new))
+
+
+def _sketches_only(snapshot):
+    return {k: v for k, v in snapshot.items() if k != PLACEMENT_KEY}
+
+
+def read_checks(checks, results, baseline_sketches, sketch_by_check, labels, part_name="the part"):
     """Sort the checks by what they showed.
 
     results: RowExport results in check order; an entry with 'error' is a row Fusion could not build.
-    sketch_by_check: {row name: sketch numbers read at that check} from the same run.
+    sketch_by_check: {row name: sketch numbers read at that check} from the same run. A snapshot may also hold the
+    part's place under PLACEMENT_KEY (`frame_numbers`); a size that moves it is fixed, since the recipe is written at
+    the place of the export.
     labels: {size name: text for the person}.
+    part_name: the part as the person knows it (the component), for the reason of a move.
     Returns (kept, fixed): kept lists the checks with a STEP file, in order, each with 'step_file'; fixed lists
     {'name' (Fusion name), 'reason', 'param', 'size'} for sizes that must stay fixed numbers.
     """
@@ -80,7 +110,12 @@ def read_checks(checks, results, baseline_sketches, sketch_by_check, labels):
             fixed.append({**fixed_entry(check["param"], build_failure_reason(label, check["value"])),
                           "param": check["param"], "size": check["size"]})
             continue
-        moved = moved_sketches(baseline_sketches, sketch_by_check.get(check["row"]["name"], {}))
+        snapshot = sketch_by_check.get(check["row"]["name"], {})
+        if place_moved(baseline_sketches, snapshot):
+            fixed.append({**fixed_entry(check["param"], place_reason(label, part_name)),
+                          "param": check["param"], "size": check["size"]})
+            continue
+        moved = moved_sketches(_sketches_only(baseline_sketches), _sketches_only(snapshot))
         if moved:
             fixed.append({**fixed_entry(check["param"], moved_reason(label, moved)),
                           "param": check["param"], "size": check["size"]})

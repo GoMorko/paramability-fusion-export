@@ -8,7 +8,8 @@ import json
 from ..package.manifest import (
     MAX_FIXED, build_recipe_manifest, build_step_only_manifest, check_step_path, validate_manifest)
 from ..translator import CaptureError, translate
-from ..translator.notes import inside_component_note, recipe_note, reader_failure_note, step_only_note, translate_failure_note
+from ..translator.notes import (
+    recipe_note, reader_failure_note, step_only_note, translate_failure_note, used_several_times_note)
 from .messages import dropped_note, fixed_note, sizes_note, unchecked_note
 
 MAX_RECIPE_BYTES = 8 * 1024 * 1024
@@ -86,12 +87,22 @@ def _dropped(size_table, recipe, fixed):
             if size_table.size_name(n) not in sizes and size_table.recipe_name(n) not in fixed_names]
 
 
-def plan_single_export(capture_or_error, step_file, title, writer, up_axis, in_component=False,
+def _uses(capture):
+    """How many times Fusion uses the component of the picked body (1 for a root body)."""
+    placement = ((capture or {}).get("target") or {}).get("placement")
+    uses = placement.get("uses") if isinstance(placement, dict) else 1
+    return uses if isinstance(uses, int) and not isinstance(uses, bool) else 1
+
+
+def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
                        size_table=None, checks=None, fixed=None, unchecked=None, listing=None):
     """Return (manifest, files, report) for one body.
 
+    A body inside a component is translated like a root body: its capture carries the place of the part in the
+    assembly, and the recipe is written there. A linked part, a place that cannot be read, or a step across
+    components makes the part a fixed shape with its own note.
+
     capture_or_error: the reader's capture dict, or the exception the reader raised.
-    in_component: the body is not in the root component, so no steps are translated and the part stays a fixed shape.
     size_table: the SizeTable of this export, or None for a recipe without sizes. A ticked size that no
       copied step uses is named in a note and in `report.json` ("dropped").
     checks: [{'size', 'value', 'step_file'}] from the size checks, one size changed in each. Only checks of sizes the
@@ -109,10 +120,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis, in_c
     refusal = None
     note = None
     error = None
-    if in_component:
-        capture = None
-        note = inside_component_note()
-    elif capture is None:
+    if capture is None:
         error = capture_or_error
         note = reader_failure_note()
     else:
@@ -159,7 +167,10 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis, in_c
     files = {"part.step": step_file}
     listed = listing.entries if listing is not None else None
     if recipe_data is not None:
-        notes = [recipe_note(len(result.recipe["features"]))]
+        first = recipe_note(len(result.recipe["features"]))
+        if _uses(capture) > 1:
+            first += " " + used_several_times_note(_uses(capture))
+        notes = [first]
         if free:
             notes.append(sizes_note(len(free)))
         if all_fixed:

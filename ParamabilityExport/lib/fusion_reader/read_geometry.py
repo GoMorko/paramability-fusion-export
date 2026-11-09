@@ -103,8 +103,35 @@ def box_of(body):
     return {"min": point(box.minPoint), "max": point(box.maxPoint)}
 
 
-def body_ref(body):
-    return {"token": safe(lambda: body.entityToken, ""), "name": safe(lambda: body.name, "")}
+def component_token_of(entity):
+    """Token of the component that owns an entity (a body, sketch, profile, plane, face or edge), or None."""
+    for read in (lambda: entity.parentComponent, lambda: entity.component, lambda: entity.body.parentComponent,
+                 lambda: entity.parentSketch.parentComponent, lambda: entity.sketch.parentComponent):
+        token = safe(lambda: read().entityToken, None)
+        if token:
+            return token
+    return None
+
+
+def foreign(entity, ctx):
+    """True when the entity is seen through an occurrence or belongs to another component than the target's."""
+    if entity is None or ctx is None:
+        return False
+    if safe(lambda: entity.assemblyContext, None) is not None:
+        return True
+    token = component_token_of(entity)
+    return token is not None and token != ctx.component_token
+
+
+def mark_foreign(record, entity, ctx):
+    """Adds "foreign": true to a record when its entity is foreign (see `foreign`); returns the record."""
+    if isinstance(record, dict) and foreign(entity, ctx):
+        record["foreign"] = True
+    return record
+
+
+def body_ref(body, ctx=None):
+    return mark_foreign({"token": safe(lambda: body.entityToken, ""), "name": safe(lambda: body.name, "")}, body, ctx)
 
 
 def collection_items(collection):
@@ -117,8 +144,8 @@ def collection_items(collection):
         return []
 
 
-def body_refs(collection):
-    return [body_ref(b) for b in collection_items(collection)]
+def body_refs(collection, ctx=None):
+    return [body_ref(b, ctx) for b in collection_items(collection)]
 
 
 def plane_of(entity):
@@ -154,7 +181,7 @@ def _same_vertex(a, b):
     return token_a is not None and token_a == safe(lambda: b.entityToken, None)
 
 
-def edge_record(edge):
+def edge_record(edge, ctx=None):
     """{ token, closed, points }: the middle point of an open edge; the points at 0.25 and 0.75 of a closed one."""
     closed = _same_vertex(safe(lambda: edge.startVertex, None), safe(lambda: edge.endVertex, None))
     points = []
@@ -166,22 +193,32 @@ def edge_record(edge):
         fallback = safe(lambda: edge.pointOnEdge, None)
         if fallback is not None:
             points.append(point(fallback))
-    return {"token": safe(lambda: edge.entityToken, ""), "closed": closed, "points": points}
+    record = {"token": safe(lambda: edge.entityToken, ""), "closed": closed, "points": points}
+    return mark_foreign(record, edge, ctx)
 
 
 class ReadContext:
-    """What one capture read shares: the design, the root component and the picked body."""
+    """What one capture read shares: the design, the root, the target body and the component it lives in.
+
+    The target is kept native (component coordinates): a picked body inside a component arrives as an occurrence
+    proxy and `nativeObject` gives the body the timeline features work on.
+    """
 
     def __init__(self, design, target):
         self.design = design
         self.root = design.rootComponent
-        self.target = target
-        self.target_ref = body_ref(target)
+        self.picked = target
+        native = safe(lambda: target.nativeObject, None) if safe(lambda: target.assemblyContext, None) else None
+        self.target = native or target
+        self.target_ref = body_ref(self.target)
+        self.component = safe(lambda: self.target.parentComponent, None) or self.root
+        self.component_token = safe(lambda: self.component.entityToken, "") or ""
+        self.is_root_component = self.component_token == safe(lambda: self.root.entityToken, "")
 
     def find_target(self):
-        """The picked body at the current marker position, or None when it does not exist yet.
+        """The target body (native) at the current marker position, or None when it does not exist yet.
 
-        Looked up by token; the root component's bodies are searched by name when the token is not found.
+        Looked up by token; the target's component is searched by name when the token is not found.
         """
         token = self.target_ref["token"]
         if token:
@@ -189,7 +226,7 @@ class ReadContext:
             if found:
                 return found[0]
         name = self.target_ref["name"]
-        for body in collection_items(safe(lambda: self.root.bRepBodies, None)):
+        for body in collection_items(safe(lambda: self.component.bRepBodies, None)):
             if name and safe(lambda: body.name, None) == name:
                 return body
         return None

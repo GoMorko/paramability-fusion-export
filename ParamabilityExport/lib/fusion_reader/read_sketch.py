@@ -123,14 +123,14 @@ def _read_curve(geometry, space):
     }
 
 
-def read_profile(profile):
-    """One Profile as { sketch, frame, loops }."""
+def read_profile(profile, ctx=None):
+    """One Profile as { sketch, frame, loops }; "foreign": true when its sketch is not the target component's."""
     sketch = profile.parentSketch
     loops = geo.collection_items(profile.profileLoops)
     loop_curves = [geo.collection_items(loop.profileCurves) for loop in loops]
     frame = geo.frame_of(sketch.transform)
     space = _Space(sketch, [c for curves in loop_curves for c in curves], frame)
-    return {
+    record = {
         "sketch": sketch.name,
         "frame": frame,
         "space": space.mode,
@@ -139,6 +139,9 @@ def read_profile(profile):
             for loop, curves in zip(loops, loop_curves)
         ],
     }
+    if geo.foreign(profile, ctx) or geo.foreign(sketch, ctx):
+        record["foreign"] = True
+    return record
 
 
 def first_profile(raw):
@@ -157,16 +160,16 @@ def profile_area(profile):
     return geo.safe(lambda: round(profile.areaProperties().area * 100.0, 6) + 0.0, None)
 
 
-def read_profiles(raw):
+def read_profiles(raw, ctx=None):
     """Profiles of a feature's `profile` property: a Profile, a planar BRepFace or a collection of them."""
     name = geo.type_name(raw)
     if name == "Profile":
-        return [read_profile(raw)]
+        return [read_profile(raw, ctx)]
     if name == "BRepFace":
-        return [{"face": True, "type": "BRepFace"}]
+        return [geo.mark_foreign({"face": True, "type": "BRepFace"}, raw, ctx)]
     if raw is not None and hasattr(raw, "count") and hasattr(raw, "item"):
         out = []
         for entity in geo.collection_items(raw):
-            out.extend(read_profiles(entity))
+            out.extend(read_profiles(entity, ctx))
         return out
     return [{"kind": "other", "type": name}]

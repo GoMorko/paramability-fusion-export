@@ -33,13 +33,41 @@ class PlanTest(unittest.TestCase):
     def plan(self, capture, up_axis="z"):
         return plan_single_export(capture, self.step, "Plate", "writer 1", up_axis)
 
-    def test_body_in_a_component_is_a_fixed_shape_with_a_note(self):
-        manifest, files, report = plan_single_export(
-            RuntimeError("not read"), self.step, "Plate", "writer 1", "z", in_component=True)
+    def test_body_in_a_component_is_a_recipe_at_its_place(self):
+        manifest, files, report = self.plan(load_capture("component_moved"))
+        self.assertEqual(manifest["kind"], "recipe")
+        self.assertEqual(manifest["notes"], ["5 steps copied from Fusion."])
+        on = json.loads(files["recipe.json"])["features"][0]["sketch"]["on"]
+        self.assertEqual(on["origin"], [100.0, 50.0, 0.0])
+        self.assertEqual(report["capture"]["target"]["placement"]["path"], "Tray:1")
+
+    def test_a_part_used_several_times_says_which_copy_the_file_holds(self):
+        capture = load_capture("component_moved")
+        capture["target"]["placement"]["uses"] = 3
+        manifest, _, _ = self.plan(capture)
+        self.assertEqual(manifest["notes"][0],
+                         "5 steps copied from Fusion. Fusion uses this part 3 times; the file holds the one you picked.")
+        self.assertEqual(validate_manifest(manifest), [])
+
+    def test_a_linked_part_or_unreadable_place_is_a_fixed_shape_with_its_own_note(self):
+        capture = load_capture("component_moved")
+        capture["target"]["placement"]["linked"] = True
+        manifest, files, report = self.plan(capture)
         self.assertEqual(manifest["kind"], "stepOnly")
-        self.assertIn("sits inside a component", manifest["notes"][0])
+        self.assertTrue(manifest["notes"][0].startswith("This part comes from a linked design."))
         self.assertNotIn("recipe.json", files)
+        capture = load_capture("component_moved")
+        capture["target"]["placement"] = {"path": "Tray:1", "error": "no match", "uses": 1, "linked": False}
+        manifest, _, report = self.plan(capture)
+        self.assertEqual(manifest["notes"], ["Added as a fixed shape: the place of this part in the assembly could not be read."])
         self.assertEqual(report["outcome"], "stepOnly")
+
+    def test_a_step_of_another_component_is_a_fixed_shape_naming_the_step(self):
+        manifest, _, report = self.plan(load_capture("component_cross_cut"))
+        self.assertEqual(manifest["kind"], "stepOnly")
+        self.assertIn("Extrude5 (extrude) changes this part from another component", manifest["notes"][0])
+        self.assertEqual(report["refusal"]["index"], 3)
+        self.assertEqual(validate_manifest(manifest), [])
 
     def test_translated_part_is_a_recipe_package(self):
         manifest, files, report = self.plan(load_capture("extrude_plate"))

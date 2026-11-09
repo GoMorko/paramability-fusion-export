@@ -84,25 +84,29 @@ def created_by_kind(entity):
     return "other"
 
 
-def _created_by(p):
+def _created_by(p, owner_token):
+    """Who made the parameter. `component` is the token of the component the maker lives in: the sketch's component
+    for a sketch dimension, else the component the parameter is listed from."""
     entity = safe(lambda: p.createdBy, None)
     if entity is None:
-        return {"kind": "other", "token": "", "name": ""}
+        return {"kind": "other", "token": "", "name": "", "component": owner_token}
     return {
         "kind": created_by_kind(entity),
         "token": safe(lambda: entity.entityToken, "") or "",
         "name": safe(lambda: entity.name, "") or "",
         "sketch": safe(lambda: entity.parentSketch.name, "") or "",
+        "component": safe(lambda: entity.parentSketch.parentComponent.entityToken, "") or owner_token,
     }
 
 
 def list_model_parameters(component):
     """One dict per numeric model parameter of a component (read through Component.modelParameters).
 
-    Keys: as for user parameters, plus role and created_by ({ kind, token, name, sketch }; `sketch` is the sketch name
-    of a sketch dimension, else empty). Unreadable members are skipped.
+    Keys: as for user parameters, plus role and created_by ({ kind, token, name, sketch, component }; `sketch` is the
+    sketch name of a sketch dimension, else empty; `component` is a component token). Unreadable members are skipped.
     """
     out = []
+    owner_token = safe(lambda: component.entityToken, "") or ""
     params = safe(lambda: component.modelParameters, None)
     if params is None:
         return out
@@ -117,6 +121,6 @@ def list_model_parameters(component):
         if d["value_type"] == "text":
             continue
         d["role"] = safe(lambda: p.role, "") or ""
-        d["created_by"] = _created_by(p)
+        d["created_by"] = _created_by(p, owner_token)
         out.append(d)
     return out

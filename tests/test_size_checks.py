@@ -90,7 +90,7 @@ class SketchStateTest(unittest.TestCase):
             sketchCurves = Coll([Curve()])
 
         root = type("Root", (), {"sketches": Coll([Sketch()])})()
-        self.assertEqual(read_sketches(root), {"S": [1.0, 2.0, 3.0, 4.0, 1.0, 2.0, 3.0]})
+        self.assertEqual(read_sketches(root), {"/S": [1.0, 2.0, 3.0, 4.0, 1.0, 2.0, 3.0]})
         self.assertEqual(read_sketches(root, skip={"S"}), {})
         self.assertEqual(read_sketches(object()), {})
 

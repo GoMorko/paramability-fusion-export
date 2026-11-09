@@ -1,8 +1,10 @@
 """Capture checks: the translator reads only a dict that passed these."""
+from . import place
 
-SUPPORTED_CAPTURES = (1, 2)
+SUPPORTED_CAPTURES = (1, 2, 3)
 _ENVELOPE_KEYS = ("capture", "target", "items")
 _ITEM_KEYS = ("index", "name", "type")
+_NOT_NUMBERS = place.FRAME_NOT_NUMBERS
 
 
 class CaptureError(Exception):
@@ -22,6 +24,7 @@ def validate_capture(capture):
     target = capture["target"]
     if not isinstance(target, dict) or not (target.get("token") or target.get("name")):
         raise CaptureError("The capture target has no token or name.")
+    _check_targets(capture)
     for position, item in enumerate(capture["items"]):
         if not isinstance(item, dict):
             raise CaptureError("Item %d is not an object." % position)
@@ -29,6 +32,28 @@ def validate_capture(capture):
             if key not in item:
                 raise CaptureError("Item %d has no '%s'." % (position, key))
     return capture
+
+
+def _check_targets(capture):
+    targets = capture.get("targets")
+    if targets is not None and (
+            not isinstance(targets, list) or not targets
+            or not all(isinstance(t, dict) and (t.get("token") or t.get("name")) for t in targets)):
+        raise CaptureError("The capture 'targets' is not a list of bodies.")
+    placement = capture["target"].get("placement")
+    if placement is None:
+        return
+    if not isinstance(placement, dict):
+        raise CaptureError("The placement of the target is not an object.")
+    if placement.get("error") or placement.get("linked"):
+        return
+    if not isinstance(placement.get("frame"), dict) or place.frame_problem(placement["frame"]) == _NOT_NUMBERS:
+        raise CaptureError("The placement of the target has no frame of numbers.")
+
+
+def outside_component(item):
+    """The item was made in a component other than the target's (capture 3), or not in the root (captures 1, 2)."""
+    return item.get("in_target_component") is False or item.get("component_root") is False
 
 
 def same_body(a, b):

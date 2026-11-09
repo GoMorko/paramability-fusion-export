@@ -1,10 +1,15 @@
 """What of a capture belongs to the picked body: its steps, the sketches they use and the model parameters behind
 them. Pure: it reads the capture dict only.
 
-Model parameters and sketches are read for the whole root component. A parameter or sketch that belongs to a step
-of another body must not decide the sizes of this export. Something is left out only when it is matched to such a
-step by name; anything that cannot be matched stays, as if no scoping existed.
+Model parameters and sketches are read for the picked body's component and the components above it. A parameter or
+sketch that belongs to a step of another body must not decide the sizes of this export. Something is left out only
+when it is matched to such a step by name; anything that cannot be matched stays, as if no scoping existed.
+
+Sketch and feature names repeat across components (each has its own `Sketch1`), so they are matched together with
+the component token the capture records (`item.component`, `created_by.component`). Captures without component
+tokens match by name alone.
 """
+from ..fusion_reader.sketches import sketch_key
 from ..params.defaults import reads_of
 from ..translator.capture import same_body
 
@@ -47,23 +52,33 @@ def body_items(capture):
     return [used[i] for i in sorted(used, key=lambda k: (k is None, k))]
 
 
-def _sketch_names(node, found):
+def _sketch_key(component, name):
+    """The snapshot key of a sketch (`fusion_reader.sketches.sketch_key`) when the capture knows its component, else
+    its name."""
+    return sketch_key(component, name) if component else name
+
+
+def _sketch_names(node, found, component):
     if isinstance(node, dict):
         for key, value in node.items():
             if key == "sketch" and isinstance(value, str):
-                found.add(value)
+                found.add(_sketch_key(component, value))
             else:
-                _sketch_names(value, found)
+                _sketch_names(value, found, component)
     elif isinstance(node, list):
         for value in node:
-            _sketch_names(value, found)
+            _sketch_names(value, found, component)
 
 
 def _sketches_of(items):
     found = set()
     for item in items:
-        _sketch_names(_data(item), found)
+        _sketch_names(_data(item), found, item.get("component"))
     return found
+
+
+def _step_key(item):
+    return (item.get("component"), item.get("name"))
 
 
 def _split(capture):
@@ -73,8 +88,8 @@ def _split(capture):
 
 
 def other_sketches(capture):
-    """Names of sketches that only steps outside the picked body use. A sketch no step names (hole positions, a
-    revolve axis) is not listed, so it still counts as used."""
+    """Keys of sketches (see `_sketch_key`) that only steps outside the picked body use. A sketch no step names (hole
+    positions, a revolve axis) is not listed, so it still counts as used."""
     used, rest = _split(capture)
     return _sketches_of(rest) - _sketches_of(used)
 
@@ -92,15 +107,15 @@ def scoped_model_params(capture):
     """
     model = list(((capture.get("parameters") or {}).get("model")) or [])
     used, rest = _split(capture)
-    other_steps = {i.get("name") for i in rest} - {i.get("name") for i in used}
+    other_steps = {_step_key(i) for i in rest} - {_step_key(i) for i in used}
     other_sketch = other_sketches(capture)
 
     def drop(param):
         made = _made_by(param)
         if made.get("kind") == "feature":
-            return made.get("name") in other_steps
+            return (made.get("component"), made.get("name")) in other_steps
         if made.get("kind") == "sketchDimension":
-            return made.get("sketch") in other_sketch
+            return _sketch_key(made.get("component"), made.get("sketch")) in other_sketch
         return False
 
     kept = {p["name"]: p for p in model if not drop(p)}

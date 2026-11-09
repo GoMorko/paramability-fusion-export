@@ -6,7 +6,7 @@ the Combine's operation. Any other history on the tool body cannot be replayed, 
 """
 import copy
 
-from .capture import same_body
+from .capture import outside_component, same_body
 from .result import Refusal
 
 TYPES = ("CombineFeature",)
@@ -31,7 +31,7 @@ def _items_on(ctx, body, before):
     """Timeline items before `before` that built or changed `body`."""
     return [
         other for other in ctx.capture["items"]
-        if other["index"] < before and not other.get("suppressed") and other.get("component_root") is not False
+        if other["index"] < before and not other.get("suppressed") and not outside_component(other)
         and other.get("type") not in NON_GEOMETRY and _touches(other, body)
     ]
 
@@ -62,6 +62,9 @@ def handle(item, ctx):
 
     found = []
     for body in tools:
+        if body.get("foreign"):
+            return Refusal("The tool body of %s is in another component, which is not copied yet."
+                           % (body.get("name") or "a body"))
         tool = _tool_step(ctx, body, item)
         if tool is None:
             name = body.get("name") or "a body"

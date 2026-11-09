@@ -121,3 +121,93 @@ class FakeTimeline:
 
     def tokens(self):
         return [i.entity.entityToken for i in self.items]
+
+
+# Occurrences, proxies and bodies for the reader tests. Matrices are plain (origin, x, y, z) tuples in mm.
+
+IDENTITY = ((0, 0, 0), (1, 0, 0), (0, 1, 0), (0, 0, 1))
+
+
+def turn_z(deg, origin=(0, 0, 0)):
+    c, s = math.cos(math.radians(deg)), math.sin(math.radians(deg))
+    return (origin, (c, s, 0), (-s, c, 0), (0, 0, 1))
+
+
+def turn_x(deg, origin=(0, 0, 0)):
+    c, s = math.cos(math.radians(deg)), math.sin(math.radians(deg))
+    return (origin, (1, 0, 0), (0, c, s), (0, -s, c))
+
+
+def apply_matrix(m, p):
+    o, x, y, z = m
+    return tuple(o[i] + p[0] * x[i] + p[1] * y[i] + p[2] * z[i] for i in range(3))
+
+
+def compose_matrices(outer, inner):
+    """The matrix that applies `inner` first, then `outer`."""
+    turn = lambda d: tuple(apply_matrix(outer, d)[i] - outer[0][i] for i in range(3))  # noqa: E731
+    return (apply_matrix(outer, inner[0]), turn(inner[1]), turn(inner[2]), turn(inner[3]))
+
+
+class Vec:
+    def __init__(self, x, y, z):
+        self.x, self.y, self.z = x, y, z
+
+
+class FakeMatrix3D:
+    """Matrix3D stand-in: getAsCoordinateSystem gives the origin in cm and the axes as they are."""
+
+    def __init__(self, matrix):
+        self.matrix = matrix
+
+    def getAsCoordinateSystem(self):
+        o, x, y, z = self.matrix
+        return Vec(*(c / 10.0 for c in o)), Vec(*x), Vec(*y), Vec(*z)
+
+
+class FakeOccurrence:
+    """An occurrence. `native` is the native occurrence of a proxy; `parent` is its assemblyContext."""
+
+    def __init__(self, name, transform2, parent=None, native=None, referenced=False, component=None):
+        self.name = name
+        self.transform2 = FakeMatrix3D(transform2) if transform2 is not None else None
+        self.assemblyContext = parent
+        self.nativeObject = native
+        self.isReferencedComponent = referenced
+        self.component = component
+
+    @property
+    def fullPathName(self):
+        names, occurrence = [], self
+        while occurrence is not None:
+            names.append(occurrence.name)
+            occurrence = occurrence.assemblyContext
+        return "+".join(reversed(names))
+
+
+class _Geo:
+    def __init__(self, point_mm):
+        self.geometry = Vec(*(c / 10.0 for c in point_mm))
+        self.pointOnFace = self.geometry
+
+
+class _List:
+    def __init__(self, items):
+        self._items = items
+        self.count = len(items)
+
+    def item(self, i):
+        return self._items[i]
+
+
+class FakeSolid:
+    """A body with vertices and faces (points in mm), either native or the proxy of one."""
+
+    def __init__(self, vertices=(), faces=(), context=None, native=None, component=None, token="b1", name="Body1"):
+        self.vertices = _List([_Geo(p) for p in vertices])
+        self.faces = _List([_Geo(p) for p in faces])
+        self.assemblyContext = context
+        self.nativeObject = native
+        self.parentComponent = component
+        self.entityToken = token
+        self.name = name

@@ -109,11 +109,11 @@ class PackagesCarryTheListTest(unittest.TestCase):
             f.write(b"ISO-10303-21;")
         return path
 
-    def test_a_body_in_a_component_still_lists_the_parameters(self):
+    def test_a_fixed_shape_still_lists_the_parameters(self):
         with tempfile.TemporaryDirectory() as tmp:
             listing = list_parameters(self.PARAMS)
             manifest, files, report = plan_single_export(
-                RuntimeError("not read"), self.step(tmp), "Part", "w", "z", in_component=True, listing=listing)
+                RuntimeError("not read"), self.step(tmp), "Part", "w", "z", listing=listing)
         self.assertEqual(manifest["kind"], "stepOnly")
         self.assertEqual([p["name"] for p in manifest["parameters"]], ["wall", "outer", "a_b"])
         self.assertEqual(manifest["parameters"][1]["expr"], "wall * 2 + 1")
@@ -132,7 +132,7 @@ class PackagesCarryTheListTest(unittest.TestCase):
     def test_without_a_list_the_manifest_has_no_parameters(self):
         with tempfile.TemporaryDirectory() as tmp:
             manifest, _, report = plan_single_export(
-                RuntimeError("x"), self.step(tmp), "Part", "w", "z", in_component=True)
+                RuntimeError("x"), self.step(tmp), "Part", "w", "z")
         self.assertNotIn("parameters", manifest)
         self.assertNotIn("parameters", report)
 

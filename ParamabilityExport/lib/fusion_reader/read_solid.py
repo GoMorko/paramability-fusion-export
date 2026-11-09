@@ -33,17 +33,17 @@ def _taper(feature, member):
     return geo.safe(lambda: geo.angle(getattr(feature, member)), None)
 
 
-def _target(definition):
+def _target(definition, ctx):
     """The face or plane an extrude starts from or reaches to: its plane, its type, and a point on a face."""
     entity = geo.safe(lambda: definition.entity, None)
     found = {"plane": geo.safe(lambda: geo.plane_of(entity), None),
              "entity_type": geo.safe(lambda: geo.type_name(entity), None)}
     if found["entity_type"] == "BRepFace":
         found["face_point"] = geo.safe(lambda: geo.point(entity.pointOnFace), None)
-    return found
+    return geo.mark_foreign(found, entity, ctx)
 
 
-def _extent(definition, taper_deg):
+def _extent(definition, taper_deg, ctx):
     """One side of an extrude as { kind, ... }."""
     name = geo.type_name(definition)
     if "ThroughAll" in name:
@@ -56,19 +56,19 @@ def _extent(definition, taper_deg):
         return {"kind": "all"}
     if "ToEntity" in name:
         return dict({"kind": "toEntity", "offset": geo.safe(lambda: geo.length(definition.offset), None)},
-                    **_target(definition))
+                    **_target(definition, ctx))
     if name == "DistanceExtentDefinition":
         return {"kind": "distance", "distance": geo.length(definition.distance), "taper_deg": taper_deg}
     return {"kind": "other", "type": name}
 
 
-def _start(feature):
+def _start(feature, ctx):
     definition = feature.startExtent
     name = geo.type_name(definition)
     if "Offset" in name:
         return {"kind": "offset", "offset": geo.length(definition.offset)}
     if "Entity" in name:
-        return dict({"kind": "fromEntity"}, **_target(definition))
+        return dict({"kind": "fromEntity"}, **_target(definition, ctx))
     if "ProfilePlane" in name:
         return {"kind": "profilePlane"}
     return {"kind": "other", "type": name}
@@ -120,19 +120,19 @@ def extrude_before(feature, ctx):
             "taper_deg": geo.safe(lambda: geo.angle(sym.taperAngle), None),
         }
     else:
-        side_one = _extent(feature.extentOne, _taper(feature, "taperAngleOne"))
+        side_one = _extent(feature.extentOne, _taper(feature, "taperAngleOne"), ctx)
         if extent_type == "two":
-            side_two = _extent(feature.extentTwo, _taper(feature, "taperAngleTwo"))
+            side_two = _extent(feature.extentTwo, _taper(feature, "taperAngleTwo"), ctx)
     return with_params({
         "operation": _operation(feature.operation),
-        "profiles": read_profiles(feature.profile),
-        "start": geo.safe(lambda: _start(feature), {"kind": "other", "type": "unreadable"}),
+        "profiles": read_profiles(feature.profile, ctx),
+        "start": geo.safe(lambda: _start(feature, ctx), {"kind": "other", "type": "unreadable"}),
         "extent_type": extent_type,
         "side_one": side_one,
         "side_two": side_two,
         "symmetric": symmetric,
         "thin": geo.safe(lambda: bool(feature.isThinExtrude), None),
-        "participants": geo.safe(lambda: geo.body_refs(feature.participantBodies), []),
+        "participants": geo.safe(lambda: geo.body_refs(feature.participantBodies, ctx), []),
         "target_box_before": ctx.target_box(),
         "end_offset": None,
         "profile_area": _first_profile_area(feature),
@@ -193,6 +193,11 @@ def axis_of(entity):
     return {"kind": "other"}
 
 
+def axis_record(entity, ctx):
+    """`axis_of` with "foreign": true when the axis entity is not the target component's."""
+    return geo.mark_foreign(axis_of(entity), entity, ctx)
+
+
 def _revolve_extent(definition):
     name = geo.type_name(definition)
     if name == "AngleExtentDefinition":
@@ -213,11 +218,11 @@ def _revolve_extent(definition):
 def revolve_before(feature, ctx):
     return with_params({
         "operation": _operation(feature.operation),
-        "profiles": read_profiles(feature.profile),
-        "axis": geo.safe(lambda: axis_of(feature.axis), {"kind": "other"}),
+        "profiles": read_profiles(feature.profile, ctx),
+        "axis": geo.safe(lambda: axis_record(feature.axis, ctx), {"kind": "other"}),
         "project_axis": geo.safe(lambda: bool(feature.isProjectAxis), None),
         "extent": _revolve_extent(feature.extentDefinition),
-        "participants": geo.safe(lambda: geo.body_refs(feature.participantBodies), []),
+        "participants": geo.safe(lambda: geo.body_refs(feature.participantBodies, ctx), []),
         "start_face_normal": None,
     }, Params().add("extent.angle_deg", lambda: feature.extentDefinition.angle, "angle").found)
 
@@ -307,7 +312,7 @@ def hole_before(feature, ctx):
         "side_cylinders": [],
         "end_points": [],
         "end_face_types": [],
-        "participants": geo.safe(lambda: geo.body_refs(feature.participantBodies), []),
+        "participants": geo.safe(lambda: geo.body_refs(feature.participantBodies, ctx), []),
     }, _hole_params(feature, hole_type))
 
 
@@ -331,8 +336,8 @@ def hole_after(feature, ctx, data):
 
 def combine_before(feature, ctx):
     return {
-        "target": geo.body_ref(feature.targetBody),
-        "tools": geo.body_refs(feature.toolBodies),
+        "target": geo.body_ref(feature.targetBody, ctx),
+        "tools": geo.body_refs(feature.toolBodies, ctx),
         "operation": _operation(feature.operation),
         "keep_tools": geo.safe(lambda: bool(feature.isKeepToolBodies), False),
     }

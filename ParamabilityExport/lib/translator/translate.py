@@ -1,12 +1,13 @@
 """The driver: walks a capture's items, calls one handler per feature type, builds the recipe."""
 from . import combine, extrude, finish, hole, repeat, revolve
 from .sizes import sketch_fixes, used_sizes
-from .capture import renamed_target, same_body, validate_capture
+from . import notes as wording, place
+from .capture import outside_component, renamed_target, same_body, validate_capture
 from .context import Context
 from .result import Refusal, TranslateResult, make_verdict
 from ..params.expressions import MAX_FORMULA_LENGTH
 from .values import Sized, number
-from .zup import turn_z_up
+from .words import type_words
 
 RECIPE_VERSION = 12
 MAX_FEATURES = 400
@@ -23,22 +24,43 @@ _MODULES = (extrude, revolve, hole, finish, repeat, combine)
 HANDLERS = {t: m.handle for m in _MODULES for t in m.TYPES}
 
 
-def type_words(type_name):
-    """'EmbossFeature' to 'emboss', 'RectangularPatternFeature' to 'rectangular pattern'."""
-    base = type_name[: -len("Feature")] if type_name.endswith("Feature") and type_name != "Feature" else type_name
-    words = []
-    for ch in base:
-        if ch.isupper() and words and not words[-1][-1].isupper():
-            words.append(ch)
-        elif words:
-            words[-1] += ch
-        else:
-            words.append(ch)
-    return " ".join(w.lower() for w in words) or type_name
+def _refusal(item, reason, note=None):
+    """The refusal record of the result. `note` is the package note when it differs from the usual wording."""
+    out = {"index": item.get("index"), "name": item.get("name", ""), "type": item.get("type", ""), "reason": reason}
+    if note:
+        out["note"] = note
+    return out
 
 
-def _refusal(item, reason):
-    return {"index": item.get("index"), "name": item.get("name", ""), "type": item.get("type", ""), "reason": reason}
+def _label(item):
+    return wording.step_label(item.get("name"), item.get("type")) or "A step"
+
+
+def _foreign(node):
+    """A record of the step's data marked `foreign` by the reader: it belongs to another component. Other bodies a
+    step lists (participants) and the tool bodies a combine lists are left to their own rules."""
+    if isinstance(node, dict):
+        if node.get("foreign") is True:
+            return True
+        return any(_foreign(v) for k, v in node.items() if k not in ("participants", "tools"))
+    if isinstance(node, list):
+        return any(_foreign(v) for v in node)
+    return False
+
+
+def _placement_refusal(capture):
+    """A refusal when the part's place in the assembly cannot be used, else None."""
+    placement = capture["target"].get("placement")
+    if not isinstance(placement, dict):
+        return None
+    if placement.get("linked"):
+        return {"index": None, "name": "", "type": "", "reason": "This part comes from a linked design.",
+                "note": wording.linked_part_note()}
+    problem = placement.get("error") or (place.frame_problem(placement["frame"]) if "frame" in placement else None)
+    if problem:
+        return {"index": None, "name": "", "type": "", "reason": "The place of this part in the assembly cannot be used. %s" % problem,
+                "note": wording.place_unreadable_note()}
+    return None
 
 
 def _data(item):
@@ -140,6 +162,9 @@ def translate(capture, handlers=None, size_table=None):
     follow is made a fixed number and the walk runs again; `result.fixed` lists those sizes as `{ name, reason }`.
     """
     validate_capture(capture)
+    unplaced = _placement_refusal(capture)
+    if unplaced is not None:
+        return TranslateResult(refusal=unplaced)
     table = dict(HANDLERS)
     if handlers:
         table.update(handlers)
@@ -177,16 +202,29 @@ def _walk(capture, table, size_table):
     ctx = Context(capture, size_table)
     result = TranslateResult()
 
-    def refuse(item, reason):
+    def refuse(item, reason, note=None):
         result.items.append(make_verdict(item, "unsupported", note=reason))
-        result.refusal = _refusal(item, reason)
+        result.refusal = _refusal(item, reason, note)
         return result, ctx
 
+    made_in_component = False
     for item in capture["items"]:
         ctx.current = item
         reason = _skip_reason(item)
         if reason is not None:
             result.items.append(make_verdict(item, "skipped", note=reason))
+            continue
+
+        if outside_component(item) and "component_root" not in item:
+            # A step made in another component: harmless unless it changes the target.
+            if item.get("target_changed") is True or _touches_target(item, ctx):
+                if not made_in_component:
+                    return refuse(item, "This body was made in another component and moved here later. "
+                                  "Steps across components are not copied yet.", wording.made_elsewhere_note())
+                return refuse(item, "This step changes the part from another component. "
+                              "Steps across components are not copied yet.",
+                              wording.from_other_component_note(_label(item)))
+            result.items.append(make_verdict(item, "skipped", note="In another component."))
             continue
 
         if _lost_target(item, ctx):
@@ -202,7 +240,8 @@ def _walk(capture, table, size_table):
         if not touches and handler is None and not item["bodies_after"] and item.get("type") not in NON_GEOMETRY_TYPES:
             return refuse(item, "Steps of type %s are not copied yet." % type_words(item["type"]))
         if not touches:
-            _collect_helper(item, handler, ctx)
+            if not _foreign(_data(item)):
+                _collect_helper(item, handler, ctx)
             result.items.append(make_verdict(item, "skipped", note="Helper geometry, not part of the exported body."))
             continue
 
@@ -210,6 +249,10 @@ def _walk(capture, table, size_table):
             return refuse(item, "Steps of type %s are not copied yet." % type_words(item["type"]))
         if _data(item).get("read_error"):
             return refuse(item, "This step could not be read from Fusion.")
+        if _foreign(_data(item)):
+            return refuse(item, "This step reaches into another component, which is not copied yet.",
+                          wording.reaches_component_note(_label(item)))
+        made_in_component = True
         if _new_bodies(item, ctx):
             return refuse(item, "This step splits the part or makes another body, which is not copied yet.")
         outcome = handler(item, ctx)
@@ -240,8 +283,7 @@ def _walk(capture, table, size_table):
     if over:
         result.refusal = {"index": None, "name": "", "type": "", "reason": over}
         return result, ctx
-    if capture.get("up_axis") == "y":
-        recipe = turn_z_up(recipe)
+    recipe = place.place(recipe, place.move_for(capture))
     _fix_long_formulas(recipe, ctx)
     result.recipe = recipe
     return result, ctx

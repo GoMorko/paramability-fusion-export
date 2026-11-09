@@ -3,6 +3,9 @@ import adsk.core
 
 from ..export_plan.errors import StepExportError
 from ..export_plan.temp_copy import remove_temporary_copy, require_marker_at_end, timeline_tokens
+from ..package.units import cm_to_mm
+
+COPY_TOLERANCE_MM = 1e-3
 
 ROUTE_TEMP_COMPONENT = "temp_component"
 ROUTE_ASK_DESIGNER = "ask_designer"
@@ -47,6 +50,20 @@ def resolve_body(design, token, fallback):
     return fallback
 
 
+def _require_copy_in_place(copy, original):
+    """The copy in the temporary component must sit where the picked body sits (boxes equal within 1e-3 mm)."""
+    if copy is None:
+        return
+    try:
+        a, b = copy.boundingBox, original.boundingBox
+        corners = ((a.minPoint, b.minPoint), (a.maxPoint, b.maxPoint))
+        off = max(abs(getattr(p, axis) - getattr(q, axis)) for p, q in corners for axis in "xyz")
+    except Exception:
+        raise StepExportError("The copy of the part could not be checked against its place in the assembly.")
+    if cm_to_mm(off) > COPY_TOLERANCE_MM:
+        raise StepExportError("The copy of the part did not land in its place in the assembly.")
+
+
 def _export_component(design, component, path):
     manager = design.exportManager
     options = manager.createSTEPExportOptions(path, component)
@@ -70,7 +87,7 @@ def export_body_step(design, body, path, route=None):
     occurrence = root.occurrences.addNewComponent(adsk.core.Matrix3D.create())
     try:
         # For a body inside a component, body is the occurrence proxy, so the copy keeps its place in the assembly.
-        body.copyToComponent(occurrence)
+        _require_copy_in_place(body.copyToComponent(occurrence), body)
         _export_component(design, occurrence.component, path)
     finally:
         remove_temporary_copy(timeline, occurrence, tokens_before)

@@ -145,17 +145,21 @@ class WalkTest(unittest.TestCase):
 
     def test_envelope_and_json_safe(self):
         c = self.capture
-        self.assertEqual((c["capture"], c["fusion"], c["design"], c["up_axis"]), (2, "2.0.1", "Clip", "z"))
+        self.assertEqual((c["capture"], c["fusion"], c["design"], c["up_axis"]), (3, "2.0.1", "Clip", "z"))
         self.assertEqual(c["target"], {"token": "b1", "name": "Body1",
-                                       "box": {"min": [0, 0, 0], "max": [40, 20, 10]}, "volume_mm3": 8000.0})
+                                       "box": {"min": [0, 0, 0], "max": [40, 20, 10]}, "volume_mm3": 8000.0,
+                                       "component": {"token": "root", "name": "", "root": True}, "placement": None})
+        self.assertEqual(c["targets"], [c["target"]])
         self.assertEqual([i["type"] for i in c["items"]], ["Sketch", "ExtrudeFeature"])
         self.assertEqual(json.loads(json.dumps(c)), c)
 
     def test_item_fields(self):
         sketch, ext = self.capture["items"]
         self.assertEqual(sketch["data"], {})
-        self.assertEqual((ext["index"], ext["name"], ext["health"], ext["component_root"]),
-                         (1, "Extrude1", "ok", True))
+        self.assertEqual((ext["index"], ext["name"], ext["health"], ext["component"], ext["in_target_component"]),
+                         (1, "Extrude1", "ok", "root", True))
+        self.assertNotIn("component_root", ext)
+        self.assertNotIn("entity_context", ext)
         self.assertEqual(ext["bodies_after"], [{"token": "b1", "name": "Body1"}])
 
     def test_marker_moves_once_per_position_and_ends_at_end(self):
@@ -232,11 +236,12 @@ class WalkTest(unittest.TestCase):
         self.assertIn("read_error", items[0]["data"])
         self.assertEqual(items[1]["data"]["operation"], "newBody")
 
-    def test_feature_outside_root_component(self):
+    def test_feature_outside_the_target_component_is_listed_but_not_read(self):
         other = Obj("fusion::ExtrudeFeature", parentComponent=Obj(entityToken="child"), bodies=Coll([]))
         design = FakeDesign([(other, "Elsewhere", {})], self.target)
         items = read_capture(design, self.target, fusion="", name="", up_axis="z")["items"]
-        self.assertFalse(items[0]["component_root"])
+        self.assertEqual((items[0]["component"], items[0]["in_target_component"], items[0]["data"]),
+                         ("child", False, {}))
 
     def test_extra_readers_plug_in_before_and_after(self):
         fillet = entry(feature("FilletFeature", "Fillet1"))

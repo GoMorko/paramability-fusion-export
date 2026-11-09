@@ -121,7 +121,7 @@ def rectangular_before(feature, ctx):
 def circular_before(feature, ctx):
     data = _common(feature)
     data.update({
-        "axis": geo.safe(lambda: read_solid.axis_of(feature.axis), {"kind": "other"}),
+        "axis": geo.safe(lambda: read_solid.axis_record(feature.axis, ctx), {"kind": "other"}),
         "quantity": _number(feature.quantity, 1),
         "total_angle_deg": geo.angle(feature.totalAngle),
         "symmetric": geo.safe(lambda: bool(feature.isSymmetric), False),
@@ -136,10 +136,14 @@ def pattern_after(feature, ctx, data):
     return {"elements": _elements(feature), "suppressed_ids": _suppressed_ids(feature)}
 
 
+def _plane_record(entity, ctx):
+    return geo.mark_foreign(geo.plane_of(entity), entity, ctx)
+
+
 def mirror_before(feature, ctx):
     data = _common(feature)
     data.update({
-        "plane": geo.safe(lambda: geo.plane_of(feature.mirrorPlane), None),
+        "plane": geo.safe(lambda: _plane_record(feature.mirrorPlane, ctx), None),
         "combine": geo.safe(lambda: bool(feature.isCombine), False),
         "target_box_before": ctx.target_box(),
     })

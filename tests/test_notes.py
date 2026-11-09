@@ -36,7 +36,10 @@ class NotesTest(unittest.TestCase):
     def test_every_note_is_short_and_free_of_dashes(self):
         refusal = {"index": 1, "name": ("A %s B %s C" % (chr(0x2014), chr(0x2013))) * 20, "type": "FilletFeature", "reason": "Because. " * 60}
         texts = [notes.step_only_note(refusal), notes.recipe_note(400), notes.reader_failure_note(),
-                 notes.translate_failure_note()]
+                 notes.translate_failure_note(), notes.linked_part_note(), notes.place_unreadable_note(),
+                 notes.made_elsewhere_note(), notes.used_several_times_note(12),
+                 notes.from_other_component_note(notes.step_label("N" * 100, "ExtrudeFeature")),
+                 notes.reaches_component_note(notes.step_label("N" * 100, "ExtrudeFeature"))]
         for text in texts:
             self.assertLessEqual(len(text), notes.MAX_NOTE)
             self.assertIsNone(re.search("[%s%s]" % (chr(0x2013), chr(0x2014)), text))
