@@ -1,0 +1,76 @@
+"""What the result dialog shows after a recipe is saved. Pure: no Fusion imports.
+
+The view is built from the manifest and report that plan_single_export returned, and the size table of the export.
+"""
+from .dialog_rows import range_text
+from .messages import MAX_LISTED_FIXED, recipe_saved_message
+
+MATCHES, NOT_CHECKED, KEPT_FIXED, NOT_USED = "matches Fusion", "not checked", "kept fixed", "not used"
+
+
+def _size_rows(table, report):
+    """One row per size the recipe holds: its Fusion name, range and what the check found."""
+    sizes = report["sizes"]
+    unchecked = set(sizes.get("unchecked") or [])
+    by_size = {e.size_name: e for e in table.entries if e.size_name}
+    rows = []
+    for size_name in sizes.get("free") or []:
+        entry = by_size.get(size_name)
+        size = table.sizes.get(size_name) or {}
+        rows.append({
+            "name": entry.name if entry is not None else size_name,
+            "range": range_text(size, size.get("min"), size.get("max")) if "min" in size else "",
+            "check": NOT_CHECKED if size_name in unchecked else MATCHES,
+        })
+    return rows
+
+
+def _left_out_rows(table, report, ticked):
+    """Rows for ticked parameters that did not become sizes: fixed after a check, or no copied step reads them."""
+    sizes = report["sizes"]
+    fixed_names = {f["name"] for f in sizes.get("fixed") or []}
+    dropped = set(sizes.get("dropped") or [])
+    rows = []
+    for name in ticked:
+        if name in dropped:
+            rows.append({"name": name, "range": "", "check": NOT_USED})
+        elif table.recipe_name(name) in fixed_names:
+            rows.append({"name": name, "range": "", "check": KEPT_FIXED})
+    return rows
+
+
+def _fixed_lines(report):
+    fixed = report["sizes"].get("fixed") or []
+    lines = ["%s: %s" % (f["name"], f["reason"]) for f in fixed[:MAX_LISTED_FIXED]]
+    if len(fixed) > MAX_LISTED_FIXED:
+        lines.append("and %d more (see report.json)." % (len(fixed) - MAX_LISTED_FIXED))
+    return lines
+
+
+def variables_line(manifest):
+    count = len(manifest.get("parameters") or [])
+    if not count:
+        return ""
+    noun = "parameter comes" if count == 1 else "parameters come"
+    return "All %d %s along as variables, with their formulas and comments." % (count, noun)
+
+
+def result_view(file_name, manifest, report, table, ticked):
+    """Plain data for the result dialog, or None when the file holds no recipe (the message box tells that story).
+
+    Keys: saved (first sentence), size_title, rows ({name, range, check}), fixed (lines), variables, message (the
+    whole story as plain text, for a message box).
+    """
+    if manifest.get("kind") != "recipe" or "sizes" not in report:
+        return None
+    notes = manifest.get("notes") or []
+    rows = _size_rows(table, report)
+    count = len(rows)
+    return {
+        "saved": ("Saved %s. %s" % (file_name, notes[0] if notes else "")).strip(),
+        "size_title": "%d %s ready for the form" % (count, "size" if count == 1 else "sizes"),
+        "rows": rows + _left_out_rows(table, report, ticked),
+        "fixed": _fixed_lines(report),
+        "variables": variables_line(manifest),
+        "message": recipe_saved_message(manifest, file_name),
+    }

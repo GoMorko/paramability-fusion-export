@@ -5,11 +5,10 @@ import adsk.core
 
 from ... import config
 from ...lib.export_plan.size_offers import offers as size_offers, table_for_body
-from ...lib.fusion_reader.bodies import is_root_body
 from ...lib.fusion_reader.design_info import default_length_unit, detect_up_axis
 from ...lib.fusion_reader.parameters import list_model_parameters, list_user_parameters
 from ...lib.fusion_reader.step_export import count_solid_bodies
-from ...lib.fusion_ui import handlers, recipe_dialog
+from ...lib.fusion_ui import handlers, recipe_dialog, result_dialog
 from .. import panel
 from . import export_flow
 
@@ -28,6 +27,7 @@ def stop():
     panel.remove_button(config.EXPORT_COMMAND_ID)
     _handlers.clear()
     _command_handlers.clear()
+    result_dialog.remove()
 
 
 def _on_created(args):
@@ -47,8 +47,8 @@ def _on_created(args):
     captures = export_flow.CaptureCache(design)
 
     def offers_for(picked):
-        """The dialog lines for a body: its own parameters when its steps can be read, else the whole design's."""
-        capture = captures.get(picked) if picked is not None and is_root_body(picked, root) else None
+        """The dialog rows for a body: its own parameters when its steps can be read, else the whole design's."""
+        capture = captures.get(picked) if picked is not None else None
         return size_offers(table_for_body(parameters, design_unit, model_params, capture), parameters)
 
     offers = offers_for(body)
@@ -64,7 +64,7 @@ def _on_created(args):
                 shown["body"] = token
                 recipe_dialog.apply_offers(inputs, offers, offers_for(picked))
         else:
-            recipe_dialog.keep_within_limit(inputs, offers, args.input)
+            recipe_dialog.handle_change(inputs, offers, args.input)
 
     # Per-dialog handlers are replaced each time the dialog opens.
     _command_handlers.clear()

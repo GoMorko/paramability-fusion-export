@@ -54,7 +54,9 @@ def value_text(entry):
 def offers(table, params):
     """One dict per parameter the dialog lists, in parameter order.
 
-    Keys: param (Fusion name), text (the line), ticked, enabled, reason (tooltip, '' when none).
+    Keys: param (Fusion name), text (short line), ticked, enabled, reason (why it is greyed or what the tick does),
+    state ('size' or 'keep' for a plain number, 'formula', 'locked'), now (value with unit), comment, formula (the
+    Fusion expression of a formula), kind, value, min and max (the default range of a plain number, else None).
     A parameter that is a formula is listed without a tick. A fixed one is greyed with its reason. A parameter
     that cannot be a size at all (text, other units) is not listed.
     """
@@ -65,15 +67,20 @@ def offers(table, params):
         if p is None:
             continue
         plain = p.get("kind") in ("length", "angle", "count")
+        common = {"param": entry.name, "now": value_text(entry), "comment": (p.get("comment") or "").strip(),
+                  "formula": p.get("expression") or "", "kind": entry.kind, "value": entry.value,
+                  "min": None, "max": None}
         if entry.state == DERIVED or (entry.state == CONSTANT and not plain):
-            out.append({"param": entry.name, "text": "%s (formula)" % entry.name, "ticked": False,
-                        "enabled": False, "reason": "A formula. It follows the parameters it reads."})
+            out.append({**common, "text": "%s (formula)" % entry.name, "ticked": False, "enabled": False,
+                        "state": "formula", "reason": "A formula. It follows the parameters it reads."})
         elif entry.state == FIXED:
-            out.append({"param": entry.name, "text": "%s, %s" % (entry.name, value_text(entry)), "ticked": False,
-                        "enabled": False, "reason": entry.reason})
+            out.append({**common, "text": "%s, %s" % (entry.name, value_text(entry)), "ticked": False,
+                        "enabled": False, "state": "locked", "reason": entry.reason})
         elif entry.state in (FREE, CONSTANT):
-            out.append({"param": entry.name, "text": "%s, %s" % (entry.name, value_text(entry)),
-                        "ticked": entry.state == FREE, "enabled": True,
+            lo, hi = defaults.size_range(p, entry.kind, entry.value)
+            out.append({**common, "text": "%s, %s" % (entry.name, value_text(entry)),
+                        "ticked": entry.state == FREE, "enabled": True, "min": lo, "max": hi,
+                        "state": "size" if entry.state == FREE else "keep",
                         "reason": "Tick to change this number in Paramability. Untick to keep it fixed."})
     return out
 

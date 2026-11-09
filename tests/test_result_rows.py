@@ -1,0 +1,61 @@
+import unittest
+
+from tests import context  # noqa: F401
+from tests import fakes
+from lib.export_plan.result_rows import result_view
+from lib.params import size_table
+
+fakes.install_adsk_core()
+from lib.fusion_ui import result_dialog  # noqa: E402
+
+
+def length(name):
+    return dict(name=name, expression="2 mm", value=0.2, unit="mm", comment="", is_favorite=True, kind="length")
+
+
+def view(manifest=None, **sizes):
+    params = [length(n) for n in ("wall", "gap", "pipe", "spare")]
+    table = size_table.build(params, ["wall", "gap", "pipe"])
+    report = {"sizes": {"free": ["wall"], "fixed": [], "checks": [], "unchecked": [], "dropped": [], **sizes}}
+    manifest = manifest or {"kind": "recipe", "notes": ["12 steps copied."], "parameters": [{}, {}, {}, {}]}
+    return result_view("box.paramability", manifest, report, table, ["wall", "gap", "pipe"])
+
+
+class ResultViewTest(unittest.TestCase):
+    def test_a_checked_size_shows_its_range_and_that_it_matches(self):
+        shown = view()
+        self.assertEqual(shown["rows"][0], {"name": "wall", "range": "1 to 4 mm", "check": "matches Fusion"})
+        self.assertEqual(shown["size_title"], "1 size ready for the form")
+        self.assertEqual(shown["saved"], "Saved box.paramability. 12 steps copied.")
+        self.assertEqual(shown["variables"], "All 4 parameters come along as variables, with their formulas and comments.")
+
+    def test_unchecked_fixed_and_unused_ticks_each_get_a_row_and_a_reason(self):
+        shown = view(unchecked=["wall"], fixed=[{"name": "gap", "reason": "gap stays fixed: no build."}],
+                     dropped=["pipe"])
+        self.assertEqual([(r["name"], r["check"]) for r in shown["rows"]],
+                         [("wall", "not checked"), ("gap", "kept fixed"), ("pipe", "not used")])
+        self.assertEqual(shown["fixed"], ["gap: gap stays fixed: no build."])
+
+    def test_a_long_fixed_list_is_cut_and_points_to_the_report(self):
+        fixed = [{"name": "p%d" % i, "reason": "r"} for i in range(8)]
+        self.assertEqual(view(fixed=fixed)["fixed"][-1], "and 3 more (see report.json).")
+
+    def test_a_part_without_a_recipe_has_no_result_dialog(self):
+        self.assertIsNone(view({"kind": "stepOnly", "notes": ["x"]}))
+
+
+class ResultDialogTest(unittest.TestCase):
+    def test_the_dialog_lists_the_rows_and_has_only_a_close_button(self):
+        command = fakes.FakeCommand()
+        shown = view(fixed=[{"name": "gap", "reason": "why"}], dropped=["pipe"])
+        result_dialog.build(command, shown)
+        inputs = command.commandInputs
+        self.assertFalse(command.isOKButtonVisible)
+        self.assertEqual(command.cancelButtonText, "Close")
+        self.assertEqual(inputs.itemById("pm_result_table").rowCount, 1 + len(shown["rows"]))
+        self.assertIn("gap: why", inputs.itemById("pm_result_fixed_text").formattedText)
+        self.assertIn("4 parameters", inputs.itemById("pm_result_variables").formattedText)
+
+
+if __name__ == "__main__":
+    unittest.main()

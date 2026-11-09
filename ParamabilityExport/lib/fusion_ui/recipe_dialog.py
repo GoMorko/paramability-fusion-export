@@ -1,22 +1,35 @@
-"""The Export for Paramability dialog: pick the body, see which parameters become sizes, export."""
+"""The Export for Paramability dialog: pick the body, tick sizes in a parameter table, export.
+
+One table row per parameter: tick, name, current value, Min and Max (the range of a size), and what the parameter
+becomes. A text box under the table follows the picked row. The texts come from export_plan.dialog_rows; this file
+only places them in Fusion inputs.
+
+A check box label cannot be changed after creation (Fusion raises on `.text`), so check boxes carry no label.
+"""
 import html
 
 import adsk.core
 
 from .log import log
 
-from ..export_plan.size_offers import MAX_TICKED, limit_message
+from ..export_plan import dialog_rows as rows
+from ..export_plan.size_offers import MAX_TICKED
 from ..fusion_reader.bodies import is_pickable_body
 
 BODY_ID = "pm_body"
 UP_ID = "pm_up"
-GROUP_ID = "pm_recipe_sizes_group"
 INTRO_ID = "pm_sizes_intro"
-BOX_PREFIX = "pm_size_"
 NOTICE_ID = "pm_notice"
-LIMIT_ID = "pm_sizes_limit"
-FIXED_ID = "pm_sizes_fixed"
-FIXED_MAX_ROWS = 6
+TABLE_ID = "pm_params_table"
+DETAILS_ID = "pm_details"
+COUNT_ID = "pm_sizes_count"
+TICK_USED_ID = "pm_tick_used"
+CLEAR_ID = "pm_untick_all"
+
+TICK_PREFIX = "pm_tick_"
+CELL_PREFIX = {"tick": TICK_PREFIX, "name": "pm_name_", "now": "pm_now_", "used_by": "pm_usedby_", "min": "pm_min_",
+               "max": "pm_max_", "status": "pm_status_"}
+_HEADER_ROWS = 1
 
 UP_LABELS = {"z": "Z up", "y": "Y up"}
 
@@ -25,68 +38,6 @@ def build_blocked(command, text):
     """A dialog that only shows why the export cannot start."""
     command.isOKButtonVisible = False
     command.commandInputs.addTextBoxCommandInput(NOTICE_ID, "", text, 3, True)
-
-
-def build(command, offers, body, up_axis):
-    """Add the inputs. offers come from export_plan.size_offers.offers; body may be None.
-
-    Check boxes are named by position, since a Fusion parameter name is not always a safe input id.
-    """
-    inputs = command.commandInputs
-    selection = inputs.addSelectionInput(BODY_ID, "Body", "Pick the body to export.")
-    selection.addSelectionFilter("SolidBodies")
-    selection.setSelectionLimits(1, 1)
-    if body is not None:
-        selection.addSelection(body)
-
-    group = inputs.addGroupCommandInput(GROUP_ID, "Sizes you can change in Paramability")
-    group.isExpanded = True
-    if not offers:
-        group.children.addTextBoxCommandInput(
-            INTRO_ID, "", "This design has no user parameters that can be sizes. The part is saved with fixed numbers.",
-            2, True)
-    else:
-        group.children.addTextBoxCommandInput(
-            INTRO_ID, "", "Ticked parameters become sizes. The others stay fixed numbers.", 2, True)
-    limit = group.children.addTextBoxCommandInput(LIMIT_ID, "", limit_message(), 1, True)
-    limit.isVisible = False
-    for index, offer in enumerate(offers):
-        # A check box label is fixed at creation; the changing text goes in the tooltip and the fixed list below.
-        box = group.children.addBoolValueInput(BOX_PREFIX + str(index), offer["param"], True, "", offer["ticked"])
-        box.isEnabled = offer["enabled"]
-        box.tooltip = _tooltip(offer)
-    fixed = group.children.addTextBoxCommandInput(
-        FIXED_ID, "", "", min(max(len(offers), 1), FIXED_MAX_ROWS), True)
-    _show_fixed(fixed, offers)
-
-    up = inputs.addDropDownCommandInput(UP_ID, "Design up direction", adsk.core.DropDownStyles.TextListDropDownStyle)
-    for key in ("z", "y"):
-        up.listItems.add(UP_LABELS[key], key == up_axis)
-    up.tooltipDescription = (
-        "Starts from the Fusion setting for new designs. Pick Y up if the part lies on its side in Paramability.")
-
-
-def _tooltip(offer):
-    return "%s. %s" % (offer["text"], offer["reason"]) if offer["reason"] else offer["text"]
-
-
-def fixed_lines(offers):
-    """Html lines for the parameters that cannot be ticked, each with its reason."""
-    return "<br>".join(
-        html.escape("%s: %s" % (o["text"], o["reason"])) for o in offers if not o["enabled"] and o["reason"])
-
-
-def _show_fixed(box, offers):
-    text = fixed_lines(offers)
-    box.formattedText = text
-    box.isVisible = bool(text)
-
-
-def _boxes(inputs, offers):
-    for index in range(len(offers)):
-        box = adsk.core.BoolValueCommandInput.cast(inputs.itemById(BOX_PREFIX + str(index)))
-        if box is not None:
-            yield index, box
 
 
 def _safely(what, action):
@@ -99,39 +50,219 @@ def _safely(what, action):
         return False
 
 
-def apply_offers(inputs, offers, fresh):
-    """Show the `fresh` offers (another body was picked) in the existing lines.
+def _cell_id(key, index):
+    return CELL_PREFIX[key] + str(index)
 
-    The lines stay as built: each is matched to its parameter by name, and `offers` is updated in place since the
-    export reads it later. A parameter missing from `fresh` keeps its old line. An entry changes only after its
-    box took the new state, so `offers` never disagrees with the dialog.
+
+def _bool(inputs, index):
+    return adsk.core.BoolValueCommandInput.cast(inputs.itemById(_cell_id("tick", index)))
+
+
+def _string(inputs, key, index):
+    return adsk.core.StringValueCommandInput.cast(inputs.itemById(_cell_id(key, index)))
+
+
+def _set_text(inputs, key, index, text):
+    box = inputs.itemById(_cell_id(key, index))
+    if box is not None:
+        box.formattedText = html.escape(text)
+
+
+def build(command, offers, body, up_axis, used_by=False):
+    """Add the inputs. offers come from export_plan.size_offers.offers; body may be None.
+
+    Cells are named by row number, since a Fusion parameter name is not always a safe input id. `used_by` swaps the
+    Now column for the parts that read each parameter (a component export; the texts come from the offers).
+    """
+    inputs = command.commandInputs
+    selection = inputs.addSelectionInput(BODY_ID, "Body", "Pick the body to export.")
+    selection.addSelectionFilter("SolidBodies")
+    selection.setSelectionLimits(1, 1)
+    if body is not None:
+        selection.addSelection(body)
+
+    if offers:
+        _safely("Dialog size", lambda: command.setDialogInitialSize(700, 700))
+        _build_table(inputs, offers, used_by)
+        inputs.addTextBoxCommandInput(
+            DETAILS_ID, "", html.escape(rows.HINT), 4, True)
+        inputs.addTextBoxCommandInput(COUNT_ID, "", "", 2, True)
+        _refresh_summary(inputs, offers)
+    else:
+        inputs.addTextBoxCommandInput(
+            INTRO_ID, "", "This design has no user parameters that can be sizes. The part is saved with fixed numbers.",
+            2, True)
+
+    up = inputs.addDropDownCommandInput(UP_ID, "Design up direction", adsk.core.DropDownStyles.TextListDropDownStyle)
+    for key in ("z", "y"):
+        up.listItems.add(UP_LABELS[key], key == up_axis)
+    up.tooltipDescription = (
+        "Starts from the Fusion setting for new designs. Pick Y up if the part lies on its side in Paramability.")
+
+
+def _build_table(inputs, offers, used_by):
+    keys = rows.columns(used_by)
+    table = inputs.addTableCommandInput(TABLE_ID, "", len(keys), rows.column_ratio(keys))
+    _safely("Table rows", lambda: (setattr(table, "minimumVisibleRows", 5), setattr(table, "maximumVisibleRows", 12)))
+    _safely("Table width", lambda: setattr(table, "isFullWidth", True))
+    for col, key in enumerate(keys):
+        table.addCommandInput(inputs.addTextBoxCommandInput("pm_head_" + key, "", rows.HEADERS[key], 1, True), 0, col)
+    for index, offer in enumerate(offers):
+        for col, key in enumerate(keys):
+            table.addCommandInput(_make_cell(inputs, key, index, offer), index + _HEADER_ROWS, col)
+    table.addToolbarCommandInput(inputs.addBoolValueInput(TICK_USED_ID, "Tick what the body uses", False, "", False))
+    table.addToolbarCommandInput(inputs.addBoolValueInput(CLEAR_ID, "Untick all", False, "", False))
+
+
+def _make_cell(inputs, key, index, offer):
+    cell_id = _cell_id(key, index)
+    cells = rows.row_cells(offer, offer["ticked"])
+    if key == "tick":
+        box = inputs.addBoolValueInput(cell_id, "", True, "", offer["ticked"])
+        box.isEnabled = cells["tick_enabled"]
+        return box
+    if key in ("min", "max"):
+        field = inputs.addStringValueInput(cell_id, "", cells[key])
+        field.isEnabled = cells["range_enabled"]
+        return field
+    if key == "name":
+        text, lines = rows.wrap_name(offer["param"])
+        return inputs.addTextBoxCommandInput(cell_id, "", text, lines, True)
+    text = rows.used_by_text(offer) if key == "used_by" else cells[key]
+    return inputs.addTextBoxCommandInput(cell_id, "", html.escape(text), 1, True)
+
+
+def _ticks(inputs, offers):
+    """The tick of each row as the person sees it; a greyed row never counts."""
+    out = []
+    for index, offer in enumerate(offers):
+        box = _bool(inputs, index)
+        out.append(bool(box is not None and offer["enabled"] and box.value))
+    return out
+
+
+def _range_texts(inputs, offers, key):
+    out = []
+    for index, offer in enumerate(offers):
+        field = _string(inputs, key, index)
+        out.append(field.value if field is not None else "")
+    return out
+
+
+def _show_row(inputs, index, offer, ticked, lo_text=None, hi_text=None):
+    """Put one row's state into its cells."""
+    cells = rows.row_cells(offer, ticked, lo_text, hi_text)
+    _bool(inputs, index).isEnabled = cells["tick_enabled"]
+    for key in ("min", "max"):
+        field = _string(inputs, key, index)
+        field.value = cells[key]
+        field.isEnabled = cells["range_enabled"]
+    _set_text(inputs, "now", index, cells["now"])
+    _set_text(inputs, "status", index, cells["status"])
+
+
+def _selected_index(inputs, offers):
+    table = adsk.core.TableCommandInput.cast(inputs.itemById(TABLE_ID))
+    if table is None:
+        return None
+    row = table.selectedRow - _HEADER_ROWS
+    return row if 0 <= row < len(offers) else None
+
+
+def _refresh_summary(inputs, offers, over=False):
+    ticks = _ticks(inputs, offers)
+    _, problem = rows.read_ranges(
+        offers, ticks, _range_texts(inputs, offers, "min"), _range_texts(inputs, offers, "max"))
+    box = inputs.itemById(COUNT_ID)
+    if box is not None:
+        box.formattedText = html.escape(rows.count_line(sum(ticks), problem, over))
+
+
+def _refresh_details(inputs, offers, index=None):
+    index = _selected_index(inputs, offers) if index is None else index
+    box = inputs.itemById(DETAILS_ID)
+    if box is None:
+        return
+    if index is None:
+        box.formattedText = html.escape(rows.HINT)
+        return
+    lo = _string(inputs, "min", index)
+    hi = _string(inputs, "max", index)
+    ticked = _ticks(inputs, offers)[index]
+    box.formattedText = rows.details_html(
+        offers[index], ticked, lo.value if lo is not None else None, hi.value if hi is not None else None)
+
+
+def apply_offers(inputs, offers, fresh):
+    """Show the `fresh` offers (another body was picked) in the existing rows.
+
+    The rows stay as built: each is matched to its parameter by name, and `offers` is updated in place since the
+    export reads it later. A parameter missing from `fresh` keeps its old row. An entry changes only after its
+    cells took the new state, so `offers` never disagrees with the dialog. Typed ranges go back to the defaults.
     """
     by_param = {o["param"]: o for o in fresh}
     merged = list(offers)
-    for index, box in _boxes(inputs, offers):
-        offer = by_param.get(offers[index]["param"])
-        if offer is None:
+    for index, offer in enumerate(offers):
+        new = by_param.get(offer["param"])
+        if new is None:
             continue
 
-        def update(box=box, offer=offer):
-            box.tooltip = _tooltip(offer)
-            box.isEnabled = offer["enabled"]
-            box.value = offer["ticked"]
+        def update(index=index, new=new):
+            _bool(inputs, index).value = new["ticked"]
+            _show_row(inputs, index, new, new["ticked"])
 
         if _safely("Updating " + offer["param"], update):
-            merged[index] = offer
+            merged[index] = new
     offers[:] = merged
-    _safely("Updating the fixed list", lambda: _show_fixed(inputs.itemById(FIXED_ID), offers))
-    _safely("Hiding the limit note", lambda: setattr(inputs.itemById(LIMIT_ID), "isVisible", False))
+    _safely("Updating the count", lambda: _refresh_summary(inputs, offers))
+    _safely("Updating the details", lambda: _refresh_details(inputs, offers))
 
 
-def keep_within_limit(inputs, offers, changed):
-    """Untick the box just ticked when it would pass the limit of sizes, and say why. Else hide the message."""
-    ticked = [box for _, box in _boxes(inputs, offers) if box.isEnabled and box.value]
-    over = len(ticked) > MAX_TICKED
-    if over and changed is not None and changed.id.startswith(BOX_PREFIX):
-        changed.value = False
-    inputs.itemById(LIMIT_ID).isVisible = over
+def _row_of(changed_id):
+    """(key, row number) of a cell input id, else (None, None)."""
+    for key, prefix in CELL_PREFIX.items():
+        if changed_id.startswith(prefix) and changed_id[len(prefix):].isdigit():
+            return key, int(changed_id[len(prefix):])
+    return None, None
+
+
+def _set_ticks(inputs, offers, wanted):
+    """Tick the enabled rows named in `wanted` (a list of booleans), up to the limit. Typed ranges stay."""
+    count = 0
+    for index, offer in enumerate(offers):
+        if not offer["enabled"]:
+            continue
+        on = bool(wanted[index]) and count < MAX_TICKED
+        count += on
+
+        def update(index=index, offer=offer, on=on):
+            _bool(inputs, index).value = on
+            _show_row(inputs, index, offer, on,
+                      _string(inputs, "min", index).value, _string(inputs, "max", index).value)
+
+        _safely("Ticking " + offer["param"], update)
+
+
+def handle_change(inputs, offers, changed):
+    """React to a tick, a typed Min or Max, or one of the two buttons; then refresh the count and the details."""
+    key, index = _row_of(changed.id)
+    if index is not None and index >= len(offers):
+        key, index = None, None
+    over = False
+    if changed.id == TICK_USED_ID:
+        _set_ticks(inputs, offers, [o["ticked"] for o in offers])
+    elif changed.id == CLEAR_ID:
+        _set_ticks(inputs, offers, [False] * len(offers))
+    elif key == "tick":
+        box = adsk.core.BoolValueCommandInput.cast(changed)
+        if box.value and sum(_ticks(inputs, offers)) > MAX_TICKED:
+            box.value = False
+            over = True
+        ticked = box.value
+        _show_row(inputs, index, offers[index], ticked,
+                  _string(inputs, "min", index).value, _string(inputs, "max", index).value)
+    _refresh_summary(inputs, offers, over)
+    _refresh_details(inputs, offers, index if key in ("tick", "min", "max") else None)
 
 
 def picked_body(inputs):
@@ -140,17 +271,17 @@ def picked_body(inputs):
 
 
 def read_form(inputs, offers):
-    """Plain dict: body, ticked (Fusion parameter names), up_axis."""
-    body = picked_body(inputs)
+    """Plain dict: body, ticked (Fusion parameter names), ranges ({name: (min, max)} of the ticked ones),
+    range_problem ('' when every typed range is fine), up_axis."""
+    ticks = _ticks(inputs, offers)
+    ranges, problem = rows.read_ranges(
+        offers, ticks, _range_texts(inputs, offers, "min"), _range_texts(inputs, offers, "max"))
     up_item = inputs.itemById(UP_ID).selectedItem
-    ticked = []
-    for index, offer in enumerate(offers):
-        box = adsk.core.BoolValueCommandInput.cast(inputs.itemById(BOX_PREFIX + str(index)))
-        if box is not None and offer["enabled"] and box.value:
-            ticked.append(offer["param"])
     return {
-        "body": body,
-        "ticked": ticked,
+        "body": picked_body(inputs),
+        "ticked": [o["param"] for o, on in zip(offers, ticks) if on],
+        "ranges": ranges,
+        "range_problem": problem,
         "up_axis": "y" if up_item and up_item.name == UP_LABELS["y"] else "z",
     }
 
@@ -164,4 +295,5 @@ def inputs_valid(inputs, offers):
     selection = inputs.itemById(BODY_ID)
     if selection.selectionCount != 1 or not is_pickable_body(selection.selection(0).entity):
         return False
-    return len(read_form(inputs, offers)["ticked"]) <= MAX_TICKED
+    form = read_form(inputs, offers)
+    return len(form["ticked"]) <= MAX_TICKED and not form["range_problem"]

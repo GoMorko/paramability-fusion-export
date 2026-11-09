@@ -6,7 +6,8 @@
 cm, rad). `ticked` are the Fusion names the person keeps as sizes. Optional keywords: `model_params` (the body's model
 parameters, for inlining, counts and defaults), `design_unit` (what a bare number in a length expression means),
 `fixed` (ticked names that cannot follow, with the reason; they become plain numbers), `quantity_params` (the model
-parameters the steps use as a pattern quantity; the user parameters behind them become whole-number counts).
+parameters the steps use as a pattern quantity; the user parameters behind them become whole-number counts) and
+`ranges` (typed min and max per size, instead of the default range).
 
 The table holds, per parameter, one entry whose `state` is:
 
@@ -70,8 +71,10 @@ def _round(x):
 
 
 class SizeTable:
-    def __init__(self, params, ticked, model_params=(), design_unit="mm", fixed=None, quantity_params=()):
+    def __init__(self, params, ticked, model_params=(), design_unit="mm", fixed=None, quantity_params=(),
+                 ranges=None):
         self._params = [p for p in params]
+        self._ranges = dict(ranges or {})
         self._model = list(model_params)
         self._ticked_in = list(ticked)
         self._design_unit = design_unit
@@ -171,7 +174,7 @@ class SizeTable:
         if e.state == DERIVED:
             return {"expr": e.formula, "label": e.label}
         p = self._cand[e.name]
-        lo, hi = defaults.size_range(p, e.kind, e.value)
+        lo, hi = self._ranges.get(e.name) or defaults.size_range(p, e.kind, e.value)
         size = {"kind": e.kind, "value": e.value, "min": lo, "max": hi, "label": e.label}
         if e.kind == "count":
             size["step"] = 1
@@ -332,7 +335,7 @@ class SizeTable:
         merged = dict(self._fixed_in)
         merged.update(reasons)
         return SizeTable(self._params, [n for n in self._ticked_in if n not in merged], self._model,
-                         self._design_unit, merged, self._quantity_params)
+                         self._design_unit, merged, self._quantity_params, self._ranges)
 
     def report(self):
         """Plain data for report.json: renames, derived formulas with their value check, fixed and unoffered names."""
@@ -355,6 +358,9 @@ def _fmt(x):
     return ("%.6f" % x).rstrip("0").rstrip(".")
 
 
-def build(params, ticked, model_params=(), design_unit="mm", fixed=None, quantity_params=()):
-    """SizeTable for the user parameters and the names ticked as sizes."""
-    return SizeTable(params, ticked, model_params, design_unit, fixed, quantity_params)
+def build(params, ticked, model_params=(), design_unit="mm", fixed=None, quantity_params=(), ranges=None):
+    """SizeTable for the user parameters and the names ticked as sizes.
+
+    `ranges` maps a Fusion name to the (min, max) the person typed; a ticked size without one gets its default range.
+    """
+    return SizeTable(params, ticked, model_params, design_unit, fixed, quantity_params, ranges)

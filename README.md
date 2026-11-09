@@ -22,16 +22,23 @@ Nothing is typed in Fusion.
 
 1. In Fusion, mark the user parameters you want to change in Paramability as favourites (optional).
 2. Click Export for Paramability and pick the body.
-3. Under "Sizes you can change in Paramability", check the list. Parameters the picked body uses are ticked to start
-   with (your favourites first); pick another body and the ticks follow that body. A parameter worked out by a
-   formula shows "(formula)" and follows the parameters it reads. Unticked parameters stay fixed numbers. A
-   parameter that drives a sketch dimension, a construction plane or axis, or a joint cannot be a size for now: it is
-   unticked and greyed out, and its tooltip says why. You can tick up to 16 sizes, since each one gets a check.
+3. Look at the parameter table. Each row is one user parameter: a tick, its name, its value now, and what it becomes in
+   Paramability. Parameters the picked body uses are ticked to start with (your favourites first); pick another body
+   and the ticks follow that body. "Tick what the body uses" and "Untick all" set them again in one click. A ticked
+   row has a Min and a Max: they start from the comment rule below, and you can type your own numbers (in mm, degrees
+   or whole numbers for a count). The current value must sit between them. An unticked row says "stays 3 mm". A
+   parameter worked out by a formula says "formula" and follows the parameters it reads. A parameter that drives a
+   sketch dimension, a construction plane or axis, or a joint cannot be a size for now: it is greyed out and its row
+   says why. Click a row to read its comment, its formula or the full reason in the box under the table. You can tick
+   up to 16 sizes, since each one gets a check.
 4. Pick the design up direction, click OK and choose where to save the file.
-5. Open the file in Paramability. The sizes are ready for the "Put on the form" button.
+5. A window then lists each size with its range and its check ("matches Fusion", "not checked", "kept fixed"), what
+   stays fixed and why, and how many parameters come along as variables. If this window cannot open, the same text is
+   shown in a message box.
+6. Open the file in Paramability. The sizes are ready for the "Put on the form" button.
 
-Each ticked size has a range: a comment such as `Wall [1..6]` on the parameter sets it, otherwise it is half to
-double the current value (a count goes from 1 to twice its value). A parameter that sets how many copies a pattern
+Each ticked size has a range: you can type it in the table. It starts from a comment such as `Wall [1..6]` on the
+parameter, otherwise from half to double the current value (a count goes from 1 to twice its value). A parameter that sets how many copies a pattern
 makes is a whole number. The add-in first works out which sizes the copied steps really use, then checks each of
 those once: it sets that size to the top of its range, writes a STEP file of the part, and puts it back. Paramability
 builds the recipe at that value and compares it with the STEP file. A size that does not match is kept as a fixed
@@ -82,11 +89,16 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 ## Limits
 
 - One solid body per export.
-- A body inside a component can be picked, and rows of values work for it. A recipe needs the body in the root
-  component for now; a body in a component is saved as a fixed shape with a note.
-- A recipe covers the picked body only, built from the root component. Parameters made by steps or sketches of other
-  bodies are left out where the add-in can match them by name; construction planes, axes and joints are always read
-  for the whole design. Sizes cannot move sketches yet.
+- A body inside a component (at any depth) exports as a recipe with sizes, like a root body, and lands where Fusion
+  shows it. If the part was moved by hand, capture its position first (Position, Capture Position); the export asks
+  for it. A size that makes the part move in the assembly stays fixed, with the reason. A component used several
+  times exports the copy you picked.
+- These stay a fixed shape with a note: a part from a linked design, a place in the assembly that cannot be read, a
+  step of another component that changes the body, a body made in another component and moved in, and a step that
+  reaches into another component.
+- A recipe covers the picked body only. Parameters made by steps or sketches of other bodies are left out where the
+  add-in can match them by name; construction planes, axes and joints are read for the component and the ones above
+  it. Sizes cannot move sketches yet.
   These stop the copy and leave a plain part:
   thin extrudes, face outlines, spline and other free curve outlines, extrudes that start or end on a tilted or curved
   surface, extrudes that make a new component, modeled threads, rounds with variable or chord length sizes or curvature

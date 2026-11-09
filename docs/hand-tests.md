@@ -53,9 +53,8 @@ The add-in exports the picked body alone. The choice is the constant `MULTI_BODY
       `MULTI_BODY_ROUTE = ROUTE_ASK_DESIGNER`. The dialog then asks the designer to hide or move the other bodies.
 - [ ] A body inside a child component or occurrence can be picked in the viewport, OK turns active, and the STEP
       holds the body where it sits in the assembly (not moved to the component origin).
-- [ ] With Export size choices, a body in a component exports as usual. With Export for Paramability, the file is a
-      plain part with the note "This part sits inside a component, so it was exported as a fixed shape."
-      A recipe needs the body in the root component for now.
+- [ ] With Export size choices, a body in a component exports as usual. With Export for Paramability it is a recipe
+      with sizes (section 8).
 - [ ] A body picked after its parameter changed (second row) still lands in the right place (the token lookup keeps
       the occurrence proxy).
 - [ ] Roll the timeline marker back and click OK: the export stops with "Move the timeline marker to the end", and no
@@ -128,23 +127,24 @@ builds agrees with the Fusion part.
 Use a design with one body in the root and three plain user parameters read by its features (for example `wall` in
 mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter.
 
-- [ ] The dialog lists the user parameters, the ones the body reads ticked (favourites first), the formula one as
-      "name (formula)" greyed out. Tooltips are readable. OK is on once a body is picked.
+- [ ] The dialog lists the user parameters in a table, the ones the body reads ticked (favourites first), the formula
+      one greyed with "formula" in the last column. OK is on once a body is picked.
 - [ ] **Greyed when it opens.** A parameter that drives a sketch dimension is unticked and greyed out as soon as the
-      dialog opens, with the reason in its tooltip. It stays that way for parameters that are not ticked by default.
+      dialog opens, with "fixed, changes a sketch" in its row and the full reason in the box under the table when the
+      row is clicked. It stays that way for parameters that are not ticked by default.
 - [ ] **Another body.** In a design with two bodies built from different parameters, pick the other body: the ticks
       and greyed lines change to that body's parameters. A parameter only the other body reads is not ticked. Note
       how long the dialog takes to open and to follow the pick (the add-in reads the steps of the body each time).
-- [ ] **Limit.** Tick a 17th size: the box unticks itself and the line "You can tick up to 16 sizes" shows. Unticking
-      one hides the line.
+- [ ] **Limit.** Tick a 17th size: the box unticks itself and the line under the details box says "You can tick up
+      to 16 sizes". Unticking one brings back the count line.
 - [ ] **Counts.** A parameter that drives a pattern quantity is a whole number size (the form steps by 1), also when
       its role text does not say "quantity". Set it to 2.5 in the app: the recipe still builds.
 - [ ] **Long name.** A user parameter with a name over 64 characters that drives a sketch dimension: the export
       saves, and the message names the fixed size without stopping.
 - [ ] **Not used.** Tick a parameter no step reads: the message after the export names it as "not used by any copied
       step".
-- [ ] With only one body in the design it is picked already. With no user parameters the group says so and the
-      export still works.
+- [ ] With only one body in the design it is picked already. With no user parameters the dialog says so (no table)
+      and the export still works.
 - [ ] Export, open in Paramability: the part is a recipe, the sizes are the ticked parameters, and the message after
       the export says how many sizes are ready. `manifest.json` inside the file lists one check per size
       (`checks/01.step` and up), each with a single size in `values`. The recipe in `recipe.json` lists no size
@@ -185,6 +185,68 @@ corners, and a pipe hole in a row of three. Tick the count and the cube width.
 - [ ] Turn the design to Y up and repeat the first check.
 - [ ] Mirror the rounded corners of one side: the height sizes are listed as fixed ("placed one by one").
 
+### 7.2 The parameter table dialog
+
+Use the filter box design (names such as `FilterBox_$_depth__contains_CeramicMedium`, a comment `Wall [1..4]` on `wall_mm`).
+
+- [ ] Columns: tick, Parameter (the Fusion name), Now (value and unit), Min, Max, In Paramability. The header row has
+      no tick. The table scrolls when there are many rows.
+- [ ] **Long names.** A name over about 26 characters is broken after an underscore into two lines inside its cell and
+      stays readable. If a break looks wrong at the real column width, note the width (the break is made by the add-in
+      with `<br>` in `formattedText`).
+- [ ] **Row click.** Click a row (not its tick): the box under the table shows the name, the comment, and for a
+      formula the formula with "Now ...", for a greyed row the reason. If the box does not follow the click, note
+      it: it then only follows ticks and typed ranges.
+- [ ] Tick or untick a row: its Min and Max open or grey out, "In Paramability" says "size" or "stays 3 mm", and the
+      count line says "N of 16 sizes ticked. Every parameter also comes along as a variable."
+- [ ] **Range.** Min and Max of a ticked row start from the comment (`Wall [1..4]` gives 1 and 4), else half to double
+      the value. Type 1.5 and 6: after the export the size in Paramability goes from 1.5 to 6. Type a Min above the
+      value, a Min above the Max, or text: the count line names the parameter and OK turns off. A count row refuses
+      1.5 and 0. Type a comma (`1,5`) or a unit (`2 mm`): both are read.
+- [ ] Does a typed Min or Max fire `inputChanged` when you leave the field (not only at Enter)? If the count line
+      updates late, note when.
+- [ ] "Tick what the body uses" returns the ticks to what the body reads; "Untick all" clears them. Both keep typed
+      ranges. A greyed row is never ticked by either.
+- [ ] Pick another body: ticks, greyed rows and texts follow; typed ranges go back to the defaults.
+- [ ] The Design up direction menu is under the count line.
+- [ ] Click OK: the progress window shows as before, then the result window "Saved for Paramability" opens with the
+      saved line, a table of sizes (name, range, "matches Fusion", "not checked", "kept fixed" or "not used"), a
+      "Stays fixed" group with each reason, and the line "All N parameters come along as variables ...". Only a Close
+      button shows. Pull a size to fail its check (a range that breaks a fillet): its row says "kept fixed".
+- [ ] If the result window does not open, the same text shows in a message box. Note which: the log line "result
+      dialog failed" gives the reason.
+
+## 8. Bodies inside components
+
+Send `report.json` from any export that surprises; its capture becomes a test fixture. The plan behind these tests
+is the "Fusion bodies inside components" plan of the Paramability notes.
+
+- [ ] **C1 Moved component.** A model with sizes (the filter box) built inside a component `Tray`, its occurrence
+      moved to (100, 50, 0) and its position captured. Export: a recipe with sizes that lands where Fusion shows it.
+      Put on the form and change a size. The report shows `entity_context` and `placement.source`. The timeline
+      marker is at the end, no temporary component is left, parameters are back.
+- [ ] **C2 Nested and turned.** `Tray` inside a component `Box`; `Box` turned 90 degrees about Z, `Tray` turned 90
+      degrees about X inside it. Same checks as C1, plus a hole on a sketch point: it lands in the right place.
+- [ ] **C3 Used twice.** Two occurrences of `Tray` at different places. Pick the second: it lands at the second
+      place, and the note says the part is used 2 times.
+- [ ] **C4 Joints.** `Tray` joined to `Box` with an offset `gap_mm`: `gap_mm` is greyed with a joint reason. Then join
+      it to a face whose place depends on `FilterBox_height_mm`: after the checks that size is fixed with "moves Tray
+      in the assembly".
+- [ ] **C5 Cut from the assembly.** With the root active, cut a hole through the body of `Tray`. Export: a fixed shape
+      whose note names the cut.
+- [ ] **C6 Components from bodies.** Model a body in the root, then "Create Components from Bodies". Export it and
+      note what happens (a recipe or the "made in another component" note); send the report.
+- [ ] **C7 Uncaptured move.** Drag `Tray` without capturing its position and export: the add-in says "Capture the
+      position of moved parts first (Position, Capture Position), then export again." and writes nothing. Capture the
+      position and export again: it works.
+- [ ] **C8 Linked component.** Insert a design as a linked component and pick its body: the file is a fixed shape with
+      the linked design note.
+- [ ] **C9 Reach into another component.** A sketch in `Tray` on a face of `Box`, and an extrude in `Tray` "to" a face
+      of `Box`. The first exports (a `Box` parameter that moves it is fixed with the sketch reason); the second is a
+      fixed shape naming the extrude.
+- [ ] For a component body, the dialog table follows the component's own parameters, and "Tick what the body uses"
+      ticks only what the component reads.
+
 ## Fusion calls to watch
 
 These were written from the API reference and never run:
@@ -214,10 +276,35 @@ These were written from the API reference and never run:
   - `CommandInput.isEnabled` and `tooltip` on a check box.
   - `BoolValueCommandInput.text` must not be set on a check box: Fusion raises `InternalValidationError : button` (the
     text is for button style only). The label is the parameter name, fixed at creation.
-- The main dialog (`lib/fusion_ui/recipe_dialog.py`): `addGroupCommandInput` with `addBoolValueInput` children whose
-  `isEnabled` is false and `tooltip` set (changed later when another body is picked, along with `value`); input ids made from a running number, not from the parameter name.
-  Also a read-only text box under the list (`pm_sizes_fixed`) whose `formattedText` and `isVisible` are set after
-  creation, and the limit note's `isVisible`.
+- The main dialog (`lib/fusion_ui/recipe_dialog.py`), none of it run yet:
+  - `commandInputs.addTableCommandInput(id, "", 6, "1:6:2:2:2:4")` with cells added by `addCommandInput(input, row,
+    column)`: check boxes (`addBoolValueInput` with empty text), read-only text boxes, and `addStringValueInput` for
+    Min and Max. Cells are created through the command's own inputs, not a group. Row 0 holds the header text boxes.
+  - `TableCommandInput.minimumVisibleRows`, `maximumVisibleRows`, `isFullWidth`, `addToolbarCommandInput` with two
+    `isCheckBox=False` buttons (their text must show; the same call as Export size choices), and `Command.
+    setDialogInitialSize(700, 700)` to make room for six columns. Each is set in a guarded call, so a refusal is
+    logged ("Table width failed") and the dialog still opens.
+  - **A row click firing `inputChanged`** with the table (or a cell) as the changed input, and `TableCommandInput.
+    selectedRow` giving the clicked row (row 0 is the header). The details box also follows the row of a touched tick
+    or Min or Max field, so a missing row click only leaves the box on the last touched row.
+  - **A long name in a text box cell:** `TextBoxCommandInput.formattedText` with `<br>` and the row count given at
+    creation; whether the row grows to fit the lines.
+  - `isEnabled` and `value` set on cells in `inputChanged` and when another body is picked; `StringValueCommandInput.
+    value` read from a cell, and `inputChanged` firing when a typed Min or Max is committed.
+  - `TextBoxCommandInput.formattedText` set after creation for the details box and the count line (`<b>` and `<br>`).
+  - Cell ids are made from the row number (`pm_tick_3`), not from the parameter name.
+- The result dialog (`lib/fusion_ui/result_dialog.py`), none of it run yet:
+  - **Starting a command from the execute handler of another:** `CommandDefinitions.addButtonDefinition(id, name,
+    tooltip, "")` (a definition that is in no panel), `commandCreated`, and `CommandDefinition.execute()` called while
+    the export command is still running. The fallback is the message box when it raises; if it does not raise but
+    nothing opens, the dialog is silently ignored, so look for it at the end of the export and note it.
+  - `Command.isOKButtonVisible = False` and `Command.cancelButtonText = "Close"`; a group with a table whose cells
+    come from the group's `children`; text boxes with `<br>` lines.
+- The component export flow (`commands/ExportForParamability/export_flow.py`): `Design.snapshots` and
+  `Snapshots.hasPendingSnapshot` (an unreadable answer counts as "nothing pending"); `BRepBody.parentComponent` of a
+  proxy giving the native component whose sketches are read at every check; `Occurrence.transform2` and the occurrence
+  path read again after each parameter change (`placement.read_frame`); the capture members of "Bodies inside
+  components" in `docs/capture-format.md`.
 - `Design.fusionUnitsManager.defaultLengthUnits` as the unit of a bare number in a length formula (falls back to mm).
 - `Component.modelParameters` read by `list_model_parameters`; `Sketch.transform.asArray()`, `Sketch.sketchPoints`
   with `worldGeometry`, `Sketch.sketchCurves` with `worldGeometry` (`radius`, `center`, `startPoint`, `endPoint`)
@@ -228,8 +315,7 @@ These were written from the API reference and never run:
   parameter in, so a mismatch shows as a parameter that other bodies' steps make ticked.
 - Reading the capture while the dialog is open (`lib/fusion_ui/` and `commands/ExportForParamability/entry.py`): the
   timeline marker moves in the `commandCreated` and `inputChanged` events and comes back to the end. Also
-  `BoolValueCommandInput.text`, `value`, `isEnabled` and `tooltip` assigned in `inputChanged`, and a
-  `TextBoxCommandInput.isVisible` toggle.
+  `BoolValueCommandInput.value`, `isEnabled` and `StringValueCommandInput.value` assigned in `inputChanged`.
 - Two buttons in one panel (`ControlsCommand` added twice, `isPromoted` on the first only).
 - `ProgressDialog` (`show`, `progressValue`, `wasCancelled`) and `FileDialog` filter text.
 - `FeatureHealthStates.ErrorFeatureHealthState` on timeline items after `computeAll`.
