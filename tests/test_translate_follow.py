@@ -48,7 +48,7 @@ def tab(start=None, side_one=None, index=10):
     frame = {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
     return {
         "index": index, "name": "Tab", "type": "ExtrudeFeature", "suppressed": False, "health": "ok", "message": "",
-        "component_root": True, "bodies_after": [{"token": "t1", "name": "Body1"}],
+        "in_target_component": True, "bodies_after": [{"token": "t1", "name": "Body1"}],
         "data": {
             "operation": "join", "profiles": [{"sketch": "Sketch9", "frame": frame,
                                                "loops": [{"outer": True, "curves": curves}]}],
@@ -95,7 +95,7 @@ class PicksTest(unittest.TestCase):
             edges[:] = [e for e in edges if e["points"][0][0] == 0]
             capture["items"].append({
                 "index": 11, "name": "Mirror1", "type": "MirrorFeature", "suppressed": False, "health": "ok",
-                "message": "", "component_root": True, "bodies_after": [{"token": "t1", "name": "Body1"}],
+                "message": "", "in_target_component": True, "bodies_after": [{"token": "t1", "name": "Body1"}],
                 "data": {"entity_type": "features", "sources": [3], "plane": {"point": [40, 0, 0], "normal": [1, 0, 0]},
                          "combine": False}})
         result, _ = run(tray(edit, keep=[0, 1, 2, 3]))
@@ -117,7 +117,7 @@ class PicksTest(unittest.TestCase):
 def _round_on_tab_top():
     """A round on the front top edge of the tab of `tab()` started on the tray top, 5 mm tall."""
     return {"index": 11, "name": "Fillet9", "type": "FilletFeature", "suppressed": False, "health": "ok",
-            "message": "", "component_root": True, "bodies_after": [{"token": "t1", "name": "Body1"}],
+            "message": "", "in_target_component": True, "bodies_after": [{"token": "t1", "name": "Body1"}],
             "data": {"sets": [{"kind": "constant", "radius": 1.0, "continuity": "tangent", "input_kinds": ["edge"],
                                "edges": [{"token": "e9", "closed": False, "points": [[85, 0, 37]]}]}]}}
 

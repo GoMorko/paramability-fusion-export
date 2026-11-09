@@ -13,6 +13,15 @@ def length(name):
     return dict(name=name, expression="2 mm", value=0.2, unit="mm", comment="", is_favorite=True, kind="length")
 
 
+def unused(name):
+    return {"name": name, "reason": "%s is not used by any copied step, so it is not a size." % name, "used": False}
+
+
+def not_followed(name):
+    return {"name": name, "reason": "%s is not a size: Extrude1 reads it, and the copy does not follow it." % name,
+            "used": True}
+
+
 def view(manifest=None, health=None, **sizes):
     params = [length(n) for n in ("wall", "gap", "pipe", "spare")]
     table = size_table.build(params, ["wall", "gap", "pipe"])
@@ -33,20 +42,26 @@ class ResultViewTest(unittest.TestCase):
         self.assertEqual(shown["variables"], "All 4 parameters come along as variables, with their formulas and comments.")
 
     def test_fixed_and_unused_ticks_each_get_a_row_and_a_reason(self):
-        shown = view(fixed=[{"name": "gap", "reason": "gap stays fixed: no build."}], dropped=["pipe"])
+        shown = view(fixed=[{"name": "gap", "reason": "gap stays fixed: no build."}], dropped=[unused("pipe")])
         self.assertEqual([(r["name"], r["check"]) for r in shown["rows"]],
                          [("wall", "size"), ("gap", "kept fixed"), ("pipe", "not used")])
-        self.assertEqual(shown["fixed"], ["gap: gap stays fixed: no build."])
+        self.assertEqual(shown["fixed"], ["gap stays fixed: no build."])
+        self.assertEqual(shown["dropped"], [])
 
     def test_a_loose_size_is_marked_and_listed_with_its_reason(self):
         shown = view(loose=[{"name": "wall", "reason": "wall may give unexpected results: it moves a joint."}])
         self.assertEqual(shown["rows"][0]["check"], "may be unexpected")
-        self.assertEqual(shown["loose"], ["wall: wall may give unexpected results: it moves a joint."])
+        self.assertEqual(shown["loose"], ["wall may give unexpected results: it moves a joint."])
 
-    def test_a_size_that_changes_a_sketch_nobody_followed_is_not_called_unused(self):
-        shown = view(dropped=["gap", "pipe"], not_followed=["gap"])
+    def test_a_size_a_step_reads_but_the_copy_cannot_follow_is_not_called_unused(self):
+        shown = view(dropped=[not_followed("gap"), unused("pipe")])
         self.assertEqual([(r["name"], r["check"]) for r in shown["rows"][1:]],
                          [("gap", "not followed"), ("pipe", "not used")])
+        self.assertEqual(shown["dropped"], ["gap is not a size: Extrude1 reads it, and the copy does not follow it."])
+        self.assertIn(shown["dropped"][0], shown["message"])
+
+    def test_a_reason_that_does_not_start_with_the_name_gets_the_name_in_front(self):
+        self.assertEqual(view(fixed=[{"name": "gap", "reason": "no build."}])["fixed"], ["gap: no build."])
 
     def test_a_design_that_did_not_come_back_is_said_in_the_warnings_and_the_message(self):
         health = {"unrestored": ["wall"], "sketch_gap_mm": 0.5, "sketch_drift": True, "probe": "measured"}
@@ -72,7 +87,7 @@ class ResultViewTest(unittest.TestCase):
 class ResultDialogTest(unittest.TestCase):
     def test_the_dialog_lists_the_rows_and_has_only_a_close_button(self):
         command = fakes.FakeCommand()
-        shown = view(fixed=[{"name": "gap", "reason": "why"}], dropped=["pipe"])
+        shown = view(fixed=[{"name": "gap", "reason": "why"}], dropped=[unused("pipe")])
         result_dialog.build(command, shown)
         inputs = command.commandInputs
         self.assertFalse(command.isOKButtonVisible)

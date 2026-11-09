@@ -51,7 +51,7 @@ class SummarizeTest(unittest.TestCase):
     def test_notes_are_listed_after_a_stop_too(self):
         capture = load_capture("fillet_setback")
         capture["items"].append({"index": 99, "name": "Emboss1", "type": "EmbossFeature", "suppressed": False,
-                                 "health": "ok", "message": "", "component_root": True,
+                                 "health": "ok", "message": "", "in_target_component": True,
                                  "bodies_after": capture["items"][-1]["bodies_after"], "data": {}})
         lines = summarize(capture)["lines"]
         self.assertEqual(lines[0], "Copy stops at Emboss1 (emboss).")

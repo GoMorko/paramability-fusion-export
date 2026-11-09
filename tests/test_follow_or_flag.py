@@ -1,10 +1,12 @@
 """Every size a copied step reads is followed or marked.
 
-After a translation each user parameter that a step reads (in its values, its sketch or the geometry it points at)
-must end in one of three states: it drives the recipe and the recipe changes with it, or it is listed as loose with a
-reason, or it is left out of the sizes with a note (or listed as fixed with a reason). A parameter that stays a free
-size nothing reads, is dropped without a word, or can push a written formula past zero inside its own range breaks
-the rule.
+After a translation each user parameter that a copied step reads (in its values, its sketch or the geometry it points
+at) must end in one of these states, all visible in the public result: it drives the recipe and the recipe changes
+with it, or it is listed as loose with a reason, or as fixed with a reason, or as dropped with a reason that does not
+claim "no step reads it". A parameter that stays a free size nothing reads, is dropped with the wrong reason, or can
+push a written formula past zero inside its own range breaks the rule.
+
+The reading of the capture below is written here on its own: it does not call the translator's audit.
 """
 import copy
 import glob
@@ -55,13 +57,16 @@ def _refs(item):
     return names, sketches
 
 
-def reads_by_step(capture):
-    """{user parameter name: first step that reads it}, following dependencies through model parameters."""
+def reads_by_step(capture, only=None):
+    """{user parameter name: first step that reads it}, following dependencies through model parameters. `only` is a
+    set of item indexes to look at (the items the translator copied), else every item."""
     params = capture["parameters"]
     user = {p["name"] for p in params["user"]}
     everything = {p["name"]: p for p in params["user"] + params["model"]}
     found = {}
     for item in capture["items"]:
+        if only is not None and item["index"] not in only:
+            continue
         names, sketches = _refs(item)
         for p in params["model"]:
             made = p.get("created_by") or {}
@@ -145,19 +150,25 @@ def offending_sizes(capture, motion=None):
     if result.recipe is None:
         return []
     marked = {m["name"] for m in result.fixed + result.loose if m.get("reason")}
-    marked |= {e.name for e in table.entries if "%s is not used by any copied step" % e.name in " ".join(result.notes)}
+    dropped = {d["name"]: d["reason"] for d in result.dropped if d.get("reason")}
+    copied = {v["index"] for v in result.items if v["verdict"] in ("translated", "translatedWithNote")}
+    reads = reads_by_step(capture, copied)
     reached = _recipe_names(result.recipe)
     by_size = {e.size_name or e.name: e.name for e in table.entries}
     offenders = []
     for entry in table.entries:
-        step = reads_by_step(capture).get(entry.name)
+        step = reads.get(entry.name)
         if step is None or entry.name in marked:
+            continue
+        if entry.name in dropped:
+            if "not used by any copied step" in dropped[entry.name]:
+                offenders.append((entry.name, step, "dropped as unused although a step reads it"))
             continue
         if entry.state in (size_table.NOT_OFFERED, size_table.CONSTANT):
             if entry.state == size_table.NOT_OFFERED and not entry.reason:
                 offenders.append((entry.name, step, "left out without a reason"))
-        elif entry.state == size_table.DERIVED and entry.reads and set(entry.reads) <= marked:
-            continue  # every size it reads is already marked, so it is a plain number now
+        elif entry.state == size_table.DERIVED and entry.reads and set(entry.reads) <= marked | set(dropped):
+            continue  # every size it reads is already marked or dropped, so it is a plain number now
         elif entry.size_name not in reached:
             offenders.append((entry.name, step, "free size no formula reads, or dropped"))
     for used, step in _corner_offenders(result.recipe) + _plane_stays_put(capture, result.recipe):
@@ -208,7 +219,7 @@ def unparsed_capture():
 def mirror_capture():
     """Mirror across the top face of the base extrude, a face the size h moves."""
     capture = load_capture("mirror_features")
-    capture["capture"] = 2
+    capture["capture"] = 3
     capture["parameters"] = {
         "user": [{"name": "h", "expression": "10 mm", "value": 1.0, "unit": "mm", "kind": "length",
                   "value_type": "numeric", "dependency_parameters": [], "comment": ""}],

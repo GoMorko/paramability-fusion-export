@@ -1,6 +1,6 @@
 {
   "_comment": "Plate 40 by 20 by 10 (z 0 to 10). Quarter revolve cut of a rectangle 5 to 10 about the line x 0, z 5 on a sketch plane at z 5, sweeping UP into the plate. The cut leaves its start wall at z 5 with the plate below it, so the outward normal of that wall points up, along the travel.",
-  "capture": 1,
+  "capture": 3,
   "fusion": "2.0.0",
   "design": "Test",
   "up_axis": "z",
@@ -29,7 +29,7 @@
       "suppressed": false,
       "health": "ok",
       "message": "",
-      "component_root": true,
+      "in_target_component": true,
       "bodies_after": [],
       "data": {}
     },
@@ -40,7 +40,7 @@
       "suppressed": false,
       "health": "ok",
       "message": "",
-      "component_root": true,
+      "in_target_component": true,
       "bodies_after": [
         {
           "token": "t1",
@@ -156,7 +156,7 @@
       "suppressed": false,
       "health": "ok",
       "message": "",
-      "component_root": true,
+      "in_target_component": true,
       "bodies_after": [],
       "data": {}
     },
@@ -167,7 +167,7 @@
       "suppressed": false,
       "health": "ok",
       "message": "",
-      "component_root": true,
+      "in_target_component": true,
       "bodies_after": [
         {
           "token": "t1",

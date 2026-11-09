@@ -158,8 +158,11 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   measured, a press pull (offset
   faces) of a curved face, of a face with a leaning or rounded side, or of two faces that meet, a combine with a tool
   body that has more than one step, and every step type not listed above (sweep, loft, coil, move, draft, emboss).
+  A Remove of another body, a Split Face (the solid stays the same, so picks on its faces may not follow) and steps of
+  other bodies that are never joined to the picked body do not stop the copy.
 - Some steps are copied with a note instead: setback corners, a cosmetic thread (cut as a plain hole), a round or
-  chamfer with more than 32 edges (picked in groups), and a direction or size that Fusion stored two ways.
+  chamfer with more than 32 edges (picked in groups), a direction or size that Fusion stored two ways, and a step that
+  Fusion shows a warning on.
 - The export works on the design as it is at the timeline marker. If you drag the marker back, the steps after it
   are left out of the part, and the dialog says so ("Exporting the design as it is at the timeline marker (step 48
   of 120)"). To read the steps, the add-in moves the marker through the design and puts it back where it was.

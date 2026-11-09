@@ -3,10 +3,9 @@
 The capture is the plain dict the reader (`lib/fusion_reader/`) returns for one design, and the only input of the
 pure translator (`lib/translator/`). Fixtures in `tests/fixtures/captures/` use this format, so every translator test
 runs without Fusion. They are written by hand or saved from real designs: the export writes the capture into
-`report.json` (section 6). The reader writes capture number 3; the translator reads 1, 2 and 3 (number 1 has no
-`parameters`, `design_units` or `params`; numbers 1 and 2 have no `targets`, `placement` or component fields, and their
-items carry `component_root`). It refuses any other number, or a capture that lacks `capture`, `target` or `items`,
-with a `CaptureError`.
+`report.json` (section 6). The reader writes capture number 3 and the translator reads only that number: a capture is
+made and read in one export run, so no older number is kept. The translator refuses any other number, or a capture
+that lacks `capture`, `target` or `items`, with a `CaptureError`.
 
 ## 1. Rules for every value
 
@@ -148,7 +147,7 @@ ITEM:
 - `bodies_before` (not for suppressed items): the bodies of the target's component at the marker before the item.
 - `target_changed`: whether the native target's box (1e-4 mm) or volume changed from the marker before the item to the
   marker after it. `true` also when the target appears or disappears; `null` when it exists on neither side or a
-  measure could not be read.
+  measure could not be read. The translator uses `false` to skip a step it has no handler for (see "Parameters behind values" in section 5).
 - `bodies_after`: `feature.bodies` read with the marker just after the item. `null` (with an item level
   `"read_error": "bodies: ..."`) when the bodies cannot be read; it is not the same as `[]`, which says the item
   makes no body. The driver must not treat `null` as helper geometry. Items that are not modeling steps get `[]`
@@ -647,16 +646,37 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   still does, and the values that cannot keep their numbers, so the shape at the current values is the same. In that
   walk a stuck sketch value follows its `rest` (the sizes that still move it), as it does once its own sizes are
   fixed. `TranslateResult.loose` lists the sizes as `{ name, reason }` ("... may give unexpected results: ..."). A
-  size that no formula reads after that is not a size at all: it is left out with a note and listed nowhere. The
-  ranges are always the table's: no minimum is raised and no range is shortened. A rule that can fail inside a range
+  size that no formula reads after that is not a size: it is left out and listed in `TranslateResult.dropped` with its
+  reason. The ranges are always the table's: no minimum is raised and no range is shortened. A rule that can fail inside a range
   (a count that a pick needs, a taper, a step that must keep meeting the part) marks the sizes it reads, with the
   value past which it fails where `kept_ranges` gives one. Only `TranslateResult.fixed` holds sizes that became
   numbers: a formula too long to copy (`Context.fix_always`). Without a motion (`motion=None`) every size behind a
   sketch dimension, construction plane or axis, or a joint, is marked with a reason, and the ones no formula reads
-  are left out.
+  are dropped with that reason.
+- End of walk audit (`lib/translator/audit.py`). After the last walk every free size that a copied step reads must be
+  in a known state: read by a written formula, fixed, loose, or dropped, each with a reason. A step reads a size
+  through its `data.params` (what each expression reads), the dimensions of the sketches its data names, and the
+  construction geometry it uses. A size of a step's `data.params` that none of that step's written values read, or a
+  sketch size that a measured motion says moves something and no formula reads, and that no handler named, gets the
+  reason "<step> reads it, and the copy does not follow it": loose when another formula reads it, else dropped. A sketch
+  size that a measured motion says moves nothing is dropped as "changes nothing in the copied steps". This makes a
+  value a handler forgets to record safe by default.
+- `TranslateResult.dropped` is `[{ name, reason, used }]`, one per ticked size the recipe does not hold: `used` is
+  true when a step reads it and the copy could not follow it (the reason says why), false when no copied step reads it
+  ("not used by any copied step") or a measured sketch does not move with it.
+- Only steps whose result reaches the exported body count. A step of another body is walked in a sandbox
+  (`Context.sandbox`): the sizes it cannot follow are held with it and join the walk only when a Combine takes that
+  body (`Context.release`), and only then do its items count for the audit.
+- A step with no handler stops the copy, with two exceptions that the capture proves harmless: a step that lists no
+  body and whose `target_changed` is false (a Remove of another body) is skipped, and so is a Split Face of the exported
+  body with `target_changed` false, with the note that picks on its faces may not follow. A step of another body that
+  has no handler is helper geometry and is skipped. A `target_changed` of true or null keeps the stop.
+- A copied step that Fusion reports with a `warning` health gets a note with Fusion's message.
+- The copy limits (`MAX_PATTERN_COPIES`, `MAX_FEATURES`, `MAX_NEAR_POINTS`) are checked at the current values; a pattern
+  count that can pass its limit inside the size ranges (`range_check.sweep`) marks the sizes it reads.
 - The recipe is version 12, or the lowest version that holds its steps and selectors (13 with an `offsetFaces` step, 14
   with a `chain` or `faceEdges` pick). With a size table it carries `sizesAsWritten: true` and `sizes`: the sizes that a written
-  formula reads, plus the sizes those formulas read. A ticked size that nothing reads is left out, with a note.
+  formula reads, plus the sizes those formulas read. A ticked size that nothing reads is left out (see `dropped`).
   Without a table the recipe has no `sizes`, and no marker.
 
 ### Sketch values that follow sizes (`lib/translator/sketch_motion.py`)
@@ -768,8 +788,9 @@ VERDICT, ...], "capture": CAPTURE }` (verdicts: see the translator, `lib/transla
 design gives a fixture: its `capture` is copied as is.
 
 `sizes` holds `free` (recipe size names), `fixed` and `loose` (`{ name, reason }` by recipe size name, as in the
-manifest), `dropped` (ticked parameters no copied step reads) and `not_followed` (dropped ones that change a sketch or
-a construction plane and could not be followed). `loose` comes from the translator and from the probe. The export
+manifest), and `dropped` (`{ name, reason, used }` by Fusion name: the ticked parameters that are not sizes, from
+`TranslateResult.dropped`; `used` is true when a step reads the parameter and the copy could not follow it). `loose` comes
+from the translator and from the probe. The export
 makes no STEP per size and keeps no range changes, so `checks` in the manifest is always empty. The report has a
 `probe` when a sketch could be followed (the rows only recompute and the parameters are restored), `marker` and
 `health`. A probe row that Fusion cannot build is listed in `probe.dropped`; no size is fixed for it.

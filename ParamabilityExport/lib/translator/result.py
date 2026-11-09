@@ -37,3 +37,6 @@ class TranslateResult:
     notes: list = field(default_factory=list)
     fixed: list = field(default_factory=list)  # [{ name, reason }]: sizes that some value could not follow
     loose: list = field(default_factory=list)  # [{ name, reason }]: sizes kept free although some value cannot follow
+    # [{ name, reason, used }]: ticked parameters that are not sizes of the recipe, with the plain reason. `used` is
+    # True when a copied step reads the parameter and the copy cannot follow it, False when nothing copied depends on it.
+    dropped: list = field(default_factory=list)

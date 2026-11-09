@@ -1,8 +1,9 @@
 """The driver: walks a capture's items, calls one handler per feature type, builds the recipe."""
-from . import borrowed, combine, extrude, finish, hole, offset, repeat, revolve
+from . import borrowed, combine, extrude, finish, hole, offset, range_check, repeat, revolve
+from .audit import audit
 from .sizes import construction_fixes, joint_reasons, untried_reasons, used_sizes
 from . import notes as wording, place
-from .notes import fixed_reason, loose_reason
+from .notes import dropped_reason, fixed_reason, loose_reason, unmoved_reason, unused_reason
 from .capture import ASSEMBLY_TYPES, SKETCH_TYPES, outside_component, renamed_target, same_body, validate_capture
 from .context import Context
 from .result import Refusal, TranslateResult, make_verdict
@@ -22,6 +23,8 @@ MAX_PATTERN_COPIES = 64
 MAX_PASSES = 70
 
 SKIP_TYPES = SKETCH_TYPES + ("none",)
+# Steps that cut faces of a body without changing its solid.
+FACE_SPLIT_TYPES = ("SplitFaceFeature",)
 
 _MODULES = (extrude, revolve, hole, finish, repeat, combine, offset)
 
@@ -114,18 +117,39 @@ def _lost_target(item, ctx):
     return any(renamed_target(b, ctx.target) for b in bodies)
 
 
+def _only_splits_faces(item, ctx):
+    """A split of faces that the capture shows left the exported body as it was: its solid is the same, only its faces
+    are cut up, so nothing is copied."""
+    return (item.get("type") in FACE_SPLIT_TYPES and item.get("target_changed") is False
+            and not _new_bodies(item, ctx))
+
+
 def _skip_reason(item):
     if item.get("suppressed"):
         return "Suppressed in Fusion."
     if item.get("type") in SKIP_TYPES:
         return ""
-    if item.get("component_root") is False:
-        return "Not in the root component."
     return None
 
 
-def _over_caps(recipe):
-    """Return a plain reason when the recipe breaks a reader cap, else None."""
+def _count_part(value):
+    """(formula text, Fusion names it reads) of a written count."""
+    if isinstance(value, dict):
+        return "(%s)" % value["expr"], tuple(getattr(value, "reads", ()))
+    return str(value), ()
+
+
+def _copy_counts(step):
+    """(formula, reads) for each count of copies a pattern step makes: the grid (both directions) and the turn."""
+    first = _count_part(step.get("linear", {}).get("count", 1))
+    second = _count_part(step.get("linear2", {}).get("count", 1))
+    return [("%s * %s" % (first[0], second[0]), first[1] + second[1]),
+            _count_part(step.get("polar", {}).get("count", 1))]
+
+
+def _over_caps(recipe, ctx):
+    """Return a plain reason when the recipe breaks a reader cap at its current values, else None. A count of copies
+    that can pass its cap inside the size ranges marks the sizes it reads (`Context.fix`)."""
     features = recipe["features"]
     if len(features) > MAX_FEATURES:
         return "The part has more than %d steps." % MAX_FEATURES
@@ -155,6 +179,12 @@ def _over_caps(recipe):
             copies = max(copies, number(step.get("polar", {}).get("count", 1)))
             if copies > MAX_PATTERN_COPIES:
                 return "A pattern makes more than %d copies." % MAX_PATTERN_COPIES
+            if ctx.table is None:
+                continue
+            for formula, reads in _copy_counts(step):
+                if reads and not range_check.sweep(ctx.table, formula, reads).at_most(MAX_PATTERN_COPIES):
+                    ctx.fix(reads, "%s could make more than %d copies at some sizes"
+                            % (step.get("label") or "a pattern", MAX_PATTERN_COPIES))
     return None
 
 
@@ -169,7 +199,8 @@ def translate(capture, handlers=None, size_table=None, motion=None):
     are written as formulas, the recipe gets `sizes` and the `sizesAsWritten` marker. A value that cannot follow its
     sizes is written as its number, and the sizes it reads stay free: the shape at the current values is the same and
     the other values still follow them. `result.loose` lists those sizes with the reason; one that no formula reads is
-    simply not a size. The ranges are the table's. A formula too long to copy fixes its sizes (`result.fixed`, as
+    not a size and is listed in `result.dropped` with the reason (as is every ticked size no step reads). After the walk
+    an audit (`audit.py`) marks the sizes a copied step reads that no handler named. The ranges are the table's. A formula too long to copy fixes its sizes (`result.fixed`, as
     `{ name, reason }`).
 
     The walk runs twice when some value cannot follow. The first walk fixes every size such a value reads, to learn
@@ -192,13 +223,13 @@ def translate(capture, handlers=None, size_table=None, motion=None):
     upfront = joint_reasons(size_table) if motion is not None else untried_reasons(size_table)
     first = _settle(capture, table, size_table, motion, upfront, follow=False)
     if first.result.recipe is None or not first.whys:
-        return _finish(first, {})
+        return _finish(first, {}, capture, motion)
     pinned = _Pinned(motion) if isinstance(motion, Motion) and not motion.optimistic else motion
     found = _settle(capture, table, size_table, pinned, {}, follow=True)
     doubts = dict(upfront)
     for name, why in list(first.whys.items()) + list(found.depends.items()):
         doubts.setdefault(name, why)
-    return _finish(found, {name: why for name, why in doubts.items() if name not in found.whys})
+    return _finish(found, {name: why for name, why in doubts.items() if name not in found.whys}, capture, motion)
 
 
 class _Pinned:
@@ -218,11 +249,11 @@ class _Pinned:
 
 
 class _Settled:
-    """Where the passes of one walk mode ended: the last walk, the table it used, the fixed sizes with why, and what
-    the last walk could not follow (`Context.depends`)."""
+    """Where the passes of one walk mode ended: the last walk, its context, the table it used, the fixed sizes with
+    why, and what the last walk could not follow (`Context.depends`)."""
 
-    def __init__(self, result, table, whys, depends):
-        self.result, self.table, self.whys, self.depends = result, table, whys, depends
+    def __init__(self, result, ctx, table, whys, depends):
+        self.result, self.ctx, self.table, self.whys, self.depends = result, ctx, table, whys, depends
 
 
 def _settle(capture, handlers, size_table, motion, fixed, follow):
@@ -238,41 +269,51 @@ def _settle(capture, handlers, size_table, motion, fixed, follow):
             break
         whys.update(more)
         current = current.with_fixed(_reasons(more))
-    return _Settled(result, current, whys, ctx.depends)
+    return _Settled(result, ctx, current, whys, ctx.depends)
 
 
 def _reasons(whys):
     return {name: fixed_reason(name, why) for name, why in whys.items()}
 
 
-def _finish(settled, doubts):
-    """The result of the last walk with its fixed and loose sizes, and the recipe `sizes`.
+def _finish(settled, doubts, capture, motion):
+    """The result of the last walk with its fixed and loose sizes, the ones left out, and the recipe `sizes`.
 
-    `doubts` (Fusion name to why) are sizes kept free that some value cannot follow; one that no formula reads is
-    not a size, so it is dropped."""
+    `doubts` (Fusion name to why) are sizes kept free that some value cannot follow. The audit adds the sizes a copied
+    step reads that no handler named. A doubted size that no formula reads is not a size: it is listed in
+    `result.dropped` with its reason, like every other ticked size that the recipe does not hold."""
     result, table, whys = settled.result, settled.table, dict(settled.whys)
-    if result.recipe is not None:
-        written = used_sizes(result.recipe["features"], table.sizes)
-        for name in [n for n in doubts if table.size_name(n) not in written]:
-            doubts.pop(name)
     result.fixed = [{"name": name, "reason": fixed_reason(name, why)} for name, why in whys.items()]
-    result.loose = [{"name": name, "reason": loose_reason(name, why)} for name, why in doubts.items()]
-    if result.recipe is not None:
-        _add_sizes(result, table, whys)
+    if result.recipe is None:
+        result.loose = [{"name": name, "reason": loose_reason(name, why)} for name, why in doubts.items()]
+        return result
+    checked = audit(capture, settled.ctx, table, set(whys) | set(doubts), motion)
+    for name, why in checked.forgotten.items():
+        doubts.setdefault(name, why)
+    sizes = used_sizes(result.recipe["features"], table.sizes)
+    result.loose = [{"name": name, "reason": loose_reason(name, why)} for name, why in doubts.items()
+                    if table.size_name(name) in sizes]
+    result.dropped = _dropped(table, sizes, doubts, checked.unmoved)
+    result.notes.extend(d["reason"] for d in result.dropped)
+    result.recipe["sizesAsWritten"] = True
+    if sizes:
+        result.recipe["sizes"] = sizes
     return result
 
 
-def _add_sizes(result, table, fixed=()):
-    """The recipe's `sizes` (those a formula reads) and the marker that says they are the whole list. A ticked size
-    that no formula reads gets a note, unless it is among the `fixed` names."""
-    recipe = result.recipe
-    sizes = used_sizes(recipe["features"], table.sizes)
-    recipe["sizesAsWritten"] = True
-    if sizes:
-        recipe["sizes"] = sizes
+def _dropped(table, sizes, doubts, unmoved):
+    """`{ name, reason, used }` for each ticked size that no written formula reads. `used` is True when a step reads
+    it and the copy could not follow it, False when nothing copied depends on it."""
+    out = []
     for name in table.ticked:
-        if table.size_name(name) not in sizes and name not in fixed:
-            result.notes.append("%s is not used by any copied step, so it is not a size." % name)
+        if table.size_name(name) in sizes:
+            continue
+        if name in doubts:
+            out.append({"name": name, "reason": dropped_reason(name, doubts[name]), "used": True})
+        else:
+            reason = unmoved_reason(name) if name in unmoved else unused_reason(name)
+            out.append({"name": name, "reason": reason, "used": False})
+    return out
 
 
 def _walk(capture, table, size_table, motion=None):
@@ -303,7 +344,7 @@ def _walk(capture, table, size_table, motion=None):
             result.items.append(make_verdict(item, "skipped", note=""))
             continue
 
-        if outside_component(item) and "component_root" not in item:
+        if outside_component(item):
             # A step made in another component: harmless unless it changes the target.
             if item.get("target_changed") is True or _touches_target(item, ctx):
                 if not made_in_component:
@@ -326,13 +367,21 @@ def _walk(capture, table, size_table, motion=None):
 
         handler = table.get(item.get("type"))
         if not touches and handler is None and not item["bodies_after"]:
+            if item.get("target_changed") is False:
+                result.items.append(make_verdict(item, "skipped", note="Does not change the exported body."))
+                continue
             return refuse(item, "Steps of type %s are not copied yet." % type_words(item["type"]))
         if not touches:
             if not _foreign(_data(item)):
-                _collect_helper(item, handler, ctx)
+                _collect_helper(item, handler, ctx, motion is not None and size_table is not None)
             result.items.append(make_verdict(item, "skipped", note="Helper geometry, not part of the exported body."))
             continue
 
+        if handler is None and _only_splits_faces(item, ctx):
+            note = wording.split_face_note(_label(item))
+            result.items.append(make_verdict(item, "skipped", note=note))
+            result.notes.append(note)
+            continue
         if handler is None:
             return refuse(item, UNSUPPORTED_REASONS.get(item["type"])
                           or "Steps of type %s are not copied yet." % type_words(item["type"]))
@@ -348,10 +397,13 @@ def _walk(capture, table, size_table, motion=None):
                 ctx.fix(names, why)
         if _new_bodies(item, ctx):
             return refuse(item, "This step splits the part or makes another body, which is not copied yet.")
+        pending = set(ctx.pending_tools)
         outcome = handler(item, ctx)
         if isinstance(outcome, Refusal):
             ctx.take_notes()
             return refuse(item, outcome.reason)
+        for key in pending - set(ctx.pending_tools):
+            ctx.release(key)
         if not outcome:
             notes = ctx.take_notes()
             result.items.append(make_verdict(item, "skipped", note=" ".join(notes)))
@@ -360,6 +412,9 @@ def _walk(capture, table, size_table, motion=None):
         if not ctx.steps and outcome[0].get("combine") != "new":
             return refuse(item, "The body starts in a way that cannot be copied.")
         ids = ctx.add_steps(item, outcome)
+        ctx.copied_items.append(item)
+        if item.get("health") == "warning":
+            ctx.note(wording.health_warning_note(_label(item), item.get("message")))
         notes = ctx.take_notes()
         if notes:
             result.items.append(make_verdict(item, "translatedWithNote", ids, " ".join(notes)))
@@ -374,7 +429,7 @@ def _walk(capture, table, size_table, motion=None):
     version = max([RECIPE_VERSION] + [KIND_VERSIONS.get(step["kind"], 0) for step in ctx.steps]
                   + [SELECTOR_VERSIONS.get(key, 0) for step in ctx.steps for key in (step.get("edges") or {})])
     recipe = {"schema": "paramability.recipe", "version": version, "features": ctx.steps}
-    over = _over_caps(recipe)
+    over = _over_caps(recipe, ctx)
     if over:
         result.refusal = {"index": None, "name": "", "type": "", "reason": over}
         return result, ctx
@@ -400,11 +455,18 @@ def _fix_long_formulas(recipe, ctx):
         walk(step, step.get("label"))
 
 
-def _collect_helper(item, handler, ctx):
-    """Keep steps of a body other than the target for a later Combine. A refusal or a missing handler drops it."""
+def _collect_helper(item, handler, ctx, with_construction):
+    """Keep steps of a body other than the target for a later Combine. A refusal or a missing handler drops it.
+
+    The handler runs in a sandbox: the sizes it cannot follow count only when a Combine takes the body
+    (`Context.release`), because until then nothing it wrote reaches the exported body."""
     if handler is None:
         return
-    outcome = handler(item, ctx)
+    with ctx.sandbox() as held:
+        if with_construction:
+            for names, why in construction_fixes(ctx.table, item):
+                ctx.fix(names, why)
+        outcome = handler(item, ctx)
     ctx.take_notes()
     bodies = item.get("bodies_after") or []
     if isinstance(outcome, Refusal) or not outcome or not bodies:
@@ -412,3 +474,4 @@ def _collect_helper(item, handler, ctx):
     key = bodies[0].get("token") or bodies[0].get("name")
     if key in ctx.pending_tools or outcome[0].get("combine") == "new":
         ctx.pending_tools.setdefault(key, []).extend(outcome)
+        ctx.hold(key, item, held)

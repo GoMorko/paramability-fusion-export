@@ -35,7 +35,7 @@ def on_tray(edit=None):
 def on_fixture(name, edit, ticked=TICKED):
     """A fixture's items with the tray's parameters; `edit(data)` changes the data of its last item."""
     capture = load_capture(name)
-    capture["capture"] = 2
+    capture["capture"] = 3
     capture["parameters"] = load_capture(TRAY)["parameters"]
     edit(capture["items"][-1]["data"])
     return capture, ticked
@@ -140,7 +140,9 @@ class TrayTest(unittest.TestCase):
         self.assertEqual((result.fixed, result.loose), ([], []))
         self.assertEqual(steps_of(result.recipe, "shell")[0]["thickness"], 2)
         self.assertNotIn("wall_mm", result.recipe["sizes"])
-        self.assertIn("wall_mm is not used by any copied step, so it is not a size.", result.notes)
+        (dropped,) = [d for d in result.dropped if d["name"] == "wall_mm"]
+        self.assertTrue(dropped["used"])
+        self.assertIn("a value of Shell1 cannot be copied", dropped["reason"])
 
     def test_a_length_that_reaches_zero_inside_the_range_marks_its_size(self):
         def edit(capture):

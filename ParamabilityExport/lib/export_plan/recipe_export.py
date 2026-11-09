@@ -7,7 +7,6 @@ import json
 
 from ..package.manifest import MAX_FIXED, build_recipe_manifest, build_step_only_manifest, validate_manifest
 from ..package.text import clip
-from ..probe.plan import sketch_driven
 from ..translator import CaptureError, translate
 from ..translator.notes import (
     recipe_note, reader_failure_note, step_only_note, translate_failure_note, used_several_times_note)
@@ -65,11 +64,6 @@ def free_sizes(recipe):
     return [name for name, size in sizes.items() if isinstance(size, dict) and "value" in size]
 
 
-def _one_period(text):
-    """A reason that already ends in a full stop and got a second one ("Fusion says 32..") ends in one."""
-    return text[:-1] if text.endswith("..") and not text.endswith("...") else text
-
-
 def _merge_fixed(size_table, *lists, skip=(), only=None):
     """Manifest entries {'name', 'reason'} in order, the first entry per size wins, at most MAX_FIXED.
 
@@ -83,7 +77,7 @@ def _merge_fixed(size_table, *lists, skip=(), only=None):
             name = entry.get("name")
             if not name:
                 continue
-            made = size_table.fixed_entry(name, _one_period(entry.get("reason") or "Stays a fixed number."))
+            made = size_table.fixed_entry(name, entry.get("reason") or "Stays a fixed number.")
             if made["name"] in seen or (only is not None and made["name"] not in only):
                 continue
             seen.add(made["name"])
@@ -91,23 +85,8 @@ def _merge_fixed(size_table, *lists, skip=(), only=None):
     return out[:MAX_FIXED]
 
 
-def _dropped(size_table, recipe, fixed):
-    """Fusion names the person ticked that the recipe does not hold as sizes: no step uses them, and they are not
-    among the fixed ones."""
-    sizes = (recipe or {}).get("sizes") or {}
-    fixed_names = {f["name"] for f in fixed}
-    return [n for n in size_table.ticked
-            if size_table.size_name(n) not in sizes and size_table.recipe_name(n) not in fixed_names]
-
-
-def _not_followed(size_table, dropped):
-    """The dropped sizes that change a sketch or a construction plane: they are used, but could not be followed."""
-    reaching = set(sketch_driven(size_table))
-    return [n for n in dropped if n in reaching]
-
-
 def _not_followed_note(names):
-    text = "Could not follow these through the sketches, so not sizes: %s." % ", ".join(names)
+    text = "Could not follow these, so not sizes: %s." % ", ".join(names)
     return clip(text, MAX_NOTE)
 
 
@@ -129,7 +108,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
 
     capture_or_error: the reader's capture dict, or the exception the reader raised.
     size_table: the SizeTable of this export, or None for a recipe without sizes. A ticked size that no
-      copied step uses is named in a note and in `report.json` ("dropped").
+      copied step uses is named in a note and in `report.json` ("dropped", with the reason).
     loose: [{'name', 'reason'}] sizes the export keeps free although it could not follow them fully (measured), by
       Fusion name. The translator adds its own. The manifest lists those the recipe keeps free, by recipe size name.
     health: how the design came out of the export (`export_plan.health.make_health`), for `report.json` and one note
@@ -169,14 +148,13 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         refusal = result.refusal
 
     free = free_sizes(result.recipe) if recipe_data is not None else []
-    all_fixed, all_loose, dropped, not_followed = [], [], [], []
+    all_fixed, all_loose, dropped = [], [], []
     if recipe_data is not None and size_table is not None:
-        all_fixed = _merge_fixed(size_table, size_table.fixed, getattr(result, "fixed", None))
-        all_loose = _merge_fixed(size_table, loose, getattr(result, "loose", None),
+        all_fixed = _merge_fixed(size_table, size_table.fixed, result.fixed)
+        all_loose = _merge_fixed(size_table, loose, result.loose,
                                  skip={f["name"] for f in all_fixed}, only=set(free))
-        dropped = _dropped(size_table, result.recipe, all_fixed)
-        # With a motion the sketches were measured, so a dropped size there simply moves nothing a step copies.
-        not_followed = _not_followed(size_table, dropped) if motion is None else []
+        fixed_names = {f["name"] for f in all_fixed}
+        dropped = [d for d in result.dropped if size_table.recipe_name(d["name"]) not in fixed_names]
 
     report = {
         "writer": writer,
@@ -199,8 +177,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
     if listing is not None:
         report["parameters"] = listing.report()
     if recipe_data is not None:
-        report["sizes"] = {"free": free, "fixed": all_fixed, "loose": all_loose, "dropped": dropped,
-                           "not_followed": not_followed}
+        report["sizes"] = {"free": free, "fixed": all_fixed, "loose": all_loose, "dropped": dropped}
 
     files = {"part.step": step_file}
     listed = listing.entries if listing is not None else None
@@ -218,7 +195,8 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
             notes.append(loose_note([f["name"] for f in all_loose]))
         if all_fixed:
             notes.append(fixed_note([f["name"] for f in all_fixed]))
-        unused = [n for n in dropped if n not in not_followed]
+        not_followed = [d["name"] for d in dropped if d["used"]]
+        unused = [d["name"] for d in dropped if not d["used"]]
         if not_followed:
             notes.append(_not_followed_note(not_followed))
         if unused:

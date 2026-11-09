@@ -18,7 +18,7 @@ def model(name, expression, kind, owner="", sketch=""):
 
 def capture():
     return {
-        "capture": 2, "target": A,
+        "capture": 3, "target": A,
         "items": [
             item(0, "Sketch1", "Sketch", []),
             item(1, "Extrude1", "ExtrudeFeature", [A], profiles=[{"sketch": "Sketch1"}]),

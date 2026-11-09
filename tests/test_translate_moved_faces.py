@@ -17,7 +17,7 @@ def plate_moved_then_chamfered(z, points=None):
     """The plate (length wall_mm * 5), its top moved up by wall_mm, then a chamfer on two edges (points of the moved
     top at height `z`, or `points`)."""
     capture = plate_with_offset(2.0, params={"distance": {"name": "d9", "expression": "wall_mm", "value": 2.0}})
-    capture["capture"] = 2
+    capture["capture"] = 3
     capture["parameters"] = load_capture(TRAY)["parameters"]
     capture["items"][1]["data"]["params"] = {"side_one.distance": {"name": "d1", "expression": "wall_mm * 5",
                                                                    "value": 10.0}}

@@ -1,7 +1,7 @@
 """Capture checks: the translator reads only a dict that passed these."""
 from . import place
 
-SUPPORTED_CAPTURES = (1, 2, 3)
+SUPPORTED_CAPTURES = (3,)
 _ENVELOPE_KEYS = ("capture", "target", "items")
 _ITEM_KEYS = ("index", "name", "type")
 _NOT_NUMBERS = place.FRAME_NOT_NUMBERS
@@ -58,8 +58,8 @@ def _check_targets(capture):
 
 
 def outside_component(item):
-    """The item was made in a component other than the target's (capture 3), or not in the root (captures 1, 2)."""
-    return item.get("in_target_component") is False or item.get("component_root") is False
+    """The item was made in a component other than the target's."""
+    return item.get("in_target_component") is False
 
 
 def same_body(a, b):

@@ -1,6 +1,6 @@
 {
   "_comment": "A 40 by 20 plate whose height is the size h, a boss that starts from its top face, and a mirror of the boss across that top face. A size moves the face the mirror plane lies on.",
-  "capture": 2,
+  "capture": 3,
   "fusion": "2.0.0",
   "design": "Test",
   "up_axis": "z",
@@ -29,7 +29,7 @@
       "suppressed": false,
       "health": "ok",
       "message": "",
-      "component_root": true,
+      "in_target_component": true,
       "bodies_after": [],
       "data": {}
     },
@@ -40,7 +40,7 @@
       "suppressed": false,
       "health": "ok",
       "message": "",
-      "component_root": true,
+      "in_target_component": true,
       "bodies_after": [
         {
           "token": "t1",
@@ -163,7 +163,7 @@
       "suppressed": false,
       "health": "ok",
       "message": "",
-      "component_root": true,
+      "in_target_component": true,
       "bodies_after": [],
       "data": {}
     },
@@ -174,7 +174,7 @@
       "suppressed": false,
       "health": "ok",
       "message": "",
-      "component_root": true,
+      "in_target_component": true,
       "bodies_after": [
         {
           "token": "t1",
@@ -283,7 +283,7 @@
       "suppressed": false,
       "health": "ok",
       "message": "",
-      "component_root": true,
+      "in_target_component": true,
       "bodies_after": [
         {
           "token": "t1",

@@ -1,4 +1,6 @@
 """Walk state handed to every handler."""
+from contextlib import contextmanager
+
 from . import meets_part
 from .capture import same_body
 from .copy_counts import stays_at_least
@@ -23,7 +25,8 @@ class Context:
     target: the exported body, {token, name, box, volume_mm3}.
     capture: the whole capture (for up_axis and cross item lookups).
     pending_tools: body token (or name) -> recipe steps that build a body other than the target, not yet placed.
-      The Combine handler takes them.
+      The Combine handler takes them. The doubts their handlers recorded wait in `held` and the capture items that
+      made them in `held_items`; both join the walk only when the Combine takes the body (`release`).
     not_repeatable: ids of steps whose length Fusion recomputes per copy (a handler marks a step with a private
       `_adjusts` key, which `add_steps` removes). Pattern and mirror handlers refuse them as sources.
     table: the size table whose sizes the feature values may follow, or None for a recipe with plain
@@ -32,6 +35,7 @@ class Context:
       `doubt_past`).
     must_fix: the same for sizes that must become fixed numbers (`fix_always`). The driver turns them into fixed
       numbers and walks again.
+    copied_items: the capture items whose steps are part of the recipe (the audit reads the sizes behind them).
     slabs: the extrude steps written so far (follow.Slab), for picks and reaches that follow sizes. A handler hands
       one over in a step's private `_slab` key: { on, extent, length, profile }. A pattern or mirror step hands over
       `_copies`, one follow.Motion per copy, and the slabs of the steps it repeats are copied with them.
@@ -61,6 +65,9 @@ class Context:
         self.target = capture["target"]
         self.steps = []
         self.pending_tools = {}
+        self.held = {}
+        self.held_items = {}
+        self.copied_items = []
         self.not_repeatable = set()
         self._ids_by_index = {}
         self._notes = []
@@ -72,6 +79,34 @@ class Context:
     def note(self, text):
         """Attach a plain sentence to the item being handled; its verdict becomes translatedWithNote."""
         self._notes.append(text)
+
+    @contextmanager
+    def sandbox(self):
+        """Doubts that handlers record inside the block are caught in the yielded `(depends, must_fix)` pair of dicts
+        and do not reach the walk. Used for steps of other bodies, whose sizes only count once a Combine uses them."""
+        saved = self.depends, self.must_fix
+        self.depends, self.must_fix = {}, {}
+        try:
+            yield self.depends, self.must_fix
+        finally:
+            self.depends, self.must_fix = saved
+
+    def hold(self, key, item, doubts):
+        """Keep the doubts of a step of another body (`sandbox`) with its item, until `release(key)`."""
+        depends, must_fix = self.held.setdefault(key, ({}, {}))
+        for mine, theirs in ((depends, doubts[0]), (must_fix, doubts[1])):
+            for name, why in theirs.items():
+                mine.setdefault(name, why)
+        self.held_items.setdefault(key, []).append(item)
+
+    def release(self, key):
+        """The body `key` joins the exported body: its held doubts and items count from now on."""
+        depends, must_fix = self.held.pop(key, ({}, {}))
+        for name, why in depends.items():
+            self.depends.setdefault(name, why)
+        for name, why in must_fix.items():
+            self.must_fix.setdefault(name, why)
+        self.copied_items.extend(self.held_items.pop(key, ()))
 
     def fix(self, names, why):
         """Record that a value cannot follow the sizes `names` (Fusion names): it is written as its number. The driver

@@ -23,7 +23,7 @@ def _square(x0, y0, x1, y1):
 
 def _item(index, name, kind, data):
     return {"index": index, "name": name, "type": kind, "suppressed": False, "health": "ok", "message": "",
-            "component_root": True, "bodies_after": [{"token": "t1", "name": "Body1"}], "data": data}
+            "in_target_component": True, "bodies_after": [{"token": "t1", "name": "Body1"}], "data": data}
 
 
 def _extrude(index, name, operation, frame, square, distance, params=None):

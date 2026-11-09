@@ -1,6 +1,6 @@
 {
  "_comment": "Filter box tray for the sized export: 80 by 60 base, height from a cube count, shell, rounded corners, a pipe hole and a row of three. The hole sketch sits on the base plane, so its place does not depend on the wall. Every driving parameter is on a feature, not on a sketch dimension.",
- "capture": 2,
+ "capture": 3,
  "fusion": "2.0.0",
  "design": "Filter box",
  "up_axis": "z",
@@ -336,7 +336,7 @@
    "suppressed": false,
    "health": "ok",
    "message": "",
-   "component_root": true,
+   "in_target_component": true,
    "bodies_after": [],
    "data": {}
   },
@@ -347,7 +347,7 @@
    "suppressed": false,
    "health": "ok",
    "message": "",
-   "component_root": true,
+   "in_target_component": true,
    "bodies_after": [
     {
      "token": "t1",
@@ -465,7 +465,7 @@
    "suppressed": false,
    "health": "ok",
    "message": "",
-   "component_root": true,
+   "in_target_component": true,
    "bodies_after": [
     {
      "token": "t1",
@@ -503,7 +503,7 @@
    "suppressed": false,
    "health": "ok",
    "message": "",
-   "component_root": true,
+   "in_target_component": true,
    "bodies_after": [
     {
      "token": "t1",
@@ -584,7 +584,7 @@
    "suppressed": false,
    "health": "ok",
    "message": "",
-   "component_root": true,
+   "in_target_component": true,
    "bodies_after": [],
    "data": {}
   },
@@ -595,7 +595,7 @@
    "suppressed": false,
    "health": "ok",
    "message": "",
-   "component_root": true,
+   "in_target_component": true,
    "bodies_after": [
     {
      "token": "t1",
@@ -675,7 +675,7 @@
    "suppressed": false,
    "health": "ok",
    "message": "",
-   "component_root": true,
+   "in_target_component": true,
    "bodies_after": [
     {
      "token": "t1",

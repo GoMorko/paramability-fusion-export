@@ -75,10 +75,19 @@ class SizedPlanTest(unittest.TestCase):
         self.assertNotIn("fixed", manifest)
 
     def test_a_ticked_size_no_step_uses_is_named_in_a_note_and_the_report(self):
+        def with_dropped(capture, size_table=None, motion=None):
+            result = sized_translate(capture)
+            result.dropped = [{"name": "width", "reason": "width is not used by any copied step, so it is not a size.",
+                               "used": False}]
+            return result
+
+        recipe_export.translate = with_dropped
         manifest, _, report = plan_single_export(
             load_capture("extrude_plate"), self.paths["part"], "Box", "w", "z", size_table=box_table(("wall", "width")))
         self.assertIn("Not used by any copied step, so not sizes: width.", manifest["notes"])
-        self.assertEqual(report["sizes"]["dropped"], ["width"])
+        (dropped,) = report["sizes"]["dropped"]
+        self.assertEqual((dropped["name"], dropped["used"]), ("width", False))
+        self.assertEqual(dropped["reason"], "width is not used by any copied step, so it is not a size.")
 
     def test_fixed_entries_hold_the_recipe_name_and_keep_the_fusion_name_in_the_reason(self):
         long_name = "Filter box $ " + "x" * 58

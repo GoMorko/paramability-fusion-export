@@ -18,7 +18,7 @@ def plate_then_emboss():
     capture = load_capture("extrude_plate")
     body = capture["items"][1]["bodies_after"]
     capture["items"].append({"index": 2, "name": "Emboss1", "type": "EmbossFeature", "suppressed": False,
-                             "health": "ok", "message": "", "component_root": True, "bodies_after": body, "data": {}})
+                             "health": "ok", "message": "", "in_target_component": True, "bodies_after": body, "data": {}})
     return capture
 
 
@@ -41,7 +41,7 @@ class PlanTest(unittest.TestCase):
         self.assertFalse([name for name in files if name.startswith("checks/")])
         self.assertEqual(json.loads(files["recipe.json"])["sizes"]["holes_count"]["min"], 1.0)
         self.assertEqual([f["name"] for f in manifest["loose"]], ["holes_count"])
-        self.assertEqual(set(report["sizes"]), {"free", "fixed", "loose", "dropped", "not_followed"})
+        self.assertEqual(set(report["sizes"]), {"free", "fixed", "loose", "dropped"})
         self.assertNotIn("check_sizes", report)
         self.assertNotIn("keep_doubtful", report)
 

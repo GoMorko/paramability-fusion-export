@@ -6,9 +6,15 @@ MAX_NOTE = 200
 MAX_NAME = 60
 
 
+def _ends(why):
+    """The reason without a closing full stop, so the template's own stop does not double it."""
+    text = str(why).rstrip()
+    return text[:-1] if text.endswith(".") and not text.endswith("...") else text
+
+
 def fixed_reason(name, why):
     """Why a size stays a fixed number: "<name> stays fixed: <why>."."""
-    return clip("%s stays fixed: %s." % (name, why), MAX_NOTE)
+    return clip("%s stays fixed: %s." % (name, _ends(why)), MAX_NOTE)
 
 
 class Past(str):
@@ -24,7 +30,20 @@ def loose_reason(name, why):
     """Why a size that stays free may not follow every step: "<name> may give unexpected results: <why>."., or
     "<name> may give unexpected results past 2.05: <why>." when the reason is a `Past`."""
     where = getattr(why, "where", None)
-    return clip("%s may give unexpected results%s: %s." % (name, " " + where if where else "", why), MAX_NOTE)
+    return clip("%s may give unexpected results%s: %s." % (name, " " + where if where else "", _ends(why)), MAX_NOTE)
+
+
+def dropped_reason(name, why):
+    """Why a ticked size is not a size although a step reads it: "<name> is not a size: <why>."."""
+    return clip("%s is not a size: %s." % (name, _ends(why)), MAX_NOTE)
+
+
+def unused_reason(name):
+    return clip("%s is not used by any copied step, so it is not a size." % name, MAX_NOTE)
+
+
+def unmoved_reason(name):
+    return clip("%s is not a size: changing it changes nothing in the copied steps." % name, MAX_NOTE)
 
 
 def recipe_note(step_count):
@@ -63,6 +82,17 @@ def made_elsewhere_note():
 
 def reaches_component_note(label):
     return "Added as a fixed shape: %s reaches into another component, which is not copied yet." % label
+
+
+def health_warning_note(label, message):
+    """A step Fusion shows a warning on was copied as Fusion built it; the copy may not match what Fusion meant."""
+    detail = _ends(plain(message or ""))
+    return clip("Fusion shows a warning on %s%s. The copy follows what Fusion built, which may not be what was meant."
+                % (label, ": " + detail if detail else ""), MAX_NOTE)
+
+
+def split_face_note(label):
+    return "%s only splits faces of the body, so it is not copied. Picks on those faces may not follow." % label
 
 
 def linked_part_note():

@@ -37,7 +37,7 @@ def plate_with_offset(distance, faces=None, moved=None, params=None):
     if params:
         data["params"] = params
     capture["items"].append({"index": 2, "name": "OffsetFaces1", "type": "OffsetFacesFeature", "suppressed": False,
-                             "health": "ok", "message": "", "component_root": True,
+                             "health": "ok", "message": "", "in_target_component": True,
                              "bodies_after": [{"token": "t1", "name": "Body1"}], "data": data})
     return capture
 
@@ -124,7 +124,7 @@ class OffsetFacesTest(unittest.TestCase):
 
     def test_the_distance_follows_its_size(self):
         capture = plate_with_offset(2.0, params={"distance": {"name": "d9", "expression": "wall_mm", "value": 2.0}})
-        capture["capture"] = 2
+        capture["capture"] = 3
         capture["parameters"] = load_capture(TRAY)["parameters"]
         result, _ = run(capture)
         step = steps_of(result.recipe, "offsetFaces")[0]
@@ -133,7 +133,7 @@ class OffsetFacesTest(unittest.TestCase):
 
     def test_the_pick_names_the_extrude_whose_end_face_moves_with_a_size(self):
         capture = plate_with_offset(2.0)
-        capture["capture"] = 2
+        capture["capture"] = 3
         capture["parameters"] = load_capture(TRAY)["parameters"]
         capture["items"][1]["data"]["params"] = {"side_one.distance": {"name": "d1", "expression": "wall_mm * 5", "value": 10.0}}
         result, _ = run(capture)

@@ -1,6 +1,6 @@
 {
   "_comment": "A blind drilled hole with a tip, 20 mm from the plane: mirrored with the body.",
-  "capture": 1,
+  "capture": 3,
   "fusion": "2.0.0",
   "design": "Test",
   "up_axis": "z",
@@ -29,7 +29,7 @@
       "suppressed": false,
       "health": "ok",
       "message": "",
-      "component_root": true,
+      "in_target_component": true,
       "bodies_after": [],
       "data": {}
     },
@@ -40,7 +40,7 @@
       "suppressed": false,
       "health": "ok",
       "message": "",
-      "component_root": true,
+      "in_target_component": true,
       "bodies_after": [
         {
           "token": "t1",
@@ -156,7 +156,7 @@
       "suppressed": false,
       "health": "ok",
       "message": "",
-      "component_root": true,
+      "in_target_component": true,
       "bodies_after": [],
       "data": {}
     },
@@ -167,7 +167,7 @@
       "suppressed": false,
       "health": "ok",
       "message": "",
-      "component_root": true,
+      "in_target_component": true,
       "bodies_after": [
         {
           "token": "t1",
@@ -235,7 +235,7 @@
       "suppressed": false,
       "health": "ok",
       "message": "",
-      "component_root": true,
+      "in_target_component": true,
       "bodies_after": [
         {
           "token": "t1",

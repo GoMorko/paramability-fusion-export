@@ -13,7 +13,7 @@ BIG = {"FilterBox___height__contains_CeramicMedium": 2.5, CUBE: 30, "wall_mm": 3
 
 def _round(points, index=3, name="Fillet9"):
     return {"index": index, "name": name, "type": "FilletFeature", "suppressed": False, "health": "ok", "message": "",
-            "component_root": True, "bodies_after": [{"token": "t1", "name": "Body1"}],
+            "in_target_component": True, "bodies_after": [{"token": "t1", "name": "Body1"}],
             "data": {"sets": [{"kind": "constant", "radius": 0.5, "continuity": "tangent", "input_kinds": ["edge"],
                                "edges": [{"token": "e%d" % n, "closed": False, "points": [p]}
                                          for n, p in enumerate(points)]}]}}

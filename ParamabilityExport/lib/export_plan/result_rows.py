@@ -4,7 +4,7 @@ The view is built from the manifest and report that plan_single_export returned,
 """
 from .dialog_rows import range_text
 from .health import FAILED, health_lines, with_lines
-from .messages import listed_lines, recipe_saved_message
+from .messages import MAX_LISTED_FIXED, listed_lines, recipe_saved_message
 
 KEPT_FIXED, NOT_USED = "kept fixed", "not used"
 NOT_FOLLOWED = "not followed"
@@ -33,16 +33,15 @@ def _size_rows(table, report):
 
 
 def _left_out_rows(table, report, ticked):
-    """Rows for ticked parameters that did not become sizes: fixed, no copied step reads them, or they change a sketch
-    that could not be followed."""
+    """Rows for ticked parameters that did not become sizes: fixed, no copied step reads them, or a step reads them and
+    the copy could not follow."""
     sizes = report["sizes"]
     fixed_names = {f["name"] for f in sizes.get("fixed") or []}
-    dropped = set(sizes.get("dropped") or [])
-    not_followed = set(sizes.get("not_followed") or [])
+    dropped = {d["name"]: d for d in sizes.get("dropped") or []}
     rows = []
     for name in ticked:
         if name in dropped:
-            rows.append({"name": name, "range": "", "check": NOT_FOLLOWED if name in not_followed else NOT_USED})
+            rows.append({"name": name, "range": "", "check": NOT_FOLLOWED if dropped[name]["used"] else NOT_USED})
         elif table.recipe_name(name) in fixed_names:
             rows.append({"name": name, "range": "", "check": KEPT_FIXED})
     return rows
@@ -55,12 +54,29 @@ def _probe_rows(report):
     return []
 
 
-def _fixed_lines(report):
-    return listed_lines(report["sizes"].get("fixed") or [])
+def _lines(table, entries):
+    """"name: reason" for the first entries, then one line that counts the rest. A reason that already starts with the
+    name (Fusion's or the recipe's) is shown as it is."""
+    fusion = {e.size_name: e.name for e in table.entries if e.size_name}
+    shown = []
+    for entry in entries[:MAX_LISTED_FIXED]:
+        name, reason = entry["name"], entry["reason"]
+        shown.append(reason if reason.startswith((name, fusion.get(name, name))) else "%s: %s" % (name, reason))
+    return shown + listed_lines(entries)[len(shown):]
 
 
-def _loose_lines(report):
-    return listed_lines(report["sizes"].get("loose") or [])
+def _fixed_lines(table, report):
+    return _lines(table, report["sizes"].get("fixed") or [])
+
+
+def _loose_lines(table, report):
+    return _lines(table, report["sizes"].get("loose") or [])
+
+
+def _dropped_lines(table, report):
+    """The reasons of the ticked parameters that a step reads and the copy could not follow. A parameter that no step
+    reads has its own row and needs no reason."""
+    return _lines(table, [d for d in report["sizes"].get("dropped") or [] if d["used"]])
 
 
 def variables_line(manifest):
@@ -75,7 +91,8 @@ def result_view(file_name, manifest, report, table, ticked):
     """Plain data for the result dialog, or None when the file holds no recipe (the message box tells that story).
 
     Keys: saved (first sentence), size_title, check_header (the title of the last column), rows ({name, range,
-    check}), fixed (lines), loose (lines: sizes that stay free but may not follow every step, with why), variables,
+    check}), fixed (lines), loose (lines: sizes that stay free but may not follow every step, with why), dropped
+    (lines: ticked parameters that a step reads but the copy could not follow, with why), variables,
     warnings (what is wrong with the design or the sketch measuring, and what to do: empty when all is well),
     message (the whole story as plain text, for a message box, with the warnings below it).
     """
@@ -84,14 +101,19 @@ def result_view(file_name, manifest, report, table, ticked):
     notes = manifest.get("notes") or []
     rows = _size_rows(table, report)
     count = len(rows)
+    dropped = _dropped_lines(table, report)
+    story = recipe_saved_message(manifest, file_name)
+    if dropped:
+        story += "\n\n" + "\n".join("- " + line for line in dropped)
     return {
         "saved": ("Saved %s. %s" % (file_name, notes[0] if notes else "")).strip(),
         "size_title": "%d %s ready for the form" % (count, "size" if count == 1 else "sizes"),
         "check_header": STATUS_HEADER,
         "rows": rows + _left_out_rows(table, report, ticked) + _probe_rows(report),
-        "fixed": _fixed_lines(report),
-        "loose": _loose_lines(report),
+        "fixed": _fixed_lines(table, report),
+        "loose": _loose_lines(table, report),
+        "dropped": dropped,
         "variables": variables_line(manifest),
         "warnings": health_lines(report.get("health")),
-        "message": with_lines(recipe_saved_message(manifest, file_name), report.get("health")),
+        "message": with_lines(story, report.get("health")),
     }

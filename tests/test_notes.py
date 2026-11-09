@@ -33,6 +33,18 @@ class NotesTest(unittest.TestCase):
             notes.step_only_note(refusal),
             "Added as a fixed shape: the part could not be copied. Nothing in the timeline makes this body.")
 
+    def test_reasons_that_end_in_a_full_stop_do_not_double_it(self):
+        self.assertEqual(notes.loose_reason("w", "Fusion says 3."), "w may give unexpected results: Fusion says 3.")
+        self.assertEqual(notes.fixed_reason("w", "Fusion says 3."), "w stays fixed: Fusion says 3.")
+        self.assertEqual(notes.dropped_reason("w", "Fusion says 3."), "w is not a size: Fusion says 3.")
+        self.assertEqual(notes.loose_reason("w", notes.Past("past 2", "it breaks.")),
+                         "w may give unexpected results past 2: it breaks.")
+
+    def test_a_fusion_warning_note_names_the_step_and_keeps_the_message(self):
+        text = notes.health_warning_note("Fillet1 (round)", "Some edges were skipped.")
+        self.assertIn("Fusion shows a warning on Fillet1 (round): Some edges were skipped. The copy", text)
+        self.assertTrue(notes.health_warning_note("Fillet1", "").startswith("Fusion shows a warning on Fillet1. "))
+
     def test_every_note_is_short_and_free_of_dashes(self):
         refusal = {"index": 1, "name": ("A %s B %s C" % (chr(0x2014), chr(0x2013))) * 20, "type": "FilletFeature", "reason": "Because. " * 60}
         texts = [notes.step_only_note(refusal), notes.recipe_note(400), notes.reader_failure_note(),

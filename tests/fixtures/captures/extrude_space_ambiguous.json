@@ -1,6 +1,6 @@
 {
   "_comment": "A sketch in the plane z = 0 whose curve space could not be decided.",
-  "capture": 1,
+  "capture": 3,
   "fusion": "2.0.0",
   "design": "Test",
   "up_axis": "z",
@@ -29,7 +29,7 @@
       "suppressed": false,
       "health": "ok",
       "message": "",
-      "component_root": true,
+      "in_target_component": true,
       "bodies_after": [],
       "data": {}
     },
@@ -40,7 +40,7 @@
       "suppressed": false,
       "health": "ok",
       "message": "",
-      "component_root": true,
+      "in_target_component": true,
       "bodies_after": [
         {
           "token": "t1",

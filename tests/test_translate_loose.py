@@ -56,7 +56,10 @@ class LooseTest(unittest.TestCase):
         result = run(None)
         self.assertEqual((result.fixed, result.loose), ([], []))
         self.assertNotIn("depth_mm", free(result))
-        self.assertIn("depth_mm is not used by any copied step, so it is not a size.", result.notes)
+        dropped = {d["name"]: d for d in result.dropped}["depth_mm"]
+        self.assertTrue(dropped["used"])
+        self.assertIn("could not be tried at other values", dropped["reason"])
+        self.assertIn(dropped["reason"], result.notes)
 
     def test_a_size_that_moves_a_joint_stays_free_with_the_reason(self):
         def joint(model):

@@ -58,8 +58,12 @@ class OutlineTest(unittest.TestCase):
         result = run(load_capture(BOX), BOX_SIZES, None)
         self.assertEqual((result.fixed, result.loose), ([], []))
         self.assertEqual(sorted(result.recipe["sizes"]), ["height_mm", "pipe_d_mm", "wall_mm"])
-        for name in ("box_count", "cube_mm", "depth_mm", "pipe_offset_mm"):
-            self.assertIn("%s is not used by any copied step, so it is not a size." % name, result.notes)
+        dropped = {d["name"]: d for d in result.dropped}
+        self.assertEqual(sorted(dropped), ["box_count", "cube_mm", "depth_mm", "pipe_offset_mm"])
+        for name, entry in dropped.items():
+            self.assertTrue(entry["used"], name)
+            self.assertIn("could not be tried", entry["reason"])
+            self.assertNotIn("not used by any copied step", entry["reason"])
 
     def test_the_first_translation_writes_numbers_and_fixes_nothing_for_sketches(self):
         result = run(load_capture(BOX), BOX_SIZES, OPTIMISTIC)

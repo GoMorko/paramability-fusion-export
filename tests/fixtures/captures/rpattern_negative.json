@@ -1,6 +1,6 @@
 {
   "_comment": "Pattern of 3 copies, 10 apart, whose copies run against the stored direction.",
-  "capture": 1,
+  "capture": 3,
   "fusion": "2.0.0",
   "design": "Test",
   "up_axis": "z",
@@ -29,7 +29,7 @@
       "suppressed": false,
       "health": "ok",
       "message": "",
-      "component_root": true,
+      "in_target_component": true,
       "bodies_after": [],
       "data": {}
     },
@@ -40,7 +40,7 @@
       "suppressed": false,
       "health": "ok",
       "message": "",
-      "component_root": true,
+      "in_target_component": true,
       "bodies_after": [
         {
           "token": "t1",
@@ -156,7 +156,7 @@
       "suppressed": false,
       "health": "ok",
       "message": "",
-      "component_root": true,
+      "in_target_component": true,
       "bodies_after": [],
       "data": {}
     },
@@ -167,7 +167,7 @@
       "suppressed": false,
       "health": "ok",
       "message": "",
-      "component_root": true,
+      "in_target_component": true,
       "bodies_after": [
         {
           "token": "t1",
@@ -258,7 +258,7 @@
       "suppressed": false,
       "health": "ok",
       "message": "",
-      "component_root": true,
+      "in_target_component": true,
       "bodies_after": [
         {
           "token": "t1",
