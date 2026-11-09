@@ -6,6 +6,7 @@ import adsk.fusion
 
 from ... import config
 from ...lib.fusion_reader.design_info import detect_up_axis
+from ...lib.export_plan.sizes_table import new_table
 from ...lib.fusion_reader.parameters import list_user_parameters
 from ...lib.fusion_reader.step_export import count_solid_bodies
 from ...lib.fusion_ui import export_dialog, handlers
@@ -73,19 +74,21 @@ def _on_created(args):
     body = None
     if count_solid_bodies(root) == 1 and root.bRepBodies.count == 1:
         body = root.bRepBodies.item(0)
-    export_dialog.build(command, parameters, body, detect_up_axis(app))
+    table = new_table(parameters)
+    export_dialog.build(command, parameters, body, detect_up_axis(app), table)
 
     # Per-dialog handlers are replaced each time the dialog opens.
     _command_handlers.clear()
     handlers.on_input_changed(
-        command.inputChanged, lambda a: export_dialog.refresh(a.inputs, parameters), _command_handlers)
+        command.inputChanged, lambda a: export_dialog.on_input_changed(a, parameters, table), _command_handlers)
     handlers.on_pre_select(command.preSelect, lambda a: export_dialog.allow_preselect(a), _command_handlers)
     handlers.on_validate(
         command.validateInputs,
-        lambda a: setattr(a, "areInputsValid", export_dialog.inputs_valid(a.inputs, parameters)),
+        lambda a: setattr(a, "areInputsValid", export_dialog.inputs_valid(a.inputs, parameters, table)),
         _command_handlers)
     handlers.on_execute(
         command.execute,
-        lambda a: export_flow.run_export(design, parameters, export_dialog.read_form(a.command.commandInputs)),
+        lambda a: export_flow.run_export(
+            design, parameters, export_dialog.read_form(a.command.commandInputs, parameters, table)),
         _command_handlers)
     handlers.on_destroy(command.destroy, lambda a: None, _command_handlers)

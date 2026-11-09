@@ -15,7 +15,20 @@ note the Fusion version and system.
 
 Use a design with two favourite user parameters (for example `width` in mm and `angle` in deg).
 
-- [ ] The dialog opens with a header line `name,width,angle` and one `Default` row with the current values.
+- [ ] The dialog opens with the group "Parameters that change between sizes" (all user parameters listed, `width` and
+      `angle` ticked) and a Sizes table with the header `Name | width (mm) | angle (deg)` and one `Default` row at
+      the current values. The line "Each row becomes one size in Paramability's dropdown." shows above the table.
+- [ ] Collapse and expand the parameter group with a design that has 30 or more user parameters: it stays usable.
+- [ ] Untick `angle`: the column goes and the other numbers stay as typed. Tick it again: the column comes back with
+      the number typed before. Tick a unitless count parameter: its column shows a plain number.
+- [ ] Select a row and click "Add size": the new row is named "Size 2" and holds the values of the selected row. With
+      no row selected, it copies the last row. Click "Remove size": the selected row goes; the last row cannot be removed.
+- [ ] Type a duplicate name or an empty name: the status box under the table names the problem at once and OK is off.
+- [ ] A parameter in inches or radians shows the number in that unit, and the exported value is the same number.
+- [ ] Fallback: if the table or the parameter list cannot be built, or its first change fails, the dialog shows
+      "The table could not be shown in this Fusion version, so sizes are typed as text.", a one line help, and one
+      text box with every settable parameter in the header and a Default row. Edit it, click OK: the file is written
+      as before. Note the failing call in the Fusion text commands log ("sizes table failed") and report it.
 - [ ] Add two more rows, set the default size, click OK, pick a place to save. The file is written.
 - [ ] After the export, both parameters show their original values in the parameters table.
 - [ ] Click Cancel in the progress window part way: nothing is saved and the parameters are back.
@@ -23,8 +36,9 @@ Use a design with two favourite user parameters (for example `width` in mm and `
       item, nothing is saved and the parameters are back.
 - [ ] Watch these calls: expressions are written as text such as `40 mm`. If your Fusion uses a comma as the decimal
       mark, check that `12.5` rows still set the right number.
-- [ ] A user parameter in an unusual unit (for example mm/s) is listed as "not supported" and refused as a column.
-- [ ] A formula parameter (for example `depth = width / 2`) as a column is refused with a plain message.
+- [ ] A user parameter in an unusual unit (for example mm/s) is listed greyed out as "not supported" with the reason
+      in its tooltip, and cannot be ticked.
+- [ ] A formula parameter (for example `depth = width / 2`) is greyed out with "(formula)" and a tooltip.
 
 ## 3. Several bodies in the root
 
@@ -116,7 +130,23 @@ These were written from the API reference and never run:
 - The `preSelect` event and `isSelectable` for the body picker.
 - `Design.findEntityByToken` to find the body again after each recompute.
 - `ExportManager.createSTEPExportOptions` with a component, and `execute`.
-- Editable multi line `TextBoxCommandInput` and its `inputChanged` event (the default size list refreshes from it).
+- The sizes table (`lib/fusion_ui/sizes_table_ui.py`), none of it run yet; the API reference pages could not be read
+  while writing it, so every member below is from memory of the reference and Autodesk samples:
+  - `CommandInputs.addGroupCommandInput`, `GroupCommandInput.children`, `isExpanded`, and `itemById` on the command
+    inputs finding the group; inputs created through `group.children`.
+  - `children.addTableCommandInput(id, name, columns, "2:1:1")` (column ratio text), `TableCommandInput.addCommandInput(input,
+    row, column)`, `getInputAtPosition`, `rowCount`, `selectedRow` (-1 when none), `deleteRow`, `minimumVisibleRows`,
+    `maximumVisibleRows`.
+  - `TableCommandInput.addToolbarCommandInput` with a `BoolValueCommandInput` created with `isCheckBox=False` and an
+    empty resource folder: the button should show its name as text. If it shows nothing, add an icon folder.
+  - `CommandInput.deleteMe` on a table, then a new table added in the same group (the columns of a table are fixed
+    when it is created). Cells are created through the same `children` as the table. If the group order or the
+    stale cells cause trouble, build the table once and hide it instead.
+  - `inputChanged` firing for cell inputs, the toolbar buttons and the check boxes inside a group; `selectedRow`
+    reading while the header row (row 0) is selected.
+  - `addValueInput` with unit text `mm`, `deg` or an empty string (counts), and `ValueCommandInput.value` returning
+    internal units (cm, rad).
+  - `CommandInput.isEnabled` and `tooltip` on a check box.
 - `ProgressDialog` (`show`, `progressValue`, `wasCancelled`) and `FileDialog` filter text.
 - `FeatureHealthStates.ErrorFeatureHealthState` on timeline items after `computeAll`.
 - The modeling orientation preference as the up direction.

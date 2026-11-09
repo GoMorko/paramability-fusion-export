@@ -1,4 +1,4 @@
-"""The sizes text of the dialog: prefill, reading and checks."""
+"""The sizes as CSV text: prefill, reading and checks. The dialog table turns into this text (see sizes_table)."""
 import csv
 import io
 from dataclasses import dataclass, field
@@ -23,15 +23,15 @@ def settable_parameters(params):
 
 
 def prefill_sizes_text(params):
-    """Header with the favourite parameters and one Default row holding their current values."""
-    chosen = [p for p in settable_parameters(params) if p["is_favorite"]]
+    """Text box start: a header with every settable parameter and one Default row at the current values."""
+    chosen = settable_parameters(params)
     header = ",".join(["name"] + [p["name"] for p in chosen])
     row = ",".join(["Default"] + [format_number(p["display_value"]) for p in chosen])
     return header + "\n" + row + "\n"
 
 
 def others_line(params, columns):
-    """Short line naming the user parameters that are not columns yet, with their units."""
+    """Short line naming the user parameters that are not columns, with the reason or the unit."""
     rest = [p for p in params if p["name"] not in columns]
     if not rest:
         return "No other user parameters."
@@ -39,7 +39,7 @@ def others_line(params, columns):
     for p in rest:
         label = p["name"]
         if p["kind"] == "derived":
-            label += " (formula)"
+            label += " (formula, cannot be a column)"
         elif p["kind"] == "unsupported":
             label += f" (unit {p['unit']} not supported)"
         elif p["unit"]:

@@ -66,27 +66,26 @@ class ExpressionsTest(unittest.TestCase):
 
 
 class SizesTextTest(unittest.TestCase):
-    def test_prefill_uses_settable_favourites(self):
-        self.assertEqual(prefill_sizes_text(PARAMS), "name,width,angle\nDefault,20,30\n")
-
-    def test_prefilled_text_reads_back(self):
-        read = read_sizes(prefill_sizes_text(PARAMS), PARAMS)
-        self.assertEqual(read.problems, [])
-        self.assertEqual(read.columns, ["width", "angle"])
-        self.assertEqual(read.rows[0]["values"], {"width": 20.0, "angle": 30.0})
+    def test_fallback_prefill_holds_every_settable_parameter(self):
+        speed = {"name": "speed", "expression": "5 mm/s", "value": 5.0, "display_value": 5.0, "unit": "mm/s",
+                 "comment": "", "is_favorite": True, "kind": "unsupported"}
+        params = PARAMS + [speed]
+        text = prefill_sizes_text(params)
+        self.assertEqual(text, "name,width,angle,wall\nDefault,20,30,2\n")
+        self.assertEqual(read_sizes(text, params).problems, [])
+        line = others_line(params, ["width", "angle", "wall"])
+        self.assertIn("depth (formula", line)
+        self.assertIn("speed (unit mm/s not supported)", line)
 
     def test_formula_column_refused(self):
         read = read_sizes("name,depth\nA,5", PARAMS)
         self.assertIn("depth", read.problems[0])
 
-    def test_unsupported_unit_refused_and_not_prefilled(self):
+    def test_unsupported_unit_refused(self):
         speed = {"name": "speed", "expression": "5 mm/s", "value": 5.0, "display_value": 5.0, "unit": "mm/s",
                  "comment": "", "is_favorite": True, "kind": "unsupported"}
-        params = PARAMS + [speed]
-        self.assertNotIn("speed", prefill_sizes_text(params))
-        read = read_sizes("name,speed\nA,5", params)
+        read = read_sizes("name,speed\nA,5", PARAMS + [speed])
         self.assertIn("mm/s", read.problems[0])
-        self.assertIn("speed (unit mm/s not supported)", others_line(params, ["width"]))
 
     def test_two_sizes_without_columns_refused(self):
         read = read_sizes("name\nA\nB", PARAMS)

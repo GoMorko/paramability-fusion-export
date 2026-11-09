@@ -4,6 +4,7 @@ import unittest
 
 from tests import context  # noqa: F401
 
+from lib.export_plan.sizes_table import new_table
 from lib.fusion_reader.bodies import is_pickable_body
 
 # The dialog module imports adsk at load time; a stub is enough for the pure checks below.
@@ -31,15 +32,16 @@ class Item:
         self.__dict__.update(kw)
 
 
-def inputs_for(body):
+def inputs_for(body, extra=None):
     items = {
         export_dialog.BODY_ID: Item(selectionCount=1, selection=lambda i: Item(entity=body)),
-        export_dialog.SIZES_ID: Item(text="Name\nSmall"),
+        export_dialog.sizes_table_ui.SIZES_GROUP_ID: Item(children=Item(count=0)),
         export_dialog.CHOICE_ID: Item(value="Size"),
         export_dialog.DEFAULT_ID: Item(selectedItem=None),
         export_dialog.UP_ID: Item(selectedItem=None),
         export_dialog.RECIPE_ID: Item(value=True),
     }
+    items.update(extra or {})
     return Item(itemById=items.__getitem__)
 
 
@@ -59,8 +61,17 @@ class BodyPickTest(unittest.TestCase):
         self.assertFalse(args.isSelectable)
 
     def test_inputs_valid_for_a_component_body(self):
-        self.assertTrue(export_dialog.inputs_valid(inputs_for(Body(context=object())), []))
-        self.assertFalse(export_dialog.inputs_valid(inputs_for(Body(solid=False)), []))
+        self.assertTrue(export_dialog.inputs_valid(inputs_for(Body(context=object())), [], new_table([])))
+        self.assertFalse(export_dialog.inputs_valid(inputs_for(Body(solid=False)), [], new_table([])))
+
+    def test_text_box_mode_reads_the_sizes_text(self):
+        table = new_table([])
+        table.text_mode = True
+        text_id = export_dialog.sizes_text_ui.SIZES_ID
+        view = inputs_for(Body(), {text_id: Item(text="name\nSmall")})
+        self.assertTrue(export_dialog.inputs_valid(view, [], table))
+        view = inputs_for(Body(), {text_id: Item(text="name\nA\nA")})
+        self.assertFalse(export_dialog.inputs_valid(view, [], table))
 
 
 class ResolveBodyTest(unittest.TestCase):

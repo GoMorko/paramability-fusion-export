@@ -17,9 +17,14 @@ The button "Export for Paramability" shows in the Utilities tab.
 
 1. In Fusion, mark the user parameters you want to vary as favourites.
 2. Click Export for Paramability.
-3. Pick the body, list your sizes (one per line), and name the dropdown. The sizes box starts with a header and a
-   Default line made from your favourites. Add one line per size: the name first, then a number for each column.
-   Leave a cell empty to keep the current value.
+3. Pick the body. Under "Parameters that change between sizes", tick the user parameters that differ from size to
+   size (your favourites are ticked to start with; the group can be collapsed). A parameter worked out by a formula,
+   or in a unit this export cannot convert, is greyed out, and its tooltip says why.
+   In the Sizes table each row is one size: a name, then a number for each ticked parameter, in that parameter's
+   own unit. The table starts with one row, "Default", at the current values. "Add size" copies the selected row
+   (or the last one) as "Size 2", "Size 3" and so on. "Remove size" deletes the selected row. Ticking or unticking a
+   parameter changes the columns and keeps the numbers you typed. Problems show in a box under the table.
+   Name the dropdown ("Name of the dropdown in Paramability").
 4. Pick the default size and the design up direction.
 5. Click OK and choose where to save the file.
 6. Open the file in Paramability with Open.
