@@ -12,6 +12,8 @@ class Context:
     capture: the whole capture (for up_axis and cross item lookups).
     pending_tools: body token (or name) -> recipe steps that build a body other than the target, not yet placed.
       The Combine handler takes them.
+    not_repeatable: ids of steps whose length Fusion recomputes per copy (a handler marks a step with a private
+      `_adjusts` key, which `add_steps` removes). Pattern and mirror handlers refuse them as sources.
     """
 
     def __init__(self, capture):
@@ -19,6 +21,7 @@ class Context:
         self.target = capture["target"]
         self.steps = []
         self.pending_tools = {}
+        self.not_repeatable = set()
         self._ids_by_index = {}
         self._notes = []
         self.current = None
@@ -51,6 +54,8 @@ class Context:
             step_id = base if n == 1 else "%s_%d" % (base, n)
             if len(step_id) > MAX_ID:
                 step_id = step_id[-MAX_ID:]
+            if step.pop("_adjusts", False):
+                self.not_repeatable.add(step_id)
             step["id"] = step_id
             step["label"] = label
             self.steps.append(step)

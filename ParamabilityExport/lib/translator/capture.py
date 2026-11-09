@@ -38,3 +38,11 @@ def same_body(a, b):
     if a.get("token") and b.get("token"):
         return a["token"] == b["token"]
     return bool(a.get("name")) and a.get("name") == b.get("name")
+
+
+def renamed_target(body, target):
+    """A body with the target's name but another token: the target was probably re-tokened, so it is not safe to match."""
+    if not body or not target:
+        return False
+    a, b = body.get("token"), target.get("token")
+    return bool(a and b and a != b and body.get("name") and body.get("name") == target.get("name"))

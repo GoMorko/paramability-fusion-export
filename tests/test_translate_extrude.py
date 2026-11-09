@@ -91,7 +91,7 @@ class PlacementTest(unittest.TestCase):
 
     def test_start_from_a_parallel_plane_acts_as_an_offset(self):
         plane = {"point": [0, 0, 14], "normal": [0, 0, -1]}
-        result = variant("extrude_start_offset", lambda d: d.update(start={"kind": "fromEntity", "plane": plane}))
+        result = variant("extrude_start_offset", lambda d: d.update(start={"kind": "fromEntity", "plane": plane}, end_offset=8.0))
         self.assertEqual(under_test(result, 3)[0]["sketch"]["on"]["origin"], [0, 0, 14])
 
     def test_start_from_a_tilted_plane_refuses(self):
@@ -156,7 +156,7 @@ class ExtentTest(unittest.TestCase):
         self.assertEqual((step["extent"], step["distance"], step["combine"]), ("oneSide", 10, "add"))
 
     def test_to_plane_adds_its_offset(self):
-        result = variant("extrude_to_plane", lambda d: d["side_one"].update(offset=1.5))
+        result = variant("extrude_to_plane", lambda d: (d["side_one"].update(offset=1.5), d.update(end_offset=11.5)))
         self.assertEqual(under_test(result, 3)[0]["distance"], 11.5)
 
     def test_to_a_plane_behind_the_sketch_goes_backwards(self):
@@ -182,25 +182,80 @@ class ExtentTest(unittest.TestCase):
         self.assertEqual([s["combine"] for s in steps], ["add", "add"])
         self.assertEqual(verdict_of(result, 3)["steps"], ["extrude_3", "extrude_3_2"])
 
-    def test_new_body_with_two_profiles_adds_the_second(self):
-        capture = load_capture("extrude_plate")
-        data = capture["items"][-1]["data"]
-        data["profiles"].append(copy.deepcopy(data["profiles"][0]))
-        steps = translate(capture).recipe["features"]
-        self.assertEqual([s["combine"] for s in steps], ["new", "add"])
+    def test_new_body_with_two_profiles_refuses(self):
+        result = translate_fixture("extrude_new_body_two_bodies")
+        self.assertIsNone(result.recipe)
+        self.assertIn("several bodies", result.refusal["reason"])
+
+    def test_profiles_on_two_planes_refuse(self):
+        result = translate_fixture("extrude_profiles_two_planes")
+        self.assertIsNone(result.recipe)
+        self.assertIn("different planes", result.refusal["reason"])
+
+    def test_profiles_on_one_plane_from_two_sketches_pass(self):
+        capture = load_capture("extrude_profiles_two_planes")
+        capture["items"][-1]["data"]["profiles"][1]["frame"]["origin"] = [0, 0, 10]
+        self.assertEqual([s["id"] for s in under_test(translate(capture), 3)], ["extrude_3", "extrude_3_2"])
+
+    def test_profiles_facing_opposite_ways_refuse(self):
+        capture = load_capture("extrude_profiles_two_planes")
+        frame = capture["items"][-1]["data"]["profiles"][1]["frame"]
+        frame.update(origin=[0, 0, 10], z=[0, 0, -1], y=[0, -1, 0])
+        self.assertIsNone(translate(capture).recipe)
+
+
+class MeasuredLengthTest(unittest.TestCase):
+    def test_one_side_length_must_match_the_measured_end(self):
+        result = variant("extrude_plate", lambda d: d.update(end_offset=12.0))
+        self.assertIn("does not match its length", result.refusal["reason"])
+
+    def test_symmetric_distance_is_checked_as_half_length(self):
+        ok = variant("extrude_symmetric_half", lambda d: d.update(end_offset=5.0))
+        self.assertEqual(ok.recipe["features"][0]["distance"], 10)
+        wrong = variant("extrude_symmetric_half", lambda d: d.update(end_offset=10.0))
+        self.assertIsNone(wrong.recipe)
+
+    def test_two_sided_end_face_must_belong_to_side_one(self):
+        swapped = variant("extrude_two_sides", lambda d: d.update(end_offset=4.0))
+        self.assertIsNone(swapped.recipe)
+        ok = variant("extrude_two_sides", lambda d: d.update(end_offset=-6.0))
+        self.assertEqual(ok.recipe["features"][0]["sketch"]["on"]["normal"], [0, 0, -1])
+
+    def test_to_entity_offset_is_checked_against_the_measured_end(self):
+        result = variant("extrude_to_plane", lambda d: d["side_one"].update(offset=1.5))
+        self.assertIsNone(result.recipe)
+
+    def test_missing_measure_is_not_a_refusal(self):
+        self.assertIsNotNone(variant("extrude_symmetric_half", lambda d: d.update(end_offset=None)).recipe)
 
 
 class TaperTest(unittest.TestCase):
-    def test_taper_uses_the_sign_constant(self):
+    def test_taper_uses_the_sign_constant_when_measured_agrees(self):
         step = translate_fixture("extrude_taper").recipe["features"][0]
         self.assertEqual(step["taperDeg"], extrude.FUSION_TAPER_SIGN * 5)
+
+    def test_taper_that_grows_the_end_face_refuses(self):
+        result = translate_fixture("extrude_taper_wrong_sign")
+        self.assertIsNone(result.recipe)
+        self.assertIn("does not match what was measured", result.refusal["reason"])
+
+    def test_taper_without_a_measure_refuses(self):
+        result = translate_fixture("extrude_taper_unmeasured")
+        self.assertIn("could not be measured", result.refusal["reason"])
+
+    def test_taper_with_no_size_change_refuses(self):
+        result = variant("extrude_taper", lambda d: d.update(end_area=d["profile_area"]))
+        self.assertIsNone(result.recipe)
 
     def test_taper_at_the_cap_refuses(self):
         result = variant("extrude_taper", lambda d: d["side_one"].update(taper_deg=45.0))
         self.assertIsNone(result.recipe)
 
     def test_symmetric_taper_is_kept(self):
-        result = variant("extrude_symmetric_half", lambda d: d["symmetric"].update(taper_deg=3.0))
+        def edit(d):
+            d["symmetric"].update(taper_deg=3.0)
+            d.update(end_offset=5.0, profile_area=800.0, end_area=700.0)
+        result = variant("extrude_symmetric_half", edit)
         self.assertEqual(result.recipe["features"][0]["taperDeg"], extrude.FUSION_TAPER_SIGN * 3)
 
     def test_no_taper_writes_no_field(self):
@@ -259,6 +314,117 @@ class RefusalTest(unittest.TestCase):
         self.assertEqual(verdict_of(result, 2)["verdict"], "skipped")
 
 
+class DriverGuardTest(unittest.TestCase):
+    def test_cut_that_splits_the_target_refuses(self):
+        for name in ("extrude_cut_splits_target", "extrude_cut_splits_target_unknown_before"):
+            result = translate_fixture(name)
+            self.assertIsNone(result.recipe, name)
+            self.assertEqual(result.refusal["index"], 3, name)
+            self.assertIn("splits the part", result.refusal["reason"], name)
+
+    def test_cut_across_two_existing_bodies_is_kept(self):
+        result = translate_fixture("extrude_cut_two_bodies_existing")
+        self.assertEqual(under_test(result, 3)[0]["combine"], "cut")
+
+    def test_two_bodies_listed_after_a_new_body_refuse(self):
+        result = translate_fixture("extrude_new_body_two_bodies_listed")
+        self.assertIsNone(result.recipe)
+
+    def test_target_with_a_new_token_is_not_skipped(self):
+        result = translate_fixture("extrude_target_token_changes")
+        self.assertIsNone(result.recipe)
+        self.assertIn("could not be followed", result.refusal["reason"])
+
+    def test_unreadable_bodies_refuse(self):
+        result = translate_fixture("extrude_bodies_unreadable")
+        self.assertIsNone(result.recipe)
+        self.assertEqual(result.refusal["index"], 3)
+
+    def test_read_error_refuses_in_driver_and_handler(self):
+        result = translate_fixture("extrude_read_error")
+        self.assertEqual(result.refusal["reason"], "This step could not be read from Fusion.")
+        item = load_capture("extrude_read_error")["items"][-1]
+        self.assertEqual(extrude.handle(item, None).reason, "This step could not be read from Fusion.")
+
+    def test_unknown_type_without_bodies_refuses_but_joints_are_skipped(self):
+        capture = load_capture("extrude_plate")
+        later = dict(capture["items"][0], index=2, name="X", type="MoveFeature", bodies_after=[], data={})
+        capture["items"].append(later)
+        self.assertIn("move", translate(capture).refusal["reason"])
+        later["type"] = "Joint"
+        self.assertIsNotNone(translate(capture).recipe)
+
+    def test_handler_with_no_steps_is_skipped_with_its_note(self):
+        def silent(item, ctx):
+            ctx.note("Nothing to copy.")
+            return []
+        capture = load_capture("extrude_plate")
+        capture["items"].append(dict(capture["items"][1], index=2, name="Thread1", type="ThreadFeature", data={}))
+        result = translate(capture, {"ThreadFeature": silent})
+        verdict = verdict_of(result, 2)
+        self.assertEqual((verdict["verdict"], verdict["steps"], verdict["note"]), ("skipped", [], "Nothing to copy."))
+        self.assertEqual(len(result.recipe["features"]), 1)
+
+
+class UnreadableTest(unittest.TestCase):
+    def test_each_unreadable_setting_refuses_at_the_extrude(self):
+        for name in ("extrude_taper_unreadable", "extrude_thin_unreadable", "extrude_start_unreadable",
+                     "extrude_extent_type_unreadable", "extrude_full_length_unreadable", "extrude_space_ambiguous"):
+            result = translate_fixture(name)
+            self.assertIsNone(result.recipe, name)
+            self.assertEqual((result.refusal["index"], result.refusal["type"]), (1, "ExtrudeFeature"), name)
+
+    def test_unreadable_through_all_direction_and_to_offset_refuse(self):
+        self.assertIsNone(variant("extrude_cut_through_one", lambda d: d["side_one"].update(positive=None)).recipe)
+        self.assertIsNone(variant("extrude_to_plane", lambda d: d["side_one"].update(offset=None)).recipe)
+
+    def test_model_space_profile_translates_like_sketch_space(self):
+        a = translate_fixture("extrude_space_model").recipe
+        b = translate_fixture("extrude_plate").recipe
+        self.assertEqual(a["features"][0]["sketch"], b["features"][0]["sketch"])
+
+    def test_capture_read_error_lands_as_a_fixed_shape_with_a_note(self):
+        from lib.export_plan.recipe_export import plan_single_export
+        from lib.fusion_reader.capture import CaptureReadError
+        manifest, files, report = plan_single_export(
+            CaptureReadError("The timeline groups hide steps that could not be read."), b"step", "Part", "w", "z")
+        self.assertEqual(manifest["kind"], "stepOnly")
+        self.assertIn("could not be read", manifest["notes"][0])
+        self.assertIn("CaptureReadError", report["error"] if isinstance(report, dict) else files["report.json"].decode())
+
+
+class RepeatabilityTest(unittest.TestCase):
+    def ids_not_repeatable(self, name, edit=None):
+        from lib.translator.context import Context
+        capture = load_capture(name)
+        if edit:
+            edit(capture["items"][-1]["data"])
+        holder = {}
+        real = Context.__init__
+
+        def init(self, cap):
+            real(self, cap)
+            holder["ctx"] = self
+
+        Context.__init__ = init
+        try:
+            result = translate(capture)
+        finally:
+            Context.__init__ = real
+        self.assertIsNotNone(result.recipe)
+        for step in result.recipe["features"]:
+            self.assertNotIn("_adjusts", step)
+        return holder["ctx"].not_repeatable
+
+    def test_steps_that_reach_a_face_or_the_far_side_are_not_repeatable(self):
+        self.assertEqual(self.ids_not_repeatable("extrude_to_plane"), {"extrude_3"})
+        self.assertEqual(self.ids_not_repeatable("extrude_cut_through_one"), {"extrude_3"})
+
+    def test_fixed_length_steps_stay_repeatable(self):
+        self.assertEqual(self.ids_not_repeatable("extrude_plate"), set())
+        self.assertEqual(self.ids_not_repeatable("extrude_cut_through_two"), set())
+
+
 class FixtureSchemaTest(unittest.TestCase):
     def test_every_translated_extrude_fixture_passes_the_schema(self):
         translated = 0
@@ -268,7 +434,7 @@ class FixtureSchemaTest(unittest.TestCase):
             if result.recipe is not None:
                 translated += 1
                 self.assertEqual(check_recipe(result.recipe), [], os.path.basename(path))
-        self.assertEqual(translated, 17)
+        self.assertEqual(translated, 19)
 
 
 if __name__ == "__main__":

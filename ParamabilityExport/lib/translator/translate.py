@@ -1,6 +1,6 @@
 """The driver: walks a capture's items, calls one handler per feature type, builds the recipe."""
 from . import combine, extrude, finish, hole, repeat, revolve
-from .capture import validate_capture
+from .capture import renamed_target, same_body, validate_capture
 from .context import Context
 from .result import Refusal, TranslateResult, make_verdict
 from .zup import turn_z_up
@@ -11,6 +11,9 @@ MAX_NEAR_POINTS = 32
 MAX_PATTERN_COPIES = 64
 
 SKIP_TYPES = ("Sketch", "ConstructionPlane", "ConstructionAxis", "ConstructionPoint", "none")
+
+# Timeline items that hold no solid geometry: with no readable bodies they cannot change the part.
+NON_GEOMETRY_TYPES = ("Joint", "JointOrigin", "AsBuiltJoint", "RigidGroup", "Canvas", "Decal")
 
 _MODULES = (extrude, revolve, hole, finish, repeat, combine)
 HANDLERS = {t: m.handle for m in _MODULES for t in m.TYPES}
@@ -34,8 +37,47 @@ def _refusal(item, reason):
     return {"index": item.get("index"), "name": item.get("name", ""), "type": item.get("type", ""), "reason": reason}
 
 
+def _data(item):
+    data = item.get("data")
+    return data if isinstance(data, dict) else {}
+
+
 def _touches_target(item, ctx):
-    return any(ctx.is_target(b) for b in item.get("bodies_after") or [])
+    """The item lists the target among its bodies, or its own data names the target as the body it works on."""
+    if any(ctx.is_target(b) for b in item.get("bodies_after") or []):
+        return True
+    data = _data(item)
+    if ctx.is_target(data.get("target")):
+        return True
+    if data.get("operation") != "newBody":
+        return any(ctx.is_target(b) for b in data.get("participants") or [])
+    return False
+
+
+def _existing_bodies(item):
+    """Bodies that existed before the item: the reader's `bodies_before`, else the bodies the item's data names."""
+    before = item.get("bodies_before")
+    if isinstance(before, list):
+        return before
+    data = _data(item)
+    named = list(data.get("participants") or []) + list(data.get("tools") or [])
+    if data.get("target"):
+        named.append(data["target"])
+    return named
+
+
+def _new_bodies(item, ctx):
+    """Bodies the item lists that are not the target and did not exist before it (a split, or a second new body)."""
+    existing = _existing_bodies(item)
+    return [
+        b for b in item.get("bodies_after") or []
+        if not ctx.is_target(b) and not any(same_body(b, e) for e in existing)
+    ]
+
+
+def _lost_target(item, ctx):
+    bodies = list(item.get("bodies_after") or []) + list(item.get("bodies_before") or [])
+    return any(renamed_target(b, ctx.target) for b in bodies)
 
 
 def _skip_reason(item):
@@ -85,8 +127,9 @@ def _over_caps(recipe):
 def translate(capture, handlers=None):
     """Capture dict to TranslateResult. `handlers` maps a feature type to a handler and overrides the table.
 
-    A handler is `handle(item, ctx) -> list[step] | Refusal`. Items after the first refusal are not walked, so
-    `items` holds the verdicts up to and including it.
+    A handler is `handle(item, ctx) -> list[step] | Refusal`. An empty list means the item makes no step on purpose
+    (verdict `skipped`, with the handler's notes). Items after the first refusal are not walked, so `items` holds the
+    verdicts up to and including it.
     """
     validate_capture(capture)
     table = dict(HANDLERS)
@@ -107,11 +150,18 @@ def translate(capture, handlers=None):
             result.items.append(make_verdict(item, "skipped", note=reason))
             continue
 
+        if _lost_target(item, ctx):
+            return refuse(item, "The body could not be followed through the timeline.")
+        if item.get("bodies_after") is None:
+            return refuse(item, "The bodies this step changes could not be read.")
+
         touches = _touches_target(item, ctx)
         if item.get("health") == "error" and (touches or not item.get("bodies_after")):
             return refuse(item, "This step does not build in Fusion.")
 
         handler = table.get(item.get("type"))
+        if not touches and handler is None and not item["bodies_after"] and item.get("type") not in NON_GEOMETRY_TYPES:
+            return refuse(item, "Steps of type %s are not copied yet." % type_words(item["type"]))
         if not touches:
             _collect_helper(item, handler, ctx)
             result.items.append(make_verdict(item, "skipped", note="Helper geometry, not part of the exported body."))
@@ -119,11 +169,20 @@ def translate(capture, handlers=None):
 
         if handler is None:
             return refuse(item, "Steps of type %s are not copied yet." % type_words(item["type"]))
+        if _data(item).get("read_error"):
+            return refuse(item, "This step could not be read from Fusion.")
+        if _new_bodies(item, ctx):
+            return refuse(item, "This step splits the part or makes another body, which is not copied yet.")
         outcome = handler(item, ctx)
         if isinstance(outcome, Refusal):
             ctx.take_notes()
             return refuse(item, outcome.reason)
-        if not ctx.steps and outcome and outcome[0].get("combine") != "new":
+        if not outcome:
+            notes = ctx.take_notes()
+            result.items.append(make_verdict(item, "skipped", note=" ".join(notes)))
+            result.notes.extend(notes)
+            continue
+        if not ctx.steps and outcome[0].get("combine") != "new":
             return refuse(item, "The body starts in a way that cannot be copied.")
         ids = ctx.add_steps(item, outcome)
         notes = ctx.take_notes()

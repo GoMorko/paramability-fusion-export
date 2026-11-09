@@ -159,3 +159,30 @@ def flip_y(loop):
             segments.append(moved)
         out["segments"] = segments
     return out
+
+
+MAX_INNER_LOOPS = 256
+
+
+def profile_loops(profile):
+    """One capture profile's `(outer, inners)` recipe loops, or a Refusal.
+
+    Refuses a flat face used as a profile, a curve space the reader could not decide (`space: "ambiguous"`), a profile
+    without exactly one outer loop, and any loop `loop_of` refuses.
+    """
+    if profile.get("face") or "loops" not in profile:
+        return Refusal("A flat face used as a sketch outline is not copied yet.")
+    sketch = profile.get("sketch", "")
+    if profile.get("space", "sketch") not in ("sketch", "model"):
+        return Refusal("%s could not be placed on its plane with certainty, so it is not copied." % _where(sketch))
+    outers, inners = [], []
+    for raw in profile["loops"]:
+        loop = loop_of(raw.get("curves") or [], sketch)
+        if isinstance(loop, Refusal):
+            return loop
+        (outers if raw.get("outer") else inners).append(loop)
+    if len(outers) != 1:
+        return Refusal("%s does not have exactly one outer loop." % _where(sketch))
+    if len(inners) > MAX_INNER_LOOPS:
+        return Refusal("%s has too many holes." % _where(sketch))
+    return outers[0], inners

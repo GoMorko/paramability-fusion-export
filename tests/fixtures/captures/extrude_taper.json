@@ -1,5 +1,5 @@
 {
-  "_comment": "Extrude 10 mm with a 5 degree taper.",
+  "_comment": "Extrude 10 mm with a 5 degree taper; the end face is smaller (Fusion positive taper leans in).",
   "capture": 1,
   "fusion": "2.0.0",
   "design": "Test",
@@ -139,14 +139,11 @@
         "side_two": null,
         "symmetric": null,
         "thin": false,
-        "participants": [
-          {
-            "token": "t1",
-            "name": "Body1"
-          }
-        ],
+        "participants": [],
         "target_box_before": null,
-        "end_offset": null
+        "end_offset": 10.0,
+        "profile_area": 800.0,
+        "end_area": 698.0753102671121
       }
     }
   ]

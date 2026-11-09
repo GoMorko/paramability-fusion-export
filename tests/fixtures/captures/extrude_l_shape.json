@@ -161,12 +161,7 @@
         "side_two": null,
         "symmetric": null,
         "thin": false,
-        "participants": [
-          {
-            "token": "t1",
-            "name": "Body1"
-          }
-        ],
+        "participants": [],
         "target_box_before": null,
         "end_offset": null
       }

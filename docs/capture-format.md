@@ -153,7 +153,14 @@ CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriente
   (`SymmetricExtentDefinition.distance`, `isFullLength`, `taperAngle`).
 - `target_box_before`: the target body's box with the marker before the item, or null when it does not exist yet.
 - `end_offset`: signed distance along the first profile's sketch `z` from its sketch plane to
-  `endFaces[0].pointOnFace`, or null. The measured check of the direction.
+  `endFaces[0].pointOnFace`, or null. The measured check of the direction and, for one side, symmetric (half
+  length) and two sided extrudes, of the length: the translator refuses when `abs(end_offset - start shift)` is not
+  the planned length within 1e-3 mm.
+- `profile_area`, `end_area` (optional, mm2): the area of the first profile and of `endFaces[0]`. Needed for a tapered
+  extrude: the end face must be smaller for a positive recipe taper, else the translator refuses.
+- `bodies_before` (optional, on any item): root bodies at the marker before the item. With it the driver finds a
+  body the item made or split off (refused); without it the driver compares `bodies_after` with the bodies the item's
+  data names (`participants`, `tools`, `target`).
 
 **RevolveFeature** (`operation`, `profile`, `axis`, `isProjectAxis`, `extentDefinition`, `startFaces`):
 

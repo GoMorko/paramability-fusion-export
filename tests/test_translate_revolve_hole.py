@@ -277,7 +277,7 @@ class ThreadTest(unittest.TestCase):
         result = translate_fixture("thread_cosmetic")
         self.assertEqual(len(result.recipe["features"]), 2)
         verdict = verdict_of(result, 4)
-        self.assertEqual((verdict["verdict"], verdict["steps"]), ("translatedWithNote", []))
+        self.assertEqual((verdict["verdict"], verdict["steps"]), ("skipped", []))
         self.assertTrue(verdict["note"])
 
     def test_modeled_thread_refuses(self):
