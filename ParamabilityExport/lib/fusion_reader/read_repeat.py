@@ -75,6 +75,19 @@ def _direction_member(feature, vector_name, entity_name, ctx):
     return None
 
 
+def _direction_sketch(feature, entity_name, ctx):
+    """{ sketch_token, sketch } of the sketch line a pattern direction is taken from, else None."""
+    line = geo.safe(lambda: geo.native_input(getattr(feature, entity_name), ctx), None)
+    if geo.type_name(line) != "SketchLine":
+        return None
+    found = {}
+    for key, read in (("sketch_token", lambda: line.parentSketch.entityToken), ("sketch", lambda: line.parentSketch.name)):
+        value = geo.safe(read, "")
+        if value:
+            found[key] = value
+    return found or None
+
+
 def _number(parameter, default):
     return geo.safe(lambda: int(round(geo.value_of(parameter))), default)
 
@@ -113,6 +126,10 @@ def rectangular_before(feature, ctx):
         "elements": [],
         "suppressed_ids": [],
     })
+    for key, entity_name in (("direction_one_sketch", "directionOneEntity"), ("direction_two_sketch", "directionTwoEntity")):
+        source = _direction_sketch(feature, entity_name, ctx)
+        if source is not None:
+            data[key] = source
     return with_params(data, Params().add("quantity_one", lambda: feature.quantityOne, "scalar")
                        .add("quantity_two", lambda: feature.quantityTwo, "scalar")
                        .add("distance_one", lambda: feature.distanceOne)
@@ -139,7 +156,10 @@ def pattern_after(feature, ctx, data):
 
 def _plane_record(entity, ctx):
     entity = geo.native_input(entity, ctx)
-    return from_assembly(geo.mark_foreign(geo.plane_of(entity), entity, ctx), entity, ctx)
+    record = from_assembly(geo.mark_foreign(geo.plane_of(entity), entity, ctx), entity, ctx)
+    if isinstance(record, dict):
+        record.update(read_solid.construction_token(entity))
+    return record
 
 
 def mirror_before(feature, ctx):

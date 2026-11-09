@@ -34,11 +34,21 @@ def _taper(feature, member):
     return geo.safe(lambda: geo.angle(getattr(feature, member)), None)
 
 
+def construction_token(entity):
+    """{ "token": ... } for a construction plane or axis (it names the parameters behind it), else {}."""
+    if geo.type_name(entity) in ("ConstructionPlane", "ConstructionAxis"):
+        token = geo.safe(lambda: entity.entityToken, "")
+        if token:
+            return {"token": token}
+    return {}
+
+
 def _target(definition, ctx):
     """The face or plane an extrude starts from or reaches to: its plane, its type, and a point on a face."""
     entity = geo.native_input(geo.safe(lambda: definition.entity, None), ctx)
     found = {"plane": geo.safe(lambda: geo.plane_of(entity), None),
              "entity_type": geo.safe(lambda: geo.type_name(entity), None)}
+    found.update(construction_token(entity))
     if found["entity_type"] == "BRepFace":
         found["face_point"] = geo.safe(lambda: geo.point(entity.pointOnFace), None)
     return geo.mark_foreign(found, entity, ctx)
@@ -192,22 +202,35 @@ class _Delta:
         self.x, self.y, self.z = b.x - a.x, b.y - a.y, b.z - a.z
 
 
-def _line_axis(line):
+def line_axis(line):
+    """{ point, dir } of a Line3D: its start point and unit direction."""
     return {"point": geo.point(line.startPoint), "dir": geo.unit_vector(_Delta(line.startPoint, line.endPoint))}
+
+
+def _sketch_line_axis(entity):
+    """A sketch line as an axis, with the tokens of the line and its sketch and the sketch name."""
+    found = line_axis(entity.worldGeometry)
+    for key, read in (("entity", lambda: entity.entityToken), ("sketch_token", lambda: entity.parentSketch.entityToken),
+                      ("sketch", lambda: entity.parentSketch.name)):
+        value = geo.safe(read, "")
+        if value:
+            found[key] = value
+    return found
 
 
 def axis_of(entity):
     """Axis of a revolve from a sketch line, construction axis, linear edge or cylindrical face."""
     name = geo.type_name(entity)
     if name == "SketchLine":
-        return _line_axis(entity.worldGeometry)
+        return _sketch_line_axis(entity)
     if name == "ConstructionAxis":
         line = entity.geometry
-        return {"point": geo.point(line.origin), "dir": geo.unit_vector(line.direction)}
+        return dict({"point": geo.point(line.origin), "dir": geo.unit_vector(line.direction)},
+                    **construction_token(entity))
     if name == "BRepEdge":
         line = entity.geometry
         if geo.type_name(line) == "Line3D":
-            return _line_axis(line)
+            return line_axis(line)
     if name == "BRepFace":
         cylinder = entity.geometry
         if geo.type_name(cylinder) == "Cylinder":
@@ -278,12 +301,39 @@ def _cylinder(face):
     }
 
 
-def _hole_positions(feature, ctx):
+def _sketch_points(feature, ctx):
+    """The sketch points of a hole placed on sketch points, else None."""
     definition = geo.safe(lambda: feature.holePositionDefinition, None)
-    if "SketchPoints" in geo.type_name(definition):
-        points = [geo.native_input(p, ctx) for p in geo.collection_items(definition.sketchPoints)]
+    if "SketchPoints" not in geo.type_name(definition):
+        return None
+    return [geo.native_input(p, ctx) for p in geo.collection_items(definition.sketchPoints)]
+
+
+def _hole_positions(feature, ctx):
+    points = _sketch_points(feature, ctx)
+    if points is not None:
         return [geo.point(p.worldGeometry) for p in points]
     return [geo.point(feature.position)]
+
+
+def _hole_sketch(feature, ctx):
+    """`sketch_token`, `sketch` and `point_tokens` (one per position) of a hole on sketch points. Points on several
+    sketches give only the first sketch's token: the hole then cannot be followed and keeps that sketch fixed."""
+    points = _sketch_points(feature, ctx)
+    if not points:
+        return {}
+    sketches = [geo.safe(lambda: p.parentSketch, None) for p in points]
+    tokens = [geo.safe(lambda: s.entityToken, "") or "" for s in sketches]
+    found = {}
+    if tokens[0]:
+        found["sketch_token"] = tokens[0]
+        name = geo.safe(lambda: sketches[0].name, "")
+        if name:
+            found["sketch"] = name
+    point_tokens = [geo.safe(lambda: p.entityToken, "") or "" for p in points]
+    if found and all(point_tokens) and len(set(tokens)) == 1:
+        found["point_tokens"] = point_tokens
+    return found
 
 
 def _hole_extent(feature):
@@ -332,6 +382,7 @@ def hole_before(feature, ctx):
         } if hole_type == "countersink" else None,
         "direction": geo.safe(lambda: geo.unit_vector(feature.direction), None),
         "positions": _hole_positions(feature, ctx),
+        **geo.safe(lambda: _hole_sketch(feature, ctx), {}),
         "extent": geo.safe(lambda: _hole_extent(feature), {"kind": "other", "type": "unreadable"}),
         "side_cylinders": [],
         "end_points": [],

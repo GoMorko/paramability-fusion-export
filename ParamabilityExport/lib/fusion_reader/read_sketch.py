@@ -212,8 +212,32 @@ def _borrowed(proxy, sketch, frame, ctx):
     return out
 
 
+_REFERENCE_KINDS = {"ConstructionPlane": "constructionPlane", "BRepFace": "face", "Plane": "plane"}
+
+
+def _reference(sketch, ctx):
+    """{ kind, token } of what the sketch sits on (`Sketch.referencePlane`), or None when it cannot be read."""
+    entity = geo.safe(lambda: sketch.referencePlane, None)
+    if entity is None:
+        return None
+    entity = geo.native_input(entity, ctx)
+    return {"kind": _REFERENCE_KINDS.get(geo.type_name(entity), "other"),
+            "token": geo.safe(lambda: entity.entityToken, "") or ""}
+
+
+def _curve_record(profile_curve, space):
+    """The curve dict, with `entity`: the token of the sketch curve it came from (same across recomputes)."""
+    record = _read_curve(profile_curve.geometry, space)
+    token = geo.safe(lambda: profile_curve.sketchEntity.entityToken, "")
+    if token:
+        record["entity"] = token
+    return record
+
+
 def read_profile(profile, ctx=None):
     """One Profile as { sketch, frame, loops }; "foreign": true when its sketch is not the target component's.
+
+    `sketch_token` and `reference` (what the sketch sits on) are added when Fusion gives them.
 
     A profile of another component's sketch, seen through an occurrence, is read from its native object (that
     component's coordinates) and adds `component`, `placement` and `sketch_params` (see `_borrowed`).
@@ -234,10 +258,16 @@ def read_profile(profile, ctx=None):
         "frame": frame,
         "space": space.mode,
         "loops": [
-            {"outer": bool(loop.isOuter), "curves": [_read_curve(c.geometry, space) for c in curves]}
+            {"outer": bool(loop.isOuter), "curves": [_curve_record(c, space) for c in curves]}
             for loop, curves in zip(loops, loop_curves)
         ],
     }
+    token = geo.safe(lambda: sketch.entityToken, "")
+    if token:
+        record["sketch_token"] = token
+    reference = _reference(sketch, ctx)
+    if reference is not None:
+        record["reference"] = reference
     if proxy is not None:
         record["foreign"] = True
         record.update(_borrowed(proxy, sketch, frame, ctx))

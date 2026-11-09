@@ -187,6 +187,11 @@ Reading inputs at the position before the item covers the getters that the refer
 ]
 ```
 
+Optional keys that let the size probe find the sketch again (section 5, "Probe states"): `sketch_token`
+(`Sketch.entityToken`) and `reference` (`{ "kind": "constructionPlane" | "face" | "plane" | "other", "token" }` from
+`Sketch.referencePlane`; `token` is empty for a plane without one). Each curve also gets `entity`, the token of its
+sketch curve (`ProfileCurve.sketchEntity.entityToken`). A key is left out when Fusion does not give it.
+
 From `Profile.parentSketch.transform`, `Profile.profileLoops`, `ProfileLoop.isOuter`, `ProfileLoop.profileCurves`,
 `ProfileCurve.geometry` and `ProfileCurve.geometryType`. A planar face used as a profile is `{ "face": true }`
 (the translator refuses it).
@@ -262,7 +267,8 @@ CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriente
 - TARGET (the face or plane of a from or to entity): `plane` from the entity's `geometry` (its origin need not lie on
   the face), `entity_type` the entity's type name (`BRepFace`, `ConstructionPlane`, or null), and for a face
   `face_point` (`BRepFace.pointOnFace`). Both keys are optional; without `face_point` the translator cannot tell
-  whether the face moves with sizes.
+  whether the face moves with sizes. For a `ConstructionPlane` or `ConstructionAxis` the record also has `token`
+  (`entityToken`), which names the model parameters behind it (`created_by.token`).
 - `symmetric`: `{ "distance": mm, "full_length": bool, "taper_deg": d }`
   (`SymmetricExtentDefinition.distance`, `isFullLength`, `taperAngle`).
 - `target_box_before`: the target body's box with the marker before the item, or null when it does not exist yet.
@@ -299,7 +305,8 @@ CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriente
 
 - `axis` from a `SketchLine` (`worldGeometry`), a `ConstructionAxis` (`geometry`, an `InfiniteLine3D`), a linear
   `BRepEdge` (`geometry`, a `Line3D`) or a cylindrical `BRepFace` (`geometry`, a `Cylinder`); else `{ "kind":
-  "other" }`.
+  "other" }`. An axis from a sketch line also has `entity` (the line's token), `sketch_token` and `sketch` (the
+  sketch's token and name); one from a construction axis has `token`. Circular pattern axes are read the same way.
 - `extent`: `{ "kind": "angle", "angle_deg", "symmetric" }` (`AngleExtentDefinition.angle`, `isSymmetric`),
   `{ "kind": "twoSidesAngle", "angle_one_deg", "angle_two_deg" }`, `{ "kind": "other", "type" }`.
 - `start_face_normal`: outward normal of `startFaces[0]` at its `pointOnFace` (surface evaluator), or null for a
@@ -333,6 +340,9 @@ CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriente
 - `counterbore`: `{ "diameter", "depth" }`; `countersink`: `{ "diameter", "angle_deg" }`.
 - `positions`: one point per `SketchPointsHolePositionDefinition.sketchPoints` item (`worldGeometry`), else
   `[position]`.
+- `sketch_token`, `sketch` (optional): token and name of the sketch of the first sketch point.
+  `point_tokens` (optional): `entityToken` of each sketch point, same order as `positions`; absent when a token is
+  missing or the points sit on more than one sketch.
 - `extent`: `{ "kind": "distance", "depth" }`, `{ "kind": "throughAll" }` (also for the `All` kind), `{ "kind":
   "toEntity" }`, `{ "kind": "other" }`.
 - `side_cylinders`: every `sideFaces` item whose geometry is a `Cylinder` (`origin`, `axis`, `radius`).
@@ -421,6 +431,8 @@ neither way, refuses an uneven chamfer.
 - `distance_type`: `spacing` or `extent` (enum `PatternDistanceType`), `other` when unreadable. The translator then
   takes the kind whose grid holds every kept element.
 - `elements`: every `PatternElement` (`id`, `isSuppressed`, `transform` as a frame; the first is the identity).
+- `direction_one_sketch`, `direction_two_sketch` (optional): `{ "sketch_token", "sketch" }` when that direction is a
+  sketch line, so the sketch is known to feed a pattern.
 
 **CircularPatternFeature** (`inputEntities`, `axis`, `quantity`, `totalAngle`, `isSymmetric`, `patternElements`,
 `suppressedElementsIds`):
@@ -439,7 +451,7 @@ neither way, refuses an uneven chamfer.
 for extrudes).
 
 `plane` from a `ConstructionPlane` (`geometry`, a `Plane`: `origin`, `normal`) or a planar `BRepFace`
-(`geometry`).
+(`geometry`). A construction plane adds `token`.
 
 **CombineFeature** (`targetBody`, `toolBodies`, `operation`, `isKeepToolBodies`):
 
@@ -573,6 +585,32 @@ How the translator uses them (`translate(capture, size_table=table)`):
   formula reads, plus the sizes those formulas read. A ticked size that nothing reads is left out, with a note.
   Without a table the recipe has no `sizes`, and no marker.
 
+### Probe states (`lib/fusion_reader/probe_state.py`)
+
+The size probe sets other size values, recomputes and reads a state with `read_state(design, request, ctx)`.
+`request` is `{ "sketches": [token], "points": [token], "lines": [token], "params": [name], "target": true }`. Every
+entity is found with `Design.findEntityByToken` (the match without `assemblyContext`; for a proxy only, its
+`nativeObject`), so values are in component coordinates like the capture. The result, mm and degrees except `params`:
+
+```json
+{
+  "sketches": { "<sketch token>": { "frame": FRAME, "profiles": [PROFILE, ...] } },
+  "points": { "<sketch point token>": [x, y, z] },
+  "lines": { "<sketch line token>": { "point": [x, y, z], "dir": [x, y, z] } },
+  "params": { "d12": 2.0 },
+  "box": { "min": [..], "max": [..] }
+}
+```
+
+- `sketches`: `frame` from `Sketch.transform`; `profiles` are every `Sketch.profiles` item read like a capture
+  profile (section 4, each curve with `entity`). A sketch with more than 200 profiles, or a profile whose space is
+  `ambiguous`, is left out.
+- `points`: `SketchPoint.worldGeometry`; `lines`: `SketchLine.worldGeometry` start point and unit direction.
+- `params`: `value` of each named parameter in Fusion's own units (cm, radians), as in `parameters.*.value`. A name
+  is looked up in the user parameters, then in the target component's model parameters.
+- `box`: the target body's box, as `target.box`.
+- Nothing raises. A part that cannot be read has no key, which the fit treats as unread.
+
 ## 6. Report and capture file
 
 The export writes `report.json` into the package: `{ "writer", "outcome": "recipe" | "stepOnly", "items": [ITEM
@@ -617,6 +655,8 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | Moving the marker marks the document changed or adds undo entries | the Marker and document test |
 | `isRollingBallCorner` still on `FilletFeature` (some fillet members are retired) | reader reads it in a try, default true; the Bin test |
 | The members in the `params` table return a `ModelParameter` (name, expression, value): `DistanceExtentDefinition.distance`, `taperAngleOne` and `taperAngleTwo`, `OffsetStartDefinition.offset`, the `HoleFeature` size members, `ConstantRadiusFilletEdgeSet.radius`, chamfer set distances, `insideThickness`, pattern `quantityOne`, `distanceOne` and the circular ones | a member that is not one adds nothing and the value stays a number; the sizes hand test logs which members gave a parameter |
+| `Sketch.entityToken`, `Sketch.referencePlane`, `ProfileCurve.sketchEntity.entityToken`, `entityToken` of sketch points, lines, construction planes and axes; the sketch curve tokens staying the same after a recompute | the probe compares its first state with the capture and fixes the sizes of a sketch that does not match; the Sketches that follow sizes tests in `docs/hand-tests.md` |
+| `Design.findEntityByToken` for a sketch of a component inside an occurrence (native object, proxies, or both) | `read_state` takes the match without `assemblyContext`, else the `nativeObject` of the first |
 | `ModelParameter.createdBy` kinds and `name` for a sketch dimension | the kind comes from the type name; the sketch rule needs only the kind |
 | `ToEntityExtentDefinition.entity` and `FromEntityStartDefinition.entity` give the picked face (`BRepFace`, read for `pointOnFace`) or construction plane | an unreadable face point fixes the sizes written before the extrude; the "Pick points that follow sizes" hand test |
 | `BRepBody.nativeObject`, `BRepBody.assemblyContext` of a picked body inside a component; `Feature.assemblyContext`, `Feature.nativeObject` of timeline entities | the target is the native body and a proxy entity is turned native; `entity_context` logs when it was a proxy; the "Bodies inside components" hand tests |
