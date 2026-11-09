@@ -1,5 +1,9 @@
 """The Export for Paramability dialog: pick the body, see which parameters become sizes, export."""
+import html
+
 import adsk.core
+
+from .log import log
 
 from ..export_plan.size_offers import MAX_TICKED, limit_message
 from ..fusion_reader.bodies import is_pickable_body
@@ -11,6 +15,8 @@ INTRO_ID = "pm_sizes_intro"
 BOX_PREFIX = "pm_size_"
 NOTICE_ID = "pm_notice"
 LIMIT_ID = "pm_sizes_limit"
+FIXED_ID = "pm_sizes_fixed"
+FIXED_MAX_ROWS = 6
 
 UP_LABELS = {"z": "Z up", "y": "Y up"}
 
@@ -45,15 +51,35 @@ def build(command, offers, body, up_axis):
     limit = group.children.addTextBoxCommandInput(LIMIT_ID, "", limit_message(), 1, True)
     limit.isVisible = False
     for index, offer in enumerate(offers):
-        box = group.children.addBoolValueInput(BOX_PREFIX + str(index), offer["text"], True, "", offer["ticked"])
+        # A check box label is fixed at creation; the changing text goes in the tooltip and the fixed list below.
+        box = group.children.addBoolValueInput(BOX_PREFIX + str(index), offer["param"], True, "", offer["ticked"])
         box.isEnabled = offer["enabled"]
-        box.tooltip = offer["reason"]
+        box.tooltip = _tooltip(offer)
+    fixed = group.children.addTextBoxCommandInput(
+        FIXED_ID, "", "", min(max(len(offers), 1), FIXED_MAX_ROWS), True)
+    _show_fixed(fixed, offers)
 
     up = inputs.addDropDownCommandInput(UP_ID, "Design up direction", adsk.core.DropDownStyles.TextListDropDownStyle)
     for key in ("z", "y"):
         up.listItems.add(UP_LABELS[key], key == up_axis)
     up.tooltipDescription = (
         "Starts from the Fusion setting for new designs. Pick Y up if the part lies on its side in Paramability.")
+
+
+def _tooltip(offer):
+    return "%s. %s" % (offer["text"], offer["reason"]) if offer["reason"] else offer["text"]
+
+
+def fixed_lines(offers):
+    """Html lines for the parameters that cannot be ticked, each with its reason."""
+    return "<br>".join(
+        html.escape("%s: %s" % (o["text"], o["reason"])) for o in offers if not o["enabled"] and o["reason"])
+
+
+def _show_fixed(box, offers):
+    text = fixed_lines(offers)
+    box.formattedText = text
+    box.isVisible = bool(text)
 
 
 def _boxes(inputs, offers):
@@ -63,23 +89,40 @@ def _boxes(inputs, offers):
             yield index, box
 
 
+def _safely(what, action):
+    """Run one Fusion call. A failure is logged so the other lines still update."""
+    try:
+        action()
+        return True
+    except Exception as error:
+        log("%s failed: %s" % (what, error))
+        return False
+
+
 def apply_offers(inputs, offers, fresh):
     """Show the `fresh` offers (another body was picked) in the existing lines.
 
     The lines stay as built: each is matched to its parameter by name, and `offers` is updated in place since the
-    export reads it later. A parameter missing from `fresh` keeps its old line.
+    export reads it later. A parameter missing from `fresh` keeps its old line. An entry changes only after its
+    box took the new state, so `offers` never disagrees with the dialog.
     """
     by_param = {o["param"]: o for o in fresh}
+    merged = list(offers)
     for index, box in _boxes(inputs, offers):
         offer = by_param.get(offers[index]["param"])
         if offer is None:
             continue
-        offers[index] = offer
-        box.text = offer["text"]
-        box.value = offer["ticked"]
-        box.isEnabled = offer["enabled"]
-        box.tooltip = offer["reason"]
-    inputs.itemById(LIMIT_ID).isVisible = False
+
+        def update(box=box, offer=offer):
+            box.tooltip = _tooltip(offer)
+            box.isEnabled = offer["enabled"]
+            box.value = offer["ticked"]
+
+        if _safely("Updating " + offer["param"], update):
+            merged[index] = offer
+    offers[:] = merged
+    _safely("Updating the fixed list", lambda: _show_fixed(inputs.itemById(FIXED_ID), offers))
+    _safely("Hiding the limit note", lambda: setattr(inputs.itemById(LIMIT_ID), "isVisible", False))
 
 
 def keep_within_limit(inputs, offers, changed):

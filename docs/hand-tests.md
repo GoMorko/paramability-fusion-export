@@ -209,8 +209,12 @@ These were written from the API reference and never run:
   - `addValueInput` with unit text `mm`, `deg` or an empty string (counts), and `ValueCommandInput.value` returning
     internal units (cm, rad).
   - `CommandInput.isEnabled` and `tooltip` on a check box.
+  - `BoolValueCommandInput.text` must not be set on a check box: Fusion raises `InternalValidationError : button` (the
+    text is for button style only). The label is the parameter name, fixed at creation.
 - The main dialog (`lib/fusion_ui/recipe_dialog.py`): `addGroupCommandInput` with `addBoolValueInput` children whose
-  `isEnabled` is false and `tooltip` set; input ids made from a running number, not from the parameter name.
+  `isEnabled` is false and `tooltip` set (changed later when another body is picked, along with `value`); input ids made from a running number, not from the parameter name.
+  Also a read-only text box under the list (`pm_sizes_fixed`) whose `formattedText` and `isVisible` are set after
+  creation, and the limit note's `isVisible`.
 - `Design.fusionUnitsManager.defaultLengthUnits` as the unit of a bare number in a length formula (falls back to mm).
 - `Component.modelParameters` read by `list_model_parameters`; `Sketch.transform.asArray()`, `Sketch.sketchPoints`
   with `worldGeometry`, `Sketch.sketchCurves` with `worldGeometry` (`radius`, `center`, `startPoint`, `endPoint`)
