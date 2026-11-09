@@ -65,13 +65,11 @@ class RevolveTest(unittest.TestCase):
         self.assertEqual(verdict_of(result, 1)["verdict"], "translated")
         assert_schema_ok(self, result.recipe)
 
-    def test_quarter_keeps_the_axis_when_the_start_face_agrees(self):
+    def test_quarter_axis_follows_the_measured_start_face(self):
         (step,) = revolves("revolve_quarter")
         self.assertEqual((step["angleDeg"], step["axis"]["dir"]), (90, [0, 1]))
         # The new solid sweeps down from the sketch plane, where its start face points up.
         self.assertLess(sweep_midpoint(step)[2], -1)
-
-    def test_quarter_negates_the_axis_when_the_start_face_is_flipped(self):
         (step,) = revolves("revolve_quarter_reversed")
         self.assertEqual((step["angleDeg"], step["axis"]["dir"]), (90, [0, -1]))
         self.assertGreater(sweep_midpoint(step)[2], 1)
@@ -109,10 +107,8 @@ class RevolveTest(unittest.TestCase):
         # The cut must sweep up into the plate (z above its sketch plane at 5), not down out of it.
         self.assertGreater(sweep_midpoint(step)[2], 5 + 1)
         assert_schema_ok(self, result.recipe)
-
-    def test_cut_with_the_start_face_pointing_down_sweeps_down(self):
-        result = variant("revolve_cut_quarter", lambda i: i["data"].update(start_face_normal=[0, 0, -1]))
-        step = result.recipe["features"][1]
+        down = variant("revolve_cut_quarter", lambda i: i["data"].update(start_face_normal=[0, 0, -1]))
+        step = down.recipe["features"][1]
         self.assertEqual(step["axis"]["dir"], [0, 1])
         self.assertLess(sweep_midpoint(step)[2], 5 - 1)
 
@@ -180,14 +176,11 @@ class HoleTest(unittest.TestCase):
         self.assertEqual(points[:5], [[0, -0.01], [4.5, -0.01], [4.5, 3], [2.5, 3], [2.5, 8]])
         self.assertEqual(len(points), 6)
 
-    def test_counterbore_through(self):
+    def test_through_counterbore_and_countersink_are_hole_options(self):
         result = translate_fixture("hole_counterbore_through")
-        step = steps_of(result.recipe, "hole")[0]
-        self.assertEqual(step["counterbore"], {"diameter": 9, "depth": 3})
+        self.assertEqual(steps_of(result.recipe, "hole")[0]["counterbore"], {"diameter": 9, "depth": 3})
         self.assertEqual(verdict_of(result, 3)["verdict"], "translated")
         assert_schema_ok(self, result.recipe)
-
-    def test_countersink_through(self):
         result = translate_fixture("hole_countersink_through")
         self.assertEqual(steps_of(result.recipe, "hole")[0]["countersink"], {"diameter": 10, "angleDeg": 90})
         assert_schema_ok(self, result.recipe)

@@ -160,15 +160,13 @@ class CopyCountTest(unittest.TestCase):
         return Quantity(4.0, "ceil(width_count) * 2", ("width_count",))
 
     def test_a_count_must_stay_at_least_the_copy_a_pick_needs_over_the_whole_range(self):
-        self.assertFalse(stays_at_least(self.table(), self.count(), 4))
-        self.assertTrue(stays_at_least(self.table(), self.count(), 2))
-
-    def test_a_count_that_falls_at_the_big_end_does_not_hold(self):
         falling = Quantity(4.0, "8 - ceil(width_count) * 2", ("width_count",))
-        self.assertFalse(stays_at_least(self.table(), falling, 4))
-
-    def test_a_count_that_follows_no_size_always_holds(self):
-        self.assertTrue(stays_at_least(self.table(), Quantity(4.0), 9))
+        for label, count, needed, holds in (("dips below the need", self.count(), 4, False),
+                                            ("never dips", self.count(), 2, True),
+                                            ("falls at the big end", falling, 4, False),
+                                            ("follows no size", Quantity(4.0), 9, True)):
+            with self.subTest(label):
+                self.assertEqual(stays_at_least(self.table(), count, needed), holds)
 
 
 def _mirror(index, plane, entity_type="features", combine=False, box=None):
@@ -293,11 +291,9 @@ class MovedReferenceTest(unittest.TestCase):
         result = run(capture)
         self.assertEqual((loose_names(result), steps_of(result.recipe, "pattern")[0]["polar"]["axisPoint"]),
                          ([], [6, 6, 10]))
-        for label, wall in (("a wall that is not on any step", dict(axis, face_point=[50, 50, 15])),):
-            with self.subTest(label):
-                capture = post_capture(_circular(3, wall))
-                capture["items"][1] = boss
-                self.assertEqual(loose_names(run(capture)), ["wall_mm"])
+        capture = post_capture(_circular(3, dict(axis, face_point=[50, 50, 15])))
+        capture["items"][1] = boss
+        self.assertEqual(loose_names(run(capture)), ["wall_mm"])
 
 
 class BodyMirrorOverRangesTest(unittest.TestCase):

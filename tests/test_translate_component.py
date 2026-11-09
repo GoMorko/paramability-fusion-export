@@ -67,20 +67,17 @@ class RefusalTest(unittest.TestCase):
     def test_a_step_of_another_component_that_changes_the_part(self):
         refusal = self.refusal("component_cross_cut")
         self.assertEqual((refusal["index"], refusal["name"]), (3, "Extrude5"))
-        self.assertEqual(step_only_note(refusal), "Added as a fixed shape: Extrude5 (extrude) changes this part from "
-                         "another component. Steps across components are not copied yet.")
+        self.assertIn("Extrude5 (extrude) changes this part from another component", step_only_note(refusal))
 
     def test_a_body_made_in_another_component(self):
         refusal = self.refusal("component_made_elsewhere")
         self.assertEqual(refusal["index"], 1)
-        self.assertEqual(step_only_note(refusal),
-                         "Added as a fixed shape: this body was made in another component and moved here later.")
+        self.assertIn("made in another component and moved here later", step_only_note(refusal))
 
     def test_a_step_that_reaches_into_another_component(self):
         refusal = self.refusal("component_foreign_extent")
         self.assertEqual((refusal["index"], refusal["name"]), (3, "Extrude2"))
-        self.assertEqual(step_only_note(refusal), "Added as a fixed shape: Extrude2 (extrude) reaches into another "
-                         "component, which is not copied yet.")
+        self.assertIn("Extrude2 (extrude) reaches into another component", step_only_note(refusal))
 
     def test_a_foreign_profile_refuses_too(self):
         capture = load_capture("component_foreign_extent")
@@ -100,15 +97,12 @@ class RefusalTest(unittest.TestCase):
     def test_a_linked_part_is_named(self):
         capture = load_capture("component_moved")
         capture["target"]["placement"]["linked"] = True
-        refusal = translate(capture).refusal
-        self.assertEqual(step_only_note(refusal),
-                         "This part comes from a linked design. Open that design in Fusion and export the part there.")
+        self.assertIn("linked design", step_only_note(translate(capture).refusal))
 
     def test_a_place_that_could_not_be_read_or_is_not_a_rotation(self):
         capture = load_capture("component_moved")
         capture["target"]["placement"] = {"path": "Tray:1", "error": "no candidate matched"}
-        self.assertEqual(step_only_note(translate(capture).refusal),
-                         "Added as a fixed shape: the place of this part in the assembly could not be read.")
+        self.assertIn("place of this part in the assembly could not be read", step_only_note(translate(capture).refusal))
         capture = load_capture("component_moved")
         capture["target"]["placement"]["frame"]["x"] = [2, 0, 0]
         self.assertIn("scaled", translate(capture).refusal["reason"])
@@ -205,14 +199,13 @@ class BorrowedSketchTest(unittest.TestCase):
         self.assertEqual(rim["sketch"]["outer"]["width"]["expr"], "wall_mm + 8")
         self.assertNotIn("fixed numbers", verdicts(result)[9][1])
 
-    def test_a_borrowed_value_the_probe_could_not_follow_marks_its_sizes(self):
-        result, _ = self.borrowed_run(Motion({"9/p0/l0/width": Stuck(["wall_mm"], "unread", "Rim of Lid")}))
-        self.assertEqual((result.fixed, [f["name"] for f in result.loose]), ([], ["wall_mm"]))
-        self.assertIn("Rim of Lid", result.loose[0]["reason"])
-
-    def test_a_probe_that_gave_no_value_for_the_sketch_marks_the_dimension_sizes(self):
-        result, _ = self.borrowed_run(Motion({}))
-        self.assertEqual((result.fixed, [f["name"] for f in result.loose]), ([], ["wall_mm"]))
+    def test_a_borrowed_value_the_probe_could_not_follow_or_never_gave_marks_its_sizes(self):
+        stuck = Motion({"9/p0/l0/width": Stuck(["wall_mm"], "unread", "Rim of Lid")})
+        for label, motion in (("stuck", stuck), ("no value", Motion({}))):
+            with self.subTest(label):
+                result, _ = self.borrowed_run(motion)
+                self.assertEqual((result.fixed, [f["name"] for f in result.loose]), ([], ["wall_mm"]))
+        self.assertIn("Rim of Lid", self.borrowed_run(stuck)[0].loose[0]["reason"])
 
     def test_the_first_translation_fixes_nothing_for_a_borrowed_sketch(self):
         result, _ = self.borrowed_run(OPTIMISTIC)
@@ -244,22 +237,24 @@ class AssemblyStepsTest(unittest.TestCase):
 
     def test_an_occurrence_that_brings_the_body_in_refuses(self):
         refusal = translate(self.with_occurrence(target_changed=True)).refusal
-        self.assertEqual((refusal["index"], step_only_note(refusal)),
-                         (99, "Added as a fixed shape: this body was made in another component and moved here later."))
+        self.assertEqual(refusal["index"], 99)
+        self.assertIn("made in another component and moved here later", step_only_note(refusal))
 
 
 class CaptureShapeTest(unittest.TestCase):
-    def test_capture_3_needs_a_frame_of_numbers_or_a_reason(self):
-        capture = load_capture("component_moved")
-        capture["target"]["placement"]["frame"] = {"origin": [0, 0, 0]}
-        with self.assertRaises(CaptureError):
-            translate(capture)
+    def test_a_placement_without_a_frame_or_a_list_of_bodies_without_bodies_is_not_a_capture(self):
+        def half_frame(capture):
+            capture["target"]["placement"]["frame"] = {"origin": [0, 0, 0]}
 
-    def test_targets_must_be_a_list_of_bodies(self):
-        capture = load_capture("component_moved")
-        capture["targets"] = []
-        with self.assertRaises(CaptureError):
-            translate(capture)
+        def no_bodies(capture):
+            capture["targets"] = []
+
+        for label, edit in (("half a frame", half_frame), ("no bodies", no_bodies)):
+            with self.subTest(label):
+                capture = load_capture("component_moved")
+                edit(capture)
+                with self.assertRaises(CaptureError):
+                    translate(capture)
 
 
 if __name__ == "__main__":

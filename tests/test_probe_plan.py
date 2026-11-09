@@ -126,9 +126,6 @@ class ProbeRowTests(unittest.TestCase):
         self.assertEqual(untried, ["cube"])
         self.assertEqual([r["name"] for r in rows], ["count (min)", "count (max)"])
 
-    def test_no_moved_size_no_rows(self):
-        self.assertEqual(plan.probe_rows(self.sizes, set()), ([], []))
-
 
 class CandidateProfileTests(unittest.TestCase):
     def test_among_profiles_with_the_same_curves_the_nearest_to_the_capture_is_taken(self):

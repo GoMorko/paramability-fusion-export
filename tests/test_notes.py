@@ -16,10 +16,8 @@ class NotesTest(unittest.TestCase):
         self.assertEqual(
             notes.step_only_note(refusal),
             "Added as a fixed shape: Emboss1 (emboss) could not be copied. Steps of type emboss are not copied yet.")
-
-    def test_type_words_are_split(self):
-        refusal = {"index": 1, "name": "", "type": "RectangularPatternFeature", "reason": "No."}
-        self.assertIn("rectangular pattern", notes.step_only_note(refusal))
+        multi = {"index": 1, "name": "", "type": "RectangularPatternFeature", "reason": "No."}
+        self.assertIn("rectangular pattern", notes.step_only_note(multi))
 
     def test_long_fusion_name_is_cut_to_60(self):
         refusal = {"index": 1, "name": "N" * 100, "type": "FilletFeature", "reason": "No."}

@@ -246,13 +246,11 @@ class MirrorTest(unittest.TestCase):
     def test_fillet_on_the_plane_refuses_instead_of_rounding_twice(self):
         self.assertIsNotNone(translate_fixture("mirror_fillet_on_plane").refusal)
 
-    def test_fillet_partly_on_the_plane_copies_only_the_off_plane_edge(self):
-        result = translate_fixture("mirror_fillet_partly_on_plane")
-        source, copy_step = steps_of(result.recipe, "round")
+    def test_fillet_partly_on_the_plane_copies_only_the_off_plane_edge_with_its_size(self):
+        source, copy_step = steps_of(translate_fixture("mirror_fillet_partly_on_plane").recipe, "round")
         self.assertEqual(len(source["edges"]["near"]), 2)
         self.assertEqual(copy_step["edges"]["near"], [[20, -10, 5]])
 
-    def test_dropped_points_take_their_sizes_along(self):
         def edit(capture):
             sets = capture["items"][3]["data"]["sets"]
             sets.append(copy.deepcopy(sets[0]))

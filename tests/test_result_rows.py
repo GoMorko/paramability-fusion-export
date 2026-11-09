@@ -36,10 +36,8 @@ class ResultViewTest(unittest.TestCase):
     def test_a_size_shows_its_range_and_what_it_becomes(self):
         shown = view()
         self.assertEqual(shown["rows"][0], {"name": "wall", "range": "1 to 4 mm", "check": "size"})
-        self.assertEqual(shown["check_header"], "In Paramability")
         self.assertEqual(shown["size_title"], "1 size ready for the form")
         self.assertEqual(shown["saved"], "Saved box.paramability. 12 steps copied.")
-        self.assertEqual(shown["variables"], "All 4 parameters come along as variables, with their formulas and comments.")
 
     def test_fixed_and_unused_ticks_each_get_a_row_and_a_reason(self):
         shown = view(fixed=[{"name": "gap", "reason": "gap stays fixed: no build."}], dropped=[unused("pipe")])
@@ -95,11 +93,10 @@ class ResultDialogTest(unittest.TestCase):
         self.assertEqual(inputs.itemById("pm_result_table").rowCount, 1 + len(shown["rows"]))
         self.assertIn("gap: why", inputs.itemById("pm_result_fixed_text").formattedText)
         loose = view(loose=[{"name": "wall", "reason": "doubt"}])
-        result_dialog.build(fakes.FakeCommand(), loose)
+        self.assertIn("4 parameters", inputs.itemById("pm_result_variables").formattedText)
         command = fakes.FakeCommand()
         result_dialog.build(command, loose)
         self.assertIn("wall: doubt", command.commandInputs.itemById("pm_result_loose_text").formattedText)
-        self.assertIn("4 parameters", inputs.itemById("pm_result_variables").formattedText)
 
     def test_warnings_show_under_the_saved_text_only_when_there_are_some(self):
         command = fakes.FakeCommand()

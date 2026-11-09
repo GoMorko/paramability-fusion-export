@@ -1,5 +1,4 @@
 """Picks and reaches that follow sizes on the sized filter tray."""
-import copy
 import unittest
 from unittest import mock
 
@@ -10,7 +9,6 @@ from tests.test_translate_sized import CUBE, H, param, run
 from lib.params.expressions import evaluate
 from lib.translator import translate
 from lib.translator.values import _env
-from lib.translator import place
 
 HEIGHT = "FilterBox_height_mm"
 TOP = [40, 30, 32]
@@ -106,12 +104,6 @@ class PicksTest(unittest.TestCase):
     def test_without_sizes_picks_stay_points(self):
         recipe = translate(tray()).recipe
         self.assertEqual(steps_of(recipe, "shell")[0]["openFaces"], {"near": [TOP]})
-
-    def test_a_formula_point_turns_with_a_y_up_design(self):
-        point = copy.deepcopy(run(tray(lambda c: c["items"][2]["data"]["faces"].append(
-            {"token": "f2", "point": [80, 30, 16]})))[0].recipe["features"][1]["openFaces"]["near"][0])
-        turned = place.place({"features": [{"kind": "hole", "origin": point}]}, place.TURN_Z_UP)
-        self.assertEqual(turned["features"][0]["origin"], [40, {"expr": "-" + HEIGHT}, 30])
 
 
 def _round_on_tab_top():

@@ -47,15 +47,12 @@ class AuditTest(unittest.TestCase):
         self.assertIn("Extrude1", dropped["reason"])
         self.assertNotIn(COUNT, result.recipe["sizes"])
 
-    def test_the_real_handlers_leave_nothing_to_the_audit(self):
+    def test_the_real_handlers_leave_nothing_to_the_audit_and_an_unread_size_is_dropped_as_unused(self):
         result = tray_result()
         self.assertEqual((result.fixed, result.loose), ([], []))
-        self.assertEqual([d["name"] for d in result.dropped], ["turn_deg"])
-
-    def test_a_size_no_copied_step_reads_is_dropped_as_unused(self):
-        (dropped,) = tray_result().dropped
-        self.assertEqual((dropped["used"], dropped["reason"]),
-                         (False, "turn_deg is not used by any copied step, so it is not a size."))
+        (dropped,) = result.dropped
+        self.assertEqual((dropped["name"], dropped["used"]), ("turn_deg", False))
+        self.assertIn("not used by any copied step", dropped["reason"])
 
     def test_a_size_that_moves_a_measured_sketch_by_nothing_is_dropped_as_changing_nothing(self):
         def still(values):

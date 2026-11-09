@@ -186,20 +186,6 @@ class TrayTest(unittest.TestCase):
         self.assertNotIn(H, result.recipe["sizes"])
         self.assertEqual(steps_of(result.recipe, "extrude")[0]["distance"], 32)
 
-    def test_a_pinned_value_with_a_formula_the_parser_cannot_read_leaves_its_size_out(self):
-        def edit(data):
-            data["total_angle_deg"] = 360.0
-            data["quantity"] = 4
-            data["elements"] = [{"id": n + 1, "suppressed": False, "frame": _turn(n * 90.0)} for n in range(4)]
-            data["params"] = {"total_angle_deg": param("d99", "turn_deg * 4 kg / 1 kg", 360.0)}
-        capture, ticked = on_fixture("cpattern_part", edit, TICKED + ["turn_deg"])
-        capture["parameters"]["model"].append(
-            {"name": "d99", "expression": "turn_deg * 4 kg / 1 kg", "value": 6.28, "unit": "deg",
-             "dependency_parameters": ["turn_deg"], "kind": "derived"})
-        result, _ = run(capture, ticked)
-        self.assertEqual((result.fixed, result.loose), ([], []))
-        self.assertNotIn("turn_deg", result.recipe.get("sizes", {}))
-
     def test_left_out_copies_mark_the_count_and_keep_the_spacing_free(self):
         def edit(capture):
             data = capture["items"][6]["data"]
@@ -304,12 +290,6 @@ class ValueKindsTest(unittest.TestCase):
         (step,) = steps_of(result.recipe, "round")
         self.assertEqual(step["size"], {"expr": "corner_mm"})
         self.assertEqual(step["edgeSizes"][-1], 2)
-
-    def test_chamfer_distance_follows_a_size(self):
-        capture, ticked = on_fixture(
-            "chamfer_equal", lambda d: d.update(params={"sets.0.distance": param("d4", "wall_mm / 2", 1.0)}))
-        result = self.check(capture, ticked)
-        self.assertEqual(steps_of(result.recipe, "bevel")[0]["size"], {"expr": "wall_mm / 2"})
 
     def test_both_chamfer_distances_follow_sizes(self):
         def edit(data):

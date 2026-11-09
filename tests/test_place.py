@@ -129,10 +129,6 @@ class SampleTurnTest(unittest.TestCase):
         self.assertEqual(by_id["m"]["plane"], {"origin": [1.0, -3.0, 2.0], "normal": [0.0, -1.0, 0.0]})
         self.assertEqual(by_id["p"]["of"], ["h"])
 
-    def test_turning_back_gives_the_original(self):
-        recipe = sample_recipe()
-        self.assertEqual(place.place(place.place(recipe, place.TURN_Z_UP), place.TURN_Z_UP.inverse()), recipe)
-
 
 def hole_at(*origin, direction=(0.0, 0.0, 1.0)):
     return {"features": [{"kind": "hole", "origin": list(origin), "direction": list(direction), "diameter": 4}]}

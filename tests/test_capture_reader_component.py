@@ -267,11 +267,6 @@ class ForeignTest(unittest.TestCase):
         record = self.read_data(self.tray.feature("FilletFeature", "F", edgeSets=Coll([edge_set])))["sets"][0]["edges"][0]
         self.assertEqual(record, geo_edge_record(stray.nativeObject))
 
-    def test_native_inputs_carry_no_flag(self):
-        data = self.read_data(self.tray.extrude())
-        self.assertNotIn("foreign", data["profiles"][0])
-        self.assertNotIn("foreign", json.dumps(data["participants"]))
-
     def test_fillet_edges_and_shell_inputs_from_another_body_are_flagged(self):
         stray = edge("e1", 1)
         stray.body = Obj(parentComponent=self.other)

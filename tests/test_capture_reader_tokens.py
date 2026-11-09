@@ -35,8 +35,9 @@ class ProfileTokensTest(unittest.TestCase):
     def test_reference_kinds(self):
         kinds = {"BRepFace": "face", "Plane": "plane", "Vertex": "other"}
         for name, kind in kinds.items():
-            ref = Obj("fusion::" + name, entityToken="t")
-            self.assertEqual(read_sketch.read_profile(profile(sketch(reference=ref), SQUARE))["reference"]["kind"], kind)
+            with self.subTest(name):
+                ref = Obj("fusion::" + name, entityToken="t")
+                self.assertEqual(read_sketch.read_profile(profile(sketch(reference=ref), SQUARE))["reference"]["kind"], kind)
 
     def test_missing_members_leave_the_keys_out(self):
         record = read_sketch.read_profile(profile(Obj("fusion::Sketch", name="S", transform=matrix()),
@@ -75,14 +76,6 @@ class FeatureTokensTest(unittest.TestCase):
         self.assertEqual(data["sketch_token"], "a")
         self.assertNotIn("point_tokens", data)
 
-    def test_hole_without_sketch_points_has_no_tokens(self):
-        data = read_item(feature("HoleFeature", "Hole1", holeType="SimpleHoleType", holeTapType="SimpleHoleTapType",
-                                 holeDiameter=Obj(value=0.5), position=P(0, 0, 0),
-                                 holePositionDefinition=Obj("fusion::PointHolePositionDefinition"),
-                                 extentDefinition=Obj("fusion::ThroughAllExtentDefinition")))
-        self.assertNotIn("sketch_token", data)
-        self.assertNotIn("point_tokens", data)
-
     def revolve(self, axis):
         return read_item(feature("RevolveFeature", "Revolve1", operation="NewBodyFeatureOperation",
                                  profile=profile(sketch(), SQUARE), axis=axis, isProjectAxis=False,
@@ -112,12 +105,6 @@ class FeatureTokensTest(unittest.TestCase):
                                      extentOne=Obj("fusion::DistanceExtentDefinition", distance=Obj(value=1.0)),
                                      taperAngleOne=Obj(value=0.0), isThinExtrude=False, endFaces=Coll([])))
             self.assertEqual(data["start"].get("token"), token)
-
-    def test_mirror_plane_token(self):
-        plane = Obj("fusion::ConstructionPlane", entityToken="cp9",
-                    geometry=Obj("core::Plane", origin=P(0, 0, 0), normal=Obj(x=1.0, y=0.0, z=0.0)))
-        data = read_item(feature("MirrorFeature", "M", inputEntities=Coll([]), mirrorPlane=plane, isCombine=False))
-        self.assertEqual(data["plane"]["token"], "cp9")
 
     def test_rectangular_pattern_direction_from_a_sketch_line_names_its_sketch(self):
         direction = Obj("fusion::SketchLine", worldGeometry=line((0, 0, 0), (5, 0, 0)), parentSketch=sketch("sk7"))

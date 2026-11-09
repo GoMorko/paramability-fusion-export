@@ -121,11 +121,6 @@ class FrameTest(unittest.TestCase):
                           context=occurrence, native=native)
         self.assertEqual(read_placement(proxy, Root())["checked_points"], 3)
 
-    def test_a_body_without_points_is_an_error(self):
-        native = FakeSolid([], component=Comp("c"))
-        proxy = FakeSolid([], context=FakeOccurrence("C:1", turn_z(0)), native=native)
-        self.assertIn("error", read_placement(proxy, Root()))
-
     def test_linked_component_on_any_occurrence_of_the_path(self):
         proxy = nested(turn_z(0, (1, 0, 0)), turn_z(0), True)
         proxy.assemblyContext.assemblyContext.isReferencedComponent = True

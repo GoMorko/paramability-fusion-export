@@ -53,9 +53,6 @@ class BuildTest(unittest.TestCase):
         self.assertEqual(row(inputs, "status", 1).formattedText, "stays 2 mm")
         self.assertEqual(row(inputs, "status", 2).formattedText, "fixed, changes a sketch")
         self.assertEqual(len(table.toolbar), 2)
-
-    def test_check_boxes_carry_no_label_to_change(self):
-        _, inputs = make_dialog([offer("wall")])
         self.assertEqual(row(inputs, "tick", 0).text, "")
 
     def test_no_parameters_gives_a_plain_line_and_no_table(self):

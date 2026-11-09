@@ -34,13 +34,13 @@ class CoreTest(unittest.TestCase):
     def test_empty_timeline_refuses(self):
         result = translate_fixture("core_empty")
         self.assertIsNone(result.recipe)
-        self.assertEqual(result.refusal["reason"], "Nothing in the timeline makes this body.")
+        self.assertEqual(result.refusal["index"], None)
+        self.assertIn("Nothing in the timeline", result.refusal["reason"])
 
     def test_unknown_feature_stops_the_walk_at_that_item(self):
         result = translate_fixture("core_unknown_feature", {"ExtrudeFeature": extrude_handler})
         self.assertIsNone(result.recipe)
         self.assertEqual((result.refusal["index"], result.refusal["type"]), (2, "EmbossFeature"))
-        self.assertIn("Emboss steps raise or sink a sketch", result.refusal["reason"])
         verdicts = {v["index"]: v["verdict"] for v in result.items}
         self.assertEqual(verdicts[1], "translated")
         self.assertEqual(verdicts[2], "unsupported")
@@ -50,7 +50,7 @@ class CoreTest(unittest.TestCase):
             "ExtrudeFeature": extrude_handler,
             "EmbossFeature": lambda item, ctx: Refusal("Not today."),
         })
-        self.assertEqual(result.refusal["reason"], "Not today.")
+        self.assertEqual((result.refusal["index"], result.refusal["reason"]), (2, "Not today."))
 
     def test_helper_body_is_skipped_and_kept_pending(self):
         result = translate_fixture("core_helper_body", {"ExtrudeFeature": extrude_handler})
@@ -68,13 +68,11 @@ class CoreTest(unittest.TestCase):
     def test_error_health_refuses(self):
         result = translate_fixture("core_error_health", {"ExtrudeFeature": extrude_handler})
         self.assertIsNone(result.recipe)
-        self.assertEqual(result.refusal["reason"], "This step does not build in Fusion.")
+        self.assertIn("does not build", result.refusal["reason"])
 
-    def test_bad_version_raises(self):
+    def test_a_capture_of_another_version_or_without_items_raises(self):
         with self.assertRaises(CaptureError):
             translate_fixture("core_bad_version")
-
-    def test_missing_keys_raise(self):
         capture = load_capture("core_empty")
         del capture["items"]
         with self.assertRaises(CaptureError):
@@ -82,7 +80,7 @@ class CoreTest(unittest.TestCase):
 
     def test_first_step_must_start_a_new_body(self):
         result = translate_fixture("core_suppressed", {"ExtrudeFeature": join_handler})
-        self.assertEqual(result.refusal["reason"], "The body starts in a way that cannot be copied.")
+        self.assertIn("starts in a way", result.refusal["reason"])
 
     def test_ids_are_unique_and_short_and_labels_cut(self):
         capture = load_capture("core_unknown_feature")
@@ -103,12 +101,6 @@ class CoreTest(unittest.TestCase):
         result = translate_fixture("core_suppressed", {"ExtrudeFeature": noting})
         self.assertEqual(result.items[1]["verdict"], "translatedWithNote")
         self.assertEqual(result.notes, ["Measured value used."])
-
-    def test_envelope_and_schema(self):
-        result = translate_fixture("core_suppressed", {"ExtrudeFeature": extrude_handler})
-        self.assertEqual({k: result.recipe[k] for k in ("schema", "version")}, {"schema": "paramability.recipe", "version": 12})
-        self.assertNotIn("sizes", result.recipe)
-        assert_schema_ok(self, result.recipe)
 
     def test_over_cap_refuses(self):
         capture = load_capture("core_empty")

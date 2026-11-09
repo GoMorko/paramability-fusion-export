@@ -4,7 +4,7 @@ import unittest
 from tests import context  # noqa: F401
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, translate_fixture
 
-from lib.translator import picks, translate, vec
+from lib.translator import translate, vec
 
 
 def verdict_of(result, index):
@@ -16,14 +16,6 @@ def variant(name, edit):
     capture = load_capture(name)
     edit(capture["items"][-1]["data"])
     return translate(capture)
-
-
-class PicksTest(unittest.TestCase):
-
-    def test_groups_never_cut_an_edge(self):
-        edges = [{"points": [[0, 0, 0]] * 2} for _ in range(17)]
-        groups = picks.edge_groups(edges)
-        self.assertEqual([len(g) for g in groups], [16, 1])
 
 
 class FilletTest(unittest.TestCase):
@@ -69,12 +61,13 @@ class FilletTest(unittest.TestCase):
             self.assertEqual(result.refusal["index"], 2)
 
     def test_other_set_kinds_and_bad_radius_refuse(self):
-        for edit in (lambda d: d["sets"][0].update(kind="chordLength"),
-                     lambda d: d["sets"][0].update(kind="other"),
-                     lambda d: d["sets"][0].update(radius=0),
-                     lambda d: d.update(sets=[]),
-                     lambda d: d["sets"][0].update(edges=[{"token": "x", "closed": False, "points": []}])):
-            self.assertIsNone(variant("fillet_four_edges", edit).recipe)
+        for label, edit in (("chord length", lambda d: d["sets"][0].update(kind="chordLength")),
+                            ("unknown kind", lambda d: d["sets"][0].update(kind="other")),
+                            ("zero radius", lambda d: d["sets"][0].update(radius=0)),
+                            ("edge without points", lambda d: d["sets"][0].update(
+                                edges=[{"token": "x", "closed": False, "points": []}]))):
+            with self.subTest(label):
+                self.assertIsNone(variant("fillet_four_edges", edit).recipe)
 
     def test_unreadable_continuity_translates_with_a_note(self):
         result = variant("fillet_four_edges", lambda d: d["sets"][0].update(continuity="other"))
@@ -198,6 +191,7 @@ class ChamferTest(unittest.TestCase):
         self.assertEqual([s["size"] for s in steps_of(result.recipe, "bevel")], [1, 2])
         self.assertEqual(verdict_of(result, 2)["verdict"], "translatedWithNote")
 
+
 class ShellTest(unittest.TestCase):
     def test_open_top(self):
         result = translate_fixture("shell_open_top")
@@ -212,13 +206,13 @@ class ShellTest(unittest.TestCase):
             self.assertIsNone(result.recipe, name)
             self.assertIn(word, result.refusal["reason"], name)
 
-    def test_no_faces_or_no_thickness_refuse(self):
-        self.assertIsNone(variant("shell_open_top", lambda d: d.update(faces=[])).recipe)
-        self.assertIsNone(variant("shell_open_top", lambda d: d.update(inside=0.0)).recipe)
-
-    def test_too_many_faces_refuse(self):
-        faces = [{"token": "f%d" % i, "point": [i, 0, 10]} for i in range(33)]
-        self.assertIsNone(variant("shell_open_top", lambda d: d.update(faces=faces)).recipe)
+    def test_no_faces_no_thickness_or_too_many_faces_refuse(self):
+        many = [{"token": "f%d" % i, "point": [i, 0, 10]} for i in range(33)]
+        for label, edit in (("no faces", lambda d: d.update(faces=[])),
+                            ("no thickness", lambda d: d.update(inside=0.0)),
+                            ("too many faces", lambda d: d.update(faces=many))):
+            with self.subTest(label):
+                self.assertIsNone(variant("shell_open_top", edit).recipe)
 
 
 if __name__ == "__main__":

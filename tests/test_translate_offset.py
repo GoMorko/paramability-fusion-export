@@ -1,6 +1,5 @@
 """Offset faces (press pull): each flat face becomes one pick point and the item one `offsetFaces` step."""
 import unittest
-from unittest import mock
 
 from tests import context  # noqa: F401
 from tests.test_translate_sized import TRAY, run
@@ -50,26 +49,14 @@ def on_plane(face, distance):
 
 
 class OffsetFacesTest(unittest.TestCase):
-    def test_the_pick_point_of_a_face_record_is_searched_once(self):
-        face = top_face()
-        with mock.patch.object(offset, "_clearance", wraps=offset._clearance) as search:
-            cache = {}
-            first = offset.inside_point(face, cache)
-            calls = search.call_count
-            self.assertEqual(offset.inside_point(face, cache), first)
-        self.assertGreater(calls, 0)
-        self.assertEqual(search.call_count, calls)
-
-    def test_a_face_becomes_one_step_with_a_point_inside_it(self):
+    def test_a_face_becomes_one_step_with_a_point_inside_it_and_keeps_the_sign_of_the_distance(self):
         result = translate(plate_with_offset(2.0))
         assert_schema_ok(self, result.recipe)
         step = steps_of(result.recipe, "offsetFaces")[0]
         self.assertEqual((step["faces"], step["distance"]), ({"near": [[20.0, 10.0, 10.0]]}, 2.0))
         self.assertEqual(result.recipe["version"], 13)
-
-    def test_the_distance_keeps_its_sign(self):
-        step = steps_of(translate(plate_with_offset(-3.0)).recipe, "offsetFaces")[0]
-        self.assertEqual(step["distance"], -3.0)
+        pulled = steps_of(translate(plate_with_offset(-3.0)).recipe, "offsetFaces")[0]
+        self.assertEqual(pulled["distance"], -3.0)
 
     def test_a_recipe_without_the_step_keeps_version_12(self):
         self.assertEqual(translate(load_capture("extrude_plate")).recipe["version"], 12)

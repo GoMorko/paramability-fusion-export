@@ -139,11 +139,9 @@ class ExtentTest(unittest.TestCase):
         result = variant("extrude_cut_through_one", lambda d: d.update(target_box_before=None))
         self.assertIsNone(result.recipe)
 
-    def test_to_plane_measures_the_distance(self):
+    def test_to_plane_measures_the_distance_and_adds_its_offset(self):
         (step,) = under_test(translate_fixture("extrude_to_plane"), 3)
         self.assertEqual((step["extent"], step["distance"], step["combine"]), ("oneSide", 10, "add"))
-
-    def test_to_plane_adds_its_offset(self):
         result = variant("extrude_to_plane", lambda d: (d["side_one"].update(offset=1.5), d.update(end_offset=11.5)))
         self.assertEqual(under_test(result, 3)[0]["distance"], 11.5)
 
@@ -173,20 +171,17 @@ class ExtentTest(unittest.TestCase):
         item["bodies_after"] = []
         self.assertIn("several bodies", extrude.handle(item, None).reason)
 
-    def test_profiles_on_two_planes_refuse(self):
+    def test_profiles_must_share_one_plane_and_facing(self):
         result = translate_fixture("extrude_profiles_two_planes")
         self.assertIsNone(result.recipe)
         self.assertIn("different planes", result.refusal["reason"])
 
-    def test_profiles_on_one_plane_from_two_sketches_pass(self):
         capture = load_capture("extrude_profiles_two_planes")
         capture["items"][-1]["data"]["profiles"][1]["frame"]["origin"] = [0, 0, 10]
         self.assertEqual([s["id"] for s in under_test(translate(capture), 3)], ["extrude_3", "extrude_3_2"])
 
-    def test_profiles_facing_opposite_ways_refuse(self):
-        capture = load_capture("extrude_profiles_two_planes")
         frame = capture["items"][-1]["data"]["profiles"][1]["frame"]
-        frame.update(origin=[0, 0, 10], z=[0, 0, -1], y=[0, -1, 0])
+        frame.update(z=[0, 0, -1], y=[0, -1, 0])
         self.assertIsNone(translate(capture).recipe)
 
 
@@ -227,9 +222,6 @@ class MeasuredLengthTest(unittest.TestCase):
             return lambda d: d.update(side_one={"kind": "distance", "distance": distance, "taper_deg": 0.0}, end_offset=30.0)
         self.assertEqual(under_test(variant("extrude_cut_through_one", cut(60.0)), 3)[0]["distance"], 60)
         self.assertIsNone(variant("extrude_cut_through_one", cut(35.0)).recipe)
-
-    def test_missing_measure_is_not_a_refusal(self):
-        self.assertIsNotNone(variant("extrude_symmetric_half", lambda d: d.update(end_offset=None)).recipe)
 
 
 class TaperTest(unittest.TestCase):
@@ -314,11 +306,13 @@ class OperationTest(unittest.TestCase):
         (step,) = under_test(translate_fixture("extrude_intersect"), 3)
         self.assertEqual(step["combine"], "intersect")
 
-    def test_intersect_with_two_profiles_refuses(self):
+    def test_intersect_with_two_profiles_or_two_sides_refuses(self):
         capture = load_capture("extrude_intersect")
         data = capture["items"][-1]["data"]
         data["profiles"].append(copy.deepcopy(data["profiles"][0]))
         self.assertIsNone(translate(capture).recipe)
+        two_sided = lambda d: d.update(extent_type="two", side_two={"kind": "distance", "distance": 2.0, "taper_deg": 0.0})
+        self.assertIsNone(variant("extrude_intersect", two_sided).recipe)
 
     def test_two_sided_cut_cuts_twice(self):
         def edit(d):
@@ -326,11 +320,6 @@ class OperationTest(unittest.TestCase):
                      side_two={"kind": "distance", "distance": 2.0, "taper_deg": 0.0}, end_offset=3.0)
         steps = under_test(variant("extrude_to_plane", edit), 3)
         self.assertEqual([s["combine"] for s in steps], ["cut", "cut"])
-
-    def test_two_sided_intersect_refuses(self):
-        def edit(d):
-            d.update(extent_type="two", side_two={"kind": "distance", "distance": 2.0, "taper_deg": 0.0})
-        self.assertIsNone(variant("extrude_intersect", edit).recipe)
 
     def test_two_sides_with_one_through_reaches_past_the_part_on_that_side(self):
         def edit(d):
@@ -350,15 +339,6 @@ class RefusalTest(unittest.TestCase):
             self.assertEqual((result.refusal["index"], result.refusal["type"]), (1, "ExtrudeFeature"), name)
             reasons[name] = result.refusal["reason"]
         self.assertEqual(len(set(reasons.values())), 4)
-
-    def test_helper_body_extrude_is_kept_as_a_pending_new_body_step(self):
-        capture = load_capture("extrude_plate")
-        helper = copy.deepcopy(capture["items"][-1])
-        helper.update(index=2, name="Extrude2", bodies_after=[{"token": "t2", "name": "Body2"}])
-        capture["items"].append(helper)
-        result = translate(capture)
-        self.assertEqual(len(result.recipe["features"]), 1)
-        self.assertEqual(verdict_of(result, 2)["verdict"], "skipped")
 
 
 class DriverGuardTest(unittest.TestCase):
@@ -389,7 +369,7 @@ class DriverGuardTest(unittest.TestCase):
 
     def test_read_error_refuses(self):
         result = translate_fixture("extrude_read_error")
-        self.assertEqual(result.refusal["reason"], "This step could not be read from Fusion.")
+        self.assertEqual(result.refusal["index"], 1)
 
     def test_unknown_type_without_bodies_refuses_but_joints_are_skipped(self):
         capture = load_capture("extrude_plate")

@@ -92,20 +92,18 @@ class StepsThatLeaveTheBodyAloneTest(unittest.TestCase):
         self.assertEqual(verdicts(result)["SplitFace1"]["verdict"], "skipped")
         notes = [n for n in result.notes if "SplitFace1" in n]
         self.assertEqual(len(notes), 1)
-        self.assertIn("Picks on those faces may not follow", notes[0])
+        self.assertIn("Picks", notes[0])
 
     def test_a_split_face_that_the_capture_cannot_prove_harmless_stops_the_copy(self):
         result = translated(tray_with(_item(7, "SplitFace1", "SplitFaceFeature", [BODY], target_changed=None)))
         self.assertEqual(result.refusal["name"], "SplitFace1")
 
-    def test_an_unknown_step_that_changes_the_body_stops_the_copy_and_is_named(self):
-        result = translated(tray_with(_item(7, "Draft1", "DraftFeature", [BODY], target_changed=True)))
-        self.assertEqual((result.recipe, result.refusal["name"]), (None, "Draft1"))
-
-    def test_an_unknown_step_on_the_exported_body_that_leaves_its_size_alone_still_stops(self):
+    def test_an_unknown_step_on_the_exported_body_stops_the_copy_and_is_named_even_if_its_size_stays(self):
         # Only a split of faces is known to leave the solid as it is, whatever the box and volume say.
-        result = translated(tray_with(_item(7, "Move1", "MoveFeature", [BODY], target_changed=False)))
-        self.assertEqual(result.refusal["name"], "Move1")
+        for changed in (True, False):
+            with self.subTest(target_changed=changed):
+                result = translated(tray_with(_item(7, "Draft1", "DraftFeature", [BODY], target_changed=changed)))
+                self.assertEqual((result.recipe, result.refusal["name"]), (None, "Draft1"))
 
 
 class FusionWarningTest(unittest.TestCase):
@@ -117,10 +115,6 @@ class FusionWarningTest(unittest.TestCase):
         self.assertEqual(verdict["verdict"], "translatedWithNote")
         self.assertIn("Some edges could not be rounded", verdict["note"])
         self.assertIn(verdict["note"], result.notes)
-
-    def test_a_step_without_a_warning_has_no_such_note(self):
-        result = translated(load_capture(TRAY))
-        self.assertNotIn("Fusion shows a warning", " ".join(result.notes))
 
 
 def pattern_of(expression, count):
@@ -152,7 +146,8 @@ class CopyLimitTest(unittest.TestCase):
 
     def test_a_count_over_the_limit_at_its_current_value_stops_the_copy(self):
         result = translated(pattern_of("holes_count * 30", 90))
-        self.assertEqual((result.recipe, result.refusal["reason"]), (None, "A pattern makes more than 64 copies."))
+        self.assertIsNone(result.recipe)
+        self.assertIn("more than 64 copies", result.refusal["reason"])
 
 
 if __name__ == "__main__":

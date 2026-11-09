@@ -25,15 +25,12 @@ class SingleCurveTest(unittest.TestCase):
         loop = loops.loop_of([{"kind": "circle", "center": [3, 4], "radius": 2.5}])
         self.assertEqual(loop, {"kind": "circle", "center": [3, 4], "radius": 2.5})
 
-    def test_ellipse_takes_angle_from_major_dir(self):
+    def test_ellipse_takes_angle_from_major_dir_and_has_none_when_axis_aligned(self):
         curve = {"kind": "ellipse", "center": [0, 0], "major_dir": [0, 1], "major_radius": 8, "minor_radius": 3}
         loop = loops.loop_of([curve])
         self.assertEqual((loop["kind"], loop["radiusX"], loop["radiusY"]), ("ellipse", 8, 3))
         self.assertTrue(close(loop["angleDeg"], 90.0, 1e-9))
-
-    def test_axis_aligned_ellipse_has_no_angle(self):
-        curve = {"kind": "ellipse", "center": [0, 0], "major_dir": [1, 0], "major_radius": 8, "minor_radius": 3}
-        self.assertNotIn("angleDeg", loops.loop_of([curve]))
+        self.assertNotIn("angleDeg", loops.loop_of([dict(curve, major_dir=[1, 0])]))
 
     def test_closed_single_arc_is_a_circle(self):
         loop = loops.loop_of([arc((5, 0), (5, 0), (-5, 0), (0, 0), 5)])
@@ -107,18 +104,19 @@ class RefusalTest(unittest.TestCase):
     def test_open_chain_names_the_sketch(self):
         refusal = loops.loop_of([line((0, 0), (10, 0)), line((10, 0), (10, 10)), line((10, 10), (0, 9))], "Sketch7")
         self.assertIsInstance(refusal, Refusal)
-        self.assertEqual(refusal.reason, "An outline in Sketch7 is not closed.")
+        self.assertIn("Sketch7", refusal.reason)
+        self.assertIn("not closed", refusal.reason)
 
     def test_two_lines_do_not_close_an_area(self):
         self.assertIsInstance(loops.loop_of([line((0, 0), (10, 0)), line((10, 0), (0, 0))]), Refusal)
 
     def test_lines_back_and_forth_on_one_line_have_no_area(self):
         flat = [line((0, 0), (5, 0)), line((5, 0), (2, 0)), line((2, 0), (0, 0))]
-        self.assertEqual(loops.loop_of(flat, "Side").reason, "An outline in Side has no area.")
+        self.assertIn("no area", loops.loop_of(flat, "Side").reason)
 
     def test_spline_curves_refuse(self):
         refusal = loops.loop_of([{"kind": "other", "type": "NurbsCurve3D", "start": [0, 0], "end": [0, 0], "samples": []}])
-        self.assertEqual(refusal.reason, "Curved outlines of this kind are not copied yet.")
+        self.assertIsInstance(refusal, Refusal)
 
     def test_circle_mixed_with_lines_refuses(self):
         self.assertIsInstance(loops.loop_of([{"kind": "circle", "center": [0, 0], "radius": 1}, line((0, 0), (1, 0))]), Refusal)

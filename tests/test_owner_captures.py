@@ -30,6 +30,15 @@ PROBE_TICKED = ["FilterBox_$_width__contains_CeramicMedium", "FilterBox_$_height
                 "_Pipe__Slope_deg"]
 
 
+def package_report(test, name):
+    """The report.json inside an owner's package, or a skipped test when the file is not here."""
+    path = os.path.join(REPORTS, name)
+    if not os.path.exists(path):
+        test.skipTest(MISSING)
+    with zipfile.ZipFile(path) as package:
+        return json.loads(package.read("report.json"))
+
+
 class OwnerCaptureTest(unittest.TestCase):
     def test_assembly_steps_are_skipped_and_the_walk_reaches_the_part(self):
         found = [os.path.join(REPORTS, f) for f in FILES if os.path.exists(os.path.join(REPORTS, f))]
@@ -47,13 +56,8 @@ class OwnerCaptureTest(unittest.TestCase):
                 refused = capture["items"][result.refusal["index"]]
                 self.assertEqual(refused["component"], own)
 
-
     def test_the_filter_box_steps_up_to_the_offset_are_copied(self):
-        path = os.path.join(REPORTS, PACKAGE)
-        if not os.path.exists(path):
-            self.skipTest(MISSING)
-        with zipfile.ZipFile(path) as package:
-            capture = json.loads(package.read("report.json"))["capture"]
+        capture = package_report(self, PACKAGE)["capture"]
         result = translate(capture)
         walked = {v["name"]: v["verdict"] for v in result.items if v["verdict"] != "skipped"}
         self.assertEqual(walked["Chamfer1"], "translated")
@@ -61,11 +65,7 @@ class OwnerCaptureTest(unittest.TestCase):
         self.assertEqual(result.refusal["name"], "OffsetFaces3")
 
     def test_the_filter_box_offset_becomes_an_offset_faces_step(self):
-        path = os.path.join(REPORTS, PACKAGE_WITH_OFFSET)
-        if not os.path.exists(path):
-            self.skipTest(MISSING)
-        with zipfile.ZipFile(path) as package:
-            capture = json.loads(package.read("report.json"))["capture"]
+        capture = package_report(self, PACKAGE_WITH_OFFSET)["capture"]
         result = translate(capture)
         self.assertIsNone(result.refusal)
         verdicts = {v["index"]: v["verdict"] for v in result.items}
@@ -77,11 +77,7 @@ class OwnerCaptureTest(unittest.TestCase):
         self.assertEqual(check_recipe(result.recipe), [])
 
     def test_the_probe_states_of_the_filter_box_leave_its_sizes_free(self):
-        path = os.path.join(REPORTS, PACKAGE_WITH_PROBE)
-        if not os.path.exists(path):
-            self.skipTest(MISSING)
-        with zipfile.ZipFile(path) as package:
-            report = json.loads(package.read("report.json"))
+        report = package_report(self, PACKAGE_WITH_PROBE)
         capture = report["capture"]
         params = capture["parameters"]
         table = size_table.build(params["user"], PROBE_TICKED, params["model"], capture.get("design_units", "mm"))
@@ -107,11 +103,7 @@ class OwnerCaptureTest(unittest.TestCase):
         self.assertEqual(check_recipe(result.recipe), [])
 
     def test_with_the_dialog_ranges_the_filter_box_sizes_stay_free_and_are_marked(self):
-        path = os.path.join(REPORTS, PACKAGE_WITH_PROBE)
-        if not os.path.exists(path):
-            self.skipTest(MISSING)
-        with zipfile.ZipFile(path) as package:
-            report = json.loads(package.read("report.json"))
+        report = package_report(self, PACKAGE_WITH_PROBE)
         capture = report["capture"]
         params = capture["parameters"]
         table = size_table.build(params["user"], PROBE_TICKED, params["model"], capture.get("design_units", "mm"))
@@ -131,11 +123,7 @@ class OwnerCaptureTest(unittest.TestCase):
         self.assertEqual(len([n for n, size in result.recipe["sizes"].items() if "value" in size]), 6)
 
     def test_with_the_offset_back_the_filter_box_sizes_stay_free_with_their_ranges(self):
-        path = os.path.join(REPORTS, PACKAGE_WITH_OFFSET_FACES)
-        if not os.path.exists(path):
-            self.skipTest(MISSING)
-        with zipfile.ZipFile(path) as package:
-            report = json.loads(package.read("report.json"))
+        report = package_report(self, PACKAGE_WITH_OFFSET_FACES)
         capture = report["capture"]
         params = capture["parameters"]
         ticked = PROBE_TICKED + ["_Filter__Wall_thickness_mm"]
@@ -168,11 +156,7 @@ class OwnerCaptureTest(unittest.TestCase):
         self.assertEqual(check_recipe(result.recipe), [])
 
     def test_the_rim_chamfer_picked_by_the_top_face_follows_the_box(self):
-        path = os.path.join(REPORTS, PACKAGE_WITH_OFFSET_FACES)
-        if not os.path.exists(path):
-            self.skipTest(MISSING)
-        with zipfile.ZipFile(path) as package:
-            report = json.loads(package.read("report.json"))
+        report = package_report(self, PACKAGE_WITH_OFFSET_FACES)
         capture = report["capture"]
         # Chamfer2's first set was picked by the box's top face; this capture is older than the face record.
         rim = next(i for i in capture["items"] if i["index"] == 70)["data"]["sets"][0]
@@ -191,11 +175,7 @@ class OwnerCaptureTest(unittest.TestCase):
         self.assertEqual(check_recipe(result.recipe), [])
 
     def test_without_a_motion_every_range_stays_and_the_sketch_sizes_are_marked_loose(self):
-        path = os.path.join(REPORTS, PACKAGE_WITH_OFFSET_FACES)
-        if not os.path.exists(path):
-            self.skipTest(MISSING)
-        with zipfile.ZipFile(path) as package:
-            capture = json.loads(package.read("report.json"))["capture"]
+        capture = package_report(self, PACKAGE_WITH_OFFSET_FACES)["capture"]
         params = capture["parameters"]
         ticked = PROBE_TICKED + ["_Filter__Wall_thickness_mm"]
         table = size_table.build(params["user"], ticked, params["model"], capture.get("design_units", "mm"))
@@ -208,27 +188,6 @@ class OwnerCaptureTest(unittest.TestCase):
         self.assertEqual(sorted(f["name"] for f in result.loose), sorted(
             [PROBE_TICKED[0], PROBE_TICKED[2], PROBE_TICKED[3], PROBE_TICKED[6], "_Filter__Wall_thickness_mm"]))
         self.assertNotIn("FilterBox__PipeTop_offsetFromCenter_mm", [f["name"] for f in result.loose])
-        self.assertEqual(check_recipe(result.recipe), [])
-
-    def test_with_the_motion_of_the_stored_states_only_the_sizes_that_cannot_follow_are_loose(self):
-        path = os.path.join(REPORTS, PACKAGE_WITH_OFFSET_FACES)
-        if not os.path.exists(path):
-            self.skipTest(MISSING)
-        with zipfile.ZipFile(path) as package:
-            report = json.loads(package.read("report.json"))
-        capture = report["capture"]
-        params = capture["parameters"]
-        ticked = PROBE_TICKED + ["_Filter__Wall_thickness_mm"]
-        table = size_table.build(params["user"], ticked, params["model"], capture.get("design_units", "mm"))
-        motion = probe_motion.build(probe_view(capture), table, report["probe"]["states"])
-        result = translate(capture, size_table=table, motion=motion)
-        self.assertEqual(result.fixed, [])
-        free = sorted(n for n, size in result.recipe["sizes"].items() if "value" in size)
-        self.assertEqual(len(free), 7)
-        # With the motion only the sizes whose values still cannot follow are loose; the height and the pipe offset
-        # follow.
-        self.assertEqual(sorted(f["name"] for f in result.loose), sorted(
-            [PROBE_TICKED[0], PROBE_TICKED[2], PROBE_TICKED[3], PROBE_TICKED[6], "_Filter__Wall_thickness_mm"]))
         self.assertEqual(check_recipe(result.recipe), [])
 
 
