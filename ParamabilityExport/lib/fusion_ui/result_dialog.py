@@ -5,11 +5,9 @@ It is a small command of its own. Fusion does not allow starting a command from 
 so `show` fires a custom event; its handler starts the dialog after the export command has ended. When the event or
 the dialog cannot start, the same story goes to a message box.
 """
-import html
-
 import adsk.core
 
-from ..export_plan.dialog_rows import wrap_name
+from ..export_plan.dialog_rows import escape, name_cell, text_rows
 from .handlers import HandlerList, on_command_created, on_custom_event
 from .log import log, message_box
 
@@ -18,7 +16,7 @@ COMMAND_NAME = "Saved for Paramability"
 EVENT_ID = "ParamabilityExportResultEvent"
 _COLUMNS = ("name", "range", "check")
 _HEADERS = {"name": "Parameter", "range": "Range", "check": "In Paramability"}
-_RATIO = "6:3:3"
+_RATIO = "8:3:3"
 _MAX_FIXED_ROWS = 6
 
 _handlers = HandlerList()
@@ -112,8 +110,8 @@ def build(command, view):
     except Exception as error:
         log("close button text failed: %s" % error)
     inputs = command.commandInputs
-    inputs.addTextBoxCommandInput("pm_result_saved", "", html.escape(view["saved"]), 3, True)
-    _add_lines(inputs, "pm_result_warnings", "Check your design", view.get("warnings"), 3)
+    inputs.addTextBoxCommandInput("pm_result_saved", "", escape(view["saved"]), text_rows(view["saved"].split("\n")), True)
+    _add_lines(inputs, "pm_result_warnings", "Check your design", view.get("warnings"))
 
     sizes = inputs.addGroupCommandInput("pm_result_sizes", view["size_title"])
     sizes.isExpanded = True
@@ -122,21 +120,21 @@ def build(command, view):
     else:
         sizes.children.addTextBoxCommandInput("pm_result_none", "", "No parameter became a size.", 1, True)
 
-    _add_lines(inputs, "pm_result_fixed", "Stays fixed", view["fixed"], 2)
-    _add_lines(inputs, "pm_result_loose", "May give unexpected results", view.get("loose"), 3)
+    _add_lines(inputs, "pm_result_fixed", "Stays fixed", view["fixed"])
+    _add_lines(inputs, "pm_result_loose", "May give unexpected results", view.get("loose"))
     if view["variables"]:
-        inputs.addTextBoxCommandInput("pm_result_variables", "", html.escape(view["variables"]), 2, True)
+        inputs.addTextBoxCommandInput("pm_result_variables", "", escape(view["variables"]), text_rows([view["variables"]]), True)
 
 
-def _add_lines(inputs, group_id, title, lines, rows_per_line):
+def _add_lines(inputs, group_id, title, lines):
     """An open group with one text box of `lines`; nothing when there are none."""
     if not lines:
         return
     group = inputs.addGroupCommandInput(group_id, title)
     group.isExpanded = True
     group.children.addTextBoxCommandInput(
-        group_id + "_text", "", "<br>".join(html.escape(line) for line in lines),
-        min(len(lines) * rows_per_line, _MAX_FIXED_ROWS), True)
+        group_id + "_text", "", "<br>".join(escape(line) for line in lines),
+        text_rows(lines, cap=_MAX_FIXED_ROWS), True)
 
 
 def _build_table(children, rows, check_header=None):
@@ -147,6 +145,11 @@ def _build_table(children, rows, check_header=None):
                               0, col)
     for index, row in enumerate(rows):
         for col, key in enumerate(_COLUMNS):
-            text, lines = wrap_name(row[key]) if key == "name" else (html.escape(row[key]), 1)
+            text, lines = name_cell(row[key]) if key == "name" else (escape(row[key]), 1)
             cell = children.addTextBoxCommandInput("pm_result_%s_%d" % (key, index), "", text, lines, True)
+            if key == "name":
+                try:
+                    cell.tooltipDescription = row[key]
+                except Exception as error:
+                    log("name tooltip failed: %s" % error)
             table.addCommandInput(cell, index + 1, col)

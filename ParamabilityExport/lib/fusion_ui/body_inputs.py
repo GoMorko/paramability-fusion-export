@@ -1,5 +1,5 @@
 """The inputs both export dialogs start with: the body picker and the line about the timeline marker."""
-import html
+from ..export_plan.dialog_rows import escape, text_rows
 
 BODY_ID = "pm_body"
 MARKER_ID = "pm_marker"
@@ -14,5 +14,5 @@ def add_body_inputs(inputs, body, marker_note=None):
     if body is not None:
         selection.addSelection(body)
     if marker_note:
-        inputs.addTextBoxCommandInput(MARKER_ID, "", html.escape(marker_note), 2, True)
+        inputs.addTextBoxCommandInput(MARKER_ID, "", escape(marker_note), text_rows([marker_note]), True)
     return selection

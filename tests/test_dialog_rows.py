@@ -52,11 +52,31 @@ class CellTextTest(unittest.TestCase):
     def test_a_typed_range_is_kept_over_the_default_in_the_cells(self):
         self.assertEqual(rows.row_cells(offer(), True, "0.5", "9")["max"], "9")
 
-    def test_a_long_name_breaks_after_an_underscore_and_is_escaped(self):
-        text, lines = rows.wrap_name("FilterBox_$_depth__contains_CeramicMedium")
-        self.assertEqual(lines, 2)
-        self.assertEqual(text, "FilterBox_$_depth__<br>contains_CeramicMedium")
-        self.assertEqual(rows.wrap_name("wall<1>"), ("wall&lt;1&gt;", 1))
+    def test_a_long_name_is_cut_in_the_middle_and_short_ones_stay(self):
+        name = "FilterBox_$_depth__contains_CeramicMedium"
+        text, lines = rows.name_cell(name)
+        self.assertEqual(lines, 1)
+        self.assertLessEqual(len(text), rows.NAME_WIDTH)
+        self.assertTrue(text.startswith("FilterBox_") and text.endswith("CeramicMedium"))
+        self.assertEqual(rows.name_cell("wall<1>"), ("wall&lt;1&gt;", 1))
+
+    def test_a_text_needs_one_row_per_line_it_fills_up_to_the_cap(self):
+        self.assertEqual(rows.text_rows(["short"]), 1)
+        self.assertEqual(rows.text_rows(["a" * (rows.LINE_WIDTH + 1), "b"]), 3)
+        self.assertEqual(rows.text_rows(["a" * 1000]), rows.MAX_ROWS)
+        self.assertEqual(rows.text_rows([]), 1)
+
+    def test_quotes_stay_plain_and_markup_is_escaped_for_a_read_only_box(self):
+        self.assertEqual(rows.escape('a "b" <c> & d'), 'a "b" &lt;c&gt; &amp; d')
+        html_text = rows.details_html(offer(comment='say "hi"', param='w"all'), True)
+        self.assertIn('<b>w"all</b>', html_text)
+        self.assertIn('Comment: say "hi"', html_text)
+        self.assertNotIn("&quot;", rows.details_panel(None, False, None, None, 'x "y"')[0])
+
+    def test_the_panel_asks_for_rows_by_what_it_shows(self):
+        _, one = rows.details_panel(None, False, None, None, "1 of 64 sizes ticked.")
+        _, more = rows.details_panel(offer(comment="c" * 200), True, None, None, "1 of 64 sizes ticked.")
+        self.assertLess(one, more)
 
     def test_details_show_comment_formula_or_reason_of_the_row(self):
         self.assertIn("Comment: Wall [1..4]", rows.details_html(offer(comment="Wall [1..4]"), True))
@@ -136,8 +156,7 @@ class CountLineTest(unittest.TestCase):
     def test_a_problem_beats_the_limit_which_beats_the_count(self):
         self.assertEqual(rows.count_line(6, "wall: bad."), "wall: bad.")
         self.assertIn("up to 64", rows.count_line(64, over=True))
-        self.assertEqual(rows.count_line(6),
-                         "6 of 64 sizes ticked. Every parameter also comes along as a variable.")
+        self.assertIn("6 of 64", rows.count_line(6))
 
 
 if __name__ == "__main__":

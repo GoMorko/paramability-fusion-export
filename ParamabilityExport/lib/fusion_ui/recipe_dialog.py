@@ -6,8 +6,6 @@ only places them in Fusion inputs.
 
 A check box label cannot be changed after creation (Fusion raises on `.text`), so the row ticks carry no label.
 """
-import html
-
 import adsk.core
 
 from .body_inputs import BODY_ID, add_body_inputs
@@ -22,12 +20,10 @@ INTRO_ID = "pm_sizes_intro"
 NOTICE_ID = "pm_notice"
 TABLE_ID = "pm_params_table"
 DETAILS_ID = "pm_details"
-COUNT_ID = "pm_sizes_count"
 TICK_USED_ID = "pm_tick_used"
 CLEAR_ID = "pm_untick_all"
 WARN_ID = "pm_stop_warning"
 SHOW_ID = "pm_show_in_timeline"
-WARN_LINES = 4
 
 TICK_PREFIX = "pm_tick_"
 CELL_PREFIX = {"tick": TICK_PREFIX, "name": "pm_name_", "now": "pm_now_", "min": "pm_min_", "max": "pm_max_",
@@ -40,7 +36,7 @@ UP_LABELS = {"z": "Z up", "y": "Y up"}
 def build_blocked(command, text):
     """A dialog that only shows why the export cannot start."""
     command.isOKButtonVisible = False
-    command.commandInputs.addTextBoxCommandInput(NOTICE_ID, "", text, 3, True)
+    command.commandInputs.addTextBoxCommandInput(NOTICE_ID, "", rows.escape(text), rows.text_rows([text]), True)
 
 
 def _safely(what, action):
@@ -68,7 +64,7 @@ def _string(inputs, key, index):
 def _set_text(inputs, key, index, text):
     box = inputs.itemById(_cell_id(key, index))
     if box is not None:
-        box.formattedText = html.escape(text)
+        box.formattedText = rows.escape(text)
 
 
 def build(command, offers, body, up_axis, design_unit="mm", stop=None, marker_note=None):
@@ -80,7 +76,7 @@ def build(command, offers, body, up_axis, design_unit="mm", stop=None, marker_no
     """
     inputs = command.commandInputs
     add_body_inputs(inputs, body, marker_note)
-    warning = inputs.addTextBoxCommandInput(WARN_ID, "", "", WARN_LINES, True)
+    warning = inputs.addTextBoxCommandInput(WARN_ID, "", "", 1, True)
     warning.isVisible = False
     button = inputs.addBoolValueInput(SHOW_ID, "Show in timeline", False, "", False)
     button.isVisible = False
@@ -91,14 +87,14 @@ def build(command, offers, body, up_axis, design_unit="mm", stop=None, marker_no
     if offers:
         _safely("Dialog size", lambda: command.setDialogInitialSize(700, 700))
         _build_table(inputs, offers, design_unit)
-        inputs.addTextBoxCommandInput(
-            DETAILS_ID, "", html.escape(rows.HINT), 4, True)
-        inputs.addTextBoxCommandInput(COUNT_ID, "", "", 2, True)
-        _refresh_summary(inputs, offers)
+        details = inputs.addTextBoxCommandInput(DETAILS_ID, "", "", 2, True)
+        _safely("Details tooltip", lambda: setattr(details, "tooltipDescription", rows.HINT_TOOLTIP))
+        _refresh_details(inputs, offers)
     else:
         inputs.addTextBoxCommandInput(
             INTRO_ID, "", "This design has no user parameters that can be sizes. The part is saved with fixed numbers.",
-            2, True)
+            rows.text_rows(["This design has no user parameters that can be sizes. The part is saved with fixed numbers."]),
+            True)
 
     up = inputs.addDropDownCommandInput(UP_ID, "Design up direction", adsk.core.DropDownStyles.TextListDropDownStyle)
     for key in ("z", "y"):
@@ -122,8 +118,9 @@ def show_stop(inputs, summary):
         if button is not None:
             button.isVisible = False
         return
-    head = "<b>%s</b>" % html.escape(lines[0]) if summary["stops"] else html.escape(lines[0])
-    box.formattedText = "<br>".join([head] + [html.escape(line) for line in lines[1:]])
+    head = "<b>%s</b>" % rows.escape(lines[0]) if summary["stops"] else rows.escape(lines[0])
+    box.formattedText = "<br>".join([head] + [rows.escape(line) for line in lines[1:]])
+    _safely("Warning rows", lambda: setattr(box, "numRows", rows.text_rows(lines)))
     box.isVisible = True
     if summary["tooltip"]:
         _safely("Warning tooltip", lambda: setattr(box, "tooltipDescription", summary["tooltip"]))
@@ -134,8 +131,8 @@ def show_stop(inputs, summary):
 def _build_table(inputs, offers, design_unit):
     keys = rows.columns()
     table = inputs.addTableCommandInput(TABLE_ID, "", len(keys), rows.column_ratio(keys))
-    _safely("Table rows", lambda: setattr(table, "minimumVisibleRows", 5))
-    _safely("Table rows", lambda: setattr(table, "maximumVisibleRows", 12))
+    _safely("Table rows", lambda: setattr(table, "minimumVisibleRows", rows.MIN_TABLE_ROWS))
+    _safely("Table rows", lambda: setattr(table, "maximumVisibleRows", rows.MAX_TABLE_ROWS))
     _safely("Table width", lambda: setattr(table, "isFullWidth", True))
     for col, key in enumerate(keys):
         head = inputs.addTextBoxCommandInput("pm_head_" + key, "", rows.header(key, design_unit), 1, True)
@@ -159,9 +156,11 @@ def _make_cell(inputs, key, index, offer):
         field.isEnabled = cells["range_enabled"]
         return field
     if key == "name":
-        text, lines = rows.wrap_name(offer["param"])
-        return inputs.addTextBoxCommandInput(cell_id, "", text, lines, True)
-    return inputs.addTextBoxCommandInput(cell_id, "", html.escape(cells[key]), 1, True)
+        text, lines = rows.name_cell(offer["param"])
+        box = inputs.addTextBoxCommandInput(cell_id, "", text, lines, True)
+        _safely("Name tooltip", lambda: setattr(box, "tooltipDescription", offer["param"]))
+        return box
+    return inputs.addTextBoxCommandInput(cell_id, "", rows.escape(cells[key]), 1, True)
 
 
 def _ticks(inputs, offers):
@@ -201,28 +200,26 @@ def _selected_index(inputs, offers):
     return row if 0 <= row < len(offers) else None
 
 
-def _refresh_summary(inputs, offers, over=False):
-    ticks = _ticks(inputs, offers)
-    _, problem = rows.read_ranges(
-        offers, ticks, _range_texts(inputs, offers, "min"), _range_texts(inputs, offers, "max"))
-    box = inputs.itemById(COUNT_ID)
-    if box is not None:
-        box.formattedText = html.escape(rows.count_line(sum(ticks), problem, over))
-
-
-def _refresh_details(inputs, offers, index=None):
-    index = _selected_index(inputs, offers) if index is None else index
+def _refresh_details(inputs, offers, index=None, over=False):
+    """Fill the box under the table: the picked row (the hint when none) over the count or the problem line."""
     box = inputs.itemById(DETAILS_ID)
     if box is None:
         return
+    ticks = _ticks(inputs, offers)
+    _, problem = rows.read_ranges(
+        offers, ticks, _range_texts(inputs, offers, "min"), _range_texts(inputs, offers, "max"))
+    count = rows.count_line(sum(ticks), problem, over)
+    index = _selected_index(inputs, offers) if index is None else index
     if index is None:
-        box.formattedText = html.escape(rows.HINT)
-        return
-    lo = _string(inputs, "min", index)
-    hi = _string(inputs, "max", index)
-    ticked = _ticks(inputs, offers)[index]
-    box.formattedText = rows.details_html(
-        offers[index], ticked, lo.value if lo is not None else None, hi.value if hi is not None else None)
+        text, needed = rows.details_panel(None, False, None, None, count)
+    else:
+        lo = _string(inputs, "min", index)
+        hi = _string(inputs, "max", index)
+        text, needed = rows.details_panel(
+            offers[index], ticks[index], lo.value if lo is not None else None, hi.value if hi is not None else None,
+            count)
+    box.formattedText = text
+    _safely("Details rows", lambda: setattr(box, "numRows", needed))
 
 
 def apply_offers(inputs, offers, fresh):
@@ -246,7 +243,6 @@ def apply_offers(inputs, offers, fresh):
         if _safely("Updating " + offer["param"], update):
             merged[index] = new
     offers[:] = merged
-    _safely("Updating the count", lambda: _refresh_summary(inputs, offers))
     _safely("Updating the details", lambda: _refresh_details(inputs, offers))
 
 
@@ -293,8 +289,7 @@ def handle_change(inputs, offers, changed):
         ticked = box.value
         _show_row(inputs, index, offers[index], ticked,
                   _string(inputs, "min", index).value, _string(inputs, "max", index).value)
-    _refresh_summary(inputs, offers, over)
-    _refresh_details(inputs, offers, index if key in ("tick", "min", "max") else None)
+    _refresh_details(inputs, offers, index if key in ("tick", "min", "max") else None, over)
 
 
 def restore_body(inputs, body):

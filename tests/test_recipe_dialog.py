@@ -25,7 +25,7 @@ def row(inputs, key, index):
 
 
 def count_text(inputs):
-    return inputs.itemById(recipe_dialog.COUNT_ID).formattedText
+    return inputs.itemById(recipe_dialog.DETAILS_ID).formattedText
 
 
 def tick(inputs, offers, index, on):
@@ -62,6 +62,33 @@ class BuildTest(unittest.TestCase):
         _, inputs = make_dialog([])
         self.assertIsNone(inputs.itemById(recipe_dialog.TABLE_ID))
         self.assertIn("no user parameters", inputs.itemById(recipe_dialog.INTRO_ID).formattedText)
+
+
+class LayoutTest(unittest.TestCase):
+    def test_a_quote_in_a_name_or_comment_reaches_the_boxes_unescaped_and_markup_escaped(self):
+        offers = [offer('w"all<1>', comment='say "hi"')]
+        _, inputs = make_dialog(offers)
+        self.assertEqual(row(inputs, "name", 0).formattedText, 'w"all&lt;1&gt;')
+        recipe_dialog.apply_offers(inputs, offers, offers)
+        table = inputs.itemById(recipe_dialog.TABLE_ID)
+        table.selectedRow = 1
+        recipe_dialog.handle_change(inputs, offers, table)
+        shown = inputs.itemById(recipe_dialog.DETAILS_ID).formattedText
+        self.assertIn('<b>w"all&lt;1&gt;</b>', shown)
+        self.assertIn('Comment: say "hi"', shown)
+        self.assertNotIn("&quot;", shown)
+
+    def test_the_details_box_grows_for_a_long_comment_and_a_stop_warning_fits_its_lines(self):
+        offers = [offer("wall", comment="c" * 300)]
+        _, inputs = make_dialog(offers)
+        hint_rows = inputs.itemById(recipe_dialog.DETAILS_ID).numRows
+        table = inputs.itemById(recipe_dialog.TABLE_ID)
+        table.selectedRow = 1
+        recipe_dialog.handle_change(inputs, offers, table)
+        self.assertGreater(inputs.itemById(recipe_dialog.DETAILS_ID).numRows, hint_rows)
+        recipe_dialog.show_stop(inputs, {"lines": ["Copied with a note: x."], "stops": False, "tooltip": "",
+                                         "index": None})
+        self.assertEqual(inputs.itemById(recipe_dialog.WARN_ID).numRows, 1)
 
 
 class TickTest(unittest.TestCase):

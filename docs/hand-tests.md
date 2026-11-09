@@ -247,14 +247,14 @@ Use the filter box design (names such as `FilterBox_$_depth__contains_CeramicMed
       no tick. Min and Max name the design's length unit ("Min (in)" in an inch design), and Now shows lengths in it
       too. An angle row shows "deg" in its cells and a count row shows plain numbers. The table scrolls when there are
       many rows.
-- [ ] **Long names.** A name over about 26 characters is broken after an underscore into two lines inside its cell and
-      stays readable. If a break looks wrong at the real column width, note the width (the break is made by the add-in
-      with `<br>` in `formattedText`).
+- [ ] **Long names.** A name over about 36 characters is cut in the middle with "..." and stays on one line, so
+      every row has the same height. Hover the name: the tooltip holds the full name; the box under the table shows
+      it in full after a click. If names that fit still wrap, or the cut is too early, note the column width.
 - [ ] **Row click.** Click a row (not its tick): the box under the table shows the name, the comment, and for a
       formula the formula with "Now ...", for a greyed row the reason. If the box does not follow the click, note
       it: it then only follows ticks and typed ranges.
 - [ ] Tick or untick a row: its Min and Max open or grey out, "In Paramability" says "size" or "stays 3 mm", and the
-      count line says "N of 64 sizes ticked. Every parameter also comes along as a variable."
+      last line of the box under the table says "N of 64 sizes ticked."
 - [ ] **Range.** Min and Max of a ticked row start from the comment (`Wall [1..4]` gives 1 and 4), else half to double
       the value. Type 1.5 and 6: after the export the size in Paramability goes from 1.5 to 6. Type a Min above the
       value, a Min above the Max, or text: the count line names the parameter and OK turns off. A count row refuses
@@ -265,7 +265,17 @@ Use the filter box design (names such as `FilterBox_$_depth__contains_CeramicMed
 - [ ] "Tick what the body uses" returns the ticks to what the body reads; "Untick all" clears them. Both keep typed
       ranges. A greyed row is never ticked by either.
 - [ ] Pick another body: ticks, greyed rows and texts follow; typed ranges go back to the defaults.
-- [ ] The Design up direction menu is under the count line.
+- [ ] The Design up direction menu is under the box with the count.
+- [ ] **The export window has no empty gaps.** Open the dialog on the filter box design, then look at:
+      - Under "Copied with a note: ..." (or the stop warning) no blank lines before the table; nothing shows when
+        the body copies fully. A long warning shows all its lines, none cut off.
+      - Under the table one box holds the hint, then the count line, with no blank lines between or after. Hover
+        it: the tooltip says the design is changed for a moment and that every parameter also comes along.
+      - Click a row with a long comment: the box grows to show it all and shrinks back on the next row.
+      - Table rows are one line each, the name column is the widest and the last column ("stays 12 mm", "fixed,
+        changes a sketch") is not cut off. About ten rows show before the table scrolls; the table spans the width.
+      - The Saved window (result dialog) has no blank lines under its notes and fixed lists either.
+      If a box is still too tall or too short, note the text it holds and the dialog width.
 - [ ] **Early warning.** Pick a body whose steps hold one the add-in cannot copy (for example a sweep, a loft or an
       emboss). Right under the body picker a box shows "Copy stops at Sweep1 (sweep)." in bold, the reason in short,
       and "The part will be saved as a fixed shape; your parameters still come along as variables." Hover the box:
@@ -416,7 +426,7 @@ These were written from the API reference and never run:
   - `BoolValueCommandInput.text` must not be set on a check box: Fusion raises `InternalValidationError : button` (the
     text is for button style only). The label is the parameter name, fixed at creation.
 - The main dialog (`lib/fusion_ui/recipe_dialog.py`), none of it run yet:
-  - `commandInputs.addTableCommandInput(id, "", 6, "1:6:2:2:2:4")` with cells added by `addCommandInput(input, row,
+  - `commandInputs.addTableCommandInput(id, "", 6, "1:9:2:2:2:4")` with cells added by `addCommandInput(input, row,
     column)`: check boxes (`addBoolValueInput` with empty text), read-only text boxes, and `addStringValueInput` for
     Min and Max. Cells are created through the command's own inputs, not a group. Row 0 holds the header text boxes.
   - `TableCommandInput.minimumVisibleRows`, `maximumVisibleRows`, `isFullWidth`, `addToolbarCommandInput` with two
@@ -432,6 +442,18 @@ These were written from the API reference and never run:
     value` read from a cell, and `inputChanged` firing when a typed Min or Max is committed.
   - `TextBoxCommandInput.formattedText` set after creation for the details box and the count line (`<b>` and `<br>`).
   - Cell ids are made from the row number (`pm_tick_3`), not from the parameter name.
+  - **Layout without gaps** (hand test "the export window has no empty gaps"), none of it run yet:
+    - `TextBoxCommandInput.numRows` set after creation (warning box, details box, export status box): whether it is
+      writable and the box resizes. If it raises it is logged ("Warning rows failed", "Details rows failed") and the
+      box keeps its first height (1 row for the warning, 2 for the details).
+    - Whether a text box with `isVisible = False` leaves no gap, and `tooltipDescription` on text boxes (details box,
+      warning box, name cells).
+    - Read only text boxes show html: `&lt;`, `&gt;` and `&amp;` must display as `<`, `>` and `&`, while quotes
+      are sent as plain `"` (the entity `&quot;` showed as typed). A parameter name with `<` or `&` shows the
+      character, not the entity.
+    - Row height of a one line text box cell; the column ratio `1:9:2:2:2:4` and the width of the name column
+      (36 characters); `minimumVisibleRows` 6, `maximumVisibleRows` 14 and `isFullWidth` with a dialog of
+      700 x 700; whether 14 rows fit the dialog height. The result dialog uses ratio `8:3:3`.
 - The result dialog (`lib/fusion_ui/result_dialog.py`), none of it run yet:
   - **Starting a command after the export command:** `Application.registerCustomEvent(id)` in `start()`,
     `CustomEvent.add` with a `CustomEventHandler`, `Application.fireCustomEvent(id)` at the end of the export, and

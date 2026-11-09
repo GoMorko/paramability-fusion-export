@@ -38,7 +38,7 @@ def build_parameter_list(inputs, params, table):
     group.isExpanded = True
     if not params:
         group.children.addTextBoxCommandInput(
-            "pm_no_params", "", "This design has no user parameters, so every size would be the same.", 2, True)
+            "pm_no_params", "", "This design has no user parameters, so every size would be the same.", 1, True)
         return
     settable_names = {p["name"] for p in settable_parameters(params)}
     for p in params:
@@ -56,7 +56,7 @@ def build_sizes(inputs, params, table):
     group = inputs.addGroupCommandInput(SIZES_GROUP_ID, "Sizes")
     group.isExpanded = True
     group.children.addTextBoxCommandInput(
-        INTRO_ID, "", "Each row becomes one size in Paramability's dropdown.", 2, True)
+        INTRO_ID, "", "Each row becomes one size in Paramability's dropdown.", 1, True)
     rebuild_table(inputs, params, table)
 
 

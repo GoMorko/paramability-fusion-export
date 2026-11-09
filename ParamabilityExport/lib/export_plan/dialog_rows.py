@@ -16,12 +16,19 @@ SIZE, KEEP, LOCKED, FORMULA = "size", "keep", "locked", "formula"
 
 HEADERS = {"tick": "", "name": "Parameter", "now": "Now", "min": "Min", "max": "Max",
            "status": "In Paramability"}
-RATIOS = {"tick": 1, "name": 6, "now": 2, "min": 2, "max": 2, "status": 4}
+# The name column is the widest: long names stay on one line, the rest are shortened with a middle ellipsis.
+RATIOS = {"tick": 1, "name": 9, "now": 2, "min": 2, "max": 2, "status": 4}
 
-NAME_WIDTH = 26
-NAME_LINES = 3
-HINT = ("Click a row to see its comment, formula or why it stays fixed. While it exports, the design is "
-        "changed for a moment to measure the sketches, then put back.")
+NAME_WIDTH = 36
+# Characters that fit one line of a full width text box, kept low so a line is never cut off.
+LINE_WIDTH = 80
+MAX_ROWS = 6
+MIN_TABLE_ROWS = 6
+MAX_TABLE_ROWS = 14
+HINT = "Click a row to see its comment, formula or why it stays fixed."
+HINT_TOOLTIP = ("While it exports, the design is changed for a moment to measure the sketches, then put back. "
+                "Every parameter also comes along as a variable.")
+ELLIPSIS = "..."
 _TYPED = re.compile(r"^\s*([-+]?[0-9.,]+)\s*([a-z]*)\s*$", re.I)
 # A comma that starts exactly three digits ("2,500") reads as a thousands mark or a decimal comma: not guessed.
 _AMBIGUOUS_COMMA = re.compile(r"^[-+]?[1-9][0-9]*,[0-9]{3}$")
@@ -140,41 +147,68 @@ def row_cells(offer, ticked, lo_text=None, hi_text=None):
     }
 
 
-def wrap_name(name, width=NAME_WIDTH, max_lines=NAME_LINES):
-    """(html, line count) for a long name broken after an underscore, so it reads in a narrow cell."""
-    lines, rest = [], name
-    while len(rest) > width and len(lines) < max_lines - 1:
-        cut = rest.rfind("_", 0, width) + 1
-        cut = cut if cut > width // 3 else width
-        lines.append(rest[:cut])
-        rest = rest[cut:]
-    lines.append(rest)
-    return "<br>".join(html.escape(line) for line in lines), len(lines)
+def escape(text):
+    """`text` for a read only text box, which shows html. Quotes stay as they are: the box prints `&quot;` as typed."""
+    return html.escape(text, quote=False)
 
 
-def details_html(offer, ticked, lo_text=None, hi_text=None):
-    """Html for the box under the table: the name, then the comment, formula, range or reason of the row."""
-    name = "<b>%s</b>" % html.escape(offer["param"])
-    now = html.escape(offer["now"])
+def text_rows(lines, width=LINE_WIDTH, cap=MAX_ROWS):
+    """How many rows a read only text box needs for these plain `lines` (at least 1, at most `cap`)."""
+    needed = sum(max(1, math.ceil(len(line) / width)) for line in lines)
+    return max(1, min(needed, cap))
+
+
+def shorten_name(name, width=NAME_WIDTH):
+    """`name` cut in the middle with an ellipsis when it is longer than `width`; the ends stay readable."""
+    if len(name) <= width:
+        return name
+    keep = width - len(ELLIPSIS)
+    head = keep - keep // 2
+    return name[:head] + ELLIPSIS + name[len(name) - keep // 2:]
+
+
+def name_cell(name):
+    """(html, line count) of a name cell: one line, shortened in the middle when it is long."""
+    return escape(shorten_name(name)), 1
+
+
+def _detail_parts(offer, ticked, lo_text, hi_text):
+    """(name, rest of the first line, further lines) of the details of a row, all plain text."""
+    name, now = offer["param"], offer["now"]
     if offer["state"] == LOCKED:
-        return "%s, %s<br>%s" % (name, now, html.escape(offer["reason"]))
+        return name, ", " + now, [offer["reason"]]
     if offer["state"] == FORMULA:
-        formula = html.escape(offer["formula"])
-        return "%s = %s<br>Now %s. It follows the parameters it reads." % (name, formula, now)
-    lines = ["%s, %s" % (name, now)]
+        return name, " = " + offer["formula"], ["Now %s. It follows the parameters it reads." % now]
+    lines = []
     if offer["comment"]:
-        lines.append("Comment: %s" % html.escape(offer["comment"]))
+        lines.append("Comment: %s" % offer["comment"])
     lo = default_range_texts(offer)[0] if lo_text is None else lo_text
     hi = default_range_texts(offer)[1] if hi_text is None else hi_text
     if ticked:
         unit = _unit_of(offer)
         unit = " " + unit if unit_kind(unit) == "length" else ""
-        lines.append("Size in Paramability from %s to %s%s." % (html.escape(lo), html.escape(hi), unit))
+        lines.append("Size in Paramability from %s to %s%s." % (lo, hi, unit))
     else:
         lines.append("Stays a fixed number. Tick it to make it a size.")
     if offer.get("doubt"):
-        lines.append(html.escape(offer["doubt"]))
-    return "<br>".join(lines)
+        lines.append(offer["doubt"])
+    return name, ", " + now, lines
+
+
+def details_html(offer, ticked, lo_text=None, hi_text=None):
+    """Html for the box under the table: the name, then the comment, formula, range or reason of the row."""
+    name, tail, lines = _detail_parts(offer, ticked, lo_text, hi_text)
+    return "<br>".join(["<b>%s</b>%s" % (escape(name), escape(tail))] + [escape(line) for line in lines])
+
+
+def details_panel(offer, ticked, lo_text, hi_text, count):
+    """(html, rows) of the box under the table: the details of `offer` (the hint when None) over the `count` line."""
+    if offer is None:
+        plain, body = [HINT], escape(HINT)
+    else:
+        name, tail, lines = _detail_parts(offer, ticked, lo_text, hi_text)
+        plain, body = [name + tail] + lines, details_html(offer, ticked, lo_text, hi_text)
+    return "%s<br>%s" % (body, escape(count)), text_rows(plain + [count])
 
 
 def count_line(count, problem="", over=False, limit=MAX_TICKED):
@@ -183,7 +217,7 @@ def count_line(count, problem="", over=False, limit=MAX_TICKED):
         return problem
     if over:
         return limit_message(limit)
-    return "%d of %d sizes ticked. Every parameter also comes along as a variable." % (count, limit)
+    return "%d of %d sizes ticked." % (count, limit)
 
 
 def _typed_or_default(offer, text, key):

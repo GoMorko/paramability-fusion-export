@@ -4,6 +4,7 @@ import traceback
 import adsk.core
 
 from ..fusion_reader.bodies import is_pickable_body
+from ..export_plan.dialog_rows import escape, text_rows
 from ..export_plan.sizes_table import read_table, table_to_csv
 from ..export_plan.sizes_text import pick_default_index, read_sizes
 from . import sizes_table_ui, sizes_text_ui
@@ -24,7 +25,7 @@ MAX_CHOICE_NAME = 60
 def build_blocked(command, text):
     """A dialog that only shows why the export cannot start."""
     command.isOKButtonVisible = False
-    command.commandInputs.addTextBoxCommandInput(NOTICE_ID, "", text, 3, True)
+    command.commandInputs.addTextBoxCommandInput(NOTICE_ID, "", escape(text), text_rows([text]), True)
 
 
 def build(command, parameters, body, up_axis, table, marker_note=None):
@@ -38,7 +39,7 @@ def build(command, parameters, body, up_axis, table, marker_note=None):
         sizes_table_ui.build_sizes(inputs, parameters, table)
     except Exception:
         _use_text_box(inputs, parameters, table)
-    status = inputs.addTextBoxCommandInput(STATUS_ID, "", "", 3, True)
+    status = inputs.addTextBoxCommandInput(STATUS_ID, "", "", 1, True)
     status.isVisible = False
 
     inputs.addStringValueInput(CHOICE_ID, "Name of the dropdown in Paramability", DEFAULT_CHOICE_NAME)
@@ -112,7 +113,12 @@ def refresh(inputs, parameters, table):
     read = _read_sizes(inputs, parameters, table)
     status = inputs.itemById(STATUS_ID)
     if read.problems:
-        status.text = "\n".join(read.problems[:3])
+        shown = read.problems[:3]
+        status.formattedText = "<br>".join(escape(line) for line in shown)
+        try:
+            status.numRows = text_rows(shown)
+        except Exception as error:
+            log("Status rows failed: %s" % error)
         status.isVisible = True
         return
     status.isVisible = False
