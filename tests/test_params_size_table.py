@@ -98,6 +98,19 @@ class FilterBoxTableTest(unittest.TestCase):
         self.assertFalse(tr.ok)
         self.assertEqual(tr.reads, ("a",))
 
+    def test_unit_words_and_conditions_become_derived_sizes(self):
+        def derived(name, expression, value, unit):
+            return dict(name=name, expression=expression, value=value, unit=unit, comment="", is_favorite=False,
+                        kind="derived", dependency_parameters=["width"])
+        params = [dict(name="width", expression="120 mm", value=12.0, unit="mm", comment="", is_favorite=True,
+                       kind="length"),
+                  derived("cells", "ceil(width / 42 mm)", 3.0, ""),
+                  derived("ratio", "width / mm", 120.0, ""),
+                  derived("lip", "if(width < 100 mm; 2 mm; 3 mm)", 0.3, "mm")]
+        t = size_table.build(params, ["width"])
+        self.assertEqual({n: t.sizes[n]["expr"] for n in ("cells", "ratio", "lip")},
+                         {"cells": "ceil(width / 42)", "ratio": "width", "lip": "width < 100 ? 2 : 3"})
+
     def test_value_check_rejects_a_bare_number_in_the_wrong_unit(self):
         # A design in inches: Fusion reads "wall + 5" as 5 in, here the formula would give 5 mm.
         params = [dict(name="wall", expression="2 mm", value=0.2, unit="mm", comment="", is_favorite=True, kind="length"),

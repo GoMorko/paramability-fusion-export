@@ -15,6 +15,9 @@ from .expressions import tokenize_formula
 UNIT_REASON = "The unit is not supported."
 CAP_REASON = "The list holds at most %d parameters." % MAX_PARAMETERS
 VALUE_REASON = "The value is not a finite number."
+LARGE_REASON = "The value is too large."
+# Largest value the list keeps, in mm, degrees or as is.
+MAX_VALUE = 1e9
 
 
 @dataclass
@@ -58,6 +61,9 @@ def list_parameters(params, model_params=(), design_unit="mm"):
         value = defaults.size_value(p)
         if not math.isfinite(value):
             out.left_out.append({"name": p["name"], "reason": VALUE_REASON})
+            continue
+        if abs(value) > MAX_VALUE:
+            out.left_out.append({"name": p["name"], "reason": LARGE_REASON})
             continue
         item = {
             "name": assigned[p["name"]],

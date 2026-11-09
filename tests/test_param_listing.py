@@ -9,7 +9,7 @@ from tests.params_fixtures import CUBE, W, reader_dicts
 from lib.export_plan.assemble import build_package
 from lib.export_plan.recipe_export import plan_single_export
 from lib.package import manifest as mf
-from lib.params.listing import CAP_REASON, UNIT_REASON, list_parameters
+from lib.params.listing import CAP_REASON, LARGE_REASON, UNIT_REASON, list_parameters
 
 
 def plain(name, mm_value, comment="", unit="mm"):
@@ -58,6 +58,11 @@ class ListingTest(unittest.TestCase):
         listing = list_parameters([plain("wall", 2), speed])
         self.assertEqual([e["label"] for e in listing.entries], ["wall"])
         self.assertEqual(listing.left_out, [{"name": "speed", "reason": UNIT_REASON}])
+
+    def test_a_value_above_a_billion_is_left_out(self):
+        listing = list_parameters([plain("wall", 2), plain("huge", 2e9)])
+        self.assertEqual([e["label"] for e in listing.entries], ["wall"])
+        self.assertEqual(listing.left_out, [{"name": "huge", "reason": LARGE_REASON}])
 
     def test_long_name_is_cut_in_label_and_name(self):
         long = "x" * 80

@@ -92,7 +92,8 @@ lives in: the sketch's component for a dimension, else the component the paramet
 component, then for each component on its occurrence path up to the root, merged by name (the nearest component wins).
 Both are empty lists when unreadable. The export builds its size table from them
 (`lib/params/size_table.py`); the translator reads only `data.params` of the items and, through the size table,
-the `created_by` kinds.
+the `created_by` kinds. How a Fusion expression becomes an app formula (operators, `if`, units, functions) is in
+`docs/expressions.md`.
 
 `target` is the picked body at the end of the timeline (`volume` cm3 times 1000). `items` lists every timeline
 item in order. Group objects are skipped; the children of a group are listed as ordinary items, and the reader raises
