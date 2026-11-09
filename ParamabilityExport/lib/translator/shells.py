@@ -5,6 +5,7 @@ the point of an outer face (or edge, where two inner walls meet) moved inward by
 back out, placed on the slab that made the outer face, and its coordinates follow that slab and the thickness.
 """
 from . import vec
+from .placer import CUT, Placer
 from .slabs import AXIAL_TOL, LATERAL_TOL, Place, as_quantity
 
 # Offset directions are written with this many digits, so a formula holds no rounding noise.
@@ -42,15 +43,21 @@ class InnerPlace(Place):
         return out
 
 
-class Shell:
+class Shell(Placer):
     """One shell step: `thickness` a Quantity, `slabs` the solid slabs of the part when it was made, `opened` the
-    Places of the faces it opens. `at` is how many slabs there were, so later slabs come first in a search."""
+    Places of the faces it opens."""
 
-    def __init__(self, thickness, slabs, opened, at):
+    def __init__(self, thickness, slabs, opened):
         self.thickness = as_quantity(thickness)
         self.slabs = [s for s in slabs if s.combine in ("new", "add") and s.taper is None]
         self.opened = opened
-        self.at = at
+
+    def material_at(self, p):
+        return CUT if self.hollows(p) else None
+
+    @property
+    def wall_offsets(self):
+        return (self.thickness.n, -self.thickness.n)
 
     def _open(self, slab, which, curve=None):
         for place in self.opened:

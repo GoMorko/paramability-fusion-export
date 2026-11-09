@@ -6,14 +6,13 @@ normal and lets the faces around it extend or shrink to meet it, so leaning side
 need no special case. Curved faces and moves that were not measured are refused.
 """
 import math
-from collections import OrderedDict
 
 from . import follow, vec
 from .footprint import Footprint
-from .result import Refusal
+from .placer_makers import MovedFacesMaker
+from .result import Refusal, StepResult
 from .values import Quantity, number, quantity, stays_positive
 
-TYPES = ("OffsetFacesFeature",)
 
 MOVE_TOL_MM = 1e-3
 NORMAL_TOL = 1e-6
@@ -21,9 +20,6 @@ NORMAL_TOL = 1e-6
 GRID = 24
 # The outline centroid is kept while its clearance is at least this share of the best clearance on the grid.
 CENTROID_SHARE = 0.5
-# The search is repeated by every walk over one capture, so the latest results are kept by face record.
-CACHE_SIZE = 256
-_cache = OrderedDict()
 
 
 def _moved_as_read(face, distance, after):
@@ -71,15 +67,15 @@ def _clearance(footprint, uv):
     return min(footprint.gaps(uv)) if footprint.covers(uv) else -1.0
 
 
-def inside_point(face):
+def inside_point(face, cache=None):
     """A point (u, v) in the face's own plane that lies inside the face, away from its edges and holes; None when the
-    search finds none. The result is kept for the face record (the same dict)."""
-    kept = _cache.get(id(face))
+    search finds none. With a `cache` dict the result is kept there for the face record (the same dict), since every
+    walk over one capture asks again."""
+    kept = cache.get(id(face)) if cache is not None else None
     if kept is None or kept[0] is not face:
         kept = (face, _search(face))
-        _cache[id(face)] = kept
-        while len(_cache) > CACHE_SIZE:
-            _cache.popitem(last=False)
+        if cache is not None:
+            cache[id(face)] = kept
     return None if kept[1] is None else list(kept[1])
 
 
@@ -103,9 +99,9 @@ def _search(face):
     return centre if _clearance(footprint, centre) >= CENTROID_SHARE * best_gap else best
 
 
-def _near_point(face):
+def _near_point(face, cache):
     """The face's pick point in model space (`origin + u x + v y`), or None when no point lies inside the face."""
-    uv = inside_point(face)
+    uv = inside_point(face, cache)
     if uv is None:
         return None
     frame = face["frame"]
@@ -116,7 +112,7 @@ def _distance(ctx, item, distance):
     """The distance as a number or a formula over the sizes; a size that could bring it to zero stays fixed."""
     q = quantity(ctx, item, "distance", distance)
     if q.sized and not stays_positive(ctx.table, q if distance > 0 else q.scaled(-1)):
-        ctx.fix(q.reads, "the offset of %s could reach zero" % (item.get("name") or "a step"))
+        ctx.doubt(q.reads, "the offset of %s could reach zero" % (item.get("name") or "a step"))
         q = Quantity(q.n)
     return q.json()
 
@@ -136,8 +132,12 @@ def handle(item, ctx):
         refusal = _face_refusal(face, distance, after)
         if refusal:
             return refusal
-    points = [_near_point(face) for face in faces]
+    cache = ctx.cache.setdefault(__name__, {})
+    points = [_near_point(face, cache) for face in faces]
     if any(p is None for p in points):
         return Refusal("A face of this offset has no room for a pick point, so it is not copied.")
     selector = follow.faces(ctx, item, [{"point": p} for p in points])
-    return [{"kind": "offsetFaces", "faces": selector, "distance": _distance(ctx, item, distance)}]
+    out = StepResult()
+    out.add({"kind": "offsetFaces", "faces": selector, "distance": _distance(ctx, item, distance)},
+            [MovedFacesMaker(faces)])
+    return out

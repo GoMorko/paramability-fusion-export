@@ -183,3 +183,5 @@ python3 -m unittest discover -s tests -t .
 ```
 
 Python 3.10 or newer, standard library only.
+
+To make the export copy one more kind of Fusion step, follow `docs/adding-a-step-type.md`.

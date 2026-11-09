@@ -10,6 +10,7 @@ from tests.schema_check import check_recipe
 from tests.translator_helpers import FIXTURES, assert_schema_ok, load_capture, translate_fixture
 
 from lib.translator import extrude, translate
+from lib.translator.result import StepResult
 
 
 def under_test(result, index):
@@ -401,7 +402,7 @@ class DriverGuardTest(unittest.TestCase):
     def test_handler_with_no_steps_is_skipped_with_its_note(self):
         def silent(item, ctx):
             ctx.note("Nothing to copy.")
-            return []
+            return StepResult()
         capture = load_capture("extrude_plate")
         capture["items"].append(dict(capture["items"][1], index=2, name="Thread1", type="ThreadFeature", data={}))
         result = translate(capture, {"ThreadFeature": silent})
@@ -429,27 +430,16 @@ class UnreadableTest(unittest.TestCase):
         self.assertEqual(a["features"][0]["sketch"], b["features"][0]["sketch"])
 
 class RepeatabilityTest(unittest.TestCase):
-    def ids_not_repeatable(self, name, edit=None):
-        from lib.translator.context import Context
-        capture = load_capture(name)
-        if edit:
-            edit(capture["items"][-1]["data"])
-        holder = {}
-        real = Context.__init__
+    def ids_not_repeatable(self, name):
+        """Ids of the steps the extrude handler marks as not repeatable by a pattern or mirror."""
+        results = []
 
-        def init(self, cap, *rest):
-            real(self, cap, *rest)
-            holder["ctx"] = self
+        def recording(item, ctx):
+            results.append(extrude.handle(item, ctx))
+            return results[-1]
 
-        Context.__init__ = init
-        try:
-            result = translate(capture)
-        finally:
-            Context.__init__ = real
-        self.assertIsNotNone(result.recipe)
-        for step in result.recipe["features"]:
-            self.assertNotIn("_adjusts", step)
-        return holder["ctx"].not_repeatable
+        self.assertIsNotNone(translate(load_capture(name), {"ExtrudeFeature": recording}).recipe)
+        return {e.step["id"] for r in results for e in r.entries if not e.repeatable}
 
     def test_steps_that_reach_a_face_or_the_far_side_are_not_repeatable(self):
         self.assertEqual(self.ids_not_repeatable("extrude_to_plane"), {"extrude_3"})

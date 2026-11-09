@@ -6,12 +6,6 @@ _ENVELOPE_KEYS = ("capture", "target", "items")
 _ITEM_KEYS = ("index", "name", "type")
 _NOT_NUMBERS = place.FRAME_NOT_NUMBERS
 
-# Timeline items that are not modeling steps: they make no body and never change the shape of one in its component.
-SKETCH_TYPES = ("Sketch", "ConstructionPlane", "ConstructionAxis", "ConstructionPoint")
-ASSEMBLY_TYPES = ("Occurrence", "Joint", "JointOrigin", "AsBuiltJoint", "RigidGroup", "MotionLink",
-                  "TangentRelationship", "Snapshot", "Canvas", "Decal")
-NOT_MODELING_TYPES = SKETCH_TYPES + ASSEMBLY_TYPES
-
 
 class CaptureError(Exception):
     """The capture is of another version or lacks keys the translator needs."""

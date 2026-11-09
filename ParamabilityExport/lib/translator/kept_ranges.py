@@ -10,6 +10,24 @@ A size whose range the person typed is not brought in: the rules cannot be kept 
 import math
 
 from . import range_check
+from .notes import Past
+
+
+def _number(value):
+    return ("%.6f" % value).rstrip("0").rstrip(".")
+
+
+def past_reasons(table, found, why):
+    """`{Fusion name: notes.Past}` for each size in `found` (`holding_ranges`): `why` with the values past which the
+    rules may fail ("past 2.05", "below 1", "outside 1 to 2.05")."""
+    out = {}
+    for name, (lo, hi) in found.items():
+        size = table.sizes.get(table.size_name(name)) or {}
+        below, past = lo > size.get("min", lo), hi < size.get("max", hi)
+        where = ("outside %s to %s" % (_number(lo), _number(hi)) if below and past
+                 else "below %s" % _number(lo) if below else "past %s" % _number(hi))
+        out[name] = Past(where, why)
+    return out
 
 
 def _keeps(sign, span, tol):

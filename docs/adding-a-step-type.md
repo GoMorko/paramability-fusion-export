@@ -1,0 +1,138 @@
+# Adding a Fusion step type
+
+This guide is for a developer who wants the export to copy one more kind of Fusion timeline step (for example Emboss,
+a thin extrude, a spline outline, text or a modeled thread). Read `docs/capture-format.md` sections 1 and 5 first.
+
+## What a new step type touches
+
+1. One entry in the step kind table, `ParamabilityExport/lib/translator/step_kinds.py`.
+2. One reader pair in a `lib/fusion_reader/read_*.py` module, registered in that module's `READERS` dict.
+3. One handler function in a `lib/translator/` module.
+4. When the step writes a recipe kind the translator does not write yet: one `RecipeKind` entry in the same table,
+   plus the recipe schema copy in `tests/schema/` and support for the kind in the Paramability app.
+5. Tests: a capture fixture, handler tests, and a hand test entry for every new Fusion call.
+6. The README limits list and `docs/capture-format.md` section 5, where the reader data is described.
+
+Nothing else holds a list of step types. `tests/test_step_kinds.py` fails when a type name or a list of recipe kinds
+shows up in another module, when a table entry names a handler that does not exist, and when a reader registers a
+type that the table does not give to that reader module.
+
+## 1. The table entry
+
+```python
+StepType("EmbossFeature", "emboss", reader="read_emboss", handler="emboss:handle", sketches=(PROFILES,)),
+```
+
+- `name`: the capture `type`, the Fusion object type name (`objectType` after the last `::`).
+- `words`: the type in plain words. Messages use them: "Copy stopped at Emboss1 (emboss)".
+- `role`: `MODELING` for a step that can make or change a body (the default). Sketches, construction geometry and
+  assembly items have their own roles and are never copied.
+- `reader`: the name of the `lib/fusion_reader` module that reads it.
+- `handler`: `"module:function"` in `lib/translator`. Leave it out while the step cannot be copied; then give
+  `unsupported`, the plain reason the copy stops at it.
+- `sketches`: the sketch records in the step data that the size probe can follow (`PROFILES`, `AXIS`, `HOLE_POINTS`).
+  The probe (`lib/probe/plan.py`) tries other size values only for sketches it can follow. A sketch token anywhere
+  else in the data leaves that sketch unfollowed for every step that uses it, so its sizes end up loose. Name a
+  record only when the probe fits it the same way it fits extrude profiles, revolve axes or hole points.
+
+A step that writes a recipe kind the table does not have needs a `RecipeKind` too: the recipe version that brought
+the kind, the paths to its points and directions (so `place.place` can move the part into the assembly), and how
+patterns, mirrors and combines treat it (`repeat`, `repeats`, `combine_tool`, `always_cuts`). A kind without a
+`repeat` value is refused as the source of a pattern or mirror, which is safe.
+
+## 2. The reader
+
+The reader is a pair `(before, after)` in the reader module's `READERS` dict, keyed by the capture type:
+
+```python
+READERS = {"EmbossFeature": (emboss_before, emboss_after)}
+```
+
+`before(feature, ctx)` runs with the marker just before the step and returns the step's `data` dict. `after(feature,
+ctx, data)` runs with the marker just after it and returns more keys for `data` (measured faces, end points). Either
+may be None.
+
+The capture must be plain data: dicts, lists, strings, numbers, booleans and null, in mm and degrees, in the target
+component's coordinates (`docs/capture-format.md` section 1). The translator runs without Fusion, in tests and on
+saved `report.json` files, so it can only use what the reader wrote down. Read every value the handler needs, and
+measure what Fusion builds where a stored flag could be wrong (an end face, a side cylinder), so the handler can check
+the two against each other.
+
+- Wrap each Fusion call in `geo.safe` (`read_geometry.py`). A member that cannot be read becomes null or `"other"`,
+  never a guess; the handler refuses it.
+- Mark inputs that belong to another component with `mark_foreign`, so the walk refuses the step.
+- Read the parameters behind each value into `data.params` (see "Parameters behind values" in
+  `docs/capture-format.md`). The size table and the end of walk audit read them.
+- A reader that raises leaves `{"read_error": ...}` as the data; the walk refuses the step.
+
+## 3. The handler
+
+```python
+def handle(item, ctx):
+    data = item.get("data") or {}
+    if data.get("kind") == "other":
+        return Refusal("This emboss works in a way that is not copied yet.")
+    out = StepResult()
+    out.add({"kind": "extrude", ...}, placers=[SlabMaker(...)], repeatable=True)
+    return out
+```
+
+A handler is `handle(item, ctx) -> StepResult | Refusal` (`lib/translator/result.py`).
+
+- `StepResult`: the recipe steps the item writes, in order. `out.add(step, placers=..., picks=..., repeatable=...)`
+  writes one step; `StepResult.of(steps)` makes a result of plain steps. An empty result means the item makes no step
+  on purpose (a cosmetic thread); its notes become the verdict note.
+- `placers`: placer makers (`lib/translator/placer_makers.py`). Without one, a later round, chamfer or offset that
+  picks a face of this step cannot follow sizes, so it marks every size written so far. A maker builds placers
+  (`lib/translator/placer.py`) once the step has its id: `place(p, edge)` places a measured point on the step's faces,
+  `material_at(p)` says whether the step adds or removes material at a point. Add a maker class when the existing
+  slab, shell, moved faces and copies makers do not describe the new faces.
+- `picks`: for a round or bevel, the measured edge points, so a later pattern or mirror can copy them.
+- `repeatable=False`: Fusion recomputes the step for each copy of a pattern (it reaches to a face or through the
+  part), so patterns and mirrors refuse it as a source.
+- `Refusal(reason)`: the item cannot be copied. The reason is one plain sentence for a hobbyist. The walk stops there
+  and the part is saved as a fixed shape.
+
+Write every value through `lib/translator/values.py`: `values.quantity` turns a Fusion expression into a formula of
+the sizes, with the right dimension and sign rules, or writes it as a number and records why. Points, faces and planes
+that later steps or this step pick go through `lib/translator/follow.py`.
+
+A handler reports what it cannot follow in one way: `ctx.doubt(names, why)`. It says that a value is written as its
+number although the sizes `names` move it in Fusion. The export then keeps those sizes free and marks them "may give
+unexpected results" with the reason, or leaves them out of the sizes with the reason when no formula reads them. Use
+`ctx.note(text)` for a remark on the step (a value Fusion stored two ways, a setting the copy does not keep). Both go
+into the handler's StepResult, so they count only when its steps are written. A step of another body, kept for a
+later Combine, counts only once the Combine joins it.
+
+The walk runs a handler many times per export (once per pass, with other size tables), so a handler must not keep
+state outside `ctx`. Work that depends on the capture alone can be kept in `ctx.cache` under the module name.
+
+## 4. What protects a new handler
+
+- The end of walk audit (`lib/translator/audit.py`) runs after every translation. Every free size that a copied step
+  reads (through its `data.params`, the sketches it draws on, the construction geometry it uses) must end read by a
+  written formula, or marked with a reason. A handler that writes a value as a number and records nothing leaves
+  the size in no state; the audit marks it loose with "Emboss1 reads it, and the copy does not follow it". So a
+  forgotten value gives a warning, not a wrong part.
+- `tests/test_follow_or_flag.py` translates every capture fixture with every user parameter ticked and checks the
+  same rule from the outside: each parameter a copied step reads is followed, loose or dropped with a reason, and no
+  written formula can reach zero inside the size ranges. A new fixture is picked up on its own.
+- `tests/test_step_kinds.py` keeps the table and the readers in step.
+
+## 5. Tests to write
+
+- A capture fixture in `tests/fixtures/captures/` (by hand, or saved from `report.json` of a real design), with the
+  box and volume from `scripts/fixture_geometry.py` (or a null volume where the script cannot model the step).
+- Handler tests in a `tests/test_translate_<name>.py`: the recipe the fixture gives, checked against the schema
+  (`assert_schema_ok`); one test per refusal branch; one test with a size table that shows the values follow the
+  sizes, and one that shows a value that cannot follow marks its size with a reason. Assert outcomes (recipe values,
+  verdicts, loose and dropped names), not wording.
+- Reader tests in `tests/test_capture_reader*.py` with the fakes, for each member the reader reads and for an
+  unreadable one.
+
+## 6. Hand tests
+
+The reader is the only code that talks to Fusion, and no tool runs it. Every new `adsk` call goes into
+`docs/hand-tests.md`, in the "Capture reader calls to watch" part: the member, what the reader expects it to return,
+and what to look for in `report.json`. Add a design to section 7 that shows the step, with what the part must look
+like in Paramability.

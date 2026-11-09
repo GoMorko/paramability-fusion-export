@@ -46,9 +46,14 @@ def recipe_saved_message(manifest, file_name):
     return text
 
 
-def listed_lines(entries):
-    """"name: reason" of the first entries, then one line that counts the rest."""
-    lines = ["%s: %s" % (f["name"], f["reason"]) for f in entries[:MAX_LISTED_FIXED]]
+def listed_lines(entries, other_names=None):
+    """"name: reason" of the first entries, then one line that counts the rest. A reason that already starts with the
+    name, or with its other name in `other_names` (a recipe name to its Fusion name), is shown as it is."""
+    other_names = other_names or {}
+    lines = []
+    for f in entries[:MAX_LISTED_FIXED]:
+        name, reason = f["name"], f["reason"]
+        lines.append(reason if reason.startswith((name, other_names.get(name, name))) else "%s: %s" % (name, reason))
     if len(entries) > MAX_LISTED_FIXED:
         lines.append("and %d more (see report.json)." % (len(entries) - MAX_LISTED_FIXED))
     return lines

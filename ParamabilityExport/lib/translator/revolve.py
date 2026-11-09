@@ -11,9 +11,8 @@ import math
 
 from . import loops, notes, placement, sketch_motion, values, vec
 from .extrude import COMBINE
-from .result import Refusal
+from .result import Refusal, StepResult
 
-TYPES = ("RevolveFeature",)
 
 AXIS_PLANE_TOL = 1e-4
 AXIS_SQUARE_TOL = 1e-9
@@ -164,8 +163,8 @@ def _turned_sized(ctx, item, drawn, dir3, point3, degrees):
     if drawn is None or (not moving_axis and still):
         return None
     if moving_axis and (item.get("data") or {}).get("project_axis"):
-        ctx.fix([n for a in axis for n in sketch_motion.movers(ctx.table, a)],
-                notes.stuck_reason("turns", drawn.sketch))
+        ctx.doubt([n for a in axis for n in sketch_motion.movers(ctx.table, a)],
+                  notes.stuck_reason("turns", drawn.sketch))
         return None
     frame, z = drawn.frame, drawn.frame["z"]
     origin = [sketch_motion.combine([(1.0, o - d * drawn.plane0), (d, drawn.plane)]) for o, d in zip(frame["origin"], z)]
@@ -260,4 +259,4 @@ def handle(item, ctx):
         if mode != "full":
             step["angleDeg"] = angle_value.json()
         steps.append(step)
-    return steps
+    return StepResult.of(steps)

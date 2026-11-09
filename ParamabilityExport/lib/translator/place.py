@@ -11,37 +11,16 @@ are zero or plus or minus one are snapped, so a part that is only moved keeps pl
 import copy
 import math
 
+from .step_kinds import RECIPE_KINDS
 from .values import Quantity, Sized
 
-# Step kind -> paths to positions. "[]" walks a list; a path that is absent in a step is skipped.
-POSITIONS = {
-    "extrude": [("sketch", "on", "origin"), ("within", "on", "origin"), ("extent", "upTo", "near", "[]")],
-    "revolve": [("sketch", "on", "origin"), ("within", "on", "origin")],
-    "hole": [("origin",)],
-    "round": [("edges", "near", "[]"), ("edges", "faceEdges", "near", "[]")],
-    "bevel": [("edges", "near", "[]"), ("edges", "faceEdges", "near", "[]")],
-    "shell": [("openFaces", "near", "[]")],
-    "offsetFaces": [("faces", "near", "[]")],
-    "pattern": [("polar", "axisPoint")],
-    "mirror": [("plane", "origin")],
-}
-
-# Step kind -> paths to directions (turned, not moved).
-DIRECTIONS = {
-    "extrude": [("sketch", "on", "normal"), ("sketch", "on", "xDir"), ("within", "on", "normal"),
-                ("within", "on", "xDir")],
-    "revolve": [("sketch", "on", "normal"), ("sketch", "on", "xDir"), ("within", "on", "normal"),
-                ("within", "on", "xDir")],
-    "hole": [("direction",)],
-    "round": [("edges", "parallelTo")],
-    "bevel": [("edges", "parallelTo"), ("sizeOn",)],
-    "pattern": [("linear", "dir"), ("linear2", "dir"), ("polar", "axis")],
-    "mirror": [("plane", "normal")],
-}
+# Step kind -> paths to positions, and to directions (turned, not moved), from the step kind table.
+POSITIONS = {k.name: list(k.positions) for k in RECIPE_KINDS if k.positions}
+DIRECTIONS = {k.name: list(k.directions) for k in RECIPE_KINDS if k.directions}
 
 # Step kinds with positions or directions that the translator never writes. The schema walk in the tests
 # fails when a kind appears in no table, so a new schema field cannot slip by.
-NOT_WRITTEN = ("loft", "sweep", "thread", "coil", "skin", "draft", "bevelGear")
+NOT_WRITTEN = tuple(k.name for k in RECIPE_KINDS if not k.written)
 
 FRAME_NOT_NUMBERS = "The frame of the part is not made of numbers."
 _SNAP = 1e-12

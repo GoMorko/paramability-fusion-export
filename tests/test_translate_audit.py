@@ -18,9 +18,12 @@ CUBE = "_CeramicMedium__Cube_width_mm"
 
 def forgetful_extrude(item, ctx):
     """An extrude handler that writes every length as a number and records nothing about the sizes behind it."""
-    outcome = extrude_handle(item, ctx)
-    ctx.depends.clear()
-    return outcome if isinstance(outcome, Refusal) else numbers_of(outcome)
+    with ctx.recording():  # what the real handler records is dropped
+        outcome = extrude_handle(item, ctx)
+    if not isinstance(outcome, Refusal):
+        for entry in outcome.entries:
+            entry.step = numbers_of(entry.step)
+    return outcome
 
 
 def tray_result(handlers=None):

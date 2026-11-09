@@ -1,7 +1,8 @@
 """What to read from Fusion and which size settings to try. Pure: no Fusion imports.
 
 `scan` finds the sketches whose numbers the probe can follow ("covered" ones): every capture record that names them
-is a profile, a hole point set or a revolve axis line that the reader gave tokens for. `request` is what the reader
+is a profile, a hole point set or a revolve axis line that the reader gave tokens for. Which records a step type
+carries comes from the step kind table (`translator/step_kinds.py`, `sketches`). `request` is what the reader
 reads per state, `kept_sizes` the sizes worth probing, `probe_rows` the size settings to try.
 
 Sizes are dicts as in `export_plan.size_offers.probe_sizes`: param (Fusion name), size (recipe name), unit, value,
@@ -13,6 +14,7 @@ from ..params import defaults
 from ..params.size_table import DERIVED, FREE
 from ..translator.loops import profile_loops
 from ..translator.result import Refusal
+from ..translator.step_kinds import AXIS, HOLE_POINTS, PROFILES, step_type
 
 MAX_PROBE_ROWS = 64
 FOLLOWED_KINDS = ("sketchDimension", "constructionPlane")
@@ -67,14 +69,11 @@ def scan(capture):
         data = item.get("data") or {}
         if item.get("suppressed") or item.get("in_target_component") is False or "read_error" in data:
             continue
-        kind, index = item.get("type"), item.get("index")
-        if kind in ("ExtrudeFeature", "RevolveFeature"):
-            _scan_profiles(out, index, data)
-            if kind == "RevolveFeature":
-                _scan_axis(out, index, data)
-        elif kind == "HoleFeature":
-            _scan_hole(out, index, data)
-        else:
+        spec = step_type(item.get("type"))
+        records = spec.sketches if spec is not None else ()
+        for record in records:
+            _SCANNERS[record](out, item.get("index"), data)
+        if not records:
             _stray_tokens(data, out)
     for token in out.uncovered:
         out.covered.pop(token, None)
@@ -132,6 +131,9 @@ def _scan_hole(out, index, data):
     _cover(out, token, data.get("sketch"))
     out.targets.append({"kind": "hole", "item": index, "sketch_token": token, "sketch": data.get("sketch") or "",
                         "positions": positions, "point_tokens": points})
+
+
+_SCANNERS = {PROFILES: _scan_profiles, AXIS: _scan_axis, HOLE_POINTS: _scan_hole}
 
 
 # ---- what to read per state ----------------------------------------------------------------------------------

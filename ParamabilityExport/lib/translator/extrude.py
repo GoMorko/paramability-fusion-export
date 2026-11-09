@@ -9,10 +9,10 @@ import math
 
 from . import follow, kept_ranges, loops, outlines, placement, sketch_motion, values, vec
 from .footprint import Footprint
-from .result import Refusal
+from .placer_makers import SlabMaker
+from .result import Refusal, StepResult
 from .values import Quantity
 
-TYPES = ("ExtrudeFeature",)
 
 # Fusion's positive taper angle widens the walls going away from the sketch (the API reference says it tapers
 # outward, and measured side walls agree). The recipe leans walls in for a positive `taperDeg`, so the two are opposite.
@@ -99,9 +99,10 @@ def _keep_taper_under_limit(ctx, item, q):
     found = kept_ranges.holding_ranges(ctx.table, rules, TAPER_MARGIN_DEG)
     lean = "%s would lean its walls %d degrees or more" % (item.get("name", "a step"), MAX_TAPER_DEG)
     if found is None:
-        ctx.fix(q.reads, "at other values " + lean)
+        ctx.doubt(q.reads, "at other values " + lean)
     elif found:
-        ctx.doubt_past(found, lean)
+        for name, reason in kept_ranges.past_reasons(ctx.table, found, lean).items():
+            ctx.doubt([name], reason)
 
 
 def _distance_quantity(ctx, item, path, raw):
@@ -140,8 +141,8 @@ def _keep_start_with_reach(ctx, item, data, shift_q):
     if not shift_q.sized:
         return shift_q
     if any((data.get(key) or {}).get("kind") == "toEntity" for key in ("side_one", "side_two")):
-        ctx.fix(shift_q.reads, "%s starts at a place that moves and reaches to a face, which the copy cannot follow"
-                % item.get("name", "a step"))
+        ctx.doubt(shift_q.reads, "%s starts at a place that moves and reaches to a face, which the copy cannot follow"
+                  % item.get("name", "a step"))
         return Quantity(shift_q.n)
     return shift_q
 
@@ -171,7 +172,7 @@ def _reach_quantity(ctx, item, side, z, reach, offset, plane_q):
         return plain
     length = moved.plus(reach - moved.n).scaled(_sign_of(reach)).plus(float(offset))
     if not values.stays_positive(ctx.table, length):
-        ctx.fix(length.reads, "%s would reach past the face it starts from" % item.get("name", "a step"))
+        ctx.doubt(length.reads, "%s would reach past the face it starts from" % item.get("name", "a step"))
         return plain
     return length
 
@@ -557,7 +558,7 @@ def handle(item, ctx):
     units = [(one, entry) for one in built for entry in plan]
     if combine in ("new", "add") and len(built) > 1:
         units = _touching_order(ctx, units, shift)
-    steps = []
+    out = StepResult()
     for (profile, (outer, inner), drawn), entry in units:
         frame = profile["frame"]
         base = placement.moved_along(placement.from_frame(frame), shift, vec.unit(frame["z"]))
@@ -573,18 +574,16 @@ def handle(item, ctx):
         step = {
             "kind": "extrude",
             "sketch": sketch,
-            "combine": combine if not steps else ("add" if combine == "new" else combine),
+            "combine": combine if not out.entries else ("add" if combine == "new" else combine),
             "extent": entry["extent"],
         }
         if entry["distance"] is not None:
             step["distance"] = entry["q"].json() if entry.get("q") else _n(entry["distance"])
         if entry["taper"]:
             step["taperDeg"] = entry["taper_q"].json() if entry.get("taper_q") else _n(entry["taper"])
-        if entry.get("adjusts"):
-            step["_adjusts"] = True
+        placers = []
         if entry["extent"] in ("oneSide", "symmetric"):
-            step["_slab"] = {"on": on, "extent": entry["extent"], "profile": profile, "outline": drawn,
-                             "length": entry.get("q") or Quantity(entry["distance"]),
-                             "taper": entry.get("taper_q") or Quantity(entry["taper"] or 0.0)}
-        steps.append(step)
-    return steps
+            placers.append(SlabMaker(on, entry["extent"], entry.get("q") or Quantity(entry["distance"]), profile,
+                                     entry.get("taper_q") or Quantity(entry["taper"] or 0.0), drawn))
+        out.add(step, placers, repeatable=not entry.get("adjusts"))
+    return out

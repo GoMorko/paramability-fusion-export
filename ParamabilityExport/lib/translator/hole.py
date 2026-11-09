@@ -9,9 +9,8 @@ import math
 
 from . import range_check, sketch_motion, values, vec
 from .values import Quantity
-from .result import Refusal
+from .result import Refusal, StepResult
 
-TYPES = ("HoleFeature", "ThreadFeature")
 
 MARGIN_MM = 0.01
 DIAMETER_TOL = 1e-3
@@ -156,8 +155,8 @@ def _misfit(sizes, tipped, through):
 
 
 def _unfollow(ctx, why, *quantities):
-    """The quantities as plain numbers; the sizes they read are marked for `why` (`Context.fix`)."""
-    ctx.fix(tuple(dict.fromkeys(r for q in quantities for r in q.reads)), why)
+    """The quantities as plain numbers; the sizes they read are marked for `why` (`Context.doubt`)."""
+    ctx.doubt(tuple(dict.fromkeys(r for q in quantities for r in q.reads)), why)
     return [Quantity(q.n) for q in quantities]
 
 
@@ -244,7 +243,7 @@ def _sizes(item, ctx, diameter, depth, counterbore, countersink):
     return _Sizes(diameter_q, depth_q, bore, sink)
 
 
-def _handle_hole(item, ctx):
+def hole(item, ctx):
     data = item.get("data") or {}
     if not data.get("positions") or not data.get("direction") or not data.get("diameter"):
         return Refusal("This hole has no readable position or size.")
@@ -286,16 +285,15 @@ def _handle_hole(item, ctx):
     _keep_fit(ctx, item, sizes, tipped)
     if tipped:
         profile = _tip_profile(sizes.diameter, sizes.depth, float(tip), sizes.counterbore, sizes.countersink)
-        return [_tip_step(p, direction, profile) for p in sketch_motion.points(ctx, item, data["positions"])]
-    return [_hole_step(p, direction, sizes.diameter, sizes.depth, sizes.counterbore, sizes.countersink)
-            for p in sketch_motion.points(ctx, item, data["positions"])]
+        points = sketch_motion.points(ctx, item, data["positions"])
+        return StepResult.of(_tip_step(p, direction, profile) for p in points)
+    return StepResult.of(_hole_step(p, direction, sizes.diameter, sizes.depth, sizes.counterbore, sizes.countersink)
+                         for p in sketch_motion.points(ctx, item, data["positions"]))
 
 
-def handle(item, ctx):
-    data = item.get("data") or {}
-    if item.get("type") == "ThreadFeature":
-        if data.get("modeled"):
-            return Refusal("Modeled threads are not copied yet.")
-        ctx.note("The thread is not copied; the exported shape has none either.")
-        return []
-    return _handle_hole(item, ctx)
+def thread(item, ctx):
+    """A cosmetic thread changes no solid: it makes no step. A modeled one is refused."""
+    if (item.get("data") or {}).get("modeled"):
+        return Refusal("Modeled threads are not copied yet.")
+    ctx.note("The thread is not copied; the exported shape has none either.")
+    return StepResult()

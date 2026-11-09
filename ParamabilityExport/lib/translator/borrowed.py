@@ -46,8 +46,8 @@ def _fix_sizes(ctx, item, profile):
     reads = []
     for name in dict.fromkeys(names):
         reads.extend(ctx.table.depends(name))
-    ctx.fix(tuple(dict.fromkeys(reads)), "it changes the sketch %s of %s, which %s copies as fixed numbers"
-            % (profile.get("sketch") or "", (profile.get("component") or {}).get("name") or "another component",
+    ctx.doubt(tuple(dict.fromkeys(reads)), "it changes the sketch %s of %s, which %s copies as fixed numbers"
+              % (profile.get("sketch") or "", (profile.get("component") or {}).get("name") or "another component",
                item.get("name", "a step")))
 
 

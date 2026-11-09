@@ -6,7 +6,7 @@ other repeats) become one `pattern` or `mirror` step. Rounds and chamfers cannot
 copies get their own `round` or `bevel` step with the source's `near` points moved to each copy.
 
 Each copy is a `follow.Motion`. A linear spacing that follows sizes moves the copied points with it, and the copies of
-extrudes are handed to the walk (`_copies`), so later picks on them follow sizes too.
+extrudes are handed to the walk (`placer_makers.CopiesMaker`), so later picks on them follow sizes too.
 
 A mirror plane or a turning axis that sits on a face or edge of the part moves when a size moves that face or edge
 (`follow.place_plane`): its origin or axis point is then written as a formula, and the copies move with it. One that
@@ -15,12 +15,12 @@ cannot be followed fixes the sizes written so far.
 import math
 
 from . import follow, range_check, values, vec
+from .step_kinds import FINISH, SOLID, recipe_kind
 from .follow import Motion
 from .values import Quantity, Sized, number, numbers_of, reads_in
-from .result import Refusal
+from .placer_makers import CopiesMaker
+from .result import Refusal, StepResult
 from ..params.expressions import ExpressionError, evaluate
-
-TYPES = ("RectangularPatternFeature", "CircularPatternFeature", "MirrorFeature")
 
 MAX_NEAR_POINTS = 32
 MAX_REFERENCES = 64
@@ -32,8 +32,6 @@ ANGLE_TOL_DEG = 1e-6
 POINT_TOL = 1e-6
 FULL_TURN_DEG = 360.0
 
-SOLID_KINDS = ("extrude", "revolve", "hole", "pattern", "mirror")
-FINISH_KINDS = ("round", "bevel")
 # Finish fields that a copy cannot carry; the translator never writes them.
 UNCOPYABLE_FINISH_KEYS = ("sizeEnd",)
 
@@ -67,14 +65,14 @@ def _sources(data, ctx, what):
                            "copied yet.")
         for step_id in ids:
             step = by_id[step_id]
-            kind = step["kind"]
-            if kind in FINISH_KINDS:
+            repeat = recipe_kind(step["kind"]).repeat
+            if repeat == FINISH:
                 near = (step.get("edges") or {}).get("near")
                 plain = ctx.plain_picks.get(step_id) or {"near": near, "reads": (), "written": near}
                 if plain["near"] is None or any(k in step for k in UNCOPYABLE_FINISH_KEYS):
                     return Refusal("A rounded or chamfered step of this %s cannot be repeated." % what)
                 finishes.append(dict(step, near=plain["near"], reads=plain["reads"], written=plain.get("written")))
-            elif kind in SOLID_KINDS:
+            elif repeat == SOLID:
                 if step.get("combine") == "intersect":
                     return Refusal("A step that trims the part cannot be repeated.")
                 if step.get("combine") == "new":
@@ -156,7 +154,7 @@ def _copied_bodies(steps):
     bodies = {}
     total = 0
     for step in steps:
-        if step.get("kind") not in ("pattern", "mirror"):
+        if not recipe_kind(step.get("kind")).repeats:
             continue
         sources = sum(bodies.get(i, 1) for i in set(step["of"]))
         added = sources if step["kind"] == "mirror" else _kept_copy_count(step) * sources
@@ -167,17 +165,16 @@ def _copied_bodies(steps):
 
 def _build(ctx, item, solids, finishes, repeat_step, motions, what):
     """The repeat step (when there are solid sources) followed by the finish copies."""
-    steps = []
+    out = StepResult()
     if solids:
         repeat_step["of"] = solids
-        repeat_step["_copies"] = motions
-        steps.append(repeat_step)
-        if _copied_bodies(list(ctx.steps) + steps) > MAX_COPIED_BODIES:
+        out.add(repeat_step, [CopiesMaker(motions)])
+        if _copied_bodies(list(ctx.steps) + out.steps) > MAX_COPIED_BODIES:
             return Refusal("This %s makes more than %d copies in all." % (what, MAX_COPIED_BODIES))
-    steps += _finish_copies(ctx, item, finishes, motions)
-    if not steps:
+    out.extend(StepResult.of(_finish_copies(ctx, item, finishes, motions)).entries)
+    if not out.entries:
         return Refusal("This %s makes no copies." % what)
-    return steps
+    return out
 
 
 
@@ -341,7 +338,7 @@ def _keep_pattern_fixed(ctx, item, skip, finishes, counts, turns=()):
 
 
 
-def _rectangular(item, ctx):
+def rectangular(item, ctx):
     data = item.get("data") or {}
     sources = _sources(data, ctx, "pattern")
     if isinstance(sources, Refusal):
@@ -466,7 +463,7 @@ def _turn_motion(point, moved, direction, angle, needs, by):
     return Motion(base.rows, shift, needs, by)
 
 
-def _circular(item, ctx):
+def circular(item, ctx):
     data = item.get("data") or {}
     sources = _sources(data, ctx, "pattern")
     if isinstance(sources, Refusal):
@@ -657,9 +654,10 @@ def _cut_reach(step, as_numbers=numbers_of):
 
 def _cuts(step, by_id):
     """True when the step (or a step it repeats) removes material."""
-    if step["kind"] in ("pattern", "mirror"):
+    kind = recipe_kind(step["kind"])
+    if kind.repeats:
         return any(_cuts(by_id[i], by_id) for i in step["of"])
-    return step["kind"] == "hole" or step.get("combine") in ("cut", "intersect")
+    return kind.always_cuts or step.get("combine") in ("cut", "intersect")
 
 
 def _body_mirror_problem(data, plane, steps):
@@ -673,7 +671,7 @@ def _body_mirror_problem(data, plane, steps):
         return "A mirror of the whole body is only copied when the body lies on one side of the plane."
     by_id = {step["id"]: step for step in steps}
     for step in steps:
-        if step.get("combine") == "intersect" or step["kind"] in ("pattern", "mirror") and _cuts(step, by_id):
+        if step.get("combine") == "intersect" or recipe_kind(step["kind"]).repeats and _cuts(step, by_id):
             return "A mirror of the whole body is not copied when a cut is repeated or the part is trimmed."
         if not _cuts(step, by_id):
             continue
@@ -729,7 +727,7 @@ def _step_reads(step, by_id):
 
 
 def _reach_or_none(step, as_numbers):
-    if step["kind"] in ("pattern", "mirror"):
+    if recipe_kind(step["kind"]).repeats:
         return None
     try:
         return _cut_reach(step, as_numbers)
@@ -764,8 +762,8 @@ def _keep_one_side(ctx, item, plane, steps, side):
     name = item.get("name", "a mirror")
     unknown = [step for step in steps if _reach_or_none(step, numbers_of) is None]
     for step in unknown:
-        ctx.fix(_step_reads(step, by_id), "%s mirrors the whole part, and %s cannot be checked to stay on one side of "
-                "the plane" % (name, step.get("label") or "a step"))
+        ctx.doubt(_step_reads(step, by_id), "%s mirrors the whole part, and %s cannot be checked to stay on one side "
+                  "of the plane" % (name, step.get("label") or "a step"))
     known = [step for step in steps if all(step is not other for other in unknown)]
     names = {table.size_name(read): read for read in reads}
     why = "%s mirrors the whole part, and at some sizes the part would reach across the plane" % name
@@ -775,16 +773,16 @@ def _keep_one_side(ctx, item, plane, steps, side):
             as_numbers = _evaluated(range_check.size_env(table, setting))
             slack = _slack(known, as_numbers(plane["origin"]), plane["normal"], side, as_numbers)
         except (ExpressionError, ValueError, ZeroDivisionError, OverflowError):
-            ctx.fix(reads, "%s mirrors the whole part, and its sizes cannot be tried at the ends of their ranges"
-                    % name)
+            ctx.doubt(reads, "%s mirrors the whole part, and its sizes cannot be tried at the ends of their ranges"
+                      % name)
             return
         if not setting:
             current = slack
         elif slack is not None and slack < min(-SIDE_TOL_MM, (current if current is not None else 0.0) - SIDE_TOL_MM):
-            ctx.fix([names[n] for n in setting if n in names], why)
+            ctx.doubt([names[n] for n in setting if n in names], why)
 
 
-def _mirror(item, ctx):
+def mirror(item, ctx):
     data = item.get("data") or {}
     plane = _mirror_plane(data)
     if plane is None:
@@ -795,7 +793,7 @@ def _mirror(item, ctx):
     if entity == "bodies":
         if not data.get("combine"):
             return Refusal("A mirrored body is only copied when it is joined to the part.")
-        if any(step["kind"] not in SOLID_KINDS for step in ctx.steps):
+        if any(recipe_kind(step["kind"]).repeat != SOLID for step in ctx.steps):
             return Refusal("A mirror of the whole body after a round, chamfer or shell is not copied yet.")
         problem = _body_mirror_problem(data, plane, ctx.steps)
         if problem:
@@ -814,14 +812,3 @@ def _mirror(item, ctx):
         return Refusal("Mirrors of faces are not copied yet.")
     motion = _mirror_motion(plane, moved, item.get("name", ""))
     return _build(ctx, item, solids, finishes, {"kind": "mirror", "plane": written}, [motion], "mirror")
-
-
-_HANDLERS = {
-    "RectangularPatternFeature": _rectangular,
-    "CircularPatternFeature": _circular,
-    "MirrorFeature": _mirror,
-}
-
-
-def handle(item, ctx):
-    return _HANDLERS[item["type"]](item, ctx)

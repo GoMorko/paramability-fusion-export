@@ -6,8 +6,8 @@ parameter's expression reads a size of the size table, the formula to write inst
 written as a number or `{ "expr": ... }`.
 
 When a value cannot follow its sizes (the formula does not translate, its unit or sign breaks inside the size range,
-or the step writes it as a plain number), it is written as its number and the sizes it reads are recorded in
-`ctx.depends`. The driver then keeps them free with a warning (`translate`); a value that depends on a size never
+or the step writes it as a plain number), it is written as its number and the sizes it reads are recorded as a doubt
+(`Context.doubt`). The driver then keeps them free with a warning (`translate`); a value that depends on a size never
 stays a number while that size stays free without one. A formula the
 parser cannot read still marks the sizes on Fusion's own list of what its parameter depends on.
 """
@@ -228,7 +228,7 @@ def pin(ctx, item, path, why):
     """The value at `path` stays a number here: the sizes its parameter reads become fixed numbers."""
     ref = _param(item, path)
     if ref is not None:
-        ctx.fix(_reads_of(ctx, ref), why)
+        ctx.doubt(_reads_of(ctx, ref), why)
 
 
 def _stays_in_range(table, formula, reads, sign, low):
@@ -284,7 +284,7 @@ def stays_below(ctx, item, q, limit, why):
     """`q` when it stays under `limit` over the size range; else its number, with its sizes fixed for `why`."""
     if not q.sized or _stays_in_range(ctx.table, q.text, q.reads, -1, -limit + 1e-9):
         return q
-    ctx.fix(q.reads, why)
+    ctx.doubt(q.reads, why)
     return Quantity(q.n)
 
 
@@ -308,25 +308,27 @@ def quantity(ctx, item, path, literal, dim="length", sign=1, absolute=False, who
     if not tr.reads:
         behind = _unread(ctx, ref, tr)
         if behind:
-            ctx.fix(behind, "a value of %s cannot be copied: %s" % (item.get("name", "a step"), tr.reason.rstrip(".")))
+            ctx.doubt(behind, "a value of %s cannot be copied: %s"
+                      % (item.get("name", "a step"), tr.reason.rstrip(".")))
         return plain
     if not tr.ok:
-        ctx.fix(tr.reads, "a value of %s cannot be copied: %s" % (item.get("name", "a step"), tr.reason.rstrip(".")))
+        ctx.doubt(tr.reads, "a value of %s cannot be copied: %s"
+                  % (item.get("name", "a step"), tr.reason.rstrip(".")))
         return plain
     if abs(sign * tr.value - literal) > TOLERANCE + 1e-9 * abs(literal):
-        ctx.fix(tr.reads, "its formula in %s does not match what Fusion measured" % item.get("name", "a step"))
+        ctx.doubt(tr.reads, "its formula in %s does not match what Fusion measured" % item.get("name", "a step"))
         return plain
     if len(tr.formula) > MAX_FORMULA_LENGTH:
-        ctx.fix(tr.reads, "its formula in %s is too long to copy" % item.get("name", "a step"))
+        ctx.doubt(tr.reads, "its formula in %s is too long to copy" % item.get("name", "a step"))
         return plain
     if whole and not _gives_whole_numbers(ctx.table, tr.formula):
-        ctx.fix(tr.reads, "%s needs a whole number of copies, and its formula can give a part number"
-                % item.get("name", "a step"))
+        ctx.doubt(tr.reads, "%s needs a whole number of copies, and its formula can give a part number"
+                  % item.get("name", "a step"))
         return plain
     if absolute or whole:
         if not _stays_in_range(ctx.table, tr.formula, tr.reads, sign, 1.0 if whole else 1e-9):
-            ctx.fix(tr.reads, "%s would leave its working range (a length reaching zero or a count under 1)"
-                    % item.get("name", "a step"))
+            ctx.doubt(tr.reads, "%s would leave its working range (a length reaching zero or a count under 1)"
+                      % item.get("name", "a step"))
             return plain
     text = tr.formula if sign > 0 else _negated(tr.formula)
     return Quantity(literal, text, tr.reads)

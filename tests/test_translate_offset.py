@@ -53,9 +53,10 @@ class OffsetFacesTest(unittest.TestCase):
     def test_the_pick_point_of_a_face_record_is_searched_once(self):
         face = top_face()
         with mock.patch.object(offset, "_clearance", wraps=offset._clearance) as search:
-            first = offset.inside_point(face)
+            cache = {}
+            first = offset.inside_point(face, cache)
             calls = search.call_count
-            self.assertEqual(offset.inside_point(face), first)
+            self.assertEqual(offset.inside_point(face, cache), first)
         self.assertGreater(calls, 0)
         self.assertEqual(search.call_count, calls)
 

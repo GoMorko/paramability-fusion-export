@@ -175,8 +175,10 @@ mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter
       its role text does not say "quantity". Set it to 2.5 in the app: the recipe still builds.
 - [ ] **Long name.** A user parameter with a name over 64 characters that drives a joint: the export saves, and the
       message names the size that may give unexpected results without stopping.
-- [ ] **Not used.** Tick a parameter no step reads: the message after the export names it as "not used by any copied
-      step".
+- [ ] **Not used.** Tick a parameter no step reads: in the result window its row says "not used", and the message
+      after the export lists it after "Not used by any copied step, so not sizes:". Tick a parameter a step reads
+      that the copy cannot follow (a size left out with a reason): its row says "not followed", and the group "Not
+      followed" gives the reason, which starts with the parameter name.
 - [ ] With only one body in the design it is picked already. With no user parameters the dialog says so (no table)
       and the export still works.
 - [ ] Export, open in Paramability: the part is a recipe, the sizes are the ticked parameters that the steps read, and
@@ -293,7 +295,8 @@ Use the filter box design (names such as `FilterBox_$_depth__contains_CeramicMed
       whether the line stays or Fusion replaces it at once (its lifetime is not fixed by the API).
 - [ ] Click OK: the progress window shows as before, then the result window "Saved for Paramability" opens with the
       saved line, a table of sizes (name, range, and under "In Paramability": "size", "may be unexpected", "kept fixed",
-      "not followed" or "not used"), a "Stays fixed" group and a "May give unexpected results" group with each reason,
+      "not followed" or "not used"), a "Stays fixed" group, a "May give unexpected results" group and a "Not followed"
+      group with each reason (a group with nothing in it is left out),
       and the line "All N parameters come along as variables ...". Only a Close button shows.
 - [ ] The result window opens right after the export ends, not while the progress window is still up. If it does not
       open, the same text shows in a message box. Note which: the log line "result dialog failed" gives the reason.

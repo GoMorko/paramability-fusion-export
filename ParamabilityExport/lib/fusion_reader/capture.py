@@ -8,12 +8,15 @@ marker always goes back to where it was.
 The target is the native body of its component, so every value is in component coordinates; `placement` says where
 the component sits in the assembly. Feature readers run only for items of the target's component.
 
-Feature readers come in pairs `(before, after)` (see read_solid). Modules read_finish, read_repeat and read_offset add theirs
-through a module level READERS dict.
+Feature readers come in pairs `(before, after)` (see read_solid). Each reader module registers its pairs in a module
+level READERS dict keyed by capture type, and the step kind table (`translator/step_kinds.py`) names the module for
+each type.
 """
+import importlib
+
 from ..export_plan.marker import put_back, read_marker
-from ..translator.capture import NOT_MODELING_TYPES
-from . import read_finish, read_geometry as geo, read_offset, read_repeat, read_solid
+from ..translator import step_kinds
+from . import read_geometry as geo
 from .parameters import list_model_parameters, list_user_parameters
 from .placement import occurrence_path, read_placement
 
@@ -135,7 +138,7 @@ def _start_item(timeline, ctx, readers, index, items, group_indices):
         item["in_target_component"] = geo.same_entity(component, ctx.component)
     else:
         # An unreadable feature stays the target's, so the translator refuses it if it touches the part.
-        item["in_target_component"] = item["type"] not in NOT_MODELING_TYPES
+        item["in_target_component"] = not step_kinds.makes_no_body(item["type"])
     if item["suppressed"]:
         return
     bodies_before = geo.safe(lambda: _component_bodies(ctx), None)
@@ -179,7 +182,7 @@ def _finish_item(timeline, ctx, readers, index, items, states):
     if entity is None or item["suppressed"]:
         return
     item["target_changed"] = _target_changed(*states)
-    item["bodies_after"] = [] if item["type"] in NOT_MODELING_TYPES else _bodies_after(item, entity)
+    item["bodies_after"] = [] if step_kinds.makes_no_body(item["type"]) else _bodies_after(item, entity)
     after = (readers.get(item["type"]) or (None, None))[1]
     if after is not None and item["in_target_component"] and "read_error" not in item["data"]:
         try:
@@ -269,6 +272,16 @@ def _target_record(ctx, final):
     }
 
 
+def feature_readers():
+    """Capture type -> (before, after) reader pair, for every type the step kind table gives a reader module."""
+    readers = {}
+    for spec in step_kinds.STEP_TYPES:
+        if spec.reader:
+            module = importlib.import_module("." + spec.reader, __package__)
+            readers[spec.name] = module.READERS[spec.name]
+    return readers
+
+
 def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_readers=None):
     """Capture of `design` for the picked `body` (the occurrence proxy of a body inside a component, or a root body).
 
@@ -280,9 +293,7 @@ def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_reade
     count = timeline.count
     end = count if marker is None else min(marker["position"], count)
     ctx = geo.ReadContext(design, body)
-    readers = dict(read_solid.READERS)
-    for module in (read_finish, read_repeat, read_offset):
-        readers.update(module.READERS)
+    readers = feature_readers()
     readers.update(extra_readers or {})
     items = {}
     group_indices = set()

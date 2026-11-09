@@ -1,8 +1,13 @@
 """Feature type names in plain words."""
+from .step_kinds import step_type
 
 
 def type_words(type_name):
-    """'EmbossFeature' to 'emboss', 'RectangularPatternFeature' to 'rectangular pattern'."""
+    """The words of the step kind table, else the type name split into words: 'SweepFeature' to 'sweep',
+    'RectangularPatternFeature' to 'rectangular pattern'."""
+    spec = step_type(type_name)
+    if spec is not None:
+        return spec.words
     base = type_name[: -len("Feature")] if type_name.endswith("Feature") and type_name != "Feature" else type_name
     words = []
     for ch in base:

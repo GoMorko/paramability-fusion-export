@@ -6,14 +6,12 @@ the Combine's operation. Any other history on the tool body cannot be replayed, 
 """
 import copy
 
+from . import step_kinds
 from .capture import outside_component, same_body
-from .result import Refusal
+from .result import Refusal, StepResult
 
-TYPES = ("CombineFeature",)
 
 COMBINE = {"join": "add", "cut": "cut", "intersect": "intersect"}
-TOOL_KINDS = ("extrude", "revolve")
-NON_GEOMETRY = ("Sketch", "ConstructionPlane", "ConstructionAxis", "ConstructionPoint", "none")
 
 
 def _pending_for(ctx, body):
@@ -32,21 +30,22 @@ def _items_on(ctx, body, before):
     return [
         other for other in ctx.capture["items"]
         if other["index"] < before and not other.get("suppressed") and not outside_component(other)
-        and other.get("type") not in NON_GEOMETRY and _touches(other, body)
+        and not step_kinds.skipped(other.get("type")) and _touches(other, body)
     ]
 
 
 def _tool_step(ctx, body, item):
-    """The one pending step that builds `body`, or None when the body has any other history."""
+    """(key, Entry) of the one pending step that builds `body`, or None when the body has any other history."""
     key = _pending_for(ctx, body)
     if key is None:
         return None
-    steps = ctx.pending_tools[key]
-    if len(steps) != 1 or steps[0].get("kind") not in TOOL_KINDS or steps[0].get("combine") != "new":
+    entries = ctx.pending_tools[key].entries
+    step = entries[0].step if len(entries) == 1 else {}
+    if not step_kinds.recipe_kind(step.get("kind")).combine_tool or step.get("combine") != "new":
         return None
     if len(_items_on(ctx, body, item["index"])) != 1:
         return None
-    return key, steps[0]
+    return key, entries[0]
 
 
 def handle(item, ctx):
@@ -73,12 +72,12 @@ def handle(item, ctx):
     if len({key for key, _ in found}) != len(found):
         return Refusal("This combine lists the same tool body twice.")
 
-    steps = []
-    for key, step in found:
-        placed = copy.deepcopy(step)
+    out = StepResult()
+    for key, entry in found:
+        placed = copy.deepcopy(entry.step)
         placed["combine"] = combine
-        steps.append(placed)
-        del ctx.pending_tools[key]
+        out.add(placed, entry.placers, entry.picks, entry.repeatable)
+        out.join(ctx.pending_tools.pop(key))
     if data.get("keep_tools"):
         ctx.note("Fusion kept the tool bodies next to the part. Only the part is copied.")
-    return steps
+    return out

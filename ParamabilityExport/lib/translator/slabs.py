@@ -8,7 +8,8 @@ import math
 
 from ..probe.motion import Stuck
 from . import vec
-from .footprint import Footprint
+from .footprint import Footprint, _polyline
+from .placer import ADD, CUT, Placer
 from .sketch_motion import combine, rendered
 from .values import Quantity, Sized
 
@@ -107,7 +108,32 @@ class Motion:
                       other.by or self.by, self.requires + other.requires)
 
 
-class Slab:
+_EPS = 1e-9
+
+
+def _crossings_2d(a, d, segments, offsets):
+    """Parameters t where a + t * d crosses one of the segments, or a copy of it moved sideways by an offset."""
+    out = []
+    for p, q in segments:
+        e = [q[0] - p[0], q[1] - p[1]]
+        size = math.hypot(*e)
+        if size <= _EPS:
+            continue
+        den = d[0] * e[1] - d[1] * e[0]
+        if abs(den) <= _EPS:
+            continue
+        side = [-e[1] / size, e[0] / size]
+        for k in offsets:
+            p0 = [p[0] + k * side[0], p[1] + k * side[1]]
+            w = [p0[0] - a[0], p0[1] - a[1]]
+            t = (w[0] * e[1] - w[1] * e[0]) / den
+            s = (w[0] * d[1] - w[1] * d[0]) / den
+            if -1e-6 <= s <= 1 + 1e-6:
+                out.append(t)
+    return out
+
+
+class Slab(Placer):
     """One extrude step: `on` is its written placement (it grows along `on.normal`), `length` a Quantity.
 
     `owner` is the id of the step that made it: the extrude, or the pattern or mirror for a copy, whose `motion`
@@ -181,6 +207,33 @@ class Slab:
         if not low - tol <= h <= high + tol:
             return False
         return self.depth_in(uv)[1] >= self.inset(h) - tol
+
+    def material_at(self, p):
+        """ADD or CUT inside or on the solid of an adding or cutting slab; an intersect slab leaves nothing."""
+        if self.combine in ("new", "add"):
+            return ADD if self.holds(p) else None
+        if self.combine == "cut":
+            return CUT if self.holds(p) else None
+        return None
+
+    def crossings(self, q, n, offsets):
+        """Parameters t where q + t * n may cross a face of the slab (an end face, a side, or one moved in by an
+        offset)."""
+        h0, uv0 = self.local(q)
+        h1, uv1 = self.local(vec.add(q, n))
+        dh, duv = h1 - h0, [uv1[0] - uv0[0], uv1[1] - uv0[1]]
+        out = []
+        if abs(dh) > _EPS:
+            low, high = self.span
+            out += [(at - h0) / dh for at in (low, high) for at in (at + k for k in offsets)]
+            out += [(at - h0) / dh for at in (low, high) for at in (at - k for k in offsets)]
+        if math.hypot(*duv) > _EPS:
+            segments = []
+            for curve in self.footprint.curves:
+                points = _polyline(curve)
+                segments += list(zip(points, points[1:]))
+            out += _crossings_2d(uv0, duv, segments, offsets)
+        return out
 
     def place(self, p, edge):
         """The Place of point `p` on this slab, or None when `p` is not on its end faces or side corners.

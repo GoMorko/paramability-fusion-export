@@ -1,22 +1,18 @@
-"""Walk state handed to every handler."""
+"""Walk state handed to every handler.
+
+A handler reports what it cannot follow in one way: `doubt(names, why)` for sizes a value of its steps cannot follow,
+and `note(text)` for a plain remark on its item. Both land in the handler's StepResult (`recording`), so they count
+only when the walk writes its steps.
+"""
 from contextlib import contextmanager
 
-from . import meets_part
 from .capture import same_body
-from .copy_counts import stays_at_least
-from .follow import Slab, locate
-from .notes import Past
-from .offset_faces import MovedFaces
-from .picks import face_points
-from .shells import Shell
+from .result import Doubt, StepResult
+from .step_kinds import recipe_kind
 from .values import reads_in
 
 MAX_ID = 64
 MAX_LABEL = 120
-
-
-def _number(value):
-    return ("%.6f" % value).rstrip("0").rstrip(".")
 
 
 class Context:
@@ -24,127 +20,104 @@ class Context:
 
     target: the exported body, {token, name, box, volume_mm3}.
     capture: the whole capture (for up_axis and cross item lookups).
-    pending_tools: body token (or name) -> recipe steps that build a body other than the target, not yet placed.
-      The Combine handler takes them. The doubts their handlers recorded wait in `held` and the capture items that
-      made them in `held_items`; both join the walk only when the Combine takes the body (`release`).
-    not_repeatable: ids of steps whose length Fusion recomputes per copy (a handler marks a step with a private
-      `_adjusts` key, which `add_steps` removes). Pattern and mirror handlers refuse them as sources.
+    pending_tools: body token (or name) -> the StepResult of the steps that build a body other than the target, not
+      yet placed, with the doubts their handlers recorded and the capture items that made them. The Combine handler
+      takes them (`StepResult.join`), so these count only once the body joins the exported one.
+    not_repeatable: ids of steps whose length Fusion recomputes per copy (`Entry.repeatable`). Pattern and mirror
+      handlers refuse them as sources.
     table: the size table whose sizes the feature values may follow, or None for a recipe with plain
       numbers only.
-    depends: Fusion name of a size -> why, for each size that a value written as a number depends on (`fix`,
-      `doubt_past`).
-    must_fix: the same for sizes that must become fixed numbers (`fix_always`). The driver turns them into fixed
-      numbers and walks again.
+    doubts: the `result.Doubt` records that count for the walk, in order (`doubt`, `commit`). `depends` and
+      `must_fix` read them by size; the driver turns the sizes of `must_fix` into fixed numbers and walks again.
     copied_items: the capture items whose steps are part of the recipe (the audit reads the sizes behind them).
-    slabs: the extrude steps written so far (follow.Slab), for picks and reaches that follow sizes. A handler hands
-      one over in a step's private `_slab` key: { on, extent, length, profile }. A pattern or mirror step hands over
-      `_copies`, one follow.Motion per copy, and the slabs of the steps it repeats are copied with them.
+    placers: the placers of the steps written so far, in the order they were made (placer.py), for picks and reaches
+      that follow sizes. The placer makers of each step's `Entry` add them (`add_placer`).
+    slabs: the extrude slabs among them (slabs.Slab), the originals and the pattern or mirror copies (`add_slab`).
     written_reads: Fusion names of the sizes that the steps written so far read.
-    shells: the shell steps written so far (shells.Shell), for picks on their inner walls. The shell handler hands
-      one over in the private `_shell` key: { thickness (a Quantity), faces (the capture faces it opens) }.
-    moved_faces: the offsetFaces steps written so far (offset_faces.MovedFaces), for picks on the faces they moved.
     motion: the probe's motion file (`probe.motion.Motion`), `probe.motion.OPTIMISTIC`, or None. With a motion file the
       sketch values follow sizes (sketch_motion.py); otherwise they are written as numbers.
-    plain_picks: round or bevel step id -> { near, reads, written }: its edges as measured points, the sizes its pick
-      follows and the written points (None when the pick names a step). A handler hands it over in the private
-      `_plain` key; patterns and mirrors copy these points.
+    plain_picks: round or bevel step id -> `Entry.picks`; patterns and mirrors copy these points.
+    cache: results that depend on the capture alone, shared by every walk of one translation (one translation walks
+      the capture many times). Handlers keep their own entry under their module name.
     """
 
-    def __init__(self, capture, table=None, motion=None):
+    def __init__(self, capture, table=None, motion=None, cache=None):
         self.capture = capture
+        self.cache = {} if cache is None else cache
         self.table = table
         self.motion = motion
-        self.depends = {}
-        self.must_fix = {}
+        self.doubts = []
+        self._recordings = []
+        self.placers = []
         self.slabs = []
-        self.shells = []
-        self.moved_faces = []
-        self._placers = 0
         self.written_reads = ()
         self.plain_picks = {}
         self.target = capture["target"]
         self.steps = []
         self.pending_tools = {}
-        self.held = {}
-        self.held_items = {}
         self.copied_items = []
         self.not_repeatable = set()
         self._ids_by_index = {}
-        self._notes = []
         self.current = None
 
     def is_target(self, body):
         return same_body(body, self.target)
 
+    def doubt(self, names, why, fixed=False):
+        """Record that a value cannot follow the sizes `names` (Fusion names), so it is written as its number. `why`
+        ends the reason. The driver keeps these sizes free with a warning (`translate`); with `fixed` the value would
+        make the recipe unusable while they stay free, so they become fixed numbers.
+
+        While a handler runs, the doubt goes to its StepResult (`recording`); otherwise it counts for the walk."""
+        record = Doubt(names, why, self.current.get("index") if self.current else None, fixed)
+        (self._recordings[-1] if self._recordings else self).doubts.append(record)
+
     def note(self, text):
-        """Attach a plain sentence to the item being handled; its verdict becomes translatedWithNote."""
-        self._notes.append(text)
+        """Attach a plain sentence to the item being handled (it goes to the handler's StepResult, `recording`); its
+        verdict becomes translatedWithNote."""
+        self._recordings[-1].notes.append(text)
 
     @contextmanager
-    def sandbox(self):
-        """Doubts that handlers record inside the block are caught in the yielded `(depends, must_fix)` pair of dicts
-        and do not reach the walk. Used for steps of other bodies, whose sizes only count once a Combine uses them."""
-        saved = self.depends, self.must_fix
-        self.depends, self.must_fix = {}, {}
+    def recording(self):
+        """Doubts and notes recorded inside the block go to the yielded StepResult instead of the walk. The walk runs
+        every handler in one, so a handler's doubts count only when its steps are written."""
+        self._recordings.append(StepResult())
         try:
-            yield self.depends, self.must_fix
+            yield self._recordings[-1]
         finally:
-            self.depends, self.must_fix = saved
+            self._recordings.pop()
 
-    def hold(self, key, item, doubts):
-        """Keep the doubts of a step of another body (`sandbox`) with its item, until `release(key)`."""
-        depends, must_fix = self.held.setdefault(key, ({}, {}))
-        for mine, theirs in ((depends, doubts[0]), (must_fix, doubts[1])):
-            for name, why in theirs.items():
-                mine.setdefault(name, why)
-        self.held_items.setdefault(key, []).append(item)
+    def commit(self, result):
+        """The steps of `result` are part of the recipe: its doubts and the items of other bodies it carries count."""
+        self.doubts.extend(result.doubts)
+        self.copied_items.extend(result.items)
 
-    def release(self, key):
-        """The body `key` joins the exported body: its held doubts and items count from now on."""
-        depends, must_fix = self.held.pop(key, ({}, {}))
-        for name, why in depends.items():
-            self.depends.setdefault(name, why)
-        for name, why in must_fix.items():
-            self.must_fix.setdefault(name, why)
-        self.copied_items.extend(self.held_items.pop(key, ()))
+    @property
+    def depends(self):
+        """Fusion name of a size -> why, for each size a value written as a number depends on (the first reason)."""
+        return self._reasons(False)
 
-    def fix(self, names, why):
-        """Record that a value cannot follow the sizes `names` (Fusion names): it is written as its number. The driver
-        keeps these sizes free with a warning (`translate`). `why` ends the reason."""
-        for name in names:
-            self.depends.setdefault(name, why)
+    @property
+    def must_fix(self):
+        """The same for the sizes that must become fixed numbers."""
+        return self._reasons(True)
 
-    def fix_always(self, names, why):
-        """Like `fix`, for a value that would make the recipe unusable while the sizes stay free."""
-        for name in names:
-            self.must_fix.setdefault(name, why)
+    def _reasons(self, fixed):
+        found = {}
+        for record in self.doubts:
+            if record.fixed == fixed:
+                for name in record.names:
+                    found.setdefault(name, record.why)
+        return found
 
-    def require(self, count, least, why):
-        """A pick needs the count Quantity `count` to stay at `least` or more. When it can fall below that inside the
-        size ranges, the sizes it reads cannot follow it (`fix`)."""
-        if self.table is not None and not stays_at_least(self.table, count, least):
-            self.fix(count.reads, "%s, and a smaller value would leave that copy out" % why)
+    def add_placer(self, placer):
+        """Register the placer of a step being written; it comes after every placer made before it."""
+        placer.order = len(self.placers)
+        self.placers.append(placer)
 
-    def doubt_past(self, found, doubt):
-        """Each size in `found` (Fusion name to the (min, max) inside which a rule holds, `kept_ranges.holding_ranges`)
-        gets `doubt` as its reason, with the values past which it holds."""
-        for name, (lo, hi) in found.items():
-            size = self.table.sizes.get(self.table.size_name(name)) or {}
-            below, past = lo > size.get("min", lo), hi < size.get("max", hi)
-            where = ("outside %s to %s" % (_number(lo), _number(hi)) if below and past
-                     else "below %s" % _number(lo) if below else "past %s" % _number(hi))
-            self.depends.setdefault(name, Past(where, doubt))
-
-    def _add_moved_faces(self, item, step):
-        self._placers += 1
-        moved = MovedFaces((item.get("data") or {}).get("faces") or [], step["distance"], None, len(self.slabs),
-                           self._placers)
-        moved.earlier = lambda p, edge: locate(self, p, edge, moved)
-        self.moved_faces.append(moved)
-
-    def take_notes(self):
-        notes, self._notes = self._notes, []
-        return notes
+    def add_slab(self, slab):
+        self.add_placer(slab)
+        self.slabs.append(slab)
 
     def steps_of(self, index):
         """Step ids written for the timeline item at `index` (empty when it made none)."""
@@ -154,7 +127,7 @@ class Context:
         """The slabs of the bodies a step makes: an extrude's own, or a repeat's originals and copies."""
         step = next((s for s in self.steps if s.get("id") == step_id), None)
         found = []
-        if step is not None and step.get("kind") in ("pattern", "mirror"):
+        if step is not None and recipe_kind(step.get("kind")).repeats:
             for of in step.get("of") or []:
                 found.extend(self.slabs_of(of))
         found.extend(s for s in self.slabs if s.owner == step_id)
@@ -164,49 +137,30 @@ class Context:
                 unique.append(slab)
         return unique
 
-    def add_steps(self, item, steps):
-        """Give each step its id and label, append to the recipe, return the ids.
+    def add_steps(self, item, result):
+        """Write the steps of a StepResult: give each step its id and label, append it to the recipe, make its
+        placers, and return the ids.
 
         Ids: `<kind>_<index>`, then `<kind>_<index>_<n>` for the second and later steps of one item.
         """
         ids = []
         label = str(item.get("name", ""))[:MAX_LABEL]
         made = self._ids_by_index.setdefault(item["index"], [])
-        for n, step in enumerate(steps, start=len(made) + 1):
+        for n, entry in enumerate(result.entries, start=len(made) + 1):
+            step = entry.step
             base = "%s_%s" % (step["kind"], item["index"])
             step_id = base if n == 1 else "%s_%d" % (base, n)
             if len(step_id) > MAX_ID:
                 step_id = step_id[-MAX_ID:]
-            if step.pop("_adjusts", False):
+            if not entry.repeatable:
                 self.not_repeatable.add(step_id)
-            slab = step.pop("_slab", None)
-            if slab is not None and slab["profile"].get("borrowed"):
-                profile = slab["profile"]
-                meets_part.check(self, step_id, slab, step.get("combine", "add"), "%s (drawn on %s of %s)" % (
-                    label or "a step", profile.get("sketch") or "a sketch", profile["borrowed"]))
-            if slab is not None:
-                self.slabs.append(Slab(step_id, slab["on"], slab["extent"], slab["length"], slab["profile"],
-                                       combine=step.get("combine", "add"), taper=slab.get("taper"),
-                                       outline=slab.get("outline")))
-            shell = step.pop("_shell", None)
-            if shell is not None:
-                opened = [locate(self, p) for p in face_points(shell["faces"])]
-                self.shells.append(Shell(shell["thickness"], self.slabs, [o for o in opened if o is not None],
-                                         len(self.slabs)))
-                self._placers += 1
-                self.shells[-1].seq = self._placers
-            if step.get("kind") == "offsetFaces":
-                self._add_moved_faces(item, step)
-            copies = step.pop("_copies", None)
-            if copies:
-                sources = [s for of in step.get("of") or [] for s in self.slabs_of(of)]
-                self.slabs.extend(s.copied(step_id, motion) for motion in copies for s in sources)
-            plain = step.pop("_plain", None)
-            if plain is not None:
-                self.plain_picks[step_id] = plain
-            self.written_reads = tuple(dict.fromkeys(self.written_reads + reads_in(step)))
             step["id"] = step_id
             step["label"] = label
+            for maker in entry.placers:
+                maker.make(self, step_id, step)
+            if entry.picks is not None:
+                self.plain_picks[step_id] = entry.picks
+            self.written_reads = tuple(dict.fromkeys(self.written_reads + reads_in(step)))
             self.steps.append(step)
             ids.append(step_id)
         made.extend(ids)

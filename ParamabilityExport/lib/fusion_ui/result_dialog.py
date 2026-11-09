@@ -1,5 +1,5 @@
-"""The dialog shown after a recipe is saved: each size with what it becomes in Paramability, what stays fixed, the
-variables.
+"""The dialog shown after a recipe is saved: each size with what it becomes in Paramability, what stays fixed, what
+may give unexpected results, the ticked parameters the copy could not follow, the variables.
 
 It is a small command of its own. Fusion does not allow starting a command from inside another command's events,
 so `show` fires a custom event; its handler starts the dialog after the export command has ended. When the event or
@@ -122,6 +122,7 @@ def build(command, view):
 
     _add_lines(inputs, "pm_result_fixed", "Stays fixed", view["fixed"])
     _add_lines(inputs, "pm_result_loose", "May give unexpected results", view.get("loose"))
+    _add_lines(inputs, "pm_result_dropped", "Not followed", view.get("dropped"))
     if view["variables"]:
         inputs.addTextBoxCommandInput("pm_result_variables", "", escape(view["variables"]), text_rows([view["variables"]]), True)
 

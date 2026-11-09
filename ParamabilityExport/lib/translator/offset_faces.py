@@ -10,6 +10,7 @@ distance.
 """
 from . import vec
 from .footprint import Footprint
+from .placer import ADD, CUT, Placer
 from .shells import InnerPlace
 from .slabs import AXIAL_TOL, FACTOR_DIGITS, LATERAL_TOL, as_quantity
 
@@ -22,20 +23,32 @@ class _WallPlace(InnerPlace):
         return None
 
 
-class MovedFaces:
+class MovedFaces(Placer):
     """One offsetFaces step: the capture faces it moved (each with `frame` and `loops`), its distance (a written
-    number or formula) and `earlier(p, edge)`, which places a point on the steps written before it. `at` and `seq`
-    order it among the other placers (follow.py)."""
+    number or formula) and `earlier(p, edge)`, which places a point on the steps written before it."""
 
-    combine = "offset"
-
-    def __init__(self, faces, distance, earlier, at, seq):
+    def __init__(self, faces, distance, earlier=None):
         usable = [f for f in faces if isinstance(f, dict) and isinstance(f.get("frame"), dict) and "loops" in f]
         self.faces = [(f["frame"], Footprint(f)) for f in usable]
         self.square = [f.get("sides") != "other" for f in usable]
         self.distance = as_quantity(distance)
         self.earlier = earlier
-        self.at, self.seq = at, seq
+
+    def material_at(self, p):
+        """The material the move added (moved out) or removed (moved in), where `p` lies in it."""
+        if not self.swept(p):
+            return None
+        return ADD if self.distance.n > 0 else CUT
+
+    def crossings(self, q, n, offsets):
+        """Parameters t where q + t * n crosses a moved face, before or after the move."""
+        out = []
+        for frame, _ in self.faces:
+            dz = vec.dot(n, frame["z"])
+            if abs(dz) > 1e-9:
+                for k in (0.0, self.distance.n):
+                    out.append((vec.dot(vec.sub(frame["origin"], q), frame["z"]) + k) / dz)
+        return out
 
     def swept(self, p):
         """True when `p` lies in or on the material the move added or removed: the prism between the face before and

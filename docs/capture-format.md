@@ -139,9 +139,9 @@ ITEM:
   the one it shows). `in_target_component`: that component is the target's component, compared as Fusion objects and
   not by token text. When the component cannot be read it is true for a feature (so the translator still refuses a
   feature of the target it cannot read) and false for the items that are not modeling steps (sketches, construction
-  geometry, occurrences, joints and the like; `NOT_MODELING_TYPES` in `lib/translator/capture.py`). Feature readers
-  run only for items in the target's component; the other items keep `"data": {}` with their `bodies_after`, health
-  and message.
+  geometry, occurrences, joints and the like: the roles `sketch` and `assembly` in the step kind table,
+  `lib/translator/step_kinds.py`). Feature readers run only for items in the target's component; the other items
+  keep `"data": {}` with their `bodies_after`, health and message.
 - `entity_context`: `"proxy"` only when `TimelineObject.entity` came as an occurrence proxy and was turned native
   (`nativeObject`) before reading; absent otherwise.
 - `bodies_before` (not for suppressed items): the bodies of the target's component at the marker before the item.
@@ -240,7 +240,7 @@ sizes, a bounded sample past that), and a face that lies on a wall stays on it. 
 their ranges and are listed in `loose`, with the values past which the step may stop meeting the part ("past 2.05",
 "below 0.98"). Those values come from `lib/translator/kept_ranges.py`, which brings the ranges toward their values
 until the gaps keep their side (each size alone first, then all together); when a range would shrink to its value or
-the person typed it, no value is given and the size cannot follow (`Context.fix`, listed in `loose` without one).
+the person typed it, no value is given and the size cannot follow (`Context.doubt`, listed in `loose` without one).
 
 CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriented):
 
@@ -639,7 +639,7 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   points, which must favour the first face by at least 0.1 at every point; edges that one direction cannot serve
   start another step) with `otherSize` or `cutAngleDeg`. Both distances follow sizes; an angle must stay under 90
   degrees over the size range, else its sizes are fixed.
-- A value that cannot follow its sizes is written as its number and its sizes are recorded (`Context.fix`; the notes
+- A value that cannot follow its sizes is written as its number and its sizes are recorded (`Context.doubt`; the notes
   here say a size is "fixed" or "marked" for such a value). The translator walks twice. The first walk makes each
   recorded size a plain number in a new size table (`with_fixed`) and walks again until nothing new is recorded, to
   learn which sizes and reasons there are. The second walk keeps those sizes free: every value that can follow them
@@ -650,8 +650,8 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   reason. The ranges are always the table's: no minimum is raised and no range is shortened. A rule that can fail inside a range
   (a count that a pick needs, a taper, a step that must keep meeting the part) marks the sizes it reads, with the
   value past which it fails where `kept_ranges` gives one. Only `TranslateResult.fixed` holds sizes that became
-  numbers: a formula too long to copy (`Context.fix_always`). Without a motion (`motion=None`) every size behind a
-  sketch dimension, construction plane or axis, or a joint, is marked with a reason, and the ones no formula reads
+  numbers: a formula too long to copy (`Context.doubt` with `fixed`). Without a motion (`motion=None`) every size behind
+  a sketch dimension, construction plane or axis, or a joint, is marked with a reason, and the ones no formula reads
   are dropped with that reason.
 - End of walk audit (`lib/translator/audit.py`). After the last walk every free size that a copied step reads must be
   in a known state: read by a written formula, fixed, loose, or dropped, each with a reason. A step reads a size

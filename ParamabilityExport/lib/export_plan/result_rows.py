@@ -4,7 +4,7 @@ The view is built from the manifest and report that plan_single_export returned,
 """
 from .dialog_rows import range_text
 from .health import FAILED, health_lines, with_lines
-from .messages import MAX_LISTED_FIXED, listed_lines, recipe_saved_message
+from .messages import listed_lines, recipe_saved_message
 
 KEPT_FIXED, NOT_USED = "kept fixed", "not used"
 NOT_FOLLOWED = "not followed"
@@ -55,14 +55,9 @@ def _probe_rows(report):
 
 
 def _lines(table, entries):
-    """"name: reason" for the first entries, then one line that counts the rest. A reason that already starts with the
-    name (Fusion's or the recipe's) is shown as it is."""
-    fusion = {e.size_name: e.name for e in table.entries if e.size_name}
-    shown = []
-    for entry in entries[:MAX_LISTED_FIXED]:
-        name, reason = entry["name"], entry["reason"]
-        shown.append(reason if reason.startswith((name, fusion.get(name, name))) else "%s: %s" % (name, reason))
-    return shown + listed_lines(entries)[len(shown):]
+    """"name: reason" for the first entries, then one line that counts the rest (`messages.listed_lines`). A reason
+    that already starts with the name (Fusion's or the recipe's) is shown as it is."""
+    return listed_lines(entries, {e.size_name: e.name for e in table.entries if e.size_name})
 
 
 def _fixed_lines(table, report):

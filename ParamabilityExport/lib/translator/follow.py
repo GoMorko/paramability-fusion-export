@@ -17,6 +17,8 @@ a face that an offsetFaces step moved through the face before the move (offset_f
 two steps cross is placed on both walls (crossings.py).
 """
 from . import crossings, notes, picks, shells, sketch_motion, vec
+from .copy_counts import stays_at_least
+from .placer import ADD
 from .slabs import (AXIAL_TOL, CONSTANT_TOL, FACTOR_DIGITS, IDENTITY_ROWS, LATERAL_TOL, Motion, Place, Slab,
                     as_quantity, cleaned_all)
 from .values import Quantity
@@ -26,18 +28,10 @@ __all__ = ["AXIAL_TOL", "CONSTANT_TOL", "FACTOR_DIGITS", "IDENTITY_ROWS", "LATER
 
 
 def _latest_first(ctx, below=None):
-    """The slabs, shells and moved faces written so far (before the placer `below` when given), the latest first."""
-    shells_left = sorted(list(ctx.shells) + list(getattr(ctx, "moved_faces", ())),
-                         key=lambda s: (-s.at, -getattr(s, "seq", 0)))
-    slab_count = len(ctx.slabs)
-    if below is not None:
-        shells_left = [s for s in shells_left if (s.at, getattr(s, "seq", 0)) < (below.at, below.seq)]
-        slab_count = min(slab_count, below.at)
-    for n in range(slab_count - 1, -1, -1):
-        while shells_left and shells_left[0].at > n:
-            yield shells_left.pop(0)
-        yield ctx.slabs[n]
-    yield from shells_left
+    """The placers written so far (before the placer `below` when given), the latest first."""
+    end = len(ctx.placers) if below is None else below.order
+    for n in range(end - 1, -1, -1):
+        yield ctx.placers[n]
 
 
 def _on_one_face(found):
@@ -79,15 +73,10 @@ def inside(ctx, p):
     """True when `p` lies in or on the part built so far: in or on an added slab or the material an offset added, and
     not in or on a later cut, hollow or the material an offset removed."""
     held = False
-    for placer in reversed(list(_latest_first(ctx))):
-        if isinstance(placer, shells.Shell):
-            held = held and not placer.hollows(p)
-        elif placer.combine in ("new", "add"):
-            held = held or placer.holds(p)
-        elif placer.combine == "cut" and placer.holds(p):
-            held = False
-        elif placer.combine == "offset" and placer.swept(p):
-            held = placer.distance.n > 0
+    for placer in list(ctx.placers):
+        material = placer.material_at(p)
+        if material is not None:
+            held = material == ADD
     return held
 
 
@@ -102,14 +91,16 @@ def _keep_copies(ctx, item, found):
     for slab in found.slabs:
         motion = slab.motion
         if motion.needs:
-            ctx.fix(motion.needs, "%s picks a copy made by %s, so its copies must stay as they are"
-                    % (_name(item), motion.by or "a pattern"))
+            ctx.doubt(motion.needs, "%s picks a copy made by %s, so its copies must stay as they are"
+                      % (_name(item), motion.by or "a pattern"))
         for count, least, by in motion.requires:
-            ctx.require(count, least, "%s picks copy %d of %s" % (_name(item), least, by or "a pattern"))
+            if ctx.table is not None and not stays_at_least(ctx.table, count, least):
+                ctx.doubt(count.reads, "%s picks copy %d of %s, and a smaller value would leave that copy out"
+                          % (_name(item), least, by or "a pattern"))
     for stuck in found.blocked:
         why = (notes.bends_reason(_name(item), stuck.sketch) if stuck.cause == sketch_motion.BENDS
                else notes.stuck_reason(stuck.cause, stuck.sketch))
-        ctx.fix(sketch_motion.movers(ctx.table, stuck), why)
+        ctx.doubt(sketch_motion.movers(ctx.table, stuck), why)
 
 
 def follow_points(ctx, item, points, edge=True, what="edges"):
@@ -118,8 +109,8 @@ def follow_points(ctx, item, points, edge=True, what="edges"):
     for p in points:
         found = locate(ctx, p, edge)
         if found is None:
-            ctx.fix(ctx.written_reads, "the %s that %s picks may move with it, and the copy cannot follow them"
-                    % (what, _name(item)))
+            ctx.doubt(ctx.written_reads, "the %s that %s picks may move with it, and the copy cannot follow them"
+                      % (what, _name(item)))
             return None
         _keep_copies(ctx, item, found)
         out.append(found.coordinates(p) if found.moves else p)
@@ -188,8 +179,8 @@ def target_shift(ctx, item, target, direction, what="reaches to"):
     if isinstance(found, shells.InnerPlace) and (found.single is None or abs(vec.dot(found.single, direction)) < 1 - 1e-9):
         found = None
     if found is None or found.which == "side":
-        ctx.fix(ctx.written_reads, "%s %s a face that may move with it, and the copy cannot follow that"
-                % (_name(item), what))
+        ctx.doubt(ctx.written_reads, "%s %s a face that may move with it, and the copy cannot follow that"
+                  % (_name(item), what))
         return None
     if not found.moves:
         return zero
@@ -233,16 +224,16 @@ def _round_face_axis(ctx, item, ref, what):
             and not any(q.sized for q in slab.origin) and axis is not None
             and abs(abs(vec.dot(slab.axis, axis)) - 1) < 1e-9):
         return Quantity(0.0)
-    ctx.fix(ctx.written_reads, "%s %s a round face that may move with it, and the copy cannot follow that"
-            % (_name(item), what))
+    ctx.doubt(ctx.written_reads, "%s %s a round face that may move with it, and the copy cannot follow that"
+              % (_name(item), what))
     return None
 
 
 def _edge_shift(ctx, item, points, direction, what):
     found = locate(ctx, points[0], True)
     if found is None:
-        ctx.fix(ctx.written_reads, "%s %s an edge that may move with it, and the copy cannot follow that"
-                % (_name(item), what))
+        ctx.doubt(ctx.written_reads, "%s %s an edge that may move with it, and the copy cannot follow that"
+                  % (_name(item), what))
         return None
     if not found.moves:
         return Quantity(0.0)
@@ -267,8 +258,8 @@ def _built_shift(ctx, item, ref, direction, what):
             return None if None in shifts else shifts[0].plus(shifts[1]).scaled(0.5)
     elif len(parts) == 1 and parts[0].get("entity_type") in ("BRepEdge", "BRepFace"):
         return place_plane(ctx, item, dict(parts[0], dir=ref.get("dir")), direction, what)
-    ctx.fix(ctx.written_reads, "%s %s a %s built on part geometry that may move with it, and the copy cannot follow "
-            "that" % (_name(item), what, "plane" if ref.get("entity_type") == "ConstructionPlane" else "axis"))
+    ctx.doubt(ctx.written_reads, "%s %s a %s built on part geometry that may move with it, and the copy cannot follow "
+              "that" % (_name(item), what, "plane" if ref.get("entity_type") == "ConstructionPlane" else "axis"))
     return None
 
 
@@ -295,8 +286,8 @@ def place_plane(ctx, item, ref, direction, what="mirrors across"):
         return offset.plus(-offset.n) if offset is not None and offset.sized and abs(offset.n) > 1e-9 else offset
     if ref.get("edge_points") or kind == "BRepEdge":
         if not ref.get("edge_points"):
-            ctx.fix(ctx.written_reads, "%s %s an edge that may move with it, and the copy cannot follow that"
-                    % (_name(item), what))
+            ctx.doubt(ctx.written_reads, "%s %s an edge that may move with it, and the copy cannot follow that"
+                      % (_name(item), what))
             return None
         return _edge_shift(ctx, item, ref["edge_points"], direction, what)
     if kind in ("ConstructionPlane", "ConstructionAxis") and _on_part(ref):

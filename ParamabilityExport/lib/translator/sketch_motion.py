@@ -78,7 +78,7 @@ def same(a, b):
 
 
 def fix_stuck(ctx, stuck):
-    ctx.fix(movers(ctx.table, stuck), notes.stuck_reason(stuck.cause, stuck.sketch))
+    ctx.doubt(movers(ctx.table, stuck), notes.stuck_reason(stuck.cause, stuck.sketch))
 
 
 def rendered(table, value, number):
@@ -104,7 +104,7 @@ def quantity(ctx, value, number, positive=False):
         fix_stuck(ctx, q)
         return Quantity(number)
     if positive and q.sized and not stays_positive(ctx.table, q):
-        ctx.fix(q.reads, notes.shrinks_reason(value.sketch))
+        ctx.doubt(q.reads, notes.shrinks_reason(value.sketch))
         return Quantity(number)
     return q
 
@@ -474,7 +474,8 @@ def planes_apart(ctx, outlines_, item):
     """Fix the sizes that move the outlines of one step apart (on different sketches whose planes move unlike)."""
     planes = [o.plane for o in outlines_ if o is not None]
     if planes and not all(same(p, planes[0]) for p in planes[1:]):
-        ctx.fix([n for p in planes for n in movers(ctx.table, p)], notes.stuck_reason("apart", item.get("name") or ""))
+        ctx.doubt([n for p in planes for n in movers(ctx.table, p)],
+                  notes.stuck_reason("apart", item.get("name") or ""))
 
 
 def points(ctx, item, rows):

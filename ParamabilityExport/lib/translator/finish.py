@@ -12,9 +12,8 @@ outside or rounded shells.
 import math
 
 from . import follow, picks, values, vec
-from .result import Refusal
-
-TYPES = ("FilletFeature", "ChamferFeature", "ShellFeature")
+from .placer_makers import ShellMaker
+from .result import Entry, Refusal, StepResult
 
 SIZE_TOL = 1e-9
 ANGLE_TOL = 1e-6
@@ -41,10 +40,10 @@ def _close(a, b, tol=SIZE_TOL):
     return abs(a - b) <= tol
 
 
-def _split_note(ctx, steps):
-    if len(steps) > 1:
+def _split_note(ctx, entries):
+    if len(entries) > 1:
         ctx.note("The edges are picked in %d steps, since one pick holds at most %d points."
-                 % (len(steps), picks.MAX_NEAR_POINTS))
+                 % (len(entries), picks.MAX_NEAR_POINTS))
 
 
 def _flat_edges(sets):
@@ -57,9 +56,9 @@ def _unlocated(edges):
 
 
 def _edge_steps(ctx, item, kind, edges, sizes, extra=None, sets=()):
-    """`round` or `bevel` steps over `edges`, one per group of edges that fits a pick. `sizes` is one size Quantity
-    per point of the edges, in order; steps with mixed sizes carry `edgeSizes`. `extra` holds more fields of every
-    step (the second measure of a chamfer). `sets` are the capture sets the edges come from."""
+    """`round` or `bevel` steps over `edges` as result Entries, one per group of edges that fits a pick. `sizes` is one
+    size Quantity per point of the edges, in order; steps with mixed sizes carry `edgeSizes`. `extra` holds more fields
+    of every step (the second measure of a chamfer). `sets` are the capture sets the edges come from."""
     extra = extra or {}
     even = all(s.same_as(sizes[0]) for s in sizes)
     whole = follow.whole_edges(ctx, edges) if even else None
@@ -83,14 +82,14 @@ def _edge_steps(ctx, item, kind, edges, sizes, extra=None, sets=()):
 
 
 def _with_plain(step, edges, reads=None, always=False):
-    """Hand the measured points over with a pick that follows sizes, for patterns and mirrors that copy it.
-    `reads` are the sizes the pick follows (default: those its points read). `always` hands them over for a pick
-    with no point per edge, whose copies need one."""
+    """The Entry of the step: with a pick that follows sizes it hands the measured points over, for patterns and
+    mirrors that copy it. `reads` are the sizes the pick follows (default: those its points read). `always` hands them
+    over for a pick with no point per edge, whose copies need one."""
     reads = values.reads_in(step["edges"]) if reads is None else reads
     if reads or always:
         written = None if always else step["edges"].get("near")
-        step["_plain"] = {"near": picks.near_points(edges), "reads": reads, "written": written}
-    return step
+        return Entry(step, picks={"near": picks.near_points(edges), "reads": reads, "written": written})
+    return Entry(step)
 
 
 def _whole_sets(edges, sets):
@@ -120,7 +119,7 @@ def _input_pick(ctx, item, edges, sets):
     return None
 
 
-def _fillet(item, ctx):
+def fillet(item, ctx):
     data = item.get("data") or {}
     sets = data.get("sets") or []
     if not sets:
@@ -147,9 +146,9 @@ def _fillet(item, ctx):
         ctx.note("Fusion used setback corners for this round. The copy uses rolling ball corners, so corners where "
                  "three or more rounded edges meet can look different.")
     sizes = [size for edge, size in pairs for _ in edge["points"]]
-    steps = _edge_steps(ctx, item, "round", [edge for edge, _ in pairs], sizes, sets=sets)
-    _split_note(ctx, steps)
-    return steps
+    entries = _edge_steps(ctx, item, "round", [edge for edge, _ in pairs], sizes, sets=sets)
+    _split_note(ctx, entries)
+    return StepResult(entries)
 
 
 def _number(value):
@@ -264,7 +263,7 @@ def _second_ratio(size, second):
     return 1.0 / math.tan(math.radians(value))
 
 
-def _chamfer(item, ctx):
+def chamfer(item, ctx):
     data = item.get("data") or {}
     sets = data.get("sets") or []
     if not sets:
@@ -312,22 +311,22 @@ def _chamfer(item, ctx):
         ctx.note("Fusion used another corner type for this chamfer; the copy uses the default one.")
     if len(groups) > 1:
         ctx.note("Chamfers of different sizes are applied one after the other.")
-    steps = []
+    entries = []
     for group in groups:
         sizes = [group["size"]] * sum(len(edge["points"]) for edge in group["edges"])
         extra = {key: q.json() for key, q in group["extra"].items()}
         if group["size_on"] is not None:
             extra["sizeOn"] = group["size_on"]
-        steps += _edge_steps(ctx, item, "bevel", group["edges"], sizes, extra, sets)
-    _split_note(ctx, steps)
-    return steps
+        entries += _edge_steps(ctx, item, "bevel", group["edges"], sizes, extra, sets)
+    _split_note(ctx, entries)
+    return StepResult(entries)
 
 
 def _same_extra(a, b):
     return a.keys() == b.keys() and all(a[k].same_as(b[k]) for k in a)
 
 
-def _shell(item, ctx):
+def shell(item, ctx):
     data = item.get("data") or {}
     if (data.get("outside") or 0) > 0:
         return Refusal("Shells that grow outward are not copied yet.")
@@ -345,12 +344,7 @@ def _shell(item, ctx):
     if len(points) > picks.MAX_NEAR_POINTS:
         return Refusal("This shell opens more than %d faces." % picks.MAX_NEAR_POINTS)
     wall = values.quantity(ctx, item, "inside", thickness, absolute=True)
-    return [{"kind": "shell", "thickness": wall.json(), "openFaces": follow.faces(ctx, item, faces),
-             "_shell": {"thickness": wall, "faces": faces}}]
-
-
-_HANDLERS = {"FilletFeature": _fillet, "ChamferFeature": _chamfer, "ShellFeature": _shell}
-
-
-def handle(item, ctx):
-    return _HANDLERS[item["type"]](item, ctx)
+    out = StepResult()
+    out.add({"kind": "shell", "thickness": wall.json(), "openFaces": follow.faces(ctx, item, faces)},
+            [ShellMaker(wall, faces)])
+    return out
