@@ -247,6 +247,19 @@ class ValueKindsTest(unittest.TestCase):
         result = self.check(capture, ticked)
         self.assertEqual(steps_of(result.recipe, "bevel")[0]["size"], {"expr": "wall_mm / 2"})
 
+    def test_both_chamfer_distances_follow_sizes(self):
+        def edit(data):
+            data["sets"][0].update(distance=2.0, distance_two=3.0)
+            for edge in data["sets"][0]["edges"]:
+                side = edge["sides"][0][1]
+                edge["cut_normals"] = [[3 * side[0], 3 * side[1], 2]]
+            data["params"] = {"sets.0.distance": param("d4", "wall_mm", 2.0),
+                              "sets.0.distance_two": param("d5", "corner_mm", 3.0)}
+        capture, ticked = on_fixture("chamfer_two_sides", edit)
+        result = self.check(capture, ticked)
+        (step,) = steps_of(result.recipe, "bevel")
+        self.assertEqual((step["size"], step["otherSize"]), ({"expr": "wall_mm"}, {"expr": "corner_mm"}))
+
     def test_blind_tipped_hole_outline_follows_its_sizes(self):
         def edit(data):
             data.update(extent={"kind": "distance", "depth": 10.0}, end_points=[[20, 30, -6.5]],

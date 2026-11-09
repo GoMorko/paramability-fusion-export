@@ -198,6 +198,25 @@ z = 0). In the plane z = 0 with a sketch frame other than the identity, the read
 `ProfileCurve.sketchEntity`; if that cannot decide it writes `ambiguous` and the translator refuses the profile. A
 loop whose chained curves enclose no area is refused.
 
+A profile of another component's sketch (Fusion hands it over through that component's occurrence) is read from its
+`nativeObject`, so `loops` are in that sketch's own 2D frame, and it keeps `"foreign": true`. It adds:
+
+- `native_frame`: the sketch frame in its own component's coordinates;
+- `frame`: the same frame brought into the target's coordinates through the assembly (that component's `placement`,
+  then the inverse of the target's), only when both places can be read;
+- `component`: `{ token, name }` of the sketch's component;
+- `placement`: like the target's placement (section 2), read for the occurrence the profile came through. Its point
+  check compares `SketchPoint.worldGeometry` of up to three native sketch points with the same points made for the
+  occurrence (`SketchPoint.createForAssemblyContext`). Without a match it holds `error` and no `frame`;
+- `sketch_params`: one `{ name, expression, reads }` per sketch dimension (`Sketch.sketchDimensions`,
+  `SketchDimension.parameter`), where `reads` lists every parameter it reads, directly or through others
+  (`dependencyParameters`).
+
+The translator copies such a profile like its own when `frame`, `native_frame` and `placement.frame` are present
+(`lib/translator/borrowed.py`): the outline is written as numbers, so every size that `sketch_params` read becomes a
+fixed number, and the step gets a note that names the sketch and its component. Without them the step is refused as
+before.
+
 CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriented):
 
 | Fusion geometry | Dict |
@@ -252,8 +271,14 @@ CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriente
   length) and two sided extrudes, of the length: the translator refuses when `abs(end_offset - start shift)` is not
   the planned length within 1e-3 mm. A one sided cut that ends past the whole `target_box_before` makes no end face
   of its own, so a nearer measured end is not checked there.
-- `profile_area`, `end_area` (optional, mm2): the area of the first profile and of `endFaces[0]`. Needed for a tapered
-  extrude: the end face must be smaller for a positive recipe taper, else the translator refuses.
+- `side_leans` (optional): per face of `ExtrudeFeature.sideFaces` (at most 256), the outward normal at
+  `pointOnFace` along the first profile's sketch `z`, which is the sine of how far that wall leans. The taper check:
+  a wall that narrows away from the sketch leans its outward normal along the travel; a cut lists the part's walls,
+  which face the other way. Every measured wall must match a side of the plan (within 1e-4), and each tapered side
+  must have a wall that shows it, else the translator refuses.
+- `profile_area`, `end_area` (optional, mm2): the area of the first profile and of `endFaces[0]`. Without
+  `side_leans`, a tapered extrude of one outline is checked by them (the end face must be smaller for a positive
+  recipe taper); a tapered extrude of several outlines is refused.
 - `bodies_before` (optional, on any item): root bodies at the marker before the item. With it the driver finds a
   body the item made or split off (refused); without it the driver compares `bodies_after` with the bodies the item's
   data names (`participants`, `tools`, `target`).
@@ -350,6 +375,20 @@ CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriente
 `kind`: `equal` (`EqualDistanceChamferEdgeSet.distance`), `twoDistances` (`distanceOne`, `distanceTwo`,
 `isFlipped`, as `distance`, `distance_two`, `flipped`), `distanceAngle` (`distance`, `angle`, `isFlipped`, as
 `distance`, `angle_deg`, `flipped`), `other`. Edges expanded as for fillets.
+
+The API does not say which face of an edge takes the first distance (`isFlipped` only swaps them, and is reported
+as unreliable). For `twoDistances` and `distanceAngle` sets each EDGE also gets, per point in `points`:
+
+- `sides` (before the item): `[[a], [b]]`, the outward normals of the edge's two faces (`BRepEdge.faces`,
+  `SurfaceEvaluator.getNormalAtPoint`) at the point;
+- `cut_normals` (after the item): the normal of the chamfer face nearest to the point (`ChamferFeature.faces`;
+  `getParameterAtPoint`, `getPointAtParameter`, `isParameterOnFace`, `getNormalAtParameter`), a face whose nearest
+  point lies on it first.
+
+The chamfer face normal is `d1 * a + d2 * b` (normalized) when `d1` lies on face `a` and `d2` on face `b`, for any
+angle between the faces, so the ratio of its two weights names the face of the first distance (for a distance and
+an angle, the second distance is taken as `distance * tan(angle)`). An edge without these keys, or whose weights fit
+neither way, refuses an uneven chamfer.
 
 **ShellFeature** (`inputEntities`, `insideThickness`, `outsideThickness`, `isTangentChain`, `shellType`):
 
@@ -452,8 +491,13 @@ whichever answers). An entity whose component cannot be read is not marked.
 | Combine `target` and `tools[]` | the body ref |
 | Fillet and chamfer `sets[].edges[]` | the edge record (`edge.body`) |
 | Shell `faces[]` | the face record (`face.body`); a foreign body input sets `"foreign": true` on the data itself |
-| Revolve and circular pattern `axis`, mirror `plane` | the axis or plane |
+| Revolve and circular pattern `axis`, mirror `plane` | the axis or plane (see below) |
 | Offset faces `faces[]` | the face record |
+
+A revolve or circular pattern `axis`, or a mirror `plane`, of another component that is seen through an occurrence
+or belongs to the root is read in the root's coordinates. The reader brings it into the target's coordinates
+(inverse of the target's placement) and writes `"assembly": true` instead of `"foreign"` (`from_assembly()` in
+`lib/fusion_reader/placement.py`); when the target's place cannot be read it stays foreign.
 
 ### Parameters behind values (`data.params`)
 
@@ -489,8 +533,8 @@ How the translator uses them (`translate(capture, size_table=table)`):
 - Pattern counts that follow sizes must give whole numbers at every size value: the formula is rounded as a whole
   (`round`, `floor`, `ceil`), or it adds, subtracts and multiplies whole numbers and count sizes. Otherwise the sizes
   are fixed. An extent spacing divides by `max((count) - 1, 1)`, so a count of 1 never divides by zero.
-- Values that stay numbers while a size reaches them: a sketch (points, placements, construction geometry), the start
-  offset, the "up to" offset, a tip angle, a countersink angle, a full circular turn, a revolve that is not a plain
+- Values that stay numbers while a size reaches them: a sketch (points, placements, construction geometry), the "up
+  to" offset, a tip angle, a countersink angle, a full circular turn, a revolve that is not a plain
   part turn, and a pattern whose copies are left out by number or are rounds copied one by one. The sizes behind
   them are fixed.
 - Picks and reaches that follow sizes (`lib/translator/follow.py`). Every extrude step is kept with its placement,
@@ -501,15 +545,28 @@ How the translator uses them (`translate(capture, size_table=table)`):
   - a round or chamfer whose edges are exactly the side edges, or exactly the edges of a moving end face, of one
     extrude writes `{ "featureEdges": <id>, "which": "sides" | "start" | "end" }`;
   - other points write the coordinate along the extrude as a formula (`0.5 * height` for a side point half way up);
-  - a "to entity" reach to a moving end face writes its length as a formula; a "from entity" start on a moving face
-    fixes the sizes of that face; a construction plane stays where it is.
+  - a "to entity" reach to a moving end face writes its length as a formula; a construction plane stays where it is;
+  - a start offset that follows sizes, or a "from entity" start on a moving end face, moves the sketch placement
+    along its normal (`sketch.on.origin` as formulas), and the picks on that extrude follow it too. Such a moving
+    start with a side that reaches "to" a face is fixed.
+  - a copy made by a pattern or mirror of an extrude is placed like the extrude and moved by the copy's motion: a
+    linear spacing that follows sizes moves the point with it, a turn or a mirror moves it by numbers. A pick on a
+    copy fixes the sizes behind that pattern's count (and a circular angle), since the list of points cannot grow.
+    A copy has no `featureEdges` or `featureFace`: the app traces only extrudes, so copies are picked by points.
   A point or face that no extrude explains may sit on geometry that moves, so every size read by the steps written
-  before it is fixed, with the step's name in the reason. Rounds and chamfers that a pattern or mirror copies use
-  their measured points, so the sizes their pick follows are fixed. Without sizes the picks stay plain points.
+  before it is fixed, with the step's name in the reason. Rounds and chamfers that a pattern or mirror copies take
+  their source's written points (formulas included) through each copy's motion; their count is fixed, and a circular
+  angle too. A copied uneven chamfer turns its `sizeOn` with the copy. Without sizes the picks stay plain points.
 - A formula longer than the app's cap (`MAX_FORMULA_LENGTH` in `lib/params/expressions.py`, 300 characters) fixes
   the sizes it reads, also when a step builds it from several values.
 - Every size that a model parameter created by a sketch dimension, construction plane or axis, or joint reads is
-  fixed up front (reason "stays fixed for now: it changes a sketch"). Sketches follow sizes in a later version.
+  fixed up front (reason "stays fixed for now: it changes a sketch"). Sketches follow sizes in a later version. The
+  dimensions of another component's sketch are not model parameters of the target's path; the sizes in their
+  `sketch_params` are fixed when the step that borrows the sketch is copied.
+- An uneven chamfer writes `sizeOn` (one direction per step: the sum of `first - other` face normals over its edge
+  points, which must favour the first face by at least 0.1 at every point; edges that one direction cannot serve
+  start another step) with `otherSize` or `cutAngleDeg`. Both distances follow sizes; an angle must stay under 90
+  degrees over the size range, else its sizes are fixed.
 - Each fixed size becomes a plain number in a new size table (`with_fixed`) and the walk runs again, until nothing
   new is fixed. `TranslateResult.fixed` lists them as `{ name, reason }`.
 - The recipe is version 12. With a size table it carries `sizesAsWritten: true` and `sizes`: the sizes that a written

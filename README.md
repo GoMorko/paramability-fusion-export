@@ -101,7 +101,8 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   times exports the copy you picked.
 - These stay a fixed shape with a note: a part from a linked design, a place in the assembly that cannot be read, a
   step of another component that changes the body, a body made in another component and moved in, and a step that
-  reaches into another component.
+  reaches into another component's faces, edges or bodies. A step that uses a sketch of another component is copied
+  where Fusion shows it; the sizes that move that sketch stay fixed.
 - A recipe covers the picked body only. Parameters made by steps or sketches of other bodies are left out where the
   add-in can match them by name; construction planes, axes and joints are read for the component and the ones above
   it. Sizes cannot move sketches yet.
@@ -109,7 +110,8 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   thin extrudes, face outlines, spline and other free curve outlines, extrudes that start or end on a tilted or curved
   surface, extrudes that make a new component, modeled threads, rounds with variable or chord length sizes or curvature
   continuity, shells that grow outward, close the body or round their corners, patterns of faces or bodies, patterns
-  that spread to both sides of the start, mirrors of faces, chamfers with two different sizes, a press pull (offset
+  that spread to both sides of the start, mirrors of faces, a chamfer with two different sizes whose sides could not be
+  measured, a press pull (offset
   faces) of a curved face, of a face with a leaning or rounded side, or of two faces that meet, a combine with a tool
   body that has more than one step, and every step type not listed above (sweep, loft, coil, move, draft, emboss).
 - Some steps are copied with a note instead: setback corners, a cosmetic thread (cut as a plain hole), a round or

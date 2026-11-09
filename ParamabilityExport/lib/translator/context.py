@@ -22,10 +22,12 @@ class Context:
     depends: Fusion name of a size -> plain reason, for each size that a value written as a number depends on.
       The driver turns these sizes into fixed numbers and walks again.
     slabs: the extrude steps written so far (follow.Slab), for picks and reaches that follow sizes. A handler hands
-      one over in a step's private `_slab` key: { on, extent, length, profile }.
+      one over in a step's private `_slab` key: { on, extent, length, profile }. A pattern or mirror step hands over
+      `_copies`, one follow.Motion per copy, and the slabs of the steps it repeats are copied with them.
     written_reads: Fusion names of the sizes that the steps written so far read.
-    plain_picks: round or bevel step id -> { near, reads }: its edges as measured points and the sizes its pick
-      follows. A handler hands it over in the private `_plain` key; patterns and mirrors copy these points.
+    plain_picks: round or bevel step id -> { near, reads, written }: its edges as measured points, the sizes its pick
+      follows and the written points (None when the pick names a step). A handler hands it over in the private
+      `_plain` key; patterns and mirrors copy these points.
     """
 
     def __init__(self, capture, table=None):
@@ -64,6 +66,20 @@ class Context:
         """Step ids written for the timeline item at `index` (empty when it made none)."""
         return list(self._ids_by_index.get(index, ()))
 
+    def slabs_of(self, step_id):
+        """The slabs of the bodies a step makes: an extrude's own, or a repeat's originals and copies."""
+        step = next((s for s in self.steps if s.get("id") == step_id), None)
+        found = []
+        if step is not None and step.get("kind") in ("pattern", "mirror"):
+            for of in step.get("of") or []:
+                found.extend(self.slabs_of(of))
+        found.extend(s for s in self.slabs if s.owner == step_id)
+        unique = []
+        for slab in found:
+            if all(slab is not other for other in unique):
+                unique.append(slab)
+        return unique
+
     def add_steps(self, item, steps):
         """Give each step its id and label, append to the recipe, return the ids.
 
@@ -82,6 +98,10 @@ class Context:
             slab = step.pop("_slab", None)
             if slab is not None:
                 self.slabs.append(Slab(step_id, slab["on"], slab["extent"], slab["length"], slab["profile"]))
+            copies = step.pop("_copies", None)
+            if copies:
+                sources = [s for of in step.get("of") or [] for s in self.slabs_of(of)]
+                self.slabs.extend(s.copied(step_id, motion) for motion in copies for s in sources)
             plain = step.pop("_plain", None)
             if plain is not None:
                 self.plain_picks[step_id] = plain

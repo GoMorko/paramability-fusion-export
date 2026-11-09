@@ -1,4 +1,5 @@
-"""Captures of the owner's hybrid assembly (add-in 0.3.1). They stay outside the repo; the test skips without them."""
+"""Captures of the owner's hybrid assembly (add-in 0.3.1, and 0.3.2 for report (3)). They stay outside the repo; the
+test skips without them."""
 import json
 import os
 import unittest
@@ -8,7 +9,7 @@ from tests import context  # noqa: F401
 from lib.translator import translate
 
 REPORTS = os.path.expanduser("~/Documents/free-projects/3mf-compose/tmp/reports")
-FILES = ("report.json", "report (1).json")
+FILES = ("report.json", "report (1).json", "report (3).json")
 
 
 class OwnerCaptureTest(unittest.TestCase):

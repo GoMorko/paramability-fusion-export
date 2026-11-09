@@ -4,7 +4,14 @@ All three read their inputs with the timeline marker just before the item, so th
 the shape the feature was applied to. Edge and face inputs are expanded here: a face gives its edges, and a tangent
 chain gives every tangentially connected edge or face, so the translator sees one flat list of picks.
 A required collection that cannot be read raises, and the walk records that as a read_error for the item.
+
+A chamfer with two distances, or a distance and an angle, also records at each edge point the outward normals of
+the edge's two faces (`sides`, before) and the normal of the chamfer face nearest to it (`cut_normals`, after). The
+API does not say which face takes the first distance; the chamfer face tells, since it leans towards the face with
+the longer distance.
 """
+import math
+
 from . import read_geometry as geo
 from .param_refs import Params, with_params
 
@@ -84,10 +91,34 @@ def expand_edges(entities, tangent_chain):
     return kinds, _unique(edges)
 
 
-def _edge_set(edge_set, ctx, tangent_default=True):
+def _edge_set(edge_set, ctx, tangent_default=True, sides=False):
     tangent_chain = geo.safe(lambda: bool(edge_set.isTangentChain), tangent_default)
     kinds, edges = expand_edges(strict_items(edge_set.edges), tangent_chain)
-    return {"input_kinds": kinds, "edges": [geo.edge_record(e, ctx) for e in edges]}
+    records = [geo.edge_record(e, ctx) for e in edges]
+    if sides:
+        for record, edge in zip(records, edges):
+            found = geo.safe(lambda: _edge_sides(geo.native_input(edge, ctx), record), None)
+            if found:
+                record["sides"] = found
+    return {"input_kinds": kinds, "edges": records}
+
+
+def _normal_at(face, point):
+    ok, normal = face.evaluator.getNormalAtPoint(point)
+    if not ok:
+        raise ValueError("The normal of a face could not be read.")
+    return geo.unit_vector(normal)
+
+
+def _edge_sides(edge, record):
+    """Per measured point of the edge, the outward normals of its two faces; None when they cannot be read."""
+    faces = strict_items(edge.faces)
+    if len(faces) != 2:
+        return None
+    points = [geo.point_at(edge, f) for f in geo.edge_fractions(record["closed"])]
+    if any(p is None for p in points) or len(points) != len(record["points"]):
+        return None
+    return [[_normal_at(face, p) for face in faces] for p in points]
 
 
 def _fillet_set(edge_set, ctx):
@@ -140,8 +171,53 @@ def _chamfer_set(edge_set, ctx):
             "angle_deg": geo.angle(edge_set.angle),
             "flipped": geo.safe(lambda: bool(edge_set.isFlipped), False),
         }
-    entry.update(_edge_set(edge_set, ctx))
+    entry.update(_edge_set(edge_set, ctx, sides=entry["kind"] in UNEVEN_KINDS))
     return entry
+
+
+UNEVEN_KINDS = ("twoDistances", "distanceAngle")
+
+
+def _distance(a, b):
+    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
+
+
+def _cut_normal(faces, p):
+    """The normal of the face of `faces` nearest to point `p` (mm), at the point nearest to `p`; None when none
+    can be measured. A face whose nearest point lies on it wins over one where it lies past its edges."""
+    point = geo.point3d(p)
+    best = None
+    for face in faces:
+        evaluator = face.evaluator
+        ok, parameter = evaluator.getParameterAtPoint(point)
+        if not ok:
+            continue
+        ok, nearest = evaluator.getPointAtParameter(parameter)
+        found, normal = evaluator.getNormalAtParameter(parameter)
+        if not ok or not found:
+            continue
+        key = (not geo.safe(lambda: bool(evaluator.isParameterOnFace(parameter)), False),
+               _distance(geo.point(nearest), p))
+        if best is None or key < best[0]:
+            best = (key, geo.unit_vector(normal))
+    return best[1] if best else None
+
+
+def chamfer_after(feature, ctx, data):
+    """cut_normals on each measured edge of an uneven set: the chamfer face normal near each of its points."""
+    faces = [geo.native_input(f, ctx) for f in geo.collection_items(geo.safe(lambda: feature.faces, None))]
+    if not faces:
+        return {}
+    for entry in data.get("sets") or []:
+        if entry.get("kind") not in UNEVEN_KINDS:
+            continue
+        for record in entry.get("edges") or []:
+            if "sides" not in record:
+                continue
+            normals = [geo.safe(lambda: _cut_normal(faces, p), None) for p in record["points"]]
+            if all(n is not None for n in normals):
+                record["cut_normals"] = normals
+    return {"sets": data.get("sets") or []}
 
 
 def _chamfer_params(edge_sets):
@@ -198,6 +274,6 @@ def shell_before(feature, ctx):
 # type name -> (before, after); either may be None
 READERS = {
     "FilletFeature": (fillet_before, None),
-    "ChamferFeature": (chamfer_before, None),
+    "ChamferFeature": (chamfer_before, chamfer_after),
     "ShellFeature": (shell_before, None),
 }

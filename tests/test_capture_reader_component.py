@@ -216,6 +216,39 @@ class ForeignTest(unittest.TestCase):
         # The target seen through its own occurrence is the target itself.
         self.assertEqual(data["participants"], [{"token": "t1", "name": "Body1"}] * 2)
 
+    def test_a_sketch_of_another_component_is_read_native_and_brought_into_the_target(self):
+        lid = Obj(entityToken="lid", name="Lid")
+        place = turn_z(90, (110, 50, 32))
+        occurrence = FakeOccurrence("Lid:1", place, component=lid)
+        points = [(0, 0, 0), (10, 0, 0), (0, 10, 0)]
+        sketch_points = [Obj(worldGeometry=P(*p), createForAssemblyContext=lambda occ, p=p: Obj(
+            worldGeometry=P(*apply_matrix(place, p)))) for p in points]
+        width = Obj(name="wall_mm", dependencyParameters=Coll([]))
+        dimension = Obj(parameter=Obj(name="d7", expression="wall_mm * 2", dependencyParameters=Coll([width])))
+        native = rect_profile(w=10, h=10)
+        native.parentSketch = Obj("fusion::Sketch", name="Rim", parentComponent=lid,
+                                  transform=native.parentSketch.transform, sketchPoints=Coll(sketch_points),
+                                  sketchDimensions=Coll([dimension]))
+        proxy = Obj("fusion::Profile", assemblyContext=occurrence, nativeObject=native,
+                    parentSketch=Obj(parentComponent=lid))
+        ext = self.tray.extrude()
+        ext[0].profile = proxy
+        profile = self.read_data(ext)["profiles"][0]
+        self.assertEqual((profile["foreign"], profile["sketch"], profile["component"]),
+                         (True, "Rim", {"token": "lid", "name": "Lid"}))
+        self.assertEqual(profile["frame"], {"origin": [0, -10, 32], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]})
+        self.assertEqual(profile["native_frame"]["origin"], [0, 0, 0])
+        self.assertEqual((profile["placement"]["frame"]["origin"], profile["placement"]["checked_points"]),
+                         ([110, 50, 32], 3))
+        self.assertEqual(profile["sketch_params"], [{"name": "d7", "expression": "wall_mm * 2", "reads": ["wall_mm"]}])
+
+    def test_a_mirror_plane_of_the_root_is_brought_into_the_target(self):
+        plane = Obj("fusion::ConstructionPlane", parentComponent=Obj(entityToken="root"),
+                    geometry=Obj("core::Plane", origin=P(0, 0, 0), normal=Obj(x=1, y=0, z=0)))
+        mirror = self.tray.feature("MirrorFeature", "Mirror1", inputEntities=Coll([]), mirrorPlane=plane)
+        record = self.read_data(mirror)["plane"]
+        self.assertEqual(record, {"point": [-50, 100, 0], "normal": [0, -1, 0], "assembly": True})
+
     def test_own_inputs_seen_through_the_occurrence_are_read_native(self):
         moved = rect_profile(w=90)
         moved.assemblyContext = self.tray.occurrence

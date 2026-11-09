@@ -1,5 +1,5 @@
 """The driver: walks a capture's items, calls one handler per feature type, builds the recipe."""
-from . import combine, extrude, finish, hole, offset, repeat, revolve
+from . import borrowed, combine, extrude, finish, hole, offset, repeat, revolve
 from .sizes import sketch_fixes, used_sizes
 from . import notes as wording, place
 from .capture import ASSEMBLY_TYPES, SKETCH_TYPES, outside_component, renamed_target, same_body, validate_capture
@@ -262,6 +262,7 @@ def _walk(capture, table, size_table):
                           or "Steps of type %s are not copied yet." % type_words(item["type"]))
         if _data(item).get("read_error"):
             return refuse(item, "This step could not be read from Fusion.")
+        item = ctx.current = borrowed.bring_in(item, ctx)
         if _foreign(_data(item)):
             return refuse(item, "This step reaches into another component, which is not copied yet.",
                           wording.reaches_component_note(_label(item)))

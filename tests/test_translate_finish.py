@@ -1,9 +1,10 @@
+import math
 import unittest
 
 from tests import context  # noqa: F401
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, translate_fixture
 
-from lib.translator import picks, translate
+from lib.translator import picks, translate, vec
 
 
 def verdict_of(result, index):
@@ -93,12 +94,43 @@ class ChamferTest(unittest.TestCase):
         self.assertEqual(steps_of(translate_fixture("chamfer_two_equal").recipe, "bevel")[0]["size"], 1.5)
         self.assertEqual(steps_of(translate_fixture("chamfer_angle_45").recipe, "bevel")[0]["size"], 2)
 
-    def test_uneven_refuses(self):
+    def test_two_distances_name_the_face_of_the_first(self):
+        result = translate_fixture("chamfer_two_sides")
+        (step,) = steps_of(result.recipe, "bevel")
+        self.assertEqual((step["size"], step["otherSize"], step["sizeOn"]), (1, 2, [0, 0, 1]))
+        self.assertEqual(len(step["edges"]["near"]), 4)
+        assert_schema_ok(self, result.recipe)
+
+    def test_the_first_distance_on_the_sides_turns_size_on_away_from_the_top(self):
+        def edit(data):
+            for edge in data["sets"][0]["edges"]:
+                edge["cut_normals"] = [[c * (2 if i == 2 else 0.5) for i, c in enumerate(edge["cut_normals"][0])]]
+        (step,) = steps_of(variant("chamfer_two_sides", edit).recipe, "bevel")
+        self.assertEqual(step["sizeOn"], [0, 0, -1])
+
+    def test_a_distance_and_an_angle_write_the_angle(self):
+        def edit(data):
+            entry = data["sets"][0]
+            entry.update(kind="distanceAngle", angle_deg=math.degrees(math.atan(2.0)))
+            del entry["distance_two"]
+        (step,) = steps_of(variant("chamfer_two_sides", edit).recipe, "bevel")
+        self.assertEqual((step["size"], step["sizeOn"]), (1, [0, 0, 1]))
+        self.assertAlmostEqual(step["cutAngleDeg"], 63.434949, 5)
+
+    def test_faces_that_no_one_direction_tells_apart_split_the_step(self):
+        def edit(data):
+            edges = data["sets"][0]["edges"]
+            for edge in (edges[1], edges[3]):
+                side = edge["sides"][0][1]
+                edge["cut_normals"] = [vec.unit([2 * side[0], 2 * side[1], 4])]
+        bevels = steps_of(variant("chamfer_two_sides", edit).recipe, "bevel")
+        self.assertEqual([len(b["edges"]["near"]) for b in bevels], [2, 2])
+        self.assertTrue(vec.close(bevels[0]["sizeOn"], vec.scale(bevels[1]["sizeOn"], -1)))
+
+    def test_uneven_without_measured_faces_refuses(self):
         result = translate_fixture("chamfer_uneven")
         self.assertIsNone(result.recipe)
-        self.assertIn("two sizes", result.refusal["reason"])
-        angled = variant("chamfer_angle_45", lambda d: d["sets"][0].update(angle_deg=30.0))
-        self.assertIsNone(angled.recipe)
+        self.assertIn("face each size is on", result.refusal["reason"])
 
     def test_other_corner_type_notes(self):
         result = variant("chamfer_equal", lambda d: d.update(corner_type="miter"))

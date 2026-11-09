@@ -3,6 +3,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from lib.fusion_reader.capture import read_capture
+from tests.fakes import install_adsk_core
 from tests.test_capture_reader import (Coll, FakeDesign, Obj, P, body, entry, feature, matrix, param,
                                        sketch_entry)
 
@@ -109,6 +110,44 @@ class ChamferTest(unittest.TestCase):
             {"kind": "other", "type": "OtherChamferEdgeSet"},
         ])
         self.assertEqual(data["sets"][0]["edges"][0]["token"], "a")
+
+def normal_face(normal):
+    """A face whose outward normal is `normal` everywhere."""
+    return Obj("fusion::BRepFace", evaluator=Obj(getNormalAtPoint=lambda p: (True, Obj(x=normal[0], y=normal[1], z=normal[2]))))
+
+
+def cut_face(nearest, normal, on_face=True):
+    """A chamfer face: every point projects to `nearest` (mm), where the normal is `normal`."""
+    evaluator = Obj(getParameterAtPoint=lambda p: (True, "uv"), getPointAtParameter=lambda uv: (True, P(*nearest)),
+                    getNormalAtParameter=lambda uv: (True, Obj(x=normal[0], y=normal[1], z=normal[2])),
+                    isParameterOnFace=lambda uv: on_face)
+    return Obj("fusion::BRepFace", evaluator=evaluator)
+
+
+class UnevenChamferTest(unittest.TestCase):
+    def setUp(self):
+        core = install_adsk_core()
+        core.Point3D = type("Point3D", (), {"create": staticmethod(lambda x, y, z: Obj(x=x, y=y, z=z))})
+
+    def test_sides_and_the_nearest_chamfer_face_are_measured_per_point(self):
+        picked = edge("a", 5)
+        picked.faces = Coll([normal_face((0, 0, 1)), normal_face((0, -1, 0))])
+        edge_set = with_edges("TwoDistancesChamferEdgeSet", [picked], distanceOne=param(0.1), distanceTwo=param(0.2))
+        faces = Coll([cut_face((5, 0.1, 0), (0, 0.9, 0.1), on_face=False), cut_face((5, 1, 0), (0, -2, 1)),
+                      cut_face((5, 3, 0), (1, 0, 0))])
+        data = read_data(feature("ChamferFeature", "Chamfer1", edgeSets=Coll([edge_set]), faces=faces))
+        (record,) = data["sets"][0]["edges"]
+        self.assertEqual(record["sides"], [[[0, 0, 1], [0, -1, 0]]])
+        self.assertEqual(record["cut_normals"], [[0, -0.894427191, 0.447213595]])
+
+    def test_an_even_set_measures_nothing(self):
+        picked = edge("a", 5)
+        picked.faces = Coll([normal_face((0, 0, 1)), normal_face((0, -1, 0))])
+        edge_set = with_edges("EqualDistanceChamferEdgeSet", [picked], distance=param(0.1))
+        data = read_data(feature("ChamferFeature", "Chamfer1", edgeSets=Coll([edge_set]),
+                                 faces=Coll([cut_face((5, 1, 0), (0, -1, 1))])))
+        self.assertEqual(sorted(data["sets"][0]["edges"][0]), ["closed", "points", "token"])
+
 
 class ShellTest(unittest.TestCase):
     def test_faces_chain_and_thickness(self):

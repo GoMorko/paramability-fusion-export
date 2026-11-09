@@ -85,7 +85,7 @@ class PicksTest(unittest.TestCase):
         self.assertEqual(steps_of(result.recipe, "round")[0]["edges"], {"near": [[2, 2, 16]]})
         self.assertEqual(steps_of(result.recipe, "round")[0]["size"], {"expr": "corner_mm"})
 
-    def test_a_copied_round_keeps_the_sizes_its_pick_follows(self):
+    def test_a_mirrored_round_follows_the_sizes_its_pick_follows(self):
         def edit(capture):
             edges = capture["items"][3]["data"]["sets"][0]["edges"]
             edges[:] = [e for e in edges if e["points"][0][0] == 0]
@@ -95,8 +95,9 @@ class PicksTest(unittest.TestCase):
                 "data": {"entity_type": "features", "sources": [3], "plane": {"point": [40, 0, 0], "normal": [1, 0, 0]},
                          "combine": False}})
         result, _ = run(tray(edit, keep=[0, 1, 2, 3]))
-        self.assertEqual(fixed_names(result), sorted([H, CUBE]))
-        self.assertIn("Mirror1", result.fixed[0]["reason"])
+        self.assertEqual(result.fixed, [])
+        near = steps_of(result.recipe, "round")[1]["edges"]["near"]
+        self.assertEqual(near, [[80, 0, {"expr": "0.5 * " + HEIGHT}], [80, 60, {"expr": "0.5 * " + HEIGHT}]])
 
     def test_without_sizes_picks_stay_points(self):
         recipe = translate(tray()).recipe
@@ -107,6 +108,14 @@ class PicksTest(unittest.TestCase):
             {"token": "f2", "point": [80, 30, 16]})))[0].recipe["features"][1]["openFaces"]["near"][0])
         turned = place.place({"features": [{"kind": "hole", "origin": point}]}, place.TURN_Z_UP)
         self.assertEqual(turned["features"][0]["origin"], [40, {"expr": "-" + HEIGHT}, 30])
+
+
+def _round_on_tab_top():
+    """A round on the front top edge of the tab of `tab()` started on the tray top, 5 mm tall."""
+    return {"index": 11, "name": "Fillet9", "type": "FilletFeature", "suppressed": False, "health": "ok",
+            "message": "", "component_root": True, "bodies_after": [{"token": "t1", "name": "Body1"}],
+            "data": {"sets": [{"kind": "constant", "radius": 1.0, "continuity": "tangent", "input_kinds": ["edge"],
+                               "edges": [{"token": "e9", "closed": False, "points": [[85, 0, 37]]}]}]}}
 
 
 class ReachTest(unittest.TestCase):
@@ -136,16 +145,35 @@ class ReachTest(unittest.TestCase):
         result, _ = run(tray(edit, keep=[0, 1]))
         self.assertEqual(fixed_names(result), sorted([H, CUBE]))
 
-    def test_a_start_on_a_moving_face_fixes_its_sizes(self):
+    def test_a_start_on_a_moving_face_moves_the_sketch_with_it(self):
         start = {"kind": "fromEntity", "plane": {"point": TOP, "normal": [0, 0, 1]}, "entity_type": "BRepFace",
                  "face_point": TOP}
 
         def edit(capture):
             capture["items"].append(tab(start=start, side_one={"kind": "distance", "distance": 5.0, "taper_deg": 0.0}))
             capture["items"][-1]["data"]["end_offset"] = 37.0
+            capture["items"].append(_round_on_tab_top())
         result, _ = run(tray(edit, keep=[0, 1]))
-        self.assertEqual(fixed_names(result), sorted([H, CUBE]))
-        self.assertIn("starts from", result.fixed[0]["reason"])
+        self.assertEqual(result.fixed, [])
+        self.assertEqual(steps_of(result.recipe, "extrude")[1]["sketch"]["on"]["origin"], [0, 0, {"expr": HEIGHT}])
+        self.assertEqual(steps_of(result.recipe, "round")[0]["edges"]["near"], [[85, 0, {"expr": HEIGHT + " + 5"}]])
+
+    def test_an_offset_start_follows_its_parameter(self):
+        def edit(capture):
+            capture["items"].append(tab(start={"kind": "offset", "offset": 4.0},
+                                        side_one={"kind": "distance", "distance": 5.0, "taper_deg": 0.0}))
+            capture["items"][-1]["data"].update(end_offset=9.0, params={"start.offset": param("d30", "wall_mm * 2", 4.0)})
+        result, _ = run(tray(edit, keep=[0, 1]))
+        self.assertEqual(steps_of(result.recipe, "extrude")[1]["sketch"]["on"]["origin"],
+                         [0, 0, {"expr": "wall_mm * 2"}])
+
+    def test_a_moving_start_that_reaches_to_a_face_is_fixed(self):
+        def edit(capture):
+            capture["items"].append(tab(start={"kind": "offset", "offset": 4.0}))
+            capture["items"][-1]["data"]["params"] = {"start.offset": param("d30", "wall_mm * 2", 4.0)}
+        result, _ = run(tray(edit, keep=[0, 1]))
+        self.assertEqual(fixed_names(result), ["wall_mm"])
+        self.assertIn("reaches to a face", result.fixed[0]["reason"])
 
 
 class CapsTest(unittest.TestCase):

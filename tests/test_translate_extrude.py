@@ -1,6 +1,7 @@
 import copy
 import glob
 import json
+import math
 import os
 import unittest
 
@@ -247,6 +248,54 @@ class TaperTest(unittest.TestCase):
             d.update(end_offset=5.0, profile_area=800.0, end_area=700.0)
         result = variant("extrude_symmetric_half", edit)
         self.assertEqual(result.recipe["features"][0]["taperDeg"], extrude.FUSION_TAPER_SIGN * 3)
+
+def two_tapered_squares(lean, operation="newBody"):
+    """The taper fixture with a second outline beside the first, one end face over both, and side walls that lean
+    by `lean` (sine) along the sketch normal."""
+    def edit(d):
+        second = copy.deepcopy(d["profiles"][0])
+        for curve in second["loops"][0]["curves"]:
+            curve["start"], curve["end"] = [curve["start"][0] + 50, curve["start"][1]], [curve["end"][0] + 50, curve["end"][1]]
+        d["profiles"].append(second)
+        d.update(operation=operation, end_area=1500.0, side_leans=[lean] * 8)
+        if operation == "cut":
+            d["side_one"]["taper_deg"] = 5.0
+    return edit
+
+
+class SideWallTaperTest(unittest.TestCase):
+    LEAN = math.sin(math.radians(5.0))
+
+    def test_several_outlines_are_checked_by_their_side_walls(self):
+        result = variant("extrude_taper", two_tapered_squares(self.LEAN))
+        self.assertEqual([s["taperDeg"] for s in result.recipe["features"]], [5, 5])
+
+    def test_walls_that_lean_the_other_way_refuse(self):
+        result = variant("extrude_taper", two_tapered_squares(-self.LEAN))
+        self.assertIn("does not match what was measured", result.refusal["reason"])
+
+    def test_a_cut_shows_the_walls_of_the_hole(self):
+        capture = load_capture("extrude_taper")
+        base = copy.deepcopy(capture["items"][-1])
+        base["data"].update(side_one={"kind": "distance", "distance": 20.0, "taper_deg": 0.0}, end_offset=20.0,
+                            profile_area=None, end_area=None)
+        base["data"]["profiles"][0]["loops"][0]["curves"] = [
+            {"kind": "line", "start": a, "end": b} for a, b in
+            (([-10, -10], [100, -10]), ([100, -10], [100, 30]), ([100, 30], [-10, 30]), ([-10, 30], [-10, -10]))]
+        capture["items"].insert(-1, dict(base, name="Block"))
+        cut = capture["items"][-1]
+        cut["index"] = 2
+        cut["data"]["participants"] = [{"token": "t1", "name": "Body1"}]
+        two_tapered_squares(-self.LEAN, "cut")(cut["data"])
+        result = translate(capture)
+        self.assertEqual([s["taperDeg"] for s in under_test(result, cut["index"])], [5, 5])
+
+    def test_several_outlines_without_measured_walls_refuse(self):
+        def edit(d):
+            two_tapered_squares(self.LEAN)(d)
+            del d["side_leans"]
+        self.assertIn("could not be measured", variant("extrude_taper", edit).refusal["reason"])
+
 
 class OperationTest(unittest.TestCase):
     def test_intersect(self):

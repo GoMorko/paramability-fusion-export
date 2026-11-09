@@ -7,6 +7,7 @@ would look like a pattern with every copy suppressed.
 """
 from . import read_geometry as geo
 from . import read_solid
+from .placement import from_assembly
 from .param_refs import Params, with_params
 from .read_finish import strict_items
 
@@ -138,7 +139,7 @@ def pattern_after(feature, ctx, data):
 
 def _plane_record(entity, ctx):
     entity = geo.native_input(entity, ctx)
-    return geo.mark_foreign(geo.plane_of(entity), entity, ctx)
+    return from_assembly(geo.mark_foreign(geo.plane_of(entity), entity, ctx), entity, ctx)
 
 
 def mirror_before(feature, ctx):

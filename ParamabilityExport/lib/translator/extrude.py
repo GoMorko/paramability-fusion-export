@@ -3,6 +3,8 @@
 Each profile becomes one recipe `extrude` step per side. Fusion's sign conventions are checked against the measured
 `end_offset` (where the end face landed), which wins when the two disagree.
 """
+import math
+
 from . import follow, loops, placement, values, vec
 from .result import Refusal
 from .values import Quantity
@@ -19,6 +21,8 @@ PARALLEL_TOL = 1e-9
 SIGN_TOL = 1e-9
 LENGTH_TOL = 1e-3
 AREA_RELATIVE_TOL = 1e-6
+# Sine of the wall lean: about 0.006 degrees.
+LEAN_TOL = 1e-4
 PLANE_TOL = 1e-4
 COMBINE = {"join": "add", "cut": "cut", "intersect": "intersect", "newBody": "new"}
 
@@ -79,29 +83,52 @@ def _distance_quantity(ctx, item, path, raw):
 
 
 def _start_shift(start, frame, ctx, item):
-    """Signed distance along the sketch normal from the sketch plane to where the extrude starts, or a Refusal."""
+    """Signed distance along the sketch normal from the sketch plane to where the extrude starts, as a Quantity that
+    follows sizes (an offset parameter, or a face that moves with an earlier extrude); or a Refusal."""
     if start is None:
         return Refusal(UNREADABLE)
     kind = start.get("kind", "profilePlane")
     if kind == "profilePlane":
-        return 0.0
+        return Quantity(0.0)
     if kind == "offset":
         if start.get("offset") is None:
             return Refusal(UNREADABLE)
-        values.pin(ctx, item, "start.offset", "it moves where the sketch of %s sits" % item.get("name", "a step"))
-        return float(start["offset"])
+        return values.quantity(ctx, item, "start.offset", float(start["offset"]))
     if kind == "fromEntity":
         plane = start.get("plane")
         if not plane:
             return Refusal("This extrude starts from a surface that is not flat, which is not copied yet.")
         if not _parallel(plane["normal"], frame["z"]):
             return Refusal("This extrude starts from a tilted surface, which is not copied yet.")
+        shift = vec.dot(vec.sub(plane["point"], frame["origin"]), vec.unit(frame["z"]))
         moved = follow.target_shift(ctx, item, start, vec.unit(frame["z"]), "starts from")
-        if moved is not None and moved.sized:
-            ctx.fix(moved.reads, "%s starts from a face that moves with it, and the copy cannot follow that"
-                    % item.get("name", "a step"))
-        return vec.dot(vec.sub(plane["point"], frame["origin"]), vec.unit(frame["z"]))
+        if moved is None or not moved.sized:
+            return Quantity(shift)
+        return moved.plus(shift - moved.n)
     return Refusal("This extrude starts in a way that is not copied yet.")
+
+
+def _keep_start_with_reach(ctx, item, data, shift_q):
+    """A side that reaches to a face is measured from a start that stays: a moving start is fixed then."""
+    if not shift_q.sized:
+        return shift_q
+    if any((data.get(key) or {}).get("kind") == "toEntity" for key in ("side_one", "side_two")):
+        ctx.fix(shift_q.reads, "%s starts at a place that moves and reaches to a face, which the copy cannot follow"
+                % item.get("name", "a step"))
+        return Quantity(shift_q.n)
+    return shift_q
+
+
+def _origin(frame, shift_q):
+    """The sketch origin moved along its normal by the start shift: a position that may follow sizes."""
+    z = vec.unit(frame["z"])
+    if not shift_q.sized:
+        return placement.moved_along(placement.from_frame(frame), shift_q.n, z)["origin"]
+    out = []
+    for o, d in zip(frame["origin"], z):
+        moved = shift_q.scaled(d).plus(float(o)) if abs(d) > 1e-12 else Quantity(float(o))
+        out.append(moved.json() if moved.sized else round(moved.n, 9) + 0.0)
+    return out
 
 
 def _reach_quantity(ctx, item, side, z, reach, offset):
@@ -283,12 +310,39 @@ def _check_measured_length(plan, data, shift, start, z, combine):
     return None
 
 
-def _check_taper(plan, data):
-    """Refuse a taper whose sign disagrees with the measured end face area, or that cannot be measured."""
+def _expected_leans(plan, combine):
+    """Per plan entry, the leans its side walls can show along the sketch normal (see `_check_taper`)."""
+    out = []
+    for entry in plan:
+        lean = math.sin(math.radians(entry["taper"] or 0.0)) * (-1 if combine == "cut" else 1)
+        out.append([-lean, lean] if entry["extent"] == "symmetric" else [entry["sign"] * lean])
+    return out
+
+
+def _check_leans(plan, leans, combine):
+    """Refuse when a measured side wall leans in a way no side of the plan gives, or a tapered side has no wall
+    that shows its taper. A wall narrowing away from the sketch leans its outward normal along the travel; a cut
+    shows the part's walls, which face the other way."""
+    expected = _expected_leans(plan, combine)
+    flat = [value for values in expected for value in values]
+    if any(not any(abs(lean - value) <= LEAN_TOL for value in flat) for lean in leans):
+        return Refusal("The taper direction does not match what was measured, so it is not copied.")
+    for entry, values in zip(plan, expected):
+        if entry["taper"] and not any(abs(lean - value) <= LEAN_TOL for lean in leans for value in values):
+            return Refusal("The taper of this extrude could not be measured.")
+    return None
+
+
+def _check_taper(plan, data, combine, outlines):
+    """Refuse a taper whose sign disagrees with the measured side walls (or, for one outline, the end face area),
+    or that cannot be measured."""
     tapered = [entry for entry in plan if entry["taper"]]
     if not tapered:
         return None
-    if not plan[0]["taper"]:
+    leans = data.get("side_leans")
+    if isinstance(leans, list) and leans:
+        return _check_leans(plan, leans, combine)
+    if not plan[0]["taper"] or outlines != 1:
         return Refusal("The taper of this extrude could not be measured.")
     start, end = data.get("profile_area"), data.get("end_area")
     if not start or end is None or start <= 0:
@@ -349,15 +403,18 @@ def handle(item, ctx):
         built.append((profile, outcome))
 
     first_frame = profiles[0]["frame"]
-    shift = _start_shift(_field(data, "start", {"kind": "profilePlane"}), first_frame, ctx, item)
-    if isinstance(shift, Refusal):
-        return shift
+    shift_q = _start_shift(_field(data, "start", {"kind": "profilePlane"}), first_frame, ctx, item)
+    if isinstance(shift_q, Refusal):
+        return shift_q
+    shift_q = _keep_start_with_reach(ctx, item, data, shift_q)
+    shift = shift_q.n
     plan = _plan(item, data, first_frame, shift, combine, ctx)
     if isinstance(plan, Refusal):
         return plan
     z0 = vec.unit(first_frame["z"])
     start = vec.add(first_frame["origin"], vec.scale(z0, shift))
-    for check in (_check_measured_length(plan, data, shift, start, z0, combine), _check_taper(plan, data)):
+    for check in (_check_measured_length(plan, data, shift, start, z0, combine),
+                  _check_taper(plan, data, combine, len(profiles))):
         if check:
             return check
     refusal = _resolve_through(plan, data, start, z0, combine)
@@ -370,6 +427,7 @@ def handle(item, ctx):
     for profile, (outer, inner) in built:
         frame = profile["frame"]
         base = placement.moved_along(placement.from_frame(frame), shift, vec.unit(frame["z"]))
+        base["origin"] = _origin(frame, shift_q)
         for entry in plan:
             reverse = entry["sign"] < 0
             on = placement.reversed_of(base) if reverse else base

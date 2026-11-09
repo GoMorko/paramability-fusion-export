@@ -124,6 +124,52 @@ class RefusalTest(unittest.TestCase):
         self.assertIn("Lid is in another component", refusal["reason"])
 
 
+def lid_rim(placement=None, sketch_params=()):
+    """A join extrude on the tray from the sketch Rim of the component Lid: a 10 mm square, 4 mm up. The Lid sits at
+    (110, 50, 32) turned a quarter about z, so in the tray's coordinates the square starts at (10, 0, 32)."""
+    square = [[0, 0], [10, 0], [10, 10], [0, 10]]
+    flat = {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
+    lid = {"origin": [110, 50, 32], "x": [0, 1, 0], "y": [-1, 0, 0], "z": [0, 0, 1]}
+    in_tray = {"origin": [10, 0, 32], "x": [0, 1, 0], "y": [-1, 0, 0], "z": [0, 0, 1]}
+    profile = {"sketch": "Rim", "frame": in_tray, "native_frame": flat, "space": "sketch", "foreign": True,
+               "loops": [{"outer": True, "curves": [{"kind": "line", "start": square[n], "end": square[(n + 1) % 4]}
+                                                     for n in range(4)]}],
+               "component": {"token": "cLid", "name": "Lid"},
+               "placement": placement or {"path": "Lid:1", "frame": lid, "source": "transform2", "checked_points": 3},
+               "sketch_params": list(sketch_params)}
+    return {"index": 9, "name": "Extrude9", "type": "ExtrudeFeature", "suppressed": False, "health": "ok",
+            "message": "", "component": "cTray", "in_target_component": True, "target_changed": True,
+            "bodies_after": [{"token": "t1", "name": "Body1"}],
+            "data": {"operation": "join", "profiles": [profile], "start": {"kind": "profilePlane"},
+                     "extent_type": "one", "side_one": {"kind": "distance", "distance": 4.0, "taper_deg": 0.0},
+                     "side_two": None, "symmetric": None, "thin": False, "participants": [], "end_offset": 4.0}}
+
+
+class BorrowedSketchTest(unittest.TestCase):
+    def test_a_sketch_of_another_component_is_brought_in_through_the_assembly(self):
+        capture = load_capture("component_moved")
+        capture["items"].append(lid_rim())
+        result = translate(capture)
+        assert_schema_ok(self, result.recipe)
+        rim = [s for s in result.recipe["features"] if s["label"] == "Extrude9"][0]
+        self.assertEqual(rim["sketch"]["on"], {"origin": [110.0, 50.0, 32.0], "normal": [0.0, 0.0, 1.0],
+                                               "xDir": [0.0, 1.0, 0.0]})
+        self.assertEqual(verdicts(result)[9], ("translatedWithNote", "Extrude9 uses the sketch Rim of Lid; its "
+                                               "outline is copied in place as fixed numbers."))
+
+    def test_sizes_that_move_the_borrowed_sketch_are_fixed(self):
+        capture = load_capture("component_moved")
+        capture["items"].append(lid_rim(sketch_params=[{"name": "d90", "expression": "wall_mm * 5", "reads": []}]))
+        result, _ = run(capture)
+        self.assertEqual([f["name"] for f in result.fixed], ["wall_mm"])
+        self.assertIn("sketch Rim of Lid", result.fixed[0]["reason"])
+
+    def test_a_borrowed_sketch_without_a_readable_place_refuses(self):
+        capture = load_capture("component_moved")
+        capture["items"].append(lid_rim(placement={"path": "Lid:1", "error": "No points of the sketch could be compared."}))
+        self.assertIn("another component", translate(capture).refusal["reason"])
+
+
 class AssemblyStepsTest(unittest.TestCase):
     """Occurrences, joints and the like are not modeling steps."""
 

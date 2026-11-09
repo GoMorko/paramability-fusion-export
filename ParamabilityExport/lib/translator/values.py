@@ -249,6 +249,14 @@ def _gives_whole_numbers(table, formula, depth=0):
     return True
 
 
+def stays_below(ctx, item, q, limit, why):
+    """`q` when it stays under `limit` over the size range; else its number, with its sizes fixed for `why`."""
+    if not q.sized or _stays_in_range(ctx.table, q.text, q.reads, -1, -limit + 1e-9):
+        return q
+    ctx.fix(q.reads, why)
+    return Quantity(q.n)
+
+
 def stays_positive(table, q):
     """True when a sized Quantity stays above zero over the size range."""
     return _stays_in_range(table, q.text, q.reads, 1, 1e-9)

@@ -340,6 +340,14 @@ class ExtrudeDataTest(unittest.TestCase):
         unknown = self.read()
         self.assertEqual((unknown["profile_area"], unknown["end_area"]), (None, None))
 
+    def test_side_walls_give_their_lean_along_the_sketch_normal(self):
+        def wall(nz):
+            normal = Obj(x=math.sqrt(1 - nz * nz), y=0, z=nz)
+            return Obj("fusion::BRepFace", pointOnFace=P(0, 0, 5),
+                       evaluator=Obj(getNormalAtPoint=lambda p: (True, normal)))
+        self.assertEqual(self.read(sideFaces=Coll([wall(0.1), wall(0.0)]))["side_leans"], [0.1, 0.0])
+        self.assertNotIn("side_leans", self.read())
+
     def test_negative_distance_keeps_its_sign_and_end_offset_follows_the_end_face(self):
         data = self.read(extentOne=Obj("fusion::DistanceExtentDefinition", distance=param(-0.8)),
                          endFaces=Coll([Obj(pointOnFace=P(5, 5, -8))]))

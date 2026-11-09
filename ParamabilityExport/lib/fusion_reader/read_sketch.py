@@ -2,6 +2,8 @@
 import math
 
 from . import read_geometry as geo
+from ..translator import place
+from .placement import read_sketch_placement, target_move
 
 # Which space ProfileCurve.geometry is in. "auto" decides per profile: a point off z = 0 proves model space. When
 # every point is at z = 0 and the sketch frame is not the identity, the curve is compared with its sketch entity
@@ -150,9 +152,78 @@ def _read_curve(geometry, space):
     }
 
 
+MAX_DEPENDENCY_NAMES = 256
+
+
+def _dependency_names(parameter):
+    """Names of every parameter `parameter` reads, directly or through others."""
+    found, stack = [], [parameter]
+    while stack and len(found) < MAX_DEPENDENCY_NAMES:
+        current = stack.pop()
+        for other in geo.collection_items(geo.safe(lambda: current.dependencyParameters, None)):
+            name = geo.safe(lambda: other.name, None)
+            if name and name not in found:
+                found.append(name)
+                stack.append(other)
+    return found
+
+
+def _sketch_params(sketch):
+    """{ name, expression, reads } of each dimension of a sketch: what moves its outline."""
+    out = []
+    for dimension in geo.collection_items(geo.safe(lambda: sketch.sketchDimensions, None)):
+        parameter = geo.safe(lambda: dimension.parameter, None)
+        name = geo.safe(lambda: parameter.name, None)
+        if parameter is None or not name:
+            continue
+        out.append({"name": name, "expression": geo.safe(lambda: parameter.expression, "") or "",
+                    "reads": _dependency_names(parameter)})
+    return out
+
+
+def _moved_frame(frame, move):
+    def apply(p, offset):
+        return [sum(move.rows[i][k] * p[k] for k in range(3)) + (move.offset[i] if offset else 0.0) for i in range(3)]
+    out = {"origin": [round(c, 6) + 0.0 for c in apply(frame["origin"], True)]}
+    for key in ("x", "y", "z"):
+        out[key] = [round(c, 9) + 0.0 for c in apply(frame[key], False)]
+    return out
+
+
+def _borrowed(proxy, sketch, frame, ctx):
+    """Another component's sketch: that component, the sketch's place in the assembly, the dimensions that move it,
+    and `frame` brought into the target's coordinates (`native_frame` keeps the sketch's own). Without a readable
+    place on both sides the frame stays the sketch's own and `placement` holds the reason."""
+    component = geo.safe(lambda: sketch.parentComponent, None)
+    placement = read_sketch_placement(proxy, sketch)
+    out = {
+        "component": {"token": geo.safe(lambda: component.entityToken, "") or "",
+                      "name": geo.safe(lambda: component.name, "") or ""},
+        "placement": placement,
+        "sketch_params": _sketch_params(sketch),
+    }
+    target = target_move(ctx)
+    if "frame" in placement and target is not None:
+        move = place.move_from_frame(placement["frame"]).then(target.inverse())
+        out.update(frame=_moved_frame(frame, move), native_frame=frame)
+    elif "frame" in placement:
+        placement.pop("frame")
+        placement["error"] = "The place of the part could not be read."
+    return out
+
+
 def read_profile(profile, ctx=None):
-    """One Profile as { sketch, frame, loops }; "foreign": true when its sketch is not the target component's."""
+    """One Profile as { sketch, frame, loops }; "foreign": true when its sketch is not the target component's.
+
+    A profile of another component's sketch, seen through an occurrence, is read from its native object (that
+    component's coordinates) and adds `component`, `placement` and `sketch_params` (see `_borrowed`).
+    """
     profile = geo.native_input(profile, ctx)
+    proxy = None
+    if geo.foreign(profile, ctx) and geo.safe(lambda: profile.assemblyContext, None) is not None:
+        native = geo.safe(lambda: profile.nativeObject, None)
+        if native is not None:
+            proxy, profile = profile, native
     sketch = profile.parentSketch
     loops = geo.collection_items(profile.profileLoops)
     loop_curves = [geo.collection_items(loop.profileCurves) for loop in loops]
@@ -167,7 +238,10 @@ def read_profile(profile, ctx=None):
             for loop, curves in zip(loops, loop_curves)
         ],
     }
-    if geo.foreign(profile, ctx) or geo.foreign(sketch, ctx):
+    if proxy is not None:
+        record["foreign"] = True
+        record.update(_borrowed(proxy, sketch, frame, ctx))
+    elif geo.foreign(profile, ctx) or geo.foreign(sketch, ctx):
         record["foreign"] = True
     return record
 

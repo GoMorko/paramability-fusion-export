@@ -34,6 +34,12 @@ def point(p):
     return [_clean(cm_to_mm(p.x), _MM_DIGITS), _clean(cm_to_mm(p.y), _MM_DIGITS), _clean(cm_to_mm(p.z), _MM_DIGITS)]
 
 
+def point3d(p):
+    """[x, y, z] in mm to a Fusion Point3D in cm."""
+    import adsk.core
+    return adsk.core.Point3D.create(p[0] / 10.0, p[1] / 10.0, p[2] / 10.0)
+
+
 def point2(p):
     """Point3D in cm to [x, y] in mm (a point in sketch space)."""
     return [_clean(cm_to_mm(p.x), _MM_DIGITS), _clean(cm_to_mm(p.y), _MM_DIGITS)]
@@ -208,12 +214,17 @@ def _same_vertex(a, b):
     return token_a is not None and token_a == safe(lambda: b.entityToken, None)
 
 
+def edge_fractions(closed):
+    """Where an edge is measured: its middle, or 0.25 and 0.75 of a closed edge."""
+    return (0.25, 0.75) if closed else (0.5,)
+
+
 def edge_record(edge, ctx=None):
     """{ token, closed, points }: the middle point of an open edge; the points at 0.25 and 0.75 of a closed one."""
     edge = native_input(edge, ctx)
     closed = _same_vertex(safe(lambda: edge.startVertex, None), safe(lambda: edge.endVertex, None))
     points = []
-    for fraction in ((0.25, 0.75) if closed else (0.5,)):
+    for fraction in edge_fractions(closed):
         p = point_at(edge, fraction)
         if p is not None:
             points.append(point(p))

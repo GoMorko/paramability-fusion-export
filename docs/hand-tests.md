@@ -179,12 +179,24 @@ corners, and a pipe hole in a row of three. Tick the count and the cube width.
 - [ ] Round only three of the four corners and export again: the same three corners stay round at every height.
 - [ ] Shell the top and one side face: both stay open when the height changes.
 - [ ] Add a tab beside the box, extruded "to" the top face. In the app the tab grows with the box.
-- [ ] Add a boss extruded "from" the top face: the message after the export lists the count and the cube width as
-      fixed, with "starts from a face" in the reason.
+- [ ] Add a boss extruded "from" the top face: in the app the boss rides on the top when the height changes, and
+      no size is fixed for it.
+- [ ] Add a boss whose sketch sits on an offset plane, with the start offset of the extrude set to `wall_mm * 2`: in the
+      app the boss moves with `wall_mm`.
 - [ ] Round the inside edges of the shell: the message lists the sizes written before the round as fixed, with the
       round's name in the reason.
 - [ ] Turn the design to Y up and repeat the first check.
-- [ ] Mirror the rounded corners of one side: the height sizes are listed as fixed ("placed one by one").
+- [ ] Mirror the rounded corners of one side: the mirrored corners stay round at every height, and no height size
+      is fixed.
+- [ ] Add a row of three posts (a rectangular pattern of an extrude, spacing `hole_pitch_mm`), then round the top
+      edge of the last post: the round stays on that post when the spacing changes. Make the count a formula of a
+      ticked size: that size is fixed, with "picks a copy made by" in the reason.
+- [ ] Chamfer the four top edges with two distances (1 mm and 2 mm), then flip the chamfer and export again: in the
+      app the 1 mm side is on the top in the first file and on the walls in the second. The report shows `sides` and
+      `cut_normals` on each edge. Do the same with a distance and an angle (30 degrees).
+- [ ] Taper a join extrude of two separate outlines by 3 degrees, with its end face meeting the top of the box: it
+      is copied, and the report shows `side_leans` for every wall. Flip the taper sign: still copied with the other
+      sign. A tapered cut of two outlines is copied too.
 
 ### 7.2 The parameter table dialog
 
@@ -251,6 +263,11 @@ inside a component, also a nested or turned one, lands where Fusion shows it.
       fixed shape naming the extrude.
 - [ ] For a component body, the dialog table follows the component's own parameters, and "Tick what the body uses"
       ticks only what the component reads.
+- [ ] **C9b Sketch of another component.** An extrude in `Tray` that uses a sketch of `Box` (moved and turned), and a
+      mirror in `Tray` across a plane of the root. Export: the extrude is copied where Fusion shows it, with a note
+      that names the sketch, and the mirror is copied. A ticked size that drives a dimension of that `Box` sketch is
+      fixed with "changes the sketch". The report shows `native_frame`, `placement.checked_points` 3 and
+      `sketch_params` on the profile, and `"assembly": true` on the mirror plane.
 - [ ] **C10 Many components.** A design with several components made one after the other (each with sketches,
       construction planes and extrudes), the picked one in the middle, and one moved away from the origin. Export:
       the occurrences and construction planes of the other components are "skipped" in the report, never the refusal.
@@ -378,6 +395,14 @@ read the capture in `report.json`.
   `angleTwo`), `startFaces` and the sign of `start_face_normal`.
 - `Profile.areaProperties().area` and `BRepFace.area` (cm2, read as `profile_area` and `end_area`), and
   `Component.bRepBodies` of the root at each marker position (`bodies_before`).
+- `ExtrudeFeature.sideFaces` with the marker after the item, and `SurfaceEvaluator.getNormalAtPoint` at
+  `pointOnFace` pointing out of the body (`side_leans`); a merged or split side face is still one of the listed faces.
+- Another component's sketch used by a feature: `Profile.assemblyContext` and `Profile.nativeObject` of the proxy,
+  `Sketch.parentComponent`, `Sketch.sketchPoints`, `SketchPoint.worldGeometry` of the native point (component
+  coordinates) and of `SketchPoint.createForAssemblyContext(occurrence)` (root coordinates), `Occurrence.transform2`
+  of that occurrence, `Sketch.sketchDimensions`, `SketchDimension.parameter`, `Parameter.dependencyParameters`.
+- A construction plane or axis of the root (or of another component, seen through its occurrence) used as a mirror
+  plane or turning axis gives `geometry` in root coordinates (`from_assembly`).
 - `HoleFeature.thread.isModeled`, `holePositionDefinition.sketchPoints[i].worldGeometry`, `position`, `direction`
   (into the material or out), `tipAngle` for a flat drill point, `participantBodies`, `sideFaces`, `endFaces`.
 - `CombineFeature.targetBody`, `toolBodies`, `isKeepToolBodies`; `ThreadFeature.isModeled`.
@@ -400,6 +425,11 @@ capture in `report.json`.
 - Edge set type names are matched by text: `ConstantRadius`, `VariableRadius`, `ChordLength`, `Asymmetric` or
   `DoubleRadius` (fillet); `EqualDistance`, `TwoDistances`, `DistanceAndAngle` (chamfer). The member names
   `ChamferEdgeSet.distanceOne`, `distanceTwo`, `angle`, `isFlipped`.
+- Uneven chamfers: `BRepEdge.faces` (two faces) and `SurfaceEvaluator.getNormalAtPoint` before the item (`sides`);
+  with the marker after it `ChamferFeature.faces` (the chamfer faces), `adsk.core.Point3D.create`,
+  `SurfaceEvaluator.getParameterAtPoint`, `getPointAtParameter`, `isParameterOnFace` and `getNormalAtParameter`
+  (`cut_normals`). An edge without `cut_normals` makes the chamfer a fixed shape; check that a chamfer on a closed
+  edge (a hole rim) gets two of each.
 - `FilletEdgeSet.isTangentChain` (default true when unreadable) and `FilletFeature.isRollingBallCorner`.
 - `BRepEdge.tangentiallyConnectedEdges` and `BRepFace.tangentiallyConnectedFaces`: whether the list includes the edge
   or face itself (the reader adds it first and drops repeats, so both work). `BRepFace.edges`.

@@ -8,7 +8,7 @@ No adsk import: it works on the objects it is given. Frames are `{ origin, x, y,
 import math
 
 from ..package.units import cm_to_mm
-from ..translator.place import RIGID_TOLERANCE
+from ..translator.place import IDENTITY_ROWS, RIGID_TOLERANCE, Move, move_from_frame
 from . import read_geometry as geo
 
 POINT_TOLERANCE_MM = 1e-3
@@ -176,21 +176,57 @@ def read_placement(body, root, component=None):
     native_points, proxy_points = _sample_points(native), _sample_points(body)
     if not native_points or len(native_points) != len(proxy_points):
         return _failed(name, "No points of the body could be compared.", uses, linked)
-    reason = "The place of the part could not be read."
+    found = _checked_frame(path, native_points, proxy_points, "part", "body")
+    if "error" in found:
+        return _failed(name, found["error"], uses, linked)
+    return dict({"path": name}, **found, uses=uses, linked=linked)
+
+
+def _checked_frame(path, native_points, proxy_points, what, shown):
+    """{ frame, source, checked_points } of the first candidate whose frame maps the native points onto the proxy
+    points, or { error }. `what` and `shown` word the reason."""
+    reason = "The place of the %s could not be read." % what
     for candidate in (_direct, _along_path):
         raw, used = candidate(path)
         if raw is None:
             continue
         if not _rigid(raw):
-            reason = "The place of the part is scaled or mirrored."
+            reason = "The place of the %s is scaled or mirrored." % what
             continue
         frame = _rounded(raw)
         if not _lands_on(frame, native_points, proxy_points):
-            reason = "The place of the part does not match the body in the assembly."
+            reason = "The place of the %s does not match the %s in the assembly." % (what, shown)
             continue
-        return {"path": name, "frame": frame, "source": used, "checked_points": len(native_points),
-                "uses": uses, "linked": linked}
-    return _failed(name, reason, uses, linked)
+        return {"frame": frame, "source": used, "checked_points": len(native_points)}
+    return {"error": reason}
+
+
+def _sketch_points(sketch, occurrence):
+    """Up to POINTS_TO_CHECK (native, proxy) point pairs of a sketch: in its component's coordinates, and as the
+    assembly shows them through `occurrence`."""
+    native, proxy = [], []
+    for point in geo.collection_items(geo.safe(lambda: sketch.sketchPoints, None)):
+        a = geo.safe(lambda: geo.point(point.worldGeometry), None)
+        b = geo.safe(lambda: geo.point(point.createForAssemblyContext(occurrence).worldGeometry), None)
+        if a is not None and b is not None:
+            native.append(a)
+            proxy.append(b)
+        if len(native) == POINTS_TO_CHECK:
+            break
+    return native, proxy
+
+
+def read_sketch_placement(proxy, sketch):
+    """Where another component's sketch sits in the assembly: `proxy` is the entity a feature got (seen through an
+    occurrence), `sketch` the native sketch. A record like the target's placement, or one with `error`."""
+    path = occurrence_path(proxy)
+    if not path:
+        return {"path": "", "error": "The sketch was not reached through its place in the assembly."}
+    name = geo.safe(lambda: path[0].fullPathName, "") or _names(path)
+    native_points, proxy_points = _sketch_points(sketch, path[0])
+    if not native_points:
+        return {"path": name, "error": "No points of the sketch could be compared."}
+    return dict({"path": name}, **_checked_frame(path, native_points, proxy_points, "sketch", "sketch"))
 
 
 def read_frame(body, source):
@@ -205,3 +241,47 @@ def read_frame(body, source):
     member = "transform2" if source in (SOURCE_TRANSFORM2, SOURCE_PATH_TRANSFORM2) else "transform"
     raw, _ = (_along_path if source in _PATH_SOURCES else _direct)(path, (member,))
     return _rounded(raw) if raw is not None else None
+
+
+_UNREAD = object()
+
+
+def target_move(ctx):
+    """The move from the target's component coordinates to the root's (identity for a root body), or None when the
+    target's place cannot be read. Read once per capture."""
+    found = getattr(ctx, "_target_move", _UNREAD)
+    if found is _UNREAD:
+        record = geo.safe(lambda: read_placement(ctx.picked, ctx.root, ctx.component), {})
+        if record is None:
+            found = Move(IDENTITY_ROWS)
+        else:
+            found = move_from_frame(record["frame"]) if "frame" in record else None
+        ctx._target_move = found
+    return found
+
+
+def _turned(move, v, offset):
+    return [round(sum(move.rows[i][k] * v[k] for k in range(3)) + (move.offset[i] if offset else 0.0), 9) + 0.0
+            for i in range(3)]
+
+
+def from_assembly(record, entity, ctx, point="point", direction="normal"):
+    """A plane or axis record of another component brought into the target's coordinates.
+
+    Such an entity is seen through an occurrence or belongs to the root, so its geometry is in the root's
+    coordinates. The record then carries `assembly: true` instead of `foreign`; when the target's place is unknown,
+    or the entity is neither, it stays foreign.
+    """
+    if not isinstance(record, dict) or not record.get("foreign") or point not in record or direction not in record:
+        return record
+    in_root = geo.safe(lambda: entity.assemblyContext, None) is not None or geo.same_entity(
+        geo.component_of(entity), geo.safe(lambda: ctx.root, None))
+    move = target_move(ctx) if in_root else None
+    if move is None:
+        return record
+    back = move.inverse()
+    out = {k: v for k, v in record.items() if k != "foreign"}
+    out[point] = _turned(back, record[point], True)
+    out[direction] = _turned(back, record[direction], False)
+    out["assembly"] = True
+    return out

@@ -4,10 +4,14 @@ The copies are read from the measured transform of every pattern element, so the
 the copies Fusion left out come from what Fusion built, not from flags. Solid sources (extrudes, revolves, holes,
 other repeats) become one `pattern` or `mirror` step. Rounds and chamfers cannot be repeated by the recipe, so the
 copies get their own `round` or `bevel` step with the source's `near` points moved to each copy.
+
+Each copy is a `follow.Motion`. A linear spacing that follows sizes moves the copied points with it, and the copies of
+extrudes are handed to the walk (`_copies`), so later picks on them follow sizes too.
 """
 import math
 
-from . import values, vec
+from . import follow, values, vec
+from .follow import Motion
 from .values import Quantity, number
 from .result import Refusal
 
@@ -25,8 +29,8 @@ FULL_TURN_DEG = 360.0
 
 SOLID_KINDS = ("extrude", "revolve", "hole", "pattern", "mirror")
 FINISH_KINDS = ("round", "bevel")
-# Finish fields that would need their own transform when copied; the translator never writes them.
-UNCOPYABLE_FINISH_KEYS = ("sizeEnd", "otherSize", "sizeOn", "cutAngleDeg")
+# Finish fields that a copy cannot carry; the translator never writes them.
+UNCOPYABLE_FINISH_KEYS = ("sizeEnd",)
 
 
 def _n(value):
@@ -60,10 +64,11 @@ def _sources(data, ctx, what):
             step = by_id[step_id]
             kind = step["kind"]
             if kind in FINISH_KINDS:
-                plain = ctx.plain_picks.get(step_id) or {"near": (step.get("edges") or {}).get("near"), "reads": ()}
+                near = (step.get("edges") or {}).get("near")
+                plain = ctx.plain_picks.get(step_id) or {"near": near, "reads": (), "written": near}
                 if plain["near"] is None or any(k in step for k in UNCOPYABLE_FINISH_KEYS):
                     return Refusal("A rounded or chamfered step of this %s cannot be repeated." % what)
-                finishes.append(dict(step, near=plain["near"], reads=plain["reads"]))
+                finishes.append(dict(step, near=plain["near"], reads=plain["reads"], written=plain.get("written")))
             elif kind in SOLID_KINDS:
                 if step.get("combine") == "intersect":
                     return Refusal("A step that trims the part cannot be repeated.")
@@ -78,36 +83,51 @@ def _sources(data, ctx, what):
     return solids, finishes
 
 
-def _finish_copies(finishes, motions):
-    """Round and bevel steps for the copies. `motions` are functions that move a point to a copy. Each source has
-    its measured points in `near`.
+def _written_points(ctx, item, source):
+    """The source's pick points as written (formulas where they follow sizes). A pick that names a step is placed
+    again here; when that fails, its sizes are fixed and the measured points are used."""
+    if source.get("written") is not None:
+        return source["written"]
+    followed = follow.follow_points(ctx, item, source["near"]) if ctx.written_reads else None
+    return followed if followed is not None else source["near"]
+
+
+def _finish_copies(ctx, item, finishes, motions):
+    """Round and bevel steps for the copies. `motions` are the follow.Motion of each copy. Each source has its
+    measured points in `near` and its written points in `written`.
 
     A moved point that lands on one of the source's own points is dropped, with its size: that edge is already
     finished, and the point would pick a neighbouring edge of the new surface. The copies are packed whole into
-    steps of at most MAX_NEAR_POINTS points.
+    steps of at most MAX_NEAR_POINTS points; copies whose `sizeOn` turns differently get their own steps.
     """
     steps = []
     for source in finishes:
         near = source["near"]
         if not near:
             continue
+        written = _written_points(ctx, item, source)
         sizes = source.get("edgeSizes")
         if sizes is not None:
             sizes = list(sizes) + [source["size"]] * (len(near) - len(sizes))
-        copies = []
-        for motion in motions:
-            kept = [(_vec(motion(p)), n) for n, p in enumerate(near)]
-            kept = [(q, n) for q, n in kept if not any(vec.close(q, p, POINT_TOL) for p in near)]
-            if kept:
-                copies.append(kept)
         groups = []
-        for copy_points in copies:
-            if groups and len(groups[-1]) + len(copy_points) <= MAX_NEAR_POINTS:
-                groups[-1].extend(copy_points)
+        for motion in motions:
+            kept = [(motion.numbers(p), n) for n, p in enumerate(near)]
+            kept = [(follow.cleaned_all(motion.quantities(written[n])), n) for q, n in kept
+                    if not any(vec.close(q, p, POINT_TOL) for p in near)]
+            if not kept:
+                continue
+            size_on = _vec(motion.turn_vector(source["sizeOn"])) if "sizeOn" in source else None
+            if groups and groups[-1][0] == size_on and len(groups[-1][1]) + len(kept) <= MAX_NEAR_POINTS:
+                groups[-1][1].extend(kept)
             else:
-                groups.append(list(copy_points))
-        for group in groups:
+                groups.append((size_on, list(kept)))
+        for size_on, group in groups:
             step = {"kind": source["kind"], "edges": {"near": [q for q, _ in group]}, "size": source["size"]}
+            for key in ("otherSize", "cutAngleDeg"):
+                if key in source:
+                    step[key] = source[key]
+            if size_on is not None:
+                step["sizeOn"] = size_on
             if sizes is not None:
                 step["edgeSizes"] = [sizes[n] for _, n in group]
             steps.append(step)
@@ -140,15 +160,16 @@ def _copied_bodies(steps):
     return total
 
 
-def _build(ctx, solids, finishes, repeat_step, motions, what):
+def _build(ctx, item, solids, finishes, repeat_step, motions, what):
     """The repeat step (when there are solid sources) followed by the finish copies."""
     steps = []
     if solids:
         repeat_step["of"] = solids
+        repeat_step["_copies"] = motions
         steps.append(repeat_step)
         if _copied_bodies(list(ctx.steps) + steps) > MAX_COPIED_BODIES:
             return Refusal("This %s makes more than %d copies in all." % (what, MAX_COPIED_BODIES))
-    steps += _finish_copies(finishes, motions)
+    steps += _finish_copies(ctx, item, finishes, motions)
     if not steps:
         return Refusal("This %s makes no copies." % what)
     return steps
@@ -181,9 +202,20 @@ def _skip_places(places, total):
     return [n for n in range(1, total) if n not in places]
 
 
-def _moves(by_place):
-    """One point mover per kept copy (not the original), in copy order. Uses the measured element transform."""
-    return [(lambda p, f=by_place[n]["frame"]: vec.frame_apply(f, p)) for n in sorted(by_place) if n > 0]
+def _grid_motions(item, placed, axes, columns):
+    """One Motion per kept copy (not the original), in copy order: the copy's place times the spacing, which may
+    follow sizes. A pick on a copy keeps the counts."""
+    needs = tuple(name for axis in axes for name in axis["count_q"].reads)
+    by_place = {}
+    for _, indexes in placed:
+        number_ = indexes[0] + (indexes[1] * columns if len(indexes) == 2 else 0)
+        shift = [Quantity(0.0)] * 3
+        for index, axis in zip(indexes, axes):
+            if index:
+                shift = [s.plus(axis["step_q"].scaled(index * d)) if abs(d) > 1e-12 else s
+                         for s, d in zip(shift, axis["dir"])]
+        by_place[number_] = Motion(shift=shift, needs=needs, by=item.get("name", ""))
+    return [by_place[n] for n in sorted(by_place) if n > 0]
 
 
 # ---------------------------------------------------------------- rectangular
@@ -290,24 +322,17 @@ def _lattice_axes(item, ctx):
     return axes
 
 
-def _keep_pattern_fixed(ctx, item, skip, finishes, counts, distances):
-    """Copies that are left out by number, or rounds that are copied one by one, cannot follow a changed count or
-    spacing: the sizes behind them become fixed numbers."""
+def _keep_pattern_fixed(ctx, item, skip, finishes, counts, turns=()):
+    """Copies that are left out by number, or rounds that are copied one by one, cannot follow a changed count;
+    turned copies cannot follow a changed angle either. The sizes behind them become fixed numbers."""
     name = item.get("name", "a pattern")
     if skip:
         for path in counts:
             values.pin(ctx, item, path, "%s leaves copies out, so its count must stay" % name)
     if finishes:
-        for path in counts + distances:
+        for path in counts + tuple(turns):
             values.pin(ctx, item, path, "the rounded or chamfered copies in %s are placed one by one" % name)
-    _keep_finish_picks_fixed(ctx, item, finishes)
 
-
-def _keep_finish_picks_fixed(ctx, item, finishes):
-    """Copied rounds and chamfers pick their edges by fixed points, so the sizes their source picks follow stay."""
-    for source in finishes:
-        ctx.fix(source["reads"], "the rounded or chamfered copies in %s are placed one by one"
-                % item.get("name", "a step"))
 
 
 def _rectangular(item, ctx):
@@ -360,10 +385,10 @@ def _rectangular(item, ctx):
         pattern[key] = {"dir": _vec(axis["dir"]), "count": axis["count"], "step": _n(axis["step"])}
     if skip:
         pattern["skip"] = skip
-    steps = _build(ctx, solids, finishes, pattern, _moves(by_place), "pattern")
+    steps = _build(ctx, item, solids, finishes, pattern, _grid_motions(item, placed, axes, columns), "pattern")
     if isinstance(steps, Refusal):
         return steps
-    _keep_pattern_fixed(ctx, item, skip, finishes, ("quantity_one", "quantity_two"), ("distance_one", "distance_two"))
+    _keep_pattern_fixed(ctx, item, skip, finishes, ("quantity_one", "quantity_two"))
     for key, axis in zip(("linear", "linear2"), axes):
         pattern[key]["count"] = axis["count_q"].json() if axis["count_q"].sized else axis["count"]
         pattern[key]["step"] = axis["step_q"].json()
@@ -452,16 +477,20 @@ def _circular(item, ctx):
     pattern = {"kind": "pattern", "polar": polar}
     if skip:
         pattern["skip"] = skip
-    steps = _build(ctx, solids, finishes, pattern, _moves(by_place), "pattern")
-    if isinstance(steps, Refusal):
-        return steps
     count_q = values.quantity(ctx, item, "quantity", count, dim="scalar", whole=True)
+    angle_q = None
     if full:
         values.pin(ctx, item, "total_angle_deg", "%s turns a full circle only while its angle is a plain 360"
                    % item.get("name", "a pattern"))
     else:
         angle_q = values.quantity(ctx, item, "total_angle_deg", total_deg, dim="angle",
                                   sign=-1 if raw_total < 0 else 1, absolute=True)
+    needs = count_q.reads + (angle_q.reads if angle_q is not None else ())
+    motions = [Motion.turn(point, direction, n * delta, needs, item.get("name", "")) for n in sorted(by_place) if n > 0]
+    steps = _build(ctx, item, solids, finishes, pattern, motions, "pattern")
+    if isinstance(steps, Refusal):
+        return steps
+    if angle_q is not None:
         polar["angleDeg"] = angle_q.json()
     _keep_pattern_fixed(ctx, item, skip, finishes, ("quantity",), ("total_angle_deg",))
     polar["count"] = count_q.json() if count_q.sized else count
@@ -555,7 +584,7 @@ def _cut_reach(step):
         end = vec.add(step["origin"], vec.scale(axis, number(step["depth"])))
         return [step["origin"], end], radius
     sketch = step.get("sketch") or {}
-    on = {k: (vec.unit(v) if k != "origin" else v) for k, v in sketch["on"].items()}
+    on = {k: (vec.unit(v) if k != "origin" else [number(c) for c in v]) for k, v in sketch["on"].items()}
     outline = _loop_points(sketch["outer"])
     if outline is None:
         return None
@@ -637,12 +666,8 @@ def _mirror(item, ctx):
         solids, finishes = sources
     else:
         return Refusal("Mirrors of faces are not copied yet.")
-    origin, normal = plane["origin"], plane["normal"]
-    steps = _build(ctx, solids, finishes, {"kind": "mirror", "plane": plane},
-                   [lambda p: vec.reflect(p, origin, normal)], "mirror")
-    if not isinstance(steps, Refusal):
-        _keep_finish_picks_fixed(ctx, item, finishes)
-    return steps
+    motion = Motion.mirror(plane["origin"], plane["normal"], item.get("name", ""))
+    return _build(ctx, item, solids, finishes, {"kind": "mirror", "plane": plane}, [motion], "mirror")
 
 
 _HANDLERS = {

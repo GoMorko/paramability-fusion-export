@@ -9,6 +9,7 @@ that feed a note, such as the participant bodies, fall back to an empty list.
 """
 from . import read_geometry as geo
 from .param_refs import Params, with_params
+from .placement import from_assembly
 from .read_sketch import first_profile, profile_area, read_profiles
 
 _OPERATIONS = [
@@ -144,19 +145,40 @@ def _dot(a, b):
     return sum(x * y for x, y in zip(a, b))
 
 
+MAX_SIDE_FACES = 256
+
+
+def _side_leans(feature, z):
+    """Per side face, its outward normal along the sketch normal `z` (the sine of how far the wall leans), or
+    None when a side face cannot be measured."""
+    leans = []
+    for face in geo.collection_items(geo.safe(lambda: feature.sideFaces, None))[:MAX_SIDE_FACES]:
+        ok, normal = face.evaluator.getNormalAtPoint(face.pointOnFace)
+        if not ok:
+            return None
+        leans.append(round(_dot(geo.unit_vector(normal), z), 9) + 0.0)
+    return leans or None
+
+
 def extrude_after(feature, ctx, data):
     """end_offset: signed distance from the first profile's sketch plane to a point on the first end face.
 
-    end_area: the area of that face in mm2 (with profile_area, it shows which way a taper goes).
+    end_area: the area of that face in mm2 (with profile_area, it shows which way a taper goes). side_leans: how
+    far each side face leans along the first profile's sketch normal (the taper check for several outlines).
     """
     faces = geo.collection_items(geo.safe(lambda: feature.endFaces, None))
-    if not faces:
-        return {}
-    out = {"end_area": geo.safe(lambda: round(faces[0].area * 100.0, 6) + 0.0, None)}
     profiles = data.get("profiles") or []
-    if not profiles or "frame" not in profiles[0]:
+    frame = profiles[0].get("frame") if profiles and isinstance(profiles[0], dict) else None
+    out = {}
+    if frame is not None:
+        leans = geo.safe(lambda: _side_leans(feature, frame["z"]), None)
+        if leans is not None:
+            out["side_leans"] = leans
+    if not faces:
         return out
-    frame = profiles[0]["frame"]
+    out["end_area"] = geo.safe(lambda: round(faces[0].area * 100.0, 6) + 0.0, None)
+    if frame is None:
+        return out
     p = geo.safe(lambda: geo.point(faces[0].pointOnFace), None)
     if p is None:
         return out
@@ -196,7 +218,7 @@ def axis_of(entity):
 def axis_record(entity, ctx):
     """`axis_of` with "foreign": true when the axis entity is not the target component's."""
     entity = geo.native_input(entity, ctx)
-    return geo.mark_foreign(axis_of(entity), entity, ctx)
+    return from_assembly(geo.mark_foreign(axis_of(entity), entity, ctx), entity, ctx, "point", "dir")
 
 
 def _revolve_extent(definition):
