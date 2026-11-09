@@ -3,6 +3,20 @@
 No tool can run Fusion, so these checks are done by hand after each change to the Fusion side. Tick each one and
 note the Fusion version and system.
 
+## Check first in this version
+
+In this order. Each id is described in the section named.
+
+- [ ] Compact export window: section 7.2, "The export window has no empty gaps", then "Early warning" and "Show in
+      timeline".
+- [ ] Result window with its warnings: section 7.2, "Click OK: ... the result window", and the export pipeline entry
+      under "Fusion calls to watch" ("These parameters could not be set back").
+- [ ] E1 to E6, Emboss on a flat face: section 10.
+- [ ] T1 to T5, thin walled extrudes of one closed outline: section "Thin extrudes".
+- [ ] S1 to S5 and X1 onward, spline outlines and sketch text: section 11.
+- [ ] Mirror plane and pattern axis reference reads: "Fusion calls to watch", the entry about `read_reference.py`.
+- [ ] `%` with a negative left side: T5.
+
 ## 1. Install
 
 - [ ] Follow the README install steps on macOS (and Windows if you have it). Confirm each step matches the current
@@ -151,9 +165,9 @@ mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter
       probe could not follow it.
 - [ ] **Loose sizes.** Tick a parameter that drives a joint, or a sketch the tries cannot follow. The size stays in
       `recipe.json`, the manifest `loose` list holds it with a reason that starts with the Fusion name, the result
-      window shows "may be unexpected" in its "In Paramability" column, and Paramability shows a warning mark. A
-      ticked parameter that no copied step reads is not a size: the message names it, and it is in the manifest
-      `parameters` list.
+      window has a "May give unexpected results" group and its row says "may be unexpected", and Paramability shows a
+      warning mark. A ticked parameter that no copied step reads is not a size: the message names it, and it is in
+      the manifest `parameters` list.
 - [ ] **Labels.** Open the file in Paramability: each size shows the Fusion parameter name as its label, and
       the Fusion comment as the variable's description (from the manifest `parameters` list), not as the name.
 
@@ -163,9 +177,6 @@ mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter
       be ticked: its row then says "size, may be unexpected", and the box under the table gives the reason ("may give
       unexpected results: it moves a joint") when the row is clicked. A parameter that drives a sketch dimension is
       not marked: section 9 covers it.
-- [ ] **Doubtful sizes in the file.** Export with such a size ticked: the size is in `recipe.json`, the manifest
-      `loose` list names it with the reason, the result window has a "May give unexpected results" group and its row
-      says "may be unexpected", and Paramability marks the size with a warning.
 - [ ] **Another body.** In a design with two bodies built from different parameters, pick the other body: the ticks
       and greyed lines change to that body's parameters. A parameter only the other body reads is not ticked. Note
       how long the dialog takes to open and to follow the pick (the add-in reads the steps of the body each time).
@@ -193,7 +204,8 @@ mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter
       when set by hand from the saved values, and no row stays on the flipped solution.
       The export takes one more recompute per row (the parameters are put back before each row after the first), so a
       long run is a little slower.
-- [ ] **Restore.** After each export, a cancel in the "Trying size 2 of 4" window, and a forced failure (full disk
+- [ ] **Restore.** With sizes that move sketches the progress window shows "Trying size n of m". After each export, a
+      cancel in the "Trying size 2 of 4" window (the message says the export is cancelled), and a forced failure (full disk
       or a read only folder), every parameter shows its old expression, formulas included, the timeline marker is
       where it was and the design has no unsaved change beyond Fusion's own.
 - [ ] **Expressions** (the translator writes `+ - * /`, `^` as `pow`, and numbers with units as mm or degrees; the
@@ -208,8 +220,6 @@ mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter
       marker is at the same step, parameters are back and the later steps compute as before when you drag the marker
       to the end.
 - [ ] Time: note how long a design with 5 sizes and 100 timeline items takes.
-- [ ] **Extra rebuilds.** With sizes that move sketches, the progress window shows "Trying size n of m". Cancel
-      there: the message says the export is cancelled, parameters are back and the marker is at the end.
 
 ### Pick points that follow sizes
 
@@ -358,7 +368,7 @@ the sizes on the form and compare the part with Fusion at the same values.
       counts and the cube width. Export: no parameter is greyed; the result window shows all as sizes; `recipe.json`
       has `"width": { "expr": "FilterBox_width_mm" }`. In Paramability, changing a count or the cube width resizes the
       base, the shell stays open and the corners stay round. Repeat with the rectangle drawn from the origin corner.
-      Note the export time against an export of the same design before this stage.
+      Note the export time.
 - [ ] **K2 Pipe offset.** A circle placed by `pipe_offset_mm` from the box edge, diameter `pipe_d_mm` as a sketch
       dimension, cut through. Then a hole feature on a sketch point at `pipe_offset_mm`. Both follow both sizes and
       the box width.
@@ -399,14 +409,15 @@ the Fusion part. The calls behind these tests are listed under "Capture reader c
 - [ ] **E3 Moved or turned outline.** An emboss with a horizontal distance, a vertical distance and a rotation set in
       the dialog. The copy stops with "moved or turned on its face" and the part saves as a fixed shape. Note in which
       frame each setting moves the outline (the sketch axes, the face axes, or the model axes) and around which point
-      the rotation turns, so the copy can follow them later.
+      the rotation turns, so the copy can follow them later. With all three at zero but one of them set by a
+      parameter, a ticked size behind it stays free with the reason "it sets how far <emboss> moves its outline".
 - [ ] **E4 Text.** An emboss of sketch text on the top face is copied (see section 11, X1). An emboss of text on a
       side face or a curved face is refused for its face, not for the text.
+- [ ] **E5 Older Fusion.** In a Fusion build from before September 2025, open a design that has an emboss. The export
+      does not crash: the step is named in the stop message and the part saves as a fixed shape.
 - [ ] **E6 Tangent Chain.** Emboss an outline near the edge of a face that has a fillet along that edge, with Tangent
       Chain on. The copy stops with "Tangent Chain" and the part saves as a fixed shape. With Tangent Chain off, or on
       a face with no rounded edge, it is copied.
-- [ ] **E5 Older Fusion.** In a Fusion build from before September 2025, open a design that has an emboss. The export
-      does not crash: the step is named in the stop message and the part saves as a fixed shape.
 
 ## 11. Spline outlines and sketch text
 
@@ -417,7 +428,7 @@ The calls behind these tests are listed under "Capture reader calls to watch (sp
 
 - [ ] **S1 Spline edge.** Draw a closed outline of three lines and one fit point spline with five or six points
       (a bump on one side) and extrude it. The export copies it and the part matches: lay the Paramability part over
-      the Fusion part and look at the curved wall; it must stay within about 0.01 mm. In `report.json` the curve shows
+      the Fusion part and look at the curved wall; it must stay within about 0.005 mm. In `report.json` the curve shows
       `kind` `other`, `type` `NurbsCurve3D`, a `samples` list of 20 or more
       points, a `mid` that is one of them, `tangent_start` and `tangent_end` (unit directions that point along the
       curve), and no `truncated`.
@@ -461,10 +472,11 @@ The calls behind these tests are listed under "Capture reader calls to watch (sp
       the same overlap reason, not with a part. If the strokes come through as separate outlines instead (no crossing
       loops), the extrude volume check stops it: the volume of the Fusion part is smaller than the outline areas times
       the length, and the item says so. Check that no part is exported in either case.
-- [ ] **X5 Text and sizes.** Tick a parameter that drives a sketch dimension of the text's sketch (its position or
-      height). The size stays loose or is left out with "could not be tried at other values". An emboss depth ticked
-      as a size follows. A size that drives the text height (the height is `Height` in the text dialog) is loose or
-      left out with a reason that names the sketch, also when the same size drives the emboss depth.
+- [ ] **X5 Text and sizes.** Tick a parameter that drives a sketch dimension of the text's sketch (its position).
+      The size stays loose or is left out with "could not be tried at other values". An emboss depth ticked as a size
+      follows. A size that drives the text height (`Height` in the text dialog) is left out of the sizes with the
+      reason "it changes the size of the text in <sketch>", also when the same size drives the emboss depth; the text
+      keeps its current height.
 - [ ] **X6 Text of another component.** A text in a sketch of another component used by an extrude of this one: the
       part saves as a fixed shape.
 
@@ -625,7 +637,7 @@ These were written from the API reference and never run:
   - `ModelParameter.createdBy` of a sketch dimension: recognised by the type name, a `SketchDimension` cast, the
     members `parentSketch` and `parameter`, or else the sketch dimension whose own `parameter` is this one
     (`Sketch.sketchDimensions`). Check that `created_by.kind` is `sketchDimension` with the sketch name in the report
-    capture for each dimension (before this check, a real design gave `other` with a role like "Linear Dimension-2").
+    capture for each dimension.
 - `Design.fusionUnitsManager.defaultLengthUnits` as the unit of a bare number in a length formula (falls back to mm).
 - `Component.modelParameters` read by `list_model_parameters`.
 - Scoping to the picked body: `SketchDimension.parentSketch` with `Sketch.name` (read as `created_by.sketch`), and
@@ -657,6 +669,12 @@ These were written from the API reference and never run:
     parameters only.
   - `BRepFace.pointOnFace` and `BRepFace.geometry` (type name `Plane` or `Cylinder`) of the mirror face or the pattern
     axis face; `BRepEdge` points through `edge_record`.
+- The export pipeline (`lib/export_plan/pipeline.py`, wired in `commands/ExportForParamability/export_flow.py`):
+  the export measures the sketches, and the probe reads the sketches once more after the last restore, so
+  `report.json` `probe.restore_gap_mm` and `health` describe the design as the person gets it back. Check that the
+  extra read after a restore does not move the timeline marker, that `health.sketch_drift` stays false on a design
+  that returns to its start, and that a restore the add-in cannot finish (a parameter locked by hand during the
+  export) shows "These parameters could not be set back" in the result window and in a message box.
 
 ## Capture reader calls to watch (extrude, revolve, hole, combine, thread, sketch profiles)
 
@@ -752,12 +770,6 @@ capture in `report.json`.
 - `CircularPatternFeature.axis` (construction axis, sketch line, linear edge, cylindrical face).
 - `Feature.timelineObject.index` of each pattern or mirror input feature matches the item `index` in the capture.
 - `MirrorFeature.patternEntityType`, `mirrorPlane` (construction plane or planar face), `isCombine`.
-- The export pipeline (`lib/export_plan/pipeline.py`, wired in `commands/ExportForParamability/export_flow.py`):
-  the export measures the sketches, and the probe reads the sketches once more after the last restore, so
-  `report.json` `probe.restore_gap_mm` and `health` describe the design as the person gets it back. Check that the
-  extra read after a restore does not move the timeline marker, that `health.sketch_drift` stays false on a design
-  that returns to its start, and that a restore the add-in cannot finish (a parameter locked by hand during the
-  export) shows "These parameters could not be set back" in the result window and in a message box.
 
 ## Capture reader calls to watch (emboss)
 
@@ -768,7 +780,7 @@ Emboss tests of section 10 and read the capture in `report.json`.
 - `adsk.fusion.EmbossFeature` itself: it came with the September 2025 release and the API reference marks it as
   preview, so members may change. A Fusion build without it cannot hold the step (E5).
 - `EmbossFeature.profiles` with the marker just before the item: a collection of `Profile` and `SketchText` items on
-  one plane. A text item is read only for its `parentSketch` and refused.
+  one plane. A text item is read as outlines (X1).
 - `EmbossFeature.inputFaces` with the marker just before the item: a list or a collection of `BRepFace`. The reader
   accepts both and raises when it cannot list them.
 - `EmbossFeature.faces` with the marker just after the item: the faces the feature made. The reader takes the flat

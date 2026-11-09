@@ -253,9 +253,10 @@ Nothing ties such a step to the walls of the part, so it must keep meeting the p
 within 2 mm keep their side of the face at every size setting of the range (every mix of the ends for up to 6
 sizes, a bounded sample past that), and a face that lies on a wall stays on it. Where a gap would close or open, the sizes it reads stay free over
 their ranges and are listed in `loose`, with the values past which the step may stop meeting the part ("past 2.05",
-"below 0.98"). Those values come from `lib/translator/kept_ranges.py`, which brings the ranges toward their values
-until the gaps keep their side (each size alone first, then all together); when a range would shrink to its value or
-the person typed it, no value is given and the size cannot follow (`Context.doubt`, listed in `loose` without one).
+"below 0.98"). Those values come from `lib/translator/kept_ranges.py`, which finds, without changing any range, the
+values up to which the gaps keep their side (each size alone first, then all together); when that value would be the
+size's own value or the person typed the range, no value is given and the size cannot follow (`Context.doubt`, listed
+in `loose` without one).
 
 CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriented):
 
@@ -273,7 +274,7 @@ when the chords do not add up to the curve's own length, and the translator then
 directions of the curve at its ends (`CurveEvaluator3D.getTangent`), left out when they cannot be read; the recipe's
 spline segment has no tangent field, so they are for checks only. A curve that cannot be evaluated has `samples: []`.
 The translator fits the app's spline through points chosen from the samples (`lib/translator/spline_fit.py`, tolerance
-0.005 mm, at most 64 points inside one segment, split into several segments past that, at most 1000 points in a loop).
+0.005 mm between the points, also where the curve runs between two samples, at most 64 points inside one segment, split into several segments past that, at most 1000 points in a loop).
 
 ## 5. Feature data
 
@@ -741,7 +742,7 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   walk a stuck sketch value follows its `rest` (the sizes that still move it), as it does once its own sizes are
   fixed. `TranslateResult.loose` lists the sizes as `{ name, reason }` ("... may give unexpected results: ..."). A
   size that no formula reads after that is not a size: it is left out and listed in `TranslateResult.dropped` with its
-  reason. The ranges are always the table's: no minimum is raised and no range is shortened. A rule that can fail inside a range
+  reason. The ranges are always the table's. A rule that can fail inside a range
   (a count that a pick needs, a taper, a step that must keep meeting the part) marks the sizes it reads, with the
   value past which it fails where `kept_ranges` gives one. Only `TranslateResult.fixed` holds sizes that became
   numbers: a formula too long to copy (`Context.doubt` with `fixed`). Without a motion (`motion=None`) every size behind
@@ -884,8 +885,8 @@ design gives a fixture: its `capture` is copied as is.
 `sizes` holds `free` (recipe size names), `fixed` and `loose` (`{ name, reason }` by recipe size name, as in the
 manifest), and `dropped` (`{ name, reason, used }` by Fusion name: the ticked parameters that are not sizes, from
 `TranslateResult.dropped`; `used` is true when a step reads the parameter and the copy could not follow it). `loose` comes
-from the translator and from the probe. The export
-makes no STEP per size and keeps no range changes, so `checks` in the manifest is always empty. The report has a
+from the translator and from the probe. `checks` in the manifest is
+always empty. The report has a
 `probe` when a sketch could be followed (the rows only recompute and the parameters are restored), `marker` and
 `health`. A probe row that Fusion cannot build is listed in `probe.dropped`; no size is fixed for it.
 

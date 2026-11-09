@@ -5,7 +5,7 @@ depth and the shift and turn of the outline, and the size of the part. After the
 where the feature put its farthest face parallel to the input face. For Tangent Chain it also reads the faces that
 touch the input faces tangentially and the surface kinds of the faces the feature made. The translator checks the two against each other.
 
-`EmbossFeature` is a recent addition to Fusion and marked as preview in the API reference. Each setting is read on its
+`EmbossFeature` is marked as preview in the API reference. Each setting is read on its
 own: one that cannot be read becomes null, and the translator then refuses the step.
 """
 from . import read_geometry as geo

@@ -117,5 +117,5 @@ def table_to_csv(table, params):
 
 
 def read_table(table, params):
-    """Run the same checks as the old text box: returns a SizesRead (rows, columns, problems)."""
+    """Read the table with the checks of the sizes text: returns a SizesRead (rows, columns, problems)."""
     return read_sizes(table_to_csv(table, params), params)

@@ -229,7 +229,7 @@ def handled(ctx, item, path, same_as=None):
 
 
 def pin(ctx, item, path, why):
-    """The value at `path` stays a number here: the sizes its parameter reads become fixed numbers."""
+    """The value at `path` stays a number here: the sizes its parameter reads stay free and are marked with `why`."""
     ctx.ask(item, path)
     ref = _param(item, path)
     if ref is not None:

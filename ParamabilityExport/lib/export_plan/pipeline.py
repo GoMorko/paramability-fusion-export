@@ -1,8 +1,7 @@
 """The export of one body into a recipe package, from the capture to the manifest. Pure: no Fusion imports.
 
-The sequence asks nothing of Fusion beyond the capture, the STEP of the part as it is and the sketch measuring. No
-STEP is made per size and no size is tried for a build: a size that a value cannot follow stays free with a warning,
-and the ranges are the ones in the dialog table.
+The sequence asks Fusion for the capture, the STEP of the part as it is and the sketch measuring. A size that a value
+cannot follow is left free with a warning, and the ranges are the ones in the dialog table.
 
 Steps, in order: read the capture, translate once to learn which sizes the recipe keeps, run the sketch probe (it
 only recomputes), translate again with the motion it found, and assemble the package. The probe runs whenever a

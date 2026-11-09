@@ -50,11 +50,11 @@ Nothing is typed in Fusion.
 ### What the export does
 
 The export reads the steps of the body, tries the sizes that move a sketch (see below), and writes the file. While it
-works it sets parameters to other values for a moment, only to let Fusion rebuild and to measure the sketches; every
-parameter is put back, whatever happens. No STEP file is made for these tries and no range is changed. Reading the
-steps may move the timeline marker, and it is put back. Every ticked parameter that a copied step reads becomes a free
+works it sets parameters to other values for a moment, only to let Fusion rebuild and to measure the sketches (no STEP
+file is made for these tries); every parameter is put back, whatever happens. Reading the steps may move the timeline
+marker, and it is put back. Every ticked parameter that a copied step reads becomes a free
 size with its current value and the range in the table. You set the final Min and Max in Paramability. The file has no
-size checks (`checks` is empty), so Paramability freezes nothing. The only sizes that become fixed numbers are the ones
+size checks (`checks` is empty). The only sizes that become fixed numbers are the ones
 that would make the recipe invalid (for example a formula too long to write). A ticked parameter that no copied step
 reads is not a size; it still comes along as a variable.
 
@@ -64,15 +64,14 @@ have to change, a step drawn on another component's sketch that could stop meeti
 45 degrees. Such a size stays a free size. It is marked "may give unexpected results" with the reason, which starts
 with the Fusion name of the parameter and, where the add-in can tell, the value past which the problem starts. Paramability
 shows a warning mark next to it. The parts of the shape that cannot follow it keep their numbers, so the part looks
-the same at the current values. The message and the result window list these loose sizes.
+the same at the current values. The result window lists these loose sizes.
 
 A size can also move a sketch: a rectangle width, a hole position, or a plane that a sketch sits on. The add-in then
-sets the size to other values, only lets Fusion rebuild (no STEP file), and reads the sketch each time. From these
+sets the size to other values, lets Fusion rebuild, and reads the sketch each time. From these
 readings it writes the sketch value as a formula of your parameters, such as `0.5 * FilterBox_width_mm`, so the
 sketch follows the size in Paramability. This adds about one rebuild per size that moves a sketch, plus two. The
 progress window says "Trying size ..." for these steps, and Cancel works there too. A try that Fusion cannot build is
-dropped; no size is fixed for it. A size the readings still cannot follow is loose. A size that no copied step reads
-is not a size.
+dropped; no size is fixed for it. A size the readings still cannot follow is loose.
 
 These cases cannot be copied in a sketch even with the tries: a point that moves along a curve (an angle or a
 polar placement), an outline that changes shape (a line that only crosses the outline above some width, a sketch
@@ -122,7 +121,7 @@ After an export, a cancel or a size that does not build, your parameters are set
 ## How it works
 
 Export for Paramability writes one STEP file of the picked body as it is, and sets parameters only for the sketch
-tries (recompute, no STEP). Export size choices sets the parameters for each size, lets Fusion rebuild, writes a STEP
+tries. Export size choices sets the parameters for each size, lets Fusion rebuild, writes a STEP
 file of the picked body, and moves on. All numbers in the file are in millimetres and degrees.
 
 When the design holds more than the picked body, the add-in copies the picked body into a temporary component,
@@ -164,14 +163,15 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   other bodies that are never joined to the picked body do not stop the copy.
 - Sketch outlines with a spline edge, an elliptical arc or another free curve are copied as spline segments. The add-in
   reads the Fusion curve as a fine chain of points and picks points for the app's own smooth curve so that it stays
-  within 0.005 mm of Fusion's curve (a long or tight curve is split into several segments). A size that moves a sketch
+  within 0.005 mm of that chain, also between its points (a long or tight curve is split into several segments). A size that moves a sketch
   holding such a curve cannot be followed: it stays loose with the reason, or is left out of the sizes, because the
   points of the curve are not a formula of the sizes. An outline of more than 1000 points is not copied.
 - Sketch text (`Text` in a sketch) is read as outlines and copied by Extrude and Emboss like any other outline: each
   letter shape is one outline step, a hole in a letter (the inside of an "o") is kept. A text with more than 400
   outlines, 1000 points in one outline or 256 holes in one letter is not copied ("This text has too many outline
-  points to copy"). A size that moves the sketch of a text cannot be followed. An emboss of text must grow or shrink
-  the part by the text area times the depth, as for other outlines.
+  points to copy"). A size that moves the sketch of a text, or sets the height of the text, cannot be followed: it stays loose
+  or is left out of the sizes, with the reason. An emboss of text must grow or shrink the part by the text area
+  times the depth, as for other outlines.
 - An Emboss of sketch outlines on a flat face is copied as an extrude that starts on the face: it raises the outline
   when its depth is positive and sinks it when the depth is negative. The depth follows a parameter. The copy checks
   that the part grows or shrinks by the outline area times the depth, so an outline that runs past its face stops the
@@ -179,8 +179,8 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 - A thin extrude of one closed outline (a wall along a rectangle or circle, for lids and boxes) is copied with its wall
   thickness as a size. The side of the wall (inside, outside or both ways) is taken from the measured end face, since
   the API does not say which of Fusion's side one and side two is which. Where Fusion keeps the corners of the wall
-  sharp, the copy rounds them and says so. A step placed after a thin extrude cannot follow sizes on the wall's faces,
-  so the sizes it reads may give unexpected results.
+  sharp, the copy rounds them and says so. A later pick on the wall's faces is placed on earlier steps or its
+  sizes may give unexpected results.
 - A formula that uses `%` is copied only when its left side stays at or above zero over the size ranges; the app and
   Fusion may disagree on negative values.
 - Some steps are copied with a note instead: setback corners, a cosmetic thread (cut as a plain hole), a round or

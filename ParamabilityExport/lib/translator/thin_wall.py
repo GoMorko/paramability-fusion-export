@@ -187,8 +187,8 @@ def decide(curves, wall, end_area):
 class ThinWall(Placer):
     """The wall of a thin extrude as material only: it says whether a point lies in the wall at the measured sizes.
 
-    Its faces are not placed (`place` gives nothing), so a later pick on one of them cannot follow sizes and the sizes
-    are marked, and `opaque` makes a step on another part's sketch say it cannot check that it still meets the wall."""
+    Its faces are not placed (`place` gives nothing), so a later pick on one of them is placed on earlier steps or its
+    sizes are marked, and `opaque` makes a step on another part's sketch say it cannot check that it still meets the wall."""
 
     opaque = True
 

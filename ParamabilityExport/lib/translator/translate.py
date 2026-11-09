@@ -252,7 +252,7 @@ class _Pinned:
 
 
 class _Settled:
-    """Where the passes of one walk mode ended: the last walk, its context, the table it used, the fixed sizes with
+    """Where the passes of one walk ended: the last walk, its context, the table it used, the fixed sizes with
     why, and what the last walk could not follow (`Context.depends`)."""
 
     def __init__(self, result, ctx, table, whys, depends):

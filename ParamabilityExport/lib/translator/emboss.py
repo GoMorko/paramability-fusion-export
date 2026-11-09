@@ -6,7 +6,7 @@ copy relies on, rewrites the item as such an extrude and passes it to `extrude.h
 formulas, slabs and picks work as for any extrude. Fusion keeps one signed depth and no emboss or deboss flag.
 
 Sketch text arrives as ordinary outline profiles (`text_outlines.py`) whose areas come from the outlines themselves,
-so the volume check below is also what confirms that the text outlines were read in the right place.
+so the volume check below also confirms that the text outlines have the area the feature used.
 
 Refused, with the part then saved as a fixed shape: curved input faces, an outline moved or turned on its face (the
 frame of those settings is not documented), a text whose outlines could not be read, a sketch plane tilted to the

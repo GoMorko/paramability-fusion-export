@@ -128,7 +128,7 @@ def view(result):
 
 
 class ExportTest(unittest.TestCase):
-    def test_an_export_measures_the_sketches_and_makes_one_step_file_and_no_check_step(self):
+    def test_an_export_measures_the_sketches_and_makes_one_step_file(self):
         port = FakePort()
         result = export(port)
         self.assertEqual(result.manifest["kind"], "recipe")

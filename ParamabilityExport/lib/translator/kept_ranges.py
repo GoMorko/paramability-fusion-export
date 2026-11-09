@@ -2,10 +2,10 @@
 
 A rule is `(value, sign)`: a sized Quantity that must stay above `tol` (sign 1), below `-tol` (sign -1) or within
 `tol` of zero (sign 0) at every size setting of the range (`range_check.corners`: every mix of the ends of the sizes
-it reads). `holding_ranges` brings the ends of the sizes it reads toward their values until the rules hold: each size
+it reads). `holding_ranges` looks for the values the ends of the sizes it reads can go to while the rules still hold: each size
 at its own ends first, then all of them by the same share of what is left for the settings that change several sizes
-at once. The values where a range had to stop tell the person past which value a size may give unexpected results.
-A size whose range the person typed is not brought in: the rules cannot be kept for it.
+at once. The ranges themselves are not changed; the values found tell the person past which value a size may give
+unexpected results. A size whose range the person typed gets no value: the rules cannot be kept for it.
 """
 import math
 
