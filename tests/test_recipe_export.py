@@ -32,6 +32,14 @@ class PlanTest(unittest.TestCase):
     def plan(self, capture, up_axis="z"):
         return plan_single_export(capture, self.step, "Plate", "writer 1", up_axis)
 
+    def test_body_in_a_component_is_a_fixed_shape_with_a_note(self):
+        manifest, files, report = plan_single_export(
+            RuntimeError("not read"), self.step, "Plate", "writer 1", "z", in_component=True)
+        self.assertEqual(manifest["kind"], "stepOnly")
+        self.assertIn("sits inside a component", manifest["notes"][0])
+        self.assertNotIn("recipe.json", files)
+        self.assertEqual(report["outcome"], "stepOnly")
+
     def test_translated_part_is_a_recipe_package(self):
         manifest, files, report = self.plan(load_capture("extrude_plate"))
         self.assertEqual(manifest["kind"], "recipe")

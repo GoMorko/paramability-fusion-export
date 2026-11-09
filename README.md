@@ -47,6 +47,8 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 ## Limits
 
 - One solid body per export.
+- A body inside a component can be picked, and rows of values work for it. A recipe needs the body in the root
+  component for now; a body in a component is saved as a fixed shape with a note.
 - A recipe covers the picked body only, built from the root component. These stop the copy and leave a plain part:
   thin extrudes, face outlines, spline and other free curve outlines, extrudes that start or end on a tilted or curved
   surface, extrudes that make a new component, modeled threads, rounds with variable or chord length sizes or curvature

@@ -1,7 +1,7 @@
 """The Export for Paramability dialog: builds the inputs and reads them back."""
 import adsk.core
 
-from ..fusion_reader.bodies import is_root_body
+from ..fusion_reader.bodies import is_pickable_body
 from ..export_plan.sizes_text import (
     others_line, pick_default_index, prefill_sizes_text, read_sizes, settable_parameters)
 
@@ -95,14 +95,14 @@ def refresh(inputs, parameters):
         dropdown.listItems.add(row["name"], i == index)
 
 
-def allow_preselect(args, root):
-    """Only bodies of the root component can be picked."""
-    args.isSelectable = is_root_body(args.selection.entity, root)
+def allow_preselect(args):
+    """Any solid body can be picked, also one inside a component."""
+    args.isSelectable = is_pickable_body(args.selection.entity)
 
 
-def inputs_valid(inputs, parameters, root):
+def inputs_valid(inputs, parameters):
     form = read_form(inputs)
-    if form["body"] is None or not is_root_body(form["body"], root):
+    if form["body"] is None or not is_pickable_body(form["body"]):
         return False
     if not 1 <= len(form["choice_name"]) <= MAX_CHOICE_NAME:
         return False

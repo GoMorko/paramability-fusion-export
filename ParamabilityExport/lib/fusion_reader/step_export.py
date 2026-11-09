@@ -1,4 +1,4 @@
-"""Write one body of the root component as a STEP file."""
+"""Write one body of the design as a STEP file."""
 import adsk.core
 
 from ..export_plan.errors import StepExportError
@@ -28,11 +28,20 @@ def count_solid_bodies(root):
 
 
 def resolve_body(design, token, fallback):
-    """Find the body again by its token (references can go stale after a recompute); else use the fallback."""
+    """Find the body again by its token (references can go stale after a recompute); else use the fallback.
+
+    A picked body inside a component is an occurrence proxy that carries the placement. When the lookup gives the
+    native body instead, it is put back into the picked occurrence, since a native body would export at the
+    component's own origin.
+    """
     try:
         found = design.findEntityByToken(token)
         if found:
-            return found[0]
+            body = found[0]
+            context = getattr(fallback, "assemblyContext", None)
+            if context is None or getattr(body, "assemblyContext", None) is not None:
+                return body
+            return body.createForAssemblyContext(context)
     except Exception:
         pass
     return fallback
@@ -60,6 +69,7 @@ def export_body_step(design, body, path, route=None):
     tokens_before = timeline_tokens(timeline)
     occurrence = root.occurrences.addNewComponent(adsk.core.Matrix3D.create())
     try:
+        # For a body inside a component, body is the occurrence proxy, so the copy keeps its place in the assembly.
         body.copyToComponent(occurrence)
         _export_component(design, occurrence.component, path)
     finally:

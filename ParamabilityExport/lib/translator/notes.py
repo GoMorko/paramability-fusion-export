@@ -35,6 +35,11 @@ def step_only_note(refusal):
     return _cut(text, MAX_NOTE)
 
 
+def inside_component_note():
+    return ("This part sits inside a component, so it was exported as a fixed shape. "
+            "Its sizes still work as rows of values.")
+
+
 def reader_failure_note():
     return "Added as a fixed shape: the steps could not be read."
 

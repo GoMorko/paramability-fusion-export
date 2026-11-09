@@ -7,7 +7,7 @@ import json
 
 from ..package.manifest import build_recipe_manifest, build_step_only_manifest, validate_manifest
 from ..translator import CaptureError, translate
-from ..translator.notes import recipe_note, reader_failure_note, step_only_note, translate_failure_note
+from ..translator.notes import inside_component_note, recipe_note, reader_failure_note, step_only_note, translate_failure_note
 
 MAX_RECIPE_BYTES = 8 * 1024 * 1024
 _TOO_LARGE = {"index": None, "name": "", "type": "", "reason": "The recipe is too large to open."}
@@ -44,10 +44,11 @@ def _with_up_axis(capture, up_axis):
     return {**capture, "up_axis": up_axis}
 
 
-def plan_single_export(capture_or_error, step_file, title, writer, up_axis):
+def plan_single_export(capture_or_error, step_file, title, writer, up_axis, in_component=False):
     """Return (manifest, files, report) for one body.
 
     capture_or_error: the reader's capture dict, or the exception the reader raised.
+    in_component: the body is not in the root component, so no steps are translated and the part stays a fixed shape.
     files maps entry paths to a file path or bytes, as write_package expects. Raises ValueError when the manifest
     breaks the package rules.
     """
@@ -56,7 +57,10 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis):
     refusal = None
     note = None
     error = None
-    if capture is None:
+    if in_component:
+        capture = None
+        note = inside_component_note()
+    elif capture is None:
         error = capture_or_error
         note = reader_failure_note()
     else:

@@ -35,7 +35,13 @@ The add-in exports the picked body alone. The choice is the constant `MULTI_BODY
 - [ ] The design timeline has no leftover items after the export (the temporary copy is removed).
 - [ ] If the copy route adds items to the timeline, fails, or the STEP holds more than the picked body, set
       `MULTI_BODY_ROUTE = ROUTE_ASK_DESIGNER`. The dialog then asks the designer to hide or move the other bodies.
-- [ ] A body inside a child component cannot be picked (it is greyed out in the viewport).
+- [ ] A body inside a child component or occurrence can be picked in the viewport, OK turns active, and the STEP
+      holds the body where it sits in the assembly (not moved to the component origin).
+- [ ] With rows of values, a body in a component exports as usual. With one row and "Export as a recipe" on, the
+      file is a plain part with the note "This part sits inside a component, so it was exported as a fixed shape."
+      A recipe needs the body in the root component for now.
+- [ ] A body picked after its parameter changed (second row) still lands in the right place (the token lookup keeps
+      the occurrence proxy).
 - [ ] Roll the timeline marker back and click OK: the export stops with "Move the timeline marker to the end", and no
       feature of the design is deleted.
 

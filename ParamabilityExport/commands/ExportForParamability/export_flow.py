@@ -13,6 +13,7 @@ from ...lib.export_plan.recipe_export import plan_single_export, recipe_saved_me
 from ...lib.export_plan.runner import ExportCancelled, RowExport
 from ...lib.export_plan.sizes_text import pick_default_index, read_sizes
 from ...lib.fusion_reader import design_info
+from ...lib.fusion_reader.bodies import is_root_body
 from ...lib.fusion_reader.capture import MarkerError, read_capture
 from ...lib.fusion_reader.rows import DesignParameterStore
 from ...lib.export_plan.errors import StepExportError
@@ -53,12 +54,14 @@ def run_export(design, parameters, form):
     store = DesignParameterStore(design)
 
     as_recipe = bool(form.get("as_recipe")) and len(read.rows) == 1
+    # The translator reads root timeline features only; a body in a component stays a fixed shape.
+    in_component = as_recipe and not is_root_body(body, design.rootComponent)
     captured = {}
 
     def export_step(path):
         current = resolve_body(design, token, body)
         export_body_step(design, current, path)
-        if as_recipe:
+        if as_recipe and not in_component:
             # Read while the size values are applied, so the recipe matches the STEP. A failure only costs the recipe.
             try:
                 captured["value"] = read_capture(design, current, up_axis=form["up_axis"])
@@ -80,7 +83,7 @@ def run_export(design, parameters, form):
             if as_recipe:
                 manifest, files, _report = plan_single_export(
                     captured.get("value", RuntimeError("The steps were not read.")), results[0]["step_file"],
-                    title, writer, form["up_axis"])
+                    title, writer, form["up_axis"], in_component=in_component)
                 message = recipe_saved_message(manifest, os.path.basename(out_path))
             else:
                 manifest, files = build_package(
