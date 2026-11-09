@@ -4,11 +4,12 @@ The recipe kernel turns by the right hand rule about the axis direction. Fusion 
 the measured outward normal of the start face decides whether the axis direction is kept or negated. The start face
 bounds the new material for a new body, join or intersect, so its outward normal points against the travel. After a
 cut it bounds the material that stays, so the normal points along the travel. Two sided revolves are refused: their
-start face is the end of one side, which does not name the side.
+start face is the end of one side, which does not name the side. With the probe's motion file the outline, its plane
+and an axis from a sketch line follow sizes (sketch_motion.py).
 """
 import math
 
-from . import loops, placement, values, vec
+from . import loops, notes, placement, sketch_motion, values, vec
 from .extrude import COMBINE
 from .result import Refusal
 
@@ -154,6 +155,33 @@ def _turned(on, dir3, point3, degrees):
     }
 
 
+def _turned_sized(ctx, item, drawn, dir3, point3, degrees):
+    """The sketch origin turned about the axis when the plane or the axis moves with sizes: R o + (I - R) a, as
+    written values; None when neither moves."""
+    axis = sketch_motion.axis_raw(ctx, item)
+    moving_axis = axis is not None and any(not (isinstance(a, sketch_motion.Affine) and a.is_constant) for a in axis)
+    still = isinstance(drawn.plane, sketch_motion.Affine) and drawn.plane.is_constant if drawn is not None else True
+    if drawn is None or (not moving_axis and still):
+        return None
+    if moving_axis and (item.get("data") or {}).get("project_axis"):
+        ctx.fix([n for a in axis for n in sketch_motion.movers(ctx.table, a)],
+                notes.stuck_reason("turns", drawn.sketch))
+        return None
+    frame, z = drawn.frame, drawn.frame["z"]
+    origin = [sketch_motion.combine([(1.0, o - d * drawn.plane0), (d, drawn.plane)]) for o, d in zip(frame["origin"], z)]
+    points = axis if moving_axis else [float(v) for v in point3]
+    rows = [vec.rotate(e, dir3, degrees) for e in ([1, 0, 0], [0, 1, 0], [0, 0, 1])]
+    turn = [[rows[j][i] for j in range(3)] for i in range(3)]
+    turned = vec.rotate(frame["origin"], dir3, degrees, point3)
+    out = []
+    for i in range(3):
+        parts = [(turn[i][j], origin[j]) for j in range(3)]
+        parts += [((1.0 if i == j else 0.0) - turn[i][j], points[j]) for j in range(3)]
+        q = sketch_motion.quantity(ctx, sketch_motion.combine(parts, drawn.sketch), turned[i])
+        out.append(q.json() if q.sized else _n(q.n))
+    return out
+
+
 def _angle_value(ctx, item, mode, angle):
     """The turn as a Quantity. Only a turn that starts at the sketch can follow a size; the others stay numbers."""
     if mode == "part":
@@ -184,7 +212,7 @@ def handle(item, ctx):
     mode, angle = angles
 
     built = []
-    for profile in profiles:
+    for at, profile in enumerate(profiles):
         outline = loops.profile_loops(profile)
         if isinstance(outline, Refusal):
             return outline
@@ -193,9 +221,11 @@ def handle(item, ctx):
         located = _axis_in(profile["frame"], axis, bool(data.get("project_axis")))
         if isinstance(located, Refusal):
             return located
-        built.append((profile, outline, located))
+        drawn = sketch_motion.outline(ctx, item, profile, outline[0], outline[1], [(at, profile)])
+        built.append((profile, outline, located, drawn))
+    sketch_motion.planes_apart(ctx, [drawn for _, _, _, drawn in built], item)
 
-    profile, (outer, _), (point2, dir2, point3, dir3) = built[0]
+    profile, (outer, _), (point2, dir2, point3, dir3), _ = built[0]
     sign = 1
     if mode == "part":
         sign = _sense(data, combine, profile["frame"], outer, point2, dir2, dir3)
@@ -208,17 +238,25 @@ def handle(item, ctx):
 
     angle_value = _angle_value(ctx, item, mode, angle)
     steps = []
-    for profile, (outer, inners), (point2, dir2, point3, dir3) in built:
+    for profile, (outer, inners), (point2, dir2, point3, dir3), drawn in built:
         on = placement.from_frame(profile["frame"])
         if mode == "symmetric":
+            moved = _turned_sized(ctx, item, drawn, dir3, point3, -angle / 2.0)
             on = _turned(on, dir3, point3, -angle / 2.0)
+            if moved is not None:
+                on["origin"] = moved
+        elif drawn is not None:
+            on["origin"] = drawn.origin(ctx, values.Quantity(0.0))
+        if drawn is not None:
+            outer, inners = drawn.written(ctx)
         sketch = {"on": on, "outer": outer}
         if inners:
             sketch["inner"] = inners
         step = {
             "kind": "revolve",
             "sketch": sketch,
-            "axis": {"point": _pt(point2), "dir": _pt([sign * dir2[0], sign * dir2[1]])},
+            "axis": {"point": sketch_motion.axis_point(ctx, item, profile["frame"], point2),
+                     "dir": _pt([sign * dir2[0], sign * dir2[1]])},
             "combine": combine if not steps else ("add" if combine == "new" else combine),
         }
         if mode != "full":

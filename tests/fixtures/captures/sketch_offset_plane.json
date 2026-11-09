@@ -1,0 +1,496 @@
+{
+ "_comment": "Plate 40 by 20 by 10. Pocket: a circle sketched on Plane1, a construction plane lift_mm (8) above the base, cut 4 mm down. Post: a square on the base sketch joined up to Plane1 itself.",
+ "capture": 3,
+ "fusion": "2.0.0",
+ "design": "Test",
+ "up_axis": "z",
+ "design_units": "mm",
+ "target": {
+  "token": "t1",
+  "name": "Body1",
+  "box": {
+   "min": [
+    0,
+    0,
+    0
+   ],
+   "max": [
+    40,
+    20,
+    10
+   ]
+  },
+  "volume_mm3": null
+ },
+ "parameters": {
+  "user": [
+   {
+    "name": "lift_mm",
+    "expression": "8 mm",
+    "value": 0.8,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "length",
+    "display_value": 8
+   },
+   {
+    "name": "plate_mm",
+    "expression": "10 mm",
+    "value": 1.0,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "length",
+    "display_value": 10
+   }
+  ],
+  "model": [
+   {
+    "name": "d1",
+    "expression": "plate_mm",
+    "value": 1.0,
+    "unit": "mm",
+    "kind": "derived",
+    "role": "",
+    "dependency_parameters": [
+     "plate_mm"
+    ],
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d1",
+     "name": "",
+     "sketch": "",
+     "component": ""
+    }
+   },
+   {
+    "name": "d20",
+    "expression": "lift_mm",
+    "value": 0.8,
+    "unit": "mm",
+    "kind": "derived",
+    "role": "",
+    "dependency_parameters": [
+     "lift_mm"
+    ],
+    "created_by": {
+     "kind": "constructionPlane",
+     "token": "cp1",
+     "name": "",
+     "sketch": "",
+     "component": ""
+    }
+   }
+  ]
+ },
+ "items": [
+  {
+   "index": 0,
+   "name": "Sketch1",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component_root": true,
+   "bodies_after": [],
+   "data": {}
+  },
+  {
+   "index": 1,
+   "name": "Extrude1",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component_root": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Body1"
+    }
+   ],
+   "data": {
+    "operation": "newBody",
+    "profiles": [
+     {
+      "sketch": "Sketch1",
+      "sketch_token": "s1",
+      "frame": {
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "x": [
+        1,
+        0,
+        0
+       ],
+       "y": [
+        0,
+        1,
+        0
+       ],
+       "z": [
+        0,
+        0,
+        1
+       ]
+      },
+      "space": "sketch",
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "line",
+          "start": [
+           0,
+           0
+          ],
+          "end": [
+           40,
+           0
+          ],
+          "entity": "e0"
+         },
+         {
+          "kind": "line",
+          "start": [
+           40,
+           0
+          ],
+          "end": [
+           40,
+           20
+          ],
+          "entity": "e1"
+         },
+         {
+          "kind": "line",
+          "start": [
+           40,
+           20
+          ],
+          "end": [
+           0,
+           20
+          ],
+          "entity": "e2"
+         },
+         {
+          "kind": "line",
+          "start": [
+           0,
+           20
+          ],
+          "end": [
+           0,
+           0
+          ],
+          "entity": "e3"
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "distance",
+     "distance": 10.0,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": false,
+    "participants": [],
+    "target_box_before": null,
+    "end_offset": 10.0,
+    "params": {
+     "side_one.distance": {
+      "name": "d1",
+      "expression": "plate_mm",
+      "value": 10.0
+     }
+    }
+   }
+  },
+  {
+   "index": 2,
+   "name": "Plane1",
+   "type": "ConstructionPlane",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component_root": true,
+   "bodies_after": [],
+   "data": {}
+  },
+  {
+   "index": 3,
+   "name": "Sketch2",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component_root": true,
+   "bodies_after": [],
+   "data": {}
+  },
+  {
+   "index": 4,
+   "name": "Extrude2",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component_root": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Body1"
+    }
+   ],
+   "data": {
+    "operation": "cut",
+    "profiles": [
+     {
+      "sketch": "Sketch2",
+      "sketch_token": "s2",
+      "frame": {
+       "origin": [
+        0,
+        0,
+        8
+       ],
+       "x": [
+        1,
+        0,
+        0
+       ],
+       "y": [
+        0,
+        1,
+        0
+       ],
+       "z": [
+        0,
+        0,
+        1
+       ]
+      },
+      "space": "sketch",
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "circle",
+          "center": [
+           20,
+           10
+          ],
+          "radius": 5,
+          "entity": "k0"
+         }
+        ]
+       }
+      ],
+      "reference": {
+       "kind": "constructionPlane",
+       "token": "cp1"
+      }
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "distance",
+     "distance": -4.0,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": false,
+    "participants": [
+     {
+      "token": "t1",
+      "name": "Body1"
+     }
+    ],
+    "target_box_before": {
+     "min": [
+      0,
+      0,
+      0
+     ],
+     "max": [
+      40,
+      20,
+      10
+     ]
+    },
+    "end_offset": -4.0
+   }
+  },
+  {
+   "index": 5,
+   "name": "Extrude3",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component_root": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Body1"
+    }
+   ],
+   "data": {
+    "operation": "join",
+    "profiles": [
+     {
+      "sketch": "Sketch1",
+      "sketch_token": "s1",
+      "frame": {
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "x": [
+        1,
+        0,
+        0
+       ],
+       "y": [
+        0,
+        1,
+        0
+       ],
+       "z": [
+        0,
+        0,
+        1
+       ]
+      },
+      "space": "sketch",
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "line",
+          "start": [
+           2,
+           2
+          ],
+          "end": [
+           6,
+           2
+          ],
+          "entity": "p0"
+         },
+         {
+          "kind": "line",
+          "start": [
+           6,
+           2
+          ],
+          "end": [
+           6,
+           6
+          ],
+          "entity": "p1"
+         },
+         {
+          "kind": "line",
+          "start": [
+           6,
+           6
+          ],
+          "end": [
+           2,
+           6
+          ],
+          "entity": "p2"
+         },
+         {
+          "kind": "line",
+          "start": [
+           2,
+           6
+          ],
+          "end": [
+           2,
+           2
+          ],
+          "entity": "p3"
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "toEntity",
+     "plane": {
+      "point": [
+       0,
+       0,
+       8
+      ],
+      "normal": [
+       0,
+       0,
+       1
+      ]
+     },
+     "offset": 0.0,
+     "entity_type": "ConstructionPlane",
+     "token": "cp1"
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": false,
+    "participants": [
+     {
+      "token": "t1",
+      "name": "Body1"
+     }
+    ],
+    "target_box_before": {
+     "min": [
+      0,
+      0,
+      0
+     ],
+     "max": [
+      40,
+      20,
+      10
+     ]
+    },
+    "end_offset": 8.0
+   }
+  }
+ ]
+}

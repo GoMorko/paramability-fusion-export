@@ -92,12 +92,14 @@ def _merged(group):
         if not outer.covers(_polyline(hole[0])[len(_polyline(hole[0])) // 2]):
             return None
     merged = dict(group[0])
+    merged["merged_from"] = [profile["_at"] for profile in group]
     merged["loops"] = [{"outer": True, "curves": loops[0]}] + [{"outer": False, "curves": hole} for hole in loops[1:]]
     return merged
 
 
 def merge_touching(profiles):
-    """The profiles with each group that shares a curve merged into one; unchanged where a merge does not work out."""
+    """The profiles with each group that shares a curve merged into one; unchanged where a merge does not work out.
+    A merged profile lists the positions of its parts in `profiles` as `merged_from`."""
     if len(profiles) < 2 or any(not isinstance(p.get("loops"), list) for p in profiles):
         return profiles
     if any(not _same_frame(p["frame"], profiles[0]["frame"]) for p in profiles[1:]):
@@ -119,8 +121,12 @@ def merge_touching(profiles):
         r = root(n)
         if r in done:
             continue
-        group = [profiles[m] for m in range(len(profiles)) if root(m) == r]
+        group = [dict(profiles[m], _at=m) for m in range(len(profiles)) if root(m) == r]
         merged = _merged(group) if len(group) > 1 else profile
         done[r] = True
-        out += [merged] if merged is not None else group
+        if merged is not None:
+            merged.pop("_at", None)
+            out.append(merged)
+        else:
+            out += [profiles[m] for m in range(len(profiles)) if root(m) == r]
     return out

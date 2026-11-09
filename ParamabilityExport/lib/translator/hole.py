@@ -3,10 +3,11 @@
 A hole with a flat end, or through all the way, is a recipe `hole`. A blind hole with a drill tip has no recipe
 `hole` form, so it becomes a revolve cut of the hole's profile (shank, optional step or cone, and the cone of the
 tip) turned about the hole axis. Measured `end_points` and `side_cylinders` check the stored direction and size.
+Hole points follow sizes when the probe's motion file moves them (sketch_motion.py).
 """
 import math
 
-from . import values, vec
+from . import sketch_motion, values, vec
 from .values import Quantity
 from .result import Refusal
 
@@ -142,7 +143,7 @@ def _tip_profile(diameter, depth, tip_deg, counterbore, countersink):
 
 
 def _hole_step(position, direction, diameter, depth, counterbore, countersink):
-    step = {"kind": "hole", "origin": _vec(position), "direction": _vec(direction), "diameter": diameter.json(),
+    step = {"kind": "hole", "origin": list(position), "direction": _vec(direction), "diameter": diameter.json(),
             "depth": None if depth is None else depth.json()}
     if counterbore:
         step["counterbore"] = {"diameter": counterbore["diameter"].json(), "depth": counterbore["depth"].json()}
@@ -157,7 +158,7 @@ def _tip_step(position, direction, profile):
     return {
         "kind": "revolve",
         "sketch": {
-            "on": {"origin": _vec(position), "normal": _vec(vec.cross(across, direction)), "xDir": _vec(across)},
+            "on": {"origin": list(position), "normal": _vec(vec.cross(across, direction)), "xDir": _vec(across)},
             "outer": {"kind": "polygon", "points": profile},
         },
         "axis": {"point": [0, 0], "dir": [0, 1]},
@@ -235,7 +236,7 @@ def _handle_hole(item, ctx):
         profile = _tip_profile(sizes.diameter, sizes.depth, float(tip), sizes.counterbore, sizes.countersink)
         if isinstance(profile, Refusal):
             return profile
-        return [_tip_step(p, direction, profile) for p in data["positions"]]
+        return [_tip_step(p, direction, profile) for p in sketch_motion.points(ctx, item, "positions", data["positions"])]
 
     if counterbore and not (counterbore["diameter"] > diameter and (through or 0 < counterbore["depth"] < depth)):
         return Refusal("The counterbore of this hole does not fit its size.")
@@ -245,7 +246,7 @@ def _handle_hole(item, ctx):
     ):
         return Refusal("The countersink of this hole does not fit its size.")
     return [_hole_step(p, direction, sizes.diameter, sizes.depth, sizes.counterbore, sizes.countersink)
-            for p in data["positions"]]
+            for p in sketch_motion.points(ctx, item, "positions", data["positions"])]
 
 
 def handle(item, ctx):

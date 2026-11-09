@@ -7,6 +7,7 @@ arcs). Everything is in the sketch's own 2D frame, mm.
 import math
 
 from .result import Refusal
+from .values import Sized, negated
 
 CHAIN_TOL = 1e-4
 RIGHT_ANGLE_TOL = 1e-6
@@ -150,9 +151,11 @@ def loop_of(curves, sketch=""):
 
 
 def flip_y(loop):
-    """The loop mirrored across the sketch x axis, for a placement whose normal is reversed."""
+    """The loop mirrored across the sketch x axis, for a placement whose normal is reversed. Coordinates may be
+    formulas."""
     def flip(p):
-        return [_n(p[0]), _n(-p[1])]
+        x, y = p
+        return [x if isinstance(x, Sized) else _n(x), negated(y) if isinstance(y, Sized) else _n(-y)]
 
     out = dict(loop)
     kind = loop["kind"]

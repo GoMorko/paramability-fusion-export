@@ -12,7 +12,7 @@ import math
 
 from . import follow, values, vec
 from .follow import Motion
-from .values import Quantity, number
+from .values import Quantity, number, numbers_of
 from .result import Refusal
 
 TYPES = ("RectangularPatternFeature", "CircularPatternFeature", "MirrorFeature")
@@ -574,6 +574,7 @@ def _placed(on, point2):
 def _cut_reach(step):
     """(points, margin) with every point of the cutting tool within `margin` mm of one of `points`; None when
     the tool is not bounded by a known rule (through cuts, other loop kinds)."""
+    step = numbers_of(step)
     kind = step["kind"]
     if kind == "hole":
         axis = vec.unit(step["direction"])

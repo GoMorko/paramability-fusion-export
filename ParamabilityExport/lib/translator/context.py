@@ -29,14 +29,17 @@ class Context:
     written_reads: Fusion names of the sizes that the steps written so far read.
     shells: the shell steps written so far (shells.Shell), for picks on their inner walls. The shell handler hands
       one over in the private `_shell` key: { thickness (a Quantity), faces (the capture faces it opens) }.
+    motion: the probe's motion file (`probe.motion.Motion`), `probe.motion.OPTIMISTIC`, or None. With a motion file the
+      sketch values follow sizes (sketch_motion.py); otherwise they are written as numbers.
     plain_picks: round or bevel step id -> { near, reads, written }: its edges as measured points, the sizes its pick
       follows and the written points (None when the pick names a step). A handler hands it over in the private
       `_plain` key; patterns and mirrors copy these points.
     """
 
-    def __init__(self, capture, table=None):
+    def __init__(self, capture, table=None, motion=None):
         self.capture = capture
         self.table = table
+        self.motion = motion
         self.depends = {}
         self.slabs = []
         self.shells = []
@@ -103,7 +106,8 @@ class Context:
             slab = step.pop("_slab", None)
             if slab is not None:
                 self.slabs.append(Slab(step_id, slab["on"], slab["extent"], slab["length"], slab["profile"],
-                                       combine=step.get("combine", "add"), taper=slab.get("taper")))
+                                       combine=step.get("combine", "add"), taper=slab.get("taper"),
+                                       outline=slab.get("outline")))
             shell = step.pop("_shell", None)
             if shell is not None:
                 opened = [locate(self, p) for p in face_points(shell["faces"])]

@@ -1,0 +1,40 @@
+{
+ "version": 1,
+ "values": {
+  "1/p0/l0/width": {
+   "const": 0,
+   "terms": {
+    "box_width_mm": 1
+   },
+   "sketch": "Sketch1"
+  },
+  "1/p0/l0/height": {
+   "const": 0,
+   "terms": {
+    "depth_mm": 1
+   },
+   "sketch": "Sketch1"
+  },
+  "5/positions/0/0": {
+   "const": 0,
+   "terms": {
+    "box_width_mm": -0.5,
+    "pipe_offset_mm": 1
+   },
+   "sketch": "Sketch2"
+  }
+ },
+ "box_max": {
+  "min": [
+   -80,
+   -60,
+   0
+  ],
+  "max": [
+   80,
+   60,
+   64
+  ]
+ },
+ "states": []
+}

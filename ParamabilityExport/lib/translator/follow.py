@@ -15,7 +15,7 @@ point on a copy is placed on the original and moved back: its coordinates follow
 A point on the inner wall of a shell is placed through the outer wall it was moved from (shells.py). An edge where
 the walls of two steps cross is placed on both walls (crossings.py).
 """
-from . import crossings, picks, shells, vec
+from . import crossings, notes, picks, shells, sketch_motion, vec
 from .slabs import (AXIAL_TOL, CONSTANT_TOL, FACTOR_DIGITS, IDENTITY_ROWS, LATERAL_TOL, Motion, Place, Slab,
                     as_quantity, cleaned_all)
 from .values import Quantity
@@ -89,7 +89,7 @@ def _name(item):
 
 def _keep_copies(ctx, item, found):
     """A pick on a copy of a pattern needs that copy: the sizes that count or turn the copies stay. A pick on a
-    tapered outline needs the taper."""
+    tapered outline needs the taper. A point the moving outline of its sketch cannot carry needs that outline to stay."""
     for slab in found.slabs:
         motion = slab.motion
         if motion.needs:
@@ -97,6 +97,10 @@ def _keep_copies(ctx, item, found):
                     % (_name(item), motion.by or "a pattern"))
     for names in found.fixes:
         ctx.fix(names, "%s picks an edge of a tapered wall, and a change of taper would move it" % _name(item))
+    for stuck in found.blocked:
+        why = (notes.bends_reason(_name(item), stuck.sketch) if stuck.cause == sketch_motion.BENDS
+               else notes.stuck_reason(stuck.cause, stuck.sketch))
+        ctx.fix(sketch_motion.movers(ctx.table, stuck), why)
 
 
 def follow_points(ctx, item, points, edge=True, what="edges"):

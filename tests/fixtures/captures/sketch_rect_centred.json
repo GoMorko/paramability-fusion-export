@@ -1,0 +1,597 @@
+{
+ "_comment": "Box centred on the origin, 80 by 60 by 32: its width is box_count * cube_mm + 2 mm, its depth a sketch dimension, shell 2 mm open at the top, one rounded side edge at the back right corner, and a pipe hole on a sketch point pipe_offset_mm from the left wall. The motion file is what the probe fits.",
+ "capture": 3,
+ "fusion": "2.0.0",
+ "design": "Test",
+ "up_axis": "z",
+ "design_units": "mm",
+ "target": {
+  "token": "t1",
+  "name": "Body1",
+  "box": {
+   "min": [
+    -40,
+    -30,
+    0
+   ],
+   "max": [
+    40,
+    30,
+    32
+   ]
+  },
+  "volume_mm3": null
+ },
+ "parameters": {
+  "user": [
+   {
+    "name": "box_count",
+    "expression": "3",
+    "value": 3,
+    "unit": "",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "count",
+    "display_value": 3
+   },
+   {
+    "name": "cube_mm",
+    "expression": "26 mm",
+    "value": 2.6,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "length",
+    "display_value": 26
+   },
+   {
+    "name": "box_width_mm",
+    "expression": "box_count * cube_mm + 2 mm",
+    "value": 8.0,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "box_count",
+     "cube_mm"
+    ],
+    "dependent_parameters": [],
+    "kind": "derived",
+    "display_value": 80
+   },
+   {
+    "name": "depth_mm",
+    "expression": "60 mm",
+    "value": 6.0,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "length",
+    "display_value": 60
+   },
+   {
+    "name": "height_mm",
+    "expression": "32 mm",
+    "value": 3.2,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "length",
+    "display_value": 32
+   },
+   {
+    "name": "wall_mm",
+    "expression": "2 mm",
+    "value": 0.2,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "length",
+    "display_value": 2
+   },
+   {
+    "name": "pipe_offset_mm",
+    "expression": "20 mm",
+    "value": 2.0,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "length",
+    "display_value": 20
+   },
+   {
+    "name": "pipe_d_mm",
+    "expression": "12 mm",
+    "value": 1.2,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "length",
+    "display_value": 12
+   }
+  ],
+  "model": [
+   {
+    "name": "d1",
+    "expression": "box_width_mm",
+    "value": 8.0,
+    "unit": "mm",
+    "kind": "derived",
+    "role": "",
+    "dependency_parameters": [
+     "box_width_mm"
+    ],
+    "created_by": {
+     "kind": "sketchDimension",
+     "token": "tok_d1",
+     "name": "",
+     "sketch": "Sketch1",
+     "component": ""
+    }
+   },
+   {
+    "name": "d2",
+    "expression": "depth_mm",
+    "value": 6.0,
+    "unit": "mm",
+    "kind": "derived",
+    "role": "",
+    "dependency_parameters": [
+     "depth_mm"
+    ],
+    "created_by": {
+     "kind": "sketchDimension",
+     "token": "tok_d2",
+     "name": "",
+     "sketch": "Sketch1",
+     "component": ""
+    }
+   },
+   {
+    "name": "d3",
+    "expression": "height_mm",
+    "value": 3.2,
+    "unit": "mm",
+    "kind": "derived",
+    "role": "",
+    "dependency_parameters": [
+     "height_mm"
+    ],
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d3",
+     "name": "",
+     "sketch": "",
+     "component": ""
+    }
+   },
+   {
+    "name": "d4",
+    "expression": "wall_mm",
+    "value": 0.2,
+    "unit": "mm",
+    "kind": "derived",
+    "role": "",
+    "dependency_parameters": [
+     "wall_mm"
+    ],
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d4",
+     "name": "",
+     "sketch": "",
+     "component": ""
+    }
+   },
+   {
+    "name": "d5",
+    "expression": "3 mm",
+    "value": 0.3,
+    "unit": "mm",
+    "kind": "derived",
+    "role": "",
+    "dependency_parameters": [],
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d5",
+     "name": "",
+     "sketch": "",
+     "component": ""
+    }
+   },
+   {
+    "name": "d6",
+    "expression": "pipe_d_mm",
+    "value": 1.2,
+    "unit": "mm",
+    "kind": "derived",
+    "role": "",
+    "dependency_parameters": [
+     "pipe_d_mm"
+    ],
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d6",
+     "name": "",
+     "sketch": "",
+     "component": ""
+    }
+   },
+   {
+    "name": "d7",
+    "expression": "118 deg",
+    "value": 118,
+    "unit": "deg",
+    "kind": "derived",
+    "role": "",
+    "dependency_parameters": [],
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d7",
+     "name": "",
+     "sketch": "",
+     "component": ""
+    }
+   },
+   {
+    "name": "d10",
+    "expression": "pipe_offset_mm",
+    "value": 2.0,
+    "unit": "mm",
+    "kind": "derived",
+    "role": "",
+    "dependency_parameters": [
+     "pipe_offset_mm"
+    ],
+    "created_by": {
+     "kind": "sketchDimension",
+     "token": "tok_d10",
+     "name": "",
+     "sketch": "Sketch2",
+     "component": ""
+    }
+   }
+  ]
+ },
+ "items": [
+  {
+   "index": 0,
+   "name": "Sketch1",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component_root": true,
+   "bodies_after": [],
+   "data": {}
+  },
+  {
+   "index": 1,
+   "name": "Extrude1",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component_root": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Body1"
+    }
+   ],
+   "data": {
+    "operation": "newBody",
+    "profiles": [
+     {
+      "sketch": "Sketch1",
+      "sketch_token": "s1",
+      "frame": {
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "x": [
+        1,
+        0,
+        0
+       ],
+       "y": [
+        0,
+        1,
+        0
+       ],
+       "z": [
+        0,
+        0,
+        1
+       ]
+      },
+      "space": "sketch",
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "line",
+          "start": [
+           -40,
+           -30
+          ],
+          "end": [
+           40,
+           -30
+          ],
+          "entity": "e0"
+         },
+         {
+          "kind": "line",
+          "start": [
+           40,
+           -30
+          ],
+          "end": [
+           40,
+           30
+          ],
+          "entity": "e1"
+         },
+         {
+          "kind": "line",
+          "start": [
+           40,
+           30
+          ],
+          "end": [
+           -40,
+           30
+          ],
+          "entity": "e2"
+         },
+         {
+          "kind": "line",
+          "start": [
+           -40,
+           30
+          ],
+          "end": [
+           -40,
+           -30
+          ],
+          "entity": "e3"
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "distance",
+     "distance": 32.0,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": false,
+    "participants": [],
+    "target_box_before": null,
+    "end_offset": 32.0,
+    "params": {
+     "side_one.distance": {
+      "name": "d3",
+      "expression": "height_mm",
+      "value": 32.0
+     }
+    }
+   }
+  },
+  {
+   "index": 2,
+   "name": "Shell1",
+   "type": "ShellFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component_root": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Body1"
+    }
+   ],
+   "data": {
+    "faces": [
+     {
+      "token": "f1",
+      "point": [
+       0,
+       0,
+       32
+      ]
+     }
+    ],
+    "bodies_input": false,
+    "inside": 2.0,
+    "outside": 0.0,
+    "shell_type": "sharp",
+    "params": {
+     "inside": {
+      "name": "d4",
+      "expression": "wall_mm",
+      "value": 2.0
+     }
+    }
+   }
+  },
+  {
+   "index": 3,
+   "name": "Fillet1",
+   "type": "FilletFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component_root": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Body1"
+    }
+   ],
+   "data": {
+    "rolling_ball": true,
+    "sets": [
+     {
+      "kind": "constant",
+      "radius": 3.0,
+      "continuity": "tangent",
+      "input_kinds": [
+       "edge"
+      ],
+      "edges": [
+       {
+        "token": "c1",
+        "closed": false,
+        "points": [
+         [
+          40,
+          30,
+          16
+         ]
+        ]
+       }
+      ]
+     }
+    ],
+    "params": {
+     "sets.0.radius": {
+      "name": "d5",
+      "expression": "3 mm",
+      "value": 3.0
+     }
+    }
+   }
+  },
+  {
+   "index": 4,
+   "name": "Sketch2",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component_root": true,
+   "bodies_after": [],
+   "data": {}
+  },
+  {
+   "index": 5,
+   "name": "Hole1",
+   "type": "HoleFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component_root": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Body1"
+    }
+   ],
+   "data": {
+    "hole_type": "simple",
+    "tap_type": "simple",
+    "thread_modeled": null,
+    "diameter": 12.0,
+    "tip_angle_deg": 118,
+    "counterbore": null,
+    "countersink": null,
+    "direction": [
+     0,
+     0,
+     1
+    ],
+    "positions": [
+     [
+      -20,
+      0,
+      0
+     ]
+    ],
+    "extent": {
+     "kind": "throughAll"
+    },
+    "side_cylinders": [
+     {
+      "origin": [
+       -20,
+       0,
+       0
+      ],
+      "axis": [
+       0,
+       0,
+       1
+      ],
+      "radius": 6.0
+     }
+    ],
+    "end_points": [
+     [
+      -20,
+      0,
+      2
+     ]
+    ],
+    "end_face_types": [],
+    "participants": [
+     {
+      "token": "t1",
+      "name": "Body1"
+     }
+    ],
+    "sketch_token": "s2",
+    "sketch": "Sketch2",
+    "point_tokens": [
+     "pt1"
+    ],
+    "params": {
+     "diameter": {
+      "name": "d6",
+      "expression": "pipe_d_mm",
+      "value": 12.0
+     },
+     "tip_angle_deg": {
+      "name": "d7",
+      "expression": "118 deg",
+      "value": 118.0
+     }
+    }
+   }
+  }
+ ]
+}

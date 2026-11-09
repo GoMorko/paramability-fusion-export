@@ -539,7 +539,7 @@ plain number, a retired member) adds nothing, and `params` is absent when nothin
 Sketch dimensions, construction planes, axes and joints are not listed per item. They are model parameters whose
 `created_by.kind` is `sketchDimension`, `constructionPlane`, `constructionAxis` or `joint`.
 
-How the translator uses them (`translate(capture, size_table=table)`):
+How the translator uses them (`translate(capture, size_table=table, motion=motion)`):
 
 - A value is written as `{ "expr": formula }` (never `{ "size": ... }`) when its expression translates, reads at least
   one free size and equals the measured number within 1e-6 once scaled to the unit of the field (a plain number in a
@@ -551,7 +551,7 @@ How the translator uses them (`translate(capture, size_table=table)`):
 - Pattern counts that follow sizes must give whole numbers at every size value: the formula is rounded as a whole
   (`round`, `floor`, `ceil`), or it adds, subtracts and multiplies whole numbers and count sizes. Otherwise the sizes
   are fixed. An extent spacing divides by `max((count) - 1, 1)`, so a count of 1 never divides by zero.
-- Values that stay numbers while a size reaches them: a sketch (points, placements, construction geometry), the "up
+- Values that stay numbers while a size reaches them: construction geometry that a step uses itself, the "up
   to" offset, a tip angle, a countersink angle, a full circular turn, a revolve that is not a plain
   part turn, and a pattern whose copies are left out by number or are rounds copied one by one. The sizes behind
   them are fixed.
@@ -582,11 +582,12 @@ How the translator uses them (`translate(capture, size_table=table)`):
   angle too. A copied uneven chamfer turns its `sizeOn` with the copy. Without sizes the picks stay plain points.
 - A formula longer than the app's cap (`MAX_FORMULA_LENGTH` in `lib/params/expressions.py`, 300 characters) fixes
   the sizes it reads, also when a step builds it from several values.
-- Every size that a model parameter created by a sketch dimension (also one whose creator reads as `other` but whose
-  `role` names a dimension), construction plane or axis, or joint reads is fixed up front (reason "stays fixed for
-  now: it changes a sketch"). Sketches follow sizes in a later version. The
-  dimensions of another component's sketch are not model parameters of the target's path; the sizes in their
-  `sketch_params` are fixed when the step that borrows the sketch is copied.
+- Sketch values follow sizes through the probe's motion file (next section). Without one, every size that a model
+  parameter created by a sketch dimension (also one whose creator reads as `other` but whose `role` names a
+  dimension), construction plane or axis, or joint reads is fixed up front (reason "it changes a sketch, which could
+  not be tried at other values"). A size that a joint reads is always fixed. The dimensions of another component's
+  sketch are not model parameters of the target's path; the sizes in their `sketch_params` are fixed when the step
+  that borrows the sketch is copied, and its outline stays numbers.
 - An uneven chamfer writes `sizeOn` (one direction per step: the sum of `first - other` face normals over its edge
   points, which must favour the first face by at least 0.1 at every point; edges that one direction cannot serve
   start another step) with `otherSize` or `cutAngleDeg`. Both distances follow sizes; an angle must stay under 90
@@ -596,6 +597,39 @@ How the translator uses them (`translate(capture, size_table=table)`):
 - The recipe is version 12. With a size table it carries `sizesAsWritten: true` and `sizes`: the sizes that a written
   formula reads, plus the sizes those formulas read. A ticked size that nothing reads is left out, with a note.
   Without a table the recipe has no `sizes`, and no marker.
+
+### Sketch values that follow sizes (`lib/translator/sketch_motion.py`)
+
+The export measures the sketches at other size values (probe states, next section) and fits each value the translator
+writes as a sum over Fusion parameters, or marks it stuck (`lib/probe/`). That is the motion file, `probe.motion`:
+keys `<item>/p<profile>/l<loop>/<field path>` (loop 0 is the outer one, then the holes; `center.0`, `width`,
+`segments.2.through.1`), `<item>/p<profile>/plane` (the sketch plane along its normal, from the component origin),
+`<item>/positions/<n>/<0|1|2>` (hole points) and `<item>/axis/point/<0|1|2>` (a revolve axis from a sketch line).
+A key that is not listed did not move. The translator uses it like this:
+
+- `motion=None`: the rule above, sketch sizes fixed up front. `motion=OPTIMISTIC` (the export's first translation):
+  sketch values are written as numbers and nothing is fixed for them, so the export can see which sizes to try.
+- Each written value with a key becomes a formula over the sizes (`{ "expr": "0.5 * FilterBox_width_mm" }`); a model
+  parameter in a sum is written through its own expression. Its number stays the captured one; a formula that misses
+  it by more than 1e-3 mm fixes its sizes ("could not be read at other values"). A width, height or radius that would
+  reach zero over the size ranges fixes its sizes ("would shrink to nothing").
+- A stuck value that a step writes fixes every size the probe lists for it, with the probe's cause: `curve` (a point
+  moves along a curve), `shape` (the outline changes), `turns` (the sketch plane turns), `unread`, `untried`.
+- An outline merged from touching profiles takes each point from the part profile that has it (rect corners from
+  centre, width and height); a rect drawn through merged corners gets its centre, width and height from them.
+- A sketch plane that moves writes the placement origin along its normal (`sketch.on.origin`); a "to entity" reach is
+  the face's move less the plane's move. Outlines of one step whose planes move differently fix those sizes.
+- A reversed placement negates the y formulas of its loops.
+- Hole points write `origin` as formulas (the drill tip revolve too); a revolve axis from a sketch line writes
+  `axis.point` in the sketch plane. A symmetric revolve turns its moving origin about the axis.
+- Picks on an extrude whose outline moves follow it: a side corner moves with that corner, a point on an outline line
+  between its two ends, a point on an arc with the arc's middle (or with the whole arc when it only shifts), on a
+  circle with its centre and radius, and a point inside an end face with the outline's centre. A point on an arc that
+  changes shape fixes those sizes. The same holds for pattern and mirror copies, shell inner walls and crossing edges.
+- A through cut clears the part at the largest sizes tried (`box_max` of the motion file).
+- A construction plane or axis that a step uses itself (start from, reach to, turn about, mirror across, with `token`)
+  fixes the sizes of the model parameters it made (`created_by.token`); without a token, of every construction plane
+  or axis.
 
 ### Probe states (`lib/fusion_reader/probe_state.py`)
 

@@ -6,8 +6,10 @@ its coordinates as Quantities that follow the slab's start, its length and the s
 """
 import math
 
+from ..probe.motion import Stuck
 from . import vec
 from .footprint import Footprint
+from .sketch_motion import combine, rendered
 from .values import Quantity, Sized
 
 IDENTITY_ROWS = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
@@ -108,10 +110,12 @@ class Slab:
 
     `owner` is the id of the step that made it: the extrude, or the pattern or mirror for a copy, whose `motion`
     carries the extrude to it. `combine` is the step's combine (new, add, cut, intersect). `taper` is the written taper
-    as a Quantity (degrees, positive leans the walls in going away from the start) or None.
+    as a Quantity (degrees, positive leans the walls in going away from the start) or None. `outline` is the
+    sketch_motion.Outline of its profile when the sketch follows sizes, else None.
     """
 
-    def __init__(self, step_id, on, extent, length, profile, motion=None, owner=None, combine="add", taper=None):
+    def __init__(self, step_id, on, extent, length, profile, motion=None, owner=None, combine="add", taper=None,
+                 outline=None):
         self.id = step_id
         self.owner = owner or step_id
         self.on, self.profile = on, profile
@@ -125,6 +129,7 @@ class Slab:
         self.motion = motion or Motion()
         self.combine = combine
         self.taper = taper if taper is not None and abs(taper.n) > 0 else None
+        self.outline = outline
 
     @property
     def is_copy(self):
@@ -139,7 +144,7 @@ class Slab:
     def copied(self, owner, motion):
         """This slab carried on by `motion`, made by step `owner`."""
         return Slab(self.id, self.on, self.extent, self.length, self.profile, self.motion.then(motion), owner,
-                    self.combine, self.taper)
+                    self.combine, self.taper, self.outline)
 
     def local(self, p):
         """(h, uv) of a point of this slab: its height above the base and its sketch position, on the original."""
@@ -192,12 +197,12 @@ class Slab:
             inset = self.inset(at)
             on_outline = abs(depth - inset) <= LATERAL_TOL
             if on_outline or depth > inset:
-                return Place(self, which, at / full, curve if on_outline else None)
+                return Place(self, which, at / full, curve if on_outline else None, uv=uv)
         if low + AXIAL_TOL < h < high - AXIAL_TOL and abs(depth - self.inset(h)) <= LATERAL_TOL:
             corner = None if self.taper is not None else self.footprint.corner_at(uv, LATERAL_TOL)
             if edge and corner is None:
                 return None
-            return Place(self, "side", round(h / full, FACTOR_DIGITS), None, corner)
+            return Place(self, "side", round(h / full, FACTOR_DIGITS), None, corner, uv=uv)
         return None
 
 
@@ -205,21 +210,48 @@ class Place:
     """Where a point sits on a slab: `which` is start, end or side; it moves `factor` times the slab length.
 
     `fixes` lists the sizes that must stay fixed for a pick on this place: a taper that leans the outline there.
+    `lateral` holds the point's place in the sketch plane as three model coordinates when the outline moves it with
+    sizes (sketch_motion.py), else None; `blocked` holds a `Stuck` when the outline moves it in a way that cannot be
+    followed.
     """
 
-    def __init__(self, slab, which, factor, curve=None, corner=None):
+    def __init__(self, slab, which, factor, curve=None, corner=None, uv=None):
         self.slab, self.which, self.factor = slab, which, factor
         self.curve, self.corner = curve, corner
         self.slabs = [slab]
         self.fixes = []
+        self.lateral = None
+        self.blocked = []
         if slab.taper is not None and slab.taper.sized and factor and (which == "side" or curve is not None):
             self.fixes.append(slab.taper.reads)
+        if uv is not None and slab.outline is not None:
+            self._follow_outline(uv)
+
+    def _follow_outline(self, uv):
+        slab = self.slab
+        found = slab.outline.follow(slab.footprint, self.which, self.curve, self.corner, uv)
+        if isinstance(found, Stuck):
+            self.blocked.append(found)
+            return
+        if found is None:
+            return
+        frame, out = slab.frame, []
+        for i in range(3):
+            value = combine([(frame["x"][i], found[0]), (frame["y"][i], found[1]), (1.0, frame["origin"][i])],
+                            slab.outline.sketch)
+            q = rendered(slab.outline.table, value, frame["origin"][i] + uv[0] * frame["x"][i] + uv[1] * frame["y"][i])
+            if isinstance(q, Stuck):
+                self.blocked.append(q)
+                return
+            out.append(q)
+        if any(q.sized for q in out):
+            self.lateral = out
 
     @property
     def moves(self):
         slab = self.slab
         return (bool(slab.length.sized and self.factor != 0) or slab.motion.moves
-                or any(q.sized for q in slab.origin))
+                or any(q.sized for q in slab.origin) or self.lateral is not None)
 
     def _inward(self, p):
         """The inward unit normal of the outline at `p` on the original, when a taper shifts it with the length."""
@@ -255,12 +287,15 @@ class Place:
             along = (self.factor * a if stretch else 0.0) + lean
             along = 0.0 if abs(along) < 1e-12 else along
             shifted = a and origin.sized
-            if not along and not shifted:
+            lateral = self.lateral[i] if self.lateral is not None and self.lateral[i].sized else None
+            if not along and not shifted and lateral is None:
                 out.append(Quantity(value))
                 continue
             moved = slab.length.scaled(along) if along else Quantity(0.0)
             if shifted:
                 moved = origin.plus(moved)
+            if lateral is not None:
+                moved = moved.plus(lateral)
             rest = value - moved.n
             out.append(moved.plus(rest if abs(rest) > CONSTANT_TOL else 0.0))
         return motion.quantities(out) if self.slab.is_copy else out

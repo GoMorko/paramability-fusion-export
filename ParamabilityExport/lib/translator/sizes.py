@@ -1,8 +1,8 @@
 """The recipe `sizes` and the sizes that cannot follow, around the size table.
 
 The size table lists every size the person ticked. The recipe keeps only the sizes that a written formula reads, and
-the sizes those formulas read in turn. A size whose value moves a sketch is fixed up front, since sketches are copied as
-numbers.
+the sizes those formulas read in turn. A size that moves a joint is fixed up front. Sketch values follow sizes through
+the probe's motion file; without one, every size that moves a sketch or construction geometry is fixed up front.
 """
 from ..params.expressions import tokenize_formula
 
@@ -13,34 +13,78 @@ _STATIC_KINDS = {
     "constructionAxis": "a construction axis",
     "joint": "a joint",
 }
+_CONSTRUCTION = {"ConstructionPlane": "constructionPlane", "ConstructionAxis": "constructionAxis"}
+_CONSTRUCTION_WORDS = {"constructionPlane": "construction plane", "constructionAxis": "construction axis"}
 
 
-def _moves(param):
-    """What a model parameter moves (for the reason text), or None. Fusion may name a sketch dimension's creator as
-    the sketch itself; its role ("Linear Dimension-2") still tells."""
+def _kind(param):
+    """The kind of a model parameter's maker. Fusion may name a sketch dimension's creator as the sketch itself; its
+    role ("Linear Dimension-2") still tells."""
     kind = (param.get("created_by") or {}).get("kind")
     if kind == "other" and "Dimension" in (param.get("role") or ""):
         kind = "sketchDimension"
-    return _STATIC_KINDS.get(kind)
+    return kind
 
 
-def sketch_fixes(table):
-    """{ Fusion name: reason } for each ticked size that a sketch dimension, construction plane or axis, or joint reads.
-
-    Sketch points, placements and construction geometry are written as numbers, so a size that moves them cannot be
-    a size. The check at other values (in the add-in and in the app) finds the ones this does not see.
-    """
+def _fixes(table, kinds, why):
     fixed = {}
     for param in table.model_params.values():
-        what = _moves(param)
-        if what is None:
+        kind = _kind(param)
+        if kind not in kinds:
             continue
         reads = table.depends(param["name"])
         for name in table.ticked:
             if name in reads and name not in fixed:
-                fixed[name] = ("%s stays fixed for now: it changes %s. Sketches that follow sizes come in a later "
-                               "version." % (name, what))[:200]
+                fixed[name] = why(name, _STATIC_KINDS[kind])[:200]
     return fixed
+
+
+def sketch_fixes(table):
+    """{ Fusion name: reason } for each ticked size that a joint reads: joints are never copied as sizes."""
+    return _fixes(table, ("joint",), lambda name, what: "%s stays fixed: it moves %s." % (name, what))
+
+
+def fallback_fixes(table):
+    """{ Fusion name: reason } for each ticked size that a sketch dimension, construction plane or axis, or joint
+    reads. Used when the export could not try sketches at other values, so their numbers stay as measured."""
+    return _fixes(table, tuple(_STATIC_KINDS),
+                  lambda name, what: "%s stays fixed: it changes %s, which could not be tried at other values."
+                  % (name, what))
+
+
+def _construction_records(node, found):
+    """Records of construction planes and axes in a step's data: `(kind, token)`, the token empty when unknown."""
+    if isinstance(node, dict):
+        kind = _CONSTRUCTION.get(node.get("entity_type"))
+        if kind is None and node.get("token") and ("normal" in node or "dir" in node):
+            kind = "constructionAxis" if "dir" in node else "constructionPlane"
+        if kind is not None:
+            found.append((kind, node.get("token") or ""))
+        for key, value in node.items():
+            if key not in ("participants", "tools", "bodies_after", "bodies_before", "target", "profiles"):
+                _construction_records(value, found)
+    elif isinstance(node, list):
+        for value in node:
+            _construction_records(value, found)
+    return found
+
+
+def construction_fixes(table, item):
+    """[(Fusion names, reason)] for the ticked sizes behind each construction plane or axis that the step uses itself
+    (to start from, reach to, turn about or mirror across). A record without a token stands for every one of its kind.
+    The reason follows "<name> stays fixed: "."""
+    out = []
+    data = item.get("data") if isinstance(item.get("data"), dict) else {}
+    for kind, token in _construction_records(data, []):
+        names = []
+        for param in table.model_params.values():
+            made = param.get("created_by") or {}
+            if _kind(param) == kind and (not token or made.get("token") == token):
+                names += [n for n in table.depends(param["name"]) if n in table.ticked]
+        if names:
+            out.append((tuple(dict.fromkeys(names)), "it moves the %s that %s uses" % (
+                _CONSTRUCTION_WORDS[kind], item.get("name") or "a step")))
+    return out
 
 
 def _identifiers(node, found):

@@ -73,3 +73,29 @@ def reader_failure_note():
 
 def translate_failure_note():
     return "Added as a fixed shape: the steps could not be copied."
+
+
+# Why a size cannot follow a sketch value, by the probe's cause. Each ends without a full stop: the size table adds
+# "<name> stays fixed: " in front.
+_STUCK = {
+    "curve": "it moves %s along a curve, which cannot be copied yet",
+    "shape": "%s makes a different outline at other values",
+    "turns": "it turns the plane of %s",
+    "unread": "%s could not be read at other values",
+    "untried": "it changes %s and could not be tried at other values",
+    "apart": "it moves the outlines of %s apart from each other",
+}
+
+
+def stuck_reason(cause, sketch):
+    """The reason a sketch value of `sketch` (a name, or empty) keeps its sizes fixed."""
+    return _STUCK.get(cause, _STUCK["unread"]) % (_cut(sketch, MAX_NAME) if sketch else "a sketch")
+
+
+def shrinks_reason(sketch):
+    return "an outline in %s would shrink to nothing" % (_cut(sketch, MAX_NAME) if sketch else "a sketch")
+
+
+def bends_reason(step, sketch):
+    return "%s picks a point on a curved outline of %s that changes shape" % (
+        _cut(step or "a step", MAX_NAME), _cut(sketch, MAX_NAME) if sketch else "a sketch")

@@ -92,6 +92,17 @@ def reads_in(node, found=None):
     return tuple(found)
 
 
+def numbers_of(node):
+    """A written value, step or list with every formula replaced by the number it stood for."""
+    if isinstance(node, Sized):
+        return node.n
+    if isinstance(node, dict):
+        return {k: numbers_of(v) for k, v in node.items()}
+    if isinstance(node, list):
+        return [numbers_of(v) for v in node]
+    return node
+
+
 def number(value):
     """The number of a written value: its measured number for a formula, else the value itself."""
     return value.n if isinstance(value, Sized) else value

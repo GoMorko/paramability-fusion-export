@@ -1,0 +1,13 @@
+{
+ "version": 1,
+ "values": {
+  "4/p0/plane": {
+   "const": 0,
+   "terms": {
+    "d20": 1
+   },
+   "sketch": "Sketch2"
+  }
+ },
+ "states": []
+}

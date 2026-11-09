@@ -24,6 +24,7 @@ class InnerPlace(Place):
         self.outer, self.outer_point = outer, outer_point
         self.offset, self.thickness = offset, thickness
         self.fixes = list(outer.fixes)
+        self.blocked = list(outer.blocked)
 
     @property
     def moves(self):

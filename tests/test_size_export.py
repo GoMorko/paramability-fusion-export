@@ -175,34 +175,24 @@ class OffersTest(unittest.TestCase):
         self.assertFalse(lines["FilterBox_width_mm"]["enabled"])
         self.assertEqual(lines["FilterBox_width_mm"]["state"], "formula")
 
-    def test_a_parameter_a_sketch_dimension_reads_is_greyed_out_before_the_export(self):
+    def test_a_parameter_a_joint_reads_is_greyed_out_before_the_export(self):
         params = [length("wall"), length("height"), length("spare")]
         model = [dict(name="d1", expression="wall", value=0.2, unit="mm", kind="derived",
-                      dependency_parameters=["wall"], created_by={"kind": "sketchDimension"}),
+                      dependency_parameters=["wall"], created_by={"kind": "joint"}),
                  dict(name="d2", expression="height + spare", value=0.2, unit="mm", kind="derived",
                       dependency_parameters=["height", "spare"], created_by={"kind": "feature"})]
         lines = {o["param"]: o for o in offers(initial_table(params, model), params)}
         self.assertEqual((lines["wall"]["ticked"], lines["wall"]["enabled"]), (False, False))
-        self.assertIn("changes a sketch", lines["wall"]["reason"])
+        self.assertIn("moves a joint", lines["wall"]["reason"])
         self.assertTrue(lines["height"]["ticked"] and lines["height"]["enabled"])
 
-    def test_a_sketch_dimension_known_only_by_its_role_greys_out_its_parameter(self):
-        params = [length("wall"), length("height")]
-        model = [dict(name="d1", expression="wall", value=0.2, unit="mm", kind="derived", role="Linear Dimension-2",
-                      dependency_parameters=["wall"], created_by={"kind": "other"}),
-                 dict(name="d2", expression="height", value=0.2, unit="mm", kind="derived", role="AlongDistance",
-                      dependency_parameters=["height"], created_by={"kind": "feature"})]
-        lines = {o["param"]: o for o in offers(initial_table(params, model), params)}
-        self.assertFalse(lines["wall"]["enabled"])
-        self.assertTrue(lines["height"]["enabled"])
-
-    def test_a_parameter_that_is_not_ticked_by_default_but_moves_a_sketch_is_greyed_out_too(self):
+    def test_a_parameter_that_is_not_ticked_by_default_but_moves_a_joint_is_greyed_out_too(self):
         params = [length("wall"), length("spare")]
         params[1]["is_favorite"] = False
         model = [dict(name="d1", expression="wall", value=0.2, unit="mm", kind="derived",
                       dependency_parameters=["wall"], created_by={"kind": "feature"}),
                  dict(name="d2", expression="spare", value=0.2, unit="mm", kind="derived",
-                      dependency_parameters=["spare"], created_by={"kind": "sketchDimension"})]
+                      dependency_parameters=["spare"], created_by={"kind": "joint"})]
         lines = {o["param"]: o for o in offers(initial_table(params, model), params)}
         self.assertFalse(lines["spare"]["enabled"])
         self.assertTrue(lines["wall"]["ticked"])

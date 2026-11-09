@@ -85,6 +85,7 @@ class CrossPlace:
         self.slab = a.place.slab
         self.slabs = a.place.slabs + b.place.slabs
         self.fixes = a.place.fixes + b.place.fixes
+        self.blocked = a.place.blocked + b.place.blocked
         self._quantities = quantities
 
     @property

@@ -1,6 +1,6 @@
 """The driver: walks a capture's items, calls one handler per feature type, builds the recipe."""
 from . import borrowed, combine, extrude, finish, hole, offset, repeat, revolve
-from .sizes import sketch_fixes, used_sizes
+from .sizes import construction_fixes, fallback_fixes, sketch_fixes, used_sizes
 from . import notes as wording, place
 from .capture import ASSEMBLY_TYPES, SKETCH_TYPES, outside_component, renamed_target, same_body, validate_capture
 from .context import Context
@@ -152,7 +152,7 @@ def _over_caps(recipe):
     return None
 
 
-def translate(capture, handlers=None, size_table=None):
+def translate(capture, handlers=None, size_table=None, motion=None):
     """Capture dict to TranslateResult. `handlers` maps a feature type to a handler and overrides the table.
 
     A handler is `handle(item, ctx) -> list[step] | Refusal`. An empty list means the item makes no step on purpose
@@ -162,6 +162,11 @@ def translate(capture, handlers=None, size_table=None):
     `size_table` makes the recipe follow Fusion parameters: feature values whose parameters read a size
     are written as formulas, the recipe gets `sizes` and the `sizesAsWritten` marker. A size that some value cannot
     follow is made a fixed number and the walk runs again; `result.fixed` lists those sizes as `{ name, reason }`.
+
+    `motion` is what the size probe measured about sketch values (`probe.motion.Motion`): sketch points, planes, hole
+    points and revolve axes are then written as formulas where they follow sizes. `probe.motion.OPTIMISTIC` writes
+    them as numbers without fixing anything for them (the first translation of an export). Without it, every size
+    that moves a sketch or construction geometry is fixed up front.
     """
     validate_capture(capture)
     unplaced = _placement_refusal(capture)
@@ -172,10 +177,10 @@ def translate(capture, handlers=None, size_table=None):
         table.update(handlers)
     if size_table is None:
         return _walk(capture, table, None)[0]
-    fixed = sketch_fixes(size_table)
+    fixed = sketch_fixes(size_table) if motion is not None else fallback_fixes(size_table)
     current = size_table.with_fixed(fixed) if fixed else size_table
     for _ in range(MAX_PASSES):
-        result, ctx = _walk(capture, table, current)
+        result, ctx = _walk(capture, table, current, motion)
         more = {name: why for name, why in ctx.depends.items() if name not in fixed}
         if result.recipe is None or not more:
             break
@@ -199,9 +204,9 @@ def _add_sizes(result, table):
             result.notes.append("%s is not used by any copied step, so it is not a size." % name)
 
 
-def _walk(capture, table, size_table):
+def _walk(capture, table, size_table, motion=None):
     """One walk over the items: (TranslateResult, Context)."""
-    ctx = Context(capture, size_table)
+    ctx = Context(capture, size_table, motion)
     result = TranslateResult()
 
     def refuse(item, reason, note=None):
@@ -267,6 +272,9 @@ def _walk(capture, table, size_table):
             return refuse(item, "This step reaches into another component, which is not copied yet.",
                           wording.reaches_component_note(_label(item)))
         made_in_component = True
+        if motion is not None and size_table is not None:
+            for names, why in construction_fixes(size_table, item):
+                ctx.fix(names, why)
         if _new_bodies(item, ctx):
             return refuse(item, "This step splits the part or makes another body, which is not copied yet.")
         outcome = handler(item, ctx)

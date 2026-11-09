@@ -2,11 +2,12 @@
 
 Profiles that share a curve are merged into one outline (outlines.py); each outline becomes one recipe `extrude` step
 per side. Fusion's sign conventions are checked against the measured
-`end_offset` (where the end face landed), which wins when the two disagree.
+`end_offset` (where the end face landed), which wins when the two disagree. With the probe's motion file the outline
+and its sketch plane follow sizes (sketch_motion.py).
 """
 import math
 
-from . import follow, loops, outlines, placement, values, vec
+from . import follow, loops, outlines, placement, sketch_motion, values, vec
 from .footprint import Footprint
 from .result import Refusal
 from .values import Quantity
@@ -133,11 +134,16 @@ def _origin(frame, shift_q):
     return out
 
 
-def _reach_quantity(ctx, item, side, z, reach, offset):
-    """The length of a side that reaches to a face, as a Quantity that follows the face when it moves with sizes."""
+def _reach_quantity(ctx, item, side, z, reach, offset, plane_q):
+    """The length of a side that reaches to a face, as a Quantity that follows the face when it moves with sizes:
+    the face's move less the sketch plane's move (`plane_q`, along the sketch normal)."""
     plain = Quantity(abs(reach) + float(offset))
     moved = follow.target_shift(ctx, item, side, z)
-    if moved is None or not moved.sized:
+    if moved is None:
+        return plain
+    if plane_q.sized:
+        moved = moved.plus(plane_q.scaled(-1))
+    if not moved.sized:
         return plain
     length = moved.plus(reach - moved.n).scaled(_sign_of(reach)).plus(float(offset))
     if not values.stays_positive(ctx.table, length):
@@ -161,7 +167,7 @@ def _is_through(side):
     return side is not None and side.get("kind") in ("throughAll", "all")
 
 
-def _plan(item, data, frame, shift, combine, ctx):
+def _plan(item, data, frame, shift, combine, ctx, plane_q):
     """The sides to extrude, as dicts {extent, sign, distance, taper}; or a Refusal.
 
     `sign` is the travel direction relative to the sketch normal. extent is oneSide, symmetric or through.
@@ -217,7 +223,8 @@ def _plan(item, data, frame, shift, combine, ctx):
             if not distance > 0:
                 return Refusal("This extrude has no length.")
             return {"extent": "oneSide", "sign": sign, "distance": distance, "taper": taper,
-                    "taper_q": taper_q, "adjusts": True, "q": _reach_quantity(ctx, item, side, z, reach, offset)}
+                    "taper_q": taper_q, "adjusts": True,
+                    "q": _reach_quantity(ctx, item, side, z, reach, offset, plane_q)}
         return Refusal("This way of setting the extrude length is not copied yet.")
 
     if extent_type == "symmetric":
@@ -264,15 +271,23 @@ def _plan(item, data, frame, shift, combine, ctx):
     return [side]
 
 
-def _resolve_through(plan, data, origin, z, combine):
-    """Give a one sided through all its distance, or a Refusal."""
+def _box_union(box, other):
+    if not box or not other:
+        return box
+    return {"min": [min(a, b) for a, b in zip(box["min"], other["min"])],
+            "max": [max(a, b) for a, b in zip(box["max"], other["max"])]}
+
+
+def _resolve_through(plan, data, origin, z, combine, box_max=None):
+    """Give a one sided through all its distance, or a Refusal. `box_max` holds the part at every size the probe
+    tried, so the cut still clears it when sizes grow."""
     for entry in plan:
         if entry["extent"] == "through" and combine not in ("cut", "intersect"):
             return Refusal("Extruding through all is only copied for cuts.")
         if entry["extent"] == "through-one":
             if combine not in ("cut", "intersect"):
                 return Refusal("Extruding through all is only copied for cuts.")
-            box = data.get("target_box_before")
+            box = _box_union(data.get("target_box_before"), box_max)
             if not box:
                 return Refusal("The part this cuts through could not be measured.")
             entry["extent"] = "oneSide"
@@ -425,8 +440,8 @@ def _touching_order(ctx, units, shift):
     touching = [bool(ctx.slabs) and _touches_part(ctx, built[0], entry, shift) for built, entry in units]
 
     def joins(n, m):
-        (a, _), first = units[n]
-        (b, _), second = units[m]
+        a, first = units[n][0][0], units[n][1]
+        b, second = units[m][0][0], units[m][1]
         return a is b or (first is second and _meets(a, b))
 
     order, left = [], list(range(len(units)))
@@ -435,6 +450,13 @@ def _touching_order(ctx, units, shift):
         order.append(pick)
         left.remove(pick)
     return [units[n] for n in order]
+
+
+def _parts(profile, sources):
+    """(index, capture profile) of the item's profiles that make `profile`: its merged parts, or itself."""
+    if "merged_from" in profile:
+        return [(n, sources[n]) for n in profile["merged_from"]]
+    return [(next(n for n, p in enumerate(sources) if p is profile), profile)]
 
 
 def handle(item, ctx):
@@ -465,6 +487,7 @@ def handle(item, ctx):
     if not _same_plane(profiles):
         return Refusal("This extrude uses outlines on different planes, which is not copied yet.")
     picked = len(profiles)
+    sources = profiles
     profiles = outlines.merge_touching(profiles)
 
     built = []
@@ -472,7 +495,11 @@ def handle(item, ctx):
         outcome = loops.profile_loops(profile)
         if isinstance(outcome, Refusal):
             return outcome
-        built.append((profile, outcome))
+        drawn = sketch_motion.outline(ctx, item, profile, outcome[0], outcome[1], _parts(profile, sources))
+        built.append((profile, outcome, drawn))
+    sketch_motion.planes_apart(ctx, [drawn for _, _, drawn in built], item)
+    first_drawn = built[0][2]
+    plane_q = first_drawn.plane_shift(ctx) if first_drawn is not None else Quantity(0.0)
 
     first_frame = profiles[0]["frame"]
     shift_q = _start_shift(_field(data, "start", {"kind": "profilePlane"}), first_frame, ctx, item)
@@ -480,7 +507,7 @@ def handle(item, ctx):
         return shift_q
     shift_q = _keep_start_with_reach(ctx, item, data, shift_q)
     shift = shift_q.n
-    plan = _plan(item, data, first_frame, shift, combine, ctx)
+    plan = _plan(item, data, first_frame, shift, combine, ctx, plane_q)
     if isinstance(plan, Refusal):
         return plan
     z0 = vec.unit(first_frame["z"])
@@ -489,7 +516,8 @@ def handle(item, ctx):
                   _check_taper(plan, data, combine, picked)):
         if check:
             return check
-    refusal = _resolve_through(plan, data, start, z0, combine)
+    box_max = ctx.motion.box_max if sketch_motion.active(ctx) else None
+    refusal = _resolve_through(plan, data, start, z0, combine, box_max)
     if refusal:
         return refusal
     if combine == "intersect" and (len(plan) * len(built) > 1):
@@ -499,10 +527,12 @@ def handle(item, ctx):
     if combine in ("new", "add") and len(built) > 1:
         units = _touching_order(ctx, units, shift)
     steps = []
-    for (profile, (outer, inner)), entry in units:
+    for (profile, (outer, inner), drawn), entry in units:
         frame = profile["frame"]
         base = placement.moved_along(placement.from_frame(frame), shift, vec.unit(frame["z"]))
-        base["origin"] = _origin(frame, shift_q)
+        base["origin"] = drawn.origin(ctx, shift_q) if drawn is not None else _origin(frame, shift_q)
+        if drawn is not None:
+            outer, inner = drawn.written(ctx)
         reverse = entry["sign"] < 0
         on = placement.reversed_of(base) if reverse else base
         pick = (lambda loop: loops.flip_y(loop)) if reverse else (lambda loop: loop)
@@ -522,7 +552,7 @@ def handle(item, ctx):
         if entry.get("adjusts"):
             step["_adjusts"] = True
         if entry["extent"] in ("oneSide", "symmetric"):
-            step["_slab"] = {"on": on, "extent": entry["extent"], "profile": profile,
+            step["_slab"] = {"on": on, "extent": entry["extent"], "profile": profile, "outline": drawn,
                              "length": entry.get("q") or Quantity(entry["distance"]),
                              "taper": entry.get("taper_q") or Quantity(entry["taper"] or 0.0)}
         steps.append(step)

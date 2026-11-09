@@ -38,9 +38,8 @@ class CellTextTest(unittest.TestCase):
         self.assertEqual(rows.status_text(offer(), True), "size")
         self.assertEqual(rows.status_text(offer("keep"), False), "stays 2 mm")
         self.assertEqual(rows.status_text(offer("formula"), False), "formula")
-        locked = offer("locked", reason="wall stays fixed for now: it changes a sketch. Sketches that follow sizes "
-                                        "come in a later version.")
-        self.assertEqual(rows.status_text(locked, False), "fixed, changes a sketch")
+        locked = offer("locked", reason="wall stays fixed: it moves a joint.")
+        self.assertEqual(rows.status_text(locked, False), "fixed, changes a joint")
 
     def test_the_range_cells_are_open_only_for_a_ticked_plain_row(self):
         self.assertTrue(rows.row_cells(offer(), True)["range_enabled"])
