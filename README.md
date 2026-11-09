@@ -1,7 +1,11 @@
 # Paramability export for Fusion
 
-A Fusion add-in that saves a design as a `.paramability` file. Paramability opens it with a size dropdown, so one
-file holds several sizes of the same part.
+An add-in for Autodesk Fusion that saves a body as a `.paramability` file. Paramability opens it as a part whose
+sizes are your Fusion user parameters, ready on the form. Your Fusion licence still applies to what you export:
+Personal is for non-commercial use, Education is for learning only.
+
+Autodesk and Fusion are trademarks of Autodesk, Inc. Paramability is not affiliated with Autodesk. Rules for sharing
+this add-in are in `docs/publishing.md`.
 
 ## Install
 
