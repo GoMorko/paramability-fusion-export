@@ -1,7 +1,7 @@
 """Where a 2D point sits against one sketch profile: inside, on an outline curve, or at a corner.
 
 Works on the capture's profile curves (sketch 2D mm, unchained). Lines, arcs and circles are measured exactly;
-ellipses are measured on a fine polyline.
+ellipses are measured on a fine polyline, free curves on their dense samples.
 """
 import math
 
@@ -21,6 +21,23 @@ def _to_segment(p, a, b):
         return _dist(p, a)
     t = max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / size))
     return _dist(p, [a[0] + t * dx, a[1] + t * dy])
+
+
+def _to_polyline(p, points):
+    """Distance from a point to a polyline."""
+    px, py = p
+    best = math.inf
+    for k in range(len(points) - 1):
+        ax, ay = points[k]
+        dx, dy = points[k + 1][0] - ax, points[k + 1][1] - ay
+        size = dx * dx + dy * dy
+        t = ((px - ax) * dx + (py - ay) * dy) / size if size > 0 else 0.0
+        t = 0.0 if t < 0.0 else (1.0 if t > 1.0 else t)
+        ex, ey = px - ax - t * dx, py - ay - t * dy
+        gap = ex * ex + ey * ey
+        if gap < best:
+            best = gap
+    return math.sqrt(best)
 
 
 def _angle(center, p):
@@ -61,10 +78,17 @@ def _polyline(curve):
         return [curve["start"], curve["end"]]
     if kind == "ellipse":
         return _ellipse_points(curve)
+    if kind == "other":
+        return curve["samples"]
     c, r = curve["center"], curve["radius"]
     a0, sweep = (0.0, 2 * math.pi) if _is_full(curve) else _arc_span(curve)
     return [[c[0] + r * math.cos(a0 + sweep * k / ARC_SEGMENTS), c[1] + r * math.sin(a0 + sweep * k / ARC_SEGMENTS)]
             for k in range(ARC_SEGMENTS + 1)]
+
+
+def _box_gap(p, box):
+    """Distance from a point to a box (min x, min y, max x, max y); zero inside it."""
+    return math.hypot(max(box[0] - p[0], 0.0, p[0] - box[2]), max(box[1] - p[1], 0.0, p[1] - box[3]))
 
 
 def curve_length(curve):
@@ -104,9 +128,8 @@ def curve_distance(curve, p):
     kind = curve["kind"]
     if kind == "line":
         return _to_segment(p, curve["start"], curve["end"])
-    if kind == "ellipse":
-        points = _ellipse_points(curve)
-        return min(_to_segment(p, a, b) for a, b in zip(points, points[1:]))
+    if kind in ("ellipse", "other"):
+        return _to_polyline(p, _polyline(curve))
     c, r = curve["center"], curve["radius"]
     if _is_full(curve):
         return abs(_dist(p, c) - r)
@@ -132,14 +155,28 @@ class Footprint:
                     corners.append(list(p))
         self.corners = corners
         self._segments = []
+        # Boxes of the curves that are long polylines, so `nearest_curve` can skip those that are far away.
+        self._boxes = []
         for curve in self.curves:
             points = _polyline(curve)
             self._segments += list(zip(points, points[1:]))
+            if curve["kind"] in ("ellipse", "other"):
+                self._boxes.append((min(p[0] for p in points), min(p[1] for p in points),
+                                    max(p[0] for p in points), max(p[1] for p in points)))
+            else:
+                self._boxes.append(None)
 
     def nearest_curve(self, p):
         """(index of the closest curve, its distance in mm)."""
-        best = min(range(len(self.curves)), key=lambda n: curve_distance(self.curves[n], p))
-        return best, curve_distance(self.curves[best], p)
+        best, best_gap = 0, math.inf
+        for n, curve in enumerate(self.curves):
+            box = self._boxes[n]
+            if box is not None and _box_gap(p, box) >= best_gap:
+                continue
+            gap = curve_distance(curve, p)
+            if gap < best_gap:
+                best, best_gap = n, gap
+        return best, best_gap
 
     def gaps(self, p):
         """Distance in mm from `p` to each curve, in curve order."""

@@ -5,7 +5,8 @@ taper leans the walls of that whole region. The recipe extrudes one outline per 
 are merged first: the shared curves are left out and the rest is chained into one outer loop and its holes.
 Profiles that only touch at a point, or stand apart, stay separate outlines. Pieces of one sketch line that meet in
 the merged loop are joined back into that line, and a loop of arcs of one circle becomes that circle, so the outline
-keeps no corner where the shared curves crossed it.
+keeps no corner where the shared curves crossed it. A free curve is shared when two profiles hold the same sketch
+curve (same entity token and ends); text outlines have no such token and are never merged.
 """
 from .footprint import Footprint, _polyline
 
@@ -27,6 +28,8 @@ def _key(curve):
     if kind in ("arc", "circle"):
         return (kind, _p(curve["center"]), round(curve["radius"], KEY_DIGITS)) + ends + (
             (_p(curve["mid"]),) if "mid" in curve else ())
+    if kind == "other" and curve.get("entity") and ends:
+        return ("other", curve["entity"]) + ends
     return None
 
 
@@ -38,7 +41,7 @@ def _close(a, b):
     return abs(a[0] - b[0]) <= CHAIN_TOL and abs(a[1] - b[1]) <= CHAIN_TOL
 
 
-def _loops(curves):
+def closed_loops(curves):
     """The curves split into closed loops, or None when they do not close."""
     left = list(curves)
     loops = []
@@ -125,7 +128,7 @@ def _merged(group):
                 if counts[key] == 1 and key not in seen:
                     seen.add(key)
                     kept.append(curve)
-    loops = _loops(kept)
+    loops = closed_loops(kept)
     if not loops:
         return None
     loops = [_joined(loop) for loop in loops]

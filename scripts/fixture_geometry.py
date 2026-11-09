@@ -5,9 +5,9 @@ Run from the add-in root (needs numpy; the add-in and its tests do not):
     python3 scripts/fixture_geometry.py --write    write the computed values into the fixtures
     python3 scripts/fixture_geometry.py name ...   limit to the named fixtures
 
-The model is a voxel count of extrudes, embosses on flat faces, revolves, holes, combines, patterns and mirrors, read straight from the
+The model is a voxel count of extrudes (thin walls with round corners included), embosses on flat faces, revolves, holes, combines, patterns and mirrors, read straight from the
 capture data (not from the translated recipe). Boxes are exact to half a voxel (0.1 mm), volumes within about
-0.5 percent. Fillets, chamfers, shells, modeled threads, tapers, thin walls, face profiles and unreadable fields
+0.5 percent. Fillets, chamfers, shells, modeled threads, tapers, face profiles and unreadable fields
 are not modelled: the box stays, `volume_mm3` becomes null. The same box rule fills each item's
 `target_box_before`.
 """
@@ -183,6 +183,46 @@ def profile_test(profile):
     return test, np.array(pts)
 
 
+def thin_band(profile, test2d, pts2d, wall):
+    """The test and bounds of the wall of a thin extrude of one outline. The capture does not say which of side one
+    and side two is the inside, so side one is the inside, side two the outside and center both ways. Corners are
+    round (the wall is every point within the thickness of the outline)."""
+    t = wall["thickness"]
+    curves = [c for loop in profile["loops"] for c in loop["curves"]]
+    segments = []
+    circle = None
+    if len(curves) == 1 and curves[0]["kind"] == "circle":
+        circle = curves[0]
+    else:
+        for c in curves:
+            pts = _polyline(c)
+            segments += list(zip(pts[:-1], pts[1:]))
+
+    def distance(u, v):
+        if circle is not None:
+            return np.abs(np.hypot(u - circle["center"][0], v - circle["center"][1]) - circle["radius"])
+        best = np.full(len(u), np.inf)
+        for a, b in segments:
+            ab = np.array(b) - np.array(a)
+            along = np.clip(((u - a[0]) * ab[0] + (v - a[1]) * ab[1]) / (ab @ ab), 0.0, 1.0)
+            best = np.minimum(best, np.hypot(u - (a[0] + along * ab[0]), v - (a[1] + along * ab[1])))
+        return best
+
+    location = wall["location"]
+    reach = {"side1": 0.0, "side2": t, "center": t / 2.0}[location]
+
+    def test(u, v):
+        inside, near = test2d(u, v), distance(u, v)
+        if location == "side1":
+            return inside & (near <= t)
+        if location == "side2":
+            return ~inside & (near <= t)
+        return near <= t / 2.0
+
+    lo, hi = pts2d.min(axis=0) - reach, pts2d.max(axis=0) + reach
+    return test, np.array([lo, hi, [lo[0], hi[1]], [hi[0], lo[1]]])
+
+
 def frame_of(frame):
     rot = np.array([frame["x"], frame["y"], frame["z"]], float).T
     return np.asarray(frame["origin"], float), rot
@@ -235,8 +275,8 @@ def extrude_intervals(data, origin, rot):
         raise Unmodelled("extent " + extent["kind"])
 
     kind = data.get("extent_type")
-    if data.get("thin") is not False:
-        _bend("thin")
+    if data.get("thin") not in (True, False) or (data.get("thin") and not data.get("thin_wall")):
+        raise Unmodelled("thin wall")
     if kind == "one":
         one = data["side_one"]
         end = data.get("end_offset")
@@ -263,6 +303,8 @@ def extrude_shape(data):
     pieces = []
     for profile in profiles:
         test2d, pts2d = profile_test(profile)
+        if data.get("thin"):
+            test2d, pts2d = thin_band(profile, test2d, pts2d, data["thin_wall"])
         origin, rot = frame_of(profile["frame"])
         intervals = extrude_intervals(data, origin, rot)
         lo_w = min(i[0] for i in intervals)

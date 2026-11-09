@@ -111,15 +111,15 @@ class EmbossRefusalTest(unittest.TestCase):
 
     def test_sketch_text(self):
         def add_text(data):
-            data["profiles"].append({"text": True, "sketch": "Sketch2"})
+            data["profiles"].append({"text": True, "sketch": "Sketch2", "problem": "open"})
             data["areas"].append(None)
-        self.check(add_text, "Text in a sketch")
+        self.check(add_text, "text could not be closed")
 
     def test_an_outline_made_of_curves_the_copy_cannot_write(self):
         def spline(data):
             data["profiles"][0]["loops"][0]["curves"][0] = {"kind": "other", "type": "NurbsCurve3D",
                                                             "start": [5, 5], "end": [55, 5], "samples": []}
-        self.check(spline, "Curved outlines")
+        self.check(spline, "could not be read closely enough")
 
     def test_a_sketch_plane_tilted_to_the_face(self):
         self.check(lambda d: d["profiles"][0]["frame"].update(z=[0, 0.6, 0.8]), "tilted")
@@ -152,10 +152,10 @@ class SketchTextTest(unittest.TestCase):
     def test_text_in_the_sketch_of_an_extrude_stops_the_copy_with_its_own_reason(self):
         capture = load_capture("extrude_plate")
         data = capture["items"][-1]["data"]
-        data["profiles"] = [{"text": True, "sketch": "Sketch1"}]
+        data["profiles"] = [{"text": True, "sketch": "Sketch1", "problem": "unread"}]
         result = translate(capture)
         self.assertIsNone(result.recipe)
-        self.assertIn("Text in a sketch", result.refusal["reason"])
+        self.assertIn("outlines of this text", result.refusal["reason"])
 
 
 class EmbossProbeTest(unittest.TestCase):

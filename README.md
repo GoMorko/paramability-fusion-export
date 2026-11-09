@@ -151,7 +151,8 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   it. A size that turns a sketch plane, moves a point along a curve, or changes the shape of an outline may give
   unexpected results.
   These stop the copy and leave a plain part:
-  thin extrudes, face outlines, text in a sketch, spline and other free curve outlines, extrudes that start or end on
+  thin extrudes of an open line, of several outlines, of an outline with holes, that go two ways, reach to a face or
+  have a taper, face outlines, a text or spline outline that is too big or too complex (see below), extrudes that start or end on
   a tilted or curved surface, an emboss on a curved face, an emboss that is moved or turned on its face or drawn on a
   plane tilted to its face, extrudes that make a new component, modeled threads, rounds with variable or chord length
   sizes or curvature continuity, shells that grow outward, close the body or round their corners, patterns of faces or bodies, patterns
@@ -161,10 +162,27 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   body that has more than one step, and every step type not listed above (sweep, loft, coil, move, draft).
   A Remove of another body, a Split Face (the solid stays the same, so picks on its faces may not follow) and steps of
   other bodies that are never joined to the picked body do not stop the copy.
+- Sketch outlines with a spline edge, an elliptical arc or another free curve are copied as spline segments. The add-in
+  reads the Fusion curve as a fine chain of points and picks points for the app's own smooth curve so that it stays
+  within 0.005 mm of Fusion's curve (a long or tight curve is split into several segments). A size that moves a sketch
+  holding such a curve cannot be followed: it stays loose with the reason, or is left out of the sizes, because the
+  points of the curve are not a formula of the sizes. An outline of more than 1000 points is not copied.
+- Sketch text (`Text` in a sketch) is read as outlines and copied by Extrude and Emboss like any other outline: each
+  letter shape is one outline step, a hole in a letter (the inside of an "o") is kept. A text with more than 400
+  outlines, 1000 points in one outline or 256 holes in one letter is not copied ("This text has too many outline
+  points to copy"). A size that moves the sketch of a text cannot be followed. An emboss of text must grow or shrink
+  the part by the text area times the depth, as for other outlines.
 - An Emboss of sketch outlines on a flat face is copied as an extrude that starts on the face: it raises the outline
   when its depth is positive and sinks it when the depth is negative. The depth follows a parameter. The copy checks
   that the part grows or shrinks by the outline area times the depth, so an outline that runs past its face stops the
   copy.
+- A thin extrude of one closed outline (a wall along a rectangle or circle, for lids and boxes) is copied with its wall
+  thickness as a size. The side of the wall (inside, outside or both ways) is taken from the measured end face, since
+  the API does not say which of Fusion's side one and side two is which. Where Fusion keeps the corners of the wall
+  sharp, the copy rounds them and says so. A step placed after a thin extrude cannot follow sizes on the wall's faces,
+  so the sizes it reads may give unexpected results.
+- A formula that uses `%` is copied only when its left side stays at or above zero over the size ranges; the app and
+  Fusion may disagree on negative values.
 - Some steps are copied with a note instead: setback corners, a cosmetic thread (cut as a plain hole), a round or
   chamfer with more than 32 edges (picked in groups), a direction or size that Fusion stored two ways, and a step that
   Fusion shows a warning on.

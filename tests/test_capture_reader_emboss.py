@@ -103,9 +103,10 @@ class EmbossReaderTest(unittest.TestCase):
         self.assertEqual((data["offset_x"], data["depth"]), (None, 1.0))
         self.assertNotIn("offset_x", data["params"])
 
-    def test_sketch_text_is_marked_as_text_and_has_no_area(self):
+    def test_sketch_text_whose_outlines_cannot_be_read_is_a_marker_without_area(self):
         data = read(text=True)
-        self.assertEqual(data["profiles"][1], {"text": True, "sketch": "Sketch1", "sketch_token": "sk1"})
+        self.assertEqual(data["profiles"][1], {"text": True, "sketch": "Sketch1", "sketch_token": "sk1",
+                                               "problem": "unread"})
         self.assertEqual(data["areas"], [304.0, None])
 
     def test_input_faces_that_cannot_be_listed_give_a_read_error(self):

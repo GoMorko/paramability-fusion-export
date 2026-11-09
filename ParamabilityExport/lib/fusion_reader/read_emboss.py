@@ -1,6 +1,6 @@
 """Emboss features (adsk.fusion.EmbossFeature) as plain dicts (docs/capture-format.md).
 
-Before the item: the outlines it raises or sinks (sketch profiles, or a text marker), the faces they land on, the
+Before the item: the outlines it raises or sinks (sketch profiles and the outlines of sketch text), the faces they land on, the
 depth and the shift and turn of the outline, and the size of the part. After the item: the size of the part again and
 where the feature put its farthest face parallel to the input face. The translator checks the two against each other.
 
@@ -10,7 +10,7 @@ own: one that cannot be read becomes null, and the translator then refuses the s
 from . import read_geometry as geo
 from .param_refs import Params, with_params
 from .read_finish import strict_items
-from .read_sketch import profile_areas, read_profiles
+from .read_sketch import read_outlines
 
 MAX_FACES = 256
 
@@ -62,9 +62,10 @@ def emboss_before(feature, ctx):
     params.add("offset_x", lambda: feature.horizontalDistance)
     params.add("offset_y", lambda: feature.verticalDistance)
     params.add("rotation_deg", lambda: feature.rotationAngle, "angle")
+    profiles, areas = read_outlines(feature.profiles, ctx)
     return with_params({
-        "profiles": read_profiles(feature.profiles, ctx),
-        "areas": profile_areas(feature.profiles),
+        "profiles": profiles,
+        "areas": areas,
         "faces": [_face_record(f, ctx) for f in faces],
         "tangent_chain": geo.safe(lambda: bool(feature.isTangentChain), None),
         "depth": _length(lambda: feature.depth),

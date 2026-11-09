@@ -1,7 +1,7 @@
 # Adding a Fusion step type
 
-This guide is for a developer who wants the export to copy one more kind of Fusion timeline step (for example a thin
-extrude, a spline outline, text or a modeled thread). Read `docs/capture-format.md` sections 1 and 5 first. The Emboss
+This guide is for a developer who wants the export to copy one more kind of Fusion timeline step (for example a
+modeled thread, a loft or a sweep). Read `docs/capture-format.md` sections 1 and 5 first. The Emboss
 step (`read_emboss.py`, `emboss.py`, `tests/test_translate_emboss.py`) is a small worked example of every part below,
 and of a step that reuses another handler.
 
@@ -89,7 +89,10 @@ A handler is `handle(item, ctx) -> StepResult | Refusal` (`lib/translator/result
   picks a face of this step cannot follow sizes, so it marks every size written so far. A maker builds placers
   (`lib/translator/placer.py`) once the step has its id: `place(p, edge)` places a measured point on the step's faces,
   `material_at(p)` says whether the step adds or removes material at a point. Add a maker class when the existing
-  slab, shell, moved faces and copies makers do not describe the new faces.
+  slab, shell, moved faces and copies makers do not describe the new faces. A step that leaves material whose faces
+  the copy cannot place (a thin wall, `thin_wall.ThinWall`) gives a placer whose `place` returns None and whose
+  `material_at` answers for the material; it sets `opaque = True`, so a step on another part's sketch (`meets_part`)
+  says it cannot check that it still meets the material.
 - `picks`: for a round or bevel, the measured edge points, so a later pattern or mirror can copy them.
 - `repeatable=False`: Fusion recomputes the step for each copy of a pattern (it reaches to a face or through the
   part), so patterns and mirrors refuse it as a source.
@@ -105,8 +108,14 @@ walk still lists the original item as the copied one, so the end of walk audit r
 sketches. A key that only the new step needs (a fixed direction of travel, for instance) goes into the other handler as
 an optional field of its data, and must not change what that handler writes without it.
 
-A step that takes sketch outlines checks each profile record with `loops.outline_refusal` (sketch text, a flat face or
-an unknown entity is not an outline) and gets its loops from `loops.profile_loops`.
+A step that takes sketch outlines checks each profile record with `loops.outline_refusal` (sketch text that could not
+be read, a flat face or an unknown entity is not an outline) and gets its loops from `loops.profile_loops`. Its reader
+reads them with `read_sketch.read_outlines(raw, ctx)`, which gives the profile records and one area per record: a
+sketch text becomes one record per outer outline, so the list can be longer than the feature's own list of profiles.
+Records are expanded in the reader, never in the handler, so the position of a profile in `data.profiles` (the key of
+its motion values) is the same in the capture, the probe and the translator. A free curve (a spline) is a `kind:
+other` curve with dense `samples`, which `loops.loop_of` fits with spline segments (`spline_fit.py`); a sketch that
+holds free curves or text is not followed by the size probe, so the sizes behind it stay loose or are left out.
 
 Write every value through `lib/translator/values.py`: `values.quantity` turns a Fusion expression into a formula of
 the sizes, with the right dimension and sign rules, or writes it as a number and records why. Points, faces and planes
@@ -151,6 +160,10 @@ state outside `ctx`. Work that depends on the capture alone can be kept in `ctx.
   the stop warning, the capture reader walk). When it becomes copyable those tests need another example type.
 - Reader tests in `tests/test_capture_reader*.py` with the fakes, for each member the reader reads and for an
   unreadable one.
+
+A new feature of an existing step type (the thin wall of an extrude) follows the same parts: the reader adds keys
+under the existing type, the handler checks them before it writes anything, and `scripts/fixture_geometry.py` models
+them when the fixture needs a volume (it only has a branch per step type, and reads the new keys inside it).
 
 ## 6. Hand tests
 

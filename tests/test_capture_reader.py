@@ -425,7 +425,7 @@ class SketchCurveTest(unittest.TestCase):
         self.assertEqual((got[1]["start"], got[1]["end"], got[1]["radius"]), ([5, 0], [0, 5], 5.0))
         self.assertEqual(got[2], {"kind": "ellipse", "center": [1, 1], "major_dir": [0, 1],
                                   "major_radius": 6.0, "minor_radius": 3.0})
-        self.assertEqual((got[3]["kind"], got[3]["type"], len(got[3]["samples"])), ("other", "NurbsCurve3D", 200))
+        self.assertEqual((got[3]["kind"], got[3]["type"], len(got[3]["samples"])), ("other", "NurbsCurve3D", 17))
         self.assertEqual((got[3]["start"], got[3]["end"]), ([0, 0], [10, 2]))
 
     def test_model_space_geometry_is_mapped_into_sketch_space(self):

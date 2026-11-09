@@ -174,7 +174,9 @@ class Anchors:
             self.points.append((loop["start"], tuple(raw_loop["start"])))
             for seg, rseg in zip(loop["segments"], raw_loop["segments"]):
                 self.points.append((seg["to"], tuple(rseg["to"])))
-                if "through" in seg:
+                if seg["kind"] == "spline":
+                    self.points += [(p, tuple(r)) for p, r in zip(seg["through"], rseg["through"])]
+                elif "through" in seg:
                     self.points.append((seg["through"], tuple(rseg["through"])))
         elif kind == "rect":
             self.points += _rect_corners(loop, raw_loop, self.sketch)
@@ -243,7 +245,9 @@ def _from_anchors(loop, anchors, sketch, sources=None):
         segments = []
         for seg in loop["segments"]:
             out = dict(seg, to=at(seg["to"]))
-            if "through" in seg:
+            if seg["kind"] == "spline":
+                out["through"] = [at(p) for p in seg["through"]]
+            elif "through" in seg:
                 out["through"] = at(seg["through"])
             segments.append(out)
         return dict(loop, start=at(loop["start"]), segments=segments)
@@ -424,7 +428,9 @@ def _mend(loop, raw_loop, sources):
     segments = []
     for seg, rseg in zip(loop["segments"], raw_loop["segments"]):
         out = dict(rseg, to=fix(seg["to"], rseg["to"]))
-        if "through" in seg:
+        if seg["kind"] == "spline":
+            out["through"] = [fix(p, r) for p, r in zip(seg["through"], rseg["through"])]
+        elif "through" in seg:
             out["through"] = fix(seg["through"], rseg["through"], True)
         segments.append(out)
     return dict(raw_loop, start=fix(loop["start"], raw_loop["start"]), segments=segments)
@@ -470,10 +476,17 @@ def outline(ctx, item, profile, outer, inners, parts):
     return Outline(ctx, profile["frame"], loops, raw_loops, plane, sketch)
 
 
+def _same_plane(a, b):
+    """True when two raw plane positions move alike; two stuck ones of one sketch and cause do."""
+    if isinstance(a, Stuck) and isinstance(b, Stuck):
+        return a.sketch == b.sketch and a.cause == b.cause and set(a.movers) == set(b.movers)
+    return same(a, b)
+
+
 def planes_apart(ctx, outlines_, item):
     """Fix the sizes that move the outlines of one step apart (on different sketches whose planes move unlike)."""
     planes = [o.plane for o in outlines_ if o is not None]
-    if planes and not all(same(p, planes[0]) for p in planes[1:]):
+    if planes and not all(_same_plane(p, planes[0]) for p in planes[1:]):
         ctx.doubt([n for p in planes for n in movers(ctx.table, p)],
                   notes.stuck_reason("apart", item.get("name") or ""))
 

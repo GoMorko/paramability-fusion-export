@@ -333,7 +333,7 @@ class OperationTest(unittest.TestCase):
 class RefusalTest(unittest.TestCase):
     def test_each_unsupported_input_has_its_own_reason(self):
         reasons = {}
-        for name in ("extrude_thin", "extrude_face_profile", "extrude_new_component", "extrude_spline"):
+        for name in ("extrude_thin", "extrude_face_profile", "extrude_new_component", "extrude_open_spline"):
             result = translate_fixture(name)
             self.assertIsNone(result.recipe, name)
             self.assertEqual((result.refusal["index"], result.refusal["type"]), (1, "ExtrudeFeature"), name)

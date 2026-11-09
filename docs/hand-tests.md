@@ -400,11 +400,91 @@ the Fusion part. The calls behind these tests are listed under "Capture reader c
       the dialog. The copy stops with "moved or turned on its face" and the part saves as a fixed shape. Note in which
       frame each setting moves the outline (the sketch axes, the face axes, or the model axes) and around which point
       the rotation turns, so the copy can follow them later.
-- [ ] **E4 Text.** An emboss of sketch text on a side face, and an extrude of the same text. Both stop with "Text in a
-      sketch is not copied yet" and the part saves as a fixed shape. For the later text copy, call
-      `SketchText.asCurves()` once in the Fusion console and note whether the points are in sketch or model space.
+- [ ] **E4 Text.** An emboss of sketch text on the top face is copied (see section 11, X1). An emboss of text on a
+      side face or a curved face is refused for its face, not for the text.
 - [ ] **E5 Older Fusion.** In a Fusion build from before September 2025, open a design that has an emboss. The export
       does not crash: the step is named in the stop message and the part saves as a fixed shape.
+
+## 11. Spline outlines and sketch text
+
+An outline with a spline edge (fit point or control point), an elliptical arc or another free curve is copied as spline
+segments, and the outlines of sketch text are copied by Extrude and Emboss. Send `report.json` from any of these that
+surprises; its capture becomes a test fixture. "Matches" means the part Paramability builds agrees with the Fusion part.
+The calls behind these tests are listed under "Capture reader calls to watch (spline outlines and sketch text)".
+
+- [ ] **S1 Spline edge.** Draw a closed outline of three lines and one fit point spline with five or six points
+      (a bump on one side) and extrude it. The export copies it and the part matches: lay the Paramability part over
+      the Fusion part and look at the curved wall; it must stay within about 0.01 mm. In `report.json` the curve shows
+      `kind` `other`, `type` `NurbsCurve3D`, a `samples` list of 20 or more
+      points, a `mid` that is one of them, `tangent_start` and `tangent_end` (unit directions that point along the
+      curve), and no `truncated`.
+- [ ] **S2 Curves of other kinds.** An outline with an elliptical arc (a slice of an ellipse), one with a control
+      point spline, one made only of one closed spline (a blob), and one with a conic curve. Each copies and
+      matches. Note the `type` each curve shows in `report.json`; a curve type that is refused tells which one.
+- [ ] **S3 Spline on a tilted or turned sketch.** The S1 outline on a sketch on an angled construction plane, and on
+      a sketch on the bottom face of a body (a sketch that is flipped in z). The export copies it, the item shows
+      `space` `sketch` or `model` (not `ambiguous`) and the part matches. A spline-only outline is the case where
+      the space is decided from the points of the curve and its sketch curve.
+- [ ] **S4 Size that moves a spline.** Tick a parameter that drives a sketch dimension of the S1 sketch (the width).
+      The size does not follow in Paramability: it is either left out of the sizes, with "it changes Sketch1 and could
+      not be tried at other values", or, when another step reads it too, it stays free with the same reason as a
+      warning. The shape at the current value is right.
+- [ ] **S5 Long or tight curve.** A spline 150 mm long with ten bends, and a tight curve (a hook of 1 mm radius).
+      The part matches. In `report.json` read the number of `samples` and whether the curve shows `truncated`; a
+      truncated curve is refused with "could not be read closely enough". In Paramability open the sketch and
+      check that the curve is smooth where one spline was split in two.
+- [ ] **X1 Text, emboss.** Write a short text ("Hello 3D") on a sketch on the top face and Emboss it 1 mm. The export
+      copies it, each letter shape is a step of its own and the inside of "e", "o" and "D" stays open. The part
+      matches. In `report.json` the emboss item shows one profile record per letter shape, each with `text` true,
+      `space` and `loops`, and `areas` that add up to about the text area; `volume_after` minus `volume_before` is that
+      area times the depth.
+- [ ] **X2 Text, extrude and space.** The same text as an Extrude (new body, 2 mm). It copies and matches. Then put
+      the text on a sketch that is not the identity (a sketch on a side face, one on the bottom face, and one on an
+      angled plane). The item shows `space` `sketch` or `model` and the part matches; a text refused with "could not
+      be told with certainty" shows the bounding box rule could not decide, and the points of
+      `SketchText.asCurves()` in the Fusion console against `SketchText.boundingBox` say which space they are in. Set
+      `GEOMETRY_SPACE` in `read_sketch.py` once this is known.
+- [ ] **X3 Text stays text.** After an export the text in the sketch is still one text (not exploded), the timeline
+      has no new item and the design is not marked changed by the read. `SketchText.asCurves()` is documented as not
+      changing the text; this is the check.
+- [ ] **X4 Shapes with holes, and big text.** "ABOQ8%" in a bold font: every hole is kept. A line of about 60
+      characters in a fine script font: it copies or stops with "This text has too many outline points to copy",
+      and the export does not take more than a minute longer than without it.
+- [ ] **X5 Text and sizes.** Tick a parameter that drives a sketch dimension of the text's sketch (its position or
+      height). The size stays loose or is left out with "could not be tried at other values". An emboss depth ticked
+      as a size follows.
+- [ ] **X6 Text of another component.** A text in a sketch of another component used by an extrude of this one: the
+      part saves as a fixed shape.
+
+## Thin extrudes
+
+A thin extrude of one closed outline is copied as an extrude with a wall. Send `report.json` from any thin extrude
+that surprises; its capture becomes a test fixture. The calls behind these tests are listed under "Capture reader
+calls to watch (thin extrude)".
+
+- [ ] **T1 Which side is which.** Draw a 40 x 30 rectangle and make a thin extrude, 10 mm tall, wall 2 mm, once with
+      each wall location in the dialog (Side 1, Side 2, Center). Note for each which way the wall grows (into the
+      rectangle, out of it, or both) and whether the corners on the outside are sharp or round. In `report.json`
+      the item shows `thin_wall.location` (`side1`, `side2` or `center`) and `end_area`: 264 for a wall inside, about
+      296 for a wall outside with sharp corners (292.6 with round corners), about 280 for a centered one. The copy
+      takes the side from `end_area`, not from the location name, and the part must match each time. Where Fusion
+      keeps the outside corners sharp, the copy rounds them and the item shows the note "Fusion keeps the corners of
+      this wall sharp"; check that the difference is the size of the corner only.
+- [ ] **T2 Open line.** Draw one open line (or a few joined lines that do not close) and make a thin extrude of it,
+      the way a rib or a fence is made. The copy stops with "A thin extrude of an open line is not copied yet" and the
+      part saves as a fixed shape. In `report.json` read what Fusion gave as the profile: `thin_wall.profile_type`
+      (the type of `ExtrudeFeature.profile`) and the entries of `profiles` (`{ "kind": "other", "type": ... }` shows
+      the type of each). Note whether the end of the wall is square or round in Fusion; the app draws round ends.
+      This is what a later copy of open lines needs.
+- [ ] **T3 Wall as a size.** Tick the parameter behind the wall thickness and the one behind the height, export, and
+      change both in Paramability: the wall and the height follow. Set the range of the wall so it can reach zero:
+      the wall is then not a size, with the reason in the result window.
+- [ ] **T4 Cases that stop the copy.** A thin extrude of an outline with a hole, of two outlines, that goes two ways,
+      that reaches to a face, and with a taper (if the dialog lets you). Each stops with its own plain reason.
+- [ ] **T5 Remainder.** A parameter `a % b` whose left side stays positive over its range is copied. When the left
+      side can go negative (for example `(width - 120 mm) % 7 mm` with width from 65 to 260), the sizes it reads are
+      loose with the reason. Also note what Fusion shows for a negative left side, such as `-20 mm % 7 mm`: the app
+      gives 1 (the result takes the sign of the right side). If Fusion gives 1 as well, the check can be dropped.
 
 ## Fusion calls to watch
 
@@ -587,7 +667,7 @@ read the capture in `report.json`.
 - `BRepFace.geometry` type of the hole end faces (`plane` flat, `cone` tipped; anything else gives null), compared with `tipAngle`.
 - `HoleFeature.holeType` names that do not match fall to `other`; the same for `FeatureExtentTypes` on extrudes.
 - `Matrix3D.getAsCoordinateSystem()` returning `(origin, xAxis, yAxis, zAxis)` in Python.
-- `CurveEvaluator3D.getParameterExtents` and `getPointAtParameter` (arc middle point, 200 samples of free curves, edge
+- `CurveEvaluator3D.getParameterExtents` and `getPointAtParameter` (arc middle point, the adaptive samples of free curves, edge
   points); `SurfaceEvaluator.getNormalAtPoint` (revolve start face normal).
 - Model parameters read through `.value` (distances, taper angles, angles, hole sizes, offsets). A plain number is
   also accepted.
@@ -689,5 +769,40 @@ Emboss tests of section 10 and read the capture in `report.json`.
   (cm2, read as `end_area`), `SurfaceEvaluator.getNormalAtPoint` at `pointOnFace` pointing out of the body.
 - `Profile.areaProperties().area` for each emboss profile (cm2, read as `areas`), and `BRepBody.volume` of the target
   at the marker before and after the item.
-- `SketchText.parentSketch` for the sketch of a text item (E4).
+- `SketchText.parentSketch` for the sketch of a text item (X1).
 
+## Capture reader calls to watch (thin extrude)
+
+These members and values were written from the API reference and never run. A member that cannot be read gives
+`null`, which the translator refuses, so a wrong guess shows up in `report.json` rather than as a wrong part. Run the
+thin extrude tests above and read the capture in `report.json`.
+
+- `ExtrudeFeature.isThinExtrude` (already read), then `ExtrudeFeature.thinExtrudeWallLocationOne` and
+  `thinExtrudeWallLocationTwo`: the enum `ThinExtrudeWallLocation` (`Side1`, `Side2`, `Center`). The reader matches
+  the value name; a value that matches none reads as `other` and stops the copy.
+- `ExtrudeFeature.thinExtrudeWallThicknessOne` and `thinExtrudeWallThicknessTwo`: `ModelParameter`s (cm, read as mm).
+  Check that the first one gives the wall in `thin_wall.thickness` and that `params["thin.thickness"]` names the
+  parameter. The second only counts for an extrude that goes two ways, which is refused.
+- The side of the wall is not taken from the location name (the API does not say which of side one and side two is
+  the inside). `endFaces[0].area` (read as `end_area`) decides it, so check that for a thin extrude it is the face at
+  the far end of the wall and has the area of the wall's cross section (T1).
+- `ExtrudeFeature.profile` of an open line, and `type_name` of what it returns (`thin_wall.profile_type`): not known
+  (T2).
+
+## Capture reader calls to watch (spline outlines and sketch text)
+
+Written from the API reference and never run. A member that cannot be read leaves the curve without samples or the text
+as a marker, which the translator refuses, so a wrong guess shows up as a refusal and not as a wrong part.
+
+- `CurveEvaluator3D.getParameterExtents` and `getPointAtParameter(parameter)` of `ProfileCurve.geometry` for a
+  `NurbsCurve3D` or `EllipticalArc3D`: `(ok, low, high)` and `(ok, Point3D)`. The reader starts with 16 equal
+  parameter spans and splits each until its middle point is within 0.0005 mm of the chord (S1, S5).
+- `CurveEvaluator3D.getTangent(parameter)`: `(ok, Vector3D)` at the first and last parameter. A failure leaves out
+  `tangent_start` or `tangent_end` (S1).
+- `ProfileCurve.geometry` of a free curve has no `startPoint` or `endPoint` (a `NurbsCurve3D` does not): the points
+  that decide the space come from the evaluator at 0, 0.5 and 1 (S3).
+- `SketchText.asCurves()`: a list of `Curve3D` (`Line3D`, `Arc3D`, `NurbsCurve3D`, ...) that trace the outlines. Called
+  once per text read, no argument. Expected to leave the text and the design alone (X3).
+- `SketchText.boundingBox`: a `BoundingBox3D` in sketch space (`minPoint`, `maxPoint`, cm). The reader keeps the
+  reading of the curve points (sketch or model space) under which every point lies inside it (X2).
+- `SketchText.parentSketch`, `Sketch.modelToSketchSpace`, `Sketch.transform` as for profiles.

@@ -1,0 +1,130 @@
+{
+  "_comment": "An outline that is one open spline: it does not close, so the extrude is not copied.",
+  "capture": 3,
+  "fusion": "2.0.0",
+  "design": "Test",
+  "up_axis": "z",
+  "target": {
+    "token": "t1",
+    "name": "Body1",
+    "box": {
+      "min": [
+        0.2,
+        0.0,
+        0.0
+      ],
+      "max": [
+        9.8,
+        3.0,
+        10.0
+      ]
+    },
+    "volume_mm3": 149.6
+  },
+  "items": [
+    {
+      "index": 0,
+      "name": "Sketch1",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 1,
+      "name": "Extrude1",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "operation": "newBody",
+        "profiles": [
+          {
+            "sketch": "Sketch1",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "other",
+                    "type": "NurbsCurve3D",
+                    "start": [
+                      0,
+                      0
+                    ],
+                    "end": [
+                      10,
+                      0
+                    ],
+                    "samples": [
+                      [
+                        0,
+                        0
+                      ],
+                      [
+                        5,
+                        3
+                      ],
+                      [
+                        10,
+                        0
+                      ]
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 10.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [],
+        "target_box_before": null,
+        "end_offset": null
+      }
+    }
+  ]
+}

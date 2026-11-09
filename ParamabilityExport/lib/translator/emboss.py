@@ -5,9 +5,13 @@ part when the depth is positive (raised) and cuts it when the depth is negative 
 copy relies on, rewrites the item as such an extrude and passes it to `extrude.handle`, so outline merging, size
 formulas, slabs and picks work as for any extrude. Fusion keeps one signed depth and no emboss or deboss flag.
 
+Sketch text arrives as ordinary outline profiles (`text_outlines.py`) whose areas come from the outlines themselves,
+so the volume check below is also what confirms that the text outlines were read in the right place.
+
 Refused, with the part then saved as a fixed shape: curved input faces, an outline moved or turned on its face (the
-frame of those settings is not documented), text, a sketch plane tilted to the face, and a result whose measured
-volume does not match the outline area times the depth (an outline that runs past its face is trimmed by Fusion).
+frame of those settings is not documented), a text whose outlines could not be read, a sketch plane tilted to the
+face, and a result whose measured volume does not match the outline area times the depth (an outline that runs past
+its face is trimmed by Fusion).
 """
 from . import extrude, loops, vec
 from .result import Refusal

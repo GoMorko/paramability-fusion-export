@@ -108,7 +108,7 @@ in section 5, and the item level `target_box_before` boxes (through all cuts, mi
 `target.volume_mm3`; they are kept for a later geometry check against the rebuilt recipe. In fixtures both are
 computed from the capture by `scripts/fixture_geometry.py` (needs numpy; box within one 0.2 mm voxel, volume within
 about 0.5 percent). `volume_mm3` is null when the part has steps that script does not model (rounds, chamfers, shells,
-tapers, thin walls, modeled threads, face outlines). A fixture with no geometry in its items (the `core_*` cases and
+tapers, modeled threads, face outlines). A fixture with no geometry in its items (the `core_*` cases and
 unreadable ones) keeps a nominal box.
 
 ITEM:
@@ -193,7 +193,8 @@ Reading inputs at the position before the item covers the getters that the refer
     ]
   },
   { "face": true, "type": "BRepFace" },
-  { "text": true, "sketch": "Sketch2", "sketch_token": "..." }
+  { "text": true, "sketch": "Sketch2", "sketch_token": "...", "frame": { ... }, "space": "sketch", "loops": [ ... ] },
+  { "text": true, "sketch": "Sketch2", "sketch_token": "...", "problem": "open" }
 ]
 ```
 
@@ -204,9 +205,17 @@ sketch curve (`ProfileCurve.sketchEntity.entityToken`). A key is left out when F
 
 From `Profile.parentSketch.transform`, `Profile.profileLoops`, `ProfileLoop.isOuter`, `ProfileLoop.profileCurves`,
 `ProfileCurve.geometry` and `ProfileCurve.geometryType`. A planar face used as a profile is `{ "face": true }` and a
-`SketchText` is `{ "text": true, "sketch", "sketch_token" }` (`SketchText.parentSketch`; no outline is read). The
-translator refuses both (`loops.outline_refusal`: "Text in a sketch is not copied yet." for text); the sketch token
-keeps the size probe from following a sketch that holds text.
+A `SketchText` is read from `SketchText.asCurves()` (transient curves; the text and the design are not changed): the
+curves are chained into closed loops, and each loop is an outer outline or a hole by how many loops contain it (even
+count: outer, odd: hole of the nearest loop around it). Each outer outline with its holes is one profile record like
+the one above, plus `"text": true` and no curve `entity`: a text of "OI" with a hole in the "O" is two records. The
+space of the points (sketch or model) is decided like for other profiles, except that the curves have no sketch entity:
+the points are compared with `SketchText.boundingBox` (sketch space) and the record is a marker when both readings
+fit or neither does. A text that cannot be turned into profiles is one record with `text`, `sketch`, `sketch_token`
+and a `problem`: `unread` (no curves), `open` (the curves do not close), `space`, `too_many` (over 4000 curves or 400
+outlines) or `foreign` (a text of another component). The translator refuses a marker with its own reason
+(`loops.TEXT_PROBLEMS`), and every size that moves the sketch of a text stays loose or is left out, since the size
+probe does not follow it.
 
 `space` says how the curve space was decided: `sketch` or `model` (the reader mapped model space curves into sketch
 2D) or `ambiguous`. A curve off the plane z = 0 proves model space. Points all at z = 0 that do not lie on one line
@@ -253,7 +262,15 @@ CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriente
 | `Arc3D` (`center`, `radius`, `startPoint`, `endPoint`) | `{ "kind": "arc", "start", "end", "mid", "center", "radius" }`; `mid` from the evaluator at the middle parameter |
 | `Circle3D` (`center`, `radius`) | `{ "kind": "circle", "center", "radius" }` |
 | `Ellipse3D` (`center`, `majorAxis`, `majorRadius`, `minorRadius`) | `{ "kind": "ellipse", "center", "major_dir": [x, y], "major_radius", "minor_radius" }` |
-| `EllipticalArc3D`, `NurbsCurve3D`, other | `{ "kind": "other", "type": "NurbsCurve3D", "start", "end", "samples": [[x, y], ...] }`, 200 samples by parameter |
+| `EllipticalArc3D`, `NurbsCurve3D`, other | `{ "kind": "other", "type": "NurbsCurve3D", "start", "end", "mid", "samples": [[x, y], ...], "tangent_start", "tangent_end" }` |
+
+A free curve is read as a dense polyline: 16 equal parameter spans, each split at its middle parameter until the middle
+point lies within 0.0005 mm of the chord, at most 800 points (`truncated: true` when the cap stopped the splitting, and
+the translator then refuses the curve). `start`, `end` and `mid` are samples. `tangent_start` and `tangent_end` are unit
+directions of the curve at its ends (`CurveEvaluator3D.getTangent`), left out when they cannot be read; the recipe's
+spline segment has no tangent field, so they are for checks only. A curve that cannot be evaluated has `samples: []`.
+The translator fits the app's spline through points chosen from the samples (`lib/translator/spline_fit.py`, tolerance
+0.005 mm, at most 64 points inside one segment, split into several segments past that, at most 1000 points in a loop).
 
 ## 5. Feature data
 
@@ -306,6 +323,16 @@ CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriente
   a wall that narrows away from the sketch leans its outward normal along the travel; a cut lists the part's walls,
   which face the other way. Every measured wall must match a side of the plan (within 1e-4), and each tapered side
   must have a wall that shows it, else the translator refuses.
+- `thin_wall` (only when `thin` is true): `{ "location", "thickness", "location_two", "thickness_two",
+  "profile_type" }` from `thinExtrudeWallLocationOne` and `thinExtrudeWallLocationTwo` (`ThinExtrudeWallLocation`:
+  `side1`, `side2`, `center`, else `other`; null when unreadable), `thinExtrudeWallThicknessOne` and
+  `thinExtrudeWallThicknessTwo` (mm, null when unreadable) and the type name of `ExtrudeFeature.profile` (an open
+  line shows here and as `{ "kind": "other", "type": ... }` in `profiles`). The thickness of side one also names its
+  parameter as `params["thin.thickness"]`. The translator copies one closed outline without holes, one way or
+  symmetric, without a taper. Side one and side two are not taken for inside and outside (the API does not say):
+  `end_area`, the area of the wall's end face, is compared with the expected area of each side of the outline,
+  worked out from its lengths and corners, and decides the side. The area is used rather than the volume change
+  because a wall that joins or cuts an existing part overlaps it, while the end face stays the wall's cross section.
 - `profile_area`, `end_area` (optional, mm2): the area of the first profile and of `endFaces[0]`. Without
   `side_leans`, a tapered extrude of one outline is checked by them (the end face must be smaller for a positive
   recipe taper); a tapered extrude of several outlines is refused. Fusion's positive taper widens the walls (the
@@ -554,8 +581,9 @@ for extrudes).
 }
 ```
 
-- `profiles`: sketch profile records (section 4), or a text marker for a `SketchText`. `areas` holds `Profile.areaProperties`
-  of each, in mm2 (null for text).
+- `profiles`: sketch profile records (section 4), including the outline records of a `SketchText`. `areas` holds
+  `Profile.areaProperties` of each, in mm2; for a text record it is the area of its outlines (outer less holes),
+  computed by the reader, null for a text marker.
 - `faces`: the `inputFaces` the outline lands on. `surface` is `Plane`, `Cylinder`, `Cone` or `other` (from
   `BRepFace.geometry`); `plane` (origin and normal of the geometry), `outward` (`getNormalAtPoint` at `pointOnFace`) and
   `face_point` are null when they cannot be read. `participants` are the bodies of these faces.
@@ -867,7 +895,7 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | Enum value names: `HoleTypes`, `HoleTapTypes`, `FeatureExtentTypes`, `PatternEntityTypes`, the spacing value of `PatternDistanceType` (add-in 0.3.1 looked for `PatternDistanceTypes` and wrote `other`), the rounded value of `ShellTypes`, `Curve3DTypes`, fillet continuity, `ChamferCornerTypes` | the reader maps by name text with a fallback to `other`; the "Capture reader calls to watch" lists in `docs/hand-tests.md` logs unknown names |
 | `ProfileCurve.geometry` in sketch space or model space; `ProfileCurve.sketchEntity` and `SketchCurve.geometry` in sketch space | reader decides per profile and writes `space` (`ambiguous` is refused); the Tilted sketch test (offset, tilted, bottom face sketch) |
 | `getAsCoordinateSystem()` returns `(origin, xAxis, yAxis, zAxis)` in Python | the Tilted sketch test |
-| `CurveEvaluator3D.getParameterExtents`, `getPointAtParameter`; `SurfaceEvaluator.getNormalAtPoint` | the "Capture reader calls to watch" lists in `docs/hand-tests.md` |
+| `CurveEvaluator3D.getParameterExtents`, `getPointAtParameter`, `getTangent`; `SurfaceEvaluator.getNormalAtPoint` | the "Capture reader calls to watch" lists in `docs/hand-tests.md` |
 | A flipped one sided extrude stores a negative distance | `end_offset`; the Extrude directions test |
 | Taper sign (Fusion positive grows or shrinks) | one constant `FUSION_TAPER_SIGN` in `extrude.py`; the Extrude directions test |
 | `ToEntityExtentDefinition`, `TwoSidesDistanceExtentDefinition`, `TwoSidesAngleExtentDefinition`, `FromEntityStartDefinition` field names | reader falls back to `other`; the Extrude directions test |
@@ -892,6 +920,8 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | `Occurrence.sourceComponent` and `Occurrence.assemblyContext` of a timeline occurrence; `ConstructionPlane.component` | the item `component`; the "Bodies inside components" hand tests |
 | Feature inputs (profiles, edges, planes, faces) of a component feature come as proxies through the occurrence; `nativeObject` gives the component's own entity | records of the target's own inputs carry no `foreign`; the "Bodies inside components" hand tests |
 | `OffsetFacesFeature.inputFaces` (or `faces` before the item), `distance`, `faces` after it; `BRepFace.loops`, `BRepLoop.isOuter`, `BRepLoop.edges`, `Plane.uDirection`; positive distance moves the face outwards | `faces_after` must show the face moved by `distance`; the Offset faces hand test |
-| `EmbossFeature.profiles` (`Profile` and `SketchText` items), `inputFaces`, `faces` after the item, `isTangentChain`, `depth`, `horizontalDistance`, `verticalDistance`, `rotationAngle`; `BRepFace.area`, `BRepFace.body`; a positive `depth` raises and a negative one sinks; the feature exists only in Fusion builds from September 2025 and is marked preview in the API reference | `volume_after` must differ from `volume_before` by `sum(areas) * abs(depth)` with the sign of `depth`, else the translator refuses; the Emboss hand tests (section 10 of `docs/hand-tests.md`) |
+| `EmbossFeature.profiles` (`Profile` and `SketchText` items; the area of a text is computed from its outlines), `inputFaces`, `faces` after the item, `isTangentChain`, `depth`, `horizontalDistance`, `verticalDistance`, `rotationAngle`; `BRepFace.area`, `BRepFace.body`; a positive `depth` raises and a negative one sinks; the feature exists only in Fusion builds from September 2025 and is marked preview in the API reference | `volume_after` must differ from `volume_before` by `sum(areas) * abs(depth)` with the sign of `depth`, else the translator refuses; the Emboss hand tests (section 10 of `docs/hand-tests.md`) |
+| `SketchText.asCurves()` returns the text outline as closed `Curve3D` loops (lines, arcs, free curves) without changing the design; the points are in sketch or model space; `SketchText.boundingBox` is in sketch space | `space` is decided by the bounding box and `ambiguous` or a failed read gives a text marker; an emboss checks the text area against the measured volume; the Text hand tests (section 11 of `docs/hand-tests.md`) |
+| Free curves (`NurbsCurve3D`, `EllipticalArc3D`) evaluate through `CurveEvaluator3D.getPointAtParameter` over `getParameterExtents`, and `getTangent` gives the direction at an end | a curve that cannot be evaluated has no samples and is refused; a missing tangent is left out; the Spline hand tests (section 11 of `docs/hand-tests.md`) |
 | `Sketch.parentComponent`, `ConstructionPlane.component`, `BRepFace.body`, `BRepEdge.body` | `foreign` reads them in a try; an unreadable one leaves the record unmarked |
 | `BRepBody.copyToComponent(proxy)` keeps the assembly place | the copy guard in `step_export.py` compares the bounding boxes (1e-3 mm) and refuses before writing |

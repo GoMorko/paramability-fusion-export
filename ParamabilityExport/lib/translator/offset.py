@@ -42,7 +42,9 @@ def _face_refusal(face, distance, after):
 
 
 def _extent(curve):
-    """Points that bound a curve: its ends, plus the box of a circle, ellipse or arc."""
+    """Points that bound a curve: its ends, plus the box of a circle, ellipse or arc, or the samples of a free curve."""
+    if curve["kind"] == "other" and curve.get("samples"):
+        return list(curve["samples"])
     if curve["kind"] in ("circle", "ellipse"):
         r = curve["radius"] if curve["kind"] == "circle" else max(curve["major_radius"], curve["minor_radius"])
         cx, cy = curve["center"]

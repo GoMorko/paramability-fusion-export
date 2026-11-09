@@ -15,7 +15,7 @@ Sources: the Fusion help pages "Parameters reference" (operators, constants, log
 |---|---|---|
 | `a + b`, `a - b`, `a * b`, `a / b` | same | `x * 1` and `x / 1` (from a unit word) drop the `1` |
 | `a ^ b` | `pow(a, b)` | binds tighter than unary minus: `-a ^ 2` is `-pow(a, 2)` |
-| `a % b` | `mod(a, b)` | the app's `mod` takes the sign of `b`; Fusion's floating point modulo may differ for negative values |
+| `a % b` | `mod(a, b)` | the app's `mod` takes the sign of `b`; what Fusion gives for a negative `a` is not confirmed, so a formula whose `a` can be negative over the size ranges is not copied (the sizes it reads are loose with a reason) |
 | `f(a; b)` | `f(a, b)` | a comma is read as a separator too |
 | `<`, `<=`, `>`, `>=`, `==` | same | gives 1 or 0; `a < b < c` is refused, as in the app |
 | `<>` (and `!=`) | `!=` | |
