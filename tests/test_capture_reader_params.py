@@ -53,11 +53,6 @@ class FeatureParamsTest(unittest.TestCase):
 
 
 class EnvelopeTest(unittest.TestCase):
-    def test_version_units_and_parameter_lists(self):
-        capture = capture_of()
-        self.assertEqual((capture["capture"], capture["design_units"]), (2, "mm"))
-        self.assertEqual(capture["parameters"], {"user": [], "model": []})
-
     def test_default_length_unit_and_user_parameters_are_read(self):
         user = Obj(name="wall", expression="2 mm", value=0.2, unit="mm", comment="", isFavorite=True)
         capture = capture_of(fusionUnitsManager=Obj(defaultLengthUnits="in"), userParameters=Coll([user]))

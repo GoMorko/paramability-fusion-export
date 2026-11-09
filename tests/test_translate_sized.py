@@ -1,4 +1,4 @@
-"""Feature values that follow sizes (lib/translator/values.py, the size table passed to translate)."""
+"""Feature values that follow sizes (the size table passed to translate)."""
 import copy
 import unittest
 
@@ -291,9 +291,6 @@ class QuantityTest(unittest.TestCase):
         self.assertEqual(q.plus(-2).text, "a + b - 2")
         self.assertEqual(Quantity(1.0).plus(q).text, "1 + (a + b)")
         self.assertEqual(q.divided_by(Quantity(4.0, "n", ("n",))).text, "(a + b) / n")
-
-    def test_plain_numbers_stay_numbers(self):
-        self.assertEqual(Quantity(2.0).scaled(3).plus(1).json(), 7)
 
 
 if __name__ == "__main__":

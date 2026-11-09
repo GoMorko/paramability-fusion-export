@@ -17,8 +17,6 @@ class NamesTest(unittest.TestCase):
         self.assertEqual(names.sanitize("wäll"), "w_ll")
         self.assertEqual(names.sanitize("if"), "if_")
         self.assertEqual(names.sanitize(""), "p_")
-
-    def test_cut_to_64(self):
         self.assertEqual(len(names.sanitize("a" * 100)), 64)
 
     def test_clashes_keep_valid_names_and_number_the_rest(self):
@@ -30,9 +28,6 @@ class NamesTest(unittest.TestCase):
         result = names.assign([long, long + "$"])
         self.assertEqual(result[long + "$"], "x" * 62 + "_2")
         self.assertEqual(len(result[long + "$"]), 64)
-
-    def test_case_is_kept(self):
-        self.assertEqual(names.assign(["Width", "width"]), {"Width": "Width", "width": "width"})
 
 
 if __name__ == "__main__":

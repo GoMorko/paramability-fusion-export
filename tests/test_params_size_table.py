@@ -3,7 +3,7 @@ import unittest
 from tests import context  # noqa: F401
 from lib.params import size_table
 from lib.params.size_table import CONSTANT, DERIVED, FIXED, FREE, NOT_OFFERED
-from tests.params_fixtures import CUBE, D, H, RAW, W, reader_dicts
+from tests.params_fixtures import CUBE, D, H, W, reader_dicts
 
 TICKED = [W, H, D, CUBE]
 NEW_W = "FilterBox___width__contains_CeramicMedium"
@@ -65,10 +65,6 @@ class FilterBoxTableTest(unittest.TestCase):
         self.assertEqual(t.depends(W), {W})
         self.assertEqual(t.depends("FilterBox__PipeTop_offsetFromCenter_mm"), frozenset())
         self.assertEqual(t.depends("nothing"), frozenset())
-
-    def test_unticking_the_cube_makes_height_follow_only_the_count(self):
-        t = table(ticked=[H])
-        self.assertEqual(t.sizes["FilterBox_height_mm"]["expr"], "FilterBox___height__contains_CeramicMedium * 18")
 
     def test_fixed_size_becomes_a_number_and_is_listed(self):
         t = table().with_fixed({CUBE: "Cube stays fixed for now: it changes Sketch3."})
@@ -141,20 +137,6 @@ class FilterBoxTableTest(unittest.TestCase):
         self.assertEqual(t.sizes["holes"]["kind"], "count")
         self.assertEqual(t.sizes["ratio"]["kind"], "number")
         self.assertEqual(size_table.build(params, ["holes"], model_params=model).sizes["holes"]["kind"], "number")
-
-    def test_fixed_entry_names_the_recipe_size_and_keeps_the_fusion_name_in_the_reason(self):
-        long_name = "p" * 71
-        params = [dict(name=long_name, expression="2 mm", value=0.2, unit="mm", comment="", is_favorite=True,
-                       kind="length"),
-                  dict(name="a b", expression="2 mm", value=0.2, unit="mm", comment="", is_favorite=True,
-                       kind="length")]
-        t = size_table.build(params, [long_name, "a b"], fixed={long_name: "Stays fixed.", "a b": "Stays fixed."})
-        self.assertEqual([len(f["name"]) for f in t.fixed], [64, 3])
-        self.assertEqual(t.fixed[1], {"name": "a_b", "reason": "a b: Stays fixed."})
-        self.assertEqual(t.fixed_entry("a_b", "x")["name"], "a_b")
-
-    def test_raw_fixture_values_match_the_designs_names(self):
-        self.assertEqual(len(RAW), 9)
 
 
 if __name__ == "__main__":

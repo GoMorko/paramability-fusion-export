@@ -17,7 +17,7 @@ class Context:
       The Combine handler takes them.
     not_repeatable: ids of steps whose length Fusion recomputes per copy (a handler marks a step with a private
       `_adjusts` key, which `add_steps` removes). Pattern and mirror handlers refuse them as sources.
-    table: the size table (lib/params) whose sizes the feature values may follow, or None for a recipe with plain
+    table: the size table whose sizes the feature values may follow, or None for a recipe with plain
       numbers only.
     depends: Fusion name of a size -> plain reason, for each size that a value written as a number depends on.
       The driver turns these sizes into fixed numbers and walks again.

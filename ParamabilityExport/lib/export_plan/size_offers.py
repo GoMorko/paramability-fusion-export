@@ -1,6 +1,6 @@
 """The parameter list of the main dialog, and the sizes the checks run over. Pure: no Fusion imports.
 
-The size table (lib/params) decides what each parameter becomes. This module turns it into dialog lines and into
+The size table decides what each parameter becomes. This module turns it into dialog lines and into
 the size dicts of size_checks.
 """
 from ..params import defaults, size_table

@@ -92,7 +92,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis, in_c
 
     capture_or_error: the reader's capture dict, or the exception the reader raised.
     in_component: the body is not in the root component, so no steps are translated and the part stays a fixed shape.
-    size_table: the lib/params SizeTable of this export, or None for a recipe without sizes. A ticked size that no
+    size_table: the SizeTable of this export, or None for a recipe without sizes. A ticked size that no
       copied step uses is named in a note and in `report.json` ("dropped").
     checks: [{'size', 'value', 'step_file'}] from the size checks, one size changed in each. Only checks of sizes the
       recipe keeps free go into the package.

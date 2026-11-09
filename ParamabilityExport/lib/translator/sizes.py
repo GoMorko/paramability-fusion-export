@@ -1,4 +1,4 @@
-"""The recipe `sizes` and the sizes that cannot follow, around the size table (lib/params).
+"""The recipe `sizes` and the sizes that cannot follow, around the size table.
 
 The size table lists every size the person ticked. The recipe keeps only the sizes that a written formula reads, and
 the sizes those formulas read in turn. A size whose value moves a sketch is fixed up front, since sketches are copied as

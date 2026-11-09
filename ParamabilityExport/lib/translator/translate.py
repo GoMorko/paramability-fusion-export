@@ -135,7 +135,7 @@ def translate(capture, handlers=None, size_table=None):
     (verdict `skipped`, with the handler's notes). Items after the first refusal are not walked, so `items` holds the
     verdicts up to and including it.
 
-    `size_table` (lib/params) makes the recipe follow Fusion parameters: feature values whose parameters read a size
+    `size_table` makes the recipe follow Fusion parameters: feature values whose parameters read a size
     are written as formulas, the recipe gets `sizes` and the `sizesAsWritten` marker. A size that some value cannot
     follow is made a fixed number and the walk runs again; `result.fixed` lists those sizes as `{ name, reason }`.
     """

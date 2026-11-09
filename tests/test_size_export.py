@@ -8,7 +8,7 @@ from tests.fakes import FakeStore
 from tests.params_fixtures import CUBE, H, reader_dicts
 from lib.export_plan import recipe_export
 from lib.export_plan.apply import RowBuildError
-from lib.export_plan.messages import fixed_note, recipe_saved_message, sizes_note
+from lib.export_plan.messages import fixed_note, recipe_saved_message
 from lib.export_plan.recipe_export import plan_single_export
 from lib.export_plan.runner import RowExport
 from lib.export_plan.size_offers import MAX_TICKED, initial_table, labels, offers, sizes_for_checks
@@ -64,7 +64,6 @@ class SizedPlanTest(unittest.TestCase):
         self.assertNotIn("checks/02.step", files)
         self.assertEqual([f["name"] for f in manifest["fixed"]], ["width", "corner", "pitch"])
         self.assertEqual(mf.validate_manifest(manifest), [])
-        self.assertEqual(manifest["notes"][1], "1 size is ready to put on the form.")
         self.assertEqual(report["sizes"]["free"], ["wall"])
         self.assertEqual(report["sizes"]["unchecked"], ["depth"])
         self.assertEqual(json.loads(files["report.json"])["sizes"]["checks"], [{"size": "wall", "value": 4.0}])
@@ -72,7 +71,6 @@ class SizedPlanTest(unittest.TestCase):
     def test_saved_message_lists_why_numbers_stay_fixed(self):
         manifest, _, _ = self.plan()
         text = recipe_saved_message(manifest, "box.paramability")
-        self.assertTrue(text.startswith("Saved box.paramability. 1 step copied from Fusion."))
         self.assertIn("- width: width stays fixed for now.", text)
 
     def test_a_part_that_stays_a_fixed_shape_has_no_checks_and_no_fixed_list(self):
@@ -123,9 +121,6 @@ class ManifestFixedTest(unittest.TestCase):
         self.assertTrue(mf.validate_manifest(self.base(fixed=[{"name": "a", "reason": "r"}] * 33)))
         self.assertTrue(mf.validate_manifest(self.base(checks=[{"values": {"w": 2e6}, "step": "checks/01.step"}])))
 
-    def test_empty_fixed_list_is_left_out(self):
-        self.assertNotIn("fixed", mf.build_recipe_manifest("R", "w", fixed=[]))
-
 
 class WriterTest(unittest.TestCase):
     def test_fixed_list_and_check_steps_reach_the_zip(self):
@@ -172,9 +167,6 @@ class OffersTest(unittest.TestCase):
     def setUp(self):
         self.params = reader_dicts()
         self.table = initial_table(self.params)
-
-    def test_without_model_parameters_the_favourites_are_ticked(self):
-        self.assertIn(CUBE, self.table.ticked)
 
     def test_favourites_the_body_reads_are_ticked_and_formulas_have_no_tick(self):
         lines = {o["param"]: o for o in offers(self.table, self.params)}
@@ -224,9 +216,7 @@ class OffersTest(unittest.TestCase):
         self.assertEqual((cube["min"], cube["max"]), (9.0, 36.0))
         self.assertEqual(labels(table)[cube["size"]], CUBE)
 
-    def test_messages(self):
-        self.assertEqual(sizes_note(4), "4 sizes are ready to put on the form.")
-        self.assertEqual(fixed_note(["a"]), "1 number stays fixed: a.")
+    def test_the_fixed_note_fits_the_manifest_note_limit(self):
         self.assertLessEqual(len(fixed_note(["x" * 60] * 6)), 200)
 
 

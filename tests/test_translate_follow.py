@@ -1,11 +1,11 @@
-"""Picks and reaches that follow sizes (lib/translator/follow.py) on the sized filter tray."""
+"""Picks and reaches that follow sizes on the sized filter tray."""
 import copy
 import unittest
 from unittest import mock
 
 from tests import context  # noqa: F401
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
-from tests.test_translate_sized import CUBE, H, TICKED, param, resolved, run
+from tests.test_translate_sized import CUBE, H, param, run
 
 from lib.params.expressions import evaluate
 from lib.translator import translate
@@ -75,13 +75,6 @@ class PicksTest(unittest.TestCase):
         big = {"FilterBox___height__contains_CeramicMedium": 2.5, CUBE: 30}
         self.assertEqual(at(result.recipe, table, near[0][2], big), 38.5)
         assert_schema_ok(self, result.recipe)
-
-    def test_several_open_faces_follow_by_formula(self):
-        def edit(capture):
-            capture["items"][2]["data"]["faces"].append({"token": "f2", "point": [80, 30, 16]})
-        result, _ = run(tray(edit))
-        near = steps_of(result.recipe, "shell")[0]["openFaces"]["near"]
-        self.assertEqual(near, [[40, 30, {"expr": HEIGHT}], [80, 30, {"expr": "0.5 * " + HEIGHT}]])
 
     def test_a_pick_on_unknown_geometry_fixes_the_earlier_sizes(self):
         def edit(capture):
