@@ -60,30 +60,19 @@ def _sketch_numbers(sketch):
     return out
 
 
-def sketch_key(component_token, name):
-    """Key of a sketch in a snapshot: sketch names repeat across components, so the component token comes first."""
-    return "%s/%s" % (component_token, name)
-
-
 def read_sketches(component, skip=()):
-    """{ "<component token>/<sketch name>": numbers } for the sketches of one component. Never raises.
+    """{ sketch name: numbers } for the sketches of one component. Never raises.
 
-    `skip` holds sketch names or full keys to leave out.
+    `skip` holds the names of sketches to leave out.
     """
-    try:
-        token = component.entityToken or ""
-    except Exception:
-        token = ""
     state = {}
     for sketch in _collection(getattr(component, "sketches", None)):
         try:
             name = sketch.name
         except Exception:
             continue
-        key = sketch_key(token, name)
-        if name in skip or key in skip:
-            continue
-        state[key] = _sketch_numbers(sketch)
+        if name not in skip:
+            state[name] = _sketch_numbers(sketch)
     return state
 
 

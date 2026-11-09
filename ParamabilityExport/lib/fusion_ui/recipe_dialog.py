@@ -68,11 +68,13 @@ def _set_text(inputs, key, index, text):
         box.formattedText = html.escape(text)
 
 
-def build(command, offers, body, up_axis, used_by=False):
+def build(command, offers, body, up_axis, used_by=False, design_unit="mm"):
     """Add the inputs. offers come from export_plan.size_offers.offers; body may be None.
 
     Cells are named by row number, since a Fusion parameter name is not always a safe input id. `used_by` swaps the
-    Now column for the parts that read each parameter (a component export; the texts come from the offers).
+    Now column for the parts that read each parameter (a component export; the texts come from the offers). The
+    Used by column is off until the whole component export needs it: no caller passes `used_by` yet.
+    `design_unit` is the unit the Min and Max cells use for lengths.
     """
     inputs = command.commandInputs
     selection = inputs.addSelectionInput(BODY_ID, "Body", "Pick the body to export.")
@@ -83,7 +85,7 @@ def build(command, offers, body, up_axis, used_by=False):
 
     if offers:
         _safely("Dialog size", lambda: command.setDialogInitialSize(700, 700))
-        _build_table(inputs, offers, used_by)
+        _build_table(inputs, offers, used_by, design_unit)
         inputs.addTextBoxCommandInput(
             DETAILS_ID, "", html.escape(rows.HINT), 4, True)
         inputs.addTextBoxCommandInput(COUNT_ID, "", "", 2, True)
@@ -100,13 +102,15 @@ def build(command, offers, body, up_axis, used_by=False):
         "Starts from the Fusion setting for new designs. Pick Y up if the part lies on its side in Paramability.")
 
 
-def _build_table(inputs, offers, used_by):
+def _build_table(inputs, offers, used_by, design_unit):
     keys = rows.columns(used_by)
     table = inputs.addTableCommandInput(TABLE_ID, "", len(keys), rows.column_ratio(keys))
-    _safely("Table rows", lambda: (setattr(table, "minimumVisibleRows", 5), setattr(table, "maximumVisibleRows", 12)))
+    _safely("Table rows", lambda: setattr(table, "minimumVisibleRows", 5))
+    _safely("Table rows", lambda: setattr(table, "maximumVisibleRows", 12))
     _safely("Table width", lambda: setattr(table, "isFullWidth", True))
     for col, key in enumerate(keys):
-        table.addCommandInput(inputs.addTextBoxCommandInput("pm_head_" + key, "", rows.HEADERS[key], 1, True), 0, col)
+        head = inputs.addTextBoxCommandInput("pm_head_" + key, "", rows.header(key, design_unit), 1, True)
+        table.addCommandInput(head, 0, col)
     for index, offer in enumerate(offers):
         for col, key in enumerate(keys):
             table.addCommandInput(_make_cell(inputs, key, index, offer), index + _HEADER_ROWS, col)

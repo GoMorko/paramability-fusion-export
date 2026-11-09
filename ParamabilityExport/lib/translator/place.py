@@ -44,7 +44,8 @@ NOT_WRITTEN = ("loft", "sweep", "thread", "coil", "skin", "draft", "bevelGear")
 
 FRAME_NOT_NUMBERS = "The frame of the part is not made of numbers."
 _SNAP = 1e-12
-_RIGID = 1e-6
+# How far a frame's axes may be from unit length and right angles and still count as a rotation.
+RIGID_TOLERANCE = 1e-6
 
 
 class Move:
@@ -81,7 +82,7 @@ IDENTITY_ROWS = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
 TURN_Z_UP = Move(((1, 0, 0), (0, 0, -1), (0, 1, 0)))
 
 
-def from_frame(frame):
+def move_from_frame(frame):
     """The move of an occurrence frame {origin, x, y, z}: its axes are the columns of the rotation."""
     axes = (frame["x"], frame["y"], frame["z"])
     return Move([[axes[j][i] for j in range(3)] for i in range(3)], frame["origin"])
@@ -99,7 +100,7 @@ def frame_problem(frame):
     for i in range(3):
         for j in range(i, 3):
             dot = sum(axes[i][k] * axes[j][k] for k in range(3))
-            if abs(dot - (1.0 if i == j else 0.0)) > _RIGID:
+            if abs(dot - (1.0 if i == j else 0.0)) > RIGID_TOLERANCE:
                 return "The frame of the part is scaled or skewed."
     x, y, z = axes
     cross = [x[1] * y[2] - x[2] * y[1], x[2] * y[0] - x[0] * y[2], x[0] * y[1] - x[1] * y[0]]
@@ -113,7 +114,7 @@ def move_for(capture):
     move = Move(IDENTITY_ROWS)
     placement = (capture.get("target") or {}).get("placement")
     if isinstance(placement, dict) and isinstance(placement.get("frame"), dict):
-        move = from_frame(placement["frame"])
+        move = move_from_frame(placement["frame"])
     if capture.get("up_axis") == "y":
         move = move.then(TURN_Z_UP)
     return move

@@ -8,12 +8,22 @@ from lib.fusion_reader.placement import occurrence_path, read_frame, read_placem
 POINTS = [(0, 0, 0), (40, 0, 0), (0, 20, 0), (0, 0, 10)]
 
 
-class Comp:
+class _ByToken:
+    """Fusion objects of one entity are equal; the fakes say so by their token."""
+
+    def __eq__(self, other):
+        return getattr(other, "entityToken", None) == self.entityToken
+
+    def __hash__(self):
+        return hash(self.entityToken)
+
+
+class Comp(_ByToken):
     def __init__(self, token):
         self.entityToken = token
 
 
-class Root:
+class Root(_ByToken):
     entityToken = "root"
 
     def __init__(self, uses=1):
@@ -98,6 +108,11 @@ class FrameTest(unittest.TestCase):
         placement = read_placement(proxy, Root())
         self.assertEqual((placement["source"], placement["frame"]["origin"]), ("transform", [30, 0, 0]))
 
+    def test_axis_noise_from_many_turns_is_still_a_rotation(self):
+        noisy = ((100, 0, 0), (1 + 1e-8, 1e-8, 0), (-1e-8, 1, 0), (0, 0, 1))
+        proxy, _ = moved(noisy)
+        self.assertNotIn("error", read_placement(proxy, Root()))
+
     def test_few_vertices_add_face_points(self):
         place = turn_z(90, (10, 0, 0))
         native = FakeSolid([(0, 0, 0)], faces=[(5, 5, 5), (1, 2, 3)], component=Comp("c"))
@@ -126,6 +141,12 @@ class ReReadTest(unittest.TestCase):
         proxy.assemblyContext.assemblyContext.nativeObject = None
         proxy.assemblyContext.assemblyContext.transform2 = FakeMatrix3D(turn_z(90, (100, 60, 0)))
         self.assertEqual(read_frame(proxy, first["source"])["origin"][1] - first["frame"]["origin"][1], 10)
+
+    def test_the_re_read_uses_the_member_the_capture_used(self):
+        proxy, occurrence = moved(turn_z(0, (30, 0, 0)))
+        occurrence.transform, occurrence.transform2 = occurrence.transform2, FakeMatrix3D(turn_z(0, (99, 0, 0)))
+        self.assertEqual(read_frame(proxy, "transform")["origin"], [30, 0, 0])
+        self.assertEqual(read_frame(proxy, "transform2")["origin"], [99, 0, 0])
 
     def test_unreadable_or_root_gives_none(self):
         self.assertIsNone(read_frame(FakeSolid(POINTS), "transform2"))

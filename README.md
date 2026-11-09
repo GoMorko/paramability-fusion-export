@@ -25,12 +25,13 @@ Nothing is typed in Fusion.
 3. Look at the parameter table. Each row is one user parameter: a tick, its name, its value now, and what it becomes in
    Paramability. Parameters the picked body uses are ticked to start with (your favourites first); pick another body
    and the ticks follow that body. "Tick what the body uses" and "Untick all" set them again in one click. A ticked
-   row has a Min and a Max: they start from the comment rule below, and you can type your own numbers (in mm, degrees
-   or whole numbers for a count). The current value must sit between them. An unticked row says "stays 3 mm". A
-   parameter worked out by a formula says "formula" and follows the parameters it reads. A parameter that drives a
-   sketch dimension, a construction plane or axis, or a joint cannot be a size for now: it is greyed out and its row
-   says why. Click a row to read its comment, its formula or the full reason in the box under the table. You can tick
-   up to 16 sizes, since each one gets a check.
+   row has a Min and a Max: they start from the comment rule below, and you can type your own numbers (in the length
+   unit of your design, in degrees, or whole numbers for a count; a typed unit such as `2 in` is read too). The
+   current value must sit between them. An unticked row says "stays 3 mm". A parameter worked out by a formula says
+   "formula" and follows the parameters it reads. A parameter that drives a sketch dimension, a construction plane or
+   axis, or a joint cannot be a size for now: it is greyed out and its row says why. Click a row to read its comment,
+   its formula or the full reason in the box under the table. You can tick up to 16 sizes, since each one gets a
+   check.
 4. Pick the design up direction, click OK and choose where to save the file.
 5. A window then lists each size with its range and its check ("matches Fusion", "not checked", "kept fixed"), what
    stays fixed and why, and how many parameters come along as variables. If this window cannot open, the same text is

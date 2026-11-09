@@ -131,10 +131,11 @@ def _start_item(timeline, ctx, readers, index, items, group_indices):
     items[index] = item
     if entity is None:
         return
-    token = geo.safe(lambda: entity.parentComponent.entityToken, None)
+    component = geo.safe(lambda: entity.parentComponent, None)
+    token = geo.safe(lambda: component.entityToken, None)
     if token:
         item["component"] = token
-        item["in_target_component"] = token == ctx.component_token
+        item["in_target_component"] = geo.same_entity(component, ctx.component)
     if item["suppressed"]:
         return
     bodies_before = geo.safe(lambda: _component_bodies(ctx), None)

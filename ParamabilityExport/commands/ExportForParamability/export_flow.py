@@ -9,7 +9,7 @@ import os
 import tempfile
 
 from ...lib.export_plan.apply import RowBuildError
-from ...lib.export_plan.body_scope import other_sketches, scope_inputs
+from ...lib.export_plan.body_scope import other_sketch_names, scope_inputs
 from ...lib.export_plan.errors import StepExportError
 from ...lib.export_plan.messages import recipe_saved_message
 from ...lib.export_plan.result_rows import result_view
@@ -65,11 +65,16 @@ class CaptureCache:
 
 
 def _target_info(capture):
-    """(component name, placement source) of the picked body from its capture; empty strings when unknown."""
+    """(component name, sketch scope, placement source) of the picked body from its capture.
+
+    The scope is the component name shown before a sketch name in a reason; empty for a body of the root.
+    Unknown values are empty strings, and the component name is then "the part".
+    """
     target = (capture or {}).get("target") or {}
     component = target.get("component") or {}
     place = target.get("placement") or {}
-    return component.get("name") or "the part", place.get("source") or ""
+    name = component.get("name") or ""
+    return name or "the part", "" if component.get("root") else name, place.get("source") or ""
 
 
 def _snapshot(component, body, source, skip):
@@ -111,8 +116,10 @@ PENDING_POSITION_MESSAGE = (
     "Capture the position of moved parts first (Position, Capture Position), then export again.")
 
 
-def _position_pending(design):
-    """True when parts were moved by hand and the position is not captured. An unreadable answer counts as no."""
+def position_pending(design):
+    """True when parts were moved by hand and the position is not captured. An unreadable answer counts as no.
+
+    It has to be asked before any read that moves the timeline marker, since that can drop a pending move."""
     try:
         return bool(design.snapshots.hasPendingSnapshot)
     except Exception:
@@ -139,8 +146,14 @@ def _parameter_listing(parameters, model_params, design_unit):
 
 
 def _show_result(file_name, manifest, report, table, ticked):
-    """The result dialog for a recipe; the message box when the file holds no recipe or the dialog cannot start."""
-    view = result_view(file_name, manifest, report, table, ticked)
+    """The result dialog for a recipe; the message box when the file holds no recipe or the dialog cannot start.
+
+    The file is saved by now, so nothing here may report a failed export."""
+    try:
+        view = result_view(file_name, manifest, report, table, ticked)
+    except Exception as exc:
+        log(f"result view failed: {exc!r}")
+        view = None
     if view is None:
         message_box(recipe_saved_message(manifest, file_name))
     else:
@@ -159,7 +172,7 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
     if not marker_at_end(design.timeline):
         message_box(MARKER_MESSAGE)
         return
-    if _position_pending(design):
+    if position_pending(design):
         message_box(PENDING_POSITION_MESSAGE)
         return
     title = design_title(design_info.document_name(app))
@@ -170,6 +183,7 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
     units = {p["name"]: p["unit"] for p in parameters}
     token = body.entityToken
     jobs = []
+    saved = None
     try:
         with tempfile.TemporaryDirectory(prefix="paramability_", ignore_cleanup_errors=True) as tmp:
             part_step = os.path.join(tmp, "part.step")
@@ -193,13 +207,13 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
                     checks, not_checked = plan_checks(sizes)
                     unchecked = [s["size"] for s in not_checked]
                 if checks:
-                    skip = other_sketches(capture)
-                    part_name, source = _target_info(capture)
+                    skip = other_sketch_names(capture)
+                    part_name, scope, source = _target_info(capture)
                     baseline = _snapshot(_target_component(design, body), current, source, skip)
                     results, snapshots = _run_checks(
                         design, DesignParameterStore(design), units, body, token, checks, tmp, jobs, skip, source)
                     kept, measured = read_checks(
-                        checks, results, baseline, snapshots, labels(table), part_name=part_name)
+                        checks, results, baseline, snapshots, labels(table), part_name=part_name, scope=scope)
                     if measured:
                         table = table.with_fixed({m["param"]: m["reason"] for m in measured})
 
@@ -210,7 +224,7 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
                 fixed=[{"name": m["name"], "reason": m["reason"]} for m in measured], unchecked=unchecked,
                 listing=_parameter_listing(parameters, model_params, design_unit))
             write_package(out_path, manifest, files)
-        _show_result(os.path.basename(out_path), manifest, report, table, form["ticked"])
+            saved = (os.path.basename(out_path), manifest, report, table)
     except ExportCancelled:
         message_box("Export cancelled. Your parameters are back to their values.")
     except (RowBuildError, StepExportError, PackageCapError, MarkerError) as exc:
@@ -220,3 +234,5 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
     finally:
         for job in jobs:
             export_common.warn_unrestored(job)
+    if saved is not None:
+        _show_result(*saved, form["ticked"])

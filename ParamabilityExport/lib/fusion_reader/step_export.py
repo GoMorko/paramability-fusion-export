@@ -2,7 +2,7 @@
 import adsk.core
 
 from ..export_plan.errors import StepExportError
-from ..export_plan.temp_copy import remove_temporary_copy, require_marker_at_end, timeline_tokens
+from ..export_plan.temp_copy import remove_temporary_copy, require_marker_at_end, timeline_state
 from ..package.units import cm_to_mm
 
 COPY_TOLERANCE_MM = 1e-3
@@ -83,11 +83,11 @@ def export_body_step(design, body, path, route=None):
             "The design holds more than one solid body. Hide or move the other bodies, then try again.")
     timeline = design.timeline
     require_marker_at_end(timeline)
-    tokens_before = timeline_tokens(timeline)
+    before = timeline_state(timeline)
     occurrence = root.occurrences.addNewComponent(adsk.core.Matrix3D.create())
     try:
         # For a body inside a component, body is the occurrence proxy, so the copy keeps its place in the assembly.
         _require_copy_in_place(body.copyToComponent(occurrence), body)
         _export_component(design, occurrence.component, path)
     finally:
-        remove_temporary_copy(timeline, occurrence, tokens_before)
+        remove_temporary_copy(timeline, occurrence, before)

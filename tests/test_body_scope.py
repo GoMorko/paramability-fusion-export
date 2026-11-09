@@ -1,7 +1,7 @@
 import unittest
 
 from tests import context  # noqa: F401
-from lib.export_plan.body_scope import body_items, other_sketches, quantity_refs, scope_inputs, scoped_model_params
+from lib.export_plan.body_scope import body_items, other_sketch_names, other_sketches, quantity_refs, scope_inputs, scoped_model_params
 
 A = {"token": "a", "name": "Body1"}
 B = {"token": "b", "name": "Body2"}
@@ -65,7 +65,7 @@ class BodyScopeTest(unittest.TestCase):
         self.assertEqual(kept, {"d1", "d2", "d4", "d5", "d6", "d7"})
 
     def test_sketches_only_other_bodies_use(self):
-        self.assertEqual(other_sketches(capture()), {"Sketch2"})
+        self.assertEqual(other_sketches(capture()), {("", "Sketch2")})
 
     def test_sketch_and_step_names_are_matched_with_their_component(self):
         cap = in_components(capture())
@@ -73,9 +73,17 @@ class BodyScopeTest(unittest.TestCase):
         cap["items"][3]["data"]["profiles"] = [{"sketch": "Sketch1"}]
         cap["parameters"]["model"][2]["created_by"]["sketch"] = "Sketch1"
         cap["parameters"]["model"][3]["created_by"]["name"] = "Extrude1"
-        self.assertEqual(other_sketches(cap), {"cB/Sketch1"})
+        self.assertEqual(other_sketches(cap), {("cB", "Sketch1")})
         kept = {p["name"] for p in scoped_model_params(cap)}
         self.assertEqual(kept, {"d1", "d2", "d4", "d5", "d6", "d7"})
+
+    def test_only_the_sketch_names_of_the_targets_own_component_are_skipped(self):
+        cap = in_components(capture())
+        cap["items"][2]["name"], cap["items"][3]["name"] = "Sketch1", "Extrude1"
+        cap["items"][3]["data"]["profiles"] = [{"sketch": "Sketch1"}]
+        self.assertEqual(other_sketch_names({**cap, "target": {**A, "component": {"token": "cA"}}}), set())
+        self.assertEqual(other_sketch_names({**cap, "target": {**A, "component": {"token": "cB"}}}), {"Sketch1"})
+        self.assertEqual(other_sketch_names(capture()), {"Sketch2"})
 
     def test_quantity_parameters_come_from_the_steps_of_the_body(self):
         self.assertEqual([r["name"] for r in quantity_refs(capture())], ["d9"])

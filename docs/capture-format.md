@@ -129,8 +129,9 @@ ITEM:
 - `health`: from `TimelineObject.healthState` (`ok`, `warning`, `error`); `message` from
   `errorOrWarningMessage`.
 - `component`: the token of the feature's `parentComponent` (read on the native entity; empty when unreadable).
-  `in_target_component`: it equals `target.component.token` (true when unreadable). Feature readers run only for items
-  in the target's component; the other items keep `"data": {}` with their `bodies_after`, health and message.
+  `in_target_component`: the feature's component is the target's component, compared as Fusion objects and not by
+  token text (true when unreadable). Feature readers run only for items in the target's component; the other items
+  keep `"data": {}` with their `bodies_after`, health and message.
 - `entity_context`: `"proxy"` only when `TimelineObject.entity` came as an occurrence proxy and was turned native
   (`nativeObject`) before reading; absent otherwise.
 - `bodies_before` (not for suppressed items): the bodies of the target's component at the marker before the item.
@@ -400,9 +401,9 @@ for extrudes).
 
 A record whose entity does not belong to the target's component carries `"foreign": true`; the key is absent
 otherwise. An entity is foreign when it has an `assemblyContext` (it is seen through an occurrence) or its component
-token differs from `target.component.token` (`foreign()` in `lib/fusion_reader/read_geometry.py`; the component is read
-from `parentComponent`, `component`, `body.parentComponent` or `parentSketch.parentComponent`, whichever answers). An
-entity whose component cannot be read is not marked.
+is not the target's component, compared as Fusion objects (`foreign()` in `lib/fusion_reader/read_geometry.py`; the
+component is read from `parentComponent`, `component`, `body.parentComponent` or `parentSketch.parentComponent`,
+whichever answers). An entity whose component cannot be read is not marked.
 
 | Where | Record |
 |---|---|

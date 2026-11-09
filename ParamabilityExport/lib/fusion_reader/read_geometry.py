@@ -103,13 +103,24 @@ def box_of(body):
     return {"min": point(box.minPoint), "max": point(box.maxPoint)}
 
 
-def component_token_of(entity):
-    """Token of the component that owns an entity (a body, sketch, profile, plane, face or edge), or None."""
+def same_entity(a, b):
+    """True when two Fusion objects are the same entity. Token text is not compared: Fusion can give one entity
+    different tokens over time."""
+    if a is None or b is None:
+        return False
+    try:
+        return a is b or bool(a == b)
+    except Exception:
+        return False
+
+
+def component_of(entity):
+    """The component that owns an entity (a body, sketch, profile, plane, face or edge), or None."""
     for read in (lambda: entity.parentComponent, lambda: entity.component, lambda: entity.body.parentComponent,
                  lambda: entity.parentSketch.parentComponent, lambda: entity.sketch.parentComponent):
-        token = safe(lambda: read().entityToken, None)
-        if token:
-            return token
+        component = safe(read, None)
+        if component is not None:
+            return component
     return None
 
 
@@ -119,8 +130,8 @@ def foreign(entity, ctx):
         return False
     if safe(lambda: entity.assemblyContext, None) is not None:
         return True
-    token = component_token_of(entity)
-    return token is not None and token != ctx.component_token
+    component = component_of(entity)
+    return component is not None and not same_entity(component, ctx.component)
 
 
 def mark_foreign(record, entity, ctx):
@@ -213,7 +224,7 @@ class ReadContext:
         self.target_ref = body_ref(self.target)
         self.component = safe(lambda: self.target.parentComponent, None) or self.root
         self.component_token = safe(lambda: self.component.entityToken, "") or ""
-        self.is_root_component = self.component_token == safe(lambda: self.root.entityToken, "")
+        self.is_root_component = same_entity(self.component, self.root)
 
     def find_target(self):
         """The target body (native) at the current marker position, or None when it does not exist yet.

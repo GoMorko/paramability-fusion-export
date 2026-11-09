@@ -13,8 +13,8 @@ from ..fusion_reader.sketches import moved_sketches
 MAX_CHECKS = 16
 _SAME = 1e-9
 
-# Key of the part's place in a sketch snapshot. Sketch keys hold " / ", so no sketch can take this one.
-PLACEMENT_KEY = "<placement>"
+# Key of the part's place in a sketch snapshot. It is not a string, so no sketch name can take it.
+PLACEMENT_KEY = ("placement",)
 # 1e-4 mm: the recompute noise Fusion leaves on an unchanged place (the numbers are mm and unit axes).
 PLACE_TOLERANCE = 1e-4
 
@@ -60,8 +60,10 @@ def fixed_entry(name, reason):
     return {"name": name, "reason": " ".join(reason.split())[:200]}
 
 
-def moved_reason(label, sketch_names):
-    shown = ", ".join(sketch_names[:2]) + (" and more" if len(sketch_names) > 2 else "")
+def moved_reason(label, sketch_names, scope=""):
+    """`scope` is the component name put before each sketch name, for a body inside a component ("Tray / Sketch1")."""
+    names = ["%s / %s" % (scope, n) if scope else n for n in sketch_names]
+    shown = ", ".join(names[:2]) + (" and more" if len(names) > 2 else "")
     return f"{label} stays fixed for now: it changes {shown}. Sketches that follow sizes come in a later version."
 
 
@@ -91,7 +93,7 @@ def _sketches_only(snapshot):
     return {k: v for k, v in snapshot.items() if k != PLACEMENT_KEY}
 
 
-def read_checks(checks, results, baseline_sketches, sketch_by_check, labels, part_name="the part"):
+def read_checks(checks, results, baseline_sketches, sketch_by_check, labels, part_name="the part", scope=""):
     """Sort the checks by what they showed.
 
     results: RowExport results in check order; an entry with 'error' is a row Fusion could not build.
@@ -100,6 +102,7 @@ def read_checks(checks, results, baseline_sketches, sketch_by_check, labels, par
     the place of the export.
     labels: {size name: text for the person}.
     part_name: the part as the person knows it (the component), for the reason of a move.
+    scope: the component name shown before a sketch name in a reason; empty for a body of the root.
     Returns (kept, fixed): kept lists the checks with a STEP file, in order, each with 'step_file'; fixed lists
     {'name' (Fusion name), 'reason', 'param', 'size'} for sizes that must stay fixed numbers.
     """
@@ -117,7 +120,7 @@ def read_checks(checks, results, baseline_sketches, sketch_by_check, labels, par
             continue
         moved = moved_sketches(_sketches_only(baseline_sketches), _sketches_only(snapshot))
         if moved:
-            fixed.append({**fixed_entry(check["param"], moved_reason(label, moved)),
+            fixed.append({**fixed_entry(check["param"], moved_reason(label, moved, scope)),
                           "param": check["param"], "size": check["size"]})
             continue
         kept.append({**check, "step_file": result["step_file"]})

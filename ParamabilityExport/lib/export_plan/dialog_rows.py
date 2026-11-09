@@ -7,9 +7,10 @@ import html
 import math
 import re
 
+from ..package.units import display_from_manifest, manifest_from_display, unit_kind
 from ..params.defaults import COUNT_CAP
 from ..params.expressions import format_number
-from .size_offers import MAX_TICKED, limit_message
+from .size_offers import MAX_TICKED, limit_message, range_unit
 
 SIZE, KEEP, LOCKED, FORMULA = "size", "keep", "locked", "formula"
 
@@ -20,13 +21,23 @@ RATIOS = {"tick": 1, "name": 6, "now": 2, "used_by": 3, "min": 2, "max": 2, "sta
 NAME_WIDTH = 26
 NAME_LINES = 3
 HINT = "Click a row to see its comment, formula or why it stays fixed."
-_UNIT_SUFFIX = re.compile(r"\s*(mm|deg)\s*$", re.I)
+_TYPED = re.compile(r"^\s*([-+]?[0-9.,]+)\s*([a-z]*)\s*$", re.I)
+# A comma that starts exactly three digits ("2,500") reads as a thousands mark or a decimal comma: not guessed.
+_AMBIGUOUS_COMMA = re.compile(r"^[-+]?[1-9][0-9]*,[0-9]{3}$")
+# Typed ranges are compared with the number now at the precision the cells show.
+RANGE_SLACK = 1e-4
 _REASON_CHANGES = re.compile(r"\bit (?:changes|moves) ([^.]+)\.", re.I)
 
 
 def columns(used_by=False):
     """Column keys left to right. A component export shows which parts read a parameter in place of Now."""
     return ("tick", "name", "used_by" if used_by else "now", "min", "max", "status")
+
+
+def header(key, design_unit="mm"):
+    """The column title. Min and Max name the design's length unit, since lengths are typed in it."""
+    unit = design_unit if unit_kind(design_unit) == "length" else "mm"
+    return "%s (%s)" % (HEADERS[key], unit) if key in ("min", "max") else HEADERS[key]
 
 
 def column_ratio(keys):
@@ -37,20 +48,48 @@ def number_text(value):
     return "" if value is None else format_number(value)
 
 
+def _unit_of(offer):
+    """The unit of the range cells of an offer: the design's length unit, deg, or '' for a count."""
+    return offer["range_unit"] if "range_unit" in offer else range_unit(offer.get("kind"))
+
+
+def cell_text(offer, value):
+    """A range value (mm, deg or plain) as the cell shows it: lengths in the design's unit, angles with deg."""
+    if value is None:
+        return ""
+    unit = _unit_of(offer)
+    text = number_text(display_from_manifest(value, unit))
+    return text + " deg" if unit_kind(unit) == "angle" else text
+
+
 def range_text(offer, lo, hi):
     unit = {"length": " mm", "angle": " deg"}.get(offer.get("kind"), "")
     text = "%s to %s%s" % (number_text(lo), number_text(hi), unit)
     return text + ", whole numbers" if offer.get("kind") == "count" else text
 
 
-def parse_number(text):
-    """The number typed in a Min or Max cell (a trailing mm or deg and a comma mark are accepted), else None."""
-    cleaned = _UNIT_SUFFIX.sub("", (text or "").strip()).replace(",", ".")
+def parse_number(text, unit=""):
+    """The number typed in a Min or Max cell as manifest numbers (mm, deg or plain), else None.
+
+    `unit` is the unit of a bare number. A typed unit that fits the kind is converted ("2 in"), a comma mark is
+    accepted as a decimal point; text with more than one mark or an unclear "2,500" is refused.
+    """
+    found = _TYPED.match(text or "")
+    if not found:
+        return None
+    number, typed = found.group(1), found.group(2).lower()
+    if number.count(",") + number.count(".") > 1 or _AMBIGUOUS_COMMA.match(number):
+        return None
     try:
-        value = float(cleaned)
+        value = float(number.replace(",", "."))
     except ValueError:
         return None
-    return value if math.isfinite(value) else None
+    if not math.isfinite(value):
+        return None
+    if typed and unit_kind(typed) != unit_kind(unit):
+        return None
+    result = manifest_from_display(value, typed or unit) if (typed or unit) else value
+    return round(result, 9) + 0.0 if result is not None and math.isfinite(result) else None
 
 
 def short_reason(reason):
@@ -80,7 +119,7 @@ def status_text(offer, ticked):
 
 
 def default_range_texts(offer):
-    return number_text(offer["min"]), number_text(offer["max"])
+    return cell_text(offer, offer["min"]), cell_text(offer, offer["max"])
 
 
 def row_cells(offer, ticked, lo_text=None, hi_text=None):
@@ -128,7 +167,9 @@ def details_html(offer, ticked, lo_text=None, hi_text=None):
     lo = default_range_texts(offer)[0] if lo_text is None else lo_text
     hi = default_range_texts(offer)[1] if hi_text is None else hi_text
     if ticked:
-        lines.append("Size in Paramability from %s to %s." % (html.escape(lo), html.escape(hi)))
+        unit = _unit_of(offer)
+        unit = " " + unit if unit_kind(unit) == "length" else ""
+        lines.append("Size in Paramability from %s to %s%s." % (html.escape(lo), html.escape(hi), unit))
     else:
         lines.append("Stays a fixed number. Tick it to make it a size.")
     return "<br>".join(lines)
@@ -143,16 +184,26 @@ def count_line(count, problem="", over=False, limit=MAX_TICKED):
     return "%d of %d sizes ticked. Every parameter also comes along as a variable." % (count, limit)
 
 
+def _typed_or_default(offer, text, key):
+    """The typed number, or the exact default when the cell still shows the default text."""
+    if text is not None and text.strip() == default_range_texts(offer)[0 if key == "min" else 1]:
+        return offer[key]
+    return parse_number(text, _unit_of(offer))
+
+
 def check_range(offer, lo_text, hi_text):
-    """(problem, (min, max)) for the typed range of a ticked row. The problem is '' when the range is fine."""
+    """(problem, (min, max)) for the typed range of a ticked row, in manifest numbers (mm, deg or plain).
+
+    The problem is '' when the range is fine.
+    """
     name = offer["param"]
-    lo, hi = parse_number(lo_text), parse_number(hi_text)
+    lo, hi = _typed_or_default(offer, lo_text, "min"), _typed_or_default(offer, hi_text, "max")
     if lo is None or hi is None:
         return "%s: type a number for Min and Max." % name, None
     if lo >= hi:
         return "%s: Min must be below Max." % name, None
     value = offer["value"]
-    if not lo <= value <= hi:
+    if not lo - RANGE_SLACK <= value <= hi + RANGE_SLACK:
         return "%s: the number now, %s, must sit between Min and Max." % (name, offer["now"]), None
     if offer["kind"] == "count":
         if lo != int(lo) or hi != int(hi) or lo < 1:

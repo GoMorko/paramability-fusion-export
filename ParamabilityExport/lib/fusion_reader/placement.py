@@ -8,10 +8,10 @@ No adsk import: it works on the objects it is given. Frames are `{ origin, x, y,
 import math
 
 from ..package.units import cm_to_mm
+from ..translator.place import RIGID_TOLERANCE
 from . import read_geometry as geo
 
 POINT_TOLERANCE_MM = 1e-3
-AXIS_TOLERANCE = 1e-9
 POINTS_TO_CHECK = 3
 _MAX_DEPTH = 64
 
@@ -48,9 +48,12 @@ def _raw_frame(matrix):
     }
 
 
-def _matrix(occurrence):
-    """(raw frame, member used): `transform2`, else the retired `transform`; (None, "") when neither reads."""
-    for member in ("transform2", "transform"):
+_MEMBERS = ("transform2", "transform")
+
+
+def _matrix(occurrence, members=_MEMBERS):
+    """(raw frame, member used): the first of `members` that reads; (None, "") when none does."""
+    for member in members:
         matrix = geo.safe(lambda: getattr(occurrence, member), None)
         frame = geo.safe(lambda: _raw_frame(matrix), None) if matrix is not None else None
         if frame is not None:
@@ -83,9 +86,9 @@ def _dot(a, b):
 def _rigid(frame):
     """True for a rotation plus a move: unit, perpendicular axes, right handed (no scale, no mirror)."""
     axes = [frame["x"], frame["y"], frame["z"]]
-    if any(abs(_dot(a, a) - 1.0) > AXIS_TOLERANCE for a in axes):
+    if any(abs(_dot(a, a) - 1.0) > RIGID_TOLERANCE for a in axes):
         return False
-    if any(abs(_dot(axes[i], axes[j])) > AXIS_TOLERANCE for i, j in ((0, 1), (0, 2), (1, 2))):
+    if any(abs(_dot(axes[i], axes[j])) > RIGID_TOLERANCE for i, j in ((0, 1), (0, 2), (1, 2))):
         return False
     cross = [frame["x"][1] * frame["y"][2] - frame["x"][2] * frame["y"][1],
              frame["x"][2] * frame["y"][0] - frame["x"][0] * frame["y"][2],
@@ -102,21 +105,21 @@ def _rounded(frame):
             "x": unit(frame["x"]), "y": unit(frame["y"]), "z": unit(frame["z"])}
 
 
-def _direct(path):
+def _direct(path, members=_MEMBERS):
     """Candidate A: the transform of the body's own occurrence."""
-    return _matrix(path[0])
+    return _matrix(path[0], members)
 
 
-def _along_path(path):
+def _along_path(path, members=_MEMBERS):
     """Candidate B: the native occurrence transforms from the top occurrence down, multiplied."""
-    total, members = None, set()
+    total, used = None, set()
     for occurrence in path:  # inner to outer
-        frame, member = _matrix(_native(occurrence))
+        frame, member = _matrix(_native(occurrence), members)
         if frame is None:
             return None, ""
-        members.add(member)
+        used.add(member)
         total = frame if total is None else _compose(frame, total)
-    return total, "path_" + ("transform2" if members == {"transform2"} else "transform")
+    return total, "path_" + ("transform2" if used == {"transform2"} else "transform")
 
 
 def _sample_points(body):
@@ -160,8 +163,7 @@ def read_placement(body, root, component=None):
     if component is None:
         component = geo.safe(lambda: body.parentComponent, None)
     if not path:
-        token = geo.safe(lambda: component.entityToken, None)
-        if token is None or token == geo.safe(lambda: root.entityToken, None):
+        if component is None or geo.same_entity(component, root):
             return None
         return _failed("", "The body was not picked through its place in the assembly.", 1, False)
     name = geo.safe(lambda: path[0].fullPathName, "") or _names(path)
@@ -192,12 +194,14 @@ def read_placement(body, root, component=None):
 
 
 def read_frame(body, source):
-    """The frame of a body's place read again with the candidate that read_placement chose; None when unreadable.
+    """The frame of a body's place read again the way read_placement read it (`source`); None when unreadable.
 
-    No point check: the size checks only compare it with the frame the export used.
+    The same candidate and the same transform member are used, so the frame means the same as the one of the
+    capture. No point check: the size checks only compare it with the frame the export used.
     """
     path = occurrence_path(body)
     if not path:
         return None
-    raw, _ = (_along_path if source in _PATH_SOURCES else _direct)(path)
+    member = "transform2" if source in (SOURCE_TRANSFORM2, SOURCE_PATH_TRANSFORM2) else "transform"
+    raw, _ = (_along_path if source in _PATH_SOURCES else _direct)(path, (member,))
     return _rounded(raw) if raw is not None else None

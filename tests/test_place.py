@@ -151,18 +151,18 @@ class MoveTest(unittest.TestCase):
     def test_a_moved_part_keeps_plain_formulas(self):
         frame = {"origin": [100, 50, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
         recipe = hole_at(1, 2, sized("0.5 * h", 16, "h"))
-        out = place.place(recipe, place.from_frame(frame))["features"][0]["origin"]
+        out = place.place(recipe, place.move_from_frame(frame))["features"][0]["origin"]
         self.assertEqual(out, [101.0, 52.0, {"expr": "0.5 * h"}])
         self.assertEqual(out[2].reads, ("h",))
 
     def test_a_turned_part_writes_affine_formulas_and_directions_ignore_the_move(self):
-        move = place.from_frame(QUARTER_ABOUT_X)
+        move = place.move_from_frame(QUARTER_ABOUT_X)
         out = place.place(hole_at(1, 2, sized("h", 30, "h"), direction=(0.0, 0.0, 1.0)), move)["features"][0]
         self.assertEqual(out["origin"], [11.0, {"expr": "-h"}, 2.0])
         self.assertEqual(out["direction"], [0.0, -1.0, 0.0])
 
     def test_move_then_turn_is_one_pass_and_inverts(self):
-        move = place.from_frame(QUARTER_ABOUT_X).then(place.TURN_Z_UP)
+        move = place.move_from_frame(QUARTER_ABOUT_X).then(place.TURN_Z_UP)
         recipe = hole_at(1, 2, 3)
         out = place.place(recipe, move)["features"][0]["origin"]
         self.assertEqual(out, [11.0, -2.0, -3.0])
@@ -176,7 +176,7 @@ class MoveTest(unittest.TestCase):
 
     def test_rounding_noise_in_a_turn_is_snapped(self):
         frame = {"origin": [0, 0, 0], "x": [6e-17, 1, 0], "y": [-1, 6e-17, 0], "z": [0, 0, 1]}
-        out = place.place(hole_at(5, 0, 0), place.from_frame(frame))["features"][0]["origin"]
+        out = place.place(hole_at(5, 0, 0), place.move_from_frame(frame))["features"][0]["origin"]
         self.assertEqual(out, [0.0, 5.0, 0.0])
 
     def test_frames_that_are_not_a_rotation_are_named(self):

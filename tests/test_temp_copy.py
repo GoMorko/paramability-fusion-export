@@ -4,8 +4,7 @@ from tests import context  # noqa: F401
 from tests.fakes import FakeTimeline
 from lib.export_plan.errors import StepExportError
 from lib.export_plan.temp_copy import (
-    delete_created_items, marker_at_end, remove_temporary_copy, require_marker_at_end, timeline_tokens)
-from lib.fusion_reader.bodies import is_root_body
+    delete_created_items, marker_at_end, remove_temporary_copy, require_marker_at_end, timeline_state)
 
 
 class Occurrence:
@@ -28,49 +27,37 @@ class TempCopyTest(unittest.TestCase):
             require_marker_at_end(timeline)
         self.assertIn("timeline marker", str(ctx.exception))
 
-    def test_cleanup_with_rolled_back_marker_keeps_the_designers_later_features(self):
-        timeline = FakeTimeline(["a", "b", "c"], marker=1)
-        before = timeline_tokens(timeline)
+    def test_cleanup_removes_only_the_items_the_copy_added(self):
+        timeline = FakeTimeline(["a", "b"])
+        before = timeline_state(timeline)
         timeline.insert_at_marker("temp1")
         timeline.insert_at_marker("temp2")
-        self.assertEqual(timeline.tokens(), ["a", "temp1", "temp2", "b", "c"])
-        deleted = remove_temporary_copy(timeline, Occurrence(fails=True), before)
-        self.assertEqual(deleted, 2)
-        self.assertEqual(timeline.tokens(), ["a", "b", "c"])
-
-    def test_cleanup_at_the_end_removes_only_the_created_items(self):
-        timeline = FakeTimeline(["a", "b"])
-        before = timeline_tokens(timeline)
-        timeline.insert_at_marker("temp")
-        delete_created_items(timeline, before)
+        self.assertEqual(remove_temporary_copy(timeline, Occurrence(fails=True), before), 2)
         self.assertEqual(timeline.tokens(), ["a", "b"])
 
-    def test_items_without_a_token_are_never_deleted(self):
-        timeline = FakeTimeline(["a"])
-        timeline.items[0].entity = None
+    def test_a_feature_whose_token_changed_is_never_deleted(self):
+        timeline = FakeTimeline(["a", "b"])
+        before = timeline_state(timeline)
+        timeline.items[1].entity.entityToken = "b-after-recompute"
         timeline.insert_at_marker("temp")
-        self.assertEqual(delete_created_items(timeline, set()), 1)
-        self.assertEqual(len(timeline.items), 1)
-        self.assertIsNone(timeline.items[0].entity)
+        self.assertEqual(delete_created_items(timeline, before), 1)
+        self.assertEqual(timeline.tokens(), ["a", "b-after-recompute"])
 
+    def test_nothing_is_deleted_when_the_timeline_did_not_grow(self):
+        timeline = FakeTimeline(["a", "b"])
+        before = timeline_state(timeline)
+        for item in timeline.items:
+            item.entity.entityToken += "-changed"
+        self.assertEqual(delete_created_items(timeline, before), 0)
+        self.assertEqual(len(timeline.items), 2)
 
-class Comp:
-    def __init__(self, token):
-        self.entityToken = token
-
-
-class Body:
-    def __init__(self, component, context=None):
-        self.parentComponent = component
-        self.assemblyContext = context
-
-
-class RootBodyTest(unittest.TestCase):
-    def test_only_root_bodies(self):
-        root, child = Comp("root"), Comp("child")
-        self.assertTrue(is_root_body(Body(root), root))
-        self.assertFalse(is_root_body(Body(child), root))
-        self.assertFalse(is_root_body(Body(root, context=object()), root))
+    def test_items_without_an_entity_are_never_deleted(self):
+        timeline = FakeTimeline(["a"])
+        before = timeline_state(timeline)
+        timeline.insert_at_marker("temp")
+        timeline.items[1].entity = None
+        self.assertEqual(delete_created_items(timeline, before), 0)
+        self.assertEqual(len(timeline.items), 2)
 
 
 if __name__ == "__main__":

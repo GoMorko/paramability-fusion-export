@@ -5,6 +5,7 @@ import unittest
 
 from tests import context
 from lib.package import manifest as mf
+from tests.schema_check import load_schema, validate
 
 PARAMS = [{"name": "width", "label": "Clip width", "unit": "mm"}, {"name": "angle", "unit": "deg"}]
 ROWS = [
@@ -75,6 +76,37 @@ class ManifestTest(unittest.TestCase):
             self.skipTest("lib/schema/v1.json not copied from the app yet")
         with open(FIXTURE, encoding="utf-8") as f:
             self.assertEqual(mf.validate_manifest(json.load(f)), [])
+
+
+PACKAGE_SCHEMA = os.path.join(context.ADDIN_DIR, "lib", "schema", "paramability.recipePackage.v1.schema.json")
+LISTED = [{"name": "wall", "label": "wall", "value": 2, "unit": "mm", "comment": "Wall [1..6]"},
+          {"name": "outer", "label": "outer", "value": 84, "unit": "mm", "expr": "wall * 2"}]
+
+
+class SchemaCopyTest(unittest.TestCase):
+    """The writers' manifests fit the app's schema copy, so a cap that drifts from the app is noticed here."""
+
+    def setUp(self):
+        self.schema = load_schema(PACKAGE_SCHEMA)
+
+    def test_every_manifest_kind_fits_the_schema(self):
+        manifests = [
+            good(),
+            mf.build_step_only_manifest("Part", "w", parameters=LISTED, notes=["Added as a fixed shape."]),
+            mf.build_recipe_manifest(
+                "Part", "w", notes=["1 step copied."], parameters=LISTED,
+                checks=[{"values": {"wall": 4}, "step": "checks/01.step"}],
+                fixed=[{"name": "gap", "reason": "gap stays fixed for now."}]),
+        ]
+        for manifest in manifests:
+            self.assertEqual(mf.validate_manifest(manifest), [])
+            self.assertEqual(validate(manifest, self.schema), [], manifest["kind"])
+
+    def test_a_long_comment_is_refused_by_both(self):
+        manifest = mf.build_step_only_manifest("Part", "w", parameters=[
+            {"name": "wall", "value": 2, "unit": "mm", "comment": "x" * (mf.MAX_PARAMETER_COMMENT + 1)}])
+        self.assertTrue(mf.validate_manifest(manifest))
+        self.assertTrue(validate(manifest, self.schema))
 
 
 if __name__ == "__main__":

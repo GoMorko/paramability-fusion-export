@@ -60,6 +60,15 @@ class ReadChecksTest(unittest.TestCase):
         self.assertIn("Wall stays fixed for now: it changes Sketch1.", by_param["wall"])
 
 
+    def test_a_moved_sketch_of_a_component_is_named_with_the_component_and_never_a_token(self):
+        results = [{"name": "wall", "step_file": "c.step"}]
+        wall = [c for c in self.checks if c["size"] == "wall"]
+        snapshots = {"wall": {"Sketch1": [1.0, 2.5], "Sketch2": [3.0]}}
+        _, fixed = read_checks(wall, results, self.baseline, snapshots, {}, scope="Tray")
+        self.assertEqual(fixed[0]["reason"], "wall stays fixed for now: it changes Tray / Sketch1. "
+                                             "Sketches that follow sizes come in a later version.")
+
+
 class SketchStateTest(unittest.TestCase):
     def test_noise_is_not_a_move_but_a_new_or_resized_sketch_is(self):
         before = {"A": [1.0, 2.0], "B": [1.0], "C": [1.0]}
@@ -90,7 +99,7 @@ class SketchStateTest(unittest.TestCase):
             sketchCurves = Coll([Curve()])
 
         root = type("Root", (), {"sketches": Coll([Sketch()])})()
-        self.assertEqual(read_sketches(root), {"/S": [1.0, 2.0, 3.0, 4.0, 1.0, 2.0, 3.0]})
+        self.assertEqual(read_sketches(root), {"S": [1.0, 2.0, 3.0, 4.0, 1.0, 2.0, 3.0]})
         self.assertEqual(read_sketches(root, skip={"S"}), {})
         self.assertEqual(read_sketches(object()), {})
 

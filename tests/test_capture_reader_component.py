@@ -10,7 +10,7 @@ from tests.test_capture_reader_params import model_param
 
 from lib.fusion_reader.capture import read_capture
 from lib.fusion_reader.read_geometry import ReadContext, foreign
-from lib.fusion_reader.sketches import read_sketches, sketch_key
+from lib.fusion_reader.sketches import read_sketches
 
 PLACE = turn_z(90, (100, 50, 0))
 CORNERS = [(0, 0, 0), (40, 0, 0), (0, 20, 0), (0, 0, 10)]
@@ -225,18 +225,21 @@ class ForeignTest(unittest.TestCase):
         self.assertTrue(data["tools"][0]["foreign"])
 
 
-class SketchKeyTest(unittest.TestCase):
-    def test_sketches_are_keyed_by_component_so_equal_names_do_not_meet(self):
-        def component(token):
-            point = Obj(worldGeometry=Obj(x=1.0, y=2.0, z=3.0))
-            sketch = Obj(name="Sketch1", sketchPoints=Coll([point]), sketchCurves=Coll([]))
-            return Obj(entityToken=token, sketches=Coll([sketch]))
+class SketchSnapshotTest(unittest.TestCase):
+    def test_sketches_are_keyed_by_name_and_a_skipped_name_is_left_out(self):
+        point = Obj(worldGeometry=Obj(x=1.0, y=2.0, z=3.0))
+        sketch = Obj(name="Sketch1", sketchPoints=Coll([point]), sketchCurves=Coll([]))
+        component = Obj(entityToken="tray", sketches=Coll([sketch]))
+        self.assertEqual(list(read_sketches(component)), ["Sketch1"])
+        self.assertEqual(read_sketches(component, skip={"Sketch1"}), {})
+        self.assertEqual(list(read_sketches(component, skip={"Sketch2"})), ["Sketch1"])
 
-        self.assertEqual(list(read_sketches(component("tray"))), ["tray/Sketch1"])
-        self.assertEqual(list(read_sketches(component("box"))), ["box/Sketch1"])
-        self.assertEqual(read_sketches(component("tray"), skip={"Sketch1"}), {})
-        self.assertEqual(read_sketches(component("tray"), skip={sketch_key("tray", "Sketch1")}), {})
-        self.assertEqual(list(read_sketches(component("tray"), skip={sketch_key("box", "Sketch1")})), ["tray/Sketch1"])
+    def test_a_changed_component_token_does_not_change_the_snapshot(self):
+        sketch = Obj(name="Sketch1", sketchPoints=Coll([]), sketchCurves=Coll([]))
+        component = Obj(entityToken="tray", sketches=Coll([sketch]))
+        before = read_sketches(component)
+        component.entityToken = "tray-after-recompute"
+        self.assertEqual(read_sketches(component), before)
 
 
 def param_value(value):

@@ -94,6 +94,46 @@ class RangeCheckTest(unittest.TestCase):
         self.assertIn("c: the number now", problem)
 
 
+class UnitTest(unittest.TestCase):
+    INCH = dict(range_unit="in", now="1 in", value=25.4, min=12.7, max=50.8)
+
+    def test_min_and_max_name_the_design_unit_in_their_headers(self):
+        self.assertEqual(rows.header("min", "in"), "Min (in)")
+        self.assertEqual(rows.header("max", "bogus"), "Max (mm)")
+        self.assertEqual(rows.header("name", "in"), "Parameter")
+
+    def test_the_default_range_shows_in_the_design_unit_and_angles_say_deg(self):
+        cells = rows.row_cells(offer(**self.INCH), True)
+        self.assertEqual((cells["min"], cells["max"]), ("0.5", "2"))
+        angle = rows.row_cells(offer(kind="angle", range_unit="deg", min=10.0, max=90.0), True)
+        self.assertEqual((angle["min"], angle["max"]), ("10 deg", "90 deg"))
+
+    def test_a_typed_number_is_read_in_the_design_unit_and_typed_units_are_converted(self):
+        self.assertEqual(rows.check_range(offer(**self.INCH), "0.75", "2")[1], (19.05, 50.8))
+        self.assertEqual(rows.check_range(offer(**self.INCH), "15 mm", "5 cm")[1], (15.0, 50.0))
+        self.assertEqual(rows.parse_number("90 deg", "deg"), 90.0)
+
+    def test_a_unit_of_another_kind_or_on_a_count_is_refused(self):
+        self.assertIsNone(rows.parse_number("2 deg", "in"))
+        self.assertIsNone(rows.parse_number("2 mm", ""))
+        self.assertIsNone(rows.parse_number("2 parsecs", "mm"))
+
+    def test_the_default_texts_give_back_the_exact_default_numbers(self):
+        self.assertEqual(rows.check_range(offer(**self.INCH), "0.5", "2")[1], (12.7, 50.8))
+        thin = offer(**{**self.INCH, "min": 1.0, "now": "1 in"})
+        self.assertEqual(rows.check_range(thin, rows.cell_text(thin, 1.0), "2")[1][0], 1.0)
+
+    def test_a_comma_is_a_decimal_mark_only_when_the_meaning_is_clear(self):
+        self.assertEqual(rows.parse_number("0,125", "mm"), 0.125)
+        self.assertEqual(rows.parse_number("4,5", "mm"), 4.5)
+        for text in ("1,000", "2,500", "1,000,000", "1.000,5"):
+            self.assertIsNone(rows.parse_number(text, "mm"), text)
+
+    def test_the_shown_value_is_accepted_as_min_up_to_the_digits_shown(self):
+        near = offer(value=0.1234567891, min=1.0, max=4.0, now="0.1234567891 mm")
+        self.assertEqual(rows.check_range(near, "0.123456789", "4")[0], "")
+
+
 class CountLineTest(unittest.TestCase):
     def test_a_problem_beats_the_limit_which_beats_the_count(self):
         self.assertEqual(rows.count_line(6, "wall: bad."), "wall: bad.")

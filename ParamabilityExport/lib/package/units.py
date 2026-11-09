@@ -73,3 +73,17 @@ def display_from_manifest(value, unit):
     else:
         return value
     return internal_to_unit(internal, unit)
+
+
+def manifest_from_display(value, unit):
+    """The inverse of `display_from_manifest`: a number typed in a unit to manifest numbers (mm, deg, plain).
+
+    Returns None for a unit that does not fit the kind (inches for an angle), or one outside the tables.
+    """
+    u = (unit or "").strip().lower()
+    kind = unit_kind(u)
+    if kind == "length":
+        return value / _PER_CM[u] * 10.0
+    if kind == "angle":
+        return math.degrees(value) if _NORMAL.get(u, u) == "rad" else value
+    return None

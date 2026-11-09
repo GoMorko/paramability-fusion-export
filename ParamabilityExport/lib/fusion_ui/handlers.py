@@ -42,6 +42,16 @@ class _Command(adsk.core.CommandEventHandler):
         _guarded(self._callback, args, self._what)
 
 
+class _Custom(adsk.core.CustomEventHandler):
+    def __init__(self, callback, what):
+        super().__init__()
+        self._callback = callback
+        self._what = what
+
+    def notify(self, args):
+        _guarded(self._callback, args, self._what)
+
+
 class _InputChanged(adsk.core.InputChangedEventHandler):
     def __init__(self, callback):
         super().__init__()
@@ -85,6 +95,10 @@ def on_command_created(event, callback, handlers):
 
 def on_execute(event, callback, handlers):
     event.add(handlers.keep(_Command(callback, "exporting")))
+
+
+def on_custom_event(event, callback, handlers, what="showing a window"):
+    event.add(handlers.keep(_Custom(callback, what)))
 
 
 def on_destroy(event, callback, handlers):

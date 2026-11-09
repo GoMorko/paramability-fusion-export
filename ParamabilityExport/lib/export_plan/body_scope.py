@@ -6,10 +6,9 @@ sketch that belongs to a step of another body must not decide the sizes of this 
 when it is matched to such a step by name; anything that cannot be matched stays, as if no scoping existed.
 
 Sketch and feature names repeat across components (each has its own `Sketch1`), so they are matched together with
-the component token the capture records (`item.component`, `created_by.component`). Captures without component
-tokens match by name alone.
+the component token the capture records (`item.component`, `created_by.component`). Those tokens come from one read
+and are only compared with each other. Captures without component tokens match by name alone.
 """
-from ..fusion_reader.sketches import sketch_key
 from ..params.defaults import reads_of
 from ..translator.capture import same_body
 
@@ -52,17 +51,11 @@ def body_items(capture):
     return [used[i] for i in sorted(used, key=lambda k: (k is None, k))]
 
 
-def _sketch_key(component, name):
-    """The snapshot key of a sketch (`fusion_reader.sketches.sketch_key`) when the capture knows its component, else
-    its name."""
-    return sketch_key(component, name) if component else name
-
-
 def _sketch_names(node, found, component):
     if isinstance(node, dict):
         for key, value in node.items():
             if key == "sketch" and isinstance(value, str):
-                found.add(_sketch_key(component, value))
+                found.add((component or "", value))
             else:
                 _sketch_names(value, found, component)
     elif isinstance(node, list):
@@ -88,10 +81,17 @@ def _split(capture):
 
 
 def other_sketches(capture):
-    """Keys of sketches (see `_sketch_key`) that only steps outside the picked body use. A sketch no step names (hole
-    positions, a revolve axis) is not listed, so it still counts as used."""
+    """(component token, sketch name) of the sketches that only steps outside the picked body use. The token is ''
+    when the capture does not know it. A sketch no step names (hole positions, a revolve axis) is not listed, so it
+    still counts as used."""
     used, rest = _split(capture)
     return _sketches_of(rest) - _sketches_of(used)
+
+
+def other_sketch_names(capture):
+    """Names of the sketches of the picked body's own component that only other bodies use."""
+    own = ((capture.get("target") or {}).get("component") or {}).get("token") or ""
+    return {name for component, name in other_sketches(capture) if not component or not own or component == own}
 
 
 def _made_by(param):
@@ -115,7 +115,7 @@ def scoped_model_params(capture):
         if made.get("kind") == "feature":
             return (made.get("component"), made.get("name")) in other_steps
         if made.get("kind") == "sketchDimension":
-            return _sketch_key(made.get("component"), made.get("sketch")) in other_sketch
+            return (made.get("component") or "", made.get("sketch")) in other_sketch
         return False
 
     kept = {p["name"]: p for p in model if not drop(p)}

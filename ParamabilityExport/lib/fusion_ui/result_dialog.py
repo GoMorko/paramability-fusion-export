@@ -1,30 +1,64 @@
 """The dialog shown after a recipe is saved: each size with its check result, what stays fixed, the variables.
 
-It is a small command of its own, started when the export ends. When it cannot be started, the same story goes
-to a message box.
+It is a small command of its own. Fusion does not allow starting a command from inside another command's events,
+so `show` fires a custom event; its handler starts the dialog after the export command has ended. When the event or
+the dialog cannot start, the same story goes to a message box.
 """
 import html
 
 import adsk.core
 
 from ..export_plan.dialog_rows import wrap_name
-from .handlers import HandlerList, on_command_created
+from .handlers import HandlerList, on_command_created, on_custom_event
 from .log import log, message_box
 
 COMMAND_ID = "ParamabilityExportResultCommand"
 COMMAND_NAME = "Saved for Paramability"
+EVENT_ID = "ParamabilityExportResultEvent"
 _COLUMNS = ("name", "range", "check")
 _HEADERS = {"name": "Parameter", "range": "Range", "check": "Check"}
 _RATIO = "6:3:3"
 _MAX_FIXED_ROWS = 6
 
 _handlers = HandlerList()
+_event_handlers = HandlerList()
 _pending = {}
 
 
+def start():
+    """Register the custom event that opens the dialog. Call once when the add-in starts.
+
+    A failure is logged only: `show` then falls back to the message box."""
+    try:
+        app = adsk.core.Application.get()
+        app.unregisterCustomEvent(EVENT_ID)  # left over from an add-in that did not stop cleanly
+        _event_handlers.clear()
+        on_custom_event(app.registerCustomEvent(EVENT_ID), _on_event, _event_handlers, "showing the result")
+    except Exception as error:
+        log("registering the result event failed: %s" % error)
+
+
 def show(view):
-    """Open the result dialog for a view from export_plan.result_rows.result_view; else show its message."""
+    """Open the result dialog for a view from export_plan.result_rows.result_view; else show its message.
+
+    The dialog opens after the calling command has ended."""
     _pending["view"] = view
+    try:
+        if not adsk.core.Application.get().fireCustomEvent(EVENT_ID):
+            raise RuntimeError("The result event did not fire.")
+    except Exception as error:
+        log("result dialog failed: %s" % error)
+        _fallback()
+
+
+def _fallback():
+    view = _pending.pop("view", None)
+    if view is not None:
+        message_box(view["message"])
+
+
+def _on_event(args):
+    """Start the result dialog; the message box when that fails."""
     try:
         ui = adsk.core.Application.get().userInterface
         old = ui.commandDefinitions.itemById(COMMAND_ID)
@@ -37,12 +71,16 @@ def show(view):
         definition.execute()
     except Exception as error:
         log("result dialog failed: %s" % error)
-        _pending.pop("view", None)
-        message_box(view["message"])
+        _fallback()
 
 
 def remove():
-    """Drop the command definition when the add-in stops."""
+    """Drop the custom event and the command definition when the add-in stops."""
+    try:
+        adsk.core.Application.get().unregisterCustomEvent(EVENT_ID)
+    except Exception as error:
+        log("removing the result event failed: %s" % error)
+    _event_handlers.clear()
     try:
         definition = adsk.core.Application.get().userInterface.commandDefinitions.itemById(COMMAND_ID)
         if definition:

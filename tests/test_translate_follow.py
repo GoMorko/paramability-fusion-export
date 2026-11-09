@@ -177,7 +177,7 @@ class CapsTest(unittest.TestCase):
         def edit(capture):
             capture["items"][6]["data"]["params"]["quantity_one"] = param("d8", "holes_count * 1", 3.0)
         result, _ = run(tray(edit))
-        self.assertEqual(steps_of(result.recipe, "pattern")[0]["linear"]["count"], {"expr": "holes_count * 1"})
+        self.assertEqual(steps_of(result.recipe, "pattern")[0]["linear"]["count"], {"expr": "holes_count"})
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@
 The size table decides what each parameter becomes. This module turns it into dialog lines and into
 the size dicts of size_checks.
 """
+from ..package.units import display_from_manifest, unit_kind
 from ..params import defaults, size_table
 from ..params.expressions import format_number
 from ..params.size_table import CONSTANT, DERIVED, FIXED, FREE
@@ -46,17 +47,26 @@ def table_for_body(params, design_unit, fallback_model, capture, limit=MAX_TICKE
     return initial_table(params, model, design_unit, quantities, limit)
 
 
-def value_text(entry):
-    suffix = {"length": " mm", "angle": " deg"}.get(entry.kind, "")
-    return format_number(entry.value) + suffix
+def range_unit(kind, design_unit="mm"):
+    """The unit the Min, Max and Now cells use: the design's length unit, deg for an angle, '' for a count."""
+    if kind == "length":
+        return design_unit if unit_kind(design_unit) == "length" else "mm"
+    return "deg" if kind == "angle" else ""
 
 
-def offers(table, params):
+def value_text(entry, design_unit="mm"):
+    unit = range_unit(entry.kind, design_unit)
+    return format_number(display_from_manifest(entry.value, unit)) + (" " + unit if unit else "")
+
+
+def offers(table, params, design_unit="mm"):
     """One dict per parameter the dialog lists, in parameter order.
 
-    Keys: param (Fusion name), text (short line), ticked, enabled, reason (why it is greyed or what the tick does),
+    Keys: param (Fusion name), ticked, enabled, reason (why it is greyed or what the tick does),
     state ('size' or 'keep' for a plain number, 'formula', 'locked'), now (value with unit), comment, formula (the
-    Fusion expression of a formula), kind, value, min and max (the default range of a plain number, else None).
+    Fusion expression of a formula), kind, value, min and max (the default range of a plain number, else None),
+    range_unit (the unit of the Now, Min and Max cells). value, min and max are mm, deg or plain numbers; the cells
+    show them in `design_unit` for a length.
     A parameter that is a formula is listed without a tick. A fixed one is greyed with its reason. A parameter
     that cannot be a size at all (text, other units) is not listed.
     """
@@ -67,19 +77,18 @@ def offers(table, params):
         if p is None:
             continue
         plain = p.get("kind") in ("length", "angle", "count")
-        common = {"param": entry.name, "now": value_text(entry), "comment": (p.get("comment") or "").strip(),
-                  "formula": p.get("expression") or "", "kind": entry.kind, "value": entry.value,
-                  "min": None, "max": None}
+        common = {"param": entry.name, "now": value_text(entry, design_unit),
+                  "comment": (p.get("comment") or "").strip(), "formula": p.get("expression") or "",
+                  "kind": entry.kind, "value": entry.value,
+                  "range_unit": range_unit(entry.kind, design_unit), "min": None, "max": None}
         if entry.state == DERIVED or (entry.state == CONSTANT and not plain):
-            out.append({**common, "text": "%s (formula)" % entry.name, "ticked": False, "enabled": False,
+            out.append({**common, "ticked": False, "enabled": False,
                         "state": "formula", "reason": "A formula. It follows the parameters it reads."})
         elif entry.state == FIXED:
-            out.append({**common, "text": "%s, %s" % (entry.name, value_text(entry)), "ticked": False,
-                        "enabled": False, "state": "locked", "reason": entry.reason})
+            out.append({**common, "ticked": False, "enabled": False, "state": "locked", "reason": entry.reason})
         elif entry.state in (FREE, CONSTANT):
             lo, hi = defaults.size_range(p, entry.kind, entry.value)
-            out.append({**common, "text": "%s, %s" % (entry.name, value_text(entry)),
-                        "ticked": entry.state == FREE, "enabled": True, "min": lo, "max": hi,
+            out.append({**common, "ticked": entry.state == FREE, "enabled": True, "min": lo, "max": hi,
                         "state": "size" if entry.state == FREE else "keep",
                         "reason": "Tick to change this number in Paramability. Untick to keep it fixed."})
     return out

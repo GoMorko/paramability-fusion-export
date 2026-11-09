@@ -171,9 +171,9 @@ class OffersTest(unittest.TestCase):
     def test_favourites_the_body_reads_are_ticked_and_formulas_have_no_tick(self):
         lines = {o["param"]: o for o in offers(self.table, self.params)}
         self.assertTrue(lines[CUBE]["ticked"])
-        self.assertEqual(lines[CUBE]["text"], CUBE + ", 18 mm")
+        self.assertEqual(lines[CUBE]["now"], "18 mm")
         self.assertFalse(lines["FilterBox_width_mm"]["enabled"])
-        self.assertEqual(lines["FilterBox_width_mm"]["text"], "FilterBox_width_mm (formula)")
+        self.assertEqual(lines["FilterBox_width_mm"]["state"], "formula")
 
     def test_a_parameter_a_sketch_dimension_reads_is_greyed_out_before_the_export(self):
         params = [length("wall"), length("height"), length("spare")]

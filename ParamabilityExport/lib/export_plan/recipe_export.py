@@ -58,6 +58,11 @@ def free_sizes(recipe):
     return [name for name, size in sizes.items() if isinstance(size, dict) and "value" in size]
 
 
+def _one_period(text):
+    """A reason that already ends in a full stop and got a second one ("Fusion says 32..") ends in one."""
+    return text[:-1] if text.endswith("..") and not text.endswith("...") else text
+
+
 def _merge_fixed(size_table, *lists):
     """Manifest entries {'name', 'reason'} in order, the first entry per size wins, at most MAX_FIXED.
 
@@ -70,7 +75,7 @@ def _merge_fixed(size_table, *lists):
             name = entry.get("name")
             if not name:
                 continue
-            made = size_table.fixed_entry(name, entry.get("reason") or "Stays a fixed number.")
+            made = size_table.fixed_entry(name, _one_period(entry.get("reason") or "Stays a fixed number."))
             if made["name"] in seen:
                 continue
             seen.add(made["name"])

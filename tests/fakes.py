@@ -379,7 +379,7 @@ def install_adsk_core():
     for kind in ("BoolValueCommandInput", "StringValueCommandInput", "TableCommandInput", "TextBoxCommandInput"):
         setattr(core, kind, caster(kind))
     for kind in ("CommandCreatedEventHandler", "CommandEventHandler", "InputChangedEventHandler",
-                 "ValidateInputsEventHandler", "SelectionEventHandler"):
+                 "ValidateInputsEventHandler", "SelectionEventHandler", "CustomEventHandler"):
         setattr(core, kind, type(kind, (), {}))
     core.DropDownStyles = types.SimpleNamespace(TextListDropDownStyle=0)
     return core

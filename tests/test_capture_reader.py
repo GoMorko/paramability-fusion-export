@@ -17,6 +17,15 @@ class Obj:
             kw["objectType"] = "adsk::%s" % type_name
         self.__dict__.update(kw)
 
+    # Fusion objects of one entity are equal; the fake says so by its token.
+    def __eq__(self, other):
+        token = self.__dict__.get("entityToken")
+        return self is other or (token is not None and isinstance(other, Obj)
+                                 and other.__dict__.get("entityToken") == token)
+
+    def __hash__(self):
+        return hash(self.__dict__.get("entityToken", id(self)))
+
 
 class Coll:
     def __init__(self, items=()):

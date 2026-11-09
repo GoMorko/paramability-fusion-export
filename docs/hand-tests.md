@@ -190,7 +190,9 @@ corners, and a pipe hole in a row of three. Tick the count and the cube width.
 Use the filter box design (names such as `FilterBox_$_depth__contains_CeramicMedium`, a comment `Wall [1..4]` on `wall_mm`).
 
 - [ ] Columns: tick, Parameter (the Fusion name), Now (value and unit), Min, Max, In Paramability. The header row has
-      no tick. The table scrolls when there are many rows.
+      no tick. Min and Max name the design's length unit ("Min (in)" in an inch design), and Now shows lengths in it
+      too. An angle row shows "deg" in its cells and a count row shows plain numbers. The table scrolls when there are
+      many rows.
 - [ ] **Long names.** A name over about 26 characters is broken after an underscore into two lines inside its cell and
       stays readable. If a break looks wrong at the real column width, note the width (the break is made by the add-in
       with `<br>` in `formattedText`).
@@ -202,7 +204,8 @@ Use the filter box design (names such as `FilterBox_$_depth__contains_CeramicMed
 - [ ] **Range.** Min and Max of a ticked row start from the comment (`Wall [1..4]` gives 1 and 4), else half to double
       the value. Type 1.5 and 6: after the export the size in Paramability goes from 1.5 to 6. Type a Min above the
       value, a Min above the Max, or text: the count line names the parameter and OK turns off. A count row refuses
-      1.5 and 0. Type a comma (`1,5`) or a unit (`2 mm`): both are read.
+      1.5 and 0. Type a comma (`1,5`) or a unit (`2 mm`, `0.1 in`): all are read. `1,000` is refused, since it
+      could mean one or a thousand. In an inch design, type 2 for Max: the size goes up to 2 inches.
 - [ ] Does a typed Min or Max fire `inputChanged` when you leave the field (not only at Enter)? If the count line
       updates late, note when.
 - [ ] "Tick what the body uses" returns the ticks to what the body reads; "Untick all" clears them. Both keep typed
@@ -213,13 +216,13 @@ Use the filter box design (names such as `FilterBox_$_depth__contains_CeramicMed
       saved line, a table of sizes (name, range, "matches Fusion", "not checked", "kept fixed" or "not used"), a
       "Stays fixed" group with each reason, and the line "All N parameters come along as variables ...". Only a Close
       button shows. Pull a size to fail its check (a range that breaks a fillet): its row says "kept fixed".
-- [ ] If the result window does not open, the same text shows in a message box. Note which: the log line "result
-      dialog failed" gives the reason.
+- [ ] The result window opens right after the export ends, not while the progress window is still up. If it does not
+      open, the same text shows in a message box. Note which: the log line "result dialog failed" gives the reason.
 
 ## 8. Bodies inside components
 
-Send `report.json` from any export that surprises; its capture becomes a test fixture. The plan behind these tests
-is the "Fusion bodies inside components" plan of the Paramability notes.
+Send `report.json` from any export that surprises; its capture becomes a test fixture. These tests check that a body
+inside a component, also a nested or turned one, lands where Fusion shows it.
 
 - [ ] **C1 Moved component.** A model with sizes (the filter box) built inside a component `Tray`, its occurrence
       moved to (100, 50, 0) and its position captured. Export: a recipe with sizes that lands where Fusion shows it.
@@ -236,8 +239,9 @@ is the "Fusion bodies inside components" plan of the Paramability notes.
       whose note names the cut.
 - [ ] **C6 Components from bodies.** Model a body in the root, then "Create Components from Bodies". Export it and
       note what happens (a recipe or the "made in another component" note); send the report.
-- [ ] **C7 Uncaptured move.** Drag `Tray` without capturing its position and export: the add-in says "Capture the
-      position of moved parts first (Position, Capture Position), then export again." and writes nothing. Capture the
+- [ ] **C7 Uncaptured move.** Drag `Tray` without capturing its position and open Export for Paramability: the dialog
+      itself says "Capture the position of moved parts first (Position, Capture Position), then export again." and
+      has no OK button. Check that the message shows at once, before any table is built. Capture the
       position and export again: it works.
 - [ ] **C8 Linked component.** Insert a design as a linked component and pick its body: the file is a fixed shape with
       the linked design note.
@@ -252,7 +256,11 @@ is the "Fusion bodies inside components" plan of the Paramability notes.
 These were written from the API reference and never run:
 
 - `BRepBody.copyToComponent` into a new occurrence (hand test 3).
-- Deleting the temporary occurrence and the timeline items the copy adds, by entity token (hand test 3).
+- Deleting the temporary occurrence and the timeline items the copy adds: only the items after the first `count`
+  items, and only entities that are not equal (`==`) to one of the entities read before the copy (hand test 3). Check
+  that `==` between two wrappers of one Fusion entity is true, here and in the capture (`parentComponent == ctx.
+  component`, `same_entity` in `lib/fusion_reader/read_geometry.py`). If it is false, the capture marks every item
+  as outside the target's component and the placement of a nested body is refused.
 - `Timeline.markerPosition` equal to `Timeline.count` when the marker is at the end.
 - The `preSelect` event and `isSelectable` for the body picker.
 - `Design.findEntityByToken` to find the body again after each recompute.
@@ -294,14 +302,17 @@ These were written from the API reference and never run:
   - `TextBoxCommandInput.formattedText` set after creation for the details box and the count line (`<b>` and `<br>`).
   - Cell ids are made from the row number (`pm_tick_3`), not from the parameter name.
 - The result dialog (`lib/fusion_ui/result_dialog.py`), none of it run yet:
-  - **Starting a command from the execute handler of another:** `CommandDefinitions.addButtonDefinition(id, name,
-    tooltip, "")` (a definition that is in no panel), `commandCreated`, and `CommandDefinition.execute()` called while
-    the export command is still running. The fallback is the message box when it raises; if it does not raise but
-    nothing opens, the dialog is silently ignored, so look for it at the end of the export and note it.
+  - **Starting a command after the export command:** `Application.registerCustomEvent(id)` in `start()`,
+    `CustomEvent.add` with a `CustomEventHandler`, `Application.fireCustomEvent(id)` at the end of the export, and
+    `unregisterCustomEvent` in `stop()`. The handler runs `CommandDefinitions.addButtonDefinition(id, name, tooltip,
+    "")` (a definition that is in no panel), `commandCreated` and `CommandDefinition.execute()`. Check that the
+    window opens once the export command has ended. The fallback is the message box when firing or starting raises;
+    if nothing raises but nothing opens, look for the window at the end of the export and note it.
   - `Command.isOKButtonVisible = False` and `Command.cancelButtonText = "Close"`; a group with a table whose cells
     come from the group's `children`; text boxes with `<br>` lines.
 - The component export flow (`commands/ExportForParamability/export_flow.py`): `Design.snapshots` and
-  `Snapshots.hasPendingSnapshot` (an unreadable answer counts as "nothing pending"); `BRepBody.parentComponent` of a
+  `Snapshots.hasPendingSnapshot` (asked when the dialog opens, before the capture moves the marker, and again at OK;
+  an unreadable answer counts as "nothing pending"); `BRepBody.parentComponent` of a
   proxy giving the native component whose sketches are read at every check; `Occurrence.transform2` and the occurrence
   path read again after each parameter change (`placement.read_frame`); the capture members of "Bodies inside
   components" in `docs/capture-format.md`.

@@ -21,6 +21,7 @@ def start():
     panel.add_button(
         config.EXPORT_COMMAND_ID, config.EXPORT_COMMAND_NAME, config.EXPORT_COMMAND_TOOLTIP, _RESOURCES,
         _on_created, _handlers, promoted=True)
+    result_dialog.start()
 
 
 def stop():
@@ -36,6 +37,10 @@ def _on_created(args):
     if design is None:
         recipe_dialog.build_blocked(command, reason)
         return
+    # Asked first: reading the timeline for the offers moves the marker, which can drop a position not yet captured.
+    if export_flow.position_pending(design):
+        recipe_dialog.build_blocked(command, export_flow.PENDING_POSITION_MESSAGE)
+        return
 
     root = design.rootComponent
     parameters = list_user_parameters(design)
@@ -49,10 +54,11 @@ def _on_created(args):
     def offers_for(picked):
         """The dialog rows for a body: its own parameters when its steps can be read, else the whole design's."""
         capture = captures.get(picked) if picked is not None else None
-        return size_offers(table_for_body(parameters, design_unit, model_params, capture), parameters)
+        return size_offers(table_for_body(parameters, design_unit, model_params, capture), parameters, design_unit)
 
     offers = offers_for(body)
-    recipe_dialog.build(command, offers, body, detect_up_axis(adsk.core.Application.get()))
+    recipe_dialog.build(
+        command, offers, body, detect_up_axis(adsk.core.Application.get()), design_unit=design_unit)
     shown = {"body": body.entityToken if body is not None else None}
 
     def on_changed(args):
