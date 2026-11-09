@@ -262,7 +262,8 @@ class MirrorTest(unittest.TestCase):
             patternEntityType="FeaturesPatternEntityType", isCombine=False,
             mirrorPlane=Obj("fusion::ConstructionPlane", geometry=plane_geometry((0, 0, 0), (1, 0, 0)))))
         self.assertEqual(data, {"entity_type": "features", "sources": [1],
-                                "plane": {"point": [0, 0, 0], "normal": [1.0, 0.0, 0.0]}, "combine": False})
+                                "plane": {"point": [0, 0, 0], "normal": [1.0, 0.0, 0.0]}, "combine": False,
+                                "target_box_before": {"min": [0, 0, 0], "max": [40, 20, 10]}})
 
     def test_body_mirror_about_a_planar_face_with_combine(self):
         planar = face("f9", geometry=plane_geometry((0, 0, 10), (0, 0, 1)))
@@ -270,6 +271,17 @@ class MirrorTest(unittest.TestCase):
                                  patternEntityType="BodiesPatternEntityType", isCombine=True, mirrorPlane=planar))
         self.assertEqual((data["entity_type"], data["sources"], data["combine"]), ("bodies", [], True))
         self.assertEqual(data["plane"], {"point": [0, 0, 10], "normal": [0.0, 0.0, 1.0]})
+        self.assertEqual(data["target_box_before"], {"min": [0, 0, 0], "max": [40, 20, 10]})
+
+    def test_target_box_is_null_while_the_target_does_not_exist(self):
+        target = body()
+        mirror = entry(feature("MirrorFeature", "Mirror1", inputEntities=Coll([body()]),
+                               patternEntityType="BodiesPatternEntityType", isCombine=True,
+                               mirrorPlane=Obj("fusion::ConstructionPlane",
+                                               geometry=plane_geometry((0, 0, 0), (1, 0, 0)))))
+        design = FakeDesign([sketch_entry(), mirror], target, appears_at=2)
+        data = read_capture(design, target, fusion="", name="", up_axis="z")["items"][1]["data"]
+        self.assertIsNone(data["target_box_before"])
 
     def test_curved_mirror_plane_is_null(self):
         curved = face("f9", geometry=Obj("core::Cylinder"))

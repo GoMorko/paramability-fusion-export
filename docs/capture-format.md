@@ -289,8 +289,11 @@ CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriente
 **MirrorFeature** (`inputEntities`, `mirrorPlane`, `isCombine`):
 
 ```json
-{ "entity_type": "features", "sources": [4], "plane": PLANE, "combine": false }
+{ "entity_type": "features", "sources": [4], "plane": PLANE, "combine": false, "target_box_before": { "min": [..], "max": [..] } }
 ```
+
+`target_box_before`: the target body's box with the marker before the item, or null when it does not exist yet (as
+for extrudes).
 
 `plane` from a `ConstructionPlane` (`geometry`, a `Plane`: `origin`, `normal`) or a planar `BRepFace`
 (`geometry`).

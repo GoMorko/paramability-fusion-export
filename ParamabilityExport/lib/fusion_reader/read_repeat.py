@@ -136,6 +136,7 @@ def mirror_before(feature, ctx):
     data.update({
         "plane": geo.safe(lambda: geo.plane_of(feature.mirrorPlane), None),
         "combine": geo.safe(lambda: bool(feature.isCombine), False),
+        "target_box_before": ctx.target_box(),
     })
     return data
 
