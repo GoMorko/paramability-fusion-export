@@ -8,6 +8,7 @@ an `other` entry (which the translator refuses), or the reader raises and the it
 that feed a note, such as the participant bodies, fall back to an empty list.
 """
 from . import read_geometry as geo
+from .param_refs import Params, with_params
 from .read_sketch import first_profile, profile_area, read_profiles
 
 _OPERATIONS = [
@@ -76,6 +77,29 @@ def _first_profile_area(feature):
     return profile_area(first) if first is not None else None
 
 
+def _extent_distance(definition):
+    """The distance parameter of a plain distance extent, else None."""
+    return definition.distance if geo.type_name(definition) == "DistanceExtentDefinition" else None
+
+
+def _extrude_params(feature, extent_type):
+    found = Params()
+    if extent_type == "symmetric":
+        sym = feature.symmetricExtent
+        found.add("symmetric.distance", lambda: sym.distance)
+        found.add("symmetric.taper_deg", lambda: sym.taperAngle, "angle")
+    elif extent_type in ("one", "two"):
+        found.add("side_one.distance", lambda: _extent_distance(feature.extentOne))
+        found.add("side_one.taper_deg", lambda: feature.taperAngleOne, "angle")
+        found.add("side_one.offset", lambda: feature.extentOne.offset)
+        if extent_type == "two":
+            found.add("side_two.distance", lambda: _extent_distance(feature.extentTwo))
+            found.add("side_two.taper_deg", lambda: feature.taperAngleTwo, "angle")
+            found.add("side_two.offset", lambda: feature.extentTwo.offset)
+    found.add("start.offset", lambda: feature.startExtent.offset)
+    return found.found
+
+
 def extrude_before(feature, ctx):
     extent_type = _extent_type(feature)
     side_one = side_two = symmetric = None
@@ -92,7 +116,7 @@ def extrude_before(feature, ctx):
         side_one = _extent(feature.extentOne, _taper(feature, "taperAngleOne"))
         if extent_type == "two":
             side_two = _extent(feature.extentTwo, _taper(feature, "taperAngleTwo"))
-    return {
+    return with_params({
         "operation": _operation(feature.operation),
         "profiles": read_profiles(feature.profile),
         "start": geo.safe(lambda: _start(feature), {"kind": "other", "type": "unreadable"}),
@@ -106,7 +130,7 @@ def extrude_before(feature, ctx):
         "end_offset": None,
         "profile_area": _first_profile_area(feature),
         "end_area": None,
-    }
+    }, _extrude_params(feature, extent_type))
 
 
 def _dot(a, b):
@@ -180,7 +204,7 @@ def _revolve_extent(definition):
 
 
 def revolve_before(feature, ctx):
-    return {
+    return with_params({
         "operation": _operation(feature.operation),
         "profiles": read_profiles(feature.profile),
         "axis": geo.safe(lambda: axis_of(feature.axis), {"kind": "other"}),
@@ -188,7 +212,7 @@ def revolve_before(feature, ctx):
         "extent": _revolve_extent(feature.extentDefinition),
         "participants": geo.safe(lambda: geo.body_refs(feature.participantBodies), []),
         "start_face_normal": None,
-    }
+    }, Params().add("extent.angle_deg", lambda: feature.extentDefinition.angle, "angle").found)
 
 
 def revolve_after(feature, ctx, data):
@@ -238,11 +262,25 @@ def _hole_extent(feature):
     return {"kind": "other", "type": name}
 
 
+def _hole_params(feature, hole_type):
+    found = Params()
+    found.add("diameter", lambda: feature.holeDiameter)
+    found.add("tip_angle_deg", lambda: feature.tipAngle, "angle")
+    found.add("extent.depth", lambda: _extent_distance(feature.extentDefinition))
+    if hole_type == "counterbore":
+        found.add("counterbore.diameter", lambda: feature.counterboreDiameter)
+        found.add("counterbore.depth", lambda: feature.counterboreDepth)
+    elif hole_type == "countersink":
+        found.add("countersink.diameter", lambda: feature.countersinkDiameter)
+        found.add("countersink.angle_deg", lambda: feature.countersinkAngle, "angle")
+    return found.found
+
+
 def hole_before(feature, ctx):
     hole_type = geo.pick_by_text(geo.enum_name(feature.holeType, "HoleTypes"), _HOLE_TYPES, "other")
     tap_type = geo.pick_by_text(geo.enum_name(feature.holeTapType, "HoleTapTypes"), _TAP_TYPES, "other")
     tapped = tap_type in ("tapped", "taperTapped")
-    return {
+    return with_params({
         "hole_type": hole_type,
         "tap_type": tap_type,
         "thread_modeled": geo.safe(lambda: bool(feature.thread.isModeled), None) if tapped else None,
@@ -263,7 +301,7 @@ def hole_before(feature, ctx):
         "end_points": [],
         "end_face_types": [],
         "participants": geo.safe(lambda: geo.body_refs(feature.participantBodies), []),
-    }
+    }, _hole_params(feature, hole_type))
 
 
 _END_FACE_TYPES = {"Plane": "plane", "Cone": "cone"}

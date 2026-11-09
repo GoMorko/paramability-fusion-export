@@ -87,7 +87,7 @@ class FieldTableTest(unittest.TestCase):
 def sample_recipe():
     placement = {"origin": [1.0, 2.0, 3.0], "normal": [0.0, 1.0, 0.0], "xDir": [1.0, 0.0, 0.0]}
     near = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
-    return {"schema": "paramability.recipe", "version": 10, "features": [
+    return {"schema": "paramability.recipe", "version": 12, "features": [
         {"id": "e", "kind": "extrude", "combine": "new", "extent": "oneSide", "distance": 5,
          "sketch": {"on": dict(placement), "outer": {"kind": "circle", "center": [1.0, 2.0], "radius": 3.0}}},
         {"id": "r", "kind": "revolve", "combine": "add", "axis": {"point": [0, 0], "dir": [0, 1]},

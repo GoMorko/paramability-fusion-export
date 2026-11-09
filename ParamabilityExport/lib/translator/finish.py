@@ -3,7 +3,7 @@
 Edges and faces are picked by `near` points taken from the captured edge and face positions (see picks.py).
 What the recipe has no words for is refused: changing radii, two sized chamfers, outside or rounded shells.
 """
-from . import picks
+from . import picks, values
 from .result import Refusal
 
 TYPES = ("FilletFeature", "ChamferFeature", "ShellFeature")
@@ -43,16 +43,16 @@ def _unlocated(edges):
 
 
 def _fillet_steps(pairs):
-    """One `round` step per group of edges that fits a pick. `pairs` are (edge, radius)."""
+    """One `round` step per group of edges that fits a pick. `pairs` are (edge, size Quantity)."""
     steps = []
-    by_edge = {id(edge): radius for edge, radius in pairs}
+    by_edge = {id(edge): size for edge, size in pairs}
     for group in picks.edge_groups([edge for edge, _ in pairs]):
         sizes = []
         for edge in group:
             sizes += [by_edge[id(edge)]] * len(edge["points"])
-        step = {"kind": "round", "edges": {"near": picks.near_points(group)}, "size": _n(sizes[0])}
-        if any(not _close(s, sizes[0]) for s in sizes):
-            step["edgeSizes"] = [_n(s) for s in sizes]
+        step = {"kind": "round", "edges": {"near": picks.near_points(group)}, "size": sizes[0].json()}
+        if any(not s.same_as(sizes[0]) for s in sizes):
+            step["edgeSizes"] = [s.json() for s in sizes]
         steps.append(step)
     return steps
 
@@ -73,7 +73,8 @@ def _fillet(item, ctx):
         radius = entry.get("radius")
         if not isinstance(radius, (int, float)) or not radius > 0:
             return Refusal("This round has no readable radius.")
-    pairs = [(edge, sets[n]["radius"]) for edge, n in _flat_edges(sets)]
+    sizes = {n: values.quantity(ctx, item, "sets.%d.radius" % n, entry["radius"]) for n, entry in enumerate(sets)}
+    pairs = [(edge, sizes[n]) for edge, n in _flat_edges(sets)]
     if not pairs or _unlocated([edge for edge, _ in pairs]):
         return Refusal("The edges of this round could not be located.")
     if any(entry.get("continuity") == "other" for entry in sets):
@@ -116,16 +117,21 @@ def _chamfer(item, ctx):
     if not sets:
         return Refusal("This chamfer has no edges to copy.")
     groups = []
-    for entry in sets:
+    for n, entry in enumerate(sets):
         size = _chamfer_size(entry)
         if isinstance(size, Refusal):
             return size
+        if entry.get("kind") != "equal":
+            for path in ("distance_two", "angle_deg"):
+                values.pin(ctx, item, "sets.%d.%s" % (n, path), "the chamfer in %s needs it to stay as it is"
+                           % item.get("name", "a step"))
+        size = values.quantity(ctx, item, "sets.%d.distance" % n, size)
         if "feature" in (entry.get("input_kinds") or []):
             return Refusal("A chamfer that follows another step's edges is not copied yet.")
         if _unlocated(entry.get("edges") or []):
             return Refusal("The edges of this chamfer could not be located.")
         for group in groups:
-            if _close(group["size"], size):
+            if group["size"].same_as(size):
                 group["edges"] += entry.get("edges") or []
                 break
         else:
@@ -140,7 +146,8 @@ def _chamfer(item, ctx):
     steps = []
     for group in groups:
         for part in picks.edge_groups(group["edges"]):
-            steps.append({"kind": "bevel", "edges": {"near": picks.near_points(part)}, "size": _n(group["size"])})
+            steps.append({"kind": "bevel", "edges": {"near": picks.near_points(part)},
+                          "size": group["size"].json()})
     _split_note(ctx, steps)
     return steps
 
@@ -162,7 +169,8 @@ def _shell(item, ctx):
         return Refusal("This shell has no open faces to copy.")
     if len(points) > picks.MAX_NEAR_POINTS:
         return Refusal("This shell opens more than %d faces." % picks.MAX_NEAR_POINTS)
-    return [{"kind": "shell", "thickness": _n(thickness), "openFaces": {"near": points}}]
+    wall = values.quantity(ctx, item, "inside", thickness)
+    return [{"kind": "shell", "thickness": wall.json(), "openFaces": {"near": points}}]
 
 
 _HANDLERS = {"FilletFeature": _fillet, "ChamferFeature": _chamfer, "ShellFeature": _shell}

@@ -7,6 +7,7 @@ would look like a pattern with every copy suppressed.
 """
 from . import read_geometry as geo
 from . import read_solid
+from .param_refs import Params, with_params
 from .read_finish import strict_items
 
 _ENTITY_TYPES = [
@@ -111,7 +112,10 @@ def rectangular_before(feature, ctx):
         "elements": [],
         "suppressed_ids": [],
     })
-    return data
+    return with_params(data, Params().add("quantity_one", lambda: feature.quantityOne, "scalar")
+                       .add("quantity_two", lambda: feature.quantityTwo, "scalar")
+                       .add("distance_one", lambda: feature.distanceOne)
+                       .add("distance_two", lambda: feature.distanceTwo).found)
 
 
 def circular_before(feature, ctx):
@@ -124,7 +128,8 @@ def circular_before(feature, ctx):
         "elements": [],
         "suppressed_ids": [],
     })
-    return data
+    return with_params(data, Params().add("quantity", lambda: feature.quantity, "scalar")
+                       .add("total_angle_deg", lambda: feature.totalAngle, "angle").found)
 
 
 def pattern_after(feature, ctx, data):

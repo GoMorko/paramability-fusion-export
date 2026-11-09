@@ -1,6 +1,6 @@
 {
-  "_comment": "Capture version 2 is not supported.",
-  "capture": 2,
+  "_comment": "Capture version 99 is not supported.",
+  "capture": 99,
   "fusion": "2.0.0",
   "design": "Test",
   "up_axis": "z",

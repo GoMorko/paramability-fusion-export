@@ -6,6 +6,7 @@ chain gives every tangentially connected edge or face, so the translator sees on
 A required collection that cannot be read raises, and the walk records that as a read_error for the item.
 """
 from . import read_geometry as geo
+from .param_refs import Params, with_params
 
 _FILLET_SET_KINDS = [
     ("constantradius", "constant"),
@@ -103,11 +104,21 @@ def _fillet_set(edge_set):
     return entry
 
 
+def _set_params(edge_sets, members):
+    """params of edge sets: `members` maps a capture field to (set member name, kind)."""
+    found = Params()
+    for n, edge_set in enumerate(edge_sets):
+        for field, (member, kind) in members.items():
+            found.add("sets.%d.%s" % (n, field), lambda: getattr(edge_set, member), kind)
+    return found.found
+
+
 def fillet_before(feature, ctx):
-    return {
+    edge_sets = strict_items(feature.edgeSets)
+    return with_params({
         "rolling_ball": geo.safe(lambda: bool(feature.isRollingBallCorner), True),
-        "sets": [_fillet_set(s) for s in strict_items(feature.edgeSets)],
-    }
+        "sets": [_fillet_set(s) for s in edge_sets],
+    }, _set_params(edge_sets, {"radius": ("radius", "length")}))
 
 
 def _chamfer_set(edge_set):
@@ -133,11 +144,28 @@ def _chamfer_set(edge_set):
     return entry
 
 
+def _chamfer_params(edge_sets):
+    found = Params()
+    for n, edge_set in enumerate(edge_sets):
+        name = geo.type_name(edge_set)
+        prefix = "sets.%d." % n
+        if "EqualDistance" in name:
+            found.add(prefix + "distance", lambda: edge_set.distance)
+        elif "TwoDistances" in name:
+            found.add(prefix + "distance", lambda: edge_set.distanceOne)
+            found.add(prefix + "distance_two", lambda: edge_set.distanceTwo)
+        elif "DistanceAndAngle" in name or "DistanceAngle" in name:
+            found.add(prefix + "distance", lambda: edge_set.distance)
+            found.add(prefix + "angle_deg", lambda: edge_set.angle, "angle")
+    return found.found
+
+
 def chamfer_before(feature, ctx):
-    return {
+    edge_sets = strict_items(feature.edgeSets)
+    return with_params({
         "corner_type": _named(lambda: feature.cornerType, "ChamferCornerTypes", _CORNER_TYPES, "chamfer", "other"),
-        "sets": [_chamfer_set(s) for s in strict_items(feature.edgeSets)],
-    }
+        "sets": [_chamfer_set(s) for s in edge_sets],
+    }, _chamfer_params(edge_sets))
 
 
 def _face_record(face):
@@ -153,13 +181,13 @@ def shell_before(feature, ctx):
             bodies_input = True
         elif name == "BRepFace":
             faces += _chain(entity, "tangentiallyConnectedFaces", tangent_chain)
-    return {
+    return with_params({
         "faces": [_face_record(f) for f in _unique(faces)],
         "bodies_input": bodies_input,
         "inside": geo.length(feature.insideThickness),
         "outside": geo.safe(lambda: geo.length(feature.outsideThickness), 0.0),
         "shell_type": _named(lambda: feature.shellType, "ShellTypes", _SHELL_TYPES, "sharp", "other"),
-    }
+    }, Params().add("inside", lambda: feature.insideThickness).found)
 
 
 # type name -> (before, after); either may be None

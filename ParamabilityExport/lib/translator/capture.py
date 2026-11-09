@@ -1,6 +1,6 @@
 """Capture checks: the translator reads only a dict that passed these."""
 
-SUPPORTED_CAPTURE = 1
+SUPPORTED_CAPTURES = (1, 2)
 _ENVELOPE_KEYS = ("capture", "target", "items")
 _ITEM_KEYS = ("index", "name", "type")
 
@@ -15,7 +15,7 @@ def validate_capture(capture):
     for key in _ENVELOPE_KEYS:
         if key not in capture:
             raise CaptureError("The capture has no '%s'." % key)
-    if capture["capture"] != SUPPORTED_CAPTURE:
+    if capture["capture"] not in SUPPORTED_CAPTURES:
         raise CaptureError("Capture version %r is not supported." % (capture["capture"],))
     if not isinstance(capture["items"], list):
         raise CaptureError("The capture 'items' is not a list.")

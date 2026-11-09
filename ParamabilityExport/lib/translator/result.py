@@ -35,3 +35,4 @@ class TranslateResult:
     items: list = field(default_factory=list)
     refusal: Optional[dict] = None
     notes: list = field(default_factory=list)
+    fixed: list = field(default_factory=list)  # [{ name, reason }]: sizes that some value could not follow

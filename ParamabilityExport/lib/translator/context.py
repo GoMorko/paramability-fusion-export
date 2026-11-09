@@ -3,6 +3,7 @@ from .capture import same_body
 
 MAX_ID = 64
 MAX_LABEL = 120
+MAX_REASON = 200
 
 
 class Context:
@@ -14,10 +15,16 @@ class Context:
       The Combine handler takes them.
     not_repeatable: ids of steps whose length Fusion recomputes per copy (a handler marks a step with a private
       `_adjusts` key, which `add_steps` removes). Pattern and mirror handlers refuse them as sources.
+    table: the size table (lib/params) whose sizes the feature values may follow, or None for a recipe with plain
+      numbers only.
+    depends: Fusion name of a size -> plain reason, for each size that a value written as a number depends on.
+      The driver turns these sizes into fixed numbers and walks again.
     """
 
-    def __init__(self, capture):
+    def __init__(self, capture, table=None):
         self.capture = capture
+        self.table = table
+        self.depends = {}
         self.target = capture["target"]
         self.steps = []
         self.pending_tools = {}
@@ -32,6 +39,12 @@ class Context:
     def note(self, text):
         """Attach a plain sentence to the item being handled; its verdict becomes translatedWithNote."""
         self._notes.append(text)
+
+    def fix(self, names, why):
+        """Record that the sizes `names` (Fusion names) cannot follow: a value that reads them stays a number."""
+        for name in names:
+            if name not in self.depends:
+                self.depends[name] = ("%s stays fixed: %s." % (name, why))[:MAX_REASON]
 
     def take_notes(self):
         notes, self._notes = self._notes, []

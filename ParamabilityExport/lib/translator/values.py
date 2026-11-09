@@ -1,0 +1,220 @@
+"""Feature values that follow Fusion parameters.
+
+A reader gives each value that Fusion keeps as a model parameter in the item's `data.params` (capture field path to
+`{ name, expression, value }`). `quantity` turns such a value into a `Quantity`: the measured number plus, when the
+parameter's expression reads a size of the size table, the formula to write instead. `num` is the same for a field
+written as a number or `{ "expr": ... }`.
+
+When a value cannot follow its sizes (the formula does not translate, its unit or sign breaks inside the size range,
+or the step writes it as a plain number), the sizes it reads are recorded in `ctx.depends` and become fixed numbers
+everywhere. A value that depends on a size must never stay a number while the size stays free.
+"""
+import re
+
+from ..params.expressions import ExpressionError, evaluate
+
+TOLERANCE = 1e-6
+MAX_FORMULA = 250  # leaves room for the few operations a handler adds before the 300 character cap
+_ATOM = re.compile(r"^(?:[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?)$")
+
+
+def _n(value):
+    return round(value, 9) + 0.0
+
+
+def _text(number):
+    value = _n(number)
+    return str(int(value)) if value == int(value) else repr(value)
+
+
+def _negated(text):
+    """`text` negated: a leading minus on a plain name or number is taken off instead of stacked."""
+    if text.startswith("-") and _ATOM.match(text[1:]):
+        return text[1:]
+    return "-" + _wrapped(text)
+
+
+def _wrapped(text):
+    return text if _ATOM.match(text) else "(" + text + ")"
+
+
+class Sized(dict):
+    """`{ "expr": formula }` that also remembers the number the formula stood for when it was written.
+
+    It is a plain dict for JSON and copying; handlers that read written steps back (`number`) use the number.
+    """
+    n = 0.0
+
+
+def number(value):
+    """The number of a written value: its measured number for a formula, else the value itself."""
+    return value.n if isinstance(value, Sized) else value
+
+
+class Quantity:
+    """A measured number with an optional formula over the sizes. `reads` are the Fusion names of the sizes it reads."""
+
+    def __init__(self, n, text=None, reads=()):
+        self.n = n
+        self.text = text
+        self.reads = tuple(reads)
+
+    @property
+    def sized(self):
+        return self.text is not None
+
+    def json(self):
+        """The value as the recipe writes it: a number, or { "expr": formula }."""
+        if not self.sized:
+            return _n(self.n)
+        out = Sized(expr=self.text)
+        out.n = self.n
+        return out
+
+    def same_as(self, other):
+        if self.sized or other.sized:
+            return self.text == other.text
+        return abs(self.n - other.n) <= 1e-9
+
+    def scaled(self, factor):
+        if not self.sized:
+            return Quantity(self.n * factor)
+        if factor == -1:
+            return Quantity(-self.n, _negated(self.text), self.reads)
+        return Quantity(self.n * factor, "%s * %s" % (_text(factor), _wrapped(self.text)), self.reads)
+
+    def plus(self, other):
+        """The sum with a number or another Quantity."""
+        if not isinstance(other, Quantity):
+            other = Quantity(other)
+        if not self.sized and not other.sized:
+            return Quantity(self.n + other.n)
+        reads = tuple(dict.fromkeys(self.reads + other.reads))
+        left = self.text if self.sized else _text(self.n)
+        if not other.sized:
+            sign, right = ("-", _text(-other.n)) if other.n < 0 else ("+", _text(other.n))
+        else:
+            sign, right = "+", _wrapped(other.text)
+        if not self.sized and self.n == 0:
+            return Quantity(self.n + other.n, other.text, reads)
+        if not other.sized and other.n == 0:
+            return self
+        return Quantity(self.n + other.n, "%s %s %s" % (left, sign, right), reads)
+
+    def divided_by(self, other):
+        if not isinstance(other, Quantity):
+            other = Quantity(other)
+        if not self.sized and not other.sized:
+            return Quantity(self.n / other.n)
+        reads = tuple(dict.fromkeys(self.reads + other.reads))
+        left = _wrapped(self.text) if self.sized else _text(self.n)
+        right = _wrapped(other.text) if other.sized else _text(other.n)
+        return Quantity(self.n / other.n, "%s / %s" % (left, right), reads)
+
+
+def _data(item):
+    data = item.get("data") if isinstance(item, dict) else None
+    return data if isinstance(data, dict) else item
+
+
+def _param(item, path):
+    params = _data(item).get("params")
+    found = params.get(path) if isinstance(params, dict) else None
+    return found if isinstance(found, dict) and found.get("expression") else None
+
+
+def _reads_of(ctx, ref):
+    if ctx.table is None:
+        return ()
+    return tuple(ctx.table.translate(ref["expression"]).reads)
+
+
+def pin(ctx, item, path, why):
+    """The value at `path` stays a number here: the sizes its parameter reads become fixed numbers."""
+    ref = _param(item, path)
+    if ref is not None:
+        ctx.fix(_reads_of(ctx, ref), why)
+
+
+def _env(table, overrides):
+    """Size values by recipe name: the free sizes (with `overrides`), then every derived size."""
+    env = {name: size["value"] for name, size in table.sizes.items() if "value" in size}
+    env.update(overrides)
+    pending = {name: size["expr"] for name, size in table.sizes.items() if "expr" in size}
+    while pending:
+        progressed = False
+        for name, formula in list(pending.items()):
+            try:
+                env[name] = evaluate(formula, env)
+            except ExpressionError:
+                continue
+            del pending[name]
+            progressed = True
+        if not progressed:
+            raise ExpressionError("A derived size cannot be worked out.")
+    return env
+
+
+def _probes(table, reads):
+    """Size settings that cover the range: each read size at its minimum and maximum, then all low and all high."""
+    names = [table.size_name(n) for n in reads]
+    names = [n for n in names if n in table.sizes and "min" in table.sizes[n]]
+    probes = []
+    for name in names:
+        size = table.sizes[name]
+        probes += [{name: size["min"]}, {name: size["max"]}]
+    if len(names) > 1:
+        probes.append({n: table.sizes[n]["min"] for n in names})
+        probes.append({n: table.sizes[n]["max"] for n in names})
+    return probes
+
+
+def _stays_in_range(table, formula, reads, sign, low):
+    """True when sign * formula stays at or above `low` over the size range."""
+    try:
+        for probe in _probes(table, reads):
+            if sign * evaluate(formula, _env(table, probe)) < low:
+                return False
+    except ExpressionError:
+        return False
+    return True
+
+
+def quantity(ctx, item, path, literal, dim="length", sign=1, absolute=False, whole=False):
+    """The value at `path` as a Quantity.
+
+    `literal` is the number the step writes (what Fusion measured, mm or degrees). `dim` is length, angle or scalar.
+    `sign` is 1 or -1 when the step writes the absolute value of a negative parameter. `absolute` asks the value to
+    stay above zero over the size range; `whole` asks it to stay at least 1 (counts).
+    """
+    plain = Quantity(literal)
+    ref = _param(item, path)
+    if ref is None or ctx.table is None:
+        return plain
+    tr = ctx.table.translate(ref["expression"], expected=ref["value"])
+    if not tr.reads:
+        return plain
+    if not tr.ok:
+        ctx.fix(tr.reads, "a value of %s cannot be copied: %s" % (item.get("name", "a step"), tr.reason))
+        return plain
+    if tr.dim != dim:
+        ctx.fix(tr.reads, "its formula in %s does not give the unit of that value" % item.get("name", "a step"))
+        return plain
+    if abs(sign * tr.value - literal) > TOLERANCE + 1e-9 * abs(literal):
+        ctx.fix(tr.reads, "its formula in %s does not match what Fusion measured" % item.get("name", "a step"))
+        return plain
+    if len(tr.formula) > MAX_FORMULA:
+        ctx.fix(tr.reads, "its formula in %s is too long to copy" % item.get("name", "a step"))
+        return plain
+    if absolute or whole:
+        if not _stays_in_range(ctx.table, tr.formula, tr.reads, sign, 1.0 if whole else 1e-9):
+            ctx.fix(tr.reads, "%s would leave its working range (a length reaching zero or a count under 1)"
+                    % item.get("name", "a step"))
+            return plain
+    text = tr.formula if sign > 0 else _negated(tr.formula)
+    return Quantity(literal, text, tr.reads)
+
+
+def num(ctx, item, path, literal, **kwargs):
+    """`quantity(...).json()`: a number, or { "expr": formula } when the value follows sizes."""
+    return quantity(ctx, item, path, literal, **kwargs).json()

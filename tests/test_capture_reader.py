@@ -145,7 +145,7 @@ class WalkTest(unittest.TestCase):
 
     def test_envelope_and_json_safe(self):
         c = self.capture
-        self.assertEqual((c["capture"], c["fusion"], c["design"], c["up_axis"]), (1, "2.0.1", "Clip", "z"))
+        self.assertEqual((c["capture"], c["fusion"], c["design"], c["up_axis"]), (2, "2.0.1", "Clip", "z"))
         self.assertEqual(c["target"], {"token": "b1", "name": "Body1",
                                        "box": {"min": [0, 0, 0], "max": [40, 20, 10]}, "volume_mm3": 8000.0})
         self.assertEqual([i["type"] for i in c["items"]], ["Sketch", "ExtrudeFeature"])

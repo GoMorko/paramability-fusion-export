@@ -1,14 +1,17 @@
 """The driver: walks a capture's items, calls one handler per feature type, builds the recipe."""
 from . import combine, extrude, finish, hole, repeat, revolve
+from .sizes import sketch_fixes, used_sizes
 from .capture import renamed_target, same_body, validate_capture
 from .context import Context
 from .result import Refusal, TranslateResult, make_verdict
+from .values import number
 from .zup import turn_z_up
 
-RECIPE_VERSION = 10
+RECIPE_VERSION = 12
 MAX_FEATURES = 400
 MAX_NEAR_POINTS = 32
 MAX_PATTERN_COPIES = 64
+MAX_PASSES = 70
 
 SKIP_TYPES = ("Sketch", "ConstructionPlane", "ConstructionAxis", "ConstructionPoint", "none")
 
@@ -117,31 +120,66 @@ def _over_caps(recipe):
         if found:
             return found
         if step.get("kind") == "pattern":
-            copies = step.get("linear", {}).get("count", 1) * step.get("linear2", {}).get("count", 1)
-            copies = max(copies, step.get("polar", {}).get("count", 1))
+            copies = number(step.get("linear", {}).get("count", 1)) * number(step.get("linear2", {}).get("count", 1))
+            copies = max(copies, number(step.get("polar", {}).get("count", 1)))
             if copies > MAX_PATTERN_COPIES:
                 return "A pattern makes more than %d copies." % MAX_PATTERN_COPIES
     return None
 
 
-def translate(capture, handlers=None):
+def translate(capture, handlers=None, size_table=None):
     """Capture dict to TranslateResult. `handlers` maps a feature type to a handler and overrides the table.
 
     A handler is `handle(item, ctx) -> list[step] | Refusal`. An empty list means the item makes no step on purpose
     (verdict `skipped`, with the handler's notes). Items after the first refusal are not walked, so `items` holds the
     verdicts up to and including it.
+
+    `size_table` (lib/params) makes the recipe follow Fusion parameters: feature values whose parameters read a size
+    are written as formulas, the recipe gets `sizes` and the `sizesAsWritten` marker. A size that some value cannot
+    follow is made a fixed number and the walk runs again; `result.fixed` lists those sizes as `{ name, reason }`.
     """
     validate_capture(capture)
     table = dict(HANDLERS)
     if handlers:
         table.update(handlers)
-    ctx = Context(capture)
+    if size_table is None:
+        return _walk(capture, table, None)[0]
+    fixed = sketch_fixes(size_table)
+    current = size_table.with_fixed(fixed) if fixed else size_table
+    for _ in range(MAX_PASSES):
+        result, ctx = _walk(capture, table, current)
+        more = {name: why for name, why in ctx.depends.items() if name not in fixed}
+        if result.recipe is None or not more:
+            break
+        fixed.update(more)
+        current = current.with_fixed(more)
+    result.fixed = [{"name": name, "reason": why} for name, why in fixed.items()]
+    if result.recipe is not None:
+        _add_sizes(result, current)
+    return result
+
+
+def _add_sizes(result, table):
+    """The recipe's `sizes` (those a formula reads) and the marker that says they are the whole list."""
+    recipe = result.recipe
+    sizes = used_sizes(recipe["features"], table.sizes)
+    recipe["sizesAsWritten"] = True
+    if sizes:
+        recipe["sizes"] = sizes
+    for name in table.ticked:
+        if table.size_name(name) not in sizes:
+            result.notes.append("%s is not used by any copied step, so it is not a size." % name)
+
+
+def _walk(capture, table, size_table):
+    """One walk over the items: (TranslateResult, Context)."""
+    ctx = Context(capture, size_table)
     result = TranslateResult()
 
     def refuse(item, reason):
         result.items.append(make_verdict(item, "unsupported", note=reason))
         result.refusal = _refusal(item, reason)
-        return result
+        return result, ctx
 
     for item in capture["items"]:
         ctx.current = item
@@ -194,17 +232,17 @@ def translate(capture, handlers=None):
 
     if not ctx.steps:
         result.refusal = {"index": None, "name": "", "type": "", "reason": "Nothing in the timeline makes this body."}
-        return result
+        return result, ctx
 
     recipe = {"schema": "paramability.recipe", "version": RECIPE_VERSION, "features": ctx.steps}
     over = _over_caps(recipe)
     if over:
         result.refusal = {"index": None, "name": "", "type": "", "reason": over}
-        return result
+        return result, ctx
     if capture.get("up_axis") == "y":
         recipe = turn_z_up(recipe)
     result.recipe = recipe
-    return result
+    return result, ctx
 
 
 def _collect_helper(item, handler, ctx):

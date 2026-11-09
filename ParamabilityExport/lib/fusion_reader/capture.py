@@ -12,8 +12,9 @@ import importlib
 from ..export_plan.temp_copy import require_marker_at_end
 from . import read_geometry as geo
 from . import read_solid
+from .parameters import list_model_parameters, list_user_parameters
 
-CAPTURE_VERSION = 1
+CAPTURE_VERSION = 2
 
 _OPTIONAL_READER_MODULES = ("read_finish", "read_repeat")
 
@@ -166,6 +167,14 @@ def _app_details():
         return "", "", "z"
 
 
+def _parameters(design):
+    """{ user, model } parameters (Fusion internal units) and the design's default length unit; empty when unreadable."""
+    user = geo.safe(lambda: list_user_parameters(design), [])
+    model = geo.safe(lambda: list_model_parameters(design.rootComponent), [])
+    unit = geo.safe(lambda: str(design.fusionUnitsManager.defaultLengthUnits).strip(), "") or "mm"
+    return {"user": user, "model": model}, unit
+
+
 def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_readers=None):
     """Capture of `design` for the picked `body`.
 
@@ -192,12 +201,15 @@ def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_reade
         _restore_marker(timeline, count)
     _check_groups(timeline, count, items, group_indices)
     final = ctx.find_target() or body
+    parameters, design_units = _parameters(design)
     app_fusion, app_name, app_up = _app_details() if None in (fusion, name, up_axis) else ("", "", "z")
     return {
         "capture": CAPTURE_VERSION,
         "fusion": app_fusion if fusion is None else fusion,
         "design": app_name if name is None else name,
         "up_axis": app_up if up_axis is None else up_axis,
+        "design_units": design_units,
+        "parameters": parameters,
         "target": {
             **ctx.target_ref,
             "box": geo.box_of(final),

@@ -1,0 +1,85 @@
+{
+  "features": [
+    {
+      "combine": "new",
+      "distance": {
+        "size": "height"
+      },
+      "id": "body",
+      "kind": "extrude",
+      "label": "Plate",
+      "sketch": {
+        "on": {
+          "normal": [0, 0, 1],
+          "origin": [0, 0, 0],
+          "xDir": [1, 0, 0]
+        },
+        "outer": {
+          "center": [0, 0],
+          "height": 30,
+          "kind": "rect",
+          "width": {
+            "size": "width"
+          }
+        }
+      }
+    },
+    {
+      "combine": "add",
+      "distance": 5,
+      "id": "boss",
+      "kind": "extrude",
+      "label": "Boss at the written height",
+      "sketch": {
+        "on": {
+          "normal": [0, 0, 1],
+          "origin": [0, 0, 10],
+          "xDir": [1, 0, 0]
+        },
+        "outer": {
+          "center": [0, 0],
+          "kind": "circle",
+          "radius": 4
+        }
+      }
+    },
+    {
+      "edges": {
+        "near": [
+          [
+            {
+              "size": "width",
+              "times": 0.5
+            },
+            15,
+            {
+              "size": "height",
+              "times": 0.5
+            }
+          ]
+        ]
+      },
+      "id": "corner",
+      "kind": "round",
+      "label": "Rounded corner",
+      "size": 2
+    }
+  ],
+  "schema": "paramability.recipe",
+  "sizes": {
+    "height": {
+      "label": "Plate height",
+      "max": 30,
+      "min": 4,
+      "value": 10
+    },
+    "width": {
+      "label": "Plate width",
+      "max": 80,
+      "min": 20,
+      "value": 40
+    }
+  },
+  "sizesAsWritten": true,
+  "version": 12
+}

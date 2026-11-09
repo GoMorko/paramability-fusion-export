@@ -3,8 +3,9 @@
 The capture is the plain dict the reader (`lib/fusion_reader/`) returns for one design, and the only input of the
 pure translator (`lib/translator/`). Fixtures in `tests/fixtures/captures/` use this format, so every translator test
 runs without Fusion. They are written by hand or saved from real designs: the export writes the capture into
-`report.json` (section 6). The translator refuses a capture whose `capture` number is not 1, or that lacks `capture`,
-`target` or `items`, with a `CaptureError`.
+`report.json` (section 6). The reader writes capture number 2; the translator reads 1 and 2 (number 1 has no
+`parameters`, `design_units` or `params`). It refuses any other number, or a capture that lacks `capture`, `target` or
+`items`, with a `CaptureError`.
 
 ## 1. Rules for every value
 
@@ -26,14 +27,24 @@ runs without Fusion. They are written by hand or saved from real designs: the ex
 
 ```json
 {
-  "capture": 1,
+  "capture": 2,
   "fusion": "2.0.21508",
   "design": "Cable clip",
   "up_axis": "z",
+  "design_units": "mm",
+  "parameters": { "user": [ PARAMETER, ... ], "model": [ PARAMETER, ... ] },
   "target": { "token": "...", "name": "Body1", "box": { "min": [0, 0, 0], "max": [40, 20, 10] }, "volume_mm3": 8000.0 },
   "items": [ ITEM, ... ]
 }
 ```
+
+`design_units` is the design's default length unit (`fusionUnitsManager.defaultLengthUnits`, `mm` when unreadable); a
+bare number in a length formula is read in it. `parameters.user` is `list_user_parameters(design)` and
+`parameters.model` is `list_model_parameters(rootComponent)` (`lib/fusion_reader/parameters.py`: name, expression, value
+in Fusion's internal cm and radians, unit, kind, favourite, dependency lists, and for model parameters `role` and
+`created_by`). Both are empty lists when unreadable. The export builds its size table from them
+(`lib/params/size_table.py`); the translator reads only `data.params` of the items and, through the size table,
+the `created_by` kinds.
 
 `target` is the picked body at the end of the timeline (`volume` cm3 times 1000). `items` lists every timeline
 item in order. Group objects are skipped; the children of a group are listed as ordinary items, and the reader raises
@@ -321,6 +332,48 @@ for extrudes).
 
 **ThreadFeature**: `{ "modeled": bool }` (`isModeled`).
 
+### Parameters behind values (`data.params`)
+
+A value that Fusion keeps as a model parameter is listed in the item's `data.params`: capture field path to
+`{ "name": "d12", "expression": "FilterBox_height_mm", "value": 32.0 }`. `value` is in mm, degrees or as is (counts),
+like the field it belongs to. Written by `lib/fusion_reader/param_refs.py`; a member that is not a model parameter (a
+plain number, a retired member) adds nothing, and `params` is absent when nothing is listed. The translator
+(`lib/translator/values.py`) turns a listed value into a formula over the sizes when its expression reads one.
+
+| Type | Field paths |
+|---|---|
+| ExtrudeFeature | `side_one.distance`, `side_two.distance`, `side_one.taper_deg`, `side_two.taper_deg`, `side_one.offset` (to entity), `side_two.offset`, `symmetric.distance`, `symmetric.taper_deg`, `start.offset` |
+| RevolveFeature | `extent.angle_deg` |
+| HoleFeature | `diameter`, `tip_angle_deg`, `extent.depth`, `counterbore.diameter`, `counterbore.depth`, `countersink.diameter`, `countersink.angle_deg` |
+| FilletFeature | `sets.<n>.radius` |
+| ChamferFeature | `sets.<n>.distance`, `sets.<n>.distance_two`, `sets.<n>.angle_deg` |
+| ShellFeature | `inside` |
+| RectangularPatternFeature | `quantity_one`, `quantity_two`, `distance_one`, `distance_two` |
+| CircularPatternFeature | `quantity`, `total_angle_deg` |
+
+Sketch dimensions, construction planes, axes and joints are not listed per item. They are model parameters whose
+`created_by.kind` is `sketchDimension`, `constructionPlane`, `constructionAxis` or `joint`.
+
+How the translator uses them (`translate(capture, size_table=table)`):
+
+- A value is written as `{ "expr": formula }` (never `{ "size": ... }`) when its expression translates, reads at least
+  one free size, gives the unit of the field and equals the measured number within 1e-6. Lengths written as absolute
+  values (extrude and hole depths, spacing) must also stay above zero over the size range; counts at least 1.
+  A negative parameter is written negated.
+- Symmetric half length is written as `2 * (formula)`. An extent spacing is `(distance) / ((count) - 1)`. Hole
+  tip outlines and counterbore or countersink sizes follow sizes point by point.
+- Values that stay numbers while a size reaches them: a sketch (points, placements, construction geometry), the start
+  offset, the "up to" offset, a tip angle, a countersink angle, a full circular turn, a revolve that is not a plain
+  part turn, and a pattern whose copies are left out by number or are rounds copied one by one. The sizes behind
+  them are fixed.
+- Every size that a model parameter created by a sketch dimension, construction plane or axis, or joint reads is
+  fixed up front (reason "stays fixed for now: it changes a sketch"). Sketches follow sizes in a later version.
+- Each fixed size becomes a plain number in a new size table (`with_fixed`) and the walk runs again, until nothing
+  new is fixed. `TranslateResult.fixed` lists them as `{ name, reason }`.
+- The recipe is version 12. With a size table it carries `sizesAsWritten: true` and `sizes`: the sizes that a written
+  formula reads, plus the sizes those formulas read. A ticked size that nothing reads is left out, with a note.
+  Without a table the recipe has no `sizes`, and no marker.
+
 ## 6. Report and capture file
 
 The export writes `report.json` into the package: `{ "writer", "outcome": "recipe" | "stepOnly", "items": [ITEM
@@ -364,3 +417,5 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | `Timeline.item` walks inside groups; `TimelineGroup.startIndex`, `endIndex` | reader raises `CaptureReadError` when a group child is not in the walk; the "Capture reader calls to watch" lists in `docs/hand-tests.md` |
 | Moving the marker marks the document changed or adds undo entries | the Marker and document test |
 | `isRollingBallCorner` still on `FilletFeature` (some fillet members are retired) | reader reads it in a try, default true; the Bin test |
+| The members in the `params` table return a `ModelParameter` (name, expression, value): `DistanceExtentDefinition.distance`, `taperAngleOne` and `taperAngleTwo`, `OffsetStartDefinition.offset`, the `HoleFeature` size members, `ConstantRadiusFilletEdgeSet.radius`, chamfer set distances, `insideThickness`, pattern `quantityOne`, `distanceOne` and the circular ones | a member that is not one adds nothing and the value stays a number; the sizes hand test logs which members gave a parameter |
+| `ModelParameter.createdBy` kinds and `name` for a sketch dimension | the kind comes from the type name; the sketch rule needs only the kind |

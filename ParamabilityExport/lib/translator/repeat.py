@@ -7,7 +7,8 @@ copies get their own `round` or `bevel` step with the source's `near` points mov
 """
 import math
 
-from . import vec
+from . import values, vec
+from .values import number
 from .result import Refusal
 
 TYPES = ("RectangularPatternFeature", "CircularPatternFeature", "MirrorFeature")
@@ -113,8 +114,10 @@ def _finish_copies(finishes, motions):
 
 def _kept_copy_count(step):
     """Copies a pattern step makes beyond the original, as the app counts them."""
-    grid = max(0, step["linear"]["count"] * step.get("linear2", {}).get("count", 1) - 1) if "linear" in step else 0
-    turned = max(0, step["polar"]["count"] - 1) if "polar" in step else 0
+    grid = 0
+    if "linear" in step:
+        grid = max(0, number(step["linear"]["count"]) * number(step.get("linear2", {}).get("count", 1)) - 1)
+    turned = max(0, number(step["polar"]["count"]) - 1) if "polar" in step else 0
     return max(0, grid + turned - len(set(step.get("skip", ()))))
 
 
@@ -184,17 +187,16 @@ def _moves(by_place):
 # ---------------------------------------------------------------- rectangular
 
 
-def _axis_step(data, which, quantity):
-    """Spacing along one direction, from the pattern distance and how Fusion measures it."""
-    distance = abs(float(data.get("distance_" + which) or 0.0))
+def _axis_step(item, ctx, which, quantity, count_q):
+    """Spacing along one direction as a Quantity, from the pattern distance and how Fusion measures it."""
+    data = item["data"]
+    raw = float(data.get("distance_" + which) or 0.0)
     kind = data.get("distance_type")
-    if kind == "spacing":
-        step = distance
-    elif kind == "extent":
-        step = distance / (quantity - 1)
-    else:
+    if kind not in ("spacing", "extent"):
         return Refusal("The spacing of this pattern could not be read.")
-    if not step > 1e-9:
+    distance = values.quantity(ctx, item, "distance_" + which, abs(raw), sign=-1 if raw < 0 else 1, absolute=True)
+    step = distance if kind == "spacing" else distance.divided_by(count_q.plus(-1))
+    if not step.n > 1e-9:
         return Refusal("The spacing of this pattern could not be read.")
     return step
 
@@ -216,8 +218,12 @@ def _solve_lattice(offset, axes):
     return indexes, vec.length(vec.sub(offset, fitted))
 
 
-def _lattice_axes(data):
-    """The directions that have more than one copy, as dicts {dir, step, count}; or a Refusal."""
+def _lattice_axes(item, ctx):
+    """The directions that have more than one copy, as dicts {dir, step, count, step_q, count_q}; or a Refusal.
+
+    `step` and `count` are the numbers; `step_q` and `count_q` are Quantities that may follow sizes.
+    """
+    data = item["data"]
     axes = []
     for which, dir_key, qty_key in (("one", "direction_one", "quantity_one"), ("two", "direction_two", "quantity_two")):
         quantity = int(data.get(qty_key) or 1)
@@ -228,15 +234,29 @@ def _lattice_axes(data):
         direction = data.get(dir_key)
         if not direction or vec.length(direction) < 1e-9:
             return Refusal("The direction of this pattern could not be read.")
-        step = _axis_step(data, which, quantity)
-        if isinstance(step, Refusal):
-            return step
-        axes.append({"dir": vec.unit(direction), "step": step, "count": quantity})
+        count_q = values.quantity(ctx, item, "quantity_" + which, quantity, dim="scalar", whole=True)
+        step_q = _axis_step(item, ctx, which, quantity, count_q)
+        if isinstance(step_q, Refusal):
+            return step_q
+        axes.append({"dir": vec.unit(direction), "step": step_q.n, "count": quantity,
+                     "step_q": step_q, "count_q": count_q})
     if not axes:
         return Refusal("This pattern makes no copies.")
     if len(axes) == 2 and 1.0 - vec.dot(axes[0]["dir"], axes[1]["dir"]) ** 2 < 1e-9:
         return Refusal("The two directions of this pattern run along one line.")
     return axes
+
+
+def _keep_pattern_fixed(ctx, item, skip, finishes, counts, distances):
+    """Copies that are left out by number, or rounds that are copied one by one, cannot follow a changed count or
+    spacing: the sizes behind them become fixed numbers."""
+    name = item.get("name", "a pattern")
+    if skip:
+        for path in counts:
+            values.pin(ctx, item, path, "%s leaves copies out, so its count must stay" % name)
+    if finishes:
+        for path in counts + distances:
+            values.pin(ctx, item, path, "the rounded or chamfered copies in %s are placed one by one" % name)
 
 
 def _rectangular(item, ctx):
@@ -247,7 +267,7 @@ def _rectangular(item, ctx):
     solids, finishes = sources
     if data.get("symmetric_one") or data.get("symmetric_two"):
         return Refusal("Patterns that spread to both sides of the start are not copied yet.")
-    axes = _lattice_axes(data)
+    axes = _lattice_axes(item, ctx)
     if isinstance(axes, Refusal):
         return axes
     kept = _kept_elements(data)
@@ -289,7 +309,14 @@ def _rectangular(item, ctx):
         pattern[key] = {"dir": _vec(axis["dir"]), "count": axis["count"], "step": _n(axis["step"])}
     if skip:
         pattern["skip"] = skip
-    return _build(ctx, solids, finishes, pattern, _moves(by_place), "pattern")
+    steps = _build(ctx, solids, finishes, pattern, _moves(by_place), "pattern")
+    if isinstance(steps, Refusal):
+        return steps
+    _keep_pattern_fixed(ctx, item, skip, finishes, ("quantity_one", "quantity_two"), ("distance_one", "distance_two"))
+    for key, axis in zip(("linear", "linear2"), axes):
+        pattern[key]["count"] = axis["count_q"].json() if axis["count_q"].sized else axis["count"]
+        pattern[key]["step"] = axis["step_q"].json()
+    return steps
 
 
 # ---------------------------------------------------------------- circular
@@ -339,7 +366,8 @@ def _circular(item, ctx):
     count = int(data.get("quantity") or 1)
     if count < 2:
         return Refusal("This pattern makes no copies.")
-    total_deg = abs(float(data.get("total_angle_deg") or 0.0))
+    raw_total = float(data.get("total_angle_deg") or 0.0)
+    total_deg = abs(raw_total)
     full = abs(total_deg - FULL_TURN_DEG) <= ANGLE_TOL_DEG
     if not full and not 0 < total_deg < FULL_TURN_DEG:
         return Refusal("The angle of this pattern could not be read.")
@@ -373,7 +401,20 @@ def _circular(item, ctx):
     pattern = {"kind": "pattern", "polar": polar}
     if skip:
         pattern["skip"] = skip
-    return _build(ctx, solids, finishes, pattern, _moves(by_place), "pattern")
+    steps = _build(ctx, solids, finishes, pattern, _moves(by_place), "pattern")
+    if isinstance(steps, Refusal):
+        return steps
+    count_q = values.quantity(ctx, item, "quantity", count, dim="scalar", whole=True)
+    if full:
+        values.pin(ctx, item, "total_angle_deg", "%s turns a full circle only while its angle is a plain 360"
+                   % item.get("name", "a pattern"))
+    else:
+        angle_q = values.quantity(ctx, item, "total_angle_deg", total_deg, dim="angle",
+                                  sign=-1 if raw_total < 0 else 1, absolute=True)
+        polar["angleDeg"] = angle_q.json()
+    _keep_pattern_fixed(ctx, item, skip, finishes, ("quantity",), ("total_angle_deg",))
+    polar["count"] = count_q.json() if count_q.sized else count
+    return steps
 
 
 # ---------------------------------------------------------------- mirror
@@ -432,7 +473,7 @@ def _loop_points(loop):
             reach = math.hypot(loop["width"], loop["height"]) / 2
         return [[cx + sx * reach, cy + sy * reach] for sx in (-1, 1) for sy in (-1, 1)]
     if kind == "polygon":
-        return [list(p) for p in loop["points"]]
+        return [[number(c) for c in p] for p in loop["points"]]
     if kind == "profile":
         points, here = [list(loop["start"])], list(loop["start"])
         for seg in loop["segments"]:
@@ -458,8 +499,9 @@ def _cut_reach(step):
         axis = vec.unit(step["direction"])
         if step.get("depth") is None:
             return None
-        radius = max([step["diameter"]] + [step.get(k, {}).get("diameter", 0) for k in ("counterbore", "countersink")]) / 2
-        end = vec.add(step["origin"], vec.scale(axis, step["depth"]))
+        radius = max([number(step["diameter"])]
+                     + [number(step.get(k, {}).get("diameter", 0)) for k in ("counterbore", "countersink")]) / 2
+        end = vec.add(step["origin"], vec.scale(axis, number(step["depth"])))
         return [step["origin"], end], radius
     sketch = step.get("sketch") or {}
     on = {k: (vec.unit(v) if k != "origin" else v) for k, v in sketch["on"].items()}
@@ -479,11 +521,11 @@ def _cut_reach(step):
         return points, margin
     if kind == "extrude":
         extent = step.get("extent")
-        distance = step.get("distance")
+        distance = number(step.get("distance"))
         if extent not in ("oneSide", "symmetric") or distance is None:
             return None
         low, high = (0.0, distance) if extent == "oneSide" else (-distance / 2, distance / 2)
-        margin = distance * math.tan(math.radians(abs(step.get("taperDeg", 0.0))))
+        margin = distance * math.tan(math.radians(abs(number(step.get("taperDeg", 0.0)))))
         points = [vec.add(_placed(on, q), vec.scale(on["normal"], h)) for q in outline for h in (low, high)]
         return points, margin
     return None

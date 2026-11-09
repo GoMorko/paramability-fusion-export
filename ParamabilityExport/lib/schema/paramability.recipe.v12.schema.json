@@ -59,6 +59,9 @@
           "$ref": "#/$defs/RegularPolygonLoop"
         },
         {
+          "$ref": "#/$defs/PresetLoop"
+        },
+        {
           "$ref": "#/$defs/GearLoop"
         }
       ]
@@ -220,6 +223,60 @@
             "size"
           ],
           "type": "object"
+        },
+        {
+          "description": "A formula over the declared sizes, such as \"units_x * 42 - 0.5\".",
+          "properties": {
+            "expr": {
+              "maxLength": 300,
+              "type": "string"
+            }
+          },
+          "required": [
+            "expr"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "PatternCount": {
+      "anyOf": [
+        {
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "description": "A named size, or an expression of one: the size value times `times` (default 1) plus `plus` (default 0).",
+          "properties": {
+            "plus": {
+              "type": "number"
+            },
+            "size": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "times": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "size"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A formula over the declared sizes, such as \"units_x * 42 - 0.5\".",
+          "properties": {
+            "expr": {
+              "maxLength": 300,
+              "type": "string"
+            }
+          },
+          "required": [
+            "expr"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -276,6 +333,30 @@
       "maxItems": 3,
       "minItems": 3,
       "type": "array"
+    },
+    "PresetLoop": {
+      "description": "A reviewed outline of a printing standard, by versioned name (for example gridfinity.v1.foot, the footprint of one Gridfinity cell: a 41.5 mm square with 3.75 mm corners), centred on `center` and turned by `angleDeg` (default 0). It is drawn as a plain profile. Offset it for the smaller steps of a shape.",
+      "properties": {
+        "angleDeg": {
+          "$ref": "#/$defs/Num"
+        },
+        "center": {
+          "$ref": "#/$defs/Point2"
+        },
+        "kind": {
+          "const": "preset"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "center"
+      ],
+      "type": "object"
     },
     "ProfileLoop": {
       "properties": {
@@ -425,6 +506,101 @@
       "maxItems": 1000,
       "type": "array"
     },
+    "Size": {
+      "anyOf": [
+        {
+          "properties": {
+            "kind": {
+              "description": "length (mm, default), angle (degrees), number, count (whole), toggle (0 or 1) or choice (one of `options`).",
+              "enum": [
+                "length",
+                "angle",
+                "number",
+                "count",
+                "toggle",
+                "choice"
+              ],
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "max": {
+              "type": "number"
+            },
+            "min": {
+              "type": "number"
+            },
+            "options": {
+              "description": "The values of a choice, each with a label.",
+              "items": {
+                "$ref": "#/$defs/SizeOption"
+              },
+              "maxItems": 16,
+              "minItems": 2,
+              "type": "array"
+            },
+            "step": {
+              "description": "Values are `min` plus whole steps. Needs `min`.",
+              "type": "number"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "expr": {
+              "maxLength": 300,
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "expr"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "preset": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "preset"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "SizeOption": {
+      "properties": {
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "value": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "value",
+        "label"
+      ],
+      "type": "object"
+    },
     "Sketch": {
       "properties": {
         "inner": {
@@ -472,6 +648,9 @@
         },
         {
           "$ref": "#/$defs/RegularPolygonLoop"
+        },
+        {
+          "$ref": "#/$defs/PresetLoop"
         },
         {
           "$ref": "#/$defs/GearLoop"
@@ -646,6 +825,11 @@
       "maxItems": 3,
       "minItems": 3,
       "type": "array"
+    },
+    "When": {
+      "description": "A formula over the declared sizes. The step and the steps that only exist for it are left out when it is 0.",
+      "maxLength": 300,
+      "type": "string"
     }
   },
   "description": "Millimetres in the part frame. Patterns and mirrors may copy at most 256 bodies in total.",
@@ -687,7 +871,7 @@
                             "properties": {
                               "near": {
                                 "items": {
-                                  "$ref": "#/$defs/Vec3"
+                                  "$ref": "#/$defs/Pos3"
                                 },
                                 "maxItems": 32,
                                 "type": "array"
@@ -755,6 +939,9 @@
                 "$ref": "#/$defs/Num",
                 "description": "Turns the shape about the sketch normal through the sketch origin over the distance, at most 3600 degrees. Not with extent through."
               },
+              "when": {
+                "$ref": "#/$defs/When"
+              },
               "within": {
                 "$ref": "#/$defs/Sketch",
                 "description": "Acts only inside this outline. Not with combine new."
@@ -812,6 +999,9 @@
               "sketch": {
                 "$ref": "#/$defs/Sketch"
               },
+              "when": {
+                "$ref": "#/$defs/When"
+              },
               "within": {
                 "$ref": "#/$defs/Sketch",
                 "description": "Acts only inside this outline. Not with combine new."
@@ -860,6 +1050,9 @@
                 "maxItems": 32,
                 "minItems": 2,
                 "type": "array"
+              },
+              "when": {
+                "$ref": "#/$defs/When"
               },
               "within": {
                 "$ref": "#/$defs/Sketch",
@@ -913,6 +1106,9 @@
               },
               "thin": {
                 "$ref": "#/$defs/Thin"
+              },
+              "when": {
+                "$ref": "#/$defs/When"
               }
             },
             "required": [
@@ -981,6 +1177,9 @@
               },
               "startAngleDeg": {
                 "$ref": "#/$defs/Num"
+              },
+              "when": {
+                "$ref": "#/$defs/When"
               }
             },
             "required": [
@@ -1047,6 +1246,9 @@
               },
               "turns": {
                 "$ref": "#/$defs/Num"
+              },
+              "when": {
+                "$ref": "#/$defs/When"
               }
             },
             "required": [
@@ -1113,6 +1315,9 @@
                 "maxItems": 2,
                 "minItems": 2,
                 "type": "array"
+              },
+              "when": {
+                "$ref": "#/$defs/When"
               },
               "within": {
                 "$ref": "#/$defs/SketchLoop",
@@ -1204,6 +1409,9 @@
               },
               "origin": {
                 "$ref": "#/$defs/Pos3"
+              },
+              "when": {
+                "$ref": "#/$defs/When"
               }
             },
             "required": [
@@ -1232,7 +1440,7 @@
                     "properties": {
                       "near": {
                         "items": {
-                          "$ref": "#/$defs/Vec3"
+                          "$ref": "#/$defs/Pos3"
                         },
                         "maxItems": 32,
                         "type": "array"
@@ -1305,6 +1513,9 @@
               "sizeEnd": {
                 "$ref": "#/$defs/Num",
                 "description": "The radius at the other end of each picked edge; the radius changes steadily along the edge from `size` at its end lowest along x (then y, then z) to this. Not with edgeSizes."
+              },
+              "when": {
+                "$ref": "#/$defs/When"
               }
             },
             "required": [
@@ -1327,7 +1538,7 @@
                     "properties": {
                       "near": {
                         "items": {
-                          "$ref": "#/$defs/Vec3"
+                          "$ref": "#/$defs/Pos3"
                         },
                         "maxItems": 32,
                         "type": "array"
@@ -1404,6 +1615,9 @@
               "sizeOn": {
                 "$ref": "#/$defs/Vec3",
                 "description": "With otherSize or cutAngleDeg: of an edge's two faces, `size` is measured on the one whose outward normal at the edge middle is closest to this direction."
+              },
+              "when": {
+                "$ref": "#/$defs/When"
               }
             },
             "required": [
@@ -1434,7 +1648,7 @@
                     "properties": {
                       "near": {
                         "items": {
-                          "$ref": "#/$defs/Vec3"
+                          "$ref": "#/$defs/Pos3"
                         },
                         "maxItems": 32,
                         "type": "array"
@@ -1469,6 +1683,9 @@
               },
               "thickness": {
                 "$ref": "#/$defs/Num"
+              },
+              "when": {
+                "$ref": "#/$defs/When"
               }
             },
             "required": [
@@ -1496,9 +1713,7 @@
               "linear": {
                 "properties": {
                   "count": {
-                    "maximum": 64,
-                    "minimum": 1,
-                    "type": "integer"
+                    "$ref": "#/$defs/PatternCount"
                   },
                   "dir": {
                     "$ref": "#/$defs/Vec3"
@@ -1518,9 +1733,7 @@
                 "description": "A second direction that turns the linear row into a grid: copies sit at every pair of steps. Needs linear. Copies are numbered row by row, the first direction running fastest.",
                 "properties": {
                   "count": {
-                    "maximum": 64,
-                    "minimum": 1,
-                    "type": "integer"
+                    "$ref": "#/$defs/PatternCount"
                   },
                   "dir": {
                     "$ref": "#/$defs/Vec3"
@@ -1557,9 +1770,7 @@
                     "$ref": "#/$defs/Pos3"
                   },
                   "count": {
-                    "maximum": 64,
-                    "minimum": 1,
-                    "type": "integer"
+                    "$ref": "#/$defs/PatternCount"
                   }
                 },
                 "required": [
@@ -1576,6 +1787,9 @@
                 },
                 "maxItems": 256,
                 "type": "array"
+              },
+              "when": {
+                "$ref": "#/$defs/When"
               }
             },
             "required": [
@@ -1622,6 +1836,9 @@
                   "normal"
                 ],
                 "type": "object"
+              },
+              "when": {
+                "$ref": "#/$defs/When"
               }
             },
             "required": [
@@ -1645,7 +1862,7 @@
                     "properties": {
                       "near": {
                         "items": {
-                          "$ref": "#/$defs/Vec3"
+                          "$ref": "#/$defs/Pos3"
                         },
                         "maxItems": 32,
                         "type": "array"
@@ -1705,6 +1922,9 @@
                   "normal"
                 ],
                 "type": "object"
+              },
+              "when": {
+                "$ref": "#/$defs/When"
               }
             },
             "required": [
@@ -1772,6 +1992,9 @@
                 "maximum": 200,
                 "minimum": 6,
                 "type": "integer"
+              },
+              "when": {
+                "$ref": "#/$defs/When"
               }
             },
             "required": [
@@ -1799,30 +2022,17 @@
     },
     "sizes": {
       "additionalProperties": {
-        "properties": {
-          "label": {
-            "type": "string"
-          },
-          "max": {
-            "type": "number"
-          },
-          "min": {
-            "type": "number"
-          },
-          "value": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "value"
-        ],
-        "type": "object"
+        "$ref": "#/$defs/Size"
       },
       "description": "At most 64 sizes, names up to 64 characters.",
       "type": "object"
     },
+    "sizesAsWritten": {
+      "description": "True when the declared sizes are the whole list: no size is added for other numbers and a changed height moves nothing above it.",
+      "type": "boolean"
+    },
     "version": {
-      "const": 10
+      "const": 12
     }
   },
   "required": [

@@ -1,0 +1,286 @@
+"""Feature values that follow sizes (lib/translator/values.py, the size table passed to translate)."""
+import copy
+import unittest
+
+from tests import context  # noqa: F401
+from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
+
+from lib.params import size_table
+from lib.params.expressions import evaluate
+from lib.translator import translate
+from lib.translator.values import Quantity, _env
+
+TRAY = "filter_tray_sized"
+H = "FilterBox_$_height__contains_CeramicMedium"
+CUBE = "_CeramicMedium__Cube_width_mm"
+TICKED = [H, CUBE, "wall_mm", "corner_mm", "pipe_d_mm", "holes_count"]
+
+
+def table_of(capture, ticked):
+    params = capture["parameters"]
+    return size_table.build(params["user"], ticked, params["model"], capture.get("design_units", "mm"))
+
+
+def run(capture, ticked=TICKED):
+    return translate(capture, size_table=table_of(capture, ticked)), table_of(capture, ticked)
+
+
+def on_tray(edit=None):
+    capture = load_capture(TRAY)
+    if edit:
+        edit(capture)
+    return capture
+
+
+def on_fixture(name, edit, ticked=TICKED):
+    """A fixture's items with the tray's parameters; `edit(data)` changes the data of its last item."""
+    capture = load_capture(name)
+    capture["capture"] = 2
+    capture["parameters"] = load_capture(TRAY)["parameters"]
+    edit(capture["items"][-1]["data"])
+    return capture, ticked
+
+
+def model_param(capture, name):
+    return next(m for m in capture["parameters"]["model"] if m["name"] == name)
+
+
+def param(name, expression, value):
+    return {"name": name, "expression": expression, "value": value}
+
+
+def resolved(recipe, table):
+    """The recipe with every formula worked out at the default sizes and the sizes left out."""
+    env = _env(table, {})
+
+    def walk(node):
+        if isinstance(node, dict):
+            if set(node) == {"expr"}:
+                return round(evaluate(node["expr"], env), 6)
+            return {k: walk(v) for k, v in node.items() if k not in ("sizes", "sizesAsWritten")}
+        if isinstance(node, list):
+            return [walk(v) for v in node]
+        return round(node, 6) if isinstance(node, float) else node
+
+    return walk(recipe)
+
+
+def same_as_plain(test, capture, result, table):
+    """Worked out at the defaults, a sized recipe is the recipe made without sizes."""
+    plain = copy.deepcopy(capture)
+    for item in plain["items"]:
+        item["data"].pop("params", None)
+    test.assertEqual(resolved(result.recipe, table), resolved(translate(plain).recipe, table))
+
+
+class TrayTest(unittest.TestCase):
+    def test_every_feature_value_follows_its_parameter(self):
+        result, table = run(on_tray())
+        recipe = result.recipe
+        self.assertEqual((recipe["version"], recipe["sizesAsWritten"]), (12, True))
+        self.assertEqual(steps_of(recipe, "extrude")[0]["distance"], {"expr": "FilterBox_height_mm"})
+        self.assertEqual(steps_of(recipe, "shell")[0]["thickness"], {"expr": "wall_mm"})
+        self.assertEqual(steps_of(recipe, "round")[0]["size"], {"expr": "corner_mm"})
+        hole = steps_of(recipe, "hole")[0]
+        self.assertEqual((hole["diameter"], hole["depth"]), ({"expr": "pipe_d_mm"}, None))
+        linear = steps_of(recipe, "pattern")[0]["linear"]
+        self.assertEqual((linear["count"], linear["step"]), ({"expr": "holes_count"}, {"expr": "hole_pitch_mm"}))
+        self.assertEqual(result.fixed, [])
+        assert_schema_ok(self, recipe)
+        same_as_plain(self, on_tray(), result, table)
+
+    def test_sizes_are_the_ticked_ones_and_their_formulas(self):
+        sizes = run(on_tray())[0].recipe["sizes"]
+        self.assertEqual(
+            sorted(sizes), sorted(["FilterBox___height__contains_CeramicMedium", CUBE, "wall_mm", "corner_mm",
+                                   "pipe_d_mm", "holes_count", "FilterBox_height_mm", "hole_pitch_mm"]))
+        self.assertEqual(sizes["hole_pitch_mm"]["expr"], CUBE + " + 4")
+        self.assertEqual(sizes["holes_count"]["kind"], "count")
+
+    def test_a_size_nothing_reads_is_left_out_with_a_note(self):
+        capture = on_tray()
+        result, _ = run(capture, TICKED + ["turn_deg"])
+        self.assertNotIn("turn_deg", result.recipe["sizes"])
+        self.assertTrue(any("turn_deg" in note for note in result.notes))
+
+    def test_without_a_table_values_stay_numbers(self):
+        recipe = translate(on_tray()).recipe
+        self.assertEqual((recipe["version"], "sizes" in recipe, "sizesAsWritten" in recipe), (12, False, False))
+        self.assertEqual(steps_of(recipe, "extrude")[0]["distance"], 32)
+
+    def test_a_size_that_moves_a_sketch_is_fixed_and_its_formulas_use_its_number(self):
+        def edit(capture):
+            model_param(capture, "d1")["expression"] = CUBE + " * 4"
+            model_param(capture, "d1")["dependency_parameters"] = [CUBE]
+        capture = on_tray(edit)
+        result, table = run(capture)
+        (fixed,) = result.fixed
+        self.assertEqual(fixed["name"], CUBE)
+        self.assertIn("sketch", fixed["reason"])
+        self.assertNotIn(CUBE, result.recipe["sizes"])
+        self.assertEqual(result.recipe["sizes"]["FilterBox_height_mm"]["expr"],
+                         "FilterBox___height__contains_CeramicMedium * 20 + 2")
+        self.assertEqual(steps_of(result.recipe, "pattern")[0]["linear"]["step"], 24)
+        self.assertEqual(steps_of(result.recipe, "shell")[0]["thickness"], {"expr": "wall_mm"})
+
+    def test_a_formula_that_misses_the_measured_value_fixes_its_size(self):
+        def edit(capture):
+            capture["items"][2]["data"]["params"]["inside"]["value"] = 3.0
+        result, _ = run(on_tray(edit))
+        self.assertEqual([f["name"] for f in result.fixed], ["wall_mm"])
+        self.assertEqual(steps_of(result.recipe, "shell")[0]["thickness"], 2)
+        self.assertNotIn("wall_mm", result.recipe["sizes"])
+
+    def test_a_length_that_reaches_zero_inside_the_range_fixes_its_size(self):
+        def edit(capture):
+            data = capture["items"][1]["data"]
+            data["side_one"]["distance"] = data["end_offset"] = 24.0
+            data["params"]["side_one.distance"] = param("d3", "(corner_mm - 1.5 mm) * 16", 24.0)
+        result, _ = run(on_tray(edit))
+        self.assertEqual([f["name"] for f in result.fixed], ["corner_mm"])
+        self.assertEqual(steps_of(result.recipe, "extrude")[0]["distance"], 24)
+        self.assertEqual(steps_of(result.recipe, "round")[0]["size"], 3)
+
+    def test_left_out_copies_keep_the_count_fixed_and_the_spacing_free(self):
+        def edit(capture):
+            data = capture["items"][6]["data"]
+            data["elements"] = [data["elements"][0], data["elements"][2]]
+        result, _ = run(on_tray(edit))
+        self.assertEqual([f["name"] for f in result.fixed], ["holes_count"])
+        pattern = steps_of(result.recipe, "pattern")[0]
+        self.assertEqual((pattern["skip"], pattern["linear"]["count"]), ([1], 3))
+        self.assertEqual(pattern["linear"]["step"], {"expr": "hole_pitch_mm"})
+
+    def test_a_negative_parameter_is_written_negated(self):
+        def edit(capture):
+            data = capture["items"][1]["data"]
+            data["side_one"]["distance"] = data["end_offset"] = -32.0
+            data["params"]["side_one.distance"] = param("d3", "-FilterBox_height_mm", -32.0)
+        result, table = run(on_tray(edit))
+        self.assertEqual(result.fixed, [])
+        self.assertEqual(steps_of(result.recipe, "extrude")[0]["distance"], {"expr": "FilterBox_height_mm"})
+
+
+class ValueKindsTest(unittest.TestCase):
+    def check(self, capture, ticked, resolve_ok=True):
+        result, table = run(capture, ticked)
+        self.assertIsNotNone(result.recipe, result.refusal)
+        assert_schema_ok(self, result.recipe)
+        if resolve_ok:
+            same_as_plain(self, capture, result, table)
+        return result
+
+    def test_symmetric_half_length_doubles_the_formula(self):
+        def edit(data):
+            data["params"] = {"symmetric.distance": param("d3", "FilterBox_height_mm / 2", 16.0)}
+            data["symmetric"]["distance"] = 16.0
+            data["end_offset"] = 16.0
+        capture, ticked = on_fixture("extrude_symmetric_half", lambda d: None)
+        item = capture["items"][1]["data"]
+        edit(item)
+        item["profiles"] = copy.deepcopy(load_capture("extrude_plate")["items"][1]["data"]["profiles"])
+        result = self.check(capture, ticked)
+        self.assertEqual(steps_of(result.recipe, "extrude")[0]["distance"], {"expr": "2 * (FilterBox_height_mm / 2)"})
+
+    def test_taper_follows_an_angle_size(self):
+        def edit(data):
+            data["side_one"]["taper_deg"] = 5.0
+            data["profile_area"], data["end_area"] = 800.0, 700.0
+            data["params"] = {"side_one.taper_deg": param("d4", "turn_deg / 18", 5.0)}
+        capture, ticked = on_fixture("extrude_plate", lambda d: None, TICKED + ["turn_deg"])
+        edit(capture["items"][-1]["data"])
+        result = self.check(capture, ticked)
+        self.assertEqual(steps_of(result.recipe, "extrude")[0]["taperDeg"], {"expr": "turn_deg / 18"})
+
+    def test_revolve_turn_follows_an_angle_size(self):
+        capture, ticked = on_fixture(
+            "revolve_quarter", lambda d: d.update(params={"extent.angle_deg": param("d4", "turn_deg", 90.0)}),
+            TICKED + ["turn_deg"])
+        result = self.check(capture, ticked)
+        self.assertEqual(steps_of(result.recipe, "revolve")[0]["angleDeg"], {"expr": "turn_deg"})
+
+    def test_partial_circular_pattern_writes_count_and_angle(self):
+        def edit(data):
+            data["params"] = {"quantity": param("d4", "holes_count + 1", 4.0), "total_angle_deg": param("d5", "turn_deg", 90.0)}
+        capture, ticked = on_fixture("cpattern_part", edit, TICKED + ["turn_deg"])
+        result = self.check(capture, ticked)
+        polar = steps_of(result.recipe, "pattern")[0]["polar"]
+        self.assertEqual((polar["count"], polar["angleDeg"]), ({"expr": "holes_count + 1"}, {"expr": "turn_deg"}))
+
+    def test_a_full_turn_keeps_its_angle_fixed(self):
+        def edit(data):
+            data["total_angle_deg"] = 360.0
+            data["quantity"] = 4
+            data["elements"] = [{"id": n + 1, "suppressed": False, "frame": _turn(n * 90.0)} for n in range(4)]
+            data["params"] = {"total_angle_deg": param("d5", "turn_deg * 4", 360.0)}
+        capture, ticked = on_fixture("cpattern_part", edit, TICKED + ["turn_deg"])
+        result, _ = run(capture, ticked)
+        self.assertEqual([f["name"] for f in result.fixed], ["turn_deg"])
+
+    def test_chamfer_and_fillet_sets_keep_their_own_sizes(self):
+        def edit(data):
+            data["sets"][0]["radius"], data["sets"][1]["radius"] = 3.0, 2.0
+            data["params"] = {"sets.0.radius": param("d4", "corner_mm", 3.0)}
+        capture, ticked = on_fixture("fillet_two_radii", edit)
+        result = self.check(capture, ticked)
+        (step,) = steps_of(result.recipe, "round")
+        self.assertEqual(step["size"], {"expr": "corner_mm"})
+        self.assertEqual(step["edgeSizes"][-1], 2)
+
+    def test_chamfer_distance_follows_a_size(self):
+        capture, ticked = on_fixture(
+            "chamfer_equal", lambda d: d.update(params={"sets.0.distance": param("d4", "wall_mm / 2", 1.0)}))
+        result = self.check(capture, ticked)
+        self.assertEqual(steps_of(result.recipe, "bevel")[0]["size"], {"expr": "wall_mm / 2"})
+
+    def test_blind_tipped_hole_outline_follows_its_sizes(self):
+        def edit(data):
+            data.update(extent={"kind": "distance", "depth": 10.0}, end_points=[[20, 30, -6.5]],
+                        positions=[[20, 30, 2]], diameter=5.0, end_face_types=["cone"])
+            data["side_cylinders"] = [{"origin": [20, 30, 2], "axis": [0, 0, -1], "radius": 2.5}]
+            data["params"] = {"diameter": param("d6", "pipe_d_mm / 2 - 1 mm", 5.0),
+                              "extent.depth": param("d7", "wall_mm * 5", 10.0)}
+        capture, ticked = on_fixture("hole_blind_tip", edit)
+        result = self.check(capture, ticked)
+        points = steps_of(result.recipe, "revolve")[0]["sketch"]["outer"]["points"]
+        self.assertTrue(any(isinstance(c, dict) for p in points for c in p))
+
+    def test_counterbore_and_depth_follow_sizes(self):
+        def edit(data):
+            data.update(hole_type="counterbore", counterbore={"diameter": 20.0, "depth": 4.0},
+                        extent={"kind": "distance", "depth": 10.0}, diameter=12.0)
+            data["end_points"] = [[10, 10, 0]]
+            data["end_face_types"] = ["plane"]
+            data["side_cylinders"] = [{"origin": [10, 10, 10], "axis": [0, 0, -1], "radius": 6.0},
+                                      {"origin": [10, 10, 10], "axis": [0, 0, -1], "radius": 10.0}]
+            data["params"] = {
+                "diameter": param("d4", "pipe_d_mm", 12.0), "counterbore.diameter": param("d5", "pipe_d_mm + 8 mm", 20.0),
+                "counterbore.depth": param("d6", "wall_mm * 2", 4.0), "extent.depth": param("d7", "wall_mm * 5", 10.0)}
+        capture, ticked = on_fixture("hole_counterbore_blind", edit)
+        result = self.check(capture, ticked)
+        (hole,) = steps_of(result.recipe, "hole")
+        self.assertEqual(hole["counterbore"], {"diameter": {"expr": "pipe_d_mm + 8"}, "depth": {"expr": "wall_mm * 2"}})
+        self.assertEqual(hole["depth"], {"expr": "wall_mm * 5"})
+
+
+def _turn(degrees):
+    import math
+    c, s = math.cos(math.radians(degrees)), math.sin(math.radians(degrees))
+    return {"origin": [20 - 20 * c + 10 * s, 10 - 20 * s - 10 * c, 0], "x": [c, s, 0], "y": [-s, c, 0], "z": [0, 0, 1]}
+
+
+class QuantityTest(unittest.TestCase):
+    def test_operations_keep_formulas_readable(self):
+        q = Quantity(10.0, "a + b", ("a",))
+        self.assertEqual(q.scaled(0.5).text, "0.5 * (a + b)")
+        self.assertEqual(q.scaled(-1).text, "-(a + b)")
+        self.assertEqual(q.plus(-2).text, "a + b - 2")
+        self.assertEqual(Quantity(1.0).plus(q).text, "1 + (a + b)")
+        self.assertEqual(q.divided_by(Quantity(4.0, "n", ("n",))).text, "(a + b) / n")
+
+    def test_plain_numbers_stay_numbers(self):
+        self.assertEqual(Quantity(2.0).scaled(3).plus(1).json(), 7)
+
+
+if __name__ == "__main__":
+    unittest.main()

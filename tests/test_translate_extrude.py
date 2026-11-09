@@ -371,8 +371,8 @@ class RepeatabilityTest(unittest.TestCase):
         holder = {}
         real = Context.__init__
 
-        def init(self, cap):
-            real(self, cap)
+        def init(self, cap, *rest):
+            real(self, cap, *rest)
             holder["ctx"] = self
 
         Context.__init__ = init

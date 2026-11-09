@@ -6,7 +6,8 @@ tip) turned about the hole axis. Measured `end_points` and `side_cylinders` chec
 """
 import math
 
-from . import vec
+from . import values, vec
+from .values import Quantity
 from .result import Refusal
 
 TYPES = ("HoleFeature", "ThreadFeature")
@@ -111,34 +112,43 @@ def _is_tipped(data, tip, ctx):
 
 
 def _tip_profile(diameter, depth, tip_deg, counterbore, countersink):
-    """Outline in (radial, depth) coordinates, or a Refusal. `depth` runs to the shoulder, not the tip."""
-    radius = diameter / 2.0
-    apex = depth + radius / math.tan(math.radians(tip_deg) / 2.0)
-    points = [(0.0, -MARGIN_MM)]
+    """Outline in (radial, depth) coordinates as [x, y] numbers or formulas, or a Refusal. `depth` runs to the shoulder.
+
+    `diameter`, `depth` and the counterbore and countersink sizes are Quantities, so the outline can follow sizes.
+    """
+    radius = diameter.scaled(0.5)
+    tip_run = 1.0 / math.tan(math.radians(tip_deg) / 2.0)
+    apex = depth.plus(radius.scaled(tip_run))
+    zero, top = Quantity(0.0), Quantity(-MARGIN_MM)
+    points = [(zero, top)]
     if counterbore:
-        wide = counterbore["diameter"] / 2.0
-        if not (wide > radius and 0 < counterbore["depth"] < depth):
+        wide = counterbore["diameter"].scaled(0.5)
+        bore_depth = counterbore["depth"]
+        if not (wide.n > radius.n and 0 < bore_depth.n < depth.n):
             return Refusal("The counterbore of this hole does not fit its size.")
-        points += [(wide, -MARGIN_MM), (wide, counterbore["depth"]), (radius, counterbore["depth"])]
+        points += [(wide, top), (wide, bore_depth), (radius, bore_depth)]
     elif countersink:
-        half = math.tan(math.radians(countersink["angle_deg"]) / 2.0)
-        wide = countersink["diameter"] / 2.0
-        if not (wide > radius and 0 < countersink["angle_deg"] < 180 and (wide - radius) / half < depth):
+        angle = countersink["angle_deg"].n
+        half = math.tan(math.radians(angle) / 2.0)
+        wide = countersink["diameter"].scaled(0.5)
+        run = (wide.n - radius.n) / half
+        if not (wide.n > radius.n and 0 < angle < 180 and run < depth.n):
             return Refusal("The countersink of this hole does not fit its size.")
-        points += [(wide + MARGIN_MM * half, -MARGIN_MM), (radius, (wide - radius) / half)]
+        points += [(wide.plus(MARGIN_MM * half), top), (radius, wide.plus(radius.scaled(-1)).scaled(1.0 / half))]
     else:
-        points.append((radius, -MARGIN_MM))
-    points += [(radius, depth), (0.0, apex)]
-    return [[_n(x), _n(y)] for x, y in points]
+        points.append((radius, top))
+    points += [(radius, depth), (zero, apex)]
+    return [[x.json(), y.json()] for x, y in points]
 
 
 def _hole_step(position, direction, diameter, depth, counterbore, countersink):
-    step = {"kind": "hole", "origin": _vec(position), "direction": _vec(direction), "diameter": _n(diameter),
-            "depth": None if depth is None else _n(depth)}
+    step = {"kind": "hole", "origin": _vec(position), "direction": _vec(direction), "diameter": diameter.json(),
+            "depth": None if depth is None else depth.json()}
     if counterbore:
-        step["counterbore"] = {"diameter": _n(counterbore["diameter"]), "depth": _n(counterbore["depth"])}
+        step["counterbore"] = {"diameter": counterbore["diameter"].json(), "depth": counterbore["depth"].json()}
     if countersink:
-        step["countersink"] = {"diameter": _n(countersink["diameter"]), "angleDeg": _n(countersink["angle_deg"])}
+        step["countersink"] = {"diameter": countersink["diameter"].json(),
+                               "angleDeg": countersink["angle_deg"].json()}
     return step
 
 
@@ -155,7 +165,37 @@ def _tip_step(position, direction, profile):
     }
 
 
-def _handle_hole(data, ctx):
+class _Sizes:
+    """The numbers of a hole as Quantities (they follow sizes when their parameters do)."""
+
+    def __init__(self, diameter, depth, counterbore, countersink):
+        self.diameter, self.depth = diameter, depth
+        self.counterbore, self.countersink = counterbore, countersink
+
+
+def _sizes(item, ctx, diameter, depth, counterbore, countersink):
+    data = item["data"]
+    if data.get("tap_type") in TAPPED:
+        values.pin(ctx, item, "diameter", "the thread of %s sets the drill size" % item.get("name", "a hole"))
+        diameter_q = Quantity(diameter)
+    else:
+        diameter_q = values.quantity(ctx, item, "diameter", diameter, absolute=True)
+    depth_q = None if depth is None else values.quantity(ctx, item, "extent.depth", depth, absolute=True)
+    bore = None
+    if counterbore:
+        bore = {"diameter": values.quantity(ctx, item, "counterbore.diameter", counterbore["diameter"], absolute=True),
+                "depth": values.quantity(ctx, item, "counterbore.depth", counterbore["depth"], absolute=True)}
+    sink = None
+    if countersink:
+        values.pin(ctx, item, "countersink.angle_deg", "the countersink of %s needs its angle to stay as it is"
+                   % item.get("name", "a hole"))
+        sink = {"diameter": values.quantity(ctx, item, "countersink.diameter", countersink["diameter"], absolute=True),
+                "angle_deg": Quantity(countersink["angle_deg"])}
+    return _Sizes(diameter_q, depth_q, bore, sink)
+
+
+def _handle_hole(item, ctx):
+    data = item.get("data") or {}
     if "read_error" in data:
         return Refusal("This hole could not be read from Fusion.")
     if not data.get("positions") or not data.get("direction") or not data.get("diameter"):
@@ -180,8 +220,10 @@ def _handle_hole(data, ctx):
         return diameter
     direction = _direction(data, ctx)
     _check_size(data, ctx, len(data["positions"]), diameter)
+    sizes = _sizes(item, ctx, diameter, depth, counterbore, countersink)
 
     tip = data.get("tip_angle_deg")
+    values.pin(ctx, item, "tip_angle_deg", "the drill tip of %s needs it to stay as it is" % item.get("name", "a hole"))
     tipped = False
     if not through:
         tipped = _is_tipped(data, tip, ctx)
@@ -190,7 +232,7 @@ def _handle_hole(data, ctx):
     if tipped:
         if tip is None or not 0 < tip < 180:
             return Refusal("The drill tip angle of this hole could not be read.")
-        profile = _tip_profile(diameter, depth, float(tip), counterbore, countersink)
+        profile = _tip_profile(sizes.diameter, sizes.depth, float(tip), sizes.counterbore, sizes.countersink)
         if isinstance(profile, Refusal):
             return profile
         return [_tip_step(p, direction, profile) for p in data["positions"]]
@@ -202,7 +244,8 @@ def _handle_hole(data, ctx):
         and MIN_COUNTERSINK_DEG <= countersink["angle_deg"] <= MAX_COUNTERSINK_DEG
     ):
         return Refusal("The countersink of this hole does not fit its size.")
-    return [_hole_step(p, direction, diameter, depth, counterbore, countersink) for p in data["positions"]]
+    return [_hole_step(p, direction, sizes.diameter, sizes.depth, sizes.counterbore, sizes.countersink)
+            for p in data["positions"]]
 
 
 def handle(item, ctx):
@@ -214,4 +257,4 @@ def handle(item, ctx):
             return Refusal("Modeled threads are not copied yet.")
         ctx.note("The thread is not copied; the exported shape has none either.")
         return []
-    return _handle_hole(data, ctx)
+    return _handle_hole(item, ctx)

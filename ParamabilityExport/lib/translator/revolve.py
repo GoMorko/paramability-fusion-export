@@ -8,7 +8,7 @@ start face is the end of one side, which does not name the side.
 """
 import math
 
-from . import loops, placement, vec
+from . import loops, placement, values, vec
 from .extrude import COMBINE
 from .result import Refusal
 
@@ -154,6 +154,14 @@ def _turned(on, dir3, point3, degrees):
     }
 
 
+def _angle_value(ctx, item, mode, angle):
+    """The turn as a Quantity. Only a turn that starts at the sketch can follow a size; the others stay numbers."""
+    if mode == "part":
+        return values.quantity(ctx, item, "extent.angle_deg", angle, dim="angle", absolute=True)
+    values.pin(ctx, item, "extent.angle_deg", "a %s turn in %s cannot follow it" % (mode, item.get("name", "a step")))
+    return values.Quantity(angle)
+
+
 def handle(item, ctx):
     data = item.get("data") or {}
     if "read_error" in data:
@@ -198,6 +206,7 @@ def handle(item, ctx):
         if isinstance(checked, Refusal):
             return checked
 
+    angle_value = _angle_value(ctx, item, mode, angle)
     steps = []
     for profile, (outer, inners), (point2, dir2, point3, dir3) in built:
         on = placement.from_frame(profile["frame"])
@@ -213,6 +222,6 @@ def handle(item, ctx):
             "combine": combine if not steps else ("add" if combine == "new" else combine),
         }
         if mode != "full":
-            step["angleDeg"] = _n(angle)
+            step["angleDeg"] = angle_value.json()
         steps.append(step)
     return steps

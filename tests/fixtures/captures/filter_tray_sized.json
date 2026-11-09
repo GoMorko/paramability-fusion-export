@@ -1,0 +1,799 @@
+{
+ "_comment": "Filter box tray for the sized export: 80 by 60 base, height from a cube count, shell, rounded corners, a pipe hole and a row of three. The hole sketch sits on the base plane, so its place does not depend on the wall. Every driving parameter is on a feature, not on a sketch dimension.",
+ "capture": 2,
+ "fusion": "2.0.0",
+ "design": "Filter box",
+ "up_axis": "z",
+ "design_units": "mm",
+ "target": {
+  "token": "t1",
+  "name": "Body1",
+  "box": {
+   "min": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "max": [
+    80.0,
+    60.0,
+    32.0
+   ]
+  },
+  "volume_mm3": null
+ },
+ "parameters": {
+  "user": [
+   {
+    "name": "FilterBox_$_height__contains_CeramicMedium",
+    "expression": "1.5",
+    "value": 1.5,
+    "unit": "",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [
+     "FilterBox_height_mm"
+    ],
+    "kind": "count",
+    "display_value": 1.5
+   },
+   {
+    "name": "_CeramicMedium__Cube_width_mm",
+    "expression": "20 mm",
+    "value": 2.0,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [
+     "FilterBox_height_mm",
+     "hole_pitch_mm"
+    ],
+    "kind": "length",
+    "display_value": 20.0
+   },
+   {
+    "name": "wall_mm",
+    "expression": "2 mm",
+    "value": 0.2,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [
+     "d4"
+    ],
+    "kind": "length",
+    "display_value": 2.0
+   },
+   {
+    "name": "corner_mm",
+    "expression": "3 mm",
+    "value": 0.3,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [
+     "d5"
+    ],
+    "kind": "length",
+    "display_value": 3.0
+   },
+   {
+    "name": "pipe_d_mm",
+    "expression": "12 mm",
+    "value": 1.2,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [
+     "d6"
+    ],
+    "kind": "length",
+    "display_value": 12.0
+   },
+   {
+    "name": "holes_count",
+    "expression": "3",
+    "value": 3,
+    "unit": "",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [
+     "d8"
+    ],
+    "kind": "count",
+    "display_value": 3
+   },
+   {
+    "name": "turn_deg",
+    "expression": "90 deg",
+    "value": 1.5707963267948966,
+    "unit": "deg",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "angle",
+    "display_value": 1.5707963267948966
+   },
+   {
+    "name": "FilterBox_height_mm",
+    "expression": "FilterBox_$_height__contains_CeramicMedium * _CeramicMedium__Cube_width_mm + 2 mm",
+    "value": 3.2,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "FilterBox_$_height__contains_CeramicMedium",
+     "_CeramicMedium__Cube_width_mm"
+    ],
+    "dependent_parameters": [],
+    "kind": "derived",
+    "display_value": 32.0
+   },
+   {
+    "name": "hole_pitch_mm",
+    "expression": "_CeramicMedium__Cube_width_mm + 4 mm",
+    "value": 2.4,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "_CeramicMedium__Cube_width_mm"
+    ],
+    "dependent_parameters": [],
+    "kind": "derived",
+    "display_value": 24.0
+   }
+  ],
+  "model": [
+   {
+    "name": "d1",
+    "expression": "80 mm",
+    "value": 8.0,
+    "unit": "mm",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "Linear Dimension",
+    "created_by": {
+     "kind": "sketchDimension",
+     "token": "tok_d1",
+     "name": ""
+    },
+    "kind": "length",
+    "display_value": 80.0
+   },
+   {
+    "name": "d2",
+    "expression": "60 mm",
+    "value": 6.0,
+    "unit": "mm",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "Linear Dimension",
+    "created_by": {
+     "kind": "sketchDimension",
+     "token": "tok_d2",
+     "name": ""
+    },
+    "kind": "length",
+    "display_value": 60.0
+   },
+   {
+    "name": "d3",
+    "expression": "FilterBox_height_mm",
+    "value": 3.2,
+    "unit": "mm",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "FilterBox_height_mm"
+    ],
+    "role": "Distance",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d3",
+     "name": ""
+    },
+    "kind": "derived",
+    "display_value": 32.0
+   },
+   {
+    "name": "d4",
+    "expression": "wall_mm",
+    "value": 0.2,
+    "unit": "mm",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "wall_mm"
+    ],
+    "role": "Inside Thickness",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d4",
+     "name": ""
+    },
+    "kind": "derived",
+    "display_value": 2.0
+   },
+   {
+    "name": "d5",
+    "expression": "corner_mm",
+    "value": 0.3,
+    "unit": "mm",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "corner_mm"
+    ],
+    "role": "Radius",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d5",
+     "name": ""
+    },
+    "kind": "derived",
+    "display_value": 3.0
+   },
+   {
+    "name": "d6",
+    "expression": "pipe_d_mm",
+    "value": 1.2,
+    "unit": "mm",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "pipe_d_mm"
+    ],
+    "role": "Hole Diameter",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d6",
+     "name": ""
+    },
+    "kind": "derived",
+    "display_value": 12.0
+   },
+   {
+    "name": "d7",
+    "expression": "118 deg",
+    "value": 2.0594885173533086,
+    "unit": "deg",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "Tip Angle",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d7",
+     "name": ""
+    },
+    "kind": "angle",
+    "display_value": 2.0594885173533086
+   },
+   {
+    "name": "d8",
+    "expression": "holes_count",
+    "value": 3,
+    "unit": "",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "holes_count"
+    ],
+    "role": "Quantity One",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d8",
+     "name": ""
+    },
+    "kind": "derived",
+    "display_value": 3
+   },
+   {
+    "name": "d9",
+    "expression": "hole_pitch_mm",
+    "value": 2.4,
+    "unit": "mm",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "hole_pitch_mm"
+    ],
+    "role": "Distance One",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d9",
+     "name": ""
+    },
+    "kind": "derived",
+    "display_value": 24.0
+   }
+  ]
+ },
+ "items": [
+  {
+   "index": 0,
+   "name": "Sketch1",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component_root": true,
+   "bodies_after": [],
+   "data": {}
+  },
+  {
+   "index": 1,
+   "name": "Extrude1",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component_root": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Body1"
+    }
+   ],
+   "data": {
+    "operation": "newBody",
+    "profiles": [
+     {
+      "sketch": "Sketch1",
+      "frame": {
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "x": [
+        1,
+        0,
+        0
+       ],
+       "y": [
+        0,
+        1,
+        0
+       ],
+       "z": [
+        0,
+        0,
+        1
+       ]
+      },
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "line",
+          "start": [
+           0,
+           0
+          ],
+          "end": [
+           80,
+           0
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           80,
+           0
+          ],
+          "end": [
+           80,
+           60
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           80,
+           60
+          ],
+          "end": [
+           0,
+           60
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           0,
+           60
+          ],
+          "end": [
+           0,
+           0
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "distance",
+     "distance": 32.0,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": false,
+    "participants": [],
+    "target_box_before": null,
+    "end_offset": 32.0,
+    "params": {
+     "side_one.distance": {
+      "name": "d3",
+      "expression": "FilterBox_height_mm",
+      "value": 32.0
+     }
+    }
+   }
+  },
+  {
+   "index": 2,
+   "name": "Shell1",
+   "type": "ShellFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component_root": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Body1"
+    }
+   ],
+   "data": {
+    "faces": [
+     {
+      "token": "f1",
+      "point": [
+       40,
+       30,
+       32
+      ]
+     }
+    ],
+    "bodies_input": false,
+    "inside": 2.0,
+    "outside": 0.0,
+    "shell_type": "sharp",
+    "params": {
+     "inside": {
+      "name": "d4",
+      "expression": "wall_mm",
+      "value": 2.0
+     }
+    }
+   }
+  },
+  {
+   "index": 3,
+   "name": "Fillet1",
+   "type": "FilletFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component_root": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Body1"
+    }
+   ],
+   "data": {
+    "rolling_ball": true,
+    "sets": [
+     {
+      "kind": "constant",
+      "radius": 3.0,
+      "continuity": "tangent",
+      "input_kinds": [
+       "edge"
+      ],
+      "edges": [
+       {
+        "token": "e0",
+        "closed": false,
+        "points": [
+         [
+          0,
+          0,
+          16
+         ]
+        ]
+       },
+       {
+        "token": "e1",
+        "closed": false,
+        "points": [
+         [
+          80,
+          0,
+          16
+         ]
+        ]
+       },
+       {
+        "token": "e2",
+        "closed": false,
+        "points": [
+         [
+          80,
+          60,
+          16
+         ]
+        ]
+       },
+       {
+        "token": "e3",
+        "closed": false,
+        "points": [
+         [
+          0,
+          60,
+          16
+         ]
+        ]
+       }
+      ]
+     }
+    ],
+    "params": {
+     "sets.0.radius": {
+      "name": "d5",
+      "expression": "corner_mm",
+      "value": 3.0
+     }
+    }
+   }
+  },
+  {
+   "index": 4,
+   "name": "Sketch2",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component_root": true,
+   "bodies_after": [],
+   "data": {}
+  },
+  {
+   "index": 5,
+   "name": "Hole1",
+   "type": "HoleFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component_root": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Body1"
+    }
+   ],
+   "data": {
+    "hole_type": "simple",
+    "tap_type": "simple",
+    "thread_modeled": null,
+    "diameter": 12.0,
+    "tip_angle_deg": 118,
+    "counterbore": null,
+    "countersink": null,
+    "direction": [
+     0,
+     0,
+     1
+    ],
+    "positions": [
+     [
+      20,
+      30,
+      0
+     ]
+    ],
+    "extent": {
+     "kind": "throughAll"
+    },
+    "side_cylinders": [
+     {
+      "origin": [
+       20,
+       30,
+       0
+      ],
+      "axis": [
+       0,
+       0,
+       1
+      ],
+      "radius": 6.0
+     }
+    ],
+    "end_points": [
+     [
+      20,
+      30,
+      2
+     ]
+    ],
+    "end_face_types": [],
+    "participants": [
+     {
+      "token": "t1",
+      "name": "Body1"
+     }
+    ],
+    "params": {
+     "diameter": {
+      "name": "d6",
+      "expression": "pipe_d_mm",
+      "value": 12.0
+     },
+     "tip_angle_deg": {
+      "name": "d7",
+      "expression": "118 deg",
+      "value": 118.0
+     }
+    }
+   }
+  },
+  {
+   "index": 6,
+   "name": "RectangularPattern1",
+   "type": "RectangularPatternFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component_root": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Body1"
+    }
+   ],
+   "data": {
+    "entity_type": "features",
+    "sources": [
+     5
+    ],
+    "direction_one": [
+     1,
+     0,
+     0
+    ],
+    "quantity_one": 3,
+    "distance_one": 24.0,
+    "direction_two": null,
+    "quantity_two": 1,
+    "distance_two": 0.0,
+    "distance_type": "spacing",
+    "symmetric_one": false,
+    "symmetric_two": false,
+    "elements": [
+     {
+      "id": 1,
+      "suppressed": false,
+      "frame": {
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "x": [
+        1,
+        0,
+        0
+       ],
+       "y": [
+        0,
+        1,
+        0
+       ],
+       "z": [
+        0,
+        0,
+        1
+       ]
+      }
+     },
+     {
+      "id": 2,
+      "suppressed": false,
+      "frame": {
+       "origin": [
+        24,
+        0,
+        0
+       ],
+       "x": [
+        1,
+        0,
+        0
+       ],
+       "y": [
+        0,
+        1,
+        0
+       ],
+       "z": [
+        0,
+        0,
+        1
+       ]
+      }
+     },
+     {
+      "id": 3,
+      "suppressed": false,
+      "frame": {
+       "origin": [
+        48,
+        0,
+        0
+       ],
+       "x": [
+        1,
+        0,
+        0
+       ],
+       "y": [
+        0,
+        1,
+        0
+       ],
+       "z": [
+        0,
+        0,
+        1
+       ]
+      }
+     }
+    ],
+    "suppressed_ids": [],
+    "params": {
+     "quantity_one": {
+      "name": "d8",
+      "expression": "holes_count",
+      "value": 3.0
+     },
+     "distance_one": {
+      "name": "d9",
+      "expression": "hole_pitch_mm",
+      "value": 24.0
+     }
+    }
+   }
+  }
+ ]
+}

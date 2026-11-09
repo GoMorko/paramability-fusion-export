@@ -11,7 +11,7 @@ from tests.translator_helpers import (
 
 from lib.translator import CaptureError, Refusal, translate
 
-with open(fixture_path("schema_example_v10"), encoding="utf-8") as _f:
+with open(fixture_path("schema_example_v12"), encoding="utf-8") as _f:
     _EXAMPLE = json.load(_f)
 _EXTRUDE = _EXAMPLE["features"][0]
 
@@ -106,7 +106,7 @@ class CoreTest(unittest.TestCase):
 
     def test_envelope_and_schema(self):
         result = translate_fixture("core_suppressed", {"ExtrudeFeature": extrude_handler})
-        self.assertEqual({k: result.recipe[k] for k in ("schema", "version")}, {"schema": "paramability.recipe", "version": 10})
+        self.assertEqual({k: result.recipe[k] for k in ("schema", "version")}, {"schema": "paramability.recipe", "version": 12})
         self.assertNotIn("sizes", result.recipe)
         assert_schema_ok(self, result.recipe)
 
