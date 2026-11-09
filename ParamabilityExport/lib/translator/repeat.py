@@ -52,7 +52,7 @@ def _sources(data, ctx, what):
         ids = ctx.steps_of(index)
         if not ids:
             return Refusal("A step this %s copies is not part of the exported body." % what)
-        if _grows_with_part(_item_at(ctx, index)):
+        if any(step_id in ctx.not_repeatable for step_id in ids):
             return Refusal("A step that reaches to the part or to a face grows with the part, so its copies are not "
                            "copied yet.")
         for step_id in ids:
@@ -74,30 +74,6 @@ def _sources(data, ctx, what):
     if len(solids) > MAX_REFERENCES:
         return Refusal("This %s repeats more than %d steps." % (what, MAX_REFERENCES))
     return solids, finishes
-
-
-def _item_at(ctx, index):
-    for item in ctx.capture.get("items") or []:
-        if item.get("index") == index:
-            return item
-    return None
-
-
-def _grows_with_part(item):
-    """True for an extrude whose length Fusion recomputes for every copy (to a face, or through the part).
-
-    The recipe fixes that length from the part as it was, so a copy would stay as long as the original.
-    """
-    if not item or item.get("type") != "ExtrudeFeature":
-        return False
-    data = item.get("data") or {}
-    sides = [data.get("side_one"), data.get("side_two")]
-    through = [bool(s) and s.get("kind") in ("throughAll", "all") for s in sides]
-    if any(bool(s) and s.get("kind") == "toEntity" for s in sides):
-        return True
-    if data.get("extent_type") == "two":
-        return through[0] != through[1]
-    return data.get("extent_type", "one") == "one" and through[0]
 
 
 def _finish_copies(finishes, motions):

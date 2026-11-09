@@ -141,6 +141,22 @@ def read_profile(profile):
     }
 
 
+def first_profile(raw):
+    """The first Profile of a feature's `profile` property (a Profile or a collection), or None."""
+    if geo.type_name(raw) == "Profile":
+        return raw
+    for entity in geo.collection_items(raw):
+        found = first_profile(entity)
+        if found is not None:
+            return found
+    return None
+
+
+def profile_area(profile):
+    """Area of a Profile in mm2, or None."""
+    return geo.safe(lambda: round(profile.areaProperties().area * 100.0, 6) + 0.0, None)
+
+
 def read_profiles(raw):
     """Profiles of a feature's `profile` property: a Profile, a planar BRepFace or a collection of them."""
     name = geo.type_name(raw)

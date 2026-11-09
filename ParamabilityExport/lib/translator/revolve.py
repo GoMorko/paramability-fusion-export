@@ -17,7 +17,6 @@ TYPES = ("RevolveFeature",)
 AXIS_PLANE_TOL = 1e-4
 AXIS_SQUARE_TOL = 1e-9
 FULL_TURN_DEG = 360.0
-MAX_INNER_LOOPS = 256
 
 
 def _n(value):
@@ -26,25 +25,6 @@ def _n(value):
 
 def _pt(p):
     return [_n(p[0]), _n(p[1])]
-
-
-def build_outline(profile):
-    """(outer, inners) recipe loops of one captured profile, or a Refusal."""
-    if profile.get("face") or "loops" not in profile:
-        return Refusal("A flat face used as a sketch outline is not copied yet.")
-    sketch = profile.get("sketch", "")
-    outers, inners = [], []
-    for raw in profile["loops"]:
-        loop = loops.loop_of(raw.get("curves") or [], sketch)
-        if isinstance(loop, Refusal):
-            return loop
-        (outers if raw.get("outer") else inners).append(loop)
-    if len(outers) != 1:
-        where = " in %s" % sketch if sketch else ""
-        return Refusal("An outline%s does not have exactly one outer loop." % where)
-    if len(inners) > MAX_INNER_LOOPS:
-        return Refusal("An outline has too many holes.")
-    return outers[0], inners
 
 
 def _loop_points(loop):
@@ -197,9 +177,11 @@ def handle(item, ctx):
 
     built = []
     for profile in profiles:
-        outline = build_outline(profile)
+        outline = loops.profile_loops(profile)
         if isinstance(outline, Refusal):
             return outline
+        if not isinstance(profile.get("frame"), dict):
+            return Refusal("A sketch outline has no readable position.")
         located = _axis_in(profile["frame"], axis, bool(data.get("project_axis")))
         if isinstance(located, Refusal):
             return located

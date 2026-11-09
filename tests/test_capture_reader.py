@@ -162,6 +162,28 @@ class WalkTest(unittest.TestCase):
         self.assertEqual(self.design.timeline.history, [0, 1, 2])
         self.assertEqual(self.design.timeline.markerPosition, 2)
 
+    def test_bodies_before_lists_the_root_bodies_at_the_marker_before_the_item(self):
+        design = FakeDesign([sketch_entry(), extrude(rect_profile(), target=self.target)], self.target)
+        roots = [Coll([]), Coll([self.target])]
+        timeline = design.timeline
+        design.rootComponent = Obj(entityToken="root", bRepBodies=None)
+        original = timeline.item
+
+        def item(i):
+            design.rootComponent.bRepBodies = roots[min(i, 1)]
+            return original(i)
+
+        timeline.item = item
+        items = read_capture(design, self.target, fusion="", name="", up_axis="z")["items"]
+        self.assertEqual(items[0]["bodies_before"], [])
+        self.assertEqual(items[1]["bodies_before"], [{"token": "b1", "name": "Body1"}])
+
+    def test_unreadable_root_bodies_leave_bodies_before_out(self):
+        design = FakeDesign([sketch_entry()], self.target)
+        design.rootComponent.bRepBodies = None
+        item = read_capture(design, self.target, fusion="", name="", up_axis="z")["items"][0]
+        self.assertNotIn("bodies_before", item)
+
     def test_marker_refused_when_not_at_end(self):
         self.design.timeline._pos = 1
         self.design.timeline.history.clear()
@@ -303,6 +325,14 @@ class ExtrudeDataTest(unittest.TestCase):
         self.assertEqual(profile["frame"], {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]})
         self.assertEqual(profile["loops"][0]["outer"], True)
         self.assertEqual(profile["loops"][0]["curves"][1], {"kind": "line", "start": [40, 0], "end": [40, 20]})
+
+    def test_profile_and_end_face_areas_in_mm2(self):
+        profile = rect_profile()
+        profile.areaProperties = lambda: Obj(area=8.0)  # 800 mm2
+        data = self.read(profile=profile, endFaces=Coll([Obj(pointOnFace=P(5, 5, 10), area=7.0)]))
+        self.assertEqual((data["profile_area"], data["end_area"]), (800.0, 700.0))
+        unknown = self.read()
+        self.assertEqual((unknown["profile_area"], unknown["end_area"]), (None, None))
 
     def test_negative_distance_keeps_its_sign_and_end_offset_follows_the_end_face(self):
         data = self.read(extentOne=Obj("fusion::DistanceExtentDefinition", distance=param(-0.8)),

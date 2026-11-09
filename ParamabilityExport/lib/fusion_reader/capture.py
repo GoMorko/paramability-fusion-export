@@ -52,6 +52,12 @@ def _is_group(obj):
     return bool(geo.safe(lambda: obj.isGroup, False)) or geo.type_name(obj).endswith("TimelineGroup")
 
 
+def _root_bodies(ctx):
+    """Bodies of the root component at the current marker position (an unreadable list raises)."""
+    bodies = ctx.root.bRepBodies
+    return [geo.body_ref(bodies.item(i)) for i in range(bodies.count)]
+
+
 def _start_item(timeline, ctx, readers, index, items, group_indices):
     """Marker is at `index`: create the item and read its inputs."""
     obj = timeline.item(index)
@@ -75,6 +81,9 @@ def _start_item(timeline, ctx, readers, index, items, group_indices):
         return
     item["component_root"] = geo.safe(
         lambda: entity.parentComponent.entityToken == ctx.root.entityToken, True)
+    bodies_before = geo.safe(lambda: _root_bodies(ctx), None)
+    if bodies_before is not None:
+        item["bodies_before"] = bodies_before
     before = (readers.get(item["type"]) or (None, None))[0]
     if before is not None:
         try:

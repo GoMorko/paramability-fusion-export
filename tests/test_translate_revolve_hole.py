@@ -40,6 +40,20 @@ def revolves(name):
 
 
 class RevolveTest(unittest.TestCase):
+    def test_profile_with_an_uncertain_curve_space_is_refused(self):
+        for space in ("ambiguous", None):
+            result = variant("revolve_full", lambda item, space=space: item["data"]["profiles"][0].update(space=space))
+            self.assertIsNone(result.recipe)
+            self.assertIn("could not be placed", result.refusal["reason"])
+        ok = variant("revolve_full", lambda item: item["data"]["profiles"][0].update(space="model"))
+        self.assertIsNotNone(ok.recipe)
+
+    def test_other_or_face_profile_entries_are_refused(self):
+        for entry in ({"kind": "other", "type": "Unknown"}, {"face": True, "type": "BRepFace"}):
+            result = variant("revolve_full", lambda item, entry=entry: item["data"].update(profiles=[entry]))
+            self.assertIsNone(result.recipe)
+            self.assertIn("flat face", result.refusal["reason"])
+
     def test_full_turn_has_no_angle(self):
         result = translate_fixture("revolve_full")
         (step,) = result.recipe["features"]

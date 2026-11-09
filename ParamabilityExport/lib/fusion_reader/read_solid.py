@@ -8,7 +8,7 @@ an `other` entry (which the translator refuses), or the reader raises and the it
 that feed a note, such as the participant bodies, fall back to an empty list.
 """
 from . import read_geometry as geo
-from .read_sketch import read_profiles
+from .read_sketch import first_profile, profile_area, read_profiles
 
 _OPERATIONS = [
     ("newcomponent", "newComponent"),
@@ -71,6 +71,11 @@ def _extent_type(feature):
     return geo.pick_by_text(name, _EXTENT_TYPES, "other")
 
 
+def _first_profile_area(feature):
+    first = first_profile(geo.safe(lambda: feature.profile, None))
+    return profile_area(first) if first is not None else None
+
+
 def extrude_before(feature, ctx):
     extent_type = _extent_type(feature)
     side_one = side_two = symmetric = None
@@ -99,6 +104,8 @@ def extrude_before(feature, ctx):
         "participants": geo.safe(lambda: geo.body_refs(feature.participantBodies), []),
         "target_box_before": ctx.target_box(),
         "end_offset": None,
+        "profile_area": _first_profile_area(feature),
+        "end_area": None,
     }
 
 
@@ -107,19 +114,24 @@ def _dot(a, b):
 
 
 def extrude_after(feature, ctx, data):
-    """end_offset: signed distance from the first profile's sketch plane to a point on the first end face."""
-    profiles = data.get("profiles") or []
-    if not profiles or "frame" not in profiles[0]:
-        return {}
-    frame = profiles[0]["frame"]
+    """end_offset: signed distance from the first profile's sketch plane to a point on the first end face.
+
+    end_area: the area of that face in mm2 (with profile_area, it shows which way a taper goes).
+    """
     faces = geo.collection_items(geo.safe(lambda: feature.endFaces, None))
     if not faces:
         return {}
+    out = {"end_area": geo.safe(lambda: round(faces[0].area * 100.0, 6) + 0.0, None)}
+    profiles = data.get("profiles") or []
+    if not profiles or "frame" not in profiles[0]:
+        return out
+    frame = profiles[0]["frame"]
     p = geo.safe(lambda: geo.point(faces[0].pointOnFace), None)
     if p is None:
-        return {}
+        return out
     offset = _dot([a - b for a, b in zip(p, frame["origin"])], frame["z"])
-    return {"end_offset": round(offset, 6) + 0.0}
+    out["end_offset"] = round(offset, 6) + 0.0
+    return out
 
 
 class _Delta:
