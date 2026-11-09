@@ -192,7 +192,8 @@ Reading inputs at the position before the item covers the getters that the refer
       { "outer": false, "curves": [ CURVE, ... ] }
     ]
   },
-  { "face": true, "type": "BRepFace" }
+  { "face": true, "type": "BRepFace" },
+  { "text": true, "sketch": "Sketch2", "sketch_token": "..." }
 ]
 ```
 
@@ -202,8 +203,10 @@ Optional keys that let the size probe find the sketch again (section 5, "Probe s
 sketch curve (`ProfileCurve.sketchEntity.entityToken`). A key is left out when Fusion does not give it.
 
 From `Profile.parentSketch.transform`, `Profile.profileLoops`, `ProfileLoop.isOuter`, `ProfileLoop.profileCurves`,
-`ProfileCurve.geometry` and `ProfileCurve.geometryType`. A planar face used as a profile is `{ "face": true }`
-(the translator refuses it).
+`ProfileCurve.geometry` and `ProfileCurve.geometryType`. A planar face used as a profile is `{ "face": true }` and a
+`SketchText` is `{ "text": true, "sketch", "sketch_token" }` (`SketchText.parentSketch`; no outline is read). The
+translator refuses both (`loops.outline_refusal`: "Text in a sketch is not copied yet." for text); the sketch token
+keeps the size probe from following a sketch that holds text.
 
 `space` says how the curve space was decided: `sketch` or `model` (the reader mapped model space curves into sketch
 2D) or `ambiguous`. A curve off the plane z = 0 proves model space. Points all at z = 0 that do not lie on one line
@@ -530,6 +533,48 @@ for extrudes).
   The translator copies a face only when one of them lies on the face plane moved by `distance`; each face becomes an
   extrude of its outline (join outwards, cut inwards).
 
+**EmbossFeature** (`profiles`, `inputFaces`, `faces`, `isTangentChain`, `depth`, `horizontalDistance`,
+`verticalDistance`, `rotationAngle`; `adsk.fusion.EmbossFeature` is marked preview in the API reference):
+
+```json
+{
+  "profiles": [ ... ],
+  "areas": [304.0],
+  "faces": [{ "entity_type": "BRepFace", "surface": "Plane", "plane": PLANE, "outward": [0, 0, 1],
+              "face_point": [30, 20, 4] }],
+  "tangent_chain": true,
+  "depth": 1.0,
+  "offset_x": 0.0, "offset_y": 0.0, "rotation_deg": 0.0,
+  "participants": [{ "token": "...", "name": "Body1" }],
+  "target_box_before": { "min": [..], "max": [..] },
+  "volume_before": 9600.0,
+  "volume_after": 9904.0,
+  "end_offset": 1.0,
+  "end_area": 304.0
+}
+```
+
+- `profiles`: sketch profile records (section 4), or a text marker for a `SketchText`. `areas` holds `Profile.areaProperties`
+  of each, in mm2 (null for text).
+- `faces`: the `inputFaces` the outline lands on. `surface` is `Plane`, `Cylinder`, `Cone` or `other` (from
+  `BRepFace.geometry`); `plane` (origin and normal of the geometry), `outward` (`getNormalAtPoint` at `pointOnFace`) and
+  `face_point` are null when they cannot be read. `participants` are the bodies of these faces.
+- `depth`: mm, as Fusion stores it. There is no emboss or deboss flag: the sign decides (assumed: positive raises the
+  outline, negative sinks it; hand test E1 and E2). `offset_x`, `offset_y` (`horizontalDistance`,
+  `verticalDistance`, mm) and `rotation_deg` (`rotationAngle`) move and turn the outline on the face in a frame the
+  reference does not document; the translator copies the step only when all three are zero. Each setting is null when
+  it cannot be read. `tangent_chain` is recorded for a later copy of curved faces; the flat copy does not use it.
+- `volume_before` and `volume_after`: the target's volume in mm3 with the marker before and after the item.
+- `end_offset` and `end_area`: signed distance along the first outline's sketch `z`, from its sketch plane, and the
+  area (mm2) of the farthest flat face of `feature.faces` that is parallel to the input face (the top of a raised
+  outline or the floor of a sunk one); null when none is found.
+
+The translator (`lib/translator/emboss.py`) copies a flat face emboss as an extrude that starts on the face
+(`start.kind` is `fromEntity`): `join` for a positive depth, `cut` for a negative one, going out of the face or into
+it. The measured `end_offset` decides the direction when it is known. It refuses a curved face, faces that are not on
+one plane, a moved or turned outline, text, a sketch plane tilted to the face, and a measured volume change that is not
+`sum(areas) * abs(depth)` within 1 percent in the direction the sign of `depth` says.
+
 ### Inputs from another component (`foreign`)
 
 A record whose entity does not belong to the target's component carries `"foreign": true`; the key is absent
@@ -575,6 +620,7 @@ plain number, a retired member) adds nothing, and `params` is absent when nothin
 | ShellFeature | `inside` |
 | RectangularPatternFeature | `quantity_one`, `quantity_two`, `distance_one`, `distance_two` |
 | CircularPatternFeature | `quantity`, `total_angle_deg` |
+| EmbossFeature | `depth` (read like an extrude length; a negative depth is written negated), `offset_x`, `offset_y`, `rotation_deg` (listed, not followed: the copy needs them to be zero) |
 
 Sketch dimensions, construction planes, axes and joints are not listed per item. They are model parameters whose
 `created_by.kind` is `sketchDimension`, `constructionPlane`, `constructionAxis` or `joint`.
@@ -846,5 +892,6 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | `Occurrence.sourceComponent` and `Occurrence.assemblyContext` of a timeline occurrence; `ConstructionPlane.component` | the item `component`; the "Bodies inside components" hand tests |
 | Feature inputs (profiles, edges, planes, faces) of a component feature come as proxies through the occurrence; `nativeObject` gives the component's own entity | records of the target's own inputs carry no `foreign`; the "Bodies inside components" hand tests |
 | `OffsetFacesFeature.inputFaces` (or `faces` before the item), `distance`, `faces` after it; `BRepFace.loops`, `BRepLoop.isOuter`, `BRepLoop.edges`, `Plane.uDirection`; positive distance moves the face outwards | `faces_after` must show the face moved by `distance`; the Offset faces hand test |
+| `EmbossFeature.profiles` (`Profile` and `SketchText` items), `inputFaces`, `faces` after the item, `isTangentChain`, `depth`, `horizontalDistance`, `verticalDistance`, `rotationAngle`; `BRepFace.area`, `BRepFace.body`; a positive `depth` raises and a negative one sinks; the feature exists only in Fusion builds from September 2025 and is marked preview in the API reference | `volume_after` must differ from `volume_before` by `sum(areas) * abs(depth)` with the sign of `depth`, else the translator refuses; the Emboss hand tests (section 10 of `docs/hand-tests.md`) |
 | `Sketch.parentComponent`, `ConstructionPlane.component`, `BRepFace.body`, `BRepEdge.body` | `foreign` reads them in a try; an unreadable one leaves the record unmarked |
 | `BRepBody.copyToComponent(proxy)` keeps the assembly place | the copy guard in `step_export.py` compares the bounding boxes (1e-3 mm) and refuses before writing |

@@ -1,7 +1,9 @@
 # Adding a Fusion step type
 
-This guide is for a developer who wants the export to copy one more kind of Fusion timeline step (for example Emboss,
-a thin extrude, a spline outline, text or a modeled thread). Read `docs/capture-format.md` sections 1 and 5 first.
+This guide is for a developer who wants the export to copy one more kind of Fusion timeline step (for example a thin
+extrude, a spline outline, text or a modeled thread). Read `docs/capture-format.md` sections 1 and 5 first. The Emboss
+step (`read_emboss.py`, `emboss.py`, `tests/test_translate_emboss.py`) is a small worked example of every part below,
+and of a step that reuses another handler.
 
 ## What a new step type touches
 
@@ -24,12 +26,13 @@ StepType("EmbossFeature", "emboss", reader="read_emboss", handler="emboss:handle
 ```
 
 - `name`: the capture `type`, the Fusion object type name (`objectType` after the last `::`).
-- `words`: the type in plain words. Messages use them: "Copy stopped at Emboss1 (emboss)".
+- `words`: the type in plain words. Messages use them: "Copy stopped at Loft1 (loft)".
 - `role`: `MODELING` for a step that can make or change a body (the default). Sketches, construction geometry and
   assembly items have their own roles and are never copied.
 - `reader`: the name of the `lib/fusion_reader` module that reads it.
 - `handler`: `"module:function"` in `lib/translator`. Leave it out while the step cannot be copied; then give
-  `unsupported`, the plain reason the copy stops at it.
+  `unsupported`, the plain reason the copy stops at it. Once a handler exists, drop `unsupported`: the handler gives
+  its own reasons.
 - `sketches`: the sketch records in the step data that the size probe can follow (`PROFILES`, `AXIS`, `HOLE_POINTS`).
   The probe (`lib/probe/plan.py`) tries other size values only for sketches it can follow. A sketch token anywhere
   else in the data leaves that sketch unfollowed for every step that uses it, so its sizes end up loose. Name a
@@ -93,6 +96,18 @@ A handler is `handle(item, ctx) -> StepResult | Refusal` (`lib/translator/result
 - `Refusal(reason)`: the item cannot be copied. The reason is one plain sentence for a hobbyist. The walk stops there
   and the part is saved as a fixed shape.
 
+A step whose result is another step in other words can hand its item to that step's handler. Emboss on a flat face is
+an extrude that starts on the face, so `emboss.handle` checks what the copy relies on, builds the data of an extrude
+(`start`, `side_one`, `params` under the extrude's field paths such as `side_one.distance`) and returns
+`extrude.handle(dict(item, data=built), ctx)`. Keep the item's `index` and `name`, and pass the capture's `profiles`
+list as it is: the size probe's motion keys (`<item>/p<profile>/...`) count profiles by their place in that list. The
+walk still lists the original item as the copied one, so the end of walk audit reads the original `data.params` and
+sketches. A key that only the new step needs (a fixed direction of travel, for instance) goes into the other handler as
+an optional field of its data, and must not change what that handler writes without it.
+
+A step that takes sketch outlines checks each profile record with `loops.outline_refusal` (sketch text, a flat face or
+an unknown entity is not an outline) and gets its loops from `loops.profile_loops`.
+
 Write every value through `lib/translator/values.py`: `values.quantity` turns a Fusion expression into a formula of
 the sizes, with the right dimension and sign rules, or writes it as a number and records why. Points, faces and planes
 that later steps or this step pick go through `lib/translator/follow.py`.
@@ -116,17 +131,24 @@ state outside `ctx`. Work that depends on the capture alone can be kept in `ctx.
   forgotten value gives a warning, not a wrong part.
 - `tests/test_follow_or_flag.py` translates every capture fixture with every user parameter ticked and checks the
   same rule from the outside: each parameter a copied step reads is followed, loose or dropped with a reason, and no
-  written formula can reach zero inside the size ranges. A new fixture is picked up on its own.
+  written formula can reach zero inside the size ranges. A new fixture is picked up on its own, but only when it has
+  `parameters.user` and the model parameters behind the step's `data.params`: give the fixture of a new step type
+  user parameters that drive its sizes.
 - `tests/test_step_kinds.py` keeps the table and the readers in step.
 
 ## 5. Tests to write
 
 - A capture fixture in `tests/fixtures/captures/` (by hand, or saved from `report.json` of a real design), with the
-  box and volume from `scripts/fixture_geometry.py` (or a null volume where the script cannot model the step).
+  box and volume from `scripts/fixture_geometry.py` (or a null volume where the script cannot model the step). The
+  script knows the step types it models by name: give a new type a branch in its `evaluate` (an emboss is turned into
+  the extrude it equals), or the fixture keeps a null volume and an unchanged box. Run it as
+  `python3 scripts/fixture_geometry.py <fixture name> --write`.
 - Handler tests in a `tests/test_translate_<name>.py`: the recipe the fixture gives, checked against the schema
   (`assert_schema_ok`); one test per refusal branch; one test with a size table that shows the values follow the
   sizes, and one that shows a value that cannot follow marks its size with a reason. Assert outcomes (recipe values,
   verdicts, loose and dropped names), not wording.
+- A step type that was listed as unsupported can be the example of a stopping step in older tests (the stop dialog,
+  the stop warning, the capture reader walk). When it becomes copyable those tests need another example type.
 - Reader tests in `tests/test_capture_reader*.py` with the fakes, for each member the reader reads and for an
   unreadable one.
 
@@ -134,5 +156,6 @@ state outside `ctx`. Work that depends on the capture alone can be kept in `ctx.
 
 The reader is the only code that talks to Fusion, and no tool runs it. Every new `adsk` call goes into
 `docs/hand-tests.md`, in the "Capture reader calls to watch" part: the member, what the reader expects it to return,
-and what to look for in `report.json`. Add a design to section 7 that shows the step, with what the part must look
-like in Paramability.
+and what to look for in `report.json`. Add a design that shows the step, with what the part must look like in
+Paramability: to section 7 for a plain step, or to a numbered section of its own when the step has several cases to
+try (Emboss has section 10).

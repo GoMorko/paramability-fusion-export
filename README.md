@@ -151,15 +151,20 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   it. A size that turns a sketch plane, moves a point along a curve, or changes the shape of an outline may give
   unexpected results.
   These stop the copy and leave a plain part:
-  thin extrudes, face outlines, spline and other free curve outlines, extrudes that start or end on a tilted or curved
-  surface, extrudes that make a new component, modeled threads, rounds with variable or chord length sizes or curvature
-  continuity, shells that grow outward, close the body or round their corners, patterns of faces or bodies, patterns
+  thin extrudes, face outlines, text in a sketch, spline and other free curve outlines, extrudes that start or end on
+  a tilted or curved surface, an emboss on a curved face, an emboss that is moved or turned on its face or drawn on a
+  plane tilted to its face, extrudes that make a new component, modeled threads, rounds with variable or chord length
+  sizes or curvature continuity, shells that grow outward, close the body or round their corners, patterns of faces or bodies, patterns
   that spread to both sides of the start, mirrors of faces, a chamfer with two different sizes whose sides could not be
   measured, a press pull (offset
   faces) of a curved face, of a face with a leaning or rounded side, or of two faces that meet, a combine with a tool
-  body that has more than one step, and every step type not listed above (sweep, loft, coil, move, draft, emboss).
+  body that has more than one step, and every step type not listed above (sweep, loft, coil, move, draft).
   A Remove of another body, a Split Face (the solid stays the same, so picks on its faces may not follow) and steps of
   other bodies that are never joined to the picked body do not stop the copy.
+- An Emboss of sketch outlines on a flat face is copied as an extrude that starts on the face: it raises the outline
+  when its depth is positive and sinks it when the depth is negative. The depth follows a parameter. The copy checks
+  that the part grows or shrinks by the outline area times the depth, so an outline that runs past its face stops the
+  copy.
 - Some steps are copied with a note instead: setback corners, a cosmetic thread (cut as a plain hole), a round or
   chamfer with more than 32 edges (picked in groups), a direction or size that Fusion stored two ways, and a step that
   Fusion shows a warning on.

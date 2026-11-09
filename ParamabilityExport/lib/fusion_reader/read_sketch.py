@@ -300,11 +300,31 @@ def profile_area(profile):
     return geo.safe(lambda: round(profile.areaProperties().area * 100.0, 6) + 0.0, None)
 
 
+def read_text(text, ctx=None):
+    """A SketchText as { text: true, sketch, sketch_token? }: the copy does not draw text, so only its sketch is
+    named. The sketch token keeps the size probe from following that sketch."""
+    sketch = geo.safe(lambda: text.parentSketch, None)
+    record = {"text": True, "sketch": geo.safe(lambda: sketch.name, "") or ""}
+    token = geo.safe(lambda: sketch.entityToken, "")
+    if token:
+        record["sketch_token"] = token
+    return geo.mark_foreign(record, text, ctx)
+
+
+def profile_areas(raw):
+    """Area in mm2 of each item of a collection of profiles (None for an item that is not a Profile)."""
+    return [profile_area(entity) if geo.type_name(entity) == "Profile" else None
+            for entity in geo.collection_items(raw)]
+
+
 def read_profiles(raw, ctx=None):
-    """Profiles of a feature's `profile` property: a Profile, a planar BRepFace or a collection of them."""
+    """Profiles of a feature's `profile` property: a Profile, a planar BRepFace, a SketchText or a collection of
+    them."""
     name = geo.type_name(raw)
     if name == "Profile":
         return [read_profile(raw, ctx)]
+    if name == "SketchText":
+        return [read_text(raw, ctx)]
     if name == "BRepFace":
         return [geo.mark_foreign({"face": True, "type": "BRepFace"}, raw, ctx)]
     if raw is not None and hasattr(raw, "count") and hasattr(raw, "item"):

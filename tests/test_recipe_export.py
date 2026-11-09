@@ -12,10 +12,10 @@ from lib.export_plan.recipe_export import plan_single_export
 from lib.package.manifest import validate_manifest
 
 
-def plate_then_emboss():
+def plate_then_loft():
     capture = load_capture("extrude_plate")
     body = capture["items"][1]["bodies_after"]
-    capture["items"].append({"index": 2, "name": "Emboss1", "type": "EmbossFeature", "suppressed": False,
+    capture["items"].append({"index": 2, "name": "Loft1", "type": "LoftFeature", "suppressed": False,
                              "health": "ok", "message": "", "in_target_component": True, "bodies_after": body, "data": {}})
     return capture
 
@@ -115,13 +115,13 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(json.loads(files["report.json"])["capture"]["design"], "Test")
 
     def test_unsupported_feature_gives_step_only_naming_it(self):
-        manifest, files, report = self.plan(plate_then_emboss())
+        manifest, files, report = self.plan(plate_then_loft())
         self.assertEqual(manifest["kind"], "stepOnly")
         self.assertNotIn("recipe", manifest)
         self.assertEqual(sorted(files), ["part.step", "report.json"])
-        self.assertIn("emboss", manifest["notes"][0].lower())
+        self.assertIn("loft", manifest["notes"][0].lower())
         self.assertEqual(validate_manifest(manifest), [])
-        self.assertEqual(report["refusal"]["type"], "EmbossFeature")
+        self.assertEqual(report["refusal"]["type"], "LoftFeature")
         self.assertEqual(report["outcome"], "stepOnly")
 
     def test_a_capture_that_cannot_be_read_gives_a_fixed_shape(self):

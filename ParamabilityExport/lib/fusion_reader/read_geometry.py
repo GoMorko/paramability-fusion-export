@@ -192,6 +192,20 @@ def plane_of(entity):
         return None
 
 
+def outward_normal(face):
+    """Unit outward normal of a BRepFace at a point on it; raises when Fusion gives none."""
+    ok, normal = face.evaluator.getNormalAtPoint(face.pointOnFace)
+    if not ok:
+        raise ValueError("The normal of a face could not be read.")
+    return unit_vector(normal)
+
+
+def surface_kind(face):
+    """The surface of a BRepFace as "Plane", "Cylinder", "Cone" or "other"."""
+    name = type_name(face.geometry)
+    return name if name in ("Plane", "Cylinder", "Cone") else "other"
+
+
 def point_at(curve, fraction):
     """Point3D at a fraction (0..1) of the parameter range of a curve or edge, or None."""
     try:

@@ -5,7 +5,7 @@ Run from the add-in root (needs numpy; the add-in and its tests do not):
     python3 scripts/fixture_geometry.py --write    write the computed values into the fixtures
     python3 scripts/fixture_geometry.py name ...   limit to the named fixtures
 
-The model is a voxel count of extrudes, revolves, holes, combines, patterns and mirrors, read straight from the
+The model is a voxel count of extrudes, embosses on flat faces, revolves, holes, combines, patterns and mirrors, read straight from the
 capture data (not from the translated recipe). Boxes are exact to half a voxel (0.1 mm), volumes within about
 0.5 percent. Fillets, chamfers, shells, modeled threads, tapers, thin walls, face profiles and unreadable fields
 are not modelled: the box stays, `volume_mm3` becomes null. The same box rule fills each item's
@@ -289,6 +289,20 @@ def extrude_shape(data):
     return shape
 
 
+def emboss_as_extrude(data):
+    """An emboss on a flat face as the extrude it equals: from the input face, out of it for a positive depth and into
+    it for a negative one, over the same outlines."""
+    face = data["faces"][0]
+    frame = data["profiles"][0]["frame"]
+    outward = np.dot(np.asarray(face["outward"], float), np.asarray(frame["z"], float))
+    travel = (1 if outward >= 0 else -1) * (1 if data["depth"] > 0 else -1)
+    return {"operation": "join" if data["depth"] > 0 else "cut", "profiles": data["profiles"],
+            "start": {"kind": "fromEntity", "plane": face["plane"]}, "extent_type": "one",
+            "side_one": {"kind": "distance", "distance": travel * abs(data["depth"]), "taper_deg": 0.0},
+            "thin": False,
+            "end_offset": data.get("end_offset")}
+
+
 def revolve_shape(data):
     ext = data["extent"]
     if ext["kind"] not in ("angle", "twoSidesAngle"):
@@ -480,6 +494,14 @@ def evaluate(capture):
                     before[item["index"]] = measure(bodies[key], 0.5)[0]
                 bodies[key] = apply_op(bodies.get(key), op, shape)
                 features[item["index"]] = (key, op, shape)
+            elif kind == "EmbossFeature":
+                extruded = emboss_as_extrude(data)
+                shape = extrude_shape(extruded)
+                key = body_key(item, data, target)
+                if data.get("target_box_before") is not None and bodies.get(key) is not None:
+                    before[item["index"]] = measure(bodies[key], 0.5)[0]
+                bodies[key] = apply_op(bodies.get(key), extruded["operation"], shape)
+                features[item["index"]] = (key, extruded["operation"], shape)
             elif kind == "RevolveFeature":
                 shape = revolve_shape(data)
                 key = body_key(item, data, target)

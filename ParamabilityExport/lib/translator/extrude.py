@@ -203,7 +203,8 @@ def _is_through(side):
 def _plan(item, data, frame, shift, combine, ctx, plane_q):
     """The sides to extrude, as dicts {extent, sign, distance, taper}; or a Refusal.
 
-    `sign` is the travel direction relative to the sketch normal. extent is oneSide, symmetric or through.
+    `sign` is the travel direction relative to the sketch normal. extent is oneSide, symmetric or through. A distance
+    side that carries `direction` (+1 or -1 along the sketch normal) travels that way instead of the measured end.
     """
     extent_type = data.get("extent_type", "one")
     if extent_type not in ("one", "two", "symmetric"):
@@ -227,7 +228,9 @@ def _plan(item, data, frame, shift, combine, ctx, plane_q):
             raw = float(side["distance"])
             if abs(raw) <= 0:
                 return Refusal("This extrude has no length.")
-            sign = forced_sign if forced_sign is not None else _choose_sign(ctx, _sign_of(raw), end, abs(raw), other)
+            sign = forced_sign if forced_sign is not None else side.get("direction")
+            if sign is None:
+                sign = _choose_sign(ctx, _sign_of(raw), end, abs(raw), other)
             return {"extent": "oneSide", "sign": sign, "distance": abs(raw), "taper": taper, "taper_q": taper_q,
                     "q": _distance_quantity(ctx, item, which + ".distance", raw)}
         if kind in ("throughAll", "all"):
@@ -508,8 +511,10 @@ def handle(item, ctx):
     profiles = data.get("profiles") or []
     if not profiles:
         return Refusal("This extrude has no sketch outline.")
-    if any(p.get("face") or "loops" not in p for p in profiles):
-        return Refusal("A flat face used as a sketch outline is not copied yet.")
+    for profile in profiles:
+        refusal = loops.outline_refusal(profile)
+        if refusal is not None:
+            return refusal
     combine = COMBINE[operation]
     # Several outlines that Fusion made into one body touch each other, so the first makes it and the rest join.
     if combine == "new" and len(profiles) > 1 and len(item.get("bodies_after") or []) != 1:

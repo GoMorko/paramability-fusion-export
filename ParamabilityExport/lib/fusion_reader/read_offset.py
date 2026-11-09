@@ -42,16 +42,9 @@ def _cross(a, b):
     return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
 
 
-def _outward_normal(face):
-    ok, normal = face.evaluator.getNormalAtPoint(face.pointOnFace)
-    if not ok:
-        raise ValueError("The normal of a face could not be read.")
-    return geo.unit_vector(normal)
-
-
 def _frame(face, plane):
     """The face plane as a frame: origin on the plane, z the outward normal, x along the plane's u direction."""
-    z = _outward_normal(face)
+    z = geo.outward_normal(face)
     x = geo.unit_vector(plane.uDirection)
     y = _cross(z, x)
     return {"origin": geo.point(plane.origin), "x": x, "y": y, "z": z}
@@ -152,7 +145,7 @@ def offset_faces_after(feature, ctx, data):
         if geo.safe(lambda: geo.type_name(face.geometry), None) != "Plane":
             continue
         point = geo.safe(lambda: geo.point(face.pointOnFace), None)
-        normal = geo.safe(lambda: _outward_normal(face), None)
+        normal = geo.safe(lambda: geo.outward_normal(face), None)
         if point is not None and normal is not None:
             found.append({"point": point, "normal": normal})
     out["faces_after"] = found

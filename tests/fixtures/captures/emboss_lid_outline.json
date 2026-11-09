@@ -1,0 +1,444 @@
+{
+  "_comment": "A 60 x 40 lid, 4 mm thick, with a ring outline raised 1 mm on its top face (Emboss1). Its thickness and the raise are sizes.",
+  "capture": 3,
+  "fusion": "2.0.0",
+  "design": "Test",
+  "up_axis": "z",
+  "design_units": "mm",
+  "target": {
+    "token": "t1",
+    "name": "Body1",
+    "box": {
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        60.0,
+        40.0,
+        5.0
+      ]
+    },
+    "volume_mm3": 9904.0
+  },
+  "parameters": {
+    "user": [
+      {
+        "name": "lid_mm",
+        "expression": "4 mm",
+        "value": 0.4,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 4.0
+      },
+      {
+        "name": "raise_mm",
+        "expression": "1 mm",
+        "value": 0.1,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 1.0
+      }
+    ],
+    "model": [
+      {
+        "name": "d1",
+        "expression": "lid_mm",
+        "value": 0.4,
+        "unit": "mm",
+        "kind": "derived",
+        "role": "",
+        "dependency_parameters": [
+          "lid_mm"
+        ],
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d1",
+          "name": "Extrude1",
+          "sketch": "",
+          "component": ""
+        }
+      },
+      {
+        "name": "d2",
+        "expression": "raise_mm",
+        "value": 0.1,
+        "unit": "mm",
+        "kind": "derived",
+        "role": "",
+        "dependency_parameters": [
+          "raise_mm"
+        ],
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d2",
+          "name": "Emboss1",
+          "sketch": "",
+          "component": ""
+        }
+      }
+    ]
+  },
+  "items": [
+    {
+      "index": 0,
+      "name": "Sketch1",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 1,
+      "name": "Extrude1",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "operation": "newBody",
+        "profiles": [
+          {
+            "sketch": "Sketch1",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      0.0,
+                      0.0
+                    ],
+                    "end": [
+                      60.0,
+                      0.0
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      60.0,
+                      0.0
+                    ],
+                    "end": [
+                      60.0,
+                      40.0
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      60.0,
+                      40.0
+                    ],
+                    "end": [
+                      0.0,
+                      40.0
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      0.0,
+                      40.0
+                    ],
+                    "end": [
+                      0.0,
+                      0.0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 4.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [],
+        "target_box_before": null,
+        "end_offset": 4.0,
+        "params": {
+          "side_one.distance": {
+            "name": "d1",
+            "expression": "lid_mm",
+            "value": 4.0
+          }
+        }
+      }
+    },
+    {
+      "index": 2,
+      "name": "Sketch2",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 3,
+      "name": "Emboss1",
+      "type": "EmbossFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "profiles": [
+          {
+            "sketch": "Sketch2",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                4
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      5.0,
+                      5.0
+                    ],
+                    "end": [
+                      55.0,
+                      5.0
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      55.0,
+                      5.0
+                    ],
+                    "end": [
+                      55.0,
+                      35.0
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      55.0,
+                      35.0
+                    ],
+                    "end": [
+                      5.0,
+                      35.0
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      5.0,
+                      35.0
+                    ],
+                    "end": [
+                      5.0,
+                      5.0
+                    ]
+                  }
+                ]
+              },
+              {
+                "outer": false,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      7.0,
+                      7.0
+                    ],
+                    "end": [
+                      53.0,
+                      7.0
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      53.0,
+                      7.0
+                    ],
+                    "end": [
+                      53.0,
+                      33.0
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      53.0,
+                      33.0
+                    ],
+                    "end": [
+                      7.0,
+                      33.0
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      7.0,
+                      33.0
+                    ],
+                    "end": [
+                      7.0,
+                      7.0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "areas": [
+          304.0
+        ],
+        "faces": [
+          {
+            "entity_type": "BRepFace",
+            "surface": "Plane",
+            "plane": {
+              "point": [
+                0,
+                0,
+                4
+              ],
+              "normal": [
+                0,
+                0,
+                1
+              ]
+            },
+            "outward": [
+              0,
+              0,
+              1
+            ],
+            "face_point": [
+              30,
+              20,
+              4
+            ]
+          }
+        ],
+        "tangent_chain": true,
+        "depth": 1.0,
+        "offset_x": 0.0,
+        "offset_y": 0.0,
+        "rotation_deg": 0.0,
+        "participants": [
+          {
+            "token": "t1",
+            "name": "Body1"
+          }
+        ],
+        "target_box_before": {
+          "min": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max": [
+            60.0,
+            40.0,
+            4.0
+          ]
+        },
+        "volume_before": 9600.0,
+        "volume_after": 9904.0,
+        "end_offset": 1.0,
+        "end_area": 304.0,
+        "params": {
+          "depth": {
+            "name": "d2",
+            "expression": "raise_mm",
+            "value": 1.0
+          }
+        }
+      }
+    }
+  ]
+}

@@ -180,14 +180,25 @@ def flip_y(loop):
 MAX_INNER_LOOPS = 256
 
 
+def outline_refusal(profile):
+    """A Refusal when a capture profile record is not a drawn sketch outline (sketch text, a flat face or an entity
+    the reader does not know), else None."""
+    if profile.get("text"):
+        return Refusal("Text in a sketch is not copied yet.")
+    if profile.get("face") or "loops" not in profile:
+        return Refusal("A flat face used as a sketch outline is not copied yet.")
+    return None
+
+
 def profile_loops(profile):
     """One capture profile's `(outer, inners)` recipe loops, or a Refusal.
 
-    Refuses a flat face used as a profile, a curve space the reader could not decide (`space: "ambiguous"`), a profile
-    without exactly one outer loop, and any loop `loop_of` refuses.
+    Refuses text or a flat face used as a profile (`outline_refusal`), a curve space the reader could not decide
+    (`space: "ambiguous"`), a profile without exactly one outer loop, and any loop `loop_of` refuses.
     """
-    if profile.get("face") or "loops" not in profile:
-        return Refusal("A flat face used as a sketch outline is not copied yet.")
+    refusal = outline_refusal(profile)
+    if refusal is not None:
+        return refusal
     sketch = profile.get("sketch", "")
     if profile.get("space", "sketch") not in ("sketch", "model"):
         return Refusal("%s could not be placed on its plane with certainty, so it is not copied." % _where(sketch))

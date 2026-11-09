@@ -1,7 +1,7 @@
 import unittest
 
 from tests import context  # noqa: F401
-from tests.test_recipe_export import plate_then_emboss
+from tests.test_recipe_export import plate_then_loft
 from tests.translator_helpers import load_capture
 
 from lib.export_plan.stop_warning import saved_message, status_text, summarize
@@ -13,14 +13,14 @@ class SummarizeTest(unittest.TestCase):
         self.assertIsNone(summarize(None))
 
     def test_the_stopping_step_is_named_and_the_variables_promise_follows_the_parameters(self):
-        summary = summarize(plate_then_emboss())
+        summary = summarize(plate_then_loft())
         self.assertTrue(summary["stops"])
-        self.assertEqual(summary["label"], "Emboss1 (emboss)")
+        self.assertEqual(summary["label"], "Loft1 (loft)")
         self.assertEqual(summary["index"], 2)
-        self.assertIn("Emboss1", summary["lines"][0])
+        self.assertIn("Loft1", summary["lines"][0])
         self.assertIn("variables", summary["lines"][-1])
-        self.assertIn("Emboss steps", summary["tooltip"])
-        self.assertNotIn("variables", summarize(plate_then_emboss(), has_parameters=False)["lines"][-1])
+        self.assertIn("Steps of type loft", summary["tooltip"])
+        self.assertNotIn("variables", summarize(plate_then_loft(), has_parameters=False)["lines"][-1])
 
     def test_a_stop_without_a_step_has_nothing_to_point_at(self):
         linked = load_capture("component_moved")
@@ -40,11 +40,11 @@ class SummarizeTest(unittest.TestCase):
 
     def test_notes_are_listed_after_a_stop_too(self):
         capture = load_capture("fillet_setback")
-        capture["items"].append({"index": 99, "name": "Emboss1", "type": "EmbossFeature", "suppressed": False,
+        capture["items"].append({"index": 99, "name": "Loft1", "type": "LoftFeature", "suppressed": False,
                                  "health": "ok", "message": "", "in_target_component": True,
                                  "bodies_after": capture["items"][-1]["bodies_after"], "data": {}})
         lines = summarize(capture)["lines"]
-        self.assertIn("Emboss1", lines[0])
+        self.assertIn("Loft1", lines[0])
         self.assertTrue(lines[-1].startswith("Copied with a note: "))
 
 

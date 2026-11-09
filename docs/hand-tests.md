@@ -126,7 +126,7 @@ builds agrees with the Fusion part.
       Fusion's undo list and "unsaved changes" mark are as before (or, if moving the marker marks the document
       changed, note it). Cancel, and a forced error during the read, leave the marker where it was and the parameters
       as they were.
-- [ ] **Fixed shape**: a part with an emboss, and one with a variable radius fillet. Each saves as a fixed shape
+- [ ] **Fixed shape**: a part with a sweep, and one with a variable radius fillet. Each saves as a fixed shape
       (plain CAD part) and the message after the export names that feature.
 - [ ] **Y up**: a design made with the Y up preference, exported with "Y up". The plain part stands upright in
       Paramability, and the positions in `recipe.json` are Z up (a plate drawn on the ground plane has its sketch
@@ -278,8 +278,8 @@ Use the filter box design (names such as `FilterBox_$_depth__contains_CeramicMed
         changes a sketch") is not cut off. About ten rows show before the table scrolls; the table spans the width.
       - The Saved window (result dialog) has no blank lines under its notes and fixed lists either.
       If a box is still too tall or too short, note the text it holds and the dialog width.
-- [ ] **Early warning.** Pick a body whose steps hold one the add-in cannot copy (for example a sweep, a loft or an
-      emboss). Right under the body picker a box shows "Copy stops at Sweep1 (sweep)." in bold, the reason in short,
+- [ ] **Early warning.** Pick a body whose steps hold one the add-in cannot copy (for example a sweep, a loft or a
+      coil). Right under the body picker a box shows "Copy stops at Sweep1 (sweep)." in bold, the reason in short,
       and "The part will be saved as a fixed shape; your parameters still come along as variables." Hover the box:
       the tooltip holds the full reason. If no tooltip shows, note it (the reason is then only in the box when short,
       and in the message after the export). Pick a body that copies fully: the box and the button go away. A step
@@ -380,6 +380,31 @@ the sizes on the form and compare the part with Fusion at the same values.
 - [ ] **K9 Report.** Send the K1 report. It pins token stability (the curves are found again in every state), the
       first read against the capture (a sketch that differs is not followed), `restore_gap_mm` (should
       be 0 or tiny) and the column checks (`motion.dropped`).
+
+## 10. Emboss
+
+An Emboss of sketch outlines on a flat face is copied as an extrude that starts on the face. Send `report.json` from
+any emboss that surprises; its capture becomes a test fixture. "Matches" means the part Paramability builds agrees with
+the Fusion part. The calls behind these tests are listed under "Capture reader calls to watch (emboss)".
+
+- [ ] **E1 Raised outline.** The BoxLid design: `Emboss1` on the sketch `DirectionEmboss` (a raised outline on the lid).
+      The export copies it and the part matches. In `report.json` the emboss item shows `faces[0].surface` `Plane`, a
+      positive `depth`, `volume_after` minus `volume_before` equal to the sum of `areas` times `depth`, and `end_offset`
+      equal to the distance of the top of the outline from the sketch plane. Tick the parameter behind the lid
+      thickness and the one behind the emboss depth: both resize the part in Paramability.
+- [ ] **E2 Sunk outline.** The same outline as a deboss (a negative depth, or the Deboss option of the dialog). `depth`
+      reads negative, the recipe step is a cut and the part matches. Note whether the dialog needs a negative number
+      or an option: if the sign of `depth` does not follow what the dialog says, the sign rule is wrong; send the
+      report.
+- [ ] **E3 Moved or turned outline.** An emboss with a horizontal distance, a vertical distance and a rotation set in
+      the dialog. The copy stops with "moved or turned on its face" and the part saves as a fixed shape. Note in which
+      frame each setting moves the outline (the sketch axes, the face axes, or the model axes) and around which point
+      the rotation turns, so the copy can follow them later.
+- [ ] **E4 Text.** An emboss of sketch text on a side face, and an extrude of the same text. Both stop with "Text in a
+      sketch is not copied yet" and the part saves as a fixed shape. For the later text copy, call
+      `SketchText.asCurves()` once in the Fusion console and note whether the points are in sketch or model space.
+- [ ] **E5 Older Fusion.** In a Fusion build from before September 2025, open a design that has an emboss. The export
+      does not crash: the step is named in the stop message and the part saves as a fixed shape.
 
 ## Fusion calls to watch
 
@@ -637,3 +662,32 @@ capture in `report.json`.
   extra read after a restore does not move the timeline marker, that `health.sketch_drift` stays false on a design
   that returns to its start, and that a restore the add-in cannot finish (a parameter locked by hand during the
   export) shows "These parameters could not be set back" in the result window and in a message box.
+
+## Capture reader calls to watch (emboss)
+
+These members and values were written from the API reference and never run. A member that cannot be read gives
+`null`, which the translator refuses, so a wrong guess shows up in `report.json` rather than as a wrong part. Run the
+Emboss tests of section 10 and read the capture in `report.json`.
+
+- `adsk.fusion.EmbossFeature` itself: it came with the September 2025 release and the API reference marks it as
+  preview, so members may change. A Fusion build without it cannot hold the step (E5).
+- `EmbossFeature.profiles` with the marker just before the item: a collection of `Profile` and `SketchText` items on
+  one plane. A text item is read only for its `parentSketch` and refused.
+- `EmbossFeature.inputFaces` with the marker just before the item: a list or a collection of `BRepFace`. The reader
+  accepts both and raises when it cannot list them.
+- `EmbossFeature.faces` with the marker just after the item: the faces the feature made. The reader takes the flat
+  face parallel to the input face that lies farthest from the sketch plane (`end_offset`, `end_area`); check that it
+  is the top of a raised outline and the floor of a sunk one.
+- `EmbossFeature.depth` as a `ModelParameter`, and its sign: assumed positive raises and negative sinks. The API has no
+  emboss or deboss flag and `Feature.operation` is not listed for it, so the sign is the only signal. The translator
+  checks the sign against the measured change of the volume and refuses when they disagree (E1, E2).
+- `EmbossFeature.horizontalDistance`, `verticalDistance` and `rotationAngle` as `ModelParameter`s: the reference does
+  not say in which frame they move the outline or around which point they turn. The copy needs all three to be zero
+  (E3).
+- `EmbossFeature.isTangentChain`: recorded only.
+- `BRepFace.geometry` type names `Plane`, `Cylinder` and `Cone` for the input faces, `BRepFace.body`, `BRepFace.area`
+  (cm2, read as `end_area`), `SurfaceEvaluator.getNormalAtPoint` at `pointOnFace` pointing out of the body.
+- `Profile.areaProperties().area` for each emboss profile (cm2, read as `areas`), and `BRepBody.volume` of the target
+  at the marker before and after the item.
+- `SketchText.parentSketch` for the sketch of a text item (E4).
+
