@@ -1,14 +1,18 @@
 """What happens when the person clicks OK in Export for Paramability.
 
-Order: the STEP of the part as it is, the capture of its steps, a first translation that shows which sizes the
-recipe keeps and the ranges it gives them, one check STEP per kept size, a try at the other end of each range (and
-smaller steps where Fusion cannot build, `size_narrowing`), extra rows that only recompute (to see how sketches move
-with sizes), then the translation again with what these found, and the file. Each run changes parameters; RowExport
-puts every parameter back whatever happens. A body inside a component is handled the same way: its sketches and its
-place in the assembly are read at every check.
+Plain export (the default): the STEP of the part as it is, the capture of its steps, one translation, and the file.
+No parameter is changed in the design: there are no check rows and no probe rows (only the capture read moves the
+timeline marker, and puts it back). Every ticked size that a copied step reads stays a free size over its range;
+sketch values stay numbers, and a size that moves a sketch, a plane or a joint is loose (`loose` in the manifest).
 
-A size that the recipe cannot follow fully stays free with a warning (`loose` in the manifest), unless the person
-ticked "Keep doubtful sizes fixed"; only a size Fusion cannot build at any other value is always fixed.
+Checked export ("Check sizes in Fusion"): the STEP of the part as it is, the capture, a first translation that shows
+which sizes the recipe keeps and the ranges it gives them, one check STEP per kept size, a try at the other end of
+each range (and smaller steps where Fusion cannot build, `size_narrowing`), the probe rows that only recompute (so
+sketch values follow sizes), then the translation again with what these found, and the file. A size that the recipe cannot follow fully stays free with a warning, unless the
+person ticked "Keep doubtful sizes fixed"; only a size Fusion cannot build at any other value is always fixed.
+
+Each run changes parameters; RowExport puts every parameter back whatever happens. A body inside a component is
+handled the same way: its sketches and its place in the assembly are read at every check.
 """
 import os
 import tempfile
@@ -245,10 +249,10 @@ def _first_translation(capture, up_axis, table, loose=True):
     return _translation(capture, up_axis, table, OPTIMISTIC if covers_a_sketch(capture) else None, loose)
 
 
-def _translation(capture, up_axis, table, motion, loose):
+def _translation(capture, up_axis, table, motion, loose, plain=False):
     """The translator's result when it gives a recipe, else None. Never raises."""
     try:
-        result = translate_capture(capture, up_axis, table, motion, loose=loose)
+        result = translate_capture(capture, up_axis, table, motion, loose=loose, plain=plain)
     except Exception as exc:
         log(f"translation failed: {exc!r}")
         return None
@@ -322,10 +326,14 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
             table = size_tables.build(
                 parameters, form["ticked"], model, design_unit, quantity_params=quantities, ranges=form["ranges"])
 
-            loose = not form.get("keep_doubtful")
+            check = bool(form.get("check_sizes"))
+            loose = not (check and form.get("keep_doubtful"))
             checks, kept, measured, doubtful, unchecked, failures, narrowed = [], [], [], [], [], [], []
             motion, probe_report, final = None, None, None
-            if isinstance(capture, dict):
+            if isinstance(capture, dict) and not check:
+                # No size pass in Fusion: sketch values stay numbers, and a size behind one is loose (translator).
+                final = _translation(capture, form["up_axis"], table, None, True, True)
+            elif isinstance(capture, dict):
                 # Checks go only to the sizes the recipe keeps after translation, within the ranges it gives them.
                 first = _first_translation(capture, form["up_axis"], table, loose)
                 if first is not None:
@@ -372,7 +380,7 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
                 listing=_parameter_listing(parameters, model_params, design_unit),
                 motion=motion, probe=probe_report, build_failures=failures, narrowed=narrowed, marker=marker,
                 loose=[{"name": m["name"], "reason": m["reason"]} for m in doubtful], loose_sizes=loose,
-                translated=final)
+                translated=final, plain=not check)
             write_package(out_path, manifest, files)
             saved = (os.path.basename(out_path), manifest, report, table)
     except ExportCancelled:

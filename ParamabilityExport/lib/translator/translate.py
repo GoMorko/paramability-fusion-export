@@ -156,7 +156,7 @@ def _over_caps(recipe):
     return None
 
 
-def translate(capture, handlers=None, size_table=None, motion=None, loose=False):
+def translate(capture, handlers=None, size_table=None, motion=None, loose=False, plain=False):
     """Capture dict to TranslateResult. `handlers` maps a feature type to a handler and overrides the table.
 
     A handler is `handle(item, ctx) -> list[step] | Refusal`. An empty list means the item makes no step on purpose
@@ -169,6 +169,9 @@ def translate(capture, handlers=None, size_table=None, motion=None, loose=False)
     lists them as `{ name, reason }`. With `loose` they stay free sizes instead, so the shape at the current values is
     the same and the other values still follow; `result.loose` lists them with the reason. A formula too long to copy
     fixes its sizes in both modes.
+
+    `plain` keeps every range as the table gives it: no minimum is raised and no range is shortened. A size whose
+    range would have needed that stays free and goes to `loose` with the reason instead. Use it with `loose`.
 
     `motion` is what the size probe measured about sketch values (`probe.motion.Motion`): sketch points, planes, hole
     points and revolve axes are then written as formulas where they follow sizes. `probe.motion.OPTIMISTIC` writes
@@ -185,15 +188,15 @@ def translate(capture, handlers=None, size_table=None, motion=None, loose=False)
     if size_table is None:
         return _walk(capture, table, None)[0]
     upfront = joint_reasons(size_table) if motion is not None else untried_reasons(size_table)
-    strict = _settle(capture, table, size_table, motion, upfront, follow=False)
+    strict = _settle(capture, table, size_table, motion, upfront, follow=False, plain=plain)
     if not loose or strict.result.recipe is None or not (strict.whys or strict.narrowed):
-        return _finish(strict, {})
+        return _finish(strict, {}, plain)
     pinned = _Pinned(motion) if isinstance(motion, Motion) and not motion.optimistic else motion
-    found = _settle(capture, table, size_table, pinned, {}, follow=True)
+    found = _settle(capture, table, size_table, pinned, {}, follow=True, plain=plain)
     doubts = dict(upfront)
     for name, why in list(strict.whys.items()) + list(found.depends.items()):
         doubts.setdefault(name, why)
-    return _finish(found, {name: why for name, why in doubts.items() if name not in found.whys})
+    return _finish(found, {name: why for name, why in doubts.items() if name not in found.whys}, plain)
 
 
 class _Pinned:
@@ -221,14 +224,14 @@ class _Settled:
         self.raised, self.narrowed, self.depends = raised, narrowed, depends
 
 
-def _settle(capture, handlers, size_table, motion, fixed, follow):
+def _settle(capture, handlers, size_table, motion, fixed, follow, plain=False):
     """Walk until nothing changes. `fixed` (Fusion name to why) are fixed up front. Without `follow` every size a
     value cannot follow is fixed and the walk runs again; with it only the sizes of `Context.fix_always` are."""
     whys = dict(fixed)
     current = size_table.with_fixed(_reasons(whys)) if whys else size_table
     raised, narrowed = {}, {}
     for _ in range(MAX_PASSES):
-        result, ctx = _walk(capture, handlers, current, motion, follow)
+        result, ctx = _walk(capture, handlers, current, motion, follow, plain)
         cannot = ctx.must_fix if follow else {**ctx.depends, **ctx.must_fix}
         more = {name: why for name, why in cannot.items() if name not in whys}
         lifted = {name: low for name, low in ctx.minimums.items()
@@ -250,16 +253,18 @@ def _reasons(whys):
     return {name: fixed_reason(name, why) for name, why in whys.items()}
 
 
-def _finish(settled, doubts):
+def _finish(settled, doubts, plain=False):
     """The result of the last walk with its fixed, loose, raised and shortened sizes, and the recipe `sizes`.
 
     `doubts` (Fusion name to why) are sizes kept free that some value cannot follow; one that no formula reads is
-    listed as fixed, since it is a fixed number in all but name."""
+    listed as fixed, since it is a fixed number in all but name. With `plain` it is simply not a size."""
     result, table, whys = settled.result, settled.table, dict(settled.whys)
     if result.recipe is not None:
         written = used_sizes(result.recipe["features"], table.sizes)
         for name in [n for n in doubts if table.size_name(n) not in written]:
-            whys[name] = doubts.pop(name)
+            why = doubts.pop(name)
+            if not plain:
+                whys[name] = why
     result.fixed = [{"name": name, "reason": fixed_reason(name, why)} for name, why in whys.items()]
     result.loose = [{"name": name, "reason": loose_reason(name, why)} for name, why in doubts.items()]
     result.raised = [{"name": name, "min": low, "reason": why} for name, (low, why) in settled.raised.items()
@@ -293,9 +298,10 @@ def _add_sizes(result, table, fixed=()):
             result.notes.append("%s is not used by any copied step, so it is not a size." % name)
 
 
-def _walk(capture, table, size_table, motion=None, follow=False):
-    """One walk over the items: (TranslateResult, Context). `follow` keeps sizes free that a value cannot follow."""
-    ctx = Context(capture, size_table, motion, follow)
+def _walk(capture, table, size_table, motion=None, follow=False, plain=False):
+    """One walk over the items: (TranslateResult, Context). `follow` keeps sizes free that a value cannot follow;
+    `plain` leaves ranges alone (`translate`)."""
+    ctx = Context(capture, size_table, motion, follow, plain)
     result = TranslateResult()
 
     def refuse(item, reason, note=None):

@@ -193,6 +193,8 @@ class SizeProbe:
             self.motion = motion_module.build(self.capture, self.table, self.states)
         except Exception:
             self.motion = None
+            current = {e.name: e.value for e in self.table.entries}
+            self.moved = list(dict.fromkeys(self.moved + build.moved_sizes(self.capture, self.states, current)))
             found.extend(self._entry(p, _UNREADABLE, labels, loose) for p in self.moved if p not in self.untried)
         found.extend(self._watched(labels, {f["param"] for f in found}, loose))
         self.restore_gap_mm = self._gap(after)

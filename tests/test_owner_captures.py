@@ -174,6 +174,26 @@ class OwnerCaptureTest(unittest.TestCase):
                          {PROBE_TICKED[0]: (1.35, 2.05), PROBE_TICKED[3]: (13.5, 20.52),
                           "_Filter__Wall_thickness_mm": (0.98, 1.25)})
 
+    def test_the_plain_export_keeps_every_range_and_marks_the_sketch_sizes_loose(self):
+        path = os.path.join(REPORTS, PACKAGE_WITH_OFFSET_FACES)
+        if not os.path.exists(path):
+            self.skipTest("the owner's package is not on this machine")
+        with zipfile.ZipFile(path) as package:
+            capture = json.loads(package.read("report.json"))["capture"]
+        params = capture["parameters"]
+        ticked = PROBE_TICKED + ["_Filter__Wall_thickness_mm"]
+        table = size_table.build(params["user"], ticked, params["model"], capture.get("design_units", "mm"))
+        result = translate(capture, size_table=table, loose=True, plain=True)
+        self.assertEqual((result.fixed, result.raised, result.narrowed), ([], [], []))
+        free = {n: (s["min"], s["max"]) for n, s in result.recipe["sizes"].items() if "value" in s}
+        self.assertEqual(len(free), 6)
+        self.assertEqual(free["_Pipe__Slope_deg"], (0.0, 45.5))
+        # The sketch sizes are loose, and the pipe offset that no step reads is not a size.
+        self.assertEqual(sorted(f["name"] for f in result.loose), sorted(
+            [PROBE_TICKED[0], PROBE_TICKED[2], PROBE_TICKED[3], PROBE_TICKED[6], "_Filter__Wall_thickness_mm"]))
+        self.assertNotIn("FilterBox__PipeTop_offsetFromCenter_mm", [f["name"] for f in result.loose])
+        self.assertEqual(check_recipe(result.recipe), [])
+
 
 if __name__ == "__main__":
     unittest.main()

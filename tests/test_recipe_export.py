@@ -55,6 +55,19 @@ class PlanTest(unittest.TestCase):
         strict = plan_single_export(capture, self.step, "Plate", "w", "z", size_table=table, loose_sizes=False)[2]
         self.assertTrue(strict["keep_doubtful"])
 
+    def test_a_plain_export_has_no_checks_keeps_the_ranges_and_records_both_choices(self):
+        from tests.test_translate_copies import counted
+        capture, table = counted()
+        manifest, files, report = plan_single_export(capture, self.step, "Plate", "w", "z", size_table=table,
+                                                     plain=True)
+        self.assertEqual(manifest["checks"], [])
+        self.assertEqual(json.loads(files["recipe.json"])["sizes"]["holes_count"]["min"], 1.0)
+        self.assertEqual([f["name"] for f in manifest["loose"]], ["holes_count"])
+        self.assertNotIn("raised", report["sizes"])
+        self.assertFalse(any("not checked" in n for n in manifest["notes"]))
+        self.assertEqual((report["check_sizes"], report["keep_doubtful"]), (False, False))
+        self.assertTrue(plan_single_export(capture, self.step, "Plate", "w", "z", size_table=table)[2]["check_sizes"])
+
     def test_checks_are_planned_inside_the_limits_the_translation_found(self):
         from tests.test_translate_copies import counted
         from lib.export_plan.recipe_export import translate_capture, with_translated_limits

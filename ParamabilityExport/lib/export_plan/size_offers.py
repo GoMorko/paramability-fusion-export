@@ -12,7 +12,7 @@ from ..translator.sizes import joint_reasons
 from .body_scope import scope_inputs
 from .size_checks import MAX_CHECKS
 
-# Every ticked size gets one check, so the dialog allows as many ticks as there are check slots.
+# The most sizes one recipe holds; a checked export also gives each size one check.
 MAX_TICKED = MAX_CHECKS
 
 

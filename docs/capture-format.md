@@ -623,6 +623,10 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   stay free: a second walk keeps them in the table, every value that can follow them still does, and the values that
   cannot keep their numbers, so the shape at the current values is the same. In that walk a stuck sketch value
   follows its `rest` (the sizes that still move it), as it does once its own sizes are fixed.
+  With `plain=True` (the export's default, with `loose=True`) no minimum is raised and no range is shortened: a size
+  that would have needed that is loose instead (`Context.require` and `Context.narrow` record a doubt), and a loose
+  size that no formula reads is not a size at all (it is not listed as fixed). The plain export passes no motion, so
+  every size behind a sketch dimension, construction plane or axis, or a joint, is loose with a reason.
   `TranslateResult.loose` lists them as `{ name, reason }` ("... may give unexpected results: ..."); a loose size
   that no formula reads is listed under `fixed` instead. A formula too long to copy (`Context.fix_always`) fixes its
   sizes in both modes.
@@ -743,6 +747,8 @@ meeting the part) is listed there too, with the old end as `from`.
 recipe size name, as in the manifest's `loose`): from the translator, from a check that moved the part in the
 assembly or changed a sketch the probe does not follow, and from the probe. `sizes.fixed` lists the fixed ones.
 `keep_doubtful` is true when the person ticked "Keep doubtful sizes fixed", so those sizes were fixed instead.
+`check_sizes` is false for the plain export (the default): no check rows, no probe rows, no parameter changed, so
+`checks` in the manifest is empty and the report has no `probe`, `raised` or `narrowed`.
 
 ## 7. API names and what is not verified
 

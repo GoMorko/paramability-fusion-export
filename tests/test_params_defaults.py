@@ -21,19 +21,19 @@ class RangeTest(unittest.TestCase):
         self.assertEqual(defaults.default_range("length", 0.0), (0.0, 10.0))
         self.assertEqual(defaults.default_range("length", -4.0), (-8.0, -2.0))
 
-    def test_comment_range_sets_the_range_and_is_cut_from_the_label(self):
+    def test_comment_range_sets_the_range_and_the_label_stays_the_name(self):
         q = p("wall", 0.2, "mm", "Wall thickness [1..6]")
-        self.assertEqual(defaults.label_for(q), "Wall thickness")
+        self.assertEqual(defaults.label_for(q), "wall")
         self.assertEqual(defaults.size_range(q, "length", 2.0), (1.0, 6.0))
 
     def test_comment_range_that_misses_the_value_is_ignored(self):
         q = p("wall", 0.2, "mm", "Wall [5..6]")
         self.assertEqual(defaults.size_range(q, "length", 2.0), (1.0, 4.0))
 
-    def test_label_falls_back_to_the_name_and_is_cut_to_120(self):
+    def test_label_is_the_name_whatever_the_comment_says_and_is_cut_to_120(self):
         self.assertEqual(defaults.label_for(p("a_b", 1, "mm")), "a_b")
-        self.assertEqual(len(defaults.label_for(p("a", 1, "mm", "x" * 200))), 120)
-        self.assertEqual(defaults.label_for(p("a", 1, "mm", "[1..2]")), "a")
+        self.assertEqual(defaults.label_for(p("a_b", 1, "mm", "Some words")), "a_b")
+        self.assertEqual(len(defaults.label_for(p("a" * 200, 1, "mm"))), 120)
 
 
 class TickedTest(unittest.TestCase):

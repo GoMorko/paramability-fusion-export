@@ -49,24 +49,26 @@ def _with_up_axis(capture, up_axis):
     return {**capture, "up_axis": up_axis}
 
 
-def _translated(capture, size_table, motion, loose=True):
-    """`translate`, handing over the sketch motion and the loose mode when the translator takes them."""
+def _translated(capture, size_table, motion, loose=True, plain=False):
+    """`translate`, handing over the sketch motion and the loose and plain modes when the translator takes them."""
     taken = inspect.signature(translate).parameters
     options = {}
     if motion is not None and "motion" in taken:
         options["motion"] = motion
     if size_table is not None and "loose" in taken:
         options["loose"] = loose
+    if plain and size_table is not None and "plain" in taken:
+        options["plain"] = True
     return translate(capture, size_table=size_table, **options)
 
 
-def translate_capture(capture, up_axis, size_table=None, motion=None, loose=True):
+def translate_capture(capture, up_axis, size_table=None, motion=None, loose=True, plain=False):
     """The translator's result for a capture turned to the dialog's up axis. Raises what the translator raises.
 
     `motion` is what the size probe found about sketch values (`probe.motion`), or `probe.motion.OPTIMISTIC` for a
     first look that fixes nothing for sketches. With `loose` a size that some value cannot follow stays free with a
-    warning (`TranslateResult.loose`) instead of being fixed."""
-    return _translated(_with_up_axis(capture, up_axis), size_table, motion, loose)
+    warning (`TranslateResult.loose`) instead of being fixed. With `plain` no range is raised or shortened either."""
+    return _translated(_with_up_axis(capture, up_axis), size_table, motion, loose, plain)
 
 
 def with_translated_limits(table, result):
@@ -154,7 +156,7 @@ def _step_narrowed(size_table, result, free):
 def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
                        size_table=None, checks=None, fixed=None, unchecked=None, listing=None, motion=None,
                        probe=None, build_failures=None, narrowed=None, marker=None, loose=None, loose_sizes=True,
-                       translated=None):
+                       translated=None, plain=False):
     """Return (manifest, files, report) for one body.
 
     A body inside a component is translated like a root body: its capture carries the place of the part in the
@@ -199,7 +201,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
     else:
         capture = _with_up_axis(capture, up_axis)
         try:
-            result = translated or _translated(capture, size_table, motion, loose_sizes)
+            result = translated or _translated(capture, size_table, motion, loose_sizes, plain)
         except CaptureError as exc:
             error, note = exc, reader_failure_note()
         except Exception as exc:
@@ -239,6 +241,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
     if marker is not None:
         report["marker"] = dict(marker)
     if size_table is not None:
+        report["check_sizes"] = not plain
         report["keep_doubtful"] = not loose_sizes
     if capture is not None:
         report["capture"] = capture
@@ -274,7 +277,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         notes.extend(narrowed_notes([n["note"] for n in kept_narrowed if n["note"]]))
         if dropped:
             notes.append(dropped_note(dropped))
-        if unchecked:
+        if unchecked and not plain:
             notes.append(unchecked_note(len(unchecked)))
         del notes[MAX_NOTES:]
         manifest_checks = []

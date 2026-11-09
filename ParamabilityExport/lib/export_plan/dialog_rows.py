@@ -20,13 +20,19 @@ RATIOS = {"tick": 1, "name": 6, "now": 2, "used_by": 3, "min": 2, "max": 2, "sta
 
 NAME_WIDTH = 26
 NAME_LINES = 3
-HINT = "Click a row to see its comment, formula or why it stays fixed."
+HINT = ("Click a row to see its comment, formula or why it stays fixed. The export changes nothing in your design "
+        "unless \"Check sizes in Fusion\" is ticked.")
 _TYPED = re.compile(r"^\s*([-+]?[0-9.,]+)\s*([a-z]*)\s*$", re.I)
 # A comma that starts exactly three digits ("2,500") reads as a thousands mark or a decimal comma: not guessed.
 _AMBIGUOUS_COMMA = re.compile(r"^[-+]?[1-9][0-9]*,[0-9]{3}$")
 # Typed ranges are compared with the number now at the precision the cells show.
 RANGE_SLACK = 1e-4
 _REASON_CHANGES = re.compile(r"\bit (changes|moves) ([^.,]+)[.,]", re.I)
+CHECK_SIZES_TEXT = "Check sizes in Fusion (slower)"
+CHECK_SIZES_TIP = ("Off: nothing in your design is changed. Every ticked size the copied steps use is saved with "
+                   "the range in the table; a size that moves a sketch, a plane or a joint is marked \"may give "
+                   "unexpected results\". On: each size is also tried in Fusion, so sketches follow the sizes and "
+                   "a size that does not match is kept fixed or its range is shortened. This takes longer.")
 KEEP_DOUBTFUL_TEXT = "Keep doubtful sizes fixed"
 KEEP_DOUBTFUL_TIP = ("A size that the export cannot follow in every step stays a fixed number, instead of a size "
                      "marked \"may give unexpected results\".")

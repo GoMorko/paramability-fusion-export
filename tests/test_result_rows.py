@@ -13,10 +13,12 @@ def length(name):
     return dict(name=name, expression="2 mm", value=0.2, unit="mm", comment="", is_favorite=True, kind="length")
 
 
-def view(manifest=None, **sizes):
+def view(manifest=None, plain=False, **sizes):
     params = [length(n) for n in ("wall", "gap", "pipe", "spare")]
     table = size_table.build(params, ["wall", "gap", "pipe"])
     report = {"sizes": {"free": ["wall"], "fixed": [], "checks": [], "unchecked": [], "dropped": [], **sizes}}
+    if plain:
+        report["check_sizes"] = False
     manifest = manifest or {"kind": "recipe", "notes": ["12 steps copied."], "parameters": [{}, {}, {}, {}]}
     return result_view("box.paramability", manifest, report, table, ["wall", "gap", "pipe"])
 
@@ -40,6 +42,14 @@ class ResultViewTest(unittest.TestCase):
         shown = view(loose=[{"name": "wall", "reason": "wall may give unexpected results: it moves a joint."}])
         self.assertEqual(shown["rows"][0]["check"], "may be unexpected")
         self.assertEqual(shown["loose"], ["wall: wall may give unexpected results: it moves a joint."])
+
+    def test_a_plain_export_says_size_or_may_be_unexpected_instead_of_a_check_result(self):
+        shown = view(plain=True, free=["wall", "gap"],
+                     loose=[{"name": "gap", "reason": "gap may give unexpected results: it moves a joint."}])
+        self.assertEqual([(r["name"], r["check"]) for r in shown["rows"][:2]],
+                         [("wall", "size"), ("gap", "may be unexpected")])
+        self.assertEqual(shown["check_header"], "In Paramability")
+        self.assertEqual(view()["check_header"], "Check")
 
     def test_a_raised_smallest_value_shows_in_the_range(self):
         shown = view(raised=[{"name": "wall", "min": 1.5, "reason": "wall starts at 1.5: ..."}])

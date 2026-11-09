@@ -1,7 +1,7 @@
 """Which parameters are offered as sizes, which are ticked, and the label, kind and range of each.
 
 The goal is a dialog that needs no typing: favourites the model reads are ticked, every size gets a range that
-suits its kind, and a comment such as `Wall [1..6]` sets the range and is cut from the label.
+suits its kind, and a comment such as `Wall [1..6]` sets the range.
 """
 import re
 
@@ -40,9 +40,9 @@ def split_comment(comment):
 
 
 def label_for(p):
-    """The comment (cut to 120 characters) or else the Fusion name."""
-    text, _ = split_comment(p.get("comment"))
-    return (text or p["name"])[:LABEL_MAX].strip() or p["name"]
+    """The label of a recipe size: the parameter name as Fusion shows it (cut to 120 characters). The comment stays
+    in the manifest `parameters` list, where Paramability reads it as the description."""
+    return p["name"][:LABEL_MAX].strip() or p["name"]
 
 
 def size_kind(p, count_names=()):

@@ -45,6 +45,7 @@ class Context:
       applies them and walks again.
     follow: the walk keeps sizes free that some value cannot follow (loose mode); `narrow_or_doubt` then lists a
       shorter range as a doubt on the size instead of applying it.
+    plain: ranges are never raised or shortened; `require` and `narrow` list the size as a doubt instead.
     motion: the probe's motion file (`probe.motion.Motion`), `probe.motion.OPTIMISTIC`, or None. With a motion file the
       sketch values follow sizes (sketch_motion.py); otherwise they are written as numbers.
     plain_picks: round or bevel step id -> { near, reads, written }: its edges as measured points, the sizes its pick
@@ -52,9 +53,10 @@ class Context:
       `_plain` key; patterns and mirrors copy these points.
     """
 
-    def __init__(self, capture, table=None, motion=None, follow=False):
+    def __init__(self, capture, table=None, motion=None, follow=False, plain=False):
         self.capture = capture
         self.follow = follow
+        self.plain = plain
         self.table = table
         self.motion = motion
         self.depends = {}
@@ -97,6 +99,10 @@ class Context:
         """A pick needs the count Quantity `count` to stay at `least` or more. The smallest values of the sizes it reads
         are raised (`minimums`: Fusion name to (number, reason)); when that cannot work, they cannot follow (`fix`)."""
         raised = raised_minimums(self.table, count, least) if self.table is not None else {}
+        if self.plain:
+            if raised != {}:
+                self.fix(count.reads, "%s, and a smaller value would leave that copy out" % why)
+            return
         if raised is None:
             self.fix(count.reads, "%s, and a smaller value would leave that copy out" % why)
             return
@@ -105,8 +111,12 @@ class Context:
                 text = "%s starts at %s: %s, which needs at least %d copies." % (name, _number(value), why, least)
                 self.minimums[name] = (value, text[:MAX_REASON])
 
-    def narrow(self, found, why):
-        """Shorten the ranges of sizes: `found` maps a Fusion name to its new (min, max); `why` ends the reason."""
+    def narrow(self, found, why, doubt=None):
+        """Shorten the ranges of sizes: `found` maps a Fusion name to its new (min, max); `why` ends the reason.
+        A plain walk lists each size as a doubt with `doubt` (else `why`) instead."""
+        if self.plain:
+            self._doubt_past(found, doubt or why)
+            return
         for name, (lo, hi) in found.items():
             old = self.narrowings.get(name)
             if old is not None:
@@ -124,8 +134,12 @@ class Context:
         """Like `narrow`; in a walk that keeps sizes free (`follow`) the ranges stay and each size in `found` gets
         `doubt` as its reason, with the values past which it holds."""
         if not self.follow:
-            self.narrow(found, why)
+            self.narrow(found, why, doubt)
             return
+        self._doubt_past(found, doubt)
+
+    def _doubt_past(self, found, doubt):
+        """Each size in `found` gets `doubt` as its reason, with the values past which it holds."""
         for name, (lo, hi) in found.items():
             size = self.table.sizes.get(self.table.size_name(name)) or {}
             below, past = lo > size.get("min", lo), hi < size.get("max", hi)

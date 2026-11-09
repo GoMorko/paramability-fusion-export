@@ -105,7 +105,7 @@ def _keep_taper_under_limit(ctx, item, q):
     if found is None:
         ctx.fix(q.reads, "at other values " + lean)
     elif found:
-        ctx.narrow(found, "past that, " + lean)
+        ctx.narrow(found, "past that, " + lean, lean)
 
 
 def _distance_quantity(ctx, item, path, raw):

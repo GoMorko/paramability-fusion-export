@@ -9,13 +9,13 @@ from lib.params import size_table
 from lib.translator import translate
 
 
-def run(motion, loose=True, edit_model=None):
+def run(motion, loose=True, edit_model=None, plain=False):
     capture = load_capture(BOX)
     params = capture["parameters"]
     if edit_model:
         edit_model(params["model"])
     table = size_table.build(params["user"], BOX_SIZES, params["model"], capture.get("design_units", "mm"))
-    return translate(capture, size_table=table, motion=motion, loose=loose)
+    return translate(capture, size_table=table, motion=motion, loose=loose, plain=plain)
 
 
 def free(result):
@@ -60,6 +60,12 @@ class LooseTest(unittest.TestCase):
             "depth_mm"])
         self.assertNotIn("depth_mm", free(result))
         self.assertFalse([n for n in result.notes if "depth_mm is not used" in n])
+
+    def test_a_plain_translation_drops_a_doubtful_size_no_formula_reads_instead_of_fixing_it(self):
+        result = run(None, plain=True)
+        self.assertEqual(result.fixed, [])
+        self.assertNotIn("depth_mm", free(result))
+        self.assertIn("depth_mm is not used by any copied step, so it is not a size.", result.notes)
 
     def test_a_size_that_moves_a_joint_stays_free_with_the_reason(self):
         def joint(model):

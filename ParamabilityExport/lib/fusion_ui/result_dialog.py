@@ -116,7 +116,7 @@ def build(command, view):
     sizes = inputs.addGroupCommandInput("pm_result_sizes", view["size_title"])
     sizes.isExpanded = True
     if view["rows"]:
-        _build_table(sizes.children, view["rows"])
+        _build_table(sizes.children, view["rows"], view.get("check_header"))
     else:
         sizes.children.addTextBoxCommandInput("pm_result_none", "", "No parameter became a size.", 1, True)
 
@@ -138,10 +138,11 @@ def _add_lines(inputs, group_id, title, lines, rows_per_line):
         min(len(lines) * rows_per_line, _MAX_FIXED_ROWS), True)
 
 
-def _build_table(children, rows):
+def _build_table(children, rows, check_header=None):
     table = children.addTableCommandInput("pm_result_table", "", len(_COLUMNS), _RATIO)
+    headers = dict(_HEADERS, check=check_header or _HEADERS["check"])
     for col, key in enumerate(_COLUMNS):
-        table.addCommandInput(children.addTextBoxCommandInput("pm_result_head_" + key, "", _HEADERS[key], 1, True),
+        table.addCommandInput(children.addTextBoxCommandInput("pm_result_head_" + key, "", headers[key], 1, True),
                               0, col)
     for index, row in enumerate(rows):
         for col, key in enumerate(_COLUMNS):

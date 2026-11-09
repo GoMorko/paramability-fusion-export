@@ -7,12 +7,16 @@ from .messages import listed_lines, recipe_saved_message
 
 MATCHES, NOT_CHECKED, KEPT_FIXED, NOT_USED = "matches Fusion", "not checked", "kept fixed", "not used"
 DOUBTFUL = "may be unexpected"
+FREE = "size"
+CHECK_HEADER, STATUS_HEADER = "Check", "In Paramability"
 
 
 def _size_rows(table, report):
-    """One row per size the recipe holds: its Fusion name, range and what the check found. A range the translator
-    shortened or a smallest value it raised (so a picked pattern copy stays) is shown that way."""
+    """One row per size the recipe holds: its Fusion name, range and what the check found (a plain export, which
+    checks nothing, says "size" or "may be unexpected"). A range the translator shortened or a smallest value it
+    raised (so a picked pattern copy stays) is shown that way."""
     sizes = report["sizes"]
+    plain = report.get("check_sizes") is False
     unchecked = set(sizes.get("unchecked") or [])
     loose = {f["name"] for f in sizes.get("loose") or []}
     raised = {r["name"]: r["min"] for r in sizes.get("raised") or []}
@@ -30,7 +34,8 @@ def _size_rows(table, report):
         rows.append({
             "name": entry.name if entry is not None else size_name,
             "range": range_text(size, size.get("min"), size.get("max")) if "min" in size else "",
-            "check": DOUBTFUL if size_name in loose else NOT_CHECKED if size_name in unchecked else MATCHES,
+            "check": DOUBTFUL if size_name in loose else FREE if plain else (
+                NOT_CHECKED if size_name in unchecked else MATCHES),
         })
     return rows
 
@@ -72,7 +77,8 @@ def variables_line(manifest):
 def result_view(file_name, manifest, report, table, ticked):
     """Plain data for the result dialog, or None when the file holds no recipe (the message box tells that story).
 
-    Keys: saved (first sentence), size_title, rows ({name, range, check}), fixed (lines), loose (lines: sizes that
+    Keys: saved (first sentence), size_title, check_header (the title of the last column), rows ({name, range,
+    check}), fixed (lines), loose (lines: sizes that
     stay free but may not follow every step, with why), narrowed (lines: sizes whose
     range was shortened because Fusion could not build the part or a step would no longer meet it), variables,
     message (the whole story as plain text, for a message box).
@@ -85,6 +91,7 @@ def result_view(file_name, manifest, report, table, ticked):
     return {
         "saved": ("Saved %s. %s" % (file_name, notes[0] if notes else "")).strip(),
         "size_title": "%d %s ready for the form" % (count, "size" if count == 1 else "sizes"),
+        "check_header": STATUS_HEADER if report.get("check_sizes") is False else CHECK_HEADER,
         "rows": rows + _left_out_rows(table, report, ticked),
         "fixed": _fixed_lines(report),
         "loose": _loose_lines(report),

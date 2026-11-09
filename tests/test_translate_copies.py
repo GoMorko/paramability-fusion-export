@@ -105,6 +105,15 @@ class PickOnCopyTest(unittest.TestCase):
         self.assertEqual(result.recipe["sizes"]["holes_count"]["min"], 2)
         self.assertEqual(steps_of(result.recipe, "round")[0]["edges"]["near"][0][0], {"expr": "8 + hole_pitch_mm"})
 
+    def test_a_plain_translation_leaves_the_count_range_and_marks_the_size_loose(self):
+        capture, table = counted()
+        result = translate(capture, size_table=table, loose=True, plain=True)
+        self.assertEqual((result.fixed, result.raised, result.narrowed), ([], [], []))
+        self.assertEqual(result.recipe["sizes"]["holes_count"]["min"], 1.0)
+        reasons = {f["name"]: f["reason"] for f in result.loose}
+        self.assertIn("Fillet1 picks copy 2 of R-Pattern1", reasons["holes_count"])
+        self.assertTrue(reasons["holes_count"].startswith("holes_count may give unexpected results"))
+
     def test_the_default_range_from_the_dialog_still_raises_the_count(self):
         result = self._counted({"holes_count": (1.0, 6.0)})
         self.assertEqual(fixed_names(result), [])

@@ -217,6 +217,19 @@ class ValueKindsTest(unittest.TestCase):
         self.assertEqual((turn["min"], turn["max"]), (45.0, 129.98))
         self.assertIn("lean its walls 45 degrees or more", result.narrowed[0]["reason"])
 
+    def test_a_plain_translation_keeps_the_angle_range_and_marks_the_size_loose(self):
+        def edit(data):
+            data["side_one"]["taper_deg"] = 5.0
+            data["profile_area"], data["end_area"] = 800.0, 900.0
+            data["params"] = {"side_one.taper_deg": param("d4", "turn_deg - 85", 5.0)}
+        capture, ticked = on_fixture("extrude_plate", edit, TICKED + ["turn_deg"])
+        result = translate(capture, size_table=table_of(capture, ticked), loose=True, plain=True)
+        turn = result.recipe["sizes"]["turn_deg"]
+        self.assertEqual((turn["min"], turn["max"]), (45.0, 135.0))
+        self.assertEqual((result.narrowed, result.fixed), ([], []))
+        reason = {f["name"]: f["reason"] for f in result.loose}["turn_deg"]
+        self.assertIn("lean its walls 45 degrees or more", reason)
+
     def test_revolve_turn_follows_an_angle_size(self):
         capture, ticked = on_fixture(
             "revolve_quarter", lambda d: d.update(params={"extent.angle_deg": param("d4", "turn_deg", 90.0)}),

@@ -113,12 +113,33 @@ class DoubtfulTest(unittest.TestCase):
         _, inputs = make_dialog(offers)
         self.assertEqual(row(inputs, "status", 0).formattedText, "size, may be unexpected")
         self.assertFalse(recipe_dialog.read_form(inputs, offers)["keep_doubtful"])
-        box = inputs.itemById(recipe_dialog.KEEP_DOUBTFUL_ID)
-        box.value = True
-        recipe_dialog.handle_change(inputs, offers, box)
+        check = inputs.itemById(recipe_dialog.CHECK_SIZES_ID)
+        keep = inputs.itemById(recipe_dialog.KEEP_DOUBTFUL_ID)
+        self.assertFalse(check.value)
+        self.assertFalse(keep.isVisible)
+        check.value = True
+        recipe_dialog.handle_change(inputs, offers, check)
+        self.assertTrue(keep.isVisible)
+        keep.value = True
+        recipe_dialog.handle_change(inputs, offers, keep)
         self.assertEqual(row(inputs, "status", 0).formattedText, "fixed, moves a joint")
         self.assertEqual(row(inputs, "status", 1).formattedText, "size")
-        self.assertTrue(recipe_dialog.read_form(inputs, offers)["keep_doubtful"])
+        form = recipe_dialog.read_form(inputs, offers)
+        self.assertEqual((form["check_sizes"], form["keep_doubtful"]), (True, True))
+
+    def test_keeping_doubtful_sizes_fixed_counts_only_while_sizes_are_checked(self):
+        offers = [offer("wall", doubt="wall may give unexpected results: it moves a joint.")]
+        _, inputs = make_dialog(offers)
+        check = inputs.itemById(recipe_dialog.CHECK_SIZES_ID)
+        keep = inputs.itemById(recipe_dialog.KEEP_DOUBTFUL_ID)
+        check.value, keep.value = True, True
+        recipe_dialog.handle_change(inputs, offers, check)
+        check.value = False
+        recipe_dialog.handle_change(inputs, offers, check)
+        self.assertFalse(keep.isVisible)
+        self.assertEqual(row(inputs, "status", 0).formattedText, "size, may be unexpected")
+        form = recipe_dialog.read_form(inputs, offers)
+        self.assertEqual((form["check_sizes"], form["keep_doubtful"]), (False, False))
 
 
 class RangeTest(unittest.TestCase):

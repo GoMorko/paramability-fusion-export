@@ -140,6 +140,25 @@ builds agrees with the Fusion part.
 Use a design with one body in the root and three plain user parameters read by its features (for example `wall` in
 mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter.
 
+Unless a line says otherwise, the lines in this section and in sections 8 and 9 that speak of checks, probe rows,
+"Trying size", shortened or raised ranges or "Keep doubtful sizes fixed" need the box "Check sizes in Fusion
+(slower)" ticked. The default export (box off) is the plain one below.
+
+- [ ] **Plain export (box off, the default).** The dialog shows the box "Check sizes in Fusion (slower)" off and no
+      "Keep doubtful sizes fixed" box; ticking the first shows the second, unticking hides it. The hint under the table
+      says that nothing is changed in the design. Export: no progress window shows, the timeline shows no parameter
+      change and Undo has nothing new beyond what Fusion itself records. Every ticked size that a copied step reads is
+      in `recipe.json` with the range of the table and its current value. `manifest.json` has `"checks": []` and the
+      package holds no `checks/` folder. `report.json` has `"check_sizes": false` and no `probe`, `raised` or
+      `narrowed`.
+- [ ] **Plain export, loose sizes.** Tick a parameter that drives a sketch dimension or a joint. The size stays in
+      `recipe.json`, the manifest `loose` list holds it with a reason that starts with the Fusion name, the result
+      window shows "may be unexpected" in its "In Paramability" column, and Paramability shows a warning mark. A
+      ticked parameter that no copied step reads is not a size: the message names it, and it is in the manifest
+      `parameters` list.
+- [ ] **Labels.** Open the plain file in Paramability: each size shows the Fusion parameter name as its label, and
+      the Fusion comment as the variable's description (from the manifest `parameters` list), not as the name.
+
 - [ ] The dialog lists the user parameters in a table, the ones the body reads ticked (favourites first), the formula
       one greyed with "formula" in the last column. OK is on once a body is picked.
 - [ ] **Doubtful when it opens.** A parameter that drives a joint is unticked as soon as the dialog opens, but it can
@@ -164,8 +183,8 @@ mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter
       step".
 - [ ] With only one body in the design it is picked already. With no user parameters the dialog says so (no table)
       and the export still works.
-- [ ] Export, open in Paramability: the part is a recipe, the sizes are the ticked parameters, and the message after
-      the export says how many sizes are ready. `manifest.json` inside the file lists one check per size
+- [ ] With the box ticked: export, open in Paramability: the part is a recipe, the sizes are the ticked parameters, and
+      the message after the export says how many sizes are ready. `manifest.json` inside the file lists one check per size
       (`checks/01.step` and up), each with a single size in `values`. The recipe in `recipe.json` lists no size
       that has no check, unless the message said some were not checked.
 - [ ] Untick a parameter and export: that name is not a size and its number is plain in `recipe.json`.
@@ -291,7 +310,7 @@ Use the filter box design (names such as `FilterBox_$_depth__contains_CeramicMed
       whether the line stays or Fusion replaces it at once (its lifetime is not fixed by the API).
 - [ ] Click OK: the progress window shows as before, then the result window "Saved for Paramability" opens with the
       saved line, a table of sizes (name, range, "matches Fusion", "not checked", "may be unexpected", "kept fixed"
-      or "not used"), a "Stays fixed" group and a "May give unexpected results" group with each reason, and the line
+      or "not used"; a plain export says "size" instead of "matches Fusion" and heads the column "In Paramability"), a "Stays fixed" group and a "May give unexpected results" group with each reason, and the line
       "All N parameters come along as variables ...". Only a Close button shows. Pull a size so that Fusion cannot
       build it at any other value (a fillet that only fits now): its row says "kept fixed".
 - [ ] The result window opens right after the export ends, not while the progress window is still up. If it does not
