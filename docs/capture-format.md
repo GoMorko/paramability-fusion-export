@@ -218,9 +218,11 @@ A profile of another component's sketch (Fusion hands it over through that compo
   (`dependencyParameters`).
 
 The translator copies such a profile like its own when `frame`, `native_frame` and `placement.frame` are present
-(`lib/translator/borrowed.py`): the outline is written as numbers, so every size that `sketch_params` read becomes a
-fixed number, and the step gets a note that names the sketch and its component. Without them the step is refused as
-before.
+(`lib/translator/borrowed.py`). The size probe reads the sketch at every state (section 5, "Probe states"), so the
+outline follows the sizes through the motion file under the usual keys (`<item>/p<profile>/...`). Where the motion
+holds no value for the profile, the outline is written as numbers and every size that `sketch_params` read becomes a
+fixed number; the first translation of an export (no sizes fixed for sketches) skips that. The step gets a note that
+names the sketch and its component. Without the frames and the place the step is refused as before.
 
 CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriented):
 
@@ -655,6 +657,14 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
 - `params`: `value` of each named parameter in Fusion's own units (cm, radians), as in `parameters.*.value`. A name
   is looked up in the user parameters, then in the target component's model parameters.
 - `box`: the target body's box, as `target.box`.
+- A sketch of another component that a step borrows is requested with the optional `borrowed`: `{ "<sketch token>":
+  { "path": "<fullPathName the capture recorded>" } }`. It is found by token, read native, and its place is found
+  again at every state: the occurrence of its component with that path (the only one when there is no path), then the
+  placement check of section 4 (native sketch points against the same points through the occurrence). Its `frame` is
+  brought into the target's coordinates (that place, then the inverse of the target's, read once per capture), so
+  it compares with the capture profile's brought-in `frame`; it adds `native_frame` and `placement` (`{ path, source }`).
+  When it cannot be read or placed, it has no key under `sketches` and `unread` (only then present) gives
+  `{ token: reason }`.
 - Nothing raises. A part that cannot be read has no key, which the fit treats as unread.
 
 ## 6. Report and capture file

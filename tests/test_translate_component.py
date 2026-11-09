@@ -4,8 +4,10 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.test_translate_sized import run
+from tests.test_translate_sketch_motion import run as run_with_motion
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, translate_fixture
 
+from lib.probe.motion import OPTIMISTIC, Affine, Motion, Stuck
 from lib.translator import CaptureError, translate
 from lib.translator.notes import step_only_note
 
@@ -163,6 +165,32 @@ class BorrowedSketchTest(unittest.TestCase):
         result, _ = run(capture)
         self.assertEqual([f["name"] for f in result.fixed], ["wall_mm"])
         self.assertIn("sketch Rim of Lid", result.fixed[0]["reason"])
+
+    def borrowed_run(self, motion):
+        capture = load_capture("component_moved")
+        capture["items"].append(lid_rim(sketch_params=[{"name": "d90", "expression": "wall_mm * 5", "reads": []}]))
+        result = run_with_motion(capture, ["wall_mm"], motion)
+        assert_schema_ok(self, result.recipe)
+        return result, [s for s in result.recipe["features"] if s["label"] == "Extrude9"][0]
+
+    def test_a_borrowed_sketch_follows_the_sizes_the_probe_found(self):
+        result, rim = self.borrowed_run(Motion({"9/p0/l0/width": Affine(8, {"wall_mm": 1.0}, "Rim")}))
+        self.assertEqual(result.fixed, [])
+        self.assertEqual(rim["sketch"]["outer"]["width"]["expr"], "wall_mm + 8")
+        self.assertNotIn("fixed numbers", verdicts(result)[9][1])
+
+    def test_a_borrowed_value_the_probe_could_not_follow_fixes_its_sizes(self):
+        result, _ = self.borrowed_run(Motion({"9/p0/l0/width": Stuck(["wall_mm"], "unread", "Rim of Lid")}))
+        self.assertEqual([f["name"] for f in result.fixed], ["wall_mm"])
+        self.assertIn("Rim of Lid", result.fixed[0]["reason"])
+
+    def test_a_probe_that_gave_no_value_for_the_sketch_keeps_the_dimension_sizes_fixed(self):
+        result, _ = self.borrowed_run(Motion({}))
+        self.assertEqual([f["name"] for f in result.fixed], ["wall_mm"])
+
+    def test_the_first_translation_fixes_nothing_for_a_borrowed_sketch(self):
+        result, _ = self.borrowed_run(OPTIMISTIC)
+        self.assertEqual(result.fixed, [])
 
     def test_a_borrowed_sketch_without_a_readable_place_refuses(self):
         capture = load_capture("component_moved")

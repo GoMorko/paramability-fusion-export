@@ -219,7 +219,11 @@ def _sketch_points(sketch, occurrence):
 def read_sketch_placement(proxy, sketch):
     """Where another component's sketch sits in the assembly: `proxy` is the entity a feature got (seen through an
     occurrence), `sketch` the native sketch. A record like the target's placement, or one with `error`."""
-    path = occurrence_path(proxy)
+    return sketch_placement_at(occurrence_path(proxy), sketch)
+
+
+def sketch_placement_at(path, sketch):
+    """`read_sketch_placement` for an occurrence path (innermost first) instead of a proxy entity."""
     if not path:
         return {"path": "", "error": "The sketch was not reached through its place in the assembly."}
     name = geo.safe(lambda: path[0].fullPathName, "") or _names(path)
@@ -227,6 +231,21 @@ def read_sketch_placement(proxy, sketch):
     if not native_points:
         return {"path": name, "error": "No points of the sketch could be compared."}
     return dict({"path": name}, **_checked_frame(path, native_points, proxy_points, "sketch", "sketch"))
+
+
+def find_occurrence(root, component, path_name=""):
+    """The occurrence of `component` to read a borrowed sketch through, as the occurrence path (innermost first), or
+    None. `path_name` is the `fullPathName` the capture recorded; without a match, a component with a single
+    occurrence is used."""
+    found = geo.collection_items(geo.safe(lambda: root.allOccurrencesByComponent(component), None))
+    if path_name:
+        found = [o for o in found if geo.safe(lambda: o.fullPathName, "") == path_name] or (
+            found if len(found) == 1 else [])
+    elif len(found) != 1:
+        found = []
+    if not found:
+        return None
+    return [found[0]] + occurrence_path(found[0])
 
 
 def read_frame(body, source):

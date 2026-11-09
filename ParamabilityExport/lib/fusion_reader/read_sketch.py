@@ -190,6 +190,15 @@ def _moved_frame(frame, move):
     return out
 
 
+def into_target(frame, placement_frame, ctx):
+    """A sketch frame of another component (`frame`, in that component) in the target's coordinates, given the
+    component's place in the assembly; None when the target's place cannot be read."""
+    target = target_move(ctx)
+    if target is None:
+        return None
+    return _moved_frame(frame, place.move_from_frame(placement_frame).then(target.inverse()))
+
+
 def _borrowed(proxy, sketch, frame, ctx):
     """Another component's sketch: that component, the sketch's place in the assembly, the dimensions that move it,
     and `frame` brought into the target's coordinates (`native_frame` keeps the sketch's own). Without a readable
@@ -202,10 +211,9 @@ def _borrowed(proxy, sketch, frame, ctx):
         "placement": placement,
         "sketch_params": _sketch_params(sketch),
     }
-    target = target_move(ctx)
-    if "frame" in placement and target is not None:
-        move = place.move_from_frame(placement["frame"]).then(target.inverse())
-        out.update(frame=_moved_frame(frame, move), native_frame=frame)
+    moved = into_target(frame, placement["frame"], ctx) if "frame" in placement else None
+    if moved is not None:
+        out.update(frame=moved, native_frame=frame)
     elif "frame" in placement:
         placement.pop("frame")
         placement["error"] = "The place of the part could not be read."

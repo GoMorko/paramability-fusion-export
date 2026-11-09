@@ -425,6 +425,13 @@ These were written from the API reference and never run:
     it); `RectangularPatternFeature.directionOneEntity` and `directionTwoEntity` with `.parentSketch`.
   - `Design.findEntityByToken` for sketches, points and lines of a component (K8): the native object or an
     occurrence proxy, the add-in keeps the one without `assemblyContext`.
+  - Another component's sketch used by a step (borrowed): `Design.findEntityByToken` for its native `Sketch`,
+    `Sketch.parentComponent`, `Component.allOccurrencesByComponent` on the root with `Occurrence.fullPathName` (the
+    occurrence is picked by the path the capture recorded) and `SketchPoint.createForAssemblyContext(occurrence)` read
+    again at every state, since a size can move that component. Check in `probe.states[*].read.sketches` that the
+    sketch has `native_frame` and `placement`, and that `unread` is absent. Test: the filter box with a lid in a
+    second component whose sketches project the box edges; shrink and grow the box on the form and compare the lid
+    rails with Fusion at the same sizes.
   - `UserParameters.itemByName` and `Component.modelParameters.itemByName` for the value of each column per state.
   - `ModelParameter.createdBy` of a sketch dimension: recognised by the type name, a `SketchDimension` cast, the
     members `parentSketch` and `parameter`, or else the sketch dimension whose own `parameter` is this one
