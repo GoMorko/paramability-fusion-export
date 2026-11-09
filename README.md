@@ -32,8 +32,8 @@ Nothing is typed in Fusion.
    row has a Min and a Max: they start from the comment rule below, and you can type your own numbers (in the length
    unit of your design, in degrees, or whole numbers for a count; a typed unit such as `2 in` is read too). The
    current value must sit between them. An unticked row says "stays 3 mm". A parameter worked out by a formula says
-   "formula" and follows the parameters it reads. A parameter that drives a sketch dimension, a construction plane or
-   axis, or a joint cannot be a size for now: it is greyed out and its row says why. Click a row to read its comment,
+   "formula" and follows the parameters it reads. A parameter that drives a joint cannot be a size for now: it is greyed
+   out and its row says why. Click a row to read its comment,
    its formula or the full reason in the box under the table. You can tick up to 64 sizes. Each one gets a
    check, an extra STEP export, so many ticks make the export slower.
 4. If a step of the body cannot be copied, a warning shows under the body picker as soon as you pick it: which
@@ -54,8 +54,18 @@ those once: it sets that size to the top of its range, writes a STEP file of the
 builds the recipe at that value and compares it with the STEP file. A size that does not match is kept as a fixed
 number.
 
+A size can also move a sketch: a rectangle width, a hole position, or a plane that a sketch sits on. The add-in then
+sets the size to other values, only lets Fusion rebuild (no STEP file), and reads the sketch each time. From these
+readings it writes the sketch value as a formula of your parameters, such as `0.5 * FilterBox_width_mm`, so the sketch
+follows the size in Paramability. This adds about one rebuild per size that moves a sketch, plus two. The progress
+window says "Trying size ..." for these steps, and Cancel works there too.
+
 A size stays a fixed number, with the reason in the message after the export and in the file, when Fusion cannot
-build the part at the checked value, or when it moves a sketch (sketches that follow sizes come in a later version).
+build the part at the checked value, when it moves a joint, or when it moves a sketch in a way the add-in cannot copy.
+These cases cannot be copied: a point that moves along a curve (an angle or a polar placement), an outline that
+changes shape (a line that only crosses the outline above some width, a sketch pattern whose count follows a size),
+a sketch plane that turns, a sketch that a step uses in another way (a pattern direction, a path), a construction
+plane or axis that a step reaches to directly, and a size that would shrink an outline to nothing.
 A ticked parameter that no copied step uses is not a size; the message after the export names it.
 When a step cannot be copied, the file holds the plain part only. The message after the export starts with the
 first step that stopped it, and the lower-right corner of the Fusion window shows a short line with the same step
@@ -111,7 +121,7 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   where Fusion shows it; the sizes that move that sketch stay fixed.
 - A recipe covers the picked body only. Parameters made by steps or sketches of other bodies are left out where the
   add-in can match them by name; construction planes, axes and joints are read for the component and the ones above
-  it. Sizes cannot move sketches yet.
+  it. A size that turns a sketch plane, moves a point along a curve, or changes the shape of an outline stays fixed.
   These stop the copy and leave a plain part:
   thin extrudes, face outlines, spline and other free curve outlines, extrudes that start or end on a tilted or curved
   surface, extrudes that make a new component, modeled threads, rounds with variable or chord length sizes or curvature

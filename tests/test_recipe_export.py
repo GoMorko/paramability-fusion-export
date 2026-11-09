@@ -143,3 +143,36 @@ class PlanTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MotionHandoverTest(unittest.TestCase):
+    """The translator gets the sketch motion only when it takes one, and the report keeps the probe record."""
+
+    def setUp(self):
+        self.seen = []
+        real = recipe_export.translate
+
+        def translate(capture, size_table=None, motion=None):
+            self.seen.append(motion)
+            return real(capture, size_table=size_table)
+
+        self._real = real
+        recipe_export.translate = translate
+        self.addCleanup(setattr, recipe_export, "translate", real)
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.step = os.path.join(self.tmp.name, "01.step")
+        with open(self.step, "wb") as f:
+            f.write(b"ISO-10303-21;")
+
+    def test_motion_and_probe_record_reach_the_translator_and_the_report(self):
+        marker = object()
+        _, _, report = plan_single_export(load_capture("extrude_plate"), self.step, "Plate", "w", "z",
+                                          motion=marker, probe={"restore_gap_mm": 0.0})
+        self.assertEqual(self.seen, [marker])
+        self.assertEqual(report["probe"], {"restore_gap_mm": 0.0})
+
+    def test_no_motion_and_no_probe_leave_the_report_as_before(self):
+        _, _, report = plan_single_export(load_capture("extrude_plate"), self.step, "Plate", "w", "z")
+        self.assertEqual(self.seen, [None])
+        self.assertNotIn("probe", report)

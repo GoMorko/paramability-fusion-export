@@ -3,6 +3,7 @@
 Whatever goes wrong while reading or translating, the person still gets the STEP as a stepOnly package with one
 plain note. The caller writes the STEP before it reads the capture.
 """
+import inspect
 import json
 
 from ..package.manifest import (
@@ -47,9 +48,23 @@ def _with_up_axis(capture, up_axis):
     return {**capture, "up_axis": up_axis}
 
 
-def translate_capture(capture, up_axis, size_table=None):
-    """The translator's result for a capture turned to the dialog's up axis. Raises what the translator raises."""
-    return translate(_with_up_axis(capture, up_axis), size_table=size_table)
+def _accepts_motion():
+    return "motion" in inspect.signature(translate).parameters
+
+
+def _translated(capture, size_table, motion):
+    """`translate`, with the sketch motion handed over when the translator takes one."""
+    if motion is not None and _accepts_motion():
+        return translate(capture, size_table=size_table, motion=motion)
+    return translate(capture, size_table=size_table)
+
+
+def translate_capture(capture, up_axis, size_table=None, motion=None):
+    """The translator's result for a capture turned to the dialog's up axis. Raises what the translator raises.
+
+    `motion` is what the size probe found about sketch values (`probe.motion`), or `probe.motion.OPTIMISTIC` for a
+    first look that fixes nothing for sketches."""
+    return _translated(_with_up_axis(capture, up_axis), size_table, motion)
 
 
 def free_sizes(recipe):
@@ -100,7 +115,8 @@ def _uses(capture):
 
 
 def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
-                       size_table=None, checks=None, fixed=None, unchecked=None, listing=None):
+                       size_table=None, checks=None, fixed=None, unchecked=None, listing=None, motion=None,
+                       probe=None):
     """Return (manifest, files, report) for one body.
 
     A body inside a component is translated like a root body: its capture carries the place of the part in the
@@ -117,6 +133,9 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
     unchecked: names of sizes that got no check, for the report.
     listing: the design's ParameterListing (params.listing). Its entries go into the manifest `parameters` of every
       package kind, so the Fusion parameters reach Paramability even when the shape stays fixed.
+    motion: what the size probe found for sketch values (`probe.motion.Motion`), or None for a translation that
+      fixes every size behind a sketch.
+    probe: the size probe's own record for `report.json` (request, states read, motion, restore gap), or None.
     files maps entry paths to a file path or bytes, as write_package expects. Raises ValueError when the manifest
     breaks the package rules.
     """
@@ -131,7 +150,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
     else:
         capture = _with_up_axis(capture, up_axis)
         try:
-            result = translate(capture, size_table=size_table)
+            result = _translated(capture, size_table, motion)
         except CaptureError as exc:
             error, note = exc, reader_failure_note()
         except Exception as exc:
@@ -162,6 +181,8 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         report["error"] = ("%s: %s" % (type(error).__name__, error))[:500]
     if capture is not None:
         report["capture"] = capture
+    if probe is not None:
+        report["probe"] = probe
     if listing is not None:
         report["parameters"] = listing.report()
     if recipe_data is not None:

@@ -84,19 +84,86 @@ def created_by_kind(entity):
     return "other"
 
 
-def _created_by(p, owner_token):
+def _cast_is_sketch_dimension(entity):
+    """True when adsk.fusion can cast the entity to a SketchDimension. False without adsk (tests) or on failure."""
+    try:
+        import adsk.fusion
+        return adsk.fusion.SketchDimension.cast(entity) is not None
+    except Exception:
+        return False
+
+
+def _is_sketch_dimension(entity):
+    """A sketch dimension by its type name, else by a cast, else by the members only a dimension has."""
+    if created_by_kind(entity) == "sketchDimension" or _cast_is_sketch_dimension(entity):
+        return True
+    return hasattr(entity, "parentSketch") and hasattr(entity, "parameter")
+
+
+def _dimension_index(component):
+    """A lookup from parameter name to (sketch, dimension) over the sketches of a component. Built once, on first use."""
+    cache = {}
+
+    def build():
+        found = {}
+        sketches = safe(lambda: component.sketches, None)
+        for i in range(safe(lambda: sketches.count, 0) or 0):
+            sketch = safe(lambda: sketches.item(i), None)
+            dims = safe(lambda: sketch.sketchDimensions, None)
+            for j in range(safe(lambda: dims.count, 0) or 0):
+                dim = safe(lambda: dims.item(j), None)
+                name = safe(lambda: dim.parameter.name, "")
+                if name:
+                    found.setdefault(name, (sketch, dim))
+        return found
+
+    def find(name):
+        if "index" not in cache:
+            cache["index"] = build()
+        return cache["index"].get(name)
+
+    return find
+
+
+def _sketch_made(dimension, sketch, owner_token):
+    sketch = sketch or safe(lambda: dimension.parentSketch, None)
+    return {
+        "kind": "sketchDimension",
+        "token": safe(lambda: dimension.entityToken, "") or "",
+        "name": safe(lambda: dimension.name, "") or "",
+        "sketch": safe(lambda: sketch.name, "") or "",
+        "component": safe(lambda: sketch.parentComponent.entityToken, "") or owner_token,
+    }
+
+
+def _created_by(p, owner_token, find_dimension=None):
     """Who made the parameter. `component` is the token of the component the maker lives in: the sketch's component
-    for a sketch dimension, else the component the parameter is listed from."""
+    for a sketch dimension, else the component the parameter is listed from.
+
+    A sketch dimension is recognised through `createdBy` (type name, cast, members) and, when that gives nothing
+    usable, through the sketch dimension whose own parameter is this one (`find_dimension(name)`).
+    """
     entity = safe(lambda: p.createdBy, None)
+    if entity is not None:
+        if _is_sketch_dimension(entity):
+            return _sketch_made(entity, None, owner_token)
+        kind = created_by_kind(entity)
+        if kind != "other":
+            return {
+                "kind": kind,
+                "token": safe(lambda: entity.entityToken, "") or "",
+                "name": safe(lambda: entity.name, "") or "",
+                "sketch": "",
+                "component": owner_token,
+            }
+    if find_dimension is not None:
+        found = find_dimension(p.name)
+        if found is not None:
+            return _sketch_made(found[1], found[0], owner_token)
     if entity is None:
         return {"kind": "other", "token": "", "name": "", "component": owner_token}
-    return {
-        "kind": created_by_kind(entity),
-        "token": safe(lambda: entity.entityToken, "") or "",
-        "name": safe(lambda: entity.name, "") or "",
-        "sketch": safe(lambda: entity.parentSketch.name, "") or "",
-        "component": safe(lambda: entity.parentSketch.parentComponent.entityToken, "") or owner_token,
-    }
+    return {"kind": "other", "token": safe(lambda: entity.entityToken, "") or "",
+            "name": safe(lambda: entity.name, "") or "", "sketch": "", "component": owner_token}
 
 
 def list_model_parameters(component):
@@ -110,6 +177,7 @@ def list_model_parameters(component):
     params = safe(lambda: component.modelParameters, None)
     if params is None:
         return out
+    find_dimension = _dimension_index(component)
     for i in range(params.count):
         p = safe(lambda: params.item(i), None)
         if p is None:
@@ -121,6 +189,6 @@ def list_model_parameters(component):
         if d["value_type"] == "text":
             continue
         d["role"] = safe(lambda: p.role, "") or ""
-        d["created_by"] = _created_by(p, owner_token)
+        d["created_by"] = _created_by(p, owner_token, find_dimension)
         out.append(d)
     return out

@@ -66,7 +66,7 @@ class ReadChecksTest(unittest.TestCase):
         snapshots = {"wall": {"Sketch1": [1.0, 2.5], "Sketch2": [3.0]}}
         _, fixed = read_checks(wall, results, self.baseline, snapshots, {}, scope="Tray")
         self.assertEqual(fixed[0]["reason"], "wall stays fixed for now: it changes Tray / Sketch1. "
-                                             "Sketches that follow sizes come in a later version.")
+                                             "A sketch like this cannot follow sizes yet.")
 
 
 class SketchStateTest(unittest.TestCase):

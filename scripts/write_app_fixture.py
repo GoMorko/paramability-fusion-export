@@ -38,7 +38,7 @@ def recipe_manifest():
         fixed=[
             {"name": "pipe_offset",
              "reason": "pipe_offset stays fixed for now: it changes Sketch3. "
-                       "Sketches that follow sizes come in a later version."},
+                       "A sketch like this cannot follow sizes yet."},
             {"name": "Filter_box_height",
              "reason": "Filter box $ height stays fixed: Fusion cannot build the part when it is 80."},
         ],

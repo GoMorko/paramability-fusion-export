@@ -63,7 +63,7 @@ def moved_reason(label, sketch_names, scope=""):
     """`scope` is the component name put before each sketch name, for a body inside a component ("Tray / Sketch1")."""
     names = ["%s / %s" % (scope, n) if scope else n for n in sketch_names]
     shown = ", ".join(names[:2]) + (" and more" if len(names) > 2 else "")
-    return f"{label} stays fixed for now: it changes {shown}. Sketches that follow sizes come in a later version."
+    return f"{label} stays fixed for now: it changes {shown}. A sketch like this cannot follow sizes yet."
 
 
 def build_failure_reason(label, value):

@@ -16,7 +16,8 @@ class RowExport:
 
     store: parameter store (see apply.apply_row_values, plus saved_expressions and current_expressions).
     units: {parameter name: Fusion unit string}.
-    export_step: callable(path) writing the STEP of the picked body for the current design state.
+    export_step: callable(path) writing the STEP of the picked body for the current design state. A row with
+    `"step": False` only recomputes: export_step is called with None, expects no file, and the result has no STEP.
     current_row is the name of the row being exported while export_step runs.
     After run(), restore_failures lists parameters that could not be put back, whatever the outcome.
     """
@@ -33,6 +34,7 @@ class RowExport:
 
         With tolerate_build_errors a row Fusion cannot build gives {'name', 'values': None, 'step_file': None,
         'error': sentence} and the run goes on. The next row must then set every parameter it needs.
+        A row without a STEP gives 'step_file': None as well.
         """
         saved = self.store.saved_expressions()
         try:
@@ -51,6 +53,10 @@ class RowExport:
                         continue
                     raise RowBuildError(f"Size \"{row['name']}\": {exc}") from exc
                 self.current_row = row["name"]
+                if row.get("step") is False:
+                    self.export_step(None)
+                    results.append({"name": row["name"], "values": values, "step_file": None})
+                    continue
                 path = os.path.join(tmpdir, f"{index:02d}.step")
                 self.export_step(path)
                 if not os.path.isfile(path):

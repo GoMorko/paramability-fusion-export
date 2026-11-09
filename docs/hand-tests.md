@@ -129,9 +129,10 @@ mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter
 
 - [ ] The dialog lists the user parameters in a table, the ones the body reads ticked (favourites first), the formula
       one greyed with "formula" in the last column. OK is on once a body is picked.
-- [ ] **Greyed when it opens.** A parameter that drives a sketch dimension is unticked and greyed out as soon as the
-      dialog opens, with "fixed, changes a sketch" in its row and the full reason in the box under the table when the
-      row is clicked. It stays that way for parameters that are not ticked by default.
+- [ ] **Greyed when it opens.** A parameter that drives a joint is unticked and greyed out as soon as the dialog
+      opens, with its reason in its row and the full reason in the box under the table when the row is clicked. It
+      stays that way for parameters that are not ticked by default. A parameter that drives a sketch dimension is not
+      greyed: section 9 covers it.
 - [ ] **Another body.** In a design with two bodies built from different parameters, pick the other body: the ticks
       and greyed lines change to that body's parameters. A parameter only the other body reads is not ticked. Note
       how long the dialog takes to open and to follow the pick (the add-in reads the steps of the body each time).
@@ -139,8 +140,8 @@ mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter
       to 64 sizes". Unticking one brings back the count line.
 - [ ] **Counts.** A parameter that drives a pattern quantity is a whole number size (the form steps by 1), also when
       its role text does not say "quantity". Set it to 2.5 in the app: the recipe still builds.
-- [ ] **Long name.** A user parameter with a name over 64 characters that drives a sketch dimension: the export
-      saves, and the message names the fixed size without stopping.
+- [ ] **Long name.** A user parameter with a name over 64 characters that drives a joint: the export saves, and the
+      message names the fixed size without stopping.
 - [ ] **Not used.** Tick a parameter no step reads: the message after the export names it as "not used by any copied
       step".
 - [ ] With only one body in the design it is picked already. With no user parameters the dialog says so (no table)
@@ -150,9 +151,10 @@ mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter
       (`checks/01.step` and up), each with a single size in `values`. The recipe in `recipe.json` lists no size
       that has no check, unless the message said some were not checked.
 - [ ] Untick a parameter and export: that name is not a size and its number is plain in `recipe.json`.
-- [ ] **Fixed by a sketch.** Drive a sketch dimension by a ticked parameter. The export does not stop: the message
-      after it lists that parameter with "it changes Sketch1" (the sketch name), the manifest `fixed` list holds it,
-      and it is not a size. A parameter that only drives an extrude distance stays a size.
+- [ ] **Fixed by a sketch.** Drive a sketch dimension by a ticked parameter through an angle (a point placed by an
+      angle on a circle). The export does not stop: the message after it lists that parameter with its reason (it
+      moves Sketch1 along a curve), the manifest `fixed` list holds it, and it is not a size. A parameter that only
+      drives an extrude distance stays a size.
 - [ ] **Fixed by a failed build.** Give a ticked parameter a range comment such as `[1..400]` that Fusion cannot
       build at the top (a fillet larger than the part). The export saves, the parameter is listed as fixed with
       "Fusion cannot build the part when it is ...", and the other sizes are unaffected.
@@ -167,6 +169,9 @@ mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter
       `wall = layers * 0.4` in mm, and a formula reading them: all export with formulas, ticked or not.
 - [ ] The marker is rolled back: the export stops with "Move the timeline marker to the end".
 - [ ] Time: note how long a design with 5 sizes and 100 timeline items takes.
+- [ ] **Extra rebuilds.** With sizes that move sketches, the progress window shows "Checking size n of m" and then
+      "Trying size n of m". Cancel in the second window: the message says the export is cancelled, parameters are back
+      and the marker is at the end.
 
 ### Pick points that follow sizes
 
@@ -294,6 +299,40 @@ inside a component, also a nested or turned one, lands where Fusion shows it.
       fillet next to it, or a curved face, gives a fixed shape that names the offset. The offset item in the report
       has no `read_error`.
 
+## 9. Sketches that follow sizes
+
+Send `report.json` from any export that surprises; its `probe` record (the states read, the motion and
+`restore_gap_mm`) and its capture become test fixtures. In every test, the package is checked in Paramability: change
+the sizes on the form and compare the part with Fusion at the same values.
+
+- [ ] **K1 Filter box base.** The filter box of the parameters plan with the base rectangle `FilterBox_width_mm` by
+      `FilterBox_depth_mm` (both `count * cube + 2 mm`), centred on the origin by a midpoint constraint. Tick the
+      counts and the cube width. Export: no parameter is greyed; the result window shows all as sizes; `recipe.json`
+      has `"width": { "expr": "FilterBox_width_mm" }`. In Paramability, changing a count or the cube width resizes the
+      base, the shell stays open and the corners stay round. Repeat with the rectangle drawn from the origin corner.
+      Note the export time against an export of the same design before this stage.
+- [ ] **K2 Pipe offset.** A circle placed by `pipe_offset_mm` from the box edge, diameter `pipe_d_mm` as a sketch
+      dimension, cut through. Then a hole feature on a sketch point at `pipe_offset_mm`. Both follow both sizes and
+      the box width.
+- [ ] **K3 Offset plane.** A sketch on a construction plane offset by `FilterBox_height_mm`, a boss extruded from it.
+      The boss moves with the height. Then make an extrude reach "to" that plane: the height is fixed with the
+      construction plane reason.
+- [ ] **K4 Sketch on a face.** A sketch on the top face of the base, a lid lip extruded from it with projected edges.
+      The lip follows the height and the width.
+- [ ] **K5 What stays fixed.** A point placed by an angle parameter on a circle (reason: along a curve); a line that
+      crosses the outline only above some width (reason: a different outline); a plane at an angle driven by a
+      parameter (reason: turns the plane). Each is fixed with its reason; the other sizes work.
+- [ ] **K6 Constraints.** A slot with equal and symmetric constraints, a rectangle with sketch fillets of radius
+      `corner_mm`, a hole diameter `sqrt(area_mm2)`. All follow; the fillet arcs keep their radius.
+- [ ] **K7 Restore and cancel.** Cancel during "Trying size 2 of 6": parameters are back and the marker is at the
+      end. A range comment that Fusion cannot build at the bottom of the range: the report `probe.dropped` lists the
+      state, the size stays a size and the other sizes work.
+- [ ] **K8 In a component.** K1 built inside a turned component `Tray`: the box lands where Fusion shows it and
+      resizes in place.
+- [ ] **K9 Report.** Send the K1 report. It pins token stability (the curves are found again in every state), the
+      first read against the capture (a sketch that differs is left to the measured check), `restore_gap_mm` (should
+      be 0 or tiny) and the column checks (`motion.dropped`).
+
 ## Fusion calls to watch
 
 These were written from the API reference and never run:
@@ -373,6 +412,24 @@ These were written from the API reference and never run:
   proxy giving the native component whose sketches are read at every check; `Occurrence.transform2` and the occurrence
   path read again after each parameter change (`placement.read_frame`); the capture members of "Bodies inside
   components" in `docs/capture-format.md`.
+- The size probe (`lib/fusion_reader/probe_state.py`, `lib/probe/`, `lib/export_plan/probe_flow.py`), none of it run
+  yet. Each member below is read at every state; a missing one only leaves that sketch unread (the measured check of
+  hand test 7.1 then decides) and shows in `probe.states` of `report.json`:
+  - `Sketch.entityToken`, `Sketch.profiles` per state (the profiles at the timeline end must equal the ones the
+    steps used: the first read is compared with the capture within 1e-4 mm), `Sketch.referencePlane` with
+    `.entityToken` and `objectType`.
+  - `ProfileCurve.sketchEntity.entityToken`: the same curve must give the same token after every recompute (K9).
+  - `SketchPoint` and `SketchLine` `.entityToken`, `.parentSketch`, `.worldGeometry`; the hole point tokens
+    (`SketchPointsHolePositionDefinition.sketchPoints` items) and the revolve axis line token.
+  - `ConstructionPlane.entityToken` and `ConstructionAxis.entityToken` (a step that reaches one fixes the sizes behind
+    it); `RectangularPatternFeature.directionOneEntity` and `directionTwoEntity` with `.parentSketch`.
+  - `Design.findEntityByToken` for sketches, points and lines of a component (K8): the native object or an
+    occurrence proxy, the add-in keeps the one without `assemblyContext`.
+  - `UserParameters.itemByName` and `Component.modelParameters.itemByName` for the value of each column per state.
+  - `ModelParameter.createdBy` of a sketch dimension: recognised by the type name, a `SketchDimension` cast, the
+    members `parentSketch` and `parameter`, or else the sketch dimension whose own `parameter` is this one
+    (`Sketch.sketchDimensions`). Check that `created_by.kind` is `sketchDimension` with the sketch name in the report
+    capture for each dimension (before this check, a real design gave `other` with a role like "Linear Dimension-2").
 - `Design.fusionUnitsManager.defaultLengthUnits` as the unit of a bare number in a length formula (falls back to mm).
 - `Component.modelParameters` read by `list_model_parameters`; `Sketch.transform.asArray()`, `Sketch.sketchPoints`
   with `worldGeometry`, `Sketch.sketchCurves` with `worldGeometry` (`radius`, `center`, `startPoint`, `endPoint`)
