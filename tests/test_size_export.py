@@ -186,6 +186,16 @@ class OffersTest(unittest.TestCase):
         self.assertIn("changes a sketch", lines["wall"]["reason"])
         self.assertTrue(lines["height"]["ticked"] and lines["height"]["enabled"])
 
+    def test_a_sketch_dimension_known_only_by_its_role_greys_out_its_parameter(self):
+        params = [length("wall"), length("height")]
+        model = [dict(name="d1", expression="wall", value=0.2, unit="mm", kind="derived", role="Linear Dimension-2",
+                      dependency_parameters=["wall"], created_by={"kind": "other"}),
+                 dict(name="d2", expression="height", value=0.2, unit="mm", kind="derived", role="AlongDistance",
+                      dependency_parameters=["height"], created_by={"kind": "feature"})]
+        lines = {o["param"]: o for o in offers(initial_table(params, model), params)}
+        self.assertFalse(lines["wall"]["enabled"])
+        self.assertTrue(lines["height"]["enabled"])
+
     def test_a_parameter_that_is_not_ticked_by_default_but_moves_a_sketch_is_greyed_out_too(self):
         params = [length("wall"), length("spare")]
         params[1]["is_favorite"] = False

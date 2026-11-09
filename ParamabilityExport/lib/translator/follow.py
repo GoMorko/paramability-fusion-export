@@ -11,212 +11,76 @@ slab places may sit on geometry that moves, so the sizes of the steps written be
 
 A pattern or mirror copy of an extrude is a slab too, with the `Motion` that carries the original to the copy. A
 point on a copy is placed on the original and moved back: its coordinates follow the length and the spacing.
+
+A point on the inner wall of a shell is placed through the outer wall it was moved from (shells.py). An edge where
+the walls of two steps cross is placed on both walls (crossings.py).
 """
-from . import picks, vec
-from .footprint import Footprint
-from .values import Quantity, Sized
+from . import crossings, picks, shells, vec
+from .slabs import (AXIAL_TOL, CONSTANT_TOL, FACTOR_DIGITS, IDENTITY_ROWS, LATERAL_TOL, Motion, Place, Slab,
+                    as_quantity, cleaned_all)
+from .values import Quantity
 
-IDENTITY_ROWS = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
-ROW_SNAP = 1e-12
-
-AXIAL_TOL = 1e-3
-LATERAL_TOL = 1e-3
-FACTOR_DIGITS = 6
-CONSTANT_TOL = 1e-6
+__all__ = ["AXIAL_TOL", "CONSTANT_TOL", "FACTOR_DIGITS", "IDENTITY_ROWS", "LATERAL_TOL", "Motion", "Place", "Slab",
+           "as_quantity", "cleaned_all"]
 
 
-def _snap(value):
-    for target in (0.0, 1.0, -1.0):
-        if abs(value - target) <= ROW_SNAP:
-            return target
-    return float(value)
+def _latest_first(ctx):
+    """The slabs and shells written so far, the latest first."""
+    shells_left = sorted(ctx.shells, key=lambda s: -s.at)
+    for n in range(len(ctx.slabs) - 1, -1, -1):
+        while shells_left and shells_left[0].at > n:
+            yield shells_left.pop(0)
+        yield ctx.slabs[n]
+    yield from shells_left
 
 
-def as_quantity(value):
-    """A written number or formula as a Quantity."""
-    if isinstance(value, Sized):
-        return Quantity(value.n, value["expr"], value.reads)
-    if isinstance(value, Quantity):
-        return value
-    return Quantity(float(value))
+def _on_one_face(found):
+    """True for a Place inside one face (not on an outline): an edge there comes from another step's wall."""
+    if isinstance(found, shells.InnerPlace):
+        return found.single is not None
+    return found.which in ("start", "end") and found.curve is None
 
 
-def _no_noise(q):
-    return Quantity(0.0) if not q.sized and abs(q.n) <= 1e-9 else q
-
-
-class Motion:
-    """A rigid map p -> rows * p + shift that carries an original to one copy.
-
-    `rows` are numbers (a turn or a mirror); `shift` holds three Quantities, so a spacing may follow sizes. `needs`
-    are the Fusion names of sizes that must stay fixed when a pick lands on the copy (the count that makes it, an
-    angle that turns it); `by` names the pattern or mirror for the reason.
-    """
-
-    def __init__(self, rows=IDENTITY_ROWS, shift=None, needs=(), by=""):
-        self.rows = tuple(tuple(_snap(c) for c in row) for row in rows)
-        self.shift = [_no_noise(as_quantity(v)) for v in (shift or (0.0, 0.0, 0.0))]
-        self.needs = tuple(needs)
-        self.by = by
-
-    @classmethod
-    def mirror(cls, origin, normal, by=""):
-        n = vec.unit(normal)
-        rows = [[(1.0 if i == j else 0.0) - 2.0 * n[i] * n[j] for j in range(3)] for i in range(3)]
-        return cls(rows, vec.scale(n, 2.0 * vec.dot(origin, n)), by=by)
-
-    @classmethod
-    def turn(cls, axis_point, axis, angle_deg, needs=(), by=""):
-        rows = [vec.rotate(e, axis, angle_deg) for e in ([1, 0, 0], [0, 1, 0], [0, 0, 1])]
-        rows = [[rows[j][i] for j in range(3)] for i in range(3)]
-        return cls(rows, vec.rotate([0.0, 0.0, 0.0], axis, angle_deg, axis_point), needs, by)
-
-    @property
-    def moves(self):
-        return any(q.sized for q in self.shift)
-
-    def turn_vector(self, d):
-        return [sum(self.rows[i][j] * d[j] for j in range(3)) for i in range(3)]
-
-    def numbers(self, p):
-        """The copy of point `p` at the measured sizes."""
-        return [v + self.shift[i].n for i, v in enumerate(self.turn_vector(p))]
-
-    def back(self, p):
-        """The original of point `p` of the copy, at the measured sizes."""
-        d = [p[i] - self.shift[i].n for i in range(3)]
-        return [sum(self.rows[j][i] * d[j] for j in range(3)) for i in range(3)]
-
-    def quantities(self, coords):
-        """The copy of a position whose coordinates are written numbers, formulas or Quantities."""
-        coords = [as_quantity(c) for c in coords]
-        out = []
-        for i in range(3):
-            total = None
-            for coef, coord in zip(self.rows[i], coords):
-                if coef:
-                    term = coord.scaled(coef)
-                    total = term if total is None else total.plus(term)
-            total = Quantity(0.0) if total is None else total
-            out.append(total.plus(self.shift[i]) if self.shift[i].sized or self.shift[i].n else total)
-        return out
-
-    def then(self, other):
-        """The motion that applies `self` first, then `other`."""
-        rows = [[sum(other.rows[i][k] * self.rows[k][j] for k in range(3)) for j in range(3)] for i in range(3)]
-        return Motion(rows, other.quantities(self.shift), tuple(dict.fromkeys(self.needs + other.needs)),
-                      other.by or self.by)
-
-
-class Slab:
-    """One extrude step: `on` is its written placement (it grows along `on.normal`), `length` a Quantity.
-
-    `owner` is the id of the step that made it: the extrude, or the pattern or mirror for a copy, whose `motion`
-    carries the extrude to it.
-    """
-
-    def __init__(self, step_id, on, extent, length, profile, motion=None, owner=None):
-        self.id = step_id
-        self.owner = owner or step_id
-        self.on, self.profile = on, profile
-        self.axis = vec.unit(on["normal"])
-        self.origin = [as_quantity(c) for c in on["origin"]]
-        self.base = vec.dot([q.n for q in self.origin], self.axis)
-        self.extent = extent
-        self.length = length
-        self.frame = profile["frame"]
-        self.footprint = Footprint(profile)
-        self.motion = motion or Motion()
-
-    @property
-    def is_copy(self):
-        return self.owner != self.id
-
-    def copied(self, owner, motion):
-        """This slab carried on by `motion`, made by step `owner`."""
-        return Slab(self.id, self.on, self.extent, self.length, self.profile, self.motion.then(motion), owner)
-
-    def place(self, p, edge):
-        """The Place of point `p` on this slab, or None when `p` is not on its end faces or side corners.
-
-        `edge` asks for a side edge: on a side face it must sit at a profile corner.
-        """
-        if self.is_copy:
-            p = self.motion.back(p)
-        full = self.length.n
-        if not full > 0:
-            return None
-        h = vec.dot(p, self.axis) - self.base
-        low, high = (0.0, full) if self.extent == "oneSide" else (-full / 2.0, full / 2.0)
-        local = vec.frame_to_local(self.frame, p)
-        uv = [local[0], local[1]]
-        curve, gap = self.footprint.nearest_curve(uv)
-        on_outline = gap <= LATERAL_TOL
-        for which, at in (("end", high), ("start", low)):
-            if abs(h - at) <= AXIAL_TOL and (on_outline or self.footprint.covers(uv)):
-                return Place(self, which, at / full, curve if on_outline else None)
-        if low + AXIAL_TOL < h < high - AXIAL_TOL and on_outline:
-            corner = self.footprint.corner_at(uv, LATERAL_TOL)
-            if edge and corner is None:
-                return None
-            return Place(self, "side", round(h / full, FACTOR_DIGITS), None, corner)
-        return None
-
-
-class Place:
-    """Where a point sits on a slab: `which` is start, end or side; it moves `factor` times the slab length."""
-
-    def __init__(self, slab, which, factor, curve=None, corner=None):
-        self.slab, self.which, self.factor = slab, which, factor
-        self.curve, self.corner = curve, corner
-
-    @property
-    def moves(self):
-        slab = self.slab
-        return (bool(slab.length.sized and self.factor != 0) or slab.motion.moves
-                or any(q.sized for q in slab.origin))
-
-    def quantities(self, p):
-        """`p` as three Quantities that follow the slab's start, its length and the spacing of a copy."""
-        motion = self.slab.motion
-        if self.slab.is_copy:
-            p = motion.back(p)
-        out = []
-        for i, value in enumerate(p):
-            a, origin = self.slab.axis[i], self.slab.origin[i]
-            if abs(a) < 1e-9 or not (self.slab.length.sized and self.factor != 0 or origin.sized):
-                out.append(Quantity(value))
-                continue
-            if abs(abs(a) - 1) < 1e-9:
-                a = 1.0 if a > 0 else -1.0
-            moved = self.slab.length.scaled(self.factor * a) if self.slab.length.sized and self.factor else Quantity(0.0)
-            if origin.sized:
-                moved = origin.plus(moved)
-            rest = value - moved.n
-            out.append(moved.plus(rest if abs(rest) > CONSTANT_TOL else 0.0))
-        return motion.quantities(out) if self.slab.is_copy else out
-
-    def coordinates(self, p):
-        """`p` as a position whose coordinates follow the slab length (numbers where nothing moves them)."""
-        return [_cleaned(q) for q in self.quantities(p)]
-
-
-def _cleaned(q):
-    """A Quantity as written: a plain number is rounded like a measured point."""
-    return q.json() if q.sized else round(q.n, 9) + 0.0
-
-
-def cleaned_all(quantities):
-    return [_cleaned(q) for q in quantities]
+def _walls(ctx, p):
+    """The flat walls through `p`, the latest first: at most one per slab or shell."""
+    out = []
+    for placer in _latest_first(ctx):
+        wall = crossings.wall_of(placer.place(p, False), p)
+        if wall is not None:
+            out.append(wall)
+    return out
 
 
 def locate(ctx, p, edge=False):
-    """The Place of a measured point on the latest slab that has it, or None."""
-    for slab in reversed(ctx.slabs):
-        found = slab.place(p, edge)
+    """The Place of a measured point on the latest slab or shell that has it, or None.
+
+    An edge that lies inside a face of the latest step that has the point, or on no step's edge at all, is placed
+    where the walls of two steps cross when it can be.
+    """
+    found = None
+    for placer in _latest_first(ctx):
+        found = placer.place(p, edge)
         if found is not None:
-            return found
-    return None
+            break
+    if edge and (found is None or _on_one_face(found)):
+        crossed = crossings.cross(_walls(ctx, p), p)
+        if crossed is not None:
+            return crossed
+    return found
+
+
+def inside(ctx, p):
+    """True when `p` lies in or on the part built so far: in or on an added slab, and not in or on a later cut or
+    hollow."""
+    held = False
+    for placer in reversed(list(_latest_first(ctx))):
+        if isinstance(placer, shells.Shell):
+            held = held and not placer.hollows(p)
+        elif placer.combine in ("new", "add"):
+            held = held or placer.holds(p)
+        elif placer.combine == "cut" and placer.holds(p):
+            held = False
+    return held
 
 
 def _name(item):
@@ -224,11 +88,15 @@ def _name(item):
 
 
 def _keep_copies(ctx, item, found):
-    """A pick on a copy of a pattern needs that copy: the sizes that count or turn the copies stay."""
-    motion = found.slab.motion
-    if motion.needs:
-        ctx.fix(motion.needs, "%s picks a copy made by %s, so its copies must stay as they are"
-                % (_name(item), motion.by or "a pattern"))
+    """A pick on a copy of a pattern needs that copy: the sizes that count or turn the copies stay. A pick on a
+    tapered outline needs the taper."""
+    for slab in found.slabs:
+        motion = slab.motion
+        if motion.needs:
+            ctx.fix(motion.needs, "%s picks a copy made by %s, so its copies must stay as they are"
+                    % (_name(item), motion.by or "a pattern"))
+    for names in found.fixes:
+        ctx.fix(names, "%s picks an edge of a tapered wall, and a change of taper would move it" % _name(item))
 
 
 def follow_points(ctx, item, points, edge=True, what="edges"):
@@ -304,6 +172,8 @@ def target_shift(ctx, item, target, direction, what="reaches to"):
         return zero
     point = target.get("face_point")
     found = locate(ctx, point) if point else None
+    if isinstance(found, shells.InnerPlace) and (found.single is None or abs(vec.dot(found.single, direction)) < 1 - 1e-9):
+        found = None
     if found is None or found.which == "side":
         ctx.fix(ctx.written_reads, "%s %s a face that may move with it, and the copy cannot follow that"
                 % (_name(item), what))
@@ -312,7 +182,7 @@ def target_shift(ctx, item, target, direction, what="reaches to"):
         return zero
     _keep_copies(ctx, item, found)
     slab = found.slab
-    if not slab.is_copy and not any(q.sized for q in slab.origin):
+    if found.which in ("start", "end") and not slab.is_copy and not any(q.sized for q in slab.origin):
         return slab.length.scaled(found.factor * vec.dot(slab.axis, direction))
     shift = zero
     for q, p, d in zip(found.quantities(point), point, direction):

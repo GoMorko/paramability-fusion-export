@@ -67,6 +67,38 @@ def _polyline(curve):
             for k in range(ARC_SEGMENTS + 1)]
 
 
+def curve_length(curve):
+    """Length in mm of one capture curve."""
+    kind = curve["kind"]
+    if kind == "line":
+        return _dist(curve["start"], curve["end"])
+    points = _polyline(curve)
+    return sum(_dist(a, b) for a, b in zip(points, points[1:]))
+
+
+def _nearest_on_segment(p, a, b):
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    size = dx * dx + dy * dy
+    t = 0.0 if size <= 0 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / size))
+    return [a[0] + t * dx, a[1] + t * dy], [dx, dy]
+
+
+def nearest_point(curve, p):
+    """(the point of the curve nearest to `p`, a unit normal of the curve there); the normal is None when unknown."""
+    if curve["kind"] in ("arc", "circle"):
+        c, r = curve["center"], curve["radius"]
+        d = _dist(p, c)
+        # Within the arc's sweep the nearest point is straight out from the centre.
+        if d > 0 and abs(curve_distance(curve, p) - abs(d - r)) <= 1e-12:
+            n = [(p[0] - c[0]) / d, (p[1] - c[1]) / d]
+            return [c[0] + r * n[0], c[1] + r * n[1]], n
+    points = [curve["start"], curve["end"]] if curve["kind"] == "line" else _polyline(curve)
+    best = min(zip(points, points[1:]), key=lambda ab: _to_segment(p, ab[0], ab[1]))
+    point, (dx, dy) = _nearest_on_segment(p, best[0], best[1])
+    size = math.hypot(dx, dy)
+    return point, ([-dy / size, dx / size] if size > 0 else None)
+
+
 def curve_distance(curve, p):
     """Distance in mm from a 2D point to one capture curve."""
     kind = curve["kind"]
@@ -108,6 +140,18 @@ class Footprint:
         """(index of the closest curve, its distance in mm)."""
         best = min(range(len(self.curves)), key=lambda n: curve_distance(self.curves[n], p))
         return best, curve_distance(self.curves[best], p)
+
+    def gaps(self, p):
+        """Distance in mm from `p` to each curve, in curve order."""
+        return [curve_distance(curve, p) for curve in self.curves]
+
+    def outward(self, n, p, step=1e-4):
+        """The unit normal of curve `n` at its point nearest `p`, pointing out of the region; None when unknown."""
+        point, normal = nearest_point(self.curves[n], p)
+        if normal is None:
+            return None
+        probe = [point[0] + step * normal[0], point[1] + step * normal[1]]
+        return [-normal[0], -normal[1]] if self.covers(probe) else normal
 
     def corner_at(self, p, tol):
         """Index of the corner within `tol` of `p`, or None."""

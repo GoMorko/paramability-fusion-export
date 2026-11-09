@@ -31,11 +31,27 @@ def with_outline(face, sides):
     return face
 
 
-def read(face, moved, more=()):
+class MadeFaces(Coll):
+    """The faces the feature made: Fusion lists them only once the marker is past the feature."""
+
+    def __init__(self, items, timeline):
+        super().__init__(items)
+        self.timeline = timeline
+
+    def __getattribute__(self, name):
+        if name == "count":
+            return Coll.__getattribute__(self, "count") if self.timeline.markerPosition > 0 else 0
+        return Coll.__getattribute__(self, name)
+
+
+def read(face, moved, more=(), inputs=None):
     target = body()
-    offset = entry(feature("OffsetFacesFeature", "OffsetFaces1", bodies=[target], inputFaces=Coll([face, *more]),
-                           distance=Obj(value=0.2, name="d5", expression="2 mm"), faces=Coll([moved])))
-    return read_capture(FakeDesign([offset], target), target, fusion="", name="", up_axis="z")["items"][0]["data"]
+    found = Coll([face, *more]) if inputs is None else inputs
+    offset = entry(feature("OffsetFacesFeature", "OffsetFaces1", bodies=[target], inputFaces=found,
+                           distance=Obj(value=0.2, name="d5", expression="2 mm")))
+    design = FakeDesign([offset], target)
+    offset[0].faces = MadeFaces([moved], design.timeline)
+    return read_capture(design, target, fusion="", name="", up_axis="z")["items"][0]["data"]
 
 
 class OffsetFacesReaderTest(unittest.TestCase):
@@ -59,6 +75,23 @@ class OffsetFacesReaderTest(unittest.TestCase):
         self.assertEqual(read(with_outline(plane_face(10), walls), plane_face(12))["faces"][0]["sides"], "other")
         curved = Obj("fusion::BRepFace", geometry=Obj("core::Cylinder"))
         self.assertEqual(read(curved, plane_face(12))["faces"][0], {"kind": "other", "type": "Cylinder"})
+
+    def test_input_faces_as_a_plain_list(self):
+        walls = [side((0, -1, 0)), side((1, 0, 0)), side((0, 1, 0)), side((-1, 0, 0))]
+        face = with_outline(plane_face(10), walls)
+        data = read(face, plane_face(12), inputs=[face])
+        self.assertEqual(data["faces"][0]["frame"]["origin"], [0, 0, 10])
+
+    def test_faces_read_after_the_step_when_none_are_given_before(self):
+        walls = [side((0, -1, 0)), side((1, 0, 0)), side((0, 1, 0)), side((-1, 0, 0))]
+        moved = with_outline(plane_face(12), walls)
+        data = read(None, moved, inputs=Coll([]))
+        face = data["faces"][0]
+        self.assertEqual((face["frame"]["origin"], face["sides"]), ([0, 0, 10], "square"))
+        self.assertEqual(face["loops"][0]["curves"][1], {"kind": "line", "start": [40, 0], "end": [40, 20]})
+        self.assertNotIn("faces_from_after", data)
+        curved = Obj("fusion::BRepFace", geometry=Obj("core::Cylinder"))
+        self.assertEqual(read(None, curved, inputs=Coll([]))["read_error"], "The faces of this offset could not be read.")
 
 
 if __name__ == "__main__":

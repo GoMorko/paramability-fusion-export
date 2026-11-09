@@ -244,14 +244,14 @@ class TaperTest(unittest.TestCase):
 
     def test_symmetric_taper_is_kept(self):
         def edit(d):
-            d["symmetric"].update(taper_deg=3.0)
+            d["symmetric"].update(taper_deg=-3.0)
             d.update(end_offset=5.0, profile_area=800.0, end_area=700.0)
         result = variant("extrude_symmetric_half", edit)
-        self.assertEqual(result.recipe["features"][0]["taperDeg"], extrude.FUSION_TAPER_SIGN * 3)
+        self.assertEqual(result.recipe["features"][0]["taperDeg"], extrude.FUSION_TAPER_SIGN * -3)
 
 def two_tapered_squares(lean, operation="newBody"):
-    """The taper fixture with a second outline beside the first, one end face over both, and side walls that lean
-    by `lean` (sine) along the sketch normal."""
+    """The taper fixture (Fusion 5 degrees, walls out) with a second outline beside the first, one end face over both,
+    and side walls that lean by `lean` (sine) along the sketch normal."""
     def edit(d):
         second = copy.deepcopy(d["profiles"][0])
         for curve in second["loops"][0]["curves"]:
@@ -267,11 +267,11 @@ class SideWallTaperTest(unittest.TestCase):
     LEAN = math.sin(math.radians(5.0))
 
     def test_several_outlines_are_checked_by_their_side_walls(self):
-        result = variant("extrude_taper", two_tapered_squares(self.LEAN))
-        self.assertEqual([s["taperDeg"] for s in result.recipe["features"]], [5, 5])
+        result = variant("extrude_taper", two_tapered_squares(-self.LEAN))
+        self.assertEqual([s["taperDeg"] for s in result.recipe["features"]], [-5, -5])
 
     def test_walls_that_lean_the_other_way_refuse(self):
-        result = variant("extrude_taper", two_tapered_squares(-self.LEAN))
+        result = variant("extrude_taper", two_tapered_squares(self.LEAN))
         self.assertIn("does not match what was measured", result.refusal["reason"])
 
     def test_a_cut_shows_the_walls_of_the_hole(self):
@@ -286,9 +286,9 @@ class SideWallTaperTest(unittest.TestCase):
         cut = capture["items"][-1]
         cut["index"] = 2
         cut["data"]["participants"] = [{"token": "t1", "name": "Body1"}]
-        two_tapered_squares(-self.LEAN, "cut")(cut["data"])
+        two_tapered_squares(self.LEAN, "cut")(cut["data"])
         result = translate(capture)
-        self.assertEqual([s["taperDeg"] for s in under_test(result, cut["index"])], [5, 5])
+        self.assertEqual([s["taperDeg"] for s in under_test(result, cut["index"])], [-5, -5])
 
     def test_several_outlines_without_measured_walls_refuse(self):
         def edit(d):

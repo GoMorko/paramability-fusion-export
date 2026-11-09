@@ -308,7 +308,8 @@ def _shell(item, ctx):
     if len(points) > picks.MAX_NEAR_POINTS:
         return Refusal("This shell opens more than %d faces." % picks.MAX_NEAR_POINTS)
     wall = values.quantity(ctx, item, "inside", thickness, absolute=True)
-    return [{"kind": "shell", "thickness": wall.json(), "openFaces": follow.faces(ctx, item, faces)}]
+    return [{"kind": "shell", "thickness": wall.json(), "openFaces": follow.faces(ctx, item, faces),
+             "_shell": {"thickness": wall, "faces": faces}}]
 
 
 _HANDLERS = {"FilletFeature": _fillet, "ChamferFeature": _chamfer, "ShellFeature": _shell}

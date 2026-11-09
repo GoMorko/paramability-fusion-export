@@ -1,20 +1,22 @@
 """Extrude feature handler (ExtrudeFeature): sketch profiles swept along their sketch normal.
 
-Each profile becomes one recipe `extrude` step per side. Fusion's sign conventions are checked against the measured
+Profiles that share a curve are merged into one outline (outlines.py); each outline becomes one recipe `extrude` step
+per side. Fusion's sign conventions are checked against the measured
 `end_offset` (where the end face landed), which wins when the two disagree.
 """
 import math
 
-from . import follow, loops, placement, values, vec
+from . import follow, loops, outlines, placement, values, vec
+from .footprint import Footprint
 from .result import Refusal
 from .values import Quantity
 
 TYPES = ("ExtrudeFeature",)
 
-# Fusion's positive taper angle narrows the walls going away from the sketch (unverified; hand test 4). The recipe
-# leans walls in for a positive `taperDeg`, so the sign is 1 when the two agree and -1 when they are opposite.
+# Fusion's positive taper angle widens the walls going away from the sketch (the API reference says it tapers
+# outward, and measured side walls agree). The recipe leans walls in for a positive `taperDeg`, so the two are opposite.
 # A tapered extrude is only copied when the measured end face area (`end_area` against `profile_area`) agrees.
-FUSION_TAPER_SIGN = 1
+FUSION_TAPER_SIGN = -1
 
 MAX_TAPER_DEG = 45.0
 PARALLEL_TOL = 1e-9
@@ -367,6 +369,74 @@ def _same_plane(profiles):
     return True
 
 
+SAMPLE_INSET = 0.02
+
+
+def _samples(profile):
+    """Sketch points just inside a profile: the middle of each outline curve, moved inward."""
+    footprint = Footprint(profile)
+    points = []
+    for n, curve in enumerate(footprint.curves):
+        mid = curve.get("mid") or [(a + b) / 2.0 for a, b in zip(curve["start"], curve["end"])]
+        out = footprint.outward(n, mid)
+        if out is not None:
+            points.append([mid[0] - SAMPLE_INSET * out[0], mid[1] - SAMPLE_INSET * out[1]])
+    return points
+
+
+def _in_model(profile, uv, height):
+    return vec.frame_apply(profile["frame"], [uv[0], uv[1], height])
+
+
+def _meets(a, b):
+    """True when two outlines on one plane touch or overlap: a curve end of one lies in or on the other."""
+    footprint = Footprint(b)
+    for curve in Footprint(a).curves:
+        for key in ("start", "end"):
+            local = vec.frame_to_local(b["frame"], _in_model(a, curve[key], 0.0))
+            uv = [local[0], local[1]]
+            if footprint.covers(uv) or footprint.nearest_curve(uv)[1] <= follow.LATERAL_TOL:
+                return True
+    return False
+
+
+def _heights(entry, shift):
+    reach = entry["distance"] or 0.0
+    if entry["extent"] == "symmetric":
+        ends = (-reach / 2.0, reach / 2.0)
+    else:
+        ends = (0.0, entry["sign"] * reach)
+    low, high = min(ends), max(ends)
+    inset = min(SAMPLE_INSET, (high - low) / 4.0)
+    return [shift + h for h in (low + inset, (low + high) / 2.0, high - inset)]
+
+
+def _touches_part(ctx, profile, entry, shift):
+    """True when the tool of one outline and side reaches into the part built so far."""
+    return any(follow.inside(ctx, _in_model(profile, uv, h)) for uv in _samples(profile) for h in _heights(entry, shift))
+
+
+def _touching_order(ctx, units, shift):
+    """(outline, side) pairs in an order where each one joins what is built: one that reaches into the part, or
+    touches a pair already taken, comes next. Fusion adds all outlines at once, the recipe one step after the other,
+    so a step that touches only a later one would stand apart for a while. The order stays Fusion's where it works.
+
+    Both sides of one outline touch each other; outlines touch on one side when they meet in the sketch."""
+    touching = [bool(ctx.slabs) and _touches_part(ctx, built[0], entry, shift) for built, entry in units]
+
+    def joins(n, m):
+        (a, _), first = units[n]
+        (b, _), second = units[m]
+        return a is b or (first is second and _meets(a, b))
+
+    order, left = [], list(range(len(units)))
+    while left:
+        pick = next((n for n in left if touching[n] or any(joins(n, m) for m in order)), left[0])
+        order.append(pick)
+        left.remove(pick)
+    return [units[n] for n in order]
+
+
 def handle(item, ctx):
     data = item.get("data") or {}
     if data.get("read_error"):
@@ -394,6 +464,8 @@ def handle(item, ctx):
         return Refusal("A sketch outline has no readable position.")
     if not _same_plane(profiles):
         return Refusal("This extrude uses outlines on different planes, which is not copied yet.")
+    picked = len(profiles)
+    profiles = outlines.merge_touching(profiles)
 
     built = []
     for profile in profiles:
@@ -414,7 +486,7 @@ def handle(item, ctx):
     z0 = vec.unit(first_frame["z"])
     start = vec.add(first_frame["origin"], vec.scale(z0, shift))
     for check in (_check_measured_length(plan, data, shift, start, z0, combine),
-                  _check_taper(plan, data, combine, len(profiles))):
+                  _check_taper(plan, data, combine, picked)):
         if check:
             return check
     refusal = _resolve_through(plan, data, start, z0, combine)
@@ -423,32 +495,35 @@ def handle(item, ctx):
     if combine == "intersect" and (len(plan) * len(built) > 1):
         return Refusal("Intersect extrudes with several outlines are not copied yet.")
 
+    units = [(one, entry) for one in built for entry in plan]
+    if combine in ("new", "add") and len(built) > 1:
+        units = _touching_order(ctx, units, shift)
     steps = []
-    for profile, (outer, inner) in built:
+    for (profile, (outer, inner)), entry in units:
         frame = profile["frame"]
         base = placement.moved_along(placement.from_frame(frame), shift, vec.unit(frame["z"]))
         base["origin"] = _origin(frame, shift_q)
-        for entry in plan:
-            reverse = entry["sign"] < 0
-            on = placement.reversed_of(base) if reverse else base
-            pick = (lambda loop: loops.flip_y(loop)) if reverse else (lambda loop: loop)
-            sketch = {"on": on, "outer": pick(outer)}
-            if inner:
-                sketch["inner"] = [pick(loop) for loop in inner]
-            step = {
-                "kind": "extrude",
-                "sketch": sketch,
-                "combine": combine if not steps else ("add" if combine == "new" else combine),
-                "extent": entry["extent"],
-            }
-            if entry["distance"] is not None:
-                step["distance"] = entry["q"].json() if entry.get("q") else _n(entry["distance"])
-            if entry["taper"]:
-                step["taperDeg"] = entry["taper_q"].json() if entry.get("taper_q") else _n(entry["taper"])
-            if entry.get("adjusts"):
-                step["_adjusts"] = True
-            if entry["extent"] in ("oneSide", "symmetric"):
-                step["_slab"] = {"on": on, "extent": entry["extent"], "profile": profile,
-                                 "length": entry.get("q") or Quantity(entry["distance"])}
-            steps.append(step)
+        reverse = entry["sign"] < 0
+        on = placement.reversed_of(base) if reverse else base
+        pick = (lambda loop: loops.flip_y(loop)) if reverse else (lambda loop: loop)
+        sketch = {"on": on, "outer": pick(outer)}
+        if inner:
+            sketch["inner"] = [pick(loop) for loop in inner]
+        step = {
+            "kind": "extrude",
+            "sketch": sketch,
+            "combine": combine if not steps else ("add" if combine == "new" else combine),
+            "extent": entry["extent"],
+        }
+        if entry["distance"] is not None:
+            step["distance"] = entry["q"].json() if entry.get("q") else _n(entry["distance"])
+        if entry["taper"]:
+            step["taperDeg"] = entry["taper_q"].json() if entry.get("taper_q") else _n(entry["taper"])
+        if entry.get("adjusts"):
+            step["_adjusts"] = True
+        if entry["extent"] in ("oneSide", "symmetric"):
+            step["_slab"] = {"on": on, "extent": entry["extent"], "profile": profile,
+                             "length": entry.get("q") or Quantity(entry["distance"]),
+                             "taper": entry.get("taper_q") or Quantity(entry["taper"] or 0.0)}
+        steps.append(step)
     return steps

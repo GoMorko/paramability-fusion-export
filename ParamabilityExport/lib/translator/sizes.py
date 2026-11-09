@@ -15,6 +15,15 @@ _STATIC_KINDS = {
 }
 
 
+def _moves(param):
+    """What a model parameter moves (for the reason text), or None. Fusion may name a sketch dimension's creator as
+    the sketch itself; its role ("Linear Dimension-2") still tells."""
+    kind = (param.get("created_by") or {}).get("kind")
+    if kind == "other" and "Dimension" in (param.get("role") or ""):
+        kind = "sketchDimension"
+    return _STATIC_KINDS.get(kind)
+
+
 def sketch_fixes(table):
     """{ Fusion name: reason } for each ticked size that a sketch dimension, construction plane or axis, or joint reads.
 
@@ -23,7 +32,7 @@ def sketch_fixes(table):
     """
     fixed = {}
     for param in table.model_params.values():
-        what = _STATIC_KINDS.get((param.get("created_by") or {}).get("kind"))
+        what = _moves(param)
         if what is None:
             continue
         reads = table.depends(param["name"])

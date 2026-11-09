@@ -1,6 +1,8 @@
 """Walk state handed to every handler."""
 from .capture import same_body
-from .follow import Slab
+from .follow import Slab, locate
+from .picks import face_points
+from .shells import Shell
 from .values import reads_in
 
 MAX_ID = 64
@@ -25,6 +27,8 @@ class Context:
       one over in a step's private `_slab` key: { on, extent, length, profile }. A pattern or mirror step hands over
       `_copies`, one follow.Motion per copy, and the slabs of the steps it repeats are copied with them.
     written_reads: Fusion names of the sizes that the steps written so far read.
+    shells: the shell steps written so far (shells.Shell), for picks on their inner walls. The shell handler hands
+      one over in the private `_shell` key: { thickness (a Quantity), faces (the capture faces it opens) }.
     plain_picks: round or bevel step id -> { near, reads, written }: its edges as measured points, the sizes its pick
       follows and the written points (None when the pick names a step). A handler hands it over in the private
       `_plain` key; patterns and mirrors copy these points.
@@ -35,6 +39,7 @@ class Context:
         self.table = table
         self.depends = {}
         self.slabs = []
+        self.shells = []
         self.written_reads = ()
         self.plain_picks = {}
         self.target = capture["target"]
@@ -97,7 +102,13 @@ class Context:
                 self.not_repeatable.add(step_id)
             slab = step.pop("_slab", None)
             if slab is not None:
-                self.slabs.append(Slab(step_id, slab["on"], slab["extent"], slab["length"], slab["profile"]))
+                self.slabs.append(Slab(step_id, slab["on"], slab["extent"], slab["length"], slab["profile"],
+                                       combine=step.get("combine", "add"), taper=slab.get("taper")))
+            shell = step.pop("_shell", None)
+            if shell is not None:
+                opened = [locate(self, p) for p in face_points(shell["faces"])]
+                self.shells.append(Shell(shell["thickness"], self.slabs, [o for o in opened if o is not None],
+                                         len(self.slabs)))
             copies = step.pop("_copies", None)
             if copies:
                 sources = [s for of in step.get("of") or [] for s in self.slabs_of(of)]

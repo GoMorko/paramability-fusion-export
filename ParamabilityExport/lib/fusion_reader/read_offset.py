@@ -3,6 +3,9 @@
 Before the item: the faces it moves, each as a flat outline on its plane (the same record as a sketch profile, with
 the outward normal as z) and whether its side walls stand square to it. After the item: the flat faces the feature
 left, so the translator can check which way and how far the faces moved.
+
+The moved faces come from `inputFaces` (a list in newer Fusion versions, a collection in older ones). When Fusion
+gives none before the item, they are read after it from the faces the feature made, moved back by the distance.
 """
 import math
 
@@ -89,28 +92,62 @@ def _face_record(face, inputs, ctx):
     return geo.mark_foreign(record, face, ctx)
 
 
+UNREADABLE = "The faces of this offset could not be read."
+
+
+def _items(value):
+    """Items of a Fusion collection (count and item(i)) or of a plain list; empty when neither."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return geo.safe(lambda: strict_items(value), None) or []
+
+
 def _input_faces(feature):
+    """The faces the step moves, read before it: `inputFaces`, else `faces` (empty when Fusion gives none)."""
     for member in ("inputFaces", "faces"):
-        found = geo.safe(lambda: strict_items(getattr(feature, member)), None)
+        found = _items(geo.safe(lambda: getattr(feature, member), None))
         if found:
             return found
-    raise ValueError("The faces of this offset could not be read.")
+    return []
+
+
+def _moved_back(record, distance):
+    """A face record read after the step, put back on the plane it was offset from."""
+    if "frame" in record:
+        frame = record["frame"]
+        record["frame"] = dict(frame, origin=[round(o - distance * z, 9) + 0.0 for o, z in zip(frame["origin"], frame["z"])])
+    return record
 
 
 def offset_faces_before(feature, ctx):
     faces = _input_faces(feature)
     inputs = [geo.native_input(f, ctx) for f in faces]
-    return with_params({
-        "distance": geo.length(feature.distance),
-        "faces": [_face_record(f, inputs, ctx) for f in faces],
-        "faces_after": [],
-    }, Params().add("distance", lambda: feature.distance).found)
+    data = {"distance": geo.length(feature.distance), "faces": [_face_record(f, inputs, ctx) for f in faces],
+            "faces_after": []}
+    if not faces:
+        data["faces_from_after"] = True
+    return with_params(data, Params().add("distance", lambda: feature.distance).found)
+
+
+def _made_faces(feature):
+    return geo.collection_items(geo.safe(lambda: feature.faces, None))
 
 
 def offset_faces_after(feature, ctx, data):
-    """faces_after: { point, normal } of each flat face the feature lists once it is computed."""
+    """faces_after: { point, normal } of each flat face the feature lists once it is computed. When the faces could not
+    be read before the item, `faces` holds the flat faces it made, moved back by the distance."""
+    out = {}
+    if data.pop("faces_from_after", False):
+        made = [f for f in _made_faces(feature)
+                if geo.safe(lambda: geo.type_name(f.geometry), None) == "Plane"]
+        if not made:
+            raise ValueError(UNREADABLE)
+        inputs = [geo.native_input(f, ctx) for f in made]
+        out["faces"] = [_moved_back(_face_record(f, inputs, ctx), data["distance"]) for f in made]
     found = []
-    for face in geo.collection_items(geo.safe(lambda: feature.faces, None)):
+    for face in _made_faces(feature):
         face = geo.native_input(face, ctx)
         if geo.safe(lambda: geo.type_name(face.geometry), None) != "Plane":
             continue
@@ -118,7 +155,8 @@ def offset_faces_after(feature, ctx, data):
         normal = geo.safe(lambda: _outward_normal(face), None)
         if point is not None and normal is not None:
             found.append({"point": point, "normal": normal})
-    return {"faces_after": found}
+    out["faces_after"] = found
+    return out
 
 
 # type name -> (before, after); either may be None

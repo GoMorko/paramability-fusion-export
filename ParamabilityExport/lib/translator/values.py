@@ -22,15 +22,37 @@ def _n(value):
 
 
 def _text(number):
+    """A number as a formula writes it: no exponent, at most 9 decimals."""
     value = _n(number)
-    return str(int(value)) if value == int(value) else repr(value)
+    return str(int(value)) if value == int(value) else format(value, ".9f").rstrip("0").rstrip(".")
+
+
+def _whole_group(text):
+    """True when `text` is one bracket group: it opens with "(" and that bracket closes at its end."""
+    if not text.startswith("("):
+        return False
+    level = 0
+    for at, char in enumerate(text):
+        level += {"(": 1, ")": -1}.get(char, 0)
+        if level == 0:
+            return at == len(text) - 1
+    return False
 
 
 def _negated(text):
-    """`text` negated: a leading minus on a plain name or number is taken off instead of stacked."""
+    """`text` negated: a leading minus on a plain name, a number or a bracket group is taken off instead of stacked."""
     if text.startswith("-") and _ATOM.match(text[1:]):
         return text[1:]
+    if text.startswith("-") and _whole_group(text[1:]):
+        return text[2:-1]
     return "-" + _wrapped(text)
+
+
+def _subtracted(text):
+    """The text after a minus sign for a negated term, or None when `text` is not a negated name, number or group."""
+    if text.startswith("-") and (_ATOM.match(text[1:]) or _whole_group(text[1:])):
+        return text[1:]
+    return None
 
 
 def _wrapped(text):
@@ -76,12 +98,17 @@ def number(value):
 
 
 class Quantity:
-    """A measured number with an optional formula over the sizes. `reads` are the Fusion names of the sizes it reads."""
+    """A measured number with an optional formula over the sizes. `reads` are the Fusion names of the sizes it reads.
 
-    def __init__(self, n, text=None, reads=()):
+    A formula that ends in a number keeps the two apart (`core`, `const`), so adding numbers later folds them into one.
+    """
+
+    def __init__(self, n, text=None, reads=(), core=None, const=0.0):
         self.n = n
         self.text = text
         self.reads = tuple(reads)
+        self.core = text if core is None else core
+        self.const = const if core is not None else 0.0
 
     @property
     def sized(self):
@@ -109,6 +136,14 @@ class Quantity:
             return Quantity(-self.n, _negated(self.text), self.reads)
         return Quantity(self.n * factor, "%s * %s" % (_text(factor), _wrapped(self.text)), self.reads)
 
+    def _with_const(self, const):
+        """This formula's core plus the number `const`."""
+        n = self.n - self.const + const
+        if abs(const) <= 1e-12:
+            return Quantity(n, self.core, self.reads)
+        sign, right = ("-", _text(-const)) if const < 0 else ("+", _text(const))
+        return Quantity(n, "%s %s %s" % (self.core, sign, right), self.reads, self.core, const)
+
     def plus(self, other):
         """The sum with a number or another Quantity."""
         if not isinstance(other, Quantity):
@@ -116,15 +151,13 @@ class Quantity:
         if not self.sized and not other.sized:
             return Quantity(self.n + other.n)
         reads = tuple(dict.fromkeys(self.reads + other.reads))
-        left = self.text if self.sized else _text(self.n)
-        if not other.sized:
-            sign, right = ("-", _text(-other.n)) if other.n < 0 else ("+", _text(other.n))
-        else:
-            sign, right = "+", _wrapped(other.text)
         if not self.sized and self.n == 0:
-            return Quantity(self.n + other.n, other.text, reads)
-        if not other.sized and other.n == 0:
-            return self
+            return Quantity(self.n + other.n, other.text, reads, other.core, other.const)
+        if not other.sized:
+            return self if other.n == 0 else self._with_const(self.const + other.n)
+        left = self.text if self.sized else _text(self.n)
+        rest = _subtracted(other.text)
+        sign, right = ("-", rest) if rest is not None else ("+", _wrapped(other.text))
         return Quantity(self.n + other.n, "%s %s %s" % (left, sign, right), reads)
 
     def divided_by(self, other):

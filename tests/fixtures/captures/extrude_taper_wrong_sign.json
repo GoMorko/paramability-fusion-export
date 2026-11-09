@@ -1,5 +1,5 @@
 {
-  "_comment": "Positive taper but the end face is larger: the sign convention does not hold.",
+  "_comment": "Positive taper but the end face is smaller: the sign convention does not hold.",
   "capture": 1,
   "fusion": "2.0.0",
   "design": "Test",
@@ -143,7 +143,7 @@
         "target_box_before": null,
         "end_offset": 10.0,
         "profile_area": 800.0,
-        "end_area": 908.0481027293298
+        "end_area": 698.0753102671121
       }
     }
   ]

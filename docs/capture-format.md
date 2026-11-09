@@ -284,7 +284,11 @@ CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriente
   must have a wall that shows it, else the translator refuses.
 - `profile_area`, `end_area` (optional, mm2): the area of the first profile and of `endFaces[0]`. Without
   `side_leans`, a tapered extrude of one outline is checked by them (the end face must be smaller for a positive
-  recipe taper); a tapered extrude of several outlines is refused.
+  recipe taper); a tapered extrude of several outlines is refused. Fusion's positive taper widens the walls (the
+  recipe's positive `taperDeg` narrows them), so the translator writes Fusion's angle with the other sign.
+- Profiles of one extrude that share a sketch curve are merged into one outline with holes before they are copied
+  (`lib/translator/outlines.py`), since Fusion extrudes and tapers their whole region at once. Outlines that stay
+  apart are written so that each step touches what is already built (the part, or an outline written before it).
 - `bodies_before` (optional, on any item): root bodies at the marker before the item. With it the driver finds a
   body the item made or split off (refused); without it the driver compares `bodies_after` with the bodies the item's
   data names (`participants`, `tools`, `target`).
@@ -461,7 +465,9 @@ for extrudes).
 
 **ThreadFeature**: `{ "modeled": bool }` (`isModeled`).
 
-**OffsetFacesFeature** (press pull; `inputFaces`, else `faces`, read before the item; `distance`; `faces` after it):
+**OffsetFacesFeature** (press pull; `inputFaces` (a list or a collection), else `faces`, read before the item;
+`distance`; `faces` after it. When no face is readable before the item, `faces` holds the flat faces of
+`feature.faces` read after it, moved back by `distance`):
 
 ```json
 {
@@ -565,14 +571,20 @@ How the translator uses them (`translate(capture, size_table=table)`):
     linear spacing that follows sizes moves the point with it, a turn or a mirror moves it by numbers. A pick on a
     copy fixes the sizes behind that pattern's count (and a circular angle), since the list of points cannot grow.
     A copy has no `featureEdges` or `featureFace`: the app traces only extrudes, so copies are picked by points.
+  - a point on the inner wall of a shell (`lib/translator/shells.py`) is moved back out by the thickness and placed
+    on the extrude whose outer wall it came from; its coordinates follow that extrude and the thickness.
+  - an edge where the flat walls of two steps cross (`lib/translator/crossings.py`), for example a cut's floor
+    running into a rib, stays on both walls as they move; along the edge it follows the shorter wall.
+  - a point on the far outline of a tapered extrude follows its length; a taper that follows a size is fixed.
   A point or face that no extrude explains may sit on geometry that moves, so every size read by the steps written
   before it is fixed, with the step's name in the reason. Rounds and chamfers that a pattern or mirror copies take
   their source's written points (formulas included) through each copy's motion; their count is fixed, and a circular
   angle too. A copied uneven chamfer turns its `sizeOn` with the copy. Without sizes the picks stay plain points.
 - A formula longer than the app's cap (`MAX_FORMULA_LENGTH` in `lib/params/expressions.py`, 300 characters) fixes
   the sizes it reads, also when a step builds it from several values.
-- Every size that a model parameter created by a sketch dimension, construction plane or axis, or joint reads is
-  fixed up front (reason "stays fixed for now: it changes a sketch"). Sketches follow sizes in a later version. The
+- Every size that a model parameter created by a sketch dimension (also one whose creator reads as `other` but whose
+  `role` names a dimension), construction plane or axis, or joint reads is fixed up front (reason "stays fixed for
+  now: it changes a sketch"). Sketches follow sizes in a later version. The
   dimensions of another component's sketch are not model parameters of the target's path; the sizes in their
   `sketch_params` are fixed when the step that borrows the sketch is copied.
 - An uneven chamfer writes `sizeOn` (one direction per step: the sum of `first - other` face normals over its edge

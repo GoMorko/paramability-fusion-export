@@ -199,12 +199,12 @@ class ValueKindsTest(unittest.TestCase):
     def test_taper_follows_an_angle_size(self):
         def edit(data):
             data["side_one"]["taper_deg"] = 5.0
-            data["profile_area"], data["end_area"] = 800.0, 700.0
+            data["profile_area"], data["end_area"] = 800.0, 900.0
             data["params"] = {"side_one.taper_deg": param("d4", "turn_deg / 18", 5.0)}
         capture, ticked = on_fixture("extrude_plate", lambda d: None, TICKED + ["turn_deg"])
         edit(capture["items"][-1]["data"])
         result = self.check(capture, ticked)
-        self.assertEqual(steps_of(result.recipe, "extrude")[0]["taperDeg"], {"expr": "turn_deg / 18"})
+        self.assertEqual(steps_of(result.recipe, "extrude")[0]["taperDeg"], {"expr": "-(turn_deg / 18)"})
 
     def test_revolve_turn_follows_an_angle_size(self):
         capture, ticked = on_fixture(

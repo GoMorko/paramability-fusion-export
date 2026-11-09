@@ -78,11 +78,11 @@ class PicksTest(unittest.TestCase):
 
     def test_a_pick_on_unknown_geometry_fixes_the_earlier_sizes(self):
         def edit(capture):
-            capture["items"][3]["data"]["sets"][0]["edges"] = [{"token": "e9", "closed": False, "points": [[2, 2, 16]]}]
+            capture["items"][3]["data"]["sets"][0]["edges"] = [{"token": "e9", "closed": False, "points": [[5, 5, 16]]}]
         result, _ = run(tray(edit))
         self.assertEqual(fixed_names(result), sorted([H, CUBE, "wall_mm"]))
         self.assertIn("Fillet1 picks", result.fixed[0]["reason"])
-        self.assertEqual(steps_of(result.recipe, "round")[0]["edges"], {"near": [[2, 2, 16]]})
+        self.assertEqual(steps_of(result.recipe, "round")[0]["edges"], {"near": [[5, 5, 16]]})
         self.assertEqual(steps_of(result.recipe, "round")[0]["size"], {"expr": "corner_mm"})
 
     def test_a_mirrored_round_follows_the_sizes_its_pick_follows(self):
