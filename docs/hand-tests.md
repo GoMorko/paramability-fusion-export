@@ -89,7 +89,10 @@ sizes. The file itself can also be checked without the app:
 - the saved message in Fusion says how many steps were copied and how many sizes are ready, or names the step that
   stopped the copy;
 - in the app repo, `npm run recipe:check -- <file>.paramability` prints `ok` for a recipe package;
-- the steps listed in `recipe.json` (a zip entry) match the design, and `report.json` holds the capture.
+- the steps listed in `recipe.json` (a zip entry) match the design, and `report.json` holds the capture;
+- after any export of a recipe or a plain part (also one size from Export size choices), the manifest lists the user parameters under `parameters`, with
+  value, unit and, for a formula parameter, `expr`; a body in a component and a part the translator cannot copy list
+  them too, and `report.json` shows how many were listed and which were left out.
 
 When a design surprises you, send `report.json`: its `capture` becomes a test fixture. The calls and enum names these
 tests pin are in the "Capture reader calls to watch" parts below. "Matches" below means the part Paramability

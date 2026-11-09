@@ -1,4 +1,4 @@
-"""Design name, Fusion version and up direction."""
+"""Design name, Fusion version, up direction and default length unit."""
 import adsk.core
 
 
@@ -20,3 +20,11 @@ def detect_up_axis(app):
     except Exception:
         pass
     return "z"
+
+
+def default_length_unit(design):
+    """The design's default length unit, which a bare number in a length formula is read in."""
+    try:
+        return design.fusionUnitsManager.defaultLengthUnits or "mm"
+    except Exception:
+        return "mm"

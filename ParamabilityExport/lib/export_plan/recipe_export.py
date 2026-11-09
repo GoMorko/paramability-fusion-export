@@ -87,7 +87,7 @@ def _dropped(size_table, recipe, fixed):
 
 
 def plan_single_export(capture_or_error, step_file, title, writer, up_axis, in_component=False,
-                       size_table=None, checks=None, fixed=None, unchecked=None):
+                       size_table=None, checks=None, fixed=None, unchecked=None, listing=None):
     """Return (manifest, files, report) for one body.
 
     capture_or_error: the reader's capture dict, or the exception the reader raised.
@@ -99,6 +99,8 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis, in_c
     fixed: [{'name', 'reason'}] parameters the export itself fixed (measured), by Fusion name. The translator adds its
       own. The manifest lists them by recipe size name.
     unchecked: names of sizes that got no check, for the report.
+    listing: the design's ParameterListing (params.listing). Its entries go into the manifest `parameters` of every
+      package kind, so the Fusion parameters reach Paramability even when the shape stays fixed.
     files maps entry paths to a file path or bytes, as write_package expects. Raises ValueError when the manifest
     breaks the package rules.
     """
@@ -147,12 +149,15 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis, in_c
         report["error"] = ("%s: %s" % (type(error).__name__, error))[:500]
     if capture is not None:
         report["capture"] = capture
+    if listing is not None:
+        report["parameters"] = listing.report()
     if recipe_data is not None:
         report["sizes"] = {"free": free, "fixed": all_fixed, "checks": [
             {"size": c["size"], "value": c["value"]} for c in kept], "unchecked": list(unchecked or []),
             "dropped": dropped}
 
     files = {"part.step": step_file}
+    listed = listing.entries if listing is not None else None
     if recipe_data is not None:
         notes = [recipe_note(len(result.recipe["features"]))]
         if free:
@@ -168,11 +173,12 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis, in_c
             manifest_checks.append({"values": {check["size"]: check["value"]}, "step": check_step_path(number)})
             files[check_step_path(number)] = check["step_file"]
         manifest = build_recipe_manifest(
-            title, writer, up_axis=up_axis, notes=notes, checks=manifest_checks, fixed=all_fixed)
+            title, writer, up_axis=up_axis, notes=notes, checks=manifest_checks, fixed=all_fixed,
+            parameters=listed)
         files["recipe.json"] = recipe_data
     else:
         notes = [note or step_only_note(refusal)]
-        manifest = build_step_only_manifest(title, writer, up_axis=up_axis, notes=notes)
+        manifest = build_step_only_manifest(title, writer, up_axis=up_axis, notes=notes, parameters=listed)
     files["report.json"] = _report_bytes(report)
 
     problems = validate_manifest(manifest)

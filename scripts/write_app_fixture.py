@@ -1,7 +1,8 @@
 """Writes manifests with every optional field set, through the package writer.
 
-The valueRows manifest is the app's frozen package fixture. The recipe manifest (checks and the fixed list) is
-written to the optional second path. A `fixed` entry's `name` is the recipe size name; when the Fusion parameter has
+The valueRows manifest is the app's frozen package fixture. The recipe manifest (checks, the fixed list and the
+`parameters` list of the design's user parameters: label, value, unit, `expr` for a formula, `comment`) is written
+to the optional second path. A `fixed` entry's `name` is the recipe size name; when the Fusion parameter has
 another name, the reason says it. Usage:
 python3 scripts/write_app_fixture.py [value rows output path] [recipe output path]
 """
@@ -24,6 +25,15 @@ def recipe_manifest():
         checks=[
             {"values": {"wall": 4}, "step": "checks/01.step"},
             {"values": {"holes": 6}, "step": "checks/02.step"},
+        ],
+        parameters=[
+            {"name": "wall", "label": "wall", "value": 2, "unit": "mm", "comment": "Wall thickness [1..6]"},
+            {"name": "holes", "label": "holes", "value": 4, "unit": ""},
+            {"name": "Filter_box_height", "label": "Filter box $ height", "value": 80, "unit": "mm"},
+            {"name": "pipe_offset", "label": "pipe_offset", "value": 0.05, "unit": "mm"},
+            {"name": "outer", "label": "outer", "value": 84, "unit": "mm", "expr": "Filter_box_height + wall * 2"},
+            {"name": "tilt", "label": "tilt", "value": 30, "unit": "deg"},
+            {"name": "pitch", "label": "pitch", "value": 12.5, "unit": "mm"},
         ],
         fixed=[
             {"name": "pipe_offset",

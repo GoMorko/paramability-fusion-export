@@ -58,7 +58,7 @@ def run_export(design, parameters, form):
             default_index = pick_default_index(read.rows, form["default_name"])
             manifest, files = build_package(
                 title, export_common.writer_for(app), results, read.columns, parameters, default_index,
-                form["choice_name"], form["up_axis"])
+                form["choice_name"], form["up_axis"], design_info.default_length_unit(design))
             write_package(out_path, manifest, files)
         message_box(saved_message(len(results), os.path.basename(out_path)))
     except ExportCancelled:

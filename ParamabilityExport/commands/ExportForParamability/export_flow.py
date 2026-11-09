@@ -29,6 +29,7 @@ from ...lib.fusion_ui.progress import ProgressDialog
 from ...lib.package.caps import PackageCapError
 from ...lib.package.writer import write_package
 from ...lib.params import size_table as size_tables
+from ...lib.params.listing import list_parameters
 from .. import export_common
 
 
@@ -87,6 +88,15 @@ def _first_translation(capture, up_axis, table):
         log(f"first translation failed: {exc!r}")
         return None
     return result if result.recipe is not None else None
+
+
+def _parameter_listing(parameters, model_params, design_unit):
+    """The design's parameters for the manifest, or None when they cannot be listed. Never stops the export."""
+    try:
+        return list_parameters(parameters, model_params, design_unit)
+    except Exception as exc:
+        log(f"parameter list failed: {exc!r}")
+        return None
 
 
 def run_export(design, parameters, model_params, design_unit, form, captures=None):
@@ -148,7 +158,8 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
                 capture if capture is not None else RuntimeError("The steps were not read."),
                 part_step, title, export_common.writer_for(app), form["up_axis"], in_component=in_component,
                 size_table=table, checks=kept,
-                fixed=[{"name": m["name"], "reason": m["reason"]} for m in measured], unchecked=unchecked)
+                fixed=[{"name": m["name"], "reason": m["reason"]} for m in measured], unchecked=unchecked,
+                listing=_parameter_listing(parameters, model_params, design_unit))
             write_package(out_path, manifest, files)
         message_box(recipe_saved_message(manifest, os.path.basename(out_path)))
     except ExportCancelled:

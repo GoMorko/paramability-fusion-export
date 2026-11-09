@@ -6,7 +6,7 @@ import adsk.core
 from ... import config
 from ...lib.export_plan.size_offers import offers as size_offers, table_for_body
 from ...lib.fusion_reader.bodies import is_root_body
-from ...lib.fusion_reader.design_info import detect_up_axis
+from ...lib.fusion_reader.design_info import default_length_unit, detect_up_axis
 from ...lib.fusion_reader.parameters import list_model_parameters, list_user_parameters
 from ...lib.fusion_reader.step_export import count_solid_bodies
 from ...lib.fusion_ui import handlers, recipe_dialog
@@ -30,14 +30,6 @@ def stop():
     _command_handlers.clear()
 
 
-def _design_unit(design):
-    """The design's default length unit, which a bare number in a length formula is read in."""
-    try:
-        return design.fusionUnitsManager.defaultLengthUnits or "mm"
-    except Exception:
-        return "mm"
-
-
 def _on_created(args):
     command = adsk.core.CommandCreatedEventArgs.cast(args).command
     design, reason = panel.design_or_reason()
@@ -48,7 +40,7 @@ def _on_created(args):
     root = design.rootComponent
     parameters = list_user_parameters(design)
     model_params = list_model_parameters(root)
-    design_unit = _design_unit(design)
+    design_unit = default_length_unit(design)
     body = None
     if count_solid_bodies(root) == 1 and root.bRepBodies.count == 1:
         body = root.bRepBodies.item(0)

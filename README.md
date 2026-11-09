@@ -43,6 +43,12 @@ A ticked parameter that no copied step uses is not a size; the message after the
 When a step cannot be copied, the file holds the plain part only, and the message names the first step that stopped
 it. A copy of what the add-in read is saved inside the file as `report.json`.
 
+Every plain part or recipe the add-in writes (also the one size case of Export size choices) also lists the design's user parameters
+(up to 64, in Fusion order) with their current values, units and comments. A parameter worked out by a formula keeps
+its formula when it can be copied, so Paramability gets the variables even when the shape stays fixed. Parameters in
+other units than length, angle or no unit are left out. In Export for Paramability, `report.json` says how many were
+listed and which were left out and why.
+
 ### Export size choices
 
 Saves ready-made sizes of one body as a dropdown. Paramability opens one shape per size.

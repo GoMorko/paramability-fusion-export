@@ -9,6 +9,10 @@ UNITS = ("mm", "deg", "")
 MAX_FIXED = 32
 MAX_FIXED_REASON = 200
 MAX_NAME_CHARS = 64
+MAX_PARAMETERS = 64
+MAX_PARAMETER_LABEL = 64
+MAX_PARAMETER_COMMENT = 200
+MAX_PARAMETER_EXPR = 300
 VALUE_LIMIT = 1e6
 
 _SEGMENT = re.compile(r"^[A-Za-z0-9_.-]+$")
@@ -40,8 +44,9 @@ def build_value_rows_manifest(name, writer, parameters, rows, default_index=None
     return manifest
 
 
-def build_step_only_manifest(name, writer, up_axis="z", notes=None):
-    return {
+def build_step_only_manifest(name, writer, up_axis="z", notes=None, parameters=None):
+    """parameters: the design's user parameter entries; the key is left out when the list is empty."""
+    manifest = {
         "schema": SCHEMA,
         "version": VERSION,
         "kind": "stepOnly",
@@ -51,13 +56,16 @@ def build_step_only_manifest(name, writer, up_axis="z", notes=None):
         "notes": list(notes or []),
         "part": "part.step",
     }
+    _add_parameters(manifest, parameters)
+    return manifest
 
 
-def build_recipe_manifest(name, writer, up_axis="z", notes=None, checks=None, fixed=None):
+def build_recipe_manifest(name, writer, up_axis="z", notes=None, checks=None, fixed=None, parameters=None):
     """A translated part: the STEP files plus recipe.json.
 
     checks: [{'values': {size name: number}, 'step': 'checks/01.step'}], one size changed per check.
     fixed: [{'name', 'reason'}] for Fusion parameters that stay fixed numbers in the shape. Left out when empty.
+    parameters: the design's user parameter entries. Left out when empty.
     """
     manifest = {
         "schema": SCHEMA,
@@ -73,7 +81,13 @@ def build_recipe_manifest(name, writer, up_axis="z", notes=None, checks=None, fi
     }
     if fixed:
         manifest["fixed"] = [dict(f) for f in fixed]
+    _add_parameters(manifest, parameters)
     return manifest
+
+
+def _add_parameters(manifest, parameters):
+    if parameters:
+        manifest["parameters"] = [dict(p) for p in parameters]
 
 
 def check_step_path(number):
@@ -133,6 +147,9 @@ def validate_manifest(m):
         elif any(not isinstance(n, str) or len(n) > 200 for n in notes):
             problems.append("each note must be text of at most 200 characters.")
 
+    if kind in ("stepOnly", "recipe"):
+        _validate_parameters(m.get("parameters"), problems)
+
     paths = []
 
     def check_path(path, label, suffixes):
@@ -185,6 +202,41 @@ def _validate_fixed(fixed, problems):
             problems.append(f"{label}: name must be 1 to {MAX_NAME_CHARS} characters.")
         if not isinstance(reason, str) or not 1 <= len(reason) <= MAX_FIXED_REASON:
             problems.append(f"{label}: reason must be 1 to {MAX_FIXED_REASON} characters.")
+
+
+def _validate_parameters(params, problems):
+    """Check the optional `parameters` list of a stepOnly or recipe manifest (valueRows has its own columns list)."""
+    names = set()
+    if params is None:
+        return
+    if not isinstance(params, list) or len(params) > MAX_PARAMETERS:
+        problems.append(f"parameters must be a list of at most {MAX_PARAMETERS}.")
+        return
+    for i, p in enumerate(params, start=1):
+        label = f"parameter {i}"
+        if not isinstance(p, dict):
+            problems.append(f"{label}: must be an object.")
+            continue
+        pname = p.get("name")
+        if not isinstance(pname, str) or not 1 <= len(pname) <= MAX_NAME_CHARS:
+            problems.append(f"{label}: name must be 1 to {MAX_NAME_CHARS} characters.")
+        elif pname in names:
+            problems.append(f"{label}: name \"{pname}\" is used twice.")
+        else:
+            names.add(pname)
+        text = p.get("label")
+        if text is not None and (not isinstance(text, str) or len(text) > MAX_PARAMETER_LABEL):
+            problems.append(f"{label}: label must be at most {MAX_PARAMETER_LABEL} characters.")
+        if p.get("unit", "") not in UNITS:
+            problems.append(f"{label}: unit must be mm, deg or empty.")
+        if "value" in p and not _finite(p["value"]):
+            problems.append(f"{label}: value must be a number.")
+        expr = p.get("expr")
+        if expr is not None and (not isinstance(expr, str) or not 1 <= len(expr) <= MAX_PARAMETER_EXPR):
+            problems.append(f"{label}: expr must be 1 to {MAX_PARAMETER_EXPR} characters.")
+        comment = p.get("comment")
+        if comment is not None and (not isinstance(comment, str) or len(comment) > MAX_PARAMETER_COMMENT):
+            problems.append(f"{label}: comment must be at most {MAX_PARAMETER_COMMENT} characters.")
 
 
 def _validate_value_rows(m, problems, check_path, step_suffixes):

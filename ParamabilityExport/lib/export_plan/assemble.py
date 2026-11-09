@@ -6,12 +6,14 @@ from ..package.manifest import (
     validate_manifest,
 )
 from ..package.units import manifest_unit
+from ..params.listing import list_parameters
+
 
 MAX_LABEL = 120
 
 
 def manifest_parameters(columns, params):
-    """Manifest parameter entries for the columns, in column order."""
+    """Manifest parameter entries for the columns, in column order (the value rows list)."""
     by_name = {p["name"]: p for p in params}
     out = []
     for name in columns:
@@ -24,13 +26,16 @@ def manifest_parameters(columns, params):
     return out
 
 
-def build_package(title, writer, results, columns, params, default_index, choice_name, up_axis):
+def build_package(title, writer, results, columns, params, default_index, choice_name, up_axis, design_unit="mm"):
     """Return (manifest, files). One result gives a stepOnly package, two or more give valueRows.
 
+    A stepOnly package lists every user parameter in `parameters`. A valueRows package lists only the columns, by
+    their Fusion names, and its rows are keyed by the same names.
     files maps entry path to the STEP file on disk. Raises ValueError when the manifest breaks the package rules.
     """
     if len(results) == 1:
-        manifest = build_step_only_manifest(title, writer, up_axis=up_axis)
+        listing = list_parameters(params, design_unit=design_unit)
+        manifest = build_step_only_manifest(title, writer, up_axis=up_axis, parameters=listing.entries)
         files = {"part.step": results[0]["step_file"]}
     else:
         rows = [{"name": r["name"], "values": r["values"]} for r in results]
