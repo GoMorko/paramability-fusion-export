@@ -14,6 +14,8 @@ from .words import type_words
 RECIPE_VERSION = 12
 # Step kinds newer than RECIPE_VERSION: a recipe that holds one states the version that introduced it.
 KIND_VERSIONS = {"offsetFaces": 13}
+# Edge selector keys newer than RECIPE_VERSION, the same way.
+SELECTOR_VERSIONS = {"chain": 14, "faceEdges": 14}
 MAX_FEATURES = 400
 MAX_NEAR_POINTS = 32
 MAX_PATTERN_COPIES = 64
@@ -395,7 +397,8 @@ def _walk(capture, table, size_table, motion=None, follow=False, plain=False):
         result.refusal = {"index": None, "name": "", "type": "", "reason": "Nothing in the timeline makes this body."}
         return result, ctx
 
-    version = max([RECIPE_VERSION] + [KIND_VERSIONS.get(step["kind"], 0) for step in ctx.steps])
+    version = max([RECIPE_VERSION] + [KIND_VERSIONS.get(step["kind"], 0) for step in ctx.steps]
+                  + [SELECTOR_VERSIONS.get(key, 0) for step in ctx.steps for key in (step.get("edges") or {})])
     recipe = {"schema": "paramability.recipe", "version": version, "features": ctx.steps}
     over = _over_caps(recipe)
     if over:

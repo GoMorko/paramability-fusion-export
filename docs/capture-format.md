@@ -388,7 +388,9 @@ CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriente
       "radius": 2.0,
       "continuity": "tangent",
       "input_kinds": ["edge"],
-      "edges": [EDGE, ...]
+      "tangent_chain": true,
+      "edges": [EDGE, ...],
+      "faces": [{ "token": "...", "point": [..] }]
     }
   ]
 }
@@ -399,6 +401,10 @@ CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriente
 - The reader expands the input: a face gives its `BRepFace.edges`; a tangent chain gives
   `BRepEdge.tangentiallyConnectedEdges`. A feature as input is listed in `input_kinds` as `feature` and not
   expanded.
+- How the set picked its edges: `tangent_chain` is `isTangentChain`; with it on, each EDGE that was an input of the
+  set (not one the chain added) has `"seed": true`. `faces` lists the face inputs, as the shell's `faces` records
+  (`point` is `BRepFace.pointOnFace`); it is absent when the set has no face input or a face cannot be read. Captures
+  of add-in 0.5.0 and older have none of these keys.
 - EDGE: `{ "token", "closed": bool, "points": [[..]] }`. `points` holds the middle point for an open edge and the
   points at 0.25 and 0.75 of the parameter range for a closed edge (`startVertex` equal to `endVertex`), from
   `BRepEdge.evaluator`.
@@ -585,6 +591,12 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   - a shell that opens one such moving end face writes `{ "featureFace": <id>, "which": "start" | "end" }`;
   - a round or chamfer whose edges are exactly the side edges, or exactly the edges of a moving end face, of one
     extrude writes `{ "featureEdges": <id>, "which": "sides" | "start" | "end" }`;
+  - otherwise, a round or chamfer step that holds whole sets of one size picks the way Fusion did (recipe version
+    14): sets picked only by faces write `{ "faceEdges": <face selector of the face points> }`, every edge around
+    those faces, and tangent chain sets picked only by edges write one point per `seed` edge with
+    `"chain": "tangent"`. Both keep picking every edge when a size adds edges (more bumps along a rim) or splits
+    one, which one point per edge cannot. A step with part of a set, mixed inputs or sizes per edge keeps a point
+    per edge;
   - other points write the coordinate along the extrude as a formula (`0.5 * height` for a side point half way up);
   - a "to entity" reach to a moving end face writes its length as a formula; a construction plane stays where it is;
   - a start offset that follows sizes, or a "from entity" start on a moving end face, moves the sketch placement
@@ -630,7 +642,8 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   `TranslateResult.loose` lists them as `{ name, reason }` ("... may give unexpected results: ..."); a loose size
   that no formula reads is listed under `fixed` instead. A formula too long to copy (`Context.fix_always`) fixes its
   sizes in both modes.
-- The recipe is version 12. With a size table it carries `sizesAsWritten: true` and `sizes`: the sizes that a written
+- The recipe is version 12, or the lowest version that holds its steps and selectors (13 with an `offsetFaces` step, 14
+  with a `chain` or `faceEdges` pick). With a size table it carries `sizesAsWritten: true` and `sizes`: the sizes that a written
   formula reads, plus the sizes those formulas read. A ticked size that nothing reads is left out, with a note.
   Without a table the recipe has no `sizes`, and no marker.
 

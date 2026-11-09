@@ -2,7 +2,9 @@
 
 All three read their inputs with the timeline marker just before the item, so the edges and faces still exist in
 the shape the feature was applied to. Edge and face inputs are expanded here: a face gives its edges, and a tangent
-chain gives every tangentially connected edge or face, so the translator sees one flat list of picks.
+chain gives every tangentially connected edge or face, so the translator sees one flat list of picks. A fillet or
+chamfer set also keeps how its edges were picked: the faces it was given (`faces`), whether it follows tangent
+chains (`tangent_chain`), and on each picked edge of a chain `seed`, so the copy can pick the same way.
 A required collection that cannot be read raises, and the walk records that as a read_error for the item.
 
 A chamfer with two distances, or a distance and an angle, also records at each edge point the outward normals of
@@ -78,29 +80,42 @@ def _chain(entity, member, tangent_chain):
 
 
 def expand_edges(entities, tangent_chain):
-    """(input kinds, edges) of a set input: faces give their edges, tangent chains are completed, features stay out."""
-    kinds, edges = [], []
+    """(input kinds, edges, faces, seeds) of a set input: faces give their edges, tangent chains are completed,
+    features stay out. `faces` are the face inputs; `seeds` the tokens of the edge inputs."""
+    kinds, edges, faces, seeds = [], [], [], set()
     for entity in entities:
         kind = _input_kind(entity)
         if kind not in kinds:
             kinds.append(kind)
+        if kind == "edge" and _token(entity):
+            seeds.add(_token(entity))
         if kind == "edge":
             edges += _chain(entity, "tangentiallyConnectedEdges", tangent_chain)
         elif kind == "face":
+            faces.append(entity)
             edges += geo.safe(lambda: strict_items(entity.edges), [])
-    return kinds, _unique(edges)
+    return kinds, _unique(edges), _unique(faces), seeds
 
 
 def _edge_set(edge_set, ctx, tangent_default=True, sides=False):
     tangent_chain = geo.safe(lambda: bool(edge_set.isTangentChain), tangent_default)
-    kinds, edges = expand_edges(strict_items(edge_set.edges), tangent_chain)
+    kinds, edges, faces, seeds = expand_edges(strict_items(edge_set.edges), tangent_chain)
     records = [geo.edge_record(e, ctx) for e in edges]
     if sides:
         for record, edge in zip(records, edges):
             found = geo.safe(lambda: _edge_sides(geo.native_input(edge, ctx), record), None)
             if found:
                 record["sides"] = found
-    return {"input_kinds": kinds, "edges": records}
+    out = {"input_kinds": kinds, "edges": records, "tangent_chain": tangent_chain}
+    if tangent_chain:
+        for record, edge in zip(records, edges):
+            if _token(edge) in seeds:
+                record["seed"] = True
+    if faces:
+        out["faces"] = [geo.safe(lambda: _face_record(f, ctx), None) for f in faces]
+        if any(face is None for face in out["faces"]):
+            del out["faces"]
+    return out
 
 
 def _normal_at(face, point):

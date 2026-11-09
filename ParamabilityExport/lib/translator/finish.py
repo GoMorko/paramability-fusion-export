@@ -2,6 +2,9 @@
 
 Edges and faces are picked by `near` points taken from the captured edge and face positions (see picks.py). When the
 picked faces move with sizes, the pick names the extrude that made them or its points follow the sizes (follow.py).
+A step that holds whole Fusion sets picked by faces picks the edges around those faces (`faceEdges`), and one of
+whole tangent chain sets picks one point per chain (`chain: tangent`), so edges that a size adds or splits are
+still picked.
 A chamfer with two distances, or a distance and an angle, says which face takes the first distance (`sizeOn`); the
 reader measures it per edge (`sides`, `cut_normals`). What the recipe has no words for is refused: changing radii,
 outside or rounded shells.
@@ -53,15 +56,20 @@ def _unlocated(edges):
     return any(not edge.get("points") for edge in edges)
 
 
-def _edge_steps(ctx, item, kind, edges, sizes, extra=None):
+def _edge_steps(ctx, item, kind, edges, sizes, extra=None, sets=()):
     """`round` or `bevel` steps over `edges`, one per group of edges that fits a pick. `sizes` is one size Quantity
     per point of the edges, in order; steps with mixed sizes carry `edgeSizes`. `extra` holds more fields of every
-    step (the second measure of a chamfer)."""
+    step (the second measure of a chamfer). `sets` are the capture sets the edges come from."""
     extra = extra or {}
-    whole = follow.whole_edges(ctx, edges) if all(s.same_as(sizes[0]) for s in sizes) else None
+    even = all(s.same_as(sizes[0]) for s in sizes)
+    whole = follow.whole_edges(ctx, edges) if even else None
     if whole is not None:
         reads = next(slab.length.reads for slab in ctx.slabs if slab.id == whole["featureEdges"])
         return [_with_plain(dict({"kind": kind, "edges": whole, "size": sizes[0].json()}, **extra), edges, reads)]
+    picked = _input_pick(ctx, item, edges, sets) if even else None
+    if picked is not None:
+        step = dict({"kind": kind, "edges": picked, "size": sizes[0].json()}, **extra)
+        return [_with_plain(step, edges, values.reads_in(picked), always=True)]
     steps, at = [], 0
     for group in picks.edge_groups(edges):
         count = sum(len(edge["points"]) for edge in group)
@@ -74,13 +82,42 @@ def _edge_steps(ctx, item, kind, edges, sizes, extra=None):
     return steps
 
 
-def _with_plain(step, edges, reads=None):
+def _with_plain(step, edges, reads=None, always=False):
     """Hand the measured points over with a pick that follows sizes, for patterns and mirrors that copy it.
-    `reads` are the sizes the pick follows (default: those its points read)."""
+    `reads` are the sizes the pick follows (default: those its points read). `always` hands them over for a pick
+    with no point per edge, whose copies need one."""
     reads = values.reads_in(step["edges"]) if reads is None else reads
-    if reads:
-        step["_plain"] = {"near": picks.near_points(edges), "reads": reads, "written": step["edges"].get("near")}
+    if reads or always:
+        written = None if always else step["edges"].get("near")
+        step["_plain"] = {"near": picks.near_points(edges), "reads": reads, "written": written}
     return step
+
+
+def _whole_sets(edges, sets):
+    """The sets whose edges are exactly `edges`, or None when the edges hold part of a set or edges of no set."""
+    wanted = {id(edge) for edge in edges}
+    found = [entry for entry in sets if any(id(edge) in wanted for edge in entry.get("edges") or [])]
+    held = {id(edge) for entry in found for edge in entry.get("edges") or []}
+    return found if found and held == wanted else None
+
+
+def _input_pick(ctx, item, edges, sets):
+    """The edge selector that picks `edges` the way Fusion picked them, or None when one point per edge is needed:
+    the edges around the faces of sets picked by faces, or the tangent chains of the picked edges of tangent chain
+    sets."""
+    found = _whole_sets(edges, sets)
+    if found is None:
+        return None
+    if all(entry.get("input_kinds") == ["face"] and entry.get("faces") for entry in found):
+        faces = [face for entry in found for face in entry["faces"]]
+        if len(faces) <= picks.MAX_NEAR_POINTS:
+            return {"faceEdges": follow.faces(ctx, item, faces)}
+        return None
+    if all(entry.get("input_kinds") == ["edge"] and entry.get("tangent_chain") for entry in found):
+        seeds = [edge for edge in edges if edge.get("seed")]
+        if seeds and len(picks.near_points(seeds)) <= picks.MAX_NEAR_POINTS:
+            return dict(follow.edges_near(ctx, item, seeds), chain="tangent")
+    return None
 
 
 def _fillet(item, ctx):
@@ -110,7 +147,7 @@ def _fillet(item, ctx):
         ctx.note("Fusion used setback corners for this round. The copy uses rolling ball corners, so corners where "
                  "three or more rounded edges meet can look different.")
     sizes = [size for edge, size in pairs for _ in edge["points"]]
-    steps = _edge_steps(ctx, item, "round", [edge for edge, _ in pairs], sizes)
+    steps = _edge_steps(ctx, item, "round", [edge for edge, _ in pairs], sizes, sets=sets)
     _split_note(ctx, steps)
     return steps
 
@@ -281,7 +318,7 @@ def _chamfer(item, ctx):
         extra = {key: q.json() for key, q in group["extra"].items()}
         if group["size_on"] is not None:
             extra["sizeOn"] = group["size_on"]
-        steps += _edge_steps(ctx, item, "bevel", group["edges"], sizes, extra)
+        steps += _edge_steps(ctx, item, "bevel", group["edges"], sizes, extra, sets)
     _split_note(ctx, steps)
     return steps
 

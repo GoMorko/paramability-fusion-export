@@ -58,6 +58,10 @@ class FilletTest(unittest.TestCase):
         self.assertEqual(fillet_set["input_kinds"], ["edge", "face"])
         self.assertEqual([(e["token"], e["closed"], e["points"]) for e in fillet_set["edges"]],
                          [("e1", False, [[1, 0, 0]]), ("e2", False, [[2, 0, 0]]), ("e3", True, [[2.5, 0, 0], [3.5, 0, 0]])])
+        # How the set was picked: the face input, and the edge the chain grew from.
+        self.assertEqual(fillet_set["faces"], [{"token": "f1", "point": [0, 1, 2]}])
+        self.assertTrue(fillet_set["tangent_chain"])
+        self.assertEqual([e.get("seed", False) for e in fillet_set["edges"]], [True, False, False])
 
     def test_chain_is_not_followed_when_the_set_says_so(self):
         e1, e2 = edge("e1", 1), edge("e2", 2)
@@ -68,6 +72,8 @@ class FilletTest(unittest.TestCase):
         data = read_data(feature("FilletFeature", "Fillet1", edgeSets=Coll([edge_set])))
         self.assertTrue(data["rolling_ball"])
         self.assertEqual([e["token"] for e in data["sets"][0]["edges"]], ["e1"])
+        self.assertFalse(data["sets"][0]["tangent_chain"])
+        self.assertNotIn("seed", data["sets"][0]["edges"][0])
 
     def test_set_kinds_continuity_and_feature_inputs(self):
         sets = [
@@ -102,7 +108,7 @@ class ChamferTest(unittest.TestCase):
         data = read_data(feature("ChamferFeature", "Chamfer1", edgeSets=Coll(sets),
                                  cornerType="ChamferCornerType"))
         self.assertEqual(data["corner_type"], "chamfer")
-        slim = [{k: v for k, v in s.items() if k not in ("edges", "input_kinds")} for s in data["sets"]]
+        slim = [{k: v for k, v in s.items() if k not in ("edges", "input_kinds", "tangent_chain")} for s in data["sets"]]
         self.assertEqual(slim, [
             {"kind": "equal", "distance": 1.0},
             {"kind": "twoDistances", "distance": 1.0, "distance_two": 3.0, "flipped": True},
@@ -146,7 +152,7 @@ class UnevenChamferTest(unittest.TestCase):
         edge_set = with_edges("EqualDistanceChamferEdgeSet", [picked], distance=param(0.1))
         data = read_data(feature("ChamferFeature", "Chamfer1", edgeSets=Coll([edge_set]),
                                  faces=Coll([cut_face((5, 1, 0), (0, -1, 1))])))
-        self.assertEqual(sorted(data["sets"][0]["edges"][0]), ["closed", "points", "token"])
+        self.assertFalse({"sides", "cut_normals"} & set(data["sets"][0]["edges"][0]))
 
 
 class ShellTest(unittest.TestCase):

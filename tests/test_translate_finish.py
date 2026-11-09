@@ -81,6 +81,60 @@ class FilletTest(unittest.TestCase):
         self.assertEqual(verdict_of(result, 2)["verdict"], "translatedWithNote")
 
 
+class InputPickTest(unittest.TestCase):
+    """A step that holds whole Fusion sets picks their edges as Fusion did: around the picked faces, or along the
+    tangent chains of the picked edges."""
+
+    @staticmethod
+    def picked_by_top_face(data):
+        data["sets"][0].update(input_kinds=["face"], faces=[{"token": "top", "point": [20.0, 10.0, 10.0]}])
+
+    def test_a_set_picked_by_a_face_picks_the_edges_around_it(self):
+        result = variant("chamfer_equal", self.picked_by_top_face)
+        (step,) = steps_of(result.recipe, "bevel")
+        self.assertEqual(step["edges"], {"faceEdges": {"near": [[20.0, 10.0, 10.0]]}})
+        self.assertEqual(result.recipe["version"], 14)
+        assert_schema_ok(self, result.recipe)
+
+    def test_a_tangent_chain_set_writes_one_point_per_picked_edge(self):
+        def edit(data):
+            data["sets"][0]["tangent_chain"] = True
+            data["sets"][0]["edges"][0]["seed"] = True
+        result = variant("fillet_four_edges", edit)
+        (step,) = steps_of(result.recipe, "round")
+        first = load_capture("fillet_four_edges")["items"][-1]["data"]["sets"][0]["edges"][0]["points"]
+        self.assertEqual(step["edges"], {"near": first, "chain": "tangent"})
+        assert_schema_ok(self, result.recipe)
+
+    def test_part_of_a_set_or_mixed_inputs_keep_a_point_per_edge(self):
+        def mixed(data):
+            data["sets"][0].update(input_kinds=["edge", "face"], faces=[{"token": "top", "point": [20.0, 10.0, 10.0]}])
+
+        def chain_without_seeds(data):
+            data["sets"][0]["tangent_chain"] = True
+        for name, edit in (("chamfer_equal", mixed), ("fillet_four_edges", chain_without_seeds)):
+            result = variant(name, edit)
+            (step,) = [s for s in result.recipe["features"] if s["kind"] in ("round", "bevel")]
+            self.assertEqual(list(step["edges"]), ["near"], name)
+            self.assertEqual(result.recipe["version"], 12, name)
+
+    def test_a_pattern_copies_a_face_pick_by_points(self):
+        def edit(capture):
+            data = capture["items"][3]["data"]
+            data["sets"][0].update(input_kinds=["face"], faces=[{"token": "f", "point": [20.0, 0.0, 5.0]}])
+        result = translate(edited_capture("rpattern_fillet", edit))
+        source, copies = steps_of(result.recipe, "round")
+        self.assertIn("faceEdges", source["edges"])
+        self.assertEqual(len(copies["edges"]["near"]), 6)
+        assert_schema_ok(self, result.recipe)
+
+
+def edited_capture(name, edit):
+    capture = load_capture(name)
+    edit(capture)
+    return capture
+
+
 class ChamferTest(unittest.TestCase):
     def test_equal_distance(self):
         result = translate_fixture("chamfer_equal")

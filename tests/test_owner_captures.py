@@ -174,6 +174,29 @@ class OwnerCaptureTest(unittest.TestCase):
                          {PROBE_TICKED[0]: (1.35, 2.05), PROBE_TICKED[3]: (13.5, 20.52),
                           "_Filter__Wall_thickness_mm": (0.98, 1.25)})
 
+    def test_the_rim_chamfer_picked_by_the_top_face_follows_the_box(self):
+        path = os.path.join(REPORTS, PACKAGE_WITH_OFFSET_FACES)
+        if not os.path.exists(path):
+            self.skipTest("the owner's package is not on this machine")
+        with zipfile.ZipFile(path) as package:
+            report = json.loads(package.read("report.json"))
+        capture = report["capture"]
+        # Chamfer2's first set was picked by the box's top face; this capture is older than the face record.
+        rim = next(i for i in capture["items"] if i["index"] == 70)["data"]["sets"][0]
+        self.assertEqual((rim["input_kinds"], len(rim["edges"])), (["face"], 36))
+        rim["faces"] = [{"token": "top", "point": [0.0, 0.0, 21.6]}]
+        params = capture["parameters"]
+        ticked = PROBE_TICKED + ["_Filter__Wall_thickness_mm"]
+        table = size_table.build(params["user"], ticked, params["model"], capture.get("design_units", "mm"))
+        motion = probe_motion.build(probe_view(capture), table, report["probe"]["states"])
+        result = translate(capture, size_table=table, motion=motion, loose=True, plain=True)
+        bevels = [f for f in result.recipe["features"] if f["label"] == "Chamfer2"]
+        # One step picks the whole rim, however many bumps the width makes; the other set keeps its points.
+        self.assertEqual(bevels[0]["edges"], {"faceEdges": {"featureFace": "extrude_49", "which": "end"}})
+        self.assertEqual([list(b["edges"]) for b in bevels[1:]], [["near"], ["near"]])
+        self.assertEqual(result.recipe["version"], 14)
+        self.assertEqual(check_recipe(result.recipe), [])
+
     def test_the_plain_export_keeps_every_range_and_marks_the_sketch_sizes_loose(self):
         path = os.path.join(REPORTS, PACKAGE_WITH_OFFSET_FACES)
         if not os.path.exists(path):
