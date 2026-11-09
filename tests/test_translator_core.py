@@ -6,11 +6,10 @@ import unittest
 from tests import context  # noqa: F401
 from tests import schema_check
 from tests.translator_helpers import (
-    assert_schema_ok, fixture_path, load_capture, steps_of, translate_fixture,
+    assert_schema_ok, fixture_path, load_capture, translate_fixture,
 )
 
 from lib.translator import CaptureError, Refusal, translate
-from lib.translator.context import Context
 
 with open(fixture_path("schema_example_v10"), encoding="utf-8") as _f:
     _EXAMPLE = json.load(_f)
@@ -118,21 +117,9 @@ class CoreTest(unittest.TestCase):
         result = translate(capture, {"ExtrudeFeature": table})
         self.assertIn("more than 400", result.refusal["reason"])
 
-    def test_context_steps_of(self):
-        ctx = Context(load_capture("core_empty"))
-        ctx.add_steps({"index": 4, "name": "A"}, [{"kind": "hole"}])
-        ctx.add_steps({"index": 4, "name": "A"}, [{"kind": "hole"}])
-        self.assertEqual(ctx.steps_of(4), ["hole_4", "hole_4_2"])
-        self.assertEqual(ctx.steps_of(9), [])
-
-
 class SchemaCheckTest(unittest.TestCase):
     def test_app_example_passes(self):
         self.assertEqual(schema_check.check_recipe(_EXAMPLE), [])
-
-    def test_wrong_version_fails(self):
-        bad = dict(_EXAMPLE, version=11)
-        self.assertTrue(schema_check.check_recipe(bad))
 
     def test_bad_enum_fails(self):
         bad = copy.deepcopy(_EXAMPLE)

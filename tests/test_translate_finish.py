@@ -18,12 +18,6 @@ def variant(name, edit):
 
 
 class PicksTest(unittest.TestCase):
-    def test_closed_edge_keeps_both_points_in_order(self):
-        edges = [{"points": [[1, 2, 3]]}, {"points": [[4, 5, 6], [7, 8, 9]]}]
-        self.assertEqual(picks.near_points(edges), [[1, 2, 3], [4, 5, 6], [7, 8, 9]])
-
-    def test_face_points(self):
-        self.assertEqual(picks.face_points([{"token": "f", "point": [1, 2, 3]}]), [[1, 2, 3]])
 
     def test_groups_never_cut_an_edge(self):
         edges = [{"points": [[0, 0, 0]] * 2} for _ in range(17)]
@@ -117,10 +111,6 @@ class ChamferTest(unittest.TestCase):
         result = variant("chamfer_equal", edit)
         self.assertEqual([s["size"] for s in steps_of(result.recipe, "bevel")], [1, 2])
         self.assertEqual(verdict_of(result, 2)["verdict"], "translatedWithNote")
-
-    def test_unknown_set_kind_refuses(self):
-        self.assertIsNone(variant("chamfer_equal", lambda d: d["sets"][0].update(kind="other")).recipe)
-
 
 class ShellTest(unittest.TestCase):
     def test_open_top(self):

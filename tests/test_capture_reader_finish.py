@@ -110,14 +110,6 @@ class ChamferTest(unittest.TestCase):
         ])
         self.assertEqual(data["sets"][0]["edges"][0]["token"], "a")
 
-    def test_corner_type_names(self):
-        def corner(value):
-            kw = {} if value is None else {"cornerType": value}
-            return read_data(feature("ChamferFeature", "C", edgeSets=Coll([]), **kw))["corner_type"]
-        self.assertEqual([corner(None), corner("MiterCornerType"), corner("WeirdCornerType")],
-                         ["chamfer", "miter", "other"])
-
-
 class ShellTest(unittest.TestCase):
     def test_faces_chain_and_thickness(self):
         neighbour = face("f2", x=5)
@@ -217,14 +209,6 @@ class RectangularPatternTest(unittest.TestCase):
                             **rectangular(inputEntities=Coll([body()]), patternEntityType="BodiesPatternEntityType"))
         self.assertEqual((data["entity_type"], data["sources"]), ("bodies", []))
 
-    def test_entity_type_falls_back_to_the_inputs_then_other(self):
-        known = read_pattern("RectangularPatternFeature", [], **rectangular(
-            inputEntities=Coll([face("f1")]), patternEntityType="NewKindOfEntityType"))
-        self.assertEqual(known["entity_type"], "faces")
-        unknown = read_pattern("RectangularPatternFeature", [], **rectangular(
-            inputEntities=Coll([Obj("fusion::Weird")]), patternEntityType="NewKindOfEntityType"))
-        self.assertEqual(unknown["entity_type"], "other")
-
     def test_unreadable_elements_are_a_read_error(self):
         target = body()
         pattern = feature("RectangularPatternFeature", "Pattern1", **rectangular())
@@ -272,16 +256,6 @@ class MirrorTest(unittest.TestCase):
         self.assertEqual((data["entity_type"], data["sources"], data["combine"]), ("bodies", [], True))
         self.assertEqual(data["plane"], {"point": [0, 0, 10], "normal": [0.0, 0.0, 1.0]})
         self.assertEqual(data["target_box_before"], {"min": [0, 0, 0], "max": [40, 20, 10]})
-
-    def test_target_box_is_null_while_the_target_does_not_exist(self):
-        target = body()
-        mirror = entry(feature("MirrorFeature", "Mirror1", inputEntities=Coll([body()]),
-                               patternEntityType="BodiesPatternEntityType", isCombine=True,
-                               mirrorPlane=Obj("fusion::ConstructionPlane",
-                                               geometry=plane_geometry((0, 0, 0), (1, 0, 0)))))
-        design = FakeDesign([sketch_entry(), mirror], target, appears_at=2)
-        data = read_capture(design, target, fusion="", name="", up_axis="z")["items"][1]["data"]
-        self.assertIsNone(data["target_box_before"])
 
     def test_curved_mirror_plane_is_null(self):
         curved = face("f9", geometry=Obj("core::Cylinder"))

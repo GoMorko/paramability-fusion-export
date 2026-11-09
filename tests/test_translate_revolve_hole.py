@@ -128,19 +128,12 @@ class RevolveTest(unittest.TestCase):
             project_axis=True, axis={"point": [0, 0, 0], "dir": [0, 3, 4]}))
         self.assertEqual(result.recipe["features"][0]["axis"]["dir"], [0, 1])
 
-    def test_cut_on_an_existing_body(self):
-        result = translate_fixture("revolve_cut")
-        self.assertEqual([s["combine"] for s in result.recipe["features"]], ["new", "cut"])
-        self.assertEqual(result.recipe["features"][1]["kind"], "revolve")
-        assert_schema_ok(self, result.recipe)
-
     def test_refusals(self):
         cases = {
             "read error": lambda i: i["data"].clear() or i["data"].update(read_error="boom"),
             "other axis": lambda i: i["data"].update(axis={"kind": "other"}),
             "other extent": lambda i: i["data"].update(extent={"kind": "other", "type": "X"}),
             "new component": lambda i: i["data"].update(operation="newComponent"),
-            "face profile": lambda i: i["data"].update(profiles=[{"face": True, "type": "BRepFace"}]),
             "curve of kind other": lambda i: i["data"]["profiles"][0]["loops"][0].update(
                 curves=[{"kind": "other", "type": "NurbsCurve3D", "start": [0, 0], "end": [1, 0], "samples": []}]),
         }

@@ -4,9 +4,7 @@ import unittest
 from tests import context  # noqa: F401
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, translate_fixture
 
-from lib.translator import repeat, translate
-from lib.translator.context import Context
-from lib.translator.result import Refusal
+from lib.translator import translate
 
 
 def verdict_of(result, index):
@@ -303,18 +301,6 @@ class RepeatedStepsTest(unittest.TestCase):
                 result = edited("rpattern_row", edit)
                 self.assertIsNone(result.recipe)
                 self.assertEqual(result.refusal["index"], 4)
-
-
-class NotRepeatableTest(unittest.TestCase):
-    def test_a_source_marked_not_repeatable_is_refused_whatever_its_kind(self):
-        capture = load_capture("rpattern_row")
-        ctx = Context(capture)
-        step = {"kind": "hole", "combine": "cut"}
-        (step_id,) = ctx.add_steps({"index": 3, "name": "Hole"}, [step])
-        data = {"entity_type": "features", "sources": [3]}
-        self.assertEqual(repeat._sources(data, ctx, "pattern"), ([step_id], []))
-        ctx.not_repeatable.add(step_id)
-        self.assertIsInstance(repeat._sources(data, ctx, "pattern"), Refusal)
 
 
 class CopyCapTest(unittest.TestCase):

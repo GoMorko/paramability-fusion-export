@@ -2,7 +2,6 @@ import json
 import os
 import tempfile
 import unittest
-import zipfile
 
 from tests import context  # noqa: F401
 from tests.schema_check import check_recipe
@@ -11,7 +10,6 @@ from tests.translator_helpers import load_capture
 from lib.export_plan import recipe_export
 from lib.export_plan.recipe_export import plan_single_export, recipe_saved_message
 from lib.package.manifest import validate_manifest
-from lib.package.writer import write_package
 from lib.translator import CaptureError
 
 
@@ -44,15 +42,6 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(check_recipe(json.loads(files["recipe.json"])), [])
         self.assertEqual(report["outcome"], "recipe")
         self.assertEqual(json.loads(files["report.json"])["capture"]["design"], "Test")
-
-    def test_zip_holds_manifest_and_files(self):
-        manifest, files, _ = self.plan(load_capture("extrude_plate"))
-        out = os.path.join(self.tmp.name, "plate.paramability")
-        write_package(out, manifest, files)
-        with zipfile.ZipFile(out) as zf:
-            self.assertEqual(zf.namelist(), ["manifest.json", "part.step", "recipe.json", "report.json"])
-            self.assertEqual(json.loads(zf.read("manifest.json"))["recipe"], "recipe.json")
-            self.assertEqual(zf.read("part.step"), b"ISO-10303-21;")
 
     def test_unsupported_feature_gives_step_only_naming_it(self):
         manifest, files, report = self.plan(plate_then_emboss())

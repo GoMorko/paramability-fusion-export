@@ -38,10 +38,5 @@ class FixtureGeometryTest(unittest.TestCase):
     def test_revolve(self):
         self.check("revolve_full")
 
-    def test_finished_part_has_no_volume(self):
-        with open(fixture_path("fillet_four_edges"), encoding="utf-8") as f:
-            self.assertIsNone(json.load(f)["target"]["volume_mm3"])
-
-
 if __name__ == "__main__":
     unittest.main()

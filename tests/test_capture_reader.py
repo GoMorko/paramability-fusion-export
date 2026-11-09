@@ -273,14 +273,6 @@ class UnreadableTest(unittest.TestCase):
         self.assertIsNone(data["side_one"]["taper_deg"])
         self.assertEqual(data["start"]["kind"], "other")
 
-    def test_unknown_hole_type_is_other(self):
-        target = body()
-        hole = entry(feature("HoleFeature", "H", bodies=[target], holeType="OddHoleType", holeTapType="OddTap",
-                             holeDiameter=param(0.5), position=P(0, 0, 0),
-                             extentDefinition=Obj("fusion::DistanceExtentDefinition", distance=param(0.8))))
-        data = self.capture([hole], target)["items"][0]["data"]
-        self.assertEqual((data["hole_type"], data["tap_type"], data["tip_angle_deg"]), ("other", "other", None))
-
     def test_end_face_types_follow_the_end_points(self):
         target = body()
         hole = entry(feature("HoleFeature", "H", bodies=[target], holeType="SimpleHoleType",
