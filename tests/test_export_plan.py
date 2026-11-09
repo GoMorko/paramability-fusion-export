@@ -5,7 +5,7 @@ import zipfile
 
 from tests import context  # noqa: F401
 from tests.fakes import FakeStore
-from lib.export_plan.apply import RowBuildError, apply_row_values
+from lib.export_plan.apply import Baseline, RowBuildError, apply_row_values
 from lib.export_plan.assemble import build_package
 from lib.export_plan.expressions import format_expression, is_plain_number
 from lib.export_plan.naming import (
@@ -142,7 +142,7 @@ class ApplyTest(unittest.TestCase):
 
     def test_error_already_there_before_export_is_ignored(self):
         store = FakeStore(ORIGINAL, bad_when=lambda e: True)
-        apply_row_values(store, UNITS, {"width": 40.0}, {"Fillet1"})
+        apply_row_values(store, UNITS, {"width": 40.0}, Baseline(True, {"Fillet1": "Fillet1"}))
 
     def test_refused_expression(self):
         store = FakeStore(ORIGINAL, reject=["40 mm"])

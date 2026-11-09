@@ -66,8 +66,16 @@ def moved_reason(label, sketch_names, scope=""):
     return f"{label} stays fixed for now: it changes {shown}. A sketch like this cannot follow sizes yet."
 
 
-def build_failure_reason(label, value):
-    return f"{label} stays fixed: Fusion cannot build the part when it is {value:g}."
+def build_failure_reason(label, value, items=()):
+    """`items` are the timeline items that went into error; the first one is named."""
+    why = f": {items[0]} fails" if items else ""
+    return f"{label} stays fixed: Fusion cannot build the part when it is {value:g}{why}."
+
+
+def build_failures(checks, results):
+    """[{'size', 'value', 'error', 'detail'}] for the checks Fusion could not build, for `report.json`."""
+    return [{"size": c["size"], "value": c["value"], "error": r["error"], "detail": r.get("detail") or {}}
+            for c, r in zip(checks, results) if r.get("error")]
 
 
 def frame_numbers(frame):
@@ -109,7 +117,8 @@ def read_checks(checks, results, baseline_sketches, sketch_by_check, labels, par
     for check, result in zip(checks, results):
         label = labels.get(check["size"], check["size"])
         if result.get("error"):
-            fixed.append({**fixed_entry(check["param"], build_failure_reason(label, check["value"])),
+            items = (result.get("detail") or {}).get("items") or ()
+            fixed.append({**fixed_entry(check["param"], build_failure_reason(label, check["value"], items)),
                           "param": check["param"], "size": check["size"]})
             continue
         snapshot = sketch_by_check.get(check["row"]["name"], {})

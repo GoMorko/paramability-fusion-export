@@ -117,6 +117,7 @@ class SizeProbeTest(unittest.TestCase):
         run(self.fusion, probe, self.sizes, self.tmp)
         self.assertTrue(any(not s["built"] for s in probe.states))
         self.assertEqual([d["name"] for d in probe.dropped][:1], ["height"])
+        self.assertEqual(probe.dropped[0]["detail"]["items"], ["Fillet1"])
         probe.finish(probe.read_now(), {})
         self.assertIsNotNone(probe.report()["motion"])
 

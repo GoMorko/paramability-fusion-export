@@ -116,7 +116,7 @@ def _uses(capture):
 
 def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
                        size_table=None, checks=None, fixed=None, unchecked=None, listing=None, motion=None,
-                       probe=None):
+                       probe=None, build_failures=None):
     """Return (manifest, files, report) for one body.
 
     A body inside a component is translated like a root body: its capture carries the place of the part in the
@@ -136,6 +136,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
     motion: what the size probe found for sketch values (`probe.motion.Motion`), or None for a translation that
       fixes every size behind a sketch.
     probe: the size probe's own record for `report.json` (request, states read, motion, restore gap), or None.
+    build_failures: the size checks Fusion could not build, with why (`size_checks.build_failures`), for `report.json`.
     files maps entry paths to a file path or bytes, as write_package expects. Raises ValueError when the manifest
     breaks the package rules.
     """
@@ -188,7 +189,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
     if recipe_data is not None:
         report["sizes"] = {"free": free, "fixed": all_fixed, "checks": [
             {"size": c["size"], "value": c["value"]} for c in kept], "unchecked": list(unchecked or []),
-            "dropped": dropped}
+            "dropped": dropped, "build_failures": list(build_failures or [])}
 
     files = {"part.step": step_file}
     listed = listing.entries if listing is not None else None

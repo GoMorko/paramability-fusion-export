@@ -16,6 +16,6 @@ def format_expression(value, unit):
     """Expression text to write into a parameter, for example "40 mm"."""
     number = format_number(value)
     unit = (unit or "").strip()
-    if unit_kind(unit) == "count" and not unit:
+    if unit_kind(unit) == "count":
         return number
     return f"{number} {unit}"

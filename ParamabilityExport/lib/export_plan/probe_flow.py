@@ -199,7 +199,8 @@ class SizeProbe:
         for values, result in zip(varied, results):
             if result.get("error"):
                 self.states.append({"values": values, "built": False})
-                self.dropped.append({"name": result.get("name"), "error": result.get("error")})
+                self.dropped.append({"name": result.get("name"), "error": result.get("error"),
+                                     "detail": result.get("detail") or {}})
             else:
                 self.states.append({"values": values, "built": True, "read": pending.pop(0) if pending else None})
 

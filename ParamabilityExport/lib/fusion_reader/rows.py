@@ -33,28 +33,34 @@ class DesignParameterStore:
     def recompute(self):
         return self.design.computeAll()
 
-    def error_items(self):
-        """Names of timeline items whose health is error. Empty for a design without a timeline."""
+    def error_entries(self):
+        """(timeline position, name) of each item whose health is error. Empty for a design without a timeline."""
         try:
             timeline = self.design.timeline
-            names = []
+            entries = []
             error = _error_state()
             for i in range(timeline.count):
                 item = timeline.item(i)
                 if not item.isSuppressed and item.healthState == error:
-                    names.append(item.name)
-            return names
+                    entries.append((i, item.name))
+            return entries
         except Exception:
             return []
+
+    def error_items(self):
+        """Names of the timeline items whose health is error."""
+        return [name for _, name in self.error_entries()]
 
 
 def saved_expressions(design):
     return DesignParameterStore(design).saved_expressions()
 
 
-def apply_row(design, values, units, baseline_errors=()):
-    """Set values (display units), recompute, return manifest numbers. Raises RowBuildError."""
-    return apply_row_values(DesignParameterStore(design), units, values, baseline_errors)
+def apply_row(design, values, units, baseline=None):
+    """Set values (display units), recompute, return manifest numbers. Raises RowBuildError.
+
+    baseline is `export_plan.apply.measure_baseline`'s result; None means a design without trouble."""
+    return apply_row_values(DesignParameterStore(design), units, values, baseline)
 
 
 def restore(design, saved):

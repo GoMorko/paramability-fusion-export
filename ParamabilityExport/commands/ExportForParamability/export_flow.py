@@ -18,7 +18,7 @@ from ...lib.export_plan.naming import design_title, package_file_name
 from ...lib.export_plan.probe_flow import SizeProbe, covers_a_sketch, kept_size_names
 from ...lib.export_plan.recipe_export import free_sizes, plan_single_export, translate_capture
 from ...lib.export_plan.runner import ExportCancelled, RowExport
-from ...lib.export_plan.size_checks import PLACEMENT_KEY, frame_numbers, plan_checks, read_checks
+from ...lib.export_plan.size_checks import PLACEMENT_KEY, build_failures, frame_numbers, plan_checks, read_checks
 from ...lib.export_plan.size_offers import labels, sizes_for_checks
 from ...lib.export_plan.temp_copy import MARKER_MESSAGE, marker_at_end
 from ...lib.fusion_reader import design_info, placement
@@ -258,7 +258,7 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
             table = size_tables.build(
                 parameters, form["ticked"], model, design_unit, quantity_params=quantities, ranges=form["ranges"])
 
-            checks, kept, measured, unchecked = [], [], [], []
+            checks, kept, measured, unchecked, failures = [], [], [], [], []
             motion, probe_report = None, None
             if isinstance(capture, dict):
                 # Checks go only to the sizes the recipe keeps after translation.
@@ -276,6 +276,7 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
                     baseline = _snapshot(_target_component(design, body), current, source, skip)
                     results, snapshots, reads = _run_checks(
                         design, store, units, body, token, checks, tmp, jobs, skip, source, probe)
+                    failures = build_failures(checks, results)
                     kept, measured = read_checks(
                         checks, results, baseline, snapshots, labels(table), part_name=part_name, scope=scope)
                     if probe is not None:
@@ -292,7 +293,7 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
                 size_table=table, checks=kept,
                 fixed=[{"name": m["name"], "reason": m["reason"]} for m in measured], unchecked=unchecked,
                 listing=_parameter_listing(parameters, model_params, design_unit),
-                motion=motion, probe=probe_report)
+                motion=motion, probe=probe_report, build_failures=failures)
             write_package(out_path, manifest, files)
             saved = (os.path.basename(out_path), manifest, report, table)
     except ExportCancelled:

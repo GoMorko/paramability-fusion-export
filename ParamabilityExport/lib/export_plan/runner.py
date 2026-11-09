@@ -2,7 +2,7 @@
 import os
 
 from ..package.caps import check_step_size, check_total_size
-from .apply import RowBuildError, apply_row_values
+from .apply import RowBuildError, apply_row_values, measure_baseline
 from .errors import StepExportError
 from .restore import restore_parameters
 
@@ -19,6 +19,8 @@ class RowExport:
     export_step: callable(path) writing the STEP of the picked body for the current design state. A row with
     `"step": False` only recomputes: export_step is called with None, expects no file, and the result has no STEP.
     current_row is the name of the row being exported while export_step runs.
+    Before the first row the run measures a baseline (`apply.measure_baseline`): a design that already has warnings or
+    errors elsewhere still gets its rows checked, against what it did before any change.
     After run(), restore_failures lists parameters that could not be put back, whatever the outcome.
     """
 
@@ -33,12 +35,13 @@ class RowExport:
         """Return [{'name', 'values', 'step_file'}]. progress(index, total, name) returns False to cancel.
 
         With tolerate_build_errors a row Fusion cannot build gives {'name', 'values': None, 'step_file': None,
-        'error': sentence} and the run goes on. The next row must then set every parameter it needs.
+        'error': sentence, 'detail': why} and the run goes on (`why` is RowBuildError.detail). The next row must
+        then set every parameter it needs.
         A row without a STEP gives 'step_file': None as well.
         """
         saved = self.store.saved_expressions()
         try:
-            baseline = set(self.store.error_items())
+            baseline = measure_baseline(self.store)
             results = []
             count = len(rows)
             total = 0
@@ -49,9 +52,10 @@ class RowExport:
                     values = apply_row_values(self.store, self.units, row["values"], baseline)
                 except RowBuildError as exc:
                     if tolerate_build_errors:
-                        results.append({"name": row["name"], "values": None, "step_file": None, "error": str(exc)})
+                        results.append({"name": row["name"], "values": None, "step_file": None, "error": str(exc),
+                                        "detail": exc.detail})
                         continue
-                    raise RowBuildError(f"Size \"{row['name']}\": {exc}") from exc
+                    raise RowBuildError(f"Size \"{row['name']}\": {exc}", exc.detail) from exc
                 self.current_row = row["name"]
                 if row.get("step") is False:
                     self.export_step(None)

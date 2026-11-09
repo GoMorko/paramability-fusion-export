@@ -36,6 +36,9 @@ Click "Export size choices". Use a design with two favourite user parameters (fo
 - [ ] Click Cancel in the progress window part way: nothing is saved and the parameters are back.
 - [ ] Add a row whose numbers break the part (a fillet that cannot fit): Fusion shows the row name and the failing
       item, nothing is saved and the parameters are back.
+- [ ] A design that already has warnings or errors elsewhere (for example a component with a yellow or red timeline
+      item) still gets its sizes checked: the sizes are offered and kept, and only a size that breaks a new item is
+      fixed, with that item named in its reason and in `report.json` (sizes, build_failures).
 - [ ] Watch these calls: expressions are written as text such as `40 mm`. If your Fusion uses a comma as the decimal
       mark, check that `12.5` rows still set the right number.
 - [ ] A user parameter in an unusual unit (for example mm/s) is listed greyed out as "not supported" with the reason
