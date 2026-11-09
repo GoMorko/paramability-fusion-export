@@ -4,7 +4,7 @@
   "id": "37398aef-f802-4cf3-b3c9-897559f4b2cc",
   "author": "GoMorko",
   "description": { "": "Exports Fusion designs for Paramability: size choices now, an editable part later." },
-  "version": "0.5.0",
+  "version": "0.5.1",
   "runOnStartup": true,
   "supportedOS": "windows|mac",
   "editEnabled": true
