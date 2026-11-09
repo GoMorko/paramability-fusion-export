@@ -1,5 +1,5 @@
 {
-  "_comment": "Two sided turn, 30 then 60 degrees.",
+  "_comment": "Two sided turn, 30 then 60 degrees. Refused: the start face does not name the side.",
   "capture": 1,
   "fusion": "2.0.0",
   "design": "Test",

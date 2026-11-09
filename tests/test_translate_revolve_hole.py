@@ -18,6 +18,21 @@ def variant(name, edit):
     return translate(capture)
 
 
+def sweep_midpoint(step):
+    """Where the middle of the sketch outline ends up halfway through the turn, in model coordinates."""
+    on = step["sketch"]["on"]
+    x = on["xDir"]
+    y = vec.cross(on["normal"], x)
+
+    def world(p):
+        return vec.add(on["origin"], vec.add(vec.scale(x, p[0]), vec.scale(y, p[1])))
+
+    axis = step["axis"]
+    point = world(axis["point"])
+    direction = vec.add(vec.scale(x, axis["dir"][0]), vec.scale(y, axis["dir"][1]))
+    return vec.rotate(world(step["sketch"]["outer"]["center"]), direction, step.get("angleDeg", 360) / 2.0, point)
+
+
 def revolves(name):
     result = translate_fixture(name)
     assert result.recipe, result.refusal
@@ -38,10 +53,13 @@ class RevolveTest(unittest.TestCase):
     def test_quarter_keeps_the_axis_when_the_start_face_agrees(self):
         (step,) = revolves("revolve_quarter")
         self.assertEqual((step["angleDeg"], step["axis"]["dir"]), (90, [0, 1]))
+        # The new solid sweeps down from the sketch plane, where its start face points up.
+        self.assertLess(sweep_midpoint(step)[2], -1)
 
     def test_quarter_negates_the_axis_when_the_start_face_is_flipped(self):
         (step,) = revolves("revolve_quarter_reversed")
         self.assertEqual((step["angleDeg"], step["axis"]["dir"]), (90, [0, -1]))
+        self.assertGreater(sweep_midpoint(step)[2], 1)
 
     def test_part_turn_without_a_measured_start_face_refuses(self):
         result = variant("revolve_quarter", lambda i: i["data"].update(start_face_normal=None))
@@ -57,11 +75,31 @@ class RevolveTest(unittest.TestCase):
         self.assertEqual((step["angleDeg"], step["axis"]["dir"]), (120, [0, 1]))
         self.assertEqual(step["sketch"]["outer"], {"kind": "rect", "center": [7.5, 10], "width": 5, "height": 20})
 
-    def test_two_sides_make_two_steps_with_the_axis_negated_on_the_second(self):
-        first, second = revolves("revolve_two_sides")
-        self.assertEqual((first["combine"], first["angleDeg"], first["axis"]["dir"]), ("new", 30, [0, 1]))
-        self.assertEqual((second["combine"], second["angleDeg"], second["axis"]["dir"]), ("add", 60, [0, -1]))
-        self.assertEqual((first["id"], second["id"]), ("revolve_1", "revolve_1_2"))
+    def test_symmetric_checks_the_start_face_against_half_the_angle(self):
+        wrong = variant("revolve_symmetric", lambda i: i["data"].update(start_face_normal=[0, 0, 1]))
+        self.assertIsNone(wrong.recipe)
+        self.assertIn("symmetric", wrong.refusal["reason"])
+        missing = variant("revolve_symmetric", lambda i: i["data"].update(start_face_normal=None))
+        self.assertIsNone(missing.recipe)
+
+    def test_two_sides_refuse(self):
+        result = translate_fixture("revolve_two_sides")
+        self.assertIsNone(result.recipe)
+        self.assertEqual((result.refusal["index"], result.refusal["type"]), (1, "RevolveFeature"))
+
+    def test_cut_start_face_points_along_the_travel(self):
+        result = translate_fixture("revolve_cut_quarter")
+        step = result.recipe["features"][1]
+        self.assertEqual((step["combine"], step["angleDeg"], step["axis"]["dir"]), ("cut", 90, [0, -1]))
+        # The cut must sweep up into the plate (z above its sketch plane at 5), not down out of it.
+        self.assertGreater(sweep_midpoint(step)[2], 5 + 1)
+        assert_schema_ok(self, result.recipe)
+
+    def test_cut_with_the_start_face_pointing_down_sweeps_down(self):
+        result = variant("revolve_cut_quarter", lambda i: i["data"].update(start_face_normal=[0, 0, -1]))
+        step = result.recipe["features"][1]
+        self.assertEqual(step["axis"]["dir"], [0, 1])
+        self.assertLess(sweep_midpoint(step)[2], 5 - 1)
 
     def test_axis_off_the_sketch_plane_refuses_unless_projected(self):
         refused = translate_fixture("revolve_axis_off_plane")
@@ -183,6 +221,38 @@ class HoleTest(unittest.TestCase):
         self.assertAlmostEqual(steps_of(result.recipe, "hole")[0]["diameter"], 5.1)
         self.assertEqual(verdict_of(result, 3)["verdict"], "translatedWithNote")
         assert_schema_ok(self, result.recipe)
+
+    def test_tapped_counterbore_uses_the_bore_not_the_counterbore_wall(self):
+        step = steps_of(translate_fixture("hole_tapped_counterbore").recipe, "hole")[0]
+        self.assertAlmostEqual(step["diameter"], 5.1)
+        self.assertEqual(step["counterbore"], {"diameter": 9, "depth": 3})
+
+    def test_tapped_hole_without_a_measured_cylinder_refuses(self):
+        result = translate_fixture("hole_tapped_no_cylinder")
+        self.assertIsNone(result.recipe)
+        self.assertIn("drill size", result.refusal["reason"])
+
+    def test_taper_tapped_and_unreadable_thread_refuse(self):
+        for label, edit in {
+            "taper tapped": lambda i: i["data"].update(tap_type="taperTapped"),
+            "thread unknown": lambda i: i["data"].update(thread_modeled=None),
+        }.items():
+            with self.subTest(label):
+                self.assertIsNone(variant("hole_tapped_cosmetic", edit).recipe)
+
+    def test_measured_flat_end_wins_over_the_stored_tip_angle(self):
+        result = translate_fixture("hole_flat_point_stored_tip")
+        (step,) = result.recipe["features"][1:]
+        self.assertEqual((step["kind"], step["depth"]), ("hole", 8))
+        self.assertEqual(verdict_of(result, 3)["verdict"], "translatedWithNote")
+
+    def test_measured_cone_without_a_tip_angle_refuses(self):
+        result = variant("hole_blind_tip", lambda i: i["data"].update(tip_angle_deg=None))
+        self.assertIsNone(result.recipe)
+
+    def test_unclear_end_faces_refuse(self):
+        result = variant("hole_blind_tip", lambda i: i["data"].update(end_face_types=["cone", "plane"]))
+        self.assertIsNone(result.recipe)
 
     def test_hole_refusals(self):
         cases = {

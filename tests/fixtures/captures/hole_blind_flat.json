@@ -225,6 +225,9 @@
             "token": "t1",
             "name": "Body1"
           }
+        ],
+        "end_face_types": [
+          "plane"
         ]
       }
     }

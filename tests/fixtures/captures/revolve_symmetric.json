@@ -1,5 +1,5 @@
 {
-  "_comment": "Symmetric 120 degree turn; the sketch plane turns by minus 60 degrees about the axis.",
+  "_comment": "Symmetric 120 degree turn; the sketch plane turns by minus 60 degrees about the axis. The start face sits 60 degrees before the profile.",
   "capture": 1,
   "fusion": "2.0.0",
   "design": "Test",
@@ -151,7 +151,11 @@
             "name": "Body1"
           }
         ],
-        "start_face_normal": null
+        "start_face_normal": [
+          -0.8660254037844386,
+          0,
+          0.5000000000000001
+        ]
       }
     }
   ]

@@ -61,15 +61,53 @@ def _check_size(data, ctx, count, diameter):
         ctx.note("The measured size of this hole differs from its stored size; the stored size was used.")
 
 
+def _drill_diameter(data):
+    """Diameter of the drilled bore of a cosmetic tapped hole, or a Refusal.
+
+    The widest measured cylinder that is not wider than the stored size: a counterbore wall is wider, and the
+    thread's nominal size is the stored one.
+    """
+    limit = float(data["diameter"]) / 2.0 + DIAMETER_TOL
+    radii = [float(c["radius"]) for c in data.get("side_cylinders") or [] if float(c["radius"]) <= limit]
+    if not radii:
+        return Refusal("The drill size of this tapped hole could not be measured.")
+    return 2.0 * max(radii)
+
+
 def _diameter(data, ctx):
     """Diameter to cut: the stored one, or for a tapped hole the measured drill size, or a Refusal."""
     if data.get("tap_type") not in TAPPED:
         return float(data["diameter"])
-    if data.get("thread_modeled"):
+    if data.get("tap_type") == "taperTapped":
+        return Refusal("Tapered threads are not copied yet.")
+    if data.get("thread_modeled") is None:
+        return Refusal("The thread of this hole could not be read.")
+    if data["thread_modeled"]:
         return Refusal("Modeled threads are not copied yet.")
-    cylinders = data.get("side_cylinders") or []
-    ctx.note("The thread of this hole is not copied; it was cut as a plain hole.")
-    return 2.0 * float(cylinders[0]["radius"]) if cylinders else float(data["diameter"])
+    drilled = _drill_diameter(data)
+    if not isinstance(drilled, Refusal):
+        ctx.note("The thread of this hole is not copied; it was cut as a plain hole.")
+    return drilled
+
+
+def _is_tipped(data, tip, ctx):
+    """True for a conical drill point, False for a flat end, or a Refusal.
+
+    The measured shape of the end faces (`end_face_types`) wins over the stored tip angle.
+    """
+    stored_tipped = not _is_flat(tip)
+    measured = set(data.get("end_face_types") or [])
+    if not measured:
+        return stored_tipped
+    if measured == {"cone"}:
+        tipped = True
+    elif measured == {"plane"}:
+        tipped = False
+    else:
+        return Refusal("The end of this hole could not be told apart as flat or pointed.")
+    if tipped != stored_tipped:
+        ctx.note("Fusion stored the drill tip of this hole differently from its measured end; the measured end was used.")
+    return tipped
 
 
 def _tip_profile(diameter, depth, tip_deg, counterbore, countersink):
@@ -144,10 +182,14 @@ def _handle_hole(data, ctx):
     _check_size(data, ctx, len(data["positions"]), diameter)
 
     tip = data.get("tip_angle_deg")
-    tipped = not through and not _is_flat(tip)
+    tipped = False
+    if not through:
+        tipped = _is_tipped(data, tip, ctx)
+        if isinstance(tipped, Refusal):
+            return tipped
     if tipped:
-        if not 0 < tip < 180:
-            return Refusal("The drill tip of this hole is not copied.")
+        if tip is None or not 0 < tip < 180:
+            return Refusal("The drill tip angle of this hole could not be read.")
         profile = _tip_profile(diameter, depth, float(tip), counterbore, countersink)
         if isinstance(profile, Refusal):
             return profile
