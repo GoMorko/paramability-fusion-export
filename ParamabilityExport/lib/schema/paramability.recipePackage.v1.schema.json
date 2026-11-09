@@ -197,6 +197,57 @@
           "maxItems": 5,
           "type": "array"
         },
+        "parameters": {
+          "description": "The user parameters of the source design, in the source order. The app adds each as a variable when the design lands as a fixed shape.",
+          "items": {
+            "properties": {
+              "comment": {
+                "maxLength": 200,
+                "type": "string"
+              },
+              "expr": {
+                "description": "A formula over the `name` of other entries, in the recipe formula grammar. The app uses it when it reads; else it keeps `value`.",
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string"
+              },
+              "label": {
+                "description": "The parameter name as the source program shows it (default: `name`).",
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "description": "Unique. The name a recipe size of this parameter has: letters, digits and underscores.",
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "unit": {
+                "description": "Millimetres, degrees or \"\" for a plain number (default \"\").",
+                "enum": [
+                  "mm",
+                  "deg",
+                  ""
+                ],
+                "type": "string"
+              },
+              "value": {
+                "description": "In millimetres, degrees or a plain number, as `unit` says.",
+                "maximum": 1000000000,
+                "minimum": -1000000000,
+                "type": "number"
+              }
+            },
+            "required": [
+              "name",
+              "value"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
         "part": {
           "description": "Relative path inside the zip: segments of letters, digits, _ . - joined by /, no \"..\". STEP files end in .step or .stp, the recipe in .json. Every path is unique.",
           "maxLength": 128,
@@ -256,6 +307,57 @@
             "type": "string"
           },
           "maxItems": 5,
+          "type": "array"
+        },
+        "parameters": {
+          "description": "The user parameters of the source design, in the source order. The app adds each as a variable when the design lands as a fixed shape.",
+          "items": {
+            "properties": {
+              "comment": {
+                "maxLength": 200,
+                "type": "string"
+              },
+              "expr": {
+                "description": "A formula over the `name` of other entries, in the recipe formula grammar. The app uses it when it reads; else it keeps `value`.",
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string"
+              },
+              "label": {
+                "description": "The parameter name as the source program shows it (default: `name`).",
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "description": "Unique. The name a recipe size of this parameter has: letters, digits and underscores.",
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "unit": {
+                "description": "Millimetres, degrees or \"\" for a plain number (default \"\").",
+                "enum": [
+                  "mm",
+                  "deg",
+                  ""
+                ],
+                "type": "string"
+              },
+              "value": {
+                "description": "In millimetres, degrees or a plain number, as `unit` says.",
+                "maximum": 1000000000,
+                "minimum": -1000000000,
+                "type": "number"
+              }
+            },
+            "required": [
+              "name",
+              "value"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
           "type": "array"
         },
         "part": {
