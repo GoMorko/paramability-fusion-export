@@ -8,11 +8,14 @@ written as a number or `{ "expr": ... }`.
 When a value cannot follow its sizes (the formula does not translate, its unit or sign breaks inside the size range,
 or the step writes it as a plain number), it is written as its number and the sizes it reads are recorded in
 `ctx.depends`. The driver then fixes them everywhere, or keeps them free with a warning (`translate`, `loose`); a
-value that depends on a size never stays a number while that size stays free without one of the two.
+value that depends on a size never stays a number while that size stays free without one of the two. A formula the
+parser cannot read still marks the sizes on Fusion's own list of what its parameter depends on.
 """
 import re
 
-from ..params.expressions import MAX_FORMULA_LENGTH, ExpressionError, evaluate, tokenize_formula
+from ..params.expressions import MAX_FORMULA_LENGTH, tokenize_formula
+from . import range_check
+from .range_check import size_env as _env  # noqa: F401  (the size values at a setting; tests read it from here)
 
 TOLERANCE = 1e-6
 _ATOM = re.compile(r"^(?:[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?)$")
@@ -205,10 +208,20 @@ def _param(item, path):
     return found if isinstance(found, dict) and found.get("expression") else None
 
 
+def _unread(ctx, ref, tr):
+    """Fusion names of the sizes behind a parameter whose expression the parser could not read: Fusion's own list of
+    the parameters it depends on. Empty when the parser read the expression."""
+    if tr.ok or tr.reads:
+        return ()
+    return tuple(sorted(ctx.table.depends(ref.get("name") or "")))
+
+
 def _reads_of(ctx, ref):
+    """Fusion names of the sizes a parameter reads."""
     if ctx.table is None:
         return ()
-    return tuple(ctx.table.translate(ref["expression"]).reads)
+    tr = ctx.table.translate(ref["expression"])
+    return tuple(tr.reads) or _unread(ctx, ref, tr)
 
 
 def pin(ctx, item, path, why):
@@ -218,50 +231,10 @@ def pin(ctx, item, path, why):
         ctx.fix(_reads_of(ctx, ref), why)
 
 
-def _env(table, overrides):
-    """Size values by recipe name: the free sizes (with `overrides`), then every derived size."""
-    env = {name: size["value"] for name, size in table.sizes.items() if "value" in size}
-    env.update(overrides)
-    pending = {name: size["expr"] for name, size in table.sizes.items() if "expr" in size}
-    while pending:
-        progressed = False
-        for name, formula in list(pending.items()):
-            try:
-                env[name] = evaluate(formula, env)
-            except ExpressionError:
-                continue
-            del pending[name]
-            progressed = True
-        if not progressed:
-            raise ExpressionError("A derived size cannot be worked out.")
-    return env
-
-
-def _probes(table, reads, mins=None):
-    """Size settings that cover the range: each read size at its minimum and maximum, then all low and all high.
-    `mins` (recipe name to number) replaces the minimum of some sizes."""
-    names = [table.size_name(n) for n in reads]
-    names = [n for n in names if n in table.sizes and "min" in table.sizes[n]]
-    low = {n: (mins or {}).get(n, table.sizes[n]["min"]) for n in names}
-    probes = []
-    for name in names:
-        size = table.sizes[name]
-        probes += [{name: low[name]}, {name: size["max"]}]
-    if len(names) > 1:
-        probes.append(dict(low))
-        probes.append({n: table.sizes[n]["max"] for n in names})
-    return probes
-
-
-def _stays_in_range(table, formula, reads, sign, low, mins=None):
-    """True when sign * formula stays at or above `low` over the size range (`mins` as in `_probes`)."""
-    try:
-        for probe in _probes(table, reads, mins):
-            if sign * evaluate(formula, _env(table, probe)) < low:
-                return False
-    except ExpressionError:
-        return False
-    return True
+def _stays_in_range(table, formula, reads, sign, low):
+    """True when sign * formula stays at or above `low` over the size range, mixed corners included."""
+    span = range_check.sweep(table, formula, reads)
+    return span.at_least(low) if sign > 0 else span.at_most(-low)
 
 
 _ROUNDING = ("round", "floor", "ceil")
@@ -333,9 +306,12 @@ def quantity(ctx, item, path, literal, dim="length", sign=1, absolute=False, who
         return plain
     tr = ctx.table.translate(ref["expression"], expected=ref["value"], dim=dim, unit=ctx.table.unit_of(ref.get("name")))
     if not tr.reads:
+        behind = _unread(ctx, ref, tr)
+        if behind:
+            ctx.fix(behind, "a value of %s cannot be copied: %s" % (item.get("name", "a step"), tr.reason.rstrip(".")))
         return plain
     if not tr.ok:
-        ctx.fix(tr.reads, "a value of %s cannot be copied: %s" % (item.get("name", "a step"), tr.reason))
+        ctx.fix(tr.reads, "a value of %s cannot be copied: %s" % (item.get("name", "a step"), tr.reason.rstrip(".")))
         return plain
     if abs(sign * tr.value - literal) > TOLERANCE + 1e-9 * abs(literal):
         ctx.fix(tr.reads, "its formula in %s does not match what Fusion measured" % item.get("name", "a step"))

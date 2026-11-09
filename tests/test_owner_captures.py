@@ -153,7 +153,7 @@ class OwnerCaptureTest(unittest.TestCase):
         self.assertEqual(result.fixed, [])
         # The ranges stay as Fusion builds them; the lid slot of Extrude5 may stop meeting the part past these.
         self.assertEqual([(f["name"], f["reason"].split(":")[0].split("results ")[1]) for f in result.loose],
-                         [(PROBE_TICKED[0], "past 2.05"), (PROBE_TICKED[3], "past 20.52"),
+                         [(PROBE_TICKED[0], "past 1.8"), (PROBE_TICKED[3], "past 18"),
                           ("_Filter__Wall_thickness_mm", "below 0.98")])
         self.assertTrue(all("Extrude5" in f["reason"] for f in result.loose))
         verdicts = {v["index"]: v for v in result.items}
@@ -172,7 +172,7 @@ class OwnerCaptureTest(unittest.TestCase):
         # "Keep doubtful sizes fixed" shortens them as before.
         strict = translate(capture, size_table=table, motion=motion)
         self.assertEqual({n["name"]: (n["min"], n["max"]) for n in strict.narrowed},
-                         {PROBE_TICKED[0]: (1.35, 2.05), PROBE_TICKED[3]: (13.5, 20.52),
+                         {PROBE_TICKED[0]: (1.35, 1.8), PROBE_TICKED[3]: (13.5, 18.0),
                           "_Filter__Wall_thickness_mm": (0.98, 1.25)})
 
     def test_the_rim_chamfer_picked_by_the_top_face_follows_the_box(self):

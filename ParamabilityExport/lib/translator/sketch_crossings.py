@@ -12,9 +12,9 @@ crossing still exists and the corners keep their order. Otherwise its sizes stay
 """
 import math
 
-from ..params.expressions import ExpressionError, evaluate
+from ..probe import keys
 from ..probe.motion import CURVE, Affine, Stuck
-from . import values
+from . import range_check
 from .curved import Curved, combine, names_of, times
 
 POINT_TOL = 1e-6
@@ -78,7 +78,7 @@ class Sources:
                     entity, kind = curve.get("entity"), curve.get("kind")
                     if not entity or kind not in ("line", "arc"):
                         continue
-                    key = "%s/c%d.%d/" % (prefix, k, j)
+                    key = keys.curve(prefix, k, j)
                     if entity not in self.curves:
                         self.curves[entity] = self._source(lookup, key, curve)
                     self.ends += [(curve["start"], entity), (curve["end"], entity)]
@@ -265,9 +265,9 @@ def _checks(loop, raw_loop, sketch):
     return out
 
 
-def _settings(table, motion, reads):
-    """Size settings to test: each read size at its ends, all low, all high, and the probe's built states."""
-    out = values._probes(table, reads)
+def _states(table, motion):
+    """The probe's built states as size settings (recipe size name to value)."""
+    out = []
     for state in getattr(motion, "states", None) or []:
         if state.get("built") is False:
             continue
@@ -287,10 +287,7 @@ def _stays_above_zero(table, motion, value):
         return False
     if not q.sized:
         return q.n > LEAST
-    try:
-        return all(evaluate(q.text, values._env(table, s)) > LEAST for s in _settings(table, motion, q.reads))
-    except (ExpressionError, ValueError, ZeroDivisionError, OverflowError):
-        return False
+    return range_check.sweep(table, q.text, q.reads, extra=_states(table, motion)).above(LEAST)
 
 
 def keeps_order(table, motion, loops, raw_loops, sketch=""):

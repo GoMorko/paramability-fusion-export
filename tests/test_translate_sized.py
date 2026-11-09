@@ -152,6 +152,59 @@ class TrayTest(unittest.TestCase):
         self.assertEqual(steps_of(result.recipe, "extrude")[0]["distance"], 24)
         self.assertEqual(steps_of(result.recipe, "round")[0]["size"], 3)
 
+    def test_a_length_that_reaches_zero_only_with_two_sizes_at_opposite_ends_fixes_both(self):
+        def edit(capture):
+            data = capture["items"][1]["data"]
+            data["side_one"]["distance"] = data["end_offset"] = 32.0
+            data["params"]["side_one.distance"] = param("d3", "16 * corner_mm - 8 * wall_mm", 32.0)
+        result, _ = run(on_tray(edit))
+        self.assertEqual(sorted(f["name"] for f in result.fixed), ["corner_mm", "wall_mm"])
+        self.assertEqual(steps_of(result.recipe, "extrude")[0]["distance"], 32)
+
+    def test_a_length_of_two_sizes_that_stays_positive_everywhere_keeps_them_free(self):
+        def edit(capture):
+            data = capture["items"][1]["data"]
+            data["side_one"]["distance"] = data["end_offset"] = 32.0
+            data["params"]["side_one.distance"] = param("d3", "8 * corner_mm + 4 * wall_mm", 32.0)
+        result, _ = run(on_tray(edit))
+        self.assertEqual(result.fixed, [])
+        self.assertEqual(steps_of(result.recipe, "extrude")[0]["distance"], {"expr": "8 * corner_mm + 4 * wall_mm"})
+
+    def test_a_formula_the_parser_cannot_read_fixes_the_sizes_fusion_lists_for_it(self):
+        def edit(capture):
+            capture["items"][1]["data"]["params"]["side_one.distance"]["expression"] = "FilterBox_height_mm * 1 kg / 1 kg"
+        result, _ = run(on_tray(edit))
+        self.assertEqual(sorted(f["name"] for f in result.fixed), sorted([H, CUBE]))
+        self.assertTrue(all("cannot be copied" in f["reason"] for f in result.fixed))
+        self.assertEqual(steps_of(result.recipe, "extrude")[0]["distance"], 32)
+
+    def test_a_formula_the_parser_cannot_read_marks_its_sizes_loose_when_they_stay_free(self):
+        def edit(capture):
+            capture["items"][1]["data"]["params"]["side_one.distance"]["expression"] = "FilterBox_height_mm * 1 kg / 1 kg"
+        capture = on_tray(edit)
+        result = translate(capture, size_table=table_of(capture, TICKED), loose=True)
+        # The cube width is also read by the hole spacing, so it stays free with a warning; the height is read
+        # nowhere else, so it is a fixed number in all but name.
+        loose = {f["name"]: f["reason"] for f in result.loose}
+        self.assertEqual(list(loose), [CUBE])
+        self.assertIn("cannot be copied", loose[CUBE])
+        self.assertNotIn("..", loose[CUBE])
+        self.assertEqual([f["name"] for f in result.fixed], [H])
+        self.assertIn(CUBE, result.recipe["sizes"])
+
+    def test_a_pinned_value_with_a_formula_the_parser_cannot_read_fixes_its_sizes(self):
+        def edit(data):
+            data["total_angle_deg"] = 360.0
+            data["quantity"] = 4
+            data["elements"] = [{"id": n + 1, "suppressed": False, "frame": _turn(n * 90.0)} for n in range(4)]
+            data["params"] = {"total_angle_deg": param("d99", "turn_deg * 4 kg / 1 kg", 360.0)}
+        capture, ticked = on_fixture("cpattern_part", edit, TICKED + ["turn_deg"])
+        capture["parameters"]["model"].append(
+            {"name": "d99", "expression": "turn_deg * 4 kg / 1 kg", "value": 6.28, "unit": "deg",
+             "dependency_parameters": ["turn_deg"], "kind": "derived"})
+        result, _ = run(capture, ticked)
+        self.assertEqual([f["name"] for f in result.fixed], ["turn_deg"])
+
     def test_left_out_copies_keep_the_count_fixed_and_the_spacing_free(self):
         def edit(capture):
             data = capture["items"][6]["data"]
@@ -312,6 +365,64 @@ class ValueKindsTest(unittest.TestCase):
         (hole,) = steps_of(result.recipe, "hole")
         self.assertEqual(hole["counterbore"], {"diameter": {"expr": "pipe_d_mm + 8"}, "depth": {"expr": "wall_mm * 2"}})
         self.assertEqual(hole["depth"], {"expr": "wall_mm * 5"})
+
+
+class HoleFitOverRangeTest(unittest.TestCase):
+    """A counterbore or countersink that fits at the current values must also fit where its sizes cross."""
+
+    def blind_counterbore(self, diameter, bore_diameter, bore_depth, depth):
+        def edit(data):
+            data.update(hole_type="counterbore", counterbore={"diameter": 20.0, "depth": 4.0},
+                        extent={"kind": "distance", "depth": 10.0}, diameter=12.0)
+            data["end_points"] = [[10, 10, 0]]
+            data["end_face_types"] = ["plane"]
+            data["side_cylinders"] = [{"origin": [10, 10, 10], "axis": [0, 0, -1], "radius": 6.0},
+                                      {"origin": [10, 10, 10], "axis": [0, 0, -1], "radius": 10.0}]
+            data["params"] = {"diameter": param("d4", diameter, 12.0),
+                              "counterbore.diameter": param("d5", bore_diameter, 20.0),
+                              "counterbore.depth": param("d6", bore_depth, 4.0),
+                              "extent.depth": param("d7", depth, 10.0)}
+        capture, ticked = on_fixture("hole_counterbore_blind", edit)
+        return capture, ticked
+
+    def test_a_counterbore_that_gets_narrower_than_its_hole_fixes_both_sizes(self):
+        capture, ticked = self.blind_counterbore("pipe_d_mm", "wall_mm * 10", "wall_mm * 2", "wall_mm * 5")
+        result, _ = run(capture, ticked)
+        self.assertEqual(sorted(f["name"] for f in result.fixed), ["pipe_d_mm", "wall_mm"])
+        (hole,) = steps_of(result.recipe, "hole")
+        self.assertEqual((hole["diameter"], hole["counterbore"]["diameter"]), (12, 20))
+
+    def test_a_counterbore_that_gets_deeper_than_its_hole_fixes_both_sizes(self):
+        capture, ticked = self.blind_counterbore("pipe_d_mm", "pipe_d_mm + 8 mm", "pipe_d_mm / 3", "wall_mm * 5")
+        result, _ = run(capture, ticked)
+        self.assertEqual(sorted(f["name"] for f in result.fixed), ["pipe_d_mm", "wall_mm"])
+        (hole,) = steps_of(result.recipe, "hole")
+        self.assertEqual((hole["depth"], hole["counterbore"]["depth"]), (10, 4))
+
+    def test_sizes_that_never_cross_stay_free(self):
+        capture, ticked = self.blind_counterbore("pipe_d_mm", "pipe_d_mm + 8 mm", "wall_mm * 2", "wall_mm * 5")
+        result, _ = run(capture, ticked)
+        self.assertEqual(result.fixed, [])
+
+    def test_a_loose_walk_keeps_a_size_other_steps_read_free_with_a_reason_and_writes_numbers(self):
+        capture, ticked = self.blind_counterbore("pipe_d_mm", "wall_mm * 10", "wall_mm * 2", "wall_mm * 5")
+        result = translate(capture, size_table=table_of(capture, ticked), loose=True)
+        self.assertEqual([f["name"] for f in result.loose], ["wall_mm"])
+        self.assertIn("counterbore", result.loose[0]["reason"])
+        (hole,) = steps_of(result.recipe, "hole")
+        self.assertEqual((hole["diameter"], hole["counterbore"]["diameter"]), (12, 20))
+
+    def test_a_countersink_that_gets_narrower_than_its_hole_fixes_both_sizes(self):
+        def edit(data):
+            data.update(hole_type="countersink", countersink={"diameter": 20.0, "angle_deg": 90.0},
+                        extent={"kind": "throughAll"}, diameter=12.0)
+            data["params"] = {"diameter": param("d4", "pipe_d_mm", 12.0),
+                              "countersink.diameter": param("d5", "wall_mm * 10", 20.0)}
+        capture, ticked = on_fixture("hole_countersink_through", edit)
+        result, _ = run(capture, ticked)
+        self.assertEqual(sorted(f["name"] for f in result.fixed), ["pipe_d_mm", "wall_mm"])
+        (hole,) = steps_of(result.recipe, "hole")
+        self.assertEqual(hole["countersink"]["diameter"], 20)
 
 
 def _turn(degrees):

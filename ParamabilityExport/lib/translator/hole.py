@@ -7,7 +7,7 @@ Hole points follow sizes when the probe's motion file moves them (sketch_motion.
 """
 import math
 
-from . import sketch_motion, values, vec
+from . import range_check, sketch_motion, values, vec
 from .values import Quantity
 from .result import Refusal
 
@@ -113,9 +113,10 @@ def _is_tipped(data, tip, ctx):
 
 
 def _tip_profile(diameter, depth, tip_deg, counterbore, countersink):
-    """Outline in (radial, depth) coordinates as [x, y] numbers or formulas, or a Refusal. `depth` runs to the shoulder.
+    """Outline in (radial, depth) coordinates as [x, y] numbers or formulas. `depth` runs to the shoulder.
 
     `diameter`, `depth` and the counterbore and countersink sizes are Quantities, so the outline can follow sizes.
+    The counterbore or countersink must fit the hole (`_misfit`).
     """
     radius = diameter.scaled(0.5)
     tip_run = 1.0 / math.tan(math.radians(tip_deg) / 2.0)
@@ -125,21 +126,69 @@ def _tip_profile(diameter, depth, tip_deg, counterbore, countersink):
     if counterbore:
         wide = counterbore["diameter"].scaled(0.5)
         bore_depth = counterbore["depth"]
-        if not (wide.n > radius.n and 0 < bore_depth.n < depth.n):
-            return Refusal("The counterbore of this hole does not fit its size.")
         points += [(wide, top), (wide, bore_depth), (radius, bore_depth)]
     elif countersink:
-        angle = countersink["angle_deg"].n
-        half = math.tan(math.radians(angle) / 2.0)
+        half = math.tan(math.radians(countersink["angle_deg"].n) / 2.0)
         wide = countersink["diameter"].scaled(0.5)
-        run = (wide.n - radius.n) / half
-        if not (wide.n > radius.n and 0 < angle < 180 and run < depth.n):
-            return Refusal("The countersink of this hole does not fit its size.")
         points += [(wide.plus(MARGIN_MM * half), top), (radius, wide.plus(radius.scaled(-1)).scaled(1.0 / half))]
     else:
         points.append((radius, top))
     points += [(radius, depth), (zero, apex)]
     return [[x.json(), y.json()] for x, y in points]
+
+
+def _misfit(sizes, tipped, through):
+    """Why a counterbore or countersink does not fit its hole at the current values, or None when it does."""
+    bore, sink = sizes.counterbore, sizes.countersink
+    if bore and not (bore["diameter"].n > sizes.diameter.n and (through or 0 < bore["depth"].n < sizes.depth.n)):
+        return "The counterbore of this hole does not fit its size."
+    if sink:
+        angle = sink["angle_deg"].n
+        wider = sink["diameter"].n > sizes.diameter.n
+        if tipped:
+            half = math.tan(math.radians(angle) / 2.0) if 0 < angle < 180 else None
+            fits = wider and half is not None and (sink["diameter"].n - sizes.diameter.n) / 2.0 / half < sizes.depth.n
+        else:
+            fits = wider and MIN_COUNTERSINK_DEG <= angle <= MAX_COUNTERSINK_DEG
+        if not fits:
+            return "The countersink of this hole does not fit its size."
+    return None
+
+
+def _unfollow(ctx, why, *quantities):
+    """The quantities as plain numbers; the sizes they read are marked for `why` (`Context.fix`)."""
+    ctx.fix(tuple(dict.fromkeys(r for q in quantities for r in q.reads)), why)
+    return [Quantity(q.n) for q in quantities]
+
+
+def _stays_positive(ctx, difference):
+    """True when a Quantity stays above zero at every corner of the size ranges (a plain number is not tested)."""
+    return not difference.sized or range_check.sweep(ctx.table, difference.text, difference.reads).above(0.0)
+
+
+def _keep_fit(ctx, item, sizes, tipped):
+    """A counterbore or countersink that fits at the current values must fit at every size of the ranges: its
+    diameter stays wider than the hole's, its depth shallower than the hole's (for a countersink the cone's run, in
+    a hole with a drill tip). When it does not, the values involved are written as numbers and their sizes marked."""
+    name = item.get("name", "a hole")
+    diameter, depth = sizes.diameter, sizes.depth
+    bore, sink = sizes.counterbore, sizes.countersink
+    if bore:
+        why = "the counterbore of %s would stop fitting its hole at some sizes" % name
+        if not _stays_positive(ctx, bore["diameter"].plus(diameter.scaled(-1))):
+            bore["diameter"], diameter = _unfollow(ctx, why, bore["diameter"], diameter)
+        if depth is not None and not _stays_positive(ctx, depth.plus(bore["depth"].scaled(-1))):
+            bore["depth"], depth = _unfollow(ctx, why, bore["depth"], depth)
+    if sink:
+        why = "the countersink of %s would stop fitting its hole at some sizes" % name
+        if not _stays_positive(ctx, sink["diameter"].plus(diameter.scaled(-1))):
+            sink["diameter"], diameter = _unfollow(ctx, why, sink["diameter"], diameter)
+        if tipped:
+            half = math.tan(math.radians(sink["angle_deg"].n) / 2.0)
+            run = sink["diameter"].plus(diameter.scaled(-1)).scaled(0.5 / half)
+            if not _stays_positive(ctx, depth.plus(run.scaled(-1))):
+                sink["diameter"], diameter, depth = _unfollow(ctx, why, sink["diameter"], diameter, depth)
+    sizes.diameter, sizes.depth = diameter, depth
 
 
 def _hole_step(position, direction, diameter, depth, counterbore, countersink):
@@ -197,8 +246,6 @@ def _sizes(item, ctx, diameter, depth, counterbore, countersink):
 
 def _handle_hole(item, ctx):
     data = item.get("data") or {}
-    if "read_error" in data:
-        return Refusal("This hole could not be read from Fusion.")
     if not data.get("positions") or not data.get("direction") or not data.get("diameter"):
         return Refusal("This hole has no readable position or size.")
     hole_type = data.get("hole_type", "simple")
@@ -224,36 +271,29 @@ def _handle_hole(item, ctx):
     sizes = _sizes(item, ctx, diameter, depth, counterbore, countersink)
 
     tip = data.get("tip_angle_deg")
-    values.pin(ctx, item, "tip_angle_deg", "the drill tip of %s needs it to stay as it is" % item.get("name", "a hole"))
     tipped = False
     if not through:
+        values.pin(ctx, item, "tip_angle_deg",
+                   "the drill tip of %s needs it to stay as it is" % item.get("name", "a hole"))
         tipped = _is_tipped(data, tip, ctx)
         if isinstance(tipped, Refusal):
             return tipped
+    if tipped and (tip is None or not 0 < tip < 180):
+        return Refusal("The drill tip angle of this hole could not be read.")
+    misfit = _misfit(sizes, tipped, through)
+    if misfit:
+        return Refusal(misfit)
+    _keep_fit(ctx, item, sizes, tipped)
     if tipped:
-        if tip is None or not 0 < tip < 180:
-            return Refusal("The drill tip angle of this hole could not be read.")
         profile = _tip_profile(sizes.diameter, sizes.depth, float(tip), sizes.counterbore, sizes.countersink)
-        if isinstance(profile, Refusal):
-            return profile
-        return [_tip_step(p, direction, profile) for p in sketch_motion.points(ctx, item, "positions", data["positions"])]
-
-    if counterbore and not (counterbore["diameter"] > diameter and (through or 0 < counterbore["depth"] < depth)):
-        return Refusal("The counterbore of this hole does not fit its size.")
-    if countersink and not (
-        countersink["diameter"] > diameter
-        and MIN_COUNTERSINK_DEG <= countersink["angle_deg"] <= MAX_COUNTERSINK_DEG
-    ):
-        return Refusal("The countersink of this hole does not fit its size.")
+        return [_tip_step(p, direction, profile) for p in sketch_motion.points(ctx, item, data["positions"])]
     return [_hole_step(p, direction, sizes.diameter, sizes.depth, sizes.counterbore, sizes.countersink)
-            for p in sketch_motion.points(ctx, item, "positions", data["positions"])]
+            for p in sketch_motion.points(ctx, item, data["positions"])]
 
 
 def handle(item, ctx):
     data = item.get("data") or {}
     if item.get("type") == "ThreadFeature":
-        if "read_error" in data:
-            return Refusal("This thread could not be read from Fusion.")
         if data.get("modeled"):
             return Refusal("Modeled threads are not copied yet.")
         ctx.note("The thread is not copied; the exported shape has none either.")

@@ -6,9 +6,9 @@ in, or come off the wall it lies on. Fusion builds that other shape too, but the
 edge it made, a join that must touch) no longer find what they pick.
 
 For points on the faces of the step, `check` looks along the face normal for the nearest faces of the part within
-`REACH` mm on each side. Over the size range (each size at its ends, all low, all high) every such gap must keep its
-sign, and a face that lies on a wall must stay on it. Only flat faces parallel to the step's face count. Where a gap
-does not keep its sign, the ranges of the sizes it reads are shortened toward their values until it does
+`REACH` mm on each side. Over the size range (every mix of the ends for up to 6 sizes, a bounded sample past that)
+every such gap must keep its sign, and a face that lies on a wall must stay on it. Only flat faces parallel to the
+step's face count. Where a gap does not keep its sign, the ranges of the sizes it reads are shortened toward their values until it does
 (`kept_ranges.shortened`, `Context.narrow`); a size whose range would shrink to its value, or whose range the person
 typed, cannot follow (`Context.fix`). When the walk keeps sizes free (loose mode), the ranges stay as Fusion builds
 them and the sizes are listed as doubtful past those values instead.

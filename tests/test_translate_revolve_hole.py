@@ -5,6 +5,7 @@ from tests import context  # noqa: F401
 from tests.translator_helpers import assert_schema_ok, close, load_capture, steps_of, translate_fixture
 
 from lib.translator import translate, vec
+from tests.test_translate_sized import TICKED, on_fixture, param, run
 
 
 def verdict_of(result, index):
@@ -277,6 +278,26 @@ class HoleTest(unittest.TestCase):
                 result = variant("hole_through", edit)
                 self.assertIsNone(result.recipe)
                 self.assertEqual(result.refusal["type"], "HoleFeature")
+
+
+class HoleTipSizeTest(unittest.TestCase):
+    """A drill tip angle that follows a size matters only for a blind hole."""
+
+    def tip_follows_size(self, name):
+        def edit(data):
+            data["tip_angle_deg"] = 118.0
+            data["params"] = {"tip_angle_deg": param("d8", "turn_deg + 58", 118.0)}
+        capture, ticked = on_fixture(name, edit, TICKED + ["turn_deg"])
+        return run(capture, ticked)[0]
+
+    def test_a_through_hole_does_not_fix_the_size_behind_its_tip_angle(self):
+        result = self.tip_follows_size("hole_through")
+        self.assertIsNotNone(result.recipe)
+        self.assertEqual(result.fixed, [])
+
+    def test_a_blind_hole_fixes_the_size_behind_its_tip_angle(self):
+        result = self.tip_follows_size("hole_blind_tip")
+        self.assertEqual([f["name"] for f in result.fixed], ["turn_deg"])
 
 
 class ThreadTest(unittest.TestCase):

@@ -7,9 +7,7 @@ are raised instead of fixing them; a size whose minimum the person typed is not 
 """
 import math
 
-from . import values
-
-STEPS = 40
+from . import range_check
 
 
 def _sizes(table, reads):
@@ -24,7 +22,10 @@ def _sizes(table, reads):
 
 
 def _holds(table, q, least, mins):
-    return values._stays_in_range(table, q.text, q.reads, 1, least - 1e-9, mins)
+    """True when the count `q` stays at `least` or more at every corner of the size ranges; `mins` (recipe name to
+    number) replaces the minimum of some sizes."""
+    bounds = {n: (m, table.sizes[n]["max"]) for n, m in (mins or {}).items()}
+    return range_check.sweep(table, q.text, q.reads, bounds).at_least(least - 1e-9)
 
 
 def _tidy(size, value, extra):
@@ -52,13 +53,7 @@ def raised_minimums(table, q, least):
 
     if not _holds(table, q, least, mins_at(1.0)):
         return None
-    low, high = 0.0, 1.0
-    for _ in range(STEPS):
-        mid = (low + high) / 2.0
-        if _holds(table, q, least, mins_at(mid)):
-            high = mid
-        else:
-            low = mid
+    high = range_check.smallest_share(lambda t: _holds(table, q, least, mins_at(t)))
     exact = mins_at(high)
     chosen = exact
     for extra in (0, 1):
