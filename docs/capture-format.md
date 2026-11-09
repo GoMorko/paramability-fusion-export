@@ -38,9 +38,14 @@ with a `CaptureError`.
   "parameters": { "user": [ PARAMETER, ... ], "model": [ PARAMETER, ... ] },
   "targets": [ TARGET ],
   "target": TARGET,
-  "items": [ ITEM, ... ]
+  "items": [ ITEM, ... ],
+  "marker": { "position": 48, "count": 120 }
 }
 ```
+
+`marker` says where the timeline marker was: `position` items sat before it, `count` is the length of the timeline.
+`items` holds only the items before the marker; the design is read as it is there. The translator does not read
+`marker` (captures without it read as before).
 
 TARGET:
 
@@ -158,14 +163,19 @@ ITEM:
 
 `lib/fusion_reader/capture.py`, `read_capture(design, body) -> dict`:
 
-1. Refuse unless `timeline.markerPosition == timeline.count` (existing `marker_at_end`).
-2. For `k` from 0 to `count`: set `timeline.markerPosition = k`. Read the target's box and volume once. Read
+1. Read the start marker `end = timeline.markerPosition` (`timeline.count` when the marker is at the end). The walk
+   treats it as the end of the timeline: items at `end` and after are left out, never refused.
+2. For `k` from 0 to `end`: set `timeline.markerPosition = k`. Read the target's box and volume once. Read
    `bodies_after` and `target_changed` of item `k - 1` and, for items of the target's component, the inputs of item `k`
    (profiles, edges, faces, tool bodies, the target box before it). One recompute per item.
-3. `finally`: `timeline.moveToEnd()`, then check `markerPosition == count`.
-   After that, each `timeline.timelineGroups` entry (`startIndex` to `endIndex`) must be covered by the walk;
-   else `read_capture` raises `CaptureReadError` and the export lands as a fixed shape.
-4. The STEP file is written before the capture, with the marker at the end.
+3. `finally`: put the marker back at `end` (`moveToEnd` when `end == count`, else `markerPosition = end`), then
+   check it reads `end`; else `MarkerError`. After that, each `timeline.timelineGroups` entry that starts before
+   `end` must be covered by the walk up to `end`; else `read_capture` raises `CaptureReadError` and the export lands
+   as a fixed shape.
+4. The STEP file is written before the capture, with the marker at `end`. The size checks keep it there: the
+   parameter store puts the marker back after every recompute and counts only the items before it for health
+   (`lib/fusion_reader/rows.py`), and the temporary copy of a component body deletes only what it added
+   (`lib/export_plan/temp_copy.py`). `report.json` records `marker` (`position`, `count`).
 
 Reading inputs at the position before the item covers the getters that the reference says need
 `timelineObject.rollTo(True)` (fillet `edges`, chamfer `edges`, extrude and revolve `profile`, `participantBodies`).
@@ -607,7 +617,11 @@ writes as a sum over Fusion parameters, or marks it stuck (`lib/probe/`). That i
 keys `<item>/p<profile>/l<loop>/<field path>` (loop 0 is the outer one, then the holes; `center.0`, `width`,
 `segments.2.through.1`), `<item>/p<profile>/plane` (the sketch plane along its normal, from the component origin),
 `<item>/positions/<n>/<0|1|2>` (hole points) and `<item>/axis/point/<0|1|2>` (a revolve axis from a sketch line).
-A key that is not listed did not move. The translator uses it like this:
+The sketch curves of each profile have `<item>/p<profile>/c<loop>.<curve>/<field>` in the capture's loop and curve
+order: a line's `offset` (its distance from the sketch origin along the left normal of its captured direction) and
+`turn` (degrees it turned), an arc's `center.0`, `center.1` and `radius`; `curves` lists the profiles
+(`<item>/p<profile>`) whose curves were measured. A key that is not listed did not move. The translator uses it like
+this:
 
 - `motion=None`: the rule above, sketch sizes fixed up front. `motion=OPTIMISTIC` (the export's first translation):
   sketch values are written as numbers and nothing is fixed for them, so the export can see which sizes to try.
@@ -616,9 +630,18 @@ A key that is not listed did not move. The translator uses it like this:
   it by more than 1e-3 mm fixes its sizes ("could not be read at other values"). A width, height or radius that would
   reach zero over the size ranges fixes its sizes ("would shrink to nothing").
 - A stuck value that a step writes fixes every size the probe lists for it, with the probe's cause: `curve` (a point
-  moves along a curve), `shape` (the outline changes), `turns` (the sketch plane turns), `unread`, `untried`.
+  moves along a curve), `shape` (the outline changes), `turns` (the sketch plane turns), `unread`, `untried`. When
+  only some states failed (a size whose state changed the outline), the probe lists only those sizes and fits the
+  value over the other states as `rest`, which the translator writes once the listed sizes are fixed.
 - An outline merged from touching profiles takes each point from the part profile that has it (rect corners from
-  centre, width and height); a rect drawn through merged corners gets its centre, width and height from them.
+  centre, width and height); a rect drawn through merged corners gets its centre, width and height from them. Pieces
+  of one sketch line in a merged loop are joined back into the line, and a loop of arcs of one circle becomes the
+  circle, with the centre and radius of that sketch circle.
+- A corner the probe could not fit (it moves along a curve) is rebuilt from the two sketch curves that cross there:
+  two lines give an affine point, a line and a circle or two circles a point with `sqrt`. An arc's middle point
+  becomes a fixed direction from its centre. The rebuilt outline must keep its crossings and the order of its corners
+  at each size's ends, all low, all high and the probe's states; otherwise its sizes are fixed ("along a curve"). A
+  line that turns cannot carry its crossings.
 - A sketch plane that moves writes the placement origin along its normal (`sketch.on.origin`); a "to entity" reach is
   the face's move less the plane's move. Outlines of one step whose planes move differently fix those sizes.
 - A reversed placement negates the y formulas of its loops.
@@ -627,7 +650,15 @@ A key that is not listed did not move. The translator uses it like this:
 - Picks on an extrude whose outline moves follow it: a side corner moves with that corner, a point on an outline line
   between its two ends, a point on an arc with the arc's middle (or with the whole arc when it only shifts), on a
   circle with its centre and radius, and a point inside an end face with the outline's centre. A point on an arc that
-  changes shape fixes those sizes. The same holds for pattern and mirror copies, shell inner walls and crossing edges.
+  changes shape fixes those sizes. The same holds for pattern and mirror copies, shell inner walls, crossing edges
+  and faces an `offsetFaces` step moved (the point moves back by the distance, then follows what made the face).
+- A pick on a tapered wall follows the taper and the length: the wall leans in by `tan(taper)` times the height along
+  the extrude, also when the taper is a size.
+- A pick on a copy of a rectangular pattern needs that copy at every size: copy n needs a count of n or more over
+  the size range (count formulas such as `ceil(width_count) * 2` are evaluated at the range ends). When the count
+  drops below that, the smallest value of the sizes it reads is raised (a whole number for a count, else two
+  decimals) and named in a note and in `report.json` (`sizes.raised`); the recipe size `min` and the result dialog
+  show it. A size with a typed range is fixed instead. Copies of a circular pattern keep their count and angle.
 - A through cut clears the part at the largest sizes tried (`box_max` of the motion file).
 - A construction plane or axis that a step uses itself (start from, reach to, turn about, mirror across, with `token`)
   fixes the sizes of the model parameters it made (`created_by.token`); without a token, of every construction plane
@@ -673,6 +704,10 @@ The export writes `report.json` into the package: `{ "writer", "outcome": "recip
 VERDICT, ...], "capture": CAPTURE }` (verdicts: see the translator, `lib/translator/result.py`). The app never reads it. A report saved from a real
 design gives a fixture: its `capture` is copied as is.
 
+`sizes.build_failures` lists the size checks Fusion could not build (value, error, why, and `tries`: the smaller steps
+tried toward the current value). A size that built at one of them is kept free with a shorter range and listed in
+`sizes.narrowed` (`side`, the failed value `from`, the new end `to`, the `note` shown to the person).
+
 ## 7. API names and what is not verified
 
 Read in the API reference on 2026-11-08: `HoleFeature` (all members above, plus `isDefaultDirection`;
@@ -709,6 +744,7 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | `entityToken` of a body stays the same across marker positions | a token that changes makes the translator refuse the capture; the Combine test |
 | `Timeline.item` walks inside groups; `TimelineGroup.startIndex`, `endIndex` | reader raises `CaptureReadError` when a group child is not in the walk; the "Capture reader calls to watch" lists in `docs/hand-tests.md` |
 | Moving the marker marks the document changed or adds undo entries | the Marker and document test |
+| New timeline items (the temporary copy) go in at a rolled back marker, and `computeAll` leaves the marker in place | the copy is checked for a body, the marker is put back after each recompute and at the end; the Marker rolled back tests |
 | `isRollingBallCorner` still on `FilletFeature` (some fillet members are retired) | reader reads it in a try, default true; the Bin test |
 | The members in the `params` table return a `ModelParameter` (name, expression, value): `DistanceExtentDefinition.distance`, `taperAngleOne` and `taperAngleTwo`, `OffsetStartDefinition.offset`, the `HoleFeature` size members, `ConstantRadiusFilletEdgeSet.radius`, chamfer set distances, `insideThickness`, pattern `quantityOne`, `distanceOne` and the circular ones | a member that is not one adds nothing and the value stays a number; the sizes hand test logs which members gave a parameter |
 | `Sketch.entityToken`, `Sketch.referencePlane`, `ProfileCurve.sketchEntity.entityToken`, `entityToken` of sketch points, lines, construction planes and axes; the sketch curve tokens staying the same after a recompute | the probe compares its first state with the capture and fixes the sizes of a sketch that does not match; the Sketches that follow sizes tests in `docs/hand-tests.md` |

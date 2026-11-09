@@ -21,6 +21,7 @@ POSITIONS = {
     "round": [("edges", "near", "[]")],
     "bevel": [("edges", "near", "[]")],
     "shell": [("openFaces", "near", "[]")],
+    "offsetFaces": [("faces", "near", "[]")],
     "pattern": [("polar", "axisPoint")],
     "mirror": [("plane", "origin")],
 }

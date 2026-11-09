@@ -10,11 +10,13 @@ Without a motion file, or with `OPTIMISTIC`, nothing here runs and the sketch is
 """
 import math
 
-from ..probe.motion import UNREAD, Affine, Stuck
+from ..probe.motion import CURVE, UNREAD, Affine, Stuck
 from . import notes
+from .curved import Curved, combine, names_of
 from .footprint import nearest_point
 from .loops import profile_loops
 from .result import Refusal
+from .sketch_crossings import Sources, keeps_order
 from .values import Quantity, stays_positive
 
 POSITIVE_FIELDS = ("width", "height", "radius", "radiusX", "radiusY")
@@ -43,44 +45,24 @@ def _free_sizes(table, names):
 
 
 def movers(table, value):
-    """The free sizes that move a raw value (Affine or Stuck)."""
-    if isinstance(value, Stuck):
-        return _free_sizes(table, value.movers)
-    return _free_sizes(table, value.terms)
+    """The free sizes that move a raw value (Affine, Curved or Stuck)."""
+    return _free_sizes(table, names_of(value))
 
 
 def raw(ctx, key, number):
     """The raw value of `key`: the probe's Affine or Stuck, or the captured number as a constant. A stuck value whose
-    sizes are all fixed by now stands still."""
+    sizes are all fixed by now follows what the other sizes do (`rest`), else stands still."""
     found = ctx.motion.get(key)
     if found is None:
         return Affine(number)
     if isinstance(found, Stuck) and not movers(ctx.table, found):
-        return Affine(number)
+        return found.rest if found.rest is not None else Affine(number)
     return found
-
-
-def combine(parts, sketch=""):
-    """`sum(coef * value)` over (coef, Affine or Stuck or number) pairs; a Stuck part makes the sum stuck."""
-    total, stuck = Affine(0.0, sketch=sketch), []
-    for coef, value in parts:
-        if not coef:
-            continue
-        if isinstance(value, Stuck):
-            stuck.append(value)
-        elif isinstance(value, Affine):
-            total = total.plus(value.scaled(coef))
-        else:
-            total = total.plus(coef * value)
-    if stuck:
-        names = [name for s in stuck for name in s.movers]
-        return Stuck(dict.fromkeys(names), stuck[0].cause, stuck[0].sketch or sketch)
-    return total
 
 
 def same(a, b):
     """True when two raw values move alike (both constant, or the same terms) and agree within SAME_TOL."""
-    if isinstance(a, Stuck) or isinstance(b, Stuck):
+    if not isinstance(a, Affine) or not isinstance(b, Affine):
         return False
     if set(a.terms) != set(b.terms) or any(abs(a.terms[k] - b.terms[k]) > 1e-9 for k in a.terms):
         return False
@@ -221,29 +203,29 @@ def _raw_values(node):
         return [v for k, value in node.items() if k not in _SKIP for v in _raw_values(value)]
     if isinstance(node, list):
         return [v for value in node for v in _raw_values(value)]
-    return [node] if isinstance(node, (Affine, Stuck)) else []
+    return [node] if isinstance(node, (Affine, Curved, Stuck)) else []
 
 
 def _names(values):
     """The Fusion names that move any of the raw values."""
-    names = []
-    for value in values:
-        names += list(value.movers if isinstance(value, Stuck) else value.terms)
-    return tuple(dict.fromkeys(names))
+    return tuple(dict.fromkeys(n for value in values for n in names_of(value)))
 
 
 def _unread(anchors, sketch):
     return Stuck(_names(anchors.all_values()), UNREAD, sketch)
 
 
-def _from_anchors(loop, anchors, sketch):
-    """The raw loop of a loop drawn through anchor points (an outline merged from several profiles)."""
+def _from_anchors(loop, anchors, sketch, sources=None):
+    """The raw loop of a loop drawn through anchor points (an outline merged from several profiles). A circle that
+    stands for arcs of one sketch circle takes that circle's centre and radius."""
     kind = loop["kind"]
     missing = _unread(anchors, sketch)
 
     def at(uv):
         found = anchors.point(uv)
-        return list(found) if found is not None else [missing, missing]
+        if found is None and sources is not None:
+            found = sources.point(uv)
+        return list(found) if isinstance(found, tuple) else [missing, missing]
 
     if kind == "polygon":
         return dict(loop, points=[at(p) for p in loop["points"]])
@@ -269,9 +251,14 @@ def _from_anchors(loop, anchors, sketch):
         return dict(loop, center=center, width=width, height=height)
     big = loop.get("radius", max(loop.get("radiusX", 0.0), loop.get("radiusY", 0.0)))
     found = anchors.round_at(loop["center"], big)
-    if found is None or found[0]["kind"] != kind:
-        return _map(loop, [], lambda path, n: missing)
-    return dict(found[1])
+    if found is not None and found[0]["kind"] == kind:
+        return dict(found[1])
+    circle = sources.circle(loop["center"], big) if sources is not None and kind == "circle" else None
+    if isinstance(circle, Stuck):
+        return _map(loop, [], lambda path, n: circle)
+    if circle is not None:
+        return dict(loop, center=circle[0], radius=circle[1])
+    return _map(loop, [], lambda path, n: missing)
 
 
 # ---- one written outline ----------------------------------------------------------------------------------------
@@ -402,18 +389,59 @@ class Outline:
         return self._shifted(uv, centre_uv, centre)
 
 
+def _sources(ctx, item, parts, sketch):
+    """The sketch curves of `parts` with their raw values, or None when the probe did not measure them."""
+    prefixes = ["%s/p%d" % (item.get("index"), n) for n, _ in parts]
+    if not all(p in getattr(ctx.motion, "curves", ()) for p in prefixes):
+        return None
+    return Sources(lambda key, number: raw(ctx, key, number), list(zip(prefixes, [s for _, s in parts])), sketch)
+
+
+def _mend(loop, raw_loop, sources):
+    """`raw_loop` with each stuck corner and arc middle rebuilt from the sketch curves through it, where it can be."""
+    if sources is None or loop["kind"] not in ("polygon", "profile"):
+        return raw_loop
+
+    def fix(uv, xy, middle=False):
+        if not any(isinstance(c, Stuck) for c in xy):
+            return xy
+        found = sources.through(uv) if middle else sources.point(uv)
+        return list(found) if isinstance(found, tuple) else xy
+
+    if loop["kind"] == "polygon":
+        return dict(raw_loop, points=[fix(p, r) for p, r in zip(loop["points"], raw_loop["points"])])
+    segments = []
+    for seg, rseg in zip(loop["segments"], raw_loop["segments"]):
+        out = dict(rseg, to=fix(seg["to"], rseg["to"]))
+        if "through" in seg:
+            out["through"] = fix(seg["through"], rseg["through"], True)
+        segments.append(out)
+    return dict(raw_loop, start=fix(loop["start"], raw_loop["start"]), segments=segments)
+
+
+def _stuck_curves(node, sketch):
+    """`node` with every Curved value made stuck: the rebuilt outline does not keep its shape."""
+    if isinstance(node, dict):
+        return {k: _stuck_curves(v, sketch) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_stuck_curves(v, sketch) for v in node]
+    return Stuck(node.names(), CURVE, sketch) if isinstance(node, Curved) else node
+
+
 def outline(ctx, item, profile, outer, inners, parts):
     """The `Outline` of one written profile, or None when sketch values do not follow sizes in this walk.
 
     `parts` are `(index, capture profile)` of the item's profiles it was made from: one for a profile written as it
-    is, several for an outline merged from touching profiles (its values are taken from theirs)."""
+    is, several for an outline merged from touching profiles (its values are taken from theirs). A corner that the
+    probe could not fit is rebuilt from the sketch curves that cross there (sketch_crossings.py)."""
     if not active(ctx):
         return None
     sketch = profile.get("sketch") or ""
     loops = [outer] + list(inners)
     prefix = "%s/p%d" % (item.get("index"), parts[0][0])
+    sources = _sources(ctx, item, parts, sketch)
     if len(parts) == 1:
-        raw_loops = _keyed_loops(ctx, prefix, loops)
+        raw_loops = [_mend(loop, r, sources) for loop, r in zip(loops, _keyed_loops(ctx, prefix, loops))]
     else:
         anchors = Anchors(sketch)
         for n, source in parts:
@@ -421,8 +449,11 @@ def outline(ctx, item, profile, outer, inners, parts):
             if not isinstance(built, Refusal):
                 own = [built[0]] + list(built[1])
                 for loop, raw_loop in zip(own, _keyed_loops(ctx, "%s/p%d" % (item.get("index"), n), own)):
-                    anchors.add(loop, raw_loop)
-        raw_loops = [_from_anchors(loop, anchors, sketch) for loop in loops]
+                    anchors.add(loop, _mend(loop, raw_loop, sources))
+        raw_loops = [_from_anchors(loop, anchors, sketch, sources) for loop in loops]
+    if any(isinstance(v, Curved) for v in _raw_values(raw_loops)) and not keeps_order(
+            ctx.table, ctx.motion, loops, raw_loops, sketch):
+        raw_loops = _stuck_curves(raw_loops, sketch)
     # Merged parts share one frame, so the first part's plane stands for all of them.
     plane = raw(ctx, prefix + "/plane", _dot(profile["frame"]["origin"], profile["frame"]["z"]))
     return Outline(ctx, profile["frame"], loops, raw_loops, plane, sketch)

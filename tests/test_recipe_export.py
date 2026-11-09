@@ -33,6 +33,13 @@ class PlanTest(unittest.TestCase):
     def plan(self, capture, up_axis="z"):
         return plan_single_export(capture, self.step, "Plate", "writer 1", up_axis)
 
+    def test_a_raised_smallest_value_is_in_the_recipe_and_the_report(self):
+        from tests.test_translate_copies import counted
+        capture, table = counted()
+        _, files, report = plan_single_export(capture, self.step, "Plate", "w", "z", size_table=table)
+        self.assertEqual([(r["name"], r["min"]) for r in report["sizes"]["raised"]], [("holes_count", 2)])
+        self.assertEqual(json.loads(files["recipe.json"])["sizes"]["holes_count"]["min"], 2)
+
     def test_body_in_a_component_is_a_recipe_at_its_place(self):
         manifest, files, report = self.plan(load_capture("component_moved"))
         self.assertEqual(manifest["kind"], "recipe")

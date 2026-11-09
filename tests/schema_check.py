@@ -10,17 +10,18 @@ SCHEMA_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ParamabilityExport", "lib", "schema")
 
 
-def _newest_recipe_schema():
-    """The recipe schema copy with the highest version, so copying a new one from the app needs no code change."""
-    found = []
+def _recipe_schemas():
+    """Version -> path of every recipe schema copy, so copying a new one from the app needs no code change."""
+    found = {}
     for name in os.listdir(SCHEMA_DIR):
         match = re.fullmatch(r"paramability\.recipe\.v(\d+)\.schema\.json", name)
         if match:
-            found.append((int(match.group(1)), name))
-    return os.path.join(SCHEMA_DIR, max(found)[1])
+            found[int(match.group(1))] = os.path.join(SCHEMA_DIR, name)
+    return found
 
 
-SCHEMA_PATH = _newest_recipe_schema()
+SCHEMAS = _recipe_schemas()
+SCHEMA_PATH = SCHEMAS[max(SCHEMAS)]
 
 HANDLED = {
     "type", "$ref", "$defs", "properties", "required", "additionalProperties", "const", "enum", "anyOf",
@@ -121,5 +122,8 @@ def validate(value, schema, root=None, path="$"):
 
 
 def check_recipe(recipe, schema=None):
-    schema = schema or load_schema()
+    """Errors of a recipe against the schema copy of the version it states (the newest when it states none)."""
+    if schema is None:
+        version = recipe.get("version") if isinstance(recipe, dict) else None
+        schema = load_schema(SCHEMAS.get(version, SCHEMA_PATH))
     return validate(recipe, schema)

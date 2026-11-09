@@ -21,7 +21,7 @@ from ...lib.export_plan.runner import ExportCancelled, RowExport
 from ...lib.export_plan.size_checks import PLACEMENT_KEY, build_failures, frame_numbers, plan_checks, read_checks
 from ...lib.export_plan.size_narrowing import narrow_failed
 from ...lib.export_plan.size_offers import labels, sizes_for_checks
-from ...lib.export_plan.temp_copy import MARKER_MESSAGE, marker_at_end
+from ...lib.export_plan.marker import not_put_back_message, put_back, read_marker
 from ...lib.fusion_reader import design_info, placement
 from ...lib.fusion_reader.capture import MarkerError, read_capture
 from ...lib.fusion_reader.probe_state import read_state
@@ -53,9 +53,15 @@ def _read_capture(design, current):
         return exc
 
 
+def _same_marker(capture, design):
+    """True when the capture was read with the timeline marker where it is now."""
+    now = read_marker(design.timeline)
+    return now is None or capture.get("marker") == now
+
+
 class CaptureCache:
     """The capture of each picked body. The dialog reads it to scope the parameters to the body, and the export
-    reuses it when it is still the same dialog. A failed read is not kept."""
+    reuses it when it is still the same dialog and the marker has not moved. A failed read is not kept."""
 
     def __init__(self, design):
         self._design = design
@@ -64,7 +70,7 @@ class CaptureCache:
     def get(self, body):
         token = body.entityToken
         cached = self._read.get(token)
-        if isinstance(cached, dict):
+        if isinstance(cached, dict) and _same_marker(cached, self._design):
             return cached
         capture = _read_capture(self._design, resolve_body(self._design, token, body))
         self._read[token] = capture
@@ -261,9 +267,6 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
     if body is None:
         message_box("Pick a body to export.")
         return
-    if not marker_at_end(design.timeline):
-        message_box(MARKER_MESSAGE)
-        return
     if position_pending(design):
         message_box(PENDING_POSITION_MESSAGE)
         return
@@ -276,6 +279,7 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
     token = body.entityToken
     jobs = []
     saved = None
+    marker = read_marker(design.timeline)
     try:
         with tempfile.TemporaryDirectory(prefix="paramability_", ignore_cleanup_errors=True) as tmp:
             part_step = os.path.join(tmp, "part.step")
@@ -330,7 +334,7 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
                 size_table=table, checks=kept,
                 fixed=[{"name": m["name"], "reason": m["reason"]} for m in measured], unchecked=unchecked,
                 listing=_parameter_listing(parameters, model_params, design_unit),
-                motion=motion, probe=probe_report, build_failures=failures, narrowed=narrowed)
+                motion=motion, probe=probe_report, build_failures=failures, narrowed=narrowed, marker=marker)
             write_package(out_path, manifest, files)
             saved = (os.path.basename(out_path), manifest, report, table)
     except ExportCancelled:
@@ -342,5 +346,7 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
     finally:
         for job in jobs:
             export_common.warn_unrestored(job)
+        if marker is not None and not put_back(design.timeline, marker["position"]):
+            message_box(not_put_back_message(marker), error=True)
     if saved is not None:
         _show_result(*saved, form["ticked"])

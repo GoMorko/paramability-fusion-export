@@ -4,6 +4,7 @@ import os
 import adsk.core
 
 from ... import config
+from ...lib.export_plan.marker import marker_note, read_marker
 from ...lib.export_plan.sizes_table import new_table
 from ...lib.fusion_reader.design_info import detect_up_axis
 from ...lib.fusion_reader.parameters import list_user_parameters
@@ -42,7 +43,8 @@ def _on_created(args):
     if count_solid_bodies(root) == 1 and root.bRepBodies.count == 1:
         body = root.bRepBodies.item(0)
     table = new_table(parameters)
-    export_dialog.build(command, parameters, body, detect_up_axis(adsk.core.Application.get()), table)
+    export_dialog.build(command, parameters, body, detect_up_axis(adsk.core.Application.get()), table,
+                        marker_note=marker_note(read_marker(design.timeline)))
 
     # Per-dialog handlers are replaced each time the dialog opens.
     _command_handlers.clear()

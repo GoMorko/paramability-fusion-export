@@ -4,6 +4,7 @@ import os
 import adsk.core
 
 from ... import config
+from ...lib.export_plan.marker import marker_note, read_marker
 from ...lib.export_plan.stop_warning import summarize as summarize_stop
 from ...lib.export_plan.size_offers import offers as size_offers, table_for_body
 from ...lib.fusion_reader.design_info import default_length_unit, detect_up_axis
@@ -45,6 +46,7 @@ def _on_created(args):
         return
 
     root = design.rootComponent
+    note = marker_note(read_marker(design.timeline))
     parameters = list_user_parameters(design)
     model_params = list_model_parameters(root)
     design_unit = default_length_unit(design)
@@ -69,7 +71,8 @@ def _on_created(args):
 
     offers, stop = inspect(body)
     recipe_dialog.build(
-        command, offers, body, detect_up_axis(adsk.core.Application.get()), design_unit=design_unit, stop=stop)
+        command, offers, body, detect_up_axis(adsk.core.Application.get()), design_unit=design_unit, stop=stop,
+        marker_note=note)
     shown = {"body": body.entityToken if body is not None else None, "stop": stop}
 
     def show_step(inputs, button):

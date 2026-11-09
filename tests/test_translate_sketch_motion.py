@@ -109,6 +109,15 @@ class StuckTest(unittest.TestCase):
         outer = steps_of(result.recipe, "extrude")[0]["sketch"]["outer"]
         self.assertEqual((outer["width"], expr(outer["height"])), (80.0, "depth_mm"))
 
+    def test_a_stuck_value_follows_the_other_sizes_once_its_own_are_fixed(self):
+        def edit(values):
+            values["1/p0/l0/width"] = {"stuck": ["pipe_offset_mm"], "cause": "shape", "sketch": "Sketch1",
+                                       "rest": values["1/p0/l0/width"]}
+
+        result = run(load_capture(BOX), BOX_SIZES, motion_of(BOX, edit))
+        self.assertEqual(sorted(reasons(result)), ["pipe_offset_mm"])
+        self.assertEqual(expr(steps_of(result.recipe, "extrude")[0]["sketch"]["outer"]["width"]), "box_width_mm")
+
     def test_an_outline_that_would_shrink_to_nothing_fixes_its_sizes(self):
         def edit(values):
             values["1/p0/l0/height"] = {"const": 120, "terms": {"depth_mm": -1}, "sketch": "Sketch1"}
@@ -146,6 +155,18 @@ class PlaneTest(unittest.TestCase):
         self.assertEqual(steps_of(result.recipe, "extrude")[1]["sketch"]["on"]["origin"][2], 8.0)
 
 
+    def test_a_construction_plane_record_without_a_token_fixes_every_plane_size(self):
+        capture = load_capture(LIFTED)
+        del capture["items"][-1]["data"]["side_one"]["token"]
+        capture["parameters"]["model"].append(dict(capture["parameters"]["model"][1], name="d21",
+                                                   expression="plate_mm", dependency_parameters=["plate_mm"],
+                                                   created_by=dict(capture["parameters"]["model"][1]["created_by"],
+                                                                   token="cp9")))
+        result = run(capture, ["lift_mm", "plate_mm"], motion_of(LIFTED))
+        self.assertEqual(sorted(reasons(result)), ["lift_mm", "plate_mm"])
+        self.assertIn("construction plane that Extrude3 uses", reasons(result)["plate_mm"])
+
+
 class RevolveAxisTest(unittest.TestCase):
     def test_an_axis_from_a_sketch_line_follows_its_size(self):
         capture = load_capture("revolve_quarter")
@@ -160,28 +181,33 @@ class RevolveAxisTest(unittest.TestCase):
 
 
 class OwnerFilterBoxTest(unittest.TestCase):
-    """The owner's FilterBox package (outside the repo) with a motion file written by hand (filter_box_motion.py)."""
+    """The owner's FilterBox package (outside the repo, 0.4.0 capture) with a motion file written by hand
+    (filter_box_motion.py): supports cross the walls, and pipe circles cross each other."""
 
     PACKAGE = os.path.expanduser("~/Documents/free-projects/3mf-compose/tmp/reports/"
-                                 "Pat - Pipe, Filter (Box, Cylinder).paramability")
+                                 "Pat -22 Pipe, Filter (Box, Cylinder).paramability")
     TICKED = ["FilterBox_$_width__contains_CeramicMedium", "FilterBox_$_height__contains_CeramicMedium",
               "FilterBox_$_depth__contains_CeramicMedium", "_CeramicMedium__Cube_width_unitless",
               "_Filter__Wall_thickness_mm", "FilterBox__PipeTop_offsetFromCenter_mm"]
 
-    def test_the_box_sizes_the_sketches_read_become_free(self):
+    def test_every_box_size_stays_free_and_the_counts_start_where_the_picked_copies_exist(self):
         if not os.path.exists(self.PACKAGE):
             self.skipTest("the owner's package is not on this machine")
         from tests.filter_box_motion import filter_box_motion
         with zipfile.ZipFile(self.PACKAGE) as package:
             capture = json.loads(package.read("report.json"))["capture"]
-        capture["items"] = [i for i in capture["items"] if i["index"] < 92]  # the steps before OffsetFaces3
         result = run(copy.deepcopy(capture), self.TICKED, filter_box_motion(capture))
         self.assertIsNone(result.refusal)
-        free = [name for name, size in result.recipe["sizes"].items() if "value" in size]
-        self.assertEqual(sorted(free), sorted(["FilterBox___height__contains_CeramicMedium",
-                                               "_CeramicMedium__Cube_width_unitless", "_Filter__Wall_thickness_mm",
-                                               "FilterBox__PipeTop_offsetFromCenter_mm"]))
-        self.assertTrue(all("picks a copy made by" in f["reason"] for f in result.fixed))
+        self.assertEqual(result.fixed, [])
+        sizes = result.recipe["sizes"]
+        self.assertEqual(sorted(n for n, size in sizes.items() if "value" in size),
+                         sorted(n.replace("$", "_") for n in self.TICKED))
+        self.assertEqual({r["name"]: r["min"] for r in result.raised},
+                         {self.TICKED[0]: 1.01, self.TICKED[2]: 1.01})
+        self.assertEqual(sizes["FilterBox___width__contains_CeramicMedium"]["min"], 1.01)
+        support = steps_of(result.recipe, "extrude")[1]["sketch"]["outer"]
+        self.assertEqual((support["kind"], expr(support["center"][0])),
+                         ("circle", "-0.5 * FilterBox_width_mm + 0.5 * _Filter__Wall_thickness_mm"))
 
 
 if __name__ == "__main__":

@@ -165,7 +165,33 @@ def _values_of(loops, plane, prefix):
     return out
 
 
-def _prefix(target):
+def _unit(v):
+    size = math.hypot(v[0], v[1]) or 1.0
+    return [v[0] / size, v[1] / size]
+
+
+def curve_values(loops, like, prefix):
+    """The values of the sketch curves of a profile, keyed `<prefix>/c<loop>.<curve>/<field>` in the capture's loop
+    and curve order. A line gives `offset` (its distance from the sketch origin along the left normal of its captured
+    direction) and `turn` (degrees it turned from that direction); an arc its `center.0`, `center.1` and `radius`.
+    `like` are the capture loops, which fix each line's direction."""
+    out = {}
+    for k, (loop, ref) in enumerate(zip(loops, like)):
+        for j, (curve, base) in enumerate(zip(loop["curves"], ref["curves"])):
+            key = "%s/c%d.%d/" % (prefix, k, j)
+            if curve["kind"] == "line":
+                d0 = _unit(_sub(base["end"], base["start"]))
+                d = _unit(_sub(curve["end"], curve["start"]))
+                out[key + "offset"] = -d0[1] * curve["start"][0] + d0[0] * curve["start"][1]
+                out[key + "turn"] = math.degrees(math.atan2(d0[0] * d[1] - d0[1] * d[0], _dot(d0, d)))
+            elif curve["kind"] == "arc":
+                out.update({key + "center.0": float(curve["center"][0]), key + "center.1": float(curve["center"][1]),
+                            key + "radius": float(curve["radius"])})
+    return out
+
+
+def prefix(target):
+    """`<item>/p<profile>` of a profile record."""
     return "%s/p%d" % (target["item"], target["p"])
 
 
@@ -173,7 +199,9 @@ def _capture_profile_values(target):
     profile = target["profile"]
     frame = profile["frame"]
     loops = _profile_loops(profile, target["sketch"])
-    return _values_of([loops[0]] + list(loops[1]), _dot(frame["origin"], frame["z"]), _prefix(target))
+    out = _values_of([loops[0]] + list(loops[1]), _dot(frame["origin"], frame["z"]), prefix(target))
+    out.update(curve_values(profile["loops"], profile["loops"], prefix(target)))
+    return out
 
 
 def _state_profile_values(target, read):
@@ -199,7 +227,9 @@ def _state_profile_values(target, read):
     got, want = [mapped[0]] + list(mapped[1]), [base[0]] + list(base[1])
     if _outline(got) != _outline(want) or not all(_angles_equal(a, b) for a, b in zip(got, want)):
         return None, SHAPE
-    return _values_of(got, _dot(frame["origin"], ref["z"]), _prefix(target)), None
+    out = _values_of(got, _dot(frame["origin"], ref["z"]), prefix(target))
+    out.update(curve_values(best[0], profile["loops"], prefix(target)))
+    return out, None
 
 
 def _hole_values(target, read, e0):

@@ -9,7 +9,10 @@
       "states": [ { "values": { "width": 2.0 }, "built": true } ] }
 
 A key is `<item index>/p<profile>/l<loop>/<field path>` (`l0` is the outer loop), `<item>/p<profile>/plane`,
-`<item>/positions/<n>/<0|1|2>` for a hole point and `<item>/axis/point/<0|1|2>` for a revolve axis line. `terms` keys
+`<item>/positions/<n>/<0|1|2>` for a hole point and `<item>/axis/point/<0|1|2>` for a revolve axis line. The sketch
+curves of a profile have `<item>/p<profile>/c<loop>.<curve>/<field>` (a line's `offset` and `turn`, an arc's
+`center.0`, `center.1` and `radius`); `curves` lists the profiles (`<item>/p<profile>`) whose curves were measured.
+A stuck value may carry `rest`: what it follows once its `stuck` sizes are fixed. `terms` keys
 are Fusion parameter names; `const` plus the terms give the value at any size settings. A key that is not listed did
 not move: the translator writes the captured number.
 
@@ -42,17 +45,22 @@ def _wrapped(text):
 
 
 class Stuck:
-    """A value that cannot follow its sizes: the Fusion names of the sizes that move it, why, and its sketch."""
+    """A value that cannot follow its sizes: the Fusion names of the sizes that move it, why, and its sketch.
 
-    def __init__(self, movers, cause, sketch=""):
+    `rest` is the Affine the value follows once those sizes are fixed (the other sizes still move it), or None."""
+
+    def __init__(self, movers, cause, sketch="", rest=None):
         self.movers = tuple(movers)
         self.cause = cause
         self.sketch = sketch
+        self.rest = rest
 
     def json(self):
         out = {"stuck": list(self.movers), "cause": self.cause}
         if self.sketch:
             out["sketch"] = self.sketch
+        if self.rest is not None:
+            out["rest"] = self.rest.json()
         return out
 
     def __eq__(self, other):
@@ -139,11 +147,12 @@ class Motion:
     """What the probe found: a value per key (Affine or Stuck), the union of the target boxes and the states tried."""
     optimistic = False
 
-    def __init__(self, values=None, box_max=None, states=None, dropped=None):
+    def __init__(self, values=None, box_max=None, states=None, dropped=None, curves=None):
         self.values = dict(values or {})
         self.box_max = box_max
         self.states = list(states or [])
         self.dropped = list(dropped or [])  # columns left out of the fit, `{ name, reason }`
+        self.curves = set(curves or ())  # profiles whose sketch curves were measured, `<item>/p<profile>`
 
     def get(self, key):
         """`Affine`, `Stuck`, or None when the value did not move."""
@@ -156,6 +165,8 @@ class Motion:
         out["states"] = self.states
         if self.dropped:
             out["dropped"] = self.dropped
+        if self.curves:
+            out["curves"] = sorted(self.curves)
         return out
 
     @classmethod
@@ -163,10 +174,13 @@ class Motion:
         values = {}
         for key, raw in (data.get("values") or {}).items():
             if "stuck" in raw:
-                values[key] = Stuck(raw["stuck"], raw.get("cause", UNREAD), raw.get("sketch", ""))
+                rest = raw.get("rest")
+                values[key] = Stuck(raw["stuck"], raw.get("cause", UNREAD), raw.get("sketch", ""),
+                                    Affine(rest.get("const", 0.0), rest.get("terms"), raw.get("sketch", ""))
+                                    if isinstance(rest, dict) else None)
             else:
                 values[key] = Affine(raw.get("const", 0.0), raw.get("terms"), raw.get("sketch", ""))
-        return cls(values, data.get("box_max"), data.get("states"), data.get("dropped"))
+        return cls(values, data.get("box_max"), data.get("states"), data.get("dropped"), data.get("curves"))
 
 
 class _Optimistic(Motion):

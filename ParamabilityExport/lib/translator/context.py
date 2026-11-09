@@ -1,6 +1,8 @@
 """Walk state handed to every handler."""
 from .capture import same_body
+from .copy_counts import raised_minimums
 from .follow import Slab, locate
+from .offset_faces import MovedFaces
 from .picks import face_points
 from .shells import Shell
 from .values import reads_in
@@ -8,6 +10,10 @@ from .values import reads_in
 MAX_ID = 64
 MAX_LABEL = 120
 MAX_REASON = 200
+
+
+def _number(value):
+    return ("%.6f" % value).rstrip("0").rstrip(".")
 
 
 class Context:
@@ -29,6 +35,9 @@ class Context:
     written_reads: Fusion names of the sizes that the steps written so far read.
     shells: the shell steps written so far (shells.Shell), for picks on their inner walls. The shell handler hands
       one over in the private `_shell` key: { thickness (a Quantity), faces (the capture faces it opens) }.
+    moved_faces: the offsetFaces steps written so far (offset_faces.MovedFaces), for picks on the faces they moved.
+    minimums: Fusion name of a size -> (smallest value, reason) the picks on pattern copies need (`require`). The
+      driver raises those minimums and walks again.
     motion: the probe's motion file (`probe.motion.Motion`), `probe.motion.OPTIMISTIC`, or None. With a motion file the
       sketch values follow sizes (sketch_motion.py); otherwise they are written as numbers.
     plain_picks: round or bevel step id -> { near, reads, written }: its edges as measured points, the sizes its pick
@@ -43,6 +52,8 @@ class Context:
         self.depends = {}
         self.slabs = []
         self.shells = []
+        self.moved_faces = []
+        self._placers = 0
         self.written_reads = ()
         self.plain_picks = {}
         self.target = capture["target"]
@@ -52,6 +63,7 @@ class Context:
         self._ids_by_index = {}
         self._notes = []
         self.current = None
+        self.minimums = {}
 
     def is_target(self, body):
         return same_body(body, self.target)
@@ -65,6 +77,25 @@ class Context:
         for name in names:
             if name not in self.depends:
                 self.depends[name] = ("%s stays fixed: %s." % (name, why))[:MAX_REASON]
+
+    def require(self, count, least, why):
+        """A pick needs the count Quantity `count` to stay at `least` or more. The smallest values of the sizes it reads
+        are raised (`minimums`: Fusion name to (number, reason)); when that cannot work, the sizes are fixed."""
+        raised = raised_minimums(self.table, count, least) if self.table is not None else {}
+        if raised is None:
+            self.fix(count.reads, "%s, and a smaller value would leave that copy out" % why)
+            return
+        for name, value in raised.items():
+            if value > self.minimums.get(name, (float("-inf"),))[0]:
+                text = "%s starts at %s: %s, which needs at least %d copies." % (name, _number(value), why, least)
+                self.minimums[name] = (value, text[:MAX_REASON])
+
+    def _add_moved_faces(self, item, step):
+        self._placers += 1
+        moved = MovedFaces((item.get("data") or {}).get("faces") or [], step["distance"], None, len(self.slabs),
+                           self._placers)
+        moved.earlier = lambda p, edge: locate(self, p, edge, moved)
+        self.moved_faces.append(moved)
 
     def take_notes(self):
         notes, self._notes = self._notes, []
@@ -113,6 +144,10 @@ class Context:
                 opened = [locate(self, p) for p in face_points(shell["faces"])]
                 self.shells.append(Shell(shell["thickness"], self.slabs, [o for o in opened if o is not None],
                                          len(self.slabs)))
+                self._placers += 1
+                self.shells[-1].seq = self._placers
+            if step.get("kind") == "offsetFaces":
+                self._add_moved_faces(item, step)
             copies = step.pop("_copies", None)
             if copies:
                 sources = [s for of in step.get("of") or [] for s in self.slabs_of(of)]

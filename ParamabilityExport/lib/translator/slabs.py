@@ -46,15 +46,17 @@ class Motion:
     """A rigid map p -> rows * p + shift that carries an original to one copy.
 
     `rows` are numbers (a turn or a mirror); `shift` holds three Quantities, so a spacing may follow sizes. `needs`
-    are the Fusion names of sizes that must stay fixed when a pick lands on the copy (the count that makes it, an
-    angle that turns it); `by` names the pattern or mirror for the reason.
+    are the Fusion names of sizes that must stay fixed when a pick lands on the copy (a count or an angle that turns
+    it); `by` names the pattern or mirror for the reason. `requires` lists `(count, least, by)`: a pick on the copy
+    needs the count (a Quantity) to stay at `least` or more, since the copy only exists then.
     """
 
-    def __init__(self, rows=IDENTITY_ROWS, shift=None, needs=(), by=""):
+    def __init__(self, rows=IDENTITY_ROWS, shift=None, needs=(), by="", requires=()):
         self.rows = tuple(tuple(_snap(c) for c in row) for row in rows)
         self.shift = [_no_noise(as_quantity(v)) for v in (shift or (0.0, 0.0, 0.0))]
         self.needs = tuple(needs)
         self.by = by
+        self.requires = tuple(requires)
 
     @classmethod
     def mirror(cls, origin, normal, by=""):
@@ -102,7 +104,7 @@ class Motion:
         """The motion that applies `self` first, then `other`."""
         rows = [[sum(other.rows[i][k] * self.rows[k][j] for k in range(3)) for j in range(3)] for i in range(3)]
         return Motion(rows, other.quantities(self.shift), tuple(dict.fromkeys(self.needs + other.needs)),
-                      other.by or self.by)
+                      other.by or self.by, self.requires + other.requires)
 
 
 class Slab:
@@ -209,8 +211,7 @@ class Slab:
 class Place:
     """Where a point sits on a slab: `which` is start, end or side; it moves `factor` times the slab length.
 
-    `fixes` lists the sizes that must stay fixed for a pick on this place: a taper that leans the outline there.
-    `lateral` holds the point's place in the sketch plane as three model coordinates when the outline moves it with
+    A taper leans the outline: a point on it follows the taper and the length. `lateral` holds the point's place in the sketch plane as three model coordinates when the outline moves it with
     sizes (sketch_motion.py), else None; `blocked` holds a `Stuck` when the outline moves it in a way that cannot be
     followed.
     """
@@ -219,11 +220,8 @@ class Place:
         self.slab, self.which, self.factor = slab, which, factor
         self.curve, self.corner = curve, corner
         self.slabs = [slab]
-        self.fixes = []
         self.lateral = None
         self.blocked = []
-        if slab.taper is not None and slab.taper.sized and factor and (which == "side" or curve is not None):
-            self.fixes.append(slab.taper.reads)
         if uv is not None and slab.outline is not None:
             self._follow_outline(uv)
 
@@ -250,13 +248,17 @@ class Place:
     @property
     def moves(self):
         slab = self.slab
+        leans = slab.taper is not None and slab.taper.sized and self.factor != 0 and (
+            self.which == "side" or self.curve is not None)
         return (bool(slab.length.sized and self.factor != 0) or slab.motion.moves
-                or any(q.sized for q in slab.origin) or self.lateral is not None)
+                or any(q.sized for q in slab.origin) or self.lateral is not None or leans)
 
     def _inward(self, p):
-        """The inward unit normal of the outline at `p` on the original, when a taper shifts it with the length."""
+        """The inward unit normal of the outline at `p` on the original, when a taper shifts it with the length or a
+        taper that follows sizes."""
         slab = self.slab
-        if slab.taper is None or not slab.length.sized or (self.which != "side" and self.curve is None):
+        if slab.taper is None or not (slab.length.sized or slab.taper.sized) or (
+                self.which != "side" and self.curve is None):
             return None
         h, uv = slab.local(p)
         curve, _ = slab.footprint.nearest_curve(uv)
@@ -274,6 +276,12 @@ class Place:
         out = []
         slab = self.slab
         stretch = slab.length.sized and self.factor != 0
+        # A taper that follows sizes leans the wall by tan(taper) times the height along the slab.
+        lean_q = None
+        if inward is not None and slab.taper.sized and self.factor:
+            height = slab.length.scaled(self.factor if slab.extent == "oneSide" else abs(self.factor))
+            lean_q = Quantity(math.tan(math.radians(slab.taper.n)), "tan(%s)" % slab.taper.text,
+                              slab.taper.reads).times(height)
         for i, value in enumerate(p):
             a, origin = slab.axis[i], slab.origin[i]
             if abs(a) < 1e-9:
@@ -281,17 +289,20 @@ class Place:
             elif abs(abs(a) - 1) < 1e-9:
                 a = 1.0 if a > 0 else -1.0
             lean = 0.0
-            if inward is not None and stretch:
+            if inward is not None and stretch and lean_q is None:
                 lean = inward[i] * math.tan(math.radians(slab.taper.n)) * (
                     self.factor if slab.extent == "oneSide" else abs(self.factor))
             along = (self.factor * a if stretch else 0.0) + lean
             along = 0.0 if abs(along) < 1e-12 else along
             shifted = a and origin.sized
             lateral = self.lateral[i] if self.lateral is not None and self.lateral[i].sized else None
-            if not along and not shifted and lateral is None:
+            leaning = lean_q is not None and abs(inward[i]) > 1e-12
+            if not along and not shifted and lateral is None and not leaning:
                 out.append(Quantity(value))
                 continue
             moved = slab.length.scaled(along) if along else Quantity(0.0)
+            if leaning:
+                moved = moved.plus(lean_q.scaled(inward[i]))
             if shifted:
                 moved = origin.plus(moved)
             if lateral is not None:

@@ -1,5 +1,6 @@
 """Apply size rows to a design and put the parameters back. Works on the design object it is given."""
 from ..export_plan.apply import apply_row_values
+from ..export_plan.marker import put_back, read_marker
 from ..export_plan.restore import restore_parameters
 
 
@@ -13,10 +14,18 @@ def _error_state():
 
 
 class DesignParameterStore:
-    """User parameters and timeline health of one design, shaped for export_plan."""
+    """User parameters and timeline health of one design, shaped for export_plan.
+
+    The design is worked on as it is at the timeline marker: the marker found when the store is made stays there
+    after every recompute, and only the items before it count for health."""
 
     def __init__(self, design):
         self.design = design
+        self.marker = read_marker(getattr(design, "timeline", None))
+
+    def _keep_marker(self):
+        if self.marker is not None:
+            put_back(self.design.timeline, self.marker["position"])
 
     def saved_expressions(self):
         params = self.design.userParameters
@@ -31,15 +40,20 @@ class DesignParameterStore:
         return self.design.userParameters.itemByName(name).value
 
     def recompute(self):
-        return self.design.computeAll()
+        try:
+            return self.design.computeAll()
+        finally:
+            self._keep_marker()
 
     def error_entries(self):
-        """(timeline position, name) of each item whose health is error. Empty for a design without a timeline."""
+        """(timeline position, name) of each item before the marker whose health is error. Empty for a design
+        without a timeline."""
         try:
             timeline = self.design.timeline
             entries = []
             error = _error_state()
-            for i in range(timeline.count):
+            end = timeline.count if self.marker is None else min(self.marker["position"], timeline.count)
+            for i in range(end):
                 item = timeline.item(i)
                 if not item.isSuppressed and item.healthState == error:
                     entries.append((i, item.name))

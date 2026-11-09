@@ -116,6 +116,12 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(again.json(), motion.json())
         self.assertIsInstance(again.get("4/p0/l0/width"), Affine)
 
+    def test_the_sketch_curves_of_each_profile_are_measured_too(self):
+        motion = self.motion()
+        self.assertEqual(self.terms(motion, "4/p0/c0.1/offset"), {W: -1.0})  # the right edge of the rectangle
+        self.assertIsNone(motion.get("4/p0/c0.1/turn"))
+        self.assertEqual(Motion.from_json(motion.json()).curves, {"4/p0", "6/p0"})
+
     def test_stuck_json_matches_the_motion_format(self):
         data = {"values": {"1/p0/l0/points.2.1": {"stuck": ["angle"], "cause": "curve", "sketch": "Sketch5"}}}
         self.assertEqual(Motion.from_json(data).get("1/p0/l0/points.2.1"), Stuck(["angle"], "curve", "Sketch5"))
@@ -147,18 +153,21 @@ class ProblemStateTests(unittest.TestCase):
 
     def test_an_outline_that_changes_shape_fixes_the_size_that_did_it(self):
         motion = self.motion(s5=state({"count": 1}, read_at(count=1, with_hole=False)))
-        self.assertEqual(motion.get("4/p0/l0/width"), Stuck(["count", "cube"], "shape", "Sketch1"))
+        width = motion.get("4/p0/l0/width")
+        self.assertEqual((width.movers, width.cause, width.rest.terms), (("count",), "shape", {W: 1.0}))
         self.assertEqual(motion.get("4/p0/l1/radius"), Stuck(["count"], "shape", "Sketch1"))
         self.assertIsInstance(motion.get("6/p0/plane"), Affine)
 
     def test_a_plane_that_turns_fixes_the_size_that_did_it(self):
         motion = self.motion(s8=state({"height": 10}, read_at(height=10, turned=True)))
-        self.assertEqual(motion.get("6/p0/plane"), Stuck(["height"], "turns", "Sketch2"))
+        plane = motion.get("6/p0/plane")
+        self.assertEqual((plane.movers, plane.cause), (("height",), "turns"))
         self.assertIsInstance(motion.get("4/p0/l0/width"), Affine)
 
     def test_a_state_without_the_sketch_is_unread(self):
         motion = self.motion(s2=state({"cube": 20}, read({}, params={})))
-        self.assertEqual(motion.get("4/p0/l0/width"), Stuck(["cube", "count"], "unread", "Sketch1"))
+        width = motion.get("4/p0/l0/width")
+        self.assertEqual((width.movers, width.cause, width.rest.terms), (("cube",), "unread", {W: 1.0}))
 
     def test_a_point_moved_along_a_curve_gives_up(self):
         import math
@@ -174,6 +183,7 @@ class ProblemStateTests(unittest.TestCase):
                                state({"ang": 15}, mk(15))])
         self.assertEqual(got.get("1/p0/l0/points.2.0"), Stuck(["ang"], "curve", "S"))
         self.assertEqual(got.get("1/p0/l0/points.1.0"), None)
+        self.assertIsNotNone(got.get("1/p0/c0.1/turn"))  # the line that turns
 
 
 class HoleAndAxisTests(unittest.TestCase):
@@ -204,7 +214,8 @@ class HoleAndAxisTests(unittest.TestCase):
 
     def test_an_axis_that_turns_is_stuck(self):
         motion = build(self.cap, self.table, self.states() + [state({"cube": 20}, self.snapshot(axis_dir=(1, 0, 0)))])
-        self.assertEqual(motion.get("9/axis/point/0"), Stuck(["cube", "off"], "turns", ""))
+        point = motion.get("9/axis/point/0")
+        self.assertEqual((point.movers, point.cause, point.rest.terms), (("cube",), "turns", {"off": 1.0}))
 
     def test_a_hole_sketch_that_turns_is_stuck(self):
         motion = build(self.cap, self.table, self.states() + [state({"cube": 20}, self.snapshot(hole_normal=(1, 0, 0)))])

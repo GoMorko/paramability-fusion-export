@@ -113,7 +113,8 @@ For each size (or each check) the add-in sets the parameters, lets Fusion rebuil
 body, and moves on. All numbers in the file are in millimetres and degrees.
 
 When the design holds more than the picked body, the add-in copies the picked body into a temporary component,
-exports that, and deletes it. The export stops if the timeline marker is not at the end. This route is a choice,
+exports that, and deletes it. Fusion puts the copy at the timeline marker, and the add-in deletes only what the copy
+added, so the steps after the marker stay as they are. This route is a choice,
 not a proven fact: section 3 of `docs/hand-tests.md` decides it. To ask the designer to hide or move other bodies instead, set `MULTI_BODY_ROUTE`
 in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`.
 
@@ -141,7 +142,9 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   body that has more than one step, and every step type not listed above (sweep, loft, coil, move, draft, emboss).
 - Some steps are copied with a note instead: setback corners, a cosmetic thread (cut as a plain hole), a round or
   chamfer with more than 32 edges (picked in groups), and a direction or size that Fusion stored two ways.
-- To read the steps, the add-in moves the timeline marker through the design and puts it back at the end.
+- The export works on the design as it is at the timeline marker. If you drag the marker back, the steps after it
+  are left out of the part, and the dialog says so ("Exporting the design as it is at the timeline marker (step 48
+  of 120)"). To read the steps, the add-in moves the marker through the design and puts it back where it was.
 - In Export size choices, only plain number parameters can be columns. A parameter worked out by a formula cannot, and neither can one in a unit this export cannot convert (units other than mm, cm, m, in, ft, deg, rad or none).
 - Paramability opens up to 256 MB per size and 1 GB per file. The export stops with a message above that.
 - The design needs history (a parametric design).

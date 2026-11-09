@@ -12,8 +12,9 @@ slab places may sit on geometry that moves, so the sizes of the steps written be
 A pattern or mirror copy of an extrude is a slab too, with the `Motion` that carries the original to the copy. A
 point on a copy is placed on the original and moved back: its coordinates follow the length and the spacing.
 
-A point on the inner wall of a shell is placed through the outer wall it was moved from (shells.py). An edge where
-the walls of two steps cross is placed on both walls (crossings.py).
+A point on the inner wall of a shell is placed through the outer wall it was moved from (shells.py), and a point on
+a face that an offsetFaces step moved through the face before the move (offset_faces.py). An edge where the walls of
+two steps cross is placed on both walls (crossings.py).
 """
 from . import crossings, notes, picks, shells, sketch_motion, vec
 from .slabs import (AXIAL_TOL, CONSTANT_TOL, FACTOR_DIGITS, IDENTITY_ROWS, LATERAL_TOL, Motion, Place, Slab,
@@ -24,10 +25,15 @@ __all__ = ["AXIAL_TOL", "CONSTANT_TOL", "FACTOR_DIGITS", "IDENTITY_ROWS", "LATER
            "as_quantity", "cleaned_all"]
 
 
-def _latest_first(ctx):
-    """The slabs and shells written so far, the latest first."""
-    shells_left = sorted(ctx.shells, key=lambda s: -s.at)
-    for n in range(len(ctx.slabs) - 1, -1, -1):
+def _latest_first(ctx, below=None):
+    """The slabs, shells and moved faces written so far (before the placer `below` when given), the latest first."""
+    shells_left = sorted(list(ctx.shells) + list(getattr(ctx, "moved_faces", ())),
+                         key=lambda s: (-s.at, -getattr(s, "seq", 0)))
+    slab_count = len(ctx.slabs)
+    if below is not None:
+        shells_left = [s for s in shells_left if (s.at, getattr(s, "seq", 0)) < (below.at, below.seq)]
+        slab_count = min(slab_count, below.at)
+    for n in range(slab_count - 1, -1, -1):
         while shells_left and shells_left[0].at > n:
             yield shells_left.pop(0)
         yield ctx.slabs[n]
@@ -41,29 +47,29 @@ def _on_one_face(found):
     return found.which in ("start", "end") and found.curve is None
 
 
-def _walls(ctx, p):
+def _walls(ctx, p, below=None):
     """The flat walls through `p`, the latest first: at most one per slab or shell."""
     out = []
-    for placer in _latest_first(ctx):
+    for placer in _latest_first(ctx, below):
         wall = crossings.wall_of(placer.place(p, False), p)
         if wall is not None:
             out.append(wall)
     return out
 
 
-def locate(ctx, p, edge=False):
-    """The Place of a measured point on the latest slab or shell that has it, or None.
+def locate(ctx, p, edge=False, below=None):
+    """The Place of a measured point on the latest slab or shell that has it (written before `below`), or None.
 
     An edge that lies inside a face of the latest step that has the point, or on no step's edge at all, is placed
     where the walls of two steps cross when it can be.
     """
     found = None
-    for placer in _latest_first(ctx):
+    for placer in _latest_first(ctx, below):
         found = placer.place(p, edge)
         if found is not None:
             break
     if edge and (found is None or _on_one_face(found)):
-        crossed = crossings.cross(_walls(ctx, p), p)
+        crossed = crossings.cross(_walls(ctx, p, below), p)
         if crossed is not None:
             return crossed
     return found
@@ -88,15 +94,16 @@ def _name(item):
 
 
 def _keep_copies(ctx, item, found):
-    """A pick on a copy of a pattern needs that copy: the sizes that count or turn the copies stay. A pick on a
-    tapered outline needs the taper. A point the moving outline of its sketch cannot carry needs that outline to stay."""
+    """A pick on a copy of a pattern needs that copy: a turned copy keeps the sizes that count or turn the copies,
+    and a copy in a grid needs its count to stay high enough. A point the moving outline of its sketch cannot carry
+    needs that outline to stay."""
     for slab in found.slabs:
         motion = slab.motion
         if motion.needs:
             ctx.fix(motion.needs, "%s picks a copy made by %s, so its copies must stay as they are"
                     % (_name(item), motion.by or "a pattern"))
-    for names in found.fixes:
-        ctx.fix(names, "%s picks an edge of a tapered wall, and a change of taper would move it" % _name(item))
+        for count, least, by in motion.requires:
+            ctx.require(count, least, "%s picks copy %d of %s" % (_name(item), least, by or "a pattern"))
     for stuck in found.blocked:
         why = (notes.bends_reason(_name(item), stuck.sketch) if stuck.cause == sketch_motion.BENDS
                else notes.stuck_reason(stuck.cause, stuck.sketch))

@@ -2,9 +2,11 @@
 
 Copies of the files published by the Paramability app. Re-copy them when the app bumps a format.
 
-- `paramability.recipe.v<N>.schema.json`: the recipe schema (copied from `schemas/` in the app repository). Keep
-  only the version the translator writes; `tests/schema_check.py` reads the highest one found here. Copy the new file
-  and remove the old one when the translator moves to a new recipe version.
+- `paramability.recipe.v<N>.schema.json`: the recipe schemas (copied from `schemas/` in the app repository). Keep the
+  oldest version the translator writes and every newer one it can write: a recipe states the lowest version that
+  holds its steps (`KIND_VERSIONS` in `lib/translator/translate.py`), and `tests/schema_check.py` checks each recipe
+  against the copy of its own version. Its default for a recipe without a version is the highest one found here. Copy
+  a new file when the translator starts to write a new version.
 - `paramability.recipePackage.v1.schema.json`: the package manifest schema (copied from `schemas/` in the app
   repository).
 - `v1.json`: the app's `valueRows` manifest fixture

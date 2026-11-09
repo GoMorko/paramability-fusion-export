@@ -27,6 +27,7 @@ TICK_USED_ID = "pm_tick_used"
 CLEAR_ID = "pm_untick_all"
 WARN_ID = "pm_stop_warning"
 SHOW_ID = "pm_show_in_timeline"
+MARKER_ID = "pm_marker"
 WARN_LINES = 4
 
 TICK_PREFIX = "pm_tick_"
@@ -71,14 +72,15 @@ def _set_text(inputs, key, index, text):
         box.formattedText = html.escape(text)
 
 
-def build(command, offers, body, up_axis, used_by=False, design_unit="mm", stop=None):
+def build(command, offers, body, up_axis, used_by=False, design_unit="mm", stop=None, marker_note=None):
     """Add the inputs. offers come from export_plan.size_offers.offers; body may be None.
 
     Cells are named by row number, since a Fusion parameter name is not always a safe input id. `used_by` swaps the
     Now column for the parts that read each parameter (a component export; the texts come from the offers). The
     Used by column is off until the whole component export needs it: no caller passes `used_by` yet.
     `design_unit` is the unit the Min and Max cells use for lengths. `stop` is the warning for the body already
-    picked (export_plan.stop_warning.summarize), if any.
+    picked (export_plan.stop_warning.summarize), if any. `marker_note` is the line shown when the timeline marker is
+    not at the end (export_plan.marker.marker_note).
     """
     inputs = command.commandInputs
     selection = inputs.addSelectionInput(BODY_ID, "Body", "Pick the body to export.")
@@ -86,6 +88,8 @@ def build(command, offers, body, up_axis, used_by=False, design_unit="mm", stop=
     selection.setSelectionLimits(1, 1)
     if body is not None:
         selection.addSelection(body)
+    if marker_note:
+        inputs.addTextBoxCommandInput(MARKER_ID, "", html.escape(marker_note), 2, True)
     warning = inputs.addTextBoxCommandInput(WARN_ID, "", "", WARN_LINES, True)
     warning.isVisible = False
     button = inputs.addBoolValueInput(SHOW_ID, "Show in timeline", False, "", False)

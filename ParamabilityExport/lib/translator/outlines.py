@@ -3,7 +3,9 @@
 Fusion extrudes the region of all the profiles it is given at once: profiles that share a curve make one face, and a
 taper leans the walls of that whole region. The recipe extrudes one outline per step, so profiles that share a curve
 are merged first: the shared curves are left out and the rest is chained into one outer loop and its holes.
-Profiles that only touch at a point, or stand apart, stay separate outlines.
+Profiles that only touch at a point, or stand apart, stay separate outlines. Pieces of one sketch line that meet in
+the merged loop are joined back into that line, and a loop of arcs of one circle becomes that circle, so the outline
+keeps no corner where the shared curves crossed it.
 """
 from .footprint import Footprint, _polyline
 
@@ -57,6 +59,46 @@ def _loops(curves):
     return loops
 
 
+def _same_circle(a, b):
+    return (a.get("kind") == "arc" and b.get("kind") == "arc" and _close(a["center"], b["center"])
+            and abs(a["radius"] - b["radius"]) <= CHAIN_TOL)
+
+
+def _other_end(curve, point):
+    return curve["end"] if _close(curve["start"], point) else curve["start"]
+
+
+def _shared_end(a, b):
+    for p in (a["start"], a["end"]):
+        if _close(p, b["start"]) or _close(p, b["end"]):
+            return p
+    return None
+
+
+def _joined(loop):
+    """A chained loop with neighbouring pieces of one sketch line joined; a loop of arcs of one circle as the circle."""
+    if len(loop) > 1 and all(_same_circle(loop[0], c) for c in loop):
+        circle = {"kind": "circle", "center": loop[0]["center"], "radius": loop[0]["radius"]}
+        if loop[0].get("entity"):
+            circle["entity"] = loop[0]["entity"]
+        return [circle]
+    out = list(loop)
+    at = 0
+    while len(out) > 3 and at < len(out):
+        a, b = out[at], out[(at + 1) % len(out)]
+        shared = _shared_end(a, b) if a.get("kind") == b.get("kind") == "line" else None
+        if shared is None or not a.get("entity") or a.get("entity") != b.get("entity"):
+            at += 1
+            continue
+        line = dict(a, start=_other_end(a, shared), end=_other_end(b, shared))
+        if at + 1 < len(out):
+            out[at:at + 2] = [line]
+        else:
+            out = [line] + out[1:-1]
+            at = 0
+    return out
+
+
 def _area(curves):
     """The area a closed loop encloses (unsigned), drawn through the curve points."""
     points = []
@@ -86,6 +128,7 @@ def _merged(group):
     loops = _loops(kept)
     if not loops:
         return None
+    loops = [_joined(loop) for loop in loops]
     loops.sort(key=_area, reverse=True)
     outer = Footprint({"loops": [{"outer": True, "curves": loops[0]}]})
     for hole in loops[1:]:

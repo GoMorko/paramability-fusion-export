@@ -7,7 +7,8 @@ cm, rad). `ticked` are the Fusion names the person keeps as sizes. Optional keyw
 parameters, for inlining, counts and defaults), `design_unit` (what a bare number in a length expression means),
 `fixed` (ticked names that cannot follow, with the reason; they become plain numbers), `quantity_params` (the model
 parameters the steps use as a pattern quantity; the user parameters behind them become whole-number counts) and
-`ranges` (typed min and max per size, instead of the default range).
+`ranges` (typed min and max per size, instead of the default range). `minimums` raises the smallest value of some
+sizes above their range (the translator does this when a smaller value would remove a pattern copy a step picks).
 
 The table holds, per parameter, one entry whose `state` is:
 
@@ -93,8 +94,10 @@ def _round(x):
 
 class SizeTable:
     def __init__(self, params, ticked, model_params=(), design_unit="mm", fixed=None, quantity_params=(),
-                 ranges=None, max_sizes=MAX_SIZES):
+                 ranges=None, max_sizes=MAX_SIZES, minimums=None, narrowed=None):
         self._params = [p for p in params]
+        self._minimums = dict(minimums or {})
+        self._narrowed = dict(narrowed or {})
         self._max_sizes = max_sizes
         self._ranges = dict(ranges or {})
         self._model = list(model_params)
@@ -200,7 +203,8 @@ class SizeTable:
         if e.state == DERIVED:
             return {"expr": e.formula, "label": e.label}
         p = self._cand[e.name]
-        lo, hi = self._ranges.get(e.name) or defaults.size_range(p, e.kind, e.value)
+        lo, hi = self._narrowed.get(e.name) or self._ranges.get(e.name) or defaults.size_range(p, e.kind, e.value)
+        lo = max(lo, self._minimums.get(e.name, lo))
         size = {"kind": e.kind, "value": e.value, "min": lo, "max": hi, "label": e.label}
         if e.kind == "count":
             size["step"] = 1
@@ -392,7 +396,27 @@ class SizeTable:
         merged = dict(self._fixed_in)
         merged.update(reasons)
         return SizeTable(self._params, [n for n in self._ticked_in if n not in merged], self._model,
-                         self._design_unit, merged, self._quantity_params, self._ranges, self._max_sizes)
+                         self._design_unit, merged, self._quantity_params, self._ranges, self._max_sizes,
+                         self._minimums, self._narrowed)
+
+    def with_minimums(self, minimums):
+        """A new table where these Fusion names (number each, in the size's own unit) start no lower than that."""
+        merged = dict(self._minimums)
+        merged.update(minimums)
+        return SizeTable(self._params, self._ticked_in, self._model, self._design_unit, self._fixed_in,
+                         self._quantity_params, self._ranges, self._max_sizes, merged, self._narrowed)
+
+    def with_narrowed(self, ranges):
+        """A new table where these Fusion names get the (min, max) given, in manifest numbers (mm, deg or plain).
+        The export narrows a range at an end where Fusion cannot build the part. It is not a typed range."""
+        merged = dict(self._narrowed)
+        merged.update(ranges)
+        return SizeTable(self._params, self._ticked_in, self._model, self._design_unit, self._fixed_in,
+                         self._quantity_params, self._ranges, self._max_sizes, self._minimums, merged)
+
+    def typed_range(self, name):
+        """True when the person typed the range of this size."""
+        return name in self._ranges
 
     def report(self):
         """Plain data for report.json: renames, derived formulas with their value check, fixed and unoffered names."""

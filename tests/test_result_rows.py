@@ -36,6 +36,10 @@ class ResultViewTest(unittest.TestCase):
                          [("wall", "not checked"), ("gap", "kept fixed"), ("pipe", "not used")])
         self.assertEqual(shown["fixed"], ["gap: gap stays fixed: no build."])
 
+    def test_a_raised_smallest_value_shows_in_the_range(self):
+        shown = view(raised=[{"name": "wall", "min": 1.5, "reason": "wall starts at 1.5: ..."}])
+        self.assertEqual(shown["rows"][0]["range"], "1.5 to 4 mm")
+
     def test_a_long_fixed_list_is_cut_and_points_to_the_report(self):
         fixed = [{"name": "p%d" % i, "reason": "r"} for i in range(8)]
         self.assertEqual(view(fixed=fixed)["fixed"][-1], "and 3 more (see report.json).")

@@ -117,7 +117,7 @@ def _uses(capture):
 
 def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
                        size_table=None, checks=None, fixed=None, unchecked=None, listing=None, motion=None,
-                       probe=None, build_failures=None, narrowed=None):
+                       probe=None, build_failures=None, narrowed=None, marker=None):
     """Return (manifest, files, report) for one body.
 
     A body inside a component is translated like a root body: its capture carries the place of the part in the
@@ -141,6 +141,8 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
     narrowed: [{'size', 'side', 'from', 'to', 'note', ...}] sizes whose range the export shortened because Fusion
       could not build the part at the end (`size_narrowing.Narrowing.narrowed`). The table already holds the new range.
       Those the recipe keeps free get a note and a record in `report.json`.
+    marker: { position, count } of the timeline marker the export worked at (`export_plan.marker.read_marker`), for
+      `report.json`. Steps after the position are left out of the part.
     files maps entry paths to a file path or bytes, as write_package expects. Raises ValueError when the manifest
     breaks the package rules.
     """
@@ -185,6 +187,8 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         report["refusal"] = refusal
     if error is not None:
         report["error"] = ("%s: %s" % (type(error).__name__, error))[:500]
+    if marker is not None:
+        report["marker"] = dict(marker)
     if capture is not None:
         report["capture"] = capture
     if probe is not None:

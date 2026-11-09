@@ -102,10 +102,11 @@ class TaperTest(unittest.TestCase):
         point = _worked_out(result, table, _picked(result)[0], BIG)
         self.assertEqual(point, [85, round(15 * math.tan(math.radians(5)), 6), 15])
 
-    def test_a_taper_that_follows_a_size_is_fixed_for_the_pick(self):
-        result, _ = self._tapered("-taper_deg")
-        self.assertEqual(fixed_names(result), ["taper_deg"])
-        self.assertIn("tapered wall", result.fixed[0]["reason"])
+    def test_a_pick_on_a_wall_whose_taper_follows_a_size_follows_it(self):
+        result, table = self._tapered("-taper_deg")
+        self.assertEqual(result.fixed, [])
+        point = _worked_out(result, table, _picked(result)[0], dict(BIG, taper_deg=8))
+        self.assertEqual(point, [85, round(15 * math.tan(math.radians(8)), 6), 15])
 
 
 class OutlineOrderTest(unittest.TestCase):

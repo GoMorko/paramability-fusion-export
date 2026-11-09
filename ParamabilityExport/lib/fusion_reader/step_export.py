@@ -2,7 +2,8 @@
 import adsk.core
 
 from ..export_plan.errors import StepExportError
-from ..export_plan.temp_copy import remove_temporary_copy, require_marker_at_end, timeline_state
+from ..export_plan.marker import put_back, read_marker
+from ..export_plan.temp_copy import remove_temporary_copy, timeline_state
 from ..package.units import cm_to_mm
 
 COPY_TOLERANCE_MM = 1e-3
@@ -71,8 +72,22 @@ def _export_component(design, component, path):
         raise StepExportError("Fusion could not write the STEP file.")
 
 
+def _require_copy_made(component):
+    """The temporary component must hold the copied body before it is written."""
+    try:
+        made = component.bRepBodies.count > 0
+    except Exception:
+        made = False
+    if not made:
+        raise StepExportError("The copy of the part could not be made.")
+
+
 def export_body_step(design, body, path, route=None):
-    """Export body to path. The root export is used when the body is the only solid body in the design."""
+    """Export body to path, as the design is at the timeline marker.
+
+    The root export is used when the body is the only solid body in the design. Otherwise the body is copied into a
+    temporary component, written, and the copy is deleted. Fusion places the copy's timeline items at the marker;
+    afterwards the marker goes back to where it was."""
     route = route or MULTI_BODY_ROUTE
     root = design.rootComponent
     if count_solid_bodies(root) == 1:
@@ -82,12 +97,17 @@ def export_body_step(design, body, path, route=None):
         raise StepExportError(
             "The design holds more than one solid body. Hide or move the other bodies, then try again.")
     timeline = design.timeline
-    require_marker_at_end(timeline)
+    start = read_marker(timeline)
     before = timeline_state(timeline)
-    occurrence = root.occurrences.addNewComponent(adsk.core.Matrix3D.create())
+    occurrence = None
     try:
+        occurrence = root.occurrences.addNewComponent(adsk.core.Matrix3D.create())
         # For a body inside a component, body is the occurrence proxy, so the copy keeps its place in the assembly.
         _require_copy_in_place(body.copyToComponent(occurrence), body)
+        _require_copy_made(occurrence.component)
         _export_component(design, occurrence.component, path)
     finally:
         remove_temporary_copy(timeline, occurrence, before)
+        back = start is None or put_back(timeline, start["position"])
+    if not back:
+        raise StepExportError("The timeline marker could not be moved back after the copy of the part.")

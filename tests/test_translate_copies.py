@@ -5,7 +5,10 @@ from tests import context  # noqa: F401
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
 from tests.test_translate_sized import TICKED, param, table_of
 
+from lib.params import size_table
 from lib.translator import translate
+from lib.translator.copy_counts import raised_minimums
+from lib.translator.values import Quantity
 
 FLAT = {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
 POST_TOP = 20.0
@@ -67,6 +70,17 @@ def fixed_names(result):
     return sorted(f["name"] for f in result.fixed)
 
 
+def counted(ranges=None):
+    """(capture, size table): three posts counted by holes_count, and a fillet on the second one."""
+    fillet = _item(4, "Fillet1", "FilletFeature", {
+        "sets": [_edges_set("constant", [[32, 8, 15]], radius=1.0, continuity="tangent")]})
+    grid = _grid(3, [2], 24.0, count=3, params={"distance_one": param("d21", "hole_pitch_mm", 24.0),
+                                                "quantity_one": param("d22", "holes_count", 3.0)})
+    capture = post_capture(grid, fillet)
+    params = capture["parameters"]
+    return capture, size_table.build(params["user"], TICKED, params["model"], ranges=ranges)
+
+
 class PickOnCopyTest(unittest.TestCase):
     def test_an_edge_on_a_pattern_copy_follows_the_spacing_and_the_length(self):
         fillet = _item(4, "Fillet1", "FilletFeature", {
@@ -79,15 +93,22 @@ class PickOnCopyTest(unittest.TestCase):
                                                   {"expr": "0.5 * (wall_mm * 5) + 10"}]])
         assert_schema_ok(self, result.recipe)
 
-    def test_a_pick_on_a_copy_keeps_the_count_that_makes_it(self):
-        fillet = _item(4, "Fillet1", "FilletFeature", {
-            "sets": [_edges_set("constant", [[32, 8, 15]], radius=1.0, continuity="tangent")]})
-        grid = _grid(3, [2], 24.0, params={"distance_one": param("d21", "hole_pitch_mm", 24.0),
-                                           "quantity_one": param("d22", "holes_count - 1", 2.0)})
-        result = run(post_capture(grid, fillet))
-        self.assertEqual(fixed_names(result), ["holes_count"])
-        self.assertIn("R-Pattern1", result.fixed[0]["reason"])
+    def _counted(self, ranges=None):
+        capture, table = counted(ranges)
+        return translate(capture, size_table=table)
+
+    def test_a_pick_on_a_copy_raises_the_smallest_count_so_the_copy_stays(self):
+        result = self._counted()
+        self.assertEqual(result.fixed, [])
+        self.assertEqual([(r["name"], r["min"]) for r in result.raised], [("holes_count", 2)])
+        self.assertIn("R-Pattern1", result.raised[0]["reason"])
+        self.assertEqual(result.recipe["sizes"]["holes_count"]["min"], 2)
         self.assertEqual(steps_of(result.recipe, "round")[0]["edges"]["near"][0][0], {"expr": "8 + hole_pitch_mm"})
+
+    def test_a_typed_range_that_would_lose_the_picked_copy_keeps_the_count(self):
+        result = self._counted({"holes_count": (1.0, 6.0)})
+        self.assertEqual(fixed_names(result), ["holes_count"])
+        self.assertIn("would leave that copy out", result.fixed[0]["reason"])
 
     def test_an_edge_on_a_mirror_copy_is_mirrored_with_its_formula(self):
         mirror = _item(3, "Mirror1", "MirrorFeature", {
@@ -133,3 +154,24 @@ class CopiedFinishTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RaisedMinimumTest(unittest.TestCase):
+    """A count formula with rounding, as in the owner's filter box: `ceil(width_count) * 2` copies."""
+
+    def table(self, ranges=None):
+        width = {"name": "width_count", "expression": "1.8", "value": 1.8, "unit": "", "kind": "count",
+                 "value_type": "numeric", "is_favorite": True, "dependency_parameters": []}
+        return size_table.build([width], ["width_count"], ranges=ranges)
+
+    def count(self):
+        return Quantity(4.0, "ceil(width_count) * 2", ("width_count",))
+
+    def test_the_minimum_rises_just_past_where_a_copy_would_go(self):
+        self.assertEqual(raised_minimums(self.table(), self.count(), 4), {"width_count": 1.01})
+        self.assertEqual(raised_minimums(self.table(), self.count(), 2), {})
+
+    def test_a_typed_range_or_a_count_that_falls_cannot_be_helped(self):
+        self.assertIsNone(raised_minimums(self.table({"width_count": (0.9, 3.6)}), self.count(), 4))
+        falling = Quantity(4.0, "8 - ceil(width_count) * 2", ("width_count",))
+        self.assertIsNone(raised_minimums(self.table(), falling, 4))

@@ -1,18 +1,25 @@
 """Offset faces handler (OffsetFacesFeature, press pull).
 
-A flat face whose side walls stand square to it moves the same way as an extrude of its outline: outwards it adds a
-slab of the offset's thickness, inwards it cuts one. Each face becomes one extrude step through the extrude handler.
-Curved faces, faces with leaning or rounded side walls, and faces that touch each other are refused, since there
-the side walls would have to grow or shrink with the face.
+Every flat face the item moves becomes one `near` point inside the face, and the item one `offsetFaces` step with the
+distance as Fusion gives it (mm, positive moves the face out of the material). The app moves each face along its
+normal and lets the faces around it extend or shrink to meet it, so leaning side walls and faces that touch each other
+need no special case. Curved faces and moves that were not measured are refused.
 """
-from . import extrude, vec
+import math
+
+from . import follow, vec
+from .footprint import Footprint
 from .result import Refusal
-from .values import number
+from .values import Quantity, number, quantity, stays_positive
 
 TYPES = ("OffsetFacesFeature",)
 
 MOVE_TOL_MM = 1e-3
 NORMAL_TOL = 1e-6
+# The pick point search: a grid over the outline's bounding box.
+GRID = 24
+# The outline centroid is kept while its clearance is at least this share of the best clearance on the grid.
+CENTROID_SHARE = 0.5
 
 
 def _moved_as_read(face, distance, after):
@@ -29,37 +36,75 @@ def _moved_as_read(face, distance, after):
 def _face_refusal(face, distance, after):
     if face.get("kind") == "other" or "loops" not in face:
         return Refusal("Offsets of curved faces are not copied yet.")
-    if face.get("sides") != "square":
-        return Refusal("Offsets of faces whose side walls lean or curve are not copied yet.")
-    if face.get("meets_offset"):
-        return Refusal("Offsets of faces that touch each other are not copied yet.")
     if not _moved_as_read(face, distance, after):
         return Refusal("The offset of this step could not be measured, so it is not copied.")
     return None
 
 
-def _as_extrude(item, data, face):
-    """The item as an extrude of the face outline by the offset distance (the face normal points out)."""
-    distance = data["distance"]
-    params = data.get("params") or {}
-    extrude_data = {
-        "operation": "join" if distance > 0 else "cut",
-        "profiles": [{"sketch": "", "frame": face["frame"], "space": "sketch", "loops": face["loops"]}],
-        "start": {"kind": "profilePlane"},
-        "extent_type": "one",
-        "side_one": {"kind": "distance", "distance": distance, "taper_deg": 0.0},
-        "side_two": None,
-        "symmetric": None,
-        "thin": False,
-        "participants": [],
-        "target_box_before": None,
-        "end_offset": None,
-        "profile_area": None,
-        "end_area": None,
-    }
-    if "distance" in params:
-        extrude_data["params"] = {"side_one.distance": params["distance"]}
-    return dict(item, data=extrude_data)
+def _extent(curve):
+    """Points that bound a curve: its ends, plus the box of a circle, ellipse or arc."""
+    if curve["kind"] in ("circle", "ellipse"):
+        r = curve["radius"] if curve["kind"] == "circle" else max(curve["major_radius"], curve["minor_radius"])
+        cx, cy = curve["center"]
+        return [[cx - r, cy - r], [cx + r, cy + r]]
+    points = [curve["start"], curve["end"]]
+    if curve["kind"] == "arc":
+        (cx, cy), r = curve["center"], curve["radius"]
+        points += [[cx - r, cy - r], [cx + r, cy + r]]
+    return points
+
+
+def _centroid(footprint):
+    """The mean of the outline's corner points and circle centres."""
+    points = []
+    for curve in footprint.curves:
+        points.append(curve["center"] if curve["kind"] in ("circle", "ellipse") else curve["start"])
+    return [sum(p[0] for p in points) / len(points), sum(p[1] for p in points) / len(points)]
+
+
+def _clearance(footprint, uv):
+    """How far a point lies inside the face, from its closest outline curve; -1 outside the face."""
+    return min(footprint.gaps(uv)) if footprint.covers(uv) else -1.0
+
+
+def inside_point(face):
+    """A point (u, v) in the face's own plane that lies inside the face, away from its edges and holes; None when the
+    search finds none."""
+    footprint = Footprint(face)
+    if not footprint.curves:
+        return None
+    box = [p for curve in footprint.curves for p in _extent(curve)]
+    low = [min(p[k] for p in box) for k in (0, 1)]
+    high = [max(p[k] for p in box) for k in (0, 1)]
+    best, best_gap = None, 0.0
+    for i in range(GRID):
+        for j in range(GRID):
+            uv = [low[k] + (high[k] - low[k]) * (n + 0.5) / GRID for k, n in ((0, i), (1, j))]
+            gap = _clearance(footprint, uv)
+            if gap > best_gap:
+                best, best_gap = uv, gap
+    if best is None:
+        return None
+    centre = _centroid(footprint)
+    return centre if _clearance(footprint, centre) >= CENTROID_SHARE * best_gap else best
+
+
+def _near_point(face):
+    """The face's pick point in model space (`origin + u x + v y`), or None when no point lies inside the face."""
+    uv = inside_point(face)
+    if uv is None:
+        return None
+    frame = face["frame"]
+    return [round(frame["origin"][i] + uv[0] * frame["x"][i] + uv[1] * frame["y"][i], 9) + 0.0 for i in range(3)]
+
+
+def _distance(ctx, item, distance):
+    """The distance as a number or a formula over the sizes; a size that could bring it to zero stays fixed."""
+    q = quantity(ctx, item, "distance", distance)
+    if q.sized and not stays_positive(ctx.table, q if distance > 0 else q.scaled(-1)):
+        ctx.fix(q.reads, "the offset of %s could reach zero" % (item.get("name") or "a step"))
+        q = Quantity(q.n)
+    return q.json()
 
 
 def handle(item, ctx):
@@ -70,17 +115,15 @@ def handle(item, ctx):
     faces = data.get("faces") or []
     if not isinstance(distance, (int, float)) or isinstance(distance, bool) or not faces:
         return Refusal("The faces or the distance of this offset could not be read.")
-    if not abs(number(distance)) > 0:
+    if not math.isfinite(distance) or not abs(number(distance)) > 0:
         return Refusal("This offset has no distance.")
     after = data.get("faces_after") or []
     for face in faces:
         refusal = _face_refusal(face, distance, after)
         if refusal:
             return refusal
-    steps = []
-    for face in faces:
-        outcome = extrude.handle(_as_extrude(item, data, face), ctx)
-        if isinstance(outcome, Refusal):
-            return outcome
-        steps += outcome
-    return steps
+    points = [_near_point(face) for face in faces]
+    if any(p is None for p in points):
+        return Refusal("A face of this offset has no room for a pick point, so it is not copied.")
+    selector = follow.faces(ctx, item, [{"point": p} for p in points])
+    return [{"kind": "offsetFaces", "faces": selector, "distance": _distance(ctx, item, distance)}]

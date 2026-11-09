@@ -86,7 +86,12 @@ class FakeEntity:
         self.entityToken = token
 
     def deleteMe(self):
-        self._timeline.items = [i for i in self._timeline.items if i.entity is not self]
+        """Removes its item; the marker moves back by one when the item sat before it, like Fusion."""
+        timeline = self._timeline
+        index = next(n for n, i in enumerate(timeline.items) if i.entity is self)
+        del timeline.items[index]
+        if index < timeline.marker:
+            timeline.marker -= 1
         return True
 
 
@@ -109,6 +114,13 @@ class FakeTimeline:
     @property
     def markerPosition(self):
         return self.marker
+
+    @markerPosition.setter
+    def markerPosition(self, value):
+        self.marker = value
+
+    def moveToEnd(self):
+        self.marker = len(self.items)
 
     def item(self, i):
         return self.items[i]

@@ -1,8 +1,9 @@
 """Walks the timeline and returns the capture: one JSON-safe dict the translator reads (docs/capture-format.md).
 
-Per timeline position k the marker is set to k once. At that position the walk finishes item k - 1 (bodies, health,
-what the feature produced, whether the target changed) and starts item k (its inputs). The marker always ends at the
-end of the timeline.
+The walk covers the items before the timeline marker as the person left it: the design as it is at the marker. Items
+after the marker are left out. Per position k the marker is set to k once. At that position the walk finishes item
+k - 1 (bodies, health, what the feature produced, whether the target changed) and starts item k (its inputs). The
+marker always goes back to where it was.
 
 The target is the native body of its component, so every value is in component coordinates; `placement` says where
 the component sits in the assembly. Feature readers run only for items of the target's component.
@@ -12,7 +13,7 @@ through a module level READERS dict; a missing module means those types give `da
 """
 import importlib
 
-from ..export_plan.temp_copy import require_marker_at_end
+from ..export_plan.marker import put_back, read_marker
 from ..translator.capture import NOT_MODELING_TYPES
 from . import read_geometry as geo
 from . import read_solid
@@ -35,7 +36,7 @@ class CaptureReadError(Exception):
 
 
 class MarkerError(CaptureReadError):
-    """The timeline marker could not be put back at the end."""
+    """The timeline marker could not be put back where it was."""
 
 
 def _optional_readers():
@@ -205,8 +206,8 @@ def _finish_item(timeline, ctx, readers, index, items, states):
             item["data"] = {"read_error": str(exc) or type(exc).__name__}
 
 
-def _check_groups(timeline, count, items, group_indices):
-    """Refuse when a timeline group lists children that the walk did not reach."""
+def _check_groups(timeline, end, count, items, group_indices):
+    """Refuse when a timeline group lists children before the marker (`end`) that the walk did not reach."""
     try:
         groups = [timeline.timelineGroups.item(i) for i in range(timeline.timelineGroups.count)]
     except Exception:
@@ -216,21 +217,16 @@ def _check_groups(timeline, count, items, group_indices):
             first, last = group.startIndex, group.endIndex
         except Exception:
             continue
-        missing = [i for i in range(first, last + 1) if i not in items and i not in group_indices]
+        if first >= end:
+            continue
+        missing = [i for i in range(first, min(last, end - 1) + 1) if i not in items and i not in group_indices]
         if last >= count or missing:
             raise CaptureReadError("The timeline groups hide steps that could not be read.")
 
 
-def _restore_marker(timeline, count):
-    try:
-        timeline.moveToEnd()
-    except Exception:
-        try:
-            timeline.markerPosition = count
-        except Exception:
-            pass
-    if timeline.markerPosition != count:
-        raise MarkerError("The timeline marker could not be moved back to the end.")
+def _restore_marker(timeline, end):
+    if not put_back(timeline, end):
+        raise MarkerError("The timeline marker could not be moved back to where it was.")
 
 
 def _app_details():
@@ -294,12 +290,13 @@ def _target_record(ctx, final):
 def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_readers=None):
     """Capture of `design` for the picked `body` (the occurrence proxy of a body inside a component, or a root body).
 
-    Refuses (StepExportError) unless the marker is at the end. fusion, name and up_axis come from the running app
-    when not given. extra_readers adds feature readers (type name to (before, after)).
+    Only the items before the timeline marker are read; `marker` records where it was. fusion, name and up_axis
+    come from the running app when not given. extra_readers adds feature readers (type name to (before, after)).
     """
     timeline = design.timeline
-    require_marker_at_end(timeline)
+    marker = read_marker(timeline)
     count = timeline.count
+    end = count if marker is None else min(marker["position"], count)
     ctx = geo.ReadContext(design, body)
     readers = dict(read_solid.READERS)
     readers.update(_optional_readers())
@@ -308,17 +305,17 @@ def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_reade
     group_indices = set()
     previous = (False, None)
     try:
-        for k in range(count + 1):
+        for k in range(end + 1):
             timeline.markerPosition = k
             state = _target_state(ctx)
             if k > 0:
                 _finish_item(timeline, ctx, readers, k - 1, items, (previous, state))
             previous = state
-            if k < count:
+            if k < end:
                 _start_item(timeline, ctx, readers, k, items, group_indices)
     finally:
-        _restore_marker(timeline, count)
-    _check_groups(timeline, count, items, group_indices)
+        _restore_marker(timeline, end)
+    _check_groups(timeline, end, count, items, group_indices)
     final = ctx.find_target() or ctx.target
     parameters, design_units = _parameters(design, ctx)
     target = _target_record(ctx, final)
@@ -333,4 +330,5 @@ def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_reade
         "targets": [target],
         "target": target,
         "items": [items[i] for i in sorted(items)],
+        "marker": {"position": end, "count": count},
     }

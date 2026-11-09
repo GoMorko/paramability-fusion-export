@@ -3,7 +3,6 @@ import math
 import unittest
 
 from tests import context  # noqa: F401
-from lib.export_plan.errors import StepExportError
 from lib.fusion_reader import read_sketch
 from lib.fusion_reader.capture import CaptureReadError, read_capture
 from lib.fusion_reader.read_geometry import edge_record
@@ -197,12 +196,31 @@ class WalkTest(unittest.TestCase):
         item = read_capture(design, self.target, fusion="", name="", up_axis="z")["items"][0]
         self.assertNotIn("bodies_before", item)
 
-    def test_marker_refused_when_not_at_end(self):
-        self.design.timeline._pos = 1
-        self.design.timeline.history.clear()
-        with self.assertRaises(StepExportError):
-            read_capture(self.design, self.target)
-        self.assertEqual(self.design.timeline.history, [])
+    def test_with_the_marker_rolled_back_only_the_steps_before_it_are_read(self):
+        later = extrude(rect_profile(), name="Later", target=self.target, operation="JoinFeatureOperation")
+        design = FakeDesign([sketch_entry(), extrude(rect_profile(), target=self.target), later], self.target)
+        design.timeline._pos = 2
+        capture = read_capture(design, self.target, fusion="", name="", up_axis="z")
+        self.assertEqual([i["name"] for i in capture["items"]], ["Sketch1", "Extrude1"])
+        self.assertEqual(capture["marker"], {"position": 2, "count": 3})
+        self.assertEqual(design.timeline.history, [0, 1, 2])
+        self.assertEqual(design.timeline.markerPosition, 2)
+
+    def test_a_failed_walk_puts_a_rolled_back_marker_back_where_it_was(self):
+        entries = [sketch_entry(), extrude(rect_profile(), target=self.target), sketch_entry()]
+        design = FakeDesign(entries, self.target, fail_at=1)
+        design.timeline._pos = 2
+        with self.assertRaises(RuntimeError):
+            read_capture(design, self.target, fusion="", name="", up_axis="z")
+        self.assertEqual(design.timeline.markerPosition, 2)
+
+    def test_a_group_after_the_marker_does_not_stop_the_read(self):
+        entries = [sketch_entry(), extrude(rect_profile(), target=self.target), sketch_entry(), sketch_entry()]
+        design = FakeDesign(entries, self.target)
+        design.timeline._pos = 2
+        design.timeline.timelineGroups = Coll([Obj(startIndex=1, endIndex=3)])
+        items = read_capture(design, self.target, fusion="", name="", up_axis="z")["items"]
+        self.assertEqual(len(items), 2)
 
     def test_marker_restored_when_the_walk_fails(self):
         design = FakeDesign([sketch_entry(), extrude(rect_profile(), target=self.target)], self.target, fail_at=1)

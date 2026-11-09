@@ -95,6 +95,12 @@ def _movers(run, series, current):
     return list(dict.fromkeys(single or several))
 
 
+def _blocked(problems):
+    """The sizes behind the states that could not be read: those of single size states when there are any."""
+    single = [p for p in problems if len(p[1]) == 1]
+    return sorted(set().union(*[p[1] for p in (single or problems)]))
+
+
 def build(capture, table, states):
     """The `Motion` of a capture. See the module text for `states`."""
     run = _Run(capture, states)
@@ -113,6 +119,7 @@ def build(capture, table, states):
     out.dropped = dropped
     for target in run.targets:
         _fit_target(out, run, target, shared, models, current)
+    out.curves = {match.prefix(t) for t in run.targets if t["kind"] == "profile"}
     return out
 
 
@@ -130,11 +137,18 @@ def _fit_target(out, run, target, shared, models, current):
     plane = (target.get("reference") or {}).get("token") or ""
     candidates = shared + [m.ranked(sketch, plane) for m in models]
     stuck_causes = [c for c in _PRIORITY if any(p[0] == c for p in problems)]
-    blocked = sorted(set().union(*[p[1] for p in problems])) if problems else []
+    blocked = _blocked(problems)
     for key, x in series.items():
         movers = _movers(run, x, current)
         if problems:
-            out.values[key] = Stuck(dict.fromkeys(blocked + movers), stuck_causes[0], sketch)
+            # The states that failed are left out: the value may still follow the other sizes.
+            rest = fit.fit_value(x, candidates)
+            if rest.kind == "affine":
+                out.values[key] = Stuck(blocked, stuck_causes[0], sketch, Affine(rest.const, rest.terms, sketch))
+            elif rest.kind == "const":
+                out.values[key] = Stuck(blocked, stuck_causes[0], sketch)
+            else:
+                out.values[key] = Stuck(dict.fromkeys(blocked + movers), stuck_causes[0], sketch)
             continue
         result = fit.fit_value(x, candidates)
         if result.kind == "affine":

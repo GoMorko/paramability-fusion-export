@@ -204,8 +204,7 @@ def _skip_places(places, total):
 
 def _grid_motions(item, placed, axes, columns):
     """One Motion per kept copy (not the original), in copy order: the copy's place times the spacing, which may
-    follow sizes. A pick on a copy keeps the counts."""
-    needs = tuple(name for axis in axes for name in axis["count_q"].reads)
+    follow sizes. A pick on a copy needs each count that follows sizes to keep that copy."""
     by_place = {}
     for _, indexes in placed:
         number_ = indexes[0] + (indexes[1] * columns if len(indexes) == 2 else 0)
@@ -214,7 +213,9 @@ def _grid_motions(item, placed, axes, columns):
             if index:
                 shift = [s.plus(axis["step_q"].scaled(index * d)) if abs(d) > 1e-12 else s
                          for s, d in zip(shift, axis["dir"])]
-        by_place[number_] = Motion(shift=shift, needs=needs, by=item.get("name", ""))
+        requires = [(axis["count_q"], index + 1, item.get("name", "")) for index, axis in zip(indexes, axes)
+                    if index and axis["count_q"].sized]
+        by_place[number_] = Motion(shift=shift, by=item.get("name", ""), requires=requires)
     return [by_place[n] for n in sorted(by_place) if n > 0]
 
 

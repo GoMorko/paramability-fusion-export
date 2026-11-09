@@ -10,6 +10,8 @@ from .values import Sized, number
 from .words import type_words
 
 RECIPE_VERSION = 12
+# Step kinds newer than RECIPE_VERSION: a recipe that holds one states the version that introduced it.
+KIND_VERSIONS = {"offsetFaces": 13}
 MAX_FEATURES = 400
 MAX_NEAR_POINTS = 32
 MAX_PATTERN_COPIES = 64
@@ -179,14 +181,22 @@ def translate(capture, handlers=None, size_table=None, motion=None):
         return _walk(capture, table, None)[0]
     fixed = sketch_fixes(size_table) if motion is not None else fallback_fixes(size_table)
     current = size_table.with_fixed(fixed) if fixed else size_table
+    raised = {}
     for _ in range(MAX_PASSES):
         result, ctx = _walk(capture, table, current, motion)
         more = {name: why for name, why in ctx.depends.items() if name not in fixed}
-        if result.recipe is None or not more:
+        lifted = {name: low for name, low in ctx.minimums.items()
+                  if name not in fixed and name not in more and low[0] > raised.get(name, (float("-inf"),))[0]}
+        if result.recipe is None or not (more or lifted):
             break
         fixed.update(more)
-        current = current.with_fixed(more)
+        raised.update(lifted)
+        current = current.with_fixed(more) if more else current
+        current = current.with_minimums({name: low[0] for name, low in lifted.items()}) if lifted else current
     result.fixed = [{"name": name, "reason": why} for name, why in fixed.items()]
+    result.raised = [{"name": name, "min": low, "reason": why} for name, (low, why) in raised.items()
+                     if name not in fixed]
+    result.notes.extend(r["reason"] for r in result.raised)
     if result.recipe is not None:
         _add_sizes(result, current)
     return result
@@ -300,7 +310,8 @@ def _walk(capture, table, size_table, motion=None):
         result.refusal = {"index": None, "name": "", "type": "", "reason": "Nothing in the timeline makes this body."}
         return result, ctx
 
-    recipe = {"schema": "paramability.recipe", "version": RECIPE_VERSION, "features": ctx.steps}
+    version = max([RECIPE_VERSION] + [KIND_VERSIONS.get(step["kind"], 0) for step in ctx.steps])
+    recipe = {"schema": "paramability.recipe", "version": version, "features": ctx.steps}
     over = _over_caps(recipe)
     if over:
         result.refusal = {"index": None, "name": "", "type": "", "reason": over}

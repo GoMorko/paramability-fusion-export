@@ -23,7 +23,6 @@ class InnerPlace(Place):
         Place.__init__(self, outer.slab, "inner", outer.factor)
         self.outer, self.outer_point = outer, outer_point
         self.offset, self.thickness = offset, thickness
-        self.fixes = list(outer.fixes)
         self.blocked = list(outer.blocked)
 
     @property

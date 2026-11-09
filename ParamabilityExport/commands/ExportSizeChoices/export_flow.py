@@ -9,7 +9,7 @@ from ...lib.export_plan.errors import StepExportError
 from ...lib.export_plan.naming import design_title, package_file_name, saved_message
 from ...lib.export_plan.runner import ExportCancelled, RowExport
 from ...lib.export_plan.sizes_text import pick_default_index, read_sizes
-from ...lib.export_plan.temp_copy import MARKER_MESSAGE, marker_at_end
+from ...lib.export_plan.marker import not_put_back_message, put_back, read_marker
 from ...lib.fusion_reader import design_info
 from ...lib.fusion_reader.capture import MarkerError
 from ...lib.fusion_reader.rows import DesignParameterStore
@@ -34,10 +34,6 @@ def run_export(design, parameters, form):
         message_box("Pick a body to export.")
         return
 
-    if not marker_at_end(design.timeline):
-        message_box(MARKER_MESSAGE)
-        return
-
     title = design_title(design_info.document_name(app))
     out_path = ask_save_path(package_file_name(title))
     if out_path is None:
@@ -45,6 +41,7 @@ def run_export(design, parameters, form):
 
     units = {p["name"]: p["unit"] for p in parameters}
     token = body.entityToken
+    marker = read_marker(design.timeline)
     store = DesignParameterStore(design)
 
     def export_step(path):
@@ -69,3 +66,5 @@ def run_export(design, parameters, form):
         error_box("The export stopped. Nothing was saved.")
     finally:
         export_common.warn_unrestored(job)
+        if marker is not None and not put_back(design.timeline, marker["position"]):
+            message_box(not_put_back_message(marker), error=True)

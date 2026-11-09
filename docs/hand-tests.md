@@ -60,8 +60,15 @@ The add-in exports the picked body alone. The choice is the constant `MULTI_BODY
       with sizes (section 8).
 - [ ] A body picked after its parameter changed (second row) still lands in the right place (the token lookup keeps
       the occurrence proxy).
-- [ ] Roll the timeline marker back and click OK: the export stops with "Move the timeline marker to the end", and no
-      feature of the design is deleted.
+- [ ] **Marker rolled back.** A root with three bodies and 10 or more steps. Drag the timeline marker back to the
+      middle, with steps after it that change the picked body (a fillet, a hole) and one that adds a body. Open the
+      dialog: a line says "Exporting the design as it is at the timeline marker (step n of m)". Click OK: the STEP
+      holds the body as Fusion shows it at the marker (without the later fillet and hole). After the export the
+      timeline has the same number of items in the same order, every step after the marker is still there, and the
+      marker sits at the same step. Watch the timeline during the export: the temporary component appears at the
+      marker (not at the end) and is gone afterwards. Repeat with Export size choices and with a cancel part way.
+- [ ] **Marker inside a group.** Expand a timeline group and put the marker inside it. Export: the temporary
+      component may join the group for a moment; afterwards the group holds the same items as before.
 
 ## 4. Y up design
 
@@ -112,9 +119,10 @@ builds agrees with the Fusion part.
       holes with one copy suppressed, a circular pattern of slots over 90 degrees, a mirrored boss. Matches; the
       pattern has one copy left out.
 - [ ] **Combine**: a separate cylinder body cut from the main body with Combine. Matches.
-- [ ] **Marker and document**: after each export the timeline marker is at the end, the design is unchanged, and
+- [ ] **Marker and document**: after each export the timeline marker is where it was (at the end, or the step it was
+      rolled back to), the design is unchanged, and
       Fusion's undo list and "unsaved changes" mark are as before (or, if moving the marker marks the document
-      changed, note it). Cancel, and a forced error during the read, leave the marker at the end and the parameters
+      changed, note it). Cancel, and a forced error during the read, leave the marker where it was and the parameters
       as they were.
 - [ ] **Fixed shape**: a part with an emboss, and one with a variable radius fillet. Each saves as a fixed shape
       (plain CAD part) and the message after the export names that feature.
@@ -174,14 +182,19 @@ mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter
       cannot build). Cancel during a retry: nothing is saved and every parameter is back.
 - [ ] **Restore.** After each export, a cancel in the "Checking size 2 of 4" window, and a forced failure (full disk
       or a read only folder), every parameter shows its old expression, formulas included, the timeline marker is
-      at the end and the design has no unsaved change beyond Fusion's own.
+      where it was and the design has no unsaved change beyond Fusion's own.
 - [ ] **Expressions** (the translator writes `+ - * /`, `^` as `pow`, and numbers with units as mm or degrees; the
       value check refuses a formula that does not give Fusion's number, so a wrong reading shows as a fixed size).
       Try `1 in + 5 mm`, `wall + 5` in a mm design and in an inch design, `wall ^ 2` and `-wall ^ 2`. Try `floor(wall)`,
       `round(wall)` and `ceil(wall)` on a length (Fusion may apply them in cm, the app in mm): with `wall = 25 mm`,
       note the value Fusion shows for `floor(wall)`. Helper parameters: a unitless `count`, `step = count * 1 mm`,
       `wall = layers * 0.4` in mm, and a formula reading them: all export with formulas, ticked or not.
-- [ ] The marker is rolled back: the export stops with "Move the timeline marker to the end".
+- [ ] **Marker rolled back, with sizes.** Put the marker before the last few steps (one of them uses a ticked size)
+      and export. The dialog shows the marker line. The recipe holds only the steps before the marker, every size
+      check matches Fusion at the marker, `report.json` has `marker` (position and count) and the capture has only
+      the items before the marker. A step after the marker that would fail at a check size does not fix that size.
+      After the export the marker is at the same step, parameters are back and the later steps compute as before
+      when you drag the marker to the end.
 - [ ] Time: note how long a design with 5 sizes and 100 timeline items takes.
 - [ ] **Extra rebuilds.** With sizes that move sketches, the progress window shows "Checking size n of m" and then
       "Trying size n of m". Cancel in the second window: the message says the export is cancelled, parameters are back
@@ -352,12 +365,26 @@ the sizes on the form and compare the part with Fusion at the same values.
 These were written from the API reference and never run:
 
 - `BRepBody.copyToComponent` into a new occurrence (hand test 3).
-- Deleting the temporary occurrence and the timeline items the copy adds: only the items after the first `count`
-  items, and only entities that are not equal (`==`) to one of the entities read before the copy (hand test 3). Check
+- Deleting the temporary occurrence and the timeline items the copy adds: only entities that are not equal (`==`) to
+  one of the entities read before the copy, wherever they sit; nothing when more items look new than the timeline
+  grew by (hand test 3). Check
   that `==` between two wrappers of one Fusion entity is true, here and in the capture (`parentComponent == ctx.
   component`, `same_entity` in `lib/fusion_reader/read_geometry.py`). If it is false, the capture marks every item
   as outside the target's component and the placement of a nested body is refused.
-- `Timeline.markerPosition` equal to `Timeline.count` when the marker is at the end.
+- `Timeline.markerPosition` equal to `Timeline.count` when the marker is at the end, and equal to the number of steps
+  before the marker when it is rolled back (the dialog line counts steps this way).
+- With the marker rolled back (hand test 3, "Marker rolled back"), none of these run yet:
+  - `Occurrences.addNewComponent` and `BRepBody.copyToComponent` put their timeline items at the marker and move the
+    marker past them, and the copied body exists (the export refuses an empty copy). If Fusion puts them at the end
+    instead, the copy is rolled back and the export stops with "The copy of the part could not be made".
+  - `Occurrence.deleteMe` removes the items of the temporary component and moves the marker back by as many; the
+    add-in then sets `markerPosition` to the start position if it is not there.
+  - `Design.computeAll` and setting `UserParameter.expression` leave the marker where it is. The add-in puts it back
+    after every recompute in any case, and once more at the end of the export.
+  - `TimelineObject.healthState` of the items before the marker after a recompute; items after the marker are not
+    read for health.
+  - `ExportManager.createSTEPExportOptions` with the root component writes the body as it is at the marker.
+  - Timeline groups that span the marker: only their children before the marker are checked.
 - The `preSelect` event and `isSelectable` for the body picker.
 - `Design.findEntityByToken` to find the body again after each recompute.
 - `ExportManager.createSTEPExportOptions` with a component, and `execute`.
@@ -460,7 +487,7 @@ These were written from the API reference and never run:
   the name of a feature (`created_by.name`) equal to its timeline item name. A name that does not match leaves the
   parameter in, so a mismatch shows as a parameter that other bodies' steps make ticked.
 - Reading the capture while the dialog is open (`lib/fusion_ui/` and `commands/ExportForParamability/entry.py`): the
-  timeline marker moves in the `commandCreated` and `inputChanged` events and comes back to the end. Also
+  timeline marker moves in the `commandCreated` and `inputChanged` events and comes back to where it was. Also
   `BoolValueCommandInput.value`, `isEnabled` and `StringValueCommandInput.value` assigned in `inputChanged`.
 - Two buttons in one panel (`ControlsCommand` added twice, `isPromoted` on the first only).
 - `ProgressDialog` (`show`, `progressValue`, `wasCancelled`) and `FileDialog` filter text.
@@ -521,7 +548,7 @@ read the capture in `report.json`.
   item is read instead: check that it lists only the moved faces (not their side walls), since each listed flat face
   is moved back by `distance` and copied.
 - `TimelineObject.isGroup`: group objects are skipped; check that grouped features still appear as items.
-- Moving `Timeline.markerPosition` once per item: the marker ends at the end, the document is not marked changed and
+- Moving `Timeline.markerPosition` once per item: the marker ends where it was, the document is not marked changed and
   the undo list is as before.
 
 ## Capture reader calls to watch (fillet, chamfer, shell, patterns, mirror)

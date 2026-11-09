@@ -36,3 +36,4 @@ class TranslateResult:
     refusal: Optional[dict] = None
     notes: list = field(default_factory=list)
     fixed: list = field(default_factory=list)  # [{ name, reason }]: sizes that some value could not follow
+    raised: list = field(default_factory=list)  # [{ name, min, reason }]: sizes whose smallest value was raised

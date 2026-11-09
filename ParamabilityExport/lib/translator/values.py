@@ -171,6 +171,17 @@ class Quantity:
         sign, right = ("-", rest) if rest is not None else ("+", _wrapped(other.text))
         return Quantity(self.n + other.n, "%s %s %s" % (left, sign, right), reads)
 
+    def times(self, other):
+        """The product with a number or another Quantity."""
+        if not isinstance(other, Quantity):
+            return self.scaled(other)
+        if not self.sized:
+            return other.scaled(self.n)
+        if not other.sized:
+            return self.scaled(other.n)
+        reads = tuple(dict.fromkeys(self.reads + other.reads))
+        return Quantity(self.n * other.n, "%s * %s" % (_wrapped(self.text), _wrapped(other.text)), reads)
+
     def divided_by(self, other):
         if not isinstance(other, Quantity):
             other = Quantity(other)
@@ -225,24 +236,26 @@ def _env(table, overrides):
     return env
 
 
-def _probes(table, reads):
-    """Size settings that cover the range: each read size at its minimum and maximum, then all low and all high."""
+def _probes(table, reads, mins=None):
+    """Size settings that cover the range: each read size at its minimum and maximum, then all low and all high.
+    `mins` (recipe name to number) replaces the minimum of some sizes."""
     names = [table.size_name(n) for n in reads]
     names = [n for n in names if n in table.sizes and "min" in table.sizes[n]]
+    low = {n: (mins or {}).get(n, table.sizes[n]["min"]) for n in names}
     probes = []
     for name in names:
         size = table.sizes[name]
-        probes += [{name: size["min"]}, {name: size["max"]}]
+        probes += [{name: low[name]}, {name: size["max"]}]
     if len(names) > 1:
-        probes.append({n: table.sizes[n]["min"] for n in names})
+        probes.append(dict(low))
         probes.append({n: table.sizes[n]["max"] for n in names})
     return probes
 
 
-def _stays_in_range(table, formula, reads, sign, low):
-    """True when sign * formula stays at or above `low` over the size range."""
+def _stays_in_range(table, formula, reads, sign, low, mins=None):
+    """True when sign * formula stays at or above `low` over the size range (`mins` as in `_probes`)."""
     try:
-        for probe in _probes(table, reads):
+        for probe in _probes(table, reads, mins):
             if sign * evaluate(formula, _env(table, probe)) < low:
                 return False
     except ExpressionError:
