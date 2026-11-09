@@ -35,7 +35,7 @@ Nothing is typed in Fusion.
 5. A window then lists each size with its range and its check ("matches Fusion", "not checked", "kept fixed"), what
    stays fixed and why, and how many parameters come along as variables. If this window cannot open, the same text is
    shown in a message box.
-6. Open the file in Paramability. The sizes are ready for the "Put on the form" button.
+6. Open the file in Paramability. The sizes land on the form as variables, ready to configure.
 
 Each ticked size has a range: you can type it in the table. It starts from a comment such as `Wall [1..6]` on the
 parameter, otherwise from half to double the current value (a count goes from 1 to twice its value). A parameter that sets how many copies a pattern
