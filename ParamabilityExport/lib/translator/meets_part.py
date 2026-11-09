@@ -140,9 +140,13 @@ def gaps(ctx, slab):
 def check(ctx, step_id, made, combine, why):
     """Mark the sizes that would make a borrowed step meet the part otherwise than at the measured sizes.
     `made` is the step's placer_makers.SlabMaker; `why` names the step for the reason."""
-    walls = ctx.slabs or any(placer.wall_offsets for placer in ctx.placers)
-    if ctx.table is None or not walls or getattr(ctx.motion, "optimistic", False):
+    if ctx.table is None or getattr(ctx.motion, "optimistic", False):
         # A first look writes the borrowed outline as numbers, so its gaps would seem to close with every size.
+        return
+    if any(placer.opaque for placer in ctx.placers):
+        ctx.doubt(ctx.written_reads, "%s is drawn after a wall whose faces the copy cannot follow, so it cannot check "
+                  "that it still meets the part" % why)
+    if not (ctx.slabs or any(placer.wall_offsets for placer in ctx.placers)):
         return
     slab = Slab(step_id, made.on, made.extent, made.length, made.profile, combine=combine, taper=made.taper,
                 outline=made.outline)

@@ -20,6 +20,7 @@ _OPERATIONS = [
     ("intersect", "intersect"),
 ]
 _EXTENT_TYPES = [("twosides", "two"), ("symmetric", "symmetric"), ("oneside", "one")]
+_WALL_LOCATIONS = [("side1", "side1"), ("side2", "side2"), ("center", "center")]
 _HOLE_TYPES = [("counterbore", "counterbore"), ("countersink", "countersink"), ("simple", "simple")]
 _TAP_TYPES = [("taper", "taperTapped"), ("tapped", "tapped"), ("clearance", "clearance"), ("simple", "simple")]
 
@@ -100,8 +101,29 @@ def _extent_distance(definition):
     return definition.distance if geo.type_name(definition) == "DistanceExtentDefinition" else None
 
 
-def _extrude_params(feature, extent_type):
+def _wall_location(member):
+    """"side1", "side2", "center" or "other" for a thin wall location; None when it cannot be read."""
+    return geo.safe(lambda: geo.pick_by_text(geo.enum_name(member(), "ThinExtrudeWallLocation"), _WALL_LOCATIONS,
+                                             "other"), None)
+
+
+def _thin_wall(feature):
+    """The wall of a thin extrude: where it sits against the outline and how thick it is, for side one and side two
+    (side two only counts for an extrude that goes two ways), and the type of the input the extrude takes its outline
+    from (`profile_type`, to see what an open line comes back as). A member that cannot be read is null."""
+    return {
+        "location": _wall_location(lambda: feature.thinExtrudeWallLocationOne),
+        "thickness": geo.safe(lambda: geo.length(feature.thinExtrudeWallThicknessOne), None),
+        "location_two": _wall_location(lambda: feature.thinExtrudeWallLocationTwo),
+        "thickness_two": geo.safe(lambda: geo.length(feature.thinExtrudeWallThicknessTwo), None),
+        "profile_type": geo.safe(lambda: geo.type_name(feature.profile), None),
+    }
+
+
+def _extrude_params(feature, extent_type, thin=False):
     found = Params()
+    if thin:
+        found.add("thin.thickness", lambda: feature.thinExtrudeWallThicknessOne)
     if extent_type == "symmetric":
         sym = feature.symmetricExtent
         found.add("symmetric.distance", lambda: sym.distance)
@@ -120,6 +142,7 @@ def _extrude_params(feature, extent_type):
 
 def extrude_before(feature, ctx):
     extent_type = _extent_type(feature)
+    thin = geo.safe(lambda: bool(feature.isThinExtrude), None)
     side_one = side_two = symmetric = None
     if extent_type == "other":
         side_one = {"kind": "other", "type": "FeatureExtentTypes"}
@@ -134,7 +157,7 @@ def extrude_before(feature, ctx):
         side_one = _extent(feature.extentOne, _taper(feature, "taperAngleOne"), ctx)
         if extent_type == "two":
             side_two = _extent(feature.extentTwo, _taper(feature, "taperAngleTwo"), ctx)
-    return with_params({
+    data = {
         "operation": _operation(feature.operation),
         "profiles": read_profiles(feature.profile, ctx),
         "start": geo.safe(lambda: _start(feature, ctx), {"kind": "other", "type": "unreadable"}),
@@ -142,13 +165,16 @@ def extrude_before(feature, ctx):
         "side_one": side_one,
         "side_two": side_two,
         "symmetric": symmetric,
-        "thin": geo.safe(lambda: bool(feature.isThinExtrude), None),
+        "thin": thin,
         "participants": geo.safe(lambda: geo.body_refs(feature.participantBodies, ctx), []),
         "target_box_before": ctx.target_box(),
         "end_offset": None,
         "profile_area": _first_profile_area(feature),
         "end_area": None,
-    }, _extrude_params(feature, extent_type))
+    }
+    if thin:
+        data["thin_wall"] = _thin_wall(feature)
+    return with_params(data, _extrude_params(feature, extent_type, thin))
 
 
 def _dot(a, b):

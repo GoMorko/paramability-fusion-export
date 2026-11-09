@@ -437,8 +437,11 @@ def _inverse_hyperbolic(name, x):
     return ("call", "ln", [("bin", "+", x, ("call", "sqrt", [square]))])
 
 
-def translate_tree(tree, resolve, design_mm=1.0):
-    """Typed result for a parse tree. `resolve(name)` gives a Typed for a parameter or raises ExpressionError."""
+def translate_tree(tree, resolve, design_mm=1.0, modulo=None):
+    """Typed result for a parse tree. `resolve(name)` gives a Typed for a parameter or raises ExpressionError.
+
+    `modulo`, when given, collects the left operand node of every `%`: the app's `mod` takes the sign of its right
+    operand, so a caller that cannot tell what Fusion does for a negative left operand checks those nodes."""
 
     def go(node):
         kind = node[0]
@@ -476,6 +479,8 @@ def translate_tree(tree, resolve, design_mm=1.0):
             return Typed(("bin", op, an, bn), dim, lit)
         if op == "%":
             an, bn, dim, lit = _align(a, b, design_mm)
+            if modulo is not None:
+                modulo.append(an)
             return Typed(("call", "mod", [an, bn]), dim, lit)
         if op == "*":
             return Typed(_mul(a.node, b.node), _dim_add(a.dim, b.dim), a.lit and b.lit)

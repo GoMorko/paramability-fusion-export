@@ -1,0 +1,238 @@
+{
+  "_comment": "A 40 x 30 box drawn as a thin extrude (Extrude1): a 2 mm wall on the inside of the outline, 10 mm tall. Side one of the wall is taken as the inside here; the copy decides the side from the measured end face. The wall and the height are sizes.",
+  "capture": 3,
+  "fusion": "2.0.0",
+  "design": "Test",
+  "up_axis": "z",
+  "design_units": "mm",
+  "target": {
+    "token": "t1",
+    "name": "Body1",
+    "box": {
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        40.0,
+        30.0,
+        10.0
+      ]
+    },
+    "volume_mm3": 2640.0
+  },
+  "parameters": {
+    "user": [
+      {
+        "name": "height_mm",
+        "expression": "10 mm",
+        "value": 1.0,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 10.0
+      },
+      {
+        "name": "wall_mm",
+        "expression": "2 mm",
+        "value": 0.2,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 2.0
+      }
+    ],
+    "model": [
+      {
+        "name": "d1",
+        "expression": "height_mm",
+        "value": 1.0,
+        "unit": "mm",
+        "kind": "derived",
+        "role": "",
+        "dependency_parameters": [
+          "height_mm"
+        ],
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d1",
+          "name": "Extrude1",
+          "sketch": "",
+          "component": ""
+        }
+      },
+      {
+        "name": "d2",
+        "expression": "wall_mm",
+        "value": 0.2,
+        "unit": "mm",
+        "kind": "derived",
+        "role": "",
+        "dependency_parameters": [
+          "wall_mm"
+        ],
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d2",
+          "name": "Extrude1",
+          "sketch": "",
+          "component": ""
+        }
+      }
+    ]
+  },
+  "items": [
+    {
+      "index": 0,
+      "name": "Sketch1",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 1,
+      "name": "Extrude1",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "operation": "newBody",
+        "profiles": [
+          {
+            "sketch": "Sketch1",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      0.0,
+                      0.0
+                    ],
+                    "end": [
+                      40.0,
+                      0.0
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      40.0,
+                      0.0
+                    ],
+                    "end": [
+                      40.0,
+                      30.0
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      40.0,
+                      30.0
+                    ],
+                    "end": [
+                      0.0,
+                      30.0
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      0.0,
+                      30.0
+                    ],
+                    "end": [
+                      0.0,
+                      0.0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 10.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": true,
+        "participants": [],
+        "target_box_before": null,
+        "end_offset": 10.0,
+        "params": {
+          "side_one.distance": {
+            "name": "d1",
+            "expression": "height_mm",
+            "value": 10.0
+          },
+          "thin.thickness": {
+            "name": "d2",
+            "expression": "wall_mm",
+            "value": 2.0
+          }
+        },
+        "end_area": 264.0,
+        "profile_area": 1200.0,
+        "thin_wall": {
+          "location": "side1",
+          "thickness": 2.0,
+          "location_two": "side1",
+          "thickness_two": null,
+          "profile_type": "Profile"
+        }
+      }
+    }
+  ]
+}

@@ -27,6 +27,7 @@ the sizes; `depends(name)` lists the free sizes a parameter or an expression nam
 driver fixes when a value cannot follow.
 """
 from dataclasses import dataclass
+from itertools import product
 
 from ..package.manifest import MAX_FIXED_REASON
 from . import defaults, names
@@ -72,6 +73,10 @@ class Translation:
 _DIM_NAMES = {LENGTH: "length", ANGLE: "angle", SCALAR: "scalar"}
 _DIMS = {name: dim for dim, name in _DIM_NAMES.items()}
 UNIT_REASON = "Its unit is not a length or an angle."
+MODULO_REASON = ("It uses % on a value that can be negative, and Fusion and Paramability may disagree on the result "
+                 "there.")
+# `%` is checked at every corner of the ranges of the sizes its left side reads, up to this many sizes.
+MAX_MODULO_SIZES = 8
 
 
 def _unit_factors(source, target, unit, design_mm):
@@ -215,7 +220,7 @@ class SizeTable:
         except ExpressionError:
             return e.value
 
-    def _resolver(self, reads, stack):
+    def _resolver(self, reads, stack, modulo=None):
         def resolve(name):
             p = self._cand.get(name)
             if p is not None:
@@ -240,7 +245,8 @@ class SizeTable:
                     raise ExpressionError(f"\"{name}\" reads itself.")
                 stack.append(name)
                 try:
-                    inner = translate_tree(parse(m["expression"]), self._resolver(reads, stack), self._design_mm)
+                    inner = translate_tree(parse(m["expression"]), self._resolver(reads, stack, modulo),
+                                           self._design_mm, modulo)
                 finally:
                     stack.pop()
                 dim = defaults.dim_of_unit(m.get("unit"))
@@ -277,11 +283,13 @@ class SizeTable:
 
     def _translate(self, expression, expected=None, dim=None, unit=""):
         """`dim` and `unit` are those of the parameter the expression sets; without them the formula keeps its own."""
-        reads = []
+        reads, modulo = [], []
         try:
             tree = parse(expression)
-            typed = translate_tree(tree, self._resolver(reads, []), self._design_mm)
+            typed = translate_tree(tree, self._resolver(reads, [], modulo), self._design_mm, modulo)
             merged = self._merge_reads(reads, expression)
+            if self._may_be_negative(modulo, merged):
+                return Translation(reads=merged, reason=MODULO_REASON)
             nodes = [typed.node] if dim is None else self._readings(typed, dim, unit)
             _, text, value = self._pick(nodes, expected)
         except ExpressionError as exc:
@@ -295,13 +303,44 @@ class SizeTable:
         out_dim = typed.dim if dim is None else dim
         return Translation(formula=text, reads=merged, dim=_DIM_NAMES.get(out_dim, "other"), value=value)
 
-    def _derived_values(self):
+    def _derived_values(self, overrides=None):
+        """The derived sizes at the current values of the free sizes, or at `overrides` (recipe name to value)."""
         env = {e.size_name: e.value for e in self._entries.values() if e.state == FREE}
+        env.update(overrides or {})
         out = {}
         for e in self._entries.values():
             if e.state == DERIVED and e.size_name:
                 out[e.size_name] = self._eval_derived(e, {**env, **out})
         return out
+
+    def _range_of(self, name):
+        e = self._entries[name]
+        return self._ranges.get(name) or defaults.size_range(self._cand[name], e.kind, e.value)
+
+    def _may_be_negative(self, lefts, reads):
+        """True when the left side of a `%` can be below zero over the ranges of the free sizes `reads`.
+
+        The app's `mod` gives the remainder with the sign of the right side, and what Fusion gives for a negative left
+        side is not confirmed, so such a formula is not written. More free sizes than MAX_MODULO_SIZES count as
+        negative (the corners are too many to try)."""
+        if not lefts:
+            return False
+        free = [n for n in reads if self._entries.get(n) is not None and self._entries[n].state == FREE]
+        if len(free) > MAX_MODULO_SIZES:
+            return True
+        ends = [self._range_of(n) for n in free]
+        for pick in product(*ends):
+            set_ = {self._entries[n].size_name: v for n, v in zip(free, pick)}
+            env = {e.size_name: e.value for e in self._entries.values() if e.state == FREE}
+            env.update(set_)
+            env.update(self._derived_values(set_))
+            for node in lefts:
+                try:
+                    if evaluate(render(node), env) < 0:
+                        return True
+                except ExpressionError:
+                    continue
+        return False
 
     def _merge_reads(self, reads, expression):
         """Free sizes read: those met while translating, plus everything the names in the text depend on."""

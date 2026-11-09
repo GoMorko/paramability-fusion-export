@@ -11,6 +11,9 @@ CUT = "cut"
 
 class Placer:
     order = 0
+    # True for a step whose material is known but whose faces cannot be placed (a thin wall): a step on another
+    # part's sketch cannot be checked to keep meeting such a part.
+    opaque = False
 
     def place(self, p, edge):
         """The Place (slabs.Place or a subclass) of measured point `p` on this placer's faces, or None. `edge` asks

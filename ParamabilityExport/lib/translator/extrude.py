@@ -4,12 +4,16 @@ Profiles that share a curve are merged into one outline (outlines.py); each outl
 per side. Fusion's sign conventions are checked against the measured
 `end_offset` (where the end face landed), which wins when the two disagree. With the probe's motion file the outline
 and its sketch plane follow sizes (sketch_motion.py).
+
+A thin extrude of one closed outline without holes is written with the recipe's `thin` wall (thin_wall.py): the wall
+thickness follows its parameter, and the side of the outline comes from the measured area of the end face. Open lines,
+several outlines, outlines with holes, two sided and tapered thin extrudes are refused.
 """
 import math
 
-from . import follow, kept_ranges, loops, outlines, placement, sketch_motion, values, vec
+from . import follow, kept_ranges, loops, outlines, placement, sketch_motion, thin_wall, values, vec
 from .footprint import Footprint
-from .placer_makers import SlabMaker
+from .placer_makers import SlabMaker, ThinWallMaker
 from .result import Refusal, StepResult
 from .values import Quantity
 
@@ -496,6 +500,18 @@ def _parts(profile, sources):
     return [(next(n for n, p in enumerate(sources) if p is profile), profile)]
 
 
+def _thin_step(ctx, item, data, wall, profile):
+    """`(side, thickness Quantity)` of a thin extrude's wall, or a Refusal when the measured end face does not fit the
+    outline and thickness. The thickness follows its parameter and must stay above zero."""
+    decided = thin_wall.decide(thin_wall.outer_curves(profile), wall, data.get("end_area"))
+    if isinstance(decided, Refusal):
+        return decided
+    side, rounded = decided
+    if rounded:
+        ctx.note("Fusion keeps the corners of this wall sharp. The copy rounds them.")
+    return side, values.quantity(ctx, item, "thin.thickness", wall["thickness"], absolute=True)
+
+
 def handle(item, ctx):
     data = item.get("data") or {}
     operation = data.get("operation")
@@ -506,11 +522,20 @@ def handle(item, ctx):
     thin = data.get("thin", False)
     if thin is None:
         return Refusal(UNREADABLE)
+    wall = None
     if thin:
-        return Refusal("Thin extrudes are not copied yet.")
+        wall = thin_wall.prepare(data)
+        if isinstance(wall, Refusal):
+            return wall
     profiles = data.get("profiles") or []
     if not profiles:
         return Refusal("This extrude has no sketch outline.")
+    if thin:
+        refusal = thin_wall.open_line_refusal(profiles)
+        if refusal is None and len(profiles) > 1:
+            refusal = Refusal("A thin extrude of several outlines is not copied yet.")
+        if refusal is not None:
+            return refusal
     for profile in profiles:
         refusal = loops.outline_refusal(profile)
         if refusal is not None:
@@ -532,6 +557,8 @@ def handle(item, ctx):
         outcome = loops.profile_loops(profile)
         if isinstance(outcome, Refusal):
             return outcome
+        if thin and outcome[1]:
+            return Refusal("A thin extrude of an outline with holes is not copied yet.")
         drawn = sketch_motion.outline(ctx, item, profile, outcome[0], outcome[1], _parts(profile, sources))
         built.append((profile, outcome, drawn))
     sketch_motion.planes_apart(ctx, [drawn for _, _, drawn in built], item)
@@ -553,6 +580,9 @@ def handle(item, ctx):
                   _check_taper(plan, data, combine, picked)):
         if check:
             return check
+    thin_step = _thin_step(ctx, item, data, wall, profiles[0]) if thin else None
+    if isinstance(thin_step, Refusal):
+        return thin_step
     box_max = ctx.motion.box_max if sketch_motion.active(ctx) else None
     refusal = _resolve_through(plan, data, start, z0, combine, box_max)
     if refusal:
@@ -587,6 +617,13 @@ def handle(item, ctx):
         if entry["taper"]:
             step["taperDeg"] = entry["taper_q"].json() if entry.get("taper_q") else _n(entry["taper"])
         placers = []
+        if thin_step is not None:
+            side, thickness_q = thin_step
+            step["thin"] = {"thickness": thickness_q.json(), "side": side}
+            placers.append(ThinWallMaker(on, entry["extent"], entry.get("q") or Quantity(entry["distance"]), profile,
+                                         side, thickness_q.n))
+            out.add(step, placers, repeatable=False)
+            continue
         if entry["extent"] in ("oneSide", "symmetric"):
             placers.append(SlabMaker(on, entry["extent"], entry.get("q") or Quantity(entry["distance"]), profile,
                                      entry.get("taper_q") or Quantity(entry["taper"] or 0.0), drawn))

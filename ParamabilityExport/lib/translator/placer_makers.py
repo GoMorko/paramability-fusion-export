@@ -10,6 +10,7 @@ from .offset_faces import MovedFaces
 from .picks import face_points
 from .shells import Shell
 from .slabs import Slab
+from .thin_wall import ThinWall
 
 
 class SlabMaker:
@@ -30,6 +31,19 @@ class SlabMaker:
                 label, self.profile.get("sketch") or "a sketch", borrowed))
         ctx.add_slab(Slab(step_id, self.on, self.extent, self.length, self.profile, combine=combine,
                           taper=self.taper, outline=self.outline))
+
+
+class ThinWallMaker:
+    """A thin extrude: `on`, `extent`, `length` (a Quantity) and `profile` as for a SlabMaker, `side` where the wall sits
+    against the outline and `thickness` its measured value in mm. It leaves material and no placeable faces."""
+
+    def __init__(self, on, extent, length, profile, side, thickness):
+        self.on, self.extent, self.length = on, extent, length
+        self.profile, self.side, self.thickness = profile, side, thickness
+
+    def make(self, ctx, step_id, step):
+        ctx.add_placer(ThinWall(step_id, self.on, self.extent, self.length, self.profile, self.side, self.thickness,
+                                step.get("combine", "add")))
 
 
 class ShellMaker:
