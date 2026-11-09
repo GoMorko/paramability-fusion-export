@@ -236,8 +236,8 @@ names the sketch and its component. Without the frames and the place the step is
 
 Nothing ties such a step to the walls of the part, so it must keep meeting the part as measured
 (`lib/translator/meets_part.py`): along the normal of each of its faces, the nearest flat parallel faces of the part
-within 2 mm keep their side of the face at every size setting of the range (each size at its ends, all low, all
-high), and a face that lies on a wall stays on it. Where a gap would close or open, the ranges of the sizes it reads
+within 2 mm keep their side of the face at every size setting of the range (every mix of the ends for up to 6
+sizes, a bounded sample past that), and a face that lies on a wall stays on it. Where a gap would close or open, the ranges of the sizes it reads
 are shortened toward their values (`lib/translator/kept_ranges.py`, each size alone first, then all together); when
 a range would shrink to its value or the person typed it, the size cannot follow (fixed, or loose in the export).
 In loose mode (the default) the ranges are not shortened: the size stays free over the range Fusion builds and is
@@ -480,6 +480,19 @@ neither way, refuses an uneven chamfer.
 { "entity_type": "features", "sources": [4], "plane": PLANE, "combine": false, "target_box_before": { "min": [..], "max": [..] } }
 ```
 
+The mirror `plane` and the circular pattern `axis` also say what they are, so the translator can tell whether sizes move
+them (`lib/fusion_reader/read_reference.py`). All keys below are optional and are added next to the plane or axis keys
+(`point`, `normal` or `dir`, `token`); a record of another component gets none.
+
+- `origin`: true for an origin plane or axis of the component. Nothing else is read then; it never moves.
+- `entity_type`: the type name of the picked entity (`BRepFace`, `BRepEdge`, `ConstructionPlane`, `ConstructionAxis`).
+- `face_point` and `surface` (`Plane`, `Cylinder`, ...) of a face; `edge_points` of an edge.
+- Construction geometry also has `token`, `made_by` (the timeline index of the feature that made it), `definition` (the
+  type name of how it is defined) and `built_on`, a list of the same descriptions for the entities that definition
+  names (own component only, up to three levels deep).
+
+A reader that cannot read one of these leaves it out, and the plane or axis then stays where it was measured.
+
 `target_box_before`: the target body's box with the marker before the item, or null when it does not exist yet (as
 for extrudes).
 
@@ -654,11 +667,16 @@ writes as a sum over Fusion parameters, or marks it stuck (`lib/probe/`). That i
 keys `<item>/p<profile>/l<loop>/<field path>` (loop 0 is the outer one, then the holes; `center.0`, `width`,
 `segments.2.through.1`), `<item>/p<profile>/plane` (the sketch plane along its normal, from the component origin),
 `<item>/positions/<n>/<0|1|2>` (hole points) and `<item>/axis/point/<0|1|2>` (a revolve axis from a sketch line).
+`lib/probe/keys.py` writes all keys; the probe and the translator both use it.
 The sketch curves of each profile have `<item>/p<profile>/c<loop>.<curve>/<field>` in the capture's loop and curve
 order: a line's `offset` (its distance from the sketch origin along the left normal of its captured direction) and
 `turn` (degrees it turned), an arc's `center.0`, `center.1` and `radius`; `curves` lists the profiles
-(`<item>/p<profile>`) whose curves were measured. A key that is not listed did not move. The translator uses it like
-this:
+(`<item>/p<profile>`) whose curves were measured. For a sketch the probe measured, a key that is not listed did not
+move. A sketch the probe could not measure (a step uses it in a way the probe cannot follow, its first read did not
+match the capture, or there was no read at the current sizes) is listed in `unmeasured` (sketch name to reason), and
+nothing is known about it. For one sketch and one size the motion file therefore gives one of three answers: measured
+and still, measured and moved (the keys), or not measured (`translator.sizes.sketch_answer`). A motion file without
+`unmeasured` (written by hand) says nothing about such sketches. The translator uses it like this:
 
 - `motion=None`: the rule above, sketch sizes fixed up front. `motion=OPTIMISTIC` (the export's first translation):
   sketch values are written as numbers and nothing is fixed for them, so the export can see which sizes to try.
@@ -666,6 +684,11 @@ this:
   parameter in a sum is written through its own expression. Its number stays the captured one; a formula that misses
   it by more than 1e-3 mm fixes its sizes ("could not be read at other values"). A width, height or radius that would
   reach zero over the size ranges fixes its sizes ("would shrink to nothing").
+- A value of an unmeasured sketch is stuck with cause `untried` for every size behind that sketch's dimensions (model
+  parameters made by a sketch dimension of that sketch). The size is fixed, or loose in a loose export, with "it
+  changes <sketch> and could not be tried at other values". A size that none of the sketch's dimensions read is not
+  touched. Dimensions are the only link: a size that moves the sketch only through its construction plane is not
+  named here.
 - A stuck value that a step writes fixes every size the probe lists for it, with the probe's cause: `curve` (a point
   moves along a curve), `shape` (the outline changes), `turns` (the sketch plane turns), `unread`, `untried`. When
   only some states failed (a size whose state changed the outline), the probe lists only those sizes and fits the
@@ -680,7 +703,7 @@ this:
 - A corner the probe could not fit (it moves along a curve) is rebuilt from the two sketch curves that cross there:
   two lines give an affine point, a line and a circle or two circles a point with `sqrt`. An arc's middle point
   becomes a fixed direction from its centre. The rebuilt outline must keep its crossings and the order of its corners
-  at each size's ends, all low, all high and the probe's states; otherwise its sizes are fixed ("along a curve"). A
+  at every mix of the size ends (up to 6 sizes; a bounded sample past that) and the probe's states; otherwise its sizes are fixed ("along a curve"). A
   line that turns cannot carry its crossings.
 - A sketch plane that moves writes the placement origin along its normal (`sketch.on.origin`); a "to entity" reach is
   the face's move less the plane's move. Outlines of one step whose planes move differently fix those sizes.

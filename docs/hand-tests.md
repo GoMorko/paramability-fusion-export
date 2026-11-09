@@ -538,6 +538,24 @@ These were written from the API reference and never run:
 - `FeatureHealthStates.ErrorFeatureHealthState` on timeline items after `computeAll`.
 - The modeling orientation preference as the up direction.
 - Toolbar tab id `ToolsTab` for the Utilities tab.
+- What a mirror plane or a circular pattern axis is (`lib/fusion_reader/read_reference.py`; check the `plane` and `axis`
+  records in `report.json` of a mirror across a body face, across a construction plane offset from a face, across an
+  origin plane, and a pattern about an edge, a cylinder face, a construction axis and an origin axis):
+  - `Component.xYConstructionPlane`, `xZConstructionPlane`, `yZConstructionPlane`, `xConstructionAxis`,
+    `yConstructionAxis`, `zConstructionAxis` equal (`==`) to the plane or axis the feature uses: the record then says
+    `origin: true` and nothing more. If the comparison is false, an origin plane is read as construction geometry with
+    no `built_on`, which the translator treats as parameters only, so it still stays where it is.
+  - `ConstructionPlane.timelineObject.index` (`made_by`) and `ConstructionPlane.definition` (type name:
+    `ConstructionPlaneOffsetDefinition`, `...MidplaneDefinition` and so on; the translator follows only names that
+    hold `offset` or `midplane`). The same two members on `ConstructionAxis`.
+  - The members of those definitions that name what they are built on, tried one by one and each guarded:
+    `planarEntity`, `planarEntityOne`, `planarEntityTwo`, `linearEntity`, `tangentFace`, `referencePlane`, `edgeOne`,
+    `edgeTwo`, `pointOne`, `pointTwo`, `pointThree`, `point`, `path`, `circularFace`, `edge`, `face`, `planeOne`,
+    `planeTwo`, `entity`. Written from memory of the reference: print `built_on` of an offset plane (one face) and a
+    midplane (two faces); a plane whose definition members are not found has no `built_on` and is treated as
+    parameters only.
+  - `BRepFace.pointOnFace` and `BRepFace.geometry` (type name `Plane` or `Cylinder`) of the mirror face or the pattern
+    axis face; `BRepEdge` points through `edge_record`.
 
 ## Capture reader calls to watch (extrude, revolve, hole, combine, thread, sketch profiles)
 
@@ -629,3 +647,9 @@ capture in `report.json`.
 - `CircularPatternFeature.axis` (construction axis, sketch line, linear edge, cylindrical face).
 - `Feature.timelineObject.index` of each pattern or mirror input feature matches the item `index` in the capture.
 - `MirrorFeature.patternEntityType`, `mirrorPlane` (construction plane or planar face), `isCombine`.
+- The export pipeline (`lib/export_plan/pipeline.py`, wired in `commands/ExportForParamability/export_flow.py`):
+  both exports measure the sketches, and the probe reads the sketches once more after the last restore, so
+  `report.json` `probe.restore_gap_mm` and `health` describe the design as the person gets it back. Check that the
+  extra read after a restore does not move the timeline marker, that `health.sketch_drift` stays false on a design
+  that returns to its start, and that a restore the add-in cannot finish (a parameter locked by hand during the
+  export) shows "These parameters could not be set back" in the result window and in a message box.
