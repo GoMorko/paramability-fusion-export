@@ -3,7 +3,7 @@ import unittest
 from tests import context  # noqa: F401
 from tests.fakes import (FakeMatrix3D, FakeOccurrence, FakeSolid, apply_matrix, compose_matrices, turn_x, turn_z)
 
-from lib.fusion_reader.placement import occurrence_path, read_frame, read_placement
+from lib.fusion_reader.placement import occurrence_path, read_placement
 
 POINTS = [(0, 0, 0), (40, 0, 0), (0, 20, 0), (0, 0, 10)]
 
@@ -130,29 +130,6 @@ class FrameTest(unittest.TestCase):
         proxy = nested(turn_z(0, (1, 0, 0)), turn_z(0), True)
         proxy.assemblyContext.assemblyContext.isReferencedComponent = True
         self.assertTrue(read_placement(proxy, Root())["linked"])
-
-
-class ReReadTest(unittest.TestCase):
-    def test_the_frame_is_read_again_with_the_chosen_source(self):
-        box, tray = turn_z(90, (100, 50, 0)), turn_x(90, (5, 0, 0))
-        proxy = nested(box, tray, transform2_is_to_root=False)
-        first = read_placement(proxy, Root())
-        self.assertEqual(read_frame(proxy, first["source"]), first["frame"])
-        proxy.assemblyContext.assemblyContext.nativeObject = None
-        proxy.assemblyContext.assemblyContext.transform2 = FakeMatrix3D(turn_z(90, (100, 60, 0)))
-        self.assertEqual(read_frame(proxy, first["source"])["origin"][1] - first["frame"]["origin"][1], 10)
-
-    def test_the_re_read_uses_the_member_the_capture_used(self):
-        proxy, occurrence = moved(turn_z(0, (30, 0, 0)))
-        occurrence.transform, occurrence.transform2 = occurrence.transform2, FakeMatrix3D(turn_z(0, (99, 0, 0)))
-        self.assertEqual(read_frame(proxy, "transform")["origin"], [30, 0, 0])
-        self.assertEqual(read_frame(proxy, "transform2")["origin"], [99, 0, 0])
-
-    def test_unreadable_or_root_gives_none(self):
-        self.assertIsNone(read_frame(FakeSolid(POINTS), "transform2"))
-        proxy, occurrence = moved(turn_z(0))
-        occurrence.transform2 = None
-        self.assertIsNone(read_frame(proxy, "transform2"))
 
 
 if __name__ == "__main__":

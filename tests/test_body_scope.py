@@ -1,7 +1,7 @@
 import unittest
 
 from tests import context  # noqa: F401
-from lib.export_plan.body_scope import body_items, other_sketch_names, other_sketches, quantity_refs, scope_inputs, scoped_model_params
+from lib.export_plan.body_scope import body_items, other_sketches, quantity_refs, scope_inputs, scoped_model_params
 
 A = {"token": "a", "name": "Body1"}
 B = {"token": "b", "name": "Body2"}
@@ -76,23 +76,6 @@ class BodyScopeTest(unittest.TestCase):
         self.assertEqual(other_sketches(cap), {("cB", "Sketch1")})
         kept = {p["name"] for p in scoped_model_params(cap)}
         self.assertEqual(kept, {"d1", "d2", "d4", "d5", "d6", "d7"})
-
-    def test_only_the_sketch_names_of_the_targets_own_component_are_skipped(self):
-        cap = in_components(capture())
-        cap["items"][2]["name"], cap["items"][3]["name"] = "Sketch1", "Extrude1"
-        cap["items"][3]["data"]["profiles"] = [{"sketch": "Sketch1"}]
-        self.assertEqual(other_sketch_names({**cap, "target": {**A, "component": {"token": "cA"}}}), set())
-        self.assertEqual(other_sketch_names({**cap, "target": {**A, "component": {"token": "cB"}}}), {"Sketch1"})
-        self.assertEqual(other_sketch_names(capture()), {"Sketch2"})
-
-    def test_a_sketch_of_the_own_component_that_no_step_of_the_body_names_is_skipped(self):
-        cap = in_components(capture())
-        cap["capture"] = 3
-        cap["items"].append(dict(item(5, "PipeBottom", "Sketch", []), component="cA"))
-        cap = {**cap, "target": {**A, "component": {"token": "cA"}}}
-        self.assertEqual(other_sketch_names(cap), {"PipeBottom"})
-        cap["items"][1]["data"]["holes"] = [{"sketch_token": "s9"}]  # a sketch the capture does not name
-        self.assertEqual(other_sketch_names(cap), set())
 
     def test_quantity_parameters_come_from_the_steps_of_the_body(self):
         self.assertEqual([r["name"] for r in quantity_refs(capture())], ["d9"])

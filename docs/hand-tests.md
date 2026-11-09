@@ -37,8 +37,8 @@ Click "Export size choices". Use a design with two favourite user parameters (fo
 - [ ] Add a row whose numbers break the part (a fillet that cannot fit): Fusion shows the row name and the failing
       item, nothing is saved and the parameters are back.
 - [ ] A design that already has warnings or errors elsewhere (for example a component with a yellow or red timeline
-      item) still gets its sizes checked: the sizes are offered and kept, and only a size that breaks a new item is
-      fixed, with that item named in its reason and in `report.json` (sizes, build_failures).
+      item) still gets its sizes built: only a size that breaks a new item stops the export, with that item named in
+      the message.
 - [ ] Watch these calls: expressions are written as text such as `40 mm`. If your Fusion uses a comma as the decimal
       mark, check that `12.5` rows still set the right number.
 - [ ] A user parameter in an unusual unit (for example mm/s) is listed greyed out as "not supported" with the reason
@@ -135,47 +135,37 @@ builds agrees with the Fusion part.
 - [ ] **Size choices**: a two row export in Export size choices still lands as size choices (one shape per size).
 
 
-### 7.1 Sizes from parameters, checks and restore
+### 7.1 Sizes from parameters, the sketch tries and restore
 
 Use a design with one body in the root and three plain user parameters read by its features (for example `wall` in
 mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter.
 
-Unless a line says otherwise, the lines in this section and in sections 8 and 9 that speak of size checks, check
-STEPs, shortened or raised ranges or "Keep doubtful sizes fixed" need the box "Check sizes in Fusion (slower)"
-ticked. The probe rows (recompute only, no STEP) also run with the box off, the default, which is the plain export
-below.
-
-- [ ] **Plain export (box off, the default).** The dialog shows the box "Check sizes in Fusion (slower)" off and no
-      "Keep doubtful sizes fixed" box; ticking the first shows the second, unticking hides it. The hint under the table
-      says the design is changed for a moment to measure the sketches. Export: a "Trying" progress window shows when
-      a ticked size moves a sketch, parameters change for a moment and are all back at the end (check the values), and
-      no check STEP is made. Every ticked size that a copied step reads is in `recipe.json` with the range of the
-      table and its current value. `manifest.json` has `"checks": []` and the package holds no `checks/` folder.
-      `report.json` has `"check_sizes": false`, a `probe` record when a sketch could be followed (its `restore_gap_mm`
-      is about 0), and no `raised` or `narrowed`. A try that Fusion cannot build is listed in `probe.dropped` and no
-      size is fixed for it.
-- [ ] **Plain export, sketch sizes follow.** Tick a parameter that drives a sketch dimension. Open the plain file in
+- [ ] **Export.** The hint under the table says the design is changed for a moment to measure the sketches. Export:
+      a "Trying" progress window shows when a ticked size moves a sketch, parameters change for a moment and are all back at the end (check the values), and no STEP is made for
+      the tries. Every ticked size that a copied step reads is in `recipe.json` with the range of the table and its
+      current value. `manifest.json` has `"checks": []` and the package holds no `checks/` folder. `report.json` has
+      a `probe` record when a sketch could be followed (its `restore_gap_mm` is about 0). A try that Fusion cannot
+      build is listed in `probe.dropped` and no size is fixed for it.
+- [ ] **Sketch sizes follow.** Tick a parameter that drives a sketch dimension. Open the file in
       Paramability: changing the size moves the sketch, and the size is not marked "may be unexpected" unless the
       probe could not follow it.
-- [ ] **Plain export, loose sizes.** Tick a parameter that drives a joint, or a sketch the tries cannot follow. The size stays in
+- [ ] **Loose sizes.** Tick a parameter that drives a joint, or a sketch the tries cannot follow. The size stays in
       `recipe.json`, the manifest `loose` list holds it with a reason that starts with the Fusion name, the result
       window shows "may be unexpected" in its "In Paramability" column, and Paramability shows a warning mark. A
       ticked parameter that no copied step reads is not a size: the message names it, and it is in the manifest
       `parameters` list.
-- [ ] **Labels.** Open the plain file in Paramability: each size shows the Fusion parameter name as its label, and
+- [ ] **Labels.** Open the file in Paramability: each size shows the Fusion parameter name as its label, and
       the Fusion comment as the variable's description (from the manifest `parameters` list), not as the name.
 
 - [ ] The dialog lists the user parameters in a table, the ones the body reads ticked (favourites first), the formula
       one greyed with "formula" in the last column. OK is on once a body is picked.
 - [ ] **Doubtful when it opens.** A parameter that drives a joint is unticked as soon as the dialog opens, but it can
       be ticked: its row then says "size, may be unexpected", and the box under the table gives the reason ("may give
-      unexpected results: it moves a joint") when the row is clicked. Tick "Keep doubtful sizes fixed": the row says
-      "fixed, moves a joint"; untick it again. A parameter that drives a sketch dimension is not marked: section 9
-      covers it.
-- [ ] **Doubtful sizes in the file.** Export with such a size ticked and the box off: the size is in `recipe.json`,
-      the manifest `loose` list names it with the reason, the result window has a "May give unexpected results" group
-      and its row says "may be unexpected", and Paramability marks the size with a warning. Export again with "Keep
-      doubtful sizes fixed" ticked: the size is in the manifest `fixed` list instead and not in `recipe.json`.
+      unexpected results: it moves a joint") when the row is clicked. A parameter that drives a sketch dimension is
+      not marked: section 9 covers it.
+- [ ] **Doubtful sizes in the file.** Export with such a size ticked: the size is in `recipe.json`, the manifest
+      `loose` list names it with the reason, the result window has a "May give unexpected results" group and its row
+      says "may be unexpected", and Paramability marks the size with a warning.
 - [ ] **Another body.** In a design with two bodies built from different parameters, pick the other body: the ticks
       and greyed lines change to that body's parameters. A parameter only the other body reads is not ticked. Note
       how long the dialog takes to open and to follow the pick (the add-in reads the steps of the body each time).
@@ -189,58 +179,35 @@ below.
       step".
 - [ ] With only one body in the design it is picked already. With no user parameters the dialog says so (no table)
       and the export still works.
-- [ ] With the box ticked: export, open in Paramability: the part is a recipe, the sizes are the ticked parameters, and
-      the message after the export says how many sizes are ready. `manifest.json` inside the file lists one check per size
-      (`checks/01.step` and up), each with a single size in `values`. The recipe in `recipe.json` lists no size
-      that has no check, unless the message said some were not checked.
+- [ ] Export, open in Paramability: the part is a recipe, the sizes are the ticked parameters that the steps read, and
+      the message after the export says how many sizes are ready.
 - [ ] Untick a parameter and export: that name is not a size and its number is plain in `recipe.json`.
 - [ ] **Doubtful by a sketch.** Drive a sketch dimension by a ticked parameter through an angle (a point placed by
       an angle on a circle) and also an extrude distance. The export does not stop: the message after it lists that
       parameter with its reason (it moves Sketch1 along a curve), the manifest `loose` list holds it, and it stays a
-      size whose extrude follows while the point keeps its place. With "Keep doubtful sizes fixed" it is in `fixed`.
-- [ ] **Fixed by a failed build.** Give a ticked parameter a range that Fusion cannot build at either end or at any
-      smaller step toward the current value (a fillet that only fits at the current value). The export saves, the
-      parameter is listed as fixed with "Fusion cannot build the part when it is ... or ..., or any value closer to
-      the current one", and the other sizes are unaffected. `report.json` (sizes, build_failures) lists the failed
-      value and the values tried (`tries`).
-- [ ] **One side only.** Give a ticked parameter a range comment such as `[1..400]` that Fusion cannot build above
-      the current value at all, but can build below it. The parameter stays a size whose range ends at its current
-      value; the check in `manifest.json` is at the bottom of the range and matches in Paramability.
-- [ ] **Range shortened by a failed build.** Give a ticked parameter a range that Fusion cannot build at the top but
-      can build part of the way (for example a wall thickness of 1.25 mm with the default range up to 2.5 mm, where
-      a chamfer fails at 2.5). A progress window "Trying size 1 of 3: ..." shows. The parameter stays a size; the
-      message after the export has a line such as "Wall thickness: the range ends at 1.87 mm, since Fusion cannot
-      build the part at 2.5 mm (Chamfer1 fails).", the result window has a "Range shortened" group and its Range
-      column shows the shorter range, the recipe size max is the same number, and `report.json` (sizes, narrowed)
-      lists it. Open the file in Paramability: the check at the new top matches. Type a Max of 2.5 yourself and
-      export again: the line says "you typed a Max of 2.5 mm". Repeat at the bottom of a range (a Min that Fusion
-      cannot build): the bottom is tried for every checked size, with a rebuild only, and the range starts at the
-      value that builds. Cancel during a try: nothing is saved and every parameter is back, with one message at most
-      about parameters that could not be put back.
+      size whose extrude follows while the point keeps its place.
 - [ ] **Rows start from the saved values.** On a design with a sketch that has two solutions (a lid sketch whose
-      outline can flip), run an export with several checked sizes and the probe: the check rows and probe rows match
-      what the same sizes give when set by hand from the saved values, and no row stays on the flipped solution.
+      outline can flip), run an export with several sizes that move sketches: the probe rows match what the same sizes give
+      when set by hand from the saved values, and no row stays on the flipped solution.
       The export takes one more recompute per row (the parameters are put back before each row after the first), so a
       long run is a little slower.
-- [ ] **Restore.** After each export, a cancel in the "Checking size 2 of 4" window, and a forced failure (full disk
+- [ ] **Restore.** After each export, a cancel in the "Trying size 2 of 4" window, and a forced failure (full disk
       or a read only folder), every parameter shows its old expression, formulas included, the timeline marker is
       where it was and the design has no unsaved change beyond Fusion's own.
 - [ ] **Expressions** (the translator writes `+ - * /`, `^` as `pow`, and numbers with units as mm or degrees; the
-      value check refuses a formula that does not give Fusion's number, so a wrong reading shows as a fixed size).
+      value check refuses a formula that does not give Fusion's number, so a wrong reading is written as a number and its sizes may give unexpected results).
       Try `1 in + 5 mm`, `wall + 5` in a mm design and in an inch design, `wall ^ 2` and `-wall ^ 2`. Try `floor(wall)`,
       `round(wall)` and `ceil(wall)` on a length (Fusion may apply them in cm, the app in mm): with `wall = 25 mm`,
       note the value Fusion shows for `floor(wall)`. Helper parameters: a unitless `count`, `step = count * 1 mm`,
       `wall = layers * 0.4` in mm, and a formula reading them: all export with formulas, ticked or not.
 - [ ] **Marker rolled back, with sizes.** Put the marker before the last few steps (one of them uses a ticked size)
-      and export. The dialog shows the marker line. The recipe holds only the steps before the marker, every size
-      check matches Fusion at the marker, `report.json` has `marker` (position and count) and the capture has only
-      the items before the marker. A step after the marker that would fail at a check size does not fix that size.
-      After the export the marker is at the same step, parameters are back and the later steps compute as before
-      when you drag the marker to the end.
+      and export. The dialog shows the marker line. The recipe holds only the steps before the marker, `report.json`
+      has `marker` (position and count) and the capture has only the items before the marker. After the export the
+      marker is at the same step, parameters are back and the later steps compute as before when you drag the marker
+      to the end.
 - [ ] Time: note how long a design with 5 sizes and 100 timeline items takes.
-- [ ] **Extra rebuilds.** With sizes that move sketches, the progress window shows "Checking size n of m" and then
-      "Trying size n of m". Cancel in the second window: the message says the export is cancelled, parameters are back
-      and the marker is at the end.
+- [ ] **Extra rebuilds.** With sizes that move sketches, the progress window shows "Trying size n of m". Cancel
+      there: the message says the export is cancelled, parameters are back and the marker is at the end.
 
 ### Pick points that follow sizes
 
@@ -257,14 +224,14 @@ corners, and a pipe hole in a row of three. Tick the count and the cube width.
       no size is fixed for it.
 - [ ] Add a boss whose sketch sits on an offset plane, with the start offset of the extrude set to `wall_mm * 2`: in the
       app the boss moves with `wall_mm`.
-- [ ] Round the inside edges of the shell: the message lists the sizes written before the round as fixed, with the
-      round's name in the reason.
+- [ ] Round the inside edges of the shell: the message lists the sizes written before the round as "may give
+      unexpected results", with the round's name in the reason.
 - [ ] Turn the design to Y up and repeat the first check.
 - [ ] Mirror the rounded corners of one side: the mirrored corners stay round at every height, and no height size
       is fixed.
 - [ ] Add a row of three posts (a rectangular pattern of an extrude, spacing `hole_pitch_mm`), then round the top
       edge of the last post: the round stays on that post when the spacing changes. Make the count a formula of a
-      ticked size: that size is fixed, with "picks a copy made by" in the reason.
+      ticked size: that size may give unexpected results, with "picks a copy made by" in the reason.
 - [ ] Chamfer the four top edges with two distances (1 mm and 2 mm), then flip the chamfer and export again: in the
       app the 1 mm side is on the top in the first file and on the walls in the second. The report shows `sides` and
       `cut_normals` on each edge. Do the same with a distance and an angle (30 degrees).
@@ -315,10 +282,9 @@ Use the filter box design (names such as `FilterBox_$_depth__contains_CeramicMed
       lower-right corner of the Fusion window shows "Paramability: saved as a fixed shape. Copy stopped at ...". Note
       whether the line stays or Fusion replaces it at once (its lifetime is not fixed by the API).
 - [ ] Click OK: the progress window shows as before, then the result window "Saved for Paramability" opens with the
-      saved line, a table of sizes (name, range, "matches Fusion", "not checked", "may be unexpected", "kept fixed"
-      or "not used"; a plain export says "size" instead of "matches Fusion" and heads the column "In Paramability"), a "Stays fixed" group and a "May give unexpected results" group with each reason, and the line
-      "All N parameters come along as variables ...". Only a Close button shows. Pull a size so that Fusion cannot
-      build it at any other value (a fillet that only fits now): its row says "kept fixed".
+      saved line, a table of sizes (name, range, and under "In Paramability": "size", "may be unexpected", "kept fixed",
+      "not followed" or "not used"), a "Stays fixed" group and a "May give unexpected results" group with each reason,
+      and the line "All N parameters come along as variables ...". Only a Close button shows.
 - [ ] The result window opens right after the export ends, not while the progress window is still up. If it does not
       open, the same text shows in a message box. Note which: the log line "result dialog failed" gives the reason.
 
@@ -336,9 +302,7 @@ inside a component, also a nested or turned one, lands where Fusion shows it.
 - [ ] **C3 Used twice.** Two occurrences of `Tray` at different places. Pick the second: it lands at the second
       place, and the note says the part is used 2 times.
 - [ ] **C4 Joints.** `Tray` joined to `Box` with an offset `gap_mm`: `gap_mm` is unticked with a joint reason and
-      may give unexpected results when ticked. Then join it to a face whose place depends on `FilterBox_height_mm`:
-      after the checks that size may give unexpected results with "moves Tray in the assembly" (fixed with "Keep
-      doubtful sizes fixed").
+      may give unexpected results when ticked.
 - [ ] **C5 Cut from the assembly.** With the root active, cut a hole through the body of `Tray`. Export: a fixed shape
       whose note names the cut.
 - [ ] **C6 Components from bodies.** Model a body in the root, then "Create Components from Bodies". Export it and
@@ -350,14 +314,14 @@ inside a component, also a nested or turned one, lands where Fusion shows it.
 - [ ] **C8 Linked component.** Insert a design as a linked component and pick its body: the file is a fixed shape with
       the linked design note.
 - [ ] **C9 Reach into another component.** A sketch in `Tray` on a face of `Box`, and an extrude in `Tray` "to" a face
-      of `Box`. The first exports (a `Box` parameter that moves it is fixed with the sketch reason); the second is a
+      of `Box`. The first exports (a `Box` parameter that moves it may give unexpected results, with the sketch reason); the second is a
       fixed shape naming the extrude.
 - [ ] For a component body, the dialog table follows the component's own parameters, and "Tick what the body uses"
       ticks only what the component reads.
 - [ ] **C9b Sketch of another component.** An extrude in `Tray` that uses a sketch of `Box` (moved and turned), and a
       mirror in `Tray` across a plane of the root. Export: the extrude is copied where Fusion shows it, with a note
-      that names the sketch, and the mirror is copied. A ticked size that drives a dimension of that `Box` sketch is
-      fixed with "changes the sketch". The report shows `native_frame`, `placement.checked_points` 3 and
+      that names the sketch, and the mirror is copied. A ticked size that drives a dimension of that `Box` sketch
+      may give unexpected results, with "changes the sketch". The report shows `native_frame`, `placement.checked_points` 3 and
       `sketch_params` on the profile, and `"assembly": true` on the mirror plane.
 - [ ] **C10 Many components.** A design with several components made one after the other (each with sketches,
       construction planes and extrudes), the picked one in the middle, and one moved away from the origin. Export:
@@ -386,13 +350,13 @@ the sizes on the form and compare the part with Fusion at the same values.
       dimension, cut through. Then a hole feature on a sketch point at `pipe_offset_mm`. Both follow both sizes and
       the box width.
 - [ ] **K3 Offset plane.** A sketch on a construction plane offset by `FilterBox_height_mm`, a boss extruded from it.
-      The boss moves with the height. Then make an extrude reach "to" that plane: the height is fixed with the
-      construction plane reason.
+      The boss moves with the height. Then make an extrude reach "to" that plane: the height may give unexpected
+      results, with the construction plane reason.
 - [ ] **K4 Sketch on a face.** A sketch on the top face of the base, a lid lip extruded from it with projected edges.
       The lip follows the height and the width.
-- [ ] **K5 What stays fixed.** A point placed by an angle parameter on a circle (reason: along a curve); a line that
+- [ ] **K5 What may give unexpected results.** A point placed by an angle parameter on a circle (reason: along a curve); a line that
       crosses the outline only above some width (reason: a different outline); a plane at an angle driven by a
-      parameter (reason: turns the plane). Each is fixed with its reason; the other sizes work.
+      parameter (reason: turns the plane). Each may give unexpected results, with its reason; the other sizes work.
 - [ ] **K6 Constraints.** A slot with equal and symmetric constraints, a rectangle with sketch fillets of radius
       `corner_mm`, a hole diameter `sqrt(area_mm2)`. All follow; the fillet arcs keep their radius.
 - [ ] **K7 Restore and cancel.** Cancel during "Trying size 2 of 6": parameters are back and the marker is at the
@@ -401,7 +365,7 @@ the sizes on the form and compare the part with Fusion at the same values.
 - [ ] **K8 In a component.** K1 built inside a turned component `Tray`: the box lands where Fusion shows it and
       resizes in place.
 - [ ] **K9 Report.** Send the K1 report. It pins token stability (the curves are found again in every state), the
-      first read against the capture (a sketch that differs is left to the measured check), `restore_gap_mm` (should
+      first read against the capture (a sketch that differs is not followed), `restore_gap_mm` (should
       be 0 or tiny) and the column checks (`motion.dropped`).
 
 ## Fusion calls to watch
@@ -493,20 +457,18 @@ These were written from the API reference and never run:
     export command. The reference says its lifetime is not fixed.
 - The component export flow (`commands/ExportForParamability/export_flow.py`): `Design.snapshots` and
   `Snapshots.hasPendingSnapshot` (asked when the dialog opens, before the capture moves the marker, and again at OK;
-  an unreadable answer counts as "nothing pending"); `BRepBody.parentComponent` of a
-  proxy giving the native component whose sketches are read at every check; `Occurrence.transform2` and the occurrence
-  path read again after each parameter change (`placement.read_frame`); the capture members of "Bodies inside
+  an unreadable answer counts as "nothing pending"); the capture members of "Bodies inside
   components" in `docs/capture-format.md`.
 - The size probe (`lib/fusion_reader/probe_state.py`, `lib/probe/`, `lib/export_plan/probe_flow.py`), none of it run
-  yet. Each member below is read at every state; a missing one only leaves that sketch unread (the measured check of
-  hand test 7.1 then decides) and shows in `probe.states` of `report.json`:
+  yet. Each member below is read at every state; a missing one only leaves that sketch unread, so its sizes may give
+  unexpected results, and it shows in `probe.states` of `report.json`:
   - `Sketch.entityToken`, `Sketch.profiles` per state (the profiles at the timeline end must equal the ones the
     steps used: the first read is compared with the capture within 1e-4 mm), `Sketch.referencePlane` with
     `.entityToken` and `objectType`.
   - `ProfileCurve.sketchEntity.entityToken`: the same curve must give the same token after every recompute (K9).
   - `SketchPoint` and `SketchLine` `.entityToken`, `.parentSketch`, `.worldGeometry`; the hole point tokens
     (`SketchPointsHolePositionDefinition.sketchPoints` items) and the revolve axis line token.
-  - `ConstructionPlane.entityToken` and `ConstructionAxis.entityToken` (a step that reaches one fixes the sizes behind
+  - `ConstructionPlane.entityToken` and `ConstructionAxis.entityToken` (a step that reaches one marks the sizes behind
     it); `RectangularPatternFeature.directionOneEntity` and `directionTwoEntity` with `.parentSketch`.
   - `Design.findEntityByToken` for sketches, points and lines of a component (K8): the native object or an
     occurrence proxy, the add-in keeps the one without `assemblyContext`.
@@ -523,10 +485,7 @@ These were written from the API reference and never run:
     (`Sketch.sketchDimensions`). Check that `created_by.kind` is `sketchDimension` with the sketch name in the report
     capture for each dimension (before this check, a real design gave `other` with a role like "Linear Dimension-2").
 - `Design.fusionUnitsManager.defaultLengthUnits` as the unit of a bare number in a length formula (falls back to mm).
-- `Component.modelParameters` read by `list_model_parameters`; `Sketch.transform.asArray()`, `Sketch.sketchPoints`
-  with `worldGeometry`, `Sketch.sketchCurves` with `worldGeometry` (`radius`, `center`, `startPoint`, `endPoint`)
-  read in `lib/fusion_reader/sketches.py`, and `Component.sketches` with `Sketch.name`. A missing member only
-  leaves a gap in the numbers: a sketch that moves on a missing member is then not seen, so check hand test 7.1.
+- `Component.modelParameters` read by `list_model_parameters`.
 - Scoping to the picked body: `SketchDimension.parentSketch` with `Sketch.name` (read as `created_by.sketch`), and
   the name of a feature (`created_by.name`) equal to its timeline item name. A name that does not match leaves the
   parameter in, so a mismatch shows as a parameter that other bodies' steps make ticked.
@@ -648,7 +607,7 @@ capture in `report.json`.
 - `Feature.timelineObject.index` of each pattern or mirror input feature matches the item `index` in the capture.
 - `MirrorFeature.patternEntityType`, `mirrorPlane` (construction plane or planar face), `isCombine`.
 - The export pipeline (`lib/export_plan/pipeline.py`, wired in `commands/ExportForParamability/export_flow.py`):
-  both exports measure the sketches, and the probe reads the sketches once more after the last restore, so
+  the export measures the sketches, and the probe reads the sketches once more after the last restore, so
   `report.json` `probe.restore_gap_mm` and `health` describe the design as the person gets it back. Check that the
   extra read after a restore does not move the timeline marker, that `health.sketch_drift` stays false on a design
   that returns to its start, and that a restore the add-in cannot finish (a parameter locked by hand during the

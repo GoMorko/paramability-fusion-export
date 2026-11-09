@@ -2,9 +2,9 @@
 
 `scan` finds the sketches whose numbers the probe can follow ("covered" ones): every capture record that names them
 is a profile, a hole point set or a revolve axis line that the reader gave tokens for. `request` is what the reader
-reads per state, `kept_sizes` the sizes worth checking, `probe_rows` the extra size settings to try.
+reads per state, `kept_sizes` the sizes worth probing, `probe_rows` the size settings to try.
 
-Sizes are dicts as in `export_plan.size_checks.plan_checks`: param (Fusion name), size (recipe name), unit, value,
+Sizes are dicts as in `export_plan.size_offers.probe_sizes`: param (Fusion name), size (recipe name), unit, value,
 min, max (manifest numbers).
 """
 from ..package.manifest import MAX_NAME_CHARS
@@ -35,10 +35,6 @@ class Scan:
     def note_name(self, token, name):
         if token and isinstance(name, str) and name:
             self.named.setdefault(token, name)
-
-    def names(self, tokens=None):
-        """Names of the covered sketches (of `tokens` when given), for the sketches the S1 check should skip."""
-        return sorted({n for t, n in self.covered.items() if n and (tokens is None or t in tokens)})
 
 
 def _profile_ok(profile):
@@ -168,7 +164,7 @@ def request(capture, table, covered=None):
             "params": list(dict.fromkeys(names)), "target": True}
 
 
-# ---- which sizes to check ------------------------------------------------------------------------------------
+# ---- which sizes to probe ------------------------------------------------------------------------------------
 
 def sketch_driven(table):
     """Fusion names of the ticked sizes that reach a model parameter made by a sketch dimension or a construction
@@ -181,7 +177,7 @@ def sketch_driven(table):
 
 
 def kept_sizes(table, free_sizes):
-    """Fusion names of the sizes to check: the free sizes of the first translation (recipe names in `free_sizes`),
+    """Fusion names of the sizes to probe: the free sizes of the first translation (recipe names in `free_sizes`),
     plus every ticked size that reaches a sketch dimension or a construction plane. In table order."""
     free = set(free_sizes)
     driven = set(sketch_driven(table))
@@ -210,19 +206,16 @@ def _row(sizes, name, overrides, key=None):
     }
 
 
-def _others(size, tried):
-    """The ends of the size's range that no state has tried (`tried`: a value or a list of them, or None)."""
-    tried = [size["value"]] + ([] if tried is None else list(tried) if isinstance(tried, (list, tuple)) else [tried])
-    return [end for end in (size["min"], size["max"]) if all(abs(end - t) > _SAME for t in tried)]
+def _others(size):
+    """The ends of the size's range that differ from its current value."""
+    return [end for end in (size["min"], size["max"]) if abs(end - size["value"]) > _SAME]
 
 
-def probe_rows(sizes, tried, moved, limit=MAX_PROBE_ROWS):
-    """The extra states to try after the checks, as `(rows, untried)`.
+def probe_rows(sizes, moved, limit=MAX_PROBE_ROWS):
+    """The states to try, as `(rows, untried)`.
 
-    sizes: the kept sizes, with the range ends to try. tried: {param: value or [values]} of the states that built
-    with that size alone changed (its check and the ends tried). moved: the params that move covered sketch values (a
-    checked size whose state moved one, or an unchecked size that reaches a sketch). A moved size gets a row at each
-    range end no state tried; with two or more moved sizes, one row
+    sizes: the kept sizes, with the range ends to try. moved: the params that move covered sketch values. A moved
+    size gets a row at each range end that differs from its current value; with two or more moved sizes, one row
     puts all kept sizes at their minimum and one at their maximum. A row has no STEP (`"step": False`); `state` holds
     the manifest values, `varied` the params that differ. `untried` lists the moved params left without rows by the
     row limit.
@@ -230,7 +223,7 @@ def probe_rows(sizes, tried, moved, limit=MAX_PROBE_ROWS):
     rows, untried = [], []
     moved_sizes = [s for s in sizes if s["param"] in moved]
     for size in moved_sizes:
-        wanted = _others(size, tried.get(size["param"]))
+        wanted = _others(size)
         if len(rows) + len(wanted) > limit:
             untried.append(size["param"])
             continue

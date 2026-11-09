@@ -45,13 +45,12 @@ class RowExport:
         failed = restore_parameters(self.store, self._saved)
         self.restore_failures = list(dict.fromkeys(self.restore_failures + failed))
 
-    def run(self, rows, tmpdir, progress, tolerate_build_errors=False, until_built=False):
+    def run(self, rows, tmpdir, progress, tolerate_build_errors=False):
         """Return [{'name', 'values', 'step_file'}]. progress(index, total, name) returns False to cancel.
 
         With tolerate_build_errors a row Fusion cannot build gives {'name', 'values': None, 'step_file': None,
         'error': sentence, 'detail': why} and the run goes on (`why` is RowBuildError.detail). The next row must
-        then set every parameter it needs. With until_built the run stops after the first row that builds, so the
-        results can be fewer than the rows.
+        then set every parameter it needs.
         A row without a STEP gives 'step_file': None as well.
         """
         if self._saved is None:
@@ -89,8 +88,6 @@ class RowExport:
                     check_step_size(f"Size \"{row['name']}\"", size)
                     check_total_size(self._total)
                     results.append({"name": row["name"], "values": values, "step_file": path})
-                if until_built:
-                    break
             return results
         finally:
             failed = restore_parameters(self.store, self._saved)

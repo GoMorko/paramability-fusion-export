@@ -68,16 +68,16 @@ def d_motion():
 class CrossingTest(unittest.TestCase):
     def test_a_line_crossing_a_circle_writes_the_square_root(self):
         result = run(capture_with(d_shape(), "w_mm", 10.0), "w_mm", d_motion(), {"w_mm": (4.0, 16.0)})
-        self.assertEqual(result.fixed, [])
+        self.assertEqual((result.fixed, result.loose), ([], []))
         assert_schema_ok(self, result.recipe)
         outer = steps_of(result.recipe, "extrude")[0]["sketch"]["outer"]
         self.assertEqual([expr(c) for c in outer["start"]],
                          ["-0.5 * w_mm", "-(sqrt(-0.25 * (w_mm * w_mm) + 100))"])
 
-    def test_a_crossing_that_disappears_inside_the_range_fixes_its_size(self):
+    def test_a_crossing_that_disappears_inside_the_range_marks_its_size(self):
         result = run(capture_with(d_shape(), "w_mm", 10.0), "w_mm", d_motion())  # w_mm reaches 20: the line only touches
-        self.assertEqual([f["name"] for f in result.fixed], ["w_mm"])
-        self.assertIn("along a curve", result.fixed[0]["reason"])
+        self.assertEqual([f["name"] for f in result.loose], ["w_mm"])
+        self.assertIn("along a curve", result.loose[0]["reason"])
 
     def test_two_circles_cross_where_their_offset_puts_them(self):
         off, half = 4.0, math.sqrt(R * R - 4.0)
@@ -90,23 +90,21 @@ class CrossingTest(unittest.TestCase):
                          "1/p0/l0/segments.1.to.0": Affine(0.0, {"off_mm": 0.5}), "1/p0/l0/segments.1.to.1": stuck,
                          "1/p0/c0.0/center.0": Affine(0.0, {"off_mm": 1.0})}, curves=["1/p0"])
         result = run(capture_with(lens, "off_mm", off), "off_mm", motion)
-        self.assertEqual(result.fixed, [])
+        self.assertEqual((result.fixed, result.loose), ([], []))
         start = steps_of(result.recipe, "extrude")[0]["sketch"]["outer"]["start"]
         self.assertEqual(expr(start[1]), "-(sqrt(-0.25 * (off_mm * off_mm) + 100))")
 
-    def test_without_measured_curves_a_stuck_crossing_still_fixes_its_size(self):
+    def test_without_measured_curves_a_stuck_crossing_still_marks_its_size(self):
         motion = d_motion()
         motion.curves = set()
         result = run(capture_with(d_shape(), "w_mm", 10.0), "w_mm", motion, {"w_mm": (4.0, 16.0)})
-        self.assertEqual([f["name"] for f in result.fixed], ["w_mm"])
-
+        self.assertEqual([f["name"] for f in result.loose], ["w_mm"])
 
     def test_a_line_that_turns_cannot_carry_its_crossings(self):
         motion = d_motion()
         motion.values["1/p0/c0.0/turn"] = Affine(0.0, {"w_mm": 1.0}, "Sketch1")
         result = run(capture_with(d_shape(), "w_mm", 10.0), "w_mm", motion, {"w_mm": (4.0, 16.0)})
-        self.assertEqual([f["name"] for f in result.fixed], ["w_mm"])
-
+        self.assertEqual([f["name"] for f in result.loose], ["w_mm"])
 
     def fillet_at(self, point):
         capture = capture_with(d_shape(), "w_mm", 10.0)
@@ -114,14 +112,15 @@ class CrossingTest(unittest.TestCase):
             "sets": [_edges_set("constant", [point], radius=1.0, continuity="tangent")]}))
         return run(capture, "w_mm", d_motion(), {"w_mm": (4.0, 16.0)})
 
-    def test_a_pick_on_an_arc_that_changes_shape_fixes_its_sizes(self):
+    def test_a_pick_on_an_arc_that_changes_shape_marks_its_sizes(self):
         a = R / math.sqrt(2)
         result = self.fillet_at([a, a, 10.0])
-        self.assertEqual([f["name"] for f in result.fixed], ["w_mm"])
-        self.assertIn("Fillet1", result.fixed[0]["reason"])
+        self.assertEqual([f["name"] for f in result.loose], ["w_mm"])
+        self.assertIn("Fillet1", result.loose[0]["reason"])
 
     def test_a_pick_at_the_middle_of_that_arc_stays(self):
-        self.assertEqual(self.fillet_at([R, 0.0, 10.0]).fixed, [])
+        result = self.fillet_at([R, 0.0, 10.0])
+        self.assertEqual((result.fixed, result.loose), ([], []))
 
 
 class CornerWithThreeCurvesTest(unittest.TestCase):

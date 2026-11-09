@@ -6,47 +6,35 @@ from .dialog_rows import range_text
 from .health import FAILED, health_lines, with_lines
 from .messages import listed_lines, recipe_saved_message
 
-MATCHES, NOT_CHECKED, KEPT_FIXED, NOT_USED = "matches Fusion", "not checked", "kept fixed", "not used"
+KEPT_FIXED, NOT_USED = "kept fixed", "not used"
 NOT_FOLLOWED = "not followed"
 NOT_MEASURED = "not measured"
 SKETCHES = "Sketches"
 DOUBTFUL = "may be unexpected"
 FREE = "size"
-CHECK_HEADER, STATUS_HEADER = "Check", "In Paramability"
+STATUS_HEADER = "In Paramability"
 
 
 def _size_rows(table, report):
-    """One row per size the recipe holds: its Fusion name, range and what the check found (a plain export, which
-    checks nothing, says "size" or "may be unexpected"). A range the translator shortened or a smallest value it
-    raised (so a picked pattern copy stays) is shown that way."""
+    """One row per size the recipe holds: its Fusion name, its range and whether it may give unexpected results."""
     sizes = report["sizes"]
-    plain = report.get("check_sizes") is False
-    unchecked = set(sizes.get("unchecked") or [])
     loose = {f["name"] for f in sizes.get("loose") or []}
-    raised = {r["name"]: r["min"] for r in sizes.get("raised") or []}
-    narrowed = {n["size"]: (n["min"], n["max"]) for n in sizes.get("narrowed") or [] if "min" in n and "max" in n}
     by_size = {e.size_name: e for e in table.entries if e.size_name}
     rows = []
     for size_name in sizes.get("free") or []:
         entry = by_size.get(size_name)
-        size = dict(table.sizes.get(size_name) or {})
-        if size_name in narrowed and "min" in size:
-            lo, hi = narrowed[size_name]
-            size["min"], size["max"] = max(size["min"], lo), min(size["max"], hi)
-        if size_name in raised and "min" in size:
-            size["min"] = max(size["min"], raised[size_name])
+        size = table.sizes.get(size_name) or {}
         rows.append({
             "name": entry.name if entry is not None else size_name,
             "range": range_text(size, size.get("min"), size.get("max")) if "min" in size else "",
-            "check": DOUBTFUL if size_name in loose else FREE if plain else (
-                NOT_CHECKED if size_name in unchecked else MATCHES),
+            "check": DOUBTFUL if size_name in loose else FREE,
         })
     return rows
 
 
 def _left_out_rows(table, report, ticked):
-    """Rows for ticked parameters that did not become sizes: fixed after a check, no copied step reads them, or they
-    change a sketch that could not be followed."""
+    """Rows for ticked parameters that did not become sizes: fixed, no copied step reads them, or they change a sketch
+    that could not be followed."""
     sizes = report["sizes"]
     fixed_names = {f["name"] for f in sizes.get("fixed") or []}
     dropped = set(sizes.get("dropped") or [])
@@ -75,10 +63,6 @@ def _loose_lines(report):
     return listed_lines(report["sizes"].get("loose") or [])
 
 
-def _narrowed_lines(report):
-    return [n["note"] for n in report["sizes"].get("narrowed") or [] if n.get("note")]
-
-
 def variables_line(manifest):
     count = len(manifest.get("parameters") or [])
     if not count:
@@ -91,9 +75,7 @@ def result_view(file_name, manifest, report, table, ticked):
     """Plain data for the result dialog, or None when the file holds no recipe (the message box tells that story).
 
     Keys: saved (first sentence), size_title, check_header (the title of the last column), rows ({name, range,
-    check}), fixed (lines), loose (lines: sizes that
-    stay free but may not follow every step, with why), narrowed (lines: sizes whose
-    range was shortened because Fusion could not build the part or a step would no longer meet it), variables,
+    check}), fixed (lines), loose (lines: sizes that stay free but may not follow every step, with why), variables,
     warnings (what is wrong with the design or the sketch measuring, and what to do: empty when all is well),
     message (the whole story as plain text, for a message box, with the warnings below it).
     """
@@ -105,11 +87,10 @@ def result_view(file_name, manifest, report, table, ticked):
     return {
         "saved": ("Saved %s. %s" % (file_name, notes[0] if notes else "")).strip(),
         "size_title": "%d %s ready for the form" % (count, "size" if count == 1 else "sizes"),
-        "check_header": STATUS_HEADER if report.get("check_sizes") is False else CHECK_HEADER,
+        "check_header": STATUS_HEADER,
         "rows": rows + _left_out_rows(table, report, ticked) + _probe_rows(report),
         "fixed": _fixed_lines(report),
         "loose": _loose_lines(report),
-        "narrowed": _narrowed_lines(report),
         "variables": variables_line(manifest),
         "warnings": health_lines(report.get("health")),
         "message": with_lines(recipe_saved_message(manifest, file_name), report.get("health")),

@@ -27,7 +27,6 @@ class ScanTests(unittest.TestCase):
         found = plan.scan(capture(extrude(1, square()), hole, axis))
         self.assertEqual(found.covered, {"sk1": "Sketch1", "sk2": "Holes", "sk3": ""})
         self.assertEqual([t["kind"] for t in found.targets], ["profile", "hole", "axis"])
-        self.assertEqual(found.names(), ["Holes", "Sketch1"])
 
     def test_a_profile_without_curve_tokens_leaves_its_sketch_uncovered(self):
         bare = square()
@@ -103,31 +102,32 @@ class ProbeRowTests(unittest.TestCase):
         self.tbl = table(PARAMS, ["count", "cube", "off"], MODEL)
         self.sizes = [size(self.tbl, "count", ""), size(self.tbl, "cube"), size(self.tbl, "off")]
 
-    def test_a_checked_size_gets_the_end_its_check_did_not_try(self):
-        rows, untried = plan.probe_rows(self.sizes, {"count": 6}, {"count"})
-        self.assertEqual([r["name"] for r in rows], ["count (min)"])
+    def test_a_moved_size_gets_a_row_at_each_end(self):
+        rows, untried = plan.probe_rows(self.sizes, {"count"})
+        self.assertEqual([r["name"] for r in rows], ["count (min)", "count (max)"])
         self.assertEqual(rows[0]["state"], {"count": 1.5, "cube": 10, "off": 5})
         self.assertEqual(rows[0]["varied"], ["count"])
         self.assertFalse(rows[0]["step"])
         self.assertEqual(untried, [])
 
     def test_row_values_are_in_the_units_fusion_shows(self):
-        rows, _ = plan.probe_rows(self.sizes, {}, {"cube"})
+        rows, _ = plan.probe_rows(self.sizes, {"cube"})
         self.assertEqual({r["name"]: r["values"]["cube"] for r in rows}, {"cube (min)": 5, "cube (max)": 20})
 
     def test_two_moved_sizes_add_one_row_with_all_at_min_and_one_at_max(self):
-        rows, _ = plan.probe_rows(self.sizes, {"count": 6, "cube": 20}, {"count", "cube"})
-        self.assertEqual([r["name"] for r in rows], ["count (min)", "cube (min)", "all min", "all max"])
+        rows, _ = plan.probe_rows(self.sizes, {"count", "cube"})
+        self.assertEqual([r["name"] for r in rows],
+                         ["count (min)", "count (max)", "cube (min)", "cube (max)", "all min", "all max"])
         self.assertEqual(rows[-2]["state"], {"count": 1.5, "cube": 5, "off": 2.5})
         self.assertEqual(rows[-1]["state"], {"count": 6, "cube": 20, "off": 10})
 
     def test_the_row_limit_leaves_a_size_untried(self):
-        rows, untried = plan.probe_rows(self.sizes, {}, {"count", "cube"}, limit=3)
+        rows, untried = plan.probe_rows(self.sizes, {"count", "cube"}, limit=3)
         self.assertEqual(untried, ["cube"])
         self.assertEqual([r["name"] for r in rows], ["count (min)", "count (max)"])
 
     def test_no_moved_size_no_rows(self):
-        self.assertEqual(plan.probe_rows(self.sizes, {"count": 6}, set()), ([], []))
+        self.assertEqual(plan.probe_rows(self.sizes, set()), ([], []))
 
 
 class CandidateProfileTests(unittest.TestCase):

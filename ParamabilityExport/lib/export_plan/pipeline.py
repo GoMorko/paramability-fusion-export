@@ -1,22 +1,17 @@
 """The export of one body into a recipe package, from the capture to the manifest. Pure: no Fusion imports.
 
-Both exports run this one sequence, with options:
+The sequence asks nothing of Fusion beyond the capture, the STEP of the part as it is and the sketch measuring. No
+STEP is made per size and no size is tried for a build: a size that a value cannot follow stays free with a warning,
+and the ranges are the ones in the dialog table.
 
-- The plain export (`check_sizes` off) asks nothing of Fusion beyond the capture, the STEP of the part and the sketch
-  measuring: no size checks, no tries to build, no shortened ranges. A size that a value cannot follow stays free
-  with a warning.
-- The checked export adds one check STEP per kept size, a try at the other end of each range (smaller steps where
-  Fusion cannot build, `size_narrowing`) and a second translation with what these found. Unless `keep_doubtful` is
-  set, a size that cannot be followed fully is fixed.
-
-Steps, in order: read the capture, translate once to learn which sizes the recipe keeps, plan and run the size
-checks, run the sketch probe, translate again with what was found, and assemble the package. The sketch probe runs
-in both exports whenever a sketch can be followed.
+Steps, in order: read the capture, translate once to learn which sizes the recipe keeps, run the sketch probe (it
+only recomputes), translate again with the motion it found, and assemble the package. The probe runs whenever a
+sketch can be followed.
 
 Fusion is reached only through the port the caller hands in (see `ExportPort`), so tests run the whole sequence with
-fakes. Parameters are changed by the runs and put back on every way out: when a step fails, when the person cancels,
-and before the probe's last read. What is left over (a parameter that would not go back, sketches that did not return
-to their start, a probe that could not measure) goes into the `health` record of the result.
+fakes. Parameters are changed by the probe and put back on every way out: when a step fails, when the person
+cancels, and before the probe's last read. What is left over (a parameter that would not go back, sketches that did
+not return to their start, a probe that could not measure) goes into the `health` record of the result.
 """
 import os
 from dataclasses import dataclass, field
@@ -26,14 +21,12 @@ from ..params import size_table as size_tables
 from ..params.listing import list_parameters
 from ..probe.motion import OPTIMISTIC
 from . import health as health_module
-from .body_scope import other_sketch_names, scope_inputs
+from .body_scope import scope_inputs
 from .probe_flow import SizeProbe, covers_a_sketch, kept_size_names
-from .recipe_export import free_sizes, plan_single_export, translate_capture, with_translated_limits
+from .recipe_export import free_sizes, plan_single_export, translate_capture
 from .restore import restore_parameters
 from .runner import ExportCancelled, RowExport
-from .size_checks import build_failures, check_at, into_range, plan_checks, read_checks
-from .size_narrowing import narrow_failed
-from .size_offers import labels, sizes_for_checks
+from .size_offers import labels, probe_sizes
 
 
 class ExportPort(Protocol):
@@ -44,8 +37,6 @@ class ExportPort(Protocol):
     units: {parameter name: Fusion unit string}.
     export_step(path): write the STEP of the picked body as the design is now.
     read_capture(): the capture dict of the picked body, or the exception that stopped the read.
-    snapshot(skip, source): the sketch numbers of the body's component now (sketches in `skip` left out), with the
-      body's place in the assembly when `source` names where it comes from.
     probe_reader(): a callable `read(request)` giving one probe state, or raising.
     progress(verb): a context manager whose value has `step(index, total, name)`; the step returns False when the
       person cancelled.
@@ -59,8 +50,6 @@ class ExportPort(Protocol):
     def export_step(self, path): ...
 
     def read_capture(self): ...
-
-    def snapshot(self, skip, source): ...
 
     def probe_reader(self): ...
 
@@ -83,8 +72,6 @@ class ExportRequest:
     design_unit: str
     ticked: list
     ranges: dict
-    check_sizes: bool = False
-    keep_doubtful: bool = False
     marker: Optional[dict] = None
 
 
@@ -100,44 +87,29 @@ class PipelineResult:
 
 
 def run_pipeline(port, request, tmp):
-    """The package of one export. `tmp` is a folder that holds the STEP files until the package is written.
+    """The package of one export. `tmp` is a folder that holds the STEP file of the part until the package is written.
 
     Raises what a failing step raises (`RowBuildError`, `StepExportError`, `PackageCapError`, `ExportCancelled`,
     `MarkerError`); the parameters are back by then and `port.warn_unrestored` has named any that are not."""
     return _Pipeline(port, request, tmp).run()
 
 
-def _target_info(capture):
-    """(component name, sketch scope, placement source) of the picked body from its capture.
+class ProbeRun:
+    """Runs the probe's rows in one job: one baseline, and the parameters put back after every row. The rows only
+    recompute (no STEP). It keeps the probe state read at every row that built, by row key, and `rows` lists
+    (row, result) of every row run. `read_failure` holds the first probe read that failed: the probe is then not
+    used."""
 
-    The scope is the component name shown before a sketch name in a reason; empty for a body of the root.
-    Unknown values are empty strings, and the component name is then "the part"."""
-    target = (capture or {}).get("target") or {}
-    component = target.get("component") or {}
-    place = target.get("placement") or {}
-    name = component.get("name") or ""
-    return name or "the part", "" if component.get("root") else name, place.get("source") or ""
-
-
-class CheckRun:
-    """Exports the STEP of each size check and tries the ends of each range, in one job: one baseline, and the
-    parameters put back after every run. It keeps the sketches read at every check and, when a probe runs, the probe
-    state of every row that built; both are keyed by the row key. `rows` lists (row, result) of every row run.
-    `read_failure` holds the first probe read that failed: the probe is then not used."""
-
-    def __init__(self, port, tmp, skip_sketches, source, probe=None):
-        self.port, self.tmp, self.skip, self.source, self.probe = port, tmp, skip_sketches, source, probe
-        self.snapshots, self.reads, self.rows = {}, {}, []
+    def __init__(self, port, tmp, probe):
+        self.port, self.tmp, self.probe = port, tmp, probe
+        self.reads, self.rows = {}, []
         self.read_failure = None
-        self._runs = 0
         self.job = RowExport(port.store, port.units, self._export)
 
     def _export(self, path):
+        """`RowExport`'s step callback: a probe row has no STEP, so `path` is None and only the state is read."""
         key = self.job.current_key
-        if path is not None:
-            self.port.export_step(path)
-            self.snapshots[key] = self.port.snapshot(self.skip, self.source)
-        if self.probe is not None and self.read_failure is None:
+        if self.read_failure is None:
             try:
                 self.reads[key] = self.probe.read_now()
             except ExportCancelled:
@@ -146,55 +118,17 @@ class CheckRun:
                 self.read_failure = exc
                 self.port.log(f"size probe read failed: {exc!r}")
 
-    def _run(self, rows, step, until_built=False):
-        self._runs += 1
-        folder = os.path.join(self.tmp, "checks", "run%d" % self._runs)
-        os.makedirs(folder, exist_ok=True)
-        results = self.job.run(rows, folder, step, tolerate_build_errors=True, until_built=until_built)
+    def try_rows(self, rows):
+        """Run the probe's rows. Returns their results."""
+        with self.port.progress("Trying") as progress:
+            results = self.job.run(rows, self.tmp, progress.step, tolerate_build_errors=True)
         self.rows.extend(zip(rows, results))
         return results
 
-    def run(self, checks):
-        """The results of the checks, in order."""
-        with self.port.progress("Checking") as progress:
-            return self._run([c["row"] for c in checks], progress.step)
-
-    def narrow(self, checks, results, sizes, size_labels):
-        """Try both ends of each checked size (`size_narrowing`). Returns a `Narrowing`."""
-        with self.port.progress("Trying") as progress:
-            def run_size(size, values, with_step, description):
-                rows = [check_at(size, v, sizes)["row"] for v in values]
-                if not with_step:
-                    rows = [dict(r, step=False) for r in rows]
-                number = 1 + next((i for i, c in enumerate(checks) if c["param"] == size["param"]), 0)
-                return self._run(rows, lambda *a: progress.step(number, len(checks), description), until_built=True)
-
-            return narrow_failed(checks, results, sizes, run_size, size_labels)
-
-    def recheck(self, kept, sizes, recipe_sizes):
-        """The kept checks with each one outside the recipe's range of its size (`size_checks.into_range`) run again
-        at the end of that range. A check that cannot move there, or does not build there, is left out."""
-        moved = {c["size"]: value for c, value in into_range(kept, recipe_sizes)}
-        if not moved:
-            return kept
-        by_param = {s["param"]: s for s in sizes}
-        redo = [check_at(by_param[c["param"]], moved[c["size"]], sizes) for c in kept
-                if c["size"] in moved and moved[c["size"]] is not None]
-        with self.port.progress("Checking") as progress:
-            results = self._run([c["row"] for c in redo], progress.step) if redo else []
-        again = {c["size"]: {**c, "step_file": r["step_file"]} for c, r in zip(redo, results) if not r.get("error")}
-        return [again[c["size"]] if c["size"] in again else c for c in kept
-                if c["size"] not in moved or c["size"] in again]
-
-    def try_rows(self, rows):
-        """Run the probe's extra rows (no STEP). Returns their results."""
-        with self.port.progress("Trying") as progress:
-            return self._run(rows, progress.step)
-
-    def probe_states(self, start=0):
-        """(values, result, read) of the rows run, from row number `start` on, for `SizeProbe.add_states`."""
+    def probe_states(self):
+        """(values, result, read) of the rows run, for `SizeProbe.add_states`."""
         out = []
-        for row, result in self.rows[start:]:
+        for row, result in self.rows:
             state = row.get("state") or {}
             values = {param: state[param] for param in row.get("varied") or [] if param in state}
             out.append((values, result, self.reads.get(row.get("key", row["name"]))))
@@ -204,8 +138,6 @@ class CheckRun:
 class _Pipeline:
     def __init__(self, port, request, tmp):
         self.port, self.request, self.tmp = port, request, tmp
-        self.checked = bool(request.check_sizes)
-        self.loose = not (self.checked and request.keep_doubtful)
         self.saved = None
         self.unrestored = []
         self.table = None
@@ -213,7 +145,7 @@ class _Pipeline:
         self.probe_status = health_module.NOT_NEEDED
         self.probe_error = ""
         self.motion = None
-        self.doubtful, self.measured = [], []
+        self.doubtful = []
 
     def run(self):
         self.saved = self.port.store.saved_expressions()
@@ -245,9 +177,7 @@ class _Pipeline:
             request.parameters, request.ticked, model, request.design_unit, quantity_params=quantities,
             ranges=request.ranges)
 
-        kept, unchecked, failures, narrowed, final = [], [], [], [], None
-        if isinstance(capture, dict):
-            kept, unchecked, failures, narrowed, final = self._translate_and_check(capture)
+        final = self._translate_and_measure(capture) if isinstance(capture, dict) else None
 
         self._restore()
         gap = self._restore_gap()
@@ -256,70 +186,34 @@ class _Pipeline:
         manifest, files, report = plan_single_export(
             capture if capture is not None else RuntimeError("The steps were not read."),
             part_step, request.title, request.writer, request.up_axis,
-            size_table=self.table, checks=kept,
-            fixed=[{"name": m["name"], "reason": m["reason"]} for m in self.measured], unchecked=unchecked,
-            listing=self._listing(), motion=self.motion, probe=probe_report, build_failures=failures,
-            narrowed=narrowed, marker=request.marker,
-            loose=[{"name": m["name"], "reason": m["reason"]} for m in self.doubtful], loose_sizes=self.loose,
-            translated=final, plain=not self.checked, health=health)
+            size_table=self.table, listing=self._listing(), motion=self.motion, probe=probe_report,
+            marker=request.marker, loose=[{"name": m["name"], "reason": m["reason"]} for m in self.doubtful],
+            translated=final, health=health)
         return PipelineResult(manifest, files, report, self.table, health)
 
-    def _translate_and_check(self, capture):
-        """The stages that need a capture. Returns (kept checks, unchecked sizes, build failures, narrowed ends, the
-        final translation)."""
-        request = self.request
-        kept, unchecked, failures, narrowed, checks, not_checked = [], [], [], [], [], []
-        first = self._translation(capture, OPTIMISTIC if covers_a_sketch(capture) else None, plain=not self.checked)
+    def _translate_and_measure(self, capture):
+        """The stages that need a capture: the first translation, the sketch probe and the translation with the
+        motion it found. Returns the final translation, or None when there is no recipe."""
+        first = self._translation(capture, OPTIMISTIC if covers_a_sketch(capture) else None)
         if first is None:
-            return kept, unchecked, failures, narrowed, None
-        planned = with_translated_limits(self.table, first)
-        keep = kept_size_names(planned, free_sizes(first.recipe))
-        sizes = sizes_for_checks(planned, request.parameters, keep=keep)
-        if self.checked:
-            checks, not_checked = plan_checks(sizes)
-            unchecked = [s["size"] for s in not_checked]
-        else:
-            not_checked = sizes
+            return None
+        keep = kept_size_names(self.table, free_sizes(first.recipe))
+        sizes = probe_sizes(self.table, self.request.parameters, keep=keep)
 
         self.probe = self._start_probe(capture)
-        part_name, scope, source = _target_info(capture)
-        skip = other_sketch_names(capture) | (self.probe.skip if self.probe is not None else set())
-        run = CheckRun(self.port, self.tmp, skip, source, self.probe) if checks or self.probe is not None else None
-        baseline = self.port.snapshot(skip, source) if checks else None
-
-        if checks:
-            results = run.run(checks)
-            narrowing = run.narrow(checks, results, sizes, labels(self.table))
-            failures = build_failures(checks, results, narrowing.tries)
-            checks, results, sizes, narrowed = (
-                narrowing.checks, narrowing.results, narrowing.sizes, narrowing.narrowed)
-            if narrowed:
-                self.table = self.table.with_narrowed(narrowing.moved_ends(self.table))
-            kept, self.measured, self.doubtful = read_checks(
-                checks, results, baseline, run.snapshots, labels(self.table), part_name=part_name, scope=scope,
-                loose=self.loose, failed_ends=narrowing.failed_ends)
         if self.probe is not None:
-            found = self._measure(run, sizes, not_checked)
+            found = self._measure(ProbeRun(self.port, self.tmp, self.probe), sizes)
             if found is not None:
-                (self.doubtful if self.loose else self.measured).extend(found)
-        if self.measured:
-            self.table = self.table.with_fixed({m["param"]: m["reason"] for m in self.measured})
-        # The translation with what the checks found can raise a minimum or shorten a range further.
-        final = self._translation(capture, self.motion, plain=not self.checked)
-        if final is not None and kept:
-            before = [c["size"] for c in kept]
-            kept = run.recheck(kept, sizes, final.recipe.get("sizes") or {})
-            unchecked += [n for n in before if n not in {c["size"] for c in kept}]
-        return kept, unchecked, failures, narrowed, final
+                self.doubtful.extend(found)
+        return self._translation(capture, self.motion)
 
     # ---- translation ------------------------------------------------------------------------------------------
 
-    def _translation(self, capture, motion, plain):
+    def _translation(self, capture, motion):
         """The translator's result when it gives a recipe, else None (the plan then reports the reason). Never
         raises."""
         try:
-            result = translate_capture(
-                capture, self.request.up_axis, self.table, motion, loose=self.loose, plain=plain)
+            result = translate_capture(capture, self.request.up_axis, self.table, motion)
         except Exception as exc:
             self.port.log(f"translation failed: {exc!r}")
             return None
@@ -353,25 +247,22 @@ class _Pipeline:
             self.probe_error = ""
         return probe
 
-    def _measure(self, run, sizes, not_checked):
-        """The probe's extra rows and its result: the sizes the probe cannot follow, or None when the probe failed.
+    def _measure(self, run, sizes):
+        """The probe's rows and its result: the sizes the probe cannot follow, or None when the probe failed.
 
-        The states are every row the checks ran, then the extra rows at the ends of the ranges as the checks left
-        them. A failure other than a cancel leaves the translation without a motion (no size behind a sketch is then
-        followed, by the translator's own rule) and is noted for the person. The parameters are put back before the
-        last read."""
+        The rows put every size at the ends of its range where a size moves a sketch. A failure other than a cancel
+        leaves the translation without a motion (no size behind a sketch is then followed, by the translator's own
+        rule) and is noted for the person. The parameters are put back before the last read."""
         probe = self.probe
         try:
-            self._use_reads(run)
-            probe.add_states(run.probe_states())
-            rows = probe.probe_rows(sizes, [s["param"] for s in not_checked])
+            rows = probe.probe_rows(sizes)
             if rows:
-                start = len(run.rows)
                 run.try_rows(rows)
-                self._use_reads(run)
-                probe.add_states(run.probe_states(start))
+                if run.read_failure is not None:
+                    raise run.read_failure
+                probe.add_states(run.probe_states())
             self._restore()
-            found = probe.finish(probe.read_now(), labels(self.table), self.loose)
+            found = probe.finish(probe.read_now(), labels(self.table))
         except ExportCancelled:
             raise
         except Exception as exc:
@@ -382,14 +273,9 @@ class _Pipeline:
         self.motion = probe.motion
         return found
 
-    @staticmethod
-    def _use_reads(run):
-        if run.read_failure is not None:
-            raise run.read_failure
-
     def _restore_gap(self):
         """How far the sketches are from their start after the last restore, or None when that cannot be told. Read
-        again here because the checks after the probe changed the design once more."""
+        again here because the probe rows changed the design once more."""
         if self.probe is None or self.probe_status != health_module.MEASURED:
             return None
         try:

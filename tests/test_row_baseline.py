@@ -9,7 +9,6 @@ from tests.fakes import FakeDesign, FakeStore
 from lib.export_plan.apply import RowBuildError, apply_row_values, measure_baseline
 from lib.export_plan.expressions import format_expression
 from lib.export_plan.runner import RowExport
-from lib.export_plan.size_checks import build_failure_reason, build_failures, read_checks
 from lib.fusion_reader.rows import DesignParameterStore
 from tests.row_helpers import apply_row
 
@@ -136,24 +135,6 @@ class RunnerBaselineTest(unittest.TestCase):
             self.run_rows(store)
         self.assertIn('Size "A"', str(ctx.exception))
         self.assertEqual(ctx.exception.detail["reason"], "recompute_failed")
-
-
-class ReasonTest(unittest.TestCase):
-    CHECKS = [{"param": "w", "size": "w", "value": 3.6, "row": {"name": "w", "values": {}}}]
-
-    def test_the_fixed_reason_names_the_first_new_error_item(self):
-        results = [{"name": "w", "error": "x", "detail": {"reason": "new_errors", "items": ["Extrude5", "Fillet2"]}}]
-        _, fixed, _ = read_checks(self.CHECKS, results, {}, {}, {"w": "Width"})
-        self.assertEqual(fixed[0]["reason"], "Width stays fixed: Fusion cannot build the part when it is 3.6: Extrude5 fails.")
-
-    def test_without_an_item_the_reason_stays_plain(self):
-        self.assertEqual(build_failure_reason("Width", 3.6), "Width stays fixed: Fusion cannot build the part when it is 3.6.")
-
-    def test_the_report_lists_each_failed_check_with_its_detail(self):
-        results = [{"name": "w", "error": "Fusion could not rebuild the design for this size.",
-                    "detail": {"reason": "recompute_failed"}}]
-        self.assertEqual(build_failures(self.CHECKS, results),
-                         [{"size": "w", "value": 3.6, "error": results[0]["error"], "detail": {"reason": "recompute_failed"}}])
 
 
 class ExpressionTextTest(unittest.TestCase):

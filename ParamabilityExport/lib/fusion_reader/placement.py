@@ -15,14 +15,6 @@ POINT_TOLERANCE_MM = 1e-3
 POINTS_TO_CHECK = 3
 _MAX_DEPTH = 64
 
-# Candidate sources. The occurrence's own transform comes first; the path product second. When `transform2` cannot be
-# read, the retired `transform` is used and the source name says so.
-SOURCE_TRANSFORM2 = "transform2"
-SOURCE_TRANSFORM = "transform"
-SOURCE_PATH_TRANSFORM2 = "path_transform2"
-SOURCE_PATH_TRANSFORM = "path_transform"
-_PATH_SOURCES = (SOURCE_PATH_TRANSFORM2, SOURCE_PATH_TRANSFORM)
-
 
 def occurrence_path(body):
     """Occurrences from the body's own one out to the top, as seen from the root (empty for a root body)."""
@@ -246,20 +238,6 @@ def find_occurrence(root, component, path_name=""):
     if not found:
         return None
     return [found[0]] + occurrence_path(found[0])
-
-
-def read_frame(body, source):
-    """The frame of a body's place read again the way read_placement read it (`source`); None when unreadable.
-
-    The same candidate and the same transform member are used, so the frame means the same as the one of the
-    capture. No point check: the size checks only compare it with the frame the export used.
-    """
-    path = occurrence_path(body)
-    if not path:
-        return None
-    member = "transform2" if source in (SOURCE_TRANSFORM2, SOURCE_PATH_TRANSFORM2) else "transform"
-    raw, _ = (_along_path if source in _PATH_SOURCES else _direct)(path, (member,))
-    return _rounded(raw) if raw is not None else None
 
 
 _UNREAD = object()

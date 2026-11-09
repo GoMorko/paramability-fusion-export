@@ -101,38 +101,13 @@ class TickTest(unittest.TestCase):
 
 
 class DoubtfulTest(unittest.TestCase):
-    def test_a_doubtful_size_says_so_and_the_box_keeps_it_fixed_instead(self):
+    def test_a_doubtful_size_says_so_and_stays_a_size(self):
         offers = [offer("wall", doubt="wall may give unexpected results: it moves a joint."), offer("gap")]
         _, inputs = make_dialog(offers)
         self.assertEqual(row(inputs, "status", 0).formattedText, "size, may be unexpected")
-        self.assertFalse(recipe_dialog.read_form(inputs, offers)["keep_doubtful"])
-        check = inputs.itemById(recipe_dialog.CHECK_SIZES_ID)
-        keep = inputs.itemById(recipe_dialog.KEEP_DOUBTFUL_ID)
-        self.assertFalse(check.value)
-        self.assertFalse(keep.isVisible)
-        check.value = True
-        recipe_dialog.handle_change(inputs, offers, check)
-        self.assertTrue(keep.isVisible)
-        keep.value = True
-        recipe_dialog.handle_change(inputs, offers, keep)
-        self.assertEqual(row(inputs, "status", 0).formattedText, "fixed, moves a joint")
         self.assertEqual(row(inputs, "status", 1).formattedText, "size")
-        form = recipe_dialog.read_form(inputs, offers)
-        self.assertEqual((form["check_sizes"], form["keep_doubtful"]), (True, True))
-
-    def test_keeping_doubtful_sizes_fixed_counts_only_while_sizes_are_checked(self):
-        offers = [offer("wall", doubt="wall may give unexpected results: it moves a joint.")]
-        _, inputs = make_dialog(offers)
-        check = inputs.itemById(recipe_dialog.CHECK_SIZES_ID)
-        keep = inputs.itemById(recipe_dialog.KEEP_DOUBTFUL_ID)
-        check.value, keep.value = True, True
-        recipe_dialog.handle_change(inputs, offers, check)
-        check.value = False
-        recipe_dialog.handle_change(inputs, offers, check)
-        self.assertFalse(keep.isVisible)
-        self.assertEqual(row(inputs, "status", 0).formattedText, "size, may be unexpected")
-        form = recipe_dialog.read_form(inputs, offers)
-        self.assertEqual((form["check_sizes"], form["keep_doubtful"]), (False, False))
+        self.assertEqual(set(recipe_dialog.read_form(inputs, offers)),
+                         {"body", "ticked", "ranges", "range_problem", "up_axis"})
 
 
 class RangeTest(unittest.TestCase):

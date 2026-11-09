@@ -30,6 +30,10 @@ def fixed_names(result):
     return sorted(f["name"] for f in result.fixed)
 
 
+def loose_names(result):
+    return sorted(f["name"] for f in result.loose)
+
+
 def at(recipe, table, value, sizes=None):
     """A written number or formula worked out at the default sizes, or at `sizes` (recipe name to value)."""
     if not isinstance(value, dict):
@@ -76,12 +80,12 @@ class PicksTest(unittest.TestCase):
         self.assertEqual(at(result.recipe, table, near[0][2], big), 38.5)
         assert_schema_ok(self, result.recipe)
 
-    def test_a_pick_on_unknown_geometry_fixes_the_earlier_sizes(self):
+    def test_a_pick_on_unknown_geometry_marks_the_earlier_sizes(self):
         def edit(capture):
             capture["items"][3]["data"]["sets"][0]["edges"] = [{"token": "e9", "closed": False, "points": [[5, 5, 16]]}]
         result, _ = run(tray(edit))
-        self.assertEqual(fixed_names(result), sorted([H, CUBE, "wall_mm"]))
-        self.assertIn("Fillet1 picks", result.fixed[0]["reason"])
+        self.assertEqual((fixed_names(result), loose_names(result)), ([], sorted([H, CUBE, "wall_mm"])))
+        self.assertIn("Fillet1 picks", result.loose[0]["reason"])
         self.assertEqual(steps_of(result.recipe, "round")[0]["edges"], {"near": [[5, 5, 16]]})
         self.assertEqual(steps_of(result.recipe, "round")[0]["size"], {"expr": "corner_mm"})
 
@@ -135,7 +139,7 @@ class ReachTest(unittest.TestCase):
         self.assertEqual(result.fixed, [])
         self.assertEqual(steps_of(result.recipe, "extrude")[1]["distance"], 20)
 
-    def test_up_to_an_unknown_face_fixes_the_earlier_sizes(self):
+    def test_up_to_an_unknown_face_marks_the_earlier_sizes(self):
         side = {"kind": "toEntity", "plane": {"point": [0, 0, 20], "normal": [0, 0, 1]}, "offset": 0.0,
                 "entity_type": "BRepFace", "face_point": [5, 5, 20]}
 
@@ -143,7 +147,7 @@ class ReachTest(unittest.TestCase):
             capture["items"].append(tab(side_one=side))
             capture["items"][-1]["data"]["end_offset"] = 20.0
         result, _ = run(tray(edit, keep=[0, 1]))
-        self.assertEqual(fixed_names(result), sorted([H, CUBE]))
+        self.assertEqual((fixed_names(result), loose_names(result)), ([], sorted([H, CUBE])))
 
     def test_a_start_on_a_moving_face_moves_the_sketch_with_it(self):
         start = {"kind": "fromEntity", "plane": {"point": TOP, "normal": [0, 0, 1]}, "entity_type": "BRepFace",
@@ -167,13 +171,13 @@ class ReachTest(unittest.TestCase):
         self.assertEqual(steps_of(result.recipe, "extrude")[1]["sketch"]["on"]["origin"],
                          [0, 0, {"expr": "wall_mm * 2"}])
 
-    def test_a_moving_start_that_reaches_to_a_face_is_fixed(self):
+    def test_a_moving_start_that_reaches_to_a_face_leaves_its_size_out(self):
         def edit(capture):
             capture["items"].append(tab(start={"kind": "offset", "offset": 4.0}))
             capture["items"][-1]["data"]["params"] = {"start.offset": param("d30", "wall_mm * 2", 4.0)}
         result, _ = run(tray(edit, keep=[0, 1]))
-        self.assertEqual(fixed_names(result), ["wall_mm"])
-        self.assertIn("reaches to a face", result.fixed[0]["reason"])
+        self.assertEqual((result.fixed, result.loose), ([], []))
+        self.assertNotIn("wall_mm", result.recipe["sizes"])
 
 
 class CapsTest(unittest.TestCase):
@@ -194,11 +198,11 @@ class CapsTest(unittest.TestCase):
         self.assertEqual(step, {"expr": "(hole_pitch_mm * 2) / (max(holes_count - 1, 1))"})
         self.assertEqual(at(result.recipe, table, step, {"holes_count": 1}), 48)
 
-    def test_a_count_whose_formula_can_give_a_part_number_is_fixed(self):
+    def test_a_count_whose_formula_can_give_a_part_number_marks_its_size(self):
         def edit(capture):
             capture["items"][6]["data"]["params"]["quantity_one"] = param("d8", CUBE + " / 20 mm * 3", 3.0)
         result, _ = run(tray(edit))
-        self.assertIn(CUBE, fixed_names(result))
+        self.assertIn(CUBE, loose_names(result))
         self.assertEqual(steps_of(result.recipe, "pattern")[0]["linear"]["count"], 3)
 
     def test_a_count_of_counts_stays_sized(self):

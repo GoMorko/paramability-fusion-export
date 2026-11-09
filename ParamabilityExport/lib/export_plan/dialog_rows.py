@@ -28,15 +28,6 @@ _AMBIGUOUS_COMMA = re.compile(r"^[-+]?[1-9][0-9]*,[0-9]{3}$")
 # Typed ranges are compared with the number now at the precision the cells show.
 RANGE_SLACK = 1e-4
 _REASON_CHANGES = re.compile(r"\bit (changes|moves) ([^.,]+)[.,]", re.I)
-CHECK_SIZES_TEXT = "Check sizes in Fusion (slower)"
-CHECK_SIZES_TIP = ("Off: sketches follow the sizes, measured by trying each size briefly in Fusion. Every ticked "
-                   "size the copied steps use is saved with the range in the table; a size that still cannot be "
-                   "followed is marked \"may give unexpected results\". On: each size is also checked with a full "
-                   "export, and a size that does not match is kept fixed or its range is shortened. This takes "
-                   "longer.")
-KEEP_DOUBTFUL_TEXT = "Keep doubtful sizes fixed"
-KEEP_DOUBTFUL_TIP = ("A size that the export cannot follow in every step stays a fixed number, instead of a size "
-                     "marked \"may give unexpected results\".")
 
 
 def columns():
@@ -117,11 +108,11 @@ def state_of(offer, ticked):
     return SIZE if ticked else KEEP
 
 
-def status_text(offer, ticked, keep_doubtful=False):
-    """What the row becomes. A doubtful size (`offer["doubt"]`) says so, or is fixed with `keep_doubtful`."""
+def status_text(offer, ticked):
+    """What the row becomes. A doubtful size (`offer["doubt"]`) says so."""
     state = state_of(offer, ticked)
     if state == SIZE and offer.get("doubt"):
-        return "fixed, " + short_reason(offer["doubt"]) if keep_doubtful else "size, may be unexpected"
+        return "size, may be unexpected"
     if state == SIZE:
         return "size"
     if state == KEEP:
@@ -135,13 +126,13 @@ def default_range_texts(offer):
     return cell_text(offer, offer["min"]), cell_text(offer, offer["max"])
 
 
-def row_cells(offer, ticked, lo_text=None, hi_text=None, keep_doubtful=False):
+def row_cells(offer, ticked, lo_text=None, hi_text=None):
     """What one row shows: now, status, min, max texts and whether the tick and the range cells can be used."""
     plain = offer["state"] in (SIZE, KEEP)
     default_lo, default_hi = default_range_texts(offer) if plain else ("", "")
     return {
         "now": offer["now"],
-        "status": status_text(offer, ticked, keep_doubtful),
+        "status": status_text(offer, ticked),
         "min": default_lo if lo_text is None else lo_text,
         "max": default_hi if hi_text is None else hi_text,
         "tick_enabled": bool(offer["enabled"]),

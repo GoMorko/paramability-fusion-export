@@ -1,27 +1,28 @@
 """The size probe of one export: which sketch states to read, and how the answers become a motion. Pure: no Fusion.
 
-The export reads the sketches of the part at its current settings (E0), at every row the size checks run (with a
-STEP, or a rebuild only at the other end of a range) and at extra settings that only recompute, at the range ends no
-row tried and with all sizes low or high (`probe_rows`). `SizeProbe` keeps that record and hands the states to
-`probe.build`. Fusion is reached through the `read` callable given to `start`: `read(request)` returns one probe
-state (`fusion_reader.probe_state.read_state`).
+The export reads the sketches of the part at its current settings (E0) and at extra settings that only recompute: the
+range ends of the sizes that move a sketch, and all sizes low or high (`probe_rows`). `SizeProbe` keeps that record
+and hands the states to `probe.build`. Fusion is reached through the `read` callable given to `start`:
+`read(request)` returns one probe state (`fusion_reader.probe_state.read_state`).
 
 A step of the target can use a sketch of another component (a borrowed sketch). The probe reads it like the
 target's own sketches: its frame is brought into the target's coordinates at every state, so the fit sees its
 outline move with the sizes. The probe works on a view of the capture where such profiles are written as own ones.
-A borrowed sketch that the fit cannot follow (it did not read back as captured) is watched instead: a size whose
-check changes it, or leaves it unreadable, stays fixed.
+A borrowed sketch that the fit cannot follow (it did not read back as captured) is watched instead: a size that
+changes it, or leaves it unreadable, is loose.
 """
+from ..package.manifest import MAX_FIXED_REASON
+from ..package.text import clip
 from ..probe import build, match, plan
 from ..probe import motion as motion_module
 from ..translator import borrowed
-from .size_checks import size_entry
+from ..translator.notes import loose_reason
 
 _STATE_KEYS = ("sketches", "points", "lines", "params", "box", "unread")
 
 
 def kept_size_names(table, free_sizes):
-    """Recipe names of the sizes to check: the free sizes of the first translation and every ticked size that
+    """Recipe names of the sizes to probe: the free sizes of the first translation and every ticked size that
     reaches a sketch dimension or a construction plane."""
     names = plan.kept_sizes(table, free_sizes)
     return {table.size_name(n) for n in names if table.size_name(n)}
@@ -111,7 +112,6 @@ class SizeProbe:
         self.request = request
         self.e0 = e0
         self.states = [{"values": {}, "built": True, "read": e0, "e0": True}]
-        self.skip = set()
         self.dropped = []
         self.untried = []
         self.restore_gap_mm = None
@@ -130,15 +130,12 @@ class SizeProbe:
         e0 = read(_with_borrowed(wide, hints, hints))
         if not isinstance(e0, dict) or not e0.get("sketches") and not e0.get("points") and not e0.get("lines"):
             return None
-        found = plan.scan(view)
-        readable = match.readable(found, e0)
+        readable = match.readable(plan.scan(view), e0)
         watch = {t: h for t, h in hints.items() if t not in readable}
         request = plan.request(view, table, covered=readable) or (bare if watch else None)
         if request is None:
             return None
-        probe = cls(capture, table, read, _with_borrowed(request, hints, watch), e0, watch)
-        probe.skip = set(found.names(readable))
-        return probe
+        return cls(capture, table, read, _with_borrowed(request, hints, watch), e0, watch)
 
     # ---- states -----------------------------------------------------------------------------------------------
 
@@ -157,46 +154,36 @@ class SizeProbe:
             else:
                 self.states.append({"values": values, "built": True, "read": read})
 
-    def _tried(self):
-        """{Fusion name: [values]} of the states that built with that size alone changed."""
-        tried = {}
-        for state in self.states[1:]:
-            values = state.get("values") or {}
-            if state.get("built") is not False and len(values) == 1:
-                for param, value in values.items():
-                    tried.setdefault(param, []).append(value)
-        return tried
-
-    def probe_rows(self, sizes, unchecked):
-        """The extra rows, at the range ends of `sizes`, for the ends no state has tried. `unchecked` lists the
-        Fusion names of kept sizes that got no check."""
+    def probe_rows(self, sizes):
+        """The extra rows, at the range ends of `sizes` that move a sketch: the sizes the states already show moving
+        one, and every size that reaches a sketch."""
         current = {e.name: e.value for e in self.table.entries}
         self.moved = build.moved_sizes(self.capture, self.states, current)
         reach = set(plan.sketch_driven(self.table))
-        moved = set(self.moved) | {p for p in unchecked if p in reach}
-        rows, self.untried = plan.probe_rows(sizes, self._tried(), moved)
+        moved = set(self.moved) | {s["param"] for s in sizes if s["param"] in reach}
+        rows, self.untried = plan.probe_rows(sizes, moved)
         return rows
 
     # ---- result -----------------------------------------------------------------------------------------------
 
-    def finish(self, after, labels, loose=False):
+    def finish(self, after, labels):
         """Build the motion and compare the design after the restore with E0.
 
-        Returns the sizes this probe cannot follow, as `size_checks.size_entry` entries (fixed ones, or kept free
-        with a warning when `loose`): the ones left without rows, and the ones that moved a sketch when the motion
-        could not be built. `labels` maps a recipe size name to the text for the person.
+        Returns the sizes this probe cannot follow, as loose entries ({name, reason, param, size}): the ones left
+        without rows, and the ones that moved a sketch when the motion could not be built. `labels` maps a recipe
+        size name to the text for the person.
         """
         found = []
         for param in self.untried:
-            found.append(self._entry(param, _UNTRIED, labels, loose))
+            found.append(self._entry(param, _UNTRIED, labels))
         try:
             self.motion = motion_module.build(self.capture, self.table, self.states)
         except Exception:
             self.motion = None
             current = {e.name: e.value for e in self.table.entries}
             self.moved = list(dict.fromkeys(self.moved + build.moved_sizes(self.capture, self.states, current)))
-            found.extend(self._entry(p, _UNREADABLE, labels, loose) for p in self.moved if p not in self.untried)
-        found.extend(self._watched(labels, {f["param"] for f in found}, loose))
+            found.extend(self._entry(p, _UNREADABLE, labels) for p in self.moved if p not in self.untried)
+        found.extend(self._watched(labels, {f["param"] for f in found}))
         self.measure_restore(after)
         return found
 
@@ -206,7 +193,7 @@ class SizeProbe:
         self.restore_gap_mm = self._gap(after)
         return self.restore_gap_mm
 
-    def _watched(self, labels, skip, loose):
+    def _watched(self, labels, skip):
         """Entries for the sizes that change a watched borrowed sketch, or leave it unreadable, in a state where
         that size alone differs. The sketch read at the first state is the reference."""
         out, done = [], set(skip)
@@ -226,12 +213,13 @@ class SizeProbe:
                 done.add(param)
                 name = hint["sketch"] or "a sketch"
                 sketch = "%s of %s" % (name, hint["component"]) if hint["component"] else name
-                out.append(self._entry(param, _watched_why(sketch), labels, loose))
+                out.append(self._entry(param, _watched_why(sketch), labels))
         return out
 
-    def _entry(self, param, why, labels, loose):
+    def _entry(self, param, why, labels):
         size = self.table.size_name(param) or param
-        return size_entry(param, size, labels.get(size, param), why, loose)
+        reason = loose_reason(labels.get(size, param), why)
+        return {"name": param, "reason": clip(reason, MAX_FIXED_REASON), "param": param, "size": size}
 
     def _gap(self, after):
         """Largest difference in mm between E0 and a read after the restore, over the covered values. None when the

@@ -31,10 +31,6 @@ def dropped_note(names):
     return clip(text, MAX_NOTE)
 
 
-def unchecked_note(count):
-    return "%s not checked against Fusion." % _count(count, "size was", "sizes were").capitalize()
-
-
 def recipe_saved_message(manifest, file_name):
     """What the person reads after the file is written: the notes, why each fixed number stays fixed, then why each
     loose size may give unexpected results."""
@@ -56,28 +52,3 @@ def listed_lines(entries):
     if len(entries) > MAX_LISTED_FIXED:
         lines.append("and %d more (see report.json)." % (len(entries) - MAX_LISTED_FIXED))
     return lines
-
-
-MAX_NARROWED_NOTES = 2
-
-
-def narrowed_sentence(label, side, to, failed, typed=False, item=""):
-    """Why a size range ends or starts where it does. `to` and `failed` are numbers with their unit as text."""
-    end, typed_end = ("ends", "Max") if side == "max" else ("starts", "Min")
-    cause = " (%s fails)" % item if item else ""
-    if typed:
-        text = "%s: you typed a %s of %s, but Fusion cannot build the part there%s, so the range %s at %s." % (
-            label[:60], typed_end, failed, cause, end, to)
-    else:
-        text = "%s: the range %s at %s, since Fusion cannot build the part at %s%s." % (
-            label[:60], end, to, failed, cause)
-    return clip(text, MAX_NOTE)
-
-
-def narrowed_notes(sentences):
-    """The notes for the narrowed ranges: the first sentences, then one line that counts the rest."""
-    if len(sentences) <= MAX_NARROWED_NOTES:
-        return list(sentences)
-    rest = len(sentences) - (MAX_NARROWED_NOTES - 1)
-    return list(sentences[: MAX_NARROWED_NOTES - 1]) + [
-        "%s shortened the same way (see report.json)." % _count(rest, "more range was", "more ranges were")]

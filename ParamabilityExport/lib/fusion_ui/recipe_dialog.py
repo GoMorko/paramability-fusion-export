@@ -4,7 +4,7 @@ One table row per parameter: tick, name, current value, Min and Max (the range o
 becomes. A text box under the table follows the picked row. The texts come from export_plan.dialog_rows; this file
 only places them in Fusion inputs.
 
-A check box label cannot be changed after creation (Fusion raises on `.text`), so check boxes carry no label.
+A check box label cannot be changed after creation (Fusion raises on `.text`), so the row ticks carry no label.
 """
 import html
 
@@ -26,8 +26,6 @@ COUNT_ID = "pm_sizes_count"
 TICK_USED_ID = "pm_tick_used"
 CLEAR_ID = "pm_untick_all"
 WARN_ID = "pm_stop_warning"
-CHECK_SIZES_ID = "pm_check_sizes"
-KEEP_DOUBTFUL_ID = "pm_keep_doubtful"
 SHOW_ID = "pm_show_in_timeline"
 WARN_LINES = 4
 
@@ -96,11 +94,6 @@ def build(command, offers, body, up_axis, design_unit="mm", stop=None, marker_no
         inputs.addTextBoxCommandInput(
             DETAILS_ID, "", html.escape(rows.HINT), 4, True)
         inputs.addTextBoxCommandInput(COUNT_ID, "", "", 2, True)
-        check = inputs.addBoolValueInput(CHECK_SIZES_ID, rows.CHECK_SIZES_TEXT, True, "", False)
-        _safely("Check box tooltip", lambda: setattr(check, "tooltip", rows.CHECK_SIZES_TIP))
-        keep = inputs.addBoolValueInput(KEEP_DOUBTFUL_ID, rows.KEEP_DOUBTFUL_TEXT, True, "", False)
-        keep.isVisible = False
-        _safely("Check box tooltip", lambda: setattr(keep, "tooltip", rows.KEEP_DOUBTFUL_TIP))
         _refresh_summary(inputs, offers)
     else:
         inputs.addTextBoxCommandInput(
@@ -188,20 +181,9 @@ def _range_texts(inputs, offers, key):
     return out
 
 
-def _check_sizes(inputs):
-    box = adsk.core.BoolValueCommandInput.cast(inputs.itemById(CHECK_SIZES_ID))
-    return bool(box is not None and box.value)
-
-
-def _keep_doubtful(inputs):
-    """The "Keep doubtful sizes fixed" choice; it only counts while sizes are checked in Fusion."""
-    box = adsk.core.BoolValueCommandInput.cast(inputs.itemById(KEEP_DOUBTFUL_ID))
-    return bool(box is not None and box.value and _check_sizes(inputs))
-
-
 def _show_row(inputs, index, offer, ticked, lo_text=None, hi_text=None):
     """Put one row's state into its cells."""
-    cells = rows.row_cells(offer, ticked, lo_text, hi_text, _keep_doubtful(inputs))
+    cells = rows.row_cells(offer, ticked, lo_text, hi_text)
     _bool(inputs, index).isEnabled = cells["tick_enabled"]
     for key in ("min", "max"):
         field = _string(inputs, key, index)
@@ -303,13 +285,6 @@ def handle_change(inputs, offers, changed):
         _set_ticks(inputs, offers, [o["ticked"] for o in offers])
     elif changed.id == CLEAR_ID:
         _set_ticks(inputs, offers, [False] * len(offers))
-    elif changed.id == CHECK_SIZES_ID:
-        keep = inputs.itemById(KEEP_DOUBTFUL_ID)
-        if keep is not None:
-            keep.isVisible = _check_sizes(inputs)
-        _set_ticks(inputs, offers, _ticks(inputs, offers))
-    elif changed.id == KEEP_DOUBTFUL_ID:
-        _set_ticks(inputs, offers, _ticks(inputs, offers))
     elif key == "tick":
         box = adsk.core.BoolValueCommandInput.cast(changed)
         if box.value and sum(_ticks(inputs, offers)) > MAX_TICKED:
@@ -338,9 +313,7 @@ def picked_body(inputs):
 
 def read_form(inputs, offers):
     """Plain dict: body, ticked (Fusion parameter names), ranges ({name: (min, max)} of the ticked ones),
-    range_problem ('' when every typed range is fine), up_axis, check_sizes (try each size in Fusion, slower),
-    keep_doubtful (with check_sizes: fix the sizes the export cannot follow fully, instead of keeping them free
-    with a warning)."""
+    range_problem ('' when every typed range is fine) and up_axis."""
     ticks = _ticks(inputs, offers)
     ranges, problem = rows.read_ranges(
         offers, ticks, _range_texts(inputs, offers, "min"), _range_texts(inputs, offers, "max"))
@@ -351,8 +324,6 @@ def read_form(inputs, offers):
         "ranges": ranges,
         "range_problem": problem,
         "up_axis": "y" if up_item and up_item.name == UP_LABELS["y"] else "z",
-        "check_sizes": _check_sizes(inputs),
-        "keep_doubtful": _keep_doubtful(inputs),
     }
 
 

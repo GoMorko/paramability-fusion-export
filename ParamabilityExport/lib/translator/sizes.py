@@ -3,8 +3,8 @@
 The size table lists every size the person ticked. The recipe keeps only the sizes that a written formula reads, and
 the sizes those formulas read in turn. A size that moves a joint cannot be followed. Sketch values follow sizes through
 the probe's motion file; without one, no size that moves a sketch or construction geometry can be followed, and with
-one, neither can a size behind a sketch the probe did not measure (`sketch_answer`). The driver fixes such sizes up
-front, or keeps them free with a warning (`translate`, `loose`).
+one, neither can a size behind a sketch the probe did not measure (`sketch_answer`). The driver keeps such sizes free
+with a warning (`translate`).
 """
 from ..params.expressions import tokenize_formula
 from ..probe.coverage import MOVED, NOT_MEASURED, STILL, Answer

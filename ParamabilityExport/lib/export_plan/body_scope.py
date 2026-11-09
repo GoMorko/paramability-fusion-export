@@ -88,42 +88,6 @@ def other_sketches(capture):
     return _sketches_of(rest) - _sketches_of(used)
 
 
-def _names_every_sketch(items):
-    """True when every sketch the steps use is named: no step that could not be read, and no sketch record (a token)
-    without its name."""
-    def unnamed(node):
-        if isinstance(node, dict):
-            if node.get("sketch_token") and not node.get("sketch"):
-                return True
-            return any(unnamed(v) for v in node.values())
-        if isinstance(node, list):
-            return any(unnamed(v) for v in node)
-        return False
-
-    return all("read_error" not in _data(i) and not unnamed(_data(i)) for i in items)
-
-
-def _unused_sketch_names(capture):
-    """Names of the sketches of the picked body's own component that no step of the body names (a sketch that only a
-    step of another component uses). Only for captures that name every sketch a step uses (capture 3)."""
-    if (capture.get("capture") or 0) < 3:
-        return set()
-    own = ((capture.get("target") or {}).get("component") or {}).get("token") or ""
-    used = body_items(capture)
-    if not own or not _names_every_sketch(used):
-        return set()
-    named = {name for _, name in _sketches_of(used)}
-    return {i.get("name") for i in capture["items"] if i.get("type") == "Sketch" and i.get("component") == own
-            and i.get("name") and i.get("name") not in named}
-
-
-def other_sketch_names(capture):
-    """Names of the sketches of the picked body's own component that only other bodies use, or no step of it uses."""
-    own = ((capture.get("target") or {}).get("component") or {}).get("token") or ""
-    found = {name for component, name in other_sketches(capture) if not component or not own or component == own}
-    return found | _unused_sketch_names(capture)
-
-
 def _made_by(param):
     return param.get("created_by") or {}
 

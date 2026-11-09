@@ -30,7 +30,7 @@ def table(params, ticked, model_params=()):
 
 
 def size(table_, name, unit="mm"):
-    """A kept size dict (as `plan_checks` takes) for a ticked parameter of the table."""
+    """A kept size dict (as `probe_sizes` gives) for a ticked parameter of the table."""
     s = table_.sizes[table_.size_name(name)]
     return {"param": name, "size": table_.size_name(name), "unit": unit, "value": s["value"], "min": s["min"],
             "max": s["max"]}

@@ -4,7 +4,7 @@ import unittest
 from tests import context  # noqa: F401
 
 from lib.translator import range_check
-from lib.translator.range_check import MAX_CORNER_SIZES, MAX_SETTINGS, largest_share, smallest_share, sweep
+from lib.translator.range_check import MAX_CORNER_SIZES, MAX_SETTINGS, largest_share, sweep
 
 
 class Table:
@@ -84,9 +84,6 @@ class ShareTest(unittest.TestCase):
     def test_largest_share_that_still_holds(self):
         self.assertAlmostEqual(largest_share(lambda t: t <= 0.3), 0.3, places=6)
         self.assertEqual(largest_share(lambda t: True), 1.0)
-
-    def test_smallest_share_that_holds(self):
-        self.assertAlmostEqual(smallest_share(lambda t: t >= 0.7), 0.7, places=6)
 
 
 if __name__ == "__main__":

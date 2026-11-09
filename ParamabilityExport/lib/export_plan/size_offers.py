@@ -1,19 +1,18 @@
-"""The parameter list of the main dialog, and the sizes the checks run over. Pure: no Fusion imports.
+"""The parameter list of the main dialog, and the sizes the sketch probe runs over. Pure: no Fusion imports.
 
-The size table decides what each parameter becomes. This module turns it into dialog lines and into
-the size dicts of size_checks.
+The size table decides what each parameter becomes. This module turns it into dialog lines and into the size dicts of
+the probe.
 """
 from ..package.units import display_from_manifest, unit_kind
 from ..params import defaults, size_table
 from ..params.expressions import format_number
-from ..params.size_table import CONSTANT, DERIVED, FIXED, FREE
+from ..params.size_table import CONSTANT, DERIVED, FIXED, FREE, MAX_SIZES
 from ..translator.notes import loose_reason
 from ..translator.sizes import joint_reasons
 from .body_scope import scope_inputs
-from .size_checks import MAX_CHECKS
 
-# The most sizes one recipe holds; a checked export also gives each size one check.
-MAX_TICKED = MAX_CHECKS
+# The most sizes one recipe holds.
+MAX_TICKED = MAX_SIZES
 
 
 def limit_message(limit=MAX_TICKED):
@@ -108,11 +107,11 @@ def offers(table, params, design_unit="mm"):
     return out
 
 
-def sizes_for_checks(table, params, keep=None):
-    """The free sizes in the shape size_checks.plan_checks reads.
+def probe_sizes(table, params, keep=None):
+    """The free sizes as the probe reads them: param (Fusion name), size (recipe name), unit, kind, value, min, max
+    (manifest numbers) and favorite.
 
-    `keep` limits them to these recipe size names (the sizes the recipe still has after translation). `typed_min` and
-    `typed_max` tell that the person set that end of the range (`SizeTable.typed_ends`).
+    `keep` limits them to these recipe size names (the sizes the recipe still has after translation).
     """
     by_name = {p["name"]: p for p in params}
     sizes = []
@@ -120,11 +119,10 @@ def sizes_for_checks(table, params, keep=None):
         if entry.state != FREE or entry.name not in by_name or (keep is not None and entry.size_name not in keep):
             continue
         size = table.sizes[entry.size_name]
-        typed_min, typed_max = table.typed_ends(entry.name)
         sizes.append({
             "param": entry.name, "size": entry.size_name, "unit": by_name[entry.name]["unit"], "kind": entry.kind,
-            "value": entry.value, "min": size["min"], "max": size["max"], "typed_min": typed_min,
-            "typed_max": typed_max, "favorite": bool(by_name[entry.name].get("is_favorite")),
+            "value": entry.value, "min": size["min"], "max": size["max"],
+            "favorite": bool(by_name[entry.name].get("is_favorite")),
         })
     return sizes
 

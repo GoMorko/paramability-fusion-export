@@ -1,12 +1,11 @@
 """What happens when the person clicks OK in Export for Paramability: ask where to save, run the export pipeline
 (`export_plan.pipeline`) against Fusion, write the file and show the result.
 
-Plain export (the default): the STEP of the part as it is, the capture of its steps, the sketch measuring, one
-translation with the motion it gave, and the file. There are no size checks and no shortened ranges. Checked export
-("Check sizes in Fusion") adds the size checks and a second translation; `export_plan.pipeline` describes both.
+The export is the STEP of the part as it is, the capture of its steps, the sketch measuring, one translation with
+the motion it gave, and the file (`export_plan.pipeline` describes the sequence).
 
-Each run changes parameters; the pipeline puts every parameter back whatever happens. A body inside a component is
-handled the same way: its sketches and its place in the assembly are read at every check.
+The measuring changes parameters; the pipeline puts every parameter back whatever happens. A body inside a component
+is handled the same way: its sketches are read at every measuring row.
 """
 import os
 import tempfile
@@ -16,14 +15,12 @@ from ...lib.export_plan.marker import read_marker
 from ...lib.export_plan.naming import design_title, package_file_name
 from ...lib.export_plan.pipeline import ExportRequest, run_pipeline
 from ...lib.export_plan.result_rows import result_view
-from ...lib.export_plan.size_checks import PLACEMENT_KEY, frame_numbers
 from ...lib.export_plan.stop_warning import saved_message, status_text
-from ...lib.fusion_reader import design_info, placement
+from ...lib.fusion_reader import design_info
 from ...lib.fusion_reader.capture import MarkerError, read_capture
 from ...lib.fusion_reader.probe_state import read_state
 from ...lib.fusion_reader.read_geometry import ReadContext
 from ...lib.fusion_reader.rows import DesignParameterStore
-from ...lib.fusion_reader.sketches import read_sketches
 from ...lib.fusion_reader.step_export import export_body_step, resolve_body
 from ...lib.fusion_ui import result_dialog
 from ...lib.fusion_ui.file_dialog import ask_save_path
@@ -80,12 +77,6 @@ class FusionPort:
     def _current(self):
         return resolve_body(self.design, self.token, self.body)
 
-    def _component(self):
-        try:
-            return self.body.parentComponent
-        except Exception:
-            return self.design.rootComponent
-
     def export_step(self, path):
         export_body_step(self.design, self._current(), path)
 
@@ -93,14 +84,6 @@ class FusionPort:
         if self._captures is not None:
             return self._captures.get(self.body)
         return _read_capture(self.design, self._current())
-
-    def snapshot(self, skip, source):
-        """The sketches of the body's component, plus its place in the assembly when that can be read."""
-        state = read_sketches(self._component(), skip)
-        frame = placement.read_frame(self._current(), source) if source else None
-        if frame is not None:
-            state[PLACEMENT_KEY] = frame_numbers(frame)
-        return state
 
     def probe_reader(self):
         ctx = ReadContext(self.design, self._current())
@@ -177,7 +160,7 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
     request = ExportRequest(
         title=title, writer=export_common.writer_for(app), up_axis=form["up_axis"], parameters=parameters,
         model_params=model_params, design_unit=design_unit, ticked=form["ticked"], ranges=form["ranges"],
-        check_sizes=bool(form.get("check_sizes")), keep_doubtful=bool(form.get("keep_doubtful")), marker=marker)
+        marker=marker)
 
     def work():
         port = FusionPort(design, body, {p["name"]: p["unit"] for p in parameters}, captures)

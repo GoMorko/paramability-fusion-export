@@ -343,7 +343,7 @@ def state_values(target, read, e0=None):
 
 def readable(found, e0):
     """Tokens of the covered sketches whose every record the first read gives back as the capture has it
-    (within 1e-4 mm). A sketch that fails stays with the measured check of the export."""
+    (within 1e-4 mm). A sketch that fails is not followed: the sizes that change it are loose."""
     bad = set()
     for target in found.targets:
         values, _ = state_values(target, e0 or {}, e0)

@@ -7,8 +7,8 @@ written as a number or `{ "expr": ... }`.
 
 When a value cannot follow its sizes (the formula does not translate, its unit or sign breaks inside the size range,
 or the step writes it as a plain number), it is written as its number and the sizes it reads are recorded in
-`ctx.depends`. The driver then fixes them everywhere, or keeps them free with a warning (`translate`, `loose`); a
-value that depends on a size never stays a number while that size stays free without one of the two. A formula the
+`ctx.depends`. The driver then keeps them free with a warning (`translate`); a value that depends on a size never
+stays a number while that size stays free without one. A formula the
 parser cannot read still marks the sizes on Fusion's own list of what its parameter depends on.
 """
 import re

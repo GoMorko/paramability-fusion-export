@@ -40,7 +40,7 @@ class MovedFacesTest(unittest.TestCase):
 
     def test_a_point_off_the_moved_face_is_not_placed_on_it(self):
         result, _ = run(plate_moved_then_chamfered(11.0))
-        self.assertIn("wall_mm", [f["name"] for f in result.fixed])
+        self.assertIn("wall_mm", [f["name"] for f in result.loose])
 
     def test_a_corner_on_the_wall_the_move_grew_follows_a_share_of_the_distance(self):
         result, _ = run(plate_moved_then_chamfered(0, [[0, 0, 11]]))

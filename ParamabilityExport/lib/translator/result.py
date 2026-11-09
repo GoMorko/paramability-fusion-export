@@ -37,5 +37,3 @@ class TranslateResult:
     notes: list = field(default_factory=list)
     fixed: list = field(default_factory=list)  # [{ name, reason }]: sizes that some value could not follow
     loose: list = field(default_factory=list)  # [{ name, reason }]: sizes kept free although some value cannot follow
-    raised: list = field(default_factory=list)  # [{ name, min, reason }]: sizes whose smallest value was raised
-    narrowed: list = field(default_factory=list)  # [{ name, min, max, reason }]: sizes whose range was shortened

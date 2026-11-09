@@ -74,10 +74,8 @@ class FilterBoxTableTest(unittest.TestCase):
         self.assertEqual(t.sizes["FilterBox_width_mm"]["expr"], f"{NEW_W} * 18 + 2")
         self.assertNotIn(CUBE, t.ticked)
 
-    def test_a_raised_minimum_lifts_the_range_and_survives_a_later_fix(self):
-        t = table().with_minimums({W: 1.01}).with_fixed({CUBE: "x"})
-        self.assertEqual(t.sizes[NEW_W]["min"], 1.01)
-        self.assertFalse(t.typed_range(W))
+    def test_a_typed_range_is_told_from_the_default_one(self):
+        self.assertFalse(table().typed_range(W))
         self.assertTrue(table(ranges={W: (0.5, 3)}).typed_range(W))
 
     def test_a_range_equal_to_the_default_is_not_typed(self):

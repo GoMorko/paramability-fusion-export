@@ -290,14 +290,15 @@ class HoleTipSizeTest(unittest.TestCase):
         capture, ticked = on_fixture(name, edit, TICKED + ["turn_deg"])
         return run(capture, ticked)[0]
 
-    def test_a_through_hole_does_not_fix_the_size_behind_its_tip_angle(self):
+    def test_a_through_hole_does_not_mark_the_size_behind_its_tip_angle(self):
         result = self.tip_follows_size("hole_through")
         self.assertIsNotNone(result.recipe)
-        self.assertEqual(result.fixed, [])
+        self.assertEqual((result.fixed, result.loose), ([], []))
 
-    def test_a_blind_hole_fixes_the_size_behind_its_tip_angle(self):
+    def test_a_blind_hole_writes_its_tip_angle_as_a_number_and_leaves_the_size_out(self):
         result = self.tip_follows_size("hole_blind_tip")
-        self.assertEqual([f["name"] for f in result.fixed], ["turn_deg"])
+        self.assertEqual((result.fixed, result.loose), ([], []))
+        self.assertNotIn("turn_deg", result.recipe.get("sizes", {}))
 
 
 class ThreadTest(unittest.TestCase):

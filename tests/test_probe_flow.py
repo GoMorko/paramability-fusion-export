@@ -1,17 +1,14 @@
-"""The size probe of one export, run against a simulated Fusion: checks, extra recompute rows, motion, restore."""
-import os
+"""The size probe of one export, run against a simulated Fusion: recompute rows, motion, restore."""
 import re
-import tempfile
 import unittest
 
 from tests import context  # noqa: F401
 from tests.fakes import FakeStore
-from tests.probe_helpers import size, table
+from tests.probe_helpers import size, table, user
 from tests.test_probe_motion import CAPTURE, MODEL, PARAMS, TICKED, W, read_at
 
 from lib.export_plan.probe_flow import SizeProbe, covers_a_sketch, kept_size_names
 from lib.export_plan.runner import RowExport
-from lib.export_plan.size_checks import plan_checks
 
 UNITS = {"count": "", "cube": "mm", "off": "mm", "height": "mm"}
 START = {"count": "3", "cube": "10 mm", "off": "5 mm", "height": "20 mm"}
@@ -41,25 +38,14 @@ def states(values, results, reads):
     return [(v, r, None if r.get("error") else pending.pop(0)) for v, r in zip(values, results)]
 
 
-def run(fusion, probe, sizes, tmp, unchecked=()):
-    """Phase 1 and phase 2 as the export runs them. Returns (checks, rows, results of the extra rows)."""
-    checks, _ = plan_checks(sizes)
+def run(fusion, probe, sizes):
+    """The probe's rows as the export runs them. Returns (rows, results)."""
+    rows = probe.probe_rows(sizes)
     reads = []
-
-    def step(path):
-        with open(path, "wb") as f:
-            f.write(b"x")
-        reads.append(probe.read_now())
-
-    job = RowExport(fusion.store, UNITS, step)
-    results = job.run([c["row"] for c in checks], tmp, lambda *a: True, tolerate_build_errors=True)
-    probe.add_states(states([{c["param"]: c["value"]} for c in checks], results, reads))
-    rows = probe.probe_rows(sizes, list(unchecked))
-    tried_reads = []
-    tried = RowExport(fusion.store, UNITS, lambda path: tried_reads.append(probe.read_now()))
-    tried_results = tried.run(rows, "", lambda *a: True, tolerate_build_errors=True)
-    probe.add_states(states([{p: r["state"][p] for p in r["varied"]} for r in rows], tried_results, tried_reads))
-    return checks, rows, tried_results
+    job = RowExport(fusion.store, UNITS, lambda path: reads.append(probe.read_now()))
+    results = job.run(rows, "", lambda *a: True, tolerate_build_errors=True)
+    probe.add_states(states([{p: r["state"][p] for p in r["varied"]} for r in rows], results, reads))
+    return rows, results
 
 
 class SizeProbeTest(unittest.TestCase):
@@ -67,16 +53,12 @@ class SizeProbeTest(unittest.TestCase):
         self.table = table(PARAMS, TICKED, MODEL)
         self.sizes = [size(self.table, n, UNITS[n]) for n in TICKED]
         self.fusion = Fusion()
-        folder = tempfile.TemporaryDirectory()
-        self.addCleanup(folder.cleanup)
-        self.tmp = folder.name
 
     def start(self):
         return SizeProbe.start(CAPTURE, self.table, self.fusion.read)
 
     def test_start_keeps_the_sketches_that_read_back_as_captured(self):
-        probe = self.start()
-        self.assertEqual(probe.skip, {"Sketch1", "Sketch2"})
+        self.assertIsNotNone(self.start())
         self.assertTrue(covers_a_sketch(CAPTURE))
 
     def test_a_design_that_reads_nothing_gives_no_probe(self):
@@ -84,10 +66,9 @@ class SizeProbeTest(unittest.TestCase):
 
     def test_sizes_that_move_sketches_get_rows_without_a_step_and_the_motion_follows_the_width(self):
         probe = self.start()
-        checks, rows, tried = run(self.fusion, probe, self.sizes, self.tmp)
-        self.assertEqual(len(os.listdir(self.tmp)), len(checks))
+        rows, results = run(self.fusion, probe, self.sizes)
         self.assertTrue(rows and all(r["step"] is False for r in rows))
-        self.assertTrue(all(r["step_file"] is None for r in tried))
+        self.assertTrue(all(r["step_file"] is None for r in results))
         self.assertEqual(self.fusion.store.exprs, START)
         found = probe.finish(probe.read_now(), {})
         self.assertEqual(found, [])
@@ -96,47 +77,36 @@ class SizeProbeTest(unittest.TestCase):
         self.assertEqual(probe.restore_gap_mm, 0.0)
 
     def test_a_size_that_moves_no_sketch_gets_no_row(self):
-        flat = [size(table(PARAMS, ["height"], MODEL), "height", "mm")]
-        probe = self.start()
-        checks, _ = plan_checks(flat)
-        results = [{"name": "height", "values": {}, "step_file": "x"}]
-        probe.add_states(states([{c["param"]: c["value"]} for c in checks], results, [read_at()]))
-        self.assertEqual(probe.probe_rows(flat, []), [])
+        tbl = table(PARAMS + [user("wall", "2 mm", 2)], ["wall"], MODEL)
+        probe = SizeProbe.start(CAPTURE, tbl, self.fusion.read)
+        self.assertEqual(probe.probe_rows([size(tbl, "wall", "mm")]), [])
 
-    def test_an_end_a_state_already_tried_gets_no_row(self):
+    def test_a_size_behind_a_sketch_gets_both_ends(self):
         probe = self.start()
         sizes = [s for s in self.sizes if s["param"] == "off"]
-        probe.add_states([({"off": sizes[0]["min"]}, {"name": "off"}, read_at())])
-        rows = probe.probe_rows(sizes, ["off"])
-        self.assertEqual([r["name"] for r in rows], ["off (max)"])
-
-    def test_an_unchecked_size_behind_a_sketch_gets_both_ends(self):
-        probe = self.start()
-        sizes = [s for s in self.sizes if s["param"] == "off"]
-        results = []
-        rows = probe.probe_rows(sizes, ["off"])
+        rows = probe.probe_rows(sizes)
         self.assertEqual([r["name"] for r in rows], ["off (min)", "off (max)"])
 
-    def test_a_size_left_without_rows_stays_fixed_with_its_reason(self):
+    def test_a_size_left_without_rows_is_loose_with_its_reason(self):
         probe = self.start()
         probe.untried = ["off"]
-        fixed = probe.finish(probe.read_now(), {"off": "Hole offset"})
-        self.assertEqual([(f["param"], f["size"]) for f in fixed], [("off", "off")])
-        self.assertIn("Hole offset stays fixed", fixed[0]["reason"])
+        found = probe.finish(probe.read_now(), {"off": "Hole offset"})
+        self.assertEqual([(f["param"], f["size"]) for f in found], [("off", "off")])
+        self.assertIn("Hole offset may give unexpected results", found[0]["reason"])
 
     def test_a_state_that_does_not_build_is_dropped_and_reported(self):
         self.fusion = Fusion(bad_when=lambda e: e["height"] == "40 mm")
         probe = self.start()
-        run(self.fusion, probe, self.sizes, self.tmp)
+        run(self.fusion, probe, self.sizes)
         self.assertTrue(any(not s["built"] for s in probe.states))
-        self.assertEqual([d["name"] for d in probe.dropped][:1], ["height"])
+        self.assertEqual([d["name"] for d in probe.dropped][:1], ["height (max)"])
         self.assertEqual(probe.dropped[0]["detail"]["items"], ["Fillet1"])
         probe.finish(probe.read_now(), {})
         self.assertIsNotNone(probe.report()["motion"])
 
     def test_the_report_keeps_the_request_the_states_and_the_motion(self):
         probe = self.start()
-        run(self.fusion, probe, self.sizes, self.tmp)
+        run(self.fusion, probe, self.sizes)
         probe.finish(probe.read_now(), {})
         report = probe.report()
         self.assertEqual(report["request"]["sketches"], ["sk1", "sk2"])

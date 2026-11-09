@@ -1,5 +1,4 @@
 """The size probe with a step that uses a sketch of another component (a borrowed sketch)."""
-import tempfile
 import unittest
 
 from tests import context  # noqa: F401
@@ -51,14 +50,11 @@ class Rig(unittest.TestCase):
     def setUp(self):
         self.table = table(PARAMS, TICKED, MODEL)
         self.sizes = [size(self.table, n, UNITS[n]) for n in TICKED]
-        folder = tempfile.TemporaryDirectory()
-        self.addCleanup(folder.cleanup)
-        self.tmp = folder.name
 
     def probe(self, fusion):
         probe = SizeProbe.start(BORROWING, self.table, fusion.read)
         self.assertIsNotNone(probe)
-        run(fusion, probe, self.sizes, self.tmp)
+        run(fusion, probe, self.sizes)
         return probe, probe.finish(probe.read_now(), {"height": "Box height"})
 
 
@@ -121,17 +117,17 @@ class BorrowedProbeTest(Rig):
 
 
 class WatchedSketchTest(Rig):
-    """A borrowed sketch that does not read back as captured is not fitted; the sizes that change it stay fixed."""
+    """A borrowed sketch that does not read back as captured is not fitted; the sizes that change it are loose."""
 
     @staticmethod
     def off_origin(out, sizes):
         out["sketches"]["skL"]["frame"] = dict(LID_FRAME, origin=[0.5, 0, sizes["height"]])
 
-    def test_sizes_that_change_a_watched_sketch_are_fixed_with_a_plain_reason(self):
+    def test_sizes_that_change_a_watched_sketch_are_loose_with_a_plain_reason(self):
         probe, fixed = self.probe(Lid(fixed_width=True, edit=self.off_origin))
         self.assertEqual(set(probe.watch), {"skL"})
         self.assertEqual([f["param"] for f in fixed], ["height"])
-        self.assertIn("Box height stays fixed: it changes the sketch LidRail of BoxLid", fixed[0]["reason"])
+        self.assertIn("Box height may give unexpected results: it changes the sketch LidRail of BoxLid", fixed[0]["reason"])
         self.assertIsNone(probe.motion.get("8/p0/l0/width"))
 
     def test_a_watched_sketch_that_does_not_change_fixes_nothing(self):
@@ -139,7 +135,7 @@ class WatchedSketchTest(Rig):
                                       edit=lambda out, s: out["sketches"]["skL"].update(frame=dict(LID_FRAME, origin=[0.5, 0, 20]))))
         self.assertEqual((set(probe.watch), fixed), ({"skL"}, []))
 
-    def test_a_watched_sketch_that_is_gone_at_a_check_fixes_that_size(self):
+    def test_a_watched_sketch_that_is_gone_at_a_row_makes_that_size_loose(self):
         def gone(out, sizes):
             out["sketches"]["skL"]["frame"] = dict(LID_FRAME, origin=[0.5, 0, 20])
             if sizes["cube"] != 10:

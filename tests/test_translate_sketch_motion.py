@@ -34,7 +34,8 @@ def run(capture, ticked, motion):
 
 
 def reasons(result):
-    return {f["name"]: f["reason"] for f in result.fixed}
+    """Why each size that stays free with a warning may give unexpected results, by Fusion name."""
+    return {f["name"]: f["reason"] for f in result.loose}
 
 
 def expr(value):
@@ -53,10 +54,12 @@ class OutlineTest(unittest.TestCase):
         self.assertEqual(expr(steps_of(result.recipe, "hole")[0]["origin"][0]), "-0.5 * box_width_mm + pipe_offset_mm")
         self.assertEqual(steps_of(result.recipe, "shell")[0]["openFaces"], {"featureFace": "extrude_1", "which": "end"})
 
-    def test_without_a_motion_file_every_size_behind_a_sketch_is_fixed(self):
+    def test_without_a_motion_file_no_size_behind_a_sketch_is_a_size(self):
         result = run(load_capture(BOX), BOX_SIZES, None)
-        self.assertEqual(sorted(reasons(result)), ["box_count", "cube_mm", "depth_mm", "pipe_offset_mm"])
-        self.assertIn("could not be tried at other values", reasons(result)["depth_mm"])
+        self.assertEqual((result.fixed, result.loose), ([], []))
+        self.assertEqual(sorted(result.recipe["sizes"]), ["height_mm", "pipe_d_mm", "wall_mm"])
+        for name in ("box_count", "cube_mm", "depth_mm", "pipe_offset_mm"):
+            self.assertIn("%s is not used by any copied step, so it is not a size." % name, result.notes)
 
     def test_the_first_translation_writes_numbers_and_fixes_nothing_for_sketches(self):
         result = run(load_capture(BOX), BOX_SIZES, OPTIMISTIC)
@@ -98,18 +101,18 @@ class OutlineTest(unittest.TestCase):
 
 
 class StuckTest(unittest.TestCase):
-    def test_a_stuck_value_fixes_every_size_that_moves_it_with_the_probe_cause(self):
+    def test_a_stuck_value_marks_the_sizes_that_move_it_with_the_probe_cause(self):
         def edit(values):
             values["1/p0/l0/width"] = {"stuck": ["box_count", "cube_mm"], "cause": "curve", "sketch": "Sketch1"}
 
         result = run(load_capture(BOX), BOX_SIZES, motion_of(BOX, edit))
         self.assertEqual(reasons(result)["cube_mm"],
-                         "cube_mm stays fixed: it moves Sketch1 along a curve, which cannot be copied yet.")
-        self.assertIn("box_count", reasons(result))
+                         "cube_mm may give unexpected results: it moves Sketch1 along a curve, which cannot be "
+                         "copied yet.")
         outer = steps_of(result.recipe, "extrude")[0]["sketch"]["outer"]
         self.assertEqual((outer["width"], expr(outer["height"])), (80.0, "depth_mm"))
 
-    def test_a_stuck_value_follows_the_other_sizes_once_its_own_are_fixed(self):
+    def test_a_stuck_value_follows_the_other_sizes_once_its_own_are_marked(self):
         def edit(values):
             values["1/p0/l0/width"] = {"stuck": ["pipe_offset_mm"], "cause": "shape", "sketch": "Sketch1",
                                        "rest": values["1/p0/l0/width"]}
@@ -118,19 +121,21 @@ class StuckTest(unittest.TestCase):
         self.assertEqual(sorted(reasons(result)), ["pipe_offset_mm"])
         self.assertEqual(expr(steps_of(result.recipe, "extrude")[0]["sketch"]["outer"]["width"]), "box_width_mm")
 
-    def test_an_outline_that_would_shrink_to_nothing_fixes_its_sizes(self):
+    def test_an_outline_that_would_shrink_to_nothing_marks_its_sizes(self):
         def edit(values):
             values["1/p0/l0/height"] = {"const": 120, "terms": {"depth_mm": -1}, "sketch": "Sketch1"}
 
         result = run(load_capture(BOX), BOX_SIZES, motion_of(BOX, edit))
-        self.assertEqual(reasons(result)["depth_mm"], "depth_mm stays fixed: an outline in Sketch1 would shrink to nothing.")
+        self.assertEqual(reasons(result)["depth_mm"], "depth_mm may give unexpected results: an outline in Sketch1 would shrink "
+                         "to nothing.")
 
     def test_a_formula_that_misses_the_captured_number_is_not_written(self):
         def edit(values):
             values["5/positions/0/0"]["const"] = 7
 
         result = run(load_capture(BOX), BOX_SIZES, motion_of(BOX, edit))
-        self.assertIn("could not be read at other values", reasons(result)["pipe_offset_mm"])
+        self.assertIn("could not be read at other values", reasons(result)["cube_mm"])
+        self.assertNotIn("pipe_offset_mm", result.recipe["sizes"])
         self.assertEqual(steps_of(result.recipe, "hole")[0]["origin"][0], -20.0)
 
 
@@ -148,14 +153,14 @@ class PlaneTest(unittest.TestCase):
         self.assertEqual(expr(pocket["on"]["origin"][2]), "lift_mm")
         self.assertEqual(expr(pocket["outer"]["center"][1]), "-plate_mm")
 
-    def test_a_step_that_reaches_to_the_construction_plane_fixes_its_sizes(self):
+    def test_a_step_that_reaches_to_the_construction_plane_marks_its_sizes(self):
         result = run(load_capture(LIFTED), ["lift_mm", "plate_mm"], motion_of(LIFTED))
-        self.assertEqual(reasons(result), {"lift_mm": "lift_mm stays fixed: it moves the construction plane that "
-                                                      "Extrude3 uses."})
-        self.assertEqual(steps_of(result.recipe, "extrude")[1]["sketch"]["on"]["origin"][2], 8.0)
+        self.assertEqual(reasons(result), {"lift_mm": "lift_mm may give unexpected results: it moves the "
+                                                      "construction plane that Extrude3 uses."})
+        self.assertEqual(expr(steps_of(result.recipe, "extrude")[1]["sketch"]["on"]["origin"][2]), "lift_mm")
 
 
-    def test_a_construction_plane_record_without_a_token_fixes_every_plane_size(self):
+    def test_a_construction_plane_record_without_a_token_marks_every_plane_size(self):
         capture = load_capture(LIFTED)
         del capture["items"][-1]["data"]["side_one"]["token"]
         capture["parameters"]["model"].append(dict(capture["parameters"]["model"][1], name="d21",
@@ -202,31 +207,28 @@ def unmeasured(*sketches, drop=()):
 
 
 class UnmeasuredSketchTest(unittest.TestCase):
-    """A sketch the probe skipped says nothing about its sizes: they are fixed or loose, never silently free."""
+    """A sketch the probe skipped says nothing about its sizes: they are loose, never silently free."""
 
-    def test_sizes_behind_a_skipped_sketch_are_fixed(self):
-        result = run(depth_drives_sketch_and_extrude(), BOX_SIZES, unmeasured("Sketch1", drop=("1/",)))
-        self.assertEqual(sorted(reasons(result)), ["box_count", "cube_mm", "depth_mm"])
-        self.assertIn("could not be tried at other values", reasons(result)["depth_mm"])
-        self.assertIn("Sketch1", reasons(result)["depth_mm"])
-
-    def test_sizes_behind_a_skipped_sketch_stay_free_with_a_warning_when_loose(self):
+    def test_sizes_behind_a_skipped_sketch_stay_free_with_a_warning(self):
         capture = depth_drives_sketch_and_extrude()
         params = capture["parameters"]
         table = size_table.build(params["user"], BOX_SIZES, params["model"], capture.get("design_units", "mm"))
-        result = translate(capture, size_table=table, motion=unmeasured("Sketch1", drop=("1/",)), loose=True)
+        result = translate(capture, size_table=table, motion=unmeasured("Sketch1", drop=("1/",)))
         self.assertEqual(sorted(f["name"] for f in result.loose), ["box_count", "cube_mm", "depth_mm"])
         self.assertEqual(result.fixed, [])
         self.assertIn("depth_mm", result.recipe["sizes"])
+        self.assertIn("could not be tried at other values", reasons(result)["depth_mm"])
+        self.assertIn("Sketch1", reasons(result)["depth_mm"])
 
     def test_a_size_the_skipped_sketch_does_not_read_is_not_touched(self):
         result = run(depth_drives_sketch_and_extrude(), BOX_SIZES, unmeasured("Sketch1", drop=("1/",)))
         for name in ("pipe_offset_mm", "height_mm", "wall_mm", "pipe_d_mm"):
             self.assertNotIn(name, reasons(result))
 
-    def test_a_skipped_hole_sketch_fixes_the_size_behind_its_points(self):
+    def test_a_skipped_hole_sketch_writes_its_points_as_numbers_and_leaves_its_size_out(self):
         result = run(load_capture(BOX), BOX_SIZES, unmeasured("Sketch2", drop=("5/",)))
-        self.assertEqual(sorted(reasons(result)), ["pipe_offset_mm"])
+        self.assertEqual(reasons(result), {})
+        self.assertNotIn("pipe_offset_mm", result.recipe["sizes"])
         self.assertEqual(steps_of(result.recipe, "hole")[0]["origin"][0], -20.0)
 
     def test_a_measured_sketch_that_did_not_move_leaves_a_size_free(self):
@@ -258,12 +260,16 @@ class OwnerFilterBoxTest(unittest.TestCase):
             capture = json.loads(package.read("report.json"))["capture"]
         result = run(copy.deepcopy(capture), self.TICKED, filter_box_motion(capture))
         self.assertIsNone(result.refusal)
-        # The lid rails lie on the box walls, which move with the depth and the cube size.
-        self.assertEqual(sorted(f["name"] for f in result.fixed), sorted([self.TICKED[2], self.TICKED[3]]))
-        self.assertTrue(all("LidAndRail of BoxLid" in f["reason"] for f in result.fixed))
+        # The lid steps lie on the box walls, which move with the sizes: each size they read is marked, with the value
+        # past which they may come off. The ranges stay as the table gives them.
+        self.assertEqual(result.fixed, [])
+        reasons = {f["name"]: f["reason"] for f in result.loose}
+        self.assertEqual(sorted(reasons), sorted([self.TICKED[0], self.TICKED[2], self.TICKED[3], self.TICKED[4]]))
+        self.assertIn("may give unexpected results past 1.8:", reasons[self.TICKED[0]])
+        self.assertIn("LidAndRail of BoxLid", reasons[self.TICKED[2]])
         sizes = result.recipe["sizes"]
         width = sizes["FilterBox___width__contains_CeramicMedium"]
-        self.assertEqual((width["min"], width["max"]), (1.01, 1.8))
+        self.assertEqual((width["min"], width["max"]), (0.9, 3.6))
         support = steps_of(result.recipe, "extrude")[1]["sketch"]["outer"]
         self.assertEqual((support["kind"], expr(support["center"][0])),
                          ("circle", "-0.5 * FilterBox_width_mm + 0.5 * _Filter__Wall_thickness_mm"))

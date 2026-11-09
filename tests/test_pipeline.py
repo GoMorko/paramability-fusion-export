@@ -1,4 +1,4 @@
-"""The export pipeline run against a simulated Fusion: plain and checked export, and every way a step can fail."""
+"""The export pipeline run against a simulated Fusion: the sketch scan, and every way a step can fail."""
 import contextlib
 import copy
 import json
@@ -83,9 +83,6 @@ class FakePort:
     def read_capture(self):
         return self.capture
 
-    def snapshot(self, skip, source):
-        return {}
-
     def probe_reader(self):
         def read(request):
             self.reads += 1
@@ -113,32 +110,31 @@ class FakePort:
         self.logs.append(text)
 
 
-def request(check=False, ranges=None, keep_doubtful=False):
+def request(ranges=None):
     return ExportRequest(
         title="Box", writer="test", up_axis="z", parameters=USER, model_params=MODEL, design_unit="mm",
-        ticked=TICKED, ranges=ranges or {}, check_sizes=check, keep_doubtful=keep_doubtful)
+        ticked=TICKED, ranges=ranges or {})
 
 
-def export(port, check=False, **options):
+def export(port, **options):
     with tempfile.TemporaryDirectory() as tmp:
-        result = run_pipeline(port, request(check, **options), tmp)
-        # The files hold STEP paths of the temporary folder: read what the package keeps before it is gone.
-        result.checks = [c["step"] for c in result.manifest.get("checks") or []]
-    return result
+        return run_pipeline(port, request(**options), tmp)
 
 
 def view(result):
     return result_view("box.paramability", result.manifest, result.report, result.table, TICKED)
 
 
-class PlainExportTest(unittest.TestCase):
-    def test_a_plain_export_measures_the_sketches_and_makes_no_check_step(self):
+class ExportTest(unittest.TestCase):
+    def test_an_export_measures_the_sketches_and_makes_one_step_file_and_no_check_step(self):
         port = FakePort()
         result = export(port)
         self.assertEqual(result.manifest["kind"], "recipe")
         self.assertEqual(port.steps, 1)
-        self.assertEqual(result.checks, [])
-        self.assertFalse(result.report["check_sizes"])
+        self.assertEqual(result.manifest["checks"], [])
+        self.assertFalse([name for name in result.files if name.startswith("checks/")])
+        self.assertNotIn("check_sizes", result.report)
+        self.assertNotIn("keep_doubtful", result.report)
         self.assertGreater(port.reads, 2)
         self.assertIsNotNone(result.report["probe"])
         self.assertEqual(result.health["probe"], "measured")
@@ -153,34 +149,23 @@ class PlainExportTest(unittest.TestCase):
         self.assertEqual(port.store.exprs, START)
 
 
-class CheckedExportTest(unittest.TestCase):
-    def test_a_checked_export_makes_check_steps_and_measures_the_sketches(self):
-        port = FakePort()
-        result = export(port, check=True)
-        self.assertTrue(result.report["check_sizes"])
-        self.assertTrue(result.checks)
-        self.assertGreater(port.steps, 1)
-        self.assertIsNotNone(result.report["probe"])
-        self.assertEqual(result.health["probe"], "measured")
-        self.assertEqual(port.store.exprs, START)
-
-    def test_a_checked_export_with_no_check_to_run_still_measures_the_sketches(self):
+class SizeRangeTest(unittest.TestCase):
+    def test_sizes_with_a_single_value_still_measure_the_sketches(self):
         single = {"height_mm": (32, 32), "wall_mm": (2, 2), "cube_mm": (26, 26), "depth_mm": (60, 60),
                   "box_count": (3, 3)}
         port = FakePort()
-        result = export(port, check=True, ranges=single)
-        self.assertEqual(result.checks, [])
+        result = export(port, ranges=single)
         self.assertEqual(port.steps, 1)
         self.assertGreater(port.reads, 1)
         self.assertIsNotNone(result.report["probe"])
         self.assertEqual(port.store.exprs, START)
 
-    def test_a_size_that_does_not_build_at_its_end_is_reported_and_the_parameters_come_back(self):
+    def test_a_size_that_does_not_build_at_the_end_of_its_range_is_left_out_of_the_probe_and_the_export_goes_on(self):
         port = FakePort(bad_when=lambda e: float(e["depth_mm"].split()[0]) > 80)
-        result = export(port, check=True, ranges={"depth_mm": (30, 120)})
-        sizes = result.report["sizes"]
-        self.assertTrue(sizes["build_failures"] or sizes.get("narrowed"))
+        result = export(port, ranges={"depth_mm": (30, 120)})
         self.assertEqual(result.manifest["kind"], "recipe")
+        self.assertEqual([d["name"] for d in result.report["probe"]["dropped"]], ["depth_mm (max)", "all max"])
+        self.assertEqual(result.report["sizes"]["fixed"], [])
         self.assertEqual(port.store.exprs, START)
 
 
@@ -202,9 +187,9 @@ class ProbeFailureTest(unittest.TestCase):
         self.assertEqual(left_out["depth_mm"], NOT_FOLLOWED)
         self.assertFalse(any("Not used by any copied step" in n and "depth_mm" in n for n in result.manifest["notes"]))
 
-    def test_a_probe_that_fails_while_the_checks_run_gives_a_recipe_and_a_warning(self):
-        port = FakePort(fail_read_from=4)
-        result = export(port, check=True)
+    def test_a_probe_that_fails_while_its_rows_run_gives_a_recipe_and_a_warning(self):
+        port = FakePort(fail_read_from=3)
+        result = export(port)
         self.assertEqual(result.manifest["kind"], "recipe")
         self.assertEqual(result.health["probe"], "failed")
         self.assertTrue(view(result)["warnings"])
@@ -240,29 +225,23 @@ class RestoreTest(unittest.TestCase):
 
 
 class FailingStepTest(unittest.TestCase):
-    def test_a_check_step_that_fails_in_the_middle_still_puts_the_parameters_back(self):
-        port = FakePort(fail_step_at=3)
+    def test_a_part_step_that_fails_stops_the_export_before_any_parameter_changes(self):
+        port = FakePort(fail_step_at=1)
         with self.assertRaises(StepExportError):
-            export(port, check=True)
+            export(port)
         self.assertEqual(port.store.exprs, START)
         self.assertEqual(port.warned, [])
 
-    def test_a_cancel_puts_the_parameters_back(self):
-        port = FakePort(cancel_at=3)
-        with self.assertRaises(ExportCancelled):
-            export(port, check=True)
-        self.assertEqual(port.store.exprs, START)
-
-    def test_a_cancel_during_the_probe_rows_of_a_plain_export_puts_the_parameters_back(self):
+    def test_a_cancel_during_the_probe_rows_puts_the_parameters_back(self):
         port = FakePort(cancel_at=2)
         with self.assertRaises(ExportCancelled):
             export(port)
         self.assertEqual(port.store.exprs, START)
 
     def test_when_the_export_stops_and_a_parameter_will_not_go_back_it_is_named(self):
-        port = FakePort(store=StuckStore(START, stuck=TICKED), fail_step_at=2)
-        with self.assertRaises(StepExportError):
-            export(port, check=True)
+        port = FakePort(store=StuckStore(START, stuck=TICKED), cancel_at=2)
+        with self.assertRaises(ExportCancelled):
+            export(port)
         self.assertEqual(len(port.warned), 1)
         self.assertTrue(port.warned[0] and set(port.warned[0]) <= set(TICKED))
 

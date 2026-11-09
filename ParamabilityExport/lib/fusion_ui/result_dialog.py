@@ -1,4 +1,5 @@
-"""The dialog shown after a recipe is saved: each size with its check result, what stays fixed, the variables.
+"""The dialog shown after a recipe is saved: each size with what it becomes in Paramability, what stays fixed, the
+variables.
 
 It is a small command of its own. Fusion does not allow starting a command from inside another command's events,
 so `show` fires a custom event; its handler starts the dialog after the export command has ended. When the event or
@@ -16,7 +17,7 @@ COMMAND_ID = "ParamabilityExportResultCommand"
 COMMAND_NAME = "Saved for Paramability"
 EVENT_ID = "ParamabilityExportResultEvent"
 _COLUMNS = ("name", "range", "check")
-_HEADERS = {"name": "Parameter", "range": "Range", "check": "Check"}
+_HEADERS = {"name": "Parameter", "range": "Range", "check": "In Paramability"}
 _RATIO = "6:3:3"
 _MAX_FIXED_ROWS = 6
 
@@ -123,7 +124,6 @@ def build(command, view):
 
     _add_lines(inputs, "pm_result_fixed", "Stays fixed", view["fixed"], 2)
     _add_lines(inputs, "pm_result_loose", "May give unexpected results", view.get("loose"), 3)
-    _add_lines(inputs, "pm_result_narrowed", "Range shortened", view.get("narrowed"), 3)
     if view["variables"]:
         inputs.addTextBoxCommandInput("pm_result_variables", "", html.escape(view["variables"]), 2, True)
 

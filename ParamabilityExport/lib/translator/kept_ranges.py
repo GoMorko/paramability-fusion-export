@@ -1,10 +1,11 @@
-"""Size ranges shortened so that some values keep their sign.
+"""The values of the sizes inside which some rules keep their sign.
 
 A rule is `(value, sign)`: a sized Quantity that must stay above `tol` (sign 1), below `-tol` (sign -1) or within
 `tol` of zero (sign 0) at every size setting of the range (`range_check.corners`: every mix of the ends of the sizes
-it reads). `shortened` brings the ends of the sizes it reads toward their values until the rules hold: each size at
-its own ends first, then all of them by the same share of what is left for the settings that change several sizes at
-once. A size whose range the person typed keeps it.
+it reads). `holding_ranges` brings the ends of the sizes it reads toward their values until the rules hold: each size
+at its own ends first, then all of them by the same share of what is left for the settings that change several sizes
+at once. The values where a range had to stop tell the person past which value a size may give unexpected results.
+A size whose range the person typed is not brought in: the rules cannot be kept for it.
 """
 import math
 
@@ -38,9 +39,9 @@ def _tidy(size, value, up):
     return round((math.ceil(value / step - 1e-9) if up else math.floor(value / step + 1e-9)) * step, 6)
 
 
-def shortened(table, rules, tol):
-    """`{Fusion name: (min, max)}` that keeps every rule: empty when they hold already, None when shortening the
-    ranges cannot make them hold (they fail at the current values, a range would shrink to its value, or every size
+def holding_ranges(table, rules, tol):
+    """`{Fusion name: (min, max)}` inside which every rule holds: empty when they hold over the whole ranges, None when
+    no shorter ranges make them hold (they fail at the current values, a range would shrink to its value, or every size
     read has a typed range)."""
     reads = list(dict.fromkeys(r for value, _ in rules for r in value.reads))
     sized = [(name, table.size_name(name)) for name in reads]

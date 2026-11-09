@@ -35,65 +35,44 @@ Nothing is typed in Fusion.
    "formula" and follows the parameters it reads. A parameter that drives a joint is not ticked to start with: the part
    does not follow it in the assembly. You can still tick it; its row then says "size, may be unexpected". Click a row
    to read its comment, its formula or the full reason in the box under the table. You can tick up to 64 sizes.
-   Below the table, "Check sizes in Fusion (slower)" is off to start with (see "Plain export and checked export");
-   it only adds the size checks. When it is on, "Keep doubtful sizes fixed" shows too: it keeps every size the add-in cannot follow fully as a fixed
-   number instead.
 4. If a step of the body cannot be copied, a warning shows under the body picker as soon as you pick it: which
    step stops the copy (for example "Extrude9 (extrude)"), and that the part will be saved as a fixed shape while your
    parameters still come along as variables. Hover the warning for the full reason. "Show in timeline" selects that
    step in Fusion; the timeline marker does not move. A line "Copied with a note" lists steps that were copied with a
    remark.
 5. Pick the design up direction, click OK and choose where to save the file.
-6. A window then lists each size with its range and its check ("matches Fusion", "not checked", "may be unexpected",
-   "kept fixed"; after a plain export just "size" or "may be unexpected"), what stays fixed and why, which sizes may
-   give unexpected results (loose sizes) and why, and how many parameters come along as variables. If this window
-   cannot open, the same text is shown in a message box.
+6. A window then lists each size with its range and what it becomes in Paramability ("size", "may be unexpected",
+   "kept fixed", "not followed" or "not used"), what stays fixed and why, which sizes may give unexpected results
+   (loose sizes) and why, and how many parameters come along as variables. If this window cannot open, the same text
+   is shown in a message box.
 7. Open the file in Paramability. The sizes land on the form as variables, ready to configure.
 
-### Plain export and checked export
+### What the export does
 
-By default the export is plain. It reads the steps of the body, tries the sizes that move a sketch (see below), and
-writes the file. While it works it sets parameters to other values for a moment, only to let Fusion rebuild and to
-measure the sketches; every parameter is put back, whatever happens. No STEP file is made for these tries, no size is
-checked against a STEP file, and no range is shortened. Reading the steps may move the timeline marker, and it is put
-back. Every ticked parameter that a copied step reads becomes a free size
-with its current value and the range in the table. You set the final Min and Max in Paramability. The file has no
+The export reads the steps of the body, tries the sizes that move a sketch (see below), and writes the file. While it
+works it sets parameters to other values for a moment, only to let Fusion rebuild and to measure the sketches; every
+parameter is put back, whatever happens. No STEP file is made for these tries and no range is changed. Reading the
+steps may move the timeline marker, and it is put back. Every ticked parameter that a copied step reads becomes a free
+size with its current value and the range in the table. You set the final Min and Max in Paramability. The file has no
 size checks (`checks` is empty), so Paramability freezes nothing. The only sizes that become fixed numbers are the ones
 that would make the recipe invalid (for example a formula too long to write). A ticked parameter that no copied step
 reads is not a size; it still comes along as a variable.
 
-Some sizes the add-in cannot follow fully: a size that moves a sketch in a way the tries could not follow, a plane or axis, a joint or the part in the assembly, a pick (an edge of a round or chamfer) that
-may move with it, a pick on a pattern copy whose count would have to change, a step drawn on another component's
-sketch that could stop meeting the part, a taper that could reach 45 degrees. Such a size stays a free size. It is
-marked "may give unexpected results" with the reason, which starts with the Fusion name of the parameter, and
-Paramability shows a warning mark next to it. The parts of the shape that cannot follow it keep their numbers, so the
-part looks the same at the current values. The message and the result window list these loose sizes.
+Some sizes the add-in cannot follow fully: a size that moves a sketch in a way the tries could not follow, a plane or
+axis, a joint, a pick (an edge of a round or chamfer) that may move with it, a pick on a pattern copy whose count would
+have to change, a step drawn on another component's sketch that could stop meeting the part, a taper that could reach
+45 degrees. Such a size stays a free size. It is marked "may give unexpected results" with the reason, which starts
+with the Fusion name of the parameter and, where the add-in can tell, the value past which the problem starts. Paramability
+shows a warning mark next to it. The parts of the shape that cannot follow it keep their numbers, so the part looks
+the same at the current values. The message and the result window list these loose sizes.
 
-Tick "Check sizes in Fusion (slower)" for the careful export. It adds the size checks below to the plain export,
-and it can take a long time. The add-in first works out which sizes the copied steps really use, then checks
-each of those once: it sets that size to the top of its range, writes a STEP file of the part, and puts it back.
-Paramability builds the recipe at that value and compares it with the STEP file. A size that does not match is kept
-as a fixed number. The add-in also tries the other end of each range (the bottom, for a check at the top), with a
-rebuild only. When Fusion cannot build the part at an end (for example a chamfer that no longer fits), the add-in does
-not fix the size. It tries again half way toward the current value, then a quarter of the way, then an eighth of the
-way (at most three more tries, each a rebuild). The value that builds becomes the new end of the range. When none
-builds, the current value becomes that end, so the size can still move the other way, and a check at the top that
-could not stay moves to the bottom. The message after the export says so, for example "Wall thickness: the range ends
-at 2 mm, since Fusion cannot build the part at 2.5 mm (Chamfer1 fails)." If you typed that end yourself, the message
-says so. The progress window says "Trying size ..." for these tries, and Cancel works there too. Only a size that
-builds at no other value on either side stays a fixed number.
-
-A size can also move a sketch: a rectangle width, a hole position, or a plane that a sketch sits on. In every export
-(plain or checked) the add-in then sets the size to other values, only lets Fusion rebuild (no STEP file), and reads the sketch
-each time. From these readings it writes the sketch value as a formula of your parameters, such as
-`0.5 * FilterBox_width_mm`, so the sketch follows the size in Paramability. This adds about one rebuild per size that
-moves a sketch, plus two. The progress window says "Trying size ..." for these steps, and Cancel works there too.
-A try that Fusion cannot build is dropped; the plain export does not fix the size for it. A size the readings still
-cannot follow is loose. The checked export also shortens the range of a size where a step would stop meeting the part (a slot that no longer
-reaches its wall, a rail that comes off) or raises a minimum so a picked pattern copy stays. With "Keep doubtful sizes
-fixed" ticked, the sizes the add-in cannot follow fully stay fixed numbers instead of loose sizes. A size that no
-copied step can follow at all, or that Fusion cannot build at any other value, always stays a fixed number, with the
-reason in the message after the export and in the file.
+A size can also move a sketch: a rectangle width, a hole position, or a plane that a sketch sits on. The add-in then
+sets the size to other values, only lets Fusion rebuild (no STEP file), and reads the sketch each time. From these
+readings it writes the sketch value as a formula of your parameters, such as `0.5 * FilterBox_width_mm`, so the
+sketch follows the size in Paramability. This adds about one rebuild per size that moves a sketch, plus two. The
+progress window says "Trying size ..." for these steps, and Cancel works there too. A try that Fusion cannot build is
+dropped; no size is fixed for it. A size the readings still cannot follow is loose. A size that no copied step reads
+is not a size.
 
 These cases cannot be copied in a sketch even with the tries: a point that moves along a curve (an angle or a
 polar placement), an outline that changes shape (a line that only crosses the outline above some width, a sketch
@@ -110,12 +89,11 @@ description of the variable.
 
 When a step cannot be copied, the file holds the plain part only. The message after the export starts with the
 first step that stopped it, and the lower-right corner of the Fusion window shows a short line with the same step
-(Fusion decides how long it stays). A copy of what the add-in read is saved inside the file as `report.json`; it
-records whether sizes were checked (`check_sizes`) and whether doubtful sizes were kept fixed (`keep_doubtful`); its `probe` record holds the tries
-for the sketches.
+(Fusion decides how long it stays). A copy of what the add-in read is saved inside the file as `report.json`; its `probe` record holds the tries
+for the sketches, and its `health` record says whether the design came back to its start.
 
-Every plain part or recipe the add-in writes (also the one size case of Export size choices) also lists the design's user parameters
-(up to 64, in Fusion order) with their current values, units and comments. A parameter worked out by a formula keeps
+Every plain part or recipe the add-in writes (also the one size case of Export size choices) also lists the design's
+user parameters (up to 64, in Fusion order) with their current values, units and comments. A parameter worked out by a formula keeps
 its formula when it can be copied, so Paramability gets the variables even when the shape stays fixed. This includes
 helper parameters that only other formulas read. Parameters in other units than length, angle or no unit (a mass, a
 time) are left out. In Export for Paramability, `report.json` says how many were
@@ -143,8 +121,9 @@ After an export, a cancel or a size that does not build, your parameters are set
 
 ## How it works
 
-For each size (or each check) the add-in sets the parameters, lets Fusion rebuild, writes a STEP file of the picked
-body, and moves on. All numbers in the file are in millimetres and degrees.
+Export for Paramability writes one STEP file of the picked body as it is, and sets parameters only for the sketch
+tries (recompute, no STEP). Export size choices sets the parameters for each size, lets Fusion rebuild, writes a STEP
+file of the picked body, and moves on. All numbers in the file are in millimetres and degrees.
 
 When the design holds more than the picked body, the add-in copies the picked body into a temporary component,
 exports that, and deletes it. Fusion puts the copy at the timeline marker, and the add-in deletes only what the copy
@@ -154,22 +133,19 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 
 ## Limits
 
-- Every size check and probe row (also in the plain export) starts from the saved values: before each row after the first the add-in puts the
+- Every size row and sketch try starts from the saved values: before each one after the first the add-in puts the
   parameters back and recomputes, so a sketch with two solutions cannot stay flipped from the row before. This costs
   one more recompute per row.
 - One solid body per export.
 - A body inside a component (at any depth) exports as a recipe with sizes, like a root body, and lands where Fusion
   shows it. If the part was moved by hand, capture its position first (Position, Capture Position); the export asks
-  for it. A size that makes the part move in the assembly may give unexpected results, with the reason. A component
-  used several
-  times exports the copy you picked.
+  for it. A component used several times exports the copy you picked.
 - These stay a fixed shape with a note: a part from a linked design, a place in the assembly that cannot be read, a
   step of another component that changes the body, a body made in another component and moved in, and a step that
   reaches into another component's faces, edges or bodies. A step that uses a sketch of another component is copied
   where Fusion shows it and follows the sizes the probe saw move it; where it could stop meeting the part (a slot that
-  no longer reaches its wall, a rail that comes off), the size may give unexpected results, with the reason. In a
-  checked export it keeps the range Fusion builds and is marked past that value; with "Keep doubtful sizes fixed"
-  the range is shortened instead.
+  no longer reaches its wall, a rail that comes off), the size may give unexpected results, with the reason and the
+  value past which it starts.
 - A recipe covers the picked body only. Parameters made by steps or sketches of other bodies are left out where the
   add-in can match them by name; construction planes, axes and joints are read for the component and the ones above
   it. A size that turns a sketch plane, moves a point along a curve, or changes the shape of an outline may give

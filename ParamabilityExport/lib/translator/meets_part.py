@@ -8,16 +8,16 @@ edge it made, a join that must touch) no longer find what they pick.
 For points on the faces of the step, `check` looks along the face normal for the nearest faces of the part within
 `REACH` mm on each side. Over the size range (every mix of the ends for up to 6 sizes, a bounded sample past that)
 every such gap must keep its sign, and a face that lies on a wall must stay on it. Only flat faces parallel to the
-step's face count. Where a gap does not keep its sign, the ranges of the sizes it reads are shortened toward their values until it does
-(`kept_ranges.shortened`, `Context.narrow`); a size whose range would shrink to its value, or whose range the person
-typed, cannot follow (`Context.fix`). When the walk keeps sizes free (loose mode), the ranges stay as Fusion builds
-them and the sizes are listed as doubtful past those values instead.
+step's face count. Where a gap does not keep its sign at some size setting, the sizes it reads may give unexpected
+results past the values where it still does (`kept_ranges.holding_ranges`, `Context.doubt_past`); a size that cannot be
+brought in that way, because it would shrink to its value or because the person typed its range, cannot follow
+(`Context.fix`).
 """
 import math
 
 from . import follow, shells, vec
 from .footprint import _polyline
-from .kept_ranges import shortened
+from .kept_ranges import holding_ranges
 from .slabs import Place, Slab
 from .values import Quantity
 
@@ -187,7 +187,7 @@ def gaps(ctx, slab):
 
 
 def check(ctx, step_id, slab_data, combine, why):
-    """Shorten or fix the sizes that would make a borrowed step meet the part otherwise than at the measured sizes.
+    """Mark the sizes that would make a borrowed step meet the part otherwise than at the measured sizes.
     `slab_data` is the step's `_slab` hand over; `why` names the step for the reason."""
     if ctx.table is None or not (ctx.slabs or ctx.shells) or getattr(ctx.motion, "optimistic", False):
         # A first look writes the borrowed outline as numbers, so its gaps would seem to close with every size.
@@ -197,9 +197,8 @@ def check(ctx, step_id, slab_data, combine, why):
     if not slab.length.n > 0:
         return
     for rule in gaps(ctx, slab):
-        found = shortened(ctx.table, [rule], ON_TOL)
+        found = holding_ranges(ctx.table, [rule], ON_TOL)
         if found is None:
             ctx.fix(rule[0].reads, "past its value, %s would no longer meet the part the way it does now" % why)
         elif found:
-            ctx.narrow_or_doubt(found, "past that, %s would no longer meet the part the way it does now" % why,
-                                "%s may no longer meet the part" % why)
+            ctx.doubt_past(found, "%s may no longer meet the part" % why)

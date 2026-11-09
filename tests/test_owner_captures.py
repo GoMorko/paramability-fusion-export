@@ -8,7 +8,6 @@ import zipfile
 from tests import context  # noqa: F401
 from tests.schema_check import check_recipe
 
-from lib.export_plan.body_scope import other_sketch_names
 from lib.export_plan.probe_flow import probe_view
 from lib.params import size_table
 from lib.probe import motion as probe_motion
@@ -84,7 +83,6 @@ class OwnerCaptureTest(unittest.TestCase):
         with zipfile.ZipFile(path) as package:
             report = json.loads(package.read("report.json"))
         capture = report["capture"]
-        self.assertIn("PipeInsertBottom", other_sketch_names(capture))  # only the lid's steps use it
         params = capture["parameters"]
         table = size_table.build(params["user"], PROBE_TICKED, params["model"], capture.get("design_units", "mm"))
         motion = probe_motion.build(probe_view(capture), table, report["probe"]["states"])
@@ -95,17 +93,20 @@ class OwnerCaptureTest(unittest.TestCase):
         self.assertEqual({(tuple(r.terms), abs(r.terms["FilterBox_depth_mm"])) for r in rails},
                          {(("FilterBox_depth_mm",), 0.5)})
         result = translate(capture, size_table=table, motion=motion)
-        self.assertEqual([f["name"] for f in result.fixed], ["FilterBox__PipeBottom_offsetFromCenter_mm"])
+        # The pipe offset of the lid moves only an outline that cannot follow it, so no formula reads it.
+        self.assertEqual(result.fixed, [])
         free = sorted(n for n, size in result.recipe["sizes"].items() if "value" in size)
         self.assertEqual(free, sorted(n.replace("$", "_") for n in PROBE_TICKED[:5] + PROBE_TICKED[6:]))
-        self.assertEqual(sorted((r["name"], r["min"]) for r in result.raised),
-                         sorted([(PROBE_TICKED[0], 1.01), (PROBE_TICKED[2], 1.01)]))
-        # Past these, the lid slot of Extrude5 no longer ends inside the closed end wall, and the pipe taper reaches 45.
-        self.assertEqual(sorted((n["name"], n["max"]) for n in result.narrowed),
-                         sorted([(PROBE_TICKED[0], 2.05), (PROBE_TICKED[3], 20.52), (PROBE_TICKED[6], 44.98)]))
+        # The ranges stay as the table gives them. The counts that a pick on a pattern copy needs, the lid slot of
+        # Extrude5 and the pipe taper may fail inside them: the sizes they read are marked, with the value past
+        # which they fail where that is known.
+        marked = {f["name"]: f["reason"] for f in result.loose}
+        self.assertEqual(sorted(marked), sorted([PROBE_TICKED[0], PROBE_TICKED[2], PROBE_TICKED[3], PROBE_TICKED[6]]))
+        self.assertIn("past 44.98", marked[PROBE_TICKED[6]])
+        self.assertIn("past 23.4", marked[PROBE_TICKED[3]])
         self.assertEqual(check_recipe(result.recipe), [])
 
-    def test_with_the_dialog_ranges_the_filter_box_sizes_stay_free_and_its_counts_are_raised(self):
+    def test_with_the_dialog_ranges_the_filter_box_sizes_stay_free_and_are_marked(self):
         path = os.path.join(REPORTS, PACKAGE_WITH_PROBE)
         if not os.path.exists(path):
             self.skipTest(MISSING)
@@ -120,18 +121,16 @@ class OwnerCaptureTest(unittest.TestCase):
         table = size_table.build(params["user"], PROBE_TICKED, params["model"], capture.get("design_units", "mm"),
                                  ranges=ranges)
         motion = probe_motion.build(probe_view(capture), table, report["probe"]["states"])
-        result = translate(capture, size_table=table, motion=motion, loose=True)
+        result = translate(capture, size_table=table, motion=motion)
         # The pipe offset of the lid moves only an outline that cannot follow it, so no formula reads it.
-        self.assertEqual([f["name"] for f in result.fixed], ["FilterBox__PipeBottom_offsetFromCenter_mm"])
-        # The box width and the cube keep the range Fusion builds; past these the lid slot may stop meeting the part.
-        self.assertEqual([(f["name"], f["reason"].split(":")[0].split("results ")[1]) for f in result.loose],
-                         [(PROBE_TICKED[0], "past 2.05"), (PROBE_TICKED[3], "past 20.52")])
-        self.assertEqual(result.narrowed[0]["name"], PROBE_TICKED[6])
-        self.assertEqual(sorted((r["name"], r["min"]) for r in result.raised),
-                         sorted([(PROBE_TICKED[0], 1.01), (PROBE_TICKED[2], 1.01)]))
+        self.assertEqual(result.fixed, [])
+        # The ranges stay as the dialog sent them; the sizes that the pattern picks, the lid slot and the pipe taper
+        # read are marked, with the value past which they fail where that is known.
+        self.assertEqual(sorted(f["name"] for f in result.loose),
+                         sorted([PROBE_TICKED[0], PROBE_TICKED[2], PROBE_TICKED[3], PROBE_TICKED[6]]))
         self.assertEqual(len([n for n, size in result.recipe["sizes"].items() if "value" in size]), 6)
 
-    def test_with_the_offset_back_the_filter_box_sizes_stay_free(self):
+    def test_with_the_offset_back_the_filter_box_sizes_stay_free_with_their_ranges(self):
         path = os.path.join(REPORTS, PACKAGE_WITH_OFFSET_FACES)
         if not os.path.exists(path):
             self.skipTest(MISSING)
@@ -141,39 +140,32 @@ class OwnerCaptureTest(unittest.TestCase):
         params = capture["parameters"]
         ticked = PROBE_TICKED + ["_Filter__Wall_thickness_mm"]
         table = size_table.build(params["user"], ticked, params["model"], capture.get("design_units", "mm"))
-        # The range ends as the tries in Fusion left them: the slope builds only below its value, the wall only
-        # thinner, and the smallest counts and cube did not build.
-        table = table.with_narrowed({
-            "_Pipe__Slope_deg": (0.0, 0.5), "_Filter__Wall_thickness_mm": (0.625, 1.25),
-            PROBE_TICKED[0]: (1.35, 3.6), PROBE_TICKED[2]: (1.35, 3.6), PROBE_TICKED[3]: (13.5, 36.0)})
         motion = probe_motion.build(probe_view(capture), table, report["probe"]["states"])
         # The lid sketch reads the same other outline after four rows of four different sizes.
         self.assertEqual(motion.apart, [6, 10, 12, 19])
-        result = translate(capture, size_table=table, motion=motion, loose=True)
+        result = translate(capture, size_table=table, motion=motion)
         self.assertEqual(result.fixed, [])
         # The ranges stay as Fusion builds them; the lid slot of Extrude5 may stop meeting the part past these.
-        self.assertEqual([(f["name"], f["reason"].split(":")[0].split("results ")[1]) for f in result.loose],
-                         [(PROBE_TICKED[0], "past 1.8"), (PROBE_TICKED[3], "past 18"),
-                          ("_Filter__Wall_thickness_mm", "below 0.98")])
-        self.assertTrue(all("Extrude5" in f["reason"] for f in result.loose))
+        marked = {f["name"]: f["reason"] for f in result.loose}
+        self.assertEqual(sorted(marked), sorted([PROBE_TICKED[0], PROBE_TICKED[2], PROBE_TICKED[3], PROBE_TICKED[6],
+                                                 "_Filter__Wall_thickness_mm"]))
+        for name, where in ((PROBE_TICKED[0], "past 1.8"), (PROBE_TICKED[3], "past 18"),
+                            ("_Filter__Wall_thickness_mm", "outside 0.98 to 1.25"), (PROBE_TICKED[6], "past 44.98")):
+            self.assertIn("may give unexpected results %s:" % where, marked[name])
+        self.assertIn("Extrude5", marked[PROBE_TICKED[3]])
         verdicts = {v["index"]: v for v in result.items}
         self.assertNotIn("two ways", verdicts[65]["note"])
         self.assertEqual(verdicts[92]["verdict"], "translated")
         free = {n: (s["min"], s["max"]) for n, s in result.recipe["sizes"].items() if "value" in s}
         self.assertEqual(free, {
-            "FilterBox___width__contains_CeramicMedium": (1.35, 3.6),
+            "FilterBox___width__contains_CeramicMedium": (0.9, 3.6),
             "FilterBox___height__contains_CeramicMedium": (0.6, 2.4),
-            "FilterBox___depth__contains_CeramicMedium": (1.35, 3.6),
-            "_CeramicMedium__Cube_width_unitless": (13.5, 36.0),
+            "FilterBox___depth__contains_CeramicMedium": (0.9, 3.6),
+            "_CeramicMedium__Cube_width_unitless": (9.0, 36.0),
             "FilterBox__PipeTop_offsetFromCenter_mm": (0.025, 0.1),
-            "_Pipe__Slope_deg": (0.0, 0.5),
-            "_Filter__Wall_thickness_mm": (0.625, 1.25)})
+            "_Pipe__Slope_deg": (0.0, 45.5),
+            "_Filter__Wall_thickness_mm": (0.625, 2.5)})
         self.assertEqual(check_recipe(result.recipe), [])
-        # "Keep doubtful sizes fixed" shortens them as before.
-        strict = translate(capture, size_table=table, motion=motion)
-        self.assertEqual({n["name"]: (n["min"], n["max"]) for n in strict.narrowed},
-                         {PROBE_TICKED[0]: (1.35, 1.8), PROBE_TICKED[3]: (13.5, 18.0),
-                          "_Filter__Wall_thickness_mm": (0.98, 1.25)})
 
     def test_the_rim_chamfer_picked_by_the_top_face_follows_the_box(self):
         path = os.path.join(REPORTS, PACKAGE_WITH_OFFSET_FACES)
@@ -190,7 +182,7 @@ class OwnerCaptureTest(unittest.TestCase):
         ticked = PROBE_TICKED + ["_Filter__Wall_thickness_mm"]
         table = size_table.build(params["user"], ticked, params["model"], capture.get("design_units", "mm"))
         motion = probe_motion.build(probe_view(capture), table, report["probe"]["states"])
-        result = translate(capture, size_table=table, motion=motion, loose=True, plain=True)
+        result = translate(capture, size_table=table, motion=motion)
         bevels = [f for f in result.recipe["features"] if f["label"] == "Chamfer2"]
         # One step picks the whole rim, however many bumps the width makes; the other set keeps its points.
         self.assertEqual(bevels[0]["edges"], {"faceEdges": {"featureFace": "extrude_49", "which": "end"}})
@@ -198,7 +190,7 @@ class OwnerCaptureTest(unittest.TestCase):
         self.assertEqual(result.recipe["version"], 14)
         self.assertEqual(check_recipe(result.recipe), [])
 
-    def test_the_plain_export_keeps_every_range_and_marks_the_sketch_sizes_loose(self):
+    def test_without_a_motion_every_range_stays_and_the_sketch_sizes_are_marked_loose(self):
         path = os.path.join(REPORTS, PACKAGE_WITH_OFFSET_FACES)
         if not os.path.exists(path):
             self.skipTest(MISSING)
@@ -207,8 +199,8 @@ class OwnerCaptureTest(unittest.TestCase):
         params = capture["parameters"]
         ticked = PROBE_TICKED + ["_Filter__Wall_thickness_mm"]
         table = size_table.build(params["user"], ticked, params["model"], capture.get("design_units", "mm"))
-        result = translate(capture, size_table=table, loose=True, plain=True)
-        self.assertEqual((result.fixed, result.raised, result.narrowed), ([], [], []))
+        result = translate(capture, size_table=table)
+        self.assertEqual(result.fixed, [])
         free = {n: (s["min"], s["max"]) for n, s in result.recipe["sizes"].items() if "value" in s}
         self.assertEqual(len(free), 6)
         self.assertEqual(free["_Pipe__Slope_deg"], (0.0, 45.5))
@@ -218,7 +210,7 @@ class OwnerCaptureTest(unittest.TestCase):
         self.assertNotIn("FilterBox__PipeTop_offsetFromCenter_mm", [f["name"] for f in result.loose])
         self.assertEqual(check_recipe(result.recipe), [])
 
-    def test_the_plain_export_with_the_motion_of_the_stored_states(self):
+    def test_with_the_motion_of_the_stored_states_only_the_sizes_that_cannot_follow_are_loose(self):
         path = os.path.join(REPORTS, PACKAGE_WITH_OFFSET_FACES)
         if not os.path.exists(path):
             self.skipTest(MISSING)
@@ -229,8 +221,8 @@ class OwnerCaptureTest(unittest.TestCase):
         ticked = PROBE_TICKED + ["_Filter__Wall_thickness_mm"]
         table = size_table.build(params["user"], ticked, params["model"], capture.get("design_units", "mm"))
         motion = probe_motion.build(probe_view(capture), table, report["probe"]["states"])
-        result = translate(capture, size_table=table, motion=motion, loose=True, plain=True)
-        self.assertEqual((result.fixed, result.raised, result.narrowed), ([], [], []))
+        result = translate(capture, size_table=table, motion=motion)
+        self.assertEqual(result.fixed, [])
         free = sorted(n for n, size in result.recipe["sizes"].items() if "value" in size)
         self.assertEqual(len(free), 7)
         # With the motion only the sizes whose values still cannot follow are loose; the height and the pipe offset

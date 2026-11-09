@@ -171,29 +171,22 @@ class BorrowedSketchTest(unittest.TestCase):
         self.assertEqual(verdicts(result)[9], ("translatedWithNote", "Extrude9 uses the sketch Rim of Lid; its "
                                                "outline is copied in place as fixed numbers."))
 
-    def test_sizes_that_move_the_borrowed_sketch_are_fixed(self):
+    def test_sizes_that_move_the_borrowed_sketch_are_marked(self):
         capture = load_capture("component_moved")
         capture["items"].append(lid_rim(sketch_params=[{"name": "d90", "expression": "wall_mm * 5", "reads": []}]))
         result, _ = run(capture)
-        fixed = {f["name"]: f["reason"] for f in result.fixed}
-        self.assertIn("sketch Rim of Lid", fixed["wall_mm"])
+        self.assertEqual(result.fixed, [])
+        loose = {f["name"]: f["reason"] for f in result.loose}
+        self.assertIn("sketch Rim of Lid", loose["wall_mm"])
         # The rim is copied as numbers and sits on the top of the tray, which moves with its height.
         self.assertIn("Extrude9 (drawn on Rim of Lid) would no longer meet the part",
-                      fixed["FilterBox_$_height__contains_CeramicMedium"])
+                      loose["FilterBox_$_height__contains_CeramicMedium"])
 
-    def test_a_borrowed_cut_that_ends_inside_a_wall_keeps_the_wall_thick_enough(self):
-        result, table = run(tray_with_lid_slot())
-        narrowed = {n["name"]: n for n in result.narrowed}
-        self.assertEqual((narrowed["wall_mm"]["min"], narrowed["wall_mm"]["max"]),
-                         (1.01, table.sizes["wall_mm"]["max"]))
-        self.assertIn("starts at 1.01: past that, Extrude9 (drawn on Rim of Lid)", narrowed["wall_mm"]["reason"])
-        self.assertEqual(result.recipe["sizes"]["wall_mm"]["min"], 1.01)
-
-    def test_in_loose_mode_the_range_stays_and_the_size_is_listed_with_the_values_it_doubts(self):
+    def test_a_borrowed_cut_that_ends_inside_a_wall_keeps_the_range_and_lists_the_values_it_doubts(self):
         capture = tray_with_lid_slot()
         table = table_of(capture, TICKED)
-        result = translate(capture, size_table=table, loose=True)
-        self.assertEqual((result.narrowed, result.fixed), ([], []))
+        result = translate(capture, size_table=table)
+        self.assertEqual(result.fixed, [])
         self.assertEqual(result.recipe["sizes"]["wall_mm"]["min"], table.sizes["wall_mm"]["min"])
         reasons = {f["name"]: f["reason"] for f in result.loose}
         self.assertEqual(reasons["wall_mm"], "wall_mm may give unexpected results below 1.01: Extrude9 (drawn on Rim "
@@ -212,14 +205,14 @@ class BorrowedSketchTest(unittest.TestCase):
         self.assertEqual(rim["sketch"]["outer"]["width"]["expr"], "wall_mm + 8")
         self.assertNotIn("fixed numbers", verdicts(result)[9][1])
 
-    def test_a_borrowed_value_the_probe_could_not_follow_fixes_its_sizes(self):
+    def test_a_borrowed_value_the_probe_could_not_follow_marks_its_sizes(self):
         result, _ = self.borrowed_run(Motion({"9/p0/l0/width": Stuck(["wall_mm"], "unread", "Rim of Lid")}))
-        self.assertEqual([f["name"] for f in result.fixed], ["wall_mm"])
-        self.assertIn("Rim of Lid", result.fixed[0]["reason"])
+        self.assertEqual((result.fixed, [f["name"] for f in result.loose]), ([], ["wall_mm"]))
+        self.assertIn("Rim of Lid", result.loose[0]["reason"])
 
-    def test_a_probe_that_gave_no_value_for_the_sketch_keeps_the_dimension_sizes_fixed(self):
+    def test_a_probe_that_gave_no_value_for_the_sketch_marks_the_dimension_sizes(self):
         result, _ = self.borrowed_run(Motion({}))
-        self.assertEqual([f["name"] for f in result.fixed], ["wall_mm"])
+        self.assertEqual((result.fixed, [f["name"] for f in result.loose]), ([], ["wall_mm"]))
 
     def test_the_first_translation_fixes_nothing_for_a_borrowed_sketch(self):
         result, _ = self.borrowed_run(OPTIMISTIC)

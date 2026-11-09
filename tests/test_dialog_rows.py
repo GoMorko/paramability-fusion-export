@@ -42,7 +42,6 @@ class CellTextTest(unittest.TestCase):
         self.assertEqual(rows.status_text(locked, False), "fixed, moves a joint")
         doubtful = offer(doubt="wall may give unexpected results: it moves a joint.")
         self.assertEqual(rows.status_text(doubtful, True), "size, may be unexpected")
-        self.assertEqual(rows.status_text(doubtful, True, keep_doubtful=True), "fixed, moves a joint")
         self.assertIn("it moves a joint", rows.details_html(doubtful, True))
 
     def test_the_range_cells_are_open_only_for_a_ticked_plain_row(self):

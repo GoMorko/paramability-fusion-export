@@ -33,12 +33,17 @@ class PlanTest(unittest.TestCase):
     def plan(self, capture, up_axis="z"):
         return plan_single_export(capture, self.step, "Plate", "writer 1", up_axis)
 
-    def test_a_raised_smallest_value_is_in_the_recipe_and_the_report(self):
+    def test_a_count_a_pick_needs_keeps_its_range_and_is_marked_loose(self):
         from tests.test_translate_copies import counted
         capture, table = counted()
-        _, files, report = plan_single_export(capture, self.step, "Plate", "w", "z", size_table=table)
-        self.assertEqual([(r["name"], r["min"]) for r in report["sizes"]["raised"]], [("holes_count", 2)])
-        self.assertEqual(json.loads(files["recipe.json"])["sizes"]["holes_count"]["min"], 2)
+        manifest, files, report = plan_single_export(capture, self.step, "Plate", "w", "z", size_table=table)
+        self.assertEqual(manifest["checks"], [])
+        self.assertFalse([name for name in files if name.startswith("checks/")])
+        self.assertEqual(json.loads(files["recipe.json"])["sizes"]["holes_count"]["min"], 1.0)
+        self.assertEqual([f["name"] for f in manifest["loose"]], ["holes_count"])
+        self.assertEqual(set(report["sizes"]), {"free", "fixed", "loose", "dropped", "not_followed"})
+        self.assertNotIn("check_sizes", report)
+        self.assertNotIn("keep_doubtful", report)
 
     def test_loose_sizes_reach_the_manifest_the_report_and_a_note(self):
         from tests.test_translate_copies import counted
@@ -47,57 +52,23 @@ class PlanTest(unittest.TestCase):
                  {"name": "gone", "reason": "gone may give unexpected results: x."}]
         manifest, _, report = plan_single_export(capture, self.step, "Plate", "w", "z", size_table=table,
                                                  loose=loose)
-        self.assertEqual(manifest["loose"], loose[:1])
-        self.assertEqual(report["sizes"]["loose"], loose[:1])
-        self.assertIn("1 size may give unexpected results: wall_mm.", manifest["notes"])
+        # The export's own entry comes first, then the translator's (the count a pick needs); a name that is no size
+        # of the recipe is left out.
+        self.assertEqual([f["name"] for f in manifest["loose"]], ["wall_mm", "holes_count"])
+        self.assertEqual(manifest["loose"][0], loose[0])
+        self.assertEqual(report["sizes"]["loose"], manifest["loose"])
+        self.assertIn("2 sizes may give unexpected results: wall_mm, holes_count.", manifest["notes"])
         self.assertEqual(validate_manifest(manifest), [])
-        self.assertFalse(report["keep_doubtful"])
-        strict = plan_single_export(capture, self.step, "Plate", "w", "z", size_table=table, loose_sizes=False)[2]
-        self.assertTrue(strict["keep_doubtful"])
 
-    def test_a_plain_export_has_no_checks_keeps_the_ranges_and_records_both_choices(self):
-        from tests.test_translate_copies import counted
-        capture, table = counted()
-        manifest, files, report = plan_single_export(capture, self.step, "Plate", "w", "z", size_table=table,
-                                                     plain=True)
-        self.assertEqual(manifest["checks"], [])
-        self.assertEqual(json.loads(files["recipe.json"])["sizes"]["holes_count"]["min"], 1.0)
-        self.assertEqual([f["name"] for f in manifest["loose"]], ["holes_count"])
-        self.assertNotIn("raised", report["sizes"])
-        self.assertFalse(any("not checked" in n for n in manifest["notes"]))
-        self.assertEqual((report["check_sizes"], report["keep_doubtful"]), (False, False))
-        self.assertTrue(plan_single_export(capture, self.step, "Plate", "w", "z", size_table=table)[2]["check_sizes"])
-
-    def test_checks_are_planned_inside_the_limits_the_translation_found(self):
-        from tests.test_translate_copies import counted
-        from lib.export_plan.recipe_export import translate_capture, with_translated_limits
-        capture, table = counted()
-        planned = with_translated_limits(table, translate_capture(capture, "z", table))
-        self.assertEqual(planned.sizes["holes_count"]["min"], 2)
-        self.assertEqual(planned.typed_ends("holes_count"), (False, False))
-
-    def test_a_check_below_a_raised_minimum_is_left_out(self):
-        from tests.test_translate_copies import counted
-        capture, table = counted()
-        checks = [{"size": "holes_count", "value": 1.0, "step_file": self.step}]
-        manifest, _, report = plan_single_export(capture, self.step, "Plate", "w", "z", size_table=table,
-                                                 checks=checks)
-        self.assertEqual((manifest["checks"], report["sizes"]["unchecked"]), ([], ["holes_count"]))
-
-    def test_a_range_a_step_shortened_is_noted_and_shown_shortened(self):
+    def test_a_step_that_may_stop_meeting_the_part_marks_its_sizes_loose_and_keeps_the_ranges(self):
         from tests.test_translate_component import tray_with_lid_slot
         from tests.test_translate_sized import TICKED, table_of
-        from lib.export_plan.result_rows import result_view
         capture = tray_with_lid_slot()
         table = table_of(capture, TICKED)
-        manifest, _, report = plan_single_export(capture, self.step, "Tray", "w", "z", size_table=table,
-                                                 loose_sizes=False)
-        wall = [n for n in report["sizes"]["narrowed"] if n["size"] == "wall_mm"]
-        self.assertEqual([(n["side"], n["to"]) for n in wall], [("min", 1.01)])
-        self.assertIn(wall[0]["note"], manifest["notes"])
-        view = result_view("Tray.paramability", manifest, report, table, TICKED)
-        rows = {r["name"]: r["range"] for r in view["rows"]}
-        self.assertIn("1.01", rows["wall_mm"])
+        manifest, _, report = plan_single_export(capture, self.step, "Tray", "w", "z", size_table=table)
+        loose = {f["name"]: f["reason"] for f in manifest["loose"]}
+        self.assertIn("below 1.01", loose["wall_mm"])
+        self.assertEqual(report["sizes"]["loose"], manifest["loose"])
 
     def test_body_in_a_component_is_a_recipe_at_its_place(self):
         manifest, files, report = self.plan(load_capture("component_moved"))
@@ -172,7 +143,7 @@ class PlanTest(unittest.TestCase):
 
     def test_translator_crash_never_stops_the_export(self):
         original = recipe_export.translate
-        recipe_export.translate = lambda capture, size_table=None: 1 / 0
+        recipe_export.translate = lambda capture, size_table=None, motion=None: 1 / 0
         try:
             manifest, _, report = self.plan(load_capture("extrude_plate"))
         finally:
@@ -212,7 +183,7 @@ if __name__ == "__main__":
 
 
 class MotionHandoverTest(unittest.TestCase):
-    """The translator gets the sketch motion only when it takes one, and the report keeps the probe record."""
+    """The translator gets the sketch motion, and the report keeps the probe record."""
 
     def setUp(self):
         self.seen = []
@@ -220,7 +191,7 @@ class MotionHandoverTest(unittest.TestCase):
 
         def translate(capture, size_table=None, motion=None):
             self.seen.append(motion)
-            return real(capture, size_table=size_table)
+            return real(capture, size_table=size_table, motion=motion)
 
         self._real = real
         recipe_export.translate = translate

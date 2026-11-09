@@ -21,8 +21,8 @@ Arguments:
   bounds  optional {recipe size name: (low, high)} that replaces the range of a size, for a range under test.
   extra   settings ({recipe size name: value}) tested besides the corners, for example states the probe built.
 
-`size_env` gives the values of every size at a setting; `largest_share` and `smallest_share` find where a rule
-starts or stops holding while a range is moved toward its value.
+`size_env` gives the values of every size at a setting; `largest_share` finds where a rule stops holding while a range
+is moved toward its value.
 """
 import random
 from itertools import combinations, product
@@ -144,17 +144,3 @@ def largest_share(holds):
         else:
             high = mid
     return low
-
-
-def smallest_share(holds):
-    """The smallest share t in [0, 1] for which `holds(t)` is true, when it fails up to some share and holds after.
-
-    `holds(1.0)` is assumed true."""
-    low, high = 0.0, 1.0
-    for _ in range(STEPS):
-        mid = (low + high) / 2.0
-        if holds(mid):
-            high = mid
-        else:
-            low = mid
-    return high

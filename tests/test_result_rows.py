@@ -13,12 +13,10 @@ def length(name):
     return dict(name=name, expression="2 mm", value=0.2, unit="mm", comment="", is_favorite=True, kind="length")
 
 
-def view(manifest=None, plain=False, health=None, **sizes):
+def view(manifest=None, health=None, **sizes):
     params = [length(n) for n in ("wall", "gap", "pipe", "spare")]
     table = size_table.build(params, ["wall", "gap", "pipe"])
-    report = {"sizes": {"free": ["wall"], "fixed": [], "checks": [], "unchecked": [], "dropped": [], **sizes}}
-    if plain:
-        report["check_sizes"] = False
+    report = {"sizes": {"free": ["wall"], "fixed": [], "dropped": [], **sizes}}
     if health:
         report["health"] = health
     manifest = manifest or {"kind": "recipe", "notes": ["12 steps copied."], "parameters": [{}, {}, {}, {}]}
@@ -26,36 +24,24 @@ def view(manifest=None, plain=False, health=None, **sizes):
 
 
 class ResultViewTest(unittest.TestCase):
-    def test_a_checked_size_shows_its_range_and_that_it_matches(self):
+    def test_a_size_shows_its_range_and_what_it_becomes(self):
         shown = view()
-        self.assertEqual(shown["rows"][0], {"name": "wall", "range": "1 to 4 mm", "check": "matches Fusion"})
+        self.assertEqual(shown["rows"][0], {"name": "wall", "range": "1 to 4 mm", "check": "size"})
+        self.assertEqual(shown["check_header"], "In Paramability")
         self.assertEqual(shown["size_title"], "1 size ready for the form")
         self.assertEqual(shown["saved"], "Saved box.paramability. 12 steps copied.")
         self.assertEqual(shown["variables"], "All 4 parameters come along as variables, with their formulas and comments.")
 
-    def test_unchecked_fixed_and_unused_ticks_each_get_a_row_and_a_reason(self):
-        shown = view(unchecked=["wall"], fixed=[{"name": "gap", "reason": "gap stays fixed: no build."}],
-                     dropped=["pipe"])
+    def test_fixed_and_unused_ticks_each_get_a_row_and_a_reason(self):
+        shown = view(fixed=[{"name": "gap", "reason": "gap stays fixed: no build."}], dropped=["pipe"])
         self.assertEqual([(r["name"], r["check"]) for r in shown["rows"]],
-                         [("wall", "not checked"), ("gap", "kept fixed"), ("pipe", "not used")])
+                         [("wall", "size"), ("gap", "kept fixed"), ("pipe", "not used")])
         self.assertEqual(shown["fixed"], ["gap: gap stays fixed: no build."])
 
     def test_a_loose_size_is_marked_and_listed_with_its_reason(self):
         shown = view(loose=[{"name": "wall", "reason": "wall may give unexpected results: it moves a joint."}])
         self.assertEqual(shown["rows"][0]["check"], "may be unexpected")
         self.assertEqual(shown["loose"], ["wall: wall may give unexpected results: it moves a joint."])
-
-    def test_a_plain_export_says_size_or_may_be_unexpected_instead_of_a_check_result(self):
-        shown = view(plain=True, free=["wall", "gap"],
-                     loose=[{"name": "gap", "reason": "gap may give unexpected results: it moves a joint."}])
-        self.assertEqual([(r["name"], r["check"]) for r in shown["rows"][:2]],
-                         [("wall", "size"), ("gap", "may be unexpected")])
-        self.assertEqual(shown["check_header"], "In Paramability")
-        self.assertEqual(view()["check_header"], "Check")
-
-    def test_a_raised_smallest_value_shows_in_the_range(self):
-        shown = view(raised=[{"name": "wall", "min": 1.5, "reason": "wall starts at 1.5: ..."}])
-        self.assertEqual(shown["rows"][0]["range"], "1.5 to 4 mm")
 
     def test_a_size_that_changes_a_sketch_nobody_followed_is_not_called_unused(self):
         shown = view(dropped=["gap", "pipe"], not_followed=["gap"])

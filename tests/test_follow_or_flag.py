@@ -2,8 +2,9 @@
 
 After a translation each user parameter that a step reads (in its values, its sketch or the geometry it points at)
 must end in one of three states: it drives the recipe and the recipe changes with it, or it is listed as loose with a
-reason, or it is listed as fixed with a reason. A parameter that stays a free size nothing reads, is dropped without a
-word, or can push a written formula past zero inside its own range breaks the rule.
+reason, or it is left out of the sizes with a note (or listed as fixed with a reason). A parameter that stays a free
+size nothing reads, is dropped without a word, or can push a written formula past zero inside its own range breaks
+the rule.
 """
 import copy
 import glob
@@ -23,7 +24,6 @@ from lib.translator import translate
 WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 # Recipe keys whose formula must stay above zero for the shape to exist.
 POSITIVE = ("distance", "thickness", "width", "height", "radius", "diameter", "depth")
-MODES = (False, True)  # loose off, loose on
 
 
 def _walk(value, key=""):
@@ -134,18 +134,18 @@ def _plane_stays_put(capture, recipe):
     return out
 
 
-def offending_sizes(capture, motion=None, loose=True, plain=False):
+def offending_sizes(capture, motion=None):
     """[(parameter, step, what is wrong)] for every parameter the rule is broken for, with every user parameter
     ticked as a size."""
     capture = copy.deepcopy(capture)
     params = capture["parameters"]
     table = size_table.build(params["user"], [p["name"] for p in params["user"]], params["model"],
                              capture.get("design_units", "mm"))
-    result = translate(capture, size_table=table, motion=motion, loose=loose, plain=plain)
+    result = translate(capture, size_table=table, motion=motion)
     if result.recipe is None:
         return []
     marked = {m["name"] for m in result.fixed + result.loose if m.get("reason")}
-    marked |= {m["name"] for m in result.raised + result.narrowed}
+    marked |= {e.name for e in table.entries if "%s is not used by any copied step" % e.name in " ".join(result.notes)}
     reached = _recipe_names(result.recipe)
     by_size = {e.size_name or e.name: e.name for e in table.entries}
     offenders = []
@@ -233,10 +233,9 @@ class FollowOrFlagTest(unittest.TestCase):
             capture = load_capture(name)
             if not (capture.get("parameters") or {}).get("user") or name in KNOWN_BREAKING:
                 continue
-            for loose in MODES:
-                with self.subTest(fixture=name, loose=loose):
-                    checked += 1
-                    self.assertEqual(offending_sizes(capture, loose=loose), [])
+            with self.subTest(fixture=name):
+                checked += 1
+                self.assertEqual(offending_sizes(capture), [])
         self.assertGreater(checked, 8)
 
     def test_a_fixture_with_a_probe_follows_or_flags_what_its_sketch_reads(self):
@@ -254,28 +253,22 @@ class FollowOrFlagTest(unittest.TestCase):
 
     # Each case below is a behaviour the rule demands.
 
-    def test_a_range_corner_that_zeroes_a_formula_is_narrowed_or_marked(self):
+    def test_a_range_corner_that_zeroes_a_formula_is_marked(self):
         # A length of cube minus two walls can reach zero inside the sizes' own ranges.
         self.assertEqual(offending_sizes(corner_capture()), [])
 
-    def test_a_sketch_the_probe_skipped_leaves_its_sizes_fixed_or_loose(self):
+    def test_a_sketch_the_probe_skipped_leaves_its_sizes_loose(self):
         # A probe that ran and skipped the sketches gives no proof, so its sizes cannot silently vanish.
         skipped = Motion(unmeasured={"Sketch1": "not measured", "Sketch2": "not measured"})
-        for loose in MODES:
-            with self.subTest(loose=loose):
-                self.assertEqual(offending_sizes(load_capture("sketch_rect_centred"), motion=skipped, loose=loose), [])
+        self.assertEqual(offending_sizes(load_capture("sketch_rect_centred"), motion=skipped), [])
 
-    def test_a_formula_the_parser_cannot_read_leaves_its_size_fixed_or_loose(self):
+    def test_a_formula_the_parser_cannot_read_leaves_its_size_loose(self):
         # A size behind a formula with an unreadable unit must be listed, not frozen without a word.
-        for loose in MODES:
-            with self.subTest(loose=loose):
-                self.assertEqual(offending_sizes(unparsed_capture(), loose=loose), [])
+        self.assertEqual(offending_sizes(unparsed_capture()), [])
 
     def test_a_mirror_plane_on_a_face_a_size_moves_follows_it_or_is_marked(self):
         # The plane stays at its number while the size moves the face it lies on.
-        for loose in MODES:
-            with self.subTest(loose=loose):
-                self.assertEqual(offending_sizes(mirror_capture(), loose=loose), [])
+        self.assertEqual(offending_sizes(mirror_capture()), [])
 
 
 # Fixtures that break the rule, with the behaviour; their sweep runs as an expected failure.

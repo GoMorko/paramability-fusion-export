@@ -9,7 +9,7 @@ from tests.test_translate_sized import CUBE, TICKED, param, table_of
 from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.translator import translate, vec
-from lib.translator.copy_counts import raised_minimums
+from lib.translator.copy_counts import stays_at_least
 from lib.translator.values import Quantity
 
 FLAT = {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
@@ -68,8 +68,8 @@ def run(capture):
     return result
 
 
-def fixed_names(result):
-    return sorted(f["name"] for f in result.fixed)
+def loose_names(result):
+    return sorted(f["name"] for f in result.loose)
 
 
 def counted(ranges=None):
@@ -89,37 +89,21 @@ class PickOnCopyTest(unittest.TestCase):
             "sets": [_edges_set("constant", [[32, 8, 15]], radius=1.0, continuity="tangent")]})
         result = run(post_capture(_grid(3, [2], 24.0, params={"distance_one": param("d21", "hole_pitch_mm", 24.0)}),
                                   fillet))
-        self.assertEqual(result.fixed, [])
+        self.assertEqual((result.fixed, result.loose), ([], []))
         (step,) = steps_of(result.recipe, "round")
         self.assertEqual(step["edges"]["near"], [[{"expr": "8 + hole_pitch_mm"}, 8,
                                                   {"expr": "0.5 * (wall_mm * 5) + 10"}]])
         assert_schema_ok(self, result.recipe)
 
-    def _counted(self, ranges=None):
-        capture, table = counted(ranges)
-        return translate(capture, size_table=table)
-
-    def test_a_pick_on_a_copy_raises_the_smallest_count_so_the_copy_stays(self):
-        result = self._counted()
-        self.assertEqual(result.fixed, [])
-        self.assertEqual([(r["name"], r["min"]) for r in result.raised], [("holes_count", 2)])
-        self.assertIn("R-Pattern1", result.raised[0]["reason"])
-        self.assertEqual(result.recipe["sizes"]["holes_count"]["min"], 2)
-        self.assertEqual(steps_of(result.recipe, "round")[0]["edges"]["near"][0][0], {"expr": "8 + hole_pitch_mm"})
-
-    def test_a_plain_translation_leaves_the_count_range_and_marks_the_size_loose(self):
+    def test_a_pick_on_a_copy_keeps_the_count_range_and_marks_the_size_loose(self):
         capture, table = counted()
-        result = translate(capture, size_table=table, loose=True, plain=True)
-        self.assertEqual((result.fixed, result.raised, result.narrowed), ([], [], []))
+        result = translate(capture, size_table=table)
+        self.assertEqual(result.fixed, [])
         self.assertEqual(result.recipe["sizes"]["holes_count"]["min"], 1.0)
         reasons = {f["name"]: f["reason"] for f in result.loose}
         self.assertIn("Fillet1 picks copy 2 of R-Pattern1", reasons["holes_count"])
         self.assertTrue(reasons["holes_count"].startswith("holes_count may give unexpected results"))
-
-    def test_the_default_range_from_the_dialog_still_raises_the_count(self):
-        result = self._counted({"holes_count": (1.0, 6.0)})
-        self.assertEqual(fixed_names(result), [])
-        self.assertEqual([(r["name"], r["min"]) for r in result.raised], [("holes_count", 2)])
+        self.assertEqual(steps_of(result.recipe, "round")[0]["edges"]["near"][0][0], {"expr": "8 + hole_pitch_mm"})
 
     def test_an_edge_on_a_mirror_copy_is_mirrored_with_its_formula(self):
         mirror = _item(3, "Mirror1", "MirrorFeature", {
@@ -128,7 +112,7 @@ class PickOnCopyTest(unittest.TestCase):
         fillet = _item(4, "Fillet1", "FilletFeature", {
             "sets": [_edges_set("constant", [[52, 8, 15]], radius=1.0, continuity="tangent")]})
         result = run(post_capture(mirror, fillet))
-        self.assertEqual(result.fixed, [])
+        self.assertEqual((result.fixed, result.loose), ([], []))
         self.assertEqual(steps_of(result.recipe, "round")[0]["edges"]["near"],
                          [[52, 8, {"expr": "0.5 * (wall_mm * 5) + 10"}]])
 
@@ -140,7 +124,8 @@ class CopiedFinishTest(unittest.TestCase):
         grid = _grid(4, [3], 24.0, count=3, params={"distance_one": param("d21", "hole_pitch_mm", 24.0),
                                                     "quantity_one": param("d22", "holes_count", 3.0)})
         result = run(post_capture(fillet, grid))
-        self.assertEqual(fixed_names(result), ["holes_count"])
+        self.assertEqual((result.fixed, result.loose), ([], []))
+        self.assertNotIn("holes_count", result.recipe["sizes"])
         _, copies = steps_of(result.recipe, "round")
         z = {"expr": "0.5 * (wall_mm * 5) + 10"}
         self.assertEqual(copies["edges"]["near"], [[{"expr": "4 + hole_pitch_mm"}, 4, z],
@@ -163,7 +148,7 @@ class CopiedFinishTest(unittest.TestCase):
         assert_schema_ok(self, recipe)
 
 
-class RaisedMinimumTest(unittest.TestCase):
+class CopyCountTest(unittest.TestCase):
     """A count formula with rounding, as in the owner's filter box: `ceil(width_count) * 2` copies."""
 
     def table(self, ranges=None):
@@ -174,14 +159,16 @@ class RaisedMinimumTest(unittest.TestCase):
     def count(self):
         return Quantity(4.0, "ceil(width_count) * 2", ("width_count",))
 
-    def test_the_minimum_rises_just_past_where_a_copy_would_go(self):
-        self.assertEqual(raised_minimums(self.table(), self.count(), 4), {"width_count": 1.01})
-        self.assertEqual(raised_minimums(self.table(), self.count(), 2), {})
+    def test_a_count_must_stay_at_least_the_copy_a_pick_needs_over_the_whole_range(self):
+        self.assertFalse(stays_at_least(self.table(), self.count(), 4))
+        self.assertTrue(stays_at_least(self.table(), self.count(), 2))
 
-    def test_a_typed_range_or_a_count_that_falls_cannot_be_helped(self):
-        self.assertIsNone(raised_minimums(self.table({"width_count": (0.5, 3.6)}), self.count(), 4))
+    def test_a_count_that_falls_at_the_big_end_does_not_hold(self):
         falling = Quantity(4.0, "8 - ceil(width_count) * 2", ("width_count",))
-        self.assertIsNone(raised_minimums(self.table(), falling, 4))
+        self.assertFalse(stays_at_least(self.table(), falling, 4))
+
+    def test_a_count_that_follows_no_size_always_holds(self):
+        self.assertTrue(stays_at_least(self.table(), Quantity(4.0), 9))
 
 
 def _mirror(index, plane, entity_type="features", combine=False, box=None):
@@ -218,10 +205,10 @@ TOP_FACE = {"point": [6, 6, POST_TOP], "normal": [0, 0, 1], "entity_type": "BRep
 class MovedReferenceTest(unittest.TestCase):
     """A mirror plane or turning axis on a face or edge that a size moves."""
 
-    def mirrored_plane(self, plane, mode=None):
+    def mirrored_plane(self, plane):
         capture = post_capture(_mirror(3, plane))
         table = table_of(capture, TICKED)
-        result = translate(capture, size_table=table, **(mode or {}))
+        result = translate(capture, size_table=table)
         self.assertIsNotNone(result.recipe, result.refusal)
         return result, steps_of(result.recipe, "mirror")[0]["plane"]["origin"]
 
@@ -229,7 +216,7 @@ class MovedReferenceTest(unittest.TestCase):
         fillet = _item(4, "Fillet1", "FilletFeature", {
             "sets": [_edges_set("constant", [[6, 8, 2 * POST_TOP - 10]], radius=1.0, continuity="tangent")]})
         result = run(post_capture(_mirror(3, TOP_FACE), fillet))
-        self.assertEqual(result.fixed, [])
+        self.assertEqual((result.fixed, result.loose), ([], []))
         (mirror,) = steps_of(result.recipe, "mirror")
         self.assertEqual([_at(c, 3.0) for c in mirror["plane"]["origin"]], [6, 6, 25])
         self.assertEqual([_at(c, 3.0) for c in steps_of(result.recipe, "round")[0]["edges"]["near"][0]], [6, 8, 40])
@@ -238,17 +225,15 @@ class MovedReferenceTest(unittest.TestCase):
     def test_a_plane_on_a_face_nothing_places_marks_the_sizes_it_may_move_with(self):
         lost = dict(TOP_FACE, face_point=[100, 100, 5])
         result, origin = self.mirrored_plane(lost)
-        self.assertEqual((fixed_names(result), origin), (["wall_mm"], [6, 6, POST_TOP]))
-        self.assertIn("Mirror1", result.fixed[0]["reason"])
-        loose, _ = self.mirrored_plane(lost, {"loose": True})
-        self.assertEqual([f["name"] for f in loose.loose], ["wall_mm"])
+        self.assertEqual((loose_names(result), origin), (["wall_mm"], [6, 6, POST_TOP]))
+        self.assertIn("Mirror1", result.loose[0]["reason"])
 
     def test_an_origin_plane_and_an_unread_plane_stay_where_they_are(self):
         for label, plane in (("origin", {"point": [30, 0, 0], "normal": [1, 0, 0], "origin": True}),
                              ("older capture", {"point": [30, 0, 0], "normal": [1, 0, 0]})):
             with self.subTest(label):
                 result, origin = self.mirrored_plane(plane)
-                self.assertEqual((result.fixed, origin), ([], [30, 0, 0]))
+                self.assertEqual(((result.fixed, result.loose), origin), (([], []), [30, 0, 0]))
 
     def test_a_construction_plane_built_on_a_moving_face(self):
         built = {"point": [6, 6, POST_TOP + 5], "normal": [0, 0, 1], "token": "cp1", "entity_type": "ConstructionPlane",
@@ -268,10 +253,10 @@ class MovedReferenceTest(unittest.TestCase):
         tilted = {"point": [6, 6, 30], "normal": [0, 0, 1], "token": "cp1", "entity_type": "ConstructionPlane",
                   "definition": "ConstructionPlaneAtAngleDefinition", "built_on": [face]}
         result, _ = self.mirrored_plane(tilted)
-        self.assertEqual(fixed_names(result), ["wall_mm"])
+        self.assertEqual(loose_names(result), ["wall_mm"])
         from_origin = dict(tilted, built_on=[{"origin": True}])
         result, origin = self.mirrored_plane(from_origin)
-        self.assertEqual((result.fixed, origin), ([], [6, 6, 30]))
+        self.assertEqual(((result.fixed, result.loose), origin), (([], []), [6, 6, 30]))
 
     def test_a_turning_axis_on_a_moving_edge_follows_it_and_so_does_a_pick_on_the_copy(self):
         axis = {"point": [6, 4, POST_TOP], "dir": [1, 0, 0], "entity_type": "BRepEdge",
@@ -279,7 +264,7 @@ class MovedReferenceTest(unittest.TestCase):
         fillet = _item(4, "Fillet1", "FilletFeature", {
             "sets": [_edges_set("constant", [[6, 0, 2 * POST_TOP - 10]], radius=1.0, continuity="tangent")]})
         result = run(post_capture(_circular(3, axis), fillet))
-        self.assertEqual(result.fixed, [])
+        self.assertEqual((result.fixed, result.loose), ([], []))
         (pattern,) = steps_of(result.recipe, "pattern")
         self.assertEqual([_at(c, 3.0) for c in pattern["polar"]["axisPoint"]], [6, 4, 25])
         self.assertEqual([_at(c, 3.0) for c in steps_of(result.recipe, "round")[0]["edges"]["near"][0]], [6, 0, 40])
@@ -290,7 +275,7 @@ class MovedReferenceTest(unittest.TestCase):
         for label, axis, expected in (("lost edge", lost, ["wall_mm"]), ("origin axis", origin, [])):
             with self.subTest(label):
                 result = run(post_capture(_circular(3, axis)))
-                self.assertEqual(fixed_names(result), expected)
+                self.assertEqual(loose_names(result), expected)
                 self.assertEqual(steps_of(result.recipe, "pattern")[0]["polar"]["axisPoint"], [6, 4, POST_TOP])
 
     def test_the_axis_of_a_round_wall_stays_while_it_only_grows_taller(self):
@@ -306,13 +291,13 @@ class MovedReferenceTest(unittest.TestCase):
         capture = post_capture(_circular(3, axis))
         capture["items"][1] = boss
         result = run(capture)
-        self.assertEqual((fixed_names(result), steps_of(result.recipe, "pattern")[0]["polar"]["axisPoint"]),
+        self.assertEqual((loose_names(result), steps_of(result.recipe, "pattern")[0]["polar"]["axisPoint"]),
                          ([], [6, 6, 10]))
         for label, wall in (("a wall that is not on any step", dict(axis, face_point=[50, 50, 15])),):
             with self.subTest(label):
                 capture = post_capture(_circular(3, wall))
                 capture["items"][1] = boss
-                self.assertEqual(fixed_names(run(capture)), ["wall_mm"])
+                self.assertEqual(loose_names(run(capture)), ["wall_mm"])
 
 
 class BodyMirrorOverRangesTest(unittest.TestCase):
@@ -329,14 +314,14 @@ class BodyMirrorOverRangesTest(unittest.TestCase):
 
     def test_a_cut_a_size_can_push_across_the_plane_marks_that_size(self):
         near = self.result(0.0)
-        self.assertEqual(fixed_names(near), ["wall_mm"])
-        self.assertIn("Mirror1", near.fixed[0]["reason"])
-        self.assertEqual(fixed_names(self.result(-20.0)), [])
+        self.assertEqual(loose_names(near), ["wall_mm"])
+        self.assertIn("Mirror1", near.loose[0]["reason"])
+        self.assertEqual(loose_names(self.result(-20.0)), [])
 
     def test_a_step_the_check_cannot_measure_marks_the_sizes_it_reads(self):
         grid = _grid(4, [2], 24.0, params={"distance_one": param("d21", "hole_pitch_mm", 24.0)})
         result = self.result(-20.0, grid)
-        self.assertEqual(fixed_names(result), sorted([CUBE, "wall_mm"]))
+        self.assertEqual(loose_names(result), sorted([CUBE, "wall_mm"]))
 
 
 if __name__ == "__main__":

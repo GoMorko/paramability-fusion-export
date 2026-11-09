@@ -9,13 +9,13 @@ from lib.params import size_table
 from lib.translator import translate
 
 
-def run(motion, loose=True, edit_model=None, plain=False):
+def run(motion, edit_model=None):
     capture = load_capture(BOX)
     params = capture["parameters"]
     if edit_model:
         edit_model(params["model"])
     table = size_table.build(params["user"], BOX_SIZES, params["model"], capture.get("design_units", "mm"))
-    return translate(capture, size_table=table, motion=motion, loose=loose, plain=plain)
+    return translate(capture, size_table=table, motion=motion)
 
 
 def free(result):
@@ -31,8 +31,7 @@ class LooseTest(unittest.TestCase):
         def edit(values):
             values["1/p0/l0/width"] = {"stuck": ["box_count", "cube_mm"], "cause": "curve", "sketch": "Sketch1"}
 
-        strict, loose = run(motion_of(BOX, edit), loose=False), run(motion_of(BOX, edit))
-        self.assertEqual(sorted(f["name"] for f in strict.fixed), ["box_count", "cube_mm"])
+        loose = run(motion_of(BOX, edit))
         self.assertEqual(loose.fixed, [])
         self.assertEqual({f["name"]: f["reason"] for f in loose.loose}["cube_mm"],
                          "cube_mm may give unexpected results: it moves Sketch1 along a curve, which cannot be "
@@ -53,17 +52,9 @@ class LooseTest(unittest.TestCase):
         self.assertEqual(expr(outer(result)["width"]), "box_width_mm")
         self.assertIn("pipe_offset_mm", free(result))
 
-    def test_a_loose_size_that_no_formula_reads_is_listed_as_fixed(self):
+    def test_a_doubtful_size_no_formula_reads_is_not_a_size_and_is_not_fixed(self):
         result = run(None)
-        self.assertEqual(result.loose, [])
-        self.assertIn("depth_mm stays fixed: it changes a sketch", {f["name"]: f["reason"] for f in result.fixed}[
-            "depth_mm"])
-        self.assertNotIn("depth_mm", free(result))
-        self.assertFalse([n for n in result.notes if "depth_mm is not used" in n])
-
-    def test_a_plain_translation_drops_a_doubtful_size_no_formula_reads_instead_of_fixing_it(self):
-        result = run(None, plain=True)
-        self.assertEqual(result.fixed, [])
+        self.assertEqual((result.fixed, result.loose), ([], []))
         self.assertNotIn("depth_mm", free(result))
         self.assertIn("depth_mm is not used by any copied step, so it is not a size.", result.notes)
 
@@ -76,7 +67,6 @@ class LooseTest(unittest.TestCase):
         self.assertEqual({f["name"]: f["reason"] for f in result.loose},
                          {"depth_mm": "depth_mm may give unexpected results: it moves a joint."})
         self.assertEqual(expr(outer(result)["height"]), "depth_mm")
-        self.assertEqual([f["name"] for f in run(motion_of(BOX), loose=False, edit_model=joint).fixed], ["depth_mm"])
 
 
 if __name__ == "__main__":
