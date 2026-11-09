@@ -45,9 +45,45 @@ class FakeFusionParam:
         self.dependencyParameters = [type("P", (), {"name": n}) for n in DEPENDENCIES.get(raw["name"], [])]
 
 
-def reader_dicts():
+def reader_dicts(raw=None, dependencies=None):
+    """`raw` and `dependencies` default to the filter box."""
+    deps = DEPENDENCIES if dependencies is None else dependencies
+
+    class Param(FakeFusionParam):
+        def __init__(self, r):
+            self.__dict__.update(r)
+            self.dependencyParameters = [type("P", (), {"name": n}) for n in deps.get(r["name"], [])]
+
     design = FakeDesign([])
-    design._params = [FakeFusionParam(r) for r in RAW]
+    design._params = [Param(r) for r in (RAW if raw is None else raw)]
     design.userParameters._items = design._params
     design.userParameters.count = len(design._params)
     return list_user_parameters(design)
+
+
+# A hobby storage box: unitless counts, a count turned into a length with `* 1 mm`, a setup value only read by other
+# formulas, a chain three deep, an `if` on an intermediate, a plain number formula in a length, and a weight in grams.
+HOBBY_RAW = [
+    _plain("cols", "4", 4, "", isFavorite=True),
+    _plain("rows", "3", 3, "", isFavorite=True),
+    _plain("layers", "3", 3, ""),
+    _plain("grid", "42 mm", mm(42), "mm"),
+    _plain("clearance", "0.25 mm", mm(0.25), "mm", comment="Setup: gap per side"),
+    _plain("cols_mm", "cols * 1 mm", mm(4), "mm"),
+    _plain("wall", "layers * 0.4", mm(1.2), "mm"),
+    _plain("width", "cols * grid - clearance * 2", mm(167.5), "mm"),
+    _plain("inner", "width - wall * 2", mm(165.1), "mm"),
+    _plain("lip", "if(inner > 100 mm; 3 mm; 2 mm)", mm(3), "mm"),
+    _plain("lip_ratio", "lip / clearance", 12, ""),
+    _plain("spacing", "cols_mm + rows * 1 mm + lip", mm(10), "mm"),
+    _plain("weight", "50 g", 0.05, "g"),
+]
+
+HOBBY_DEPENDENCIES = {
+    "cols_mm": ["cols"], "wall": ["layers"], "width": ["cols", "grid", "clearance"], "inner": ["width", "wall"],
+    "lip": ["inner"], "lip_ratio": ["lip", "clearance"], "spacing": ["cols_mm", "rows", "lip"],
+}
+
+
+def hobby_dicts():
+    return reader_dicts(HOBBY_RAW, HOBBY_DEPENDENCIES)

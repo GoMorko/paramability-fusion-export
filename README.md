@@ -34,8 +34,8 @@ Nothing is typed in Fusion.
    current value must sit between them. An unticked row says "stays 3 mm". A parameter worked out by a formula says
    "formula" and follows the parameters it reads. A parameter that drives a sketch dimension, a construction plane or
    axis, or a joint cannot be a size for now: it is greyed out and its row says why. Click a row to read its comment,
-   its formula or the full reason in the box under the table. You can tick up to 16 sizes, since each one gets a
-   check.
+   its formula or the full reason in the box under the table. You can tick up to 64 sizes. Each one gets a
+   check, an extra STEP export, so many ticks make the export slower.
 4. Pick the design up direction, click OK and choose where to save the file.
 5. A window then lists each size with its range and its check ("matches Fusion", "not checked", "kept fixed"), what
    stays fixed and why, and how many parameters come along as variables. If this window cannot open, the same text is
@@ -57,8 +57,9 @@ it. A copy of what the add-in read is saved inside the file as `report.json`.
 
 Every plain part or recipe the add-in writes (also the one size case of Export size choices) also lists the design's user parameters
 (up to 64, in Fusion order) with their current values, units and comments. A parameter worked out by a formula keeps
-its formula when it can be copied, so Paramability gets the variables even when the shape stays fixed. Parameters in
-other units than length, angle or no unit are left out. In Export for Paramability, `report.json` says how many were
+its formula when it can be copied, so Paramability gets the variables even when the shape stays fixed. This includes
+helper parameters that only other formulas read. Parameters in other units than length, angle or no unit (a mass, a
+time) are left out. In Export for Paramability, `report.json` says how many were
 listed and which were left out and why.
 
 ### Export size choices

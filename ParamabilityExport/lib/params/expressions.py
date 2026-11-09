@@ -4,11 +4,12 @@ Fusion writes `;` between function arguments, `^` for powers, `%` for the remain
 `and`, `or`, `not`, and `if(test; a; b)`. The app formula writes `,`, `pow`, `mod`, `!=`, `&& || !` and
 `test ? a : b`. A formula is a number over size names with lengths in mm and angles in degrees, so every unit is
 converted away: `2 mm` becomes `2`, `1 in` becomes `25.4` and `w / mm` becomes `w`. Units are tracked as a pair of
-powers (length, angle) so that sums and comparisons of unlike things refuse. docs/expressions.md has the full table.
+powers (length, angle) only to convert numbers: Fusion already refuses expressions whose units do not fit, so a mix
+of units is written as it stands. docs/expressions.md has the full table.
 
-Unverified in Fusion: a bare number added to a length is read in the design's default length unit, a value without
-a unit in an angle position is read in degrees, and `-a ^ b` binds as `-(a ^ b)`. The value check compares the written
-formula with the number Fusion reports, so a wrong guess refuses instead of writing a wrong formula.
+Unverified in Fusion: a number without a unit added to a length is read in the design's default length unit, a value
+without a unit in an angle position is read in degrees, and `-a ^ b` binds as `-(a ^ b)`. The value check compares
+the written formula with the number Fusion reports, so a wrong guess is caught instead of writing a wrong formula.
 """
 import math
 import re
@@ -225,7 +226,7 @@ class _Parser:
         while self.peek()[0] == "id" and not self.is_word(*_LOGIC_WORDS):
             word = self.take()[1]
             if unit_factor(word, loose=True) is None:
-                raise ExpressionError(f"The unit \"{word}\" is not supported.")
+                raise ExpressionError(f"The unit \"{word}\" is not a length or an angle.")
             node = ("unit", node, word)
         return node
 
@@ -345,7 +346,8 @@ def render(node):
     return f"{ltext} {op} {rtext}"
 
 
-def _scale(node, factor):
+def scale_node(node, factor):
+    """The output node times `factor` (radians to degrees is written as `* 180 / pi()`)."""
     if factor == 1.0:
         return node
     if node[0] == "num":
@@ -375,16 +377,24 @@ def _dim_sub(a, b):
     return (a[0] - b[0], a[1] - b[1])
 
 
-def _align(a, b, design_mm, message="A sum mixes values with different units."):
-    """Bring two operands to one unit. Returns (node a, node b, dim, lit)."""
+def _bare_factor(dim, design_mm):
+    """Factor of a number without a unit that stands next to a value of `dim`: the design's length unit for a
+    length (squared for an area), degrees for an angle."""
+    return design_mm ** dim[0]
+
+
+def _align(a, b, design_mm):
+    """Bring two operands to one unit. Returns (node a, node b, dim, lit).
+
+    A value without a unit takes the unit of the other side. Two different units are kept as written.
+    """
     if a.dim == b.dim:
         return a.node, b.node, a.dim, a.lit and b.lit
-    for lit, other, flip in ((a, b, False), (b, a, True)):
-        if lit.lit and lit.dim == SCALAR and other.dim in (LENGTH, ANGLE):
-            factor = design_mm if other.dim == LENGTH else 1.0
-            scaled = _scale(lit.node, factor)
-            return (scaled, other.node, other.dim, False) if not flip else (other.node, scaled, other.dim, False)
-    raise ExpressionError(message)
+    if a.dim == SCALAR:
+        return scale_node(a.node, _bare_factor(b.dim, design_mm)), b.node, b.dim, False
+    if b.dim == SCALAR:
+        return a.node, scale_node(b.node, _bare_factor(a.dim, design_mm)), a.dim, False
+    return a.node, b.node, a.dim, False
 
 
 def _constant(node):
@@ -445,7 +455,7 @@ def translate_tree(tree, resolve, design_mm=1.0):
             a = go(node[1])
             dim, factor = unit_factor(node[2], loose=True)
             value = _constant(a.node)
-            out = ("num", value * factor) if value is not None else _scale(a.node, factor)
+            out = ("num", value * factor) if value is not None else scale_node(a.node, factor)
             return Typed(out, _dim_add(a.dim, dim), False)
         if kind == "neg":
             a = go(node[1])
@@ -455,7 +465,7 @@ def translate_tree(tree, resolve, design_mm=1.0):
         if kind == "logic":
             return Typed(("logic", node[1], go(node[2]).node, go(node[3]).node), SCALAR, False)
         if kind == "cmp":
-            an, bn, _, _ = _align(go(node[2]), go(node[3]), design_mm, "A comparison mixes values with different units.")
+            an, bn, _, _ = _align(go(node[2]), go(node[3]), design_mm)
             return Typed(("cmp", node[1], an, bn), SCALAR, False)
         if kind == "call":
             return call(node[1], [go(a) for a in node[2]])
@@ -465,7 +475,7 @@ def translate_tree(tree, resolve, design_mm=1.0):
             an, bn, dim, lit = _align(a, b, design_mm)
             return Typed(("bin", op, an, bn), dim, lit)
         if op == "%":
-            an, bn, dim, lit = _align(a, b, design_mm, "A remainder mixes values with different units.")
+            an, bn, dim, lit = _align(a, b, design_mm)
             return Typed(("call", "mod", [an, bn]), dim, lit)
         if op == "*":
             return Typed(_mul(a.node, b.node), _dim_add(a.dim, b.dim), a.lit and b.lit)
@@ -474,30 +484,15 @@ def translate_tree(tree, resolve, design_mm=1.0):
         return power(a, b)
 
     def power(a, b):
-        if b.dim != SCALAR:
-            raise ExpressionError("An exponent cannot have a unit.")
         if a.dim == SCALAR:
             return Typed(("call", "pow", [a.node, b.node]), SCALAR, a.lit and b.lit)
         n = _constant(b.node)
-        if n is None or n != int(n):
-            raise ExpressionError("A value with a unit can only be raised to a whole number.")
-        n = int(n)
-        return Typed(("call", "pow", [a.node, b.node]), (a.dim[0] * n, a.dim[1] * n), False)
+        dim = a.dim if n is None else (a.dim[0] * n, a.dim[1] * n)
+        return Typed(("call", "pow", [a.node, b.node]), dim, False)
 
     def need(name, args, count):
         if len(args) != count:
             raise ExpressionError(f"{name} needs {count} value{'s' if count != 1 else ''}.")
-
-    def unitless(name, a):
-        if a.dim != SCALAR:
-            raise ExpressionError(f"{name} needs a value without a unit.")
-        return a.node
-
-    def angle(name, a):
-        """An angle argument in degrees; a value without a unit is read in degrees, as Fusion does."""
-        if a.dim not in (ANGLE, SCALAR):
-            raise ExpressionError(f"{name} needs an angle.")
-        return a.node
 
     def call(name, args):
         if name in _SAME_UNIT_FUNCTIONS:
@@ -506,19 +501,19 @@ def translate_tree(tree, resolve, design_mm=1.0):
             return Typed(("call", name, [a.node]), a.dim, a.lit)
         if name in _TRIG:
             need(name, args, 1)
-            return Typed(("call", name, [angle(name, args[0])]), SCALAR, False)
+            return Typed(("call", name, [args[0].node]), SCALAR, False)
         if name in _INVERSE_TRIG:
             need(name, args, 1)
-            return Typed(("call", name, [unitless(name, args[0])]), ANGLE, False)
+            return Typed(("call", name, [args[0].node]), ANGLE, False)
         if name in _HYPERBOLIC:
             need(name, args, 1)
-            return Typed(_folded(_hyperbolic(name, _folded(_radians(angle(name, args[0]))))), SCALAR, False)
+            return Typed(_folded(_hyperbolic(name, _folded(_radians(args[0].node)))), SCALAR, False)
         if name in _INVERSE_HYPERBOLIC:
             need(name, args, 1)
-            return Typed(_folded(_scale(_inverse_hyperbolic(name, unitless(name, args[0])), DEG_PER_RAD)), ANGLE, False)
+            return Typed(_folded(scale_node(_inverse_hyperbolic(name, args[0].node), DEG_PER_RAD)), ANGLE, False)
         if name in _PLAIN:
             need(name, args, 1)
-            return Typed(("call", name, [unitless(name, args[0])]), SCALAR, False)
+            return Typed(("call", name, [args[0].node]), SCALAR, False)
         if name == "sign":
             # Fusion's sign gives 1 above zero and 0 otherwise.
             need(name, args, 1)
@@ -526,31 +521,57 @@ def translate_tree(tree, resolve, design_mm=1.0):
         if name == "sqrt":
             need(name, args, 1)
             a = args[0]
-            if a.dim[0] % 2 or a.dim[1] % 2:
-                raise ExpressionError("sqrt needs a value whose unit can be halved.")
-            return Typed(("call", "sqrt", [a.node]), (a.dim[0] // 2, a.dim[1] // 2), a.lit)
+            return Typed(("call", "sqrt", [a.node]), (a.dim[0] / 2, a.dim[1] / 2), a.lit)
         if name == "pow":
             need(name, args, 2)
             return power(args[0], args[1])
         if name == "if":
             need(name, args, 3)
-            an, bn, dim, lit = _align(args[1], args[2], design_mm, "The two results of if have different units.")
+            an, bn, dim, lit = _align(args[1], args[2], design_mm)
             return Typed(("cond", args[0].node, an, bn), dim, lit)
         if name in _PICK_FUNCTIONS:
             if len(args) < 2:
                 raise ExpressionError(f"{name} needs at least 2 values.")
-            dims = {a.dim for a in args if not (a.lit and a.dim == SCALAR)}
-            if len(dims) > 1:
-                raise ExpressionError(f"{name} mixes values with different units.")
-            dim = dims.pop() if dims else SCALAR
-            factor = design_mm if dim == LENGTH else 1.0
-            nodes = [_scale(a.node, factor) if (a.lit and a.dim == SCALAR and dim != SCALAR) else a.node for a in args]
+            dim = next((a.dim for a in args if a.dim != SCALAR), SCALAR)
+            factor = _bare_factor(dim, design_mm)
+            nodes = [scale_node(a.node, factor) if a.dim == SCALAR else a.node for a in args]
             return Typed(("call", name, nodes), dim, all(a.lit for a in args))
         if name == "random":
             raise ExpressionError("A random number cannot be copied.")
         raise ExpressionError(f"The function \"{name}\" cannot be copied.")
 
     return go(tree)
+
+
+_NO_UNIT = ("", "unitless", "no units")
+
+
+def _no_names(name):
+    raise ExpressionError(f"\"{name}\" is not a unit.")
+
+
+def unit_scale(unit):
+    """(dim, mm or degrees in one of it) of a parameter unit: `mm`, `in`, `deg`, or one built from them such as
+    `mm^2`. (SCALAR, 1) for no unit; None for a unit with other words (mass, time)."""
+    text = (unit or "").strip()
+    if text.lower() in _NO_UNIT:
+        return SCALAR, 1.0
+    found = unit_factor(text, loose=True)
+    if found is not None:
+        return found
+    try:
+        typed = translate_tree(parse(text), _no_names)
+    except ExpressionError:
+        return None
+    value = _constant(typed.node)
+    if value is None or value <= 0 or typed.lit or typed.dim == SCALAR:
+        return None
+    return typed.dim, value
+
+
+def internal_factor(dim):
+    """Factor from Fusion's internal numbers (cm, radians) to mm and degrees, for a value of `dim`."""
+    return 10.0 ** dim[0] * DEG_PER_RAD ** dim[1]
 
 
 # Evaluation of written formulas with the app's function semantics, to check them against the number Fusion reports.

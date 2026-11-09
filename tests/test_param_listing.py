@@ -5,7 +5,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.translator_helpers import load_capture
-from tests.params_fixtures import CUBE, W, reader_dicts
+from tests.params_fixtures import CUBE, W, hobby_dicts, reader_dicts
 from lib.export_plan.assemble import build_package
 from lib.export_plan.recipe_export import plan_single_export
 from lib.package import manifest as mf
@@ -58,6 +58,16 @@ class ListingTest(unittest.TestCase):
         listing = list_parameters([plain("wall", 2), speed])
         self.assertEqual([e["label"] for e in listing.entries], ["wall"])
         self.assertEqual(listing.left_out, [{"name": "speed", "reason": UNIT_REASON}])
+
+    def test_every_intermediate_of_a_hobby_project_comes_with_its_formula(self):
+        listing = list_parameters(hobby_dicts())
+        exprs = {e["name"]: e.get("expr") for e in listing.entries}
+        self.assertEqual(exprs, {
+            "cols": None, "rows": None, "layers": None, "grid": None, "clearance": None, "cols_mm": "cols",
+            "wall": "layers * 0.4", "width": "cols * grid - clearance * 2", "inner": "width - wall * 2",
+            "lip": "inner > 100 ? 3 : 2", "lip_ratio": "lip / clearance", "spacing": "cols_mm + rows + lip"})
+        self.assertEqual(listing.left_out, [{"name": "weight", "reason": UNIT_REASON}])
+        self.assertEqual(listing.no_formula, [])
 
     def test_a_value_above_a_billion_is_left_out(self):
         listing = list_parameters([plain("wall", 2), plain("huge", 2e9)])

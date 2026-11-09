@@ -78,16 +78,16 @@ class TickTest(unittest.TestCase):
         tick(inputs, offers, 0, False)
         self.assertFalse(row(inputs, "min", 0).isEnabled)
         self.assertEqual(row(inputs, "status", 0).formattedText, "stays 2 mm")
-        self.assertIn("0 of 16", count_text(inputs))
+        self.assertIn("0 of 64", count_text(inputs))
 
     def test_a_tick_over_the_limit_is_undone_and_the_limit_is_said(self):
         offers = [offer("p%d" % i) for i in range(recipe_dialog.MAX_TICKED)] + [offer("extra", "keep")]
         _, inputs = make_dialog(offers)
         tick(inputs, offers, len(offers) - 1, True)
         self.assertFalse(row(inputs, "tick", len(offers) - 1).value)
-        self.assertIn("up to 16", count_text(inputs))
+        self.assertIn("up to 64", count_text(inputs))
         tick(inputs, offers, 0, False)
-        self.assertIn("15 of 16", count_text(inputs))
+        self.assertIn("63 of 64", count_text(inputs))
 
     def test_the_buttons_tick_what_the_body_uses_and_untick_all(self):
         offers = [offer("a"), offer("b", "keep"), offer("c", "locked", lo=None)]

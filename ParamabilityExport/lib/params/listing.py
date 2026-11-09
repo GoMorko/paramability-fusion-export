@@ -12,7 +12,7 @@ from ..package.units import manifest_unit
 from . import defaults, names, size_table
 from .expressions import tokenize_formula
 
-UNIT_REASON = "The unit is not supported."
+UNIT_REASON = size_table.UNIT_REASON
 CAP_REASON = "The list holds at most %d parameters." % MAX_PARAMETERS
 VALUE_REASON = "The value is not a finite number."
 LARGE_REASON = "The value is too large."
@@ -49,7 +49,8 @@ def list_parameters(params, model_params=(), design_unit="mm"):
     assigned = names.assign([p["name"] for p in candidates])
     out = ParameterListing()
     try:
-        table = size_table.build(candidates, offered, model_params, design_unit)
+        # Every plain parameter is a size here, so each formula is written over the names of the list.
+        table = size_table.build(candidates, offered, model_params, design_unit, max_sizes=len(candidates))
     except Exception:
         # Without the table the values and names still go in, only the formulas are lost.
         table = None
@@ -72,7 +73,7 @@ def list_parameters(params, model_params=(), design_unit="mm"):
             "unit": manifest_unit(p.get("unit")),
         }
         entry = table.entry(p["name"]) if table is not None else None
-        if entry is not None and entry.state == size_table.DERIVED:
+        if entry is not None and entry.state in (size_table.DERIVED, size_table.CONSTANT) and entry.formula:
             item["expr"] = entry.formula
         elif p.get("kind") == "derived" and entry is not None and entry.state == size_table.NOT_OFFERED:
             out.no_formula.append({"name": p["name"], "reason": entry.reason})

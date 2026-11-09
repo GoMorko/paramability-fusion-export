@@ -102,10 +102,18 @@ class TranslateTest(unittest.TestCase):
         self.assertEqual(formula("PI * w + E", SIZES), "pi() * w + exp(1)")
         self.assertEqual(formula("sign(w - 1200 mm) + 1", SIZES), "(w - 1200 > 0) + 1")
 
-    def test_refusals(self):
+    def test_units_only_convert_numbers(self):
         names = {"a": ("a", LENGTH), "n": ("n", SCALAR), "t": ("t", ANGLE)}
-        for text in ("sin(a)", "a + 1 deg", "a < t", "if(n; a; t)", "a ^ n", "a $ 2", "a +", "2 kg",
-                     "a < n < 2", "asin(a)", "random()", "foo(a)"):
+        self.assertEqual(formula("a + n", names, design_mm=10.0), "a + n * 10")
+        self.assertEqual(formula("max(n, a)", names), "max(n, a)")
+        self.assertEqual(formula("a < t", names), "a < t")
+        t = translate("sqrt(a)", names)
+        self.assertEqual((render(t.node), t.dim), ("sqrt(a)", (0.5, 0)))
+        self.assertEqual(translate("a ^ n", names).dim, LENGTH)
+
+    def test_refusals(self):
+        names = {"a": ("a", LENGTH), "n": ("n", SCALAR)}
+        for text in ("a $ 2", "a +", "2 kg", "a < n < 2", "random()", "foo(a)"):
             with self.assertRaises(ExpressionError, msg=text):
                 translate(text, names)
 

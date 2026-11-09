@@ -118,7 +118,7 @@ class ManifestFixedTest(unittest.TestCase):
         self.assertEqual(mf.validate_manifest(self.base()), [])
         self.assertTrue(mf.validate_manifest(self.base(fixed=[{"name": "a"}])))
         self.assertTrue(mf.validate_manifest(self.base(fixed=[{"name": "a", "reason": "x" * 201}])))
-        self.assertTrue(mf.validate_manifest(self.base(fixed=[{"name": "a", "reason": "r"}] * 33)))
+        self.assertTrue(mf.validate_manifest(self.base(fixed=[{"name": "a", "reason": "r"}] * (mf.MAX_FIXED + 1))))
         self.assertTrue(mf.validate_manifest(self.base(checks=[{"values": {"w": 2e6}, "step": "checks/01.step"}])))
 
 
@@ -198,7 +198,7 @@ class OffersTest(unittest.TestCase):
         self.assertTrue(lines["wall"]["ticked"])
 
     def test_no_more_sizes_are_ticked_than_there_are_check_slots(self):
-        params = [length("p%d" % i) for i in range(20)]
+        params = [length("p%d" % i) for i in range(MAX_TICKED + 4)]
         table = initial_table(params)
         self.assertEqual(len(table.ticked), MAX_TICKED)
         lines = offers(table, params)

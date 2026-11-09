@@ -2,8 +2,8 @@
 
 `lib/params/expressions.py` turns the expression of a Fusion parameter into a formula in the app grammar
 (`@packages/expressions` in the app). The app formula is a plain number over size names: lengths in mm, angles in
-degrees. So every unit is converted away, and the unit powers (length, angle) are tracked only to refuse sums and
-comparisons of unlike things.
+degrees. So every unit is converted away. The unit powers (length, angle) are tracked only to convert numbers, never
+to refuse: Fusion already refuses an expression whose units do not fit, so whatever it accepts is translated.
 
 Sources: the Fusion help pages "Parameters reference" (operators, constants, logic, functions) and "Unit types"
 (unit words), and the API page "Understanding Units in Fusion" (bare numbers, internal cm and radians). The Fusion
@@ -36,9 +36,29 @@ is not taken for metres.
 | Length | `mm`, `millimeter`, `cm`, `centimeter`, `m`, `meter`, `hm`, `um`, `micron`, `µ`, `in`, `inch`, `"`, `ft`, `foot`, `yd`, `yard`, `mi`, `mile`, `mil`, `nauticalMile` | mm |
 | Angle | `deg`, `degree`, `degrees`, `°`, `˚`, `rad`, `radian`, `radians`, `grad` | degrees (`rad` writes `* 180 / pi()`) |
 
-A bare number next to a length (in a sum, a comparison, `min`, `max`, `%` or the two results of `if`) is read in the
-design's default length unit. A value without a unit in an angle position (`sin(30)`) is read in degrees. Any
-other unit (`kg`, `s`) is refused. A length plus an angle is refused.
+A value without a unit next to a length (in a sum, a comparison, `min`, `max`, `%` or the two results of `if`) is
+read in the design's default length unit, next to an angle in degrees. This holds for a number and for a unitless
+parameter. A value without a unit in an angle position (`sin(30)`) is read in degrees. A unitless parameter times
+`1 mm` is the same number in mm (`count * 1 mm` is `count`). Other unit words (`kg`, `s`) cannot be read.
+
+### The unit of the parameter
+
+The formula of a parameter is scaled to the parameter's own unit when the two differ. A plain number formula in a
+length parameter (`layers * 0.4` in a mm parameter) is read in the parameter's unit, else in the design's unit. A
+length formula in a parameter without a unit is read as mm, else in Fusion's internal cm, else in the design's unit.
+The value check picks the first reading that gives Fusion's number. Feature values of model parameters are scaled the
+same way, to the unit of the field they set.
+
+A parameter unit built from lengths and angles (`mm^2`) gives a plain number in mm squared: formulas can read it,
+but it cannot be ticked as a size. A parameter in another unit (a mass, a time) is left out, and so is any formula
+that reads it.
+
+### Helper parameters
+
+A user parameter that only other formulas read is handled like any other. Ticked, it is a size. Unticked and plain,
+its number is written into each formula that reads it. Unticked and a formula, it becomes a derived size when it
+follows a ticked size, else its number. Past 64 named sizes, a derived formula is written in full where it is read.
+A formula that cannot be translated and follows no size is read as its number, so it breaks nothing.
 
 ## Functions
 
@@ -51,8 +71,8 @@ Function names are matched without case.
 | `sinh`, `cosh`, `tanh` | angle | written with `exp` over the angle in radians | no unit |
 | `asinh`, `acosh`, `atanh` | no unit | written with `ln` and `sqrt`, then `* 180 / pi()` | angle |
 | `exp`, `ln`, `log` | no unit | same (`log` is base 10 in both) | no unit |
-| `sqrt` | any unit that can be halved | `sqrt` | half the unit |
-| `pow(a; b)` | any, `b` without a unit | `pow(a, b)` | `a`'s unit to the power `b` (a whole number when `a` has a unit) |
+| `sqrt` | any | `sqrt` | half the unit |
+| `pow(a; b)` | any | `pow(a, b)` | `a`'s unit to the power `b` |
 | `abs`, `floor`, `ceil`, `round` | any | same | the same unit |
 | `min`, `max` | values of one unit | same | that unit |
 | `sign(x)` | any | `x > 0` | 1 above zero, else 0 |
@@ -62,13 +82,14 @@ Function names are matched without case.
 
 `evaluate` works out a written formula with the app's own function rules (trig in degrees and exact at quarter
 turns, `round` half up, floored `mod`, only the taken branch of a choice). The size table compares the result with
-the value Fusion reports and refuses a formula that misses it. This pins the unverified readings above: the design
-unit for bare numbers, degrees for unitless angles, and the rounding of negative halves (`round(-1.5)` is -2 in
-Fusion and -1 in the app).
+the value Fusion reports and refuses a formula that misses it; the sizes it reads are then fixed with that reason.
+This pins the unverified readings above: the design unit for bare numbers, degrees for unitless angles, the reading
+of a formula in its parameter's unit, and the rounding of negative halves (`round(-1.5)` is -2 in Fusion and -1 in
+the app).
 
 ## Not translated
 
 - `random()`: the app formula has no random numbers.
-- `Gravity`, `SpeedOfLight` and units other than lengths and angles.
+- `Gravity`, `SpeedOfLight` and unit words other than lengths and angles.
 - Text parameters and the `{name}` text form.
 - `sin(PI/4 rad)` as written in the Fusion help reads as `PI / (4 rad)` here and is refused; `sin((PI/4) rad)` works.

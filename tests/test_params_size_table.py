@@ -3,7 +3,7 @@ import unittest
 from tests import context  # noqa: F401
 from lib.params import size_table
 from lib.params.size_table import CONSTANT, DERIVED, FIXED, FREE, NOT_OFFERED
-from tests.params_fixtures import CUBE, D, H, W, reader_dicts
+from tests.params_fixtures import CUBE, D, H, W, hobby_dicts, reader_dicts
 
 TICKED = [W, H, D, CUBE]
 NEW_W = "FilterBox___width__contains_CeramicMedium"
@@ -150,6 +150,59 @@ class FilterBoxTableTest(unittest.TestCase):
         self.assertEqual(t.sizes["holes"]["kind"], "count")
         self.assertEqual(t.sizes["ratio"]["kind"], "number")
         self.assertEqual(size_table.build(params, ["holes"], model_params=model).sizes["holes"]["kind"], "number")
+
+
+class HobbyProjectTest(unittest.TestCase):
+    """Intermediate parameters (counts made lengths, setup values, chains) never break the formulas that read them."""
+
+    def test_every_parameter_but_the_weight_translates_with_the_counts_ticked(self):
+        t = size_table.build(hobby_dicts(), ["cols", "rows"])
+        states = {e.name: e.state for e in t.entries}
+        self.assertEqual(states["weight"], NOT_OFFERED)
+        self.assertEqual(t.entry("weight").reason, size_table.UNIT_REASON)
+        self.assertTrue(all(s != NOT_OFFERED for n, s in states.items() if n != "weight"), states)
+        self.assertEqual(t.sizes["cols_mm"]["expr"], "cols")
+        self.assertEqual(t.sizes["spacing"]["expr"], "cols_mm + rows + lip")
+        self.assertEqual(t.sizes["lip"]["expr"], "inner > 100 ? 3 : 2")
+        self.assertEqual(t.entry("wall").state, CONSTANT)
+
+    def test_unticked_intermediates_are_written_as_numbers(self):
+        t = size_table.build(hobby_dicts(), ["layers"])
+        self.assertEqual(t.sizes["wall"]["expr"], "layers * 0.4")
+        self.assertEqual(t.sizes["inner"]["expr"], "167.5 - wall * 2")
+        self.assertEqual(t.entry("width").state, CONSTANT)
+
+    def test_a_feature_value_reading_the_chain_through_a_model_parameter(self):
+        model = [dict(name="d7", expression="lip * cols", value=1.2, unit="mm", kind="derived")]
+        tr = size_table.build(hobby_dicts(), ["cols"], model_params=model).translate(
+            "d7 + 1", expected=13.0, dim="length", unit="mm")
+        self.assertEqual((tr.formula, tr.dim, tr.reads), ("lip * cols + 1", "length", ("cols",)))
+
+    def test_a_plain_number_formula_in_a_length_is_read_in_the_parameter_unit(self):
+        params = hobby_dicts() + [dict(name="gap_in", expression="cols / 8", value=1.27, unit="in", comment="",
+                                       is_favorite=False, kind="derived", dependency_parameters=["cols"])]
+        t = size_table.build(params, ["cols"])
+        self.assertEqual(t.sizes["gap_in"]["expr"], "cols / 8 * 25.4")
+
+    def test_a_unit_built_from_lengths_is_a_number_formulas_can_read(self):
+        params = [dict(name="w", expression="10 mm", value=1.0, unit="mm", comment="", is_favorite=True,
+                       kind="length"),
+                  dict(name="area", expression="200 mm^2", value=2.0, unit="mm^2", comment="", is_favorite=False,
+                       kind="unsupported"),
+                  dict(name="depth", expression="area / w", value=2.0, unit="mm", comment="", is_favorite=False,
+                       kind="derived")]
+        t = size_table.build(params, ["w", "area"])
+        self.assertEqual((t.entry("area").state, t.entry("area").value), (CONSTANT, 200.0))
+        self.assertEqual(t.sizes["depth"]["expr"], "200 / w")
+
+    def test_derived_formulas_past_the_size_cap_are_written_where_they_are_read(self):
+        t = size_table.build(hobby_dicts(), ["cols", "rows"], max_sizes=4)
+        self.assertEqual(len(t.sizes), 4)
+        self.assertEqual(t.entry("lip").state, DERIVED)
+        self.assertIsNone(t.size_name("lip"))
+        self.assertEqual(t.sizes["cols_mm"]["expr"], "cols")
+        tr = t.translate("lip * 2", expected=6.0)
+        self.assertEqual((tr.formula, tr.value), ("(width - 1.2 * 2 > 100 ? 3 : 2) * 2", 6.0))
 
 
 if __name__ == "__main__":

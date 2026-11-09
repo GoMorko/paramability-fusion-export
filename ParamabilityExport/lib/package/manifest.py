@@ -6,7 +6,8 @@ SCHEMA = "paramability.recipePackage"
 VERSION = 1
 KINDS = ("valueRows", "recipe", "stepOnly")
 UNITS = ("mm", "deg", "")
-MAX_FIXED = 32
+MAX_CHECKS = 64
+MAX_FIXED = 64
 MAX_FIXED_REASON = 200
 MAX_NAME_CHARS = 64
 MAX_PARAMETERS = 64
@@ -168,8 +169,8 @@ def validate_manifest(m):
         check_path(m.get("part"), "part", step_suffixes)
         check_path(m.get("recipe"), "recipe", (".json",))
         checks = m.get("checks", [])
-        if not isinstance(checks, list) or len(checks) > 16:
-            problems.append("checks must be a list of at most 16.")
+        if not isinstance(checks, list) or len(checks) > MAX_CHECKS:
+            problems.append(f"checks must be a list of at most {MAX_CHECKS}.")
         else:
             for i, c in enumerate(checks, start=1):
                 label = f"check {i}"

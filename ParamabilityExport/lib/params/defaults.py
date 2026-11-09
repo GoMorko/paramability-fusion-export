@@ -3,11 +3,10 @@
 The goal is a dialog that needs no typing: favourites the model reads are ticked, every size gets a range that
 suits its kind, and a comment such as `Wall [1..6]` sets the range and is cut from the label.
 """
-import math
 import re
 
 from ..package.units import unit_kind
-from .expressions import ANGLE, LENGTH, SCALAR, referenced_names
+from .expressions import internal_factor, referenced_names, unit_scale
 
 LABEL_MAX = 120
 COUNT_CAP = 64
@@ -16,8 +15,9 @@ _RANGE_COMMENT = re.compile(r"\s*\[\s*(-?(?:\d+\.?\d*|\.\d+))\s*\.\.\s*(-?(?:\d+
 
 
 def dim_of_unit(unit):
-    """Unit powers (length, angle) of a Fusion unit, or None for a unit that is not offered."""
-    return {"length": LENGTH, "angle": ANGLE, "count": SCALAR}.get(unit_kind(unit))
+    """Unit powers (length, angle) of a Fusion unit, or None for a unit that is not built from lengths and angles."""
+    found = unit_scale(unit)
+    return found[0] if found is not None else None
 
 
 def is_numeric(p):
@@ -25,14 +25,9 @@ def is_numeric(p):
 
 
 def size_value(p):
-    """The number a parameter stands for in a formula: mm, degrees or the plain number."""
-    kind = unit_kind(p.get("unit"))
-    value = p["value"]
-    if kind == "length":
-        return value * 10.0
-    if kind == "angle":
-        return math.degrees(value)
-    return value
+    """The number a parameter stands for in a formula: mm, degrees (or a power of them) or the plain number."""
+    dim = dim_of_unit(p.get("unit"))
+    return p["value"] if dim is None else p["value"] * internal_factor(dim)
 
 
 def split_comment(comment):
@@ -134,7 +129,7 @@ def count_names(params, model_params, quantity_refs=()):
 
 
 def is_offered(p):
-    """A plain number parameter in a length, angle or no unit."""
+    """A plain number parameter in a length, angle or no unit: one the person can tick as a size."""
     return (is_numeric(p) and p.get("kind") in ("length", "angle", "count")
             and dim_of_unit(p.get("unit")) is not None)
 

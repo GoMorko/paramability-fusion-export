@@ -6,11 +6,10 @@ and compares it with the STEP, so a size that disagrees with Fusion is found and
 A size is a dict: param (Fusion name), size (name in the recipe), unit (Fusion unit), value, min, max (manifest
 numbers: mm, deg or plain), favorite (bool).
 """
-from ..package.manifest import MAX_NAME_CHARS
+from ..package.manifest import MAX_CHECKS, MAX_NAME_CHARS
 from ..package.units import display_from_manifest
 from ..fusion_reader.sketches import moved_sketches
 
-MAX_CHECKS = 16
 _SAME = 1e-9
 
 # Key of the part's place in a sketch snapshot. It is not a string, so no sketch name can take it.

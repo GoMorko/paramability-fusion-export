@@ -7,7 +7,7 @@ import os
 
 MAX_TOTAL_BYTES = 1024 ** 3
 MAX_STEP_BYTES = 256 * 1024 ** 2
-MAX_ENTRIES = 64
+MAX_ENTRIES = 80
 
 
 class PackageCapError(Exception):

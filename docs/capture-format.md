@@ -441,7 +441,8 @@ Sketch dimensions, construction planes, axes and joints are not listed per item.
 How the translator uses them (`translate(capture, size_table=table)`):
 
 - A value is written as `{ "expr": formula }` (never `{ "size": ... }`) when its expression translates, reads at least
-  one free size, gives the unit of the field and equals the measured number within 1e-6. Lengths written as absolute
+  one free size and equals the measured number within 1e-6 once scaled to the unit of the field (a plain number in a
+  length is read in the parameter's unit or the design's, whichever gives Fusion's number). Lengths written as absolute
   values (extrude and hole depths, spacing) must also stay above zero over the size range; counts at least 1.
   A negative parameter is written negated.
 - Symmetric half length is written as `2 * (formula)`. An extent spacing is `(distance) / ((count) - 1)`. Hole

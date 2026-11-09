@@ -137,9 +137,9 @@ class UnitTest(unittest.TestCase):
 class CountLineTest(unittest.TestCase):
     def test_a_problem_beats_the_limit_which_beats_the_count(self):
         self.assertEqual(rows.count_line(6, "wall: bad."), "wall: bad.")
-        self.assertIn("up to 16", rows.count_line(16, over=True))
+        self.assertIn("up to 64", rows.count_line(64, over=True))
         self.assertEqual(rows.count_line(6),
-                         "6 of 16 sizes ticked. Every parameter also comes along as a variable.")
+                         "6 of 64 sizes ticked. Every parameter also comes along as a variable.")
 
 
 if __name__ == "__main__":

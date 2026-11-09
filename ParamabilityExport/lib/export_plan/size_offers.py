@@ -68,7 +68,7 @@ def offers(table, params, design_unit="mm"):
     range_unit (the unit of the Now, Min and Max cells). value, min and max are mm, deg or plain numbers; the cells
     show them in `design_unit` for a length.
     A parameter that is a formula is listed without a tick. A fixed one is greyed with its reason. A parameter
-    that cannot be a size at all (text, other units) is not listed.
+    that cannot be a size at all (text, units other than a length, an angle or none) is not listed.
     """
     by_name = {p["name"]: p for p in params}
     out = []
@@ -77,6 +77,8 @@ def offers(table, params, design_unit="mm"):
         if p is None:
             continue
         plain = p.get("kind") in ("length", "angle", "count")
+        if entry.state == CONSTANT and not plain and p.get("kind") != "derived":
+            continue
         common = {"param": entry.name, "now": value_text(entry, design_unit),
                   "comment": (p.get("comment") or "").strip(), "formula": p.get("expression") or "",
                   "kind": entry.kind, "value": entry.value,

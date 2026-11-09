@@ -253,14 +253,11 @@ def quantity(ctx, item, path, literal, dim="length", sign=1, absolute=False, who
     ref = _param(item, path)
     if ref is None or ctx.table is None:
         return plain
-    tr = ctx.table.translate(ref["expression"], expected=ref["value"])
+    tr = ctx.table.translate(ref["expression"], expected=ref["value"], dim=dim, unit=ctx.table.unit_of(ref.get("name")))
     if not tr.reads:
         return plain
     if not tr.ok:
         ctx.fix(tr.reads, "a value of %s cannot be copied: %s" % (item.get("name", "a step"), tr.reason))
-        return plain
-    if tr.dim != dim:
-        ctx.fix(tr.reads, "its formula in %s does not give the unit of that value" % item.get("name", "a step"))
         return plain
     if abs(sign * tr.value - literal) > TOLERANCE + 1e-9 * abs(literal):
         ctx.fix(tr.reads, "its formula in %s does not match what Fusion measured" % item.get("name", "a step"))

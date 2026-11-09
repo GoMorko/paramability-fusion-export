@@ -135,8 +135,8 @@ mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter
 - [ ] **Another body.** In a design with two bodies built from different parameters, pick the other body: the ticks
       and greyed lines change to that body's parameters. A parameter only the other body reads is not ticked. Note
       how long the dialog takes to open and to follow the pick (the add-in reads the steps of the body each time).
-- [ ] **Limit.** Tick a 17th size: the box unticks itself and the line under the details box says "You can tick up
-      to 16 sizes". Unticking one brings back the count line.
+- [ ] **Limit.** Tick a 65th size: the box unticks itself and the line under the details box says "You can tick up
+      to 64 sizes". Unticking one brings back the count line.
 - [ ] **Counts.** A parameter that drives a pattern quantity is a whole number size (the form steps by 1), also when
       its role text does not say "quantity". Set it to 2.5 in the app: the recipe still builds.
 - [ ] **Long name.** A user parameter with a name over 64 characters that drives a sketch dimension: the export
@@ -163,7 +163,8 @@ mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter
       value check refuses a formula that does not give Fusion's number, so a wrong reading shows as a fixed size).
       Try `1 in + 5 mm`, `wall + 5` in a mm design and in an inch design, `wall ^ 2` and `-wall ^ 2`. Try `floor(wall)`,
       `round(wall)` and `ceil(wall)` on a length (Fusion may apply them in cm, the app in mm): with `wall = 25 mm`,
-      note the value Fusion shows for `floor(wall)`.
+      note the value Fusion shows for `floor(wall)`. Helper parameters: a unitless `count`, `step = count * 1 mm`,
+      `wall = layers * 0.4` in mm, and a formula reading them: all export with formulas, ticked or not.
 - [ ] The marker is rolled back: the export stops with "Move the timeline marker to the end".
 - [ ] Time: note how long a design with 5 sizes and 100 timeline items takes.
 
@@ -200,7 +201,7 @@ Use the filter box design (names such as `FilterBox_$_depth__contains_CeramicMed
       formula the formula with "Now ...", for a greyed row the reason. If the box does not follow the click, note
       it: it then only follows ticks and typed ranges.
 - [ ] Tick or untick a row: its Min and Max open or grey out, "In Paramability" says "size" or "stays 3 mm", and the
-      count line says "N of 16 sizes ticked. Every parameter also comes along as a variable."
+      count line says "N of 64 sizes ticked. Every parameter also comes along as a variable."
 - [ ] **Range.** Min and Max of a ticked row start from the comment (`Wall [1..4]` gives 1 and 4), else half to double
       the value. Type 1.5 and 6: after the export the size in Paramability goes from 1.5 to 6. Type a Min above the
       value, a Min above the Max, or text: the count line names the parameter and OK turns off. A count row refuses
