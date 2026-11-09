@@ -8,15 +8,12 @@ marker always goes back to where it was.
 The target is the native body of its component, so every value is in component coordinates; `placement` says where
 the component sits in the assembly. Feature readers run only for items of the target's component.
 
-Feature readers come in pairs `(before, after)` (see read_solid). Modules read_finish and read_repeat add theirs
-through a module level READERS dict; a missing module means those types give `data: {}`.
+Feature readers come in pairs `(before, after)` (see read_solid). Modules read_finish, read_repeat and read_offset add theirs
+through a module level READERS dict.
 """
-import importlib
-
 from ..export_plan.marker import put_back, read_marker
 from ..translator.capture import NOT_MODELING_TYPES
-from . import read_geometry as geo
-from . import read_solid
+from . import read_finish, read_geometry as geo, read_offset, read_repeat, read_solid
 from .parameters import list_model_parameters, list_user_parameters
 from .placement import occurrence_path, read_placement
 
@@ -28,8 +25,6 @@ BOX_TOLERANCE_MM = 1e-4
 VOLUME_TOLERANCE_MM3 = 1e-4
 VOLUME_RELATIVE = 1e-9
 
-_OPTIONAL_READER_MODULES = ("read_finish", "read_repeat", "read_offset")
-
 
 class CaptureReadError(Exception):
     """The timeline cannot be read completely; the export falls back to a fixed shape."""
@@ -37,19 +32,6 @@ class CaptureReadError(Exception):
 
 class MarkerError(CaptureReadError):
     """The timeline marker could not be put back where it was."""
-
-
-def _optional_readers():
-    readers = {}
-    for module in _OPTIONAL_READER_MODULES:
-        try:
-            loaded = importlib.import_module("%s.%s" % (__package__, module))
-        except ModuleNotFoundError as exc:
-            if not (exc.name or "").endswith(module):
-                raise
-            continue
-        readers.update(getattr(loaded, "READERS", {}))
-    return readers
 
 
 def _health(state):
@@ -299,7 +281,8 @@ def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_reade
     end = count if marker is None else min(marker["position"], count)
     ctx = geo.ReadContext(design, body)
     readers = dict(read_solid.READERS)
-    readers.update(_optional_readers())
+    for module in (read_finish, read_repeat, read_offset):
+        readers.update(module.READERS)
     readers.update(extra_readers or {})
     items = {}
     group_indices = set()

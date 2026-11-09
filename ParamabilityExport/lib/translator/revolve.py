@@ -192,8 +192,6 @@ def _angle_value(ctx, item, mode, angle):
 
 def handle(item, ctx):
     data = item.get("data") or {}
-    if "read_error" in data:
-        return Refusal("This revolve could not be read from Fusion.")
     operation = data.get("operation")
     if operation == "newComponent":
         return Refusal("Revolves that make a new component are not copied.")

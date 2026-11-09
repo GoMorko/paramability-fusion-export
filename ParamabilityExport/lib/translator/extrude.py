@@ -68,11 +68,6 @@ def _choose_sign(ctx, geometric, rel_end, reach=None, other=None):
 UNREADABLE = "A setting of this extrude could not be read from Fusion."
 
 
-def _field(mapping, key, default):
-    """mapping[key] when present, `default` when absent; None (present but unreadable) is kept for the caller."""
-    return mapping.get(key, default)
-
-
 def _taper(deg):
     """Recipe `taperDeg` from Fusion's, or a Refusal. None (unreadable) refuses."""
     if deg is None:
@@ -219,7 +214,7 @@ def _plan(item, data, frame, shift, combine, ctx, plane_q):
 
     def one_side(side, which, forced_sign=None, measured=True, other=None):
         kind = (side or {}).get("kind")
-        taper = _taper(_field(side, "taper_deg", 0.0)) if side else 0.0
+        taper = _taper(side.get("taper_deg", 0.0)) if side else 0.0
         if isinstance(taper, Refusal):
             return taper
         taper_q = None
@@ -236,7 +231,7 @@ def _plan(item, data, frame, shift, combine, ctx, plane_q):
         if kind in ("throughAll", "all"):
             if taper:
                 return Refusal("A tapered extrude through all is not copied.")
-            positive = _field(side, "positive", True)
+            positive = side.get("positive", True)
             if positive is None:
                 return Refusal(UNREADABLE)
             sign = forced_sign if forced_sign is not None else _choose_sign(
@@ -253,7 +248,7 @@ def _plan(item, data, frame, shift, combine, ctx, plane_q):
                 return Refusal("This extrude ends on the surface it starts from.")
             sign = forced_sign if forced_sign is not None else _choose_sign(
                 ctx, _sign_of(reach), end, abs(reach), other)
-            offset = _field(side, "offset", 0.0)
+            offset = side.get("offset", 0.0)
             if offset is None:
                 return Refusal(UNREADABLE)
             values.pin(ctx, item, which + ".offset", "it sets how far %s reaches" % item.get("name", "a step"))
@@ -272,10 +267,10 @@ def _plan(item, data, frame, shift, combine, ctx, plane_q):
         sym = data.get("symmetric")
         if not sym:
             return Refusal("This extrude has no readable length.")
-        taper = _taper(_field(sym, "taper_deg", 0.0))
+        taper = _taper(sym.get("taper_deg", 0.0))
         if isinstance(taper, Refusal):
             return taper
-        full_length = _field(sym, "full_length", False)
+        full_length = sym.get("full_length", False)
         if full_length is None:
             return Refusal(UNREADABLE)
         factor = 1.0 if full_length else 2.0
@@ -362,7 +357,6 @@ def _check_measured_length(plan, data, shift, start, z, combine):
             and _beyond_part(data.get("target_box_before"), start, vec.scale(z, first["sign"]), planned)):
         return None
     return Refusal("The measured end of this extrude does not match its length, so it is not copied.")
-    return None
 
 
 def _expected_leans(plan, combine):
@@ -499,14 +493,12 @@ def _parts(profile, sources):
 
 def handle(item, ctx):
     data = item.get("data") or {}
-    if data.get("read_error"):
-        return Refusal("This step could not be read from Fusion.")
     operation = data.get("operation")
     if operation == "newComponent":
         return Refusal("Extrudes that make a new component are not copied.")
     if operation not in COMBINE:
         return Refusal("This extrude combines with the part in a way that is not copied yet.")
-    thin = _field(data, "thin", False)
+    thin = data.get("thin", False)
     if thin is None:
         return Refusal(UNREADABLE)
     if thin:
@@ -540,7 +532,7 @@ def handle(item, ctx):
     plane_q = first_drawn.plane_shift(ctx) if first_drawn is not None else Quantity(0.0)
 
     first_frame = profiles[0]["frame"]
-    shift_q = _start_shift(_field(data, "start", {"kind": "profilePlane"}), first_frame, ctx, item)
+    shift_q = _start_shift(data.get("start", {"kind": "profilePlane"}), first_frame, ctx, item)
     if isinstance(shift_q, Refusal):
         return shift_q
     shift_q = _keep_start_with_reach(ctx, item, data, shift_q)

@@ -4,7 +4,8 @@ from tests import context  # noqa: F401
 from tests.fakes import FakeDesign
 from lib.export_plan.apply import RowBuildError
 from lib.fusion_reader.parameters import list_user_parameters
-from lib.fusion_reader.rows import DesignParameterStore, apply_row, restore, saved_expressions
+from lib.fusion_reader.rows import DesignParameterStore
+from tests.row_helpers import apply_row, restore, saved_expressions
 
 PARAMS = [
     dict(name="width", expression="20 mm", value=2.0, unit="mm", comment="Clip width", isFavorite=True),

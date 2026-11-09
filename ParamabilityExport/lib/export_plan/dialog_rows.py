@@ -14,9 +14,9 @@ from .size_offers import MAX_TICKED, limit_message, range_unit
 
 SIZE, KEEP, LOCKED, FORMULA = "size", "keep", "locked", "formula"
 
-HEADERS = {"tick": "", "name": "Parameter", "now": "Now", "used_by": "Used by", "min": "Min", "max": "Max",
+HEADERS = {"tick": "", "name": "Parameter", "now": "Now", "min": "Min", "max": "Max",
            "status": "In Paramability"}
-RATIOS = {"tick": 1, "name": 6, "now": 2, "used_by": 3, "min": 2, "max": 2, "status": 4}
+RATIOS = {"tick": 1, "name": 6, "now": 2, "min": 2, "max": 2, "status": 4}
 
 NAME_WIDTH = 26
 NAME_LINES = 3
@@ -39,9 +39,9 @@ KEEP_DOUBTFUL_TIP = ("A size that the export cannot follow in every step stays a
                      "marked \"may give unexpected results\".")
 
 
-def columns(used_by=False):
-    """Column keys left to right. A component export shows which parts read a parameter in place of Now."""
-    return ("tick", "name", "used_by" if used_by else "now", "min", "max", "status")
+def columns():
+    """Column keys left to right."""
+    return ("tick", "name", "now", "min", "max", "status")
 
 
 def header(key, design_unit="mm"):
@@ -147,10 +147,6 @@ def row_cells(offer, ticked, lo_text=None, hi_text=None, keep_doubtful=False):
         "tick_enabled": bool(offer["enabled"]),
         "range_enabled": plain and bool(offer["enabled"]) and bool(ticked),
     }
-
-
-def used_by_text(offer):
-    return offer.get("used_by", "")
 
 
 def wrap_name(name, width=NAME_WIDTH, max_lines=NAME_LINES):

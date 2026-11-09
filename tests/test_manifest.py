@@ -3,7 +3,7 @@ import json
 import os
 import unittest
 
-from tests import context
+from tests import context  # noqa: F401
 from lib.package import manifest as mf
 from tests.schema_check import load_schema, validate
 
@@ -12,7 +12,7 @@ ROWS = [
     {"name": "Small", "values": {"width": 20, "angle": 30}},
     {"name": "Large", "values": {"width": 40, "angle": 30}},
 ]
-FIXTURE = os.path.join(context.ADDIN_DIR, "lib", "schema", "v1.json")
+FIXTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema", "v1.json")
 
 
 def good():
@@ -73,12 +73,12 @@ class ManifestTest(unittest.TestCase):
 
     def test_app_fixture_validates_when_present(self):
         if not os.path.exists(FIXTURE):
-            self.skipTest("lib/schema/v1.json not copied from the app yet")
+            self.skipTest("tests/schema/v1.json not copied from the app yet")
         with open(FIXTURE, encoding="utf-8") as f:
             self.assertEqual(mf.validate_manifest(json.load(f)), [])
 
 
-PACKAGE_SCHEMA = os.path.join(context.ADDIN_DIR, "lib", "schema", "paramability.recipePackage.v1.schema.json")
+PACKAGE_SCHEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema", "paramability.recipePackage.v1.schema.json")
 LISTED = [{"name": "wall", "label": "wall", "value": 2, "unit": "mm", "comment": "Wall [1..6]"},
           {"name": "outer", "label": "outer", "value": 84, "unit": "mm", "expr": "wall * 2"}]
 

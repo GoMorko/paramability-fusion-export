@@ -59,10 +59,6 @@ class CellTextTest(unittest.TestCase):
         self.assertEqual(text, "FilterBox_$_depth__<br>contains_CeramicMedium")
         self.assertEqual(rows.wrap_name("wall<1>"), ("wall&lt;1&gt;", 1))
 
-    def test_a_component_export_swaps_now_for_used_by(self):
-        self.assertEqual(rows.columns(), ("tick", "name", "now", "min", "max", "status"))
-        self.assertEqual(rows.columns(used_by=True)[2], "used_by")
-
     def test_details_show_comment_formula_or_reason_of_the_row(self):
         self.assertIn("Comment: Wall [1..4]", rows.details_html(offer(comment="Wall [1..4]"), True))
         self.assertIn("from 1 to 4", rows.details_html(offer(), True))

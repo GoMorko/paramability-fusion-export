@@ -10,7 +10,8 @@ from lib.export_plan.apply import RowBuildError, apply_row_values, measure_basel
 from lib.export_plan.expressions import format_expression
 from lib.export_plan.runner import RowExport
 from lib.export_plan.size_checks import build_failure_reason, build_failures, read_checks
-from lib.fusion_reader.rows import DesignParameterStore, apply_row
+from lib.fusion_reader.rows import DesignParameterStore
+from tests.row_helpers import apply_row
 
 UNITS = {"w": "mm"}
 

@@ -8,7 +8,8 @@ from tests.translator_helpers import load_capture
 from lib.export_plan.apply import measure_baseline
 from lib.export_plan.marker import marker_note, read_marker
 from lib.export_plan.recipe_export import plan_single_export
-from lib.fusion_reader.rows import DesignParameterStore, apply_row
+from lib.fusion_reader.rows import DesignParameterStore
+from tests.row_helpers import apply_row
 
 
 class Timeline:

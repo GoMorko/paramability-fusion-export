@@ -1,7 +1,5 @@
 """Apply size rows to a design and put the parameters back. Works on the design object it is given."""
-from ..export_plan.apply import apply_row_values
 from ..export_plan.marker import put_back, read_marker
-from ..export_plan.restore import restore_parameters
 
 
 def _error_state():
@@ -65,18 +63,3 @@ class DesignParameterStore:
         """Names of the timeline items whose health is error."""
         return [name for _, name in self.error_entries()]
 
-
-def saved_expressions(design):
-    return DesignParameterStore(design).saved_expressions()
-
-
-def apply_row(design, values, units, baseline=None):
-    """Set values (display units), recompute, return manifest numbers. Raises RowBuildError.
-
-    baseline is `export_plan.apply.measure_baseline`'s result; None means a design without trouble."""
-    return apply_row_values(DesignParameterStore(design), units, values, baseline)
-
-
-def restore(design, saved):
-    """Put parameters back to the saved expressions. Returns the names that could not be restored."""
-    return restore_parameters(DesignParameterStore(design), saved)

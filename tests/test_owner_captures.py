@@ -15,6 +15,7 @@ from lib.probe import motion as probe_motion
 from lib.translator import translate
 
 REPORTS = os.path.expanduser("~/Documents/free-projects/3mf-compose/tmp/reports")
+MISSING = "skipped: the owner's capture files are not in %s (the folder is missing or lacks them)" % REPORTS
 FILES = ("report.json", "report (1).json", "report (3).json")
 PACKAGE = "Pat - Pipe, Filter (Box, Cylinder).paramability"
 # The same part exported by add-in 0.4.0, whose reader measures the faces of the offset.
@@ -34,7 +35,7 @@ class OwnerCaptureTest(unittest.TestCase):
     def test_assembly_steps_are_skipped_and_the_walk_reaches_the_part(self):
         found = [os.path.join(REPORTS, f) for f in FILES if os.path.exists(os.path.join(REPORTS, f))]
         if not found:
-            self.skipTest("the owner's captures are not on this machine")
+            self.skipTest(MISSING)
         for path in found:
             with self.subTest(os.path.basename(path)), open(path, encoding="utf-8") as f:
                 capture = json.load(f)["capture"]
@@ -51,7 +52,7 @@ class OwnerCaptureTest(unittest.TestCase):
     def test_the_filter_box_steps_up_to_the_offset_are_copied(self):
         path = os.path.join(REPORTS, PACKAGE)
         if not os.path.exists(path):
-            self.skipTest("the owner's package is not on this machine")
+            self.skipTest(MISSING)
         with zipfile.ZipFile(path) as package:
             capture = json.loads(package.read("report.json"))["capture"]
         result = translate(capture)
@@ -63,7 +64,7 @@ class OwnerCaptureTest(unittest.TestCase):
     def test_the_filter_box_offset_becomes_an_offset_faces_step(self):
         path = os.path.join(REPORTS, PACKAGE_WITH_OFFSET)
         if not os.path.exists(path):
-            self.skipTest("the owner's package is not on this machine")
+            self.skipTest(MISSING)
         with zipfile.ZipFile(path) as package:
             capture = json.loads(package.read("report.json"))["capture"]
         result = translate(capture)
@@ -79,7 +80,7 @@ class OwnerCaptureTest(unittest.TestCase):
     def test_the_probe_states_of_the_filter_box_leave_its_sizes_free(self):
         path = os.path.join(REPORTS, PACKAGE_WITH_PROBE)
         if not os.path.exists(path):
-            self.skipTest("the owner's package is not on this machine")
+            self.skipTest(MISSING)
         with zipfile.ZipFile(path) as package:
             report = json.loads(package.read("report.json"))
         capture = report["capture"]
@@ -107,7 +108,7 @@ class OwnerCaptureTest(unittest.TestCase):
     def test_with_the_dialog_ranges_the_filter_box_sizes_stay_free_and_its_counts_are_raised(self):
         path = os.path.join(REPORTS, PACKAGE_WITH_PROBE)
         if not os.path.exists(path):
-            self.skipTest("the owner's package is not on this machine")
+            self.skipTest(MISSING)
         with zipfile.ZipFile(path) as package:
             report = json.loads(package.read("report.json"))
         capture = report["capture"]
@@ -133,7 +134,7 @@ class OwnerCaptureTest(unittest.TestCase):
     def test_with_the_offset_back_the_filter_box_sizes_stay_free(self):
         path = os.path.join(REPORTS, PACKAGE_WITH_OFFSET_FACES)
         if not os.path.exists(path):
-            self.skipTest("the owner's package is not on this machine")
+            self.skipTest(MISSING)
         with zipfile.ZipFile(path) as package:
             report = json.loads(package.read("report.json"))
         capture = report["capture"]
@@ -177,7 +178,7 @@ class OwnerCaptureTest(unittest.TestCase):
     def test_the_rim_chamfer_picked_by_the_top_face_follows_the_box(self):
         path = os.path.join(REPORTS, PACKAGE_WITH_OFFSET_FACES)
         if not os.path.exists(path):
-            self.skipTest("the owner's package is not on this machine")
+            self.skipTest(MISSING)
         with zipfile.ZipFile(path) as package:
             report = json.loads(package.read("report.json"))
         capture = report["capture"]
@@ -200,7 +201,7 @@ class OwnerCaptureTest(unittest.TestCase):
     def test_the_plain_export_keeps_every_range_and_marks_the_sketch_sizes_loose(self):
         path = os.path.join(REPORTS, PACKAGE_WITH_OFFSET_FACES)
         if not os.path.exists(path):
-            self.skipTest("the owner's package is not on this machine")
+            self.skipTest(MISSING)
         with zipfile.ZipFile(path) as package:
             capture = json.loads(package.read("report.json"))["capture"]
         params = capture["parameters"]
@@ -220,7 +221,7 @@ class OwnerCaptureTest(unittest.TestCase):
     def test_the_plain_export_with_the_motion_of_the_stored_states(self):
         path = os.path.join(REPORTS, PACKAGE_WITH_OFFSET_FACES)
         if not os.path.exists(path):
-            self.skipTest("the owner's package is not on this machine")
+            self.skipTest(MISSING)
         with zipfile.ZipFile(path) as package:
             report = json.loads(package.read("report.json"))
         capture = report["capture"]

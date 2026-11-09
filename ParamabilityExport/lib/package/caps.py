@@ -1,7 +1,7 @@
 """Size limits the Paramability app enforces when it opens a package.
 
 Source: the app's recipe-package reader (reader caps, section 1.4 of the package contract). The schema JSON in
-lib/schema/ carries text limits only, so these byte limits live here. Update them together with the app.
+tests/schema/ carries text limits only, so these byte limits live here. Update them together with the app.
 """
 import os
 

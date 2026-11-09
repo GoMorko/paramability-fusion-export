@@ -63,13 +63,6 @@ class BuildTest(unittest.TestCase):
         self.assertIsNone(inputs.itemById(recipe_dialog.TABLE_ID))
         self.assertIn("no user parameters", inputs.itemById(recipe_dialog.INTRO_ID).formattedText)
 
-    def test_a_used_by_column_can_replace_the_now_column(self):
-        command = fakes.FakeCommand()
-        recipe_dialog.build(command, [offer("wall", used_by="Box, Lid")], None, "z", used_by=True)
-        inputs = command.commandInputs
-        self.assertEqual(row(inputs, "used_by", 0).formattedText, "Box, Lid")
-        self.assertIsNone(row(inputs, "now", 0))
-
 
 class TickTest(unittest.TestCase):
     def test_unticking_a_row_greys_its_range_and_shows_what_stays(self):

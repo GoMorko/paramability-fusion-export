@@ -6,8 +6,7 @@ import json
 import os
 import re
 
-SCHEMA_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ParamabilityExport", "lib", "schema")
+SCHEMA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema")
 
 
 def _recipe_schemas():

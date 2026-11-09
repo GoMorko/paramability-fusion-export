@@ -386,11 +386,9 @@ class DriverGuardTest(unittest.TestCase):
         self.assertIsNone(result.recipe)
         self.assertEqual(result.refusal["index"], 3)
 
-    def test_read_error_refuses_in_driver_and_handler(self):
+    def test_read_error_refuses(self):
         result = translate_fixture("extrude_read_error")
         self.assertEqual(result.refusal["reason"], "This step could not be read from Fusion.")
-        item = load_capture("extrude_read_error")["items"][-1]
-        self.assertEqual(extrude.handle(item, None).reason, "This step could not be read from Fusion.")
 
     def test_unknown_type_without_bodies_refuses_but_joints_are_skipped(self):
         capture = load_capture("extrude_plate")

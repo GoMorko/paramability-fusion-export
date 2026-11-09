@@ -32,8 +32,8 @@ SHOW_ID = "pm_show_in_timeline"
 WARN_LINES = 4
 
 TICK_PREFIX = "pm_tick_"
-CELL_PREFIX = {"tick": TICK_PREFIX, "name": "pm_name_", "now": "pm_now_", "used_by": "pm_usedby_", "min": "pm_min_",
-               "max": "pm_max_", "status": "pm_status_"}
+CELL_PREFIX = {"tick": TICK_PREFIX, "name": "pm_name_", "now": "pm_now_", "min": "pm_min_", "max": "pm_max_",
+               "status": "pm_status_"}
 _HEADER_ROWS = 1
 
 UP_LABELS = {"z": "Z up", "y": "Y up"}
@@ -73,13 +73,10 @@ def _set_text(inputs, key, index, text):
         box.formattedText = html.escape(text)
 
 
-def build(command, offers, body, up_axis, used_by=False, design_unit="mm", stop=None, marker_note=None):
+def build(command, offers, body, up_axis, design_unit="mm", stop=None, marker_note=None):
     """Add the inputs. offers come from export_plan.size_offers.offers; body may be None.
 
-    Cells are named by row number, since a Fusion parameter name is not always a safe input id. `used_by` swaps the
-    Now column for the parts that read each parameter (a component export; the texts come from the offers). The
-    Used by column is off until the whole component export needs it: no caller passes `used_by` yet.
-    `design_unit` is the unit the Min and Max cells use for lengths. `stop` is the warning for the body already
+    Cells are named by row number, since a Fusion parameter name is not always a safe input id. `design_unit` is the unit the Min and Max cells use for lengths. `stop` is the warning for the body already
     picked (export_plan.stop_warning.summarize), if any. `marker_note` is the line shown when the timeline marker is
     not at the end (export_plan.marker.marker_note).
     """
@@ -95,7 +92,7 @@ def build(command, offers, body, up_axis, used_by=False, design_unit="mm", stop=
 
     if offers:
         _safely("Dialog size", lambda: command.setDialogInitialSize(700, 700))
-        _build_table(inputs, offers, used_by, design_unit)
+        _build_table(inputs, offers, design_unit)
         inputs.addTextBoxCommandInput(
             DETAILS_ID, "", html.escape(rows.HINT), 4, True)
         inputs.addTextBoxCommandInput(COUNT_ID, "", "", 2, True)
@@ -141,8 +138,8 @@ def show_stop(inputs, summary):
         button.isVisible = summary["index"] is not None
 
 
-def _build_table(inputs, offers, used_by, design_unit):
-    keys = rows.columns(used_by)
+def _build_table(inputs, offers, design_unit):
+    keys = rows.columns()
     table = inputs.addTableCommandInput(TABLE_ID, "", len(keys), rows.column_ratio(keys))
     _safely("Table rows", lambda: setattr(table, "minimumVisibleRows", 5))
     _safely("Table rows", lambda: setattr(table, "maximumVisibleRows", 12))
@@ -171,8 +168,7 @@ def _make_cell(inputs, key, index, offer):
     if key == "name":
         text, lines = rows.wrap_name(offer["param"])
         return inputs.addTextBoxCommandInput(cell_id, "", text, lines, True)
-    text = rows.used_by_text(offer) if key == "used_by" else cells[key]
-    return inputs.addTextBoxCommandInput(cell_id, "", html.escape(text), 1, True)
+    return inputs.addTextBoxCommandInput(cell_id, "", html.escape(cells[key]), 1, True)
 
 
 def _ticks(inputs, offers):
