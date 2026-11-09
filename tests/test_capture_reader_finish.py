@@ -272,11 +272,20 @@ class CircularPatternTest(unittest.TestCase):
                                                               direction=Obj(x=0.0, y=0.0, z=1.0))),
             quantity=param(6.0), totalAngle=param(2 * 3.141592653589793), isSymmetric=False,
             suppressedElementsIds=[4, 5])
-        self.assertEqual(data["axis"], {"point": [5, 5, 0], "dir": [0.0, 0.0, 1.0]})
+        self.assertEqual(data["axis"], {"point": [5, 5, 0], "dir": [0.0, 0.0, 1.0], "entity_type": "ConstructionAxis"})
         self.assertEqual((data["quantity"], data["total_angle_deg"], data["symmetric"]), (6, 360.0, False))
         self.assertEqual(data["suppressed_ids"], [4, 5])
         self.assertEqual(data["elements"][1]["frame"]["x"], [0.0, 1.0, 0.0])
         self.assertEqual(data["sources"], [1])
+
+    def test_an_edge_axis_says_where_the_edge_is(self):
+        line = edge("e1", 5)
+        line.geometry = Obj("core::Line3D", startPoint=P(0, 0, 0), endPoint=P(10, 0, 0))
+        data = read_pattern("CircularPatternFeature", [element(1, (0, 0, 0))], inputEntities=Coll([source_feature(1)]),
+                            patternEntityType="FeaturesPatternEntityType", axis=line, quantity=param(3.0),
+                            totalAngle=param(2 * 3.141592653589793))
+        self.assertEqual(data["axis"], {"point": [0, 0, 0], "dir": [1.0, 0.0, 0.0], "entity_type": "BRepEdge",
+                                        "edge_points": [[5, 0, 0]]})
 
     def test_unreadable_axis_is_marked_other(self):
         data = read_pattern("CircularPatternFeature", [], inputEntities=Coll([source_feature(1)]),
@@ -291,7 +300,8 @@ class MirrorTest(unittest.TestCase):
             patternEntityType="FeaturesPatternEntityType", isCombine=False,
             mirrorPlane=Obj("fusion::ConstructionPlane", geometry=plane_geometry((0, 0, 0), (1, 0, 0)))))
         self.assertEqual(data, {"entity_type": "features", "sources": [1],
-                                "plane": {"point": [0, 0, 0], "normal": [1.0, 0.0, 0.0]}, "combine": False,
+                                "plane": {"point": [0, 0, 0], "normal": [1.0, 0.0, 0.0],
+                                          "entity_type": "ConstructionPlane"}, "combine": False,
                                 "target_box_before": {"min": [0, 0, 0], "max": [40, 20, 10]}})
 
     def test_body_mirror_about_a_planar_face_with_combine(self):
@@ -299,8 +309,31 @@ class MirrorTest(unittest.TestCase):
         data = read_data(feature("MirrorFeature", "Mirror1", inputEntities=Coll([body()]),
                                  patternEntityType="BodiesPatternEntityType", isCombine=True, mirrorPlane=planar))
         self.assertEqual((data["entity_type"], data["sources"], data["combine"]), ("bodies", [], True))
-        self.assertEqual(data["plane"], {"point": [0, 0, 10], "normal": [0.0, 0.0, 1.0]})
+        self.assertEqual(data["plane"], {"point": [0, 0, 10], "normal": [0.0, 0.0, 1.0], "entity_type": "BRepFace",
+                                         "face_point": [0, 1, 2], "surface": "Plane"})
         self.assertEqual(data["target_box_before"], {"min": [0, 0, 0], "max": [40, 20, 10]})
+
+    def test_a_construction_plane_says_what_it_is_built_on(self):
+        base = face("f1", geometry=plane_geometry((0, 0, 10), (0, 0, 1)))
+        built = Obj("fusion::ConstructionPlane", entityToken="cp1", geometry=plane_geometry((0, 0, 15), (0, 0, 1)),
+                    timelineObject=Obj(index=2),
+                    definition=Obj("fusion::ConstructionPlaneOffsetDefinition", planarEntity=base))
+        data = read_data(feature("MirrorFeature", "Mirror1", inputEntities=Coll([source_feature(1)]),
+                                 patternEntityType="FeaturesPatternEntityType", mirrorPlane=built))
+        plane = data["plane"]
+        self.assertEqual((plane["token"], plane["made_by"], plane["definition"]),
+                         ("cp1", 2, "ConstructionPlaneOffsetDefinition"))
+        self.assertEqual(plane["built_on"], [{"entity_type": "BRepFace", "face_point": [0, 1, 2], "surface": "Plane"}])
+
+    def test_an_origin_plane_says_only_that_it_is_one(self):
+        origin = Obj("fusion::ConstructionPlane", entityToken="xy", geometry=plane_geometry((0, 0, 0), (0, 0, 1)))
+        target = body()
+        design = FakeDesign([sketch_entry(), entry(feature(
+            "MirrorFeature", "Mirror1", inputEntities=Coll([source_feature(1)]),
+            patternEntityType="FeaturesPatternEntityType", mirrorPlane=origin))], target)
+        design.rootComponent.xYConstructionPlane = origin
+        data = read_capture(design, target, fusion="", name="", up_axis="z")["items"][1]["data"]
+        self.assertEqual(data["plane"], {"point": [0, 0, 0], "normal": [0.0, 0.0, 1.0], "token": "xy", "origin": True})
 
     def test_curved_mirror_plane_is_null(self):
         curved = face("f9", geometry=Obj("core::Cylinder"))

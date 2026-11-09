@@ -7,13 +7,18 @@ copies get their own `round` or `bevel` step with the source's `near` points mov
 
 Each copy is a `follow.Motion`. A linear spacing that follows sizes moves the copied points with it, and the copies of
 extrudes are handed to the walk (`_copies`), so later picks on them follow sizes too.
+
+A mirror plane or a turning axis that sits on a face or edge of the part moves when a size moves that face or edge
+(`follow.place_plane`): its origin or axis point is then written as a formula, and the copies move with it. One that
+cannot be followed fixes the sizes written so far.
 """
 import math
 
-from . import follow, values, vec
+from . import follow, range_check, values, vec
 from .follow import Motion
-from .values import Quantity, number, numbers_of
+from .values import Quantity, Sized, number, numbers_of, reads_in
 from .result import Refusal
+from ..params.expressions import ExpressionError, evaluate
 
 TYPES = ("RectangularPatternFeature", "CircularPatternFeature", "MirrorFeature")
 
@@ -429,6 +434,38 @@ def _copy_number(angle, delta, sign, count, full):
     return k if 0 <= k < count else None
 
 
+UNIT_DIRECTIONS = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0])
+
+
+def _axis_shift(ctx, item, axis, direction):
+    """How the axis point moves with sizes, as three Quantities (zero where it stays). An axis on a face or edge that
+    sizes move takes the move; the part of it along the axis is left out, it changes nothing. An axis that cannot be
+    followed stays where it is."""
+    shifts = []
+    for unit in UNIT_DIRECTIONS:
+        shift = follow.place_plane(ctx, item, axis, unit, "turns copies about")
+        if shift is None:
+            return [Quantity(0.0)] * 3
+        shifts.append(shift)
+    return [shift if shift.sized and abs(abs(d) - 1) >= 1e-9 else Quantity(0.0) for shift, d in zip(shifts, direction)]
+
+
+def _turn_motion(point, moved, direction, angle, needs, by):
+    """The turn about the axis through `point`, with the shift that follows `moved` (how the axis point moves)."""
+    base = Motion.turn(point, direction, angle, needs, by)
+    if not any(q.sized for q in moved):
+        return base
+    shift = []
+    for i in range(3):
+        total = Quantity(base.shift[i].n)
+        for j in range(3):
+            coefficient = (1.0 if i == j else 0.0) - base.rows[i][j]
+            if abs(coefficient) > 1e-12 and moved[j].sized:
+                total = total.plus(moved[j].scaled(coefficient))
+        shift.append(total)
+    return Motion(base.rows, shift, needs, by)
+
+
 def _circular(item, ctx):
     data = item.get("data") or {}
     sources = _sources(data, ctx, "pattern")
@@ -472,6 +509,7 @@ def _circular(item, ctx):
     by_place = {_copy_number(t, delta, sign, count, full): element for element, t in turns}
     skip = _skip_places(by_place, count)
 
+    moved = _axis_shift(ctx, item, axis, direction)
     polar = {"axisPoint": _vec(point), "axis": _vec(direction), "count": count}
     if not full:
         polar["angleDeg"] = _n((count - 1) * delta)
@@ -487,10 +525,13 @@ def _circular(item, ctx):
         angle_q = values.quantity(ctx, item, "total_angle_deg", total_deg, dim="angle",
                                   sign=-1 if raw_total < 0 else 1, absolute=True)
     needs = count_q.reads + (angle_q.reads if angle_q is not None else ())
-    motions = [Motion.turn(point, direction, n * delta, needs, item.get("name", "")) for n in sorted(by_place) if n > 0]
+    motions = [_turn_motion(point, moved, direction, n * delta, needs, item.get("name", ""))
+               for n in sorted(by_place) if n > 0]
     steps = _build(ctx, item, solids, finishes, pattern, motions, "pattern")
     if isinstance(steps, Refusal):
         return steps
+    if any(q.sized for q in moved):
+        polar["axisPoint"] = [q.plus(c).json() if q.sized else _n(c) for q, c in zip(moved, point)]
     if angle_q is not None:
         polar["angleDeg"] = angle_q.json()
     _keep_pattern_fixed(ctx, item, skip, finishes, ("quantity",), ("total_angle_deg",))
@@ -572,10 +613,11 @@ def _placed(on, point2):
     return vec.add(vec.add(on["origin"], vec.scale(on["xDir"], point2[0])), vec.scale(y_dir, point2[1]))
 
 
-def _cut_reach(step):
-    """(points, margin) with every point of the cutting tool within `margin` mm of one of `points`; None when
-    the tool is not bounded by a known rule (through cuts, other loop kinds)."""
-    step = numbers_of(step)
+def _cut_reach(step, as_numbers=numbers_of):
+    """(points, margin) with every point of the tool within `margin` mm of one of `points`; None when the tool is
+    not bounded by a known rule (through cuts, other loop kinds). `as_numbers` turns the step's formulas into numbers
+    (the measured ones by default)."""
+    step = as_numbers(step)
     kind = step["kind"]
     if kind == "hole":
         axis = vec.unit(step["direction"])
@@ -644,11 +686,111 @@ def _body_mirror_problem(data, plane, steps):
     return None
 
 
+def _mirror_plane_at(plane, shift):
+    """The plane as written and the shift it was given: with a sized `shift` (how far the plane moves along its normal)
+    the origin becomes formulas and the shift is returned; with none the plane and None."""
+    normal, origin = plane["normal"], plane["origin"]
+    if not shift.sized:
+        return plane, None
+    moved = [shift.scaled(c).plus(o).json() if abs(c) > 1e-9 else o for o, c in zip(origin, normal)]
+    return dict(plane, origin=moved), shift
+
+
+def _mirror_motion(plane, shift, name):
+    """The Motion of a mirror across `plane`; a plane that moves along its normal by `shift` moves the copies twice
+    as far."""
+    base = Motion.mirror(plane["origin"], plane["normal"], name)
+    if shift is None:
+        return base
+    return Motion(base.rows, [shift.scaled(2.0 * c).plus(base.shift[i].n) if abs(c) > 1e-9 else base.shift[i]
+                              for i, c in enumerate(plane["normal"])], by=name)
+
+
+def _evaluated(env):
+    """A function that turns every formula of a written value into its number at the sizes `env`."""
+    def convert(node):
+        if isinstance(node, Sized):
+            return evaluate(node["expr"], env)
+        if isinstance(node, dict):
+            return {k: convert(v) for k, v in node.items()}
+        if isinstance(node, list):
+            return [convert(v) for v in node]
+        return node
+    return convert
+
+
+def _step_reads(step, by_id):
+    """The Fusion names a step reads, with those of the steps it repeats."""
+    found = list(reads_in(step))
+    for source in step.get("of") or ():
+        if source in by_id:
+            found += _step_reads(by_id[source], by_id)
+    return tuple(dict.fromkeys(found))
+
+
+def _reach_or_none(step, as_numbers):
+    if step["kind"] in ("pattern", "mirror"):
+        return None
+    try:
+        return _cut_reach(step, as_numbers)
+    except (KeyError, TypeError, IndexError):
+        return None
+
+
+def _slack(steps, origin, normal, side, as_numbers):
+    """How far the tools of the steps stay on `side` of the plane, in mm (negative when one reaches across); None
+    when no step has a known reach."""
+    worst = None
+    for step in steps:
+        reach = _reach_or_none(step, as_numbers)
+        if reach is None:
+            continue
+        points, margin = reach
+        here = min(side * vec.dot(vec.sub(p, origin), normal) for p in points) - margin
+        worst = here if worst is None else min(worst, here)
+    return worst
+
+
+def _keep_one_side(ctx, item, plane, steps, side):
+    """The body lies on one side of the plane at the current sizes. Mirroring every step equals the body joined with
+    its image only while that holds, so each corner of the size ranges is tried too: a step that reaches across the
+    plane there, or whose reach is unknown, marks the sizes it reads. The reach of a tool is a bound, so a corner
+    only counts when it is worse than the current sizes."""
+    table = ctx.table
+    reads = tuple(dict.fromkeys(reads_in(steps) + reads_in(plane)))
+    if table is None or not reads:
+        return
+    by_id = {step["id"]: step for step in steps}
+    name = item.get("name", "a mirror")
+    unknown = [step for step in steps if _reach_or_none(step, numbers_of) is None]
+    for step in unknown:
+        ctx.fix(_step_reads(step, by_id), "%s mirrors the whole part, and %s cannot be checked to stay on one side of "
+                "the plane" % (name, step.get("label") or "a step"))
+    known = [step for step in steps if all(step is not other for other in unknown)]
+    names = {table.size_name(read): read for read in reads}
+    why = "%s mirrors the whole part, and at some sizes the part would reach across the plane" % name
+    current = None
+    for setting in range_check.corners(table, reads):
+        try:
+            as_numbers = _evaluated(range_check.size_env(table, setting))
+            slack = _slack(known, as_numbers(plane["origin"]), plane["normal"], side, as_numbers)
+        except (ExpressionError, ValueError, ZeroDivisionError, OverflowError):
+            ctx.fix(reads, "%s mirrors the whole part, and its sizes cannot be tried at the ends of their ranges"
+                    % name)
+            return
+        if not setting:
+            current = slack
+        elif slack is not None and slack < min(-SIDE_TOL_MM, (current if current is not None else 0.0) - SIDE_TOL_MM):
+            ctx.fix([names[n] for n in setting if n in names], why)
+
+
 def _mirror(item, ctx):
     data = item.get("data") or {}
     plane = _mirror_plane(data)
     if plane is None:
         return Refusal("The mirror plane could not be read as a flat plane.")
+    shift = follow.place_plane(ctx, item, data["plane"], plane["normal"], "mirrors across")
+    written, moved = _mirror_plane_at(plane, shift if shift is not None else Quantity(0.0))
     entity = data.get("entity_type")
     if entity == "bodies":
         if not data.get("combine"):
@@ -658,6 +800,8 @@ def _mirror(item, ctx):
         problem = _body_mirror_problem(data, plane, ctx.steps)
         if problem:
             return Refusal(problem)
+        _keep_one_side(ctx, item, written, ctx.steps, _side_of_plane(data["target_box_before"], plane["origin"],
+                                                                     plane["normal"]))
         solids, finishes = [step["id"] for step in ctx.steps], []
         if len(solids) > MAX_REFERENCES:
             return Refusal("This mirror repeats more than %d steps." % MAX_REFERENCES)
@@ -668,8 +812,8 @@ def _mirror(item, ctx):
         solids, finishes = sources
     else:
         return Refusal("Mirrors of faces are not copied yet.")
-    motion = Motion.mirror(plane["origin"], plane["normal"], item.get("name", ""))
-    return _build(ctx, item, solids, finishes, {"kind": "mirror", "plane": plane}, [motion], "mirror")
+    motion = _mirror_motion(plane, moved, item.get("name", ""))
+    return _build(ctx, item, solids, finishes, {"kind": "mirror", "plane": written}, [motion], "mirror")
 
 
 _HANDLERS = {

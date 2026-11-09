@@ -202,3 +202,103 @@ def target_shift(ctx, item, target, direction, what="reaches to"):
         if abs(d) > 1e-9:
             shift = shift.plus(q.plus(-p).scaled(d))
     return shift
+
+
+def _on_part(ref):
+    """True when a plane or axis description sits on geometry of the part (a face, an edge, a sketch) or on
+    construction geometry built on such. Origin planes and axes, and construction geometry made from parameters
+    alone, do not."""
+    if ref.get("origin") or ref.get("foreign"):
+        return False
+    if ref.get("entity_type") in ("ConstructionPlane", "ConstructionAxis"):
+        return any(_on_part(entry) for entry in ref.get("built_on") or ())
+    return True
+
+
+def _is_plane(ref):
+    return bool(ref.get("origin")) or ref.get("entity_type") == "ConstructionPlane" or (
+        ref.get("entity_type") == "BRepFace" and ref.get("surface") in (None, "Plane"))
+
+
+def _round_face_axis(ctx, item, ref, what):
+    """Zero when the axis of a round face (a cylinder wall of one extrude) stays where it is: the face does not move,
+    or only slides along its own axis as the length changes. None (sizes fixed) otherwise."""
+    found = locate(ctx, ref["face_point"]) if ref.get("face_point") else None
+    if found is not None and not found.moves:
+        return Quantity(0.0)
+    slab = getattr(found, "slab", None)
+    axis = ref.get("dir")
+    if (isinstance(found, Place) and found.which == "side" and not slab.is_copy and found.lateral is None
+            and not found.blocked and slab.taper is None and not slab.motion.moves
+            and not any(q.sized for q in slab.origin) and axis is not None
+            and abs(abs(vec.dot(slab.axis, axis)) - 1) < 1e-9):
+        return Quantity(0.0)
+    ctx.fix(ctx.written_reads, "%s %s a round face that may move with it, and the copy cannot follow that"
+            % (_name(item), what))
+    return None
+
+
+def _edge_shift(ctx, item, points, direction, what):
+    found = locate(ctx, points[0], True)
+    if found is None:
+        ctx.fix(ctx.written_reads, "%s %s an edge that may move with it, and the copy cannot follow that"
+                % (_name(item), what))
+        return None
+    if not found.moves:
+        return Quantity(0.0)
+    _keep_copies(ctx, item, found)
+    shift = Quantity(0.0)
+    for q, p, d in zip(found.quantities(points[0]), points[0], direction):
+        if abs(d) > 1e-9:
+            shift = shift.plus(q.plus(-p).scaled(d))
+    return shift
+
+
+def _built_shift(ctx, item, ref, direction, what):
+    """The shift of construction geometry built on part geometry: an offset plane moves with its base, a midplane
+    with the mean of its two bases, an axis on an edge or round face with that edge or face. Anything else cannot be
+    followed."""
+    parts, definition = ref["built_on"], (ref.get("definition") or "").lower()
+    if ref.get("entity_type") == "ConstructionPlane":
+        if "offset" in definition and len(parts) == 1 and _is_plane(parts[0]):
+            return place_plane(ctx, item, parts[0], direction, what)
+        if "midplane" in definition and len(parts) == 2 and all(_is_plane(p) for p in parts):
+            shifts = [place_plane(ctx, item, p, direction, what) for p in parts]
+            return None if None in shifts else shifts[0].plus(shifts[1]).scaled(0.5)
+    elif len(parts) == 1 and parts[0].get("entity_type") in ("BRepEdge", "BRepFace"):
+        return place_plane(ctx, item, dict(parts[0], dir=ref.get("dir")), direction, what)
+    ctx.fix(ctx.written_reads, "%s %s a %s built on part geometry that may move with it, and the copy cannot follow "
+            "that" % (_name(item), what, "plane" if ref.get("entity_type") == "ConstructionPlane" else "axis"))
+    return None
+
+
+def place_plane(ctx, item, ref, direction, what="mirrors across"):
+    """How a plane or axis moves along unit `direction` as sizes change: a Quantity (plain zero when it stays), or
+    None when it may move and cannot be followed (its sizes are then fixed). The Quantity is the move from the
+    measured place (its number is zero), not the distance from some base. `ref` is the capture's plane or axis record.
+    An axis moves by its offset in each coordinate direction; the part of it along the axis is harmless.
+
+    An origin plane or axis, or a record that says nothing about what it is (an older capture), stays. A face is
+    placed like the face an extrude reaches to (`target_shift`). `what` words the reason.
+    """
+    zero = Quantity(0.0)
+    if not ctx.written_reads or ref.get("origin") or ref.get("assembly") or ref.get("foreign"):
+        return zero
+    kind = ref.get("entity_type")
+    if ref.get("face_point") is not None or kind == "BRepFace":
+        if ref.get("surface") not in (None, "Plane"):
+            return _round_face_axis(ctx, item, ref, what)
+        found = locate(ctx, ref["face_point"]) if ref.get("face_point") else None
+        if found is not None and getattr(found, "which", None) == "side" and not found.moves:
+            return zero
+        offset = target_shift(ctx, item, {"face_point": ref.get("face_point")}, direction, what)
+        return offset.plus(-offset.n) if offset is not None and offset.sized and abs(offset.n) > 1e-9 else offset
+    if ref.get("edge_points") or kind == "BRepEdge":
+        if not ref.get("edge_points"):
+            ctx.fix(ctx.written_reads, "%s %s an edge that may move with it, and the copy cannot follow that"
+                    % (_name(item), what))
+            return None
+        return _edge_shift(ctx, item, ref["edge_points"], direction, what)
+    if kind in ("ConstructionPlane", "ConstructionAxis") and _on_part(ref):
+        return _built_shift(ctx, item, ref, direction, what)
+    return zero

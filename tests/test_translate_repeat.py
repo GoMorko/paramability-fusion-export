@@ -2,6 +2,7 @@ import copy
 import unittest
 
 from tests import context  # noqa: F401
+from tests.test_translate_sized import table_of
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, translate_fixture
 
 from lib.translator import translate
@@ -225,6 +226,14 @@ class MirrorTest(unittest.TestCase):
         (mirror,) = steps_of(result.recipe, "mirror")
         self.assertEqual(mirror["of"], verdict_of(result, 3)["steps"])
         self.assertEqual(mirror["plane"], {"origin": [0, 0, 0], "normal": [1, 0, 0]})
+        assert_schema_ok(self, result.recipe)
+
+    def test_a_plane_on_a_face_that_a_size_moves_follows_the_size(self):
+        capture = load_capture("mirror_on_moved_face")
+        result = translate(capture, size_table=table_of(capture, ["h"]))
+        self.assertEqual((result.fixed, result.loose), ([], []))
+        (mirror,) = steps_of(result.recipe, "mirror")
+        self.assertEqual(mirror["plane"]["origin"], [0, 0, {"expr": "h"}])
         assert_schema_ok(self, result.recipe)
 
     def test_fillet_points_are_reflected(self):

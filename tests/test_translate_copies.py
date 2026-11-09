@@ -1,12 +1,14 @@
 """Picks on pattern and mirror copies, and copied rounds and chamfers, follow sizes."""
+import math
 import unittest
 
 from tests import context  # noqa: F401
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
-from tests.test_translate_sized import TICKED, param, table_of
+from tests.test_translate_sized import CUBE, TICKED, param, table_of
 
 from lib.params import size_table
-from lib.translator import translate
+from lib.params.expressions import evaluate
+from lib.translator import translate, vec
 from lib.translator.copy_counts import raised_minimums
 from lib.translator.values import Quantity
 
@@ -161,10 +163,6 @@ class CopiedFinishTest(unittest.TestCase):
         assert_schema_ok(self, recipe)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class RaisedMinimumTest(unittest.TestCase):
     """A count formula with rounding, as in the owner's filter box: `ceil(width_count) * 2` copies."""
 
@@ -184,3 +182,162 @@ class RaisedMinimumTest(unittest.TestCase):
         self.assertIsNone(raised_minimums(self.table({"width_count": (0.5, 3.6)}), self.count(), 4))
         falling = Quantity(4.0, "8 - ceil(width_count) * 2", ("width_count",))
         self.assertIsNone(raised_minimums(self.table(), falling, 4))
+
+
+def _mirror(index, plane, entity_type="features", combine=False, box=None):
+    return _item(index, "Mirror1", "MirrorFeature", {
+        "entity_type": entity_type, "sources": [2], "plane": plane, "combine": combine, "target_box_before": box})
+
+
+def _turned(about, degrees, vertical=False):
+    """An element frame that turns by `degrees` about the line through `about` along x (or along z)."""
+    cos, sin = math.cos(math.radians(degrees)), math.sin(math.radians(degrees))
+    frame = ({"origin": [0, 0, 0], "x": [cos, sin, 0], "y": [-sin, cos, 0], "z": [0, 0, 1]} if vertical else
+             {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, cos, sin], "z": [0, -sin, cos]})
+    return dict(frame, origin=vec.sub(about, vec.frame_apply(frame, about)))
+
+
+def _circular(index, axis, count=4):
+    elements = [{"id": n + 1, "suppressed": False,
+                 "frame": _turned(axis["point"], 360.0 * n / count, axis["dir"] == [0, 0, 1])}
+                for n in range(count)]
+    return _item(index, "C-Pattern1", "CircularPatternFeature", {
+        "entity_type": "features", "sources": [2], "axis": axis, "quantity": count, "total_angle_deg": 360.0,
+        "symmetric": False, "elements": elements})
+
+
+def _at(recipe_value, wall):
+    """A written number or formula at the size wall_mm = `wall`."""
+    return evaluate(recipe_value["expr"], {"wall_mm": wall}) if isinstance(recipe_value, dict) else recipe_value
+
+
+TOP_FACE = {"point": [6, 6, POST_TOP], "normal": [0, 0, 1], "entity_type": "BRepFace",
+            "face_point": [6, 6, POST_TOP], "surface": "Plane"}
+
+
+class MovedReferenceTest(unittest.TestCase):
+    """A mirror plane or turning axis on a face or edge that a size moves."""
+
+    def mirrored_plane(self, plane, mode=None):
+        capture = post_capture(_mirror(3, plane))
+        table = table_of(capture, TICKED)
+        result = translate(capture, size_table=table, **(mode or {}))
+        self.assertIsNotNone(result.recipe, result.refusal)
+        return result, steps_of(result.recipe, "mirror")[0]["plane"]["origin"]
+
+    def test_a_mirror_plane_on_a_moving_face_follows_it_and_so_does_a_pick_on_the_copy(self):
+        fillet = _item(4, "Fillet1", "FilletFeature", {
+            "sets": [_edges_set("constant", [[6, 8, 2 * POST_TOP - 10]], radius=1.0, continuity="tangent")]})
+        result = run(post_capture(_mirror(3, TOP_FACE), fillet))
+        self.assertEqual(result.fixed, [])
+        (mirror,) = steps_of(result.recipe, "mirror")
+        self.assertEqual([_at(c, 3.0) for c in mirror["plane"]["origin"]], [6, 6, 25])
+        self.assertEqual([_at(c, 3.0) for c in steps_of(result.recipe, "round")[0]["edges"]["near"][0]], [6, 8, 40])
+        assert_schema_ok(self, result.recipe)
+
+    def test_a_plane_on_a_face_nothing_places_marks_the_sizes_it_may_move_with(self):
+        lost = dict(TOP_FACE, face_point=[100, 100, 5])
+        result, origin = self.mirrored_plane(lost)
+        self.assertEqual((fixed_names(result), origin), (["wall_mm"], [6, 6, POST_TOP]))
+        self.assertIn("Mirror1", result.fixed[0]["reason"])
+        loose, _ = self.mirrored_plane(lost, {"loose": True})
+        self.assertEqual([f["name"] for f in loose.loose], ["wall_mm"])
+
+    def test_an_origin_plane_and_an_unread_plane_stay_where_they_are(self):
+        for label, plane in (("origin", {"point": [30, 0, 0], "normal": [1, 0, 0], "origin": True}),
+                             ("older capture", {"point": [30, 0, 0], "normal": [1, 0, 0]})):
+            with self.subTest(label):
+                result, origin = self.mirrored_plane(plane)
+                self.assertEqual((result.fixed, origin), ([], [30, 0, 0]))
+
+    def test_a_construction_plane_built_on_a_moving_face(self):
+        built = {"point": [6, 6, POST_TOP + 5], "normal": [0, 0, 1], "token": "cp1", "entity_type": "ConstructionPlane",
+                 "definition": "ConstructionPlaneOffsetDefinition", "built_on": [
+                     {"entity_type": "BRepFace", "face_point": [6, 6, POST_TOP], "surface": "Plane"}]}
+        _, origin = self.mirrored_plane(built)
+        self.assertEqual([_at(c, 3.0) for c in origin], [6, 6, 30])
+
+        midplane = dict(built, definition="ConstructionPlaneMidplaneDefinition", point=[6, 6, 10], built_on=[
+            {"entity_type": "BRepFace", "face_point": [6, 6, POST_TOP], "surface": "Plane"},
+            {"entity_type": "BRepFace", "face_point": [30, 10, 0], "surface": "Plane"}])
+        _, origin = self.mirrored_plane(midplane)
+        self.assertEqual([_at(c, 3.0) for c in origin], [6, 6, 12.5])
+
+    def test_a_construction_plane_that_cannot_be_followed_or_does_not_move(self):
+        face = {"entity_type": "BRepFace", "face_point": [6, 6, POST_TOP], "surface": "Plane"}
+        tilted = {"point": [6, 6, 30], "normal": [0, 0, 1], "token": "cp1", "entity_type": "ConstructionPlane",
+                  "definition": "ConstructionPlaneAtAngleDefinition", "built_on": [face]}
+        result, _ = self.mirrored_plane(tilted)
+        self.assertEqual(fixed_names(result), ["wall_mm"])
+        from_origin = dict(tilted, built_on=[{"origin": True}])
+        result, origin = self.mirrored_plane(from_origin)
+        self.assertEqual((result.fixed, origin), ([], [6, 6, 30]))
+
+    def test_a_turning_axis_on_a_moving_edge_follows_it_and_so_does_a_pick_on_the_copy(self):
+        axis = {"point": [6, 4, POST_TOP], "dir": [1, 0, 0], "entity_type": "BRepEdge",
+                "edge_points": [[6, 4, POST_TOP]]}
+        fillet = _item(4, "Fillet1", "FilletFeature", {
+            "sets": [_edges_set("constant", [[6, 0, 2 * POST_TOP - 10]], radius=1.0, continuity="tangent")]})
+        result = run(post_capture(_circular(3, axis), fillet))
+        self.assertEqual(result.fixed, [])
+        (pattern,) = steps_of(result.recipe, "pattern")
+        self.assertEqual([_at(c, 3.0) for c in pattern["polar"]["axisPoint"]], [6, 4, 25])
+        self.assertEqual([_at(c, 3.0) for c in steps_of(result.recipe, "round")[0]["edges"]["near"][0]], [6, 0, 40])
+
+    def test_a_turning_axis_that_cannot_be_placed_or_is_an_origin_axis(self):
+        lost = {"point": [6, 4, POST_TOP], "dir": [1, 0, 0], "entity_type": "BRepEdge", "edge_points": [[90, 90, 90]]}
+        origin = {"point": [6, 4, POST_TOP], "dir": [1, 0, 0], "origin": True}
+        for label, axis, expected in (("lost edge", lost, ["wall_mm"]), ("origin axis", origin, [])):
+            with self.subTest(label):
+                result = run(post_capture(_circular(3, axis)))
+                self.assertEqual(fixed_names(result), expected)
+                self.assertEqual(steps_of(result.recipe, "pattern")[0]["polar"]["axisPoint"], [6, 4, POST_TOP])
+
+    def test_the_axis_of_a_round_wall_stays_while_it_only_grows_taller(self):
+        axis = {"point": [6, 6, 10], "dir": [0, 0, 1], "entity_type": "BRepFace", "surface": "Cylinder",
+                "face_point": [8, 6, 15]}
+        boss = _item(2, "Post", "ExtrudeFeature", {
+            "operation": "join", "profiles": [{"sketch": "Post", "frame": dict(FLAT, origin=[0, 0, 10]), "loops": [
+                {"outer": True, "curves": [{"kind": "circle", "center": [6, 6], "radius": 2.0}]}]}],
+            "start": {"kind": "profilePlane"}, "extent_type": "one",
+            "side_one": {"kind": "distance", "distance": 10.0, "taper_deg": 0.0}, "side_two": None,
+            "symmetric": None, "thin": False, "participants": [], "end_offset": 10.0,
+            "params": {"side_one.distance": param("d20", "wall_mm * 5", 10.0)}})
+        capture = post_capture(_circular(3, axis))
+        capture["items"][1] = boss
+        result = run(capture)
+        self.assertEqual((fixed_names(result), steps_of(result.recipe, "pattern")[0]["polar"]["axisPoint"]),
+                         ([], [6, 6, 10]))
+        for label, wall in (("a wall that is not on any step", dict(axis, face_point=[50, 50, 15])),):
+            with self.subTest(label):
+                capture = post_capture(_circular(3, wall))
+                capture["items"][1] = boss
+                self.assertEqual(fixed_names(run(capture)), ["wall_mm"])
+
+
+class BodyMirrorOverRangesTest(unittest.TestCase):
+    """The body mirror needs the part on one side of the plane at every size, not only at the measured ones."""
+
+    PLATE_BOX = {"min": [0, 0, 0], "max": [60, 20, POST_TOP]}
+
+    def result(self, plane_z, *middle):
+        pocket = _extrude(3, "Pocket", "cut", {"origin": [0, 0, 10], "x": [1, 0, 0], "y": [0, -1, 0], "z": [0, 0, -1]},
+                          (20, 5, 30, 15), 8.0, {"side_one.distance": param("d30", "wall_mm * 4", 8.0)})
+        plane = {"point": [0, 0, plane_z], "normal": [0, 0, 1], "origin": True}
+        capture = post_capture(pocket, *middle, _mirror(4 + len(middle), plane, "bodies", True, self.PLATE_BOX))
+        return translate(capture, size_table=table_of(capture, TICKED))
+
+    def test_a_cut_a_size_can_push_across_the_plane_marks_that_size(self):
+        near = self.result(0.0)
+        self.assertEqual(fixed_names(near), ["wall_mm"])
+        self.assertIn("Mirror1", near.fixed[0]["reason"])
+        self.assertEqual(fixed_names(self.result(-20.0)), [])
+
+    def test_a_step_the_check_cannot_measure_marks_the_sizes_it_reads(self):
+        grid = _grid(4, [2], 24.0, params={"distance_one": param("d21", "hole_pitch_mm", 24.0)})
+        result = self.result(-20.0, grid)
+        self.assertEqual(fixed_names(result), sorted([CUBE, "wall_mm"]))
+
+
+if __name__ == "__main__":
+    unittest.main()

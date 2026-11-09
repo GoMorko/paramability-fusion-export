@@ -4,12 +4,16 @@ The inputs and numbers are read with the timeline marker just before the item. T
 transform of every copy) exist only once the feature is computed, so they are read with the marker just after it.
 The elements are required: when the collection cannot be read the item gets a read_error, because an empty list
 would look like a pattern with every copy suppressed.
+
+The mirror plane and the circular pattern axis also say what they are (origin, face, edge, construction geometry and
+what it is built on; see read_reference.py), so the translator can tell whether sizes move them.
 """
 from . import read_geometry as geo
 from . import read_solid
 from .placement import from_assembly
 from .param_refs import Params, with_params
 from .read_finish import strict_items
+from .read_reference import add_reference
 
 _ENTITY_TYPES = [
     ("feature", "features"),
@@ -136,10 +140,18 @@ def rectangular_before(feature, ctx):
                        .add("distance_two", lambda: feature.distanceTwo).found)
 
 
+def _axis_record(entity, ctx):
+    """The pattern axis with what it is (face, edge, construction axis ...) when the axis could be read."""
+    record = read_solid.axis_record(entity, ctx)
+    if isinstance(record, dict) and "dir" in record:
+        add_reference(record, geo.native_input(entity, ctx), ctx)
+    return record
+
+
 def circular_before(feature, ctx):
     data = _common(feature)
     data.update({
-        "axis": geo.safe(lambda: read_solid.axis_record(feature.axis, ctx), {"kind": "other"}),
+        "axis": geo.safe(lambda: _axis_record(feature.axis, ctx), {"kind": "other"}),
         "quantity": _number(feature.quantity, 1),
         "total_angle_deg": geo.angle(feature.totalAngle),
         "symmetric": geo.safe(lambda: bool(feature.isSymmetric), False),
@@ -159,6 +171,7 @@ def _plane_record(entity, ctx):
     record = from_assembly(geo.mark_foreign(geo.plane_of(entity), entity, ctx), entity, ctx)
     if isinstance(record, dict):
         record.update(read_solid.construction_token(entity))
+        add_reference(record, entity, ctx)
     return record
 
 
