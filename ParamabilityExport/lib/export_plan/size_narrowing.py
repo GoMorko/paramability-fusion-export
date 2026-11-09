@@ -1,11 +1,14 @@
-"""Shorten the range of a size that Fusion cannot build at its checked value. Pure: no Fusion imports.
+"""Find how far each size can move each way in Fusion. Pure: no Fusion imports.
 
-A size check goes to the end of the range. When Fusion cannot build the part there, the check is tried again at
-smaller steps toward the current value (half way, then a quarter, then an eighth of the way). The highest value that
-builds becomes the new end of the range and the new check; only a size with no building value stays fixed.
+A size check goes to one end of the range (the top, or the bottom when the top is the current value). When Fusion
+cannot build the part there, the check is tried again at smaller steps toward the current value (half way, then a
+quarter, then an eighth of the way); the first value that builds becomes that end of the range and the new check.
+When none builds, the current value becomes that end. The other end is then tried the same way: with a STEP when the
+check had to move there, else as a rebuild only. A size that builds at no other value either way stays fixed.
 
-`run_try(check, number, total, description)` runs one check row (`size_checks.check_at`) and returns its RowExport
-result; it raises to stop the export.
+`run(size, values, step, description)` sets `size` to each value in turn (rows of `size_checks.check_at`, with a
+STEP when `step`), stops after the first that builds and returns the RowExport results of the rows it ran; it raises
+to stop the export.
 """
 import math
 
@@ -52,46 +55,83 @@ def _amount(value, size):
 
 
 class Narrowing:
-    """What `narrow_failed` found: the checks and results with the narrowed ones replaced, `narrowed` (one dict per
-    size whose range was shortened), `tries` ({size: [{'value', 'built'}]} for every size tried again) and `sizes`
-    (the size dicts with the new range ends)."""
+    """What `narrow_failed` found: the checks and results with the moved ones replaced, `narrowed` (one dict per end
+    of a range that was shortened), `tries` ({size: [{'value', 'built'}]} for every value tried after a failure or at
+    the other end), `sizes` (the size dicts with the new range ends) and `failed_ends` ({Fusion name: [values]} of
+    the sizes that build at no other value, for the reason they stay fixed)."""
 
     def __init__(self, checks, results, sizes):
         self.checks, self.results, self.sizes = list(checks), list(results), list(sizes)
-        self.narrowed, self.tries = [], {}
+        self.narrowed, self.tries, self.failed_ends = [], {}, {}
 
     def ranges(self):
-        """{Fusion name: (min, max)} of the shortened sizes, for `SizeTable.with_narrowed`."""
+        """{Fusion name: (min, max)} of the shortened sizes, as the checks saw them."""
         return {n["param"]: (n["min"], n["max"]) for n in self.narrowed}
 
+    def moved_ends(self, table):
+        """{Fusion name: (min, max)} for `SizeTable.with_narrowed`: only the ends found here move, the other end stays
+        as `table` has it, so the translator still reports the limits it sets itself."""
+        out = {}
+        for n in self.narrowed:
+            size = table.sizes.get(table.size_name(n["param"])) or {}
+            lo, hi = out.get(n["param"], (size.get("min", n["min"]), size.get("max", n["max"])))
+            out[n["param"]] = (n["to"], hi) if n["side"] == "min" else (lo, n["to"])
+        return out
 
-def narrow_failed(checks, results, sizes, run_try, labels):
-    """Try the checks that did not build at smaller steps. Returns a `Narrowing`.
+
+def _same(a, b):
+    return abs(a - b) <= _SAME
+
+
+def narrow_failed(checks, results, sizes, run, labels):
+    """Try both ends of each checked size. Returns a `Narrowing`.
 
     sizes: the size dicts the checks came from (`size_offers.sizes_for_checks`, with `kind`, `typed_min` and
     `typed_max`). labels: {size name: text for the person}.
     """
     by_param = {s["param"]: s for s in sizes}
-    plan = {i: retry_values(by_param[c["param"]], c["value"])
-            for i, (c, r) in enumerate(zip(checks, results)) if retryable(r) and c["param"] in by_param}
     out = Narrowing(checks, results, sizes)
-    total, number = sum(len(v) for v in plan.values()), 0
-    for index, values in plan.items():
-        check, failure = checks[index], results[index]
-        size = by_param[check["param"]]
+    for index, check in enumerate(checks):
+        size = by_param.get(check["param"])
+        if size is None:
+            continue
         label = labels.get(size["size"], size["size"])
-        tried = out.tries.setdefault(size["size"], [])
-        for value in values:
-            number += 1
-            retry = check_at(size, value, sizes)
-            result = run_try(retry, number, total, "%s at %s" % (label, _amount(value, size)))
-            tried.append({"value": value, "built": not result.get("error")})
-            if not result.get("error"):
-                out.checks[index], out.results[index] = retry, result
-                _record(out, size, check["value"], value, label, failure)
-                number += len(values) - len(tried)
-                break
+        moves = _end(out, index, size, check["value"], results[index], run, label, step=True)
+        other = size["max"] if check["value"] < size["value"] else size["min"]
+        if not _same(other, size["value"]):
+            moves = _end(out, index, size, other, None, run, label, step=not moves) or moves
+        if not moves:
+            ends = [check["value"]] + ([other] if not _same(other, size["value"]) else [])
+            out.failed_ends[size["param"]] = ends
+            out.narrowed = [n for n in out.narrowed if n["param"] != size["param"]]
     return out
+
+
+def _end(out, index, size, end, result, run, label, step):
+    """Settle one end of a size's range. `result` is the check already run at `end`, or None to try `end` first.
+    Returns True when the part builds at `end` or at a value tried toward the current one, which then ends the range
+    (and becomes the check with `step`); else the current value ends the range."""
+    if result is not None and not result.get("error"):
+        return True
+    size = next(s for s in out.sizes if s["param"] == size["param"])
+    values = [end] if result is None else []
+    if result is None or retryable(result):
+        values += retry_values(size, end)
+    found = run(size, values, step, "%s at %s" % (label, _amount(values[0], size))) if values else []
+    tries = out.tries.setdefault(size["size"], [])
+    failure = result
+    for value, got in zip(values, found):
+        tries.append({"value": value, "built": not got.get("error")})
+        if got.get("error"):
+            failure = failure or got
+            continue
+        if step:
+            out.checks[index], out.results[index] = check_at(size, value, out.sizes), got
+        if not _same(value, end):
+            _record(out, size, end, value, label, failure or {})
+        return True
+    _record(out, size, end, size["value"], label, failure or {})
+    return False
 
 
 def _record(out, size, failed, value, label, failure):
@@ -99,8 +139,7 @@ def _record(out, size, failed, value, label, failure):
     lo, hi = (size["min"], value) if side == "max" else (value, size["max"])
     items = (failure.get("detail") or {}).get("items") or ()
     sentence = narrowed_sentence(label, side, _amount(value, size), _amount(failed, size),
-                                 typed=bool(size.get("typed_" + ("max" if side == "max" else "min"))),
-                                 item=items[0] if items else "")
+                                 typed=bool(size.get("typed_" + side)), item=items[0] if items else "")
     out.narrowed.append({"param": size["param"], "size": size["size"], "side": side, "from": failed, "to": value,
                          "min": lo, "max": hi, "items": list(items), "note": sentence})
     out.sizes = [dict(s, min=lo, max=hi) if s["param"] == size["param"] else s for s in out.sizes]

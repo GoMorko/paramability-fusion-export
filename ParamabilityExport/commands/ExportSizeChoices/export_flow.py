@@ -66,5 +66,5 @@ def run_export(design, parameters, form):
         error_box("The export stopped. Nothing was saved.")
     finally:
         export_common.warn_unrestored(job)
-        if marker is not None and not put_back(design.timeline, marker["position"]):
+        if marker is not None and not put_back(design.timeline, marker):
             message_box(not_put_back_message(marker), error=True)

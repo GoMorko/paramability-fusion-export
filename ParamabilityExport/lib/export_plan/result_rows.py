@@ -3,9 +3,10 @@
 The view is built from the manifest and report that plan_single_export returned, and the size table of the export.
 """
 from .dialog_rows import range_text
-from .messages import MAX_LISTED_FIXED, recipe_saved_message
+from .messages import listed_lines, recipe_saved_message
 
 MATCHES, NOT_CHECKED, KEPT_FIXED, NOT_USED = "matches Fusion", "not checked", "kept fixed", "not used"
+DOUBTFUL = "may be unexpected"
 
 
 def _size_rows(table, report):
@@ -13,6 +14,7 @@ def _size_rows(table, report):
     shortened or a smallest value it raised (so a picked pattern copy stays) is shown that way."""
     sizes = report["sizes"]
     unchecked = set(sizes.get("unchecked") or [])
+    loose = {f["name"] for f in sizes.get("loose") or []}
     raised = {r["name"]: r["min"] for r in sizes.get("raised") or []}
     narrowed = {n["size"]: (n["min"], n["max"]) for n in sizes.get("narrowed") or [] if "min" in n and "max" in n}
     by_size = {e.size_name: e for e in table.entries if e.size_name}
@@ -28,7 +30,7 @@ def _size_rows(table, report):
         rows.append({
             "name": entry.name if entry is not None else size_name,
             "range": range_text(size, size.get("min"), size.get("max")) if "min" in size else "",
-            "check": NOT_CHECKED if size_name in unchecked else MATCHES,
+            "check": DOUBTFUL if size_name in loose else NOT_CHECKED if size_name in unchecked else MATCHES,
         })
     return rows
 
@@ -48,11 +50,11 @@ def _left_out_rows(table, report, ticked):
 
 
 def _fixed_lines(report):
-    fixed = report["sizes"].get("fixed") or []
-    lines = ["%s: %s" % (f["name"], f["reason"]) for f in fixed[:MAX_LISTED_FIXED]]
-    if len(fixed) > MAX_LISTED_FIXED:
-        lines.append("and %d more (see report.json)." % (len(fixed) - MAX_LISTED_FIXED))
-    return lines
+    return listed_lines(report["sizes"].get("fixed") or [])
+
+
+def _loose_lines(report):
+    return listed_lines(report["sizes"].get("loose") or [])
 
 
 def _narrowed_lines(report):
@@ -70,7 +72,8 @@ def variables_line(manifest):
 def result_view(file_name, manifest, report, table, ticked):
     """Plain data for the result dialog, or None when the file holds no recipe (the message box tells that story).
 
-    Keys: saved (first sentence), size_title, rows ({name, range, check}), fixed (lines), narrowed (lines: sizes whose
+    Keys: saved (first sentence), size_title, rows ({name, range, check}), fixed (lines), loose (lines: sizes that
+    stay free but may not follow every step, with why), narrowed (lines: sizes whose
     range was shortened because Fusion could not build the part or a step would no longer meet it), variables,
     message (the whole story as plain text, for a message box).
     """
@@ -84,6 +87,7 @@ def result_view(file_name, manifest, report, table, ticked):
         "size_title": "%d %s ready for the form" % (count, "size" if count == 1 else "sizes"),
         "rows": rows + _left_out_rows(table, report, ticked),
         "fixed": _fixed_lines(report),
+        "loose": _loose_lines(report),
         "narrowed": _narrowed_lines(report),
         "variables": variables_line(manifest),
         "message": recipe_saved_message(manifest, file_name),

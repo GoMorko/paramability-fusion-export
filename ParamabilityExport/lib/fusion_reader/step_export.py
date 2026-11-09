@@ -82,6 +82,16 @@ def _require_copy_made(component):
         raise StepExportError("The copy of the part could not be made.")
 
 
+def _left_behind(timeline, before):
+    """How many timeline items the copy added that are still there. 0 when the timeline could not be read before."""
+    if not before[0]:
+        return 0
+    try:
+        return max(0, timeline.count - before[0])
+    except Exception:
+        return 0
+
+
 def export_body_step(design, body, path, route=None):
     """Export body to path, as the design is at the timeline marker.
 
@@ -108,6 +118,11 @@ def export_body_step(design, body, path, route=None):
         _export_component(design, occurrence.component, path)
     finally:
         remove_temporary_copy(timeline, occurrence, before)
-        back = start is None or put_back(timeline, start["position"])
+        back = start is None or put_back(timeline, start)
     if not back:
         raise StepExportError("The timeline marker could not be moved back after the copy of the part.")
+    left = _left_behind(timeline, before)
+    if left:
+        raise StepExportError(
+            "The temporary copy of the part left %d %s in the timeline. Please delete %s by hand (Undo can help)."
+            % (left, "step" if left == 1 else "steps", "it" if left == 1 else "them"))

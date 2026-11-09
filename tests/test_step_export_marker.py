@@ -65,6 +65,23 @@ class MarkerInTheMiddleTest(unittest.TestCase):
             export_body_step(design, design.body(), "part.step")
         self.assertEqual((design.timeline.tokens(), design.timeline.markerPosition), (["s1", "e1", "f1"], 2))
 
+    def test_a_marker_at_the_end_goes_after_items_the_cleanup_left_and_they_are_reported(self):
+        design = Design(["s1", "e1"], marker=2)
+        body = design.body()
+        copy_to = body.copyToComponent
+
+        def copy_with_a_stuck_item(occurrence):
+            made = copy_to(occurrence)
+            design.timeline.insert_at_marker("stuck")
+            design.timeline.items[-1].entity.deleteMe = lambda: None
+            return made
+
+        body.copyToComponent = copy_with_a_stuck_item
+        with self.assertRaises(StepExportError) as raised:
+            export_body_step(design, body, "part.step")
+        self.assertIn("left 1 step", str(raised.exception))
+        self.assertEqual(design.timeline.markerPosition, len(design.timeline.items))
+
     def test_an_empty_copy_is_refused_before_writing(self):
         design = Design(["s1", "e1", "f1"], marker=2)
         body = design.body()

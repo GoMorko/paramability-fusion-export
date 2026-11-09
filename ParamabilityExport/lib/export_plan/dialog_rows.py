@@ -26,7 +26,10 @@ _TYPED = re.compile(r"^\s*([-+]?[0-9.,]+)\s*([a-z]*)\s*$", re.I)
 _AMBIGUOUS_COMMA = re.compile(r"^[-+]?[1-9][0-9]*,[0-9]{3}$")
 # Typed ranges are compared with the number now at the precision the cells show.
 RANGE_SLACK = 1e-4
-_REASON_CHANGES = re.compile(r"\bit (?:changes|moves) ([^.]+)\.", re.I)
+_REASON_CHANGES = re.compile(r"\bit (changes|moves) ([^.,]+)[.,]", re.I)
+KEEP_DOUBTFUL_TEXT = "Keep doubtful sizes fixed"
+KEEP_DOUBTFUL_TIP = ("A size that the export cannot follow in every step stays a fixed number, instead of a size "
+                     "marked \"may give unexpected results\".")
 
 
 def columns(used_by=False):
@@ -96,7 +99,7 @@ def short_reason(reason):
     """A few words for the table: 'changes a sketch' from the full reason."""
     found = _REASON_CHANGES.search(reason or "")
     if found:
-        return "changes " + found.group(1).strip()
+        return "%s %s" % (found.group(1).lower(), found.group(2).strip())
     first = (reason or "").split(". ")[0].strip().rstrip(".")
     return first[:1].lower() + first[1:] if len(first) <= 30 else "see below"
 
@@ -107,8 +110,11 @@ def state_of(offer, ticked):
     return SIZE if ticked else KEEP
 
 
-def status_text(offer, ticked):
+def status_text(offer, ticked, keep_doubtful=False):
+    """What the row becomes. A doubtful size (`offer["doubt"]`) says so, or is fixed with `keep_doubtful`."""
     state = state_of(offer, ticked)
+    if state == SIZE and offer.get("doubt"):
+        return "fixed, " + short_reason(offer["doubt"]) if keep_doubtful else "size, may be unexpected"
     if state == SIZE:
         return "size"
     if state == KEEP:
@@ -122,13 +128,13 @@ def default_range_texts(offer):
     return cell_text(offer, offer["min"]), cell_text(offer, offer["max"])
 
 
-def row_cells(offer, ticked, lo_text=None, hi_text=None):
+def row_cells(offer, ticked, lo_text=None, hi_text=None, keep_doubtful=False):
     """What one row shows: now, status, min, max texts and whether the tick and the range cells can be used."""
     plain = offer["state"] in (SIZE, KEEP)
     default_lo, default_hi = default_range_texts(offer) if plain else ("", "")
     return {
         "now": offer["now"],
-        "status": status_text(offer, ticked),
+        "status": status_text(offer, ticked, keep_doubtful),
         "min": default_lo if lo_text is None else lo_text,
         "max": default_hi if hi_text is None else hi_text,
         "tick_enabled": bool(offer["enabled"]),
@@ -172,6 +178,8 @@ def details_html(offer, ticked, lo_text=None, hi_text=None):
         lines.append("Size in Paramability from %s to %s%s." % (html.escape(lo), html.escape(hi), unit))
     else:
         lines.append("Stays a fixed number. Tick it to make it a size.")
+    if offer.get("doubt"):
+        lines.append(html.escape(offer["doubt"]))
     return "<br>".join(lines)
 
 

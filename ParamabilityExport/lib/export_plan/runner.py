@@ -12,16 +12,18 @@ class ExportCancelled(Exception):
 
 
 class RowExport:
-    """One export run over a list of rows.
+    """Runs of size rows over one design.
 
     store: parameter store (see apply.apply_row_values, plus saved_expressions and current_expressions).
     units: {parameter name: Fusion unit string}.
     export_step: callable(path) writing the STEP of the picked body for the current design state. A row with
     `"step": False` only recomputes: export_step is called with None, expects no file, and the result has no STEP.
-    current_row is the name of the row being exported while export_step runs.
-    Before the first row the run measures a baseline (`apply.measure_baseline`): a design that already has warnings or
-    errors elsewhere still gets its rows checked, against what it did before any change.
-    After run(), restore_failures lists parameters that could not be put back, whatever the outcome.
+    current_row is the name of the row being exported while export_step runs, current_key its `key` (the name when
+    the row has none); a name is cut to the manifest limit, so use the key to tell rows apart.
+    Before its first row the job measures a baseline (`apply.measure_baseline`) and notes the parameters: a design
+    that already has warnings or errors elsewhere still gets its rows checked, against what it did before any change.
+    Later runs of the same job reuse both, and every run puts the parameters back at its end. restore_failures lists
+    the parameters that could not be put back by any run, whatever the outcome.
     """
 
     def __init__(self, store, units, export_step):
@@ -29,27 +31,33 @@ class RowExport:
         self.units = units
         self.export_step = export_step
         self.current_row = ""
+        self.current_key = ""
         self.restore_failures = []
+        self._saved = None
+        self._baseline = None
+        self._total = 0
 
-    def run(self, rows, tmpdir, progress, tolerate_build_errors=False):
+    def run(self, rows, tmpdir, progress, tolerate_build_errors=False, until_built=False):
         """Return [{'name', 'values', 'step_file'}]. progress(index, total, name) returns False to cancel.
 
         With tolerate_build_errors a row Fusion cannot build gives {'name', 'values': None, 'step_file': None,
         'error': sentence, 'detail': why} and the run goes on (`why` is RowBuildError.detail). The next row must
-        then set every parameter it needs.
+        then set every parameter it needs. With until_built the run stops after the first row that builds, so the
+        results can be fewer than the rows.
         A row without a STEP gives 'step_file': None as well.
         """
-        saved = self.store.saved_expressions()
+        if self._saved is None:
+            self._saved = self.store.saved_expressions()
         try:
-            baseline = measure_baseline(self.store)
+            if self._baseline is None:
+                self._baseline = measure_baseline(self.store)
             results = []
             count = len(rows)
-            total = 0
             for index, row in enumerate(rows, start=1):
                 if not progress(index, count, row["name"]):
                     raise ExportCancelled()
                 try:
-                    values = apply_row_values(self.store, self.units, row["values"], baseline)
+                    values = apply_row_values(self.store, self.units, row["values"], self._baseline)
                 except RowBuildError as exc:
                     if tolerate_build_errors:
                         results.append({"name": row["name"], "values": None, "step_file": None, "error": str(exc),
@@ -57,19 +65,23 @@ class RowExport:
                         continue
                     raise RowBuildError(f"Size \"{row['name']}\": {exc}", exc.detail) from exc
                 self.current_row = row["name"]
+                self.current_key = row.get("key", row["name"])
                 if row.get("step") is False:
                     self.export_step(None)
                     results.append({"name": row["name"], "values": values, "step_file": None})
-                    continue
-                path = os.path.join(tmpdir, f"{index:02d}.step")
-                self.export_step(path)
-                if not os.path.isfile(path):
-                    raise StepExportError(f"Fusion did not write the STEP file for size \"{row['name']}\".")
-                size = os.path.getsize(path)
-                total += size
-                check_step_size(f"Size \"{row['name']}\"", size)
-                check_total_size(total)
-                results.append({"name": row["name"], "values": values, "step_file": path})
+                else:
+                    path = os.path.join(tmpdir, f"{index:02d}.step")
+                    self.export_step(path)
+                    if not os.path.isfile(path):
+                        raise StepExportError(f"Fusion did not write the STEP file for size \"{row['name']}\".")
+                    size = os.path.getsize(path)
+                    self._total += size
+                    check_step_size(f"Size \"{row['name']}\"", size)
+                    check_total_size(self._total)
+                    results.append({"name": row["name"], "values": values, "step_file": path})
+                if until_built:
+                    break
             return results
         finally:
-            self.restore_failures = restore_parameters(self.store, saved)
+            failed = restore_parameters(self.store, self._saved)
+            self.restore_failures = list(dict.fromkeys(self.restore_failures + failed))

@@ -35,6 +35,12 @@ class Fusion:
                        height=number(e["height"]))
 
 
+def states(values, results, reads):
+    """(values, result, read) per row; `reads` were taken at the rows that built, in order."""
+    pending = list(reads)
+    return [(v, r, None if r.get("error") else pending.pop(0)) for v, r in zip(values, results)]
+
+
 def run(fusion, probe, sizes, tmp, unchecked=()):
     """Phase 1 and phase 2 as the export runs them. Returns (checks, rows, results of the extra rows)."""
     checks, _ = plan_checks(sizes)
@@ -47,12 +53,12 @@ def run(fusion, probe, sizes, tmp, unchecked=()):
 
     job = RowExport(fusion.store, UNITS, step)
     results = job.run([c["row"] for c in checks], tmp, lambda *a: True, tolerate_build_errors=True)
-    probe.add_checks(checks, results, reads)
-    rows = probe.probe_rows(sizes, checks, results, list(unchecked))
+    probe.add_states(states([{c["param"]: c["value"]} for c in checks], results, reads))
+    rows = probe.probe_rows(sizes, list(unchecked))
     tried_reads = []
     tried = RowExport(fusion.store, UNITS, lambda path: tried_reads.append(probe.read_now()))
     tried_results = tried.run(rows, "", lambda *a: True, tolerate_build_errors=True)
-    probe.add_tried(tried_results, tried_reads)
+    probe.add_states(states([{p: r["state"][p] for p in r["varied"]} for r in rows], tried_results, tried_reads))
     return checks, rows, tried_results
 
 
@@ -94,14 +100,21 @@ class SizeProbeTest(unittest.TestCase):
         probe = self.start()
         checks, _ = plan_checks(flat)
         results = [{"name": "height", "values": {}, "step_file": "x"}]
-        probe.add_checks(checks, results, [read_at()])
-        self.assertEqual(probe.probe_rows(flat, checks, results, []), [])
+        probe.add_states(states([{c["param"]: c["value"]} for c in checks], results, [read_at()]))
+        self.assertEqual(probe.probe_rows(flat, []), [])
+
+    def test_an_end_a_state_already_tried_gets_no_row(self):
+        probe = self.start()
+        sizes = [s for s in self.sizes if s["param"] == "off"]
+        probe.add_states([({"off": sizes[0]["min"]}, {"name": "off"}, read_at())])
+        rows = probe.probe_rows(sizes, ["off"])
+        self.assertEqual([r["name"] for r in rows], ["off (max)"])
 
     def test_an_unchecked_size_behind_a_sketch_gets_both_ends(self):
         probe = self.start()
         sizes = [s for s in self.sizes if s["param"] == "off"]
         results = []
-        rows = probe.probe_rows(sizes, [], results, ["off"])
+        rows = probe.probe_rows(sizes, ["off"])
         self.assertEqual([r["name"] for r in rows], ["off (min)", "off (max)"])
 
     def test_a_size_left_without_rows_stays_fixed_with_its_reason(self):

@@ -182,6 +182,32 @@
         "kind": {
           "const": "recipe"
         },
+        "loose": {
+          "description": "Sizes the writer could not follow fully. They stay free sizes and the app marks each with its reason as a warning.",
+          "items": {
+            "properties": {
+              "name": {
+                "description": "Name of a recipe size that is a free size. The writer could not follow it fully, so the app marks it.",
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "reason": {
+                "description": "Short plain sentence on why the size may give unexpected results.",
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "reason"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
         "name": {
           "maxLength": 120,
           "minLength": 1,

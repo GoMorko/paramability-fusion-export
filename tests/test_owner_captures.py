@@ -101,6 +101,29 @@ class OwnerCaptureTest(unittest.TestCase):
                          sorted([(PROBE_TICKED[0], 2.05), (PROBE_TICKED[3], 20.52), (PROBE_TICKED[6], 44.98)]))
         self.assertEqual(check_recipe(result.recipe), [])
 
+    def test_with_the_dialog_ranges_the_filter_box_sizes_stay_free_and_its_counts_are_raised(self):
+        path = os.path.join(REPORTS, PACKAGE_WITH_PROBE)
+        if not os.path.exists(path):
+            self.skipTest("the owner's package is not on this machine")
+        with zipfile.ZipFile(path) as package:
+            report = json.loads(package.read("report.json"))
+        capture = report["capture"]
+        params = capture["parameters"]
+        table = size_table.build(params["user"], PROBE_TICKED, params["model"], capture.get("design_units", "mm"))
+        # The dialog sends the range of every ticked row, also when it is the default one.
+        ranges = {n: (table.sizes[table.size_name(n)]["min"], table.sizes[table.size_name(n)]["max"])
+                  for n in PROBE_TICKED}
+        table = size_table.build(params["user"], PROBE_TICKED, params["model"], capture.get("design_units", "mm"),
+                                 ranges=ranges)
+        motion = probe_motion.build(probe_view(capture), table, report["probe"]["states"])
+        result = translate(capture, size_table=table, motion=motion, loose=True)
+        # The pipe offset of the lid moves only an outline that cannot follow it, so no formula reads it.
+        self.assertEqual(([f["name"] for f in result.fixed], result.loose),
+                         (["FilterBox__PipeBottom_offsetFromCenter_mm"], []))
+        self.assertEqual(sorted((r["name"], r["min"]) for r in result.raised),
+                         sorted([(PROBE_TICKED[0], 1.01), (PROBE_TICKED[2], 1.01)]))
+        self.assertEqual(len([n for n, size in result.recipe["sizes"].items() if "value" in size]), 6)
+
 
 if __name__ == "__main__":
     unittest.main()

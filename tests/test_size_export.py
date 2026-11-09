@@ -138,6 +138,21 @@ class WriterTest(unittest.TestCase):
         self.assertEqual(written["fixed"], [{"name": "a", "reason": "Because."}])
 
 
+class SharedRunTest(unittest.TestCase):
+    def test_runs_of_one_job_share_the_baseline_and_a_run_can_stop_at_the_first_row_that_builds(self):
+        store = FakeStore({"width": "20 mm"}, bad_when=lambda e: e["width"] != "20 mm" and e["width"] != "30 mm")
+        job = RowExport(store, {"width": "mm"}, lambda path: None)
+        rows = [{"name": "w%d" % w, "values": {"width": float(w)}, "step": False} for w in (40, 30, 25)]
+        first = job.run(rows[:1], "", lambda *a: True, tolerate_build_errors=True)
+        recomputes = store.recomputes
+        tried = job.run(rows, "", lambda *a: True, tolerate_build_errors=True, until_built=True)
+        self.assertTrue(first[0]["error"])
+        self.assertEqual([bool(r.get("error")) for r in tried], [True, False])
+        # One recompute per row and one for the restore: no second baseline.
+        self.assertEqual(store.recomputes - recomputes, 3)
+        self.assertEqual(store.exprs, {"width": "20 mm"})
+
+
 class ToleratedBuildErrorTest(unittest.TestCase):
     def test_a_row_that_does_not_build_is_reported_and_the_run_goes_on(self):
         original = {"width": "20 mm", "wall": "2 mm"}
@@ -175,18 +190,19 @@ class OffersTest(unittest.TestCase):
         self.assertFalse(lines["FilterBox_width_mm"]["enabled"])
         self.assertEqual(lines["FilterBox_width_mm"]["state"], "formula")
 
-    def test_a_parameter_a_joint_reads_is_greyed_out_before_the_export(self):
+    def test_a_parameter_a_joint_reads_is_offered_unticked_with_a_warning(self):
         params = [length("wall"), length("height"), length("spare")]
         model = [dict(name="d1", expression="wall", value=0.2, unit="mm", kind="derived",
                       dependency_parameters=["wall"], created_by={"kind": "joint"}),
                  dict(name="d2", expression="height + spare", value=0.2, unit="mm", kind="derived",
                       dependency_parameters=["height", "spare"], created_by={"kind": "feature"})]
         lines = {o["param"]: o for o in offers(initial_table(params, model), params)}
-        self.assertEqual((lines["wall"]["ticked"], lines["wall"]["enabled"]), (False, False))
-        self.assertIn("moves a joint", lines["wall"]["reason"])
+        self.assertEqual((lines["wall"]["ticked"], lines["wall"]["enabled"]), (False, True))
+        self.assertEqual(lines["wall"]["doubt"], "wall may give unexpected results: it moves a joint.")
         self.assertTrue(lines["height"]["ticked"] and lines["height"]["enabled"])
+        self.assertEqual(lines["height"]["doubt"], "")
 
-    def test_a_parameter_that_is_not_ticked_by_default_but_moves_a_joint_is_greyed_out_too(self):
+    def test_a_parameter_that_is_not_ticked_by_default_but_moves_a_joint_gets_the_warning_too(self):
         params = [length("wall"), length("spare")]
         params[1]["is_favorite"] = False
         model = [dict(name="d1", expression="wall", value=0.2, unit="mm", kind="derived",
@@ -194,7 +210,7 @@ class OffersTest(unittest.TestCase):
                  dict(name="d2", expression="spare", value=0.2, unit="mm", kind="derived",
                       dependency_parameters=["spare"], created_by={"kind": "joint"})]
         lines = {o["param"]: o for o in offers(initial_table(params, model), params)}
-        self.assertFalse(lines["spare"]["enabled"])
+        self.assertIn("moves a joint", lines["spare"]["doubt"])
         self.assertTrue(lines["wall"]["ticked"])
 
     def test_no_more_sizes_are_ticked_than_there_are_check_slots(self):

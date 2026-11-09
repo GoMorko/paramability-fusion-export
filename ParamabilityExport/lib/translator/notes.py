@@ -1,20 +1,19 @@
 """Plain sentences for the package notes. Each is at most 200 characters, with no dashes."""
+from ..package.text import clip, plain
 from .words import type_words
 
 MAX_NOTE = 200
 MAX_NAME = 60
-_DASHES = {chr(0x2014): "-", chr(0x2013): "-"}
 
 
-def _plain(text):
-    for dash, replacement in _DASHES.items():
-        text = text.replace(dash, replacement)
-    return " ".join(text.split())
+def fixed_reason(name, why):
+    """Why a size stays a fixed number: "<name> stays fixed: <why>."."""
+    return clip("%s stays fixed: %s." % (name, why), MAX_NOTE)
 
 
-def _cut(text, limit):
-    text = _plain(text)
-    return text if len(text) <= limit else text[: limit - 3].rstrip() + "..."
+def loose_reason(name, why):
+    """Why a size that stays free may not follow every step: "<name> may give unexpected results: <why>."."""
+    return clip("%s may give unexpected results: %s." % (name, why), MAX_NOTE)
 
 
 def recipe_note(step_count):
@@ -23,7 +22,7 @@ def recipe_note(step_count):
 
 def step_label(name, type_name):
     """'Emboss1 (emboss)', or whichever of the two is known, or an empty string."""
-    name = _cut(str(name or ""), MAX_NAME)
+    name = clip(str(name or ""), MAX_NAME)
     words = type_words(type_name) if type_name else ""
     return "%s (%s)" % (name, words) if name and words else (name or words)
 
@@ -32,14 +31,14 @@ def step_only_note(refusal):
     """Note for a part that could not be copied. `refusal` is the translator's {index, name, type, reason}; a refusal
     that carries its own `note` is written as it is."""
     if refusal.get("note"):
-        return _cut(refusal["note"], MAX_NOTE)
-    reason = _plain(str(refusal.get("reason") or "").strip())
+        return clip(refusal["note"], MAX_NOTE)
+    reason = plain(str(refusal.get("reason") or "").strip())
     label = step_label(refusal.get("name"), refusal.get("type"))
     if label:
         text = "Added as a fixed shape: %s could not be copied. %s" % (label, reason)
     else:
         text = "Added as a fixed shape: the part could not be copied. %s" % reason
-    return _cut(text, MAX_NOTE)
+    return clip(text, MAX_NOTE)
 
 
 def from_other_component_note(label):
@@ -89,13 +88,13 @@ _STUCK = {
 
 def stuck_reason(cause, sketch):
     """The reason a sketch value of `sketch` (a name, or empty) keeps its sizes fixed."""
-    return _STUCK.get(cause, _STUCK["unread"]) % (_cut(sketch, MAX_NAME) if sketch else "a sketch")
+    return _STUCK.get(cause, _STUCK["unread"]) % (clip(sketch, MAX_NAME) if sketch else "a sketch")
 
 
 def shrinks_reason(sketch):
-    return "an outline in %s would shrink to nothing" % (_cut(sketch, MAX_NAME) if sketch else "a sketch")
+    return "an outline in %s would shrink to nothing" % (clip(sketch, MAX_NAME) if sketch else "a sketch")
 
 
 def bends_reason(step, sketch):
     return "%s picks a point on a curved outline of %s that changes shape" % (
-        _cut(step or "a step", MAX_NAME), _cut(sketch, MAX_NAME) if sketch else "a sketch")
+        clip(step or "a step", MAX_NAME), clip(sketch, MAX_NAME) if sketch else "a sketch")

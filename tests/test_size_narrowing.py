@@ -9,12 +9,11 @@ from tests.fakes import FakeStore
 from tests.params_fixtures import CUBE, reader_dicts
 
 from lib.export_plan import recipe_export
-from lib.export_plan.apply import RowBuildError
 from lib.export_plan.messages import narrowed_notes
 from lib.export_plan.recipe_export import plan_single_export
 from lib.export_plan.result_rows import result_view
 from lib.export_plan.runner import ExportCancelled, RowExport
-from lib.export_plan.size_checks import build_failures, plan_checks, read_checks
+from lib.export_plan.size_checks import build_failures, check_at, plan_checks, read_checks
 from lib.export_plan.size_narrowing import narrow_failed, retry_values
 from lib.export_plan.size_offers import sizes_for_checks
 from lib.params import size_table
@@ -40,24 +39,30 @@ def number(text):
 
 
 class Fusion:
-    """A design that builds while `wall` is at most `limit` and `gap` is at most `gap_limit`."""
+    """A design that builds while `wall` is between `low` and `limit` and `gap` is at most `gap_limit`."""
 
-    def __init__(self, limit, gap_limit=100.0):
-        self.store = FakeStore(START, bad_when=lambda e: number(e["wall"]) > limit or number(e["gap"]) > gap_limit)
-        self.exports = []
+    def __init__(self, limit, gap_limit=100.0, low=0.0):
+        self.store = FakeStore(START, bad_when=lambda e: not low <= number(e["wall"]) <= limit
+                               or number(e["gap"]) > gap_limit)
+        self.exports, self.calls = [], []
         self.tmp = tempfile.mkdtemp()
-        self.addresses = []
+        self.job = RowExport(self.store, UNITS, self._export)
+        self.sizes = []
 
-    def run_try(self, check, number_, total, description):
-        self.addresses.append((number_, total, description))
-        job = RowExport(self.store, UNITS, lambda path: self.exports.append(check["row"]["values"]["wall"]) or open(
-            path, "wb").close())
-        return job.run([check["row"]], self.tmp, lambda *a: True, tolerate_build_errors=True)[0]
+    def _export(self, path):
+        if path is not None:
+            self.exports.append(number(self.store.exprs["wall"]))
+            open(path, "wb").close()
+
+    def run(self, size, values, step, description, progress=lambda *a: True):
+        self.calls.append((size["param"], list(values), step, description))
+        rows = [dict(check_at(size, v, self.sizes)["row"], step=step) for v in values]
+        return self.job.run(rows, self.tmp, progress, tolerate_build_errors=True, until_built=True)
 
     def first_pass(self, size_list):
+        self.sizes = size_list
         checks, _ = plan_checks(size_list)
-        job = RowExport(self.store, UNITS, lambda path: open(path, "wb").close())
-        return checks, job.run([c["row"] for c in checks], self.tmp, lambda *a: True, tolerate_build_errors=True)
+        return checks, self.job.run([c["row"] for c in checks], self.tmp, lambda *a: True, tolerate_build_errors=True)
 
 
 class RetryValuesTest(unittest.TestCase):
@@ -76,7 +81,7 @@ class NarrowFailedTest(unittest.TestCase):
     def narrow(self, fusion, size_list=None, labels=LABELS):
         size_list = size_list or sizes()
         checks, results = fusion.first_pass(size_list)
-        return checks, results, narrow_failed(checks, results, size_list, fusion.run_try, labels)
+        return checks, results, narrow_failed(checks, results, size_list, fusion.run, labels)
 
     def test_a_size_that_builds_at_the_first_smaller_step_ends_its_range_there(self):
         fusion = Fusion(limit=2.0)
@@ -85,65 +90,88 @@ class NarrowFailedTest(unittest.TestCase):
         wall = out.narrowed[0]
         self.assertEqual((wall["side"], wall["to"], wall["min"], wall["max"]), ("max", 1.87, 0.625, 1.87))
         self.assertEqual(out.checks[0]["value"], 1.87)
-        self.assertTrue(out.results[0]["step_file"].endswith("01.step"))
+        self.assertTrue(out.results[0]["step_file"])
         self.assertEqual([s["max"] for s in out.sizes], [1.87, 8.0])
-        self.assertEqual(out.tries, {"wall": [{"value": 1.87, "built": True}]})
-        self.assertEqual(fusion.exports, [1.87])
+        self.assertEqual(out.tries["wall"], [{"value": 1.87, "built": True}, {"value": 0.625, "built": True}])
+        self.assertEqual(fusion.exports[-1:], [1.87])
         self.assertEqual(fusion.store.exprs, START)
+
+    def test_the_other_end_is_tried_without_a_step_and_narrowed_the_same_way(self):
+        fusion = Fusion(limit=100, low=0.9)
+        _, _, out = self.narrow(fusion)
+        wall = out.narrowed[0]
+        self.assertEqual((wall["side"], wall["to"], wall["min"], wall["max"]), ("min", 0.94, 0.94, 2.5))
+        self.assertEqual(out.checks[0]["value"], 2.5)
+        self.assertEqual([c[2] for c in fusion.calls], [False, False])
+        self.assertEqual(fusion.calls[0][1], [0.625, 0.94, 1.1, 1.172])
 
     def test_a_size_that_builds_only_at_the_second_step_is_narrowed_after_two_tries(self):
         fusion = Fusion(limit=1.6)
         _, _, out = self.narrow(fusion)
         self.assertEqual(out.narrowed[0]["to"], 1.56)
-        self.assertEqual([t["built"] for t in out.tries["wall"]], [False, True])
+        self.assertEqual([t["built"] for t in out.tries["wall"]], [False, True, True])
         self.assertEqual(out.ranges(), {"wall": (0.625, 1.56)})
 
-    def test_a_size_that_builds_at_no_step_stays_a_failure_for_the_fixed_list(self):
+    def test_a_size_that_cannot_grow_keeps_the_lower_half_of_its_range_with_the_check_there(self):
         fusion = Fusion(limit=1.3)
+        _, _, out = self.narrow(fusion)
+        self.assertEqual(out.ranges(), {"wall": (0.625, 1.25)})
+        self.assertEqual((out.checks[0]["value"], out.failed_ends), (0.625, {}))
+        self.assertIn("the range ends at 1.25 mm", out.narrowed[0]["note"])
+        self.assertEqual(fusion.exports[-1:], [0.625])
+
+    def test_a_size_that_builds_at_no_other_value_stays_a_failure_for_the_fixed_list(self):
+        fusion = Fusion(limit=1.25, low=1.25)
         checks, results, out = self.narrow(fusion)
-        self.assertEqual(out.narrowed, [])
-        self.assertEqual(len(out.tries["wall"]), 3)
-        self.assertEqual(fusion.exports, [])
+        self.assertEqual((out.narrowed, out.failed_ends), ([], {"wall": [2.5, 0.625]}))
+        self.assertEqual(len(out.tries["wall"]), 7)
         self.assertTrue(out.results[0].get("error"))
-        _, fixed = read_checks(out.checks, out.results, {}, {}, {"wall": "Wall thickness"})
-        self.assertIn("Wall thickness stays fixed: Fusion cannot build the part when it is 2.5", fixed[0]["reason"])
+        _, fixed, _ = read_checks(out.checks, out.results, {}, {}, {"wall": "Wall thickness"},
+                                  failed_ends=out.failed_ends)
+        self.assertEqual(fixed[0]["reason"], "Wall thickness stays fixed: Fusion cannot build the part when it is 2.5 "
+                                             "or 0.625, or any value closer to the current one: Fillet1 fails.")
         self.assertEqual(build_failures(checks, results, out.tries)[0]["tries"][0], {"value": 1.87, "built": False})
         self.assertEqual(fusion.store.exprs, START)
 
+    def test_only_the_moved_end_reaches_the_table(self):
+        _, _, out = self.narrow(Fusion(limit=2.0))
+        table = size_table.build([dict(name="wall", expression="1.25 mm", value=0.125, unit="mm", comment="",
+                                       is_favorite=True, kind="length")], ["wall"])
+        planned = table.with_minimums({"wall": 0.8})
+        self.assertEqual(out.moved_ends(planned), {"wall": (0.8, 1.87)})
+        self.assertEqual(out.moved_ends(table), {"wall": (0.625, 1.87)})
+
     def test_a_check_that_went_to_the_bottom_narrows_the_min(self):
         size_list = sizes(min=0.1, max=1.25)
-        fusion = Fusion(limit=100)
-        fusion.store = FakeStore(START, bad_when=lambda e: number(e["wall"]) < 0.5)
-        _, _, out = self.narrow(fusion, size_list)
+        _, _, out = self.narrow(Fusion(limit=100, low=0.5), size_list)
         wall = out.narrowed[0]
         self.assertEqual((wall["side"], wall["to"], wall["min"], wall["max"]), ("min", 0.68, 0.68, 1.25))
 
-    def test_a_row_that_builds_or_a_refused_expression_is_not_tried_again(self):
+    def test_a_refused_expression_is_not_tried_again_and_the_other_end_takes_the_check(self):
         fusion = Fusion(limit=100)
         checks, results, out = self.narrow(fusion)
-        self.assertEqual((out.narrowed, out.tries, fusion.addresses), ([], {}, []))
+        self.assertEqual(out.narrowed, [])
         refused = [dict(results[0], error="no", detail={"reason": "expression_refused"}), results[1]]
-        out = narrow_failed(checks, refused, sizes(), fusion.run_try, LABELS)
-        self.assertEqual(fusion.addresses, [])
-        self.assertIs(out.results[0], refused[0])
+        fusion.calls = []
+        out = narrow_failed(checks, refused, sizes(), fusion.run, LABELS)
+        self.assertEqual((fusion.calls[0][0], fusion.calls[0][1][0], fusion.calls[0][2]), ("wall", 0.625, True))
+        self.assertEqual((out.checks[0]["value"], out.ranges()["wall"]), (0.625, (0.625, 1.25)))
 
-    def test_two_failing_sizes_are_narrowed_each_and_the_progress_counts_the_skipped_tries(self):
+    def test_two_failing_sizes_are_narrowed_each_and_the_progress_names_the_try(self):
         fusion = Fusion(limit=2.0, gap_limit=6.0)
         _, _, out = self.narrow(fusion)
         self.assertEqual([(n["size"], n["to"]) for n in out.narrowed], [("wall", 1.87), ("gap", 6.0)])
-        self.assertEqual([(n, t) for n, t, _ in fusion.addresses], [(1, 6), (4, 6)])
-        self.assertEqual(fusion.addresses[0][2], "Wall thickness at 1.87 mm")
+        self.assertEqual(fusion.calls[0][3], "Wall thickness at 1.87 mm")
 
     def test_a_cancel_during_a_try_stops_the_run_and_puts_the_parameters_back(self):
         fusion = Fusion(limit=2.0)
         checks, results = fusion.first_pass(sizes())
 
-        def run_try(check, number_, total, description):
-            job = RowExport(fusion.store, UNITS, lambda path: None)
-            return job.run([check["row"]], fusion.tmp, lambda *a: False, tolerate_build_errors=True)[0]
+        def run(size, values, step, description):
+            return fusion.run(size, values, step, description, progress=lambda *a: False)
 
         with self.assertRaises(ExportCancelled):
-            narrow_failed(checks, results, sizes(), run_try, LABELS)
+            narrow_failed(checks, results, sizes(), run, LABELS)
         self.assertEqual(fusion.store.exprs, START)
 
     def test_the_note_says_what_happened_and_names_a_typed_max(self):
@@ -172,7 +200,7 @@ class NarrowedTableTest(unittest.TestCase):
         self.assertFalse(narrowed.typed_range(CUBE))
         self.assertEqual(narrowed.with_fixed({}).sizes[name]["max"], 27.0)
         kept = sizes_for_checks(narrowed, self.params)[0]
-        self.assertEqual((kept["min"], kept["max"], kept["typed_max"]), (9.0, 27.0, True))
+        self.assertEqual((kept["min"], kept["max"], kept["typed_max"]), (9.0, 27.0, False))
         rows, _ = plan.probe_rows([dict(kept, value=18.0)], {CUBE: 27.0}, {CUBE})
         self.assertEqual([r["name"] for r in rows], ["%s (min)" % name])
 

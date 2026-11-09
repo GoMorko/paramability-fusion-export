@@ -6,8 +6,9 @@ parameter's expression reads a size of the size table, the formula to write inst
 written as a number or `{ "expr": ... }`.
 
 When a value cannot follow its sizes (the formula does not translate, its unit or sign breaks inside the size range,
-or the step writes it as a plain number), the sizes it reads are recorded in `ctx.depends` and become fixed numbers
-everywhere. A value that depends on a size must never stay a number while the size stays free.
+or the step writes it as a plain number), it is written as its number and the sizes it reads are recorded in
+`ctx.depends`. The driver then fixes them everywhere, or keeps them free with a warning (`translate`, `loose`); a
+value that depends on a size never stays a number while that size stays free without one of the two.
 """
 import re
 

@@ -21,27 +21,47 @@ def at_end(marker):
     return marker is None or marker["position"] >= marker["count"]
 
 
-def put_back(timeline, position):
-    """Move the marker to `position` unless it is there already. Returns True when it reads `position` after.
+def put_back(timeline, marker):
+    """Move the marker back to where `marker` (`read_marker`) found it. Returns True when it reads there after.
 
-    At the end of the timeline `moveToEnd` is tried first. Never raises."""
+    A marker that was at the end goes to the end again (`moveToEnd`), also when the timeline has grown since: items
+    left behind by a step must not end up after it. A position (an int) is taken as it is. Never raises."""
+    if isinstance(marker, dict):
+        if at_end(marker):
+            return _to_end(timeline)
+        marker = marker["position"]
     try:
-        if timeline.markerPosition == position:
+        if timeline.markerPosition == marker:
+            return True
+        if marker == timeline.count:
+            return _to_end(timeline)
+    except Exception:
+        return False
+    try:
+        timeline.markerPosition = marker
+    except Exception:
+        pass
+    try:
+        return timeline.markerPosition == marker
+    except Exception:
+        return False
+
+
+def _to_end(timeline):
+    try:
+        if timeline.markerPosition == timeline.count:
             return True
     except Exception:
         return False
     try:
-        if position == timeline.count:
-            timeline.moveToEnd()
+        timeline.moveToEnd()
     except Exception:
-        pass
+        try:
+            timeline.markerPosition = timeline.count
+        except Exception:
+            pass
     try:
-        if timeline.markerPosition != position:
-            timeline.markerPosition = position
-    except Exception:
-        pass
-    try:
-        return timeline.markerPosition == position
+        return timeline.markerPosition == timeline.count
     except Exception:
         return False
 

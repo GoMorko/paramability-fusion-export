@@ -36,6 +36,11 @@ class ResultViewTest(unittest.TestCase):
                          [("wall", "not checked"), ("gap", "kept fixed"), ("pipe", "not used")])
         self.assertEqual(shown["fixed"], ["gap: gap stays fixed: no build."])
 
+    def test_a_loose_size_is_marked_and_listed_with_its_reason(self):
+        shown = view(loose=[{"name": "wall", "reason": "wall may give unexpected results: it moves a joint."}])
+        self.assertEqual(shown["rows"][0]["check"], "may be unexpected")
+        self.assertEqual(shown["loose"], ["wall: wall may give unexpected results: it moves a joint."])
+
     def test_a_raised_smallest_value_shows_in_the_range(self):
         shown = view(raised=[{"name": "wall", "min": 1.5, "reason": "wall starts at 1.5: ..."}])
         self.assertEqual(shown["rows"][0]["range"], "1.5 to 4 mm")
@@ -58,6 +63,11 @@ class ResultDialogTest(unittest.TestCase):
         self.assertEqual(command.cancelButtonText, "Close")
         self.assertEqual(inputs.itemById("pm_result_table").rowCount, 1 + len(shown["rows"]))
         self.assertIn("gap: why", inputs.itemById("pm_result_fixed_text").formattedText)
+        loose = view(loose=[{"name": "wall", "reason": "doubt"}])
+        result_dialog.build(fakes.FakeCommand(), loose)
+        command = fakes.FakeCommand()
+        result_dialog.build(command, loose)
+        self.assertIn("wall: doubt", command.commandInputs.itemById("pm_result_loose_text").formattedText)
         self.assertIn("4 parameters", inputs.itemById("pm_result_variables").formattedText)
 
 

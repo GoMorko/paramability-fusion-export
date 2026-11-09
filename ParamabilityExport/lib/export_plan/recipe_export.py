@@ -11,10 +11,10 @@ from ..package.manifest import (
 from ..translator import CaptureError, translate
 from ..translator.notes import (
     recipe_note, reader_failure_note, step_only_note, translate_failure_note, used_several_times_note)
-from .messages import dropped_note, fixed_note, narrowed_notes, sizes_note, unchecked_note
+from .messages import dropped_note, fixed_note, loose_note, narrowed_notes, sizes_note, unchecked_note
 
 MAX_RECIPE_BYTES = 8 * 1024 * 1024
-MAX_NOTES = 5  # the manifest limit; the last notes (not checked, not used) give way
+MAX_NOTES = 5  # the manifest limit; the last notes (shortened ranges, not used, not checked) give way
 _TOO_LARGE = {"index": None, "name": "", "type": "", "reason": "The recipe is too large to open."}
 _NOT_WRITTEN = {"index": None, "name": "", "type": "", "reason": "The steps could not be written."}
 
@@ -49,23 +49,33 @@ def _with_up_axis(capture, up_axis):
     return {**capture, "up_axis": up_axis}
 
 
-def _accepts_motion():
-    return "motion" in inspect.signature(translate).parameters
+def _translated(capture, size_table, motion, loose=True):
+    """`translate`, handing over the sketch motion and the loose mode when the translator takes them."""
+    taken = inspect.signature(translate).parameters
+    options = {}
+    if motion is not None and "motion" in taken:
+        options["motion"] = motion
+    if size_table is not None and "loose" in taken:
+        options["loose"] = loose
+    return translate(capture, size_table=size_table, **options)
 
 
-def _translated(capture, size_table, motion):
-    """`translate`, with the sketch motion handed over when the translator takes one."""
-    if motion is not None and _accepts_motion():
-        return translate(capture, size_table=size_table, motion=motion)
-    return translate(capture, size_table=size_table)
-
-
-def translate_capture(capture, up_axis, size_table=None, motion=None):
+def translate_capture(capture, up_axis, size_table=None, motion=None, loose=True):
     """The translator's result for a capture turned to the dialog's up axis. Raises what the translator raises.
 
     `motion` is what the size probe found about sketch values (`probe.motion`), or `probe.motion.OPTIMISTIC` for a
-    first look that fixes nothing for sketches."""
-    return _translated(_with_up_axis(capture, up_axis), size_table, motion)
+    first look that fixes nothing for sketches. With `loose` a size that some value cannot follow stays free with a
+    warning (`TranslateResult.loose`) instead of being fixed."""
+    return _translated(_with_up_axis(capture, up_axis), size_table, motion, loose)
+
+
+def with_translated_limits(table, result):
+    """`table` with the minimums a translation raised and the ranges it shortened (`TranslateResult.raised`,
+    `narrowed`), so that the checks are planned inside the ranges the recipe gives its sizes."""
+    raised = {r["name"]: r["min"] for r in getattr(result, "raised", None) or []}
+    shortened = {r["name"]: (r["min"], r["max"]) for r in getattr(result, "narrowed", None) or []}
+    table = table.with_minimums(raised) if raised else table
+    return table.with_narrowed(shortened) if shortened else table
 
 
 def free_sizes(recipe):
@@ -79,24 +89,32 @@ def _one_period(text):
     return text[:-1] if text.endswith("..") and not text.endswith("...") else text
 
 
-def _merge_fixed(size_table, *lists):
+def _merge_fixed(size_table, *lists, skip=(), only=None):
     """Manifest entries {'name', 'reason'} in order, the first entry per size wins, at most MAX_FIXED.
 
     Names in the lists are Fusion parameter names (or recipe size names). The entry holds the recipe size name; the
-    reason names the Fusion parameter when the two differ.
+    reason names the Fusion parameter when the two differ. Recipe names in `skip` are left out, and so is every name
+    outside `only` when it is given.
     """
-    out, seen = [], set()
+    out, seen = [], set(skip)
     for entries in lists:
         for entry in entries or []:
             name = entry.get("name")
             if not name:
                 continue
             made = size_table.fixed_entry(name, _one_period(entry.get("reason") or "Stays a fixed number."))
-            if made["name"] in seen:
+            if made["name"] in seen or (only is not None and made["name"] not in only):
                 continue
             seen.add(made["name"])
             out.append(made)
     return out[:MAX_FIXED]
+
+
+def _in_range(check, sizes):
+    """True when the check's value lies in the range the recipe gives its size."""
+    size = sizes.get(check["size"]) or {}
+    lo, hi = size.get("min", check["value"]), size.get("max", check["value"])
+    return lo - 1e-9 <= check["value"] <= hi + 1e-9
 
 
 def _dropped(size_table, recipe, fixed):
@@ -135,7 +153,8 @@ def _step_narrowed(size_table, result, free):
 
 def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
                        size_table=None, checks=None, fixed=None, unchecked=None, listing=None, motion=None,
-                       probe=None, build_failures=None, narrowed=None, marker=None):
+                       probe=None, build_failures=None, narrowed=None, marker=None, loose=None, loose_sizes=True,
+                       translated=None):
     """Return (manifest, files, report) for one body.
 
     A body inside a component is translated like a root body: its capture carries the place of the part in the
@@ -149,6 +168,10 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
       recipe keeps free go into the package.
     fixed: [{'name', 'reason'}] parameters the export itself fixed (measured), by Fusion name. The translator adds its
       own. The manifest lists them by recipe size name.
+    loose: [{'name', 'reason'}] sizes the export keeps free although it could not follow them fully (measured), by
+      Fusion name. The translator adds its own. The manifest lists those the recipe keeps free, by recipe size name.
+    loose_sizes: False makes the translator fix every size that some value cannot follow.
+    translated: the translator's result for these same inputs (`translate_capture`), when the caller has it already.
     unchecked: names of sizes that got no check, for the report.
     listing: the design's ParameterListing (params.listing). Its entries go into the manifest `parameters` of every
       package kind, so the Fusion parameters reach Paramability even when the shape stays fixed.
@@ -175,7 +198,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
     else:
         capture = _with_up_axis(capture, up_axis)
         try:
-            result = _translated(capture, size_table, motion)
+            result = translated or _translated(capture, size_table, motion, loose_sizes)
         except CaptureError as exc:
             error, note = exc, reader_failure_note()
         except Exception as exc:
@@ -188,10 +211,17 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         refusal = result.refusal
 
     free = free_sizes(result.recipe) if recipe_data is not None else []
+    recipe_sizes = (result.recipe.get("sizes") or {}) if recipe_data is not None else {}
     kept = [c for c in (checks or []) if c["size"] in free]
-    all_fixed, dropped = [], []
+    # A check below a minimum the translator raised, or past a range it shortened, cannot be used.
+    outside = [c["size"] for c in kept if not _in_range(c, recipe_sizes)]
+    kept = [c for c in kept if c["size"] not in outside]
+    unchecked = list(unchecked or []) + [n for n in outside if n not in (unchecked or [])]
+    all_fixed, all_loose, dropped = [], [], []
     if recipe_data is not None and size_table is not None:
         all_fixed = _merge_fixed(size_table, fixed, size_table.fixed, getattr(result, "fixed", None))
+        all_loose = _merge_fixed(size_table, loose, getattr(result, "loose", None),
+                                 skip={f["name"] for f in all_fixed}, only=set(free))
         dropped = _dropped(size_table, result.recipe, all_fixed)
 
     kept_narrowed = [n for n in narrowed or [] if n["size"] in free] + _step_narrowed(size_table, result, free)
@@ -214,7 +244,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
     if listing is not None:
         report["parameters"] = listing.report()
     if recipe_data is not None:
-        report["sizes"] = {"free": free, "fixed": all_fixed, "checks": [
+        report["sizes"] = {"free": free, "fixed": all_fixed, "loose": all_loose, "checks": [
             {"size": c["size"], "value": c["value"]} for c in kept], "unchecked": list(unchecked or []),
             "dropped": dropped, "build_failures": list(build_failures or [])}
         raised = [{"name": size_table.size_name(r["name"]), "min": r["min"], "reason": r["reason"]}
@@ -234,9 +264,11 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         notes = [first]
         if free:
             notes.append(sizes_note(len(free)))
-        notes.extend(narrowed_notes([n["note"] for n in kept_narrowed if n["note"]]))
+        if all_loose:
+            notes.append(loose_note([f["name"] for f in all_loose]))
         if all_fixed:
             notes.append(fixed_note([f["name"] for f in all_fixed]))
+        notes.extend(narrowed_notes([n["note"] for n in kept_narrowed if n["note"]]))
         if dropped:
             notes.append(dropped_note(dropped))
         if unchecked:
@@ -248,7 +280,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
             files[check_step_path(number)] = check["step_file"]
         manifest = build_recipe_manifest(
             title, writer, up_axis=up_axis, notes=notes, checks=manifest_checks, fixed=all_fixed,
-            parameters=listed)
+            parameters=listed, loose=all_loose)
         files["recipe.json"] = recipe_data
     else:
         notes = [note or step_only_note(refusal)]

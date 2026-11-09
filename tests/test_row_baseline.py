@@ -142,7 +142,7 @@ class ReasonTest(unittest.TestCase):
 
     def test_the_fixed_reason_names_the_first_new_error_item(self):
         results = [{"name": "w", "error": "x", "detail": {"reason": "new_errors", "items": ["Extrude5", "Fillet2"]}}]
-        _, fixed = read_checks(self.CHECKS, results, {}, {}, {"w": "Width"})
+        _, fixed, _ = read_checks(self.CHECKS, results, {}, {}, {"w": "Width"})
         self.assertEqual(fixed[0]["reason"], "Width stays fixed: Fusion cannot build the part when it is 3.6: Extrude5 fails.")
 
     def test_without_an_item_the_reason_stays_plain(self):

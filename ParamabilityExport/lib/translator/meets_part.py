@@ -10,7 +10,7 @@ For points on the faces of the step, `check` looks along the face normal for the
 sign, and a face that lies on a wall must stay on it. Only flat faces parallel to the step's face count. Where a gap
 does not keep its sign, the ranges of the sizes it reads are shortened toward their values until it does
 (`kept_ranges.shortened`, `Context.narrow`); a size whose range would shrink to its value, or whose range the person
-typed, is fixed.
+typed, cannot follow (`Context.fix`).
 """
 import math
 
@@ -188,7 +188,8 @@ def gaps(ctx, slab):
 def check(ctx, step_id, slab_data, combine, why):
     """Shorten or fix the sizes that would make a borrowed step meet the part otherwise than at the measured sizes.
     `slab_data` is the step's `_slab` hand over; `why` names the step for the reason."""
-    if ctx.table is None or not (ctx.slabs or ctx.shells):
+    if ctx.table is None or not (ctx.slabs or ctx.shells) or getattr(ctx.motion, "optimistic", False):
+        # A first look writes the borrowed outline as numbers, so its gaps would seem to close with every size.
         return
     slab = Slab(step_id, slab_data["on"], slab_data["extent"], slab_data["length"], slab_data["profile"],
                 combine=combine, taper=slab_data.get("taper"), outline=slab_data.get("outline"))

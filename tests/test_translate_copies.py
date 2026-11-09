@@ -105,10 +105,10 @@ class PickOnCopyTest(unittest.TestCase):
         self.assertEqual(result.recipe["sizes"]["holes_count"]["min"], 2)
         self.assertEqual(steps_of(result.recipe, "round")[0]["edges"]["near"][0][0], {"expr": "8 + hole_pitch_mm"})
 
-    def test_a_typed_range_that_would_lose_the_picked_copy_keeps_the_count(self):
+    def test_the_default_range_from_the_dialog_still_raises_the_count(self):
         result = self._counted({"holes_count": (1.0, 6.0)})
-        self.assertEqual(fixed_names(result), ["holes_count"])
-        self.assertIn("would leave that copy out", result.fixed[0]["reason"])
+        self.assertEqual(fixed_names(result), [])
+        self.assertEqual([(r["name"], r["min"]) for r in result.raised], [("holes_count", 2)])
 
     def test_an_edge_on_a_mirror_copy_is_mirrored_with_its_formula(self):
         mirror = _item(3, "Mirror1", "MirrorFeature", {
@@ -172,6 +172,6 @@ class RaisedMinimumTest(unittest.TestCase):
         self.assertEqual(raised_minimums(self.table(), self.count(), 2), {})
 
     def test_a_typed_range_or_a_count_that_falls_cannot_be_helped(self):
-        self.assertIsNone(raised_minimums(self.table({"width_count": (0.9, 3.6)}), self.count(), 4))
+        self.assertIsNone(raised_minimums(self.table({"width_count": (0.5, 3.6)}), self.count(), 4))
         falling = Quantity(4.0, "8 - ceil(width_count) * 2", ("width_count",))
         self.assertIsNone(raised_minimums(self.table(), falling, 4))

@@ -1,7 +1,8 @@
 """The size probe of one export: which sketch states to read, and how the answers become a motion. Pure: no Fusion.
 
-The export reads the sketches of the part at its current settings (E0), at every size check (phase 1, with a STEP),
-and at extra settings that only recompute (phase 2, no STEP). `SizeProbe` keeps that record and hands the states to
+The export reads the sketches of the part at its current settings (E0), at every row the size checks run (with a
+STEP, or a rebuild only at the other end of a range) and at extra settings that only recompute, at the range ends no
+row tried and with all sizes low or high (`probe_rows`). `SizeProbe` keeps that record and hands the states to
 `probe.build`. Fusion is reached through the `read` callable given to `start`: `read(request)` returns one probe
 state (`fusion_reader.probe_state.read_state`).
 
@@ -14,7 +15,7 @@ check changes it, or leaves it unreadable, stays fixed.
 from ..probe import build, match, plan
 from ..probe import motion as motion_module
 from ..translator import borrowed
-from .size_checks import fixed_entry
+from .size_checks import size_entry
 
 _STATE_KEYS = ("sketches", "points", "lines", "params", "box", "unread")
 _SAME_MM = 1e-4
@@ -128,21 +129,12 @@ def _same_sketch(before, now):
         a[:2] == b[:2] and _close(a[2], b[2]) for a, b in zip(curves_a, curves_b))
 
 
-def _state_values(row):
-    state = row.get("state") or {}
-    return {p: state[p] for p in row.get("varied") or [] if p in state}
+_UNTRIED = "it changes a sketch and could not be tried at other values"
+_UNREADABLE = "a sketch it changes could not be read at other values"
 
 
-def _untried_reason(label):
-    return "%s stays fixed: it changes a sketch and could not be tried at other values." % label
-
-
-def _unreadable_reason(label):
-    return "%s stays fixed: a sketch it changes could not be read at other values." % label
-
-
-def _watched_reason(label, sketch):
-    return "%s stays fixed: it changes the sketch %s, which could not be followed." % (label, sketch)
+def _watched_why(sketch):
+    return "it changes the sketch %s, which could not be followed" % sketch
 
 
 class SizeProbe:
@@ -160,7 +152,6 @@ class SizeProbe:
         self.skip = set()
         self.dropped = []
         self.untried = []
-        self._tried = []
         self.restore_gap_mm = None
         self.motion = None
         self.moved = []
@@ -193,58 +184,60 @@ class SizeProbe:
         """The probe state of the design as it is now."""
         return self.read(self.request)
 
-    def _add(self, varied, results, reads):
-        """Add one state per result. `reads` are the states read at the rows that built, in order."""
-        pending = list(reads)
-        for values, result in zip(varied, results):
+    def add_states(self, entries):
+        """Add one state per `(values, result, read)`: the size values a row set, its RowExport result and the probe
+        state read there (None when it did not build)."""
+        for values, result, read in entries:
             if result.get("error"):
                 self.states.append({"values": values, "built": False})
                 self.dropped.append({"name": result.get("name"), "error": result.get("error"),
                                      "detail": result.get("detail") or {}})
             else:
-                self.states.append({"values": values, "built": True, "read": pending.pop(0) if pending else None})
+                self.states.append({"values": values, "built": True, "read": read})
 
-    def add_checks(self, checks, results, reads):
-        """The states of the phase 1 checks (`results` in check order, `reads` for those that built)."""
-        self._add([{c["param"]: c["value"]} for c in checks], results, reads)
+    def _tried(self):
+        """{Fusion name: [values]} of the states that built with that size alone changed."""
+        tried = {}
+        for state in self.states[1:]:
+            values = state.get("values") or {}
+            if state.get("built") is not False and len(values) == 1:
+                for param, value in values.items():
+                    tried.setdefault(param, []).append(value)
+        return tried
 
-    def probe_rows(self, sizes, checks, results, unchecked):
-        """The phase 2 rows. `unchecked` lists the Fusion names of kept sizes that got no check."""
+    def probe_rows(self, sizes, unchecked):
+        """The extra rows, at the range ends of `sizes`, for the ends no state has tried. `unchecked` lists the
+        Fusion names of kept sizes that got no check."""
         current = {e.name: e.value for e in self.table.entries}
         self.moved = build.moved_sizes(self.capture, self.states, current)
         reach = set(plan.sketch_driven(self.table))
         moved = set(self.moved) | {p for p in unchecked if p in reach}
-        check_values = {c["param"]: c["value"] for c, r in zip(checks, results) if not r.get("error")}
-        rows, self.untried = plan.probe_rows(sizes, check_values, moved)
-        self._tried = [_state_values(r) for r in rows]
+        rows, self.untried = plan.probe_rows(sizes, self._tried(), moved)
         return rows
-
-    def add_tried(self, results, reads):
-        self._add(self._tried, results, reads)
 
     # ---- result -----------------------------------------------------------------------------------------------
 
-    def finish(self, after, labels):
+    def finish(self, after, labels, loose=False):
         """Build the motion and compare the design after the restore with E0.
 
-        Returns the sizes this probe makes fixed, as fixed entries (`size_checks.fixed_entry` plus `param`, `size`):
-        the ones left without rows, and the ones that moved a sketch when the motion could not be built.
-        `labels` maps a recipe size name to the text for the person.
+        Returns the sizes this probe cannot follow, as `size_checks.size_entry` entries (fixed ones, or kept free
+        with a warning when `loose`): the ones left without rows, and the ones that moved a sketch when the motion
+        could not be built. `labels` maps a recipe size name to the text for the person.
         """
-        fixed = []
+        found = []
         for param in self.untried:
-            fixed.append(self._fixed(param, _untried_reason, labels))
+            found.append(self._entry(param, _UNTRIED, labels, loose))
         try:
             self.motion = motion_module.build(self.capture, self.table, self.states)
         except Exception:
             self.motion = None
-            fixed.extend(self._fixed(p, _unreadable_reason, labels) for p in self.moved if p not in self.untried)
-        fixed.extend(self._watched(labels, {f["param"] for f in fixed}))
+            found.extend(self._entry(p, _UNREADABLE, labels, loose) for p in self.moved if p not in self.untried)
+        found.extend(self._watched(labels, {f["param"] for f in found}, loose))
         self.restore_gap_mm = self._gap(after)
-        return fixed
+        return found
 
-    def _watched(self, labels, skip):
-        """Fixed entries for the sizes that change a watched borrowed sketch, or leave it unreadable, in a state where
+    def _watched(self, labels, skip, loose):
+        """Entries for the sizes that change a watched borrowed sketch, or leave it unreadable, in a state where
         that size alone differs. The sketch read at the first state is the reference."""
         out, done = [], set(skip)
         for token, hint in self.watch.items():
@@ -261,16 +254,14 @@ class SizeProbe:
                 if param in done or (now is not None and _same_sketch(before, now)):
                     continue
                 done.add(param)
-                size = self.table.size_name(param) or param
                 name = hint["sketch"] or "a sketch"
-                reason = _watched_reason(labels.get(size, param),
-                                         "%s of %s" % (name, hint["component"]) if hint["component"] else name)
-                out.append({**fixed_entry(param, reason), "param": param, "size": size})
+                sketch = "%s of %s" % (name, hint["component"]) if hint["component"] else name
+                out.append(self._entry(param, _watched_why(sketch), labels, loose))
         return out
 
-    def _fixed(self, param, reason, labels):
+    def _entry(self, param, why, labels, loose):
         size = self.table.size_name(param) or param
-        return {**fixed_entry(param, reason(labels.get(size, param))), "param": param, "size": size}
+        return size_entry(param, size, labels.get(size, param), why, loose)
 
     def _gap(self, after):
         """Largest difference in mm between E0 and a read after the restore, over the covered values. None when the

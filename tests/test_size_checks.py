@@ -1,7 +1,7 @@
 import unittest
 
 from tests import context  # noqa: F401
-from lib.export_plan.size_checks import check_value, plan_checks, read_checks
+from lib.export_plan.size_checks import check_value, into_range, plan_checks, read_checks
 from lib.fusion_reader.sketches import moved_sketches, read_sketches
 
 SIZES = [
@@ -34,6 +34,12 @@ class PlanChecksTest(unittest.TestCase):
         self.assertAlmostEqual(checks[0]["row"]["values"]["w"], 2.0)
         self.assertEqual(checks[0]["value"], 50.8)
 
+    def test_a_check_outside_the_recipe_range_moves_to_its_end_or_is_left_out(self):
+        checks, _ = plan_checks(SIZES[:3])
+        recipe = {"wall": {"value": 2.0, "min": 1.0, "max": 3.0}, "count": {"value": 3.0, "min": 1.0, "max": 3.0},
+                  "turn": {"value": 90.0, "min": 45.0, "max": 90.0}}
+        self.assertEqual([(c["size"], v) for c, v in into_range(checks, recipe)], [("count", None), ("wall", 3.0)])
+
     def test_limit_leaves_the_rest_unchecked(self):
         checks, unchecked = plan_checks(SIZES, limit=2)
         self.assertEqual([c["size"] for c in checks], ["count", "turn"])
@@ -45,28 +51,43 @@ class ReadChecksTest(unittest.TestCase):
         self.checks, _ = plan_checks(SIZES[:2] + SIZES[2:3])
         self.baseline = {"Sketch1": [1.0, 2.0], "Sketch2": [3.0]}
 
+    def key(self, size):
+        return next(c["row"]["key"] for c in self.checks if c["size"] == size)
+
     def test_sorts_by_what_each_check_showed(self):
         results = [
             {"name": "count", "step_file": "a.step"},
             {"name": "turn", "step_file": None, "error": "Fusion could not rebuild the design for this size."},
             {"name": "wall", "step_file": "c.step"},
         ]
-        snapshots = {"count": dict(self.baseline), "wall": {"Sketch1": [1.0, 2.5], "Sketch2": [3.0]}}
-        kept, fixed = read_checks(self.checks, results, self.baseline, snapshots, {"wall": "Wall"})
+        snapshots = {self.key("count"): dict(self.baseline),
+                     self.key("wall"): {"Sketch1": [1.0, 2.5], "Sketch2": [3.0]}}
+        kept, fixed, _ = read_checks(self.checks, results, self.baseline, snapshots, {"wall": "Wall"})
         self.assertEqual([c["size"] for c in kept], ["count"])
         self.assertEqual(kept[0]["step_file"], "a.step")
         by_param = {f["param"]: f["reason"] for f in fixed}
         self.assertIn("cannot build the part", by_param["turn"])
-        self.assertIn("Wall stays fixed for now: it changes Sketch1.", by_param["wall"])
+        self.assertIn("Wall stays fixed: it changes Sketch1", by_param["wall"])
 
+    def test_a_loose_size_keeps_its_check_and_says_why_it_may_be_unexpected(self):
+        results = [{"name": "count", "step_file": "a.step"}, {"name": "turn", "error": "x"},
+                   {"name": "wall", "step_file": "c.step"}]
+        snapshots = {self.key("count"): dict(self.baseline),
+                     self.key("wall"): {"Sketch1": [1.0, 2.5], "Sketch2": [3.0]}}
+        kept, fixed, loose = read_checks(self.checks, results, self.baseline, snapshots, {"wall": "Wall"},
+                                         loose=True)
+        self.assertEqual([c["size"] for c in kept], ["count", "wall"])
+        self.assertEqual([f["param"] for f in fixed], ["turn"])
+        self.assertEqual(loose[0]["reason"], "Wall may give unexpected results: it changes Sketch1, and a sketch "
+                                             "like this cannot follow sizes yet.")
 
     def test_a_moved_sketch_of_a_component_is_named_with_the_component_and_never_a_token(self):
         results = [{"name": "wall", "step_file": "c.step"}]
         wall = [c for c in self.checks if c["size"] == "wall"]
-        snapshots = {"wall": {"Sketch1": [1.0, 2.5], "Sketch2": [3.0]}}
-        _, fixed = read_checks(wall, results, self.baseline, snapshots, {}, scope="Tray")
-        self.assertEqual(fixed[0]["reason"], "wall stays fixed for now: it changes Tray / Sketch1. "
-                                             "A sketch like this cannot follow sizes yet.")
+        snapshots = {self.key("wall"): {"Sketch1": [1.0, 2.5], "Sketch2": [3.0]}}
+        _, fixed, _ = read_checks(wall, results, self.baseline, snapshots, {}, scope="Tray")
+        self.assertEqual(fixed[0]["reason"], "wall stays fixed: it changes Tray / Sketch1, and a sketch like this "
+                                             "cannot follow sizes yet.")
 
 
 class SketchStateTest(unittest.TestCase):

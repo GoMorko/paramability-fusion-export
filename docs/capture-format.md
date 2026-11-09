@@ -238,9 +238,9 @@ Nothing ties such a step to the walls of the part, so it must keep meeting the p
 (`lib/translator/meets_part.py`): along the normal of each of its faces, the nearest flat parallel faces of the part
 within 2 mm keep their side of the face at every size setting of the range (each size at its ends, all low, all
 high), and a face that lies on a wall stays on it. Where a gap would close or open, the ranges of the sizes it reads
-are shortened toward their values (`lib/translator/kept_ranges.py`, each size alone first, then all together), or
-fixed when a range would shrink to its value or the person typed it. The result lists them in `narrowed` (`name`,
-`min`, `max`, `reason`); `report.json` adds them to `sizes.narrowed`.
+are shortened toward their values (`lib/translator/kept_ranges.py`, each size alone first, then all together); when
+a range would shrink to its value or the person typed it, the size cannot follow (fixed, or loose in the export).
+The result lists them in `narrowed` (`name`, `min`, `max`, `reason`); `report.json` adds them to `sizes.narrowed`.
 
 CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriented):
 
@@ -604,16 +604,25 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   the sizes it reads, also when a step builds it from several values.
 - Sketch values follow sizes through the probe's motion file (next section). Without one, every size that a model
   parameter created by a sketch dimension (also one whose creator reads as `other` but whose `role` names a
-  dimension), construction plane or axis, or joint reads is fixed up front (reason "it changes a sketch, which could
-  not be tried at other values"). A size that a joint reads is always fixed. The dimensions of another component's
+  dimension), construction plane or axis, or joint reads cannot be followed (reason "it changes a sketch, which could
+  not be tried at other values"). A size that a joint reads can never be followed ("it moves a joint"). The
+  dimensions of another component's
   sketch are not model parameters of the target's path; the sizes in their `sketch_params` are fixed when the step
   that borrows the sketch is copied, and its outline stays numbers.
 - An uneven chamfer writes `sizeOn` (one direction per step: the sum of `first - other` face normals over its edge
   points, which must favour the first face by at least 0.1 at every point; edges that one direction cannot serve
   start another step) with `otherSize` or `cutAngleDeg`. Both distances follow sizes; an angle must stay under 90
   degrees over the size range, else its sizes are fixed.
-- Each fixed size becomes a plain number in a new size table (`with_fixed`) and the walk runs again, until nothing
-  new is fixed. `TranslateResult.fixed` lists them as `{ name, reason }`.
+- A value that cannot follow its sizes is written as its number and its sizes are recorded (`Context.fix`). By
+  default each such size becomes a plain number in a new size table (`with_fixed`) and the walk runs again, until
+  nothing new is fixed; `TranslateResult.fixed` lists them as `{ name, reason }` ("... stays fixed: ..."). With
+  `translate(..., loose=True)` (what the export uses unless the person ticks "Keep doubtful sizes fixed") these sizes
+  stay free: a second walk keeps them in the table, every value that can follow them still does, and the values that
+  cannot keep their numbers, so the shape at the current values is the same. In that walk a stuck sketch value
+  follows its `rest` (the sizes that still move it), as it does once its own sizes are fixed.
+  `TranslateResult.loose` lists them as `{ name, reason }` ("... may give unexpected results: ..."); a loose size
+  that no formula reads is listed under `fixed` instead. A formula too long to copy (`Context.fix_always`) fixes its
+  sizes in both modes.
 - The recipe is version 12. With a size table it carries `sizesAsWritten: true` and `sizes`: the sizes that a written
   formula reads, plus the sizes those formulas read. A ticked size that nothing reads is left out, with a note.
   Without a table the recipe has no `sizes`, and no marker.
@@ -666,7 +675,9 @@ this:
   the size range (count formulas such as `ceil(width_count) * 2` are evaluated at the range ends). When the count
   drops below that, the smallest value of the sizes it reads is raised (a whole number for a count, else two
   decimals) and named in a note and in `report.json` (`sizes.raised`); the recipe size `min` and the result dialog
-  show it. A size with a typed range is fixed instead. Copies of a circular pattern keep their count and angle.
+  show it. A size whose minimum the person typed (`SizeTable.typed_ends`: a dialog range or a range comment that
+  differs from the default half to double) cannot follow instead. Copies of a circular pattern keep their count and
+  angle.
 - A taper that follows sizes stays under 45 degrees either way: the ranges of its sizes are shortened.
 - A through cut clears the part at the largest sizes tried (`box_max` of the motion file).
 - A construction plane or axis that a step uses itself (start from, reach to, turn about, mirror across, with `token`)
@@ -713,11 +724,18 @@ The export writes `report.json` into the package: `{ "writer", "outcome": "recip
 VERDICT, ...], "capture": CAPTURE }` (verdicts: see the translator, `lib/translator/result.py`). The app never reads it. A report saved from a real
 design gives a fixture: its `capture` is copied as is.
 
-`sizes.build_failures` lists the size checks Fusion could not build (value, error, why, and `tries`: the smaller steps
-tried toward the current value). A size that built at one of them is kept free with a shorter range and listed in
-`sizes.narrowed` (`side`, the failed value `from`, the new end `to`, the `note` shown to the person). A range the
-translator shortened (a taper, or a step on another component's sketch that must keep meeting the part) is listed
-there too, with the old end as `from`.
+`sizes.build_failures` lists the size checks Fusion could not build (value, error, why, and `tries`: every value
+tried after it, toward the current value and at the other end of the range). Each end of a checked size's range is
+tried: the check's end with a STEP, the other end as a rebuild only (`lib/export_plan/size_narrowing.py`). Where
+Fusion cannot build, smaller steps toward the current value are tried; the first that builds ends the range there,
+and when none builds the current value ends it. Such an end is listed in `sizes.narrowed` (`side`, the failed value
+`from`, the new end `to`, the `note` shown to the person). Only a size that builds at no other value on either side
+is fixed. A range the translator shortened (a taper, or a step on another component's sketch that must keep meeting
+the part) is listed there too, with the old end as `from`.
+
+`sizes.loose` lists the sizes that stay free although the export could not follow them fully (`{ name, reason }` by
+recipe size name, as in the manifest's `loose`): from the translator, from a check that moved the part in the
+assembly or changed a sketch the probe does not follow, and from the probe. `sizes.fixed` lists the fixed ones.
 
 ## 7. API names and what is not verified
 

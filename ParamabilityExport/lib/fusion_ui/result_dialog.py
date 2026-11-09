@@ -120,20 +120,22 @@ def build(command, view):
     else:
         sizes.children.addTextBoxCommandInput("pm_result_none", "", "No parameter became a size.", 1, True)
 
-    if view["fixed"]:
-        fixed = inputs.addGroupCommandInput("pm_result_fixed", "Stays fixed")
-        fixed.isExpanded = True
-        fixed.children.addTextBoxCommandInput(
-            "pm_result_fixed_text", "", "<br>".join(html.escape(line) for line in view["fixed"]),
-            min(len(view["fixed"]) * 2, _MAX_FIXED_ROWS), True)
-    if view.get("narrowed"):
-        narrowed = inputs.addGroupCommandInput("pm_result_narrowed", "Range shortened")
-        narrowed.isExpanded = True
-        narrowed.children.addTextBoxCommandInput(
-            "pm_result_narrowed_text", "", "<br>".join(html.escape(line) for line in view["narrowed"]),
-            min(len(view["narrowed"]) * 3, _MAX_FIXED_ROWS), True)
+    _add_lines(inputs, "pm_result_fixed", "Stays fixed", view["fixed"], 2)
+    _add_lines(inputs, "pm_result_loose", "May give unexpected results", view.get("loose"), 3)
+    _add_lines(inputs, "pm_result_narrowed", "Range shortened", view.get("narrowed"), 3)
     if view["variables"]:
         inputs.addTextBoxCommandInput("pm_result_variables", "", html.escape(view["variables"]), 2, True)
+
+
+def _add_lines(inputs, group_id, title, lines, rows_per_line):
+    """An open group with one text box of `lines`; nothing when there are none."""
+    if not lines:
+        return
+    group = inputs.addGroupCommandInput(group_id, title)
+    group.isExpanded = True
+    group.children.addTextBoxCommandInput(
+        group_id + "_text", "", "<br>".join(html.escape(line) for line in lines),
+        min(len(lines) * rows_per_line, _MAX_FIXED_ROWS), True)
 
 
 def _build_table(children, rows):

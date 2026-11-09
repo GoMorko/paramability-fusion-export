@@ -40,6 +40,34 @@ class PlanTest(unittest.TestCase):
         self.assertEqual([(r["name"], r["min"]) for r in report["sizes"]["raised"]], [("holes_count", 2)])
         self.assertEqual(json.loads(files["recipe.json"])["sizes"]["holes_count"]["min"], 2)
 
+    def test_loose_sizes_reach_the_manifest_the_report_and_a_note(self):
+        from tests.test_translate_copies import counted
+        capture, table = counted()
+        loose = [{"name": "wall_mm", "reason": "wall_mm may give unexpected results: it moves a joint."},
+                 {"name": "gone", "reason": "gone may give unexpected results: x."}]
+        manifest, _, report = plan_single_export(capture, self.step, "Plate", "w", "z", size_table=table,
+                                                 loose=loose)
+        self.assertEqual(manifest["loose"], loose[:1])
+        self.assertEqual(report["sizes"]["loose"], loose[:1])
+        self.assertIn("1 size may give unexpected results: wall_mm.", manifest["notes"])
+        self.assertEqual(validate_manifest(manifest), [])
+
+    def test_checks_are_planned_inside_the_limits_the_translation_found(self):
+        from tests.test_translate_copies import counted
+        from lib.export_plan.recipe_export import translate_capture, with_translated_limits
+        capture, table = counted()
+        planned = with_translated_limits(table, translate_capture(capture, "z", table))
+        self.assertEqual(planned.sizes["holes_count"]["min"], 2)
+        self.assertEqual(planned.typed_ends("holes_count"), (False, False))
+
+    def test_a_check_below_a_raised_minimum_is_left_out(self):
+        from tests.test_translate_copies import counted
+        capture, table = counted()
+        checks = [{"size": "holes_count", "value": 1.0, "step_file": self.step}]
+        manifest, _, report = plan_single_export(capture, self.step, "Plate", "w", "z", size_table=table,
+                                                 checks=checks)
+        self.assertEqual((manifest["checks"], report["sizes"]["unchecked"]), ([], ["holes_count"]))
+
     def test_a_range_a_step_shortened_is_noted_and_shown_shortened(self):
         from tests.test_translate_component import tray_with_lid_slot
         from tests.test_translate_sized import TICKED, table_of

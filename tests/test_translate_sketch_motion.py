@@ -11,7 +11,7 @@ from tests.translator_helpers import FIXTURES, assert_schema_ok, load_capture, s
 from lib.params import size_table
 from lib.probe.motion import OPTIMISTIC, Motion
 from lib.translator import translate
-from lib.translator.sizes import fallback_fixes
+from lib.translator.sizes import untried_reasons
 
 MOTION = os.path.join(os.path.dirname(FIXTURES), "motion")
 BOX = "sketch_rect_centred"
@@ -69,7 +69,7 @@ class OutlineTest(unittest.TestCase):
         capture["parameters"]["model"][1]["role"] = "Linear Dimension-3"
         params = capture["parameters"]
         table = size_table.build(params["user"], ["depth_mm", "height_mm"], params["model"])
-        self.assertEqual(list(fallback_fixes(table)), ["depth_mm"])
+        self.assertEqual(list(untried_reasons(table)), ["depth_mm"])
 
     def test_touching_profiles_take_the_merged_outline_from_their_parts(self):
         capture = load_capture(BOX)

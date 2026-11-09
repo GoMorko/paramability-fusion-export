@@ -28,8 +28,9 @@ class Context:
       `_adjusts` key, which `add_steps` removes). Pattern and mirror handlers refuse them as sources.
     table: the size table whose sizes the feature values may follow, or None for a recipe with plain
       numbers only.
-    depends: Fusion name of a size -> plain reason, for each size that a value written as a number depends on.
-      The driver turns these sizes into fixed numbers and walks again.
+    depends: Fusion name of a size -> why, for each size that a value written as a number depends on (`fix`).
+    must_fix: the same for sizes that must become fixed numbers whatever the mode (`fix_always`). The driver turns
+      them into fixed numbers and walks again.
     slabs: the extrude steps written so far (follow.Slab), for picks and reaches that follow sizes. A handler hands
       one over in a step's private `_slab` key: { on, extent, length, profile }. A pattern or mirror step hands over
       `_copies`, one follow.Motion per copy, and the slabs of the steps it repeats are copied with them.
@@ -53,6 +54,7 @@ class Context:
         self.table = table
         self.motion = motion
         self.depends = {}
+        self.must_fix = {}
         self.slabs = []
         self.shells = []
         self.moved_faces = []
@@ -77,14 +79,19 @@ class Context:
         self._notes.append(text)
 
     def fix(self, names, why):
-        """Record that the sizes `names` (Fusion names) cannot follow: a value that reads them stays a number."""
+        """Record that a value cannot follow the sizes `names` (Fusion names): it is written as its number. The driver
+        fixes these sizes, or keeps them free with a warning (`translate`, `loose`). `why` ends the reason."""
         for name in names:
-            if name not in self.depends:
-                self.depends[name] = ("%s stays fixed: %s." % (name, why))[:MAX_REASON]
+            self.depends.setdefault(name, why)
+
+    def fix_always(self, names, why):
+        """Like `fix`, for a value that would make the recipe unusable while the sizes stay free."""
+        for name in names:
+            self.must_fix.setdefault(name, why)
 
     def require(self, count, least, why):
         """A pick needs the count Quantity `count` to stay at `least` or more. The smallest values of the sizes it reads
-        are raised (`minimums`: Fusion name to (number, reason)); when that cannot work, the sizes are fixed."""
+        are raised (`minimums`: Fusion name to (number, reason)); when that cannot work, they cannot follow (`fix`)."""
         raised = raised_minimums(self.table, count, least) if self.table is not None else {}
         if raised is None:
             self.fix(count.reads, "%s, and a smaller value would leave that copy out" % why)

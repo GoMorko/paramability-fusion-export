@@ -7,7 +7,8 @@ cm, rad). `ticked` are the Fusion names the person keeps as sizes. Optional keyw
 parameters, for inlining, counts and defaults), `design_unit` (what a bare number in a length expression means),
 `fixed` (ticked names that cannot follow, with the reason; they become plain numbers), `quantity_params` (the model
 parameters the steps use as a pattern quantity; the user parameters behind them become whole-number counts) and
-`ranges` (typed min and max per size, instead of the default range). `minimums` raises the smallest value of some
+`ranges` (min and max per size from the dialog, instead of the default range; a range equal to the default is not
+typed, `typed_ends`). `minimums` raises the smallest value of some
 sizes above their range (the translator does this when a smaller value would remove a pattern copy a step picks).
 
 The table holds, per parameter, one entry whose `state` is:
@@ -414,9 +415,26 @@ class SizeTable:
         return SizeTable(self._params, self._ticked_in, self._model, self._design_unit, self._fixed_in,
                          self._quantity_params, self._ranges, self._max_sizes, self._minimums, merged)
 
+    def typed_ends(self, name):
+        """(min typed, max typed) of a free size: the person set that end to another number than the default range
+        (half to double, `defaults.default_range`), in the dialog or with a range comment. A range the export narrowed
+        or a minimum the translator raised is not typed."""
+        e = self._entries.get(name)
+        if e is None or e.state != FREE:
+            return False, False
+        p = self._cand[name]
+        lo, hi = self._ranges.get(name) or defaults.size_range(p, e.kind, e.value)
+        base_lo, base_hi = defaults.default_range(e.kind, e.value)
+        return abs(lo - base_lo) > VALUE_TOLERANCE, abs(hi - base_hi) > VALUE_TOLERANCE
+
     def typed_range(self, name):
-        """True when the person typed the range of this size."""
-        return name in self._ranges
+        """True when the person typed either end of the range of this size (`typed_ends`)."""
+        return any(self.typed_ends(name))
+
+    def with_ticked(self, names):
+        """A new table where these Fusion names are the ticked ones (the size cap still applies)."""
+        return SizeTable(self._params, list(names), self._model, self._design_unit, self._fixed_in,
+                         self._quantity_params, self._ranges, self._max_sizes, self._minimums, self._narrowed)
 
     def report(self):
         """Plain data for report.json: renames, derived formulas with their value check, fixed and unoffered names."""

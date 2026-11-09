@@ -25,7 +25,7 @@ class DesignParameterStore:
 
     def _keep_marker(self):
         if self.marker is not None:
-            put_back(self.design.timeline, self.marker["position"])
+            put_back(self.design.timeline, self.marker)
 
     def saved_expressions(self):
         params = self.design.userParameters

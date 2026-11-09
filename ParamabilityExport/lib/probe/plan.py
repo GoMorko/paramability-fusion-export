@@ -186,11 +186,12 @@ def state_values(sizes, overrides=None):
     return values
 
 
-def _row(sizes, name, overrides):
+def _row(sizes, name, overrides, key=None):
     manifest = state_values(sizes, overrides)
     current = {s["param"]: s["value"] for s in sizes}
     return {
         "name": name[:MAX_NAME_CHARS],
+        "key": "probe: " + (key or name),
         "values": {s["param"]: display_from_manifest(manifest[s["param"]], s["unit"]) for s in sizes},
         "step": False,
         "state": manifest,
@@ -198,18 +199,19 @@ def _row(sizes, name, overrides):
     }
 
 
-def _others(size, check_value):
-    """The ends of the size's range that no state has tried: both for an unchecked size, the other for a checked."""
-    tried = [size["value"]] + ([] if check_value is None else [check_value])
+def _others(size, tried):
+    """The ends of the size's range that no state has tried (`tried`: a value or a list of them, or None)."""
+    tried = [size["value"]] + ([] if tried is None else list(tried) if isinstance(tried, (list, tuple)) else [tried])
     return [end for end in (size["min"], size["max"]) if all(abs(end - t) > _SAME for t in tried)]
 
 
-def probe_rows(sizes, check_values, moved, limit=MAX_PROBE_ROWS):
+def probe_rows(sizes, tried, moved, limit=MAX_PROBE_ROWS):
     """The extra states to try after the checks, as `(rows, untried)`.
 
-    sizes: the kept sizes. check_values: {param: value its check used} for the checked ones. moved: the params that
-    move covered sketch values (a checked size whose check state moved one, or an unchecked size that reaches a
-    sketch). A moved size gets a row at each range end its check did not try; with two or more moved sizes, one row
+    sizes: the kept sizes, with the range ends to try. tried: {param: value or [values]} of the states that built
+    with that size alone changed (its check and the ends tried). moved: the params that move covered sketch values (a
+    checked size whose state moved one, or an unchecked size that reaches a sketch). A moved size gets a row at each
+    range end no state tried; with two or more moved sizes, one row
     puts all kept sizes at their minimum and one at their maximum. A row has no STEP (`"step": False`); `state` holds
     the manifest values, `varied` the params that differ. `untried` lists the moved params left without rows by the
     row limit.
@@ -217,13 +219,14 @@ def probe_rows(sizes, check_values, moved, limit=MAX_PROBE_ROWS):
     rows, untried = [], []
     moved_sizes = [s for s in sizes if s["param"] in moved]
     for size in moved_sizes:
-        wanted = _others(size, check_values.get(size["param"]))
+        wanted = _others(size, tried.get(size["param"]))
         if len(rows) + len(wanted) > limit:
             untried.append(size["param"])
             continue
         for end in wanted:
             label = "min" if end == size["min"] else "max"
-            rows.append(_row(sizes, "%s (%s)" % (size["size"][:MAX_NAME_CHARS - 6], label), {size["param"]: end}))
+            rows.append(_row(sizes, "%s (%s)" % (size["size"][:MAX_NAME_CHARS - 6], label), {size["param"]: end},
+                             "%s (%s)" % (size["param"], label)))
     if len(moved_sizes) >= 2 and len(rows) + 2 <= limit:
         for label, key in (("all min", "min"), ("all max", "max")):
             rows.append(_row(sizes, label, {s["param"]: s[key] for s in sizes}))

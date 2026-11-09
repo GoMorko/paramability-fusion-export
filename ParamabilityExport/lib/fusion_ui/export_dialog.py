@@ -1,5 +1,4 @@
 """The Export size choices dialog: the sizes table of value rows. Builds the inputs and reads them back."""
-import html
 import traceback
 
 import adsk.core
@@ -8,15 +7,14 @@ from ..fusion_reader.bodies import is_pickable_body
 from ..export_plan.sizes_table import read_table, table_to_csv
 from ..export_plan.sizes_text import pick_default_index, read_sizes
 from . import sizes_table_ui, sizes_text_ui
+from .body_inputs import BODY_ID, add_body_inputs
 from .log import log
 
-BODY_ID = "pm_body"
 STATUS_ID = "pm_status"
 CHOICE_ID = "pm_choice"
 DEFAULT_ID = "pm_default"
 UP_ID = "pm_up"
 NOTICE_ID = "pm_notice"
-MARKER_ID = "pm_marker"
 
 UP_LABELS = {"z": "Z up", "y": "Y up"}
 DEFAULT_CHOICE_NAME = "Size"
@@ -33,13 +31,7 @@ def build(command, parameters, body, up_axis, table, marker_note=None):
     """Add all inputs. parameters come from fusion_reader.parameters; body may be None; table is the sizes data.
     `marker_note` is the line shown when the timeline marker is not at the end (export_plan.marker.marker_note)."""
     inputs = command.commandInputs
-    selection = inputs.addSelectionInput(BODY_ID, "Body", "Pick the body to export.")
-    selection.addSelectionFilter("SolidBodies")
-    selection.setSelectionLimits(1, 1)
-    if body is not None:
-        selection.addSelection(body)
-    if marker_note:
-        inputs.addTextBoxCommandInput(MARKER_ID, "", html.escape(marker_note), 2, True)
+    add_body_inputs(inputs, body, marker_note)
 
     try:
         sizes_table_ui.build_parameter_list(inputs, parameters, table)

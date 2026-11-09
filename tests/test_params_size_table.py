@@ -80,6 +80,12 @@ class FilterBoxTableTest(unittest.TestCase):
         self.assertFalse(t.typed_range(W))
         self.assertTrue(table(ranges={W: (0.5, 3)}).typed_range(W))
 
+    def test_a_range_equal_to_the_default_is_not_typed(self):
+        size = table().sizes[NEW_W]
+        default = table(ranges={W: (size["min"], size["max"])})
+        self.assertEqual(default.typed_ends(W), (False, False))
+        self.assertEqual(table(ranges={W: (size["min"], 9.0)}).typed_ends(W), (False, True))
+
     def test_fixing_every_input_turns_derived_sizes_into_numbers(self):
         t = table(ticked=[W]).with_fixed({W: "x"})
         self.assertEqual(t.sizes, {})

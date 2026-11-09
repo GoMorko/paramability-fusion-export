@@ -96,11 +96,17 @@ class SchemaCopyTest(unittest.TestCase):
             mf.build_recipe_manifest(
                 "Part", "w", notes=["1 step copied."], parameters=LISTED,
                 checks=[{"values": {"wall": 4}, "step": "checks/01.step"}],
-                fixed=[{"name": "gap", "reason": "gap stays fixed for now."}]),
+                fixed=[{"name": "gap", "reason": "gap stays fixed for now."}],
+                loose=[{"name": "wall", "reason": "wall may give unexpected results: it moves a joint."}]),
         ]
         for manifest in manifests:
             self.assertEqual(mf.validate_manifest(manifest), [])
             self.assertEqual(validate(manifest, self.schema), [], manifest["kind"])
+
+    def test_a_long_loose_reason_is_refused_by_both(self):
+        manifest = mf.build_recipe_manifest("Part", "w", loose=[{"name": "wall", "reason": "x" * 201}])
+        self.assertTrue(mf.validate_manifest(manifest))
+        self.assertTrue(validate(manifest, self.schema))
 
     def test_a_long_comment_is_refused_by_both(self):
         manifest = mf.build_step_only_manifest("Part", "w", parameters=[

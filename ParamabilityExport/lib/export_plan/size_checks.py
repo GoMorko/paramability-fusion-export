@@ -6,9 +6,11 @@ and compares it with the STEP, so a size that disagrees with Fusion is found and
 A size is a dict: param (Fusion name), size (name in the recipe), unit (Fusion unit), value, min, max (manifest
 numbers: mm, deg or plain), favorite (bool).
 """
-from ..package.manifest import MAX_CHECKS, MAX_NAME_CHARS
+from ..package.manifest import MAX_CHECKS, MAX_FIXED_REASON, MAX_NAME_CHARS
+from ..package.text import clip
 from ..package.units import display_from_manifest
 from ..fusion_reader.sketches import moved_sketches
+from ..translator.notes import fixed_reason, loose_reason
 
 _SAME = 1e-9
 
@@ -50,31 +52,62 @@ def plan_checks(sizes, limit=MAX_CHECKS):
 
 
 def check_at(size, value, sizes):
-    """One check of `size` at `value`: every other size stays at its current value."""
+    """One check of `size` at `value`: every other size stays at its current value. The row also holds the manifest
+    value it sets (`state`, `varied`), as the probe's rows do."""
     values = {s["param"]: display_from_manifest(s["value"], s["unit"]) for s in sizes}
     values[size["param"]] = display_from_manifest(value, size["unit"])
     return {
         "param": size["param"], "size": size["size"], "value": value,
-        "row": {"name": size["size"][:MAX_NAME_CHARS], "values": values},
+        "row": {"name": size["size"][:MAX_NAME_CHARS], "values": values, "key": row_key(size["param"], value),
+                "state": {size["param"]: value}, "varied": [size["param"]]},
     }
+
+
+def row_key(param, value):
+    """The key of a row that sets one size: unique per size and value, unlike the row name, which is cut."""
+    return "%s=%r" % (param, float(value))
+
+
+def into_range(checks, recipe_sizes):
+    """[(check, value)] for the checks whose value lies outside the range the recipe gives their size (a minimum the
+    translator raised, a range it shortened): the value is the end of that range on the same side, or None when that
+    end is the current value. `recipe_sizes` is the recipe's `sizes` (recipe name to size dict)."""
+    out = []
+    for check in checks:
+        size = recipe_sizes.get(check["size"]) or {}
+        if "min" not in size or size["min"] - _SAME <= check["value"] <= size["max"] + _SAME:
+            continue
+        end = size["max"] if check["value"] > size["max"] else size["min"]
+        out.append((check, None if abs(end - size["value"]) <= _SAME else end))
+    return out
 
 
 def fixed_entry(name, reason):
     """`name` is the Fusion parameter name; the package entry is made from it later, with the recipe size name."""
-    return {"name": name, "reason": " ".join(reason.split())[:200]}
+    return {"name": name, "reason": clip(reason, MAX_FIXED_REASON)}
 
 
-def moved_reason(label, sketch_names, scope=""):
+def size_entry(param, size, label, why, loose=False):
+    """The entry of a size that cannot follow: fixed, or kept free with a warning when `loose`."""
+    reason = loose_reason(label, why) if loose else fixed_reason(label, why)
+    return {**fixed_entry(param, reason), "param": param, "size": size}
+
+
+def moved_why(sketch_names, scope=""):
     """`scope` is the component name put before each sketch name, for a body inside a component ("Tray / Sketch1")."""
     names = ["%s / %s" % (scope, n) if scope else n for n in sketch_names]
     shown = ", ".join(names[:2]) + (" and more" if len(names) > 2 else "")
-    return f"{label} stays fixed for now: it changes {shown}. A sketch like this cannot follow sizes yet."
+    return "it changes %s, and a sketch like this cannot follow sizes yet" % shown
 
 
 def build_failure_reason(label, value, items=()):
-    """`items` are the timeline items that went into error; the first one is named."""
+    """`value` is the number Fusion could not build, or a list of them (one per end of the range); `items` are the
+    timeline items that went into error, the first one is named."""
+    values = value if isinstance(value, (list, tuple)) else [value]
     why = f": {items[0]} fails" if items else ""
-    return f"{label} stays fixed: Fusion cannot build the part when it is {value:g}{why}."
+    shown = " or ".join("%g" % v for v in values)
+    closer = ", or any value closer to the current one" if len(values) > 1 else ""
+    return f"{label} stays fixed: Fusion cannot build the part when it is {shown}{closer}{why}."
 
 
 def build_failures(checks, results, tries=None):
@@ -94,9 +127,8 @@ def frame_numbers(frame):
     return [float(v) for key in ("origin", "x", "y", "z") for v in frame[key]]
 
 
-def place_reason(label, part):
-    return (f"{label} stays fixed: it moves {part} in the assembly. "
-            "Parts that move with sizes come in a later version.")
+def place_why(part):
+    return f"it moves {part} in the assembly, and parts that move with sizes come in a later version"
 
 
 def place_moved(before, after):
@@ -111,36 +143,43 @@ def _sketches_only(snapshot):
     return {k: v for k, v in snapshot.items() if k != PLACEMENT_KEY}
 
 
-def read_checks(checks, results, baseline_sketches, sketch_by_check, labels, part_name="the part", scope=""):
+def read_checks(checks, results, baseline_sketches, sketch_by_check, labels, part_name="the part", scope="",
+                loose=False, failed_ends=None):
     """Sort the checks by what they showed.
 
     results: RowExport results in check order; an entry with 'error' is a row Fusion could not build.
-    sketch_by_check: {row name: sketch numbers read at that check} from the same run. A snapshot may also hold the
-    part's place under PLACEMENT_KEY (`frame_numbers`); a size that moves it is fixed, since the recipe is written at
-    the place of the export.
+    sketch_by_check: {row key: sketch numbers read at that check} from the same run. A snapshot may also hold the
+    part's place under PLACEMENT_KEY (`frame_numbers`); a size that moves it cannot follow, since the recipe is written
+    at the place of the export. So can a size that changes a sketch the probe does not follow.
     labels: {size name: text for the person}.
     part_name: the part as the person knows it (the component), for the reason of a move.
     scope: the component name shown before a sketch name in a reason; empty for a body of the root.
-    Returns (kept, fixed): kept lists the checks with a STEP file, in order, each with 'step_file'; fixed lists
-    {'name' (Fusion name), 'reason', 'param', 'size'} for sizes that must stay fixed numbers.
+    loose: a size that cannot follow keeps its check and stays free with a warning, instead of being fixed.
+    failed_ends: {Fusion name: [values]} the ends Fusion could not build, for the reason of a check that failed.
+    Returns (kept, fixed, loose): kept lists the checks with a STEP file, in order, each with 'step_file'; fixed and
+    loose list {'name' (Fusion name), 'reason', 'param', 'size'}. A check that did not build is always fixed.
     """
-    kept, fixed = [], []
+    kept, fixed, doubtful = [], [], []
     for check, result in zip(checks, results):
         label = labels.get(check["size"], check["size"])
         if result.get("error"):
             items = (result.get("detail") or {}).get("items") or ()
-            fixed.append({**fixed_entry(check["param"], build_failure_reason(label, check["value"], items)),
+            value = (failed_ends or {}).get(check["param"]) or check["value"]
+            fixed.append({**fixed_entry(check["param"], build_failure_reason(label, value, items)),
                           "param": check["param"], "size": check["size"]})
             continue
-        snapshot = sketch_by_check.get(check["row"]["name"], {})
+        row = check["row"]
+        snapshot = sketch_by_check.get(row.get("key", row["name"]), {})
+        why = None
         if place_moved(baseline_sketches, snapshot):
-            fixed.append({**fixed_entry(check["param"], place_reason(label, part_name)),
-                          "param": check["param"], "size": check["size"]})
-            continue
-        moved = moved_sketches(_sketches_only(baseline_sketches), _sketches_only(snapshot))
-        if moved:
-            fixed.append({**fixed_entry(check["param"], moved_reason(label, moved, scope)),
-                          "param": check["param"], "size": check["size"]})
-            continue
+            why = place_why(part_name)
+        else:
+            moved = moved_sketches(_sketches_only(baseline_sketches), _sketches_only(snapshot))
+            if moved:
+                why = moved_why(moved, scope)
+        if why is not None:
+            (doubtful if loose else fixed).append(size_entry(check["param"], check["size"], label, why, loose))
+            if not loose:
+                continue
         kept.append({**check, "step_file": result["step_file"]})
-    return kept, fixed
+    return kept, fixed, doubtful

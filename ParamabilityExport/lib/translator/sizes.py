@@ -1,8 +1,9 @@
 """The recipe `sizes` and the sizes that cannot follow, around the size table.
 
 The size table lists every size the person ticked. The recipe keeps only the sizes that a written formula reads, and
-the sizes those formulas read in turn. A size that moves a joint is fixed up front. Sketch values follow sizes through
-the probe's motion file; without one, every size that moves a sketch or construction geometry is fixed up front.
+the sizes those formulas read in turn. A size that moves a joint cannot be followed. Sketch values follow sizes through
+the probe's motion file; without one, no size that moves a sketch or construction geometry can be followed. The driver
+fixes such sizes up front, or keeps them free with a warning (`translate`, `loose`).
 """
 from ..params.expressions import tokenize_formula
 
@@ -26,30 +27,32 @@ def _kind(param):
     return kind
 
 
-def _fixes(table, kinds, why):
-    fixed = {}
+def _reasons(table, kinds, why, names=None):
+    """{ Fusion name: why } for each name (the ticked sizes by default) behind a model parameter made by `kinds`."""
+    names = table.ticked if names is None else names
+    found = {}
     for param in table.model_params.values():
         kind = _kind(param)
         if kind not in kinds:
             continue
         reads = table.depends(param["name"])
-        for name in table.ticked:
-            if name in reads and name not in fixed:
-                fixed[name] = why(name, _STATIC_KINDS[kind])[:200]
-    return fixed
+        for name in names:
+            if name in reads and name not in found:
+                found[name] = why(_STATIC_KINDS[kind])
+    return found
 
 
-def sketch_fixes(table):
-    """{ Fusion name: reason } for each ticked size that a joint reads: joints are never copied as sizes."""
-    return _fixes(table, ("joint",), lambda name, what: "%s stays fixed: it moves %s." % (name, what))
+def joint_reasons(table, names=None):
+    """{ Fusion name: why } for each ticked size (or each of `names`) that a joint reads. A joint is not copied, so
+    the part does not follow such a size in the assembly."""
+    return _reasons(table, ("joint",), lambda what: "it moves %s" % what, names)
 
 
-def fallback_fixes(table):
-    """{ Fusion name: reason } for each ticked size that a sketch dimension, construction plane or axis, or joint
+def untried_reasons(table):
+    """{ Fusion name: why } for each ticked size that a sketch dimension, construction plane or axis, or joint
     reads. Used when the export could not try sketches at other values, so their numbers stay as measured."""
-    return _fixes(table, tuple(_STATIC_KINDS),
-                  lambda name, what: "%s stays fixed: it changes %s, which could not be tried at other values."
-                  % (name, what))
+    return _reasons(table, tuple(_STATIC_KINDS),
+                    lambda what: "it changes %s, which could not be tried at other values" % what)
 
 
 def _construction_records(node, found):

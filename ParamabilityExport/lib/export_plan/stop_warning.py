@@ -3,6 +3,7 @@
 The dialog shows them as soon as a body is picked, the message after the export repeats the same first line, and
 the Fusion status line uses the short form. All of them name the step the same way: "Extrude9 (extrude)".
 """
+from ..package.text import clip
 from ..translator import CaptureError
 from ..translator.notes import step_label
 from .messages import recipe_saved_message
@@ -12,11 +13,6 @@ MAX_SHORT_REASON = 110
 MAX_LISTED_NOTES = 3
 UNREAD = "The steps could not be read."
 UNCOPIED = "The steps could not be copied."
-
-
-def _cut(text, limit):
-    text = " ".join((text or "").split())
-    return text if len(text) <= limit else text[: limit - 3].rstrip(" ,;:.") + "..."
 
 
 def _step_index(refusal):
@@ -42,7 +38,7 @@ def _stop_fields(refusal, has_parameters):
     title = _title(label, reason)
     lines = [title]
     if reason and reason != title:
-        lines.append(_cut(reason, MAX_SHORT_REASON))
+        lines.append(clip(reason, MAX_SHORT_REASON))
     lines.append(fixed_shape_sentence(has_parameters))
     return {"stops": True, "index": _step_index(refusal), "label": label, "title": title, "reason": reason,
             "lines": lines}

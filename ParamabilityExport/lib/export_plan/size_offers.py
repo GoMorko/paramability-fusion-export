@@ -7,13 +7,13 @@ from ..package.units import display_from_manifest, unit_kind
 from ..params import defaults, size_table
 from ..params.expressions import format_number
 from ..params.size_table import CONSTANT, DERIVED, FIXED, FREE
-from ..translator.sizes import sketch_fixes
+from ..translator.notes import loose_reason
+from ..translator.sizes import joint_reasons
 from .body_scope import scope_inputs
 from .size_checks import MAX_CHECKS
 
 # Every ticked size gets one check, so the dialog allows as many ticks as there are check slots.
 MAX_TICKED = MAX_CHECKS
-_SAME_RANGE = 1e-9
 
 
 def limit_message(limit=MAX_TICKED):
@@ -23,21 +23,28 @@ def limit_message(limit=MAX_TICKED):
 def initial_table(params, model_params=(), design_unit="mm", quantity_params=(), limit=MAX_TICKED):
     """The table for the first look at the dialog (or after another body is picked).
 
-    The sensible default parameters are ticked, at most `limit`. A parameter that a joint reads is fixed whether it
-    was a default or not, so the dialog can grey it out. Sketch dimensions and construction planes stay offered: the
-    export tries them at other values and fixes only the ones a sketch cannot follow.
+    The sensible default parameters are ticked, at most `limit`. A parameter that a joint reads is not ticked to
+    start with: it can be a size, but the part does not follow it in the assembly (`doubts`). Sketch dimensions and
+    construction planes are offered as well: the export tries them at other values.
     """
-    def build(ticked, fixed=None):
-        return size_table.build(params, ticked, model_params, design_unit, fixed, quantity_params)
+    def build(ticked):
+        return size_table.build(params, ticked, model_params, design_unit, None, quantity_params)
 
     offered = [p["name"] for p in params if defaults.is_offered(p)]
-    fixes = sketch_fixes(build(offered))
+    doubtful = joint_reasons(build(offered), offered)
     if model_params:
         wanted = defaults.default_ticked(params, model_params)
     else:
         # Without the model parameters nothing tells what the body reads: start from the favourites.
         wanted = [p["name"] for p in params if defaults.is_offered(p) and p.get("is_favorite")] or offered
-    return build([n for n in wanted if n not in fixes][:limit], fixes)
+    return build([n for n in wanted if n not in doubtful][:limit])
+
+
+def doubts(table, params):
+    """{Fusion name: reason} of the offered parameters that a joint reads. Such a size stays free, with a warning."""
+    offered = [p["name"] for p in params if defaults.is_offered(p)]
+    found = joint_reasons(table.with_ticked(offered), offered)
+    return {name: loose_reason(name, why) for name, why in found.items()}
 
 
 def table_for_body(params, design_unit, fallback_model, capture, limit=MAX_TICKED):
@@ -64,7 +71,8 @@ def value_text(entry, design_unit="mm"):
 def offers(table, params, design_unit="mm"):
     """One dict per parameter the dialog lists, in parameter order.
 
-    Keys: param (Fusion name), ticked, enabled, reason (why it is greyed or what the tick does),
+    Keys: param (Fusion name), ticked, enabled, reason (why it is greyed or what the tick does), doubt (why a size
+    may give unexpected results, else ''),
     state ('size' or 'keep' for a plain number, 'formula', 'locked'), now (value with unit), comment, formula (the
     Fusion expression of a formula), kind, value, min and max (the default range of a plain number, else None),
     range_unit (the unit of the Now, Min and Max cells). value, min and max are mm, deg or plain numbers; the cells
@@ -73,6 +81,7 @@ def offers(table, params, design_unit="mm"):
     that cannot be a size at all (text, units other than a length, an angle or none) is not listed.
     """
     by_name = {p["name"]: p for p in params}
+    doubtful = doubts(table, params)
     out = []
     for entry in table.entries:
         p = by_name.get(entry.name)
@@ -84,7 +93,8 @@ def offers(table, params, design_unit="mm"):
         common = {"param": entry.name, "now": value_text(entry, design_unit),
                   "comment": (p.get("comment") or "").strip(), "formula": p.get("expression") or "",
                   "kind": entry.kind, "value": entry.value,
-                  "range_unit": range_unit(entry.kind, design_unit), "min": None, "max": None}
+                  "range_unit": range_unit(entry.kind, design_unit), "min": None, "max": None,
+                  "doubt": doubtful.get(entry.name, "")}
         if entry.state == DERIVED or (entry.state == CONSTANT and not plain):
             out.append({**common, "ticked": False, "enabled": False,
                         "state": "formula", "reason": "A formula. It follows the parameters it reads."})
@@ -102,7 +112,7 @@ def sizes_for_checks(table, params, keep=None):
     """The free sizes in the shape size_checks.plan_checks reads.
 
     `keep` limits them to these recipe size names (the sizes the recipe still has after translation). `typed_min` and
-    `typed_max` tell that the person changed that end of the range from the default (a range comment counts).
+    `typed_max` tell that the person set that end of the range (`SizeTable.typed_ends`).
     """
     by_name = {p["name"]: p for p in params}
     sizes = []
@@ -110,12 +120,11 @@ def sizes_for_checks(table, params, keep=None):
         if entry.state != FREE or entry.name not in by_name or (keep is not None and entry.size_name not in keep):
             continue
         size = table.sizes[entry.size_name]
-        lo, hi = defaults.default_range(entry.kind, entry.value)
+        typed_min, typed_max = table.typed_ends(entry.name)
         sizes.append({
             "param": entry.name, "size": entry.size_name, "unit": by_name[entry.name]["unit"], "kind": entry.kind,
-            "value": entry.value, "min": size["min"], "max": size["max"],
-            "typed_min": abs(size["min"] - lo) > _SAME_RANGE, "typed_max": abs(size["max"] - hi) > _SAME_RANGE,
-            "favorite": bool(by_name[entry.name].get("is_favorite")),
+            "value": entry.value, "min": size["min"], "max": size["max"], "typed_min": typed_min,
+            "typed_max": typed_max, "favorite": bool(by_name[entry.name].get("is_favorite")),
         })
     return sizes
 

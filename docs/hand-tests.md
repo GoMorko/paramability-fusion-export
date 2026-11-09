@@ -51,7 +51,9 @@ The add-in exports the picked body alone. The choice is the constant `MULTI_BODY
 `ParamabilityExport/lib/fusion_reader/step_export.py`.
 
 - [ ] A root with three bodies, pick one: each STEP in the file holds only that body.
-- [ ] The design timeline has no leftover items after the export (the temporary copy is removed).
+- [ ] The design timeline has no leftover items after the export (the temporary copy is removed). If the cleanup
+      ever leaves an item, the export stops with "The temporary copy of the part left N steps in the timeline" and a
+      marker that was at the end is at the end again, after those items.
 - [ ] If the copy route adds items to the timeline, fails, or the STEP holds more than the picked body, set
       `MULTI_BODY_ROUTE = ROUTE_ASK_DESIGNER`. The dialog then asks the designer to hide or move the other bodies.
 - [ ] A body inside a child component or occurrence can be picked in the viewport, OK turns active, and the STEP
@@ -140,10 +142,15 @@ mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter
 
 - [ ] The dialog lists the user parameters in a table, the ones the body reads ticked (favourites first), the formula
       one greyed with "formula" in the last column. OK is on once a body is picked.
-- [ ] **Greyed when it opens.** A parameter that drives a joint is unticked and greyed out as soon as the dialog
-      opens, with its reason in its row and the full reason in the box under the table when the row is clicked. It
-      stays that way for parameters that are not ticked by default. A parameter that drives a sketch dimension is not
-      greyed: section 9 covers it.
+- [ ] **Doubtful when it opens.** A parameter that drives a joint is unticked as soon as the dialog opens, but it can
+      be ticked: its row then says "size, may be unexpected", and the box under the table gives the reason ("may give
+      unexpected results: it moves a joint") when the row is clicked. Tick "Keep doubtful sizes fixed": the row says
+      "fixed, moves a joint"; untick it again. A parameter that drives a sketch dimension is not marked: section 9
+      covers it.
+- [ ] **Doubtful sizes in the file.** Export with such a size ticked and the box off: the size is in `recipe.json`,
+      the manifest `loose` list names it with the reason, the result window has a "May give unexpected results" group
+      and its row says "may be unexpected", and Paramability marks the size with a warning. Export again with "Keep
+      doubtful sizes fixed" ticked: the size is in the manifest `fixed` list instead and not in `recipe.json`.
 - [ ] **Another body.** In a design with two bodies built from different parameters, pick the other body: the ticks
       and greyed lines change to that body's parameters. A parameter only the other body reads is not ticked. Note
       how long the dialog takes to open and to follow the pick (the add-in reads the steps of the body each time).
@@ -152,7 +159,7 @@ mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter
 - [ ] **Counts.** A parameter that drives a pattern quantity is a whole number size (the form steps by 1), also when
       its role text does not say "quantity". Set it to 2.5 in the app: the recipe still builds.
 - [ ] **Long name.** A user parameter with a name over 64 characters that drives a joint: the export saves, and the
-      message names the fixed size without stopping.
+      message names the size that may give unexpected results without stopping.
 - [ ] **Not used.** Tick a parameter no step reads: the message after the export names it as "not used by any copied
       step".
 - [ ] With only one body in the design it is picked already. With no user parameters the dialog says so (no table)
@@ -162,24 +169,29 @@ mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter
       (`checks/01.step` and up), each with a single size in `values`. The recipe in `recipe.json` lists no size
       that has no check, unless the message said some were not checked.
 - [ ] Untick a parameter and export: that name is not a size and its number is plain in `recipe.json`.
-- [ ] **Fixed by a sketch.** Drive a sketch dimension by a ticked parameter through an angle (a point placed by an
-      angle on a circle). The export does not stop: the message after it lists that parameter with its reason (it
-      moves Sketch1 along a curve), the manifest `fixed` list holds it, and it is not a size. A parameter that only
-      drives an extrude distance stays a size.
-- [ ] **Fixed by a failed build.** Give a ticked parameter a range comment such as `[1..400]` that Fusion cannot
-      build at the top or at any smaller step toward the current value (a fillet larger than the part at every
-      step). The export saves, the parameter is listed as fixed with "Fusion cannot build the part when it is ...",
-      and the other sizes are unaffected. `report.json` (sizes, build_failures) lists the failed value and the
-      smaller steps tried (`tries`).
+- [ ] **Doubtful by a sketch.** Drive a sketch dimension by a ticked parameter through an angle (a point placed by
+      an angle on a circle) and also an extrude distance. The export does not stop: the message after it lists that
+      parameter with its reason (it moves Sketch1 along a curve), the manifest `loose` list holds it, and it stays a
+      size whose extrude follows while the point keeps its place. With "Keep doubtful sizes fixed" it is in `fixed`.
+- [ ] **Fixed by a failed build.** Give a ticked parameter a range that Fusion cannot build at either end or at any
+      smaller step toward the current value (a fillet that only fits at the current value). The export saves, the
+      parameter is listed as fixed with "Fusion cannot build the part when it is ... or ..., or any value closer to
+      the current one", and the other sizes are unaffected. `report.json` (sizes, build_failures) lists the failed
+      value and the values tried (`tries`).
+- [ ] **One side only.** Give a ticked parameter a range comment such as `[1..400]` that Fusion cannot build above
+      the current value at all, but can build below it. The parameter stays a size whose range ends at its current
+      value; the check in `manifest.json` is at the bottom of the range and matches in Paramability.
 - [ ] **Range shortened by a failed build.** Give a ticked parameter a range that Fusion cannot build at the top but
       can build part of the way (for example a wall thickness of 1.25 mm with the default range up to 2.5 mm, where
-      a chamfer fails at 2.5). A progress window "Retrying size 1 of 3: ..." shows. The parameter stays a size; the
+      a chamfer fails at 2.5). A progress window "Trying size 1 of 3: ..." shows. The parameter stays a size; the
       message after the export has a line such as "Wall thickness: the range ends at 1.87 mm, since Fusion cannot
       build the part at 2.5 mm (Chamfer1 fails).", the result window has a "Range shortened" group and its Range
       column shows the shorter range, the recipe size max is the same number, and `report.json` (sizes, narrowed)
       lists it. Open the file in Paramability: the check at the new top matches. Type a Max of 2.5 yourself and
       export again: the line says "you typed a Max of 2.5 mm". Repeat at the bottom of a range (a Min that Fusion
-      cannot build). Cancel during a retry: nothing is saved and every parameter is back.
+      cannot build): the bottom is tried for every checked size, with a rebuild only, and the range starts at the
+      value that builds. Cancel during a try: nothing is saved and every parameter is back, with one message at most
+      about parameters that could not be put back.
 - [ ] **Restore.** After each export, a cancel in the "Checking size 2 of 4" window, and a forced failure (full disk
       or a read only folder), every parameter shows its old expression, formulas included, the timeline marker is
       where it was and the design has no unsaved change beyond Fusion's own.
@@ -273,9 +285,10 @@ Use the filter box design (names such as `FilterBox_$_depth__contains_CeramicMed
       lower-right corner of the Fusion window shows "Paramability: saved as a fixed shape. Copy stopped at ...". Note
       whether the line stays or Fusion replaces it at once (its lifetime is not fixed by the API).
 - [ ] Click OK: the progress window shows as before, then the result window "Saved for Paramability" opens with the
-      saved line, a table of sizes (name, range, "matches Fusion", "not checked", "kept fixed" or "not used"), a
-      "Stays fixed" group with each reason, and the line "All N parameters come along as variables ...". Only a Close
-      button shows. Pull a size to fail its check (a range that breaks a fillet): its row says "kept fixed".
+      saved line, a table of sizes (name, range, "matches Fusion", "not checked", "may be unexpected", "kept fixed"
+      or "not used"), a "Stays fixed" group and a "May give unexpected results" group with each reason, and the line
+      "All N parameters come along as variables ...". Only a Close button shows. Pull a size so that Fusion cannot
+      build it at any other value (a fillet that only fits now): its row says "kept fixed".
 - [ ] The result window opens right after the export ends, not while the progress window is still up. If it does not
       open, the same text shows in a message box. Note which: the log line "result dialog failed" gives the reason.
 
@@ -292,9 +305,10 @@ inside a component, also a nested or turned one, lands where Fusion shows it.
       degrees about X inside it. Same checks as C1, plus a hole on a sketch point: it lands in the right place.
 - [ ] **C3 Used twice.** Two occurrences of `Tray` at different places. Pick the second: it lands at the second
       place, and the note says the part is used 2 times.
-- [ ] **C4 Joints.** `Tray` joined to `Box` with an offset `gap_mm`: `gap_mm` is greyed with a joint reason. Then join
-      it to a face whose place depends on `FilterBox_height_mm`: after the checks that size is fixed with "moves Tray
-      in the assembly".
+- [ ] **C4 Joints.** `Tray` joined to `Box` with an offset `gap_mm`: `gap_mm` is unticked with a joint reason and
+      may give unexpected results when ticked. Then join it to a face whose place depends on `FilterBox_height_mm`:
+      after the checks that size may give unexpected results with "moves Tray in the assembly" (fixed with "Keep
+      doubtful sizes fixed").
 - [ ] **C5 Cut from the assembly.** With the root active, cut a hole through the body of `Tray`. Export: a fixed shape
       whose note names the cut.
 - [ ] **C6 Components from bodies.** Model a body in the root, then "Create Components from Bodies". Export it and

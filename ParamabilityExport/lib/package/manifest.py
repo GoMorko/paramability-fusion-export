@@ -61,11 +61,13 @@ def build_step_only_manifest(name, writer, up_axis="z", notes=None, parameters=N
     return manifest
 
 
-def build_recipe_manifest(name, writer, up_axis="z", notes=None, checks=None, fixed=None, parameters=None):
+def build_recipe_manifest(name, writer, up_axis="z", notes=None, checks=None, fixed=None, parameters=None,
+                          loose=None):
     """A translated part: the STEP files plus recipe.json.
 
     checks: [{'values': {size name: number}, 'step': 'checks/01.step'}], one size changed per check.
     fixed: [{'name', 'reason'}] for Fusion parameters that stay fixed numbers in the shape. Left out when empty.
+    loose: [{'name', 'reason'}] for recipe sizes that stay free but may not follow every step. Left out when empty.
     parameters: the design's user parameter entries. Left out when empty.
     """
     manifest = {
@@ -82,6 +84,8 @@ def build_recipe_manifest(name, writer, up_axis="z", notes=None, checks=None, fi
     }
     if fixed:
         manifest["fixed"] = [dict(f) for f in fixed]
+    if loose:
+        manifest["loose"] = [dict(f) for f in loose]
     _add_parameters(manifest, parameters)
     return manifest
 
@@ -182,19 +186,21 @@ def validate_manifest(m):
                     problems.append(f"{label}: size names must be 1 to {MAX_NAME_CHARS} characters.")
                 check_path(c.get("step") if isinstance(c, dict) else None, label, step_suffixes)
         _validate_fixed(m.get("fixed"), problems)
+        _validate_fixed(m.get("loose"), problems, "loose")
     elif kind == "valueRows":
         _validate_value_rows(m, problems, check_path, step_suffixes)
     return problems
 
 
-def _validate_fixed(fixed, problems):
+def _validate_fixed(fixed, problems, key="fixed"):
+    """The `fixed` or `loose` list: { name, reason } entries."""
     if fixed is None:
         return
     if not isinstance(fixed, list) or len(fixed) > MAX_FIXED:
-        problems.append(f"fixed must be a list of at most {MAX_FIXED}.")
+        problems.append(f"{key} must be a list of at most {MAX_FIXED}.")
         return
     for i, entry in enumerate(fixed, start=1):
-        label = f"fixed {i}"
+        label = f"{key} {i}"
         if not isinstance(entry, dict):
             problems.append(f"{label}: must be an object.")
             continue

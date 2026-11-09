@@ -107,6 +107,20 @@ class TickTest(unittest.TestCase):
         self.assertIn("Stays a fixed number", inputs.itemById(recipe_dialog.DETAILS_ID).formattedText)
 
 
+class DoubtfulTest(unittest.TestCase):
+    def test_a_doubtful_size_says_so_and_the_box_keeps_it_fixed_instead(self):
+        offers = [offer("wall", doubt="wall may give unexpected results: it moves a joint."), offer("gap")]
+        _, inputs = make_dialog(offers)
+        self.assertEqual(row(inputs, "status", 0).formattedText, "size, may be unexpected")
+        self.assertFalse(recipe_dialog.read_form(inputs, offers)["keep_doubtful"])
+        box = inputs.itemById(recipe_dialog.KEEP_DOUBTFUL_ID)
+        box.value = True
+        recipe_dialog.handle_change(inputs, offers, box)
+        self.assertEqual(row(inputs, "status", 0).formattedText, "fixed, moves a joint")
+        self.assertEqual(row(inputs, "status", 1).formattedText, "size")
+        self.assertTrue(recipe_dialog.read_form(inputs, offers)["keep_doubtful"])
+
+
 class RangeTest(unittest.TestCase):
     def test_a_typed_range_goes_into_the_form_and_ok_needs_a_body(self):
         offers = [offer("wall")]

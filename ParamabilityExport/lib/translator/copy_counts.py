@@ -3,7 +3,7 @@
 Fusion keeps the edges a round or chamfer picked when a pattern count changes: new copies get no round, and a copy
 that goes away takes its round with it. So a pick on copy n of a pattern needs at least n + 1 copies over the whole
 size range. When the count formula drops below that at the smallest sizes, the smallest values of the sizes it reads
-are raised instead of fixing them; a size whose range the person typed is not raised.
+are raised instead of fixing them; a size whose minimum the person typed is not raised.
 """
 import math
 
@@ -39,11 +39,11 @@ def raised_minimums(table, q, least):
     """`{Fusion name: new minimum}` that keeps the count `q` (a sized Quantity) at `least` or more over the size range.
 
     Empty when it holds already; None when raising the minimums cannot make it hold (the count falls at the largest
-    sizes, or every size it reads has a typed range)."""
+    sizes, or every size it reads has a typed minimum)."""
     if not q.sized or _holds(table, q, least, None):
         return {}
     free = [(name, size_name, size) for name, size_name, size in _sizes(table, q.reads)
-            if not table.typed_range(name) and size["value"] > size["min"]]
+            if not table.typed_ends(name)[0] and size["value"] > size["min"]]
     if not free:
         return None
 
