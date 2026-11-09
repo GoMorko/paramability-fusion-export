@@ -11,6 +11,7 @@ Edges, faces and bodies of another component stay refused. Such a step must also
 range (`meets_part.py`, run when the step is added).
 """
 from ..params.expressions import referenced_names
+from ..probe import keys
 
 BORROWED_KEYS = ("foreign", "placement", "component", "sketch_params", "native_frame")
 
@@ -31,7 +32,7 @@ def _optimistic(ctx):
 def _has_motion(ctx, item, number):
     """True when the probe's motion file holds a value of this profile (the probe read the sketch)."""
     motion = getattr(ctx, "motion", None)
-    prefix = "%s/p%d/" % (item.get("index"), number)
+    prefix = keys.profile(item.get("index"), number) + "/"
     return motion is not None and any(key.startswith(prefix) for key in getattr(motion, "values", {}))
 
 

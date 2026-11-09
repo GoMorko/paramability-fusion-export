@@ -7,16 +7,17 @@
         "12/p0/l0/points.2.1": { "stuck": ["angle_deg"], "cause": "curve", "sketch": "Sketch5" } },
       "box_max": { "min": [..], "max": [..] },
       "states": [ { "values": { "width": 2.0 }, "built": true } ],
-      "apart": [ 3 ] }
+      "apart": [ 3 ],
+      "unmeasured": { "Sketch7": "its first read did not match the capture" } }
 
-A key is `<item index>/p<profile>/l<loop>/<field path>` (`l0` is the outer loop), `<item>/p<profile>/plane`,
-`<item>/positions/<n>/<0|1|2>` for a hole point and `<item>/axis/point/<0|1|2>` for a revolve axis line. The sketch
-curves of a profile have `<item>/p<profile>/c<loop>.<curve>/<field>` (a line's `offset` and `turn`, an arc's
-`center.0`, `center.1` and `radius`); `curves` lists the profiles (`<item>/p<profile>`) whose curves were measured.
+The keys are written by `probe.keys`. `curves` lists the profiles (`<item>/p<profile>`) whose sketch curves were
+measured.
 `apart` lists the states (by number in `states`) where Fusion solved a sketch another way, so a different outline
 there blames no size. A stuck value may carry `rest`: what it follows once its `stuck` sizes are fixed. `terms` keys
-are Fusion parameter names; `const` plus the terms give the value at any size settings. A key that is not listed did
-not move: the translator writes the captured number.
+are Fusion parameter names; `const` plus the terms give the value at any size settings. A key that is not listed
+did not move: the translator writes the captured number, unless its sketch is in `unmeasured` (sketch name to the
+reason the probe could not measure it): then nothing is known about it, and the sizes behind that sketch cannot be
+followed (`probe.coverage`). A motion file without `unmeasured` says nothing about such sketches.
 
 Imports nothing from the translator at module level, since the translator imports this module.
 """
@@ -149,13 +150,15 @@ class Motion:
     """What the probe found: a value per key (Affine or Stuck), the union of the target boxes and the states tried."""
     optimistic = False
 
-    def __init__(self, values=None, box_max=None, states=None, dropped=None, curves=None, apart=None):
+    def __init__(self, values=None, box_max=None, states=None, dropped=None, curves=None, apart=None,
+                 unmeasured=None):
         self.values = dict(values or {})
         self.box_max = box_max
         self.states = list(states or [])
         self.dropped = list(dropped or [])  # columns left out of the fit, `{ name, reason }`
         self.curves = set(curves or ())  # profiles whose sketch curves were measured, `<item>/p<profile>`
         self.apart = list(apart or [])  # numbers in `states` where Fusion solved a sketch another way
+        self.unmeasured = dict(unmeasured or {})  # sketch name to why the probe could not measure it
 
     def get(self, key):
         """`Affine`, `Stuck`, or None when the value did not move."""
@@ -172,6 +175,8 @@ class Motion:
             out["curves"] = sorted(self.curves)
         if self.apart:
             out["apart"] = list(self.apart)
+        if self.unmeasured:
+            out["unmeasured"] = dict(self.unmeasured)
         return out
 
     @classmethod
@@ -186,7 +191,7 @@ class Motion:
             else:
                 values[key] = Affine(raw.get("const", 0.0), raw.get("terms"), raw.get("sketch", ""))
         return cls(values, data.get("box_max"), data.get("states"), data.get("dropped"), data.get("curves"),
-                   data.get("apart"))
+                   data.get("apart"), data.get("unmeasured"))
 
 
 class _Optimistic(Motion):

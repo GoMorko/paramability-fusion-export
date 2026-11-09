@@ -23,12 +23,18 @@ _CURVES = ("line", "arc", "circle", "ellipse")
 class Scan:
     """`targets`: the covered records (dicts with `kind` "profile", "hole" or "axis", `item` and what the fit reads).
     `covered`: sketch token to name ("" when the record has none). `uncovered`: tokens of sketches that some record
-    uses in a way the probe cannot follow."""
+    uses in a way the probe cannot follow. `named`: the name of every sketch a record names, covered or not, by token
+    (a sketch no record gives a name for is missing)."""
 
     def __init__(self):
         self.targets = []
         self.covered = {}
         self.uncovered = set()
+        self.named = {}
+
+    def note_name(self, token, name):
+        if token and isinstance(name, str) and name:
+            self.named.setdefault(token, name)
 
     def names(self, tokens=None):
         """Names of the covered sketches (of `tokens` when given), for the sketches the S1 check should skip."""
@@ -44,17 +50,18 @@ def _profile_ok(profile):
     return not isinstance(profile_loops(profile), Refusal)
 
 
-def _stray_tokens(node, found):
+def _stray_tokens(node, out):
     """Sketch tokens that a record carries; any such record other than the ones scanned leaves its sketch uncovered."""
     if isinstance(node, dict):
         for key, value in node.items():
             if key == "sketch_token" and isinstance(value, str):
-                found.add(value)
+                out.uncovered.add(value)
+                out.note_name(value, node.get("sketch"))
             else:
-                _stray_tokens(value, found)
+                _stray_tokens(value, out)
     elif isinstance(node, list):
         for value in node:
-            _stray_tokens(value, found)
+            _stray_tokens(value, out)
 
 
 def scan(capture):
@@ -72,7 +79,7 @@ def scan(capture):
         elif kind == "HoleFeature":
             _scan_hole(out, index, data)
         else:
-            _stray_tokens(data, out.uncovered)
+            _stray_tokens(data, out)
     for token in out.uncovered:
         out.covered.pop(token, None)
     out.targets = [t for t in out.targets if t["sketch_token"] in out.covered]
@@ -80,6 +87,7 @@ def scan(capture):
 
 
 def _cover(out, token, name):
+    out.note_name(token, name)
     out.covered.setdefault(token, name or "")
     if name and not out.covered[token]:
         out.covered[token] = name
@@ -93,6 +101,7 @@ def _scan_profiles(out, index, data):
         if not _profile_ok(profile):
             if token:
                 out.uncovered.add(token)
+                out.note_name(token, profile.get("sketch"))
             continue
         _cover(out, token, profile.get("sketch"))
         out.targets.append({"kind": "profile", "item": index, "p": number, "profile": profile,
@@ -108,6 +117,7 @@ def _scan_axis(out, index, data):
     if not token or "point" not in axis or "dir" not in axis:
         if token:
             out.uncovered.add(token)
+            out.note_name(token, axis.get("sketch"))
         return
     _cover(out, token, axis.get("sketch"))
     out.targets.append({"kind": "axis", "item": index, "entity": axis["entity"], "sketch_token": token,
@@ -121,6 +131,7 @@ def _scan_hole(out, index, data):
         return
     if not positions or not isinstance(points, list) or len(points) != len(positions) or not all(points):
         out.uncovered.add(token)
+        out.note_name(token, data.get("sketch"))
         return
     _cover(out, token, data.get("sketch"))
     out.targets.append({"kind": "hole", "item": index, "sketch_token": token, "sketch": data.get("sketch") or "",

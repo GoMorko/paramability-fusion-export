@@ -10,6 +10,7 @@ import math
 
 from ..translator.loops import profile_loops
 from ..translator.result import Refusal
+from . import keys
 from .motion import SHAPE, TURNS, UNREAD
 
 POINT_TOLERANCE = 1e-4
@@ -215,11 +216,11 @@ def _profile_loops(profile, name):
 
 
 def _values_of(loops, plane, prefix):
-    out = {prefix + "/plane": plane}
+    out = {keys.plane(prefix): plane}
     for at, loop in enumerate(loops):
         numbers = {}
         _numbers(loop, [], numbers)
-        out.update({"%s/l%d/%s" % (prefix, at, k): v for k, v in numbers.items()})
+        out.update({keys.loop_field(prefix, at, k): v for k, v in numbers.items()})
     return out
 
 
@@ -236,7 +237,7 @@ def curve_values(loops, like, prefix):
     out = {}
     for k, (loop, ref) in enumerate(zip(loops, like)):
         for j, (curve, base) in enumerate(zip(loop["curves"], ref["curves"])):
-            key = "%s/c%d.%d/" % (prefix, k, j)
+            key = keys.curve(prefix, k, j)
             if curve["kind"] == "line":
                 d0 = _unit(_sub(base["end"], base["start"]))
                 d = _unit(_sub(curve["end"], curve["start"]))
@@ -250,7 +251,7 @@ def curve_values(loops, like, prefix):
 
 def prefix(target):
     """`<item>/p<profile>` of a profile record."""
-    return "%s/p%d" % (target["item"], target["p"])
+    return keys.profile(target["item"], target["p"])
 
 
 def _capture_profile_values(target):
@@ -291,9 +292,9 @@ def _state_profile_values(target, read):
 
 
 def _hole_values(target, read, e0):
-    prefix = "%s/positions" % target["item"]
+    item = target["item"]
     if read is None:
-        return {"%s/%d/%d" % (prefix, n, c): float(p[c]) for n, p in enumerate(target["positions"])
+        return {keys.hole_point(item, n, c): float(p[c]) for n, p in enumerate(target["positions"])
                 for c in range(3)}, None
     here = (read.get("sketches") or {}).get(target["sketch_token"]) or {}
     there = ((e0 or {}).get("sketches") or {}).get(target["sketch_token"]) or {}
@@ -306,20 +307,20 @@ def _hole_values(target, read, e0):
         p = (read.get("points") or {}).get(token)
         if not p:
             return None, UNREAD
-        out.update({"%s/%d/%d" % (prefix, n, c): float(p[c]) for c in range(3)})
+        out.update({keys.hole_point(item, n, c): float(p[c]) for c in range(3)})
     return out, None
 
 
 def _axis_values(target, read):
-    prefix = "%s/axis/point" % target["item"]
+    item = target["item"]
     if read is None:
-        return {"%s/%d" % (prefix, c): float(target["axis"]["point"][c]) for c in range(3)}, None
+        return {keys.axis_point(item, c): float(target["axis"]["point"][c]) for c in range(3)}, None
     line = (read.get("lines") or {}).get(target["entity"])
     if not line:
         return None, UNREAD
     if _turned(line["dir"], target["axis"]["dir"]):
         return None, TURNS
-    return {"%s/%d" % (prefix, c): float(line["point"][c]) for c in range(3)}, None
+    return {keys.axis_point(item, c): float(line["point"][c]) for c in range(3)}, None
 
 
 def captured_values(target):

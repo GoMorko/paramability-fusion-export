@@ -180,6 +180,65 @@ class RevolveAxisTest(unittest.TestCase):
         self.assertEqual(expr(steps_of(result.recipe, "revolve")[0]["axis"]["point"][0]), "gap_mm - 5")
 
 
+def depth_drives_sketch_and_extrude():
+    """The centred box whose extrude length is `depth_mm - 28 mm`, so depth_mm moves both Sketch1 and the extrude."""
+    capture = load_capture(BOX)
+    extrude = next(i for i in capture["items"] if i["type"] == "ExtrudeFeature")["data"]
+    extrude["params"]["side_one.distance"]["expression"] = "depth_mm - 28 mm"
+    for param in capture["parameters"]["model"]:
+        if param["name"] == "d3":
+            param.update(expression="depth_mm - 28 mm", dependency_parameters=["depth_mm"])
+    return capture
+
+
+def unmeasured(*sketches, drop=()):
+    """The box motion where the probe did not measure `sketches` (it has no values for the keys in `drop`)."""
+    with open(os.path.join(MOTION, BOX + ".json"), encoding="utf-8") as f:
+        data = json.load(f)
+    for key in [k for k in data["values"] if k.startswith(tuple(drop))]:
+        del data["values"][key]
+    data["unmeasured"] = {name: "its first read did not match the capture" for name in sketches}
+    return Motion.from_json(data)
+
+
+class UnmeasuredSketchTest(unittest.TestCase):
+    """A sketch the probe skipped says nothing about its sizes: they are fixed or loose, never silently free."""
+
+    def test_sizes_behind_a_skipped_sketch_are_fixed(self):
+        result = run(depth_drives_sketch_and_extrude(), BOX_SIZES, unmeasured("Sketch1", drop=("1/",)))
+        self.assertEqual(sorted(reasons(result)), ["box_count", "cube_mm", "depth_mm"])
+        self.assertIn("could not be tried at other values", reasons(result)["depth_mm"])
+        self.assertIn("Sketch1", reasons(result)["depth_mm"])
+
+    def test_sizes_behind_a_skipped_sketch_stay_free_with_a_warning_when_loose(self):
+        capture = depth_drives_sketch_and_extrude()
+        params = capture["parameters"]
+        table = size_table.build(params["user"], BOX_SIZES, params["model"], capture.get("design_units", "mm"))
+        result = translate(capture, size_table=table, motion=unmeasured("Sketch1", drop=("1/",)), loose=True)
+        self.assertEqual(sorted(f["name"] for f in result.loose), ["box_count", "cube_mm", "depth_mm"])
+        self.assertEqual(result.fixed, [])
+        self.assertIn("depth_mm", result.recipe["sizes"])
+
+    def test_a_size_the_skipped_sketch_does_not_read_is_not_touched(self):
+        result = run(depth_drives_sketch_and_extrude(), BOX_SIZES, unmeasured("Sketch1", drop=("1/",)))
+        for name in ("pipe_offset_mm", "height_mm", "wall_mm", "pipe_d_mm"):
+            self.assertNotIn(name, reasons(result))
+
+    def test_a_skipped_hole_sketch_fixes_the_size_behind_its_points(self):
+        result = run(load_capture(BOX), BOX_SIZES, unmeasured("Sketch2", drop=("5/",)))
+        self.assertEqual(sorted(reasons(result)), ["pipe_offset_mm"])
+        self.assertEqual(steps_of(result.recipe, "hole")[0]["origin"][0], -20.0)
+
+    def test_a_measured_sketch_that_did_not_move_leaves_a_size_free(self):
+        result = run(depth_drives_sketch_and_extrude(), BOX_SIZES, unmeasured(drop=("1/p0/l0/height",)))
+        self.assertNotIn("depth_mm", reasons(result))
+
+    def test_a_motion_file_without_coverage_data_reads_as_measured(self):
+        motion = motion_of(BOX, lambda values: [values.pop(k) for k in [k for k in values if k.startswith("1/")]])
+        self.assertEqual(motion.unmeasured, {})
+        self.assertNotIn("depth_mm", reasons(run(depth_drives_sketch_and_extrude(), BOX_SIZES, motion)))
+
+
 class OwnerFilterBoxTest(unittest.TestCase):
     """The owner's FilterBox package (outside the repo, 0.4.0 capture) with a motion file written by hand
     (filter_box_motion.py): supports cross the walls, and pipe circles cross each other. The motion has no values for
@@ -204,7 +263,7 @@ class OwnerFilterBoxTest(unittest.TestCase):
         self.assertTrue(all("LidAndRail of BoxLid" in f["reason"] for f in result.fixed))
         sizes = result.recipe["sizes"]
         width = sizes["FilterBox___width__contains_CeramicMedium"]
-        self.assertEqual((width["min"], width["max"]), (1.01, 2.34))
+        self.assertEqual((width["min"], width["max"]), (1.01, 1.8))
         support = steps_of(result.recipe, "extrude")[1]["sketch"]["outer"]
         self.assertEqual((support["kind"], expr(support["center"][0])),
                          ("circle", "-0.5 * FilterBox_width_mm + 0.5 * _Filter__Wall_thickness_mm"))

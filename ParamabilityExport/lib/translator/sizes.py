@@ -2,10 +2,13 @@
 
 The size table lists every size the person ticked. The recipe keeps only the sizes that a written formula reads, and
 the sizes those formulas read in turn. A size that moves a joint cannot be followed. Sketch values follow sizes through
-the probe's motion file; without one, no size that moves a sketch or construction geometry can be followed. The driver
-fixes such sizes up front, or keeps them free with a warning (`translate`, `loose`).
+the probe's motion file; without one, no size that moves a sketch or construction geometry can be followed, and with
+one, neither can a size behind a sketch the probe did not measure (`sketch_answer`). The driver fixes such sizes up
+front, or keeps them free with a warning (`translate`, `loose`).
 """
 from ..params.expressions import tokenize_formula
+from ..probe.coverage import MOVED, NOT_MEASURED, STILL, Answer
+from ..probe.motion import Affine, Stuck
 
 # model parameter created_by kind -> what it moves, for the reason text
 _STATIC_KINDS = {
@@ -53,6 +56,58 @@ def untried_reasons(table):
     reads. Used when the export could not try sketches at other values, so their numbers stay as measured."""
     return _reasons(table, tuple(_STATIC_KINDS),
                     lambda what: "it changes %s, which could not be tried at other values" % what)
+
+
+def sketch_params(table, sketch):
+    """Fusion names of the model parameters made by the dimensions of the sketch named `sketch`."""
+    if not sketch:
+        return []
+    return [name for name, param in table.model_params.items()
+            if _kind(param) == "sketchDimension" and (param.get("created_by") or {}).get("sketch") == sketch]
+
+
+def sketch_sizes(table, sketch):
+    """Fusion names of the free sizes that the dimensions of the sketch named `sketch` read, in table order."""
+    reached = set()
+    for name in sketch_params(table, sketch):
+        reached |= table.depends(name)
+    return [name for name in table.ticked if name in reached]
+
+
+def _driven(table, value):
+    """Fusion names of the free sizes behind a motion value (an Affine's terms, a Stuck's movers and its rest)."""
+    if isinstance(value, Stuck):
+        names = set(value.movers) | (set(value.rest.terms) if value.rest is not None else set())
+    elif isinstance(value, Affine):
+        names = set(value.terms)
+    else:
+        names = set()
+    out = set()
+    for name in names:
+        out |= table.depends(name)
+    return out
+
+
+def sketch_answer(table, motion, sketch, size):
+    """What the motion file says about size `size` (a Fusion name) and the sketch named `sketch`: an `Answer` of
+    `STILL`, `MOVED` or `NOT_MEASURED`. A size that none of the sketch's dimensions read cannot move it, so it is
+    still whatever the probe did."""
+    if size not in sketch_sizes(table, sketch):
+        return Answer(STILL)
+    reason = getattr(motion, "unmeasured", {}).get(sketch)
+    if reason:
+        return Answer(NOT_MEASURED, reason=reason)
+    moved = [key for key, value in motion.values.items()
+             if getattr(value, "sketch", "") == sketch and size in _driven(table, value)]
+    return Answer(MOVED, moved) if moved else Answer(STILL)
+
+
+def unmeasured_sizes(table, motion, sketch):
+    """Fusion names of the free sizes whose effect on the sketch named `sketch` the probe did not measure."""
+    if not getattr(motion, "unmeasured", {}).get(sketch):
+        return []
+    return [size for size in sketch_sizes(table, sketch)
+            if sketch_answer(table, motion, sketch, size).kind == NOT_MEASURED]
 
 
 def _construction_records(node, found):

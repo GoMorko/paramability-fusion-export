@@ -11,7 +11,7 @@ a sketch reads as the same different outline in states that change different siz
 those states blame no size for that outline (`Motion.apart`).
 """
 from . import columns as cols
-from . import fit, match, plan
+from . import coverage, fit, match, plan
 from .motion import CURVE, SHAPE, TURNS, UNREAD, Affine, Motion, Stuck
 
 _SAME = 1e-9
@@ -29,9 +29,10 @@ class _Run:
         self.targets = []
         self.apart = set()
         self._values = {}
+        self.readable = set()
         if self.base:
-            ok = match.readable(self.found, self.base)
-            self.targets = [t for t in self.found.targets if t["sketch_token"] in ok]
+            self.readable = match.readable(self.found, self.base)
+            self.targets = [t for t in self.found.targets if t["sketch_token"] in self.readable]
 
     def varied(self, at, current=None):
         """Fusion names of the sizes that state `at` sets to other values than E0 has."""
@@ -134,7 +135,8 @@ def build(capture, table, states):
     current = {e.name: e.value for e in table.entries}
     out = Motion(box_max=_box_max(states),
                  states=[{"values": s.get("values") or {}, "built": s.get("built") is not False}
-                         for s in run.states[1:]])
+                         for s in run.states[1:]],
+                 unmeasured=coverage.unmeasured(run.found, run.readable, bool(run.base)))
     if not run.targets:
         return out
     overrides = [s.get("values") or {} for s in run.states]

@@ -4,18 +4,21 @@ The probe measures each value the translator writes for a sketch (loop numbers, 
 axis points) at other size settings and fits it as `Affine` (a sum over Fusion parameters) or marks it `Stuck`. Here
 the values of one outline are looked up by key (`<item>/p<profile>/l<loop>/<field path>`), combined where the
 translator writes a value the probe did not key (outlines merged from several profiles, rect corners, points picked on
-an outline) and written as formulas. A stuck value that is written fixes its sizes, with the probe's cause.
+an outline) and written as formulas. A stuck value that is written fixes its sizes, with the probe's cause. A value of
+a sketch the probe did not measure (`Motion.unmeasured`) is stuck the same way for the sizes behind that sketch.
 
 Without a motion file, or with `OPTIMISTIC`, nothing here runs and the sketch is written as numbers.
 """
 import math
 
-from ..probe.motion import CURVE, UNREAD, Affine, Stuck
+from ..probe import keys
+from ..probe.motion import CURVE, UNREAD, UNTRIED, Affine, Stuck
 from . import notes
 from .curved import Curved, combine, names_of
 from .footprint import nearest_point
 from .loops import profile_loops
 from .result import Refusal
+from .sizes import unmeasured_sizes
 from .sketch_crossings import Sources, keeps_order
 from .values import Quantity, stays_positive
 
@@ -49,10 +52,15 @@ def movers(table, value):
     return _free_sizes(table, names_of(value))
 
 
-def raw(ctx, key, number):
-    """The raw value of `key`: the probe's Affine or Stuck, or the captured number as a constant. A stuck value whose
-    sizes are all fixed by now follows what the other sizes do (`rest`), else stands still."""
+def raw(ctx, key, number, sketch=""):
+    """The raw value of `key` in the sketch named `sketch`: the probe's Affine or Stuck, or the captured number as a
+    constant when the sketch was measured and the value did not move. A value of a sketch the probe did not measure
+    is stuck for the sizes behind that sketch. A stuck value whose sizes are all fixed by now follows what the other
+    sizes do (`rest`), else stands still."""
     found = ctx.motion.get(key)
+    if found is None:
+        names = unmeasured_sizes(ctx.table, ctx.motion, sketch)
+        found = Stuck(names, UNTRIED, sketch) if names else None
     if found is None:
         return Affine(number)
     if isinstance(found, Stuck) and not movers(ctx.table, found):
@@ -125,8 +133,8 @@ def _pair(node, other, fn, path=()):
     return node
 
 
-def _keyed_loops(ctx, prefix, loops):
-    return [_map(loop, [], lambda path, n, k=k: raw(ctx, "%s/l%d/%s" % (prefix, k, path), n))
+def _keyed_loops(ctx, prefix, loops, sketch=""):
+    return [_map(loop, [], lambda path, n, k=k: raw(ctx, keys.loop_field(prefix, k, path), n, sketch))
             for k, loop in enumerate(loops)]
 
 
@@ -393,10 +401,11 @@ class Outline:
 
 def _sources(ctx, item, parts, sketch):
     """The sketch curves of `parts` with their raw values, or None when the probe did not measure them."""
-    prefixes = ["%s/p%d" % (item.get("index"), n) for n, _ in parts]
+    prefixes = [keys.profile(item.get("index"), n) for n, _ in parts]
     if not all(p in getattr(ctx.motion, "curves", ()) for p in prefixes):
         return None
-    return Sources(lambda key, number: raw(ctx, key, number), list(zip(prefixes, [s for _, s in parts])), sketch)
+    return Sources(lambda key, number: raw(ctx, key, number, sketch), list(zip(prefixes, [s for _, s in parts])),
+                   sketch)
 
 
 def _mend(loop, raw_loop, sources):
@@ -440,24 +449,24 @@ def outline(ctx, item, profile, outer, inners, parts):
         return None
     sketch = profile.get("sketch") or ""
     loops = [outer] + list(inners)
-    prefix = "%s/p%d" % (item.get("index"), parts[0][0])
+    prefix = keys.profile(item.get("index"), parts[0][0])
     sources = _sources(ctx, item, parts, sketch)
     if len(parts) == 1:
-        raw_loops = [_mend(loop, r, sources) for loop, r in zip(loops, _keyed_loops(ctx, prefix, loops))]
+        raw_loops = [_mend(loop, r, sources) for loop, r in zip(loops, _keyed_loops(ctx, prefix, loops, sketch))]
     else:
         anchors = Anchors(sketch)
         for n, source in parts:
             built = profile_loops(source)
             if not isinstance(built, Refusal):
                 own = [built[0]] + list(built[1])
-                for loop, raw_loop in zip(own, _keyed_loops(ctx, "%s/p%d" % (item.get("index"), n), own)):
+                for loop, raw_loop in zip(own, _keyed_loops(ctx, keys.profile(item.get("index"), n), own, sketch)):
                     anchors.add(loop, _mend(loop, raw_loop, sources))
         raw_loops = [_from_anchors(loop, anchors, sketch, sources) for loop in loops]
     if any(isinstance(v, Curved) for v in _raw_values(raw_loops)) and not keeps_order(
             ctx.table, ctx.motion, loops, raw_loops, sketch):
         raw_loops = _stuck_curves(raw_loops, sketch)
     # Merged parts share one frame, so the first part's plane stands for all of them.
-    plane = raw(ctx, prefix + "/plane", _dot(profile["frame"]["origin"], profile["frame"]["z"]))
+    plane = raw(ctx, keys.plane(prefix), _dot(profile["frame"]["origin"], profile["frame"]["z"]), sketch)
     return Outline(ctx, profile["frame"], loops, raw_loops, plane, sketch)
 
 
@@ -468,8 +477,8 @@ def planes_apart(ctx, outlines_, item):
         ctx.fix([n for p in planes for n in movers(ctx.table, p)], notes.stuck_reason("apart", item.get("name") or ""))
 
 
-def points(ctx, item, key, rows):
-    """Written 3D points (hole positions) by keys `<item>/<key>/<n>/<0|1|2>`: lists of numbers or formulas."""
+def points(ctx, item, rows):
+    """Written 3D points of a hole's positions (`rows`): lists of numbers or formulas."""
     if not active(ctx):
         return [[round(float(c), 9) + 0.0 for c in p] for p in rows]
     sketch = (item.get("data") or {}).get("sketch") or ""
@@ -477,7 +486,7 @@ def points(ctx, item, key, rows):
     for n, p in enumerate(rows):
         row = []
         for c, number in enumerate(p):
-            value = raw(ctx, "%s/%s/%d/%d" % (item.get("index"), key, n, c), float(number))
+            value = raw(ctx, keys.hole_point(item.get("index"), n, c), float(number), sketch)
             if isinstance(value, Affine) and not value.sketch:
                 value = Affine(value.const, value.terms, sketch)
             row.append(quantity(ctx, value, float(number)).json())
@@ -492,7 +501,7 @@ def axis_point(ctx, item, frame, point2):
         return [round(v, 9) + 0.0 for v in point2]
     axis = (item.get("data") or {}).get("axis") or {}
     sketch = axis.get("sketch") or ""
-    coords = [raw(ctx, "%s/axis/point/%d" % (item.get("index"), c), float(axis["point"][c])) for c in range(3)]
+    coords = [raw(ctx, keys.axis_point(item.get("index"), c), float(axis["point"][c]), sketch) for c in range(3)]
     if all(isinstance(v, Affine) and v.is_constant for v in coords):
         return [round(v, 9) + 0.0 for v in point2]
     out = []
@@ -510,4 +519,5 @@ def axis_raw(ctx, item):
     axis = (item.get("data") or {}).get("axis") or {}
     if "point" not in axis:
         return None
-    return [raw(ctx, "%s/axis/point/%d" % (item.get("index"), c), float(axis["point"][c])) for c in range(3)]
+    sketch = axis.get("sketch") or ""
+    return [raw(ctx, keys.axis_point(item.get("index"), c), float(axis["point"][c]), sketch) for c in range(3)]

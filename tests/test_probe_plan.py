@@ -42,6 +42,16 @@ class ScanTests(unittest.TestCase):
         self.assertEqual(found.covered, {})
         self.assertEqual(found.targets, [])
 
+    def test_an_uncovered_sketch_keeps_its_name_for_the_reason_the_person_reads(self):
+        bare = square()
+        for curve in bare["loops"][0]["curves"]:
+            del curve["entity"]
+        pattern = {"index": 5, "type": "RectangularPatternFeature",
+                   "data": {"direction_one": {"sketch_token": "sk7", "sketch": "Spine"}}}
+        found = plan.scan(capture(extrude(1, bare), pattern))
+        self.assertEqual(found.named, {"sk1": "Sketch1", "sk7": "Spine"})
+        self.assertEqual(found.uncovered, {"sk1", "sk7"})
+
     def test_a_curve_the_translator_cannot_copy_is_not_covered(self):
         other = square()
         other["loops"][0]["curves"][0] = {"kind": "other", "entity": "x", "start": [0, 0], "end": [1, 1]}
