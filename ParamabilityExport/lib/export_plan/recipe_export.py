@@ -170,7 +170,8 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
       own. The manifest lists them by recipe size name.
     loose: [{'name', 'reason'}] sizes the export keeps free although it could not follow them fully (measured), by
       Fusion name. The translator adds its own. The manifest lists those the recipe keeps free, by recipe size name.
-    loose_sizes: False makes the translator fix every size that some value cannot follow.
+    loose_sizes: False makes the translator fix every size that some value cannot follow (the dialog's "Keep doubtful
+      sizes fixed"). The report records it as `keep_doubtful`.
     translated: the translator's result for these same inputs (`translate_capture`), when the caller has it already.
     unchecked: names of sizes that got no check, for the report.
     listing: the design's ParameterListing (params.listing). Its entries go into the manifest `parameters` of every
@@ -237,6 +238,8 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         report["error"] = ("%s: %s" % (type(error).__name__, error))[:500]
     if marker is not None:
         report["marker"] = dict(marker)
+    if size_table is not None:
+        report["keep_doubtful"] = not loose_sizes
     if capture is not None:
         report["capture"] = capture
     if probe is not None:

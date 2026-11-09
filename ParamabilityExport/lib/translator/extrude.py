@@ -43,11 +43,23 @@ def _parallel(a, b):
     return vec.length(vec.cross(vec.unit(a), vec.unit(b))) <= PARALLEL_TOL
 
 
-def _choose_sign(ctx, geometric, rel_end):
-    """Direction (+1 along the sketch normal, -1 against it): the measured end face wins over the stored sign."""
+def _fits(sign, rel_end, reach, other):
+    """True when a face at `rel_end` can lie in an extrude that goes `reach` along `sign` and `other` the other way."""
+    limit = reach if _sign_of(rel_end) == sign else other
+    return abs(rel_end) <= limit + LENGTH_TOL
+
+
+def _choose_sign(ctx, geometric, rel_end, reach=None, other=None):
+    """Direction (+1 along the sketch normal, -1 against it): the measured end face wins over the stored sign.
+
+    A two sided extrude passes `reach` (this side) and `other` (the other side): its end faces lie on both sides, so
+    the measured face turns the direction only when it fits the turned extrude and not the stored one."""
     if rel_end is None or abs(rel_end) < SIGN_TOL:
         return geometric
     measured = _sign_of(rel_end)
+    if measured != geometric and reach is not None and other is not None and (
+            _fits(geometric, rel_end, reach, other) or not _fits(-geometric, rel_end, reach, other)):
+        return geometric
     if measured != geometric:
         ctx.note("Fusion stored the extrude direction two ways; the measured end of the extrude was used.")
     return measured
@@ -179,6 +191,14 @@ def _reach_through(box, origin, direction):
     return farthest + diagonal + 1.0
 
 
+def _reach_of(side):
+    """How far a side of a two sided extrude can reach from the sketch plane, or None when that is not known here."""
+    kind = (side or {}).get("kind")
+    if kind == "distance" and isinstance(side.get("distance"), (int, float)):
+        return abs(float(side["distance"]))
+    return math.inf if kind in ("throughAll", "all") else None
+
+
 def _is_through(side):
     return side is not None and side.get("kind") in ("throughAll", "all")
 
@@ -197,7 +217,7 @@ def _plan(item, data, frame, shift, combine, ctx, plane_q):
     z = vec.unit(frame["z"])
     origin = vec.add(frame["origin"], vec.scale(z, shift))
 
-    def one_side(side, which, forced_sign=None, measured=True):
+    def one_side(side, which, forced_sign=None, measured=True, other=None):
         kind = (side or {}).get("kind")
         taper = _taper(_field(side, "taper_deg", 0.0)) if side else 0.0
         if isinstance(taper, Refusal):
@@ -210,7 +230,7 @@ def _plan(item, data, frame, shift, combine, ctx, plane_q):
             raw = float(side["distance"])
             if abs(raw) <= 0:
                 return Refusal("This extrude has no length.")
-            sign = forced_sign if forced_sign is not None else _choose_sign(ctx, _sign_of(raw), end)
+            sign = forced_sign if forced_sign is not None else _choose_sign(ctx, _sign_of(raw), end, abs(raw), other)
             return {"extent": "oneSide", "sign": sign, "distance": abs(raw), "taper": taper, "taper_q": taper_q,
                     "q": _distance_quantity(ctx, item, which + ".distance", raw)}
         if kind in ("throughAll", "all"):
@@ -219,7 +239,8 @@ def _plan(item, data, frame, shift, combine, ctx, plane_q):
             positive = _field(side, "positive", True)
             if positive is None:
                 return Refusal(UNREADABLE)
-            sign = forced_sign if forced_sign is not None else _choose_sign(ctx, 1 if positive else -1, end)
+            sign = forced_sign if forced_sign is not None else _choose_sign(
+                ctx, 1 if positive else -1, end, math.inf, other)
             return {"extent": "through-one", "sign": sign, "distance": None, "taper": 0.0, "adjusts": True}
         if kind == "toEntity":
             plane = side.get("plane")
@@ -230,7 +251,8 @@ def _plan(item, data, frame, shift, combine, ctx, plane_q):
             reach = vec.dot(vec.sub(plane["point"], origin), z)
             if abs(reach) < SIGN_TOL:
                 return Refusal("This extrude ends on the surface it starts from.")
-            sign = forced_sign if forced_sign is not None else _choose_sign(ctx, _sign_of(reach), end)
+            sign = forced_sign if forced_sign is not None else _choose_sign(
+                ctx, _sign_of(reach), end, abs(reach), other)
             offset = _field(side, "offset", 0.0)
             if offset is None:
                 return Refusal(UNREADABLE)
@@ -273,7 +295,7 @@ def _plan(item, data, frame, shift, combine, ctx, plane_q):
             return [{"extent": "through", "sign": 1, "distance": None, "taper": 0.0}]
         if combine == "intersect":
             return Refusal("Two sided intersect extrudes are not copied yet.")
-        first = one_side(one, "side_one")
+        first = one_side(one, "side_one", other=_reach_of(two))
         if isinstance(first, Refusal):
             return first
         second = one_side(two, "side_two", forced_sign=-first["sign"], measured=False)

@@ -18,7 +18,6 @@ from ..translator import borrowed
 from .size_checks import size_entry
 
 _STATE_KEYS = ("sketches", "points", "lines", "params", "box", "unread")
-_SAME_MM = 1e-4
 
 
 def kept_size_names(table, free_sizes):
@@ -90,43 +89,6 @@ def _with_borrowed(request, hints, watch):
     if paths:
         out["borrowed"] = paths
     return out
-
-
-def _numbers(node, out):
-    if isinstance(node, dict):
-        for key in sorted(node):
-            _numbers(node[key], out)
-    elif isinstance(node, list):
-        for value in node:
-            _numbers(value, out)
-    elif isinstance(node, (int, float)) and not isinstance(node, bool):
-        out.append(float(node))
-
-
-def _signature(record):
-    """(frame numbers, curves sorted by their sketch curve token) of a sketch state."""
-    frame = []
-    _numbers(record.get("frame"), frame)
-    curves = []
-    for profile in record.get("profiles") or []:
-        for loop in profile.get("loops") or []:
-            for curve in loop.get("curves") or []:
-                numbers = []
-                _numbers({k: v for k, v in curve.items() if k not in ("entity", "kind", "type")}, numbers)
-                curves.append((str(curve.get("entity") or ""), str(curve.get("kind") or ""), numbers))
-    return frame, sorted(curves)
-
-
-def _close(a, b):
-    return len(a) == len(b) and all(abs(x - y) <= _SAME_MM for x, y in zip(a, b))
-
-
-def _same_sketch(before, now):
-    """True when two reads of one sketch have the same frame and curves."""
-    frame_a, curves_a = _signature(before)
-    frame_b, curves_b = _signature(now)
-    return _close(frame_a, frame_b) and len(curves_a) == len(curves_b) and all(
-        a[:2] == b[:2] and _close(a[2], b[2]) for a, b in zip(curves_a, curves_b))
 
 
 _UNTRIED = "it changes a sketch and could not be tried at other values"
@@ -251,7 +213,7 @@ class SizeProbe:
                     continue
                 param = next(iter(values))
                 now = (read.get("sketches") or {}).get(token)
-                if param in done or (now is not None and _same_sketch(before, now)):
+                if param in done or (now is not None and match.same_read(before, now)):
                     continue
                 done.add(param)
                 name = hint["sketch"] or "a sketch"

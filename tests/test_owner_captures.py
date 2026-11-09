@@ -1,5 +1,5 @@
-"""Captures of the owner's hybrid assembly (add-in 0.3.1, 0.3.2 for report (3), and 0.3.3 inside the FilterBox
-package). They stay outside the repo; the tests skip without them."""
+"""Captures of the owner's hybrid assembly (add-in 0.3.1, 0.3.2 for report (3), 0.3.3 to 0.4.3 inside the FilterBox
+packages). They stay outside the repo; the tests skip without them."""
 import json
 import os
 import unittest
@@ -21,6 +21,9 @@ PACKAGE = "Pat - Pipe, Filter (Box, Cylinder).paramability"
 PACKAGE_WITH_OFFSET = "Pat - Pipe, Filter (Box, Cylinder) (2).paramability"
 # Add-in 0.4.1 with the offset removed in Fusion, and the probe's states read at other size values.
 PACKAGE_WITH_PROBE = "P123at - Pipe, Filter (Box, Cylinder).paramability"
+# Add-in 0.4.3 with the offset back in Fusion: Fusion lists another end face of the lid slot cut, and its lid sketch
+# lands on another solution in some probe states.
+PACKAGE_WITH_OFFSET_FACES = "Pat - Pipe, Filter (Box, Cylinder) (4).paramability"
 PROBE_TICKED = ["FilterBox_$_width__contains_CeramicMedium", "FilterBox_$_height__contains_CeramicMedium",
                 "FilterBox_$_depth__contains_CeramicMedium", "_CeramicMedium__Cube_width_unitless",
                 "FilterBox__PipeTop_offsetFromCenter_mm", "FilterBox__PipeBottom_offsetFromCenter_mm",
@@ -123,6 +126,40 @@ class OwnerCaptureTest(unittest.TestCase):
         self.assertEqual(sorted((r["name"], r["min"]) for r in result.raised),
                          sorted([(PROBE_TICKED[0], 1.01), (PROBE_TICKED[2], 1.01)]))
         self.assertEqual(len([n for n, size in result.recipe["sizes"].items() if "value" in size]), 6)
+
+    def test_with_the_offset_back_the_filter_box_sizes_stay_free(self):
+        path = os.path.join(REPORTS, PACKAGE_WITH_OFFSET_FACES)
+        if not os.path.exists(path):
+            self.skipTest("the owner's package is not on this machine")
+        with zipfile.ZipFile(path) as package:
+            report = json.loads(package.read("report.json"))
+        capture = report["capture"]
+        params = capture["parameters"]
+        ticked = PROBE_TICKED + ["_Filter__Wall_thickness_mm"]
+        table = size_table.build(params["user"], ticked, params["model"], capture.get("design_units", "mm"))
+        # The range ends as the tries in Fusion left them: the slope builds only below its value, the wall only
+        # thinner, and the smallest counts and cube did not build.
+        table = table.with_narrowed({
+            "_Pipe__Slope_deg": (0.0, 0.5), "_Filter__Wall_thickness_mm": (0.625, 1.25),
+            PROBE_TICKED[0]: (1.35, 3.6), PROBE_TICKED[2]: (1.35, 3.6), PROBE_TICKED[3]: (13.5, 36.0)})
+        motion = probe_motion.build(probe_view(capture), table, report["probe"]["states"])
+        # The lid sketch reads the same other outline after four rows of four different sizes.
+        self.assertEqual(motion.apart, [6, 10, 12, 19])
+        result = translate(capture, size_table=table, motion=motion, loose=True)
+        self.assertEqual((result.fixed, result.loose), ([], []))
+        verdicts = {v["index"]: v for v in result.items}
+        self.assertNotIn("two ways", verdicts[65]["note"])
+        self.assertEqual(verdicts[92]["verdict"], "translated")
+        free = {n: (s["min"], s["max"]) for n, s in result.recipe["sizes"].items() if "value" in s}
+        self.assertEqual(free, {
+            "FilterBox___width__contains_CeramicMedium": (1.35, 2.05),
+            "FilterBox___height__contains_CeramicMedium": (0.6, 2.4),
+            "FilterBox___depth__contains_CeramicMedium": (1.35, 3.6),
+            "_CeramicMedium__Cube_width_unitless": (13.5, 20.52),
+            "FilterBox__PipeTop_offsetFromCenter_mm": (0.025, 0.1),
+            "_Pipe__Slope_deg": (0.0, 0.5),
+            "_Filter__Wall_thickness_mm": (0.98, 1.25)})
+        self.assertEqual(check_recipe(result.recipe), [])
 
 
 if __name__ == "__main__":

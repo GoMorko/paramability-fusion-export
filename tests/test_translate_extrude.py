@@ -206,6 +206,17 @@ class MeasuredLengthTest(unittest.TestCase):
         ok = variant("extrude_two_sides", lambda d: d.update(end_offset=-6.0))
         self.assertEqual(ok.recipe["features"][0]["sketch"]["on"]["normal"], [0, 0, -1])
 
+    def test_a_two_sided_cut_turns_only_for_a_face_that_the_stored_direction_cannot_reach(self):
+        def cut(end):
+            return lambda d: d.update(extent_type="two", end_offset=end,
+                                      side_one={"kind": "distance", "distance": 60.0, "taper_deg": 0.0},
+                                      side_two={"kind": "distance", "distance": 10.0, "taper_deg": 0.0})
+        # A wall cut through 4 mm behind the sketch lies in reach of the second side.
+        kept = under_test(variant("extrude_cut_through_one", cut(-4.0)), 3)
+        self.assertEqual(kept[0]["sketch"]["on"]["normal"], [1, 0, 0])
+        turned = under_test(variant("extrude_cut_through_one", cut(-50.0)), 3)
+        self.assertEqual(turned[0]["sketch"]["on"]["normal"], [-1, 0, 0])
+
     def test_to_entity_offset_is_checked_against_the_measured_end(self):
         result = variant("extrude_to_plane", lambda d: d["side_one"].update(offset=1.5))
         self.assertIsNone(result.recipe)

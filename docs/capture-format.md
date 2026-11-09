@@ -296,7 +296,8 @@ CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriente
   `endFaces[0].pointOnFace`, or null. The measured check of the direction and, for one side, symmetric (half
   length) and two sided extrudes, of the length: the translator refuses when `abs(end_offset - start shift)` is not
   the planned length within 1e-3 mm. A one sided cut that ends past the whole `target_box_before` makes no end face
-  of its own, so a nearer measured end is not checked there.
+  of its own, so a nearer measured end is not checked there. A two sided extrude has faces on both sides of its
+  sketch, so the measured face turns its direction only when it lies out of reach of the stored one.
 - `side_leans` (optional): per face of `ExtrudeFeature.sideFaces` (at most 256), the outward normal at
   `pointOnFace` along the first profile's sketch `z`, which is the sine of how far that wall leans. The taper check:
   a wall that narrows away from the sketch leans its outward normal along the travel; a cut lists the part's walls,
@@ -649,7 +650,10 @@ this:
 - A stuck value that a step writes fixes every size the probe lists for it, with the probe's cause: `curve` (a point
   moves along a curve), `shape` (the outline changes), `turns` (the sketch plane turns), `unread`, `untried`. When
   only some states failed (a size whose state changed the outline), the probe lists only those sizes and fits the
-  value over the other states as `rest`, which the translator writes once the listed sizes are fixed.
+  value over the other states as `rest`, which the translator writes once the listed sizes are fixed. A sketch can
+  have more than one solution, and Fusion may land on another one after the rows run before: when a sketch reads as
+  the same different outline in states that change different sizes, those states blame no size for it (`apart`
+  lists them, by number in `states`).
 - An outline merged from touching profiles takes each point from the part profile that has it (rect corners from
   centre, width and height); a rect drawn through merged corners gets its centre, width and height from them. Pieces
   of one sketch line in a merged loop are joined back into the line, and a loop of arcs of one circle becomes the
@@ -736,6 +740,7 @@ the part) is listed there too, with the old end as `from`.
 `sizes.loose` lists the sizes that stay free although the export could not follow them fully (`{ name, reason }` by
 recipe size name, as in the manifest's `loose`): from the translator, from a check that moved the part in the
 assembly or changed a sketch the probe does not follow, and from the probe. `sizes.fixed` lists the fixed ones.
+`keep_doubtful` is true when the person ticked "Keep doubtful sizes fixed", so those sizes were fixed instead.
 
 ## 7. API names and what is not verified
 

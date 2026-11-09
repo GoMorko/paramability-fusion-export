@@ -6,13 +6,15 @@
         "9/p0/plane": { "const": 0, "terms": { "FilterBox_height_mm": 1 } },
         "12/p0/l0/points.2.1": { "stuck": ["angle_deg"], "cause": "curve", "sketch": "Sketch5" } },
       "box_max": { "min": [..], "max": [..] },
-      "states": [ { "values": { "width": 2.0 }, "built": true } ] }
+      "states": [ { "values": { "width": 2.0 }, "built": true } ],
+      "apart": [ 3 ] }
 
 A key is `<item index>/p<profile>/l<loop>/<field path>` (`l0` is the outer loop), `<item>/p<profile>/plane`,
 `<item>/positions/<n>/<0|1|2>` for a hole point and `<item>/axis/point/<0|1|2>` for a revolve axis line. The sketch
 curves of a profile have `<item>/p<profile>/c<loop>.<curve>/<field>` (a line's `offset` and `turn`, an arc's
 `center.0`, `center.1` and `radius`); `curves` lists the profiles (`<item>/p<profile>`) whose curves were measured.
-A stuck value may carry `rest`: what it follows once its `stuck` sizes are fixed. `terms` keys
+`apart` lists the states (by number in `states`) where Fusion solved a sketch another way, so a different outline
+there blames no size. A stuck value may carry `rest`: what it follows once its `stuck` sizes are fixed. `terms` keys
 are Fusion parameter names; `const` plus the terms give the value at any size settings. A key that is not listed did
 not move: the translator writes the captured number.
 
@@ -147,12 +149,13 @@ class Motion:
     """What the probe found: a value per key (Affine or Stuck), the union of the target boxes and the states tried."""
     optimistic = False
 
-    def __init__(self, values=None, box_max=None, states=None, dropped=None, curves=None):
+    def __init__(self, values=None, box_max=None, states=None, dropped=None, curves=None, apart=None):
         self.values = dict(values or {})
         self.box_max = box_max
         self.states = list(states or [])
         self.dropped = list(dropped or [])  # columns left out of the fit, `{ name, reason }`
         self.curves = set(curves or ())  # profiles whose sketch curves were measured, `<item>/p<profile>`
+        self.apart = list(apart or [])  # numbers in `states` where Fusion solved a sketch another way
 
     def get(self, key):
         """`Affine`, `Stuck`, or None when the value did not move."""
@@ -167,6 +170,8 @@ class Motion:
             out["dropped"] = self.dropped
         if self.curves:
             out["curves"] = sorted(self.curves)
+        if self.apart:
+            out["apart"] = list(self.apart)
         return out
 
     @classmethod
@@ -180,7 +185,8 @@ class Motion:
                                     if isinstance(rest, dict) else None)
             else:
                 values[key] = Affine(raw.get("const", 0.0), raw.get("terms"), raw.get("sketch", ""))
-        return cls(values, data.get("box_max"), data.get("states"), data.get("dropped"), data.get("curves"))
+        return cls(values, data.get("box_max"), data.get("states"), data.get("dropped"), data.get("curves"),
+                   data.get("apart"))
 
 
 class _Optimistic(Motion):

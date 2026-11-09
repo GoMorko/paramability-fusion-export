@@ -5,6 +5,10 @@ kept sizes that differ from the current settings (a size that is missing stays a
 probe state of `fusion_reader.probe_state` (sketches, points, lines, params in Fusion's own units, box). Exactly one
 state has `"e0": true`: the read at the current settings, before any size is changed. A state that is not `built`
 (Fusion could not build the part there) is left out of the fit.
+
+A sketch can have more than one solution, and Fusion may land on another one depending on the rows run before. When
+a sketch reads as the same different outline in states that change different sizes, none of those sizes made it:
+those states blame no size for that outline (`Motion.apart`).
 """
 from . import columns as cols
 from . import fit, match, plan
@@ -23,6 +27,8 @@ class _Run:
         self.base = (self.e0 or {}).get("read")
         self.states = [self.e0 or {"values": {}, "e0": True}] + [s for s in states if not s.get("e0")]
         self.targets = []
+        self.apart = set()
+        self._values = {}
         if self.base:
             ok = match.readable(self.found, self.base)
             self.targets = [t for t in self.found.targets if t["sketch_token"] in ok]
@@ -42,6 +48,12 @@ class _Run:
 
     def values_at(self, target, at):
         """`(values, cause)` of a target in state `at`; (None, None) for a state that was not built."""
+        key = (id(target), at)
+        if key not in self._values:
+            self._values[key] = self._read_values(target, at)
+        return self._values[key]
+
+    def _read_values(self, target, at):
         if not self.built(at):
             return None, None
         read = self.states[at].get("read")
@@ -49,6 +61,19 @@ class _Run:
         if values is not None and values.keys() != match.captured_values(target).keys():
             return None, SHAPE
         return values, cause
+
+    def find_apart(self, current=None):
+        """The states where a sketch reads as the same different outline as in a state that changes other sizes."""
+        for token in dict.fromkeys(t["sketch_token"] for t in self.targets):
+            shaped = [at for at in range(1, len(self.states))
+                      if any(self.values_at(t, at)[1] == SHAPE for t in self.targets if t["sketch_token"] == token)]
+            reads = {at: self.states[at]["read"]["sketches"].get(token) for at in shaped}
+            for i, a in enumerate(shaped):
+                for b in shaped[i + 1:]:
+                    sizes_a, sizes_b = self.varied(a, current), self.varied(b, current)
+                    if (sizes_a and sizes_b and not sizes_a & sizes_b and isinstance(reads[a], dict)
+                            and isinstance(reads[b], dict) and match.same_read(reads[a], reads[b])):
+                        self.apart.update((a, b))
 
 
 def _moved(a, b):
@@ -119,6 +144,8 @@ def build(capture, table, states):
     shared = cols.user_columns(table, overrides, envs, reads, dropped)
     models = cols.model_columns(table, envs, reads, dropped)
     out.dropped = dropped
+    run.find_apart(current)
+    out.apart = sorted(at - 1 for at in run.apart)
     for target in run.targets:
         _fit_target(out, run, target, shared, models, current)
     out.curves = {match.prefix(t) for t in run.targets if t["kind"] == "profile"}
@@ -133,7 +160,7 @@ def _fit_target(out, run, target, shared, models, current):
         values, cause = run.values_at(target, at)
         for key in want:
             series[key].append(None if values is None else values[key])
-        if values is None and cause:
+        if values is None and cause and not (cause == SHAPE and at in run.apart):
             problems.append((cause, run.varied(at, current)))
     sketch = target["sketch"]
     plane = (target.get("reference") or {}).get("token") or ""

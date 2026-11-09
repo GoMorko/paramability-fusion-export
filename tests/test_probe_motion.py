@@ -158,6 +158,20 @@ class ProblemStateTests(unittest.TestCase):
         self.assertEqual(motion.get("4/p0/l1/radius"), Stuck(["count"], "shape", "Sketch1"))
         self.assertIsInstance(motion.get("6/p0/plane"), Affine)
 
+    def test_the_same_other_outline_at_states_of_different_sizes_blames_none_of_them(self):
+        def flipped(**sizes):
+            found = read_at(**sizes)
+            lid = found["sketches"]["sk2"]
+            found["sketches"]["sk2"] = dict(lid, profiles=[{"loops": [loop([circle((0, 0), 4, "c2")]),
+                                                                      loop([circle((1, 0), 1, "c3")], False)]}])
+            return state(sizes, found)
+
+        motion = self.motion(s3=flipped(off=10), s5=flipped(count=1))
+        self.assertEqual(motion.apart, [2, 4])
+        self.assertNotIsInstance(motion.get("6/p0/l0/radius"), Stuck)
+        alone = self.motion(s3=flipped(off=10))
+        self.assertEqual((alone.apart, alone.get("6/p0/l0/radius")), ([], Stuck(["off"], "shape", "Sketch2")))
+
     def test_a_plane_that_turns_fixes_the_size_that_did_it(self):
         motion = self.motion(s8=state({"height": 10}, read_at(height=10, turned=True)))
         plane = motion.get("6/p0/plane")

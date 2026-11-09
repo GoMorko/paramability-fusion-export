@@ -351,3 +351,40 @@ def readable(found, e0):
                 abs(values[k] - v) > POINT_TOLERANCE for k, v in want.items()):
             bad.add(target["sketch_token"])
     return {t for t in found.covered if t not in bad}
+
+
+def _all_numbers(node, out):
+    if isinstance(node, dict):
+        for key in sorted(node):
+            _all_numbers(node[key], out)
+    elif isinstance(node, list):
+        for value in node:
+            _all_numbers(value, out)
+    elif isinstance(node, (int, float)) and not isinstance(node, bool):
+        out.append(float(node))
+
+
+def _read_signature(record):
+    """(frame numbers, curves sorted by their sketch curve token) of a sketch read."""
+    frame = []
+    _all_numbers(record.get("frame"), frame)
+    curves = []
+    for profile in record.get("profiles") or []:
+        for loop in profile.get("loops") or []:
+            for curve in loop.get("curves") or []:
+                numbers = []
+                _all_numbers({k: v for k, v in curve.items() if k not in ("entity", "kind", "type")}, numbers)
+                curves.append((str(curve.get("entity") or ""), str(curve.get("kind") or ""), numbers))
+    return frame, sorted(curves)
+
+
+def _close(a, b):
+    return len(a) == len(b) and all(abs(x - y) <= POINT_TOLERANCE for x, y in zip(a, b))
+
+
+def same_read(before, now):
+    """True when two reads of one sketch (`{ frame, profiles }`) have the same frame and curves, within 1e-4 mm."""
+    frame_a, curves_a = _read_signature(before)
+    frame_b, curves_b = _read_signature(now)
+    return _close(frame_a, frame_b) and len(curves_a) == len(curves_b) and all(
+        a[:2] == b[:2] and _close(a[2], b[2]) for a, b in zip(curves_a, curves_b))

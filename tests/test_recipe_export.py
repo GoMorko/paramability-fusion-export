@@ -51,6 +51,9 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(report["sizes"]["loose"], loose[:1])
         self.assertIn("1 size may give unexpected results: wall_mm.", manifest["notes"])
         self.assertEqual(validate_manifest(manifest), [])
+        self.assertFalse(report["keep_doubtful"])
+        strict = plan_single_export(capture, self.step, "Plate", "w", "z", size_table=table, loose_sizes=False)[2]
+        self.assertTrue(strict["keep_doubtful"])
 
     def test_checks_are_planned_inside_the_limits_the_translation_found(self):
         from tests.test_translate_copies import counted
