@@ -4,9 +4,9 @@ import traceback
 import adsk.core
 
 from ..fusion_reader.bodies import is_pickable_body
-from ..export_plan.dialog_rows import escape, text_rows
-from ..export_plan.sizes_table import read_table, table_to_csv
-from ..export_plan.sizes_text import pick_default_index, read_sizes
+from ..dialog_model.dialog_rows import escape, text_rows
+from ..dialog_model.sizes_table import read_table, table_to_csv
+from ..dialog_model.sizes_text import pick_default_index, read_sizes
 from . import sizes_table_ui, sizes_text_ui
 from .body_inputs import BODY_ID, add_body_inputs
 from .log import log
@@ -30,7 +30,7 @@ def build_blocked(command, text):
 
 def build(command, parameters, body, up_axis, table, marker_note=None):
     """Add all inputs. parameters come from fusion_reader.parameters; body may be None; table is the sizes data.
-    `marker_note` is the line shown when the timeline marker is not at the end (export_plan.marker.marker_note)."""
+    `marker_note` is the line shown when the timeline marker is not at the end (design_edit.marker.marker_note)."""
     inputs = command.commandInputs
     add_body_inputs(inputs, body, marker_note)
 

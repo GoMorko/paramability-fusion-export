@@ -20,7 +20,7 @@ from tests.translator_helpers import FIXTURES, load_capture
 
 from lib.params import size_table
 from lib.params.expressions import ExpressionError, evaluate
-from lib.probe.motion import Motion
+from lib.sketch_values.motion import Motion
 from lib.translator import translate
 
 WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")

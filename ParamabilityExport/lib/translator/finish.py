@@ -11,6 +11,8 @@ outside or rounded shells.
 """
 import math
 
+from ..package.numbers import is_number
+
 from . import follow, picks, values, vec
 from .placer_makers import ShellMaker
 from .result import Entry, Refusal, StepResult
@@ -30,10 +32,6 @@ _FILLET_SET_REFUSALS = {
     "chordLength": "Rounds set by chord length are not copied yet.",
     "asymmetric": "Rounds with two different radii are not copied yet.",
 }
-
-
-def _n(value):
-    return round(value, 9) + 0.0
 
 
 def _close(a, b, tol=SIZE_TOL):
@@ -151,10 +149,6 @@ def fillet(item, ctx):
     return StepResult(entries)
 
 
-def _number(value):
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
-
-
 def _chamfer_measures(entry):
     """(size, second) of a chamfer set: `second` is None for an even chamfer, else ("otherSize", distance) or
     ("cutAngleDeg", angle). A Refusal when a value cannot be read."""
@@ -163,19 +157,19 @@ def _chamfer_measures(entry):
     second = None
     if kind == "twoDistances":
         other = entry.get("distance_two")
-        if not _number(other) or not other > 0:
+        if not is_number(other) or not other > 0:
             return Refusal("This chamfer has no readable size.")
         if not _close(distance, other):
             second = ("otherSize", other)
     elif kind == "distanceAngle":
         angle = entry.get("angle_deg")
-        if not _number(angle) or not 0 < angle < 90:
+        if not is_number(angle) or not 0 < angle < 90:
             return Refusal("This chamfer has no readable angle.")
         if not _close(angle, EQUAL_ANGLE_DEG, ANGLE_TOL):
             second = ("cutAngleDeg", angle)
     elif kind != "equal":
         return Refusal("This kind of chamfer is not copied yet.")
-    if not _number(distance) or not distance > 0:
+    if not is_number(distance) or not distance > 0:
         return Refusal("This chamfer has no readable size.")
     return distance, second
 

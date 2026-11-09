@@ -7,7 +7,7 @@ the dialog cannot start, the same story goes to a message box.
 """
 import adsk.core
 
-from ..export_plan.dialog_rows import escape, name_cell, text_rows
+from ..dialog_model.dialog_rows import escape, name_cell, text_rows
 from .handlers import HandlerList, on_command_created, on_custom_event
 from .log import log, message_box
 
@@ -38,7 +38,7 @@ def start():
 
 
 def show(view):
-    """Open the result dialog for a view from export_plan.result_rows.result_view; else show its message.
+    """Open the result dialog for a view from dialog_model.result_rows.result_view; else show its message.
 
     The dialog opens after the calling command has ended."""
     _pending["view"] = view
@@ -103,7 +103,7 @@ def _on_created(args):
 
 
 def build(command, view):
-    """Add the inputs of the result dialog. view comes from export_plan.result_rows.result_view."""
+    """Add the inputs of the result dialog. view comes from dialog_model.result_rows.result_view."""
     command.isOKButtonVisible = False
     try:
         command.cancelButtonText = "Close"

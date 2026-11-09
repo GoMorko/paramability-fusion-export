@@ -1,4 +1,4 @@
-"""Sketch values that follow sizes, read from the probe's motion file (`probe.motion`).
+"""Sketch values that follow sizes, read from the probe's motion file (`sketch_values.motion`).
 
 The probe measures each value the translator writes for a sketch (loop numbers, the sketch plane, hole points, revolve
 axis points) at other size settings and fits it as `Affine` (a sum over Fusion parameters) or marks it `Stuck`. Here
@@ -11,10 +11,10 @@ Without a motion file, or with `OPTIMISTIC`, nothing here runs and the sketch is
 """
 import math
 
-from ..probe import keys
-from ..probe.motion import CURVE, UNREAD, UNTRIED, Affine, Stuck
+from ..sketch_values import keys
+from ..sketch_values.motion import CURVE, UNREAD, UNTRIED, Affine, Stuck
 from . import notes
-from .curved import Curved, combine, names_of
+from .curved import Curved, combine, names_of, render
 from .footprint import nearest_point
 from .loops import profile_loops
 from .result import Refusal
@@ -88,7 +88,7 @@ def rendered(table, value, number):
         return value
     if value.is_constant:
         return Quantity(number)
-    q = value.render(table)
+    q = render(value, table)
     if isinstance(q, Stuck) or not q.sized:
         return q if isinstance(q, Stuck) else Quantity(number)
     if abs(q.n - number) > VALUE_TOL:

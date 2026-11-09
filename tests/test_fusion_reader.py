@@ -2,7 +2,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.fakes import FakeDesign
-from lib.export_plan.apply import RowBuildError
+from lib.design_edit.apply import RowBuildError
 from lib.fusion_reader.parameters import list_user_parameters
 from lib.fusion_reader.rows import DesignParameterStore
 from tests.row_helpers import apply_row, restore, saved_expressions

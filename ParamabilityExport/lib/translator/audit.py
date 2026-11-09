@@ -9,8 +9,8 @@ out with the reason given here.
 A size is read by a copied step through the model parameters in its `data.params`, through the dimensions of the
 sketches it draws on, and through the construction geometry it uses.
 """
-from ..probe.coverage import STILL
-from ..probe.motion import Motion
+from ..sketch_values.coverage import STILL
+from ..sketch_values.motion import Motion
 from .notes import step_label
 from .sizes import construction_fixes, sketch_answer, sketch_sizes, used_sizes
 from .values import reads_in

@@ -10,12 +10,12 @@ import math
 from . import vec
 from .footprint import curve_length
 from .shells import InnerPlace
-from .slabs import _cleaned
+from .slabs import cleaned
 from .values import Quantity
+from .vec import POINT_TOL
 
 # Walls closer to parallel than this (sine of the angle between them) do not make an edge.
 PARALLEL_SINE = 0.05
-POINT_TOL = 1e-6
 COEF_DIGITS = 9
 
 
@@ -95,7 +95,7 @@ class CrossPlace:
         return self._quantities
 
     def coordinates(self, p):
-        return [_cleaned(q) for q in self._quantities]
+        return [cleaned(q) for q in self._quantities]
 
 
 def _plane(wall, p):

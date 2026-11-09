@@ -1,7 +1,7 @@
 """Save file dialog for the package."""
 import adsk.core
 
-from ..export_plan.naming import with_extension
+from ..package.naming import with_extension
 
 
 def ask_save_path(initial_name):

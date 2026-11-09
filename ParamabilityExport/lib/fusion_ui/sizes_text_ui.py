@@ -1,6 +1,6 @@
 """Fallback for the sizes table: one multi line text box with CSV text, used when the table cannot be shown."""
-from ..export_plan.dialog_rows import escape, text_rows
-from ..export_plan.sizes_text import others_line, prefill_sizes_text, settable_parameters
+from ..dialog_model.dialog_rows import escape, text_rows
+from ..dialog_model.sizes_text import others_line, prefill_sizes_text, settable_parameters
 
 SIZES_ID = "pm_sizes_text"
 OTHERS_ID = "pm_sizes_others"

@@ -8,7 +8,7 @@ the merged loop are joined back into that line, and a loop of arcs of one circle
 keeps no corner where the shared curves crossed it. A free curve is shared when two profiles hold the same sketch
 curve (same entity token and ends); text outlines have no such token and are never merged.
 """
-from .footprint import Footprint, _polyline
+from .footprint import Footprint, polyline
 
 KEY_DIGITS = 4
 CHAIN_TOL = 1e-4
@@ -106,7 +106,7 @@ def _area(curves):
     """The area a closed loop encloses (unsigned), drawn through the curve points."""
     points = []
     for curve in curves:
-        points += _polyline(curve)
+        points += polyline(curve)
     return abs(sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(points, points[1:] + points[:1]))) / 2.0
 
 
@@ -135,7 +135,7 @@ def _merged(group):
     loops.sort(key=_area, reverse=True)
     outer = Footprint({"loops": [{"outer": True, "curves": loops[0]}]})
     for hole in loops[1:]:
-        if not outer.covers(_polyline(hole[0])[len(_polyline(hole[0])) // 2]):
+        if not outer.covers(polyline(hole[0])[len(polyline(hole[0])) // 2]):
             return None
     merged = dict(group[0])
     merged["merged_from"] = [profile["_at"] for profile in group]

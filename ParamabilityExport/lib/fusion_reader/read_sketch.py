@@ -143,7 +143,7 @@ class _Space:
         return [round(dx / n, 9) + 0.0, round(dy / n, 9) + 0.0]
 
 
-def _read_curve(geometry, space):
+def read_curve(geometry, space):
     name = geo.type_name(geometry)
     if name == "Line3D":
         return {"kind": "line", "start": space.xy(geometry.startPoint), "end": space.xy(geometry.endPoint)}
@@ -335,7 +335,7 @@ def _reference(sketch, ctx):
 
 def _curve_record(profile_curve, space):
     """The curve dict, with `entity`: the token of the sketch curve it came from (same across recomputes)."""
-    record = _read_curve(profile_curve.geometry, space)
+    record = read_curve(profile_curve.geometry, space)
     token = geo.safe(lambda: profile_curve.sketchEntity.entityToken, "")
     if token:
         record["entity"] = token
@@ -447,7 +447,7 @@ def read_text_outlines(text, ctx=None):
     space = _Space(sketch, [_OnCurve(g) for g in geometries], frame, _text_box(text))
     if space.mode not in ("sketch", "model"):
         return [_text_marker(text, ctx, "space")], [None]
-    curves = [_read_curve(g, space) for g in geometries]
+    curves = [read_curve(g, space) for g in geometries]
     found = text_outlines.outlines_of(curves)
     if isinstance(found, str):
         return [_text_marker(text, ctx, found)], [None]

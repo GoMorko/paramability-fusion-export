@@ -4,7 +4,7 @@ from tests import context  # noqa: F401
 from tests.test_recipe_export import plate_then_loft
 from tests.translator_helpers import load_capture
 
-from lib.export_plan.stop_warning import saved_message, status_text, summarize
+from lib.dialog_model.stop_warning import saved_message, status_text, summarize
 
 
 class SummarizeTest(unittest.TestCase):

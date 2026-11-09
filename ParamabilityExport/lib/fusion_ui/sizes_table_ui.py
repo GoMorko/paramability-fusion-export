@@ -1,6 +1,6 @@
 """The parameter check list and the sizes table of the export dialog.
 
-The table is a view of export_plan.sizes_table.SizesTable. Cell inputs hold values in Fusion internal units
+The table is a view of dialog_model.sizes_table.SizesTable. Cell inputs hold values in Fusion internal units
 (cm, rad), the same units the table data keeps, so no unit conversion happens here.
 Fusion keeps removed inputs registered, so every id that can be created twice carries a running number.
 """
@@ -8,9 +8,9 @@ import itertools
 
 import adsk.core
 
-from ..export_plan.sizes_table import (
+from ..dialog_model.sizes_table import (
     add_row, column_label, parameter_note, remove_row, set_row, toggle_column)
-from ..export_plan.sizes_text import settable_parameters
+from ..dialog_model.sizes_text import settable_parameters
 
 PARAMS_GROUP_ID = "pm_params_group"
 SIZES_GROUP_ID = "pm_sizes_group"

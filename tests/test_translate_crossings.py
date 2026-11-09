@@ -7,7 +7,7 @@ from tests.test_translate_copies import _edges_set, _item
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
 
 from lib.params import size_table
-from lib.probe.motion import Affine, Motion, Stuck
+from lib.sketch_values.motion import Affine, Motion, Stuck
 from lib.translator import translate
 from lib.translator.outlines import _joined, merge_touching
 from lib.translator.sketch_crossings import Sources

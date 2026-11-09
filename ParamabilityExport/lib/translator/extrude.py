@@ -11,6 +11,8 @@ several outlines, outlines with holes, two sided and tapered thin extrudes are r
 """
 import math
 
+from ..package.numbers import round9
+
 from . import follow, kept_ranges, loops, outlines, placement, sketch_motion, thin_wall, values, vec
 from .footprint import Footprint
 from .placer_makers import SlabMaker, ThinWallMaker
@@ -33,10 +35,6 @@ AREA_RELATIVE_TOL = 1e-6
 LEAN_TOL = 1e-4
 PLANE_TOL = 1e-4
 COMBINE = {"join": "add", "cut": "cut", "intersect": "intersect", "newBody": "new"}
-
-
-def _n(value):
-    return round(value, 9) + 0.0
 
 
 def _sign_of(value):
@@ -613,9 +611,9 @@ def handle(item, ctx):
             "extent": entry["extent"],
         }
         if entry["distance"] is not None:
-            step["distance"] = entry["q"].json() if entry.get("q") else _n(entry["distance"])
+            step["distance"] = entry["q"].json() if entry.get("q") else round9(entry["distance"])
         if entry["taper"]:
-            step["taperDeg"] = entry["taper_q"].json() if entry.get("taper_q") else _n(entry["taper"])
+            step["taperDeg"] = entry["taper_q"].json() if entry.get("taper_q") else round9(entry["taper"])
         placers = []
         if thin_step is not None:
             side, thickness_q = thin_step

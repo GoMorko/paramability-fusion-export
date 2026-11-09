@@ -9,7 +9,7 @@ from tests import context  # noqa: F401
 from tests.translator_helpers import FIXTURES, assert_schema_ok, load_capture, steps_of
 
 from lib.params import size_table
-from lib.probe.motion import OPTIMISTIC, Motion
+from lib.sketch_values.motion import OPTIMISTIC, Motion
 from lib.translator import translate
 from lib.translator.sizes import untried_reasons
 

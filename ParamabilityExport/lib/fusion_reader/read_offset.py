@@ -12,7 +12,7 @@ import math
 from . import read_geometry as geo
 from .param_refs import Params, with_params
 from .read_finish import strict_items
-from .read_sketch import _read_curve
+from .read_sketch import read_curve
 
 SQUARE_TOL = 1e-6
 
@@ -72,7 +72,7 @@ def _face_record(face, inputs, ctx):
     loops, square, meets = [], True, False
     for loop in strict_items(face.loops):
         edges = strict_items(loop.edges)
-        loops.append({"outer": bool(loop.isOuter), "curves": [_read_curve(e.geometry, space) for e in edges]})
+        loops.append({"outer": bool(loop.isOuter), "curves": [read_curve(e.geometry, space) for e in edges]})
         for edge in edges:
             for neighbour in strict_items(edge.faces):
                 if geo.same_entity(geo.native_input(neighbour, ctx), face):

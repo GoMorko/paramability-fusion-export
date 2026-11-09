@@ -174,7 +174,7 @@ ITEM:
 4. The STEP file is written before the capture, with the marker at `end`. The sketch tries keep it there: the
    parameter store puts the marker back after every recompute and counts only the items before it for health
    (`lib/fusion_reader/rows.py`), and the temporary copy of a component body deletes only what it added
-   (`lib/export_plan/temp_copy.py`). `report.json` records `marker` (`position`, `count`).
+   (`lib/design_edit/temp_copy.py`). `report.json` records `marker` (`position`, `count`).
 
 Reading inputs at the position before the item covers the getters that the reference says need
 `timelineObject.rollTo(True)` (fillet `edges`, chamfer `edges`, extrude and revolve `profile`, `participantBodies`).
@@ -756,11 +756,11 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
 ### Sketch values that follow sizes (`lib/translator/sketch_motion.py`)
 
 The export measures the sketches at other size values (probe states, next section) and fits each value the translator
-writes as a sum over Fusion parameters, or marks it stuck (`lib/probe/`). That is the motion file, `probe.motion`:
+writes as a sum over Fusion parameters, or marks it stuck (`lib/probe/`). That is the motion file, `sketch_values.motion`:
 keys `<item>/p<profile>/l<loop>/<field path>` (loop 0 is the outer one, then the holes; `center.0`, `width`,
 `segments.2.through.1`), `<item>/p<profile>/plane` (the sketch plane along its normal, from the component origin),
 `<item>/positions/<n>/<0|1|2>` (hole points) and `<item>/axis/point/<0|1|2>` (a revolve axis from a sketch line).
-`lib/probe/keys.py` writes all keys; the probe and the translator both use it.
+`lib/sketch_values/keys.py` writes all keys; the probe and the translator both use it.
 The sketch curves of each profile have `<item>/p<profile>/c<loop>.<curve>/<field>` in the capture's loop and curve
 order: a line's `offset` (its distance from the sketch origin along the left normal of its captured direction) and
 `turn` (degrees it turned), an arc's `center.0`, `center.1` and `radius`; `curves` lists the profiles

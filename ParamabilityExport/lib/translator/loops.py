@@ -7,6 +7,8 @@ and splines). A free curve (`kind: other`, with its dense `samples`) becomes spl
 """
 import math
 
+from ..package.numbers import round9
+
 from . import spline_fit
 from .result import Refusal
 from .values import Sized, negated
@@ -19,12 +21,8 @@ TEXT_TOO_BIG = "This text has too many outline points to copy."
 MIN_AREA_MM2 = 1e-6
 
 
-def _n(value):
-    return round(value, 9) + 0.0
-
-
 def _pt(p):
-    return [_n(p[0]), _n(p[1])]
+    return [round9(p[0]), round9(p[1])]
 
 
 def _dist(a, b):
@@ -46,7 +44,7 @@ def _oriented(curve, reverse):
     return link
 
 
-def _chain(curves):
+def closed_chain(curves):
     """Order and orient lines and arcs so each starts where the last ended. None when they do not close."""
     remaining = list(curves)
     first = remaining.pop(0)
@@ -108,9 +106,9 @@ def _as_rect(chain):
     width, height = (edges[0][2], edges[1][2]) if along_x else (edges[1][2], edges[0][2])
     cx = sum(link["start"][0] for link in chain) / 4.0
     cy = sum(link["start"][1] for link in chain) / 4.0
-    loop = {"kind": "rect", "center": _pt([cx, cy]), "width": _n(width), "height": _n(height)}
+    loop = {"kind": "rect", "center": _pt([cx, cy]), "width": round9(width), "height": round9(height)}
     if turn:
-        loop["angleDeg"] = _n(turn)
+        loop["angleDeg"] = round9(turn)
     return loop
 
 
@@ -124,21 +122,21 @@ def loop_of(curves, sketch="", text=False):
     if len(curves) == 1 and curves[0]["kind"] in ("circle", "ellipse"):
         c = curves[0]
         if c["kind"] == "circle":
-            return {"kind": "circle", "center": _pt(c["center"]), "radius": _n(c["radius"])}
+            return {"kind": "circle", "center": _pt(c["center"]), "radius": round9(c["radius"])}
         loop = {
             "kind": "ellipse", "center": _pt(c["center"]),
-            "radiusX": _n(c["major_radius"]), "radiusY": _n(c["minor_radius"]),
+            "radiusX": round9(c["major_radius"]), "radiusY": round9(c["minor_radius"]),
         }
         angle = math.degrees(math.atan2(c["major_dir"][1], c["major_dir"][0]))
         if abs(angle) > ANGLE_TOL_DEG:
-            loop["angleDeg"] = _n(angle)
+            loop["angleDeg"] = round9(angle)
         return loop
     if len(curves) == 1 and curves[0]["kind"] == "arc" and _dist(curves[0]["start"], curves[0]["end"]) <= CHAIN_TOL:
         c = curves[0]
-        return {"kind": "circle", "center": _pt(c["center"]), "radius": _n(c["radius"])}
+        return {"kind": "circle", "center": _pt(c["center"]), "radius": round9(c["radius"])}
     if any(c.get("kind") not in ("line", "arc", "other") for c in curves):
         return Refusal("%s is not closed." % _where(sketch))
-    chain = _chain(curves)
+    chain = closed_chain(curves)
     if chain is None or len(chain) < 3 and all(link["kind"] == "line" for link in chain):
         return Refusal("%s is not closed." % _where(sketch))
     if len(chain) > MAX_LOOP_POINTS:
@@ -200,14 +198,14 @@ def flip_y(loop):
     formulas."""
     def flip(p):
         x, y = p
-        return [x if isinstance(x, Sized) else _n(x), negated(y) if isinstance(y, Sized) else _n(-y)]
+        return [x if isinstance(x, Sized) else round9(x), negated(y) if isinstance(y, Sized) else round9(-y)]
 
     out = dict(loop)
     kind = loop["kind"]
     if kind in ("circle", "rect", "ellipse"):
         out["center"] = flip(loop["center"])
         if "angleDeg" in loop:
-            out["angleDeg"] = _n(-loop["angleDeg"])
+            out["angleDeg"] = round9(-loop["angleDeg"])
     elif kind == "polygon":
         out["points"] = [flip(p) for p in loop["points"]]
     elif kind == "profile":

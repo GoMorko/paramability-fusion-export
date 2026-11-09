@@ -2,19 +2,7 @@ import copy
 import unittest
 
 from tests import context  # noqa: F401
-from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, translate_fixture
-
-from lib.translator import translate
-
-
-def verdict_of(result, index):
-    return [v for v in result.items if v["index"] == index][0]
-
-
-def edited(name, edit):
-    capture = copy.deepcopy(load_capture(name))
-    edit(capture)
-    return translate(capture)
+from tests.translator_helpers import assert_schema_ok, edited, steps_of, translate_fixture, verdict_of
 
 
 class CombineTest(unittest.TestCase):

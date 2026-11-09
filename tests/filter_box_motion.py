@@ -13,7 +13,7 @@ from tests import context  # noqa: F401
 
 import math
 
-from lib.probe.motion import Affine, Motion, Stuck
+from lib.sketch_values.motion import Affine, Motion, Stuck
 from lib.translator.loops import profile_loops
 
 W, D = "FilterBox_width_mm", "FilterBox_depth_mm"

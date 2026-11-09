@@ -8,7 +8,7 @@ from tests.probe_helpers import size, table, user
 from tests.test_probe_motion import CAPTURE, MODEL, PARAMS, TICKED, W, read_at
 
 from lib.export_plan.probe_flow import SizeProbe, covers_a_sketch, kept_size_names
-from lib.export_plan.runner import RowExport
+from lib.design_edit.runner import RowExport
 
 UNITS = {"count": "", "cube": "mm", "off": "mm", "height": "mm"}
 START = {"count": "3", "cube": "10 mm", "off": "5 mm", "height": "20 mm"}

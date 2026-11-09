@@ -2,7 +2,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.fakes import FakeTimeline
-from lib.export_plan.temp_copy import delete_created_items, remove_temporary_copy, timeline_state
+from lib.design_edit.temp_copy import delete_created_items, remove_temporary_copy, timeline_state
 
 
 class Occurrence:

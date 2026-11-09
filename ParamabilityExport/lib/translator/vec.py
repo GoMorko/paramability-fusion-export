@@ -1,6 +1,9 @@
 """Small vector helpers on [x, y, z] lists. Angles in degrees; rotations follow the right hand rule."""
 import math
 
+# Points closer than this (mm) are the same point.
+POINT_TOL = 1e-6
+
 
 def add(a, b):
     return [x + y for x, y in zip(a, b)]

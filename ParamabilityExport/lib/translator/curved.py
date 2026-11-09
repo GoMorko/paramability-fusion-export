@@ -2,13 +2,14 @@
 
 Where a sketch line crosses a circle, or two circles cross, the crossing point moves with a square root of the sizes,
 so it is not an `Affine`. `Curved` keeps such a value as a small formula over Fusion parameter names: a polynomial
-part plus square roots, products and quotients of other values. It renders to a `Quantity` over the sizes like
-`Affine.render`.
+part plus square roots, products and quotients of other values. `render` writes an `Affine` or a `Curved` as a
+`Quantity` over the sizes.
 """
 import math
 
-from ..probe.motion import UNREAD, Affine, Stuck
-from .values import Quantity, _wrapped
+from ..package.numbers import round9
+from ..sketch_values.motion import UNREAD, Affine, Stuck
+from .values import Quantity, wrapped
 
 _EPS = 1e-12
 
@@ -66,7 +67,7 @@ class Poly:
                 if not tr.ok:
                     return Stuck(table.depends(name) or tr.reads, UNREAD)
                 if tr.reads:
-                    texts.append(_wrapped(tr.formula))
+                    texts.append(wrapped(tr.formula))
                     reads.extend(tr.reads)
                     value *= tr.value
                 else:
@@ -76,6 +77,55 @@ class Poly:
             else:
                 total = total.plus(number)
         return total
+
+
+def _coefficient(value):
+    value = round9(value)
+    return str(int(value)) if value == int(value) else repr(value)
+
+
+def _sum_formula(parts, constant):
+    """`parts` are (coefficient, formula) pairs, written as a sum: `0.5 * w - offset + 2`."""
+    out = ""
+    for at, (a, text) in enumerate(parts):
+        if abs(a) == 1:
+            body = text if a > 0 else wrapped(text)
+        else:
+            body = "%s * %s" % (_coefficient(abs(a)), wrapped(text))
+        if at == 0:
+            out = ("-" if a < 0 else "") + body
+        else:
+            out += (" - " if a < 0 else " + ") + body
+    if abs(constant) > _EPS:
+        out += (" - " if constant < 0 else " + ") + _coefficient(abs(constant))
+    return out
+
+
+def _render_affine(value, table):
+    constant = total = value.const
+    parts, reads = [], []
+    for name, a in value.terms.items():
+        tr = table.translate(name)
+        if not tr.ok:
+            return Stuck(table.depends(name) or tr.reads, UNREAD, value.sketch)
+        total += a * tr.value
+        if tr.reads:
+            parts.append((a, tr.formula))
+            reads.extend(tr.reads)
+        else:
+            constant += a * tr.value
+    if not parts:
+        return Quantity(round9(constant))
+    return Quantity(total, _sum_formula(parts, constant), tuple(dict.fromkeys(reads)))
+
+
+def render(value, table):
+    """`value` (an `Affine` or a `Curved`) as a `Quantity` over the sizes of `table`, or a `Stuck` ("unread") when a
+    parameter cannot be written as a formula. A fixed or constant parameter becomes its number and joins the
+    constant; a formula reads the free sizes it depends on."""
+    if isinstance(value, Affine):
+        return _render_affine(value, table)
+    return value.render(table)
 
 
 def _as_curved(value):
@@ -140,7 +190,7 @@ class Curved:
         if isinstance(total, Stuck):
             return Stuck(total.movers, UNREAD, self.sketch)
         for coef, node in self.nodes:
-            args = [a.render(table) for a in node[1:]]
+            args = [render(a, table) for a in node[1:]]
             stuck = next((a for a in args if isinstance(a, Stuck)), None)
             if stuck is not None:
                 return Stuck(stuck.movers, UNREAD, self.sketch)

@@ -7,7 +7,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.schema_check import check_recipe
-from tests.translator_helpers import FIXTURES, assert_schema_ok, load_capture, translate_fixture
+from tests.translator_helpers import FIXTURES, assert_schema_ok, load_capture, translate_fixture, variant, verdict_of
 
 from lib.translator import extrude, translate
 from lib.translator.result import StepResult
@@ -16,17 +16,6 @@ from lib.translator.result import StepResult
 def under_test(result, index):
     """The recipe steps written for the timeline item at `index`."""
     return [s for s in result.recipe["features"] if s["id"] == "extrude_%d" % index or s["id"].startswith("extrude_%d_" % index)]
-
-
-def verdict_of(result, index):
-    return [v for v in result.items if v["index"] == index][0]
-
-
-def variant(name, edit):
-    """Translate a fixture after `edit(data)` changed the data of its last item."""
-    capture = load_capture(name)
-    edit(capture["items"][-1]["data"])
-    return translate(capture)
 
 
 class ShapeTest(unittest.TestCase):

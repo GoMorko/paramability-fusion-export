@@ -9,6 +9,8 @@ and an axis from a sketch line follow sizes (sketch_motion.py).
 """
 import math
 
+from ..package.numbers import round9
+
 from . import loops, notes, placement, sketch_motion, values, vec
 from .extrude import COMBINE
 from .result import Refusal, StepResult
@@ -19,12 +21,8 @@ AXIS_SQUARE_TOL = 1e-9
 FULL_TURN_DEG = 360.0
 
 
-def _n(value):
-    return round(value, 9) + 0.0
-
-
 def _pt(p):
-    return [_n(p[0]), _n(p[1])]
+    return [round9(p[0]), round9(p[1])]
 
 
 def _loop_points(loop):
@@ -148,9 +146,9 @@ def _angles(extent):
 def _turned(on, dir3, point3, degrees):
     """The placement turned about the 3D axis (right hand rule)."""
     return {
-        "origin": [_n(v) for v in vec.rotate(on["origin"], dir3, degrees, point3)],
-        "normal": [_n(v) for v in vec.rotate(on["normal"], dir3, degrees)],
-        "xDir": [_n(v) for v in vec.rotate(on["xDir"], dir3, degrees)],
+        "origin": [round9(v) for v in vec.rotate(on["origin"], dir3, degrees, point3)],
+        "normal": [round9(v) for v in vec.rotate(on["normal"], dir3, degrees)],
+        "xDir": [round9(v) for v in vec.rotate(on["xDir"], dir3, degrees)],
     }
 
 
@@ -177,7 +175,7 @@ def _turned_sized(ctx, item, drawn, dir3, point3, degrees):
         parts = [(turn[i][j], origin[j]) for j in range(3)]
         parts += [((1.0 if i == j else 0.0) - turn[i][j], points[j]) for j in range(3)]
         q = sketch_motion.quantity(ctx, sketch_motion.combine(parts, drawn.sketch), turned[i])
-        out.append(q.json() if q.sized else _n(q.n))
+        out.append(q.json() if q.sized else round9(q.n))
     return out
 
 

@@ -15,6 +15,8 @@ import math
 import re
 from collections import namedtuple
 
+from ..package.units import unit_kind
+
 # One operand while translating: the output node, its unit powers (length, angle) and whether it is a bare
 # literal (a number typed without a unit, whose unit is read from the other side of a sum).
 Typed = namedtuple("Typed", "node dim lit")
@@ -299,6 +301,23 @@ def format_number(value):
         return str(int(value))
     text = ("%.9f" % value).rstrip("0").rstrip(".")
     return "0" if text in ("", "-0") else text
+
+
+_PLAIN_NUMBER = re.compile(r"^\s*[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?\s*([A-Za-z]+)?\s*$")
+
+
+def is_plain_number(expression):
+    """True for "20", "20 mm" or "1.5e2 deg"; false for formulas such as "d1 * 2" or "20 mm + 1 mm"."""
+    return bool(_PLAIN_NUMBER.match(expression or ""))
+
+
+def format_expression(value, unit):
+    """Expression text to write into a parameter, for example "40 mm"."""
+    number = format_number(value)
+    unit = (unit or "").strip()
+    if unit_kind(unit) == "count":
+        return number
+    return f"{number} {unit}"
 
 
 # Binding strength, as in the app grammar: choice, ||, &&, comparison, + -, * /, unary, atom.

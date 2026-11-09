@@ -1,9 +1,9 @@
 """Write one body of the design as a STEP file."""
 import adsk.core
 
-from ..export_plan.errors import StepExportError
-from ..export_plan.marker import put_back, read_marker
-from ..export_plan.temp_copy import remove_temporary_copy, timeline_state
+from ..design_edit.errors import StepExportError
+from ..design_edit.marker import put_back, read_marker
+from ..design_edit.temp_copy import remove_temporary_copy, timeline_state
 from ..package.units import cm_to_mm
 
 COPY_TOLERANCE_MM = 1e-3

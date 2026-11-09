@@ -14,7 +14,7 @@ brought in that way, because it would shrink to its value or because the person 
 (`Context.doubt`).
 """
 from . import follow, shells, vec
-from .footprint import _polyline
+from .footprint import polyline
 from .kept_ranges import holding_ranges, past_reasons
 from .slabs import Place, Slab
 from .values import Quantity
@@ -108,7 +108,7 @@ def _samples(slab):
     low, high = slab.span
     out = []
     for n, curve in enumerate(slab.footprint.curves):
-        points = _polyline(curve)
+        points = polyline(curve)
         mid = points[len(points) // 2]
         outward = slab.footprint.outward(n, mid)
         if outward is None:

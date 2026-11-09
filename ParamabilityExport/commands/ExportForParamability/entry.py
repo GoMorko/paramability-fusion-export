@@ -4,8 +4,8 @@ import os
 import adsk.core
 
 from ... import config
-from ...lib.export_plan.marker import marker_note, read_marker
-from ...lib.export_plan.stop_warning import summarize as summarize_stop
+from ...lib.design_edit.marker import marker_note, read_marker
+from ...lib.dialog_model.stop_warning import summarize as summarize_stop
 from ...lib.export_plan.size_offers import offers as size_offers, table_for_body
 from ...lib.fusion_reader.design_info import default_length_unit, detect_up_axis
 from ...lib.fusion_reader.parameters import list_model_parameters, list_user_parameters

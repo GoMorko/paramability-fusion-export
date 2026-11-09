@@ -1,11 +1,104 @@
+import ast
 import os
 import re
 import unittest
 
 from tests import context
 
+# The packages of the add-in and the packages each one may import, bottom to top. A new import between packages must
+# fit this table, so a cycle or an upward import fails here. `fusion_reader` and `fusion_ui` are the only packages
+# that use Fusion; `commands` sits on top.
+ALLOWED_IMPORTS = {
+    "package": set(),
+    "params": {"package"},
+    "sketch_values": {"package"},
+    "design_edit": {"package", "params"},
+    "translator": {"package", "params", "sketch_values"},
+    "probe": {"package", "params", "sketch_values", "translator"},
+    "export_plan": {"design_edit", "package", "params", "probe", "sketch_values", "translator"},
+    "dialog_model": {"export_plan", "package", "params", "translator"},
+    "fusion_reader": {"design_edit", "package", "params", "translator"},
+    "fusion_ui": {"dialog_model", "export_plan", "fusion_reader", "package"},
+    "commands": {"design_edit", "dialog_model", "export_plan", "fusion_reader", "fusion_ui", "package"},
+}
+
+
+def _python_files(folder):
+    for dirpath, dirnames, names in os.walk(folder):
+        dirnames[:] = [d for d in dirnames if d != "__pycache__"]
+        for name in names:
+            if name.endswith(".py"):
+                yield os.path.join(dirpath, name)
+
+
+def _zone(path):
+    """The package a file belongs to: a folder of `lib`, or `commands`."""
+    parts = os.path.relpath(path, context.ADDIN_DIR).split(os.sep)
+    if parts[0] == "lib" and len(parts) > 2:
+        return parts[1]
+    return parts[0] if parts[0] == "commands" else None
+
+
+def _imported_zones(path):
+    """The packages a file imports from: every import in it, also one inside a function."""
+    rel = os.path.relpath(path, context.ADDIN_DIR)[:-3].split(os.sep)
+    folder = rel[:-1]
+    found = set()
+    with open(path, encoding="utf-8") as f:
+        tree = ast.parse(f.read())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            targets = [(a.name.split("."), []) for a in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                base = folder[:len(folder) - (node.level - 1)]
+                module = base + (node.module.split(".") if node.module else [])
+            else:
+                module = node.module.split(".") if node.module else []
+            targets = [(module, [a.name for a in node.names])]
+        else:
+            continue
+        for module, names in targets:
+            if module[:1] == ["ParamabilityExport"]:
+                module = module[1:]
+            if module[:1] == ["lib"]:
+                if len(module) > 1:
+                    found.add(module[1])
+                else:
+                    found.update(names)
+            elif module[:1] == ["commands"]:
+                found.add("commands")
+    return found
+
 
 class BoundaryTest(unittest.TestCase):
+    def test_every_package_is_listed_and_has_more_than_one_module(self):
+        lib = os.path.join(context.ADDIN_DIR, "lib")
+        folders = {d for d in os.listdir(lib) if os.path.isdir(os.path.join(lib, d)) and d != "__pycache__"}
+        self.assertEqual(folders | {"commands"}, set(ALLOWED_IMPORTS))
+        for folder in folders:
+            modules = [n for n in os.listdir(os.path.join(lib, folder)) if n.endswith(".py") and n != "__init__.py"]
+            self.assertGreater(len(modules), 1, folder)
+
+    def test_packages_import_only_the_packages_below_them(self):
+        for path in _python_files(context.ADDIN_DIR):
+            zone = _zone(path)
+            if zone is None:
+                continue
+            extra = _imported_zones(path) - {zone} - ALLOWED_IMPORTS[zone]
+            where = os.path.relpath(path, context.ADDIN_DIR)
+            self.assertEqual(extra, set(), "%s may not import %s" % (where, sorted(extra)))
+
+    def test_the_allowed_imports_have_no_cycle(self):
+        def reaches(start, seen):
+            for nxt in ALLOWED_IMPORTS[start]:
+                if nxt not in seen:
+                    seen.add(nxt)
+                    reaches(nxt, seen)
+            return seen
+        for name in ALLOWED_IMPORTS:
+            self.assertNotIn(name, reaches(name, set()), name)
+
     def test_adsk_only_in_reader_ui_and_commands(self):
         pattern = re.compile(r"^\s*(import|from)\s+adsk\b", re.M)
         allowed = ("fusion_reader", "fusion_ui", "commands")

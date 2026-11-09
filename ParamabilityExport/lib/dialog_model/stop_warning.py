@@ -6,8 +6,8 @@ the Fusion status line uses the short form. All of them name the step the same w
 from ..package.text import clip
 from ..translator import CaptureError
 from ..translator.notes import step_label
-from .messages import recipe_saved_message
-from .recipe_export import translate_capture
+from ..export_plan.messages import recipe_saved_message
+from ..export_plan.recipe_export import translate_capture
 
 MAX_SHORT_REASON = 110
 MAX_LISTED_NOTES = 3

@@ -5,14 +5,14 @@ import zipfile
 
 from tests import context  # noqa: F401
 from tests.fakes import FakeStore
-from lib.export_plan.apply import RowBuildError
+from lib.design_edit.apply import RowBuildError
 from lib.export_plan.assemble import build_package
-from lib.export_plan.expressions import format_expression, is_plain_number
-from lib.export_plan.naming import addin_version, design_title, package_file_name, with_extension
-from lib.export_plan.errors import StepExportError
-from lib.export_plan.restore import restore_order, restore_parameters
-from lib.export_plan.runner import ExportCancelled, RowExport
-from lib.export_plan.sizes_text import others_line, prefill_sizes_text, read_sizes
+from lib.params.expressions import format_expression, is_plain_number
+from lib.package.naming import addin_version, design_title, package_file_name, with_extension
+from lib.design_edit.errors import StepExportError
+from lib.design_edit.restore import restore_order, restore_parameters
+from lib.design_edit.runner import ExportCancelled, RowExport
+from lib.dialog_model.sizes_text import others_line, prefill_sizes_text, read_sizes
 from lib.package.manifest import validate_manifest
 from lib.package.writer import write_package
 

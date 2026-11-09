@@ -13,6 +13,7 @@ parser cannot read still marks the sizes on Fusion's own list of what its parame
 """
 import re
 
+from ..package.numbers import round9
 from ..params.expressions import MAX_FORMULA_LENGTH, tokenize_formula
 from . import range_check
 from .range_check import size_env as _env  # noqa: F401  (the size values at a setting; tests read it from here)
@@ -21,13 +22,9 @@ TOLERANCE = 1e-6
 _ATOM = re.compile(r"^(?:[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?)$")
 
 
-def _n(value):
-    return round(value, 9) + 0.0
-
-
 def _text(number):
     """A number as a formula writes it: no exponent, at most 9 decimals."""
-    value = _n(number)
+    value = round9(number)
     return str(int(value)) if value == int(value) else format(value, ".9f").rstrip("0").rstrip(".")
 
 
@@ -49,7 +46,7 @@ def _negated(text):
         return text[1:]
     if text.startswith("-") and _whole_group(text[1:]):
         return text[2:-1]
-    return "-" + _wrapped(text)
+    return "-" + wrapped(text)
 
 
 def _subtracted(text):
@@ -59,7 +56,7 @@ def _subtracted(text):
     return None
 
 
-def _wrapped(text):
+def wrapped(text):
     return text if _ATOM.match(text) else "(" + text + ")"
 
 
@@ -132,7 +129,7 @@ class Quantity:
     def json(self):
         """The value as the recipe writes it: a number, or { "expr": formula }."""
         if not self.sized:
-            return _n(self.n)
+            return round9(self.n)
         out = Sized(expr=self.text)
         out.n, out.reads = self.n, self.reads
         return out
@@ -149,7 +146,7 @@ class Quantity:
             return self
         if factor == -1:
             return Quantity(-self.n, _negated(self.text), self.reads)
-        return Quantity(self.n * factor, "%s * %s" % (_text(factor), _wrapped(self.text)), self.reads)
+        return Quantity(self.n * factor, "%s * %s" % (_text(factor), wrapped(self.text)), self.reads)
 
     def _with_const(self, const):
         """This formula's core plus the number `const`."""
@@ -172,7 +169,7 @@ class Quantity:
             return self if other.n == 0 else self._with_const(self.const + other.n)
         left = self.text if self.sized else _text(self.n)
         rest = _subtracted(other.text)
-        sign, right = ("-", rest) if rest is not None else ("+", _wrapped(other.text))
+        sign, right = ("-", rest) if rest is not None else ("+", wrapped(other.text))
         return Quantity(self.n + other.n, "%s %s %s" % (left, sign, right), reads)
 
     def times(self, other):
@@ -184,7 +181,7 @@ class Quantity:
         if not other.sized:
             return self.scaled(other.n)
         reads = tuple(dict.fromkeys(self.reads + other.reads))
-        return Quantity(self.n * other.n, "%s * %s" % (_wrapped(self.text), _wrapped(other.text)), reads)
+        return Quantity(self.n * other.n, "%s * %s" % (wrapped(self.text), wrapped(other.text)), reads)
 
     def divided_by(self, other):
         if not isinstance(other, Quantity):
@@ -192,8 +189,8 @@ class Quantity:
         if not self.sized and not other.sized:
             return Quantity(self.n / other.n)
         reads = tuple(dict.fromkeys(self.reads + other.reads))
-        left = _wrapped(self.text) if self.sized else _text(self.n)
-        right = _wrapped(other.text) if other.sized else _text(other.n)
+        left = wrapped(self.text) if self.sized else _text(self.n)
+        right = wrapped(other.text) if other.sized else _text(other.n)
         return Quantity(self.n / other.n, "%s / %s" % (left, right), reads)
 
 

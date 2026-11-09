@@ -6,8 +6,8 @@ import unittest
 from tests import context  # noqa: F401
 from tests.fakes import FakeDesign, FakeStore
 
-from lib.export_plan.apply import RowBuildError, apply_row_values, measure_baseline
-from lib.export_plan.runner import RowExport
+from lib.design_edit.apply import RowBuildError, apply_row_values, measure_baseline
+from lib.design_edit.runner import RowExport
 from lib.fusion_reader.rows import DesignParameterStore
 from tests.row_helpers import apply_row
 

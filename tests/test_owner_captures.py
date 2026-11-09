@@ -10,7 +10,7 @@ from tests.schema_check import check_recipe
 
 from lib.export_plan.probe_flow import probe_view
 from lib.params import size_table
-from lib.probe import motion as probe_motion
+from lib.probe import build as probe_build
 from lib.translator import translate
 
 REPORTS = os.path.expanduser("~/Documents/free-projects/3mf-compose/tmp/reports")
@@ -81,7 +81,7 @@ class OwnerCaptureTest(unittest.TestCase):
         capture = report["capture"]
         params = capture["parameters"]
         table = size_table.build(params["user"], PROBE_TICKED, params["model"], capture.get("design_units", "mm"))
-        motion = probe_motion.build(probe_view(capture), table, report["probe"]["states"])
+        motion = probe_build.build(probe_view(capture), table, report["probe"]["states"])
         # The lid rails slide with the box wall; pieces of one sketch line keep their own place in the loop.
         rails = [v.rest for k, v in motion.values.items()
                  if k.split("/")[0] in ("65", "66", "67", "68") and "/l" in k and getattr(v, "rest", None)]
@@ -112,7 +112,7 @@ class OwnerCaptureTest(unittest.TestCase):
                   for n in PROBE_TICKED}
         table = size_table.build(params["user"], PROBE_TICKED, params["model"], capture.get("design_units", "mm"),
                                  ranges=ranges)
-        motion = probe_motion.build(probe_view(capture), table, report["probe"]["states"])
+        motion = probe_build.build(probe_view(capture), table, report["probe"]["states"])
         result = translate(capture, size_table=table, motion=motion)
         # The pipe offset of the lid moves only an outline that cannot follow it, so no formula reads it.
         self.assertEqual(result.fixed, [])
@@ -128,7 +128,7 @@ class OwnerCaptureTest(unittest.TestCase):
         params = capture["parameters"]
         ticked = PROBE_TICKED + ["_Filter__Wall_thickness_mm"]
         table = size_table.build(params["user"], ticked, params["model"], capture.get("design_units", "mm"))
-        motion = probe_motion.build(probe_view(capture), table, report["probe"]["states"])
+        motion = probe_build.build(probe_view(capture), table, report["probe"]["states"])
         # The lid sketch reads the same other outline after four rows of four different sizes.
         self.assertEqual(motion.apart, [6, 10, 12, 19])
         result = translate(capture, size_table=table, motion=motion)
@@ -165,7 +165,7 @@ class OwnerCaptureTest(unittest.TestCase):
         params = capture["parameters"]
         ticked = PROBE_TICKED + ["_Filter__Wall_thickness_mm"]
         table = size_table.build(params["user"], ticked, params["model"], capture.get("design_units", "mm"))
-        motion = probe_motion.build(probe_view(capture), table, report["probe"]["states"])
+        motion = probe_build.build(probe_view(capture), table, report["probe"]["states"])
         result = translate(capture, size_table=table, motion=motion)
         bevels = [f for f in result.recipe["features"] if f["label"] == "Chamfer2"]
         # One step picks the whole rim, however many bumps the width makes; the other set keeps its points.

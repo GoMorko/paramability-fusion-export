@@ -4,7 +4,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.fakes import FakeStore
-from lib.export_plan.runner import RowExport
+from lib.design_edit.runner import RowExport
 from lib.package import caps
 from lib.package.caps import PackageCapError, check_package_caps
 from lib.package.writer import write_package

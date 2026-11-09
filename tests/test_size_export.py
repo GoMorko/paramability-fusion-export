@@ -7,10 +7,10 @@ from tests import context  # noqa: F401
 from tests.fakes import FakeStore
 from tests.params_fixtures import CUBE, H, reader_dicts
 from lib.export_plan import recipe_export
-from lib.export_plan.apply import RowBuildError
+from lib.design_edit.apply import RowBuildError
 from lib.export_plan.messages import fixed_note, recipe_saved_message
 from lib.export_plan.recipe_export import plan_single_export
-from lib.export_plan.runner import RowExport
+from lib.design_edit.runner import RowExport
 from lib.export_plan.size_offers import MAX_TICKED, initial_table, labels, offers, probe_sizes
 from lib.params import size_table
 from lib.package import manifest as mf

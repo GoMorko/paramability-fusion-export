@@ -7,8 +7,8 @@ one, neither can a size behind a sketch the probe did not measure (`sketch_answe
 with a warning (`translate`).
 """
 from ..params.expressions import tokenize_formula
-from ..probe.coverage import MOVED, NOT_MEASURED, STILL, Answer
-from ..probe.motion import Affine, Stuck
+from ..sketch_values.coverage import MOVED, NOT_MEASURED, STILL, Answer
+from ..sketch_values.motion import Affine, Stuck
 
 # model parameter created_by kind -> what it moves, for the reason text
 _STATIC_KINDS = {

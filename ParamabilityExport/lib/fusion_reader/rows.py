@@ -1,5 +1,5 @@
 """Apply size rows to a design and put the parameters back. Works on the design object it is given."""
-from ..export_plan.marker import put_back, read_marker
+from ..design_edit.marker import put_back, read_marker
 
 
 def _error_state():

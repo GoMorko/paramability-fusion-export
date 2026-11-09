@@ -7,6 +7,8 @@ Hole points follow sizes when the probe's motion file moves them (sketch_motion.
 """
 import math
 
+from ..package.numbers import round9
+
 from . import range_check, sketch_motion, values, vec
 from .values import Quantity
 from .result import Refusal, StepResult
@@ -20,12 +22,8 @@ MIN_COUNTERSINK_DEG, MAX_COUNTERSINK_DEG = 60.0, 120.0
 TAPPED = ("tapped", "taperTapped")
 
 
-def _n(value):
-    return round(value, 9) + 0.0
-
-
 def _vec(values):
-    return [_n(v) for v in values]
+    return [round9(v) for v in values]
 
 
 def _is_flat(tip_deg):

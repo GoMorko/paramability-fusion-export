@@ -4,7 +4,7 @@ import unittest
 
 from tests import context  # noqa: F401
 
-from lib.export_plan.sizes_table import new_table
+from lib.dialog_model.sizes_table import new_table
 from lib.fusion_reader.bodies import is_pickable_body
 
 # The dialog module imports adsk at load time; a stub is enough for the pure checks below.

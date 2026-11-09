@@ -34,7 +34,7 @@ class Context:
       that follow sizes. The placer makers of each step's `Entry` add them (`add_placer`).
     slabs: the extrude slabs among them (slabs.Slab), the originals and the pattern or mirror copies (`add_slab`).
     written_reads: Fusion names of the sizes that the steps written so far read.
-    motion: the probe's motion file (`probe.motion.Motion`), `probe.motion.OPTIMISTIC`, or None. With a motion file the
+    motion: the probe's motion file (`sketch_values.motion.Motion`), `sketch_values.motion.OPTIMISTIC`, or None. With a motion file the
       sketch values follow sizes (sketch_motion.py); otherwise they are written as numbers.
     plain_picks: round or bevel step id -> `Entry.picks`; patterns and mirrors copy these points.
     cache: results that depend on the capture alone, shared by every walk of one translation (one translation walks

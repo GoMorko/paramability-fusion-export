@@ -6,9 +6,9 @@ its coordinates as Quantities that follow the slab's start, its length and the s
 """
 import math
 
-from ..probe.motion import Stuck
+from ..sketch_values.motion import Stuck
 from . import vec
-from .footprint import Footprint, _polyline
+from .footprint import Footprint, polyline
 from .placer import ADD, CUT, Placer
 from .sketch_motion import combine, rendered
 from .values import Quantity, Sized
@@ -230,7 +230,7 @@ class Slab(Placer):
         if math.hypot(*duv) > _EPS:
             segments = []
             for curve in self.footprint.curves:
-                points = _polyline(curve)
+                points = polyline(curve)
                 segments += list(zip(points, points[1:]))
             out += _crossings_2d(uv0, duv, segments, offsets)
         return out
@@ -366,15 +366,15 @@ class Place:
 
     def coordinates(self, p):
         """`p` as a position whose coordinates follow the slab length (numbers where nothing moves them)."""
-        return [_cleaned(q) for q in self.quantities(p)]
+        return [cleaned(q) for q in self.quantities(p)]
 
 
-def _cleaned(q):
+def cleaned(q):
     """A Quantity as written: a plain number is rounded like a measured point."""
     return q.json() if q.sized else round(q.n, 9) + 0.0
 
 
 def cleaned_all(quantities):
-    return [_cleaned(q) for q in quantities]
+    return [cleaned(q) for q in quantities]
 
 

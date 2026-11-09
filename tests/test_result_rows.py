@@ -2,7 +2,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests import fakes
-from lib.export_plan.result_rows import result_view
+from lib.dialog_model.result_rows import result_view
 from lib.params import size_table
 
 fakes.install_adsk_core()

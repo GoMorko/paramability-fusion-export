@@ -11,11 +11,11 @@ import os
 import tempfile
 
 from ...lib.export_plan import health as health_module
-from ...lib.export_plan.marker import read_marker
-from ...lib.export_plan.naming import design_title, package_file_name
+from ...lib.design_edit.marker import read_marker
+from ...lib.package.naming import design_title, package_file_name
 from ...lib.export_plan.pipeline import ExportRequest, run_pipeline
-from ...lib.export_plan.result_rows import result_view
-from ...lib.export_plan.stop_warning import saved_message, status_text
+from ...lib.dialog_model.result_rows import result_view
+from ...lib.dialog_model.stop_warning import saved_message, status_text
 from ...lib.fusion_reader import design_info
 from ...lib.fusion_reader.capture import MarkerError, read_capture
 from ...lib.fusion_reader.probe_state import read_state

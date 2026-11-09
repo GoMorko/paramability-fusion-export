@@ -5,8 +5,8 @@ import unittest
 from tests import context  # noqa: F401
 from tests.fakes import FakeDesign
 from tests.translator_helpers import load_capture
-from lib.export_plan.apply import measure_baseline
-from lib.export_plan.marker import marker_note, read_marker
+from lib.design_edit.apply import measure_baseline
+from lib.design_edit.marker import marker_note, read_marker
 from lib.export_plan.recipe_export import plan_single_export
 from lib.fusion_reader.rows import DesignParameterStore
 from tests.row_helpers import apply_row

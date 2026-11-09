@@ -1,4 +1,5 @@
 """Shared helpers for translator tests."""
+import copy
 import json
 import os
 
@@ -35,3 +36,22 @@ def close(a, b, tol=1e-9):
     if isinstance(a, (list, tuple)):
         return len(a) == len(b) and all(close(x, y, tol) for x, y in zip(a, b))
     return abs(a - b) <= tol
+
+
+def verdict_of(result, index):
+    """The verdict of the item at timeline `index`."""
+    return [v for v in result.items if v["index"] == index][0]
+
+
+def edited(name, edit):
+    """Translate a fixture after `edit(capture)` changed a copy of it."""
+    capture = copy.deepcopy(load_capture(name))
+    edit(capture)
+    return translate(capture)
+
+
+def variant(name, edit):
+    """Translate a fixture after `edit(data)` changed the data of its last item."""
+    capture = load_capture(name)
+    edit(capture["items"][-1]["data"])
+    return translate(capture)

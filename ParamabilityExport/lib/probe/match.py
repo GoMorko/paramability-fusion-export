@@ -10,8 +10,8 @@ import math
 
 from ..translator.loops import profile_loops
 from ..translator.result import Refusal
-from . import keys
-from .motion import SHAPE, TURNS, UNREAD
+from ..sketch_values import keys
+from ..sketch_values.motion import SHAPE, TURNS, UNREAD
 
 POINT_TOLERANCE = 1e-4
 TURN_TOLERANCE = 1e-6

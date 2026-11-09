@@ -10,18 +10,18 @@
       "apart": [ 3 ],
       "unmeasured": { "Sketch7": "its first read did not match the capture" } }
 
-The keys are written by `probe.keys`. `curves` lists the profiles (`<item>/p<profile>`) whose sketch curves were
+The keys are written by `sketch_values.keys`. `curves` lists the profiles (`<item>/p<profile>`) whose sketch curves were
 measured.
 `apart` lists the states (by number in `states`) where Fusion solved a sketch another way, so a different outline
 there blames no size. A stuck value may carry `rest`: what it follows once its `stuck` sizes are fixed. `terms` keys
 are Fusion parameter names; `const` plus the terms give the value at any size settings. A key that is not listed
 did not move: the translator writes the captured number, unless its sketch is in `unmeasured` (sketch name to the
 reason the probe could not measure it): then nothing is known about it, and the sizes behind that sketch cannot be
-followed (`probe.coverage`). A motion file without `unmeasured` says nothing about such sketches.
+followed (`sketch_values.coverage`). A motion file without `unmeasured` says nothing about such sketches.
 
-Imports nothing from the translator at module level, since the translator imports this module.
+The translator reads this file; `probe.build` makes it.
 """
-import re
+from ..package.numbers import round9
 
 VERSION = 1
 
@@ -29,22 +29,6 @@ CURVE, SHAPE, TURNS, UNREAD, UNTRIED = "curve", "shape", "turns", "unread", "unt
 CAUSES = (CURVE, SHAPE, TURNS, UNREAD, UNTRIED)
 
 _EPS = 1e-12
-
-
-def _n(value):
-    return round(value, 9) + 0.0
-
-
-def _text(value):
-    value = _n(value)
-    return str(int(value)) if value == int(value) else repr(value)
-
-
-_ATOM = re.compile(r"^(?:[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?)$")
-
-
-def _wrapped(text):
-    return text if _ATOM.match(text) else "(" + text + ")"
 
 
 class Stuck:
@@ -102,48 +86,10 @@ class Affine:
         return self.const + sum(a * env[name] for name, a in self.terms.items())
 
     def json(self):
-        out = {"const": _n(self.const), "terms": {k: _n(v) for k, v in self.terms.items()}}
+        out = {"const": round9(self.const), "terms": {k: round9(v) for k, v in self.terms.items()}}
         if self.sketch:
             out["sketch"] = self.sketch
         return out
-
-    def render(self, table):
-        """The value as a `Quantity` over the sizes of `table`, or a `Stuck` ("unread") when a parameter cannot be
-        written as a formula. A fixed or constant parameter becomes its number and joins the constant; a formula
-        reads the free sizes it depends on."""
-        from ..translator.values import Quantity
-        constant = total = self.const
-        parts, reads = [], []
-        for name, a in self.terms.items():
-            tr = table.translate(name)
-            if not tr.ok:
-                return Stuck(table.depends(name) or tr.reads, UNREAD, self.sketch)
-            total += a * tr.value
-            if tr.reads:
-                parts.append((a, tr.formula))
-                reads.extend(tr.reads)
-            else:
-                constant += a * tr.value
-        if not parts:
-            return Quantity(_n(constant))
-        return Quantity(total, _formula(parts, constant), tuple(dict.fromkeys(reads)))
-
-
-def _formula(parts, constant):
-    """`parts` are (coefficient, formula) pairs, written as a sum: `0.5 * w - offset + 2`."""
-    out = ""
-    for at, (a, text) in enumerate(parts):
-        if abs(a) == 1:
-            body = text if a > 0 else _wrapped(text)
-        else:
-            body = "%s * %s" % (_text(abs(a)), _wrapped(text))
-        if at == 0:
-            out = ("-" if a < 0 else "") + body
-        else:
-            out += (" - " if a < 0 else " + ") + body
-    if abs(constant) > _EPS:
-        out += (" - " if constant < 0 else " + ") + _text(abs(constant))
-    return out
 
 
 class Motion:
@@ -201,8 +147,3 @@ class _Optimistic(Motion):
 
 OPTIMISTIC = _Optimistic()
 
-
-def build(capture, table, states):
-    """The `Motion` of a capture from the states read at other size settings. See `probe.build.build`."""
-    from . import build as builder
-    return builder.build(capture, table, states)

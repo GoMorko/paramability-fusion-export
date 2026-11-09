@@ -11,8 +11,9 @@ a sketch reads as the same different outline in states that change different siz
 those states blame no size for that outline (`Motion.apart`).
 """
 from . import columns as cols
-from . import coverage, fit, match, plan
-from .motion import CURVE, SHAPE, TURNS, UNREAD, Affine, Motion, Stuck
+from . import fit, match, plan
+from ..sketch_values import coverage
+from ..sketch_values.motion import CURVE, SHAPE, TURNS, UNREAD, Affine, Motion, Stuck
 
 _SAME = 1e-9
 _PRIORITY = (TURNS, SHAPE, UNREAD)

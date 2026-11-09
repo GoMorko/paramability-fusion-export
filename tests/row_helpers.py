@@ -1,7 +1,7 @@
 """Design-level wrappers around the row writer, for tests that work on a fake design."""
 from tests import context  # noqa: F401
-from lib.export_plan.apply import apply_row_values
-from lib.export_plan.restore import restore_parameters
+from lib.design_edit.apply import apply_row_values
+from lib.design_edit.restore import restore_parameters
 from lib.fusion_reader.rows import DesignParameterStore
 
 

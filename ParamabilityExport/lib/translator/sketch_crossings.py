@@ -12,12 +12,12 @@ crossing still exists and the corners keep their order. Otherwise its sizes stay
 """
 import math
 
-from ..probe import keys
-from ..probe.motion import CURVE, Affine, Stuck
+from ..sketch_values import keys
+from ..sketch_values.motion import CURVE, Affine, Stuck
 from . import range_check
-from .curved import Curved, combine, names_of, times
+from .curved import Curved, combine, names_of, render, times
+from .vec import POINT_TOL
 
-POINT_TOL = 1e-6
 FIT_TOL = 1e-4
 TURN_TOL = 1e-9
 LEAST = 1e-9
@@ -282,7 +282,7 @@ def _states(table, motion):
 
 
 def _stays_above_zero(table, motion, value):
-    q = value.render(table)
+    q = render(value, table)
     if isinstance(q, Stuck):
         return False
     if not q.sized:

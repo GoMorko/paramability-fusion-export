@@ -2,20 +2,9 @@ import math
 import unittest
 
 from tests import context  # noqa: F401
-from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, translate_fixture
+from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, translate_fixture, variant, verdict_of
 
 from lib.translator import translate, vec
-
-
-def verdict_of(result, index):
-    return [v for v in result.items if v["index"] == index][0]
-
-
-def variant(name, edit):
-    """Translate a fixture after `edit(data)` changed the data of its last item."""
-    capture = load_capture(name)
-    edit(capture["items"][-1]["data"])
-    return translate(capture)
 
 
 class FilletTest(unittest.TestCase):

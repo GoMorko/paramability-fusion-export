@@ -15,8 +15,9 @@ has rounded corners and says so in a note.
 """
 import math
 
+from ..package.numbers import is_number
 from . import loops
-from .footprint import _arc_span, _is_full, _polyline, curve_length
+from .footprint import arc_span, curve_length, is_full, polyline
 from .placer import ADD, CUT, Placer
 from .result import Refusal
 from .slabs import Slab
@@ -41,7 +42,7 @@ def prepare(data):
     A wall is copied for one outline, one thickness and a distance that runs one way or symmetric. Two sides, a
     taper, a reach to a face or through all are refused."""
     wall = data.get("thin_wall")
-    if not isinstance(wall, dict) or wall.get("location") is None or not _number(wall.get("thickness")):
+    if not isinstance(wall, dict) or wall.get("location") is None or not is_number(wall.get("thickness")):
         return Refusal(UNREADABLE)
     if wall["location"] not in LOCATIONS:
         return Refusal("The wall of this thin extrude sits in a way that is not copied yet.")
@@ -73,10 +74,6 @@ def open_line_refusal(profiles):
     return None
 
 
-def _number(value):
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
-
-
 def outer_curves(profile):
     for loop in profile.get("loops") or []:
         if loop.get("outer"):
@@ -91,7 +88,7 @@ def _tangent(link, at_end):
     else:
         point = link["end"] if at_end else link["start"]
         radial = [point[0] - link["center"][0], point[1] - link["center"][1]]
-        sign = 1.0 if _arc_span(link)[1] >= 0 else -1.0
+        sign = 1.0 if arc_span(link)[1] >= 0 else -1.0
         d = [-sign * radial[1], sign * radial[0]]
     size = math.hypot(*d) or 1.0
     return [d[0] / size, d[1] / size]
@@ -100,7 +97,7 @@ def _tangent(link, at_end):
 def _signed_area(chain):
     points = []
     for link in chain:
-        points += _polyline(link)[:-1]
+        points += polyline(link)[:-1]
     return 0.5 * sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(points, points[1:] + points[:1]))
 
 
@@ -110,11 +107,11 @@ def shape_of(curves):
 
     Turns count positive where the outline bends toward the inside (a convex corner or arc), whichever way it is
     drawn."""
-    if len(curves) == 1 and (_is_full(curves[0]) or curves[0]["kind"] == "ellipse"):
+    if len(curves) == 1 and (is_full(curves[0]) or curves[0]["kind"] == "ellipse"):
         return curve_length(curves[0]), 2.0 * math.pi, []
     if any(c["kind"] not in ("line", "arc") for c in curves):
         return None
-    chain = loops._chain(curves)
+    chain = loops.closed_chain(curves)
     if chain is None:
         return None
     orient = 1.0 if _signed_area(chain) > 0 else -1.0
@@ -122,7 +119,7 @@ def shape_of(curves):
     for link in chain:
         perimeter += curve_length(link)
         if link["kind"] == "arc":
-            arcs += orient * _arc_span(link)[1]
+            arcs += orient * arc_span(link)[1]
     turns = []
     for here, there in zip(chain, chain[1:] + chain[:1]):
         a, b = _tangent(here, True), _tangent(there, False)
@@ -165,7 +162,7 @@ def decide(curves, wall, end_area):
     """`(side, rounded)` for a wall: the side of the outline it sits on (inside, outside or middle), and whether the
     copy rounds corners that Fusion keeps sharp. A Refusal when the measured end area fits no side, or fits more than
     one."""
-    if not _number(end_area) or not end_area > 0:
+    if not is_number(end_area) or not end_area > 0:
         return Refusal("The size of the wall of this thin extrude could not be measured, so it is not copied.")
     shape = shape_of(curves)
     if shape is None:

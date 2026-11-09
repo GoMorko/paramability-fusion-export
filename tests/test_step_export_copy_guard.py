@@ -3,7 +3,7 @@ import types
 import unittest
 
 from tests import context  # noqa: F401
-from lib.export_plan.errors import StepExportError
+from lib.design_edit.errors import StepExportError
 
 # step_export imports adsk.core at load time; a stub is enough for the pure check below.
 if "adsk" not in sys.modules:

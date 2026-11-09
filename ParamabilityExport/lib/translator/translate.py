@@ -5,20 +5,20 @@ from . import borrowed, range_check, step_kinds
 from .audit import audit
 from .sizes import construction_fixes, joint_reasons, untried_reasons, used_sizes
 from . import notes as wording, place
+from .picks import MAX_NEAR_POINTS
 from .notes import dropped_reason, fixed_reason, loose_reason, unmoved_reason, unused_reason
 from .capture import outside_component, renamed_target, same_body, validate_capture
 from .context import Context
 from .result import Refusal, StepResult, TranslateResult, make_verdict
 from ..params.expressions import MAX_FORMULA_LENGTH
 from .values import Sized, number
-from ..probe.motion import Motion, Stuck
+from ..sketch_values.motion import Motion, Stuck
 from .words import type_words
 
 RECIPE_VERSION = 12
 # Edge selector keys newer than RECIPE_VERSION, the same way.
 SELECTOR_VERSIONS = {"chain": 14, "faceEdges": 14}
 MAX_FEATURES = 400
-MAX_NEAR_POINTS = 32
 MAX_PATTERN_COPIES = 64
 MAX_PASSES = 70
 
@@ -206,8 +206,8 @@ def translate(capture, handlers=None, size_table=None, motion=None):
     The walk runs twice when some value cannot follow. The first walk fixes every size such a value reads, to learn
     which sizes and reasons there are. The second keeps them free.
 
-    `motion` is what the size probe measured about sketch values (`probe.motion.Motion`): sketch points, planes, hole
-    points and revolve axes are then written as formulas where they follow sizes. `probe.motion.OPTIMISTIC` writes
+    `motion` is what the size probe measured about sketch values (`sketch_values.motion.Motion`): sketch points, planes, hole
+    points and revolve axes are then written as formulas where they follow sizes. `sketch_values.motion.OPTIMISTIC` writes
     them as numbers without fixing anything for them (the first translation of an export). Without it, no size that
     moves a sketch or construction geometry can be followed.
     """

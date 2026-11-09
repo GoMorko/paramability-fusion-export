@@ -14,7 +14,6 @@ changes it, or leaves it unreadable, is loose.
 from ..package.manifest import MAX_FIXED_REASON
 from ..package.text import clip
 from ..probe import build, match, plan
-from ..probe import motion as motion_module
 from ..translator import borrowed
 from ..translator.notes import loose_reason
 
@@ -177,7 +176,7 @@ class SizeProbe:
         for param in self.untried:
             found.append(self._entry(param, _UNTRIED, labels))
         try:
-            self.motion = motion_module.build(self.capture, self.table, self.states)
+            self.motion = build.build(self.capture, self.table, self.states)
         except Exception:
             self.motion = None
             current = {e.name: e.value for e in self.table.entries}

@@ -19,13 +19,13 @@ from typing import Optional, Protocol
 
 from ..params import size_table as size_tables
 from ..params.listing import list_parameters
-from ..probe.motion import OPTIMISTIC
+from ..sketch_values.motion import OPTIMISTIC
 from . import health as health_module
 from .body_scope import scope_inputs
 from .probe_flow import SizeProbe, covers_a_sketch, kept_size_names
 from .recipe_export import free_sizes, plan_single_export, translate_capture
-from .restore import restore_parameters
-from .runner import ExportCancelled, RowExport
+from ..design_edit.restore import restore_parameters
+from ..design_edit.runner import ExportCancelled, RowExport
 from .size_offers import labels, probe_sizes
 
 

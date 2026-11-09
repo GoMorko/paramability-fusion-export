@@ -44,7 +44,7 @@ def _angle(center, p):
     return math.atan2(p[1] - center[1], p[0] - center[0])
 
 
-def _arc_span(curve):
+def arc_span(curve):
     """(start angle, signed sweep) of an arc, the sweep passing through its middle point."""
     c = curve["center"]
     a0, am, a1 = (_angle(c, curve[k]) for k in ("start", "mid", "end"))
@@ -53,7 +53,7 @@ def _arc_span(curve):
     return (a0, ccw) if mid <= ccw else (a0, ccw - 2 * math.pi)
 
 
-def _is_full(curve):
+def is_full(curve):
     return curve["kind"] in ("circle", "ellipse") or (
         curve["kind"] == "arc" and _dist(curve["start"], curve["end"]) <= CORNER_TOL)
 
@@ -71,7 +71,7 @@ def _ellipse_points(curve):
     return points
 
 
-def _polyline(curve):
+def polyline(curve):
     """Points along the curve, for the inside test."""
     kind = curve["kind"]
     if kind == "line":
@@ -81,7 +81,7 @@ def _polyline(curve):
     if kind == "other":
         return curve["samples"]
     c, r = curve["center"], curve["radius"]
-    a0, sweep = (0.0, 2 * math.pi) if _is_full(curve) else _arc_span(curve)
+    a0, sweep = (0.0, 2 * math.pi) if is_full(curve) else arc_span(curve)
     return [[c[0] + r * math.cos(a0 + sweep * k / ARC_SEGMENTS), c[1] + r * math.sin(a0 + sweep * k / ARC_SEGMENTS)]
             for k in range(ARC_SEGMENTS + 1)]
 
@@ -96,7 +96,7 @@ def curve_length(curve):
     kind = curve["kind"]
     if kind == "line":
         return _dist(curve["start"], curve["end"])
-    points = _polyline(curve)
+    points = polyline(curve)
     return sum(_dist(a, b) for a, b in zip(points, points[1:]))
 
 
@@ -116,7 +116,7 @@ def nearest_point(curve, p):
         if d > 0 and abs(curve_distance(curve, p) - abs(d - r)) <= 1e-12:
             n = [(p[0] - c[0]) / d, (p[1] - c[1]) / d]
             return [c[0] + r * n[0], c[1] + r * n[1]], n
-    points = [curve["start"], curve["end"]] if curve["kind"] == "line" else _polyline(curve)
+    points = [curve["start"], curve["end"]] if curve["kind"] == "line" else polyline(curve)
     best = min(zip(points, points[1:]), key=lambda ab: _to_segment(p, ab[0], ab[1]))
     point, (dx, dy) = _nearest_on_segment(p, best[0], best[1])
     size = math.hypot(dx, dy)
@@ -129,11 +129,11 @@ def curve_distance(curve, p):
     if kind == "line":
         return _to_segment(p, curve["start"], curve["end"])
     if kind in ("ellipse", "other"):
-        return _to_polyline(p, _polyline(curve))
+        return _to_polyline(p, polyline(curve))
     c, r = curve["center"], curve["radius"]
-    if _is_full(curve):
+    if is_full(curve):
         return abs(_dist(p, c) - r)
-    a0, sweep = _arc_span(curve)
+    a0, sweep = arc_span(curve)
     turned = (_angle(c, p) - a0) % (2 * math.pi)
     within = turned <= sweep if sweep >= 0 else turned >= 2 * math.pi + sweep or turned == 0
     if within:
@@ -148,7 +148,7 @@ class Footprint:
         self.curves = [curve for loop in profile.get("loops") or [] for curve in loop.get("curves") or []]
         corners = []
         for curve in self.curves:
-            if _is_full(curve):
+            if is_full(curve):
                 continue
             for p in (curve["start"], curve["end"]):
                 if not any(_dist(p, q) <= CORNER_TOL for q in corners):
@@ -158,7 +158,7 @@ class Footprint:
         # Boxes of the curves that are long polylines, so `nearest_curve` can skip those that are far away.
         self._boxes = []
         for curve in self.curves:
-            points = _polyline(curve)
+            points = polyline(curve)
             self._segments += list(zip(points, points[1:]))
             if curve["kind"] in ("ellipse", "other"):
                 self._boxes.append((min(p[0] for p in points), min(p[1] for p in points),

@@ -7,7 +7,7 @@ from tests.test_probe_flow import UNITS, Fusion, number, run
 from tests.test_probe_motion import CAPTURE, MODEL, PARAMS, TICKED, W, read_at
 
 from lib.export_plan.probe_flow import SizeProbe, borrowed_sketches, covers_a_sketch, probe_view
-from lib.probe.motion import Affine
+from lib.sketch_values.motion import Affine
 from lib.translator import borrowed
 
 LID_FRAME = {"origin": [0, 0, 20], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}

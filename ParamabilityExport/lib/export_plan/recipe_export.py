@@ -52,7 +52,7 @@ def _with_up_axis(capture, up_axis):
 def translate_capture(capture, up_axis, size_table=None, motion=None):
     """The translator's result for a capture turned to the dialog's up axis. Raises what the translator raises.
 
-    `motion` is what the size probe found about sketch values (`probe.motion`), or `probe.motion.OPTIMISTIC` for a
+    `motion` is what the size probe found about sketch values (`sketch_values.motion`), or `sketch_values.motion.OPTIMISTIC` for a
     first look that fixes nothing for sketches. A size that some value cannot follow stays free with a warning
     (`TranslateResult.loose`); the ranges are the table's."""
     return translate(_with_up_axis(capture, up_axis), size_table=size_table, motion=motion)
@@ -116,10 +116,10 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
     translated: the translator's result for these same inputs (`translate_capture`), when the caller has it already.
     listing: the design's ParameterListing (params.listing). Its entries go into the manifest `parameters` of every
       package kind, so the Fusion parameters reach Paramability even when the shape stays fixed.
-    motion: what the size probe found for sketch values (`probe.motion.Motion`), or None for a translation that
+    motion: what the size probe found for sketch values (`sketch_values.motion.Motion`), or None for a translation that
       fixes every size behind a sketch.
     probe: the size probe's own record for `report.json` (request, states read, motion, restore gap), or None.
-    marker: { position, count } of the timeline marker the export worked at (`export_plan.marker.read_marker`), for
+    marker: { position, count } of the timeline marker the export worked at (`design_edit.marker.read_marker`), for
       `report.json`. Steps after the position are left out of the part.
     files maps entry paths to a file path or bytes, as write_package expects. The manifest `checks` list is empty.
     Raises ValueError when the manifest breaks the package rules.

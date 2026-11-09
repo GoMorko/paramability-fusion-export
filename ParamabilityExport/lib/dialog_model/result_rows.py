@@ -3,8 +3,8 @@
 The view is built from the manifest and report that plan_single_export returned, and the size table of the export.
 """
 from .dialog_rows import range_text
-from .health import FAILED, health_lines, with_lines
-from .messages import listed_lines, recipe_saved_message
+from ..export_plan.health import FAILED, health_lines, with_lines
+from ..export_plan.messages import listed_lines, recipe_saved_message
 
 KEPT_FIXED, NOT_USED = "kept fixed", "not used"
 NOT_FOLLOWED = "not followed"

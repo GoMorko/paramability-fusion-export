@@ -7,7 +7,7 @@ one profile record, the same shape a sketch profile has, so extrudes and embosse
 """
 import math
 
-from .footprint import _polyline
+from .footprint import polyline
 from .outlines import CHAIN_TOL, closed_loops
 
 OPEN = "open"
@@ -25,10 +25,10 @@ def _touches(point, curve):
 def _ring(loop):
     """The points of a chained loop, each curve run the way the chain goes."""
     if len(loop) == 1:
-        return list(_polyline(loop[0]))[:-1] or list(_polyline(loop[0]))
+        return list(polyline(loop[0]))[:-1] or list(polyline(loop[0]))
     points = []
     for n, curve in enumerate(loop):
-        line = list(_polyline(curve))
+        line = list(polyline(curve))
         if n == 0:
             if not _touches(line[-1], loop[1]):
                 line.reverse()

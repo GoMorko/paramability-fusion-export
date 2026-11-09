@@ -9,10 +9,10 @@ from tests import context  # noqa: F401
 from tests.fakes import FakeStore
 from tests.translator_helpers import load_capture
 
-from lib.export_plan.errors import StepExportError
+from lib.design_edit.errors import StepExportError
 from lib.export_plan.pipeline import ExportRequest, run_pipeline
-from lib.export_plan.result_rows import NOT_FOLLOWED, NOT_MEASURED, result_view
-from lib.export_plan.runner import ExportCancelled
+from lib.dialog_model.result_rows import NOT_FOLLOWED, NOT_MEASURED, result_view
+from lib.design_edit.runner import ExportCancelled
 
 CAPTURE = load_capture("sketch_rect_centred")
 USER = CAPTURE["parameters"]["user"]

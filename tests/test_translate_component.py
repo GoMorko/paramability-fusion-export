@@ -7,7 +7,7 @@ from tests.test_translate_sized import TICKED, run, table_of
 from tests.test_translate_sketch_motion import run as run_with_motion
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, translate_fixture
 
-from lib.probe.motion import OPTIMISTIC, Affine, Motion, Stuck
+from lib.sketch_values.motion import OPTIMISTIC, Affine, Motion, Stuck
 from lib.translator import CaptureError, translate
 from lib.translator.notes import step_only_note
 

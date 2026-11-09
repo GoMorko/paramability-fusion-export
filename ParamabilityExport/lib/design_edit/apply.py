@@ -1,6 +1,6 @@
 """Apply one size row to the design and read back the resulting numbers."""
 from ..package.units import to_manifest_value
-from .expressions import format_expression
+from ..params.expressions import format_expression
 
 
 class RowBuildError(Exception):

@@ -195,11 +195,29 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 - Made for the current Fusion release.
 - This is version 0.5.2. The Fusion side has not been run by a tool: see `docs/hand-tests.md`.
 
+## Code layout
+
+The add-in code is in `ParamabilityExport/lib/`, one package per job. A package imports only packages above it in this
+list (lowest first); `tests/test_boundary.py` holds the exact table.
+
+- `package`: the `.paramability` file: units, rows, manifest, caps, file names, zip writer.
+- `params`: Fusion parameters as sizes: names, defaults, expression to formula, the size table.
+- `sketch_values`: the motion file of sketch values that follow sizes, its keys and per sketch coverage.
+- `design_edit`: setting parameter values row by row, restoring them, the timeline marker, the temporary copy.
+- `translator`: a capture dict in, a recipe plus verdicts out (one handler per step kind).
+- `probe`: measures sketches at other size values and fits the motion file.
+- `export_plan`: the export itself: the pipeline, the recipe and its notes, the probe run, size offers.
+- `dialog_model`: what the dialogs show, as plain data (rows, Sizes table, result view, stop warning).
+- `fusion_reader`: reads the design with `adsk` into a capture (one of two packages that use `adsk`).
+- `fusion_ui`: draws the dialogs and handles their events with `adsk`.
+- `commands/`: the two buttons, their flows and the panel; the top of the tree.
+
 ## Tests
 
-The package writer and the export logic (`lib/package/`, `lib/export_plan/`) do not need Fusion. The Fusion
+Everything under `lib/` except `fusion_reader/` and `fusion_ui/` is pure Python and runs without Fusion. The Fusion
 reading code is tested with fakes. Anything that touches `adsk` stays in `lib/fusion_reader/`, `lib/fusion_ui/` and
-`commands/`. From this folder:
+`commands/`. `tests/test_boundary.py` checks that and which package may import which, so imports only go one way.
+From this folder:
 
 ```
 python3 -m unittest discover -s tests -t .

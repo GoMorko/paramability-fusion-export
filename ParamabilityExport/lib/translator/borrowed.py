@@ -11,7 +11,7 @@ Edges, faces and bodies of another component stay refused. Such a step must also
 range (`meets_part.py`, run when the step is added).
 """
 from ..params.expressions import referenced_names
-from ..probe import keys
+from ..sketch_values import keys
 
 BORROWED_KEYS = ("foreign", "placement", "component", "sketch_params", "native_frame")
 

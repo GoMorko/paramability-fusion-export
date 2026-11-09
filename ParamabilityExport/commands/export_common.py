@@ -5,11 +5,11 @@ import os
 import adsk.core
 
 from .. import config
-from ..lib.export_plan.apply import RowBuildError
-from ..lib.export_plan.errors import StepExportError
-from ..lib.export_plan.marker import not_put_back_message, put_back
-from ..lib.export_plan.naming import addin_version, writer_text
-from ..lib.export_plan.runner import ExportCancelled
+from ..lib.design_edit.apply import RowBuildError
+from ..lib.design_edit.errors import StepExportError
+from ..lib.design_edit.marker import not_put_back_message, put_back
+from ..lib.package.naming import addin_version, writer_text
+from ..lib.design_edit.runner import ExportCancelled
 from ..lib.fusion_reader import design_info
 from ..lib.fusion_reader.capture import MarkerError
 from ..lib.fusion_ui.log import error_box, log, message_box

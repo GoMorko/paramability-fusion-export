@@ -1,1 +1,3 @@
-"""Pure export logic: size rows, parameter restore, row runner, package assembly. No Fusion imports."""
+"""The export itself: the sequence of one export (`pipeline`), the recipe and its notes (`recipe_export`,
+`messages`, `health`), the sketch probe run (`probe_flow`), the sizes offered for a body (`size_offers`,
+`body_scope`) and the package assembly (`assemble`). Pure: no Fusion imports."""

@@ -1,5 +1,5 @@
 """Put user parameters back to their saved expressions."""
-from .expressions import is_plain_number
+from ..params.expressions import is_plain_number
 
 
 def restore_order(saved):

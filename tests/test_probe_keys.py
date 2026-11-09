@@ -9,8 +9,10 @@ from tests.test_probe_motion import CAPTURE, MODEL, PARAMS, TICKED, at, states
 from tests.translator_helpers import FIXTURES, load_capture
 
 from lib.params import size_table
-from lib.probe import coverage, match, plan
-from lib.probe.motion import Affine, Motion, Stuck, build
+from lib.probe import match, plan
+from lib.sketch_values import coverage
+from lib.probe.build import build
+from lib.sketch_values.motion import Affine, Motion, Stuck
 from lib.translator import translate
 from lib.translator.sizes import sketch_answer
 

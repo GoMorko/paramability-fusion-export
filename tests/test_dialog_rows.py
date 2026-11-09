@@ -1,7 +1,7 @@
 import unittest
 
 from tests import context  # noqa: F401
-from lib.export_plan import dialog_rows as rows
+from lib.dialog_model import dialog_rows as rows
 from lib.export_plan.size_offers import initial_table, offers
 from lib.params import size_table
 

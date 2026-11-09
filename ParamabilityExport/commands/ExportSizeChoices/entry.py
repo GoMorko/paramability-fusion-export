@@ -4,8 +4,8 @@ import os
 import adsk.core
 
 from ... import config
-from ...lib.export_plan.marker import marker_note, read_marker
-from ...lib.export_plan.sizes_table import new_table
+from ...lib.design_edit.marker import marker_note, read_marker
+from ...lib.dialog_model.sizes_table import new_table
 from ...lib.fusion_reader.design_info import detect_up_axis
 from ...lib.fusion_reader.parameters import list_user_parameters
 from ...lib.fusion_reader.step_export import count_solid_bodies

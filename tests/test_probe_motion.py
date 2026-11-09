@@ -5,7 +5,9 @@ from tests.probe_helpers import (
     IDENT, capture, circle, extrude, loop, model, profile, read, rect_curves, sketch_state, state, table, user)
 
 from lib.probe import build as probe_build
-from lib.probe.motion import Affine, Motion, Stuck, build
+from lib.probe.build import build
+from lib.sketch_values.motion import Affine, Motion, Stuck
+from lib.translator.curved import render
 
 W = "FilterBox_width_mm"
 PARAMS = [user("count", "3", 3, ""), user("cube", "10 mm", 10), user(W, "count * cube + 2 mm", 32),
@@ -83,19 +85,19 @@ class BuildTests(unittest.TestCase):
         self.assertNotIn("d2", used)
 
     def test_formula_over_the_sizes_and_the_number_it_stands_for(self):
-        quantity = self.motion().get("4/p0/l1/center.0").render(self.table)
+        quantity = render(self.motion().get("4/p0/l1/center.0"), self.table)
         self.assertEqual(quantity.text, "FilterBox_width_mm - off")
         self.assertAlmostEqual(quantity.n, 27)
         self.assertEqual(set(quantity.reads), {"count", "cube", "off"})
-        self.assertEqual(Affine(2, {W: 0.5}).render(self.table).text, "0.5 * FilterBox_width_mm + 2")
+        self.assertEqual(render(Affine(2, {W: 0.5}), self.table).text, "0.5 * FilterBox_width_mm + 2")
 
     def test_a_term_that_is_a_fixed_number_joins_the_constant(self):
         fixed = self.table.with_fixed({"off": "fixed"})
-        quantity = Affine(1, {"off": 2.0}).render(fixed)
+        quantity = render(Affine(1, {"off": 2.0}), fixed)
         self.assertEqual((quantity.sized, quantity.n), (False, 11.0))
 
     def test_a_term_that_cannot_be_written_is_stuck(self):
-        stuck = Affine(0, {"missing": 1.0}, "Sketch1").render(self.table)
+        stuck = render(Affine(0, {"missing": 1.0}, "Sketch1"), self.table)
         self.assertEqual((stuck.cause, stuck.sketch), ("unread", "Sketch1"))
 
     def test_union_of_the_boxes_over_all_states(self):

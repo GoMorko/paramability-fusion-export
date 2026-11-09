@@ -1,9 +1,9 @@
 import unittest
 
 from tests import context  # noqa: F401
-from lib.export_plan.sizes_table import (
+from lib.dialog_model.sizes_table import (
     add_row, new_table, read_table, remove_row, set_row, table_to_csv, toggle_column)
-from lib.export_plan.sizes_text import read_sizes
+from lib.dialog_model.sizes_text import read_sizes
 from lib.package.units import internal_to_unit
 
 

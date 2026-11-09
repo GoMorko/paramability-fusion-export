@@ -14,34 +14,31 @@ cannot be followed fixes the sizes written so far.
 """
 import math
 
+from ..package.numbers import round9
+from ..params.expressions import ExpressionError, evaluate
 from . import follow, range_check, values, vec
+from .vec import POINT_TOL
 from .step_kinds import FINISH, SOLID, recipe_kind
 from .follow import Motion
+from .picks import MAX_NEAR_POINTS
 from .values import Quantity, Sized, number, numbers_of, reads_in
 from .placer_makers import CopiesMaker
 from .result import Refusal, StepResult
-from ..params.expressions import ExpressionError, evaluate
 
-MAX_NEAR_POINTS = 32
 MAX_REFERENCES = 64
 MAX_COPIED_BODIES = 256
 
 FIT_TOL_MM = 1e-4
 ROTATION_TOL = 1e-9
 ANGLE_TOL_DEG = 1e-6
-POINT_TOL = 1e-6
 FULL_TURN_DEG = 360.0
 
 # Finish fields that a copy cannot carry; the translator never writes them.
 UNCOPYABLE_FINISH_KEYS = ("sizeEnd",)
 
 
-def _n(value):
-    return round(value, 9) + 0.0
-
-
 def _vec(values):
-    return [_n(v) for v in values]
+    return [round9(v) for v in values]
 
 
 # ---------------------------------------------------------------- sources
@@ -385,7 +382,7 @@ def rectangular(item, ctx):
 
     pattern = {"kind": "pattern"}
     for key, axis in zip(("linear", "linear2"), axes):
-        pattern[key] = {"dir": _vec(axis["dir"]), "count": axis["count"], "step": _n(axis["step"])}
+        pattern[key] = {"dir": _vec(axis["dir"]), "count": axis["count"], "step": round9(axis["step"])}
     if skip:
         pattern["skip"] = skip
     steps = _build(ctx, item, solids, finishes, pattern, _grid_motions(item, placed, axes, columns), "pattern")
@@ -509,7 +506,7 @@ def circular(item, ctx):
     moved = _axis_shift(ctx, item, axis, direction)
     polar = {"axisPoint": _vec(point), "axis": _vec(direction), "count": count}
     if not full:
-        polar["angleDeg"] = _n((count - 1) * delta)
+        polar["angleDeg"] = round9((count - 1) * delta)
     pattern = {"kind": "pattern", "polar": polar}
     if skip:
         pattern["skip"] = skip
@@ -528,7 +525,7 @@ def circular(item, ctx):
     if isinstance(steps, Refusal):
         return steps
     if any(q.sized for q in moved):
-        polar["axisPoint"] = [q.plus(c).json() if q.sized else _n(c) for q, c in zip(moved, point)]
+        polar["axisPoint"] = [q.plus(c).json() if q.sized else round9(c) for q, c in zip(moved, point)]
     if angle_q is not None:
         polar["angleDeg"] = angle_q.json()
     _keep_pattern_fixed(ctx, item, skip, finishes, ("quantity",), ("total_angle_deg",))

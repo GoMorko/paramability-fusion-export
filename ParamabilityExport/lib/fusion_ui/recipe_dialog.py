@@ -1,7 +1,7 @@
 """The Export for Paramability dialog: pick the body, tick sizes in a parameter table, export.
 
 One table row per parameter: tick, name, current value, Min and Max (the range of a size), and what the parameter
-becomes. A text box under the table follows the picked row. The texts come from export_plan.dialog_rows; this file
+becomes. A text box under the table follows the picked row. The texts come from dialog_model.dialog_rows; this file
 only places them in Fusion inputs.
 
 A check box label cannot be changed after creation (Fusion raises on `.text`), so the row ticks carry no label.
@@ -11,7 +11,7 @@ import adsk.core
 from .body_inputs import BODY_ID, add_body_inputs
 from .log import log
 
-from ..export_plan import dialog_rows as rows
+from ..dialog_model import dialog_rows as rows
 from ..export_plan.size_offers import MAX_TICKED
 from ..fusion_reader.bodies import is_pickable_body
 
@@ -71,8 +71,8 @@ def build(command, offers, body, up_axis, design_unit="mm", stop=None, marker_no
     """Add the inputs. offers come from export_plan.size_offers.offers; body may be None.
 
     Cells are named by row number, since a Fusion parameter name is not always a safe input id. `design_unit` is the unit the Min and Max cells use for lengths. `stop` is the warning for the body already
-    picked (export_plan.stop_warning.summarize), if any. `marker_note` is the line shown when the timeline marker is
-    not at the end (export_plan.marker.marker_note).
+    picked (dialog_model.stop_warning.summarize), if any. `marker_note` is the line shown when the timeline marker is
+    not at the end (design_edit.marker.marker_note).
     """
     inputs = command.commandInputs
     add_body_inputs(inputs, body, marker_note)

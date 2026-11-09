@@ -1,1 +1,1 @@
-"""Pure package writer: units, rows, manifest, zip. No Fusion imports."""
+"""Pure package writer: units, number helpers, rows, manifest, caps, file names, zip. No Fusion imports."""

@@ -6,7 +6,7 @@ from tests.test_recipe_dialog import make_dialog, offer
 from tests.test_recipe_export import plate_then_loft
 
 core = fakes.install_adsk_core()
-from lib.export_plan.stop_warning import summarize  # noqa: E402
+from lib.dialog_model.stop_warning import summarize  # noqa: E402
 from lib.fusion_ui import recipe_dialog, timeline_select  # noqa: E402
 
 

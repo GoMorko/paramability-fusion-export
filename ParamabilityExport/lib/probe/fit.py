@@ -7,7 +7,7 @@ in enough states to tell a line from a coincidence.
 import itertools
 import math
 
-from .motion import CURVE, UNTRIED
+from ..sketch_values.motion import CURVE, UNTRIED
 
 TOLERANCE = 1e-4
 MAX_COLUMNS = 3

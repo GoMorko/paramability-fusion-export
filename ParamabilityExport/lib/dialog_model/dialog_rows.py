@@ -10,7 +10,7 @@ import re
 from ..package.units import display_from_manifest, manifest_from_display, unit_kind
 from ..params.defaults import COUNT_CAP
 from ..params.expressions import format_number
-from .size_offers import MAX_TICKED, limit_message, range_unit
+from ..export_plan.size_offers import MAX_TICKED, limit_message, range_unit
 
 SIZE, KEEP, LOCKED, FORMULA = "size", "keep", "locked", "formula"
 

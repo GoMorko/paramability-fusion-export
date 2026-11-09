@@ -4,7 +4,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.fakes import FakeTimeline
-from lib.export_plan.errors import StepExportError
+from lib.design_edit.errors import StepExportError
 
 # step_export imports adsk.core at load time; a stub with Matrix3D is enough here.
 if "adsk" not in sys.modules:
