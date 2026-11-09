@@ -1,14 +1,15 @@
 """What happens when the person clicks OK in Export for Paramability.
 
-Plain export (the default): the STEP of the part as it is, the capture of its steps, one translation, and the file.
-No parameter is changed in the design: there are no check rows and no probe rows (only the capture read moves the
-timeline marker, and puts it back). Every ticked size that a copied step reads stays a free size over its range;
-sketch values stay numbers, and a size that moves a sketch, a plane or a joint is loose (`loose` in the manifest).
+Plain export (the default): the STEP of the part as it is, the capture of its steps, the probe rows that only
+recompute (no STEP) so sketch values follow sizes, one translation with the motion they gave, and the file. There are
+no size checks, no tries to build, no shortened ranges and nothing fixed because Fusion failed: a probe row Fusion
+cannot build is dropped, and a size that a value still cannot follow is loose (`loose` in the manifest). Every ticked
+size that a copied step reads stays a free size over its range.
 
 Checked export ("Check sizes in Fusion"): the STEP of the part as it is, the capture, a first translation that shows
 which sizes the recipe keeps and the ranges it gives them, one check STEP per kept size, a try at the other end of
-each range (and smaller steps where Fusion cannot build, `size_narrowing`), the probe rows that only recompute (so
-sketch values follow sizes), then the translation again with what these found, and the file. A size that the recipe cannot follow fully stays free with a warning, unless the
+each range (and smaller steps where Fusion cannot build, `size_narrowing`), the probe rows, then the translation
+again with what these found, and the file. A size that the recipe cannot follow fully stays free with a warning, unless the
 person ticked "Keep doubtful sizes fixed"; only a size Fusion cannot build at any other value is always fixed.
 
 Each run changes parameters; RowExport puts every parameter back whatever happens. A body inside a component is
@@ -241,12 +242,12 @@ def position_pending(design):
         return False
 
 
-def _first_translation(capture, up_axis, table, loose=True):
+def _first_translation(capture, up_axis, table, loose=True, plain=False):
     """The translator's result when it gives a recipe, else None (the plan then reports the reason).
 
     A part with sketches the probe can follow is translated without fixing sizes for them, so the sizes that move
     only sketches stay in the list of sizes to check."""
-    return _translation(capture, up_axis, table, OPTIMISTIC if covers_a_sketch(capture) else None, loose)
+    return _translation(capture, up_axis, table, OPTIMISTIC if covers_a_sketch(capture) else None, loose, plain)
 
 
 def _translation(capture, up_axis, table, motion, loose, plain=False):
@@ -331,8 +332,19 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
             checks, kept, measured, doubtful, unchecked, failures, narrowed = [], [], [], [], [], [], []
             motion, probe_report, final = None, None, None
             if isinstance(capture, dict) and not check:
-                # No size pass in Fusion: sketch values stay numbers, and a size behind one is loose (translator).
-                final = _translation(capture, form["up_axis"], table, None, True, True)
+                # Probe rows only: sketch values follow sizes; no check STEPs, no narrowing, nothing fixed.
+                first = _first_translation(capture, form["up_axis"], table, True, True)
+                probe, sizes = None, []
+                if first is not None:
+                    keep = kept_size_names(table, free_sizes(first.recipe))
+                    sizes = sizes_for_checks(table, parameters, keep=keep)
+                    probe = _start_probe(design, body, token, capture, table)
+                if probe is not None:
+                    store = DesignParameterStore(design)
+                    run = _CheckRun(design, store, units, body, token, tmp, jobs, set(), "", probe)
+                    motion, probe_report, found = _finish_probe(probe, run, sizes, sizes, labels(table), True)
+                    doubtful.extend(found)
+                final = _translation(capture, form["up_axis"], table, motion, True, True)
             elif isinstance(capture, dict):
                 # Checks go only to the sizes the recipe keeps after translation, within the ranges it gives them.
                 first = _first_translation(capture, form["up_axis"], table, loose)

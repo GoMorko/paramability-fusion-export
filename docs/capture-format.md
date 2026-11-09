@@ -747,8 +747,9 @@ meeting the part) is listed there too, with the old end as `from`.
 recipe size name, as in the manifest's `loose`): from the translator, from a check that moved the part in the
 assembly or changed a sketch the probe does not follow, and from the probe. `sizes.fixed` lists the fixed ones.
 `keep_doubtful` is true when the person ticked "Keep doubtful sizes fixed", so those sizes were fixed instead.
-`check_sizes` is false for the plain export (the default): no check rows, no probe rows, no parameter changed, so
-`checks` in the manifest is empty and the report has no `probe`, `raised` or `narrowed`.
+`check_sizes` is false for the plain export (the default): no check rows and no check STEPs, but the probe rows run
+(recompute only, parameters restored), so `checks` in the manifest is empty, the report has a `probe` when a sketch
+could be followed, and no `raised` or `narrowed`.
 
 ## 7. API names and what is not verified
 

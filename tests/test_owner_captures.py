@@ -194,6 +194,27 @@ class OwnerCaptureTest(unittest.TestCase):
         self.assertNotIn("FilterBox__PipeTop_offsetFromCenter_mm", [f["name"] for f in result.loose])
         self.assertEqual(check_recipe(result.recipe), [])
 
+    def test_the_plain_export_with_the_motion_of_the_stored_states(self):
+        path = os.path.join(REPORTS, PACKAGE_WITH_OFFSET_FACES)
+        if not os.path.exists(path):
+            self.skipTest("the owner's package is not on this machine")
+        with zipfile.ZipFile(path) as package:
+            report = json.loads(package.read("report.json"))
+        capture = report["capture"]
+        params = capture["parameters"]
+        ticked = PROBE_TICKED + ["_Filter__Wall_thickness_mm"]
+        table = size_table.build(params["user"], ticked, params["model"], capture.get("design_units", "mm"))
+        motion = probe_motion.build(probe_view(capture), table, report["probe"]["states"])
+        result = translate(capture, size_table=table, motion=motion, loose=True, plain=True)
+        self.assertEqual((result.fixed, result.raised, result.narrowed), ([], [], []))
+        free = sorted(n for n, size in result.recipe["sizes"].items() if "value" in size)
+        self.assertEqual(len(free), 7)
+        # With the motion only the sizes whose values still cannot follow are loose; the height and the pipe offset
+        # follow.
+        self.assertEqual(sorted(f["name"] for f in result.loose), sorted(
+            [PROBE_TICKED[0], PROBE_TICKED[2], PROBE_TICKED[3], PROBE_TICKED[6], "_Filter__Wall_thickness_mm"]))
+        self.assertEqual(check_recipe(result.recipe), [])
+
 
 if __name__ == "__main__":
     unittest.main()
