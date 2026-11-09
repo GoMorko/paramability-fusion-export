@@ -13,7 +13,7 @@ frame of those settings is not documented), a text whose outlines could not be r
 face, and a result whose measured volume does not match the outline area times the depth (an outline that runs past
 its face is trimmed by Fusion).
 """
-from . import extrude, loops, vec
+from . import extrude, loops, values, vec
 from .result import Refusal
 
 PLANE_TOL = 1e-4
@@ -79,6 +79,30 @@ def _volume_refusal(data, depth):
     return None
 
 
+def _on_plane(face, plane):
+    """True when a neighbour record is a flat face on the plane of the input face."""
+    own = face.get("plane") if isinstance(face, dict) else None
+    if own is None or face.get("surface") != "Plane":
+        return False
+    same_way = abs(abs(vec.dot(vec.unit(own["normal"]), vec.unit(plane["normal"]))) - 1.0) <= SIGN_TOL
+    return same_way and abs(vec.dot(vec.sub(own["point"], plane["point"]), vec.unit(plane["normal"]))) <= PLANE_TOL
+
+
+def _tangent_refusal(data, face):
+    """A Refusal when Tangent Chain is on (or unknown) and the outline could wrap onto a face that is not on the
+    input plane. Without the neighbours the made faces tell: any curved one refuses; none listed copies."""
+    if data.get("tangent_chain") is False:
+        return None
+    reason = Refusal("This emboss follows tangent faces (Tangent Chain), which is not copied yet.")
+    neighbours = data.get("tangent_faces")
+    if isinstance(neighbours, list):
+        return reason if any(not _on_plane(n, face["plane"]) for n in neighbours) else None
+    made = data.get("made_surfaces")
+    if isinstance(made, list) and any(kind not in (None, "Plane") for kind in made):
+        return reason
+    return None
+
+
 def _direction(data, face, depth):
     """+1 or -1 along the first outline's sketch normal: out of the face for a positive depth, into it for a
     negative one. The measured end of the feature wins when it is known."""
@@ -122,6 +146,11 @@ def handle(item, ctx):
     refusal = _volume_refusal(data, depth)
     if refusal is not None:
         return refusal
+    refusal = _tangent_refusal(data, face)
+    if refusal is not None:
+        return refusal
+    for path in ("offset_x", "offset_y", "rotation_deg"):
+        values.pin(ctx, item, path, "it sets how far %s moves its outline" % item.get("name", "an emboss"))
     built = {
         "operation": "join" if depth > 0 else "cut",
         "profiles": profiles,
@@ -141,4 +170,6 @@ def handle(item, ctx):
     }
     if "depth" in (data.get("params") or {}):
         built["params"] = {"side_one.distance": data["params"]["depth"]}
-    return extrude.handle(dict(item, data=built), ctx)
+    outcome = extrude.handle(dict(item, data=built), ctx)
+    values.handled(ctx, item, "depth", same_as="side_one.distance")
+    return outcome

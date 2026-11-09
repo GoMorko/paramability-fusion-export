@@ -153,8 +153,8 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   These stop the copy and leave a plain part:
   thin extrudes of an open line, of several outlines, of an outline with holes, that go two ways, reach to a face or
   have a taper, face outlines, a text or spline outline that is too big or too complex (see below), extrudes that start or end on
-  a tilted or curved surface, an emboss on a curved face, an emboss that is moved or turned on its face or drawn on a
-  plane tilted to its face, extrudes that make a new component, modeled threads, rounds with variable or chord length
+  a tilted or curved surface, an emboss on a curved face, an emboss that is moved or turned on its face, drawn on a
+  plane tilted to its face or set to follow tangent faces that are rounded, extrudes that make a new component, modeled threads, rounds with variable or chord length
   sizes or curvature continuity, shells that grow outward, close the body or round their corners, patterns of faces or bodies, patterns
   that spread to both sides of the start, mirrors of faces, a chamfer with two different sizes whose sides could not be
   measured, a press pull (offset

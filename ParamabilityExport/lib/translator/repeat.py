@@ -305,6 +305,8 @@ def _lattice_axes(item, ctx):
         if quantity < 1:
             return Refusal("This pattern has no copies.")
         if quantity == 1:
+            values.pin(ctx, item, "quantity_" + which, "a count of one copy cannot follow it")
+            values.handled(ctx, item, "distance_" + which)
             continue
         direction = data.get(dir_key)
         if not direction or vec.length(direction) < 1e-9:

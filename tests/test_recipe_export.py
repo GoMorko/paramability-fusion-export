@@ -191,6 +191,16 @@ class MotionHandoverTest(unittest.TestCase):
         self.assertEqual(self.seen, [marker])
         self.assertEqual(report["probe"], {"restore_gap_mm": 0.0})
 
+    def test_a_translation_that_refused_is_used_as_given_and_nothing_translates_again(self):
+        capture = plate_then_loft()
+        refused = recipe_export.translate(capture)
+        self.assertIsNone(refused.recipe)
+        self.seen.clear()
+        manifest, _, report = plan_single_export(capture, self.step, "Plate", "w", "z", translated=refused)
+        self.assertEqual(self.seen, [])
+        self.assertEqual(manifest["kind"], "stepOnly")
+        self.assertEqual(report["refusal"], refused.refusal)
+
 
 if __name__ == "__main__":
     unittest.main()

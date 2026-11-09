@@ -30,6 +30,7 @@ class Context:
     doubts: the `result.Doubt` records that count for the walk, in order (`doubt`, `commit`). `depends` and
       `must_fix` read them by size; the driver turns the sizes of `must_fix` into fixed numbers and walks again.
     copied_items: the capture items whose steps are part of the recipe (the audit reads the sizes behind them).
+    asked: `(item index, params path)` of every value the handlers of the copied items dealt with (`ask`).
     placers: the placers of the steps written so far, in the order they were made (placer.py), for picks and reaches
       that follow sizes. The placer makers of each step's `Entry` add them (`add_placer`).
     slabs: the extrude slabs among them (slabs.Slab), the originals and the pattern or mirror copies (`add_slab`).
@@ -56,6 +57,7 @@ class Context:
         self.steps = []
         self.pending_tools = {}
         self.copied_items = []
+        self.asked = set()
         self.not_repeatable = set()
         self._ids_by_index = {}
         self.current = None
@@ -71,6 +73,20 @@ class Context:
         While a handler runs, the doubt goes to its StepResult (`recording`); otherwise it counts for the walk."""
         record = Doubt(names, why, self.current.get("index") if self.current else None, fixed)
         (self._recordings[-1] if self._recordings else self).doubts.append(record)
+
+    def _key(self, item, path):
+        index = item.get("index") if isinstance(item, dict) else None
+        if index is None and self.current is not None:
+            index = self.current.get("index")
+        return index, path
+
+    def ask(self, item, path, same_as=None):
+        """Record that a handler dealt with the value at `path` of `item`: followed, pinned or left out on purpose.
+        With `same_as`, only when the handler dealt with that other path of the item (a rewritten item names its
+        values differently). Like doubts, it counts only when the handler's steps are written."""
+        here = self._recordings[-1] if self._recordings else self
+        if same_as is None or self._key(item, same_as) in here.asked:
+            here.asked.add(self._key(item, path))
 
     def note(self, text):
         """Attach a plain sentence to the item being handled (it goes to the handler's StepResult, `recording`); its
@@ -90,6 +106,7 @@ class Context:
     def commit(self, result):
         """The steps of `result` are part of the recipe: its doubts and the items of other bodies it carries count."""
         self.doubts.extend(result.doubts)
+        self.asked |= result.asked
         self.copied_items.extend(result.items)
 
     @property

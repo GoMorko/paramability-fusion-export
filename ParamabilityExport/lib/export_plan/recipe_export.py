@@ -114,6 +114,8 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
     health: how the design came out of the export (`export_plan.health.make_health`), for `report.json` and one note
       when the sketch measurements cannot be trusted.
     translated: the translator's result for these same inputs (`translate_capture`), when the caller has it already.
+      A result without a recipe (a refusal) is used as it is: nothing is translated a second time. Only None
+      translates here.
     listing: the design's ParameterListing (params.listing). Its entries go into the manifest `parameters` of every
       package kind, so the Fusion parameters reach Paramability even when the shape stays fixed.
     motion: what the size probe found for sketch values (`sketch_values.motion.Motion`), or None for a translation that

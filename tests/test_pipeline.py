@@ -4,12 +4,14 @@ import copy
 import json
 import tempfile
 import unittest
+from unittest import mock
 
 from tests import context  # noqa: F401
 from tests.fakes import FakeStore
 from tests.translator_helpers import load_capture
 
 from lib.design_edit.errors import StepExportError
+from lib.export_plan import recipe_export
 from lib.export_plan.pipeline import ExportRequest, run_pipeline
 from lib.dialog_model.result_rows import NOT_FOLLOWED, NOT_MEASURED, result_view
 from lib.design_edit.runner import ExportCancelled
@@ -147,6 +149,19 @@ class ExportTest(unittest.TestCase):
         self.assertEqual(result.manifest["kind"], "stepOnly")
         self.assertEqual(port.reads, 0)
         self.assertEqual(port.store.exprs, START)
+
+
+class RefusalTest(unittest.TestCase):
+    def test_a_part_that_cannot_be_copied_is_translated_once(self):
+        capture = load_capture("extrude_plate")
+        capture["items"][-1]["type"] = "MysteryFeature"
+        port = FakePort()
+        port.capture = capture
+        with mock.patch.object(recipe_export, "translate", wraps=recipe_export.translate) as translated:
+            result = export(port)
+        self.assertEqual(translated.call_count, 1)
+        self.assertEqual(result.manifest["kind"], "stepOnly")
+        self.assertIn("refusal", result.report)
 
 
 class SizeRangeTest(unittest.TestCase):

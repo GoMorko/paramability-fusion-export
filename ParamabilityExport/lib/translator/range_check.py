@@ -23,14 +23,29 @@ Arguments:
 
 `size_env` gives the values of every size at a setting; `largest_share` finds where a rule stops holding while a range
 is moved toward its value.
+
+A formula that is more than sums and products (`abs`, a division by a size, `min`, `max`, `mod`, a choice, a
+function such as `sin` or `sqrt`) can have its extreme or its failure inside a range. For such a formula `sweep`
+also tests inner settings (`inner_settings`): each read size at INNER_FRACTIONS of its range, with the other sizes at
+every combination of their ends and inner values when at most MAX_GRID_SIZES sizes are read (at most 125 settings), and
+with the others at their current values, all low or all high when more are read (at most MAX_INNER settings). Then
+it looks for the places where a term of the formula changes sign (a divisor, the argument of `abs`, `sqrt` or `ln`, the
+two sides of a comparison, the difference of two `min` or `max` arguments): between two neighbouring inner values with
+different signs, bisection finds the zero, and the settings on both sides of it are tested too (at most MAX_ZEROS).
+A divisor that changes sign inside a range counts as a failed setting.
 """
 import random
 from itertools import combinations, product
 
-from ..params.expressions import ExpressionError, evaluate
+from ..params.expressions import ExpressionError, _eval, evaluate, parse_formula
 
 MAX_CORNER_SIZES = 6
 MAX_SETTINGS = 256
+MAX_GRID_SIZES = 3
+MAX_INNER = 256
+MAX_ZEROS = 64
+MAX_TERMS = 8
+INNER_FRACTIONS = (0.25, 0.5, 0.75)
 STEPS = 40
 
 _FAILURES = (ExpressionError, ValueError, ZeroDivisionError, OverflowError)
@@ -115,13 +130,155 @@ def corners(table, reads, bounds=None):
     return out
 
 
-def sweep(table, formula, reads, bounds=None, extra=()):
-    """The `Span` of `formula` (recipe formula text) over `corners` and the `extra` settings."""
-    low = high = None
-    failed = False
-    for setting in corners(table, reads, bounds) + list(extra):
+_CHECKED_ARGUMENTS = {"abs": (0,), "sign": (0,), "sqrt": (0,), "ln": (0,), "log": (0,)}
+_DIVISORS = {"mod": 1}
+
+
+def _terms(node, out):
+    """Collect `(term node, is a divisor)` of the sub-expressions whose sign matters, and return whether the tree is
+    more than sums and products of sizes."""
+    kind = node[0]
+    nonlinear = kind in ("cond", "cmp", "logic", "not", "call")
+    children = []
+    if kind == "bin":
+        if node[1] == "/":
+            nonlinear = nonlinear or _reads(node[3])
+            out.append((node[3], True))
+        children = node[2:]
+    elif kind == "neg":
+        children = node[1:]
+    elif kind == "not":
+        out.append((node[1], False))
+        children = node[1:]
+    elif kind == "cond":
+        out.append((node[1], False))
+        children = node[1:]
+    elif kind == "logic":
+        children = node[2:]
+    elif kind == "cmp":
+        out.append((("bin", "-", node[2], node[3]), False))
+        children = node[2:]
+    elif kind == "call":
+        name, args = node[1], node[2]
+        for at in _CHECKED_ARGUMENTS.get(name, ()):
+            if at < len(args):
+                out.append((args[at], False))
+        if name in _DIVISORS and len(args) > _DIVISORS[name]:
+            out.append((args[_DIVISORS[name]], True))
+        if name in ("min", "max", "clamp"):
+            out.extend((("bin", "-", a, b), False) for a, b in zip(args, args[1:]))
+        children = args
+    found = nonlinear
+    for child in children:
+        found = _terms(child, out) or found
+    return found
+
+
+def _reads(node):
+    if node[0] == "name":
+        return True
+    return any(_reads(c) for c in node[1:] if isinstance(c, tuple)) or \
+        any(_reads(x) for c in node[1:] if isinstance(c, list) for x in c)
+
+
+def _value(tree, env):
+    value = _eval(tree, env)
+    if value != value or value in (float("inf"), float("-inf")):
+        raise ExpressionError("The formula does not give a number.")
+    return value
+
+
+def _inner_values(ends):
+    return {n: [lo + f * (hi - lo) for f in INNER_FRACTIONS] for n, (lo, hi) in ends.items()}
+
+
+def inner_settings(table, reads, bounds=None):
+    """The inner size settings of `sweep`, as [{recipe size name: value}] (see the module text for the bounds)."""
+    ends = _ends(table, reads, bounds)
+    names = list(ends)
+    inner = _inner_values(ends)
+    if not names:
+        return []
+    if len(names) <= MAX_GRID_SIZES:
+        values = [list(ends[n]) + inner[n] for n in names]
+        return [dict(zip(names, pick)) for pick in product(*values)]
+    low, high = {n: ends[n][0] for n in names}, {n: ends[n][1] for n in names}
+    out = []
+    for n in names:
+        for x in inner[n]:
+            for rest in ({}, low, high):
+                out.append(dict(rest, **{n: x}))
+    return out[:MAX_INNER]
+
+
+def _crossings(table, tree_terms, ends):
+    """(settings next to a sign change of a term, whether a divisor changed sign)."""
+    settings, divisor_flips = [], False
+    sizes = list(ends)
+    low, high = {n: ends[n][0] for n in sizes}, {n: ends[n][1] for n in sizes}
+    for term, is_divisor in tree_terms[:MAX_TERMS]:
+        for n in sizes:
+            lo, hi = ends[n]
+            xs = [lo] + [lo + f * (hi - lo) for f in INNER_FRACTIONS] + [hi]
+            for rest in ({}, low, high):
+                try:
+                    signs = [_sign(_value(term, size_env(table, dict(rest, **{n: x})))) for x in xs]
+                except _FAILURES:
+                    continue
+                for (x0, s0), (x1, s1) in zip(zip(xs, signs), zip(xs[1:], signs[1:])):
+                    if s0 * s1 >= 0:
+                        continue
+                    divisor_flips = divisor_flips or is_divisor
+                    if len(settings) < 2 * MAX_ZEROS:
+                        a, b = _bisect(table, term, dict(rest), n, x0, x1, s0)
+                        settings += [dict(rest, **{n: a}), dict(rest, **{n: b})]
+    return settings, divisor_flips
+
+
+def _sign(x):
+    return (x > 0) - (x < 0)
+
+
+def _bisect(table, term, rest, name, x0, x1, s0):
+    """The two ends of the last bracket around the zero of `term` along one size, between `x0` and `x1` where the
+    signs differ (`s0` at `x0`)."""
+    for _ in range(STEPS):
+        mid = (x0 + x1) / 2.0
         try:
-            value = evaluate(formula, size_env(table, setting))
+            s = _sign(_value(term, size_env(table, dict(rest, **{name: mid}))))
+        except _FAILURES:
+            break
+        if s == 0:
+            return mid, mid
+        if s == s0:
+            x0 = mid
+        else:
+            x1 = mid
+    return x0, x1
+
+
+def sweep(table, formula, reads, bounds=None, extra=()):
+    """The `Span` of `formula` (recipe formula text) over `corners`, `inner_settings` and `sign changes` for a
+    formula that needs them, and the `extra` settings."""
+    try:
+        tree = parse_formula(formula)
+    except ExpressionError:
+        return Span(failed=True)
+    terms = []
+    nonlinear = _terms(tree, terms)
+    settings = corners(table, reads, bounds)
+    failed = False
+    if nonlinear:
+        settings += inner_settings(table, reads, bounds)
+        ends = _ends(table, reads, bounds)
+        if ends and terms:
+            found, flipped = _crossings(table, terms, ends)
+            settings += found
+            failed = flipped
+    low = high = None
+    for setting in settings + list(extra):
+        try:
+            value = _value(tree, size_env(table, setting))
         except _FAILURES:
             failed = True
             continue

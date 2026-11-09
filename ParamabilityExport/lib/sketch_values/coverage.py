@@ -14,6 +14,7 @@ STILL, MOVED, NOT_MEASURED = "still", "moved", "not measured"
 
 NOT_FOLLOWABLE = "a step uses it in a way the probe cannot follow"
 NOT_MATCHED = "its first read did not match the capture"
+NOT_TRIED = "the sketch could not be tried for this size"
 NOT_READ = "the design could not be read at its current sizes"
 
 

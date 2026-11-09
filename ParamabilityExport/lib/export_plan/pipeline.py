@@ -193,10 +193,15 @@ class _Pipeline:
 
     def _translate_and_measure(self, capture):
         """The stages that need a capture: the first translation, the sketch probe and the translation with the
-        motion it found. Returns the final translation, or None when there is no recipe."""
-        first = self._translation(capture, OPTIMISTIC if covers_a_sketch(capture) else None)
+        motion it found. Returns the final translation (a refusal included), or None when it failed."""
+        first_motion = OPTIMISTIC if covers_a_sketch(capture) else None
+        first = self._translation(capture, first_motion)
         if first is None:
             return None
+        if first.recipe is None:
+            # The plan translates without a motion at this point, so the first look's refusal is its result only
+            # when the first look had none either.
+            return first if first_motion is None else None
         keep = kept_size_names(self.table, free_sizes(first.recipe))
         sizes = probe_sizes(self.table, self.request.parameters, keep=keep)
 
@@ -210,14 +215,14 @@ class _Pipeline:
     # ---- translation ------------------------------------------------------------------------------------------
 
     def _translation(self, capture, motion):
-        """The translator's result when it gives a recipe, else None (the plan then reports the reason). Never
-        raises."""
+        """The translator's result, a refusal included (the plan reports its reason without translating again), or
+        None when the translator failed. Never raises."""
         try:
             result = translate_capture(capture, self.request.up_axis, self.table, motion)
         except Exception as exc:
             self.port.log(f"translation failed: {exc!r}")
             return None
-        return result if result.recipe is not None else None
+        return result
 
     def _listing(self):
         """The design's parameters for the manifest, or None when they cannot be listed. Never stops the export."""

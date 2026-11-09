@@ -7,7 +7,7 @@ one, neither can a size behind a sketch the probe did not measure (`sketch_answe
 with a warning (`translate`).
 """
 from ..params.expressions import tokenize_formula
-from ..sketch_values.coverage import MOVED, NOT_MEASURED, STILL, Answer
+from ..sketch_values.coverage import MOVED, NOT_MEASURED, NOT_TRIED, STILL, Answer
 from ..sketch_values.motion import Affine, Stuck
 
 # model parameter created_by kind -> what it moves, for the reason text
@@ -58,6 +58,52 @@ def untried_reasons(table):
                     lambda what: "it changes %s, which could not be tried at other values" % what)
 
 
+def _text_sketches(node, found):
+    """{ sketch name: { params: names, unknown: bool } } for the sketch text records in a step's data. `params` are the
+    model parameters the reader found behind the text (its height); `unknown` is set when it could not read them (or the
+    record has none)."""
+    if isinstance(node, dict):
+        if node.get("text") is True and node.get("sketch"):
+            info = found.setdefault(node["sketch"], {"params": set(), "unknown": False})
+            info["params"].update(n for n in node.get("text_params") or [] if isinstance(n, str))
+            info["unknown"] = info["unknown"] or bool(node.get("text_params_unknown")) or not node.get("text_params")
+        for key, value in node.items():
+            if key not in ("participants", "tools", "bodies_after", "bodies_before", "target"):
+                _text_sketches(value, found)
+    elif isinstance(node, list):
+        for value in node:
+            _text_sketches(value, found)
+    return found
+
+
+def _text_param_names(table, sketch, info):
+    """Names of the model parameters that belong to the text of `sketch`: the ones the reader named, the ones made by
+    that text, and, when the reader could not tell which are the text's, every parameter with an unknown maker."""
+    names = set(info["params"])
+    for name, param in table.model_params.items():
+        made = param.get("created_by") or {}
+        kind = _kind(param)
+        if kind == "sketchText" and made.get("sketch") == sketch:
+            names.add(name)
+        elif info["unknown"] and kind == "other" and not made.get("sketch"):
+            names.add(name)
+    return names
+
+
+def text_reasons(table, capture):
+    """{ Fusion name: why } for each ticked size that reaches a parameter of a sketch text (its height). The copy
+    keeps the letters as outlines at their current size, so such a size cannot follow."""
+    out = {}
+    for sketch, info in _text_sketches(capture.get("items") or [], {}).items():
+        reached = set()
+        for name in _text_param_names(table, sketch, info):
+            reached |= table.depends(name)
+        for size in table.ticked:
+            if size in reached:
+                out.setdefault(size, "it changes the size of the text in %s, which is copied as it is now" % sketch)
+    return out
+
+
 def sketch_params(table, sketch):
     """Fusion names of the model parameters made by the dimensions of the sketch named `sketch`."""
     if not sketch:
@@ -97,6 +143,8 @@ def sketch_answer(table, motion, sketch, size):
     reason = getattr(motion, "unmeasured", {}).get(sketch)
     if reason:
         return Answer(NOT_MEASURED, reason=reason)
+    if size in getattr(motion, "untried", ()):
+        return Answer(NOT_MEASURED, reason=NOT_TRIED)
     moved = [key for key, value in motion.values.items()
              if getattr(value, "sketch", "") == sketch and size in _driven(table, value)]
     return Answer(MOVED, moved) if moved else Answer(STILL)

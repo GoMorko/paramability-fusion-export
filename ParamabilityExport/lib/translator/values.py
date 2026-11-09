@@ -221,8 +221,16 @@ def _reads_of(ctx, ref):
     return tuple(tr.reads) or _unread(ctx, ref, tr)
 
 
+def handled(ctx, item, path, same_as=None):
+    """The value at `path` needs nothing here (the step kind or its settings do not use it), so the audit does not
+    expect it to follow the sizes it reads. With `same_as`, only when that other path of the item was dealt with:
+    a handler that rewrites its item names the same value differently."""
+    ctx.ask(item, path, same_as)
+
+
 def pin(ctx, item, path, why):
     """The value at `path` stays a number here: the sizes its parameter reads become fixed numbers."""
+    ctx.ask(item, path)
     ref = _param(item, path)
     if ref is not None:
         ctx.doubt(_reads_of(ctx, ref), why)
@@ -298,6 +306,7 @@ def quantity(ctx, item, path, literal, dim="length", sign=1, absolute=False, who
     stay above zero over the size range; `whole` asks it to stay at least 1 (counts).
     """
     plain = Quantity(literal)
+    ctx.ask(item, path)
     ref = _param(item, path)
     if ref is None or ctx.table is None:
         return plain

@@ -9,6 +9,9 @@ from tests.test_probe_motion import CAPTURE, MODEL, PARAMS, TICKED, W, read_at
 
 from lib.export_plan.probe_flow import SizeProbe, covers_a_sketch, kept_size_names
 from lib.design_edit.runner import RowExport
+from lib.sketch_values import coverage
+from lib.sketch_values.motion import Motion
+from lib.translator.sizes import sketch_answer, sketch_sizes
 
 UNITS = {"count": "", "cube": "mm", "off": "mm", "height": "mm"}
 START = {"count": "3", "cube": "10 mm", "off": "5 mm", "height": "20 mm"}
@@ -91,6 +94,19 @@ class SizeProbeTest(unittest.TestCase):
         found = probe.finish(probe.read_now(), {"off": "Hole offset"})
         self.assertEqual([(f["param"], f["size"]) for f in found], [("off", "off")])
         self.assertIn("Hole offset", found[0]["reason"])
+
+    def test_a_size_left_without_rows_is_not_measured_for_the_sketches_that_read_it(self):
+        probe = self.start()
+        run(self.fusion, probe, [s for s in self.sizes if s["param"] != "off"])
+        probe.untried = ["off"]
+        probe.finish(probe.read_now(), {})
+        self.assertEqual(Motion.from_json(probe.motion.json()).untried, ["off"])
+        sketches = [n for n in ("Sketch1", "Sketch2", "Sketch3") if "off" in sketch_sizes(self.table, n)]
+        self.assertTrue(sketches)
+        for name in sketches:
+            answer = sketch_answer(self.table, probe.motion, name, "off")
+            self.assertEqual((answer.kind, answer.reason), (coverage.NOT_MEASURED, coverage.NOT_TRIED))
+            self.assertNotEqual(sketch_answer(self.table, probe.motion, name, "height").kind, coverage.NOT_MEASURED)
 
     def test_a_state_that_does_not_build_is_dropped_and_reported(self):
         self.fusion = Fusion(bad_when=lambda e: e["height"] == "40 mm")

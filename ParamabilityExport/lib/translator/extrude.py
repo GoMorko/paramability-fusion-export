@@ -8,13 +8,16 @@ and its sketch plane follow sizes (sketch_motion.py).
 A thin extrude of one closed outline without holes is written with the recipe's `thin` wall (thin_wall.py): the wall
 thickness follows its parameter, and the side of the outline comes from the measured area of the end face. Open lines,
 several outlines, outlines with holes, two sided and tapered thin extrudes are refused.
+
+An extrude of text or spline outlines is also checked against the volume Fusion made (`_volume_refusal`).
 """
+import heapq
 import math
 
 from ..package.numbers import round9
 
 from . import follow, kept_ranges, loops, outlines, placement, sketch_motion, thin_wall, values, vec
-from .footprint import Footprint
+from .footprint import Footprint, polyline
 from .placer_makers import SlabMaker, ThinWallMaker
 from .result import Refusal, StepResult
 from .values import Quantity
@@ -34,6 +37,8 @@ AREA_RELATIVE_TOL = 1e-6
 # Sine of the wall lean: about 0.006 degrees.
 LEAN_TOL = 1e-4
 PLANE_TOL = 1e-4
+VOLUME_RELATIVE_TOL = 0.01
+VOLUME_ABSOLUTE_TOL = 1e-3
 COMBINE = {"join": "add", "cut": "cut", "intersect": "intersect", "newBody": "new"}
 
 
@@ -112,9 +117,12 @@ def _distance_quantity(ctx, item, path, raw):
     return values.quantity(ctx, item, path, abs(raw), sign=_sign_of(raw), absolute=True)
 
 
-def _start_shift(start, frame, ctx, item):
+def _start_shift(start, frame, ctx, item, plane_q):
     """Signed distance along the sketch normal from the sketch plane to where the extrude starts, as a Quantity that
-    follows sizes (an offset parameter, or a face that moves with an earlier extrude); or a Refusal."""
+    follows sizes (an offset parameter, or a face that moves with an earlier extrude); or a Refusal.
+
+    An offset starts from the sketch plane and moves with it. A start on a face is measured from the plane too, so the
+    plane's own move (`plane_q`, along the sketch normal) comes off the face's move: the written origin adds it back."""
     if start is None:
         return Refusal(UNREADABLE)
     kind = start.get("kind", "profilePlane")
@@ -125,6 +133,7 @@ def _start_shift(start, frame, ctx, item):
             return Refusal(UNREADABLE)
         return values.quantity(ctx, item, "start.offset", float(start["offset"]))
     if kind == "fromEntity":
+        values.pin(ctx, item, "start.offset", "it sets how far %s starts from its face" % item.get("name", "a step"))
         plane = start.get("plane")
         if not plane:
             return Refusal("This extrude starts from a surface that is not flat, which is not copied yet.")
@@ -132,9 +141,12 @@ def _start_shift(start, frame, ctx, item):
             return Refusal("This extrude starts from a tilted surface, which is not copied yet.")
         shift = vec.dot(vec.sub(plane["point"], frame["origin"]), vec.unit(frame["z"]))
         moved = follow.target_shift(ctx, item, start, vec.unit(frame["z"]), "starts from")
-        if moved is None or not moved.sized:
-            return Quantity(shift)
-        return moved.plus(shift - moved.n)
+        face = Quantity(shift) if moved is None or not moved.sized else moved.plus(shift - moved.n)
+        if not plane_q.sized:
+            return face
+        if face.sized and (face.text == plane_q.text or face.core == plane_q.core):
+            return Quantity(face.n - plane_q.n)
+        return face.plus(plane_q.scaled(-1))
     return Refusal("This extrude starts in a way that is not copied yet.")
 
 
@@ -238,6 +250,7 @@ def _plan(item, data, frame, shift, combine, ctx, plane_q):
         if kind in ("throughAll", "all"):
             if taper:
                 return Refusal("A tapered extrude through all is not copied.")
+            values.pin(ctx, item, which + ".taper_deg", "a taper of zero cannot follow it")
             positive = side.get("positive", True)
             if positive is None:
                 return Refusal(UNREADABLE)
@@ -410,6 +423,42 @@ def _check_taper(plan, data, combine, outlines):
     return None
 
 
+def _holds_free_outline(profiles):
+    """True when a profile is sketch text or has a free curve (a spline)."""
+    return any(p.get("text") or any(c.get("kind") == "other" for loop in p.get("loops") or []
+                                    for c in loop.get("curves") or []) for p in profiles)
+
+
+def _volume_refusal(data, plan, combine, profiles, thin):
+    """Refuse when the part Fusion made from text or spline outlines is not the outline area times the length.
+
+    Text outlines are sorted into outer outlines and holes by the reader, and overlapping strokes can be read as a hole,
+    so the area they give is checked against the measured volume. A new body must match; a join or cut may lose volume
+    to material it overlaps, so it only must not exceed the expected volume or go the wrong way. Cases whose volume
+    cannot be worked out here (taper, through all, thin, intersect) are not checked. A capture without the measured
+    values (made before they were read) is not checked either."""
+    if "areas" not in data or not _holds_free_outline(profiles):
+        return None
+    if thin or combine == "intersect" or any(e["taper"] or e["distance"] is None for e in plan):
+        return None
+    areas, before, after = data["areas"], data.get("volume_before"), data.get("volume_after")
+    if (not isinstance(areas, list) or len(areas) != len(profiles) or any(a is None for a in areas)
+            or before is None or after is None):
+        return Refusal("The change this extrude makes to the part could not be measured, so it is not copied.")
+    expected = sum(areas) * sum(entry["distance"] for entry in plan)
+    change = after - before
+    tolerance = VOLUME_RELATIVE_TOL * expected + VOLUME_ABSOLUTE_TOL
+    if combine == "new":
+        agrees = abs(change - expected) <= tolerance
+    else:
+        grows = combine == "add"
+        agrees = abs(change) <= expected + tolerance and (change >= -VOLUME_ABSOLUTE_TOL if grows
+                                                          else change <= VOLUME_ABSOLUTE_TOL)
+    if not agrees:
+        return Refusal("The result of this extrude does not match the outlines it was drawn with, so it is not copied.")
+    return None
+
+
 def _same_plane(profiles):
     """True when every profile frame has the first one's normal and lies in its plane."""
     first = profiles[0]["frame"]
@@ -426,9 +475,8 @@ def _same_plane(profiles):
 SAMPLE_INSET = 0.02
 
 
-def _samples(profile):
-    """Sketch points just inside a profile: the middle of each outline curve, moved inward."""
-    footprint = Footprint(profile)
+def _samples(footprint):
+    """Sketch points just inside an outline: the middle of each curve, moved inward."""
     points = []
     for n, curve in enumerate(footprint.curves):
         mid = curve.get("mid") or [(a + b) / 2.0 for a, b in zip(curve["start"], curve["end"])]
@@ -442,19 +490,56 @@ def _in_model(profile, uv, height):
     return vec.frame_apply(profile["frame"], [uv[0], uv[1], height])
 
 
-def _meets(a, b):
-    """True when two outlines on one plane touch or overlap: a curve end of one lies in or on the other."""
-    footprint = Footprint(b)
-    for curve in Footprint(a).curves:
-        for key in ("start", "end"):
-            local = vec.frame_to_local(b["frame"], _in_model(a, curve[key], 0.0))
+def _bounds(points):
+    """(low, high) corners of the box around 3D points."""
+    return ([min(p[i] for p in points) for i in range(3)], [max(p[i] for p in points) for i in range(3)])
+
+
+def _apart(a, b):
+    """True when two boxes (low, high) do not overlap."""
+    return any(a[1][i] < b[0][i] or b[1][i] < a[0][i] for i in range(3))
+
+
+class _Outline:
+    """One outline for the order search: its footprint, where its curve ends lie and the box around its region in
+    model space (grown by the touch tolerance), all worked out once."""
+
+    def __init__(self, profile):
+        self.profile = profile
+        self.footprint = Footprint(profile)
+        self.ends = [_in_model(profile, curve[key], 0.0) for curve in self.footprint.curves
+                     for key in ("start", "end")]
+        flat = [p for curve in self.footprint.curves for p in polyline(curve)]
+        corners = [(x, y) for x in (min(p[0] for p in flat), max(p[0] for p in flat))
+                   for y in (min(p[1] for p in flat), max(p[1] for p in flat))]
+        low, high = _bounds([_in_model(profile, c, 0.0) for c in corners])
+        self.box = ([v - follow.LATERAL_TOL for v in low], [v + follow.LATERAL_TOL for v in high])
+        self.ends_box = _bounds(self.ends)
+        self._samples = None
+
+    def samples(self):
+        if self._samples is None:
+            self._samples = _samples(self.footprint)
+        return self._samples
+
+    def meets(self, other):
+        """True when a curve end of this outline lies in or on `other` (both on one plane)."""
+        if _apart(self.ends_box, other.box):
+            return False
+        low, high = other.box
+        for p in self.ends:
+            if any(p[i] < low[i] or p[i] > high[i] for i in range(3)):
+                continue
+            local = vec.frame_to_local(other.profile["frame"], p)
             uv = [local[0], local[1]]
-            if footprint.covers(uv) or footprint.nearest_curve(uv)[1] <= follow.LATERAL_TOL:
+            if other.footprint.covers(uv) or other.footprint.nearest_curve(uv)[1] <= follow.LATERAL_TOL:
                 return True
-    return False
+        return False
 
 
-def _heights(entry, shift):
+def _heights(entry, shift, join=False):
+    """Heights (along the sketch normal) to test for material: inside the side. A join also tests just outside both
+    ends, since a tool that stands on the part's face joins it."""
     reach = entry["distance"] or 0.0
     if entry["extent"] == "symmetric":
         ends = (-reach / 2.0, reach / 2.0)
@@ -462,32 +547,73 @@ def _heights(entry, shift):
         ends = (0.0, entry["sign"] * reach)
     low, high = min(ends), max(ends)
     inset = min(SAMPLE_INSET, (high - low) / 4.0)
-    return [shift + h for h in (low + inset, (low + high) / 2.0, high - inset)]
+    found = [low + inset, (low + high) / 2.0, high - inset]
+    if join:
+        found += [low - SAMPLE_INSET, high + SAMPLE_INSET]
+    return [shift + h for h in found]
 
 
-def _touches_part(ctx, profile, entry, shift):
+def _touches_part(ctx, outline, entry, shift, join=False):
     """True when the tool of one outline and side reaches into the part built so far."""
-    return any(follow.inside(ctx, _in_model(profile, uv, h)) for uv in _samples(profile) for h in _heights(entry, shift))
+    profile = outline.profile
+    return any(follow.inside(ctx, _in_model(profile, uv, h))
+               for h in _heights(entry, shift, join) for uv in outline.samples())
 
 
-def _touching_order(ctx, units, shift):
+def _touching_order(ctx, units, shift, join):
     """(outline, side) pairs in an order where each one joins what is built: one that reaches into the part, or
     touches a pair already taken, comes next. Fusion adds all outlines at once, the recipe one step after the other,
     so a step that touches only a later one would stand apart for a while. The order stays Fusion's where it works.
 
-    Both sides of one outline touch each other; outlines touch on one side when they meet in the sketch."""
-    touching = [bool(ctx.slabs) and _touches_part(ctx, built[0], entry, shift) for built, entry in units]
+    Both sides of one outline touch each other; outlines touch on one side when they meet in the sketch. `join` is
+    true when the steps add to the part, so a tool that stands on a face of it counts as touching it.
 
-    def joins(n, m):
-        a, first = units[n][0][0], units[n][1]
-        b, second = units[m][0][0], units[m][1]
-        return a is b or (first is second and _meets(a, b))
+    Candidates wait in a heap by position, so the work follows the number of outlines that really touch."""
+    found = {}
 
-    order, left = [], list(range(len(units)))
-    while left:
-        pick = next((n for n in left if touching[n] or any(joins(n, m) for m in order)), left[0])
+    def outline(profile):
+        if id(profile) not in found:
+            found[id(profile)] = _Outline(profile)
+        return found[id(profile)]
+
+    profiles = [units[n][0][0] for n in range(len(units))]
+    by_profile = {}
+    for n, profile in enumerate(profiles):
+        by_profile.setdefault(id(profile), []).append(n)
+    first_of = {id(profile): profile for profile in profiles}
+    touching = ([n for n, (built, entry) in enumerate(units) if _touches_part(ctx, outline(built[0]), entry, shift, join)]
+                if ctx.slabs else [])
+    heap = list(touching)
+    heapq.heapify(heap)
+    meeting = {}
+
+    def meeting_it(pid):
+        """Ids of the outlines that meet outline `pid` (a curve end of theirs lies in or on it)."""
+        if pid not in meeting:
+            target = outline(first_of[pid])
+            meeting[pid] = [other for other in by_profile if other != pid and outline(first_of[other]).meets(target)]
+        return meeting[pid]
+
+    taken = [False] * len(units)
+    order, ahead = [], 0
+    for _ in units:
+        pick = None
+        while heap and pick is None:
+            n = heapq.heappop(heap)
+            pick = None if taken[n] else n
+        if pick is None:
+            while taken[ahead]:
+                ahead += 1
+            pick = ahead
+        taken[pick] = True
         order.append(pick)
-        left.remove(pick)
+        pid, entry = id(profiles[pick]), units[pick][1]
+        for n in by_profile[pid]:
+            heapq.heappush(heap, n)
+        for other in meeting_it(pid):
+            for n in by_profile[other]:
+                if units[n][1] is entry:
+                    heapq.heappush(heap, n)
     return [units[n] for n in order]
 
 
@@ -564,7 +690,7 @@ def handle(item, ctx):
     plane_q = first_drawn.plane_shift(ctx) if first_drawn is not None else Quantity(0.0)
 
     first_frame = profiles[0]["frame"]
-    shift_q = _start_shift(data.get("start", {"kind": "profilePlane"}), first_frame, ctx, item)
+    shift_q = _start_shift(data.get("start", {"kind": "profilePlane"}), first_frame, ctx, item, plane_q)
     if isinstance(shift_q, Refusal):
         return shift_q
     shift_q = _keep_start_with_reach(ctx, item, data, shift_q)
@@ -575,7 +701,8 @@ def handle(item, ctx):
     z0 = vec.unit(first_frame["z"])
     start = vec.add(first_frame["origin"], vec.scale(z0, shift))
     for check in (_check_measured_length(plan, data, shift, start, z0, combine),
-                  _check_taper(plan, data, combine, picked)):
+                  _check_taper(plan, data, combine, picked),
+                  _volume_refusal(data, plan, combine, sources, thin)):
         if check:
             return check
     thin_step = _thin_step(ctx, item, data, wall, profiles[0]) if thin else None
@@ -590,7 +717,7 @@ def handle(item, ctx):
 
     units = [(one, entry) for one in built for entry in plan]
     if combine in ("new", "add") and len(built) > 1:
-        units = _touching_order(ctx, units, shift)
+        units = _touching_order(ctx, units, shift, combine == "add")
     out = StepResult()
     for (profile, (outer, inner), drawn), entry in units:
         frame = profile["frame"]

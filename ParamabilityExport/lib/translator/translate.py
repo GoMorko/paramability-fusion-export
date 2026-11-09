@@ -3,7 +3,7 @@ import importlib
 
 from . import borrowed, range_check, step_kinds
 from .audit import audit
-from .sizes import construction_fixes, joint_reasons, untried_reasons, used_sizes
+from .sizes import construction_fixes, joint_reasons, text_reasons, untried_reasons, used_sizes
 from . import notes as wording, place
 from .picks import MAX_NEAR_POINTS
 from .notes import dropped_reason, fixed_reason, loose_reason, unmoved_reason, unused_reason
@@ -222,6 +222,8 @@ def translate(capture, handlers=None, size_table=None, motion=None):
     if size_table is None:
         return _walk(capture, table, None, cache=cache)[0]
     upfront = joint_reasons(size_table) if motion is not None else untried_reasons(size_table)
+    for name, why in text_reasons(size_table, capture).items():
+        upfront.setdefault(name, why)
     first = _settle(capture, table, size_table, motion, upfront, False, cache)
     if first.result.recipe is None or not first.whys:
         return _finish(first, {}, capture, motion)
@@ -470,6 +472,7 @@ def _handle(handler, item, ctx):
     else:
         outcome.doubts[:0] = recorded.doubts
         outcome.notes[:0] = recorded.notes
+        outcome.asked |= recorded.asked
     return outcome
 
 
@@ -493,4 +496,5 @@ def _collect_helper(item, handler, ctx, with_construction):
         held = ctx.pending_tools.setdefault(key, StepResult())
         held.extend(outcome.entries)
         held.doubts.extend(construction.doubts + outcome.doubts)
+        held.asked |= outcome.asked
         held.items.append(item)

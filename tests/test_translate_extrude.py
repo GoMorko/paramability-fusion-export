@@ -9,6 +9,8 @@ from tests import context  # noqa: F401
 from tests.schema_check import check_recipe
 from tests.translator_helpers import FIXTURES, assert_schema_ok, load_capture, translate_fixture, variant, verdict_of
 
+from tests.test_translate_start_from_face import as_extrude
+
 from lib.translator import extrude, translate
 from lib.translator.result import StepResult
 
@@ -417,6 +419,61 @@ class RepeatabilityTest(unittest.TestCase):
     def test_fixed_length_steps_stay_repeatable(self):
         self.assertEqual(self.ids_not_repeatable("extrude_plate"), set())
         self.assertEqual(self.ids_not_repeatable("extrude_cut_through_two"), set())
+
+
+class FreeOutlineVolumeTest(unittest.TestCase):
+    """An extrude of text or spline outlines is checked against the volume Fusion made (plain outlines are not)."""
+
+    TEXT = ("extrude_text", [175.848813, 80.0], 3.0)
+    SPLINE = ("extrude_spline", [30.0], 10.0)
+    PART = 9600.0
+
+    def run_with(self, case, change, operation=None):
+        """Translate the fixture with the measured volume change `change(expected)` for its outlines. A join or cut
+        runs on the lid of the emboss fixture, rewritten as a one millimetre extrude of its text."""
+        name, areas, length = case
+        capture = as_extrude(load_capture("emboss_text"), index=3) if operation else load_capture(name)
+        data = capture["items"][3 if operation else 1]["data"]
+        before = self.PART if operation else 0.0
+        expected = sum(areas) * (1.0 if operation else length)
+        data.update(areas=areas, volume_before=before, volume_after=before + change(expected))
+        if operation:
+            data["operation"] = operation
+        return translate(capture)
+
+    def test_a_new_body_that_has_the_outline_volume_is_copied(self):
+        for case in (self.TEXT, self.SPLINE):
+            self.assertIsNotNone(self.run_with(case, lambda expected: expected).recipe)
+
+    def test_a_new_body_with_more_or_less_volume_than_its_outlines_is_refused(self):
+        for case in (self.TEXT, self.SPLINE):
+            for factor in (1.5, 0.7):
+                result = self.run_with(case, lambda expected: expected * factor)
+                self.assertIsNone(result.recipe)
+                self.assertEqual(result.refusal["index"], 1)
+
+    def test_a_volume_that_was_not_measured_refuses(self):
+        capture = load_capture("extrude_text")
+        capture["items"][1]["data"].update(areas=[175.848813, 80.0], volume_before=0.0, volume_after=None)
+        self.assertIsNone(translate(capture).recipe)
+
+    def test_a_capture_without_the_measured_values_is_copied_as_before(self):
+        self.assertIsNotNone(translate(load_capture("extrude_text")).recipe)
+
+    def test_a_join_may_lose_volume_to_the_part_but_never_gain_more_than_its_outlines(self):
+        self.assertIsNotNone(self.run_with(self.TEXT, lambda expected: expected, "join").recipe)
+        self.assertIsNotNone(self.run_with(self.TEXT, lambda expected: 0.5 * expected, "join").recipe)
+        self.assertIsNone(self.run_with(self.TEXT, lambda expected: 1.4 * expected, "join").recipe)
+        self.assertIsNone(self.run_with(self.TEXT, lambda expected: -1.0, "join").recipe)
+
+    def test_a_cut_that_removes_more_than_its_outlines_is_refused(self):
+        self.assertIsNotNone(self.run_with(self.TEXT, lambda expected: -0.5 * expected, "cut").recipe)
+        self.assertIsNone(self.run_with(self.TEXT, lambda expected: -1.4 * expected, "cut").recipe)
+
+    def test_plain_outlines_are_not_checked(self):
+        capture = load_capture("extrude_plate")
+        capture["items"][1]["data"].update(areas=[800.0], volume_before=0.0, volume_after=1.0)
+        self.assertIsNotNone(translate(capture).recipe)
 
 
 class FixtureSchemaTest(unittest.TestCase):

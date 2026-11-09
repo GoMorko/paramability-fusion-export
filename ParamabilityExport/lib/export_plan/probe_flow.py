@@ -182,6 +182,8 @@ class SizeProbe:
             current = {e.name: e.value for e in self.table.entries}
             self.moved = list(dict.fromkeys(self.moved + build.moved_sizes(self.capture, self.states, current)))
             found.extend(self._entry(p, _UNREADABLE, labels) for p in self.moved if p not in self.untried)
+        if self.motion is not None:
+            self.motion.untried = list(self.untried)
         found.extend(self._watched(labels, {f["param"] for f in found}))
         self.measure_restore(after)
         return found

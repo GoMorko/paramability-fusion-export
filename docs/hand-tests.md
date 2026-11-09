@@ -402,6 +402,9 @@ the Fusion part. The calls behind these tests are listed under "Capture reader c
       the rotation turns, so the copy can follow them later.
 - [ ] **E4 Text.** An emboss of sketch text on the top face is copied (see section 11, X1). An emboss of text on a
       side face or a curved face is refused for its face, not for the text.
+- [ ] **E6 Tangent Chain.** Emboss an outline near the edge of a face that has a fillet along that edge, with Tangent
+      Chain on. The copy stops with "Tangent Chain" and the part saves as a fixed shape. With Tangent Chain off, or on
+      a face with no rounded edge, it is copied.
 - [ ] **E5 Older Fusion.** In a Fusion build from before September 2025, open a design that has an emboss. The export
       does not crash: the step is named in the stop message and the part saves as a fixed shape.
 
@@ -450,9 +453,18 @@ The calls behind these tests are listed under "Capture reader calls to watch (sp
 - [ ] **X4 Shapes with holes, and big text.** "ABOQ8%" in a bold font: every hole is kept. A line of about 60
       characters in a fine script font: it copies or stops with "This text has too many outline points to copy",
       and the export does not take more than a minute longer than without it.
+- [ ] **X4b Overlapping strokes.** A variable font whose letters are drawn from overlapping strokes (for example a
+      heavy weight of a variable font with "k" or "x"). If `SketchText.asCurves()` returns crossing loops the copy stops
+      with "This text has overlapping outlines, so it is not copied yet". Note which fonts do, and whether the loops
+      of one glyph keep the winding of the font (this could replace the even and odd rule later).
+- [ ] **X4c Extrude of overlapping strokes.** The text of X4b as an Extrude (new body, 2 mm). The export stops with
+      the same overlap reason, not with a part. If the strokes come through as separate outlines instead (no crossing
+      loops), the extrude volume check stops it: the volume of the Fusion part is smaller than the outline areas times
+      the length, and the item says so. Check that no part is exported in either case.
 - [ ] **X5 Text and sizes.** Tick a parameter that drives a sketch dimension of the text's sketch (its position or
       height). The size stays loose or is left out with "could not be tried at other values". An emboss depth ticked
-      as a size follows.
+      as a size follows. A size that drives the text height (the height is `Height` in the text dialog) is loose or
+      left out with a reason that names the sketch, also when the same size drives the emboss depth.
 - [ ] **X6 Text of another component.** A text in a sketch of another component used by an extrude of this one: the
       part saves as a fixed shape.
 
@@ -701,6 +713,10 @@ read the capture in `report.json`.
 - `TimelineObject.isGroup`: group objects are skipped; check that grouped features still appear as items.
 - Moving `Timeline.markerPosition` once per item: the marker ends where it was, the document is not marked changed and
   the undo list is as before.
+- `Profile.areaProperties().area` of every profile of an extrude whose outlines hold text or a spline, and `BRepBody.volume`
+  of the target before and after the item (of the bodies in `ExtrudeFeature.bodies` for a new body). The translator
+  compares the change with the outline area times the length; when a value cannot be read it refuses (extrude of text,
+  X1; overlapping strokes, X4).
 
 ## Capture reader calls to watch (fillet, chamfer, shell, patterns, mirror)
 
@@ -764,7 +780,9 @@ Emboss tests of section 10 and read the capture in `report.json`.
 - `EmbossFeature.horizontalDistance`, `verticalDistance` and `rotationAngle` as `ModelParameter`s: the reference does
   not say in which frame they move the outline or around which point they turn. The copy needs all three to be zero
   (E3).
-- `EmbossFeature.isTangentChain`: recorded only.
+- `EmbossFeature.isTangentChain` and `BRepFace.tangentiallyConnectedFaces` of each input face (read as
+  `tangent_faces`; whether it includes the face itself does not matter). `EmbossFeature.faces` surface kinds are read
+  as `made_surfaces`. With Tangent Chain on and a fillet next to the face the copy must stop (E6).
 - `BRepFace.geometry` type names `Plane`, `Cylinder` and `Cone` for the input faces, `BRepFace.body`, `BRepFace.area`
   (cm2, read as `end_area`), `SurfaceEvaluator.getNormalAtPoint` at `pointOnFace` pointing out of the body.
 - `Profile.areaProperties().area` for each emboss profile (cm2, read as `areas`), and `BRepBody.volume` of the target
@@ -796,7 +814,14 @@ as a marker, which the translator refuses, so a wrong guess shows up as a refusa
 
 - `CurveEvaluator3D.getParameterExtents` and `getPointAtParameter(parameter)` of `ProfileCurve.geometry` for a
   `NurbsCurve3D` or `EllipticalArc3D`: `(ok, low, high)` and `(ok, Point3D)`. The reader starts with 16 equal
-  parameter spans and splits each until its middle point is within 0.0005 mm of the chord (S1, S5).
+  parameter spans (4 per knot span for a curve with many control points) and splits each until five points inside it
+  are within 0.0005 mm of the chord (S1, S5).
+- `NurbsCurve3D.controlPointCount` and `degree`: read only to choose how many spans to start with. A curve that does
+  not give them starts with 16.
+- `CurveEvaluator3D.getLengthAtParameter(from, to)` over the whole parameter range, in cm (the reader accepts a plain
+  number or `(ok, length)`). The chords of the samples must add up to it within 0.1 % (or 0.01 mm); if not, the
+  curve is marked `truncated` and refused. Check on a spline with a tight S bend that the length is the real curve
+  length and that a normal spline is not refused by it (S1, S2).
 - `CurveEvaluator3D.getTangent(parameter)`: `(ok, Vector3D)` at the first and last parameter. A failure leaves out
   `tangent_start` or `tangent_end` (S1).
 - `ProfileCurve.geometry` of a free curve has no `startPoint` or `endPoint` (a `NurbsCurve3D` does not): the points
@@ -806,3 +831,8 @@ as a marker, which the translator refuses, so a wrong guess shows up as a refusa
 - `SketchText.boundingBox`: a `BoundingBox3D` in sketch space (`minPoint`, `maxPoint`, cm). The reader keeps the
   reading of the curve points (sketch or model space) under which every point lies inside it (X2).
 - `SketchText.parentSketch`, `Sketch.modelToSketchSpace`, `Sketch.transform` as for profiles.
+- `SketchText.heightParameter` (a `ModelParameter`): its `name` is kept as `text_params` on each text record, so a size
+  that drives the text height is not followed (X5). Also `Sketch.sketchTexts` and the `createdBy` of that parameter:
+  `created_by.kind` should read `sketchText` with the sketch name in the report. When the name cannot be read the
+  record says `text_params_unknown` and every size that reaches a parameter with an unknown maker is treated as
+  reaching the text.

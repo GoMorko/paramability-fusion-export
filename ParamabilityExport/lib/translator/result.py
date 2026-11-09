@@ -58,7 +58,9 @@ class StepResult:
     An empty result means the item makes no step on purpose. The walk fills `doubts` (`Doubt` records: the sizes a
     value of these steps cannot follow) and `notes` (plain sentences for the item's verdict) with what the handler
     recorded on the context. `items` are capture items of other bodies whose steps these steps carry (the tool body of
-    a Combine); they count as copied once these steps are written.
+    a Combine); they count as copied once these steps are written. `asked` is the set of `(item index, params path)`
+    the handlers dealt with (`values.quantity`, `values.pin`, `values.handled`); the audit compares it with each
+    item's `data.params`.
     """
 
     def __init__(self, entries=()):
@@ -66,6 +68,7 @@ class StepResult:
         self.doubts = []
         self.notes = []
         self.items = []
+        self.asked = set()
 
     @classmethod
     def of(cls, steps):
@@ -89,6 +92,7 @@ class StepResult:
         """Take on the doubts and items of `other`, the result of another body whose steps these steps carry."""
         self.doubts.extend(other.doubts)
         self.items.extend(other.items)
+        self.asked |= other.asked
 
 
 VERDICTS = ("translated", "translatedWithNote", "skipped", "unsupported")

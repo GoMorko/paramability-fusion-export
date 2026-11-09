@@ -2,6 +2,7 @@
 import unittest
 
 from tests import context  # noqa: F401
+from tests.test_translate_start_from_face import height_at, origin_height
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
 
 from lib.params import size_table
@@ -81,6 +82,11 @@ class EmbossSizesTest(unittest.TestCase):
         _, cut = steps_of(sized(capture).recipe, "extrude")
         self.assertEqual((cut["combine"], cut["distance"]), ("cut", {"expr": "raise_mm"}))
 
+    def test_with_the_sketch_plane_following_the_lid_the_emboss_still_starts_on_the_face(self):
+        written = origin_height(load_capture(LID), ("lid_mm", "raise_mm"), {"lid_mm": 1.0})
+        for lid in (4.0, 10.0):
+            self.assertAlmostEqual(height_at(written, {"lid_mm": lid, "raise_mm": 1.0}), lid)
+
     def test_a_depth_that_reaches_zero_inside_the_size_range_is_written_as_a_number_with_a_reason(self):
         capture = load_capture(LID)
         capture["parameters"]["user"][1].update(expression="2 mm", value=0.2, display_value=2.0)
@@ -90,6 +96,37 @@ class EmbossSizesTest(unittest.TestCase):
         _, raised = steps_of(result.recipe, "extrude")
         self.assertEqual(raised["distance"], 1.0)
         self.assertEqual([(d["name"], d["used"]) for d in result.dropped], [("raise_mm", True)])
+
+
+class EmbossPinTest(unittest.TestCase):
+    def test_a_size_behind_the_horizontal_distance_does_not_stay_free(self):
+        # A distance of "raise_mm - 1 mm" is 0 now, but it moves the outline at other values of raise_mm.
+        capture = load_capture(LID)
+        emboss_data(capture)["params"]["offset_x"] = {"name": "d9", "expression": "raise_mm - 1 mm", "value": 0.0}
+        result = sized(capture)
+        self.assertIsNone(result.refusal)
+        self.assertEqual([d["name"] for d in result.loose], ["raise_mm"])
+        self.assertIn("moves its outline", result.loose[0]["reason"])
+
+
+class EmbossTangentChainTest(unittest.TestCase):
+    FILLET = {"surface": "Cylinder", "plane": None}
+    FLAT = {"surface": "Plane", "plane": {"point": [0, 0, 4], "normal": [0, 0, 1]}}
+
+    def test_a_curved_neighbour_with_tangent_chain_on_is_refused(self):
+        result = with_edit(lambda d: d.update(tangent_chain=True, tangent_faces=[self.FILLET]))
+        self.assertIn("Tangent Chain", reason_of(result))
+
+    def test_flat_neighbours_on_the_plane_or_tangent_chain_off_are_copied(self):
+        for edit in (lambda d: d.update(tangent_faces=[self.FLAT]),
+                     lambda d: d.update(tangent_chain=False, tangent_faces=[self.FILLET])):
+            self.assertIsNone(with_edit(edit).refusal)
+
+    def test_without_neighbours_a_curved_made_face_refuses_and_flat_ones_copy(self):
+        refused = with_edit(lambda d: d.update(tangent_faces=None, made_surfaces=["Plane", "Cylinder"]))
+        self.assertIn("Tangent Chain", reason_of(refused))
+        self.assertIsNone(with_edit(lambda d: d.update(tangent_faces=None, made_surfaces=["Plane"])).refusal)
+        self.assertIsNone(with_edit(lambda d: d.update(tangent_faces=None, made_surfaces=None)).refusal)
 
 
 class EmbossRefusalTest(unittest.TestCase):

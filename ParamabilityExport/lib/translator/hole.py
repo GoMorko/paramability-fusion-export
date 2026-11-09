@@ -269,7 +269,9 @@ def hole(item, ctx):
 
     tip = data.get("tip_angle_deg")
     tipped = False
-    if not through:
+    if through:
+        values.handled(ctx, item, "tip_angle_deg")
+    else:
         values.pin(ctx, item, "tip_angle_deg",
                    "the drill tip of %s needs it to stay as it is" % item.get("name", "a hole"))
         tipped = _is_tipped(data, tip, ctx)

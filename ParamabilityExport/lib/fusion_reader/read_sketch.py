@@ -14,10 +14,20 @@ GEOMETRY_SPACE = "auto"
 
 _FLAT_CM = 1e-5  # 1e-4 mm
 _IDENTITY = {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
-# A free curve is read as a dense polyline: 16 parameter spans, each split until its middle point is within
-# _CHORD_TOL_MM of its chord, at most _MAX_SAMPLES points in all. The translator fits the recipe's spline through it.
+# A free curve is read as a dense polyline. It starts with `_START_SPANS` parameter spans (more when the curve has
+# many control points: `_SPANS_PER_KNOT_SPAN` each, at most `_MAX_START_SPANS`). A span is kept when every point at
+# `_INNER_FRACTIONS` of it is within _CHORD_TOL_MM of its chord, else it is split in two; at most _MAX_SAMPLES points
+# in all. The chords must then add up to the curve's own length (within `_LENGTH_TOL`, relative, and
+# `_LENGTH_TOL_MM`): a wave that fell between the tested points shows as missing length, and the curve is marked
+# `truncated` like one that hit the point cap. The translator fits the recipe's spline through the samples.
 _START_SPANS = 16
+_SPANS_PER_KNOT_SPAN = 4
+_MAX_START_SPANS = 200
+_INNER_FRACTIONS = (1 / 6, 2 / 6, 3 / 6, 4 / 6, 5 / 6)
+_MIDDLE = 2  # the entry of _INNER_FRACTIONS at one half
 _CHORD_TOL_MM = 0.0005
+_LENGTH_TOL = 1e-3
+_LENGTH_TOL_MM = 0.01
 _MAX_SAMPLES = 800
 _MAX_SPLIT_DEPTH = 12
 # Text outlines: past these the text is not read (the copy refuses it).
@@ -179,9 +189,38 @@ def _chord_gap(p, a, b):
     return math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy)
 
 
+def _start_spans(geometry):
+    """How many parameter spans a free curve starts with: its knot spans (control points less degree) times
+    `_SPANS_PER_KNOT_SPAN` when the geometry gives them, never fewer than `_START_SPANS`."""
+    count = geo.safe(lambda: geometry.controlPointCount, None)
+    if not isinstance(count, int) or isinstance(count, bool) or count < 2:
+        return _START_SPANS
+    degree = geo.safe(lambda: geometry.degree, None)
+    degree = degree if isinstance(degree, int) and not isinstance(degree, bool) and degree >= 1 else 1
+    spans = max(count - degree, 1) * _SPANS_PER_KNOT_SPAN
+    return max(_START_SPANS, min(spans, _MAX_START_SPANS))
+
+
+def _own_length_mm(evaluator, low, high):
+    """The curve's length in mm from `CurveEvaluator3D.getLengthAtParameter`, or None when it cannot be read."""
+    found = geo.safe(lambda: evaluator.getLengthAtParameter(low, high), None)
+    if isinstance(found, (tuple, list)):
+        if not found or not found[0]:
+            return None
+        found = found[1] if len(found) > 1 else None
+    if not isinstance(found, (int, float)) or isinstance(found, bool) or not math.isfinite(found) or found < 0:
+        return None
+    return found * 10.0
+
+
+def _chord_length(points):
+    return sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(points, points[1:]))
+
+
 def _dense_samples(geometry, space):
-    """([[x, y], ...], truncated): the curve as a polyline within `_CHORD_TOL_MM` of it (`truncated` when the point
-    cap stopped the refinement), or None when the curve cannot be evaluated."""
+    """([[x, y], ...], truncated): the curve as a polyline within `_CHORD_TOL_MM` of it, or None when the curve
+    cannot be evaluated. `truncated` is set when the point cap stopped the refinement or when the chords do not add up
+    to the curve's own length (so the samples do not stand for the whole curve)."""
     evaluator = geo.safe(lambda: geometry.evaluator, None)
     extents = geo.safe(lambda: evaluator.getParameterExtents(), None)
     if not extents or not extents[0]:
@@ -192,26 +231,33 @@ def _dense_samples(geometry, space):
         ok, p = evaluator.getPointAtParameter(t)
         return space.xy(p) if ok else None
 
-    params = [low + (high - low) * i / _START_SPANS for i in range(_START_SPANS + 1)]
+    spans = _start_spans(geometry)
+    params = [low + (high - low) * i / spans for i in range(spans + 1)]
     points = [geo.safe(lambda t=t: at(t), None) for t in params]
     if any(p is None for p in points):
         return None
     out, state = [points[0]], {"truncated": False}
 
     def split(t0, p0, t1, p1, depth):
-        mid_t = (t0 + t1) / 2.0
-        mid = geo.safe(lambda: at(mid_t), None)
-        if (mid is not None and depth < _MAX_SPLIT_DEPTH and _chord_gap(mid, p0, p1) > _CHORD_TOL_MM):
+        inner = [(t0 + (t1 - t0) * f, geo.safe(lambda t=t0 + (t1 - t0) * f: at(t), None)) for f in _INNER_FRACTIONS]
+        found = [p for _, p in inner if p is not None]
+        if found and depth < _MAX_SPLIT_DEPTH and any(_chord_gap(p, p0, p1) > _CHORD_TOL_MM for p in found):
             if len(out) >= _MAX_SAMPLES:
                 state["truncated"] = True
             else:
-                split(t0, p0, mid_t, mid, depth + 1)
-                split(mid_t, mid, t1, p1, depth + 1)
-                return
+                mid_t, mid = inner[_MIDDLE]
+                if mid is not None:
+                    split(t0, p0, mid_t, mid, depth + 1)
+                    split(mid_t, mid, t1, p1, depth + 1)
+                    return
         out.append(p1)
 
-    for i in range(_START_SPANS):
+    for i in range(spans):
         split(params[i], points[i], params[i + 1], points[i + 1], 0)
+    if not state["truncated"]:
+        own = _own_length_mm(evaluator, low, high)
+        if own is not None and abs(own - _chord_length(out)) > max(_LENGTH_TOL * own, _LENGTH_TOL_MM):
+            state["truncated"] = True
     return out, state["truncated"]
 
 
@@ -400,11 +446,22 @@ def profile_area(profile):
     return geo.safe(lambda: round(profile.areaProperties().area * 100.0, 6) + 0.0, None)
 
 
+def _text_params(text):
+    """The model parameters of a SketchText that a size can reach: { text_params: [height parameter name] }, or
+    { text_params_unknown: true } when Fusion does not give the name. The translator keeps the sizes behind them
+    from following the copied letters."""
+    name = geo.safe(lambda: text.heightParameter.name, None)
+    if isinstance(name, str) and name:
+        return {"text_params": [name]}
+    return {"text_params_unknown": True}
+
+
 def _text_marker(text, ctx, problem):
-    """A SketchText that is not read as outlines: { text: true, sketch, sketch_token?, problem }. The sketch token
-    keeps the size probe from following that sketch."""
+    """A SketchText that is not read as outlines: { text: true, sketch, sketch_token?, problem, text_params }. The
+    sketch token keeps the size probe from following that sketch."""
     sketch = geo.safe(lambda: text.parentSketch, None)
     record = {"text": True, "sketch": geo.safe(lambda: sketch.name, "") or "", "problem": problem}
+    record.update(_text_params(text))
     token = geo.safe(lambda: sketch.entityToken, "")
     if token:
         record["sketch_token"] = token
@@ -430,7 +487,7 @@ def _text_box(text):
 def read_text_outlines(text, ctx=None):
     """(profiles, areas) of a SketchText: one profile record per outer outline, with its holes, from
     `SketchText.asCurves()` (transient curves; the text and the design are not changed). Each record is { text: true,
-    sketch, sketch_token?, frame, space, reference?, loops }; its area (mm2, outer less holes) is in `areas`.
+    sketch, sketch_token?, text_params, frame, space, reference?, loops }; its area (mm2, outer less holes) is in `areas`.
     A text that cannot be read, is too big or sits in an unknown space is one record without loops and with a
     `problem` the translator words."""
     text = geo.native_input(text, ctx)
@@ -454,6 +511,7 @@ def read_text_outlines(text, ctx=None):
     if len(found) > _MAX_TEXT_PROFILES:
         return [_text_marker(text, ctx, "too_many")], [None]
     base = {"text": True, "sketch": geo.safe(lambda: sketch.name, "") or "", "frame": frame, "space": space.mode}
+    base.update(_text_params(text))
     token = geo.safe(lambda: sketch.entityToken, "")
     if token:
         base["sketch_token"] = token

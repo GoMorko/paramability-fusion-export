@@ -10,7 +10,7 @@ that feed a note, such as the participant bodies, fall back to an empty list.
 from . import read_geometry as geo
 from .param_refs import Params, with_params
 from .placement import from_assembly
-from .read_sketch import first_profile, profile_area, read_profiles
+from .read_sketch import first_profile, profile_area, read_outlines, read_profiles
 
 _OPERATIONS = [
     ("newcomponent", "newComponent"),
@@ -91,6 +91,20 @@ def _extent_type(feature):
     return geo.pick_by_text(name, _EXTENT_TYPES, "other")
 
 
+def _holds_free_outline(profiles):
+    """True when a profile record is sketch text or has a free curve (a spline): the shapes the translator rebuilds
+    from samples and so checks against the part Fusion made."""
+    return any(p.get("text") or any(c.get("kind") == "other" for loop in p.get("loops") or []
+                                    for c in loop.get("curves") or []) for p in profiles)
+
+
+def _new_bodies_volume(feature):
+    """Summed volume in mm3 of the bodies a feature made, or None when one cannot be read."""
+    bodies = geo.collection_items(geo.safe(lambda: feature.bodies, None))
+    found = [geo.safe(lambda: round(b.volume * 1000.0, 6) + 0.0, None) for b in bodies]
+    return None if not found or any(v is None for v in found) else round(sum(found), 6) + 0.0
+
+
 def _first_profile_area(feature):
     first = first_profile(geo.safe(lambda: feature.profile, None))
     return profile_area(first) if first is not None else None
@@ -157,9 +171,11 @@ def extrude_before(feature, ctx):
         side_one = _extent(feature.extentOne, _taper(feature, "taperAngleOne"), ctx)
         if extent_type == "two":
             side_two = _extent(feature.extentTwo, _taper(feature, "taperAngleTwo"), ctx)
+    operation = _operation(feature.operation)
+    profiles, areas = read_outlines(feature.profile, ctx)
     data = {
-        "operation": _operation(feature.operation),
-        "profiles": read_profiles(feature.profile, ctx),
+        "operation": operation,
+        "profiles": profiles,
         "start": geo.safe(lambda: _start(feature, ctx), {"kind": "other", "type": "unreadable"}),
         "extent_type": extent_type,
         "side_one": side_one,
@@ -174,6 +190,10 @@ def extrude_before(feature, ctx):
     }
     if thin:
         data["thin_wall"] = _thin_wall(feature)
+    if _holds_free_outline(profiles):
+        data["areas"] = areas
+        data["volume_before"] = 0.0 if operation == "newBody" else geo.target_volume(ctx)
+        data["volume_after"] = None
     return with_params(data, _extrude_params(feature, extent_type, thin))
 
 
@@ -201,11 +221,16 @@ def extrude_after(feature, ctx, data):
 
     end_area: the area of that face in mm2 (with profile_area, it shows which way a taper goes). side_leans: how
     far each side face leans along the first profile's sketch normal (the taper check for several outlines).
+    volume_after: for an extrude of text or spline outlines, the volume that was measured before the item is
+    compared with (the target's, or the new bodies' summed for a new body).
     """
     faces = geo.collection_items(geo.safe(lambda: feature.endFaces, None))
     profiles = data.get("profiles") or []
     frame = profiles[0].get("frame") if profiles and isinstance(profiles[0], dict) else None
     out = {}
+    if "volume_before" in data:
+        out["volume_after"] = (_new_bodies_volume(feature) if data.get("operation") == "newBody"
+                               else geo.target_volume(ctx))
     if frame is not None:
         leans = geo.safe(lambda: _side_leans(feature, frame["z"]), None)
         if leans is not None:

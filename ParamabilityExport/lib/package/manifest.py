@@ -95,10 +95,6 @@ def _add_parameters(manifest, parameters):
         manifest["parameters"] = [dict(p) for p in parameters]
 
 
-def check_step_path(number):
-    return f"checks/{number:02d}.step"
-
-
 def row_step_path(number):
     return f"rows/{number:02d}.step"
 

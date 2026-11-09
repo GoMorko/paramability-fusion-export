@@ -2,7 +2,8 @@
 
 Before the item: the outlines it raises or sinks (sketch profiles and the outlines of sketch text), the faces they land on, the
 depth and the shift and turn of the outline, and the size of the part. After the item: the size of the part again and
-where the feature put its farthest face parallel to the input face. The translator checks the two against each other.
+where the feature put its farthest face parallel to the input face. For Tangent Chain it also reads the faces that
+touch the input faces tangentially and the surface kinds of the faces the feature made. The translator checks the two against each other.
 
 `EmbossFeature` is a recent addition to Fusion and marked as preview in the API reference. Each setting is read on its
 own: one that cannot be read becomes null, and the translator then refuses the step.
@@ -35,6 +36,23 @@ def _input_faces(feature):
     return faces[:MAX_FACES]
 
 
+def _surface_record(face):
+    """Surface kind and plane of a face next to an input face; a member that cannot be read is null."""
+    return {"surface": geo.safe(lambda: geo.surface_kind(face), None),
+            "plane": geo.safe(lambda: geo.plane_of(face), None)}
+
+
+def _tangent_faces(faces, ctx):
+    """The faces that touch the input faces tangentially, as { surface, plane }; null when they cannot be listed."""
+    def read():
+        found = []
+        for face in faces:
+            raw = geo.native_input(face, ctx).tangentiallyConnectedFaces
+            found.extend(_surface_record(n) for n in strict_items(raw)[:MAX_FACES])
+        return found
+    return geo.safe(read, None)
+
+
 def _participants(faces, ctx):
     """The bodies of the input faces, once each."""
     found = {}
@@ -43,12 +61,6 @@ def _participants(faces, ctx):
         if ref is not None:
             found.setdefault(ref["token"] or ref["name"], ref)
     return list(found.values())
-
-
-def _volume(ctx):
-    """Volume of the target body in mm3 at the current marker position, or None."""
-    body = ctx.find_target()
-    return geo.safe(lambda: round(body.volume * 1000.0, 6) + 0.0, None) if body is not None else None
 
 
 def _length(read):
@@ -68,13 +80,15 @@ def emboss_before(feature, ctx):
         "areas": areas,
         "faces": [_face_record(f, ctx) for f in faces],
         "tangent_chain": geo.safe(lambda: bool(feature.isTangentChain), None),
+        "tangent_faces": _tangent_faces(faces, ctx),
+        "made_surfaces": None,
         "depth": _length(lambda: feature.depth),
         "offset_x": _length(lambda: feature.horizontalDistance),
         "offset_y": _length(lambda: feature.verticalDistance),
         "rotation_deg": geo.safe(lambda: geo.angle(feature.rotationAngle), None),
         "participants": _participants(faces, ctx),
         "target_box_before": ctx.target_box(),
-        "volume_before": _volume(ctx),
+        "volume_before": geo.target_volume(ctx),
         "volume_after": None,
         "end_offset": None,
         "end_area": None,
@@ -97,10 +111,18 @@ def _parallel_faces(feature, normal):
     return found
 
 
+def _made_surfaces(feature):
+    """Surface kind of every face the feature made; null when the faces cannot be listed."""
+    faces = geo.safe(lambda: strict_items(feature.faces)[:MAX_FACES], None)
+    if faces is None:
+        return None
+    return [geo.safe(lambda: geo.surface_kind(f), None) for f in faces]
+
+
 def emboss_after(feature, ctx, data):
     """volume_after, and for the farthest made face parallel to the input face: end_offset, its signed distance along
     the first outline's sketch normal from the sketch plane, and end_area, its area in mm2."""
-    out = {"volume_after": _volume(ctx)}
+    out = {"volume_after": geo.target_volume(ctx), "made_surfaces": _made_surfaces(feature)}
     frame = next((p["frame"] for p in data.get("profiles") or [] if isinstance(p.get("frame"), dict)), None)
     faces = data.get("faces") or []
     normal = faces[0].get("outward") if faces and isinstance(faces[0], dict) else None

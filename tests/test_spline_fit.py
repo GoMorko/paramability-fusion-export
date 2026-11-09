@@ -60,6 +60,20 @@ class FitTest(unittest.TestCase):
         pieces = self.check(circle_samples(6.0))
         self.assertLess(math.dist(pieces[0][0], pieces[-1][-1]), 1e-9)
 
+    def test_a_long_closed_curve_with_many_bends_stays_within_the_tolerance_between_samples(self):
+        def point(t):
+            return [120 * math.cos(2 * math.pi * t) * (1 + 0.3 * math.cos(2 * math.pi * t)),
+                    79 * math.sin(2 * math.pi * t)]
+        samples = [point(i / 799) for i in range(800)]
+        pieces = self.check(samples)
+        self.assertLess(math.dist(pieces[0][0], pieces[-1][-1]), 1e-9)
+
+    def test_the_error_of_a_curve_that_ends_exactly_where_it_starts_can_be_measured(self):
+        samples = circle_samples(2.0)
+        samples[-1] = list(samples[0])
+        pieces = spline_fit.fit(samples)
+        self.assertLessEqual(spline_fit.max_error(samples, pieces), spline_fit.TOLERANCE_MM)
+
     def test_a_straight_run_is_a_two_point_piece(self):
         self.assertEqual(spline_fit.fit([[0, 0], [5, 0], [10, 0]]), [[[0.0, 0.0], [10.0, 0.0]]])
 

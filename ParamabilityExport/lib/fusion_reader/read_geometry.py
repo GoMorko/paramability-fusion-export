@@ -110,6 +110,12 @@ def box_of(body):
     return {"min": point(box.minPoint), "max": point(box.maxPoint)}
 
 
+def target_volume(ctx):
+    """Volume of the target body in mm3 at the current marker position, or None."""
+    body = ctx.find_target()
+    return safe(lambda: round(body.volume * 1000.0, 6) + 0.0, None) if body is not None else None
+
+
 def same_entity(a, b):
     """True when two Fusion objects are the same entity. Token text is not compared: Fusion can give one entity
     different tokens over time."""

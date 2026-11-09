@@ -8,7 +8,8 @@
       "box_max": { "min": [..], "max": [..] },
       "states": [ { "values": { "width": 2.0 }, "built": true } ],
       "apart": [ 3 ],
-      "unmeasured": { "Sketch7": "its first read did not match the capture" } }
+      "unmeasured": { "Sketch7": "its first read did not match the capture" },
+      "untried": [ "FilterBox_width_mm" ] }
 
 The keys are written by `sketch_values.keys`. `curves` lists the profiles (`<item>/p<profile>`) whose sketch curves were
 measured.
@@ -18,6 +19,8 @@ are Fusion parameter names; `const` plus the terms give the value at any size se
 did not move: the translator writes the captured number, unless its sketch is in `unmeasured` (sketch name to the
 reason the probe could not measure it): then nothing is known about it, and the sizes behind that sketch cannot be
 followed (`sketch_values.coverage`). A motion file without `unmeasured` says nothing about such sketches.
+`untried` lists the Fusion names of sizes that move a sketch but were left without probe rows: for them every sketch
+answers `NOT_MEASURED`.
 
 The translator reads this file; `probe.build` makes it.
 """
@@ -97,7 +100,7 @@ class Motion:
     optimistic = False
 
     def __init__(self, values=None, box_max=None, states=None, dropped=None, curves=None, apart=None,
-                 unmeasured=None):
+                 unmeasured=None, untried=None):
         self.values = dict(values or {})
         self.box_max = box_max
         self.states = list(states or [])
@@ -105,6 +108,7 @@ class Motion:
         self.curves = set(curves or ())  # profiles whose sketch curves were measured, `<item>/p<profile>`
         self.apart = list(apart or [])  # numbers in `states` where Fusion solved a sketch another way
         self.unmeasured = dict(unmeasured or {})  # sketch name to why the probe could not measure it
+        self.untried = list(untried or [])  # Fusion names of sizes that moved a sketch and were not tried
 
     def get(self, key):
         """`Affine`, `Stuck`, or None when the value did not move."""
@@ -123,6 +127,8 @@ class Motion:
             out["apart"] = list(self.apart)
         if self.unmeasured:
             out["unmeasured"] = dict(self.unmeasured)
+        if self.untried:
+            out["untried"] = list(self.untried)
         return out
 
     @classmethod
@@ -137,7 +143,7 @@ class Motion:
             else:
                 values[key] = Affine(raw.get("const", 0.0), raw.get("terms"), raw.get("sketch", ""))
         return cls(values, data.get("box_max"), data.get("states"), data.get("dropped"), data.get("curves"),
-                   data.get("apart"), data.get("unmeasured"))
+                   data.get("apart"), data.get("unmeasured"), data.get("untried"))
 
 
 class _Optimistic(Motion):

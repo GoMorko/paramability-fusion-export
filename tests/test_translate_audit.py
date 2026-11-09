@@ -26,8 +26,10 @@ def forgetful_extrude(item, ctx):
     return outcome
 
 
-def tray_result(handlers=None):
+def tray_result(handlers=None, edit=None):
     capture = load_capture(TRAY)
+    if edit:
+        edit(capture)
     params = capture["parameters"]
     table = size_table.build(params["user"], [p["name"] for p in params["user"]], params["model"],
                              capture.get("design_units", "mm"))
@@ -53,6 +55,18 @@ class AuditTest(unittest.TestCase):
         (dropped,) = result.dropped
         self.assertEqual((dropped["name"], dropped["used"]), ("turn_deg", False))
         self.assertIn("not used by any copied step", dropped["reason"])
+
+    def test_a_value_no_handler_asked_for_makes_its_size_loose_although_another_value_follows_it(self):
+        def second_side(capture):
+            data = capture["items"][1]["data"]
+            data["params"]["side_two.distance"] = dict(data["params"]["side_one.distance"], name="d99")
+
+        before = tray_result()
+        after = tray_result(edit=second_side)
+        self.assertEqual(before.loose, [])
+        self.assertEqual([f["name"] for f in after.loose], [COUNT, CUBE])
+        self.assertTrue(all("Extrude1" in f["reason"] for f in after.loose))
+        self.assertIn(CUBE, after.recipe["sizes"])
 
     def test_a_size_that_moves_a_measured_sketch_by_nothing_is_dropped_as_changing_nothing(self):
         def still(values):

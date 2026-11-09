@@ -211,9 +211,12 @@ count: outer, odd: hole of the nearest loop around it). Each outer outline with 
 the one above, plus `"text": true` and no curve `entity`: a text of "OI" with a hole in the "O" is two records. The
 space of the points (sketch or model) is decided like for other profiles, except that the curves have no sketch entity:
 the points are compared with `SketchText.boundingBox` (sketch space) and the record is a marker when both readings
-fit or neither does. A text that cannot be turned into profiles is one record with `text`, `sketch`, `sketch_token`
-and a `problem`: `unread` (no curves), `open` (the curves do not close), `space`, `too_many` (over 4000 curves or 400
-outlines) or `foreign` (a text of another component). The translator refuses a marker with its own reason
+fit or neither does. Every text record, outline or marker, carries `text_params` (the name of the text's height
+parameter, `SketchText.heightParameter`) or `text_params_unknown: true` when Fusion does not give the name; the sizes
+behind them are kept from following the copied letters. A text that cannot be turned into profiles is one record with
+`text`, `sketch`, `sketch_token` and a `problem`: `unread` (no curves), `open` (the curves do not close), `overlap`
+(two loops cross, as in a script font whose strokes overlap, so holes cannot be told from strokes), `space`,
+`too_many` (over 4000 curves or 400 outlines) or `foreign` (a text of another component). The translator refuses a marker with its own reason
 (`loops.TEXT_PROBLEMS`), and every size that moves the sketch of a text stays loose or is left out, since the size
 probe does not follow it.
 
@@ -265,8 +268,8 @@ CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriente
 | `EllipticalArc3D`, `NurbsCurve3D`, other | `{ "kind": "other", "type": "NurbsCurve3D", "start", "end", "mid", "samples": [[x, y], ...], "tangent_start", "tangent_end" }` |
 
 A free curve is read as a dense polyline: 16 equal parameter spans, each split at its middle parameter until the middle
-point lies within 0.0005 mm of the chord, at most 800 points (`truncated: true` when the cap stopped the splitting, and
-the translator then refuses the curve). `start`, `end` and `mid` are samples. `tangent_start` and `tangent_end` are unit
+point lies within 0.0005 mm of the chord, at most 800 points (`truncated: true` when the cap stopped the splitting or
+when the chords do not add up to the curve's own length, and the translator then refuses the curve). `start`, `end` and `mid` are samples. `tangent_start` and `tangent_end` are unit
 directions of the curve at its ends (`CurveEvaluator3D.getTangent`), left out when they cannot be read; the recipe's
 spline segment has no tangent field, so they are for checks only. A curve that cannot be evaluated has `samples: []`.
 The translator fits the app's spline through points chosen from the samples (`lib/translator/spline_fit.py`, tolerance
@@ -337,6 +340,13 @@ The translator fits the app's spline through points chosen from the samples (`li
   `side_leans`, a tapered extrude of one outline is checked by them (the end face must be smaller for a positive
   recipe taper); a tapered extrude of several outlines is refused. Fusion's positive taper widens the walls (the
   recipe's positive `taperDeg` narrows them), so the translator writes Fusion's angle with the other sign.
+- `areas`, `volume_before`, `volume_after` (only when the outlines hold sketch text or a free curve): `areas` as for an
+  emboss (one entry per profile record; the area the reader worked out for text, `Profile.areaProperties` for a
+  spline), and the volume in mm3 the part had before and after the item: the target's, or for a new body 0 and the
+  summed volume of `ExtrudeFeature.bodies`. The translator expects a new body to have exactly the outline area times
+  the length; a join or cut may lose volume to material it overlaps, so it only refuses a change larger than that or in
+  the wrong direction. A taper, through all, thin and intersect are not checked. A capture without these keys (made
+  before they were read) is not checked.
 - Profiles of one extrude that share a sketch curve are merged into one outline with holes before they are copied
   (`lib/translator/outlines.py`), since Fusion extrudes and tapers their whole region at once. Outlines that stay
   apart are written so that each step touches what is already built (the part, or an outline written before it).
@@ -570,6 +580,8 @@ for extrudes).
   "faces": [{ "entity_type": "BRepFace", "surface": "Plane", "plane": PLANE, "outward": [0, 0, 1],
               "face_point": [30, 20, 4] }],
   "tangent_chain": true,
+  "tangent_faces": [{ "surface": "Cylinder", "plane": null }],
+  "made_surfaces": ["Plane", "Plane"],
   "depth": 1.0,
   "offset_x": 0.0, "offset_y": 0.0, "rotation_deg": 0.0,
   "participants": [{ "token": "...", "name": "Body1" }],
@@ -591,7 +603,11 @@ for extrudes).
   outline, negative sinks it; hand test E1 and E2). `offset_x`, `offset_y` (`horizontalDistance`,
   `verticalDistance`, mm) and `rotation_deg` (`rotationAngle`) move and turn the outline on the face in a frame the
   reference does not document; the translator copies the step only when all three are zero. Each setting is null when
-  it cannot be read. `tangent_chain` is recorded for a later copy of curved faces; the flat copy does not use it.
+  it cannot be read. A size behind any of the three is pinned (a loose size with the reason), since it would move the
+  outline in Fusion at other values.
+- `tangent_chain` is `isTangentChain`. `tangent_faces` lists the faces that touch the input faces tangentially
+  (`BRepFace.tangentiallyConnectedFaces`) as `{ surface, plane }`; null when they cannot be listed. `made_surfaces` is
+  the surface kind of every face in `feature.faces` (read after the item), null when unreadable.
 - `volume_before` and `volume_after`: the target's volume in mm3 with the marker before and after the item.
 - `end_offset` and `end_area`: signed distance along the first outline's sketch `z`, from its sketch plane, and the
   area (mm2) of the farthest flat face of `feature.faces` that is parallel to the input face (the top of a raised
@@ -600,7 +616,9 @@ for extrudes).
 The translator (`lib/translator/emboss.py`) copies a flat face emboss as an extrude that starts on the face
 (`start.kind` is `fromEntity`): `join` for a positive depth, `cut` for a negative one, going out of the face or into
 it. The measured `end_offset` decides the direction when it is known. It refuses a curved face, faces that are not on
-one plane, a moved or turned outline, text, a sketch plane tilted to the face, and a measured volume change that is not
+one plane, a moved or turned outline, text, a sketch plane tilted to the face, Tangent Chain on (or unreadable) with a
+tangent neighbour that is curved or not on the input plane (when the neighbours could not be listed: any curved made
+face), and a measured volume change that is not
 `sum(areas) * abs(depth)` within 1 percent in the direction the sign of `depth` says.
 
 ### Inputs from another component (`foreign`)
@@ -648,10 +666,12 @@ plain number, a retired member) adds nothing, and `params` is absent when nothin
 | ShellFeature | `inside` |
 | RectangularPatternFeature | `quantity_one`, `quantity_two`, `distance_one`, `distance_two` |
 | CircularPatternFeature | `quantity`, `total_angle_deg` |
-| EmbossFeature | `depth` (read like an extrude length; a negative depth is written negated), `offset_x`, `offset_y`, `rotation_deg` (listed, not followed: the copy needs them to be zero) |
+| EmbossFeature | `depth` (read like an extrude length; a negative depth is written negated), `offset_x`, `offset_y`, `rotation_deg` (not followed: the copy needs them to be zero, and a size behind them is pinned) |
 
 Sketch dimensions, construction planes, axes and joints are not listed per item. They are model parameters whose
-`created_by.kind` is `sketchDimension`, `constructionPlane`, `constructionAxis` or `joint`.
+`created_by.kind` is `sketchDimension`, `constructionPlane`, `constructionAxis` or `joint`. The full list of kinds is
+`feature`, `sketchDimension`, `sketchText` (the height of a sketch text), `constructionPlane`, `constructionAxis`,
+`joint` and `other`.
 
 How the translator uses them (`translate(capture, size_table=table, motion=motion)`):
 
@@ -730,8 +750,8 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
 - End of walk audit (`lib/translator/audit.py`). After the last walk every free size that a copied step reads must be
   in a known state: read by a written formula, fixed, loose, or dropped, each with a reason. A step reads a size
   through its `data.params` (what each expression reads), the dimensions of the sketches its data names, and the
-  construction geometry it uses. A size of a step's `data.params` that none of that step's written values read, or a
-  sketch size that a measured motion says moves something and no formula reads, and that no handler named, gets the
+  construction geometry it uses. A value of a step's `data.params` that its handler never dealt with
+  (`values.quantity`, `values.pin` or `values.handled` record the path) and that reads a free size, or a sketch size that a measured motion says moves something and no formula reads, and that no handler named, gets the
   reason "<step> reads it, and the copy does not follow it": loose when another formula reads it, else dropped. A sketch
   size that a measured motion says moves nothing is dropped as "changes nothing in the copied steps". This makes a
   value a handler forgets to record safe by default.

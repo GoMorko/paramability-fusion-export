@@ -105,7 +105,8 @@ an extrude that starts on the face, so `emboss.handle` checks what the copy reli
 `extrude.handle(dict(item, data=built), ctx)`. Keep the item's `index` and `name`, and pass the capture's `profiles`
 list as it is: the size probe's motion keys (`<item>/p<profile>/...`) count profiles by their place in that list. The
 walk still lists the original item as the copied one, so the end of walk audit reads the original `data.params` and
-sketches. A key that only the new step needs (a fixed direction of travel, for instance) goes into the other handler as
+sketches. A value the other handler asks for under another path is mapped back with
+`values.handled(ctx, item, "depth", same_as="side_one.distance")`. A key that only the new step needs (a fixed direction of travel, for instance) goes into the other handler as
 an optional field of its data, and must not change what that handler writes without it.
 
 A step that takes sketch outlines checks each profile record with `loops.outline_refusal` (sketch text that could not
@@ -135,9 +136,13 @@ state outside `ctx`. Work that depends on the capture alone can be kept in `ctx.
 
 - The end of walk audit (`lib/translator/audit.py`) runs after every translation. Every free size that a copied step
   reads (through its `data.params`, the sketches it draws on, the construction geometry it uses) must end read by a
-  written formula, or marked with a reason. A handler that writes a value as a number and records nothing leaves
-  the size in no state; the audit marks it loose with "Emboss1 reads it, and the copy does not follow it". So a
-  forgotten value gives a warning, not a wrong part.
+  written formula, or marked with a reason. It checks each value of `data.params` on its own: `values.quantity`,
+  `values.pin` and `values.handled` record that the handler dealt with that path, and a path that reads a free size and
+  was never asked for makes the size loose ("Emboss1 reads it, and the copy does not follow it"), even when another
+  value of the step follows the same size. A value the step kind or its settings do not use (a tip angle of a
+  through hole, the second direction of a pattern with one copy) is declared with `values.handled`; a value the copy
+  writes as a fixed number (a taper of zero) is declared with `values.pin`. So a forgotten value gives a warning, not
+  a wrong part.
 - `tests/test_follow_or_flag.py` translates every capture fixture with every user parameter ticked and checks the
   same rule from the outside: each parameter a copied step reads is followed, loose or dropped with a reason, and no
   written formula can reach zero inside the size ranges. A new fixture is picked up on its own, but only when it has

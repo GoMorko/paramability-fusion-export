@@ -67,6 +67,7 @@ def list_user_parameters(design):
 
 
 _CREATED_BY_KINDS = (
+    ("sketchtext", "sketchText"),
     ("dimension", "sketchDimension"),
     ("constructionplane", "constructionPlane"),
     ("constructionaxis", "constructionAxis"),
@@ -76,7 +77,8 @@ _CREATED_BY_KINDS = (
 
 
 def created_by_kind(entity):
-    """feature, sketchDimension, constructionPlane, constructionAxis, joint or other, from the entity's type name."""
+    """feature, sketchDimension, sketchText, constructionPlane, constructionAxis, joint or other, from the entity's type
+    name."""
     text = type_name(entity).lower()
     for key, kind in _CREATED_BY_KINDS:
         if key in text:
@@ -100,29 +102,46 @@ def _is_sketch_dimension(entity):
     return hasattr(entity, "parentSketch") and hasattr(entity, "parameter")
 
 
-def _dimension_index(component):
-    """A lookup from parameter name to (sketch, dimension) over the sketches of a component. Built once, on first use."""
-    cache = {}
+class _SketchIndex:
+    """Lookups from parameter name over the sketches of a component: to (sketch, dimension) for the parameter of a
+    sketch dimension, to (sketch, text) for the height of a sketch text. Built once, on first use."""
 
-    def build():
-        found = {}
-        sketches = safe(lambda: component.sketches, None)
+    def __init__(self, component):
+        self._component = component
+        self._dimensions = self._texts = None
+
+    def _build(self):
+        self._dimensions, self._texts = {}, {}
+        sketches = safe(lambda: self._component.sketches, None)
         for i in range(safe(lambda: sketches.count, 0) or 0):
             sketch = safe(lambda: sketches.item(i), None)
-            dims = safe(lambda: sketch.sketchDimensions, None)
-            for j in range(safe(lambda: dims.count, 0) or 0):
-                dim = safe(lambda: dims.item(j), None)
-                name = safe(lambda: dim.parameter.name, "")
-                if name:
-                    found.setdefault(name, (sketch, dim))
-        return found
+            self._collect(sketch, "sketchDimensions", lambda d: d.parameter.name, self._dimensions)
+            self._collect(sketch, "sketchTexts", lambda t: t.heightParameter.name, self._texts)
 
-    def find(name):
-        if "index" not in cache:
-            cache["index"] = build()
-        return cache["index"].get(name)
+    @staticmethod
+    def _collect(sketch, members, name_of, found):
+        items = safe(lambda: getattr(sketch, members), None)
+        for j in range(safe(lambda: items.count, 0) or 0):
+            item = safe(lambda: items.item(j), None)
+            name = safe(lambda: name_of(item), "")
+            if name:
+                found.setdefault(name, (sketch, item))
 
-    return find
+    def dimension(self, name):
+        if self._dimensions is None:
+            self._build()
+        return self._dimensions.get(name)
+
+    def text(self, name):
+        if self._texts is None:
+            self._build()
+        return self._texts.get(name)
+
+
+def _is_sketch_text(entity):
+    """A sketch text by its type name, else by the members only a text has."""
+    return created_by_kind(entity) == "sketchText" or (
+        hasattr(entity, "heightParameter") and hasattr(entity, "parentSketch"))
 
 
 def _sketch_made(dimension, sketch, owner_token):
@@ -136,17 +155,31 @@ def _sketch_made(dimension, sketch, owner_token):
     }
 
 
-def _created_by(p, owner_token, find_dimension=None):
+def _text_made(text, sketch, owner_token):
+    sketch = sketch or safe(lambda: text.parentSketch, None)
+    return {
+        "kind": "sketchText",
+        "token": safe(lambda: text.entityToken, "") or "",
+        "name": "",
+        "sketch": safe(lambda: sketch.name, "") or "",
+        "component": safe(lambda: sketch.parentComponent.entityToken, "") or owner_token,
+    }
+
+
+def _created_by(p, owner_token, index=None):
     """Who made the parameter. `component` is the token of the component the maker lives in: the sketch's component
-    for a sketch dimension, else the component the parameter is listed from.
+    for a sketch dimension or text, else the component the parameter is listed from.
 
     A sketch dimension is recognised through `createdBy` (type name, cast, members) and, when that gives nothing
-    usable, through the sketch dimension whose own parameter is this one (`find_dimension(name)`).
+    usable, through the sketch dimension whose own parameter is this one (`index.dimension(name)`). A sketch text
+    (its height parameter) is recognised the same way, through `index.text(name)`.
     """
     entity = safe(lambda: p.createdBy, None)
     if entity is not None:
         if _is_sketch_dimension(entity):
             return _sketch_made(entity, None, owner_token)
+        if _is_sketch_text(entity):
+            return _text_made(entity, None, owner_token)
         kind = created_by_kind(entity)
         if kind != "other":
             return {
@@ -156,10 +189,13 @@ def _created_by(p, owner_token, find_dimension=None):
                 "sketch": "",
                 "component": owner_token,
             }
-    if find_dimension is not None:
-        found = find_dimension(p.name)
+    if index is not None:
+        found = index.dimension(p.name)
         if found is not None:
             return _sketch_made(found[1], found[0], owner_token)
+        found = index.text(p.name)
+        if found is not None:
+            return _text_made(found[1], found[0], owner_token)
     if entity is None:
         return {"kind": "other", "token": "", "name": "", "component": owner_token}
     return {"kind": "other", "token": safe(lambda: entity.entityToken, "") or "",
@@ -170,14 +206,14 @@ def list_model_parameters(component):
     """One dict per numeric model parameter of a component (read through Component.modelParameters).
 
     Keys: as for user parameters, plus role and created_by ({ kind, token, name, sketch, component }; `sketch` is the
-    sketch name of a sketch dimension, else empty; `component` is a component token). Unreadable members are skipped.
+    sketch name of a sketch dimension or text, else empty; `component` is a component token). Unreadable members are skipped.
     """
     out = []
     owner_token = safe(lambda: component.entityToken, "") or ""
     params = safe(lambda: component.modelParameters, None)
     if params is None:
         return out
-    find_dimension = _dimension_index(component)
+    index = _SketchIndex(component)
     for i in range(params.count):
         p = safe(lambda: params.item(i), None)
         if p is None:
@@ -189,6 +225,6 @@ def list_model_parameters(component):
         if d["value_type"] == "text":
             continue
         d["role"] = safe(lambda: p.role, "") or ""
-        d["created_by"] = _created_by(p, owner_token, find_dimension)
+        d["created_by"] = _created_by(p, owner_token, index)
         out.append(d)
     return out

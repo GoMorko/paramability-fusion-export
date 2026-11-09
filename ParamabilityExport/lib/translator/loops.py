@@ -229,6 +229,7 @@ MAX_INNER_LOOPS = 256
 TEXT_PROBLEMS = {
     "too_many": TEXT_TOO_BIG,
     "open": "The outlines of this text could not be closed, so it is not copied.",
+    "overlap": "This text has overlapping outlines, so it is not copied yet.",
     "space": "The place of this text on its sketch could not be told with certainty, so it is not copied.",
     "unread": "The outlines of this text could not be read from Fusion, so it is not copied.",
 }

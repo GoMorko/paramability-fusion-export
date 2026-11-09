@@ -57,7 +57,8 @@ class EmbossFeatureStub(Obj):
         raise RuntimeError("not available")
 
 
-def read(depth_cm=0.1, after=8304.0, made_z=11, face_z=10, surface="Plane", text=False, broken=False):
+def read(depth_cm=0.1, after=8304.0, made_z=11, face_z=10, surface="Plane", text=False, broken=False, tangent=None,
+         made_extra=()):
     target = lid(after)
     sketch = Obj("fusion::Sketch", name="Sketch1", transform=identity(), entityToken="sk1")
     outlines = [ring_profile(sketch)]
@@ -65,8 +66,11 @@ def read(depth_cm=0.1, after=8304.0, made_z=11, face_z=10, surface="Plane", text
         outlines.append(Obj("fusion::SketchText", parentSketch=sketch, text="Hi"))
     made = face_of("Plane", made_z, target, area=3.04)
     kind = EmbossFeatureStub if broken else Obj
+    input_face = face_of(surface, face_z, target)
+    if tangent is not None:
+        input_face.tangentiallyConnectedFaces = Coll(tangent)
     emboss = kind("fusion::EmbossFeature", parentComponent=Obj(entityToken="root"), bodies=Coll([target]),
-                  profiles=Coll(outlines), inputFaces=Coll([face_of(surface, face_z, target)]), faces=Coll([made]),
+                  profiles=Coll(outlines), inputFaces=Coll([input_face]), faces=Coll([made, *made_extra]),
                   isTangentChain=True, depth=parameter(depth_cm), horizontalDistance=parameter(0, "d6", "0 mm"),
                   verticalDistance=parameter(0, "d7", "0 mm"), rotationAngle=parameter(0, "d8", "0 deg"))
     design = FakeDesign([entry((emboss, "Emboss1"))], target, appears_at=0)
@@ -97,6 +101,19 @@ class EmbossReaderTest(unittest.TestCase):
         face = read(surface="Cylinder")["faces"][0]
         self.assertEqual((face["surface"], face["plane"]), ("Cylinder", None))
 
+    def test_faces_that_touch_the_input_face_tangentially_and_the_made_surfaces_are_recorded(self):
+        target = lid(8304.0)
+        fillet = face_of("Cylinder", 9, target)
+        data = read(tangent=[fillet], made_extra=[fillet])
+        self.assertEqual(data["tangent_faces"], [{"surface": "Cylinder", "plane": None}])
+        self.assertEqual(data["made_surfaces"], ["Plane", "Cylinder"])
+        self.assertTrue(data["tangent_chain"])
+
+    def test_neighbours_that_cannot_be_listed_are_null(self):
+        data = read()
+        self.assertIsNone(data["tangent_faces"])
+        self.assertEqual(data["made_surfaces"], ["Plane"])
+
     def test_a_setting_that_cannot_be_read_is_null_and_the_rest_is_still_read(self):
         data = read(broken=True)
         self.assertNotIn("read_error", data)
@@ -106,7 +123,7 @@ class EmbossReaderTest(unittest.TestCase):
     def test_sketch_text_whose_outlines_cannot_be_read_is_a_marker_without_area(self):
         data = read(text=True)
         self.assertEqual(data["profiles"][1], {"text": True, "sketch": "Sketch1", "sketch_token": "sk1",
-                                               "problem": "unread"})
+                                               "problem": "unread", "text_params_unknown": True})
         self.assertEqual(data["areas"], [304.0, None])
 
     def test_input_faces_that_cannot_be_listed_give_a_read_error(self):

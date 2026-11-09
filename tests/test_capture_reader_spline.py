@@ -1,22 +1,31 @@
 """Reader of free curves (splines, elliptical arcs) and of sketch text outlines."""
 import math
+import time
 import unittest
 
 from tests import context  # noqa: F401
-from tests.test_capture_reader import Coll, Obj, P, line, matrix, profile_of, rect_profile
+from tests.test_capture_reader import CM, Coll, Obj, P, line, matrix, profile_of, rect_profile
 
 from lib.fusion_reader import read_sketch
 
 
-def curve_on(trace, extents=(0.0, 1.0), kind="NurbsCurve3D"):
-    """A free curve whose evaluator follows `trace(t) -> (x, y)` in mm, with a tangent from a small step."""
+def curve_on(trace, extents=(0.0, 1.0), kind="NurbsCurve3D", length=False, **members):
+    """A free curve whose evaluator follows `trace(t) -> (x, y)` in mm, with a tangent from a small step. With
+    `length`, the evaluator also gives its own length (cm) as `getLengthAtParameter`: True for a measured one, or a
+    function of (from, to)."""
     def tangent(t):
         a, b = trace(t - 1e-6), trace(t + 1e-6)
         return True, Obj(x=b[0] - a[0], y=b[1] - a[1], z=0.0)
 
+    def measured(low, high, steps=20000):
+        points = [trace(low + (high - low) * i / steps) for i in range(steps + 1)]
+        return True, sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(points, points[1:])) * CM
+
     evaluator = Obj(getParameterExtents=lambda: (True,) + extents,
                     getPointAtParameter=lambda t: (True, P(*trace(t))), getTangent=tangent)
-    return Obj("core::" + kind, evaluator=evaluator)
+    if length:
+        evaluator.getLengthAtParameter = measured if length is True else length
+    return Obj("core::" + kind, evaluator=evaluator, **members)
 
 
 def half_circle(t):
@@ -59,6 +68,40 @@ class FreeCurveTest(unittest.TestCase):
             read_sketch._MAX_SAMPLES = original
         self.assertTrue(got["truncated"])
         self.assertLessEqual(len(got["samples"]), 40 + 16)
+
+    def wave(self, waves):
+        return lambda t: (100.0 * t, 0.5 * math.sin(2 * math.pi * waves * t))
+
+    def test_a_wave_that_the_tested_points_would_miss_is_not_a_straight_line(self):
+        # 32 waves of 0.5 mm: the span ends and the middle of every span lie on the axis.
+        for waves in (32, 96):
+            got = read_curves([curve_on(self.wave(waves), length=True)])[0]
+            self.assertTrue(got["truncated"], waves)
+
+    def test_chords_that_do_not_add_up_to_the_curve_length_mark_it(self):
+        # 96 waves cross the axis exactly at every tested point, so only the evaluator's own length shows them.
+        flat_but_long = curve_on(self.wave(96), length=True)
+        self.assertTrue(read_curves([flat_but_long])[0]["truncated"])
+        wavy_without_length = read_curves([curve_on(self.wave(96))])[0]
+        self.assertNotIn("truncated", wavy_without_length)
+
+    def test_a_normal_curve_with_its_own_length_is_read_whole(self):
+        got = read_curves([curve_on(half_circle, length=True)])[0]
+        self.assertNotIn("truncated", got)
+        self.assertLess(chord_error(got["samples"]), 0.001)
+
+    def test_a_length_that_cannot_be_read_is_not_a_check(self):
+        for answer in (lambda a, b: (False, 0.0), lambda a, b: (_ for _ in ()).throw(RuntimeError()),
+                       lambda a, b: (True, -1.0)):
+            got = read_curves([curve_on(half_circle, length=answer)])[0]
+            self.assertNotIn("truncated", got)
+
+    def test_a_curve_with_many_control_points_starts_with_more_spans(self):
+        plain = read_curves([curve_on(lambda t: (30 * t, 2 * t))])[0]
+        many = read_curves([curve_on(lambda t: (30 * t, 2 * t), controlPointCount=40, degree=3)])[0]
+        few = read_curves([curve_on(lambda t: (30 * t, 2 * t), controlPointCount=4, degree=3)])[0]
+        self.assertEqual(len(plain["samples"]), len(few["samples"]))
+        self.assertGreaterEqual(len(many["samples"]), 4 * (40 - 3))
 
     def test_a_curve_that_cannot_be_evaluated_has_no_samples(self):
         broken = Obj("core::NurbsCurve3D", evaluator=Obj(getParameterExtents=lambda: (False, 0.0, 1.0)))
@@ -159,6 +202,29 @@ class TextOutlinesTest(unittest.TestCase):
         ctx = Obj(component=Obj(entityToken="root"))
         profiles, _ = read_sketch.read_text_outlines(text, ctx)
         self.assertEqual((profiles[0]["problem"], profiles[0]["foreign"]), ("foreign", True))
+
+    def test_the_height_parameter_of_a_text_is_kept_for_the_sizes(self):
+        named = self.text(self.square(0, 0, 10), heightParameter=Obj(name="d7"))
+        self.assertEqual(read_sketch.read_text_outlines(named)[0][0]["text_params"], ["d7"])
+        unnamed = read_sketch.read_text_outlines(self.text(self.square(0, 0, 10)))[0][0]
+        self.assertEqual((unnamed["text_params_unknown"], "text_params" in unnamed), (True, False))
+        marker = read_sketch.read_text_outlines(self.text(self.square(0, 0, 10)[:3], heightParameter=Obj(name="d7")))[0][0]
+        self.assertEqual(marker["text_params"], ["d7"])
+
+    def test_overlapping_strokes_are_a_marker_with_that_problem(self):
+        bar = [line((0, 0), (20, 0)), line((20, 0), (20, 5)), line((20, 5), (0, 5)), line((0, 5), (0, 0))]
+        stem = [line((8, 1), (12, 1)), line((12, 1), (12, 12)), line((12, 12), (8, 12)), line((8, 12), (8, 1))]
+        profiles, areas = read_sketch.read_text_outlines(self.text(bar + stem, box=(0, 0, 20, 12)))
+        self.assertEqual((profiles[0]["problem"], areas, "loops" in profiles[0]), ("overlap", [None], False))
+
+    def test_a_text_of_two_hundred_outlines_is_read_fast(self):
+        curves = []
+        for n in range(200):
+            curves += self.square(12.0 * n, 0, 10) + self.square(12.0 * n + 3, 3, 4)
+        started = time.time()
+        profiles, areas = read_sketch.read_text_outlines(self.text(curves, box=(0, 0, 2400, 10)))
+        self.assertLess(time.time() - started, 2.0)
+        self.assertEqual((len(profiles), areas[0]), (200, 84.0))
 
     def test_a_text_among_profiles_gives_one_area_per_record(self):
         raw = Coll([rect_profile(), self.text(self.square(0, 0, 10) + self.square(20, 0, 5))])

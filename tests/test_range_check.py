@@ -1,5 +1,6 @@
 """The range sampler: what a formula does over the corners of the ranges of the sizes it reads."""
 import unittest
+import unittest.mock
 
 from tests import context  # noqa: F401
 
@@ -50,6 +51,44 @@ class SweepTest(unittest.TestCase):
     def test_a_name_that_is_not_a_size_keeps_its_current_value(self):
         span = sweep(BOX, "width + 1", ("width", "unknown"))
         self.assertEqual((span.low, span.high), (21, 81))
+
+
+INNER = Table(a=(30, 20, 40), b=(35, 25, 45), s=(5, 0, 20), w=(3, 1, 3), m=(10, 4, 16))
+
+
+class InsideExtremesTest(unittest.TestCase):
+    def test_abs_of_a_difference_reaches_zero_inside_the_ranges(self):
+        span = sweep(INNER, "abs(a - b) - 1", ("a", "b"))
+        self.assertLessEqual(span.low, -0.999)
+        self.assertFalse(span.above(0.0))
+
+    def test_a_divisor_that_changes_sign_inside_the_range_fails(self):
+        span = sweep(INNER, "w / (s - 3.3)", ("w", "s"))
+        self.assertTrue(span.failed)
+
+    def test_a_divisor_that_reaches_a_small_value_inside_is_seen_in_the_high_end(self):
+        span = sweep(INNER, "w / (abs(s - 3.3) + 0.01)", ("w", "s"))
+        self.assertFalse(span.failed)
+        self.assertGreater(span.high, 290)
+        self.assertFalse(span.at_most(30))
+
+    def test_a_choice_is_tested_on_both_sides_of_its_switch(self):
+        span = sweep(INNER, "s > 7.5 && s < 12 ? 100 : 0", ("s",))
+        self.assertEqual((span.low, span.high), (0, 100))
+
+    def test_a_mod_by_a_size_that_changes_sign_fails_and_a_min_over_a_difference_is_followed(self):
+        self.assertTrue(sweep(INNER, "mod(7, s - 3.3)", ("s",)).failed)
+        self.assertLess(sweep(INNER, "min(a, 50 - b) - 14", ("a", "b")).low, 0)
+
+    def test_a_formula_of_sums_and_products_adds_no_inner_settings(self):
+        with unittest.mock.patch.object(range_check, "inner_settings", side_effect=AssertionError):
+            sweep(INNER, "a * b - 2 * s", ("a", "b", "s"))
+
+    def test_the_inner_settings_stay_bounded_for_many_sizes(self):
+        many = Table(**{"s%d" % n: (5, 0, 10) for n in range(12)})
+        names = list(many.sizes)
+        self.assertLessEqual(len(range_check.inner_settings(many, names)), range_check.MAX_INNER)
+        self.assertEqual(len(range_check.inner_settings(INNER, ("a", "b", "s"))), 125)
 
 
 class ManySizesTest(unittest.TestCase):
