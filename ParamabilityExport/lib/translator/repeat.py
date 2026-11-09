@@ -52,6 +52,9 @@ def _sources(data, ctx, what):
         ids = ctx.steps_of(index)
         if not ids:
             return Refusal("A step this %s copies is not part of the exported body." % what)
+        if _grows_with_part(_item_at(ctx, index)):
+            return Refusal("A step that reaches to the part or to a face grows with the part, so its copies are not "
+                           "copied yet.")
         for step_id in ids:
             step = by_id[step_id]
             kind = step["kind"]
@@ -62,6 +65,8 @@ def _sources(data, ctx, what):
             elif kind in SOLID_KINDS:
                 if step.get("combine") == "intersect":
                     return Refusal("A step that trims the part cannot be repeated.")
+                if step.get("combine") == "new":
+                    return Refusal("A step that makes a separate body cannot be repeated.")
                 if step_id not in solids:
                     solids.append(step_id)
             else:
@@ -71,12 +76,36 @@ def _sources(data, ctx, what):
     return solids, finishes
 
 
-def _finish_copies(finishes, motions, drop_same=False):
+def _item_at(ctx, index):
+    for item in ctx.capture.get("items") or []:
+        if item.get("index") == index:
+            return item
+    return None
+
+
+def _grows_with_part(item):
+    """True for an extrude whose length Fusion recomputes for every copy (to a face, or through the part).
+
+    The recipe fixes that length from the part as it was, so a copy would stay as long as the original.
+    """
+    if not item or item.get("type") != "ExtrudeFeature":
+        return False
+    data = item.get("data") or {}
+    sides = [data.get("side_one"), data.get("side_two")]
+    through = [bool(s) and s.get("kind") in ("throughAll", "all") for s in sides]
+    if any(bool(s) and s.get("kind") == "toEntity" for s in sides):
+        return True
+    if data.get("extent_type") == "two":
+        return through[0] != through[1]
+    return data.get("extent_type", "one") == "one" and through[0]
+
+
+def _finish_copies(finishes, motions):
     """Round and bevel steps for the copies. `motions` are functions that move a point to a copy.
 
-    Whole copies are packed into a step, so the two points of a closed edge never land in different steps.
-    With `drop_same` a copy whose points all lie on the source's own points is left out (an edge that maps onto
-    itself is already finished).
+    A moved point that lands on one of the source's own points is dropped, with its size: that edge is already
+    finished, and the point would pick a neighbouring edge of the new surface. The copies are packed whole into
+    steps of at most MAX_NEAR_POINTS points.
     """
     steps = []
     for source in finishes:
@@ -86,40 +115,51 @@ def _finish_copies(finishes, motions, drop_same=False):
         sizes = source.get("edgeSizes")
         if sizes is not None:
             sizes = list(sizes) + [source["size"]] * (len(near) - len(sizes))
-        moved = []
+        copies = []
         for motion in motions:
-            points = [_vec(motion(p)) for p in near]
-            if drop_same and all(any(vec.close(p, q, POINT_TOL) for q in near) for p in points):
-                continue
-            moved.append(points)
-        per_step = max(1, MAX_NEAR_POINTS // len(near))
-        for start in range(0, len(moved), per_step):
-            chunk = moved[start:start + per_step]
-            step = {
-                "kind": source["kind"],
-                "edges": {"near": [p for points in chunk for p in points]},
-                "size": source["size"],
-            }
+            kept = [(_vec(motion(p)), n) for n, p in enumerate(near)]
+            kept = [(q, n) for q, n in kept if not any(vec.close(q, p, POINT_TOL) for p in near)]
+            if kept:
+                copies.append(kept)
+        groups = []
+        for copy_points in copies:
+            if groups and len(groups[-1]) + len(copy_points) <= MAX_NEAR_POINTS:
+                groups[-1].extend(copy_points)
+            else:
+                groups.append(list(copy_points))
+        for group in groups:
+            step = {"kind": source["kind"], "edges": {"near": [q for q, _ in group]}, "size": source["size"]}
             if sizes is not None:
-                step["edgeSizes"] = sizes * len(chunk)
+                step["edgeSizes"] = [sizes[n] for _, n in group]
             steps.append(step)
     return steps
 
 
+def _kept_copy_count(step):
+    """Copies a pattern step makes beyond the original, as the app counts them."""
+    grid = max(0, step["linear"]["count"] * step.get("linear2", {}).get("count", 1) - 1) if "linear" in step else 0
+    turned = max(0, step["polar"]["count"] - 1) if "polar" in step else 0
+    return max(0, grid + turned - len(set(step.get("skip", ()))))
+
+
 def _copied_bodies(steps):
-    """Bodies the pattern and mirror steps made so far, counted once per referenced step."""
+    """Tool bodies the pattern and mirror steps add, counted as the app counts them.
+
+    A step named in `of` counts once; a repeat among them counts all the bodies it makes, original included.
+    """
+    bodies = {}
     total = 0
     for step in steps:
-        if step.get("kind") == "mirror":
-            total += len(step["of"])
-        elif step.get("kind") == "pattern":
-            lin = step.get("linear", {}).get("count", 1) * step.get("linear2", {}).get("count", 1)
-            copies = max(lin, step.get("polar", {}).get("count", 1)) - 1 - len(step.get("skip", ()))
-            total += max(copies, 0) * len(step["of"])
+        if step.get("kind") not in ("pattern", "mirror"):
+            continue
+        sources = sum(bodies.get(i, 1) for i in set(step["of"]))
+        added = sources if step["kind"] == "mirror" else _kept_copy_count(step) * sources
+        total += added
+        bodies[step.get("id")] = added + sources
     return total
 
 
-def _build(ctx, solids, finishes, repeat_step, motions, what, drop_same=False):
+def _build(ctx, solids, finishes, repeat_step, motions, what):
     """The repeat step (when there are solid sources) followed by the finish copies."""
     steps = []
     if solids:
@@ -127,10 +167,11 @@ def _build(ctx, solids, finishes, repeat_step, motions, what, drop_same=False):
         steps.append(repeat_step)
         if _copied_bodies(list(ctx.steps) + steps) > MAX_COPIED_BODIES:
             return Refusal("This %s makes more than %d copies in all." % (what, MAX_COPIED_BODIES))
-    steps += _finish_copies(finishes, motions, drop_same)
+    steps += _finish_copies(finishes, motions)
     if not steps:
         return Refusal("This %s makes no copies." % what)
     return steps
+
 
 
 # ---------------------------------------------------------------- elements
@@ -139,6 +180,10 @@ def _build(ctx, solids, finishes, repeat_step, motions, what, drop_same=False):
 def _is_identity_rotation(frame):
     return (vec.close(frame["x"], [1, 0, 0], ROTATION_TOL) and vec.close(frame["y"], [0, 1, 0], ROTATION_TOL)
             and vec.close(frame["z"], [0, 0, 1], ROTATION_TOL))
+
+
+def _is_identity(frame):
+    return _is_identity_rotation(frame) and vec.length(frame["origin"]) <= FIT_TOL_MM
 
 
 def _kept_elements(data):
@@ -233,13 +278,16 @@ def _rectangular(item, ctx):
     if kept is None:
         return Refusal("The copies of this pattern could not be read.")
 
-    reference = data["elements"][0]["frame"]["origin"]
+    # Element transforms are relative to the original, so offsets are measured from the origin, and the original
+    # itself must be among the elements or the lattice could be off by one place.
+    if not any(_is_identity(e["frame"]) for e in data["elements"]):
+        return Refusal("The original copy was not found among the copies of this pattern.")
     placed = []
     for element in kept:
         frame = element["frame"]
         if not _is_identity_rotation(frame):
             return Refusal("The copies of this pattern are turned, which is not copied yet.")
-        indexes, residual = _solve_lattice(vec.sub(frame["origin"], reference), [(a["dir"], a["step"]) for a in axes])
+        indexes, residual = _solve_lattice(frame["origin"], [(a["dir"], a["step"]) for a in axes])
         if residual > FIT_TOL_MM:
             return Refusal("The copies of this pattern do not sit on an even grid.")
         placed.append((element, indexes))
@@ -362,6 +410,140 @@ def _mirror_plane(data):
     return {"origin": _vec(plane["point"]), "normal": _vec(vec.unit(plane["normal"]))}
 
 
+# A whole body mirror in Fusion is "the body joined with its mirror image". The recipe instead mirrors every
+# earlier step onto the finished part, which agrees only when the body lies on one side of the plane and no cutting
+# tool reaches across it. The helpers below prove that, and the mirror is refused when they cannot.
+
+SIDE_TOL_MM = 1e-4
+
+
+def _side_of_plane(box, origin, normal):
+    """+1 or -1 when the whole box lies on that side of the plane (within tolerance), else 0."""
+    lo, hi = box["min"], box["max"]
+    dists = [vec.dot(vec.sub([hi[0] if i & 1 else lo[0], hi[1] if i & 2 else lo[1], hi[2] if i & 4 else lo[2]],
+                             origin), normal) for i in range(8)]
+    if min(dists) >= -SIDE_TOL_MM and max(dists) > SIDE_TOL_MM:
+        return 1
+    if max(dists) <= SIDE_TOL_MM and min(dists) < -SIDE_TOL_MM:
+        return -1
+    return 0
+
+
+def _arc_circle_points(p0, pm, p1):
+    """Corners of the square around the circle through three 2D points (a bound for any arc of that circle)."""
+    ax, ay = p0
+    bx, by = pm
+    cx, cy = p1
+    d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by))
+    if abs(d) < 1e-12:
+        return [p0, pm, p1]
+    ux = ((ax * ax + ay * ay) * (by - cy) + (bx * bx + by * by) * (cy - ay) + (cx * cx + cy * cy) * (ay - by)) / d
+    uy = ((ax * ax + ay * ay) * (cx - bx) + (bx * bx + by * by) * (ax - cx) + (cx * cx + cy * cy) * (bx - ax)) / d
+    r = math.hypot(ax - ux, ay - uy)
+    return [[ux + sx * r, uy + sy * r] for sx in (-1, 1) for sy in (-1, 1)]
+
+
+def _loop_points(loop):
+    """2D points whose hull contains the loop, or None for a loop kind this does not know."""
+    kind = loop.get("kind")
+    if kind in ("circle", "ellipse", "rect"):
+        cx, cy = loop["center"]
+        if kind == "circle":
+            reach = loop["radius"]
+        elif kind == "ellipse":
+            reach = max(loop["radiusX"], loop["radiusY"])
+        else:
+            reach = math.hypot(loop["width"], loop["height"]) / 2
+        return [[cx + sx * reach, cy + sy * reach] for sx in (-1, 1) for sy in (-1, 1)]
+    if kind == "polygon":
+        return [list(p) for p in loop["points"]]
+    if kind == "profile":
+        points, here = [list(loop["start"])], list(loop["start"])
+        for seg in loop["segments"]:
+            if "through" in seg:
+                points += _arc_circle_points(here, seg["through"], seg["to"])
+            points.append(list(seg["to"]))
+            here = list(seg["to"])
+        return points
+    return None
+
+
+def _placed(on, point2):
+    """A sketch point in model coordinates (the sketch y axis is normal x xDir)."""
+    y_dir = vec.cross(on["normal"], on["xDir"])
+    return vec.add(vec.add(on["origin"], vec.scale(on["xDir"], point2[0])), vec.scale(y_dir, point2[1]))
+
+
+def _cut_reach(step):
+    """(points, margin) with every point of the cutting tool within `margin` mm of one of `points`; None when
+    the tool is not bounded by a known rule (through cuts, other loop kinds)."""
+    kind = step["kind"]
+    if kind == "hole":
+        axis = vec.unit(step["direction"])
+        if step.get("depth") is None:
+            return None
+        radius = max([step["diameter"]] + [step.get(k, {}).get("diameter", 0) for k in ("counterbore", "countersink")]) / 2
+        end = vec.add(step["origin"], vec.scale(axis, step["depth"]))
+        return [step["origin"], end], radius
+    sketch = step.get("sketch") or {}
+    on = {k: (vec.unit(v) if k != "origin" else v) for k, v in sketch["on"].items()}
+    outline = _loop_points(sketch["outer"])
+    if outline is None:
+        return None
+    if kind == "revolve":
+        axis_point = _placed(on, step["axis"]["point"])
+        axis_dir = vec.unit(vec.add(vec.scale(on["xDir"], step["axis"]["dir"][0]),
+                                    vec.scale(vec.cross(on["normal"], on["xDir"]), step["axis"]["dir"][1])))
+        points, margin = [], 0.0
+        for q in outline:
+            p = _placed(on, q)
+            along = vec.dot(vec.sub(p, axis_point), axis_dir)
+            points.append(vec.add(axis_point, vec.scale(axis_dir, along)))
+            margin = max(margin, vec.length(vec.sub(p, points[-1])))
+        return points, margin
+    if kind == "extrude":
+        extent = step.get("extent")
+        distance = step.get("distance")
+        if extent not in ("oneSide", "symmetric") or distance is None:
+            return None
+        low, high = (0.0, distance) if extent == "oneSide" else (-distance / 2, distance / 2)
+        margin = distance * math.tan(math.radians(abs(step.get("taperDeg", 0.0))))
+        points = [vec.add(_placed(on, q), vec.scale(on["normal"], h)) for q in outline for h in (low, high)]
+        return points, margin
+    return None
+
+
+def _cuts(step, by_id):
+    """True when the step (or a step it repeats) removes material."""
+    if step["kind"] in ("pattern", "mirror"):
+        return any(_cuts(by_id[i], by_id) for i in step["of"])
+    return step["kind"] == "hole" or step.get("combine") in ("cut", "intersect")
+
+
+def _body_mirror_problem(data, plane, steps):
+    """A plain reason when mirroring every earlier step would not equal the body joined with its image, else None."""
+    box = data.get("target_box_before")
+    if not box:
+        return "The part could not be measured before this mirror."
+    origin, normal = plane["origin"], plane["normal"]
+    side = _side_of_plane(box, origin, normal)
+    if not side:
+        return "A mirror of the whole body is only copied when the body lies on one side of the plane."
+    by_id = {step["id"]: step for step in steps}
+    for step in steps:
+        if step.get("combine") == "intersect" or step["kind"] in ("pattern", "mirror") and _cuts(step, by_id):
+            return "A mirror of the whole body is not copied when a cut is repeated or the part is trimmed."
+        if not _cuts(step, by_id):
+            continue
+        reach = _cut_reach(step)
+        if reach is None:
+            return "A mirror of the whole body is not copied when a cut has no measurable end."
+        points, margin = reach
+        if min(side * vec.dot(vec.sub(p, origin), normal) for p in points) - margin < -SIDE_TOL_MM:
+            return "A mirror of the whole body is not copied when a cut reaches across the mirror plane."
+    return None
+
+
 def _mirror(item, ctx):
     data = item.get("data") or {}
     plane = _mirror_plane(data)
@@ -373,6 +555,9 @@ def _mirror(item, ctx):
             return Refusal("A mirrored body is only copied when it is joined to the part.")
         if any(step["kind"] not in SOLID_KINDS for step in ctx.steps):
             return Refusal("A mirror of the whole body after a round, chamfer or shell is not copied yet.")
+        problem = _body_mirror_problem(data, plane, ctx.steps)
+        if problem:
+            return Refusal(problem)
         solids, finishes = [step["id"] for step in ctx.steps], []
         if len(solids) > MAX_REFERENCES:
             return Refusal("This mirror repeats more than %d steps." % MAX_REFERENCES)
@@ -385,7 +570,7 @@ def _mirror(item, ctx):
         return Refusal("Mirrors of faces are not copied yet.")
     origin, normal = plane["origin"], plane["normal"]
     return _build(ctx, solids, finishes, {"kind": "mirror", "plane": plane},
-                  [lambda p: vec.reflect(p, origin, normal)], "mirror", drop_same=True)
+                  [lambda p: vec.reflect(p, origin, normal)], "mirror")
 
 
 _HANDLERS = {

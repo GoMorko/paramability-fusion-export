@@ -1,5 +1,5 @@
 {
-  "_comment": "Boss and a hole, then the whole body mirrored and joined.",
+  "_comment": "Plate from x 0 to 40 with a boss and a 4 mm pocket, all on one side of the plane x 0; the whole body is mirrored and joined.",
   "capture": 1,
   "fusion": "2.0.0",
   "design": "Test",
@@ -9,12 +9,12 @@
     "name": "Body1",
     "box": {
       "min": [
-        -20,
+        0,
         -10,
         0
       ],
       "max": [
-        20,
+        40,
         10,
         10
       ]
@@ -81,44 +81,44 @@
                   {
                     "kind": "line",
                     "start": [
-                      -20,
+                      0,
                       -10
                     ],
                     "end": [
-                      20,
+                      40,
                       -10
                     ]
                   },
                   {
                     "kind": "line",
                     "start": [
-                      20,
+                      40,
                       -10
                     ],
                     "end": [
-                      20,
+                      40,
                       10
                     ]
                   },
                   {
                     "kind": "line",
                     "start": [
-                      20,
+                      40,
                       10
                     ],
                     "end": [
-                      -20,
+                      0,
                       10
                     ]
                   },
                   {
                     "kind": "line",
                     "start": [
-                      -20,
+                      0,
                       10
                     ],
                     "end": [
-                      -20,
+                      0,
                       -10
                     ]
                   }
@@ -208,7 +208,7 @@
                   {
                     "kind": "circle",
                     "center": [
-                      -10,
+                      10,
                       0
                     ],
                     "radius": 3
@@ -238,12 +238,12 @@
         ],
         "target_box_before": {
           "min": [
-            -20,
+            0,
             -10,
             0
           ],
           "max": [
-            20,
+            40,
             10,
             10
           ]
@@ -310,7 +310,7 @@
                   {
                     "kind": "circle",
                     "center": [
-                      10,
+                      30,
                       0
                     ],
                     "radius": 2
@@ -340,12 +340,12 @@
         ],
         "target_box_before": {
           "min": [
-            -20,
+            0,
             -10,
             0
           ],
           "max": [
-            20,
+            40,
             10,
             10
           ]
@@ -382,7 +382,19 @@
             0
           ]
         },
-        "combine": true
+        "combine": true,
+        "target_box_before": {
+          "min": [
+            0,
+            -10,
+            0
+          ],
+          "max": [
+            40,
+            10,
+            15
+          ]
+        }
       }
     }
   ]

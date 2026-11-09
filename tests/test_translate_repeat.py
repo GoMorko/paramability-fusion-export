@@ -46,6 +46,13 @@ class RectangularPatternTest(unittest.TestCase):
                 self.assertEqual(steps_of(result.recipe, "pattern")[0]["skip"], [5])
                 assert_schema_ok(self, result.recipe)
 
+    def test_missing_original_refuses(self):
+        def edit(capture):
+            del pattern_data(capture)["elements"][0]
+        result = edited("rpattern_row", edit)
+        self.assertIsNone(result.recipe)
+        self.assertEqual(result.refusal["index"], 4)
+
     def test_copies_running_against_the_direction_negate_it(self):
         (pattern,) = steps_of(translate_fixture("rpattern_negative").recipe, "pattern")
         self.assertEqual(pattern["linear"], {"dir": [-1, 0, 0], "count": 3, "step": 10})
@@ -224,20 +231,108 @@ class MirrorTest(unittest.TestCase):
     def test_fillet_on_the_plane_refuses_instead_of_rounding_twice(self):
         self.assertIsNotNone(translate_fixture("mirror_fillet_on_plane").refusal)
 
-    def test_body_mirror_repeats_every_earlier_step(self):
+    def test_fillet_partly_on_the_plane_copies_only_the_off_plane_edge(self):
+        result = translate_fixture("mirror_fillet_partly_on_plane")
+        source, copy_step = steps_of(result.recipe, "round")
+        self.assertEqual(len(source["edges"]["near"]), 2)
+        self.assertEqual(copy_step["edges"]["near"], [[20, -10, 5]])
+
+    def test_dropped_points_take_their_sizes_along(self):
+        def edit(capture):
+            sets = capture["items"][3]["data"]["sets"]
+            sets.append(copy.deepcopy(sets[0]))
+            sets[0]["radius"], sets[1]["radius"] = 2.0, 3.0
+            sets[0]["edges"][0]["points"] = [[0, -10, 5]]
+            sets[1]["edges"][0]["points"] = [[-20, -10, 5]]
+        _, copy_step = steps_of(edited("mirror_fillet_partly_on_plane", edit).recipe, "round")
+        self.assertEqual((copy_step["edges"]["near"], copy_step["edgeSizes"]), ([[20, -10, 5]], [3]))
+
+    def test_body_mirror_of_a_part_on_one_side(self):
         result = translate_fixture("mirror_body")
         (mirror,) = steps_of(result.recipe, "mirror")
         self.assertEqual(mirror["of"], [s["id"] for s in result.recipe["features"][:-1]])
         assert_schema_ok(self, result.recipe)
 
-    def test_refusals(self):
-        loose_body = edited("mirror_body", lambda c: pattern_data(c).update(combine=False))
+    def test_body_mirror_bounds_a_drill_tip_cut(self):
+        result = translate_fixture("mirror_body_tip_hole")
+        self.assertEqual(steps_of(result.recipe, "mirror")[0]["of"], ["extrude_1", "revolve_3"])
+
+        def across(capture):
+            data = capture["items"][3]["data"]
+            data["positions"] = [[1, 0, 10]]
+            data["side_cylinders"][0]["origin"] = [1, 0, 10]
+        self.assertIsNone(edited("mirror_body_tip_hole", across).recipe)
+
+    def test_body_mirror_refusals(self):
+        no_box = edited("mirror_body", lambda c: pattern_data(c).pop("target_box_before"))
+        cases = [
+            ("straddles the plane", translate_fixture("mirror_body_straddling")),
+            ("a cut reaches across", translate_fixture("mirror_body_cut_across")),
+            ("part not measured", no_box),
+            ("round before it", translate_fixture("mirror_body_after_round")),
+            ("not joined", edited("mirror_body", lambda c: pattern_data(c).update(combine=False))),
+        ]
+        for label, result in cases:
+            with self.subTest(label):
+                self.assertIsNone(result.recipe)
+                self.assertEqual(result.refusal["type"], "MirrorFeature")
+
+    def test_other_refusals(self):
         no_plane = edited("mirror_features", lambda c: pattern_data(c).update(plane=None))
         faces = edited("mirror_features", lambda c: pattern_data(c).update(entity_type="faces"))
-        cases = [translate_fixture("mirror_body_after_round"), loose_body, no_plane, faces]
-        for result in cases:
+        for result in (no_plane, faces):
             self.assertIsNone(result.recipe)
             self.assertIsNotNone(result.refusal)
+
+
+class RepeatedStepsTest(unittest.TestCase):
+    def test_steps_that_grow_with_the_part_refuse(self):
+        def through(capture):
+            capture["items"][3]["data"]["side_one"] = {"kind": "throughAll", "positive": False, "taper_deg": 0.0}
+
+        def to_face(capture):
+            capture["items"][3]["data"]["side_one"] = {"kind": "toEntity", "plane": {"point": [0, 0, 6], "normal": [0, 0, 1]}, "offset": 0.0}
+
+        def separate_body(capture):
+            pattern_data(capture)["sources"] = [1]
+
+        for label, edit in (("through all", through), ("to a face", to_face), ("new body", separate_body)):
+            with self.subTest(label):
+                result = edited("rpattern_row", edit)
+                self.assertIsNone(result.recipe)
+                self.assertEqual(result.refusal["index"], 4)
+
+
+class CopyCapTest(unittest.TestCase):
+    """The app counts a repeat among the sources as all the bodies it makes, original included."""
+
+    def nested(self, outer_count):
+        def edit(capture):
+            first = pattern_data(capture)
+            first.update(quantity_one=8, quantity_two=8, direction_two=[0, 1, 0], distance_one=5.0, distance_two=5.0,
+                         elements=[{"id": n + 1, "suppressed": False,
+                                    "frame": {"origin": [5.0 * (n % 8), 5.0 * (n // 8), 0], "x": [1, 0, 0],
+                                              "y": [0, 1, 0], "z": [0, 0, 1]}} for n in range(64)])
+            outer = copy.deepcopy(capture["items"][-1])
+            outer.update({"index": 5, "name": "RectangularPattern2"})
+            outer["data"].update(sources=[4], quantity_one=outer_count, quantity_two=1, direction_two=None,
+                                 distance_one=50.0, elements=[
+                                     {"id": n + 1, "suppressed": False,
+                                      "frame": {"origin": [0, 0, 50.0 * n], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}}
+                                     for n in range(outer_count)])
+            outer["data"]["direction_one"] = [0, 0, 1]
+            capture["items"].append(outer)
+        return edited("rpattern_row", edit)
+
+    def test_nested_pattern_under_the_cap(self):
+        # 63 copies, then 3 copies of the 64 bodies: 63 + 192 = 255
+        self.assertIsNotNone(self.nested(4).recipe)
+
+    def test_nested_pattern_over_the_cap(self):
+        # 63 + 4 * 64 = 319
+        result = self.nested(5)
+        self.assertIsNone(result.recipe)
+        self.assertEqual(result.refusal["index"], 5)
 
 
 if __name__ == "__main__":
