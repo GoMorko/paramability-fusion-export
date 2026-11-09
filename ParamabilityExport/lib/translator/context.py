@@ -1,4 +1,5 @@
 """Walk state handed to every handler."""
+from . import meets_part
 from .capture import same_body
 from .copy_counts import raised_minimums
 from .follow import Slab, locate
@@ -38,6 +39,8 @@ class Context:
     moved_faces: the offsetFaces steps written so far (offset_faces.MovedFaces), for picks on the faces they moved.
     minimums: Fusion name of a size -> (smallest value, reason) the picks on pattern copies need (`require`). The
       driver raises those minimums and walks again.
+    narrowings: Fusion name of a size -> ((min, max), reason): shorter ranges a step needs (`narrow`). The driver
+      applies them and walks again.
     motion: the probe's motion file (`probe.motion.Motion`), `probe.motion.OPTIMISTIC`, or None. With a motion file the
       sketch values follow sizes (sketch_motion.py); otherwise they are written as numbers.
     plain_picks: round or bevel step id -> { near, reads, written }: its edges as measured points, the sizes its pick
@@ -64,6 +67,7 @@ class Context:
         self._notes = []
         self.current = None
         self.minimums = {}
+        self.narrowings = {}
 
     def is_target(self, body):
         return same_body(body, self.target)
@@ -89,6 +93,21 @@ class Context:
             if value > self.minimums.get(name, (float("-inf"),))[0]:
                 text = "%s starts at %s: %s, which needs at least %d copies." % (name, _number(value), why, least)
                 self.minimums[name] = (value, text[:MAX_REASON])
+
+    def narrow(self, found, why):
+        """Shorten the ranges of sizes: `found` maps a Fusion name to its new (min, max); `why` ends the reason."""
+        for name, (lo, hi) in found.items():
+            old = self.narrowings.get(name)
+            if old is not None:
+                lo, hi = max(lo, old[0][0]), min(hi, old[0][1])
+            size = self.table.sizes.get(self.table.size_name(name)) or {}
+            if lo > size.get("min", lo) and hi < size.get("max", hi):
+                text = "%s stays between %s and %s: %s." % (name, _number(lo), _number(hi), why)
+            elif lo > size.get("min", lo):
+                text = "%s starts at %s: %s." % (name, _number(lo), why)
+            else:
+                text = "%s ends at %s: %s." % (name, _number(hi), why)
+            self.narrowings[name] = ((lo, hi), text[:MAX_REASON])
 
     def _add_moved_faces(self, item, step):
         self._placers += 1
@@ -135,6 +154,10 @@ class Context:
             if step.pop("_adjusts", False):
                 self.not_repeatable.add(step_id)
             slab = step.pop("_slab", None)
+            if slab is not None and slab["profile"].get("borrowed"):
+                profile = slab["profile"]
+                meets_part.check(self, step_id, slab, step.get("combine", "add"), "%s (drawn on %s of %s)" % (
+                    label or "a step", profile.get("sketch") or "a sketch", profile["borrowed"]))
             if slab is not None:
                 self.slabs.append(Slab(step_id, slab["on"], slab["extent"], slab["length"], slab["profile"],
                                        combine=step.get("combine", "add"), taper=slab.get("taper"),

@@ -2,8 +2,9 @@
 
 A state profile is matched to the capture profile by the sketch entity tokens of its curves, mapped into the sketch
 frame of the capture, and run through the translator's own `profile_loops`, so a value here is the value the
-translator writes. A state that cannot be turned into the same outline is a problem with a cause (`motion.SHAPE`,
-`TURNS`, `UNREAD`), not a number.
+translator writes. Pieces of one sketch curve are paired by their place along the loop, so a loop that moved further
+than its pieces are apart still pairs each piece with its own. A state that cannot be turned into the same outline is
+a problem with a cause (`motion.SHAPE`, `TURNS`, `UNREAD`), not a number.
 """
 import math
 
@@ -64,16 +65,17 @@ def _mapped(curve, frame, ref):
     return out
 
 
-def _gap(curve, other):
-    """Sum of the distances between the key points of two curves of one kind."""
-    return sum(_dist(curve[k], other[k]) for k in _POINT_KEYS[curve["kind"]])
+def _gap(curve, other, shift=(0.0, 0.0)):
+    """Sum of the distances between the key points of two curves of one kind, `curve` moved back by `shift`."""
+    return sum(_dist(_sub(curve[k], shift), other[k]) for k in _POINT_KEYS[curve["kind"]])
 
 
-def _aligned(curve, like):
-    """`curve` turned to run the way `like` does (a line or arc swapped end to end, an ellipse axis flipped)."""
+def _aligned(curve, like, shift=(0.0, 0.0)):
+    """`curve` turned to run the way `like` does (a line or arc swapped end to end, an ellipse axis flipped), compared
+    once moved back by `shift`."""
     if curve["kind"] in ("line", "arc"):
         swapped = dict(curve, start=curve["end"], end=curve["start"])
-        return swapped if _gap(swapped, like) < _gap(curve, like) else curve
+        return swapped if _gap(swapped, like, shift) < _gap(curve, like, shift) else curve
     if curve["kind"] == "ellipse" and _dot(curve["major_dir"], like["major_dir"]) < 0:
         return dict(curve, major_dir=[-v for v in curve["major_dir"]])
     return curve
@@ -84,25 +86,81 @@ def _signature(loop):
     return None if not tokens or None in tokens else (bool(loop.get("outer")), tuple(sorted(tokens)))
 
 
-def _arrange_loop(state_loop, loop, frame, ref):
-    """The state loop's curves in the order and direction of the capture loop, mapped to `ref`; and their gap."""
-    left = [_mapped(c, frame, ref) for c in state_loop["curves"]]
-    out, total = [], 0.0
-    for curve in loop["curves"]:
-        best = None
-        for other in left:
-            if other.get("entity") != curve.get("entity") or other["kind"] != curve["kind"]:
-                continue
-            aligned = _aligned(other, curve)
-            gap = _gap(aligned, curve)
-            if best is None or gap < best[0]:
-                best = (gap, other, aligned)
-        if best is None:
+def _same_curve(a, b):
+    return a.get("entity") == b.get("entity") and a["kind"] == b["kind"]
+
+
+def _centre(curve):
+    points = [curve[k] for k in _POINT_KEYS[curve["kind"]]]
+    return [sum(p[i] for p in points) / len(points) for i in range(2)]
+
+
+def _shift(pairs):
+    """The mean move from each capture curve to its state curve: how far the loop slid as a whole."""
+    if not pairs:
+        return (0.0, 0.0)
+    moves = [_sub(_centre(state), _centre(curve)) for state, curve in pairs]
+    return tuple(sum(m[i] for m in moves) / len(moves) for i in range(2))
+
+
+def _lined_up(order, curves):
+    """(state curves turned like the capture's, their gap, the gap left once the loop's slide is taken out)."""
+    shift = _shift(list(zip(order, curves)))
+    aligned = [_aligned(o, c, shift) for o, c in zip(order, curves)]
+    return (aligned, sum(_gap(a, c) for a, c in zip(aligned, curves)),
+            sum(_gap(a, c, shift) for a, c in zip(aligned, curves)))
+
+
+def _walks(mapped, curves):
+    """Orders of `mapped` along the loop (each start, both ways) whose entities and kinds match `curves` one by one."""
+    n = len(curves)
+    if n != len(mapped):
+        return
+    for step in (1, -1):
+        for start in range(n):
+            order = [mapped[(start + step * i) % n] for i in range(n)]
+            if all(_same_curve(o, c) for o, c in zip(order, curves)):
+                yield order
+
+
+def _nearest(mapped, curves):
+    """Each capture curve paired with a state curve of its entity and kind, the nearest once the slide shown by the
+    curves that appear once is taken out; or None."""
+    def count(curve, among):
+        return sum(1 for other in among if _same_curve(other, curve))
+
+    once = [(m, c) for c in curves if count(c, curves) == 1 and count(c, mapped) == 1
+            for m in mapped if _same_curve(m, c)]
+    shift = _shift(once)
+    left, order = list(mapped), []
+    for curve in curves:
+        found = [o for o in left if _same_curve(o, curve)]
+        if not found:
             return None
-        left.remove(best[1])
-        out.append(best[2])
-        total += best[0]
-    return out, total
+        best = min(found, key=lambda o: _gap(_aligned(o, curve, shift), curve, shift))
+        left.remove(best)
+        order.append(best)
+    return order
+
+
+def _arrange_loop(state_loop, loop, frame, ref):
+    """The state loop's curves in the order and direction of the capture loop, mapped to `ref`; and their gap.
+
+    Pieces of one sketch curve are told apart by their place along the loop when the loop reads in order, else by
+    nearness once the loop's slide is taken out, so a loop that moved far still pairs each piece with its own."""
+    mapped = [_mapped(c, frame, ref) for c in state_loop["curves"]]
+    curves = loop["curves"]
+    entities = [c.get("entity") for c in curves]
+    repeated = len(set(entities)) < len(entities)
+    walked = [_lined_up(order, curves) for order in _walks(mapped, curves)] if repeated else []
+    if walked:
+        best = min(walked, key=lambda w: w[2])
+        return best[0], best[1]
+    order = _nearest(mapped, curves)
+    if order is None:
+        return None
+    aligned, gap, _ = _lined_up(order, curves)
+    return aligned, gap
 
 
 def _arrange(state_profile, profile, frame, ref):

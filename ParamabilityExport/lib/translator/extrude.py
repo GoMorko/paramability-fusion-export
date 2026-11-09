@@ -7,7 +7,7 @@ and its sketch plane follow sizes (sketch_motion.py).
 """
 import math
 
-from . import follow, loops, outlines, placement, sketch_motion, values, vec
+from . import follow, kept_ranges, loops, outlines, placement, sketch_motion, values, vec
 from .footprint import Footprint
 from .result import Refusal
 from .values import Quantity
@@ -20,6 +20,7 @@ TYPES = ("ExtrudeFeature",)
 FUSION_TAPER_SIGN = -1
 
 MAX_TAPER_DEG = 45.0
+TAPER_MARGIN_DEG = 0.01
 PARALLEL_TOL = 1e-9
 SIGN_TOL = 1e-9
 LENGTH_TOL = 1e-3
@@ -77,7 +78,22 @@ def _taper_quantity(ctx, item, path, taper):
     if not taper:
         values.pin(ctx, item, path, "a taper of zero cannot follow it")
         return None
-    return values.quantity(ctx, item, path, taper, dim="angle", sign=FUSION_TAPER_SIGN)
+    q = values.quantity(ctx, item, path, taper, dim="angle", sign=FUSION_TAPER_SIGN)
+    if q.sized:
+        _keep_taper_under_limit(ctx, item, q)
+    return q
+
+
+def _keep_taper_under_limit(ctx, item, q):
+    """A taper that follows sizes stays under MAX_TAPER_DEG either way: the ranges of its sizes are shortened."""
+    limit = Quantity(MAX_TAPER_DEG)
+    rules = [(limit.plus(q.scaled(-1.0)), 1), (limit.plus(q), 1)]
+    found = kept_ranges.shortened(ctx.table, rules, TAPER_MARGIN_DEG)
+    lean = "%s would lean its walls %d degrees or more" % (item.get("name", "a step"), MAX_TAPER_DEG)
+    if found is None:
+        ctx.fix(q.reads, "at other values " + lean)
+    elif found:
+        ctx.narrow(found, "past that, " + lean)
 
 
 def _distance_quantity(ctx, item, path, raw):

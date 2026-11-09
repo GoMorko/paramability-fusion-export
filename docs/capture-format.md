@@ -234,6 +234,14 @@ holds no value for the profile, the outline is written as numbers and every size
 fixed number; the first translation of an export (no sizes fixed for sketches) skips that. The step gets a note that
 names the sketch and its component. Without the frames and the place the step is refused as before.
 
+Nothing ties such a step to the walls of the part, so it must keep meeting the part as measured
+(`lib/translator/meets_part.py`): along the normal of each of its faces, the nearest flat parallel faces of the part
+within 2 mm keep their side of the face at every size setting of the range (each size at its ends, all low, all
+high), and a face that lies on a wall stays on it. Where a gap would close or open, the ranges of the sizes it reads
+are shortened toward their values (`lib/translator/kept_ranges.py`, each size alone first, then all together), or
+fixed when a range would shrink to its value or the person typed it. The result lists them in `narrowed` (`name`,
+`min`, `max`, `reason`); `report.json` adds them to `sizes.narrowed`.
+
 CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriented):
 
 | Fusion geometry | Dict |
@@ -659,6 +667,7 @@ this:
   drops below that, the smallest value of the sizes it reads is raised (a whole number for a count, else two
   decimals) and named in a note and in `report.json` (`sizes.raised`); the recipe size `min` and the result dialog
   show it. A size with a typed range is fixed instead. Copies of a circular pattern keep their count and angle.
+- A taper that follows sizes stays under 45 degrees either way: the ranges of its sizes are shortened.
 - A through cut clears the part at the largest sizes tried (`box_max` of the motion file).
 - A construction plane or axis that a step uses itself (start from, reach to, turn about, mirror across, with `token`)
   fixes the sizes of the model parameters it made (`created_by.token`); without a token, of every construction plane
@@ -706,7 +715,9 @@ design gives a fixture: its `capture` is copied as is.
 
 `sizes.build_failures` lists the size checks Fusion could not build (value, error, why, and `tries`: the smaller steps
 tried toward the current value). A size that built at one of them is kept free with a shorter range and listed in
-`sizes.narrowed` (`side`, the failed value `from`, the new end `to`, the `note` shown to the person).
+`sizes.narrowed` (`side`, the failed value `from`, the new end `to`, the `note` shown to the person). A range the
+translator shortened (a taper, or a step on another component's sketch that must keep meeting the part) is listed
+there too, with the old end as `from`.
 
 ## 7. API names and what is not verified
 

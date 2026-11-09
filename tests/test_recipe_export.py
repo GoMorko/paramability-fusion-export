@@ -40,6 +40,20 @@ class PlanTest(unittest.TestCase):
         self.assertEqual([(r["name"], r["min"]) for r in report["sizes"]["raised"]], [("holes_count", 2)])
         self.assertEqual(json.loads(files["recipe.json"])["sizes"]["holes_count"]["min"], 2)
 
+    def test_a_range_a_step_shortened_is_noted_and_shown_shortened(self):
+        from tests.test_translate_component import tray_with_lid_slot
+        from tests.test_translate_sized import TICKED, table_of
+        from lib.export_plan.result_rows import result_view
+        capture = tray_with_lid_slot()
+        table = table_of(capture, TICKED)
+        manifest, _, report = plan_single_export(capture, self.step, "Tray", "w", "z", size_table=table)
+        wall = [n for n in report["sizes"]["narrowed"] if n["size"] == "wall_mm"]
+        self.assertEqual([(n["side"], n["to"]) for n in wall], [("min", 1.01)])
+        self.assertIn(wall[0]["note"], manifest["notes"])
+        view = result_view("Tray.paramability", manifest, report, table, TICKED)
+        rows = {r["name"]: r["range"] for r in view["rows"]}
+        self.assertIn("1.01", rows["wall_mm"])
+
     def test_body_in_a_component_is_a_recipe_at_its_place(self):
         manifest, files, report = self.plan(load_capture("component_moved"))
         self.assertEqual(manifest["kind"], "recipe")

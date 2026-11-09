@@ -128,7 +128,8 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 - These stay a fixed shape with a note: a part from a linked design, a place in the assembly that cannot be read, a
   step of another component that changes the body, a body made in another component and moved in, and a step that
   reaches into another component's faces, edges or bodies. A step that uses a sketch of another component is copied
-  where Fusion shows it; the sizes that move that sketch stay fixed.
+  where Fusion shows it and follows the sizes the probe saw move it; where it would stop meeting the part (a slot that
+  no longer reaches its wall, a rail that comes off), the size range is shortened or the size stays fixed.
 - A recipe covers the picked body only. Parameters made by steps or sketches of other bodies are left out where the
   add-in can match them by name; construction planes, axes and joints are read for the component and the ones above
   it. A size that turns a sketch plane, moves a point along a curve, or changes the shape of an outline stays fixed.

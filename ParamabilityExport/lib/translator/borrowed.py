@@ -7,7 +7,8 @@ other.
 The sizes that move the sketch come from the probe's motion file when it holds values for the profile: the outline
 then follows them like the target's own sketches (`sketch_motion`, same keys). Without such values, the outline is
 written as numbers and every size that moves the sketch (its dimensions, `sketch_params`) becomes a fixed number.
-Edges, faces and bodies of another component stay refused.
+Edges, faces and bodies of another component stay refused. Such a step must also keep meeting the part over the size
+range (`meets_part.py`, run when the step is added).
 """
 from ..params.expressions import referenced_names
 

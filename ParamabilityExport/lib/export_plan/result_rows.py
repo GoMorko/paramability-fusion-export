@@ -9,16 +9,20 @@ MATCHES, NOT_CHECKED, KEPT_FIXED, NOT_USED = "matches Fusion", "not checked", "k
 
 
 def _size_rows(table, report):
-    """One row per size the recipe holds: its Fusion name, range and what the check found. A smallest value the
-    translator raised (so a picked pattern copy stays) is shown raised."""
+    """One row per size the recipe holds: its Fusion name, range and what the check found. A range the translator
+    shortened or a smallest value it raised (so a picked pattern copy stays) is shown that way."""
     sizes = report["sizes"]
     unchecked = set(sizes.get("unchecked") or [])
     raised = {r["name"]: r["min"] for r in sizes.get("raised") or []}
+    narrowed = {n["size"]: (n["min"], n["max"]) for n in sizes.get("narrowed") or [] if "min" in n and "max" in n}
     by_size = {e.size_name: e for e in table.entries if e.size_name}
     rows = []
     for size_name in sizes.get("free") or []:
         entry = by_size.get(size_name)
         size = dict(table.sizes.get(size_name) or {})
+        if size_name in narrowed and "min" in size:
+            lo, hi = narrowed[size_name]
+            size["min"], size["max"] = max(size["min"], lo), min(size["max"], hi)
         if size_name in raised and "min" in size:
             size["min"] = max(size["min"], raised[size_name])
         rows.append({
@@ -67,8 +71,8 @@ def result_view(file_name, manifest, report, table, ticked):
     """Plain data for the result dialog, or None when the file holds no recipe (the message box tells that story).
 
     Keys: saved (first sentence), size_title, rows ({name, range, check}), fixed (lines), narrowed (lines: sizes whose
-    range was shortened because Fusion could not build the part), variables, message (the whole story as plain text,
-    for a message box).
+    range was shortened because Fusion could not build the part or a step would no longer meet it), variables,
+    message (the whole story as plain text, for a message box).
     """
     if manifest.get("kind") != "recipe" or "sizes" not in report:
         return None

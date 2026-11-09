@@ -84,12 +84,21 @@ class OwnerCaptureTest(unittest.TestCase):
         params = capture["parameters"]
         table = size_table.build(params["user"], PROBE_TICKED, params["model"], capture.get("design_units", "mm"))
         motion = probe_motion.build(probe_view(capture), table, report["probe"]["states"])
+        # The lid rails slide with the box wall; pieces of one sketch line keep their own place in the loop.
+        rails = [v.rest for k, v in motion.values.items()
+                 if k.split("/")[0] in ("65", "66", "67", "68") and "/l" in k and getattr(v, "rest", None)]
+        self.assertTrue(rails)
+        self.assertEqual({(tuple(r.terms), abs(r.terms["FilterBox_depth_mm"])) for r in rails},
+                         {(("FilterBox_depth_mm",), 0.5)})
         result = translate(capture, size_table=table, motion=motion)
         self.assertEqual([f["name"] for f in result.fixed], ["FilterBox__PipeBottom_offsetFromCenter_mm"])
         free = sorted(n for n, size in result.recipe["sizes"].items() if "value" in size)
         self.assertEqual(free, sorted(n.replace("$", "_") for n in PROBE_TICKED[:5] + PROBE_TICKED[6:]))
         self.assertEqual(sorted((r["name"], r["min"]) for r in result.raised),
                          sorted([(PROBE_TICKED[0], 1.01), (PROBE_TICKED[2], 1.01)]))
+        # Past these, the lid slot of Extrude5 no longer ends inside the closed end wall, and the pipe taper reaches 45.
+        self.assertEqual(sorted((n["name"], n["max"]) for n in result.narrowed),
+                         sorted([(PROBE_TICKED[0], 2.05), (PROBE_TICKED[3], 20.52), (PROBE_TICKED[6], 44.98)]))
         self.assertEqual(check_recipe(result.recipe), [])
 
 

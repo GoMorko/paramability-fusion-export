@@ -181,25 +181,39 @@ def translate(capture, handlers=None, size_table=None, motion=None):
         return _walk(capture, table, None)[0]
     fixed = sketch_fixes(size_table) if motion is not None else fallback_fixes(size_table)
     current = size_table.with_fixed(fixed) if fixed else size_table
-    raised = {}
+    raised, narrowed = {}, {}
     for _ in range(MAX_PASSES):
         result, ctx = _walk(capture, table, current, motion)
         more = {name: why for name, why in ctx.depends.items() if name not in fixed}
         lifted = {name: low for name, low in ctx.minimums.items()
                   if name not in fixed and name not in more and low[0] > raised.get(name, (float("-inf"),))[0]}
-        if result.recipe is None or not (more or lifted):
+        shortened = {name: bounds for name, bounds in ctx.narrowings.items()
+                     if name not in fixed and name not in more and _shorter(bounds[0], narrowed.get(name))}
+        if result.recipe is None or not (more or lifted or shortened):
             break
         fixed.update(more)
         raised.update(lifted)
+        narrowed.update(shortened)
         current = current.with_fixed(more) if more else current
         current = current.with_minimums({name: low[0] for name, low in lifted.items()}) if lifted else current
+        current = current.with_narrowed({name: b[0] for name, b in shortened.items()}) if shortened else current
     result.fixed = [{"name": name, "reason": why} for name, why in fixed.items()]
     result.raised = [{"name": name, "min": low, "reason": why} for name, (low, why) in raised.items()
                      if name not in fixed]
-    result.notes.extend(r["reason"] for r in result.raised)
+    result.narrowed = [{"name": name, "min": b[0], "max": b[1], "reason": why}
+                       for name, (b, why) in narrowed.items() if name not in fixed]
+    result.notes.extend(r["reason"] for r in result.raised + result.narrowed)
     if result.recipe is not None:
         _add_sizes(result, current)
     return result
+
+
+def _shorter(bounds, before):
+    """True when the range `bounds` is shorter than the one recorded before (or there was none)."""
+    if before is None:
+        return True
+    (lo, hi), (old_lo, old_hi) = bounds, before[0]
+    return lo > old_lo + 1e-12 or hi < old_hi - 1e-12
 
 
 def _add_sizes(result, table):

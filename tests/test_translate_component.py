@@ -147,6 +147,18 @@ def lid_rim(placement=None, sketch_params=()):
                      "side_two": None, "symmetric": None, "thin": False, "participants": [], "end_offset": 4.0}}
 
 
+def tray_with_lid_slot():
+    """The tray with a slot cut from the Lid's sketch Rim, 9 mm toward its side wall at x = 80: the slot ends 1 mm
+    into that 2 mm wall."""
+    capture = load_capture("component_moved")
+    slot = lid_rim()
+    slot["data"]["profiles"][0]["frame"] = {"origin": [70, 20, 10], "x": [0, 1, 0], "y": [0, 0, 1], "z": [1, 0, 0]}
+    slot["data"].update(operation="cut", side_one={"kind": "distance", "distance": 9.0, "taper_deg": 0.0},
+                        end_offset=9.0)
+    capture["items"].append(slot)
+    return capture
+
+
 class BorrowedSketchTest(unittest.TestCase):
     def test_a_sketch_of_another_component_is_brought_in_through_the_assembly(self):
         capture = load_capture("component_moved")
@@ -163,8 +175,19 @@ class BorrowedSketchTest(unittest.TestCase):
         capture = load_capture("component_moved")
         capture["items"].append(lid_rim(sketch_params=[{"name": "d90", "expression": "wall_mm * 5", "reads": []}]))
         result, _ = run(capture)
-        self.assertEqual([f["name"] for f in result.fixed], ["wall_mm"])
-        self.assertIn("sketch Rim of Lid", result.fixed[0]["reason"])
+        fixed = {f["name"]: f["reason"] for f in result.fixed}
+        self.assertIn("sketch Rim of Lid", fixed["wall_mm"])
+        # The rim is copied as numbers and sits on the top of the tray, which moves with its height.
+        self.assertIn("Extrude9 (drawn on Rim of Lid) would no longer meet the part",
+                      fixed["FilterBox_$_height__contains_CeramicMedium"])
+
+    def test_a_borrowed_cut_that_ends_inside_a_wall_keeps_the_wall_thick_enough(self):
+        result, table = run(tray_with_lid_slot())
+        narrowed = {n["name"]: n for n in result.narrowed}
+        self.assertEqual((narrowed["wall_mm"]["min"], narrowed["wall_mm"]["max"]),
+                         (1.01, table.sizes["wall_mm"]["max"]))
+        self.assertIn("starts at 1.01: past that, Extrude9 (drawn on Rim of Lid)", narrowed["wall_mm"]["reason"])
+        self.assertEqual(result.recipe["sizes"]["wall_mm"]["min"], 1.01)
 
     def borrowed_run(self, motion):
         capture = load_capture("component_moved")

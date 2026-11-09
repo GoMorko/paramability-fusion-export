@@ -115,6 +115,24 @@ def _uses(capture):
     return uses if isinstance(uses, int) and not isinstance(uses, bool) else 1
 
 
+def _step_narrowed(size_table, result, free):
+    """Records like the export's own narrowed ones for the ranges the translator shortened, so a step keeps meeting
+    the part (`TranslateResult.narrowed`): one per end that moved, the reason on the first."""
+    out = []
+    for r in getattr(result, "narrowed", None) or []:
+        size = size_table.size_name(r["name"]) if size_table is not None else None
+        before = size_table.sizes.get(size) if size in free else None
+        if not before:
+            continue
+        note = r["reason"]
+        for side in ("min", "max"):
+            if abs(r[side] - before[side]) > 1e-9:
+                out.append({"param": r["name"], "size": size, "side": side, "from": before[side], "to": r[side],
+                            "min": r["min"], "max": r["max"], "items": [], "note": note})
+                note = ""
+    return out
+
+
 def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
                        size_table=None, checks=None, fixed=None, unchecked=None, listing=None, motion=None,
                        probe=None, build_failures=None, narrowed=None, marker=None):
@@ -176,7 +194,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         all_fixed = _merge_fixed(size_table, fixed, size_table.fixed, getattr(result, "fixed", None))
         dropped = _dropped(size_table, result.recipe, all_fixed)
 
-    kept_narrowed = [n for n in narrowed or [] if n["size"] in free]
+    kept_narrowed = [n for n in narrowed or [] if n["size"] in free] + _step_narrowed(size_table, result, free)
     report = {
         "writer": writer,
         "outcome": "recipe" if recipe_data is not None else "stepOnly",
@@ -216,7 +234,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         notes = [first]
         if free:
             notes.append(sizes_note(len(free)))
-        notes.extend(narrowed_notes([n["note"] for n in kept_narrowed]))
+        notes.extend(narrowed_notes([n["note"] for n in kept_narrowed if n["note"]]))
         if all_fixed:
             notes.append(fixed_note([f["name"] for f in all_fixed]))
         if dropped:

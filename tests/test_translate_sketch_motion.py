@@ -182,7 +182,8 @@ class RevolveAxisTest(unittest.TestCase):
 
 class OwnerFilterBoxTest(unittest.TestCase):
     """The owner's FilterBox package (outside the repo, 0.4.0 capture) with a motion file written by hand
-    (filter_box_motion.py): supports cross the walls, and pipe circles cross each other."""
+    (filter_box_motion.py): supports cross the walls, and pipe circles cross each other. The motion has no values for
+    the lid steps drawn on BoxLid's sketches, so they are copied as numbers."""
 
     PACKAGE = os.path.expanduser("~/Documents/free-projects/3mf-compose/tmp/reports/"
                                  "Pat -22 Pipe, Filter (Box, Cylinder).paramability")
@@ -190,7 +191,7 @@ class OwnerFilterBoxTest(unittest.TestCase):
               "FilterBox_$_depth__contains_CeramicMedium", "_CeramicMedium__Cube_width_unitless",
               "_Filter__Wall_thickness_mm", "FilterBox__PipeTop_offsetFromCenter_mm"]
 
-    def test_every_box_size_stays_free_and_the_counts_start_where_the_picked_copies_exist(self):
+    def test_box_sizes_stay_free_unless_the_lid_steps_copied_as_numbers_would_come_off_the_box(self):
         if not os.path.exists(self.PACKAGE):
             self.skipTest("the owner's package is not on this machine")
         from tests.filter_box_motion import filter_box_motion
@@ -198,13 +199,12 @@ class OwnerFilterBoxTest(unittest.TestCase):
             capture = json.loads(package.read("report.json"))["capture"]
         result = run(copy.deepcopy(capture), self.TICKED, filter_box_motion(capture))
         self.assertIsNone(result.refusal)
-        self.assertEqual(result.fixed, [])
+        # The lid rails lie on the box walls, which move with the depth and the cube size.
+        self.assertEqual(sorted(f["name"] for f in result.fixed), sorted([self.TICKED[2], self.TICKED[3]]))
+        self.assertTrue(all("LidAndRail of BoxLid" in f["reason"] for f in result.fixed))
         sizes = result.recipe["sizes"]
-        self.assertEqual(sorted(n for n, size in sizes.items() if "value" in size),
-                         sorted(n.replace("$", "_") for n in self.TICKED))
-        self.assertEqual({r["name"]: r["min"] for r in result.raised},
-                         {self.TICKED[0]: 1.01, self.TICKED[2]: 1.01})
-        self.assertEqual(sizes["FilterBox___width__contains_CeramicMedium"]["min"], 1.01)
+        width = sizes["FilterBox___width__contains_CeramicMedium"]
+        self.assertEqual((width["min"], width["max"]), (1.01, 2.34))
         support = steps_of(result.recipe, "extrude")[1]["sketch"]["outer"]
         self.assertEqual((support["kind"], expr(support["center"][0])),
                          ("circle", "-0.5 * FilterBox_width_mm + 0.5 * _Filter__Wall_thickness_mm"))
