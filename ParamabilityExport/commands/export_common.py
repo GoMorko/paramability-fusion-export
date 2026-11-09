@@ -1,12 +1,19 @@
-"""Pieces both exports share: the writer text, the restore warning and the plain error boxes."""
+"""Pieces both exports share: the writer text, the restore warning and the guard that turns every way an export can
+stop into a plain message."""
 import os
 
 import adsk.core
 
 from .. import config
+from ..lib.export_plan.apply import RowBuildError
+from ..lib.export_plan.errors import StepExportError
+from ..lib.export_plan.marker import not_put_back_message, put_back
 from ..lib.export_plan.naming import addin_version, writer_text
+from ..lib.export_plan.runner import ExportCancelled
 from ..lib.fusion_reader import design_info
-from ..lib.fusion_ui.log import log, message_box
+from ..lib.fusion_reader.capture import MarkerError
+from ..lib.fusion_ui.log import error_box, log, message_box
+from ..lib.package.caps import PackageCapError
 
 _ADDIN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -25,15 +32,34 @@ def _manifest_path():
     return os.path.join(_ADDIN_DIR, found[0]) if found else named
 
 
-def warn_unrestored(job):
-    """Tell the person when a parameter could not be put back. Parameters are the one thing never left changed."""
-    if job is None or not job.restore_failures:
+def warn_unrestored(names):
+    """Tell the person when parameters could not be put back. Parameters are the one thing never left changed."""
+    if not names:
         return
-    names = ", ".join(job.restore_failures)
+    names = ", ".join(names)
     log(f"could not restore: {names}")
     message_box(
         "These parameters could not be set back, please check them: " + names
-        + ".\nUse Undo in Fusion if they look wrong.", error=True)
+        + ".\nUse Undo in Fusion if they look wrong, or reopen the design from its last save.", error=True)
+
+
+def run_guarded(design, marker, work, unrestored=lambda: ()):
+    """Run `work()` and return its value, or None when the export stopped. Each way it stops gets a plain message,
+    and the timeline marker is moved back to `marker` at the end. `unrestored()` names the parameters that could not be
+    put back, for an export that does not check this itself."""
+    try:
+        return work()
+    except ExportCancelled:
+        message_box("Export cancelled. Your parameters are back to their values.")
+    except (RowBuildError, StepExportError, PackageCapError, MarkerError) as exc:
+        message_box(f"{exc}\n\nNothing was saved. Your parameters are back to their values.", error=True)
+    except Exception:
+        error_box("The export stopped. Nothing was saved.")
+    finally:
+        warn_unrestored(unrestored())
+        if marker is not None and not put_back(design.timeline, marker):
+            message_box(not_put_back_message(marker), error=True)
+    return None
 
 
 def app():

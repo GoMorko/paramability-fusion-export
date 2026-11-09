@@ -13,12 +13,14 @@ def length(name):
     return dict(name=name, expression="2 mm", value=0.2, unit="mm", comment="", is_favorite=True, kind="length")
 
 
-def view(manifest=None, plain=False, **sizes):
+def view(manifest=None, plain=False, health=None, **sizes):
     params = [length(n) for n in ("wall", "gap", "pipe", "spare")]
     table = size_table.build(params, ["wall", "gap", "pipe"])
     report = {"sizes": {"free": ["wall"], "fixed": [], "checks": [], "unchecked": [], "dropped": [], **sizes}}
     if plain:
         report["check_sizes"] = False
+    if health:
+        report["health"] = health
     manifest = manifest or {"kind": "recipe", "notes": ["12 steps copied."], "parameters": [{}, {}, {}, {}]}
     return result_view("box.paramability", manifest, report, table, ["wall", "gap", "pipe"])
 
@@ -55,6 +57,24 @@ class ResultViewTest(unittest.TestCase):
         shown = view(raised=[{"name": "wall", "min": 1.5, "reason": "wall starts at 1.5: ..."}])
         self.assertEqual(shown["rows"][0]["range"], "1.5 to 4 mm")
 
+    def test_a_size_that_changes_a_sketch_nobody_followed_is_not_called_unused(self):
+        shown = view(dropped=["gap", "pipe"], not_followed=["gap"])
+        self.assertEqual([(r["name"], r["check"]) for r in shown["rows"][1:]],
+                         [("gap", "not followed"), ("pipe", "not used")])
+
+    def test_a_design_that_did_not_come_back_is_said_in_the_warnings_and_the_message(self):
+        health = {"unrestored": ["wall"], "sketch_gap_mm": 0.5, "sketch_drift": True, "probe": "measured"}
+        shown = view(health=health)
+        self.assertEqual(len(shown["warnings"]), 2)
+        self.assertIn("Undo", shown["warnings"][0])
+        self.assertIn(shown["warnings"][1], shown["message"])
+
+    def test_sketches_that_could_not_be_measured_get_a_row_and_a_warning(self):
+        shown = view(health={"unrestored": [], "sketch_gap_mm": None, "probe": "failed"})
+        self.assertEqual(shown["rows"][-1]["check"], "not measured")
+        self.assertEqual(len(shown["warnings"]), 1)
+        self.assertEqual(view()["warnings"], [])
+
     def test_a_long_fixed_list_is_cut_and_points_to_the_report(self):
         fixed = [{"name": "p%d" % i, "reason": "r"} for i in range(8)]
         self.assertEqual(view(fixed=fixed)["fixed"][-1], "and 3 more (see report.json).")
@@ -79,6 +99,14 @@ class ResultDialogTest(unittest.TestCase):
         result_dialog.build(command, loose)
         self.assertIn("wall: doubt", command.commandInputs.itemById("pm_result_loose_text").formattedText)
         self.assertIn("4 parameters", inputs.itemById("pm_result_variables").formattedText)
+
+    def test_warnings_show_under_the_saved_text_only_when_there_are_some(self):
+        command = fakes.FakeCommand()
+        result_dialog.build(command, dict(view(), warnings=["The sketch could not be tried."]))
+        self.assertIn("could not be tried", command.commandInputs.itemById("pm_result_warnings_text").formattedText)
+        quiet = fakes.FakeCommand()
+        result_dialog.build(quiet, dict(view(), warnings=[]))
+        self.assertIsNone(quiet.commandInputs.itemById("pm_result_warnings"))
 
 
 if __name__ == "__main__":

@@ -3,9 +3,13 @@
 The view is built from the manifest and report that plan_single_export returned, and the size table of the export.
 """
 from .dialog_rows import range_text
+from .health import FAILED, health_lines, with_lines
 from .messages import listed_lines, recipe_saved_message
 
 MATCHES, NOT_CHECKED, KEPT_FIXED, NOT_USED = "matches Fusion", "not checked", "kept fixed", "not used"
+NOT_FOLLOWED = "not followed"
+NOT_MEASURED = "not measured"
+SKETCHES = "Sketches"
 DOUBTFUL = "may be unexpected"
 FREE = "size"
 CHECK_HEADER, STATUS_HEADER = "Check", "In Paramability"
@@ -41,17 +45,26 @@ def _size_rows(table, report):
 
 
 def _left_out_rows(table, report, ticked):
-    """Rows for ticked parameters that did not become sizes: fixed after a check, or no copied step reads them."""
+    """Rows for ticked parameters that did not become sizes: fixed after a check, no copied step reads them, or they
+    change a sketch that could not be followed."""
     sizes = report["sizes"]
     fixed_names = {f["name"] for f in sizes.get("fixed") or []}
     dropped = set(sizes.get("dropped") or [])
+    not_followed = set(sizes.get("not_followed") or [])
     rows = []
     for name in ticked:
         if name in dropped:
-            rows.append({"name": name, "range": "", "check": NOT_USED})
+            rows.append({"name": name, "range": "", "check": NOT_FOLLOWED if name in not_followed else NOT_USED})
         elif table.recipe_name(name) in fixed_names:
             rows.append({"name": name, "range": "", "check": KEPT_FIXED})
     return rows
+
+
+def _probe_rows(report):
+    """A row that says the sketches could not be measured, so no one reads the sizes as measured."""
+    if (report.get("health") or {}).get("probe") == FAILED:
+        return [{"name": SKETCHES, "range": "", "check": NOT_MEASURED}]
+    return []
 
 
 def _fixed_lines(report):
@@ -81,7 +94,8 @@ def result_view(file_name, manifest, report, table, ticked):
     check}), fixed (lines), loose (lines: sizes that
     stay free but may not follow every step, with why), narrowed (lines: sizes whose
     range was shortened because Fusion could not build the part or a step would no longer meet it), variables,
-    message (the whole story as plain text, for a message box).
+    warnings (what is wrong with the design or the sketch measuring, and what to do: empty when all is well),
+    message (the whole story as plain text, for a message box, with the warnings below it).
     """
     if manifest.get("kind") != "recipe" or "sizes" not in report:
         return None
@@ -92,10 +106,11 @@ def result_view(file_name, manifest, report, table, ticked):
         "saved": ("Saved %s. %s" % (file_name, notes[0] if notes else "")).strip(),
         "size_title": "%d %s ready for the form" % (count, "size" if count == 1 else "sizes"),
         "check_header": STATUS_HEADER if report.get("check_sizes") is False else CHECK_HEADER,
-        "rows": rows + _left_out_rows(table, report, ticked),
+        "rows": rows + _left_out_rows(table, report, ticked) + _probe_rows(report),
         "fixed": _fixed_lines(report),
         "loose": _loose_lines(report),
         "narrowed": _narrowed_lines(report),
         "variables": variables_line(manifest),
-        "message": recipe_saved_message(manifest, file_name),
+        "warnings": health_lines(report.get("health")),
+        "message": with_lines(recipe_saved_message(manifest, file_name), report.get("health")),
     }

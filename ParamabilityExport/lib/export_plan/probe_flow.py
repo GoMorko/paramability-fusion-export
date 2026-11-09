@@ -197,8 +197,14 @@ class SizeProbe:
             self.moved = list(dict.fromkeys(self.moved + build.moved_sizes(self.capture, self.states, current)))
             found.extend(self._entry(p, _UNREADABLE, labels, loose) for p in self.moved if p not in self.untried)
         found.extend(self._watched(labels, {f["param"] for f in found}, loose))
-        self.restore_gap_mm = self._gap(after)
+        self.measure_restore(after)
         return found
+
+    def measure_restore(self, after):
+        """Compare the sketches read after the parameters were put back with the first read. Keeps and returns the
+        largest gap in mm, or None when the two reads cannot be compared."""
+        self.restore_gap_mm = self._gap(after)
+        return self.restore_gap_mm
 
     def _watched(self, labels, skip, loose):
         """Entries for the sizes that change a watched borrowed sketch, or leave it unreadable, in a state where

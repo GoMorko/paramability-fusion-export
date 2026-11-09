@@ -112,6 +112,7 @@ def build(command, view):
         log("close button text failed: %s" % error)
     inputs = command.commandInputs
     inputs.addTextBoxCommandInput("pm_result_saved", "", html.escape(view["saved"]), 3, True)
+    _add_lines(inputs, "pm_result_warnings", "Check your design", view.get("warnings"), 3)
 
     sizes = inputs.addGroupCommandInput("pm_result_sizes", view["size_title"])
     sizes.isExpanded = True

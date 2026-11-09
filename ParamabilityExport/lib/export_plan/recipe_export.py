@@ -8,10 +8,14 @@ import json
 
 from ..package.manifest import (
     MAX_FIXED, build_recipe_manifest, build_step_only_manifest, check_step_path, validate_manifest)
+from ..package.text import clip
+from ..probe.plan import sketch_driven
 from ..translator import CaptureError, translate
 from ..translator.notes import (
     recipe_note, reader_failure_note, step_only_note, translate_failure_note, used_several_times_note)
-from .messages import dropped_note, fixed_note, loose_note, narrowed_notes, sizes_note, unchecked_note
+from .health import measuring_note
+from .messages import (
+    MAX_NOTE, dropped_note, fixed_note, loose_note, narrowed_notes, sizes_note, unchecked_note)
 
 MAX_RECIPE_BYTES = 8 * 1024 * 1024
 MAX_NOTES = 5  # the manifest limit; the last notes (shortened ranges, not used, not checked) give way
@@ -128,6 +132,17 @@ def _dropped(size_table, recipe, fixed):
             if size_table.size_name(n) not in sizes and size_table.recipe_name(n) not in fixed_names]
 
 
+def _not_followed(size_table, dropped):
+    """The dropped sizes that change a sketch or a construction plane: they are used, but could not be followed."""
+    reaching = set(sketch_driven(size_table))
+    return [n for n in dropped if n in reaching]
+
+
+def _not_followed_note(names):
+    text = "Could not follow these through the sketches, so not sizes: %s." % ", ".join(names)
+    return clip(text, MAX_NOTE)
+
+
 def _uses(capture):
     """How many times Fusion uses the component of the picked body (1 for a root body)."""
     placement = ((capture or {}).get("target") or {}).get("placement")
@@ -156,7 +171,7 @@ def _step_narrowed(size_table, result, free):
 def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
                        size_table=None, checks=None, fixed=None, unchecked=None, listing=None, motion=None,
                        probe=None, build_failures=None, narrowed=None, marker=None, loose=None, loose_sizes=True,
-                       translated=None, plain=False):
+                       translated=None, plain=False, health=None):
     """Return (manifest, files, report) for one body.
 
     A body inside a component is translated like a root body: its capture carries the place of the part in the
@@ -174,6 +189,8 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
       Fusion name. The translator adds its own. The manifest lists those the recipe keeps free, by recipe size name.
     loose_sizes: False makes the translator fix every size that some value cannot follow (the dialog's "Keep doubtful
       sizes fixed"). The report records it as `keep_doubtful`.
+    health: how the design came out of the export (`export_plan.health.make_health`), for `report.json` and one note
+      when the sketch measurements cannot be trusted.
     translated: the translator's result for these same inputs (`translate_capture`), when the caller has it already.
     unchecked: names of sizes that got no check, for the report.
     listing: the design's ParameterListing (params.listing). Its entries go into the manifest `parameters` of every
@@ -220,12 +237,14 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
     outside = [c["size"] for c in kept if not _in_range(c, recipe_sizes)]
     kept = [c for c in kept if c["size"] not in outside]
     unchecked = list(unchecked or []) + [n for n in outside if n not in (unchecked or [])]
-    all_fixed, all_loose, dropped = [], [], []
+    all_fixed, all_loose, dropped, not_followed = [], [], [], []
     if recipe_data is not None and size_table is not None:
         all_fixed = _merge_fixed(size_table, fixed, size_table.fixed, getattr(result, "fixed", None))
         all_loose = _merge_fixed(size_table, loose, getattr(result, "loose", None),
                                  skip={f["name"] for f in all_fixed}, only=set(free))
         dropped = _dropped(size_table, result.recipe, all_fixed)
+        # With a motion the sketches were measured, so a dropped size there simply moves nothing a step copies.
+        not_followed = _not_followed(size_table, dropped) if motion is None else []
 
     kept_narrowed = [n for n in narrowed or [] if n["size"] in free] + _step_narrowed(size_table, result, free)
     report = {
@@ -247,12 +266,14 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         report["capture"] = capture
     if probe is not None:
         report["probe"] = probe
+    if health is not None:
+        report["health"] = health
     if listing is not None:
         report["parameters"] = listing.report()
     if recipe_data is not None:
         report["sizes"] = {"free": free, "fixed": all_fixed, "loose": all_loose, "checks": [
             {"size": c["size"], "value": c["value"]} for c in kept], "unchecked": list(unchecked or []),
-            "dropped": dropped, "build_failures": list(build_failures or [])}
+            "dropped": dropped, "not_followed": not_followed, "build_failures": list(build_failures or [])}
         raised = [{"name": size_table.size_name(r["name"]), "min": r["min"], "reason": r["reason"]}
                   for r in getattr(result, "raised", None) or []
                   if size_table is not None and size_table.size_name(r["name"]) in free]
@@ -268,6 +289,9 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         if _uses(capture) > 1:
             first += " " + used_several_times_note(_uses(capture))
         notes = [first]
+        doubt = measuring_note(health)
+        if doubt:
+            notes.append(doubt)
         if free:
             notes.append(sizes_note(len(free)))
         if all_loose:
@@ -275,8 +299,11 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         if all_fixed:
             notes.append(fixed_note([f["name"] for f in all_fixed]))
         notes.extend(narrowed_notes([n["note"] for n in kept_narrowed if n["note"]]))
-        if dropped:
-            notes.append(dropped_note(dropped))
+        unused = [n for n in dropped if n not in not_followed]
+        if not_followed:
+            notes.append(_not_followed_note(not_followed))
+        if unused:
+            notes.append(dropped_note(unused))
         if unchecked and not plain:
             notes.append(unchecked_note(len(unchecked)))
         del notes[MAX_NOTES:]
