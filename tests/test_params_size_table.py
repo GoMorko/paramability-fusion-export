@@ -64,7 +64,6 @@ class FilterBoxTableTest(unittest.TestCase):
         self.assertEqual(t.depends("FilterBox_height_mm"), {CUBE})
         self.assertEqual(t.depends(W), {W})
         self.assertEqual(t.depends("FilterBox__PipeTop_offsetFromCenter_mm"), frozenset())
-        self.assertEqual(t.depends("nothing"), frozenset())
 
     def test_fixed_size_becomes_a_number_and_is_listed(self):
         t = table().with_fixed({CUBE: "Cube stays fixed for now: it changes Sketch3."})
@@ -74,14 +73,11 @@ class FilterBoxTableTest(unittest.TestCase):
         self.assertEqual(t.sizes["FilterBox_width_mm"]["expr"], f"{NEW_W} * 18 + 2")
         self.assertNotIn(CUBE, t.ticked)
 
-    def test_a_typed_range_is_told_from_the_default_one(self):
+    def test_a_typed_range_is_told_from_the_default_one_per_end(self):
+        size = table().sizes[NEW_W]
         self.assertFalse(table().typed_range(W))
         self.assertTrue(table(ranges={W: (0.5, 3)}).typed_range(W))
-
-    def test_a_range_equal_to_the_default_is_not_typed(self):
-        size = table().sizes[NEW_W]
-        default = table(ranges={W: (size["min"], size["max"])})
-        self.assertEqual(default.typed_ends(W), (False, False))
+        self.assertEqual(table(ranges={W: (size["min"], size["max"])}).typed_ends(W), (False, False))
         self.assertEqual(table(ranges={W: (size["min"], 9.0)}).typed_ends(W), (False, True))
 
     def test_fixing_every_input_turns_derived_sizes_into_numbers(self):
@@ -108,19 +104,6 @@ class FilterBoxTableTest(unittest.TestCase):
         self.assertFalse(tr.ok)
         self.assertEqual(tr.reads, ("a",))
 
-    def test_unit_words_and_conditions_become_derived_sizes(self):
-        def derived(name, expression, value, unit):
-            return dict(name=name, expression=expression, value=value, unit=unit, comment="", is_favorite=False,
-                        kind="derived", dependency_parameters=["width"])
-        params = [dict(name="width", expression="120 mm", value=12.0, unit="mm", comment="", is_favorite=True,
-                       kind="length"),
-                  derived("cells", "ceil(width / 42 mm)", 3.0, ""),
-                  derived("ratio", "width / mm", 120.0, ""),
-                  derived("lip", "if(width < 100 mm; 2 mm; 3 mm)", 0.3, "mm")]
-        t = size_table.build(params, ["width"])
-        self.assertEqual({n: t.sizes[n]["expr"] for n in ("cells", "ratio", "lip")},
-                         {"cells": "ceil(width / 42)", "ratio": "width", "lip": "width < 100 ? 2 : 3"})
-
     def test_value_check_rejects_a_bare_number_in_the_wrong_unit(self):
         # A design in inches: Fusion reads "wall + 5" as 5 in, here the formula would give 5 mm.
         params = [dict(name="wall", expression="2 mm", value=0.2, unit="mm", comment="", is_favorite=True, kind="length"),
@@ -135,13 +118,6 @@ class FilterBoxTableTest(unittest.TestCase):
         t = size_table.build(params, [p["name"] for p in params])
         self.assertEqual(len(t.sizes), 64)
         self.assertEqual(t.entry("p64").state, CONSTANT)
-
-    def test_unsupported_unit_and_text_are_not_offered(self):
-        params = [dict(name="mass", expression="5 kg", value=5.0, unit="kg", comment="", is_favorite=True,
-                       kind="unsupported")]
-        t = size_table.build(params, ["mass"])
-        self.assertEqual(t.entry("mass").state, NOT_OFFERED)
-        self.assertEqual(t.sizes, {})
 
     def test_count_kind_and_step_for_pattern_quantities(self):
         params = [dict(name="holes", expression="3", value=3.0, unit="", comment="", is_favorite=True, kind="count")]

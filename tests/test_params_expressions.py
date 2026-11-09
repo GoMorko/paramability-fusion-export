@@ -82,7 +82,9 @@ class TranslateTest(unittest.TestCase):
         self.assertEqual(formula("if((w < 400 mm) and (h < 400 mm); 12 mm; 18 mm)", SIZES),
                          "w < 400 && h < 400 ? 12 : 18")
         self.assertEqual(formula("w > h or not (n <> 2)", SIZES), "w > h || !(n != 2)")
+        self.assertEqual(formula("w > h OR NOT n AND h > 0", SIZES), "w > h || !n && h > 0")
         self.assertEqual(formula("(w >= h) * 2", SIZES), "(w >= h) * 2")
+        self.assertEqual(formula("(w <= h) + (w == h) + (w <> h)", SIZES), "(w <= h) + (w == h) + (w != h)")
 
     def test_trig_takes_degrees_and_inverse_trig_gives_an_angle(self):
         self.assertEqual(formula("w * sin(t)", SIZES), "w * sin(t)")
@@ -91,11 +93,26 @@ class TranslateTest(unittest.TestCase):
         self.assertEqual((render(t.node), t.dim), ("atan(w / h)", ANGLE))
 
     def test_hyperbolic_functions_are_written_with_exp_and_ln(self):
-        t = translate("sinh(t)", SIZES)
-        self.assertAlmostEqual(evaluate(render(t.node), {"t": 57.29577951308232}), math.sinh(1))
-        t = translate("asinh(n)", SIZES)
-        self.assertEqual(t.dim, ANGLE)
-        self.assertAlmostEqual(evaluate(render(t.node), {"n": 2.0}), math.degrees(math.asinh(2)))
+        one_radian = 57.29577951308232
+        for name, arg, expected in (("sinh", one_radian, math.sinh(1)), ("cosh", one_radian, math.cosh(1)),
+                                    ("tanh", one_radian, math.tanh(1))):
+            with self.subTest(name):
+                t = translate(f"{name}(t)", SIZES)
+                self.assertEqual(t.dim, SCALAR)
+                self.assertAlmostEqual(evaluate(render(t.node), {"t": arg}), expected)
+        for name, arg, expected in (("asinh", 2.0, math.asinh(2)), ("acosh", 2.0, math.acosh(2)),
+                                    ("atanh", 0.5, math.atanh(0.5))):
+            with self.subTest(name):
+                t = translate(f"{name}(n)", SIZES)
+                self.assertEqual(t.dim, ANGLE)
+                self.assertAlmostEqual(evaluate(render(t.node), {"n": arg}), math.degrees(expected))
+
+    def test_functions_the_app_has_too_pass_through_without_case(self):
+        for text, expected in (("tan(t)", "tan(t)"), ("SIN(t)", "sin(t)"), ("asin(n)", "asin(n)"),
+                               ("acos(n)", "acos(n)"), ("pow(w; 2)", "pow(w, 2)"), ("abs(w - h)", "abs(w - h)"),
+                               ("floor(w / 2)", "floor(w / 2)"), ("round(w)", "round(w)"), ("ceil(n)", "ceil(n)")):
+            with self.subTest(text):
+                self.assertEqual(formula(text, SIZES), expected)
 
     def test_plain_functions_constants_and_sign(self):
         self.assertEqual(formula("exp(n) + ln(n) + log(n)", SIZES), "exp(n) + ln(n) + log(n)")

@@ -5,7 +5,7 @@ from tests.probe_helpers import (
     IDENT, capture, circle, extrude, loop, model, profile, read, rect_curves, sketch_state, state, table, user)
 
 from lib.probe import build as probe_build
-from lib.probe.motion import OPTIMISTIC, Affine, Motion, Stuck, build
+from lib.probe.motion import Affine, Motion, Stuck, build
 
 W = "FilterBox_width_mm"
 PARAMS = [user("count", "3", 3, ""), user("cube", "10 mm", 10), user(W, "count * cube + 2 mm", 32),
@@ -87,10 +87,7 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(quantity.text, "FilterBox_width_mm - off")
         self.assertAlmostEqual(quantity.n, 27)
         self.assertEqual(set(quantity.reads), {"count", "cube", "off"})
-
-    def test_half_the_width_and_a_constant(self):
-        text = Affine(2, {W: 0.5}).render(self.table).text
-        self.assertEqual(text, "0.5 * FilterBox_width_mm + 2")
+        self.assertEqual(Affine(2, {W: 0.5}).render(self.table).text, "0.5 * FilterBox_width_mm + 2")
 
     def test_a_term_that_is_a_fixed_number_joins_the_constant(self):
         fixed = self.table.with_fixed({"off": "fixed"})
@@ -135,11 +132,6 @@ class BuildTests(unittest.TestCase):
     def test_without_a_start_read_nothing_is_written(self):
         self.assertEqual(self.motion(states()[1:]).values, {})
 
-    def test_optimistic_motion_writes_numbers_only(self):
-        self.assertTrue(OPTIMISTIC.optimistic)
-        self.assertIsNone(OPTIMISTIC.get("4/p0/l0/width"))
-        self.assertFalse(Motion().optimistic)
-
 
 class ProblemStateTests(unittest.TestCase):
     def setUp(self):
@@ -183,13 +175,10 @@ class ProblemStateTests(unittest.TestCase):
         width = motion.get("4/p0/l0/width")
         self.assertEqual((width.movers, width.cause, width.rest.terms), (("cube",), "unread", {W: 1.0}))
 
-    def test_sizes_of_a_failing_combined_state_stay_stuck_beside_an_unrelated_single_failure(self):
+    def test_a_failing_combined_state_blames_its_sizes_only_when_none_of_them_fails_alone(self):
         unread = read({}, params={})
         motion = self.motion(s2=state({"cube": 20}, unread), s9=state({"count": 6, "off": 10}, unread))
         self.assertEqual(motion.get("4/p0/l0/width").movers, ("count", "cube", "off"))
-
-    def test_a_combined_failing_state_adds_nothing_when_one_of_its_sizes_fails_alone(self):
-        unread = read({}, params={})
         motion = self.motion(s2=state({"cube": 20}, unread), s9=state({"cube": 5, "off": 10}, unread))
         self.assertEqual(motion.get("4/p0/l0/width").movers, ("cube",))
 
@@ -236,12 +225,10 @@ class HoleAndAxisTests(unittest.TestCase):
         self.assertEqual(motion.get("9/axis/point/0").terms, {"off": 1.0})
         self.assertIsNone(motion.get("9/axis/point/1"))
 
-    def test_an_axis_that_turns_is_stuck(self):
+    def test_an_axis_that_turns_and_a_hole_sketch_that_turns_are_stuck(self):
         motion = build(self.cap, self.table, self.states() + [state({"cube": 20}, self.snapshot(axis_dir=(1, 0, 0)))])
         point = motion.get("9/axis/point/0")
         self.assertEqual((point.movers, point.cause, point.rest.terms), (("cube",), "turns", {"off": 1.0}))
-
-    def test_a_hole_sketch_that_turns_is_stuck(self):
         motion = build(self.cap, self.table, self.states() + [state({"cube": 20}, self.snapshot(hole_normal=(1, 0, 0)))])
         self.assertEqual(motion.get("8/positions/0/0").cause, "turns")
 

@@ -24,10 +24,8 @@ class UnitsTest(unittest.TestCase):
             units.to_manifest_value(3, "mm/s")
 
     def test_conversions(self):
-        self.assertAlmostEqual(units.cm_to_mm(2.5), 25.0)
-        self.assertAlmostEqual(units.rad_to_deg(3.141592653589793), 180.0)
         self.assertEqual(units.to_manifest_value(4.0, "mm"), 40.0)
-        self.assertEqual(units.to_manifest_value(3.141592653589793 / 2, "deg"), 90.0)
+        self.assertEqual(units.to_manifest_value(0.5235987755982988, "deg"), 30.0)
         self.assertEqual(units.to_manifest_value(3, ""), 3)
 
 

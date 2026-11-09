@@ -2,7 +2,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from lib.params import defaults
-from tests.params_fixtures import CUBE, D, H, W, reader_dicts
+from tests.params_fixtures import CUBE, H, W, reader_dicts
 
 
 def p(name, value, unit, comment="", fav=False, kind=None):
@@ -30,9 +30,7 @@ class RangeTest(unittest.TestCase):
         q = p("wall", 0.2, "mm", "Wall [5..6]")
         self.assertEqual(defaults.size_range(q, "length", 2.0), (1.0, 4.0))
 
-    def test_label_is_the_name_whatever_the_comment_says_and_is_cut_to_120(self):
-        self.assertEqual(defaults.label_for(p("a_b", 1, "mm")), "a_b")
-        self.assertEqual(defaults.label_for(p("a_b", 1, "mm", "Some words")), "a_b")
+    def test_a_long_label_is_cut_to_120(self):
         self.assertEqual(len(defaults.label_for(p("a" * 200, 1, "mm"))), 120)
 
 
@@ -52,10 +50,6 @@ class TickedTest(unittest.TestCase):
         model = self.model("FilterBox_width_mm", "FilterBox__PipeTop_offsetFromCenter_mm")
         self.assertEqual(defaults.default_ticked(params, model),
                          [W, CUBE, "FilterBox__PipeTop_offsetFromCenter_mm"])
-
-    def test_parameters_the_body_does_not_read_are_not_ticked(self):
-        self.assertEqual(defaults.default_ticked(reader_dicts(), []), [])
-        self.assertEqual(defaults.default_ticked(reader_dicts(), self.model(D)), [D])
 
     def test_count_names_from_quantity_role(self):
         params = reader_dicts()

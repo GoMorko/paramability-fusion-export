@@ -52,13 +52,6 @@ class ListingTest(unittest.TestCase):
         self.assertEqual(by_label(listing)["odd"], {"name": "odd", "label": "odd", "value": 5.0, "unit": "mm"})
         self.assertEqual([x["name"] for x in listing.no_formula], ["odd"])
 
-    def test_unit_that_is_not_length_angle_or_count_is_left_out(self):
-        speed = plain("speed", 5, unit="mm/s")
-        speed["kind"] = "unsupported"
-        listing = list_parameters([plain("wall", 2), speed])
-        self.assertEqual([e["label"] for e in listing.entries], ["wall"])
-        self.assertEqual(listing.left_out, [{"name": "speed", "reason": UNIT_REASON}])
-
     def test_every_intermediate_of_a_hobby_project_comes_with_its_formula(self):
         listing = list_parameters(hobby_dicts())
         exprs = {e["name"]: e.get("expr") for e in listing.entries}

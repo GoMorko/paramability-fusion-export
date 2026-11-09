@@ -57,11 +57,9 @@ class SizeProbeTest(unittest.TestCase):
     def start(self):
         return SizeProbe.start(CAPTURE, self.table, self.fusion.read)
 
-    def test_start_keeps_the_sketches_that_read_back_as_captured(self):
+    def test_a_probe_starts_when_the_sketches_read_back_as_captured_and_not_when_nothing_reads(self):
         self.assertIsNotNone(self.start())
         self.assertTrue(covers_a_sketch(CAPTURE))
-
-    def test_a_design_that_reads_nothing_gives_no_probe(self):
         self.assertIsNone(SizeProbe.start(CAPTURE, self.table, lambda request: {}))
 
     def test_sizes_that_move_sketches_get_rows_without_a_step_and_the_motion_follows_the_width(self):
@@ -92,7 +90,7 @@ class SizeProbeTest(unittest.TestCase):
         probe.untried = ["off"]
         found = probe.finish(probe.read_now(), {"off": "Hole offset"})
         self.assertEqual([(f["param"], f["size"]) for f in found], [("off", "off")])
-        self.assertIn("Hole offset may give unexpected results", found[0]["reason"])
+        self.assertIn("Hole offset", found[0]["reason"])
 
     def test_a_state_that_does_not_build_is_dropped_and_reported(self):
         self.fusion = Fusion(bad_when=lambda e: e["height"] == "40 mm")

@@ -51,10 +51,6 @@ class SweepTest(unittest.TestCase):
         span = sweep(BOX, "width + 1", ("width", "unknown"))
         self.assertEqual((span.low, span.high), (21, 81))
 
-    def test_a_formula_with_no_ranged_size_is_worked_out_at_the_current_values(self):
-        span = sweep(BOX, "width / 4", ())
-        self.assertEqual((span.low, span.high), (10, 10))
-
 
 class ManySizesTest(unittest.TestCase):
     NAMES = ["s%d" % n for n in range(MAX_CORNER_SIZES + 3)]

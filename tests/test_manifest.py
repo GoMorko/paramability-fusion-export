@@ -103,16 +103,16 @@ class SchemaCopyTest(unittest.TestCase):
             self.assertEqual(mf.validate_manifest(manifest), [])
             self.assertEqual(validate(manifest, self.schema), [], manifest["kind"])
 
-    def test_a_long_loose_reason_is_refused_by_both(self):
-        manifest = mf.build_recipe_manifest("Part", "w", loose=[{"name": "wall", "reason": "x" * 201}])
-        self.assertTrue(mf.validate_manifest(manifest))
-        self.assertTrue(validate(manifest, self.schema))
-
-    def test_a_long_comment_is_refused_by_both(self):
-        manifest = mf.build_step_only_manifest("Part", "w", parameters=[
-            {"name": "wall", "value": 2, "unit": "mm", "comment": "x" * (mf.MAX_PARAMETER_COMMENT + 1)}])
-        self.assertTrue(mf.validate_manifest(manifest))
-        self.assertTrue(validate(manifest, self.schema))
+    def test_a_long_loose_reason_and_a_long_comment_are_refused_by_both(self):
+        too_long = (
+            mf.build_recipe_manifest("Part", "w", loose=[{"name": "wall", "reason": "x" * 201}]),
+            mf.build_step_only_manifest("Part", "w", parameters=[
+                {"name": "wall", "value": 2, "unit": "mm", "comment": "x" * (mf.MAX_PARAMETER_COMMENT + 1)}]),
+        )
+        for manifest in too_long:
+            with self.subTest(kind=manifest["kind"]):
+                self.assertTrue(mf.validate_manifest(manifest))
+                self.assertTrue(validate(manifest, self.schema))
 
 
 if __name__ == "__main__":

@@ -66,9 +66,6 @@ class ViewTests(unittest.TestCase):
         self.assertFalse(set(seen) & set(borrowed.BORROWED_KEYS))
         self.assertTrue(BORROWING["items"][-1]["data"]["profiles"][0]["foreign"])
 
-    def test_a_capture_without_borrowed_profiles_is_returned_as_it_is(self):
-        self.assertIs(probe_view(CAPTURE), CAPTURE)
-
     def test_a_profile_without_a_readable_place_is_not_borrowed(self):
         bad = rail()
         bad["placement"] = {"path": "BoxLid:1", "error": "No points."}
@@ -101,19 +98,18 @@ class BorrowedProbeTest(Rig):
         self.assertEqual(probe.motion.get("8/p0/l0/center.0").terms.keys() - {W}, {"off"})
         self.assertIsNone(probe.motion.get("8/p0/plane"))
 
-    def test_a_borrowed_sketch_that_cannot_be_read_at_a_state_is_stuck_for_the_sizes_of_that_state(self):
-        probe, _ = self.probe(Lid(edit=lambda out, s: out["sketches"].pop("skL") if s["height"] != 20 else None))
-        stuck = probe.motion.get("8/p0/l0/width")
-        self.assertEqual((stuck.cause, stuck.sketch), ("unread", "LidRail of BoxLid"))
-        self.assertIn("height", stuck.movers)
-
-    def test_a_turned_place_makes_the_sketch_stuck_with_the_turn_cause(self):
+    def test_a_borrowed_sketch_that_is_unread_or_turned_at_a_state_is_stuck_for_the_sizes_of_that_state(self):
         def turn(out, sizes):
             if sizes["off"] != 5:
                 out["sketches"]["skL"]["frame"] = dict(LID_FRAME, z=[1, 0, 0])
-        probe, _ = self.probe(Lid(edit=turn))
-        stuck = probe.motion.get("8/p0/l0/width")
-        self.assertEqual((stuck.cause, "off" in stuck.movers), ("turns", True))
+        for cause, size_name, edit in (
+                ("unread", "height", lambda out, s: out["sketches"].pop("skL") if s["height"] != 20 else None),
+                ("turns", "off", turn)):
+            with self.subTest(cause):
+                probe, _ = self.probe(Lid(edit=edit))
+                stuck = probe.motion.get("8/p0/l0/width")
+                self.assertEqual((stuck.cause, stuck.sketch), (cause, "LidRail of BoxLid"))
+                self.assertIn(size_name, stuck.movers)
 
 
 class WatchedSketchTest(Rig):

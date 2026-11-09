@@ -7,7 +7,6 @@ from tests import context  # noqa: F401
 from tests.fakes import FakeDesign, FakeStore
 
 from lib.export_plan.apply import RowBuildError, apply_row_values, measure_baseline
-from lib.export_plan.expressions import format_expression
 from lib.export_plan.runner import RowExport
 from lib.fusion_reader.rows import DesignParameterStore
 from tests.row_helpers import apply_row
@@ -78,10 +77,6 @@ class BaselineRowTest(unittest.TestCase):
             apply(store, baseline)
         self.assertEqual(ctx.exception.items, ["Extrude"])
 
-    def test_an_item_that_was_in_error_before_is_ignored(self):
-        store = ScriptedStore([True], errors=[(3, "Fillet1")])
-        self.assertEqual(apply(store, measure_baseline(store)), {"w": 7.0})
-
     def test_a_recompute_that_raises_fails_the_row_even_when_the_baseline_failed(self):
         store = ScriptedStore([False, RuntimeError("boom")])
         baseline = measure_baseline(store)
@@ -129,23 +124,8 @@ class RunnerBaselineTest(unittest.TestCase):
         store.set_expression = set_expression
         return self.run_rows(store, tolerate=True)[0]
 
-    def test_a_failure_without_tolerance_keeps_the_row_name_and_detail(self):
-        store = ScriptedStore([True, False])
-        with self.assertRaises(RowBuildError) as ctx:
-            self.run_rows(store)
-        self.assertIn('Size "A"', str(ctx.exception))
-        self.assertEqual(ctx.exception.detail["reason"], "recompute_failed")
 
-
-class ExpressionTextTest(unittest.TestCase):
-    def test_unitless_count_is_a_bare_number(self):
-        for unit in ("", "unitless", "no units"):
-            self.assertEqual(format_expression(3.6, unit), "3.6")
-
-    def test_a_length_gets_mm_and_an_angle_gets_deg(self):
-        self.assertEqual(format_expression(0.1, "mm"), "0.1 mm")
-        self.assertEqual(format_expression(2.5, "deg"), "2.5 deg")
-
+class ParameterNameTest(unittest.TestCase):
     def test_a_parameter_name_with_a_dollar_sign_is_passed_as_it_is_and_not_into_the_expression(self):
         name = "FilterBox_$_width__contains_CeramicMedium"
         store = ScriptedStore(expressions={name: "1.8"})

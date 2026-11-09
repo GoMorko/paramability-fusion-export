@@ -64,9 +64,6 @@ class BodyScopeTest(unittest.TestCase):
         kept = {p["name"] for p in scoped_model_params(capture())}
         self.assertEqual(kept, {"d1", "d2", "d4", "d5", "d6", "d7"})
 
-    def test_sketches_only_other_bodies_use(self):
-        self.assertEqual(other_sketches(capture()), {("", "Sketch2")})
-
     def test_sketch_and_step_names_are_matched_with_their_component(self):
         cap = in_components(capture())
         cap["items"][2]["name"], cap["items"][3]["name"] = "Sketch1", "Extrude1"

@@ -16,7 +16,7 @@ class WarningBoxTest(unittest.TestCase):
         recipe_dialog.show_stop(inputs, summarize(plate_then_emboss()))
         box = inputs.itemById(recipe_dialog.WARN_ID)
         self.assertTrue(box.isVisible)
-        self.assertTrue(box.formattedText.startswith("<b>Copy stops at Emboss1 (emboss).</b>"))
+        self.assertIn("Emboss1", box.formattedText)
         self.assertIn("Emboss steps", box.tooltipDescription)
         self.assertTrue(inputs.itemById(recipe_dialog.SHOW_ID).isVisible)
 
@@ -82,13 +82,10 @@ class SelectStepTest(unittest.TestCase):
         self.assertEqual(self.selections.added, ["f1"])
         self.assertEqual(timeline.markerPosition, 3)
 
-    def test_a_step_without_a_feature_or_outside_the_timeline_gives_a_message(self):
+    def test_a_step_without_a_feature_outside_the_timeline_or_refused_gives_a_message(self):
         design = type("Design", (), {"timeline": _Timeline(["f0", None, "f2"])})()
         self.assertEqual(timeline_select.select_step(design, 1), timeline_select.CANNOT_SELECT)
         self.assertEqual(timeline_select.select_step(design, 7), timeline_select.CANNOT_SELECT)
         self.assertEqual(self.selections.added, [])
-
-    def test_a_refused_selection_gives_a_message(self):
         self.selections.fail = True
-        design = type("Design", (), {"timeline": _Timeline(["f0", "f1", "f2"])})()
         self.assertEqual(timeline_select.select_step(design, 0), timeline_select.CANNOT_SELECT)

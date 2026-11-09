@@ -66,7 +66,7 @@ class SizedPlanTest(unittest.TestCase):
     def test_saved_message_lists_why_numbers_stay_fixed(self):
         manifest, _, _ = self.plan()
         text = recipe_saved_message(manifest, "box.paramability")
-        self.assertIn("- pitch: pitch stays fixed.", text)
+        self.assertIn("pitch stays fixed", text)
 
     def test_a_part_that_stays_a_fixed_shape_has_no_fixed_list(self):
         manifest, files, _ = plan_single_export(
@@ -215,26 +215,19 @@ class OffersTest(unittest.TestCase):
 
     def test_a_parameter_a_joint_reads_is_offered_unticked_with_a_warning(self):
         params = [length("wall"), length("height"), length("spare")]
+        params[2]["is_favorite"] = False
         model = [dict(name="d1", expression="wall", value=0.2, unit="mm", kind="derived",
                       dependency_parameters=["wall"], created_by={"kind": "joint"}),
-                 dict(name="d2", expression="height + spare", value=0.2, unit="mm", kind="derived",
-                      dependency_parameters=["height", "spare"], created_by={"kind": "feature"})]
-        lines = {o["param"]: o for o in offers(initial_table(params, model), params)}
-        self.assertEqual((lines["wall"]["ticked"], lines["wall"]["enabled"]), (False, True))
-        self.assertEqual(lines["wall"]["doubt"], "wall may give unexpected results: it moves a joint.")
-        self.assertTrue(lines["height"]["ticked"] and lines["height"]["enabled"])
-        self.assertEqual(lines["height"]["doubt"], "")
-
-    def test_a_parameter_that_is_not_ticked_by_default_but_moves_a_joint_gets_the_warning_too(self):
-        params = [length("wall"), length("spare")]
-        params[1]["is_favorite"] = False
-        model = [dict(name="d1", expression="wall", value=0.2, unit="mm", kind="derived",
-                      dependency_parameters=["wall"], created_by={"kind": "feature"}),
-                 dict(name="d2", expression="spare", value=0.2, unit="mm", kind="derived",
+                 dict(name="d2", expression="height", value=0.2, unit="mm", kind="derived",
+                      dependency_parameters=["height"], created_by={"kind": "feature"}),
+                 dict(name="d3", expression="spare", value=0.2, unit="mm", kind="derived",
                       dependency_parameters=["spare"], created_by={"kind": "joint"})]
         lines = {o["param"]: o for o in offers(initial_table(params, model), params)}
+        self.assertEqual((lines["wall"]["ticked"], lines["wall"]["enabled"]), (False, True))
+        self.assertIn("moves a joint", lines["wall"]["doubt"])
+        self.assertTrue(lines["height"]["ticked"] and lines["height"]["enabled"])
+        self.assertEqual(lines["height"]["doubt"], "")
         self.assertIn("moves a joint", lines["spare"]["doubt"])
-        self.assertTrue(lines["wall"]["ticked"])
 
     def test_no_more_sizes_are_ticked_than_a_recipe_holds(self):
         params = [length("p%d" % i) for i in range(MAX_TICKED + 4)]

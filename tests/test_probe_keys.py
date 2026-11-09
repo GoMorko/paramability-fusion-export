@@ -60,15 +60,12 @@ class AnswerTest(unittest.TestCase):
     def setUp(self):
         self.table = table(PARAMS, TICKED, MODEL)
 
-    def test_a_measured_sketch_that_a_size_moved_is_answered_with_the_motion(self):
-        motion = build(CAPTURE, self.table, states())
-        answer = sketch_answer(self.table, motion, "Sketch1", "count")
-        self.assertEqual(answer.kind, coverage.MOVED)
-        self.assertIn("4/p0/l0/width", answer.keys)
-
-    def test_a_measured_sketch_that_a_size_did_not_move_is_answered_still(self):
+    def test_a_measured_sketch_is_answered_moved_for_a_size_that_moved_it_and_still_for_one_that_did_not(self):
         motion = build(CAPTURE, self.table, states())
         self.assertEqual(motion.unmeasured, {})
+        moved = sketch_answer(self.table, motion, "Sketch1", "count")
+        self.assertEqual(moved.kind, coverage.MOVED)
+        self.assertIn("4/p0/l0/width", moved.keys)
         self.assertEqual(sketch_answer(self.table, motion, "Sketch1", "height").kind, coverage.STILL)
 
     def test_a_sketch_whose_first_read_does_not_match_is_not_measured_for_every_size_behind_it(self):

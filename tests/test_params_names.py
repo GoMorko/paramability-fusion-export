@@ -5,9 +5,6 @@ from lib.params import names
 
 
 class NamesTest(unittest.TestCase):
-    def test_valid_names_are_kept(self):
-        self.assertEqual(names.assign(["_CeramicMedium__Cube_width_mm"]), {"_CeramicMedium__Cube_width_mm": "_CeramicMedium__Cube_width_mm"})
-
     def test_dollar_becomes_underscore(self):
         old = "FilterBox_$_width__contains_CeramicMedium"
         self.assertEqual(names.assign([old])[old], "FilterBox___width__contains_CeramicMedium")

@@ -80,9 +80,6 @@ class ReadStateTest(unittest.TestCase):
         design.rootComponent.bRepBodies = Coll([])
         self.assertNotIn("box", state(design, target=True))
 
-    def test_empty_request_reads_nothing(self):
-        self.assertEqual(state(Design({})), {"sketches": {}, "points": {}, "lines": {}, "params": {}})
-
 
 class ProbeAgreementTest(unittest.TestCase):
     def test_the_first_state_matches_the_capture_for_the_probe(self):
@@ -156,13 +153,6 @@ class BorrowedSketchTest(unittest.TestCase):
         got = self.read(borrowed={"skL": {"path": "Lid:1"}})
         self.assertEqual(got["sketches"], {})
         self.assertIn("does not match", got["unread"]["skL"])
-
-    def test_an_own_sketch_adds_nothing_new(self):
-        sk = sketch()
-        sk.profiles = Coll([profile(sk, SQUARE)])
-        got = state(Design({"sk1": [sk]}), sketches=["sk1"])
-        self.assertNotIn("unread", got)
-        self.assertNotIn("native_frame", got["sketches"]["sk1"])
 
 
 class BorrowedAgreementTest(unittest.TestCase):

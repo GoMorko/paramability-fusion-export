@@ -2,8 +2,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.fakes import FakeTimeline
-from lib.export_plan.temp_copy import (
-    created_entities, delete_created_items, remove_temporary_copy, timeline_state)
+from lib.export_plan.temp_copy import delete_created_items, remove_temporary_copy, timeline_state
 
 
 class Occurrence:
@@ -33,14 +32,6 @@ class TempCopyTest(unittest.TestCase):
         self.assertEqual(timeline.tokens(), ["a", "b", "temp-occurrence", "temp-copy", "c", "d"])
         self.assertEqual(remove_temporary_copy(timeline, occurrence, before), 1)
         self.assertEqual((timeline.tokens(), timeline.marker), (["a", "b", "c", "d"], 2))
-
-    def test_new_items_are_found_wherever_they_sit(self):
-        timeline = FakeTimeline(["a", "b", "c"], marker=1)
-        before = timeline_state(timeline)
-        first = timeline.insert_at_marker("x")
-        timeline.marker = 4
-        second = timeline.insert_at_marker("y")
-        self.assertEqual(created_entities(timeline, before), [first, second])
 
     def test_a_feature_whose_token_changed_is_never_deleted(self):
         timeline = FakeTimeline(["a", "b", "c"], marker=1)

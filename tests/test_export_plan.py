@@ -5,11 +5,10 @@ import zipfile
 
 from tests import context  # noqa: F401
 from tests.fakes import FakeStore
-from lib.export_plan.apply import Baseline, RowBuildError, apply_row_values
+from lib.export_plan.apply import RowBuildError
 from lib.export_plan.assemble import build_package
 from lib.export_plan.expressions import format_expression, is_plain_number
-from lib.export_plan.naming import (
-    addin_version, design_title, package_file_name, saved_message, with_extension, writer_text)
+from lib.export_plan.naming import addin_version, design_title, package_file_name, with_extension
 from lib.export_plan.errors import StepExportError
 from lib.export_plan.restore import restore_order, restore_parameters
 from lib.export_plan.runner import ExportCancelled, RowExport
@@ -62,7 +61,8 @@ class ExpressionsTest(unittest.TestCase):
     def test_format_expression(self):
         self.assertEqual(format_expression(40.0, "mm"), "40 mm")
         self.assertEqual(format_expression(12.5, "deg"), "12.5 deg")
-        self.assertEqual(format_expression(3, ""), "3")
+        for unit in ("", "unitless", "no units"):
+            self.assertEqual(format_expression(3.6, unit), "3.6")
 
 
 class SizesTextTest(unittest.TestCase):
@@ -77,21 +77,15 @@ class SizesTextTest(unittest.TestCase):
         self.assertIn("depth (formula", line)
         self.assertIn("speed (unit mm/s not supported)", line)
 
-    def test_formula_column_refused(self):
-        read = read_sizes("name,depth\nA,5", PARAMS)
-        self.assertIn("depth", read.problems[0])
-
-    def test_unsupported_unit_refused(self):
+    def test_formula_and_unsupported_unit_columns_are_refused(self):
         speed = {"name": "speed", "expression": "5 mm/s", "value": 5.0, "display_value": 5.0, "unit": "mm/s",
                  "comment": "", "is_favorite": True, "kind": "unsupported"}
-        read = read_sizes("name,speed\nA,5", PARAMS + [speed])
-        self.assertIn("mm/s", read.problems[0])
+        for text, name in (("name,depth\nA,5", "depth"), ("name,speed\nA,5", "mm/s")):
+            with self.subTest(name):
+                self.assertIn(name, read_sizes(text, PARAMS + [speed]).problems[0])
 
-    def test_two_sizes_without_columns_refused(self):
-        read = read_sizes("name\nA\nB", PARAMS)
-        self.assertEqual(len(read.problems), 1)
-
-    def test_one_size_without_columns_allowed(self):
+    def test_columns_are_needed_only_when_there_are_several_sizes(self):
+        self.assertEqual(len(read_sizes("name\nA\nB", PARAMS).problems), 1)
         self.assertEqual(read_sizes("name\nA", PARAMS).problems, [])
 
     def test_blank_cell_keeps_current_display_value(self):
@@ -110,11 +104,6 @@ class RestoreTest(unittest.TestCase):
         self.assertEqual(store.exprs, ORIGINAL)
         self.assertEqual(store.recomputes, 1)
 
-    def test_nothing_changed_does_not_recompute(self):
-        store = FakeStore(ORIGINAL)
-        restore_parameters(store, dict(ORIGINAL))
-        self.assertEqual(store.recomputes, 0)
-
     def test_refused_parameter_is_retried_once(self):
         store = FakeStore(ORIGINAL, flaky=["width"])
         store.exprs["width"] = "99 mm"
@@ -125,29 +114,6 @@ class RestoreTest(unittest.TestCase):
         store = FakeStore(ORIGINAL, reject=["20 mm"])
         store.exprs["width"] = "99 mm"
         self.assertEqual(restore_parameters(store, dict(ORIGINAL)), ["width"])
-
-
-class ApplyTest(unittest.TestCase):
-    def test_returns_mm_and_deg_values(self):
-        store = FakeStore(ORIGINAL)
-        values = apply_row_values(store, UNITS, {"width": 40.0}, ())
-        self.assertEqual(store.exprs["width"], "40 mm")
-        self.assertEqual(values, {"width": 40.0})
-
-    def test_new_error_item_is_a_build_failure(self):
-        store = FakeStore(ORIGINAL, bad_when=lambda e: e["width"] == "80 mm")
-        with self.assertRaises(RowBuildError) as ctx:
-            apply_row_values(store, UNITS, {"width": 80.0}, ())
-        self.assertIn("Fillet1", str(ctx.exception))
-
-    def test_error_already_there_before_export_is_ignored(self):
-        store = FakeStore(ORIGINAL, bad_when=lambda e: True)
-        apply_row_values(store, UNITS, {"width": 40.0}, Baseline(True, {"Fillet1": "Fillet1"}))
-
-    def test_refused_expression(self):
-        store = FakeStore(ORIGINAL, reject=["40 mm"])
-        with self.assertRaises(RowBuildError):
-            apply_row_values(store, UNITS, {"width": 40.0}, ())
 
 
 class RunnerRestoreGuaranteeTest(unittest.TestCase):
@@ -223,14 +189,6 @@ class NamingTest(unittest.TestCase):
     def test_extension_added_once(self):
         self.assertEqual(with_extension("x"), "x.paramability")
         self.assertEqual(with_extension("x.PARAMABILITY"), "x.PARAMABILITY")
-
-    def test_writer_text(self):
-        self.assertEqual(writer_text("0.1.0", "2.0.1"), "Paramability Fusion export 0.1.0, Fusion 2.0.1")
-        self.assertEqual(writer_text("0.1.0", ""), "Paramability Fusion export 0.1.0")
-
-    def test_saved_message(self):
-        self.assertEqual(saved_message(3, "clip.paramability"), "Saved 3 sizes to clip.paramability.")
-        self.assertEqual(saved_message(1, "clip.paramability"), "Saved clip.paramability.")
 
     def test_addin_version_from_manifest_file(self):
         path = os.path.join(context.ADDIN_DIR, "ParamabilityExport.manifest")

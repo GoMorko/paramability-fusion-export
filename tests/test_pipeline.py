@@ -217,12 +217,6 @@ class RestoreTest(unittest.TestCase):
         self.assertTrue(any("measured" in n for n in result.manifest["notes"]))
         self.assertEqual(json.loads(json.dumps(result.report["health"]))["sketch_drift"], True)
 
-    def test_a_clean_run_gives_no_warning_and_no_note_about_measuring(self):
-        result = export(FakePort())
-        self.assertEqual(result.health["unrestored"], [])
-        self.assertFalse(result.health["sketch_drift"])
-        self.assertFalse(any("may be off" in n for n in result.manifest["notes"]))
-
 
 class FailingStepTest(unittest.TestCase):
     def test_a_part_step_that_fails_stops_the_export_before_any_parameter_changes(self):

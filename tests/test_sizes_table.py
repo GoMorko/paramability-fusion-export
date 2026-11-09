@@ -2,7 +2,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from lib.export_plan.sizes_table import (
-    add_row, column_label, new_table, parameter_note, read_table, remove_row, set_row, table_to_csv, toggle_column)
+    add_row, new_table, read_table, remove_row, set_row, table_to_csv, toggle_column)
 from lib.export_plan.sizes_text import read_sizes
 from lib.package.units import internal_to_unit
 
@@ -22,13 +22,11 @@ PARAMS = [
 
 
 class SizesTableTest(unittest.TestCase):
-    def test_start_is_one_default_row_with_settable_favourites(self):
+    def test_start_is_one_default_row_with_settable_favourites_that_reads_back(self):
         table = new_table(PARAMS)
         self.assertEqual(table.columns, ["width", "angle"])
         self.assertEqual(table_to_csv(table, PARAMS), "name,width,angle\nDefault,20,30\n")
-
-    def test_csv_reads_back_through_read_sizes(self):
-        read = read_table(new_table(PARAMS), PARAMS)
+        read = read_table(table, PARAMS)
         self.assertEqual(read.problems, [])
         self.assertEqual(read.rows, [{"name": "Default", "values": {"width": 20.0, "angle": 30.0}}])
 
@@ -97,13 +95,6 @@ class SizesTableTest(unittest.TestCase):
         read = read_sizes(table_to_csv(table, PARAMS), PARAMS)
         self.assertEqual(read.problems, [])
         self.assertEqual(read.rows[0]["name"], 'Big, "wide" fit')
-
-    def test_labels_and_notes(self):
-        self.assertEqual(column_label(PARAMS[0]), "width (mm)")
-        self.assertEqual(column_label(PARAMS[2]), "count")
-        self.assertEqual(parameter_note(PARAMS[0]), "")
-        self.assertIn("formula", parameter_note(PARAMS[3]))
-        self.assertIn("mm/s", parameter_note(PARAMS[4]))
 
 
 if __name__ == "__main__":

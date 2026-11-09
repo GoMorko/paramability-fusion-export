@@ -37,14 +37,10 @@ class FitValueTests(unittest.TestCase):
         result = fit_value(WIDTH, [Column("width", 1, WIDTH), Column("half", 2, [w / 2 for w in WIDTH])])
         self.assertEqual(result.terms, {"width": 1.0})
 
-    def test_coefficient_snaps_to_a_twenty_fourth(self):
-        x = [w / 3 + 2e-7 * (i % 2) for i, w in enumerate(WIDTH)]
-        result = fit_value(x, cols(w=WIDTH))
-        self.assertEqual(result.terms, {"w": 8 / 24})
-
-    def test_coefficient_off_the_grid_is_kept(self):
-        result = fit_value([w * 0.1 for w in WIDTH], cols(w=WIDTH))
-        self.assertEqual(result.terms, {"w": 0.1})
+    def test_coefficient_snaps_to_a_twenty_fourth_and_one_off_the_grid_is_kept(self):
+        third = [w / 3 + 2e-7 * (i % 2) for i, w in enumerate(WIDTH)]
+        self.assertEqual(fit_value(third, cols(w=WIDTH)).terms, {"w": 8 / 24})
+        self.assertEqual(fit_value([w * 0.1 for w in WIDTH], cols(w=WIDTH)).terms, {"w": 0.1})
 
     def test_within_one_ten_thousandth_is_exact_and_beyond_is_not(self):
         near = [w + (5e-5 if i == 2 else 0) for i, w in enumerate(WIDTH)]
