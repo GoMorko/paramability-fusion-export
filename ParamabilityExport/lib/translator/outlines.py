@@ -84,7 +84,7 @@ def _joined(loop):
         return [circle]
     out = list(loop)
     at = 0
-    while len(out) > 3 and at < len(out):
+    while len(out) > 2 and at < len(out):
         a, b = out[at], out[(at + 1) % len(out)]
         shared = _shared_end(a, b) if a.get("kind") == b.get("kind") == "line" else None
         if shared is None or not a.get("entity") or a.get("entity") != b.get("entity"):

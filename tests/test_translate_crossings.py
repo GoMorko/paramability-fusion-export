@@ -9,7 +9,9 @@ from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
 from lib.params import size_table
 from lib.probe.motion import Affine, Motion, Stuck
 from lib.translator import translate
-from lib.translator.outlines import merge_touching
+from lib.translator.outlines import _joined, merge_touching
+from lib.translator.sketch_crossings import Sources
+from lib.translator.sketch_motion import Anchors, _from_anchors
 
 R = 10.0
 
@@ -122,6 +124,25 @@ class CrossingTest(unittest.TestCase):
         self.assertEqual(self.fillet_at([R, 0.0, 10.0]).fixed, [])
 
 
+class CornerWithThreeCurvesTest(unittest.TestCase):
+    """Three sketch lines end at the origin; the first one cannot follow its size."""
+    STUCK = Stuck(["w_mm"], "curve", "S")
+
+    def sources(self, curves):
+        return Sources(lambda key, number: self.STUCK if key == "p/c0.0/offset" else Affine(number, {}, "S"),
+                       [("p", {"loops": [{"curves": curves}]})], "S")
+
+    def test_a_pair_of_curves_that_can_follow_gives_the_corner(self):
+        curves = [line((5, 0), (0, 0), "a"), line((0, 0), (0, 5), "b"), line((3, 3), (0, 0), "c")]
+        self.assertIsInstance(self.sources(curves).point((0, 0)), tuple)
+
+    def test_the_cause_of_a_stuck_corner_stays_on_the_anchor_value(self):
+        sources = self.sources([line((5, 0), (0, 0), "a"), line((0, 0), (0, 5), "b")])
+        loop = {"kind": "polygon", "points": [[0, 0], [5, 0], [0, 5]]}
+        raw = _from_anchors(loop, Anchors("S"), "S", sources)
+        self.assertEqual(raw["points"][0], [self.STUCK, self.STUCK])
+
+
 class MergedOutlineTest(unittest.TestCase):
     FRAME = {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
 
@@ -135,6 +156,12 @@ class MergedOutlineTest(unittest.TestCase):
                  line((5, 4), (5, 0), "mid")]
         (merged,) = merge_touching([self.profile(left), self.profile(right)])
         self.assertEqual(len(merged["loops"][0]["curves"]), 4)
+
+    def test_pieces_of_a_line_are_joined_in_a_loop_of_three_curves(self):
+        loop = [line((0, -3), (0, 0), "cut"), line((0, 0), (0, 3), "cut"), arc((0, 3), (3, 0), (0, -3), (0, 0), "round", 3)]
+        joined = _joined(loop)
+        self.assertEqual([c["kind"] for c in joined], ["line", "arc"])
+        self.assertEqual((joined[0]["start"], joined[0]["end"]), ([0, -3], [0, 3]))
 
     def test_arcs_of_one_circle_become_that_circle(self):
         h = math.sqrt(R * R - 25)

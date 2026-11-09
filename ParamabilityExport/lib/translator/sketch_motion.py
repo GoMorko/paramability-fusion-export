@@ -225,6 +225,8 @@ def _from_anchors(loop, anchors, sketch, sources=None):
         found = anchors.point(uv)
         if found is None and sources is not None:
             found = sources.point(uv)
+        if isinstance(found, Stuck):
+            return [found, found]
         return list(found) if isinstance(found, tuple) else [missing, missing]
 
     if kind == "polygon":

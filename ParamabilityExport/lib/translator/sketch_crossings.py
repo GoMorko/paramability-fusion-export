@@ -101,15 +101,17 @@ class Sources:
         return list(dict.fromkeys(e for p, e in found if math.hypot(p[0] - uv[0], p[1] - uv[1]) <= POINT_TOL))
 
     def point(self, uv):
-        """The raw (x, y) of the corner at `uv` from the two curves that cross there, a Stuck when one of them cannot
-        follow, or None when no pair of curves gives this corner."""
+        """The raw (x, y) of the corner at `uv` from the two curves that cross there, a Stuck when no pair of curves
+        that can follow gives it and one that cannot is involved, or None when no pair of curves gives this corner."""
         sources = [self.curves[e] for e in self._at(self.ends, uv) if self.curves.get(e) is not None]
         pairs = [(a, b) for i, a in enumerate(sources) for b in sources[i + 1:]]
         pairs.sort(key=lambda p: sum(isinstance(s, _Circle) for s in p))
+        blocked = None
         for a, b in pairs:
             stuck = a.stuck() or b.stuck()
             if stuck is not None:
-                return Stuck(stuck.movers, stuck.cause, self.sketch)
+                blocked = blocked or Stuck(stuck.movers, stuck.cause, self.sketch)
+                continue
             if isinstance(a, _Circle) and isinstance(b, _Line):
                 a, b = b, a
             if isinstance(a, _Line) and isinstance(b, _Line):
@@ -120,7 +122,7 @@ class Sources:
                 found = _circle_circle(a, b, uv, self.sketch)
             if found is not None:
                 return found
-        return None
+        return blocked
 
     def circle(self, center, radius):
         """The raw (centre, radius) of the sketch circle at `center` with `radius`, a Stuck, or None."""

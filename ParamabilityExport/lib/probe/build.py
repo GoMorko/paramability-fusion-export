@@ -96,9 +96,11 @@ def _movers(run, series, current):
 
 
 def _blocked(problems):
-    """The sizes behind the states that could not be read: those of single size states when there are any."""
-    single = [p for p in problems if len(p[1]) == 1]
-    return sorted(set().union(*[p[1] for p in (single or problems)]))
+    """The sizes behind the states that could not be read. A state of several sizes adds nothing when a size of it
+    already fails alone, since that size stays fixed and the state cannot happen."""
+    alone = set().union(*[p[1] for p in problems if len(p[1]) == 1])
+    several = [p[1] for p in problems if len(p[1]) != 1 and not p[1] & alone]
+    return sorted(alone.union(*several))
 
 
 def build(capture, table, states):

@@ -6,6 +6,7 @@ normal and lets the faces around it extend or shrink to meet it, so leaning side
 need no special case. Curved faces and moves that were not measured are refused.
 """
 import math
+from collections import OrderedDict
 
 from . import follow, vec
 from .footprint import Footprint
@@ -20,6 +21,9 @@ NORMAL_TOL = 1e-6
 GRID = 24
 # The outline centroid is kept while its clearance is at least this share of the best clearance on the grid.
 CENTROID_SHARE = 0.5
+# The search is repeated by every walk over one capture, so the latest results are kept by face record.
+CACHE_SIZE = 256
+_cache = OrderedDict()
 
 
 def _moved_as_read(face, distance, after):
@@ -69,7 +73,17 @@ def _clearance(footprint, uv):
 
 def inside_point(face):
     """A point (u, v) in the face's own plane that lies inside the face, away from its edges and holes; None when the
-    search finds none."""
+    search finds none. The result is kept for the face record (the same dict)."""
+    kept = _cache.get(id(face))
+    if kept is None or kept[0] is not face:
+        kept = (face, _search(face))
+        _cache[id(face)] = kept
+        while len(_cache) > CACHE_SIZE:
+            _cache.popitem(last=False)
+    return None if kept[1] is None else list(kept[1])
+
+
+def _search(face):
     footprint = Footprint(face)
     if not footprint.curves:
         return None

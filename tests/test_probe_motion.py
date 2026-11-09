@@ -169,6 +169,16 @@ class ProblemStateTests(unittest.TestCase):
         width = motion.get("4/p0/l0/width")
         self.assertEqual((width.movers, width.cause, width.rest.terms), (("cube",), "unread", {W: 1.0}))
 
+    def test_sizes_of_a_failing_combined_state_stay_stuck_beside_an_unrelated_single_failure(self):
+        unread = read({}, params={})
+        motion = self.motion(s2=state({"cube": 20}, unread), s9=state({"count": 6, "off": 10}, unread))
+        self.assertEqual(motion.get("4/p0/l0/width").movers, ("count", "cube", "off"))
+
+    def test_a_combined_failing_state_adds_nothing_when_one_of_its_sizes_fails_alone(self):
+        unread = read({}, params={})
+        motion = self.motion(s2=state({"cube": 20}, unread), s9=state({"cube": 5, "off": 10}, unread))
+        self.assertEqual(motion.get("4/p0/l0/width").movers, ("cube",))
+
     def test_a_point_moved_along_a_curve_gives_up(self):
         import math
         angle = user("ang", "60 deg", 60, "deg")

@@ -76,8 +76,8 @@ def locate(ctx, p, edge=False, below=None):
 
 
 def inside(ctx, p):
-    """True when `p` lies in or on the part built so far: in or on an added slab, and not in or on a later cut or
-    hollow."""
+    """True when `p` lies in or on the part built so far: in or on an added slab or the material an offset added, and
+    not in or on a later cut, hollow or the material an offset removed."""
     held = False
     for placer in reversed(list(_latest_first(ctx))):
         if isinstance(placer, shells.Shell):
@@ -86,6 +86,8 @@ def inside(ctx, p):
             held = held or placer.holds(p)
         elif placer.combine == "cut" and placer.holds(p):
             held = False
+        elif placer.combine == "offset" and placer.swept(p):
+            held = placer.distance.n > 0
     return held
 
 

@@ -1,5 +1,6 @@
 """Offset faces (press pull): each flat face becomes one pick point and the item one `offsetFaces` step."""
 import unittest
+from unittest import mock
 
 from tests import context  # noqa: F401
 from tests.test_translate_sized import TRAY, run
@@ -49,6 +50,15 @@ def on_plane(face, distance):
 
 
 class OffsetFacesTest(unittest.TestCase):
+    def test_the_pick_point_of_a_face_record_is_searched_once(self):
+        face = top_face()
+        with mock.patch.object(offset, "_clearance", wraps=offset._clearance) as search:
+            first = offset.inside_point(face)
+            calls = search.call_count
+            self.assertEqual(offset.inside_point(face), first)
+        self.assertGreater(calls, 0)
+        self.assertEqual(search.call_count, calls)
+
     def test_a_face_becomes_one_step_with_a_point_inside_it(self):
         result = translate(plate_with_offset(2.0))
         assert_schema_ok(self, result.recipe)
