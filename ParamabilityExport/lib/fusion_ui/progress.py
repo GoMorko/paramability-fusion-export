@@ -3,10 +3,14 @@ import adsk.core
 
 
 class ProgressDialog:
-    """Use as a context manager. step(index, total, name) returns False when the person cancelled."""
+    """Use as a context manager. step(index, total, name) returns False when the person cancelled.
 
-    def __init__(self, title):
+    verb starts the message of each step ("Exporting size 2 of 5: Large").
+    """
+
+    def __init__(self, title, verb="Exporting"):
         self._title = title
+        self._verb = verb
         self._dialog = adsk.core.Application.get().userInterface.createProgressDialog()
         self._shown = False
 
@@ -24,7 +28,7 @@ class ProgressDialog:
         if not self._shown:
             self._dialog.show(self._title, "Size %v of %m", 0, total, 1)
             self._shown = True
-        self._dialog.message = f"Exporting size {index} of {total}: {name}"
+        self._dialog.message = f"{self._verb} size {index} of {total}: {name}"
         self._dialog.progressValue = index - 1
         adsk.doEvents()
         return not self._dialog.wasCancelled

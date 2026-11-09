@@ -39,7 +39,6 @@ def inputs_for(body, extra=None):
         export_dialog.CHOICE_ID: Item(value="Size"),
         export_dialog.DEFAULT_ID: Item(selectedItem=None),
         export_dialog.UP_ID: Item(selectedItem=None),
-        export_dialog.RECIPE_ID: Item(value=True),
     }
     items.update(extra or {})
     return Item(itemById=items.__getitem__)

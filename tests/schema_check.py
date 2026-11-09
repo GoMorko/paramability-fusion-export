@@ -4,11 +4,23 @@ It fails on any other keyword, so a schema copy that grows a keyword is noticed 
 """
 import json
 import os
+import re
 
-SCHEMA_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "ParamabilityExport", "lib", "schema", "paramability.recipe.v10.schema.json",
-)
+SCHEMA_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ParamabilityExport", "lib", "schema")
+
+
+def _newest_recipe_schema():
+    """The recipe schema copy with the highest version, so copying a new one from the app needs no code change."""
+    found = []
+    for name in os.listdir(SCHEMA_DIR):
+        match = re.fullmatch(r"paramability\.recipe\.v(\d+)\.schema\.json", name)
+        if match:
+            found.append((int(match.group(1)), name))
+    return os.path.join(SCHEMA_DIR, max(found)[1])
+
+
+SCHEMA_PATH = _newest_recipe_schema()
 
 HANDLED = {
     "type", "$ref", "$defs", "properties", "required", "additionalProperties", "const", "enum", "anyOf",

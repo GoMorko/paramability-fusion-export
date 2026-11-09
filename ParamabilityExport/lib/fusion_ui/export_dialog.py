@@ -1,4 +1,4 @@
-"""The Export for Paramability dialog: builds the inputs and reads them back."""
+"""The Export size choices dialog: the sizes table of value rows. Builds the inputs and reads them back."""
 import traceback
 
 import adsk.core
@@ -15,7 +15,6 @@ CHOICE_ID = "pm_choice"
 DEFAULT_ID = "pm_default"
 UP_ID = "pm_up"
 NOTICE_ID = "pm_notice"
-RECIPE_ID = "pm_recipe"
 
 UP_LABELS = {"z": "Z up", "y": "Y up"}
 DEFAULT_CHOICE_NAME = "Size"
@@ -45,11 +44,6 @@ def build(command, parameters, body, up_axis, table):
     status = inputs.addTextBoxCommandInput(STATUS_ID, "", "", 3, True)
     status.isVisible = False
 
-    recipe = inputs.addBoolValueInput(RECIPE_ID, "Export as a recipe", True, "", True)
-    recipe.tooltip = "Copy the modeling steps so Paramability can rebuild the part."
-    recipe.tooltipDescription = (
-        "Works with a single size. Steps that cannot be copied save the part as a fixed shape instead. "
-        "With two or more sizes the file holds one shape per size.")
     inputs.addStringValueInput(CHOICE_ID, "Name of the dropdown in Paramability", DEFAULT_CHOICE_NAME)
     default = inputs.addDropDownCommandInput(DEFAULT_ID, "Default size", adsk.core.DropDownStyles.TextListDropDownStyle)
     default.listItems.add("Default", True)
@@ -101,7 +95,6 @@ def read_form(inputs, parameters, table):
         "sizes_text": sizes_text_ui.read_text(inputs) if table.text_mode else table_to_csv(table, parameters),
         "choice_name": inputs.itemById(CHOICE_ID).value.strip(),
         "default_name": default_item.name if default_item else "",
-        "as_recipe": bool(inputs.itemById(RECIPE_ID).value),
         "up_axis": "y" if up_item and up_item.name == UP_LABELS["y"] else "z",
     }
 
@@ -121,13 +114,11 @@ def refresh(inputs, parameters, table):
     _sync(inputs, table)
     read = _read_sizes(inputs, parameters, table)
     status = inputs.itemById(STATUS_ID)
-    recipe = inputs.itemById(RECIPE_ID)
     if read.problems:
         status.text = "\n".join(read.problems[:3])
         status.isVisible = True
         return
     status.isVisible = False
-    recipe.isVisible = len(read.rows) <= 1
     dropdown = inputs.itemById(DEFAULT_ID)
     current = dropdown.selectedItem.name if dropdown.selectedItem else ""
     index = pick_default_index(read.rows, current)

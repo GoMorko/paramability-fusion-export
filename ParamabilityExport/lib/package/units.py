@@ -61,3 +61,15 @@ def internal_to_unit(value, unit):
         u = _NORMAL.get((unit or "").strip().lower(), (unit or "").strip().lower())
         return value if u == "rad" else rad_to_deg(value)
     return value
+
+
+def display_from_manifest(value, unit):
+    """Convert a manifest number (mm, deg, plain) to the number Fusion shows in the parameter's own unit."""
+    kind = unit_kind(unit)
+    if kind == "length":
+        internal = value / 10.0
+    elif kind == "angle":
+        internal = math.radians(value)
+    else:
+        return value
+    return internal_to_unit(internal, unit)

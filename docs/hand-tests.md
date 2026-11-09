@@ -8,12 +8,14 @@ note the Fusion version and system.
 - [ ] Follow the README install steps on macOS (and Windows if you have it). Confirm each step matches the current
       Fusion dialog: Utilities tab, Scripts and Add-Ins, plus icon, "Script or add-in from device", Run, "Run on
       Startup". The steps came from Autodesk's help pages, not from a Fusion window. Fix the README if a label differs.
-- [ ] The button "Export for Paramability" shows in the Utilities tab, in the panel "Paramability", with an icon.
-- [ ] Stop the add-in in the Add-Ins dialog: the button goes away and the panel is removed.
+- [ ] The buttons "Export for Paramability" and "Export size choices" show in the Utilities tab, in the panel
+      "Paramability", each with an icon. The first is promoted.
+- [ ] Stop the add-in in the Add-Ins dialog: both buttons go away and the panel is removed. Run it again: no
+      duplicate button.
 
-## 2. Sizes and parameter restore
+## 2. Sizes and parameter restore (Export size choices)
 
-Use a design with two favourite user parameters (for example `width` in mm and `angle` in deg).
+Click "Export size choices". Use a design with two favourite user parameters (for example `width` in mm and `angle` in deg).
 
 - [ ] The dialog opens with the group "Parameters that change between sizes" (all user parameters listed, `width` and
       `angle` ticked) and a Sizes table with the header `Name | width (mm) | angle (deg)` and one `Default` row at
@@ -51,8 +53,8 @@ The add-in exports the picked body alone. The choice is the constant `MULTI_BODY
       `MULTI_BODY_ROUTE = ROUTE_ASK_DESIGNER`. The dialog then asks the designer to hide or move the other bodies.
 - [ ] A body inside a child component or occurrence can be picked in the viewport, OK turns active, and the STEP
       holds the body where it sits in the assembly (not moved to the component origin).
-- [ ] With rows of values, a body in a component exports as usual. With one row and "Export as a recipe" on, the
-      file is a plain part with the note "This part sits inside a component, so it was exported as a fixed shape."
+- [ ] With Export size choices, a body in a component exports as usual. With Export for Paramability, the file is a
+      plain part with the note "This part sits inside a component, so it was exported as a fixed shape."
       A recipe needs the body in the root component for now.
 - [ ] A body picked after its parameter changed (second row) still lands in the right place (the token lookup keeps
       the occurrence proxy).
@@ -79,19 +81,19 @@ The add-in exports the picked body alone. The choice is the constant `MULTI_BODY
 - [ ] The numbers of the picked size show in the Variables panel.
 - [ ] A one size export opens as a plain part.
 
-## 7. Recipe export (one size, "Export as a recipe" on)
+## 7. Recipe export (Export for Paramability)
 
-The current Paramability opens a recipe package as a plain part and shows "This package has editable steps that this
-version cannot use yet." It does not rebuild the steps or compare them with the Fusion part yet. So today each test
-checks the file, not the rebuilt part:
+Paramability rebuilds the steps, compares them with the Fusion part and lands the file as an editable part with its
+sizes. The file itself can also be checked without the app:
 
-- the saved message in Fusion says how many steps were copied, or names the step that stopped the copy;
+- the saved message in Fusion says how many steps were copied and how many sizes are ready, or names the step that
+  stopped the copy;
 - in the app repo, `npm run recipe:check -- <file>.paramability` prints `ok` for a recipe package;
 - the steps listed in `recipe.json` (a zip entry) match the design, and `report.json` holds the capture.
 
 When a design surprises you, send `report.json`: its `capture` becomes a test fixture. The calls and enum names these
-tests pin are in the "Capture reader calls to watch" parts below. Once Paramability rebuilds recipes, "Matches" below
-means the part it builds agrees with the Fusion part.
+tests pin are in the "Capture reader calls to watch" parts below. "Matches" below means the part Paramability
+builds agrees with the Fusion part.
 
 - [ ] **Plate**: a sketched rectangle with a pocket, two through holes and an L shaped boss. Saves as a recipe and
       matches. Put two features in a timeline group to check that groups are walked.
@@ -115,10 +117,35 @@ means the part it builds agrees with the Fusion part.
       Paramability, and the positions in `recipe.json` are Z up (a plate drawn on the ground plane has its sketch
       normal along z).
 - [ ] **Speed**: a design with about 100 timeline items exports in under a minute.
-- [ ] **Several sizes**: a two row export still lands as size choices (one shape per size), and the "Export as a
-      recipe" box is hidden while the sizes box holds two or more rows.
-- [ ] **Single size with values**: one row that changes a parameter. The recipe and the STEP both hold the changed
-      value, and the parameter is back to its old value after the export.
+- [ ] **Size choices**: a two row export in Export size choices still lands as size choices (one shape per size).
+
+
+### 7.1 Sizes from parameters, checks and restore
+
+Use a design with one body in the root and three plain user parameters read by its features (for example `wall` in
+mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter.
+
+- [ ] The dialog lists the user parameters, the ones the body reads ticked (favourites first), the formula one as
+      "name (formula)" greyed out. Tooltips are readable. OK is on once a body is picked.
+- [ ] With only one body in the design it is picked already. With no user parameters the group says so and the
+      export still works.
+- [ ] Export, open in Paramability: the part is a recipe, the sizes are the ticked parameters, and the message after
+      the export says how many sizes are ready. `manifest.json` inside the file lists one check per size
+      (`checks/01.step` and up), each with a single size in `values`. The recipe in `recipe.json` lists no size
+      that has no check, unless the message said some were not checked.
+- [ ] Untick a parameter and export: that name is not a size and its number is plain in `recipe.json`.
+- [ ] **Fixed by a sketch.** Drive a sketch dimension by a ticked parameter. The export does not stop: the message
+      after it lists that parameter with "it changes Sketch1" (the sketch name), the manifest `fixed` list holds it,
+      and it is not a size. A parameter that only drives an extrude distance stays a size.
+- [ ] **Fixed by a failed build.** Give a ticked parameter a range comment such as `[1..400]` that Fusion cannot
+      build at the top (a fillet larger than the part). The export saves, the parameter is listed as fixed with
+      "Fusion cannot build the part when it is ...", and the other sizes are unaffected.
+- [ ] **Restore.** After each export, a cancel in the "Checking size 2 of 4" window, and a forced failure (full disk
+      or a read only folder), every parameter shows its old expression, formulas included, the timeline marker is
+      at the end and the design has no unsaved change beyond Fusion's own.
+- [ ] A design with more than 16 ticked sizes: the message says some sizes were not checked.
+- [ ] The marker is rolled back: the export stops with "Move the timeline marker to the end".
+- [ ] Time: note how long a design with 5 sizes and 100 timeline items takes.
 
 ## Fusion calls to watch
 
@@ -147,6 +174,14 @@ These were written from the API reference and never run:
   - `addValueInput` with unit text `mm`, `deg` or an empty string (counts), and `ValueCommandInput.value` returning
     internal units (cm, rad).
   - `CommandInput.isEnabled` and `tooltip` on a check box.
+- The main dialog (`lib/fusion_ui/recipe_dialog.py`): `addGroupCommandInput` with `addBoolValueInput` children whose
+  `isEnabled` is false and `tooltip` set; input ids made from a running number, not from the parameter name.
+- `Design.fusionUnitsManager.defaultLengthUnits` as the unit of a bare number in a length formula (falls back to mm).
+- `Component.modelParameters` read by `list_model_parameters`; `Sketch.transform.asArray()`, `Sketch.sketchPoints`
+  with `worldGeometry`, `Sketch.sketchCurves` with `worldGeometry` (`radius`, `center`, `startPoint`, `endPoint`)
+  read in `lib/export_plan/sketch_state.py`, and `Component.sketches` with `Sketch.name`. A missing member only
+  leaves a gap in the numbers: a sketch that moves on a missing member is then not seen, so check hand test 7.1.
+- Two buttons in one panel (`ControlsCommand` added twice, `isPromoted` on the first only).
 - `ProgressDialog` (`show`, `progressValue`, `wasCancelled`) and `FileDialog` filter text.
 - `FeatureHealthStates.ErrorFeatureHealthState` on timeline items after `computeAll`.
 - The modeling orientation preference as the up direction.

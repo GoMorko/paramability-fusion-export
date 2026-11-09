@@ -6,6 +6,10 @@ SCHEMA = "paramability.recipePackage"
 VERSION = 1
 KINDS = ("valueRows", "recipe", "stepOnly")
 UNITS = ("mm", "deg", "")
+MAX_FIXED = 32
+MAX_FIXED_REASON = 200
+MAX_NAME_CHARS = 64
+VALUE_LIMIT = 1e6
 
 _SEGMENT = re.compile(r"^[A-Za-z0-9_.-]+$")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
@@ -49,9 +53,13 @@ def build_step_only_manifest(name, writer, up_axis="z", notes=None):
     }
 
 
-def build_recipe_manifest(name, writer, up_axis="z", notes=None, checks=None):
-    """A translated part: the STEP files plus recipe.json. checks: [{'values': {...}, 'step': 'checks/x.step'}]."""
-    return {
+def build_recipe_manifest(name, writer, up_axis="z", notes=None, checks=None, fixed=None):
+    """A translated part: the STEP files plus recipe.json.
+
+    checks: [{'values': {size name: number}, 'step': 'checks/01.step'}], one size changed per check.
+    fixed: [{'name', 'reason'}] for Fusion parameters that stay fixed numbers in the shape. Left out when empty.
+    """
+    manifest = {
         "schema": SCHEMA,
         "version": VERSION,
         "kind": "recipe",
@@ -63,6 +71,13 @@ def build_recipe_manifest(name, writer, up_axis="z", notes=None, checks=None):
         "recipe": "recipe.json",
         "checks": [dict(c) for c in (checks or [])],
     }
+    if fixed:
+        manifest["fixed"] = [dict(f) for f in fixed]
+    return manifest
+
+
+def check_step_path(number):
+    return f"checks/{number:02d}.step"
 
 
 def row_step_path(number):
@@ -142,12 +157,34 @@ def validate_manifest(m):
             for i, c in enumerate(checks, start=1):
                 label = f"check {i}"
                 vals = c.get("values") if isinstance(c, dict) else None
-                if not isinstance(vals, dict) or not vals or not all(_finite(v) for v in vals.values()):
-                    problems.append(f"{label}: values must be a non empty map of numbers.")
+                if not isinstance(vals, dict) or not vals or not all(
+                        _finite(v) and abs(v) <= VALUE_LIMIT for v in vals.values()):
+                    problems.append(f"{label}: values must be a non empty map of numbers within 1e6.")
+                elif not all(isinstance(k, str) and 1 <= len(k) <= MAX_NAME_CHARS for k in vals):
+                    problems.append(f"{label}: size names must be 1 to {MAX_NAME_CHARS} characters.")
                 check_path(c.get("step") if isinstance(c, dict) else None, label, step_suffixes)
+        _validate_fixed(m.get("fixed"), problems)
     elif kind == "valueRows":
         _validate_value_rows(m, problems, check_path, step_suffixes)
     return problems
+
+
+def _validate_fixed(fixed, problems):
+    if fixed is None:
+        return
+    if not isinstance(fixed, list) or len(fixed) > MAX_FIXED:
+        problems.append(f"fixed must be a list of at most {MAX_FIXED}.")
+        return
+    for i, entry in enumerate(fixed, start=1):
+        label = f"fixed {i}"
+        if not isinstance(entry, dict):
+            problems.append(f"{label}: must be an object.")
+            continue
+        name, reason = entry.get("name"), entry.get("reason")
+        if not isinstance(name, str) or not 1 <= len(name) <= MAX_NAME_CHARS:
+            problems.append(f"{label}: name must be 1 to {MAX_NAME_CHARS} characters.")
+        if not isinstance(reason, str) or not 1 <= len(reason) <= MAX_FIXED_REASON:
+            problems.append(f"{label}: reason must be 1 to {MAX_FIXED_REASON} characters.")
 
 
 def _validate_value_rows(m, problems, check_path, step_suffixes):

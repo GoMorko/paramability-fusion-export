@@ -17,6 +17,7 @@ class RowExport:
     store: parameter store (see apply.apply_row_values, plus saved_expressions and current_expressions).
     units: {parameter name: Fusion unit string}.
     export_step: callable(path) writing the STEP of the picked body for the current design state.
+    current_row is the name of the row being exported while export_step runs.
     After run(), restore_failures lists parameters that could not be put back, whatever the outcome.
     """
 
@@ -24,10 +25,15 @@ class RowExport:
         self.store = store
         self.units = units
         self.export_step = export_step
+        self.current_row = ""
         self.restore_failures = []
 
-    def run(self, rows, tmpdir, progress):
-        """Return [{'name', 'values', 'step_file'}]. progress(index, total, name) returns False to cancel."""
+    def run(self, rows, tmpdir, progress, tolerate_build_errors=False):
+        """Return [{'name', 'values', 'step_file'}]. progress(index, total, name) returns False to cancel.
+
+        With tolerate_build_errors a row Fusion cannot build gives {'name', 'values': None, 'step_file': None,
+        'error': sentence} and the run goes on. The next row must then set every parameter it needs.
+        """
         saved = self.store.saved_expressions()
         try:
             baseline = set(self.store.error_items())
@@ -40,7 +46,11 @@ class RowExport:
                 try:
                     values = apply_row_values(self.store, self.units, row["values"], baseline)
                 except RowBuildError as exc:
+                    if tolerate_build_errors:
+                        results.append({"name": row["name"], "values": None, "step_file": None, "error": str(exc)})
+                        continue
                     raise RowBuildError(f"Size \"{row['name']}\": {exc}") from exc
+                self.current_row = row["name"]
                 path = os.path.join(tmpdir, f"{index:02d}.step")
                 self.export_step(path)
                 if not os.path.isfile(path):
