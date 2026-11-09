@@ -124,6 +124,30 @@ class RefusalTest(unittest.TestCase):
         self.assertIn("Lid is in another component", refusal["reason"])
 
 
+class AssemblyStepsTest(unittest.TestCase):
+    """Occurrences, joints and the like are not modeling steps."""
+
+    def with_occurrence(self, **fields):
+        capture = load_capture("component_moved")
+        # As capture 3 of add-in 0.3.1 wrote it: no readable component, no readable bodies.
+        occurrence = {"index": 99, "name": "Lid:1", "type": "Occurrence", "suppressed": False, "health": "ok",
+                      "message": "", "component": "", "in_target_component": True, "bodies_after": None,
+                      "read_error": "bodies: no attribute", "target_changed": None, "data": {}}
+        occurrence.update(fields)
+        capture["items"].insert(0, occurrence)
+        return capture
+
+    def test_an_occurrence_is_skipped(self):
+        result = translate(self.with_occurrence())
+        self.assertIsNotNone(result.recipe)
+        self.assertEqual(verdicts(result)[99], ("skipped", ""))
+
+    def test_an_occurrence_that_brings_the_body_in_refuses(self):
+        refusal = translate(self.with_occurrence(target_changed=True)).refusal
+        self.assertEqual((refusal["index"], step_only_note(refusal)),
+                         (99, "Added as a fixed shape: this body was made in another component and moved here later."))
+
+
 class CaptureShapeTest(unittest.TestCase):
     def test_capture_3_needs_a_frame_of_numbers_or_a_reason(self):
         capture = load_capture("component_moved")

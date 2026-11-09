@@ -251,8 +251,21 @@ def _resolve_through(plan, data, origin, z, combine):
     return None
 
 
-def _check_measured_length(plan, data, shift):
-    """Refuse when the measured end face is not where the planned length puts it (None when it agrees or is unknown)."""
+def _beyond_part(box, start, direction, length):
+    """True when a cut of `length` from `start` along `direction` ends past the whole box."""
+    if not box:
+        return False
+    lo, hi = box["min"], box["max"]
+    corners = ([hi[0] if i & 1 else lo[0], hi[1] if i & 2 else lo[1], hi[2] if i & 4 else lo[2]] for i in range(8))
+    return length > max(vec.dot(vec.sub(c, start), direction) for c in corners) + LENGTH_TOL
+
+
+def _check_measured_length(plan, data, shift, start, z, combine):
+    """Refuse when the measured end face is not where the planned length puts it (None when it agrees or is unknown).
+
+    A cut that ends past the part makes no end face of its own; the face Fusion lists then is a wall it cut through,
+    nearer than the planned end, and the length is not checked.
+    """
     end = data.get("end_offset")
     if end is None or not plan:
         return None
@@ -260,8 +273,13 @@ def _check_measured_length(plan, data, shift):
     if first["extent"] == "through" or first["distance"] is None:
         return None
     planned = first["distance"] / 2.0 if first["extent"] == "symmetric" else first["distance"]
-    if abs(abs(end - shift) - planned) > LENGTH_TOL:
-        return Refusal("The measured end of this extrude does not match its length, so it is not copied.")
+    measured = abs(end - shift)
+    if abs(measured - planned) <= LENGTH_TOL:
+        return None
+    if (combine == "cut" and first["extent"] == "oneSide" and measured < planned
+            and _beyond_part(data.get("target_box_before"), start, vec.scale(z, first["sign"]), planned)):
+        return None
+    return Refusal("The measured end of this extrude does not match its length, so it is not copied.")
     return None
 
 
@@ -315,7 +333,8 @@ def handle(item, ctx):
     if any(p.get("face") or "loops" not in p for p in profiles):
         return Refusal("A flat face used as a sketch outline is not copied yet.")
     combine = COMBINE[operation]
-    if combine == "new" and len(profiles) > 1:
+    # Several outlines that Fusion made into one body touch each other, so the first makes it and the rest join.
+    if combine == "new" and len(profiles) > 1 and len(item.get("bodies_after") or []) != 1:
         return Refusal("A new body from several outlines makes several bodies, which is not copied yet.")
     if any(not isinstance(p.get("frame"), dict) for p in profiles):
         return Refusal("A sketch outline has no readable position.")
@@ -336,11 +355,12 @@ def handle(item, ctx):
     plan = _plan(item, data, first_frame, shift, combine, ctx)
     if isinstance(plan, Refusal):
         return plan
-    for check in (_check_measured_length(plan, data, shift), _check_taper(plan, data)):
+    z0 = vec.unit(first_frame["z"])
+    start = vec.add(first_frame["origin"], vec.scale(z0, shift))
+    for check in (_check_measured_length(plan, data, shift, start, z0, combine), _check_taper(plan, data)):
         if check:
             return check
-    z0 = vec.unit(first_frame["z"])
-    refusal = _resolve_through(plan, data, vec.add(first_frame["origin"], vec.scale(z0, shift)), z0, combine)
+    refusal = _resolve_through(plan, data, start, z0, combine)
     if refusal:
         return refusal
     if combine == "intersect" and (len(plan) * len(built) > 1):

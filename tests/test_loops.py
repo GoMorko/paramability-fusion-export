@@ -112,6 +112,10 @@ class RefusalTest(unittest.TestCase):
     def test_two_lines_do_not_close_an_area(self):
         self.assertIsInstance(loops.loop_of([line((0, 0), (10, 0)), line((10, 0), (0, 0))]), Refusal)
 
+    def test_lines_back_and_forth_on_one_line_have_no_area(self):
+        flat = [line((0, 0), (5, 0)), line((5, 0), (2, 0)), line((2, 0), (0, 0))]
+        self.assertEqual(loops.loop_of(flat, "Side").reason, "An outline in Side has no area.")
+
     def test_spline_curves_refuse(self):
         refusal = loops.loop_of([{"kind": "other", "type": "NurbsCurve3D", "start": [0, 0], "end": [0, 0], "samples": []}])
         self.assertEqual(refusal.reason, "Curved outlines of this kind are not copied yet.")

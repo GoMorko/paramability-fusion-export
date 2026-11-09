@@ -251,6 +251,15 @@ inside a component, also a nested or turned one, lands where Fusion shows it.
       fixed shape naming the extrude.
 - [ ] For a component body, the dialog table follows the component's own parameters, and "Tick what the body uses"
       ticks only what the component reads.
+- [ ] **C10 Many components.** A design with several components made one after the other (each with sketches,
+      construction planes and extrudes), the picked one in the middle, and one moved away from the origin. Export:
+      the occurrences and construction planes of the other components are "skipped" in the report, never the refusal.
+      The report items of the picked component's own extrudes, chamfers and mirrors carry no `foreign`, and its
+      outlines on a standing sketch (on a side plane, not the ground) have real 2D points, not all `y` = 0.
+- [ ] **C11 Offset faces.** In a component: a box, then Press Pull its top face up by `gap_mm`, then a second box
+      whose side face is pulled in by 1 mm. Export: two recipes whose offsets became extrudes (join and cut), and a
+      changed `gap_mm` moves the top. The report shows `faces_after` and `sides: "square"`. A pulled face with a
+      fillet next to it, or a curved face, gives a fixed shape that names the offset.
 
 ## Fusion calls to watch
 
@@ -386,7 +395,7 @@ rectangular pattern (row, grid, flipped direction, suppressed copy), circular pa
 capture in `report.json`.
 
 - Enum names are matched by text: `SurfaceContinuityTypes` (fillet continuity), `ChamferCornerTypes`, `ShellTypes`,
-  `PatternEntityTypes`, `PatternDistanceTypes`. An unreadable member gives `other` for fillet continuity and pattern
+  `PatternEntityTypes`, `PatternDistanceType` (also tried as `PatternDistanceTypes`). An unreadable member gives `other` for fillet continuity and pattern
   distance type, `chamfer` for the corner type and `sharp` for the shell type; an unknown name gives `other`.
 - Edge set type names are matched by text: `ConstantRadius`, `VariableRadius`, `ChordLength`, `Asymmetric` or
   `DoubleRadius` (fillet); `EqualDistance`, `TwoDistances`, `DistanceAndAngle` (chamfer). The member names

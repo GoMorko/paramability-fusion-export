@@ -35,7 +35,7 @@ def _taper(feature, member):
 
 def _target(definition, ctx):
     """The face or plane an extrude starts from or reaches to: its plane, its type, and a point on a face."""
-    entity = geo.safe(lambda: definition.entity, None)
+    entity = geo.native_input(geo.safe(lambda: definition.entity, None), ctx)
     found = {"plane": geo.safe(lambda: geo.plane_of(entity), None),
              "entity_type": geo.safe(lambda: geo.type_name(entity), None)}
     if found["entity_type"] == "BRepFace":
@@ -195,6 +195,7 @@ def axis_of(entity):
 
 def axis_record(entity, ctx):
     """`axis_of` with "foreign": true when the axis entity is not the target component's."""
+    entity = geo.native_input(entity, ctx)
     return geo.mark_foreign(axis_of(entity), entity, ctx)
 
 
@@ -255,10 +256,11 @@ def _cylinder(face):
     }
 
 
-def _hole_positions(feature):
+def _hole_positions(feature, ctx):
     definition = geo.safe(lambda: feature.holePositionDefinition, None)
     if "SketchPoints" in geo.type_name(definition):
-        return [geo.point(p.worldGeometry) for p in geo.collection_items(definition.sketchPoints)]
+        points = [geo.native_input(p, ctx) for p in geo.collection_items(definition.sketchPoints)]
+        return [geo.point(p.worldGeometry) for p in points]
     return [geo.point(feature.position)]
 
 
@@ -307,7 +309,7 @@ def hole_before(feature, ctx):
             "angle_deg": geo.angle(feature.countersinkAngle),
         } if hole_type == "countersink" else None,
         "direction": geo.safe(lambda: geo.unit_vector(feature.direction), None),
-        "positions": _hole_positions(feature),
+        "positions": _hole_positions(feature, ctx),
         "extent": geo.safe(lambda: _hole_extent(feature), {"kind": "other", "type": "unreadable"}),
         "side_cylinders": [],
         "end_points": [],

@@ -56,14 +56,15 @@ def type_name(entity):
     return text.split("::")[-1] or "none"
 
 
-def enum_name(value, enum_class):
-    """Name of an enum value. Strings pass through; integers are looked up in adsk.fusion / adsk.core; else ''."""
+def enum_name(value, *enum_classes):
+    """Name of an enum value. Strings pass through; integers are looked up in adsk.fusion / adsk.core under each
+    class name given (in order); else ''."""
     if isinstance(value, str):
         return value
     try:
         import adsk.core
         import adsk.fusion
-        for module in (adsk.fusion, adsk.core):
+        for module, enum_class in ((m, c) for c in enum_classes for m in (adsk.fusion, adsk.core)):
             holder = getattr(module, enum_class, None)
             if holder is None:
                 continue
@@ -124,10 +125,24 @@ def component_of(entity):
     return None
 
 
+def native_input(entity, ctx):
+    """The native object of an entity of the target's component that Fusion hands over through an occurrence (a
+    feature's profiles, edges and planes can come so). Native objects are in component coordinates, like the target.
+    Any other entity is returned as it is."""
+    if entity is None or ctx is None or safe(lambda: entity.assemblyContext, None) is None:
+        return entity
+    native = safe(lambda: entity.nativeObject, None)
+    if native is not None and same_entity(component_of(native), ctx.component):
+        return native
+    return entity
+
+
 def foreign(entity, ctx):
-    """True when the entity is seen through an occurrence or belongs to another component than the target's."""
+    """True when the entity is seen through an occurrence or belongs to another component than the target's.
+    The target component's own entities seen through an occurrence are not foreign (see `native_input`)."""
     if entity is None or ctx is None:
         return False
+    entity = native_input(entity, ctx)
     if safe(lambda: entity.assemblyContext, None) is not None:
         return True
     component = component_of(entity)
@@ -142,6 +157,7 @@ def mark_foreign(record, entity, ctx):
 
 
 def body_ref(body, ctx=None):
+    body = native_input(body, ctx)
     return mark_foreign({"token": safe(lambda: body.entityToken, ""), "name": safe(lambda: body.name, "")}, body, ctx)
 
 
@@ -194,6 +210,7 @@ def _same_vertex(a, b):
 
 def edge_record(edge, ctx=None):
     """{ token, closed, points }: the middle point of an open edge; the points at 0.25 and 0.75 of a closed one."""
+    edge = native_input(edge, ctx)
     closed = _same_vertex(safe(lambda: edge.startVertex, None), safe(lambda: edge.endVertex, None))
     points = []
     for fraction in ((0.25, 0.75) if closed else (0.5,)):

@@ -209,17 +209,29 @@ def _stays_in_range(table, formula, reads, sign, low):
 _ROUNDING = ("round", "floor", "ceil")
 
 
+def _without_rounding(tokens):
+    """The tokens with each rounding call (`ceil(...)` and the like) left out: such a call is a whole number."""
+    out, at = [], 0
+    while at < len(tokens):
+        token = tokens[at]
+        if token[0] == "id" and token[1] in _ROUNDING and at + 1 < len(tokens) and tokens[at + 1] == ("op", "("):
+            level, at = 0, at + 1
+            while at < len(tokens):
+                level += {("op", "("): 1, ("op", ")"): -1}.get(tokens[at], 0)
+                at += 1
+                if level == 0:
+                    break
+            out.append(("num", 1))
+            continue
+        out.append(token)
+        at += 1
+    return out
+
+
 def _gives_whole_numbers(table, formula, depth=0):
-    """True when a formula gives a whole number at every size value: it is rounded as a whole, or it adds,
-    subtracts and multiplies whole numbers and count sizes (and derived sizes that do the same)."""
-    tokens = tokenize_formula(formula)[:-1]
-    if len(tokens) > 2 and tokens[0][0] == "id" and tokens[0][1] in _ROUNDING and tokens[1] == ("op", "(") \
-            and tokens[-1] == ("op", ")"):
-        level = 0
-        for at, token in enumerate(tokens[1:], start=1):
-            level += {("op", "("): 1, ("op", ")"): -1}.get(token, 0)
-            if level == 0:
-                return at == len(tokens) - 1
+    """True when a formula gives a whole number at every size value: it adds, subtracts and multiplies whole
+    numbers, rounding calls and count sizes (and derived sizes that do the same)."""
+    tokens = _without_rounding(tokenize_formula(formula)[:-1])
     for token in tokens:
         if token[0] == "num" and token[1] != int(token[1]):
             return False

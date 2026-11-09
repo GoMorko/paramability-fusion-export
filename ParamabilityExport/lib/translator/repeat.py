@@ -189,11 +189,44 @@ def _moves(by_place):
 # ---------------------------------------------------------------- rectangular
 
 
-def _axis_step(item, ctx, which, quantity, count_q):
+def _distance_kind(data):
+    """How Fusion measures the pattern distance: `spacing` (between neighbours) or `extent` (first to last), or None.
+
+    When the reader could not name it, the measured copies tell: the kind whose grid holds every kept copy.
+    """
+    kind = data.get("distance_type")
+    if kind in ("spacing", "extent"):
+        return kind
+    kept = _kept_elements(data)
+    if not kept:
+        return None
+    for guess in ("spacing", "extent"):
+        axes = []
+        for which in ("one", "two"):
+            count = int(data.get("quantity_" + which) or 1)
+            direction = data.get("direction_" + which)
+            if count > 1 and direction and vec.length(direction) > 1e-9:
+                distance = abs(float(data.get("distance_" + which) or 0.0))
+                axes.append((vec.unit(direction), distance if guess == "spacing" else distance / (count - 1), count))
+        if not axes or not all(step > 1e-9 for _, step, _ in axes):
+            return None
+        if len(axes) == 2 and 1.0 - vec.dot(axes[0][0], axes[1][0]) ** 2 < 1e-9:
+            return None
+        fits = True
+        for element in kept:
+            indexes, residual = _solve_lattice(element["frame"]["origin"], [(d, s) for d, s, _ in axes])
+            if residual > FIT_TOL_MM or any(abs(i) >= c for i, (_, _, c) in zip(indexes, axes)):
+                fits = False
+                break
+        if fits:
+            return guess
+    return None
+
+
+def _axis_step(item, ctx, which, quantity, count_q, kind):
     """Spacing along one direction as a Quantity, from the pattern distance and how Fusion measures it."""
     data = item["data"]
     raw = float(data.get("distance_" + which) or 0.0)
-    kind = data.get("distance_type")
     if kind not in ("spacing", "extent"):
         return Refusal("The spacing of this pattern could not be read.")
     distance = values.quantity(ctx, item, "distance_" + which, abs(raw), sign=-1 if raw < 0 else 1, absolute=True)
@@ -233,6 +266,7 @@ def _lattice_axes(item, ctx):
     `step` and `count` are the numbers; `step_q` and `count_q` are Quantities that may follow sizes.
     """
     data = item["data"]
+    kind = _distance_kind(data)
     axes = []
     for which, dir_key, qty_key in (("one", "direction_one", "quantity_one"), ("two", "direction_two", "quantity_two")):
         quantity = int(data.get(qty_key) or 1)
@@ -244,7 +278,7 @@ def _lattice_axes(item, ctx):
         if not direction or vec.length(direction) < 1e-9:
             return Refusal("The direction of this pattern could not be read.")
         count_q = values.quantity(ctx, item, "quantity_" + which, quantity, dim="scalar", whole=True)
-        step_q = _axis_step(item, ctx, which, quantity, count_q)
+        step_q = _axis_step(item, ctx, which, quantity, count_q, kind)
         if isinstance(step_q, Refusal):
             return step_q
         axes.append({"dir": vec.unit(direction), "step": step_q.n, "count": quantity,

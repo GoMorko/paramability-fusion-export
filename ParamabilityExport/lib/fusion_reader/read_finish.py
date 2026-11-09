@@ -169,6 +169,7 @@ def chamfer_before(feature, ctx):
 
 
 def _face_record(face, ctx):
+    face = geo.native_input(face, ctx)
     return geo.mark_foreign({"token": _token(face), "point": geo.point(face.pointOnFace)}, face, ctx)
 
 

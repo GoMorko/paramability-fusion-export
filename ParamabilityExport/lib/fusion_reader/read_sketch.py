@@ -33,6 +33,30 @@ def _frame_is_identity(frame):
         max(abs(a - b) for a, b in zip(frame[key], want)) <= 1e-6 for key, want in _IDENTITY.items())
 
 
+def _on_ground_plane(frame):
+    """True when the sketch plane is the plane z = 0, where model and sketch points both have z = 0."""
+    z = frame["z"]
+    return abs(abs(z[2]) - 1.0) <= 1e-6 and abs(frame["origin"][2]) <= 1e-4
+
+
+def _spread(points):
+    """True when the points (mm) do not all lie on one line."""
+    if len(points) < 3:
+        return False
+    a = points[0]
+    b = max(points, key=lambda p: sum((p[i] - a[i]) ** 2 for i in range(3)))
+    ab = [b[i] - a[i] for i in range(3)]
+    length = math.sqrt(sum(c * c for c in ab))
+    if length <= 1e-4:
+        return False
+    for p in points:
+        ap = [p[i] - a[i] for i in range(3)]
+        cross = [ap[1] * ab[2] - ap[2] * ab[1], ap[2] * ab[0] - ap[0] * ab[2], ap[0] * ab[1] - ap[1] * ab[0]]
+        if math.sqrt(sum(c * c for c in cross)) / length > 1e-4:
+            return True
+    return False
+
+
 def _decide_by_entity(sketch, curves):
     """"sketch", "model" or "ambiguous" from comparing profile curves with their sketch entities."""
     moved = False
@@ -60,6 +84,9 @@ class _Space:
             if any(abs(p.z) > _FLAT_CM for p in probes):
                 mode = "model"
             elif _frame_is_identity(frame):
+                mode = "sketch"
+            elif not _on_ground_plane(frame) and _spread([geo.point(p) for p in probes]):
+                # Model points off a line on a plane other than z = 0 cannot all have z = 0.
                 mode = "sketch"
             else:
                 mode = geo.safe(lambda: _decide_by_entity(sketch, curves), "ambiguous")
@@ -125,6 +152,7 @@ def _read_curve(geometry, space):
 
 def read_profile(profile, ctx=None):
     """One Profile as { sketch, frame, loops }; "foreign": true when its sketch is not the target component's."""
+    profile = geo.native_input(profile, ctx)
     sketch = profile.parentSketch
     loops = geo.collection_items(profile.profileLoops)
     loop_curves = [geo.collection_items(loop.profileCurves) for loop in loops]

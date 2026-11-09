@@ -129,10 +129,15 @@ ITEM:
   `ExtrudeFeature`). Items without an entity: `"type": "none"`.
 - `health`: from `TimelineObject.healthState` (`ok`, `warning`, `error`); `message` from
   `errorOrWarningMessage`.
-- `component`: the token of the feature's `parentComponent` (read on the native entity; empty when unreadable).
-  `in_target_component`: the feature's component is the target's component, compared as Fusion objects and not by
-  token text (true when unreadable). Feature readers run only for items in the target's component; the other items
-  keep `"data": {}` with their `bodies_after`, health and message.
+- `component`: the token of the component the item lives in (read on the native entity; empty when unreadable): the
+  `parentComponent` of a feature or sketch, the `component` of construction geometry, and for an `Occurrence` the
+  component it sits in (the `component` of its `assemblyContext`, else its `sourceComponent`; its own `component` is
+  the one it shows). `in_target_component`: that component is the target's component, compared as Fusion objects and
+  not by token text. When the component cannot be read it is true for a feature (so the translator still refuses a
+  feature of the target it cannot read) and false for the items that are not modeling steps (sketches, construction
+  geometry, occurrences, joints and the like; `NOT_MODELING_TYPES` in `lib/translator/capture.py`). Feature readers
+  run only for items in the target's component; the other items keep `"data": {}` with their `bodies_after`, health
+  and message.
 - `entity_context`: `"proxy"` only when `TimelineObject.entity` came as an occurrence proxy and was turned native
   (`nativeObject`) before reading; absent otherwise.
 - `bodies_before` (not for suppressed items): the bodies of the target's component at the marker before the item.
@@ -141,7 +146,9 @@ ITEM:
   measure could not be read.
 - `bodies_after`: `feature.bodies` read with the marker just after the item. `null` (with an item level
   `"read_error": "bodies: ..."`) when the bodies cannot be read; it is not the same as `[]`, which says the item
-  makes no body. The driver must not treat `null` as helper geometry.
+  makes no body. The driver must not treat `null` as helper geometry. Items that are not modeling steps get `[]`
+  without a read. The translator skips them whatever their bodies say (captures of add-in 0.3.1 have `null` there);
+  an occurrence, joint or the like that changes the target is refused.
 - `data`: per type, below. Types without a reader (sketches, construction geometry, unknown features) carry
   `"data": {}`. When a reader fails, `data` is `{ "read_error": "<message>" }`.
 - A member that cannot be read never becomes a plausible value: it reads as `null` or as an `other` entry
@@ -185,9 +192,11 @@ From `Profile.parentSketch.transform`, `Profile.profileLoops`, `ProfileLoop.isOu
 (the translator refuses it).
 
 `space` says how the curve space was decided: `sketch` or `model` (the reader mapped model space curves into sketch
-2D) or `ambiguous`. A curve off the plane z = 0 proves model space. In the plane z = 0 with a sketch frame other
-than the identity, the reader compares the curve with `ProfileCurve.sketchEntity`; if that cannot decide it writes
-`ambiguous` and the translator refuses the profile.
+2D) or `ambiguous`. A curve off the plane z = 0 proves model space. Points all at z = 0 that do not lie on one line
+prove sketch space when the sketch plane is not the plane z = 0 (model points on such a plane cannot all have
+z = 0). In the plane z = 0 with a sketch frame other than the identity, the reader compares the curve with
+`ProfileCurve.sketchEntity`; if that cannot decide it writes `ambiguous` and the translator refuses the profile. A
+loop whose chained curves enclose no area is refused.
 
 CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriented):
 
@@ -221,7 +230,8 @@ CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriente
 }
 ```
 
-- `operation`: `join`, `cut`, `intersect`, `newBody`, `newComponent` (from `FeatureOperations`).
+- `operation`: `join`, `cut`, `intersect`, `newBody`, `newComponent` (from `FeatureOperations`). A new body from
+  several profiles is copied only when `bodies_after` lists one body (the profiles touch).
 - `start`: `{ "kind": "profilePlane" }`, `{ "kind": "offset", "offset": mm }` (`OffsetStartDefinition.offset`),
   `{ "kind": "fromEntity", "plane": PLANE or null, "entity_type": "...", "face_point": [..] }`
   (`FromEntityStartDefinition`, TARGET below).
@@ -240,7 +250,8 @@ CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriente
 - `end_offset`: signed distance along the first profile's sketch `z` from its sketch plane to
   `endFaces[0].pointOnFace`, or null. The measured check of the direction and, for one side, symmetric (half
   length) and two sided extrudes, of the length: the translator refuses when `abs(end_offset - start shift)` is not
-  the planned length within 1e-3 mm.
+  the planned length within 1e-3 mm. A one sided cut that ends past the whole `target_box_before` makes no end face
+  of its own, so a nearer measured end is not checked there.
 - `profile_area`, `end_area` (optional, mm2): the area of the first profile and of `endFaces[0]`. Needed for a tapered
   extrude: the end face must be smaller for a positive recipe taper, else the translator refuses.
 - `bodies_before` (optional, on any item): root bodies at the marker before the item. With it the driver finds a
@@ -368,7 +379,8 @@ CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriente
 
 - `entity_type`: `features`, `faces`, `bodies`, `occurrences`. `sources`: `timelineObject.index` of each input
   feature.
-- `distance_type`: `spacing` or `extent`.
+- `distance_type`: `spacing` or `extent` (enum `PatternDistanceType`), `other` when unreadable. The translator then
+  takes the kind whose grid holds every kept element.
 - `elements`: every `PatternElement` (`id`, `isSuppressed`, `transform` as a frame; the first is the identity).
 
 **CircularPatternFeature** (`inputEntities`, `axis`, `quantity`, `totalAngle`, `isSymmetric`, `patternElements`,
@@ -398,11 +410,37 @@ for extrudes).
 
 **ThreadFeature**: `{ "modeled": bool }` (`isModeled`).
 
+**OffsetFacesFeature** (press pull; `inputFaces`, else `faces`, read before the item; `distance`; `faces` after it):
+
+```json
+{
+  "distance": 2.0,
+  "faces": [
+    { "token": "...", "frame": FRAME, "space": "sketch", "loops": [LOOP, ...], "sides": "square", "meets_offset": false }
+  ],
+  "faces_after": [{ "point": [x, y, z], "normal": [x, y, z] }]
+}
+```
+
+- `distance`: mm, positive along the outward face normal.
+- `faces[]`: a flat face as a profile record (section 4): `frame` is the face plane with `z` the outward normal
+  (`SurfaceEvaluator.getNormalAtPoint`) and `x` the plane's `uDirection`; `loops` from `BRepFace.loops`
+  (`isOuter`, `edges`, each `edge.geometry` mapped into the frame). A face that is not a plane is
+  `{ "kind": "other", "type": "Cylinder" }`.
+- `sides`: `square` when every face next to it (`edge.faces`) is a plane across it or a cylinder along its normal,
+  else `other`. `meets_offset`: a face next to it is moved by the same step.
+- `faces_after`: a point and the outward normal of each flat face of `feature.faces` with the marker after the item.
+  The translator copies a face only when one of them lies on the face plane moved by `distance`; each face becomes an
+  extrude of its outline (join outwards, cut inwards).
+
 ### Inputs from another component (`foreign`)
 
 A record whose entity does not belong to the target's component carries `"foreign": true`; the key is absent
-otherwise. An entity is foreign when it has an `assemblyContext` (it is seen through an occurrence) or its component
-is not the target's component, compared as Fusion objects (`foreign()` in `lib/fusion_reader/read_geometry.py`; the
+otherwise. Fusion can hand a feature's inputs over as occurrence proxies even when they are the target component's
+own; such an entity is read through its `nativeObject` (component coordinates) and is not foreign
+(`native_input()` in `lib/fusion_reader/read_geometry.py`). Any other entity is foreign when it has an
+`assemblyContext` (it is seen through an occurrence) or its component is not the target's component, compared as
+Fusion objects (`foreign()` in `lib/fusion_reader/read_geometry.py`; the
 component is read from `parentComponent`, `component`, `body.parentComponent` or `parentSketch.parentComponent`,
 whichever answers). An entity whose component cannot be read is not marked.
 
@@ -415,6 +453,7 @@ whichever answers). An entity whose component cannot be read is not marked.
 | Fillet and chamfer `sets[].edges[]` | the edge record (`edge.body`) |
 | Shell `faces[]` | the face record (`face.body`); a foreign body input sets `"foreign": true` on the data itself |
 | Revolve and circular pattern `axis`, mirror `plane` | the axis or plane |
+| Offset faces `faces[]` | the face record |
 
 ### Parameters behind values (`data.params`)
 
@@ -506,7 +545,7 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 
 | Item | Check |
 |---|---|
-| Enum value names: `HoleTypes`, `HoleTapTypes`, `FeatureExtentTypes`, `PatternEntityTypes`, the spacing value of `PatternDistanceTypes`, the rounded value of `ShellTypes`, `Curve3DTypes`, fillet continuity, `ChamferCornerTypes` | the reader maps by name text with a fallback to `other`; the "Capture reader calls to watch" lists in `docs/hand-tests.md` logs unknown names |
+| Enum value names: `HoleTypes`, `HoleTapTypes`, `FeatureExtentTypes`, `PatternEntityTypes`, the spacing value of `PatternDistanceType` (add-in 0.3.1 looked for `PatternDistanceTypes` and wrote `other`), the rounded value of `ShellTypes`, `Curve3DTypes`, fillet continuity, `ChamferCornerTypes` | the reader maps by name text with a fallback to `other`; the "Capture reader calls to watch" lists in `docs/hand-tests.md` logs unknown names |
 | `ProfileCurve.geometry` in sketch space or model space; `ProfileCurve.sketchEntity` and `SketchCurve.geometry` in sketch space | reader decides per profile and writes `space` (`ambiguous` is refused); the Tilted sketch test (offset, tilted, bottom face sketch) |
 | `getAsCoordinateSystem()` returns `(origin, xAxis, yAxis, zAxis)` in Python | the Tilted sketch test |
 | `CurveEvaluator3D.getParameterExtents`, `getPointAtParameter`; `SurfaceEvaluator.getNormalAtPoint` | the "Capture reader calls to watch" lists in `docs/hand-tests.md` |
@@ -528,5 +567,8 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | Vertex and face point geometry of a proxy body is in root coordinates, of the native body in component coordinates | the point check; a mismatch gives `placement.error` and a fixed shape |
 | `Occurrence.isReferencedComponent`, `Component.allOccurrencesByComponent` | `linked` and `uses`; a wrong value only changes a note or refusal |
 | `Sketch.transform`, `SketchPoint.worldGeometry` of a native component sketch are in component coordinates | the "Nested and turned" hand test compares one hole position |
+| `Occurrence.sourceComponent` and `Occurrence.assemblyContext` of a timeline occurrence; `ConstructionPlane.component` | the item `component`; the "Bodies inside components" hand tests |
+| Feature inputs (profiles, edges, planes, faces) of a component feature come as proxies through the occurrence; `nativeObject` gives the component's own entity | records of the target's own inputs carry no `foreign`; the "Bodies inside components" hand tests |
+| `OffsetFacesFeature.inputFaces` (or `faces` before the item), `distance`, `faces` after it; `BRepFace.loops`, `BRepLoop.isOuter`, `BRepLoop.edges`, `Plane.uDirection`; positive distance moves the face outwards | `faces_after` must show the face moved by `distance`; the Offset faces hand test |
 | `Sketch.parentComponent`, `ConstructionPlane.component`, `BRepFace.body`, `BRepEdge.body` | `foreign` reads them in a try; an unreadable one leaves the record unmarked |
 | `BRepBody.copyToComponent(proxy)` keeps the assembly place | the copy guard in `step_export.py` compares the bounding boxes (1e-3 mm) and refuses before writing |

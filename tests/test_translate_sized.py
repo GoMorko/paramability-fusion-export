@@ -8,7 +8,7 @@ from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
 from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.translator import translate
-from lib.translator.values import Quantity, _env
+from lib.translator.values import Quantity, _env, _gives_whole_numbers
 
 TRAY = "filter_tray_sized"
 H = "FilterBox_$_height__contains_CeramicMedium"
@@ -291,6 +291,13 @@ class QuantityTest(unittest.TestCase):
         self.assertEqual(q.plus(-2).text, "a + b - 2")
         self.assertEqual(Quantity(1.0).plus(q).text, "1 + (a + b)")
         self.assertEqual(q.divided_by(Quantity(4.0, "n", ("n",))).text, "(a + b) / n")
+
+
+class WholeCountTest(unittest.TestCase):
+    def test_rounding_calls_count_as_whole_inside_a_formula(self):
+        table = type("Table", (), {"sizes": {"depth": {"value": 1.5}, "n": {"value": 3, "kind": "count"}}})()
+        cases = {"ceil(depth) * 2": True, "n * 2 + round(depth / 2)": True, "ceil(depth) / 2": False, "depth * 2": False}
+        self.assertEqual({f: _gives_whole_numbers(table, f) for f in cases}, cases)
 
 
 if __name__ == "__main__":

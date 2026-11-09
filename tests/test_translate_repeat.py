@@ -39,6 +39,12 @@ class RectangularPatternTest(unittest.TestCase):
         self.assertEqual(pattern["linear2"], {"dir": [0, 1, 0], "count": 2, "step": 10})
         assert_schema_ok(self, result.recipe)
 
+    def test_an_unread_distance_kind_is_told_by_the_copies(self):
+        for name, step in (("rpattern_row", 20), ("rpattern_grid_extent", 20)):
+            with self.subTest(name):
+                result = edited(name, lambda capture: pattern_data(capture).update(distance_type="other"))
+                self.assertEqual(steps_of(result.recipe, "pattern")[0]["linear"]["step"], step)
+
     def test_suppressed_and_missing_copies_are_skipped_by_number(self):
         for name in ("rpattern_skip", "rpattern_missing_element"):
             with self.subTest(name):

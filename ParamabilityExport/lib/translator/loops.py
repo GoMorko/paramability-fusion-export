@@ -12,6 +12,7 @@ CHAIN_TOL = 1e-4
 RIGHT_ANGLE_TOL = 1e-6
 ANGLE_TOL_DEG = 1e-6
 MAX_LOOP_POINTS = 1000
+MIN_AREA_MM2 = 1e-6
 
 
 def _n(value):
@@ -59,6 +60,16 @@ def _chain(curves):
     if _dist(chain[-1]["end"], chain[0]["start"]) > CHAIN_TOL:
         return None
     return chain
+
+
+def _area(chain):
+    """Signed area of a chained loop, with each arc drawn through its middle point (enough to tell a flat loop)."""
+    points = []
+    for link in chain:
+        points.append(link["start"])
+        if link["kind"] == "arc":
+            points.append(link["mid"])
+    return 0.5 * sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(points, points[1:] + points[:1]))
 
 
 def _as_rect(chain):
@@ -120,6 +131,8 @@ def loop_of(curves, sketch=""):
         return Refusal("%s is not closed." % _where(sketch))
     if len(chain) > MAX_LOOP_POINTS:
         return Refusal("%s has too many segments." % _where(sketch))
+    if abs(_area(chain)) <= MIN_AREA_MM2:
+        return Refusal("%s has no area." % _where(sketch))
     if all(link["kind"] == "line" for link in chain):
         rect = _as_rect(chain)
         if rect:

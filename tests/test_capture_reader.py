@@ -416,6 +416,15 @@ class SketchCurveTest(unittest.TestCase):
         profile = read_sketch.read_profile(profile_of([line((1, 2, 5), (3, 2, 5))], sketch))
         self.assertEqual((profile["frame"]["origin"], profile["space"]), ([0, 0, 5], "model"))
 
+    def test_flat_points_on_a_standing_sketch_are_sketch_space(self):
+        # A sketch on the YZ plane: its model points would have z off 0, so flat points are in sketch space.
+        standing = matrix(x=(0, 1, 0), y=(0, 0, 1), z=(1, 0, 0))
+        sketch = Obj("fusion::Sketch", name="Side", transform=standing, modelToSketchSpace=lambda p: Obj(x=p.y, y=p.z, z=p.x))
+        pieces = [line((0, 0), (4, 0)), line((4, 0), (4, 3)), line((4, 3), (0, 0))]
+        profile = read_sketch.read_profile(profile_of(pieces, sketch))
+        self.assertEqual(profile["space"], "sketch")
+        self.assertEqual(profile["loops"][0]["curves"][1], {"kind": "line", "start": [4, 0], "end": [4, 3]})
+
     def test_space_in_the_plane_z_zero(self):
         flipped = matrix(y=(0, -1, 0), z=(0, 0, -1))
         to_sketch = lambda p: Obj(x=p.x, y=-p.y, z=-p.z)

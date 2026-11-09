@@ -10,6 +10,7 @@ from tests.test_capture_reader_params import model_param
 
 from lib.fusion_reader.capture import read_capture
 from lib.fusion_reader.read_geometry import ReadContext, foreign
+from lib.fusion_reader.read_geometry import edge_record as geo_edge_record
 from lib.fusion_reader.sketches import read_sketches
 
 PLACE = turn_z(90, (100, 50, 0))
@@ -96,6 +97,23 @@ class ComponentItemsTest(unittest.TestCase):
         item = read(design, tray.proxy)["items"][2]
         self.assertEqual((item["component"], item["in_target_component"], item["data"]), ("root", False, {}))
         self.assertEqual(item["bodies_after"], [{"token": "x1", "name": "Other"}])
+
+    def test_occurrences_and_construction_geometry_name_the_component_they_sit_in(self):
+        tray = Tray()
+        child = Obj(entityToken="lid", name="Lid")
+        inside = Obj("fusion::Occurrence", name="Lid:1", component=child, sourceComponent=tray.component)
+        through = Obj("fusion::Occurrence", name="Lid:1", component=child,
+                      assemblyContext=Obj(component=tray.component), nativeObject=Obj("fusion::Occurrence"))
+        unknown = Obj("fusion::Occurrence", name="Box:1", component=tray.component)
+        plane = Obj("fusion::ConstructionPlane", component=tray.component)
+        lost_plane = Obj("fusion::ConstructionPlane")
+        lost_feature = Obj("fusion::ExtrudeFeature", bodies=Coll([]))
+        entries = [(e, "X", {}) for e in (inside, through, unknown, plane, lost_plane, lost_feature)]
+        items = read(tray.design(entries), tray.proxy)["items"]
+        self.assertEqual([(i["component"], i["in_target_component"]) for i in items],
+                         [("tray", True), ("tray", True), ("", False), ("tray", True), ("", False), ("", True)])
+        self.assertEqual([i["bodies_after"] for i in items[:5]], [[]] * 5)
+        self.assertFalse(any("read_error" in i for i in items[:5]))
 
     def test_a_proxy_entity_is_turned_native_and_marked(self):
         tray = Tray()
@@ -195,7 +213,27 @@ class ForeignTest(unittest.TestCase):
         data = self.read_data(ext)
         self.assertTrue(data["profiles"][0]["foreign"])
         self.assertTrue(data["side_one"]["foreign"])
-        self.assertEqual([p.get("foreign") for p in data["participants"]], [True, None])
+        # The target seen through its own occurrence is the target itself.
+        self.assertEqual(data["participants"], [{"token": "t1", "name": "Body1"}] * 2)
+
+    def test_own_inputs_seen_through_the_occurrence_are_read_native(self):
+        moved = rect_profile(w=90)
+        moved.assemblyContext = self.tray.occurrence
+        moved.nativeObject = rect_profile()
+        moved.nativeObject.parentSketch.parentComponent = self.tray.component
+        stray = edge("e1", 7)
+        stray.assemblyContext = self.tray.occurrence
+        stray.nativeObject = edge("e1", 1)
+        stray.nativeObject.body = Obj(parentComponent=self.tray.component)
+        ext = self.tray.extrude()
+        ext[0].profile = moved
+        data = self.read_data(ext)
+        self.assertNotIn("foreign", data["profiles"][0])
+        self.assertEqual(max(c["end"][0] for c in data["profiles"][0]["loops"][0]["curves"]), 40)
+        edge_set = with_edges("ConstantRadiusFilletEdgeSet", [stray], radius=model_param("d", "r", 0.2),
+                              isTangentChain=False, continuity="TangentSurfaceContinuityType")
+        record = self.read_data(self.tray.feature("FilletFeature", "F", edgeSets=Coll([edge_set])))["sets"][0]["edges"][0]
+        self.assertEqual(record, geo_edge_record(stray.nativeObject))
 
     def test_native_inputs_carry_no_flag(self):
         data = self.read_data(self.tray.extrude())

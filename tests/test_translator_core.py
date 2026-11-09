@@ -40,7 +40,7 @@ class CoreTest(unittest.TestCase):
         result = translate_fixture("core_unknown_feature", {"ExtrudeFeature": extrude_handler})
         self.assertIsNone(result.recipe)
         self.assertEqual((result.refusal["index"], result.refusal["type"]), (2, "EmbossFeature"))
-        self.assertIn("emboss", result.refusal["reason"])
+        self.assertIn("Emboss steps raise or sink a sketch", result.refusal["reason"])
         verdicts = {v["index"]: v["verdict"] for v in result.items}
         self.assertEqual(verdicts[1], "translated")
         self.assertEqual(verdicts[2], "unsupported")

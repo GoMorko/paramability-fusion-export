@@ -1,8 +1,8 @@
 """The driver: walks a capture's items, calls one handler per feature type, builds the recipe."""
-from . import combine, extrude, finish, hole, repeat, revolve
+from . import combine, extrude, finish, hole, offset, repeat, revolve
 from .sizes import sketch_fixes, used_sizes
 from . import notes as wording, place
-from .capture import outside_component, renamed_target, same_body, validate_capture
+from .capture import ASSEMBLY_TYPES, SKETCH_TYPES, outside_component, renamed_target, same_body, validate_capture
 from .context import Context
 from .result import Refusal, TranslateResult, make_verdict
 from ..params.expressions import MAX_FORMULA_LENGTH
@@ -15,12 +15,14 @@ MAX_NEAR_POINTS = 32
 MAX_PATTERN_COPIES = 64
 MAX_PASSES = 70
 
-SKIP_TYPES = ("Sketch", "ConstructionPlane", "ConstructionAxis", "ConstructionPoint", "none")
+SKIP_TYPES = SKETCH_TYPES + ("none",)
 
-# Timeline items that hold no solid geometry: with no readable bodies they cannot change the part.
-NON_GEOMETRY_TYPES = ("Joint", "JointOrigin", "AsBuiltJoint", "RigidGroup", "Canvas", "Decal")
+_MODULES = (extrude, revolve, hole, finish, repeat, combine, offset)
 
-_MODULES = (extrude, revolve, hole, finish, repeat, combine)
+# Plain reasons for feature types the recipe has no step for.
+UNSUPPORTED_REASONS = {
+    "EmbossFeature": "Emboss steps raise or sink a sketch on a face, which Paramability cannot do yet.",
+}
 HANDLERS = {t: m.handle for m in _MODULES for t in m.TYPES}
 
 
@@ -215,6 +217,16 @@ def _walk(capture, table, size_table):
             result.items.append(make_verdict(item, "skipped", note=reason))
             continue
 
+        if item.get("type") in ASSEMBLY_TYPES:
+            # Components, joints and the like: in component coordinates they never change the part's shape.
+            if item.get("target_changed") is True:
+                if not made_in_component:
+                    return refuse(item, "This body was made in another component and moved here later. "
+                                  "Steps across components are not copied yet.", wording.made_elsewhere_note())
+                return refuse(item, "This step changes the part, which is not copied yet.")
+            result.items.append(make_verdict(item, "skipped", note=""))
+            continue
+
         if outside_component(item) and "component_root" not in item:
             # A step made in another component: harmless unless it changes the target.
             if item.get("target_changed") is True or _touches_target(item, ctx):
@@ -237,7 +249,7 @@ def _walk(capture, table, size_table):
             return refuse(item, "This step does not build in Fusion.")
 
         handler = table.get(item.get("type"))
-        if not touches and handler is None and not item["bodies_after"] and item.get("type") not in NON_GEOMETRY_TYPES:
+        if not touches and handler is None and not item["bodies_after"]:
             return refuse(item, "Steps of type %s are not copied yet." % type_words(item["type"]))
         if not touches:
             if not _foreign(_data(item)):
@@ -246,7 +258,8 @@ def _walk(capture, table, size_table):
             continue
 
         if handler is None:
-            return refuse(item, "Steps of type %s are not copied yet." % type_words(item["type"]))
+            return refuse(item, UNSUPPORTED_REASONS.get(item["type"])
+                          or "Steps of type %s are not copied yet." % type_words(item["type"]))
         if _data(item).get("read_error"):
             return refuse(item, "This step could not be read from Fusion.")
         if _foreign(_data(item)):

@@ -13,6 +13,7 @@ through a module level READERS dict; a missing module means those types give `da
 import importlib
 
 from ..export_plan.temp_copy import require_marker_at_end
+from ..translator.capture import NOT_MODELING_TYPES
 from . import read_geometry as geo
 from . import read_solid
 from .parameters import list_model_parameters, list_user_parameters
@@ -26,7 +27,7 @@ BOX_TOLERANCE_MM = 1e-4
 VOLUME_TOLERANCE_MM3 = 1e-4
 VOLUME_RELATIVE = 1e-9
 
-_OPTIONAL_READER_MODULES = ("read_finish", "read_repeat")
+_OPTIONAL_READER_MODULES = ("read_finish", "read_repeat", "read_offset")
 
 
 class CaptureReadError(Exception):
@@ -76,6 +77,20 @@ def _native_entity(obj):
         native = geo.safe(lambda: entity.nativeObject, None)
         return (native or entity), True
     return entity, False
+
+
+def _owner_component(raw, entity, type_name):
+    """The component an item lives in, or None when unreadable.
+
+    An occurrence sits in the component of its assembly context, or in its `sourceComponent`; its own `component` is
+    the one it shows. Other entities name theirs through `parentComponent` or `component` (construction geometry).
+    """
+    if type_name == "Occurrence":
+        context = geo.safe(lambda: raw.assemblyContext, None)
+        if context is not None:
+            return geo.safe(lambda: context.component, None)
+        return geo.safe(lambda: entity.sourceComponent, None)
+    return geo.component_of(entity)
 
 
 def _target_state(ctx):
@@ -131,11 +146,13 @@ def _start_item(timeline, ctx, readers, index, items, group_indices):
     items[index] = item
     if entity is None:
         return
-    component = geo.safe(lambda: entity.parentComponent, None)
-    token = geo.safe(lambda: component.entityToken, None)
-    if token:
-        item["component"] = token
+    component = _owner_component(geo.safe(lambda: obj.entity, None), entity, item["type"])
+    if component is not None:
+        item["component"] = geo.safe(lambda: component.entityToken, "") or ""
         item["in_target_component"] = geo.same_entity(component, ctx.component)
+    else:
+        # An unreadable feature stays the target's, so the translator refuses it if it touches the part.
+        item["in_target_component"] = item["type"] not in NOT_MODELING_TYPES
     if item["suppressed"]:
         return
     bodies_before = geo.safe(lambda: _component_bodies(ctx), None)
@@ -179,7 +196,7 @@ def _finish_item(timeline, ctx, readers, index, items, states):
     if entity is None or item["suppressed"]:
         return
     item["target_changed"] = _target_changed(*states)
-    item["bodies_after"] = _bodies_after(item, entity)
+    item["bodies_after"] = [] if item["type"] in NOT_MODELING_TYPES else _bodies_after(item, entity)
     after = (readers.get(item["type"]) or (None, None))[1]
     if after is not None and item["in_target_component"] and "read_error" not in item["data"]:
         try:

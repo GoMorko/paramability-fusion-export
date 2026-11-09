@@ -30,7 +30,7 @@ def _inputs(feature):
 
 def _entity_type(feature, inputs):
     """features, faces, bodies, occurrences or other. The enum name is tried first, then the type of the inputs."""
-    name = geo.safe(lambda: geo.enum_name(feature.patternEntityType, "PatternEntityTypes"), "")
+    name = geo.safe(lambda: geo.enum_name(feature.patternEntityType, "PatternEntityTypes", "PatternEntityType"), "")
     found = geo.pick_by_text(name, _ENTITY_TYPES, "")
     if found:
         return found
@@ -65,10 +65,10 @@ def _direction(entity):
     return plane["normal"] if plane else None
 
 
-def _direction_member(feature, vector_name, entity_name):
+def _direction_member(feature, vector_name, entity_name, ctx):
     """The direction of a rectangular pattern: a vector member when the API has one, else the direction entity."""
     for name in (vector_name, entity_name):
-        found = geo.safe(lambda: _direction(getattr(feature, name)), None)
+        found = geo.safe(lambda: _direction(geo.native_input(getattr(feature, name), ctx)), None)
         if found is not None:
             return found
     return None
@@ -96,16 +96,16 @@ def _suppressed_ids(feature):
 def rectangular_before(feature, ctx):
     data = _common(feature)
     quantity_two = geo.safe(lambda: _number(feature.quantityTwo, 1), 1)
-    direction_two = _direction_member(feature, "directionTwo", "directionTwoEntity")
+    direction_two = _direction_member(feature, "directionTwo", "directionTwoEntity", ctx)
     data.update({
-        "direction_one": _direction_member(feature, "directionOne", "directionOneEntity"),
+        "direction_one": _direction_member(feature, "directionOne", "directionOneEntity", ctx),
         "quantity_one": _number(feature.quantityOne, 1),
         "distance_one": geo.length(feature.distanceOne),
         "direction_two": direction_two,
         "quantity_two": quantity_two if direction_two is not None else 1,
         "distance_two": geo.safe(lambda: geo.length(feature.distanceTwo), 0.0) if direction_two is not None else 0.0,
         "distance_type": geo.pick_by_text(
-            geo.safe(lambda: geo.enum_name(feature.patternDistanceType, "PatternDistanceTypes"), ""),
+            geo.safe(lambda: geo.enum_name(feature.patternDistanceType, "PatternDistanceType", "PatternDistanceTypes"), ""),
             _DISTANCE_TYPES, "other"),
         "symmetric_one": geo.safe(lambda: bool(feature.isSymmetricInDirectionOne), False),
         "symmetric_two": geo.safe(lambda: bool(feature.isSymmetricInDirectionTwo), False),
@@ -137,6 +137,7 @@ def pattern_after(feature, ctx, data):
 
 
 def _plane_record(entity, ctx):
+    entity = geo.native_input(entity, ctx)
     return geo.mark_foreign(geo.plane_of(entity), entity, ctx)
 
 

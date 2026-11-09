@@ -164,10 +164,12 @@ class ExtentTest(unittest.TestCase):
         self.assertEqual([s["combine"] for s in steps], ["add", "add"])
         self.assertEqual(verdict_of(result, 3)["steps"], ["extrude_3", "extrude_3_2"])
 
-    def test_new_body_with_two_profiles_refuses(self):
+    def test_new_body_from_two_outlines_that_fusion_made_one_body(self):
         result = translate_fixture("extrude_new_body_two_bodies")
-        self.assertIsNone(result.recipe)
-        self.assertIn("several bodies", result.refusal["reason"])
+        self.assertEqual([s["combine"] for s in result.recipe["features"]], ["new", "add"])
+        item = load_capture("extrude_new_body_two_bodies")["items"][-1]
+        item["bodies_after"] = []
+        self.assertIn("several bodies", extrude.handle(item, None).reason)
 
     def test_profiles_on_two_planes_refuse(self):
         result = translate_fixture("extrude_profiles_two_planes")
@@ -206,6 +208,12 @@ class MeasuredLengthTest(unittest.TestCase):
     def test_to_entity_offset_is_checked_against_the_measured_end(self):
         result = variant("extrude_to_plane", lambda d: d["side_one"].update(offset=1.5))
         self.assertIsNone(result.recipe)
+
+    def test_a_cut_past_the_part_is_not_checked_against_a_nearer_wall(self):
+        def cut(distance):
+            return lambda d: d.update(side_one={"kind": "distance", "distance": distance, "taper_deg": 0.0}, end_offset=30.0)
+        self.assertEqual(under_test(variant("extrude_cut_through_one", cut(60.0)), 3)[0]["distance"], 60)
+        self.assertIsNone(variant("extrude_cut_through_one", cut(35.0)).recipe)
 
     def test_missing_measure_is_not_a_refusal(self):
         self.assertIsNotNone(variant("extrude_symmetric_half", lambda d: d.update(end_offset=None)).recipe)
