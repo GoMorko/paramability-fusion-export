@@ -26,10 +26,11 @@ The button "Export for Paramability" shows in the Utilities tab.
 
 One size saves a plain part. Two or more sizes save a part with a dropdown.
 
-With one size, "Export as a recipe" (on by default) also copies the modeling steps: sketches, extrudes, revolves,
-holes, fillets, chamfers, shells, patterns and mirrors of one body. Paramability then opens the part as steps you can
-edit. When a step cannot be copied, the file keeps the shape as a plain part and the message after the export names
-the first step that stopped it. A copy of what the add-in read from Fusion is saved inside the file as `report.json`.
+With one size, "Export as a recipe" (on by default) also saves the modeling steps of the picked body: sketches
+with extrudes and revolves, holes, rounds, chamfers, shells, rectangular and circular patterns, mirrors and combines.
+The current Paramability opens such a file as a plain part and says the steps are kept for a later version. When a
+step cannot be copied, the file holds the plain part only, and the message after the export names the first step that
+stopped it. A copy of what the add-in read from Fusion is saved inside the file as `report.json`.
 
 After the export, a cancel or a size that does not build, your parameters are set back to their old values.
 
@@ -46,8 +47,14 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 ## Limits
 
 - One solid body per export.
-- A recipe covers the picked body only, built from the root component. Thin extrudes, spline outlines, variable fillets,
-  symmetric patterns, sweeps, lofts and other steps are not copied yet: the file then holds a plain part.
+- A recipe covers the picked body only, built from the root component. These stop the copy and leave a plain part:
+  thin extrudes, face outlines, spline and other free curve outlines, extrudes that start or end on a tilted or curved
+  surface, extrudes that make a new component, modeled threads, rounds with variable or chord length sizes or curvature
+  continuity, shells that grow outward, close the body or round their corners, patterns of faces or bodies, patterns
+  that spread to both sides of the start, mirrors of faces, a combine with a tool
+  body that has more than one step, and every step type not listed above (sweep, loft, coil, move, draft, emboss).
+- Some steps are copied with a note instead: setback corners, a cosmetic thread (cut as a plain hole), a round or
+  chamfer with more than 32 edges (picked in groups), and a direction or size that Fusion stored two ways.
 - To read the steps, the add-in moves the timeline marker through the design and puts it back at the end.
 - Only plain number parameters can be columns. A parameter worked out by a formula cannot, and neither can one in a unit this export cannot convert (units other than mm, cm, m, in, ft, deg, rad or none).
 - Paramability opens up to 256 MB per size and 1 GB per file. The export stops with a message above that.

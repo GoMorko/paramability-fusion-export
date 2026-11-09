@@ -1,13 +1,10 @@
 # Capture format
 
 The capture is the plain dict the reader (`lib/fusion_reader/`) returns for one design, and the only input of the
-pure translator (`lib/translator/`). Fixtures in `tests/fixtures/captures/` use this format. The translator refuses a
-capture whose `capture` number is not 1, or that lacks `capture`, `target` or `items`, with a `CaptureError`.
-
-The reader (`lib/fusion_reader/`) walks the timeline and returns one JSON-safe dict, the **capture**. The
-translator (`lib/translator/`) reads only the capture. Fixtures are captures written by hand or saved from real
-designs (the export writes the capture into `report.json`, section 6), so every translator test runs without
-Fusion.
+pure translator (`lib/translator/`). Fixtures in `tests/fixtures/captures/` use this format, so every translator test
+runs without Fusion. They are written by hand or saved from real designs: the export writes the capture into
+`report.json` (section 6). The translator refuses a capture whose `capture` number is not 1, or that lacks `capture`,
+`target` or `items`, with a `CaptureError`.
 
 ## 1. Rules for every value
 
@@ -19,7 +16,9 @@ Fusion.
   `Matrix3D.getAsCoordinateSystem()`.
 - A plane is `{ "point": [..], "normal": [..] }`. An axis is `{ "point": [..], "dir": [..] }` (dir unit).
 - A box is `{ "min": [..], "max": [..] }` from `BRepBody.boundingBox` (`minPoint`, `maxPoint`).
-- Bodies are named by `BRepBody.entityToken` plus `BRepBody.name` (fallback when tokens change).
+- Bodies are named by `BRepBody.entityToken` plus `BRepBody.name`. Two refs name one body when both tokens match; the
+  names are compared only when a token is missing. A body with the target's name and another token is not matched:
+  the translator refuses ("The body could not be followed through the timeline") rather than guess.
 - An entity the reader cannot express becomes `{ "kind": "other", "type": "<objectType>" }`; the translator
   refuses it with a note. The reader never throws for an unknown shape.
 
@@ -37,7 +36,16 @@ Fusion.
 ```
 
 `target` is the picked body at the end of the timeline (`volume` cm3 times 1000). `items` lists every timeline
-item in order. Group objects are skipped; the children of a group are listed as ordinary items.
+item in order. Group objects are skipped; the children of a group are listed as ordinary items, and the reader raises
+when a group lists a child the walk did not reach.
+
+What the translator trusts: `target.token` and `target.name` (to follow the body), the item fields in section 5,
+and the item level `target_box_before` boxes (through all cuts, mirrors). It never reads `target.box` or
+`target.volume_mm3`; they are kept for a later geometry check against the rebuilt recipe. In fixtures both are
+computed from the capture by `scripts/fixture_geometry.py` (needs numpy; box within one 0.2 mm voxel, volume within
+about 0.5 percent). `volume_mm3` is null when the part has steps that script does not model (rounds, chamfers, shells,
+tapers, thin walls, modeled threads, face outlines). A fixture with no geometry in its items (the `core_*` cases and
+unreadable ones) keeps a nominal box.
 
 ITEM:
 
@@ -102,7 +110,7 @@ Reading inputs at the position before the item covers the getters that the refer
 
 From `Profile.parentSketch.transform`, `Profile.profileLoops`, `ProfileLoop.isOuter`, `ProfileLoop.profileCurves`,
 `ProfileCurve.geometry` and `ProfileCurve.geometryType`. A planar face used as a profile is `{ "face": true }`
-(refused in F3).
+(the translator refuses it).
 
 `space` says how the curve space was decided: `sketch` or `model` (the reader mapped model space curves into sketch
 2D) or `ambiguous`. A curve off the plane z = 0 proves model space. In the plane z = 0 with a sketch frame other
@@ -338,21 +346,21 @@ the page says "the extent type of a hole is currently limited to a distance exte
 Read on 2026-11-07: `TimelineObject`, `FilletFeature`, `ChamferFeature`, `CircularPatternFeature`,
 `MirrorFeature`, `CombineFeature`, `Sketch`, `Profile`, `ProfileLoop`, `FeatureOperations`.
 
-Not verified (each has a measured check or a hand test in section 5):
+Not verified (each has a measured check or a test in section 7 of `docs/hand-tests.md`):
 
 | Item | Check |
 |---|---|
-| Enum value names: `HoleTypes`, `HoleTapTypes`, `FeatureExtentTypes`, `PatternEntityTypes`, the spacing value of `PatternDistanceTypes`, the rounded value of `ShellTypes`, `Curve3DTypes`, fillet continuity, `ChamferCornerTypes` | the reader maps by name text with a fallback to `other`; hand test (enum names) logs unknown names |
-| `ProfileCurve.geometry` in sketch space or model space; `ProfileCurve.sketchEntity` and `SketchCurve.geometry` in sketch space | reader decides per profile and writes `space` (`ambiguous` is refused); hand test 2 (offset, tilted, bottom face sketch) |
-| `getAsCoordinateSystem()` returns `(origin, xAxis, yAxis, zAxis)` in Python | hand test 2 |
-| `CurveEvaluator3D.getParameterExtents`, `getPointAtParameter`; `SurfaceEvaluator.getNormalAtPoint` | hand test (enum names) |
-| A flipped one sided extrude stores a negative distance | `end_offset`; hand test 4 |
-| Taper sign (Fusion positive grows or shrinks) | one constant `FUSION_TAPER_SIGN` in `extrude.py`; hand test 4 |
-| `ToEntityExtentDefinition`, `TwoSidesDistanceExtentDefinition`, `TwoSidesAngleExtentDefinition`, `FromEntityStartDefinition` field names | reader falls back to `other`; hand test 4 |
-| Revolve turning sense | `start_face_normal`; hand test 3 |
-| Hole `direction` points into the material; blind depth is measured to the shoulder, not the tip; how a flat drill point shows (`tipAngle` 180 or another member) | `end_points`; hand test 5 |
-| `patternElements` includes suppressed elements | translator fills missing lattice places from the quantities; hand test 6 |
-| `entityToken` of a body stays the same across marker positions | name fallback; hand test 7 |
-| `Timeline.item` walks inside groups; `TimelineGroup.startIndex`, `endIndex` | reader raises `CaptureReadError` when a group child is not in the walk; hand test (enum names) |
-| Moving the marker marks the document changed or adds undo entries | hand test 8 |
-| `isRollingBallCorner` still on `FilletFeature` (some fillet members are retired) | reader reads it in a try, default true; hand test 6 |
+| Enum value names: `HoleTypes`, `HoleTapTypes`, `FeatureExtentTypes`, `PatternEntityTypes`, the spacing value of `PatternDistanceTypes`, the rounded value of `ShellTypes`, `Curve3DTypes`, fillet continuity, `ChamferCornerTypes` | the reader maps by name text with a fallback to `other`; the "Capture reader calls to watch" lists in `docs/hand-tests.md` logs unknown names |
+| `ProfileCurve.geometry` in sketch space or model space; `ProfileCurve.sketchEntity` and `SketchCurve.geometry` in sketch space | reader decides per profile and writes `space` (`ambiguous` is refused); the Tilted sketch test (offset, tilted, bottom face sketch) |
+| `getAsCoordinateSystem()` returns `(origin, xAxis, yAxis, zAxis)` in Python | the Tilted sketch test |
+| `CurveEvaluator3D.getParameterExtents`, `getPointAtParameter`; `SurfaceEvaluator.getNormalAtPoint` | the "Capture reader calls to watch" lists in `docs/hand-tests.md` |
+| A flipped one sided extrude stores a negative distance | `end_offset`; the Extrude directions test |
+| Taper sign (Fusion positive grows or shrinks) | one constant `FUSION_TAPER_SIGN` in `extrude.py`; the Extrude directions test |
+| `ToEntityExtentDefinition`, `TwoSidesDistanceExtentDefinition`, `TwoSidesAngleExtentDefinition`, `FromEntityStartDefinition` field names | reader falls back to `other`; the Extrude directions test |
+| Revolve turning sense | `start_face_normal`; the Turned knob test |
+| Hole `direction` points into the material; blind depth is measured to the shoulder, not the tip; how a flat drill point shows (`tipAngle` 180 or another member) | `end_points`; the Holes test |
+| `patternElements` includes suppressed elements | translator fills missing lattice places from the quantities; the Bin test |
+| `entityToken` of a body stays the same across marker positions | a token that changes makes the translator refuse the capture; the Combine test |
+| `Timeline.item` walks inside groups; `TimelineGroup.startIndex`, `endIndex` | reader raises `CaptureReadError` when a group child is not in the walk; the "Capture reader calls to watch" lists in `docs/hand-tests.md` |
+| Moving the marker marks the document changed or adds undo entries | the Marker and document test |
+| `isRollingBallCorner` still on `FilletFeature` (some fillet members are retired) | reader reads it in a try, default true; the Bin test |

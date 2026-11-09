@@ -61,11 +61,19 @@ The add-in exports the picked body alone. The choice is the constant `MULTI_BODY
 
 ## 7. Recipe export (one size, "Export as a recipe" on)
 
-Run in Fusion, then open each file in Paramability with Open. "Matches" means the toast "Matches your Fusion part."
-When a design surprises you, send `report.json` from inside the file (a zip): its `capture` becomes a test fixture.
-The calls and enum names these tests pin are in the "Capture reader calls to watch" parts below.
+The current Paramability opens a recipe package as a plain part and shows "This package has editable steps that this
+version cannot use yet." It does not rebuild the steps or compare them with the Fusion part yet. So today each test
+checks the file, not the rebuilt part:
 
-- [ ] **Plate**: a sketched rectangle with a pocket, two through holes and an L shaped boss. Lands as a recipe and
+- the saved message in Fusion says how many steps were copied, or names the step that stopped the copy;
+- in the app repo, `npm run recipe:check -- <file>.paramability` prints `ok` for a recipe package;
+- the steps listed in `recipe.json` (a zip entry) match the design, and `report.json` holds the capture.
+
+When a design surprises you, send `report.json`: its `capture` becomes a test fixture. The calls and enum names these
+tests pin are in the "Capture reader calls to watch" parts below. Once Paramability rebuilds recipes, "Matches" below
+means the part it builds agrees with the Fusion part.
+
+- [ ] **Plate**: a sketched rectangle with a pocket, two through holes and an L shaped boss. Saves as a recipe and
       matches. Put two features in a timeline group to check that groups are walked.
 - [ ] **Tilted sketch**: a boss on a sketch on an angled construction plane, offset from the origin. Matches.
 - [ ] **Turned knob**: a full revolve, a 90 degree revolve cut, a symmetric 120 degree revolve. Matches.
@@ -83,8 +91,9 @@ The calls and enum names these tests pin are in the "Capture reader calls to wat
       as they were.
 - [ ] **Fixed shape**: a part with an emboss, and one with a variable radius fillet. Each saves as a fixed shape
       (plain CAD part) and the message after the export names that feature.
-- [ ] **Y up**: a design made with the Y up preference, exported with "Y up". It stands upright; after a size edit
-      in Paramability the rebuild still stands upright.
+- [ ] **Y up**: a design made with the Y up preference, exported with "Y up". The plain part stands upright in
+      Paramability, and the positions in `recipe.json` are Z up (a plate drawn on the ground plane has its sketch
+      normal along z).
 - [ ] **Speed**: a design with about 100 timeline items exports in under a minute.
 - [ ] **Several sizes**: a two row export still lands as size choices (one shape per size), and the "Export as a
       recipe" box is hidden while the sizes box holds two or more rows.
@@ -109,10 +118,10 @@ These were written from the API reference and never run:
 
 ## Capture reader calls to watch (extrude, revolve, hole, combine, thread, sketch profiles)
 
-These members and values were written from the API reference or plan and never run. Each has a measured value in
-the capture or reads as `null` or `other`, which the translator refuses, so a wrong guess shows up in `report.json`
-rather than as a wrong part.
-Run the plate, tilted sketch, turned knob, extrude directions, holes and combine designs of the F3 hand tests and
+These members and values were written from the API reference and never run. A member that cannot be read gives
+`null` or `other`, which the translator refuses, so a wrong guess shows up in `report.json` rather than as a wrong
+part. The few members that fall back to a default (the fillet, chamfer and shell ones) are listed in the next part.
+Run the plate, tilted sketch, turned knob, extrude directions, holes and combine designs of section 7 and
 read the capture in `report.json`.
 
 - Enum names are matched by text: `FeatureOperations`, `FeatureExtentTypes`, `HoleTypes`, `HoleTapTypes`,
@@ -153,7 +162,7 @@ read the capture in `report.json`.
 
 ## Capture reader calls to watch (fillet, chamfer, shell, patterns, mirror)
 
-These members and values were written from the API reference or plan and never run. Run the fillet (edges, face and
+These members and values were written from the API reference and never run. Run the fillet (edges, face and
 tangent chain inputs, two radii), chamfer (equal, two distances, distance and angle), shell (open top, body input),
 rectangular pattern (row, grid, flipped direction, suppressed copy), circular pattern and mirror designs, and read the
 capture in `report.json`.
