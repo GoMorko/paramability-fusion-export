@@ -85,8 +85,8 @@ The add-in exports the picked body alone. The choice is the constant `MULTI_BODY
 Paramability rebuilds the steps, compares them with the Fusion part and lands the file as an editable part with its
 sizes. The file itself can also be checked without the app:
 
-- the saved message in Fusion says how many steps were copied and how many sizes are ready, or names the step that
-  stopped the copy;
+- the saved message in Fusion says how many steps were copied and how many sizes are ready, or (for a fixed shape)
+  starts with the step that stopped the copy, written as in the dialog warning ("Extrude9 (extrude)");
 - in the app repo, `npm run recipe:check -- <file>.paramability` prints `ok` for a recipe package;
 - the steps listed in `recipe.json` (a zip entry) match the design, and `report.json` holds the capture;
 - after any export of a recipe or a plain part (also one size from Export size choices), the manifest lists the user parameters under `parameters`, with
@@ -225,6 +225,21 @@ Use the filter box design (names such as `FilterBox_$_depth__contains_CeramicMed
       ranges. A greyed row is never ticked by either.
 - [ ] Pick another body: ticks, greyed rows and texts follow; typed ranges go back to the defaults.
 - [ ] The Design up direction menu is under the count line.
+- [ ] **Early warning.** Pick a body whose steps hold one the add-in cannot copy (for example a sweep, a loft or an
+      emboss). Right under the body picker a box shows "Copy stops at Sweep1 (sweep)." in bold, the reason in short,
+      and "The part will be saved as a fixed shape; your parameters still come along as variables." Hover the box:
+      the tooltip holds the full reason. If no tooltip shows, note it (the reason is then only in the box when short,
+      and in the message after the export). Pick a body that copies fully: the box and the button go away. A step
+      copied with a note (for example a round with setback corners, or an extrude that uses a sketch of another
+      component) adds one line "Copied with a note: ...".
+- [ ] **Show in timeline.** With a stop shown, click "Show in timeline". The stopping step's feature is selected in
+      the canvas and the timeline marker does not move; the design is not changed. The body picker still holds the
+      body. If Fusion refuses the selection a message says so. Note whether the step also shows as selected in the
+      timeline bar. No button shows when the stop has no step (a linked part, an unreadable place, a read that failed).
+- [ ] **Message and status line.** Click OK on such a body. The message box starts with "Saved <file>. Copy stopped
+      at Sweep1 (sweep)." then the reason and "The part is saved as a fixed shape." After you close the box, the
+      lower-right corner of the Fusion window shows "Paramability: saved as a fixed shape. Copy stopped at ...". Note
+      whether the line stays or Fusion replaces it at once (its lifetime is not fixed by the API).
 - [ ] Click OK: the progress window shows as before, then the result window "Saved for Paramability" opens with the
       saved line, a table of sizes (name, range, "matches Fusion", "not checked", "kept fixed" or "not used"), a
       "Stays fixed" group with each reason, and the line "All N parameters come along as variables ...". Only a Close
@@ -276,7 +291,8 @@ inside a component, also a nested or turned one, lands where Fusion shows it.
 - [ ] **C11 Offset faces.** In a component: a box, then Press Pull its top face up by `gap_mm`, then a second box
       whose side face is pulled in by 1 mm. Export: two recipes whose offsets became extrudes (join and cut), and a
       changed `gap_mm` moves the top. The report shows `faces_after` and `sides: "square"`. A pulled face with a
-      fillet next to it, or a curved face, gives a fixed shape that names the offset.
+      fillet next to it, or a curved face, gives a fixed shape that names the offset. The offset item in the report
+      has no `read_error`.
 
 ## Fusion calls to watch
 
@@ -337,6 +353,20 @@ These were written from the API reference and never run:
     if nothing raises but nothing opens, look for the window at the end of the export and note it.
   - `Command.isOKButtonVisible = False` and `Command.cancelButtonText = "Close"`; a group with a table whose cells
     come from the group's `children`; text boxes with `<br>` lines.
+- The early warning (`lib/fusion_ui/timeline_select.py`, `lib/fusion_ui/notice.py`, `commands/ExportForParamability/
+  entry.py`), none of it run yet:
+  - `Timeline.item(index).entity` giving the feature of a timeline item (`None` for a group or an unsupported type),
+    without touching `markerPosition`.
+  - `UserInterface.activeSelections.clear()` and `.add(feature)` with a feature (the reference says `add` takes any
+    entity; it does not name features). While the dialog's body picker is active the selection may go to the picker:
+    after the call the add-in puts the body back with `SelectionCommandInput.clearSelection` and `addSelection`.
+    Check that the body stays picked, that no `inputChanged` loop starts, and that the selection survives until the
+    dialog closes.
+  - A button style `BoolValueCommandInput` ("Show in timeline", `isCheckBox=False`) whose `value` is set back to
+    False in `inputChanged`; `CommandInput.isVisible` on it and on the warning text box; `TextBoxCommandInput.
+    tooltipDescription` and `CommandInput.tooltip` on a read-only text box.
+  - `UserInterface.statusMessage` (the lower-right corner) followed by `adsk.doEvents()`, set at the end of the
+    export command. The reference says its lifetime is not fixed.
 - The component export flow (`commands/ExportForParamability/export_flow.py`): `Design.snapshots` and
   `Snapshots.hasPendingSnapshot` (asked when the dialog opens, before the capture moves the marker, and again at OK;
   an unreadable answer counts as "nothing pending"); `BRepBody.parentComponent` of a
@@ -408,6 +438,10 @@ read the capture in `report.json`.
 - `CombineFeature.targetBody`, `toolBodies`, `isKeepToolBodies`; `ThreadFeature.isModeled`.
 - `participantBodies` on extrude and revolve (may be unreadable; then the list is empty).
 - `Design.findEntityByToken` for the picked body at each marker position, with a name fallback in the root component.
+- `OffsetFacesFeature.inputFaces` with the marker just before the item: a Python list of `BRepFace` in newer Fusion
+  versions (a collection in older ones). When it gives no faces, `OffsetFacesFeature.faces` with the marker after the
+  item is read instead: check that it lists only the moved faces (not their side walls), since each listed flat face
+  is moved back by `distance` and copied.
 - `TimelineObject.isGroup`: group objects are skipped; check that grouped features still appear as items.
 - Moving `Timeline.markerPosition` once per item: the marker ends at the end, the document is not marked changed and
   the undo list is as before.

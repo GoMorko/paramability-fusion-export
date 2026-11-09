@@ -283,6 +283,9 @@ class FakeSelection(FakeInput):
     def addSelection(self, entity):
         self.picked.append(entity)
 
+    def clearSelection(self):
+        self.picked.clear()
+
     @property
     def selectionCount(self):
         return len(self.picked)

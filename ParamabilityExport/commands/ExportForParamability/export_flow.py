@@ -11,7 +11,7 @@ import tempfile
 from ...lib.export_plan.apply import RowBuildError
 from ...lib.export_plan.body_scope import other_sketch_names, scope_inputs
 from ...lib.export_plan.errors import StepExportError
-from ...lib.export_plan.messages import recipe_saved_message
+from ...lib.export_plan.stop_warning import saved_message, status_text
 from ...lib.export_plan.result_rows import result_view
 from ...lib.export_plan.naming import design_title, package_file_name
 from ...lib.export_plan.recipe_export import free_sizes, plan_single_export, translate_capture
@@ -26,6 +26,7 @@ from ...lib.fusion_reader.sketches import read_sketches
 from ...lib.fusion_reader.step_export import export_body_step, resolve_body
 from ...lib.fusion_ui.file_dialog import ask_save_path
 from ...lib.fusion_ui.log import error_box, log, message_box
+from ...lib.fusion_ui.notice import status_notice
 from ...lib.fusion_ui.progress import ProgressDialog
 from ...lib.fusion_ui import result_dialog
 from ...lib.package.caps import PackageCapError
@@ -146,7 +147,8 @@ def _parameter_listing(parameters, model_params, design_unit):
 
 
 def _show_result(file_name, manifest, report, table, ticked):
-    """The result dialog for a recipe; the message box when the file holds no recipe or the dialog cannot start.
+    """The result dialog for a recipe. A part saved as a fixed shape (or a dialog that cannot start) gets the message
+    box, which starts with the stopping step, and then a line in Fusion's status area.
 
     The file is saved by now, so nothing here may report a failed export."""
     try:
@@ -155,7 +157,13 @@ def _show_result(file_name, manifest, report, table, ticked):
         log(f"result view failed: {exc!r}")
         view = None
     if view is None:
-        message_box(recipe_saved_message(manifest, file_name))
+        try:
+            text, notice = saved_message(manifest, report, file_name), status_text(report)
+        except Exception as exc:
+            log(f"saved message failed: {exc!r}")
+            text, notice = "Saved %s." % file_name, ""
+        message_box(text)
+        status_notice(notice)
     else:
         result_dialog.show(view)
 

@@ -4,11 +4,13 @@ import os
 import adsk.core
 
 from ... import config
+from ...lib.export_plan.stop_warning import summarize as summarize_stop
 from ...lib.export_plan.size_offers import offers as size_offers, table_for_body
 from ...lib.fusion_reader.design_info import default_length_unit, detect_up_axis
 from ...lib.fusion_reader.parameters import list_model_parameters, list_user_parameters
 from ...lib.fusion_reader.step_export import count_solid_bodies
-from ...lib.fusion_ui import handlers, recipe_dialog, result_dialog
+from ...lib.fusion_ui.log import log, message_box
+from ...lib.fusion_ui import handlers, recipe_dialog, result_dialog, timeline_select
 from .. import panel
 from . import export_flow
 
@@ -51,24 +53,52 @@ def _on_created(args):
         body = root.bRepBodies.item(0)
     captures = export_flow.CaptureCache(design)
 
-    def offers_for(picked):
-        """The dialog rows for a body: its own parameters when its steps can be read, else the whole design's."""
+    def inspect(picked):
+        """(dialog rows, warning) for a body. The rows hold its own parameters when its steps can be read, else the
+        whole design's. The warning says which step stops the copy; it is None when nothing is picked."""
         capture = captures.get(picked) if picked is not None else None
-        return size_offers(table_for_body(parameters, design_unit, model_params, capture), parameters, design_unit)
+        rows = size_offers(table_for_body(parameters, design_unit, model_params, capture), parameters, design_unit)
+        return rows, _stop_for(capture)
 
-    offers = offers_for(body)
+    def _stop_for(capture):
+        try:
+            return summarize_stop(capture, has_parameters=bool(parameters))
+        except Exception as exc:
+            log(f"stop warning failed: {exc!r}")
+            return None
+
+    offers, stop = inspect(body)
     recipe_dialog.build(
-        command, offers, body, detect_up_axis(adsk.core.Application.get()), design_unit=design_unit)
-    shown = {"body": body.entityToken if body is not None else None}
+        command, offers, body, detect_up_axis(adsk.core.Application.get()), design_unit=design_unit, stop=stop)
+    shown = {"body": body.entityToken if body is not None else None, "stop": stop}
+
+    def show_step(inputs, button):
+        """Select the stopping step in Fusion, then put the body picker and the button back as they were."""
+        picked = recipe_dialog.picked_body(inputs)
+        problem = timeline_select.select_step(design, (shown["stop"] or {}).get("index"))
+        try:
+            recipe_dialog.restore_body(inputs, picked)
+            adsk.core.BoolValueCommandInput.cast(button).value = False
+        except Exception as exc:
+            log(f"restoring the dialog failed: {exc!r}")
+        if problem:
+            message_box(problem)
 
     def on_changed(args):
         inputs = args.inputs
         if args.input.id == recipe_dialog.BODY_ID:
             picked = recipe_dialog.picked_body(inputs)
             token = picked.entityToken if picked is not None else None
-            if picked is not None and token != shown["body"]:
+            if picked is None:
+                shown["body"], shown["stop"] = None, None
+                recipe_dialog.show_stop(inputs, None)
+            elif token != shown["body"]:
                 shown["body"] = token
-                recipe_dialog.apply_offers(inputs, offers, offers_for(picked))
+                fresh, shown["stop"] = inspect(picked)
+                recipe_dialog.apply_offers(inputs, offers, fresh)
+                recipe_dialog.show_stop(inputs, shown["stop"])
+        elif args.input.id == recipe_dialog.SHOW_ID:
+            show_step(inputs, args.input)
         else:
             recipe_dialog.handle_change(inputs, offers, args.input)
 

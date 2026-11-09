@@ -36,11 +36,16 @@ Nothing is typed in Fusion.
    axis, or a joint cannot be a size for now: it is greyed out and its row says why. Click a row to read its comment,
    its formula or the full reason in the box under the table. You can tick up to 64 sizes. Each one gets a
    check, an extra STEP export, so many ticks make the export slower.
-4. Pick the design up direction, click OK and choose where to save the file.
-5. A window then lists each size with its range and its check ("matches Fusion", "not checked", "kept fixed"), what
+4. If a step of the body cannot be copied, a warning shows under the body picker as soon as you pick it: which
+   step stops the copy (for example "Extrude9 (extrude)"), and that the part will be saved as a fixed shape while your
+   parameters still come along as variables. Hover the warning for the full reason. "Show in timeline" selects that
+   step in Fusion; the timeline marker does not move. A line "Copied with a note" lists steps that were copied with a
+   remark.
+5. Pick the design up direction, click OK and choose where to save the file.
+6. A window then lists each size with its range and its check ("matches Fusion", "not checked", "kept fixed"), what
    stays fixed and why, and how many parameters come along as variables. If this window cannot open, the same text is
    shown in a message box.
-6. Open the file in Paramability. The sizes land on the form as variables, ready to configure.
+7. Open the file in Paramability. The sizes land on the form as variables, ready to configure.
 
 Each ticked size has a range: you can type it in the table. It starts from a comment such as `Wall [1..6]` on the
 parameter, otherwise from half to double the current value (a count goes from 1 to twice its value). A parameter that sets how many copies a pattern
@@ -52,8 +57,9 @@ number.
 A size stays a fixed number, with the reason in the message after the export and in the file, when Fusion cannot
 build the part at the checked value, or when it moves a sketch (sketches that follow sizes come in a later version).
 A ticked parameter that no copied step uses is not a size; the message after the export names it.
-When a step cannot be copied, the file holds the plain part only, and the message names the first step that stopped
-it. A copy of what the add-in read is saved inside the file as `report.json`.
+When a step cannot be copied, the file holds the plain part only. The message after the export starts with the
+first step that stopped it, and the lower-right corner of the Fusion window shows a short line with the same step
+(Fusion decides how long it stays). A copy of what the add-in read is saved inside the file as `report.json`.
 
 Every plain part or recipe the add-in writes (also the one size case of Export size choices) also lists the design's user parameters
 (up to 64, in Fusion order) with their current values, units and comments. A parameter worked out by a formula keeps
