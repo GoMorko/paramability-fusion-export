@@ -19,6 +19,7 @@ from ...lib.export_plan.probe_flow import SizeProbe, covers_a_sketch, kept_size_
 from ...lib.export_plan.recipe_export import free_sizes, plan_single_export, translate_capture
 from ...lib.export_plan.runner import ExportCancelled, RowExport
 from ...lib.export_plan.size_checks import PLACEMENT_KEY, build_failures, frame_numbers, plan_checks, read_checks
+from ...lib.export_plan.size_narrowing import narrow_failed
 from ...lib.export_plan.size_offers import labels, sizes_for_checks
 from ...lib.export_plan.temp_copy import MARKER_MESSAGE, marker_at_end
 from ...lib.fusion_reader import design_info, placement
@@ -99,25 +100,56 @@ def _target_component(design, body):
         return design.rootComponent
 
 
-def _run_checks(design, store, units, body, token, checks, tmp, job_box, skip_sketches, source, probe=None):
-    """Export one STEP per check. Returns (results, snapshots per check row, probe states of the checks that built)."""
-    snapshots, reads = {}, []
-    component = _target_component(design, body)
+class _CheckRun:
+    """Exports the STEP of each size check. It keeps the sketches read at every check row and, when a probe runs,
+    the probe state of the rows that built. Every row run puts the parameters back."""
 
-    def export_check(path):
-        current = resolve_body(design, token, body)
-        export_body_step(design, current, path)
-        snapshots[job.current_row] = _snapshot(component, current, source, skip_sketches)
-        if probe is not None:
-            reads.append(probe.read_now())
+    def __init__(self, design, store, units, body, token, tmp, jobs, skip_sketches, source, probe=None):
+        self.design, self.store, self.units, self.body, self.token = design, store, units, body, token
+        self.tmp, self.jobs, self.skip, self.source, self.probe = tmp, jobs, skip_sketches, source, probe
+        self.component = _target_component(design, body)
+        self.snapshots, self.reads = {}, {}
+        self._tries = 0
 
-    job = RowExport(store, units, export_check)
-    job_box.append(job)
-    os.makedirs(os.path.join(tmp, "checks"), exist_ok=True)
-    with ProgressDialog("Export for Paramability", verb="Checking") as progress:
-        results = job.run([c["row"] for c in checks], os.path.join(tmp, "checks"), progress.step,
-                          tolerate_build_errors=True)
-    return results, snapshots, reads
+    def _job(self):
+        def export_check(path):
+            current = resolve_body(self.design, self.token, self.body)
+            export_body_step(self.design, current, path)
+            self.snapshots[job.current_row] = _snapshot(self.component, current, self.source, self.skip)
+            if self.probe is not None:
+                self.reads[job.current_row] = self.probe.read_now()
+
+        job = RowExport(self.store, self.units, export_check)
+        self.jobs.append(job)
+        return job
+
+    def run(self, checks):
+        """The results of the checks, in order."""
+        folder = os.path.join(self.tmp, "checks")
+        os.makedirs(folder, exist_ok=True)
+        with ProgressDialog("Export for Paramability", verb="Checking") as progress:
+            return self._job().run([c["row"] for c in checks], folder, progress.step, tolerate_build_errors=True)
+
+    def narrow(self, checks, results, sizes, size_labels):
+        """Try the checks Fusion could not build at smaller steps (`size_narrowing`). Returns a `Narrowing`."""
+        with ProgressDialog("Export for Paramability", verb="Retrying") as progress:
+            def run_try(check, number, total, description):
+                self._tries += 1
+                folder = os.path.join(self.tmp, "checks", "try%d" % self._tries)
+                os.makedirs(folder, exist_ok=True)
+
+                def step(index, count, name):
+                    return progress.step(number, total, description)
+
+                return self._job().run([check["row"]], folder, step, tolerate_build_errors=True)[0]
+
+            return narrow_failed(checks, results, sizes, run_try, size_labels)
+
+    def probe_reads(self, checks, results):
+        """The probe states of the checks that built, in check order."""
+        if self.probe is None:
+            return []
+        return [self.reads.get(c["row"]["name"]) for c, r in zip(checks, results) if not r.get("error")]
 
 
 def _run_probe_rows(store, units, rows, job_box, probe):
@@ -258,7 +290,7 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
             table = size_tables.build(
                 parameters, form["ticked"], model, design_unit, quantity_params=quantities, ranges=form["ranges"])
 
-            checks, kept, measured, unchecked, failures = [], [], [], [], []
+            checks, kept, measured, unchecked, failures, narrowed = [], [], [], [], [], []
             motion, probe_report = None, None
             if isinstance(capture, dict):
                 # Checks go only to the sizes the recipe keeps after translation.
@@ -274,15 +306,20 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
                     probe = _start_probe(design, body, token, capture, table)
                     skip = other_sketch_names(capture) | (probe.skip if probe is not None else set())
                     baseline = _snapshot(_target_component(design, body), current, source, skip)
-                    results, snapshots, reads = _run_checks(
-                        design, store, units, body, token, checks, tmp, jobs, skip, source, probe)
-                    failures = build_failures(checks, results)
+                    run = _CheckRun(design, store, units, body, token, tmp, jobs, skip, source, probe)
+                    results = run.run(checks)
+                    narrowing = run.narrow(checks, results, sizes, labels(table))
+                    failures = build_failures(checks, results, narrowing.tries)
+                    checks, results, sizes, narrowed = (
+                        narrowing.checks, narrowing.results, narrowing.sizes, narrowing.narrowed)
+                    if narrowed:
+                        table = table.with_narrowed(narrowing.ranges())
                     kept, measured = read_checks(
-                        checks, results, baseline, snapshots, labels(table), part_name=part_name, scope=scope)
+                        checks, results, baseline, run.snapshots, labels(table), part_name=part_name, scope=scope)
                     if probe is not None:
                         motion, probe_report, found = _finish_probe(
-                            design, store, units, probe, sizes, checks, results, reads, not_checked, jobs,
-                            labels(table))
+                            design, store, units, probe, sizes, checks, results, run.probe_reads(checks, results),
+                            not_checked, jobs, labels(table))
                         measured = measured + found
                     if measured:
                         table = table.with_fixed({m["param"]: m["reason"] for m in measured})
@@ -293,7 +330,7 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
                 size_table=table, checks=kept,
                 fixed=[{"name": m["name"], "reason": m["reason"]} for m in measured], unchecked=unchecked,
                 listing=_parameter_listing(parameters, model_params, design_unit),
-                motion=motion, probe=probe_report, build_failures=failures)
+                motion=motion, probe=probe_report, build_failures=failures, narrowed=narrowed)
             write_package(out_path, manifest, files)
             saved = (os.path.basename(out_path), manifest, report, table)
     except ExportCancelled:

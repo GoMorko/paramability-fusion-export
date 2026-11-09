@@ -11,9 +11,10 @@ from ..package.manifest import (
 from ..translator import CaptureError, translate
 from ..translator.notes import (
     recipe_note, reader_failure_note, step_only_note, translate_failure_note, used_several_times_note)
-from .messages import dropped_note, fixed_note, sizes_note, unchecked_note
+from .messages import dropped_note, fixed_note, narrowed_notes, sizes_note, unchecked_note
 
 MAX_RECIPE_BYTES = 8 * 1024 * 1024
+MAX_NOTES = 5  # the manifest limit; the last notes (not checked, not used) give way
 _TOO_LARGE = {"index": None, "name": "", "type": "", "reason": "The recipe is too large to open."}
 _NOT_WRITTEN = {"index": None, "name": "", "type": "", "reason": "The steps could not be written."}
 
@@ -116,7 +117,7 @@ def _uses(capture):
 
 def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
                        size_table=None, checks=None, fixed=None, unchecked=None, listing=None, motion=None,
-                       probe=None, build_failures=None):
+                       probe=None, build_failures=None, narrowed=None):
     """Return (manifest, files, report) for one body.
 
     A body inside a component is translated like a root body: its capture carries the place of the part in the
@@ -137,6 +138,9 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
       fixes every size behind a sketch.
     probe: the size probe's own record for `report.json` (request, states read, motion, restore gap), or None.
     build_failures: the size checks Fusion could not build, with why (`size_checks.build_failures`), for `report.json`.
+    narrowed: [{'size', 'side', 'from', 'to', 'note', ...}] sizes whose range the export shortened because Fusion
+      could not build the part at the end (`size_narrowing.Narrowing.narrowed`). The table already holds the new range.
+      Those the recipe keeps free get a note and a record in `report.json`.
     files maps entry paths to a file path or bytes, as write_package expects. Raises ValueError when the manifest
     breaks the package rules.
     """
@@ -170,6 +174,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         all_fixed = _merge_fixed(size_table, fixed, size_table.fixed, getattr(result, "fixed", None))
         dropped = _dropped(size_table, result.recipe, all_fixed)
 
+    kept_narrowed = [n for n in narrowed or [] if n["size"] in free]
     report = {
         "writer": writer,
         "outcome": "recipe" if recipe_data is not None else "stepOnly",
@@ -190,6 +195,13 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         report["sizes"] = {"free": free, "fixed": all_fixed, "checks": [
             {"size": c["size"], "value": c["value"]} for c in kept], "unchecked": list(unchecked or []),
             "dropped": dropped, "build_failures": list(build_failures or [])}
+        raised = [{"name": size_table.size_name(r["name"]), "min": r["min"], "reason": r["reason"]}
+                  for r in getattr(result, "raised", None) or []
+                  if size_table is not None and size_table.size_name(r["name"]) in free]
+        if raised:
+            report["sizes"]["raised"] = raised
+        if kept_narrowed:
+            report["sizes"]["narrowed"] = kept_narrowed
 
     files = {"part.step": step_file}
     listed = listing.entries if listing is not None else None
@@ -200,12 +212,14 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         notes = [first]
         if free:
             notes.append(sizes_note(len(free)))
+        notes.extend(narrowed_notes([n["note"] for n in kept_narrowed]))
         if all_fixed:
             notes.append(fixed_note([f["name"] for f in all_fixed]))
         if dropped:
             notes.append(dropped_note(dropped))
         if unchecked:
             notes.append(unchecked_note(len(unchecked)))
+        del notes[MAX_NOTES:]
         manifest_checks = []
         for number, check in enumerate(kept, start=1):
             manifest_checks.append({"values": {check["size"]: check["value"]}, "step": check_step_path(number)})

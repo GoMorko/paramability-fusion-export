@@ -54,6 +54,15 @@ those once: it sets that size to the top of its range, writes a STEP file of the
 builds the recipe at that value and compares it with the STEP file. A size that does not match is kept as a fixed
 number.
 
+When Fusion cannot build the part at the top of a range (for example a chamfer that no longer fits), the add-in does
+not fix the size at once. It tries again half way toward the current value, then a quarter of the way, then an
+eighth of the way (at most three more tries, each a rebuild, with a STEP file only for the try that builds). The
+highest value that builds becomes the new end of the range, and the check runs there. The message after the export says so, for
+example "Wall thickness: the range ends at 2 mm, since Fusion cannot build the part at 2.5 mm (Chamfer1 fails)."
+If you typed that end yourself, the message says so. The same goes for the bottom of a range. The progress window
+says "Retrying size ..." for these tries, and Cancel works there too. Only a size that builds at none of the
+tries stays a fixed number.
+
 A size can also move a sketch: a rectangle width, a hole position, or a plane that a sketch sits on. The add-in then
 sets the size to other values, only lets Fusion rebuild (no STEP file), and reads the sketch each time. From these
 readings it writes the sketch value as a formula of your parameters, such as `0.5 * FilterBox_width_mm`, so the sketch
@@ -61,7 +70,7 @@ follows the size in Paramability. This adds about one rebuild per size that move
 window says "Trying size ..." for these steps, and Cancel works there too.
 
 A size stays a fixed number, with the reason in the message after the export and in the file, when Fusion cannot
-build the part at the checked value, when it moves a joint, or when it moves a sketch in a way the add-in cannot copy.
+build the part at the checked value or at any of the smaller steps, when it moves a joint, or when it moves a sketch in a way the add-in cannot copy.
 These cases cannot be copied: a point that moves along a curve (an angle or a polar placement), an outline that
 changes shape (a line that only crosses the outline above some width, a sketch pattern whose count follows a size),
 a sketch plane that turns, a sketch that a step uses in another way (a pattern direction, a path), a construction

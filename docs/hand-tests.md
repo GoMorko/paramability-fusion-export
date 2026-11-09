@@ -159,8 +159,19 @@ mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter
       moves Sketch1 along a curve), the manifest `fixed` list holds it, and it is not a size. A parameter that only
       drives an extrude distance stays a size.
 - [ ] **Fixed by a failed build.** Give a ticked parameter a range comment such as `[1..400]` that Fusion cannot
-      build at the top (a fillet larger than the part). The export saves, the parameter is listed as fixed with
-      "Fusion cannot build the part when it is ...", and the other sizes are unaffected.
+      build at the top or at any smaller step toward the current value (a fillet larger than the part at every
+      step). The export saves, the parameter is listed as fixed with "Fusion cannot build the part when it is ...",
+      and the other sizes are unaffected. `report.json` (sizes, build_failures) lists the failed value and the
+      smaller steps tried (`tries`).
+- [ ] **Range shortened by a failed build.** Give a ticked parameter a range that Fusion cannot build at the top but
+      can build part of the way (for example a wall thickness of 1.25 mm with the default range up to 2.5 mm, where
+      a chamfer fails at 2.5). A progress window "Retrying size 1 of 3: ..." shows. The parameter stays a size; the
+      message after the export has a line such as "Wall thickness: the range ends at 1.87 mm, since Fusion cannot
+      build the part at 2.5 mm (Chamfer1 fails).", the result window has a "Range shortened" group and its Range
+      column shows the shorter range, the recipe size max is the same number, and `report.json` (sizes, narrowed)
+      lists it. Open the file in Paramability: the check at the new top matches. Type a Max of 2.5 yourself and
+      export again: the line says "you typed a Max of 2.5 mm". Repeat at the bottom of a range (a Min that Fusion
+      cannot build). Cancel during a retry: nothing is saved and every parameter is back.
 - [ ] **Restore.** After each export, a cancel in the "Checking size 2 of 4" window, and a forced failure (full disk
       or a read only folder), every parameter shows its old expression, formulas included, the timeline marker is
       at the end and the design has no unsaved change beyond Fusion's own.

@@ -45,13 +45,18 @@ def plan_checks(sizes, limit=MAX_CHECKS):
         if value is None or len(checks) >= limit:
             unchecked.append(size)
             continue
-        values = {s["param"]: display_from_manifest(s["value"], s["unit"]) for s in sizes}
-        values[size["param"]] = display_from_manifest(value, size["unit"])
-        checks.append({
-            "param": size["param"], "size": size["size"], "value": value,
-            "row": {"name": size["size"][:MAX_NAME_CHARS], "values": values},
-        })
+        checks.append(check_at(size, value, sizes))
     return checks, unchecked
+
+
+def check_at(size, value, sizes):
+    """One check of `size` at `value`: every other size stays at its current value."""
+    values = {s["param"]: display_from_manifest(s["value"], s["unit"]) for s in sizes}
+    values[size["param"]] = display_from_manifest(value, size["unit"])
+    return {
+        "param": size["param"], "size": size["size"], "value": value,
+        "row": {"name": size["size"][:MAX_NAME_CHARS], "values": values},
+    }
 
 
 def fixed_entry(name, reason):
@@ -72,10 +77,16 @@ def build_failure_reason(label, value, items=()):
     return f"{label} stays fixed: Fusion cannot build the part when it is {value:g}{why}."
 
 
-def build_failures(checks, results):
-    """[{'size', 'value', 'error', 'detail'}] for the checks Fusion could not build, for `report.json`."""
-    return [{"size": c["size"], "value": c["value"], "error": r["error"], "detail": r.get("detail") or {}}
-            for c, r in zip(checks, results) if r.get("error")]
+def build_failures(checks, results, tries=None):
+    """[{'size', 'value', 'error', 'detail'}] for the checks Fusion could not build, for `report.json`. `tries` is
+    {size: [{'value', 'built'}]}: the smaller steps tried after the failure (`size_narrowing.narrow_failed`)."""
+    out = []
+    for c, r in zip(checks, results):
+        if r.get("error"):
+            out.append({"size": c["size"], "value": c["value"], "error": r["error"], "detail": r.get("detail") or {}})
+            if (tries or {}).get(c["size"]):
+                out[-1]["tries"] = tries[c["size"]]
+    return out
 
 
 def frame_numbers(frame):

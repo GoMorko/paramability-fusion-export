@@ -13,6 +13,7 @@ from .size_checks import MAX_CHECKS
 
 # Every ticked size gets one check, so the dialog allows as many ticks as there are check slots.
 MAX_TICKED = MAX_CHECKS
+_SAME_RANGE = 1e-9
 
 
 def limit_message(limit=MAX_TICKED):
@@ -22,8 +23,9 @@ def limit_message(limit=MAX_TICKED):
 def initial_table(params, model_params=(), design_unit="mm", quantity_params=(), limit=MAX_TICKED):
     """The table for the first look at the dialog (or after another body is picked).
 
-    The sensible default parameters are ticked, at most `limit`. A parameter that a sketch dimension, construction
-    plane or axis, or joint reads is fixed whether it was a default or not, so the dialog can grey it out.
+    The sensible default parameters are ticked, at most `limit`. A parameter that a joint reads is fixed whether it
+    was a default or not, so the dialog can grey it out. Sketch dimensions and construction planes stay offered: the
+    export tries them at other values and fixes only the ones a sketch cannot follow.
     """
     def build(ticked, fixed=None):
         return size_table.build(params, ticked, model_params, design_unit, fixed, quantity_params)
@@ -99,7 +101,8 @@ def offers(table, params, design_unit="mm"):
 def sizes_for_checks(table, params, keep=None):
     """The free sizes in the shape size_checks.plan_checks reads.
 
-    `keep` limits them to these recipe size names (the sizes the recipe still has after translation).
+    `keep` limits them to these recipe size names (the sizes the recipe still has after translation). `typed_min` and
+    `typed_max` tell that the person changed that end of the range from the default (a range comment counts).
     """
     by_name = {p["name"]: p for p in params}
     sizes = []
@@ -107,9 +110,11 @@ def sizes_for_checks(table, params, keep=None):
         if entry.state != FREE or entry.name not in by_name or (keep is not None and entry.size_name not in keep):
             continue
         size = table.sizes[entry.size_name]
+        lo, hi = defaults.default_range(entry.kind, entry.value)
         sizes.append({
-            "param": entry.name, "size": entry.size_name, "unit": by_name[entry.name]["unit"],
+            "param": entry.name, "size": entry.size_name, "unit": by_name[entry.name]["unit"], "kind": entry.kind,
             "value": entry.value, "min": size["min"], "max": size["max"],
+            "typed_min": abs(size["min"] - lo) > _SAME_RANGE, "typed_max": abs(size["max"] - hi) > _SAME_RANGE,
             "favorite": bool(by_name[entry.name].get("is_favorite")),
         })
     return sizes

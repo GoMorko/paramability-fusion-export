@@ -126,6 +126,12 @@ def build(command, view):
         fixed.children.addTextBoxCommandInput(
             "pm_result_fixed_text", "", "<br>".join(html.escape(line) for line in view["fixed"]),
             min(len(view["fixed"]) * 2, _MAX_FIXED_ROWS), True)
+    if view.get("narrowed"):
+        narrowed = inputs.addGroupCommandInput("pm_result_narrowed", "Range shortened")
+        narrowed.isExpanded = True
+        narrowed.children.addTextBoxCommandInput(
+            "pm_result_narrowed_text", "", "<br>".join(html.escape(line) for line in view["narrowed"]),
+            min(len(view["narrowed"]) * 3, _MAX_FIXED_ROWS), True)
     if view["variables"]:
         inputs.addTextBoxCommandInput("pm_result_variables", "", html.escape(view["variables"]), 2, True)
 

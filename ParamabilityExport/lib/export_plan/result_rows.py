@@ -9,14 +9,18 @@ MATCHES, NOT_CHECKED, KEPT_FIXED, NOT_USED = "matches Fusion", "not checked", "k
 
 
 def _size_rows(table, report):
-    """One row per size the recipe holds: its Fusion name, range and what the check found."""
+    """One row per size the recipe holds: its Fusion name, range and what the check found. A smallest value the
+    translator raised (so a picked pattern copy stays) is shown raised."""
     sizes = report["sizes"]
     unchecked = set(sizes.get("unchecked") or [])
+    raised = {r["name"]: r["min"] for r in sizes.get("raised") or []}
     by_size = {e.size_name: e for e in table.entries if e.size_name}
     rows = []
     for size_name in sizes.get("free") or []:
         entry = by_size.get(size_name)
-        size = table.sizes.get(size_name) or {}
+        size = dict(table.sizes.get(size_name) or {})
+        if size_name in raised and "min" in size:
+            size["min"] = max(size["min"], raised[size_name])
         rows.append({
             "name": entry.name if entry is not None else size_name,
             "range": range_text(size, size.get("min"), size.get("max")) if "min" in size else "",
@@ -47,6 +51,10 @@ def _fixed_lines(report):
     return lines
 
 
+def _narrowed_lines(report):
+    return [n["note"] for n in report["sizes"].get("narrowed") or [] if n.get("note")]
+
+
 def variables_line(manifest):
     count = len(manifest.get("parameters") or [])
     if not count:
@@ -58,8 +66,9 @@ def variables_line(manifest):
 def result_view(file_name, manifest, report, table, ticked):
     """Plain data for the result dialog, or None when the file holds no recipe (the message box tells that story).
 
-    Keys: saved (first sentence), size_title, rows ({name, range, check}), fixed (lines), variables, message (the
-    whole story as plain text, for a message box).
+    Keys: saved (first sentence), size_title, rows ({name, range, check}), fixed (lines), narrowed (lines: sizes whose
+    range was shortened because Fusion could not build the part), variables, message (the whole story as plain text,
+    for a message box).
     """
     if manifest.get("kind") != "recipe" or "sizes" not in report:
         return None
@@ -71,6 +80,7 @@ def result_view(file_name, manifest, report, table, ticked):
         "size_title": "%d %s ready for the form" % (count, "size" if count == 1 else "sizes"),
         "rows": rows + _left_out_rows(table, report, ticked),
         "fixed": _fixed_lines(report),
+        "narrowed": _narrowed_lines(report),
         "variables": variables_line(manifest),
         "message": recipe_saved_message(manifest, file_name),
     }
