@@ -13,7 +13,16 @@ _ADDIN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def writer_for(app):
     return writer_text(
-        addin_version(os.path.join(_ADDIN_DIR, config.ADDIN_NAME + ".manifest")), design_info.fusion_version(app))
+        addin_version(_manifest_path()), design_info.fusion_version(app))
+
+
+def _manifest_path():
+    """The add-in's .manifest file, found by its extension so a renamed folder still reads it."""
+    named = os.path.join(_ADDIN_DIR, config.ADDIN_NAME + ".manifest")
+    if os.path.exists(named):
+        return named
+    found = sorted(n for n in os.listdir(_ADDIN_DIR) if n.endswith(".manifest"))
+    return os.path.join(_ADDIN_DIR, found[0]) if found else named
 
 
 def warn_unrestored(job):
