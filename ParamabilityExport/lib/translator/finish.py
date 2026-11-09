@@ -1,9 +1,10 @@
 """Fillet, chamfer and shell handlers (FilletFeature, ChamferFeature, ShellFeature).
 
-Edges and faces are picked by `near` points taken from the captured edge and face positions (see picks.py).
+Edges and faces are picked by `near` points taken from the captured edge and face positions (see picks.py). When the
+picked faces move with sizes, the pick names the extrude that made them or its points follow the sizes (follow.py).
 What the recipe has no words for is refused: changing radii, two sized chamfers, outside or rounded shells.
 """
-from . import picks, values
+from . import follow, picks, values
 from .result import Refusal
 
 TYPES = ("FilletFeature", "ChamferFeature", "ShellFeature")
@@ -42,19 +43,32 @@ def _unlocated(edges):
     return any(not edge.get("points") for edge in edges)
 
 
-def _fillet_steps(pairs):
-    """One `round` step per group of edges that fits a pick. `pairs` are (edge, size Quantity)."""
-    steps = []
-    by_edge = {id(edge): size for edge, size in pairs}
-    for group in picks.edge_groups([edge for edge, _ in pairs]):
-        sizes = []
-        for edge in group:
-            sizes += [by_edge[id(edge)]] * len(edge["points"])
-        step = {"kind": "round", "edges": {"near": picks.near_points(group)}, "size": sizes[0].json()}
-        if any(not s.same_as(sizes[0]) for s in sizes):
-            step["edgeSizes"] = [s.json() for s in sizes]
-        steps.append(step)
+def _edge_steps(ctx, item, kind, edges, sizes):
+    """`round` or `bevel` steps over `edges`, one per group of edges that fits a pick. `sizes` is one size Quantity
+    per point of the edges, in order; steps with mixed sizes carry `edgeSizes`."""
+    whole = follow.whole_edges(ctx, edges) if all(s.same_as(sizes[0]) for s in sizes) else None
+    if whole is not None:
+        reads = next(slab.length.reads for slab in ctx.slabs if slab.id == whole["featureEdges"])
+        return [_with_plain({"kind": kind, "edges": whole, "size": sizes[0].json()}, edges, reads)]
+    steps, at = [], 0
+    for group in picks.edge_groups(edges):
+        count = sum(len(edge["points"]) for edge in group)
+        own = sizes[at:at + count]
+        at += count
+        step = {"kind": kind, "edges": follow.edges_near(ctx, item, group), "size": own[0].json()}
+        if any(not s.same_as(own[0]) for s in own):
+            step["edgeSizes"] = [s.json() for s in own]
+        steps.append(_with_plain(step, group))
     return steps
+
+
+def _with_plain(step, edges, reads=None):
+    """Hand the measured points over with a pick that follows sizes, for patterns and mirrors that copy it.
+    `reads` are the sizes the pick follows (default: those its points read)."""
+    reads = values.reads_in(step["edges"]) if reads is None else reads
+    if reads:
+        step["_plain"] = {"near": picks.near_points(edges), "reads": reads}
+    return step
 
 
 def _fillet(item, ctx):
@@ -73,7 +87,8 @@ def _fillet(item, ctx):
         radius = entry.get("radius")
         if not isinstance(radius, (int, float)) or not radius > 0:
             return Refusal("This round has no readable radius.")
-    sizes = {n: values.quantity(ctx, item, "sets.%d.radius" % n, entry["radius"]) for n, entry in enumerate(sets)}
+    sizes = {n: values.quantity(ctx, item, "sets.%d.radius" % n, entry["radius"], absolute=True)
+             for n, entry in enumerate(sets)}
     pairs = [(edge, sizes[n]) for edge, n in _flat_edges(sets)]
     if not pairs or _unlocated([edge for edge, _ in pairs]):
         return Refusal("The edges of this round could not be located.")
@@ -82,7 +97,8 @@ def _fillet(item, ctx):
     if data.get("rolling_ball") is False:
         ctx.note("Fusion used setback corners for this round. The copy uses rolling ball corners, so corners where "
                  "three or more rounded edges meet can look different.")
-    steps = _fillet_steps(pairs)
+    sizes = [size for edge, size in pairs for _ in edge["points"]]
+    steps = _edge_steps(ctx, item, "round", [edge for edge, _ in pairs], sizes)
     _split_note(ctx, steps)
     return steps
 
@@ -125,7 +141,7 @@ def _chamfer(item, ctx):
             for path in ("distance_two", "angle_deg"):
                 values.pin(ctx, item, "sets.%d.%s" % (n, path), "the chamfer in %s needs it to stay as it is"
                            % item.get("name", "a step"))
-        size = values.quantity(ctx, item, "sets.%d.distance" % n, size)
+        size = values.quantity(ctx, item, "sets.%d.distance" % n, size, absolute=True)
         if "feature" in (entry.get("input_kinds") or []):
             return Refusal("A chamfer that follows another step's edges is not copied yet.")
         if _unlocated(entry.get("edges") or []):
@@ -145,9 +161,8 @@ def _chamfer(item, ctx):
         ctx.note("Chamfers of different sizes are applied one after the other.")
     steps = []
     for group in groups:
-        for part in picks.edge_groups(group["edges"]):
-            steps.append({"kind": "bevel", "edges": {"near": picks.near_points(part)},
-                          "size": group["size"].json()})
+        sizes = [group["size"]] * sum(len(edge["points"]) for edge in group["edges"])
+        steps += _edge_steps(ctx, item, "bevel", group["edges"], sizes)
     _split_note(ctx, steps)
     return steps
 
@@ -169,8 +184,8 @@ def _shell(item, ctx):
         return Refusal("This shell has no open faces to copy.")
     if len(points) > picks.MAX_NEAR_POINTS:
         return Refusal("This shell opens more than %d faces." % picks.MAX_NEAR_POINTS)
-    wall = values.quantity(ctx, item, "inside", thickness)
-    return [{"kind": "shell", "thickness": wall.json(), "openFaces": {"near": points}}]
+    wall = values.quantity(ctx, item, "inside", thickness, absolute=True)
+    return [{"kind": "shell", "thickness": wall.json(), "openFaces": follow.faces(ctx, item, faces)}]
 
 
 _HANDLERS = {"FilletFeature": _fillet, "ChamferFeature": _chamfer, "ShellFeature": _shell}

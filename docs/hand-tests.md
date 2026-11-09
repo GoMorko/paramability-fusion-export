@@ -127,6 +127,19 @@ mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter
 
 - [ ] The dialog lists the user parameters, the ones the body reads ticked (favourites first), the formula one as
       "name (formula)" greyed out. Tooltips are readable. OK is on once a body is picked.
+- [ ] **Greyed when it opens.** A parameter that drives a sketch dimension is unticked and greyed out as soon as the
+      dialog opens, with the reason in its tooltip. It stays that way for parameters that are not ticked by default.
+- [ ] **Another body.** In a design with two bodies built from different parameters, pick the other body: the ticks
+      and greyed lines change to that body's parameters. A parameter only the other body reads is not ticked. Note
+      how long the dialog takes to open and to follow the pick (the add-in reads the steps of the body each time).
+- [ ] **Limit.** Tick a 17th size: the box unticks itself and the line "You can tick up to 16 sizes" shows. Unticking
+      one hides the line.
+- [ ] **Counts.** A parameter that drives a pattern quantity is a whole number size (the form steps by 1), also when
+      its role text does not say "quantity". Set it to 2.5 in the app: the recipe still builds.
+- [ ] **Long name.** A user parameter with a name over 64 characters that drives a sketch dimension: the export
+      saves, and the message names the fixed size without stopping.
+- [ ] **Not used.** Tick a parameter no step reads: the message after the export names it as "not used by any copied
+      step".
 - [ ] With only one body in the design it is picked already. With no user parameters the group says so and the
       export still works.
 - [ ] Export, open in Paramability: the part is a recipe, the sizes are the ticked parameters, and the message after
@@ -143,9 +156,31 @@ mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter
 - [ ] **Restore.** After each export, a cancel in the "Checking size 2 of 4" window, and a forced failure (full disk
       or a read only folder), every parameter shows its old expression, formulas included, the timeline marker is
       at the end and the design has no unsaved change beyond Fusion's own.
-- [ ] A design with more than 16 ticked sizes: the message says some sizes were not checked.
+- [ ] **Expressions** (the translator writes `+ - * /`, `^` as `pow`, and numbers with units as mm or degrees; the
+      value check refuses a formula that does not give Fusion's number, so a wrong reading shows as a fixed size).
+      Try `1 in + 5 mm`, `wall + 5` in a mm design and in an inch design, `wall ^ 2` and `-wall ^ 2`. Try `floor(wall)`,
+      `round(wall)` and `ceil(wall)` on a length (Fusion may apply them in cm, the app in mm): with `wall = 25 mm`,
+      note the value Fusion shows for `floor(wall)`.
 - [ ] The marker is rolled back: the export stops with "Move the timeline marker to the end".
 - [ ] Time: note how long a design with 5 sizes and 100 timeline items takes.
+
+### Pick points that follow sizes
+
+Use the filter tray: an 80 by 60 base extruded to `count * cube + 2 mm`, a shell that opens the top, rounded vertical
+corners, and a pipe hole in a row of three. Tick the count and the cube width.
+
+- [ ] Export and open in Paramability. Set the count to 2.5 and the cube width to 30 (the box grows to 77 mm): the top
+      stays open and all four corners stay round. Do the same at both ends of each range and with every size at its
+      smallest and at its largest.
+- [ ] Round only three of the four corners and export again: the same three corners stay round at every height.
+- [ ] Shell the top and one side face: both stay open when the height changes.
+- [ ] Add a tab beside the box, extruded "to" the top face. In the app the tab grows with the box.
+- [ ] Add a boss extruded "from" the top face: the message after the export lists the count and the cube width as
+      fixed, with "starts from a face" in the reason.
+- [ ] Round the inside edges of the shell: the message lists the sizes written before the round as fixed, with the
+      round's name in the reason.
+- [ ] Turn the design to Y up and repeat the first check.
+- [ ] Mirror the rounded corners of one side: the height sizes are listed as fixed ("placed one by one").
 
 ## Fusion calls to watch
 
@@ -179,8 +214,15 @@ These were written from the API reference and never run:
 - `Design.fusionUnitsManager.defaultLengthUnits` as the unit of a bare number in a length formula (falls back to mm).
 - `Component.modelParameters` read by `list_model_parameters`; `Sketch.transform.asArray()`, `Sketch.sketchPoints`
   with `worldGeometry`, `Sketch.sketchCurves` with `worldGeometry` (`radius`, `center`, `startPoint`, `endPoint`)
-  read in `lib/export_plan/sketch_state.py`, and `Component.sketches` with `Sketch.name`. A missing member only
+  read in `lib/fusion_reader/sketches.py`, and `Component.sketches` with `Sketch.name`. A missing member only
   leaves a gap in the numbers: a sketch that moves on a missing member is then not seen, so check hand test 7.1.
+- Scoping to the picked body: `SketchDimension.parentSketch` with `Sketch.name` (read as `created_by.sketch`), and
+  the name of a feature (`created_by.name`) equal to its timeline item name. A name that does not match leaves the
+  parameter in, so a mismatch shows as a parameter that other bodies' steps make ticked.
+- Reading the capture while the dialog is open (`lib/fusion_ui/` and `commands/ExportForParamability/entry.py`): the
+  timeline marker moves in the `commandCreated` and `inputChanged` events and comes back to the end. Also
+  `BoolValueCommandInput.text`, `value`, `isEnabled` and `tooltip` assigned in `inputChanged`, and a
+  `TextBoxCommandInput.isVisible` toggle.
 - Two buttons in one panel (`ControlsCommand` added twice, `isPromoted` on the first only).
 - `ProgressDialog` (`show`, `progressValue`, `wasCancelled`) and `FileDialog` filter text.
 - `FeatureHealthStates.ErrorFeatureHealthState` on timeline items after `computeAll`.

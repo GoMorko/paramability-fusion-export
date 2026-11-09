@@ -6,6 +6,8 @@ the X axis, so later size edits rebuild upright. 2D sketch values and revolve ax
 """
 import copy
 
+from .values import Sized, negated
+
 # Step kind -> paths to positions and directions. "[]" walks a list; a path that is absent in a step is skipped.
 PLACEMENT = ("origin", "normal", "xDir")
 FIELDS = {
@@ -26,18 +28,18 @@ NOT_WRITTEN = ("loft", "sweep", "thread", "coil", "skin", "draft", "bevelGear")
 
 
 def turn_point(p):
-    """(x, y, z) to (x, -z, y)."""
-    return [p[0], 0.0 - p[2], p[1]]
+    """(x, y, z) to (x, -z, y). A coordinate may be a formula."""
+    return [p[0], negated(p[2]), p[1]]
 
 
 def turn_back_point(p):
     """The inverse of turn_point: (x, y, z) to (x, z, -y)."""
-    return [p[0], p[2], 0.0 - p[1]]
+    return [p[0], p[2], negated(p[1])]
 
 
 def _is_triple(value):
     return isinstance(value, (list, tuple)) and len(value) == 3 and all(
-        isinstance(v, (int, float)) and not isinstance(v, bool) for v in value)
+        isinstance(v, Sized) or isinstance(v, (int, float)) and not isinstance(v, bool) for v in value)
 
 
 def _apply(node, path, fn):

@@ -11,10 +11,9 @@ everywhere. A value that depends on a size must never stay a number while the si
 """
 import re
 
-from ..params.expressions import ExpressionError, evaluate
+from ..params.expressions import MAX_FORMULA_LENGTH, ExpressionError, evaluate, tokenize_formula
 
 TOLERANCE = 1e-6
-MAX_FORMULA = 250  # leaves room for the few operations a handler adds before the 300 character cap
 _ATOM = re.compile(r"^(?:[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?)$")
 
 
@@ -39,11 +38,36 @@ def _wrapped(text):
 
 
 class Sized(dict):
-    """`{ "expr": formula }` that also remembers the number the formula stood for when it was written.
+    """`{ "expr": formula }` that also remembers the number the formula stood for when it was written, and the Fusion
+    names of the sizes it reads.
 
     It is a plain dict for JSON and copying; handlers that read written steps back (`number`) use the number.
     """
     n = 0.0
+    reads = ()
+
+
+def negated(value):
+    """A written number or formula, negated."""
+    if not isinstance(value, Sized):
+        return 0.0 - value
+    out = Sized(expr=_negated(value["expr"]))
+    out.n, out.reads = -value.n, value.reads
+    return out
+
+
+def reads_in(node, found=None):
+    """The Fusion names read by every formula in a written value, step or list of steps, in order."""
+    found = {} if found is None else found
+    if isinstance(node, Sized):
+        found.update(dict.fromkeys(node.reads))
+    if isinstance(node, dict):
+        for value in node.values():
+            reads_in(value, found)
+    elif isinstance(node, list):
+        for value in node:
+            reads_in(value, found)
+    return tuple(found)
 
 
 def number(value):
@@ -68,7 +92,7 @@ class Quantity:
         if not self.sized:
             return _n(self.n)
         out = Sized(expr=self.text)
-        out.n = self.n
+        out.n, out.reads = self.n, self.reads
         return out
 
     def same_as(self, other):
@@ -79,6 +103,8 @@ class Quantity:
     def scaled(self, factor):
         if not self.sized:
             return Quantity(self.n * factor)
+        if factor == 1:
+            return self
         if factor == -1:
             return Quantity(-self.n, _negated(self.text), self.reads)
         return Quantity(self.n * factor, "%s * %s" % (_text(factor), _wrapped(self.text)), self.reads)
@@ -180,6 +206,42 @@ def _stays_in_range(table, formula, reads, sign, low):
     return True
 
 
+_ROUNDING = ("round", "floor", "ceil")
+
+
+def _gives_whole_numbers(table, formula, depth=0):
+    """True when a formula gives a whole number at every size value: it is rounded as a whole, or it adds,
+    subtracts and multiplies whole numbers and count sizes (and derived sizes that do the same)."""
+    tokens = tokenize_formula(formula)[:-1]
+    if len(tokens) > 2 and tokens[0][0] == "id" and tokens[0][1] in _ROUNDING and tokens[1] == ("op", "(") \
+            and tokens[-1] == ("op", ")"):
+        level = 0
+        for at, token in enumerate(tokens[1:], start=1):
+            level += {("op", "("): 1, ("op", ")"): -1}.get(token, 0)
+            if level == 0:
+                return at == len(tokens) - 1
+    for token in tokens:
+        if token[0] == "num" and token[1] != int(token[1]):
+            return False
+        if token[0] == "op" and token[1] not in "+-*()":
+            return False
+        if token[0] == "id":
+            size = table.sizes.get(token[1])
+            if size is None or depth > 8:
+                return False
+            if "expr" in size:
+                if not _gives_whole_numbers(table, size["expr"], depth + 1):
+                    return False
+            elif size.get("kind") != "count":
+                return False
+    return True
+
+
+def stays_positive(table, q):
+    """True when a sized Quantity stays above zero over the size range."""
+    return _stays_in_range(table, q.text, q.reads, 1, 1e-9)
+
+
 def quantity(ctx, item, path, literal, dim="length", sign=1, absolute=False, whole=False):
     """The value at `path` as a Quantity.
 
@@ -203,8 +265,12 @@ def quantity(ctx, item, path, literal, dim="length", sign=1, absolute=False, who
     if abs(sign * tr.value - literal) > TOLERANCE + 1e-9 * abs(literal):
         ctx.fix(tr.reads, "its formula in %s does not match what Fusion measured" % item.get("name", "a step"))
         return plain
-    if len(tr.formula) > MAX_FORMULA:
+    if len(tr.formula) > MAX_FORMULA_LENGTH:
         ctx.fix(tr.reads, "its formula in %s is too long to copy" % item.get("name", "a step"))
+        return plain
+    if whole and not _gives_whole_numbers(ctx.table, tr.formula):
+        ctx.fix(tr.reads, "%s needs a whole number of copies, and its formula can give a part number"
+                % item.get("name", "a step"))
         return plain
     if absolute or whole:
         if not _stays_in_range(ctx.table, tr.formula, tr.reads, sign, 1.0 if whole else 1e-9):

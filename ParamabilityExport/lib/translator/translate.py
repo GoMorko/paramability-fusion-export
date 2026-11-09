@@ -4,7 +4,8 @@ from .sizes import sketch_fixes, used_sizes
 from .capture import renamed_target, same_body, validate_capture
 from .context import Context
 from .result import Refusal, TranslateResult, make_verdict
-from .values import number
+from ..params.expressions import MAX_FORMULA_LENGTH
+from .values import Sized, number
 from .zup import turn_z_up
 
 RECIPE_VERSION = 12
@@ -241,8 +242,25 @@ def _walk(capture, table, size_table):
         return result, ctx
     if capture.get("up_axis") == "y":
         recipe = turn_z_up(recipe)
+    _fix_long_formulas(recipe, ctx)
     result.recipe = recipe
     return result, ctx
+
+
+def _fix_long_formulas(recipe, ctx):
+    """Formulas a step builds from several values can pass the app's length cap: their sizes become fixed numbers."""
+    def walk(node, label):
+        if isinstance(node, Sized) and len(node["expr"]) > MAX_FORMULA_LENGTH:
+            ctx.fix(node.reads, "a value in %s needs a formula too long to copy" % (label or "a step"))
+        if isinstance(node, dict):
+            for value in node.values():
+                walk(value, label)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value, label)
+
+    for step in recipe["features"]:
+        walk(step, step.get("label"))
 
 
 def _collect_helper(item, handler, ctx):

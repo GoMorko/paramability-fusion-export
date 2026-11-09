@@ -353,9 +353,12 @@ class ExtrudeDataTest(unittest.TestCase):
         self.assertIsNone(sym["side_one"])
         through = self.read(extentOne=Obj("fusion::ThroughAllExtentDefinition", isPositiveDirection=False))
         self.assertEqual(through["side_one"], {"kind": "throughAll", "positive": False, "taper_deg": 0.0})
-        face = Obj("fusion::BRepFace", geometry=Obj("core::Plane", origin=P(0, 0, 12), normal=Obj(x=0, y=0, z=1)))
+        face = Obj("fusion::BRepFace", geometry=Obj("core::Plane", origin=P(0, 0, 12), normal=Obj(x=0, y=0, z=1)),
+                   pointOnFace=P(2, 3, 12))
         to_face = self.read(extentOne=Obj("fusion::ToEntityExtentDefinition", entity=face))
         self.assertEqual(to_face["side_one"]["plane"], {"point": [0, 0, 12], "normal": [0, 0, 1]})
+        self.assertEqual((to_face["side_one"]["entity_type"], to_face["side_one"]["face_point"]),
+                         ("BRepFace", [2, 3, 12]))
         unknown = self.read(extentOne=Obj("fusion::SomethingNewExtentDefinition"))
         self.assertEqual(unknown["side_one"], {"kind": "other", "type": "SomethingNewExtentDefinition"})
 

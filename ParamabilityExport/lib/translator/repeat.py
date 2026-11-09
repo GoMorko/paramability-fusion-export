@@ -8,7 +8,7 @@ copies get their own `round` or `bevel` step with the source's `near` points mov
 import math
 
 from . import values, vec
-from .values import number
+from .values import Quantity, number
 from .result import Refusal
 
 TYPES = ("RectangularPatternFeature", "CircularPatternFeature", "MirrorFeature")
@@ -60,9 +60,10 @@ def _sources(data, ctx, what):
             step = by_id[step_id]
             kind = step["kind"]
             if kind in FINISH_KINDS:
-                if "near" not in (step.get("edges") or {}) or any(k in step for k in UNCOPYABLE_FINISH_KEYS):
+                plain = ctx.plain_picks.get(step_id) or {"near": (step.get("edges") or {}).get("near"), "reads": ()}
+                if plain["near"] is None or any(k in step for k in UNCOPYABLE_FINISH_KEYS):
                     return Refusal("A rounded or chamfered step of this %s cannot be repeated." % what)
-                finishes.append(step)
+                finishes.append(dict(step, near=plain["near"], reads=plain["reads"]))
             elif kind in SOLID_KINDS:
                 if step.get("combine") == "intersect":
                     return Refusal("A step that trims the part cannot be repeated.")
@@ -78,7 +79,8 @@ def _sources(data, ctx, what):
 
 
 def _finish_copies(finishes, motions):
-    """Round and bevel steps for the copies. `motions` are functions that move a point to a copy.
+    """Round and bevel steps for the copies. `motions` are functions that move a point to a copy. Each source has
+    its measured points in `near`.
 
     A moved point that lands on one of the source's own points is dropped, with its size: that edge is already
     finished, and the point would pick a neighbouring edge of the new surface. The copies are packed whole into
@@ -86,7 +88,7 @@ def _finish_copies(finishes, motions):
     """
     steps = []
     for source in finishes:
-        near = source["edges"]["near"]
+        near = source["near"]
         if not near:
             continue
         sizes = source.get("edgeSizes")
@@ -195,10 +197,17 @@ def _axis_step(item, ctx, which, quantity, count_q):
     if kind not in ("spacing", "extent"):
         return Refusal("The spacing of this pattern could not be read.")
     distance = values.quantity(ctx, item, "distance_" + which, abs(raw), sign=-1 if raw < 0 else 1, absolute=True)
-    step = distance if kind == "spacing" else distance.divided_by(count_q.plus(-1))
+    step = distance if kind == "spacing" else distance.divided_by(_gaps(count_q))
     if not step.n > 1e-9:
         return Refusal("The spacing of this pattern could not be read.")
     return step
+
+
+def _gaps(count_q):
+    """The gaps between `count` copies; a count that follows sizes never gives zero gaps, so one copy divides by 1."""
+    if not count_q.sized:
+        return count_q.plus(-1)
+    return Quantity(count_q.n - 1, "max(%s - 1, 1)" % count_q.text, count_q.reads)
 
 
 def _solve_lattice(offset, axes):
@@ -257,6 +266,14 @@ def _keep_pattern_fixed(ctx, item, skip, finishes, counts, distances):
     if finishes:
         for path in counts + distances:
             values.pin(ctx, item, path, "the rounded or chamfered copies in %s are placed one by one" % name)
+    _keep_finish_picks_fixed(ctx, item, finishes)
+
+
+def _keep_finish_picks_fixed(ctx, item, finishes):
+    """Copied rounds and chamfers pick their edges by fixed points, so the sizes their source picks follow stay."""
+    for source in finishes:
+        ctx.fix(source["reads"], "the rounded or chamfered copies in %s are placed one by one"
+                % item.get("name", "a step"))
 
 
 def _rectangular(item, ctx):
@@ -587,8 +604,11 @@ def _mirror(item, ctx):
     else:
         return Refusal("Mirrors of faces are not copied yet.")
     origin, normal = plane["origin"], plane["normal"]
-    return _build(ctx, solids, finishes, {"kind": "mirror", "plane": plane},
-                  [lambda p: vec.reflect(p, origin, normal)], "mirror")
+    steps = _build(ctx, solids, finishes, {"kind": "mirror", "plane": plane},
+                   [lambda p: vec.reflect(p, origin, normal)], "mirror")
+    if not isinstance(steps, Refusal):
+        _keep_finish_picks_fixed(ctx, item, finishes)
+    return steps
 
 
 _HANDLERS = {

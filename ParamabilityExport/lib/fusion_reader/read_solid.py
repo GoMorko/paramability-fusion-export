@@ -33,6 +33,16 @@ def _taper(feature, member):
     return geo.safe(lambda: geo.angle(getattr(feature, member)), None)
 
 
+def _target(definition):
+    """The face or plane an extrude starts from or reaches to: its plane, its type, and a point on a face."""
+    entity = geo.safe(lambda: definition.entity, None)
+    found = {"plane": geo.safe(lambda: geo.plane_of(entity), None),
+             "entity_type": geo.safe(lambda: geo.type_name(entity), None)}
+    if found["entity_type"] == "BRepFace":
+        found["face_point"] = geo.safe(lambda: geo.point(entity.pointOnFace), None)
+    return found
+
+
 def _extent(definition, taper_deg):
     """One side of an extrude as { kind, ... }."""
     name = geo.type_name(definition)
@@ -45,11 +55,8 @@ def _extent(definition, taper_deg):
     if name.startswith("All"):
         return {"kind": "all"}
     if "ToEntity" in name:
-        return {
-            "kind": "toEntity",
-            "plane": geo.safe(lambda: geo.plane_of(definition.entity), None),
-            "offset": geo.safe(lambda: geo.length(definition.offset), None),
-        }
+        return dict({"kind": "toEntity", "offset": geo.safe(lambda: geo.length(definition.offset), None)},
+                    **_target(definition))
     if name == "DistanceExtentDefinition":
         return {"kind": "distance", "distance": geo.length(definition.distance), "taper_deg": taper_deg}
     return {"kind": "other", "type": name}
@@ -61,7 +68,7 @@ def _start(feature):
     if "Offset" in name:
         return {"kind": "offset", "offset": geo.length(definition.offset)}
     if "Entity" in name:
-        return {"kind": "fromEntity", "plane": geo.safe(lambda: geo.plane_of(definition.entity), None)}
+        return dict({"kind": "fromEntity"}, **_target(definition))
     if "ProfilePlane" in name:
         return {"kind": "profilePlane"}
     return {"kind": "other", "type": name}

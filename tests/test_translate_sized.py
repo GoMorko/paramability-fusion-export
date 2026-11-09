@@ -65,12 +65,21 @@ def resolved(recipe, table):
     return walk(recipe)
 
 
+SELECTORS = ("edges", "openFaces")
+
+
 def same_as_plain(test, capture, result, table):
-    """Worked out at the defaults, a sized recipe is the recipe made without sizes."""
+    """Worked out at the defaults, a sized recipe is the recipe made without sizes. A pick that names an extrude
+    (`featureFace`, `featureEdges`) stands for the plain recipe's points, so picks are compared where both have points."""
     plain = copy.deepcopy(capture)
     for item in plain["items"]:
         item["data"].pop("params", None)
-    test.assertEqual(resolved(result.recipe, table), resolved(translate(plain).recipe, table))
+    sized, unsized = resolved(result.recipe, table), resolved(translate(plain).recipe, table)
+    for a, b in zip(sized["features"], unsized["features"]):
+        for key in SELECTORS:
+            if key in a and "near" not in a[key]:
+                a.pop(key), b.pop(key)
+    test.assertEqual(sized, unsized)
 
 
 class TrayTest(unittest.TestCase):
@@ -81,6 +90,8 @@ class TrayTest(unittest.TestCase):
         self.assertEqual(steps_of(recipe, "extrude")[0]["distance"], {"expr": "FilterBox_height_mm"})
         self.assertEqual(steps_of(recipe, "shell")[0]["thickness"], {"expr": "wall_mm"})
         self.assertEqual(steps_of(recipe, "round")[0]["size"], {"expr": "corner_mm"})
+        self.assertEqual(steps_of(recipe, "shell")[0]["openFaces"], {"featureFace": "extrude_1", "which": "end"})
+        self.assertEqual(steps_of(recipe, "round")[0]["edges"], {"featureEdges": "extrude_1", "which": "sides"})
         hole = steps_of(recipe, "hole")[0]
         self.assertEqual((hole["diameter"], hole["depth"]), ({"expr": "pipe_d_mm"}, None))
         linear = steps_of(recipe, "pattern")[0]["linear"]
@@ -156,6 +167,9 @@ class TrayTest(unittest.TestCase):
             data = capture["items"][1]["data"]
             data["side_one"]["distance"] = data["end_offset"] = -32.0
             data["params"]["side_one.distance"] = param("d3", "-FilterBox_height_mm", -32.0)
+            capture["items"][2]["data"]["faces"][0]["point"] = [40, 30, -32]
+            for edge in capture["items"][3]["data"]["sets"][0]["edges"]:
+                edge["points"][0][2] = -16
         result, table = run(on_tray(edit))
         self.assertEqual(result.fixed, [])
         self.assertEqual(steps_of(result.recipe, "extrude")[0]["distance"], {"expr": "FilterBox_height_mm"})

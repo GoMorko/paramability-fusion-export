@@ -42,7 +42,8 @@ runs without Fusion. They are written by hand or saved from real designs: the ex
 bare number in a length formula is read in it. `parameters.user` is `list_user_parameters(design)` and
 `parameters.model` is `list_model_parameters(rootComponent)` (`lib/fusion_reader/parameters.py`: name, expression, value
 in Fusion's internal cm and radians, unit, kind, favourite, dependency lists, and for model parameters `role` and
-`created_by`). Both are empty lists when unreadable. The export builds its size table from them
+`created_by` as `{ kind, token, name, sketch }`, where `sketch` is the name of the sketch that holds a sketch dimension
+(`SketchDimension.parentSketch`) and empty otherwise). Both are empty lists when unreadable. The export builds its size table from them
 (`lib/params/size_table.py`); the translator reads only `data.params` of the items and, through the size table,
 the `created_by` kinds.
 
@@ -162,12 +163,17 @@ CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriente
 
 - `operation`: `join`, `cut`, `intersect`, `newBody`, `newComponent` (from `FeatureOperations`).
 - `start`: `{ "kind": "profilePlane" }`, `{ "kind": "offset", "offset": mm }` (`OffsetStartDefinition.offset`),
-  `{ "kind": "fromEntity", "plane": PLANE or null }` (`FromEntityStartDefinition`).
+  `{ "kind": "fromEntity", "plane": PLANE or null, "entity_type": "...", "face_point": [..] }`
+  (`FromEntityStartDefinition`, TARGET below).
 - `extent_type`: `one`, `two`, `symmetric`.
 - EXTENT: `{ "kind": "distance", "distance": mm, "taper_deg": d }` (`DistanceExtentDefinition.distance`, the value
   as Fusion stores it, sign kept), `{ "kind": "throughAll", "positive": bool, "taper_deg": d }`
   (`ThroughAllExtentDefinition.isPositiveDirection`), `{ "kind": "all" }`, `{ "kind": "toEntity", "plane": PLANE or
-  null, "offset": mm }`, `{ "kind": "other", "type": "..." }`.
+  null, "offset": mm, "entity_type": "...", "face_point": [..] }` (TARGET below), `{ "kind": "other", "type": "..." }`.
+- TARGET (the face or plane of a from or to entity): `plane` from the entity's `geometry` (its origin need not lie on
+  the face), `entity_type` the entity's type name (`BRepFace`, `ConstructionPlane`, or null), and for a face
+  `face_point` (`BRepFace.pointOnFace`). Both keys are optional; without `face_point` the translator cannot tell
+  whether the face moves with sizes.
 - `symmetric`: `{ "distance": mm, "full_length": bool, "taper_deg": d }`
   (`SymmetricExtentDefinition.distance`, `isFullLength`, `taperAngle`).
 - `target_box_before`: the target body's box with the marker before the item, or null when it does not exist yet.
@@ -362,10 +368,28 @@ How the translator uses them (`translate(capture, size_table=table)`):
   A negative parameter is written negated.
 - Symmetric half length is written as `2 * (formula)`. An extent spacing is `(distance) / ((count) - 1)`. Hole
   tip outlines and counterbore or countersink sizes follow sizes point by point.
+- Pattern counts that follow sizes must give whole numbers at every size value: the formula is rounded as a whole
+  (`round`, `floor`, `ceil`), or it adds, subtracts and multiplies whole numbers and count sizes. Otherwise the sizes
+  are fixed. An extent spacing divides by `max((count) - 1, 1)`, so a count of 1 never divides by zero.
 - Values that stay numbers while a size reaches them: a sketch (points, placements, construction geometry), the start
   offset, the "up to" offset, a tip angle, a countersink angle, a full circular turn, a revolve that is not a plain
   part turn, and a pattern whose copies are left out by number or are rounds copied one by one. The sizes behind
   them are fixed.
+- Picks and reaches that follow sizes (`lib/translator/follow.py`). Every extrude step is kept with its placement,
+  profile and length. A pick point (fillet and chamfer edge points, shell face points) or a TARGET `face_point` that
+  lies on an end face of an earlier extrude (inside its profile), or on its side at a profile corner (any outline
+  point for a face), moves with that extrude's length:
+  - a shell that opens one such moving end face writes `{ "featureFace": <id>, "which": "start" | "end" }`;
+  - a round or chamfer whose edges are exactly the side edges, or exactly the edges of a moving end face, of one
+    extrude writes `{ "featureEdges": <id>, "which": "sides" | "start" | "end" }`;
+  - other points write the coordinate along the extrude as a formula (`0.5 * height` for a side point half way up);
+  - a "to entity" reach to a moving end face writes its length as a formula; a "from entity" start on a moving face
+    fixes the sizes of that face; a construction plane stays where it is.
+  A point or face that no extrude explains may sit on geometry that moves, so every size read by the steps written
+  before it is fixed, with the step's name in the reason. Rounds and chamfers that a pattern or mirror copies use
+  their measured points, so the sizes their pick follows are fixed. Without sizes the picks stay plain points.
+- A formula longer than the app's cap (`MAX_FORMULA_LENGTH` in `lib/params/expressions.py`, 300 characters) fixes
+  the sizes it reads, also when a step builds it from several values.
 - Every size that a model parameter created by a sketch dimension, construction plane or axis, or joint reads is
   fixed up front (reason "stays fixed for now: it changes a sketch"). Sketches follow sizes in a later version.
 - Each fixed size becomes a plain number in a new size table (`with_fixed`) and the walk runs again, until nothing
@@ -377,8 +401,8 @@ How the translator uses them (`translate(capture, size_table=table)`):
 ## 6. Report and capture file
 
 The export writes `report.json` into the package: `{ "writer", "outcome": "recipe" | "stepOnly", "items": [ITEM
-VERDICT, ...], "capture": CAPTURE }` (verdicts: see the translator, `lib/translator/result.py`). The app never reads it. The owner can send it from a real
-design, and its `capture` becomes a fixture.
+VERDICT, ...], "capture": CAPTURE }` (verdicts: see the translator, `lib/translator/result.py`). The app never reads it. A report saved from a real
+design gives a fixture: its `capture` is copied as is.
 
 ## 7. API names and what is not verified
 
@@ -419,3 +443,4 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | `isRollingBallCorner` still on `FilletFeature` (some fillet members are retired) | reader reads it in a try, default true; the Bin test |
 | The members in the `params` table return a `ModelParameter` (name, expression, value): `DistanceExtentDefinition.distance`, `taperAngleOne` and `taperAngleTwo`, `OffsetStartDefinition.offset`, the `HoleFeature` size members, `ConstantRadiusFilletEdgeSet.radius`, chamfer set distances, `insideThickness`, pattern `quantityOne`, `distanceOne` and the circular ones | a member that is not one adds nothing and the value stays a number; the sizes hand test logs which members gave a parameter |
 | `ModelParameter.createdBy` kinds and `name` for a sketch dimension | the kind comes from the type name; the sketch rule needs only the kind |
+| `ToEntityExtentDefinition.entity` and `FromEntityStartDefinition.entity` give the picked face (`BRepFace`, read for `pointOnFace`) or construction plane | an unreadable face point fixes the sizes written before the extrude; the "Pick points that follow sizes" hand test |

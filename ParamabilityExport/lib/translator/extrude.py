@@ -3,8 +3,9 @@
 Each profile becomes one recipe `extrude` step per side. Fusion's sign conventions are checked against the measured
 `end_offset` (where the end face landed), which wins when the two disagree.
 """
-from . import loops, placement, values, vec
+from . import follow, loops, placement, values, vec
 from .result import Refusal
+from .values import Quantity
 
 TYPES = ("ExtrudeFeature",)
 
@@ -95,8 +96,25 @@ def _start_shift(start, frame, ctx, item):
             return Refusal("This extrude starts from a surface that is not flat, which is not copied yet.")
         if not _parallel(plane["normal"], frame["z"]):
             return Refusal("This extrude starts from a tilted surface, which is not copied yet.")
+        moved = follow.target_shift(ctx, item, start, vec.unit(frame["z"]), "starts from")
+        if moved is not None and moved.sized:
+            ctx.fix(moved.reads, "%s starts from a face that moves with it, and the copy cannot follow that"
+                    % item.get("name", "a step"))
         return vec.dot(vec.sub(plane["point"], frame["origin"]), vec.unit(frame["z"]))
     return Refusal("This extrude starts in a way that is not copied yet.")
+
+
+def _reach_quantity(ctx, item, side, z, reach, offset):
+    """The length of a side that reaches to a face, as a Quantity that follows the face when it moves with sizes."""
+    plain = Quantity(abs(reach) + float(offset))
+    moved = follow.target_shift(ctx, item, side, z)
+    if moved is None or not moved.sized:
+        return plain
+    length = moved.plus(reach - moved.n).scaled(_sign_of(reach)).plus(float(offset))
+    if not values.stays_positive(ctx.table, length):
+        ctx.fix(length.reads, "%s would reach past the face it starts from" % item.get("name", "a step"))
+        return plain
+    return length
 
 
 def _reach_through(box, origin, direction):
@@ -170,7 +188,7 @@ def _plan(item, data, frame, shift, combine, ctx):
             if not distance > 0:
                 return Refusal("This extrude has no length.")
             return {"extent": "oneSide", "sign": sign, "distance": distance, "taper": taper,
-                    "taper_q": taper_q, "adjusts": True}
+                    "taper_q": taper_q, "adjusts": True, "q": _reach_quantity(ctx, item, side, z, reach, offset)}
         return Refusal("This way of setting the extrude length is not copied yet.")
 
     if extent_type == "symmetric":
@@ -351,5 +369,8 @@ def handle(item, ctx):
                 step["taperDeg"] = entry["taper_q"].json() if entry.get("taper_q") else _n(entry["taper"])
             if entry.get("adjusts"):
                 step["_adjusts"] = True
+            if entry["extent"] in ("oneSide", "symmetric"):
+                step["_slab"] = {"on": on, "extent": entry["extent"], "profile": profile,
+                                 "length": entry.get("q") or Quantity(entry["distance"])}
             steps.append(step)
     return steps
