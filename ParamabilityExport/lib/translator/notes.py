@@ -11,9 +11,20 @@ def fixed_reason(name, why):
     return clip("%s stays fixed: %s." % (name, why), MAX_NOTE)
 
 
+class Past(str):
+    """A reason that applies only beyond some values of the size: `where` is the words for them ("past 2.05")."""
+
+    def __new__(cls, where, text):
+        out = super().__new__(cls, text)
+        out.where = where
+        return out
+
+
 def loose_reason(name, why):
-    """Why a size that stays free may not follow every step: "<name> may give unexpected results: <why>."."""
-    return clip("%s may give unexpected results: %s." % (name, why), MAX_NOTE)
+    """Why a size that stays free may not follow every step: "<name> may give unexpected results: <why>."., or
+    "<name> may give unexpected results past 2.05: <why>." when the reason is a `Past`."""
+    where = getattr(why, "where", None)
+    return clip("%s may give unexpected results%s: %s." % (name, " " + where if where else "", why), MAX_NOTE)
 
 
 def recipe_note(step_count):

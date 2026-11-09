@@ -77,7 +77,8 @@ class PlanTest(unittest.TestCase):
         from lib.export_plan.result_rows import result_view
         capture = tray_with_lid_slot()
         table = table_of(capture, TICKED)
-        manifest, _, report = plan_single_export(capture, self.step, "Tray", "w", "z", size_table=table)
+        manifest, _, report = plan_single_export(capture, self.step, "Tray", "w", "z", size_table=table,
+                                                 loose_sizes=False)
         wall = [n for n in report["sizes"]["narrowed"] if n["size"] == "wall_mm"]
         self.assertEqual([(n["side"], n["to"]) for n in wall], [("min", 1.01)])
         self.assertIn(wall[0]["note"], manifest["notes"])

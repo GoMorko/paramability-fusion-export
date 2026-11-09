@@ -240,7 +240,9 @@ within 2 mm keep their side of the face at every size setting of the range (each
 high), and a face that lies on a wall stays on it. Where a gap would close or open, the ranges of the sizes it reads
 are shortened toward their values (`lib/translator/kept_ranges.py`, each size alone first, then all together); when
 a range would shrink to its value or the person typed it, the size cannot follow (fixed, or loose in the export).
-The result lists them in `narrowed` (`name`, `min`, `max`, `reason`); `report.json` adds them to `sizes.narrowed`.
+In loose mode (the default) the ranges are not shortened: the size stays free over the range Fusion builds and is
+listed in `loose` with the values past which the step may stop meeting the part ("past 2.05", "below 0.98"). With
+"Keep doubtful sizes fixed" the result lists the shortened ranges in `narrowed` (`name`, `min`, `max`, `reason`); `report.json` adds them to `sizes.narrowed`.
 
 CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriented):
 
@@ -734,8 +736,8 @@ tried: the check's end with a STEP, the other end as a rebuild only (`lib/export
 Fusion cannot build, smaller steps toward the current value are tried; the first that builds ends the range there,
 and when none builds the current value ends it. Such an end is listed in `sizes.narrowed` (`side`, the failed value
 `from`, the new end `to`, the `note` shown to the person). Only a size that builds at no other value on either side
-is fixed. A range the translator shortened (a taper, or a step on another component's sketch that must keep meeting
-the part) is listed there too, with the old end as `from`.
+is fixed. A range the translator shortened (a taper, or in strict mode a step on another component's sketch that must keep
+meeting the part) is listed there too, with the old end as `from`.
 
 `sizes.loose` lists the sizes that stay free although the export could not follow them fully (`{ name, reason }` by
 recipe size name, as in the manifest's `loose`): from the translator, from a check that moved the part in the

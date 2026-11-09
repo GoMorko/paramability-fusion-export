@@ -192,6 +192,11 @@ mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter
       cannot build): the bottom is tried for every checked size, with a rebuild only, and the range starts at the
       value that builds. Cancel during a try: nothing is saved and every parameter is back, with one message at most
       about parameters that could not be put back.
+- [ ] **Rows start from the saved values.** On a design with a sketch that has two solutions (a lid sketch whose
+      outline can flip), run an export with several checked sizes and the probe: the check rows and probe rows match
+      what the same sizes give when set by hand from the saved values, and no row stays on the flipped solution.
+      The export takes one more recompute per row (the parameters are put back before each row after the first), so a
+      long run is a little slower.
 - [ ] **Restore.** After each export, a cancel in the "Checking size 2 of 4" window, and a forced failure (full disk
       or a read only folder), every parameter shows its old expression, formulas included, the timeline marker is
       where it was and the design has no unsaved change beyond Fusion's own.

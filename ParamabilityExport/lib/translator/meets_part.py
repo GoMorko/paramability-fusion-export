@@ -10,7 +10,8 @@ For points on the faces of the step, `check` looks along the face normal for the
 sign, and a face that lies on a wall must stay on it. Only flat faces parallel to the step's face count. Where a gap
 does not keep its sign, the ranges of the sizes it reads are shortened toward their values until it does
 (`kept_ranges.shortened`, `Context.narrow`); a size whose range would shrink to its value, or whose range the person
-typed, cannot follow (`Context.fix`).
+typed, cannot follow (`Context.fix`). When the walk keeps sizes free (loose mode), the ranges stay as Fusion builds
+them and the sizes are listed as doubtful past those values instead.
 """
 import math
 
@@ -200,4 +201,5 @@ def check(ctx, step_id, slab_data, combine, why):
         if found is None:
             ctx.fix(rule[0].reads, "past its value, %s would no longer meet the part the way it does now" % why)
         elif found:
-            ctx.narrow(found, "past that, %s would no longer meet the part the way it does now" % why)
+            ctx.narrow_or_doubt(found, "past that, %s would no longer meet the part the way it does now" % why,
+                                "%s may no longer meet the part" % why)

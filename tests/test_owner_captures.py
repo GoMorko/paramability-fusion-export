@@ -121,8 +121,11 @@ class OwnerCaptureTest(unittest.TestCase):
         motion = probe_motion.build(probe_view(capture), table, report["probe"]["states"])
         result = translate(capture, size_table=table, motion=motion, loose=True)
         # The pipe offset of the lid moves only an outline that cannot follow it, so no formula reads it.
-        self.assertEqual(([f["name"] for f in result.fixed], result.loose),
-                         (["FilterBox__PipeBottom_offsetFromCenter_mm"], []))
+        self.assertEqual([f["name"] for f in result.fixed], ["FilterBox__PipeBottom_offsetFromCenter_mm"])
+        # The box width and the cube keep the range Fusion builds; past these the lid slot may stop meeting the part.
+        self.assertEqual([(f["name"], f["reason"].split(":")[0].split("results ")[1]) for f in result.loose],
+                         [(PROBE_TICKED[0], "past 2.05"), (PROBE_TICKED[3], "past 20.52")])
+        self.assertEqual(result.narrowed[0]["name"], PROBE_TICKED[6])
         self.assertEqual(sorted((r["name"], r["min"]) for r in result.raised),
                          sorted([(PROBE_TICKED[0], 1.01), (PROBE_TICKED[2], 1.01)]))
         self.assertEqual(len([n for n, size in result.recipe["sizes"].items() if "value" in size]), 6)
@@ -146,20 +149,30 @@ class OwnerCaptureTest(unittest.TestCase):
         # The lid sketch reads the same other outline after four rows of four different sizes.
         self.assertEqual(motion.apart, [6, 10, 12, 19])
         result = translate(capture, size_table=table, motion=motion, loose=True)
-        self.assertEqual((result.fixed, result.loose), ([], []))
+        self.assertEqual(result.fixed, [])
+        # The ranges stay as Fusion builds them; the lid slot of Extrude5 may stop meeting the part past these.
+        self.assertEqual([(f["name"], f["reason"].split(":")[0].split("results ")[1]) for f in result.loose],
+                         [(PROBE_TICKED[0], "past 2.05"), (PROBE_TICKED[3], "past 20.52"),
+                          ("_Filter__Wall_thickness_mm", "below 0.98")])
+        self.assertTrue(all("Extrude5" in f["reason"] for f in result.loose))
         verdicts = {v["index"]: v for v in result.items}
         self.assertNotIn("two ways", verdicts[65]["note"])
         self.assertEqual(verdicts[92]["verdict"], "translated")
         free = {n: (s["min"], s["max"]) for n, s in result.recipe["sizes"].items() if "value" in s}
         self.assertEqual(free, {
-            "FilterBox___width__contains_CeramicMedium": (1.35, 2.05),
+            "FilterBox___width__contains_CeramicMedium": (1.35, 3.6),
             "FilterBox___height__contains_CeramicMedium": (0.6, 2.4),
             "FilterBox___depth__contains_CeramicMedium": (1.35, 3.6),
-            "_CeramicMedium__Cube_width_unitless": (13.5, 20.52),
+            "_CeramicMedium__Cube_width_unitless": (13.5, 36.0),
             "FilterBox__PipeTop_offsetFromCenter_mm": (0.025, 0.1),
             "_Pipe__Slope_deg": (0.0, 0.5),
-            "_Filter__Wall_thickness_mm": (0.98, 1.25)})
+            "_Filter__Wall_thickness_mm": (0.625, 1.25)})
         self.assertEqual(check_recipe(result.recipe), [])
+        # "Keep doubtful sizes fixed" shortens them as before.
+        strict = translate(capture, size_table=table, motion=motion)
+        self.assertEqual({n["name"]: (n["min"], n["max"]) for n in strict.narrowed},
+                         {PROBE_TICKED[0]: (1.35, 2.05), PROBE_TICKED[3]: (13.5, 20.52),
+                          "_Filter__Wall_thickness_mm": (0.98, 1.25)})
 
 
 if __name__ == "__main__":

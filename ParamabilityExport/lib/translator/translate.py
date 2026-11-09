@@ -186,7 +186,7 @@ def translate(capture, handlers=None, size_table=None, motion=None, loose=False)
         return _walk(capture, table, None)[0]
     upfront = joint_reasons(size_table) if motion is not None else untried_reasons(size_table)
     strict = _settle(capture, table, size_table, motion, upfront, follow=False)
-    if not loose or strict.result.recipe is None or not strict.whys:
+    if not loose or strict.result.recipe is None or not (strict.whys or strict.narrowed):
         return _finish(strict, {})
     pinned = _Pinned(motion) if isinstance(motion, Motion) and not motion.optimistic else motion
     found = _settle(capture, table, size_table, pinned, {}, follow=True)
@@ -228,7 +228,7 @@ def _settle(capture, handlers, size_table, motion, fixed, follow):
     current = size_table.with_fixed(_reasons(whys)) if whys else size_table
     raised, narrowed = {}, {}
     for _ in range(MAX_PASSES):
-        result, ctx = _walk(capture, handlers, current, motion)
+        result, ctx = _walk(capture, handlers, current, motion, follow)
         cannot = ctx.must_fix if follow else {**ctx.depends, **ctx.must_fix}
         more = {name: why for name, why in cannot.items() if name not in whys}
         lifted = {name: low for name, low in ctx.minimums.items()
@@ -293,9 +293,9 @@ def _add_sizes(result, table, fixed=()):
             result.notes.append("%s is not used by any copied step, so it is not a size." % name)
 
 
-def _walk(capture, table, size_table, motion=None):
-    """One walk over the items: (TranslateResult, Context)."""
-    ctx = Context(capture, size_table, motion)
+def _walk(capture, table, size_table, motion=None, follow=False):
+    """One walk over the items: (TranslateResult, Context). `follow` keeps sizes free that a value cannot follow."""
+    ctx = Context(capture, size_table, motion, follow)
     result = TranslateResult()
 
     def refuse(item, reason, note=None):

@@ -22,7 +22,8 @@ class RowExport:
     the row has none); a name is cut to the manifest limit, so use the key to tell rows apart.
     Before its first row the job measures a baseline (`apply.measure_baseline`) and notes the parameters: a design
     that already has warnings or errors elsewhere still gets its rows checked, against what it did before any change.
-    Later runs of the same job reuse both, and every run puts the parameters back at its end. restore_failures lists
+    Later runs of the same job reuse both. Every row starts from the saved expressions (one more recompute per row
+    after the first), and every run puts the parameters back at its end. restore_failures lists
     the parameters that could not be put back by any run, whatever the outcome.
     """
 
@@ -36,6 +37,13 @@ class RowExport:
         self._saved = None
         self._baseline = None
         self._total = 0
+
+    def _back_to_current(self):
+        """Put the parameters back to their saved expressions and recompute before the next row, so a row never builds
+        on the values of the one before it: a sketch with two solutions can flip under a row and stay flipped.
+        A parameter that cannot be put back is listed in restore_failures, and the run goes on."""
+        failed = restore_parameters(self.store, self._saved)
+        self.restore_failures = list(dict.fromkeys(self.restore_failures + failed))
 
     def run(self, rows, tmpdir, progress, tolerate_build_errors=False, until_built=False):
         """Return [{'name', 'values', 'step_file'}]. progress(index, total, name) returns False to cancel.
@@ -56,6 +64,8 @@ class RowExport:
             for index, row in enumerate(rows, start=1):
                 if not progress(index, count, row["name"]):
                     raise ExportCancelled()
+                if index > 1:
+                    self._back_to_current()
                 try:
                     values = apply_row_values(self.store, self.units, row["values"], self._baseline)
                 except RowBuildError as exc:

@@ -3,6 +3,7 @@ from . import meets_part
 from .capture import same_body
 from .copy_counts import raised_minimums
 from .follow import Slab, locate
+from .notes import Past
 from .offset_faces import MovedFaces
 from .picks import face_points
 from .shells import Shell
@@ -42,6 +43,8 @@ class Context:
       driver raises those minimums and walks again.
     narrowings: Fusion name of a size -> ((min, max), reason): shorter ranges a step needs (`narrow`). The driver
       applies them and walks again.
+    follow: the walk keeps sizes free that some value cannot follow (loose mode); `narrow_or_doubt` then lists a
+      shorter range as a doubt on the size instead of applying it.
     motion: the probe's motion file (`probe.motion.Motion`), `probe.motion.OPTIMISTIC`, or None. With a motion file the
       sketch values follow sizes (sketch_motion.py); otherwise they are written as numbers.
     plain_picks: round or bevel step id -> { near, reads, written }: its edges as measured points, the sizes its pick
@@ -49,8 +52,9 @@ class Context:
       `_plain` key; patterns and mirrors copy these points.
     """
 
-    def __init__(self, capture, table=None, motion=None):
+    def __init__(self, capture, table=None, motion=None, follow=False):
         self.capture = capture
+        self.follow = follow
         self.table = table
         self.motion = motion
         self.depends = {}
@@ -115,6 +119,19 @@ class Context:
             else:
                 text = "%s ends at %s: %s." % (name, _number(hi), why)
             self.narrowings[name] = ((lo, hi), text[:MAX_REASON])
+
+    def narrow_or_doubt(self, found, why, doubt):
+        """Like `narrow`; in a walk that keeps sizes free (`follow`) the ranges stay and each size in `found` gets
+        `doubt` as its reason, with the values past which it holds."""
+        if not self.follow:
+            self.narrow(found, why)
+            return
+        for name, (lo, hi) in found.items():
+            size = self.table.sizes.get(self.table.size_name(name)) or {}
+            below, past = lo > size.get("min", lo), hi < size.get("max", hi)
+            where = ("outside %s to %s" % (_number(lo), _number(hi)) if below and past
+                     else "below %s" % _number(lo) if below else "past %s" % _number(hi))
+            self.depends.setdefault(name, Past(where, doubt))
 
     def _add_moved_faces(self, item, step):
         self._placers += 1

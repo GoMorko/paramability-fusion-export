@@ -148,9 +148,29 @@ class SharedRunTest(unittest.TestCase):
         tried = job.run(rows, "", lambda *a: True, tolerate_build_errors=True, until_built=True)
         self.assertTrue(first[0]["error"])
         self.assertEqual([bool(r.get("error")) for r in tried], [True, False])
-        # One recompute per row and one for the restore: no second baseline.
-        self.assertEqual(store.recomputes - recomputes, 3)
+        # Two rows, one restore between them and one at the end: no second baseline.
+        self.assertEqual(store.recomputes - recomputes, 4)
         self.assertEqual(store.exprs, {"width": "20 mm"})
+
+
+class RowStartTest(unittest.TestCase):
+    def test_a_row_never_sees_the_values_of_the_row_before(self):
+        store = FakeStore({"width": "20 mm", "wall": "2 mm"})
+        seen = []
+        original = store.recompute
+
+        def recompute():
+            seen.append(dict(store.exprs))
+            return original()
+
+        store.recompute = recompute
+        job = RowExport(store, {"width": "mm", "wall": "mm"}, lambda path: None)
+        rows = [{"name": "a", "values": {"width": 40.0}, "step": False},
+                {"name": "b", "values": {"wall": 5.0}, "step": False}]
+        job.run(rows, "", lambda *a: True)
+        row_b = next(s for s in seen if s["wall"] == "5 mm")
+        self.assertEqual(row_b["width"], "20 mm")
+        self.assertEqual(store.exprs, {"width": "20 mm", "wall": "2 mm"})
 
 
 class ToleratedBuildErrorTest(unittest.TestCase):

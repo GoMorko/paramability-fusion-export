@@ -128,6 +128,9 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 
 ## Limits
 
+- Every size check and probe row starts from the saved values: before each row after the first the add-in puts the
+  parameters back and recomputes, so a sketch with two solutions cannot stay flipped from the row before. This costs
+  one more recompute per row.
 - One solid body per export.
 - A body inside a component (at any depth) exports as a recipe with sizes, like a root body, and lands where Fusion
   shows it. If the part was moved by hand, capture its position first (Position, Capture Position); the export asks
@@ -138,8 +141,8 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   step of another component that changes the body, a body made in another component and moved in, and a step that
   reaches into another component's faces, edges or bodies. A step that uses a sketch of another component is copied
   where Fusion shows it and follows the sizes the probe saw move it; where it would stop meeting the part (a slot that
-  no longer reaches its wall, a rail that comes off), the size range is shortened or the size may give unexpected
-  results.
+  no longer reaches its wall, a rail that comes off), the size keeps the range Fusion builds and may give unexpected
+  results past that value, with the reason. With "Keep doubtful sizes fixed" the range is shortened instead.
 - A recipe covers the picked body only. Parameters made by steps or sketches of other bodies are left out where the
   add-in can match them by name; construction planes, axes and joints are read for the component and the ones above
   it. A size that turns a sketch plane, moves a point along a curve, or changes the shape of an outline may give

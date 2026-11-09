@@ -3,7 +3,7 @@ import copy
 import unittest
 
 from tests import context  # noqa: F401
-from tests.test_translate_sized import run
+from tests.test_translate_sized import TICKED, run, table_of
 from tests.test_translate_sketch_motion import run as run_with_motion
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, translate_fixture
 
@@ -188,6 +188,16 @@ class BorrowedSketchTest(unittest.TestCase):
                          (1.01, table.sizes["wall_mm"]["max"]))
         self.assertIn("starts at 1.01: past that, Extrude9 (drawn on Rim of Lid)", narrowed["wall_mm"]["reason"])
         self.assertEqual(result.recipe["sizes"]["wall_mm"]["min"], 1.01)
+
+    def test_in_loose_mode_the_range_stays_and_the_size_is_listed_with_the_values_it_doubts(self):
+        capture = tray_with_lid_slot()
+        table = table_of(capture, TICKED)
+        result = translate(capture, size_table=table, loose=True)
+        self.assertEqual((result.narrowed, result.fixed), ([], []))
+        self.assertEqual(result.recipe["sizes"]["wall_mm"]["min"], table.sizes["wall_mm"]["min"])
+        reasons = {f["name"]: f["reason"] for f in result.loose}
+        self.assertEqual(reasons["wall_mm"], "wall_mm may give unexpected results below 1.01: Extrude9 (drawn on Rim "
+                         "of Lid) may no longer meet the part.")
 
     def borrowed_run(self, motion):
         capture = load_capture("component_moved")
