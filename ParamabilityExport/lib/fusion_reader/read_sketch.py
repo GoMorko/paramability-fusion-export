@@ -3,12 +3,14 @@ import math
 
 from . import read_geometry as geo
 
-# Which space ProfileCurve.geometry is in. "auto" treats geometry with every point at z near 0 as sketch space and
-# anything else as model space. A sketch lying in a model plane with turned axes is not told apart by "auto"; set
-# "sketch" or "model" after hand test 2 (docs/hand-tests.md).
+# Which space ProfileCurve.geometry is in. "auto" decides per profile: a point off z = 0 proves model space. When
+# every point is at z = 0 and the sketch frame is not the identity, the curve is compared with its sketch entity
+# (SketchCurve.geometry is in sketch space); if that cannot decide, the profile is marked "ambiguous" and the
+# translator refuses it. Set "sketch" or "model" once hand test 2 (docs/hand-tests.md) shows which one Fusion uses.
 GEOMETRY_SPACE = "auto"
 
 _FLAT_CM = 1e-5  # 1e-4 mm
+_IDENTITY = {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
 _SAMPLES = 200
 
 
@@ -22,15 +24,47 @@ def _probe_points(geometry):
     return out
 
 
-class _Space:
-    """Maps curve geometry of one profile into sketch 2D."""
+def _near(a, b):
+    return max(abs(a.x - b.x), abs(a.y - b.y), abs(a.z - b.z)) <= _FLAT_CM
 
-    def __init__(self, sketch, geometries):
+
+def _frame_is_identity(frame):
+    return all(
+        max(abs(a - b) for a, b in zip(frame[key], want)) <= 1e-6 for key, want in _IDENTITY.items())
+
+
+def _decide_by_entity(sketch, curves):
+    """"sketch", "model" or "ambiguous" from comparing profile curves with their sketch entities."""
+    moved = False
+    for curve in curves:
+        entity = geo.safe(lambda: curve.sketchEntity, None)
+        if entity is None:
+            continue
+        mine = _probe_points(curve.geometry)
+        theirs = _probe_points(entity.geometry)
+        for a, b in zip(mine, theirs):
+            if not _near(a, b):
+                return "model"
+            if not _near(a, sketch.modelToSketchSpace(a)):
+                moved = True
+    return "sketch" if moved else "ambiguous"
+
+
+class _Space:
+    """Maps curve geometry of one profile into sketch 2D. `mode` is "sketch", "model" or "ambiguous"."""
+
+    def __init__(self, sketch, curves, frame):
         mode = GEOMETRY_SPACE
         if mode == "auto":
-            probes = [p for g in geometries for p in _probe_points(g)]
-            mode = "model" if any(abs(p.z) > _FLAT_CM for p in probes) else "sketch"
+            probes = [p for c in curves for p in _probe_points(c.geometry)]
+            if any(abs(p.z) > _FLAT_CM for p in probes):
+                mode = "model"
+            elif _frame_is_identity(frame):
+                mode = "sketch"
+            else:
+                mode = geo.safe(lambda: _decide_by_entity(sketch, curves), "ambiguous")
         self.sketch = sketch
+        self.mode = mode
         self.model = mode == "model"
 
     def xy(self, p):
@@ -93,13 +127,15 @@ def read_profile(profile):
     """One Profile as { sketch, frame, loops }."""
     sketch = profile.parentSketch
     loops = geo.collection_items(profile.profileLoops)
-    loop_curves = [[pc.geometry for pc in geo.collection_items(loop.profileCurves)] for loop in loops]
-    space = _Space(sketch, [g for curves in loop_curves for g in curves])
+    loop_curves = [geo.collection_items(loop.profileCurves) for loop in loops]
+    frame = geo.frame_of(sketch.transform)
+    space = _Space(sketch, [c for curves in loop_curves for c in curves], frame)
     return {
         "sketch": sketch.name,
-        "frame": geo.frame_of(sketch.transform),
+        "frame": frame,
+        "space": space.mode,
         "loops": [
-            {"outer": bool(loop.isOuter), "curves": [_read_curve(g, space) for g in curves]}
+            {"outer": bool(loop.isOuter), "curves": [_read_curve(c.geometry, space) for c in curves]}
             for loop, curves in zip(loops, loop_curves)
         ],
     }

@@ -18,7 +18,11 @@ CAPTURE_VERSION = 1
 _OPTIONAL_READER_MODULES = ("read_finish", "read_repeat")
 
 
-class MarkerError(Exception):
+class CaptureReadError(Exception):
+    """The timeline cannot be read completely; the export falls back to a fixed shape."""
+
+
+class MarkerError(CaptureReadError):
     """The timeline marker could not be put back at the end."""
 
 
@@ -48,10 +52,11 @@ def _is_group(obj):
     return bool(geo.safe(lambda: obj.isGroup, False)) or geo.type_name(obj).endswith("TimelineGroup")
 
 
-def _start_item(timeline, ctx, readers, index, items):
+def _start_item(timeline, ctx, readers, index, items, group_indices):
     """Marker is at `index`: create the item and read its inputs."""
     obj = timeline.item(index)
     if _is_group(obj):
+        group_indices.add(index)
         return
     entity = geo.safe(lambda: obj.entity, None)
     item = {
@@ -78,6 +83,21 @@ def _start_item(timeline, ctx, readers, index, items):
             item["data"] = {"read_error": str(exc) or type(exc).__name__}
 
 
+def _bodies_after(item, entity):
+    """Bodies of the feature, or None (with item["read_error"]) when they cannot be read.
+
+    None is not an empty list: an empty list says the item makes no body, None says it is unknown.
+    """
+    try:
+        bodies = entity.bodies
+        if bodies is None:
+            raise ValueError("The feature has no bodies.")
+        return [geo.body_ref(b) for b in (bodies.item(i) for i in range(bodies.count))]
+    except Exception as exc:
+        item["read_error"] = "bodies: " + (str(exc) or type(exc).__name__)
+        return None
+
+
 def _finish_item(timeline, ctx, readers, index, items):
     """Marker is just after `index`: read bodies, health and what the feature produced."""
     item = items.get(index)
@@ -89,13 +109,29 @@ def _finish_item(timeline, ctx, readers, index, items):
     entity = geo.safe(lambda: obj.entity, None)
     if entity is None or item["suppressed"]:
         return
-    item["bodies_after"] = geo.safe(lambda: geo.body_refs(entity.bodies), [])
+    item["bodies_after"] = _bodies_after(item, entity)
     after = (readers.get(item["type"]) or (None, None))[1]
     if after is not None and "read_error" not in item["data"]:
         try:
             item["data"].update(after(entity, ctx, item["data"]) or {})
         except Exception as exc:
             item["data"] = {"read_error": str(exc) or type(exc).__name__}
+
+
+def _check_groups(timeline, count, items, group_indices):
+    """Refuse when a timeline group lists children that the walk did not reach."""
+    try:
+        groups = [timeline.timelineGroups.item(i) for i in range(timeline.timelineGroups.count)]
+    except Exception:
+        return
+    for group in groups:
+        try:
+            first, last = group.startIndex, group.endIndex
+        except Exception:
+            continue
+        missing = [i for i in range(first, last + 1) if i not in items and i not in group_indices]
+        if last >= count or missing:
+            raise CaptureReadError("The timeline groups hide steps that could not be read.")
 
 
 def _restore_marker(timeline, count):
@@ -135,15 +171,17 @@ def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_reade
     readers.update(_optional_readers())
     readers.update(extra_readers or {})
     items = {}
+    group_indices = set()
     try:
         for k in range(count + 1):
             timeline.markerPosition = k
             if k > 0:
                 _finish_item(timeline, ctx, readers, k - 1, items)
             if k < count:
-                _start_item(timeline, ctx, readers, k, items)
+                _start_item(timeline, ctx, readers, k, items, group_indices)
     finally:
         _restore_marker(timeline, count)
+    _check_groups(timeline, count, items, group_indices)
     final = ctx.find_target() or body
     app_fusion, app_name, app_up = _app_details() if None in (fusion, name, up_axis) else ("", "", "z")
     return {

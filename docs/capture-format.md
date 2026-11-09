@@ -37,7 +37,7 @@ Fusion.
 ```
 
 `target` is the picked body at the end of the timeline (`volume` cm3 times 1000). `items` lists every timeline
-item in order, groups expanded.
+item in order. Group objects are skipped; the children of a group are listed as ordinary items.
 
 ITEM:
 
@@ -60,9 +60,13 @@ ITEM:
 - `health`: from `TimelineObject.healthState` (`ok`, `warning`, `error`); `message` from
   `errorOrWarningMessage`.
 - `component_root`: the feature's `parentComponent` is the root component.
-- `bodies_after`: `feature.bodies` read with the marker just after the item.
+- `bodies_after`: `feature.bodies` read with the marker just after the item. `null` (with an item level
+  `"read_error": "bodies: ..."`) when the bodies cannot be read; it is not the same as `[]`, which says the item
+  makes no body. The driver must not treat `null` as helper geometry.
 - `data`: per type, below. Types without a reader (sketches, construction geometry, unknown features) carry
-  `"data": {}`.
+  `"data": {}`. When a reader fails, `data` is `{ "read_error": "<message>" }`.
+- A member that cannot be read never becomes a plausible value: it reads as `null` or as an `other` entry
+  (`"extent_type": "other"`, `"hole_type": "other"`, `{ "kind": "other" }`), and the translator refuses it.
 
 ## 3. Walk and marker
 
@@ -72,6 +76,8 @@ ITEM:
 2. For `k` from 0 to `count`: set `timeline.markerPosition = k`. Read `bodies_after` of item `k - 1` and the
    inputs of item `k` (profiles, edges, faces, tool bodies, the target box before it). One recompute per item.
 3. `finally`: `timeline.moveToEnd()`, then check `markerPosition == count`.
+   After that, each `timeline.timelineGroups` entry (`startIndex` to `endIndex`) must be covered by the walk;
+   else `read_capture` raises `CaptureReadError` and the export lands as a fixed shape.
 4. The STEP file is written before the capture, with the marker at the end.
 
 Reading inputs at the position before the item covers the getters that the reference says need
@@ -84,6 +90,7 @@ Reading inputs at the position before the item covers the getters that the refer
   {
     "sketch": "Sketch1",
     "frame": { "origin": [0, 0, 5], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1] },
+    "space": "sketch",
     "loops": [
       { "outer": true, "curves": [ CURVE, ... ] },
       { "outer": false, "curves": [ CURVE, ... ] }
@@ -96,6 +103,11 @@ Reading inputs at the position before the item covers the getters that the refer
 From `Profile.parentSketch.transform`, `Profile.profileLoops`, `ProfileLoop.isOuter`, `ProfileLoop.profileCurves`,
 `ProfileCurve.geometry` and `ProfileCurve.geometryType`. A planar face used as a profile is `{ "face": true }`
 (refused in F3).
+
+`space` says how the curve space was decided: `sketch` or `model` (the reader mapped model space curves into sketch
+2D) or `ambiguous`. A curve off the plane z = 0 proves model space. In the plane z = 0 with a sketch frame other
+than the identity, the reader compares the curve with `ProfileCurve.sketchEntity`; if that cannot decide it writes
+`ambiguous` and the translator refuses the profile.
 
 CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriented):
 
@@ -183,6 +195,7 @@ CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriente
   "extent": { "kind": "distance", "depth": 8.0 },
   "side_cylinders": [{ "origin": [..], "axis": [..], "radius": 2.5 }],
   "end_points": [[10, 10, 2.0]],
+  "end_face_types": ["cone"],
   "participants": [ ... ]
 }
 ```
@@ -195,7 +208,9 @@ CURVE, in sketch 2D mm, in the order Fusion lists them (not chained, not oriente
 - `extent`: `{ "kind": "distance", "depth" }`, `{ "kind": "throughAll" }` (also for the `All` kind), `{ "kind":
   "toEntity" }`, `{ "kind": "other" }`.
 - `side_cylinders`: every `sideFaces` item whose geometry is a `Cylinder` (`origin`, `axis`, `radius`).
-  `end_points`: `pointOnFace` of each `endFaces` item. Measured checks of direction, count and diameter.
+  `end_points`: `pointOnFace` of each `endFaces` item. `end_face_types`: the geometry type of each of those faces
+  (`"plane"` or `"cone"`; `null` when the type is another one or cannot be read), one per `end_points` entry; a flat or
+  tipped bottom is decided from it, not from `tip_angle_deg`. Measured checks of direction, count and diameter.
 
 **FilletFeature** (`edgeSets`, `isRollingBallCorner`):
 
@@ -318,7 +333,7 @@ Not verified (each has a measured check or a hand test in section 5):
 | Item | Check |
 |---|---|
 | Enum value names: `HoleTypes`, `HoleTapTypes`, `FeatureExtentTypes`, `PatternEntityTypes`, the spacing value of `PatternDistanceTypes`, the rounded value of `ShellTypes`, `Curve3DTypes`, fillet continuity, `ChamferCornerTypes` | the reader maps by name text with a fallback to `other`; hand test (enum names) logs unknown names |
-| `ProfileCurve.geometry` in sketch space or model space | reader checks z near 0 in sketch space, else maps with `Sketch.modelToSketchSpace`; hand test 2 (offset, tilted sketch) |
+| `ProfileCurve.geometry` in sketch space or model space; `ProfileCurve.sketchEntity` and `SketchCurve.geometry` in sketch space | reader decides per profile and writes `space` (`ambiguous` is refused); hand test 2 (offset, tilted, bottom face sketch) |
 | `getAsCoordinateSystem()` returns `(origin, xAxis, yAxis, zAxis)` in Python | hand test 2 |
 | `CurveEvaluator3D.getParameterExtents`, `getPointAtParameter`; `SurfaceEvaluator.getNormalAtPoint` | hand test (enum names) |
 | A flipped one sided extrude stores a negative distance | `end_offset`; hand test 4 |
@@ -328,6 +343,6 @@ Not verified (each has a measured check or a hand test in section 5):
 | Hole `direction` points into the material; blind depth is measured to the shoulder, not the tip; how a flat drill point shows (`tipAngle` 180 or another member) | `end_points`; hand test 5 |
 | `patternElements` includes suppressed elements | translator fills missing lattice places from the quantities; hand test 6 |
 | `entityToken` of a body stays the same across marker positions | name fallback; hand test 7 |
-| `Timeline.item` walks inside groups | reader also walks `timelineGroups`; hand test (enum names) |
+| `Timeline.item` walks inside groups; `TimelineGroup.startIndex`, `endIndex` | reader raises `CaptureReadError` when a group child is not in the walk; hand test (enum names) |
 | Moving the marker marks the document changed or adds undo entries | hand test 8 |
 | `isRollingBallCorner` still on `FilletFeature` (some fillet members are retired) | reader reads it in a try, default true; hand test 6 |

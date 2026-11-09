@@ -3,7 +3,9 @@
 Each feature type has a pair of readers. `before(feature, ctx)` runs with the timeline marker just before the item
 and reads the inputs. `after(feature, ctx, data)` runs with the marker just after it and reads what the feature
 produced (the measured values that check signs and flags). Both return dicts that go into the item's data.
-A member that is missing or retired falls back to a default or to an `other` entry; it never stops the walk.
+A member that is missing or retired never stops the walk and never becomes a plausible value: it reads as None or as
+an `other` entry (which the translator refuses), or the reader raises and the item gets a `read_error`. Only members
+that feed a note, such as the participant bodies, fall back to an empty list.
 """
 from . import read_geometry as geo
 from .read_sketch import read_profiles
@@ -27,7 +29,7 @@ def _operation(value):
 
 
 def _taper(feature, member):
-    return geo.safe(lambda: geo.angle(getattr(feature, member)), 0.0)
+    return geo.safe(lambda: geo.angle(getattr(feature, member)), None)
 
 
 def _extent(definition, taper_deg):
@@ -36,7 +38,7 @@ def _extent(definition, taper_deg):
     if "ThroughAll" in name:
         return {
             "kind": "throughAll",
-            "positive": geo.safe(lambda: bool(definition.isPositiveDirection), True),
+            "positive": geo.safe(lambda: bool(definition.isPositiveDirection), None),
             "taper_deg": taper_deg,
         }
     if name.startswith("All"):
@@ -45,7 +47,7 @@ def _extent(definition, taper_deg):
         return {
             "kind": "toEntity",
             "plane": geo.safe(lambda: geo.plane_of(definition.entity), None),
-            "offset": geo.safe(lambda: geo.length(definition.offset), 0.0),
+            "offset": geo.safe(lambda: geo.length(definition.offset), None),
         }
     if name == "DistanceExtentDefinition":
         return {"kind": "distance", "distance": geo.length(definition.distance), "taper_deg": taper_deg}
@@ -59,28 +61,27 @@ def _start(feature):
         return {"kind": "offset", "offset": geo.length(definition.offset)}
     if "Entity" in name:
         return {"kind": "fromEntity", "plane": geo.safe(lambda: geo.plane_of(definition.entity), None)}
-    if "ProfilePlane" in name or name == "none":
+    if "ProfilePlane" in name:
         return {"kind": "profilePlane"}
     return {"kind": "other", "type": name}
 
 
 def _extent_type(feature):
     name = geo.enum_name(feature.extentType, "FeatureExtentTypes")
-    found = geo.pick_by_text(name, _EXTENT_TYPES, "")
-    if found:
-        return found
-    return "two" if geo.safe(lambda: bool(feature.hasTwoExtents), False) else "one"
+    return geo.pick_by_text(name, _EXTENT_TYPES, "other")
 
 
 def extrude_before(feature, ctx):
     extent_type = _extent_type(feature)
     side_one = side_two = symmetric = None
-    if extent_type == "symmetric":
+    if extent_type == "other":
+        side_one = {"kind": "other", "type": "FeatureExtentTypes"}
+    elif extent_type == "symmetric":
         sym = feature.symmetricExtent
         symmetric = {
             "distance": geo.length(sym.distance),
-            "full_length": geo.safe(lambda: bool(sym.isFullLength), False),
-            "taper_deg": geo.safe(lambda: geo.angle(sym.taperAngle), 0.0),
+            "full_length": geo.safe(lambda: bool(sym.isFullLength), None),
+            "taper_deg": geo.safe(lambda: geo.angle(sym.taperAngle), None),
         }
     else:
         side_one = _extent(feature.extentOne, _taper(feature, "taperAngleOne"))
@@ -89,12 +90,12 @@ def extrude_before(feature, ctx):
     return {
         "operation": _operation(feature.operation),
         "profiles": read_profiles(feature.profile),
-        "start": geo.safe(lambda: _start(feature), {"kind": "profilePlane"}),
+        "start": geo.safe(lambda: _start(feature), {"kind": "other", "type": "unreadable"}),
         "extent_type": extent_type,
         "side_one": side_one,
         "side_two": side_two,
         "symmetric": symmetric,
-        "thin": geo.safe(lambda: bool(feature.isThinExtrude), False),
+        "thin": geo.safe(lambda: bool(feature.isThinExtrude), None),
         "participants": geo.safe(lambda: geo.body_refs(feature.participantBodies), []),
         "target_box_before": ctx.target_box(),
         "end_offset": None,
@@ -155,7 +156,7 @@ def _revolve_extent(definition):
         return {
             "kind": "angle",
             "angle_deg": geo.angle(definition.angle),
-            "symmetric": geo.safe(lambda: bool(definition.isSymmetric), False),
+            "symmetric": geo.safe(lambda: bool(definition.isSymmetric), None),
         }
     if name == "TwoSidesAngleExtentDefinition":
         return {
@@ -171,7 +172,7 @@ def revolve_before(feature, ctx):
         "operation": _operation(feature.operation),
         "profiles": read_profiles(feature.profile),
         "axis": geo.safe(lambda: axis_of(feature.axis), {"kind": "other"}),
-        "project_axis": geo.safe(lambda: bool(feature.isProjectAxis), False),
+        "project_axis": geo.safe(lambda: bool(feature.isProjectAxis), None),
         "extent": _revolve_extent(feature.extentDefinition),
         "participants": geo.safe(lambda: geo.body_refs(feature.participantBodies), []),
         "start_face_normal": None,
@@ -226,8 +227,8 @@ def _hole_extent(feature):
 
 
 def hole_before(feature, ctx):
-    hole_type = geo.pick_by_text(geo.enum_name(feature.holeType, "HoleTypes"), _HOLE_TYPES, "simple")
-    tap_type = geo.pick_by_text(geo.enum_name(feature.holeTapType, "HoleTapTypes"), _TAP_TYPES, "simple")
+    hole_type = geo.pick_by_text(geo.enum_name(feature.holeType, "HoleTypes"), _HOLE_TYPES, "other")
+    tap_type = geo.pick_by_text(geo.enum_name(feature.holeTapType, "HoleTapTypes"), _TAP_TYPES, "other")
     tapped = tap_type in ("tapped", "taperTapped")
     return {
         "hole_type": hole_type,
@@ -244,12 +245,16 @@ def hole_before(feature, ctx):
             "angle_deg": geo.angle(feature.countersinkAngle),
         } if hole_type == "countersink" else None,
         "direction": geo.safe(lambda: geo.unit_vector(feature.direction), None),
-        "positions": geo.safe(lambda: _hole_positions(feature), []),
+        "positions": _hole_positions(feature),
         "extent": geo.safe(lambda: _hole_extent(feature), {"kind": "other", "type": "unreadable"}),
         "side_cylinders": [],
         "end_points": [],
+        "end_face_types": [],
         "participants": geo.safe(lambda: geo.body_refs(feature.participantBodies), []),
     }
+
+
+_END_FACE_TYPES = {"Plane": "plane", "Cone": "cone"}
 
 
 def hole_after(feature, ctx, data):
@@ -258,12 +263,13 @@ def hole_after(feature, ctx, data):
         cylinder = geo.safe(lambda: _cylinder(face), None)
         if cylinder is not None:
             side.append(cylinder)
-    ends = []
+    ends, end_types = [], []
     for face in geo.collection_items(geo.safe(lambda: feature.endFaces, None)):
         p = geo.safe(lambda: geo.point(face.pointOnFace), None)
         if p is not None:
             ends.append(p)
-    return {"side_cylinders": side, "end_points": ends}
+            end_types.append(_END_FACE_TYPES.get(geo.safe(lambda: geo.type_name(face.geometry), None)))
+    return {"side_cylinders": side, "end_points": ends, "end_face_types": end_types}
 
 
 def combine_before(feature, ctx):

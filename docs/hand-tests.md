@@ -110,15 +110,23 @@ These were written from the API reference and never run:
 ## Capture reader calls to watch (extrude, revolve, hole, combine, thread, sketch profiles)
 
 These members and values were written from the API reference or plan and never run. Each has a measured value in
-the capture or a fallback to an `other` entry, so a wrong guess shows up in `report.json` rather than as a wrong part.
+the capture or reads as `null` or `other`, which the translator refuses, so a wrong guess shows up in `report.json`
+rather than as a wrong part.
 Run the plate, tilted sketch, turned knob, extrude directions, holes and combine designs of the F3 hand tests and
 read the capture in `report.json`.
 
 - Enum names are matched by text: `FeatureOperations`, `FeatureExtentTypes`, `HoleTypes`, `HoleTapTypes`,
-  `FeatureHealthStates`. Unknown names fall back to `other` (operation), `one` (extent) or `simple` (hole).
+  `FeatureHealthStates`. Unknown names fall back to `other`.
 - `ProfileCurve.geometry` space. The reader treats geometry with every point at z near 0 as sketch space, else maps it
   with `Sketch.modelToSketchSpace`. A sketch lying in a model plane with turned axes cannot be told apart this way;
   `GEOMETRY_SPACE` in `read_sketch.py` can be set to `"sketch"` or `"model"`.
+- `ProfileCurve.sketchEntity` and `SketchCurve.geometry` (sketch space), used to decide the curve space of a sketch
+  in the plane z = 0 with a turned frame (for example a sketch on a bottom face). A profile marked `"space":
+  "ambiguous"` is refused.
+- `Timeline.timelineGroups`, `TimelineGroup.startIndex` and `endIndex`: a design with a collapsed group must export;
+  a group whose children `Timeline.item` does not list makes the capture fail and the export a fixed shape.
+- `BRepFace.geometry` type of the hole end faces (`plane` flat, `cone` tipped; anything else gives null), compared with `tipAngle`.
+- `HoleFeature.holeType` names that do not match fall to `other`; the same for `FeatureExtentTypes` on extrudes.
 - `Matrix3D.getAsCoordinateSystem()` returning `(origin, xAxis, yAxis, zAxis)` in Python.
 - `CurveEvaluator3D.getParameterExtents` and `getPointAtParameter` (arc middle point, 200 samples of free curves, edge
   points); `SurfaceEvaluator.getNormalAtPoint` (revolve start face normal).

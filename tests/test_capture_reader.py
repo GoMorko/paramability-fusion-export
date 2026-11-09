@@ -5,7 +5,7 @@ import unittest
 from tests import context  # noqa: F401
 from lib.export_plan.errors import StepExportError
 from lib.fusion_reader import read_sketch
-from lib.fusion_reader.capture import read_capture
+from lib.fusion_reader.capture import CaptureReadError, read_capture
 from lib.fusion_reader.read_geometry import edge_record
 
 CM = 0.1  # one mm in Fusion cm
@@ -76,6 +76,7 @@ class FakeTimeline:
         self._pos = len(entries)
         self.history = []
         self.fail_at = fail_at
+        self.timelineGroups = Coll([])
 
     @property
     def count(self):
@@ -223,6 +224,65 @@ class WalkTest(unittest.TestCase):
         self.assertEqual(items[0]["data"], {"a": 1, "b": 2})
 
 
+class UnreadableTest(unittest.TestCase):
+    def capture(self, entries, target=None):
+        target = target or body()
+        return read_capture(FakeDesign(entries, target), target, fusion="", name="", up_axis="z")
+
+    def test_unreadable_bodies_are_null_not_empty(self):
+        move = Obj("fusion::MoveFeature", parentComponent=Obj(entityToken="root"))
+        item = self.capture([(move, "Move1", {})])["items"][0]
+        self.assertIsNone(item["bodies_after"])
+        self.assertTrue(item["read_error"].startswith("bodies"))
+        empty = self.capture([entry(feature("EmbossFeature", "E"))])["items"][0]
+        self.assertEqual(empty["bodies_after"], [])
+        self.assertNotIn("read_error", empty)
+
+    def test_unreadable_extrude_members_read_as_unknown(self):
+        target = body()
+        ext = extrude(rect_profile(), target=target, extentType="WeirdFeatureExtentType", taperAngleOne=None,
+                      startExtent=Obj("fusion::OddStartDefinition"))
+        data = self.capture([sketch_entry(), ext], target)["items"][1]["data"]
+        self.assertEqual(data["extent_type"], "other")
+        self.assertEqual(data["side_one"]["kind"], "other")
+        self.assertEqual(data["start"], {"kind": "other", "type": "OddStartDefinition"})
+        ext = extrude(rect_profile(), target=target, taperAngleOne=None, startExtent=None)
+        data = self.capture([sketch_entry(), ext], target)["items"][1]["data"]
+        self.assertIsNone(data["side_one"]["taper_deg"])
+        self.assertEqual(data["start"]["kind"], "other")
+
+    def test_unknown_hole_type_is_other(self):
+        target = body()
+        hole = entry(feature("HoleFeature", "H", bodies=[target], holeType="OddHoleType", holeTapType="OddTap",
+                             holeDiameter=param(0.5), position=P(0, 0, 0),
+                             extentDefinition=Obj("fusion::DistanceExtentDefinition", distance=param(0.8))))
+        data = self.capture([hole], target)["items"][0]["data"]
+        self.assertEqual((data["hole_type"], data["tap_type"], data["tip_angle_deg"]), ("other", "other", None))
+
+    def test_end_face_types_follow_the_end_points(self):
+        target = body()
+        hole = entry(feature("HoleFeature", "H", bodies=[target], holeType="SimpleHoleType",
+                             holeTapType="SimpleHoleTapType", holeDiameter=param(0.5), position=P(0, 0, 0),
+                             extentDefinition=Obj("fusion::DistanceExtentDefinition", distance=param(0.8)),
+                             endFaces=Coll([Obj(pointOnFace=P(0, 0, 1), geometry=Obj("core::Cone")),
+                                            Obj(pointOnFace=P(0, 0, 2), geometry=Obj("core::Plane")),
+                                            Obj(pointOnFace=P(0, 0, 3), geometry=Obj("core::Torus")),
+                                            Obj(pointOnFace=P(0, 0, 4))])))
+        data = self.capture([hole], target)["items"][0]["data"]
+        self.assertEqual(data["end_face_types"], ["cone", "plane", None, None])
+        self.assertEqual(len(data["end_points"]), 4)
+
+    def test_group_children_not_in_the_walk_refuse_the_capture(self):
+        target = body()
+        design = FakeDesign([sketch_entry(), sketch_entry()], target)
+        design.timeline.timelineGroups = Coll([Obj(startIndex=1, endIndex=3)])
+        with self.assertRaises(CaptureReadError):
+            read_capture(design, target, fusion="", name="", up_axis="z")
+        self.assertEqual(design.timeline.markerPosition, 2)
+        design.timeline.timelineGroups = Coll([Obj(startIndex=0, endIndex=1)])
+        read_capture(design, target, fusion="", name="", up_axis="z")
+
+
 class ExtrudeDataTest(unittest.TestCase):
     def read(self, **kw):
         target = body()
@@ -315,7 +375,25 @@ class SketchCurveTest(unittest.TestCase):
         got = self.curves([line((1, 2, 5), (3, 2, 5)), line((3, 2, 5), (3, 4, 5))], sketch)
         self.assertEqual(got[0], {"kind": "line", "start": [1, 2], "end": [3, 2]})
         profile = read_sketch.read_profile(profile_of([line((1, 2, 5), (3, 2, 5))], sketch))
-        self.assertEqual(profile["frame"]["origin"], [0, 0, 5])
+        self.assertEqual((profile["frame"]["origin"], profile["space"]), ([0, 0, 5], "model"))
+
+    def test_space_in_the_plane_z_zero(self):
+        flipped = matrix(y=(0, -1, 0), z=(0, 0, -1))
+        to_sketch = lambda p: Obj(x=p.x, y=-p.y, z=-p.z)
+        sketch = Obj("fusion::Sketch", name="Bottom", transform=flipped, modelToSketchSpace=to_sketch)
+
+        def profile_with(entity_geometry):
+            geometry = line((1, 2), (3, 2))
+            curve = Obj(geometry=geometry)
+            if entity_geometry is not None:
+                curve.sketchEntity = Obj(geometry=entity_geometry)
+            loop = Obj(isOuter=True, profileCurves=Coll([curve]))
+            return Obj("fusion::Profile", parentSketch=sketch, profileLoops=Coll([loop]))
+
+        self.assertEqual(read_sketch.read_profile(profile_with(None))["space"], "ambiguous")
+        self.assertEqual(read_sketch.read_profile(profile_with(line((1, 2), (3, 2))))["space"], "sketch")
+        self.assertEqual(read_sketch.read_profile(profile_with(line((1, -2), (3, -2))))["space"], "model")
+        self.assertEqual(read_sketch.read_profile(rect_profile())["space"], "sketch")
 
 
 class RevolveTest(unittest.TestCase):
