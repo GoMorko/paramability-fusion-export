@@ -1,4 +1,4 @@
-"""The owner's filter box parameters (names and formulas from a Fusion screenshot), as reader dicts."""
+"""The filter box design's parameters (names with `$`, formulas over a count and a cube width), as reader dicts."""
 from lib.fusion_reader.parameters import list_user_parameters
 from tests.fakes import FakeDesign
 

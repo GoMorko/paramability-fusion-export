@@ -8,7 +8,7 @@ import io
 from dataclasses import dataclass, field
 
 from ..package.units import internal_to_unit
-from .expressions import format_number
+from ..params.expressions import format_number
 from .sizes_text import read_sizes, settable_parameters
 
 DEFAULT_ROW_NAME = "Default"

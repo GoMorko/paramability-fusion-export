@@ -8,7 +8,7 @@ numbers: mm, deg or plain), favorite (bool).
 """
 from ..package.manifest import MAX_NAME_CHARS
 from ..package.units import display_from_manifest
-from .sketch_state import moved_sketches
+from ..fusion_reader.sketches import moved_sketches
 
 MAX_CHECKS = 16
 _SAME = 1e-9
@@ -51,7 +51,8 @@ def plan_checks(sizes, limit=MAX_CHECKS):
 
 
 def fixed_entry(name, reason):
-    return {"name": name[:MAX_NAME_CHARS], "reason": " ".join(reason.split())[:200]}
+    """`name` is the Fusion parameter name; the package entry is made from it later, with the recipe size name."""
+    return {"name": name, "reason": " ".join(reason.split())[:200]}
 
 
 def moved_reason(label, sketch_names):
@@ -70,7 +71,7 @@ def read_checks(checks, results, baseline_sketches, sketch_by_check, labels):
     sketch_by_check: {row name: sketch numbers read at that check} from the same run.
     labels: {size name: text for the person}.
     Returns (kept, fixed): kept lists the checks with a STEP file, in order, each with 'step_file'; fixed lists
-    {'name', 'reason', 'param', 'size'} for sizes that must stay fixed numbers.
+    {'name' (Fusion name), 'reason', 'param', 'size'} for sizes that must stay fixed numbers.
     """
     kept, fixed = [], []
     for check, result in zip(checks, results):

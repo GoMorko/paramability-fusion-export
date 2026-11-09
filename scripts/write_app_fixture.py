@@ -1,7 +1,8 @@
 """Writes manifests with every optional field set, through the package writer.
 
 The valueRows manifest is the app's frozen package fixture. The recipe manifest (checks and the fixed list) is
-written to the optional second path. Usage:
+written to the optional second path. A `fixed` entry's `name` is the recipe size name; when the Fusion parameter has
+another name, the reason says it. Usage:
 python3 scripts/write_app_fixture.py [value rows output path] [recipe output path]
 """
 import json
@@ -24,9 +25,13 @@ def recipe_manifest():
             {"values": {"wall": 4}, "step": "checks/01.step"},
             {"values": {"holes": 6}, "step": "checks/02.step"},
         ],
-        fixed=[{"name": "pipe_offset",
-                "reason": "pipe_offset stays fixed for now: it changes Sketch3. "
-                          "Sketches that follow sizes come in a later version."}],
+        fixed=[
+            {"name": "pipe_offset",
+             "reason": "pipe_offset stays fixed for now: it changes Sketch3. "
+                       "Sketches that follow sizes come in a later version."},
+            {"name": "Filter_box_height",
+             "reason": "Filter box $ height stays fixed: Fusion cannot build the part when it is 80."},
+        ],
     )
 
 

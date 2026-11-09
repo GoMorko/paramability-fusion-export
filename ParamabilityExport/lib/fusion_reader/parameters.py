@@ -92,13 +92,15 @@ def _created_by(p):
         "kind": created_by_kind(entity),
         "token": safe(lambda: entity.entityToken, "") or "",
         "name": safe(lambda: entity.name, "") or "",
+        "sketch": safe(lambda: entity.parentSketch.name, "") or "",
     }
 
 
 def list_model_parameters(component):
     """One dict per numeric model parameter of a component (read through Component.modelParameters).
 
-    Keys: as for user parameters, plus role and created_by ({ kind, token, name }). Unreadable members are skipped.
+    Keys: as for user parameters, plus role and created_by ({ kind, token, name, sketch }; `sketch` is the sketch name
+    of a sketch dimension, else empty). Unreadable members are skipped.
     """
     out = []
     params = safe(lambda: component.modelParameters, None)

@@ -22,6 +22,9 @@ LENGTH_MM = {"mm": 1.0, "cm": 10.0, "m": 1000.0, "in": 25.4, "ft": 304.8, "um": 
 ANGLE_DEG = {"deg": 1.0, "rad": 180.0 / math.pi}
 _ANGLE_ALIAS = {"degree": "deg", "degrees": "deg", "radian": "rad", "radians": "rad"}
 
+# Longest formula text the app accepts in a recipe.
+MAX_FORMULA_LENGTH = 300
+
 SCALAR = (0, 0)
 LENGTH = (1, 0)
 ANGLE = (0, 1)

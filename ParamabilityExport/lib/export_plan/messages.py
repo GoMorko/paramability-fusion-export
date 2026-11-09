@@ -18,6 +18,12 @@ def fixed_note(names):
     return text if len(text) <= MAX_NOTE else text[: MAX_NOTE - 4].rstrip(", ") + "...."
 
 
+def dropped_note(names):
+    """One note naming ticked parameters that no copied step uses, so they are not sizes. Cut to the note limit."""
+    text = "Not used by any copied step, so not sizes: %s." % ", ".join(names)
+    return text if len(text) <= MAX_NOTE else text[: MAX_NOTE - 4].rstrip(", ") + "...."
+
+
 def unchecked_note(count):
     return "%s not checked against Fusion." % _count(count, "size was", "sizes were").capitalize()
 

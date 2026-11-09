@@ -11,15 +11,21 @@ from lib.export_plan.apply import RowBuildError
 from lib.export_plan.messages import fixed_note, recipe_saved_message, sizes_note
 from lib.export_plan.recipe_export import plan_single_export
 from lib.export_plan.runner import RowExport
-from lib.export_plan.size_offers import initial_table, labels, offers, sizes_for_checks
+from lib.export_plan.size_offers import MAX_TICKED, initial_table, labels, offers, sizes_for_checks
 from lib.params import size_table
 from lib.package import manifest as mf
 from lib.translator.result import TranslateResult
 from tests.translator_helpers import load_capture
 
 
-class FakeTable:
-    fixed = [{"name": "corner", "reason": "corner stays fixed."}]
+def length(name):
+    return dict(name=name, expression="2 mm", value=0.2, unit="mm", comment="", is_favorite=True, kind="length")
+
+
+def box_table(ticked=("wall",)):
+    """A real table: `wall` free, `corner` fixed up front."""
+    params = [length(n) for n in ("wall", "corner", "width", "pitch")]
+    return size_table.build(params, list(ticked), fixed={"corner": "corner stays fixed."})
 
 
 def sized_translate(capture, size_table=None):
@@ -48,7 +54,7 @@ class SizedPlanTest(unittest.TestCase):
         checks = [{"size": "wall", "value": 4.0, "step_file": self.paths["c1"]},
                   {"size": "gone", "value": 9.0, "step_file": self.paths["c2"]}]
         return plan_single_export(
-            load_capture("extrude_plate"), self.paths["part"], "Box", "w", "z", size_table=FakeTable(),
+            load_capture("extrude_plate"), self.paths["part"], "Box", "w", "z", size_table=box_table(),
             checks=checks, fixed=[{"name": "width", "reason": "width stays fixed for now."}], **kwargs)
 
     def test_package_holds_checks_of_free_sizes_only_and_all_fixed_numbers(self):
@@ -71,17 +77,36 @@ class SizedPlanTest(unittest.TestCase):
 
     def test_a_part_that_stays_a_fixed_shape_has_no_checks_and_no_fixed_list(self):
         manifest, files, _ = plan_single_export(
-            RuntimeError("x"), self.paths["part"], "Box", "w", "z", size_table=FakeTable(),
+            RuntimeError("x"), self.paths["part"], "Box", "w", "z", size_table=box_table(),
             checks=[{"size": "wall", "value": 4.0, "step_file": self.paths["c1"]}])
         self.assertEqual(manifest["kind"], "stepOnly")
         self.assertNotIn("checks/01.step", files)
 
-    def test_translator_without_size_table_keyword_is_still_called(self):
-        recipe_export.translate = lambda capture: TranslateResult(
-            recipe={"schema": "paramability.recipe", "version": 10, "features": [{"id": "a", "kind": "extrude"}]})
-        manifest, _, _ = self.plan()
-        self.assertEqual(manifest["checks"], [])
-        self.assertEqual(manifest["notes"], ["1 step copied from Fusion.", "2 numbers stay fixed: width, corner."])
+    def test_a_ticked_size_no_step_uses_is_named_in_a_note_and_the_report(self):
+        manifest, _, report = plan_single_export(
+            load_capture("extrude_plate"), self.paths["part"], "Box", "w", "z", size_table=box_table(("wall", "width")))
+        self.assertIn("Not used by any copied step, so not sizes: width.", manifest["notes"])
+        self.assertEqual(report["sizes"]["dropped"], ["width"])
+
+    def test_fixed_entries_hold_the_recipe_name_and_keep_the_fusion_name_in_the_reason(self):
+        long_name = "Filter box $ " + "x" * 58
+        params = [length("wall"), length(long_name), length("a b")]
+        table = size_table.build(params, ["wall", long_name, "a b"])
+        recipe_export.translate = lambda capture, size_table=None: self.translated(
+            [{"name": long_name, "reason": long_name + " stays fixed: a sketch."}, {"name": "a b", "reason": "Why."}])
+        manifest, _, _ = plan_single_export(
+            load_capture("extrude_plate"), self.paths["part"], "Box", "w", "z", size_table=table)
+        names = [f["name"] for f in manifest["fixed"]]
+        self.assertEqual(names, [table.recipe_name(long_name), "a_b"])
+        self.assertTrue(all(len(n) <= 64 for n in names))
+        self.assertEqual(manifest["fixed"][1]["reason"], "a b: Why.")
+        self.assertEqual(mf.validate_manifest(manifest), [])
+
+    @staticmethod
+    def translated(fixed):
+        result = sized_translate(None)
+        result.fixed = fixed
+        return result
 
 
 class ManifestFixedTest(unittest.TestCase):
@@ -157,6 +182,41 @@ class OffersTest(unittest.TestCase):
         self.assertEqual(lines[CUBE]["text"], CUBE + ", 18 mm")
         self.assertFalse(lines["FilterBox_width_mm"]["enabled"])
         self.assertEqual(lines["FilterBox_width_mm"]["text"], "FilterBox_width_mm (formula)")
+
+    def test_a_parameter_a_sketch_dimension_reads_is_greyed_out_before_the_export(self):
+        params = [length("wall"), length("height"), length("spare")]
+        model = [dict(name="d1", expression="wall", value=0.2, unit="mm", kind="derived",
+                      dependency_parameters=["wall"], created_by={"kind": "sketchDimension"}),
+                 dict(name="d2", expression="height + spare", value=0.2, unit="mm", kind="derived",
+                      dependency_parameters=["height", "spare"], created_by={"kind": "feature"})]
+        lines = {o["param"]: o for o in offers(initial_table(params, model), params)}
+        self.assertEqual((lines["wall"]["ticked"], lines["wall"]["enabled"]), (False, False))
+        self.assertIn("changes a sketch", lines["wall"]["reason"])
+        self.assertTrue(lines["height"]["ticked"] and lines["height"]["enabled"])
+
+    def test_a_parameter_that_is_not_ticked_by_default_but_moves_a_sketch_is_greyed_out_too(self):
+        params = [length("wall"), length("spare")]
+        params[1]["is_favorite"] = False
+        model = [dict(name="d1", expression="wall", value=0.2, unit="mm", kind="derived",
+                      dependency_parameters=["wall"], created_by={"kind": "feature"}),
+                 dict(name="d2", expression="spare", value=0.2, unit="mm", kind="derived",
+                      dependency_parameters=["spare"], created_by={"kind": "sketchDimension"})]
+        lines = {o["param"]: o for o in offers(initial_table(params, model), params)}
+        self.assertFalse(lines["spare"]["enabled"])
+        self.assertTrue(lines["wall"]["ticked"])
+
+    def test_no_more_sizes_are_ticked_than_there_are_check_slots(self):
+        params = [length("p%d" % i) for i in range(20)]
+        table = initial_table(params)
+        self.assertEqual(len(table.ticked), MAX_TICKED)
+        lines = offers(table, params)
+        self.assertEqual(sum(1 for o in lines if o["ticked"]), MAX_TICKED)
+        self.assertTrue(all(o["enabled"] for o in lines))
+
+    def test_checks_go_only_to_sizes_the_recipe_keeps(self):
+        table = size_table.build(self.params, [CUBE, H])
+        kept = sizes_for_checks(table, self.params, keep=[table.size_name(CUBE)])
+        self.assertEqual([s["param"] for s in kept], [CUBE])
 
     def test_check_sizes_come_from_free_sizes_with_their_range(self):
         table = size_table.build(self.params, [CUBE])

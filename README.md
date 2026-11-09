@@ -22,21 +22,24 @@ Nothing is typed in Fusion.
 
 1. In Fusion, mark the user parameters you want to change in Paramability as favourites (optional).
 2. Click Export for Paramability and pick the body.
-3. Under "Sizes you can change in Paramability", check the list. Parameters the body uses are ticked to start with
-   (your favourites first). A parameter worked out by a formula shows "(formula)" and follows the parameters it
-   reads. Unticked parameters stay fixed numbers. A parameter that cannot be a size is greyed out, and its tooltip
-   says why.
+3. Under "Sizes you can change in Paramability", check the list. Parameters the picked body uses are ticked to start
+   with (your favourites first); pick another body and the ticks follow that body. A parameter worked out by a
+   formula shows "(formula)" and follows the parameters it reads. Unticked parameters stay fixed numbers. A
+   parameter that drives a sketch dimension, a construction plane or axis, or a joint cannot be a size for now: it is
+   unticked and greyed out, and its tooltip says why. You can tick up to 16 sizes, since each one gets a check.
 4. Pick the design up direction, click OK and choose where to save the file.
 5. Open the file in Paramability. The sizes are ready for the "Put on the form" button.
 
 Each ticked size has a range: a comment such as `Wall [1..6]` on the parameter sets it, otherwise it is half to
-double the current value (a count goes from 1 to twice its value). The add-in checks every size once: it sets that
-size to the top of its range, writes a STEP file of the part, and puts it back. Paramability builds the recipe at that
-value and compares it with the STEP file. A size that does not match is kept as a fixed number. Up to 16 sizes are
-checked, favourites first; the rest are saved as sizes without a check.
+double the current value (a count goes from 1 to twice its value). A parameter that sets how many copies a pattern
+makes is a whole number. The add-in first works out which sizes the copied steps really use, then checks each of
+those once: it sets that size to the top of its range, writes a STEP file of the part, and puts it back. Paramability
+builds the recipe at that value and compares it with the STEP file. A size that does not match is kept as a fixed
+number.
 
 A size stays a fixed number, with the reason in the message after the export and in the file, when Fusion cannot
 build the part at the checked value, or when it moves a sketch (sketches that follow sizes come in a later version).
+A ticked parameter that no copied step uses is not a size; the message after the export names it.
 When a step cannot be copied, the file holds the plain part only, and the message names the first step that stopped
 it. A copy of what the add-in read is saved inside the file as `report.json`.
 
@@ -75,7 +78,9 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 - One solid body per export.
 - A body inside a component can be picked, and rows of values work for it. A recipe needs the body in the root
   component for now; a body in a component is saved as a fixed shape with a note.
-- A recipe covers the picked body only, built from the root component. Sizes cannot move sketches yet.
+- A recipe covers the picked body only, built from the root component. Parameters made by steps or sketches of other
+  bodies are left out where the add-in can match them by name; construction planes, axes and joints are always read
+  for the whole design. Sizes cannot move sketches yet.
   These stop the copy and leave a plain part:
   thin extrudes, face outlines, spline and other free curve outlines, extrudes that start or end on a tilted or curved
   surface, extrudes that make a new component, modeled threads, rounds with variable or chord length sizes or curvature

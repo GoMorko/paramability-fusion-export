@@ -3,14 +3,13 @@
 Whatever goes wrong while reading or translating, the person still gets the STEP as a stepOnly package with one
 plain note. The caller writes the STEP before it reads the capture.
 """
-import inspect
 import json
 
 from ..package.manifest import (
     MAX_FIXED, build_recipe_manifest, build_step_only_manifest, check_step_path, validate_manifest)
 from ..translator import CaptureError, translate
 from ..translator.notes import inside_component_note, recipe_note, reader_failure_note, step_only_note, translate_failure_note
-from .messages import fixed_note, recipe_saved_message, sizes_note, unchecked_note  # noqa: F401
+from .messages import dropped_note, fixed_note, sizes_note, unchecked_note
 
 MAX_RECIPE_BYTES = 8 * 1024 * 1024
 _TOO_LARGE = {"index": None, "name": "", "type": "", "reason": "The recipe is too large to open."}
@@ -47,30 +46,44 @@ def _with_up_axis(capture, up_axis):
     return {**capture, "up_axis": up_axis}
 
 
-def _translate_with_sizes(capture, size_table):
-    """Run the translator. The size table (lib/params) goes along when the translator takes `size_table`."""
-    if size_table is not None and "size_table" in inspect.signature(translate).parameters:
-        return translate(capture, size_table=size_table)
-    return translate(capture)
+def translate_capture(capture, up_axis, size_table=None):
+    """The translator's result for a capture turned to the dialog's up axis. Raises what the translator raises."""
+    return translate(_with_up_axis(capture, up_axis), size_table=size_table)
 
 
-def _free_sizes(recipe):
+def free_sizes(recipe):
     """Names of the recipe sizes a form can change (not the formulas)."""
     sizes = (recipe or {}).get("sizes") or {}
     return [name for name, size in sizes.items() if isinstance(size, dict) and "value" in size]
 
 
-def _merge_fixed(*lists):
-    """Entries {'name', 'reason'} in order, the first entry per name wins, at most MAX_FIXED."""
+def _merge_fixed(size_table, *lists):
+    """Manifest entries {'name', 'reason'} in order, the first entry per size wins, at most MAX_FIXED.
+
+    Names in the lists are Fusion parameter names (or recipe size names). The entry holds the recipe size name; the
+    reason names the Fusion parameter when the two differ.
+    """
     out, seen = [], set()
     for entries in lists:
         for entry in entries or []:
             name = entry.get("name")
-            if name in seen or not name:
+            if not name:
                 continue
-            seen.add(name)
-            out.append({"name": name, "reason": entry.get("reason") or "Stays a fixed number."})
+            made = size_table.fixed_entry(name, entry.get("reason") or "Stays a fixed number.")
+            if made["name"] in seen:
+                continue
+            seen.add(made["name"])
+            out.append(made)
     return out[:MAX_FIXED]
+
+
+def _dropped(size_table, recipe, fixed):
+    """Fusion names the person ticked that the recipe does not hold as sizes: no step uses them, and they are not
+    among the fixed ones."""
+    sizes = (recipe or {}).get("sizes") or {}
+    fixed_names = {f["name"] for f in fixed}
+    return [n for n in size_table.ticked
+            if size_table.size_name(n) not in sizes and size_table.recipe_name(n) not in fixed_names]
 
 
 def plan_single_export(capture_or_error, step_file, title, writer, up_axis, in_component=False,
@@ -79,10 +92,12 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis, in_c
 
     capture_or_error: the reader's capture dict, or the exception the reader raised.
     in_component: the body is not in the root component, so no steps are translated and the part stays a fixed shape.
-    size_table: the lib/params SizeTable of this export, or None for a recipe without sizes.
+    size_table: the lib/params SizeTable of this export, or None for a recipe without sizes. A ticked size that no
+      copied step uses is named in a note and in `report.json` ("dropped").
     checks: [{'size', 'value', 'step_file'}] from the size checks, one size changed in each. Only checks of sizes the
       recipe keeps free go into the package.
-    fixed: [{'name', 'reason'}] parameters the export itself fixed (measured). The translator adds its own.
+    fixed: [{'name', 'reason'}] parameters the export itself fixed (measured), by Fusion name. The translator adds its
+      own. The manifest lists them by recipe size name.
     unchecked: names of sizes that got no check, for the report.
     files maps entry paths to a file path or bytes, as write_package expects. Raises ValueError when the manifest
     breaks the package rules.
@@ -101,7 +116,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis, in_c
     else:
         capture = _with_up_axis(capture, up_axis)
         try:
-            result = _translate_with_sizes(capture, size_table)
+            result = translate(capture, size_table=size_table)
         except CaptureError as exc:
             error, note = exc, reader_failure_note()
         except Exception as exc:
@@ -113,11 +128,12 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis, in_c
     elif result is not None:
         refusal = result.refusal
 
-    free = _free_sizes(result.recipe) if recipe_data is not None else []
+    free = free_sizes(result.recipe) if recipe_data is not None else []
     kept = [c for c in (checks or []) if c["size"] in free]
-    all_fixed = []
-    if recipe_data is not None:
-        all_fixed = _merge_fixed(fixed, getattr(size_table, "fixed", None), getattr(result, "fixed", None))
+    all_fixed, dropped = [], []
+    if recipe_data is not None and size_table is not None:
+        all_fixed = _merge_fixed(size_table, fixed, size_table.fixed, getattr(result, "fixed", None))
+        dropped = _dropped(size_table, result.recipe, all_fixed)
 
     report = {
         "writer": writer,
@@ -133,7 +149,8 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis, in_c
         report["capture"] = capture
     if recipe_data is not None:
         report["sizes"] = {"free": free, "fixed": all_fixed, "checks": [
-            {"size": c["size"], "value": c["value"]} for c in kept], "unchecked": list(unchecked or [])}
+            {"size": c["size"], "value": c["value"]} for c in kept], "unchecked": list(unchecked or []),
+            "dropped": dropped}
 
     files = {"part.step": step_file}
     if recipe_data is not None:
@@ -142,6 +159,8 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis, in_c
             notes.append(sizes_note(len(free)))
         if all_fixed:
             notes.append(fixed_note([f["name"] for f in all_fixed]))
+        if dropped:
+            notes.append(dropped_note(dropped))
         if unchecked:
             notes.append(unchecked_note(len(unchecked)))
         manifest_checks = []

@@ -131,12 +131,29 @@ class FilterBoxTableTest(unittest.TestCase):
         t = size_table.build(params, ["holes"], model_params=model)
         self.assertEqual(t.sizes["holes"], {"kind": "count", "value": 3.0, "min": 1.0, "max": 6.0, "label": "holes", "step": 1})
 
-    def test_favourite_model_parameter_is_treated_as_a_user_parameter(self):
-        model = [dict(name="d3", expression="4 mm", value=0.4, unit="mm", is_favorite=True, kind="length")]
-        t = size_table.build([], ["d3"], model_params=model)
-        self.assertEqual(t.sizes["d3"]["value"], 4.0)
+    def test_a_count_is_found_by_the_pattern_quantity_it_drives_whatever_the_role_text(self):
+        params = [dict(name="holes", expression="3", value=3.0, unit="", comment="", is_favorite=True, kind="count"),
+                  dict(name="ratio", expression="1.5", value=1.5, unit="", comment="", is_favorite=True, kind="count")]
+        model = [dict(name="d5", expression="holes", value=3.0, unit="", role="Other", dependency_parameters=["holes"],
+                      kind="derived")]
+        refs = [{"name": "d5", "expression": "holes", "value": 3.0}]
+        t = size_table.build(params, ["holes", "ratio"], model_params=model, quantity_params=refs)
+        self.assertEqual(t.sizes["holes"]["kind"], "count")
+        self.assertEqual(t.sizes["ratio"]["kind"], "number")
+        self.assertEqual(size_table.build(params, ["holes"], model_params=model).sizes["holes"]["kind"], "number")
 
-    def test_raw_fixture_values_match_the_screenshot(self):
+    def test_fixed_entry_names_the_recipe_size_and_keeps_the_fusion_name_in_the_reason(self):
+        long_name = "p" * 71
+        params = [dict(name=long_name, expression="2 mm", value=0.2, unit="mm", comment="", is_favorite=True,
+                       kind="length"),
+                  dict(name="a b", expression="2 mm", value=0.2, unit="mm", comment="", is_favorite=True,
+                       kind="length")]
+        t = size_table.build(params, [long_name, "a b"], fixed={long_name: "Stays fixed.", "a b": "Stays fixed."})
+        self.assertEqual([len(f["name"]) for f in t.fixed], [64, 3])
+        self.assertEqual(t.fixed[1], {"name": "a_b", "reason": "a b: Stays fixed."})
+        self.assertEqual(t.fixed_entry("a_b", "x")["name"], "a_b")
+
+    def test_raw_fixture_values_match_the_designs_names(self):
         self.assertEqual(len(RAW), 9)
 
 

@@ -1,25 +1,27 @@
 """What happens when the person clicks OK in Export for Paramability.
 
-Order: the STEP of the part as it is, the capture of its steps, one check STEP per size, then the translation and
-the file. The checks change parameters one at a time; RowExport puts every parameter back whatever happens.
+Order: the STEP of the part as it is, the capture of its steps, a first translation that shows which sizes the
+recipe keeps, one check STEP per kept size, then the translation again with what the checks found, and the file. The
+checks change parameters one at a time; RowExport puts every parameter back whatever happens.
 """
 import os
 import tempfile
 
 from ...lib.export_plan.apply import RowBuildError
+from ...lib.export_plan.body_scope import other_sketches, scope_inputs
 from ...lib.export_plan.errors import StepExportError
 from ...lib.export_plan.messages import recipe_saved_message
 from ...lib.export_plan.naming import design_title, package_file_name
-from ...lib.export_plan.recipe_export import plan_single_export
+from ...lib.export_plan.recipe_export import free_sizes, plan_single_export, translate_capture
 from ...lib.export_plan.runner import ExportCancelled, RowExport
 from ...lib.export_plan.size_checks import plan_checks, read_checks
 from ...lib.export_plan.size_offers import labels, sizes_for_checks
-from ...lib.export_plan.sketch_state import read_sketches
 from ...lib.export_plan.temp_copy import MARKER_MESSAGE, marker_at_end
 from ...lib.fusion_reader import design_info
 from ...lib.fusion_reader.bodies import is_root_body
 from ...lib.fusion_reader.capture import MarkerError, read_capture
 from ...lib.fusion_reader.rows import DesignParameterStore
+from ...lib.fusion_reader.sketches import read_sketches
 from ...lib.fusion_reader.step_export import export_body_step, resolve_body
 from ...lib.fusion_ui.file_dialog import ask_save_path
 from ...lib.fusion_ui.log import error_box, log, message_box
@@ -30,10 +32,10 @@ from ...lib.params import size_table as size_tables
 from .. import export_common
 
 
-def _read_capture(design, current, up_axis):
+def _read_capture(design, current):
     """The capture, or the exception that stopped it. Only a lost timeline marker is not swallowed."""
     try:
-        return read_capture(design, current, up_axis=up_axis)
+        return read_capture(design, current)
     except MarkerError:
         raise
     except Exception as exc:
@@ -41,14 +43,32 @@ def _read_capture(design, current, up_axis):
         return exc
 
 
-def _run_checks(design, store, units, body, token, checks, tmp, job_box):
+class CaptureCache:
+    """The capture of each picked body. The dialog reads it to scope the parameters to the body, and the export
+    reuses it when it is still the same dialog. A failed read is not kept."""
+
+    def __init__(self, design):
+        self._design = design
+        self._read = {}
+
+    def get(self, body):
+        token = body.entityToken
+        cached = self._read.get(token)
+        if isinstance(cached, dict):
+            return cached
+        capture = _read_capture(self._design, resolve_body(self._design, token, body))
+        self._read[token] = capture
+        return capture
+
+
+def _run_checks(design, store, units, body, token, checks, tmp, job_box, skip_sketches):
     """Export one STEP per check. Returns (results, sketch numbers per check row, the job)."""
     snapshots = {}
     root = design.rootComponent
 
     def export_check(path):
         export_body_step(design, resolve_body(design, token, body), path)
-        snapshots[job.current_row] = read_sketches(root)
+        snapshots[job.current_row] = read_sketches(root, skip_sketches)
 
     job = RowExport(store, units, export_check)
     job_box.append(job)
@@ -59,8 +79,20 @@ def _run_checks(design, store, units, body, token, checks, tmp, job_box):
     return results, snapshots
 
 
-def run_export(design, parameters, model_params, design_unit, form):
-    """Run one export. Parameters are always put back before this returns."""
+def _first_translation(capture, up_axis, table):
+    """The translator's result when it gives a recipe, else None (the plan then reports the reason)."""
+    try:
+        result = translate_capture(capture, up_axis, table)
+    except Exception as exc:
+        log(f"first translation failed: {exc!r}")
+        return None
+    return result if result.recipe is not None else None
+
+
+def run_export(design, parameters, model_params, design_unit, form, captures=None):
+    """Run one export. Parameters are always put back before this returns.
+
+    `captures` is the dialog's CaptureCache; a capture it already holds for the picked body is not read again."""
     app = export_common.app()
     body = form["body"]
     if body is None:
@@ -74,7 +106,6 @@ def run_export(design, parameters, model_params, design_unit, form):
     if out_path is None:
         return
 
-    table = size_tables.build(parameters, form["ticked"], model_params, design_unit)
     units = {p["name"]: p["unit"] for p in parameters}
     token = body.entityToken
     in_component = not is_root_body(body, design.rootComponent)
@@ -85,17 +116,30 @@ def run_export(design, parameters, model_params, design_unit, form):
             current = resolve_body(design, token, body)
             export_body_step(design, current, part_step)
             # The translator reads root timeline features only; a body in a component stays a fixed shape.
-            capture = None if in_component else _read_capture(design, current, form["up_axis"])
+            if in_component:
+                capture = None
+            elif captures is not None:
+                capture = captures.get(body)
+            else:
+                capture = _read_capture(design, current)
+
+            model, quantities = scope_inputs(capture, model_params)
+            table = size_tables.build(
+                parameters, form["ticked"], model, design_unit, quantity_params=quantities)
 
             checks, kept, measured, unchecked = [], [], [], []
             if isinstance(capture, dict):
-                sizes = sizes_for_checks(table, parameters)
-                checks, not_checked = plan_checks(sizes)
-                unchecked = [s["size"] for s in not_checked]
+                # Checks go only to the sizes the recipe keeps after translation.
+                first = _first_translation(capture, form["up_axis"], table)
+                if first is not None:
+                    sizes = sizes_for_checks(table, parameters, keep=free_sizes(first.recipe))
+                    checks, not_checked = plan_checks(sizes)
+                    unchecked = [s["size"] for s in not_checked]
                 if checks:
-                    baseline = read_sketches(design.rootComponent)
+                    skip = other_sketches(capture)
+                    baseline = read_sketches(design.rootComponent, skip)
                     results, snapshots = _run_checks(
-                        design, DesignParameterStore(design), units, body, token, checks, tmp, jobs)
+                        design, DesignParameterStore(design), units, body, token, checks, tmp, jobs, skip)
                     kept, measured = read_checks(checks, results, baseline, snapshots, labels(table))
                     if measured:
                         table = table.with_fixed({m["param"]: m["reason"] for m in measured})

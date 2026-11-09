@@ -5,14 +5,15 @@
 `params` are the user parameters as read by `fusion_reader.parameters.list_user_parameters` (Fusion internal values:
 cm, rad). `ticked` are the Fusion names the person keeps as sizes. Optional keywords: `model_params` (the body's model
 parameters, for inlining, counts and defaults), `design_unit` (what a bare number in a length expression means),
-`fixed` (ticked names that cannot follow, with the reason; they become plain numbers).
+`fixed` (ticked names that cannot follow, with the reason; they become plain numbers), `quantity_params` (the model
+parameters the steps use as a pattern quantity; the user parameters behind them become whole-number counts).
 
 The table holds, per parameter, one entry whose `state` is:
 
 - `free`: a plain number kept as a size (`table.sizes[recipe_name]` has `kind`, `value`, `min`, `max`, `label`);
 - `derived`: a formula over other sizes (`{ expr, label }`);
 - `constant`: a plain number that is not a size; every formula that reads it holds its number;
-- `fixed`: ticked, but fixed with a reason (shown unticked and greyed);
+- `fixed`: fixed with a reason (shown unticked and greyed); it is not a size of the recipe;
 - `not_offered`: a unit or formula that cannot be copied (the reason is kept).
 
 `translate(expression)` turns a Fusion expression (a feature value read from a model parameter) into a formula over
@@ -21,13 +22,13 @@ driver fixes when a value cannot follow.
 """
 from dataclasses import dataclass
 
+from ..package.manifest import MAX_FIXED_REASON
 from . import defaults, names
 from .expressions import (
-    ANGLE, LENGTH, LENGTH_MM, SCALAR, ExpressionError, Typed, evaluate, parse, referenced_names, render,
-    translate_tree)
+    ANGLE, LENGTH, LENGTH_MM, MAX_FORMULA_LENGTH, SCALAR, ExpressionError, Typed, evaluate, parse, referenced_names,
+    render, translate_tree)
 
 MAX_SIZES = 64
-MAX_FORMULA_CHARS = 300
 VALUE_TOLERANCE = 1e-6
 
 FREE, DERIVED, CONSTANT, FIXED, NOT_OFFERED = "free", "derived", "constant", "fixed", "not_offered"
@@ -45,7 +46,6 @@ class Entry:
     formula: str = ""  # written formula of a derived entry
     reads: tuple = ()  # Fusion names of the free sizes a derived entry depends on
     reason: str = ""
-    source: str = "user"
 
 
 @dataclass
@@ -70,12 +70,13 @@ def _round(x):
 
 
 class SizeTable:
-    def __init__(self, params, ticked, model_params=(), design_unit="mm", fixed=None):
+    def __init__(self, params, ticked, model_params=(), design_unit="mm", fixed=None, quantity_params=()):
         self._params = [p for p in params]
         self._model = list(model_params)
         self._ticked_in = list(ticked)
         self._design_unit = design_unit
         self._fixed_in = dict(fixed or {})
+        self._quantity_params = list(quantity_params)
         self._design_mm = LENGTH_MM.get((design_unit or "mm").lower(), 1.0)
         self.model_params = {m["name"]: m for m in self._model}
         self.entries = []
@@ -88,14 +89,8 @@ class SizeTable:
     # ---- building --------------------------------------------------------------------------------------------
 
     def _compute(self):
-        counts = defaults.count_names(self._params, self._model)
-        candidates = [dict(p, source="user") for p in self._params]
-        taken = {p["name"] for p in candidates}
-        for m in self._model:
-            if (m["name"] not in taken and m.get("is_favorite") and defaults.is_numeric(m)
-                    and m.get("kind") in ("length", "angle", "count")):
-                candidates.append(dict(m, source="model"))
-                taken.add(m["name"])
+        counts = defaults.count_names(self._params, self._model, self._quantity_params)
+        candidates = list(self._params)
         self._cand = {p["name"]: p for p in candidates}
         self._recipe_names = names.assign([p["name"] for p in candidates])
         ticked = set(self._ticked_in)
@@ -123,18 +118,18 @@ class SizeTable:
     def _plain_entry(self, p, ticked, counts, free_count):
         """Entry of a plain number parameter; None for a formula (handled by _derived_entry)."""
         if not defaults.is_numeric(p):
-            return Entry(p["name"], NOT_OFFERED, reason="Text values are not offered.", source=p["source"])
+            return Entry(p["name"], NOT_OFFERED, reason="Text values are not offered.")
         if p.get("kind") == "derived":
             return None
         label = defaults.label_for(p)
         if p.get("kind") not in ("length", "angle", "count") or defaults.dim_of_unit(p.get("unit")) is None:
-            return Entry(p["name"], NOT_OFFERED, label=label, reason=f"The unit \"{p.get('unit')}\" is not supported.",
-                         source=p["source"])
+            return Entry(p["name"], NOT_OFFERED, label=label, reason=f"The unit \"{p.get('unit')}\" is not supported.")
         value = _round(defaults.size_value(p))
         kind = defaults.size_kind(p, counts)
-        base = dict(name=p["name"], label=label, kind=kind, value=value, source=p["source"])
+        base = dict(name=p["name"], label=label, kind=kind, value=value)
         if p["name"] in self._fixed_in:
-            return Entry(state=FIXED, reason=self._fixed_in[p["name"]], **base)
+            return Entry(state=FIXED, size_name=self._recipe_names[p["name"]], reason=self._fixed_in[p["name"]],
+                         **base)
         if p["name"] in ticked:
             if free_count >= MAX_SIZES:
                 return Entry(state=CONSTANT, reason=f"{MAX_SIZES} is the most sizes.", **base)
@@ -146,7 +141,7 @@ class SizeTable:
         if name in self._entries:
             return self._entries[name]
         p = self._cand[name]
-        base = dict(name=name, label=defaults.label_for(p), expression=p.get("expression", ""), source=p["source"],
+        base = dict(name=name, label=defaults.label_for(p), expression=p.get("expression", ""),
                     kind=defaults.size_kind(p), value=_round(defaults.size_value(p)))
         if name in self._active:
             raise ExpressionError(f"\"{name}\" reads itself.")
@@ -163,7 +158,7 @@ class SizeTable:
             entry = Entry(state=NOT_OFFERED, reads=tr.reads, reason=tr.reason, **base)
         elif not tr.reads:
             entry = Entry(state=CONSTANT, **base)
-        elif len(tr.formula) > MAX_FORMULA_CHARS:
+        elif len(tr.formula) > MAX_FORMULA_LENGTH:
             entry = Entry(state=NOT_OFFERED, reads=tr.reads, reason="The formula is too long to copy.", **base)
         elif sum(1 for e in self._entries.values() if e.state in (FREE, DERIVED)) >= MAX_SIZES:
             entry = Entry(state=CONSTANT, reason=f"{MAX_SIZES} is the most sizes.", **base)
@@ -242,7 +237,7 @@ class SizeTable:
             return Translation(
                 reads=merged,
                 reason=f"The formula gives {_fmt(value)} but Fusion says {_fmt(expected)}.")
-        if len(text) > MAX_FORMULA_CHARS and merged:
+        if len(text) > MAX_FORMULA_LENGTH and merged:
             return Translation(reads=merged, reason="The formula is too long to copy.")
         return Translation(formula=text, reads=merged, dim=_DIM_NAMES.get(typed.dim, "other"), value=value)
 
@@ -310,15 +305,34 @@ class SizeTable:
 
     @property
     def fixed(self):
-        """[{ name, reason }] for the manifest and the dialog."""
-        return [{"name": e.name, "reason": e.reason} for e in self.entries if e.state == FIXED]
+        """[{ name, reason }] for the manifest: the recipe size name and the reason."""
+        return [self.fixed_entry(e.name, e.reason) for e in self.entries if e.state == FIXED]
+
+    def recipe_name(self, name):
+        """The recipe size name of a Fusion parameter name. A name that is a recipe name already is kept."""
+        if name in self._recipe_names:
+            return self._recipe_names[name]
+        if name in self._recipe_names.values():
+            return name
+        return names.sanitize(name)
+
+    def fixed_entry(self, name, reason):
+        """`{ name, reason }` of a fixed parameter for the manifest.
+
+        `name` is the recipe size name (at most 64 characters). The reason holds the Fusion name when it differs.
+        """
+        recipe = self.recipe_name(name)
+        text = " ".join(reason.split())
+        if recipe != name and name not in text:
+            text = "%s: %s" % (name, text)
+        return {"name": recipe, "reason": text[:MAX_FIXED_REASON]}
 
     def with_fixed(self, reasons):
         """A new table where these Fusion names (reason text each) are fixed to their numbers."""
         merged = dict(self._fixed_in)
         merged.update(reasons)
         return SizeTable(self._params, [n for n in self._ticked_in if n not in merged], self._model,
-                         self._design_unit, merged)
+                         self._design_unit, merged, self._quantity_params)
 
     def report(self):
         """Plain data for report.json: renames, derived formulas with their value check, fixed and unoffered names."""
@@ -341,6 +355,6 @@ def _fmt(x):
     return ("%.6f" % x).rstrip("0").rstrip(".")
 
 
-def build(params, ticked, model_params=(), design_unit="mm", fixed=None):
+def build(params, ticked, model_params=(), design_unit="mm", fixed=None, quantity_params=()):
     """SizeTable for the user parameters and the names ticked as sizes."""
-    return SizeTable(params, ticked, model_params, design_unit, fixed)
+    return SizeTable(params, ticked, model_params, design_unit, fixed, quantity_params)

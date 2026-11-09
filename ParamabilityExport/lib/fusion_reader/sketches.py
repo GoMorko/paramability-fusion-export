@@ -2,7 +2,8 @@
 
 A size that moves a sketch cannot follow the form yet, so the export fixes it. The reader only uses members it
 finds, and a member that cannot be read leaves a gap in the list, so a failing read never invents a move.
-Numbers are Fusion internal units (cm). No adsk import: it works on the objects it is given.
+Numbers are Fusion internal units (cm). No adsk import: it works on the objects it is given. `moved_sketches` works
+on plain numbers.
 """
 
 # 1e-4 mm in cm: the recompute noise Fusion leaves on an unchanged sketch.
@@ -59,13 +60,15 @@ def _sketch_numbers(sketch):
     return out
 
 
-def read_sketches(root):
-    """{sketch name: numbers} for every sketch of the root component. Never raises."""
+def read_sketches(root, skip=()):
+    """{sketch name: numbers} for the sketches of the root component, except those named in `skip`. Never raises."""
     state = {}
     for sketch in _collection(getattr(root, "sketches", None)):
         try:
             name = sketch.name
         except Exception:
+            continue
+        if name in skip:
             continue
         state[name] = _sketch_numbers(sketch)
     return state

@@ -19,7 +19,7 @@ def translate(text, names=None, design_mm=1.0):
 
 
 class TranslateTest(unittest.TestCase):
-    def test_filter_box_formula_keeps_owner_names_and_drops_units(self):
+    def test_filter_box_formula_keeps_names_with_a_dollar_sign_and_drops_units(self):
         names = {"W$": ("W_", SCALAR), "cube_mm": ("cube_mm", LENGTH)}
         t = translate("W$ * cube_mm + 2 mm", names)
         self.assertEqual(render(t.node), "W_ * cube_mm + 2")

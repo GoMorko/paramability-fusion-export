@@ -88,7 +88,7 @@ def size_range(p, kind, value):
     return default_range(kind, value)
 
 
-def _deps(p):
+def reads_of(p):
     """Names a parameter reads: the Fusion dependency list plus the names found in its expression."""
     return list(dict.fromkeys(list(p.get("dependency_parameters", ())) + referenced_names(p.get("expression", ""))))
 
@@ -99,7 +99,7 @@ def _closure(start, lookup):
     stack = list(start)
     while stack:
         p = stack.pop()
-        for dep in _deps(p):
+        for dep in reads_of(p):
             if dep not in seen:
                 seen.add(dep)
                 if dep in lookup:
@@ -119,14 +119,18 @@ def names_read_by(params, model_params):
     return _closure(model_params, _lookup(params, model_params)) & user
 
 
-def count_names(params, model_params):
-    """User parameters read by a model parameter whose role names a quantity (pattern counts).
+def count_names(params, model_params, quantity_refs=()):
+    """User parameters read by a model parameter that sets a pattern quantity.
 
-    The role strings of Fusion are not all verified, so the match is on the word "quantity".
+    `quantity_refs` are the model parameters the steps use as a pattern quantity (`{ name, expression }`, from the
+    capture). A model parameter whose role text names a quantity counts as well; the role strings of Fusion are not
+    all verified, so that match is on the word "quantity".
     """
     user = {p["name"] for p in params}
-    quantities = [m for m in model_params if "quantity" in (m.get("role") or "").lower()]
-    return _closure(quantities, _lookup(params, model_params)) & user
+    lookup = _lookup(params, model_params)
+    quantities = [lookup.get(ref["name"], ref) for ref in quantity_refs]
+    quantities += [m for m in model_params if "quantity" in (m.get("role") or "").lower()]
+    return _closure(quantities, lookup) & user
 
 
 def is_offered(p):

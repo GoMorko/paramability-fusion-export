@@ -8,7 +8,8 @@ from tests.schema_check import check_recipe
 from tests.translator_helpers import load_capture
 
 from lib.export_plan import recipe_export
-from lib.export_plan.recipe_export import plan_single_export, recipe_saved_message
+from lib.export_plan.messages import recipe_saved_message
+from lib.export_plan.recipe_export import plan_single_export
 from lib.package.manifest import validate_manifest
 from lib.translator import CaptureError
 
@@ -77,7 +78,7 @@ class PlanTest(unittest.TestCase):
 
     def test_translator_crash_never_stops_the_export(self):
         original = recipe_export.translate
-        recipe_export.translate = lambda capture: 1 / 0
+        recipe_export.translate = lambda capture, size_table=None: 1 / 0
         try:
             manifest, _, report = self.plan(load_capture("extrude_plate"))
         finally:

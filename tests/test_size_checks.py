@@ -2,7 +2,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from lib.export_plan.size_checks import check_value, plan_checks, read_checks
-from lib.export_plan.sketch_state import moved_sketches, read_sketches
+from lib.fusion_reader.sketches import moved_sketches, read_sketches
 
 SIZES = [
     {"param": "wall", "size": "wall", "unit": "mm", "value": 2.0, "min": 1.0, "max": 4.0, "favorite": False},
@@ -91,6 +91,7 @@ class SketchStateTest(unittest.TestCase):
 
         root = type("Root", (), {"sketches": Coll([Sketch()])})()
         self.assertEqual(read_sketches(root), {"S": [1.0, 2.0, 3.0, 4.0, 1.0, 2.0, 3.0]})
+        self.assertEqual(read_sketches(root, skip={"S"}), {})
         self.assertEqual(read_sketches(object()), {})
 
 

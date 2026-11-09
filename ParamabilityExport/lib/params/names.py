@@ -1,7 +1,7 @@
 """Fusion parameter names to recipe size names.
 
 A size name must match `^[A-Za-z_][A-Za-z0-9_]*$`, have at most 64 characters and not be one of the formula
-keywords. Fusion names may hold other characters (the owner's design uses `$`), so those are replaced.
+keywords. Fusion names may hold other characters (for example `$`), so those are replaced.
 """
 import re
 
