@@ -397,17 +397,24 @@ def _foreign_sketch_points(points, ctx):
     return {"positions": worlds, "position_refs": refs, "foreign": True}
 
 
-# Members of a hole position definition that hold the faces, planes or edges it is placed on (a member a definition
-# type lacks reads as nothing).
-_PLACE_MEMBERS = ("planarEntity", "edge", "edges", "referenceEdge", "centerEdge", "face", "faces", "plane",
-                  "planeEntity", "entity")
+# Members of each hole position definition type that hold the faces, planes, edges or points it is placed on. A
+# definition of any other type (an edge placement among them, whose member names are not fixed here) is read through every member named below (a member a type lacks reads as
+# nothing).
+_PLACE_MEMBERS = {
+    "PointHolePositionDefinition": ("planarEntity", "point"),
+    "PlaneAndOffsetsHolePositionDefinition": ("planarEntity", "edgeOne", "edgeTwo"),
+    "AtCenterHolePositionDefinition": ("planarEntity", "centerEdge"),
+}
+_ALL_PLACE_MEMBERS = ("planarEntity", "edge", "edges", "referenceEdge", "centerEdge", "edgeOne", "edgeTwo", "point",
+                      "face", "faces", "plane", "planeEntity", "entity")
 
 
 def _foreign_place(feature, ctx):
-    """`foreign` and `position_refs` of a hole placed on a face, plane or edge of another component, else {}."""
+    """`foreign` and `position_refs` of a hole placed on a face, plane, edge or point of another component, else {}."""
     definition = geo.safe(lambda: feature.holePositionDefinition, None)
+    members = _PLACE_MEMBERS.get(geo.type_name(definition), _ALL_PLACE_MEMBERS)
     placed = []
-    for member in _PLACE_MEMBERS:
+    for member in members:
         value = geo.safe(lambda: getattr(definition, member), None)
         if value is None:
             continue

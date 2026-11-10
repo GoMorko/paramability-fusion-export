@@ -7,8 +7,8 @@ from .sizes import construction_fixes, joint_reasons, text_reasons, untried_reas
 from . import notes as wording, place
 from .picks import MAX_NEAR_POINTS
 from .notes import (
-    dropped_reason, fixed_reason, loose_reason, tried_unmoved_reason, unmoved_link_reason, unmoved_reason,
-    unused_reason)
+    BODY_MOVED_WHY, dropped_reason, fixed_reason, loose_reason, tried_unmoved_reason, unmoved_link_reason,
+    unmoved_reason, unused_reason)
 from .capture import outside_component, renamed_target, same_body, validate_capture
 from .context import Context
 from .result import Refusal, StepResult, TranslateResult, make_verdict
@@ -232,6 +232,8 @@ def translate(capture, handlers=None, size_table=None, motion=None):
     upfront = joint_reasons(size_table) if motion is not None else untried_reasons(size_table)
     for name, why in text_reasons(size_table, capture).items():
         upfront.setdefault(name, why)
+    for name in getattr(motion, "body_moved", None) or ():
+        upfront.setdefault(name, BODY_MOVED_WHY)
     first = _settle(capture, table, size_table, motion, upfront, False, cache)
     if first.result.recipe is None or not first.whys:
         return _finish(first, {}, capture, motion)

@@ -951,16 +951,23 @@ at the ends of its range. Then up to 8 ticked sizes that nothing ties to a sketc
 while rows are left: the person ticked them, so a sketch may follow them in a way the capture cannot show. Such a size
 left without rows is not listed as untried. With two or more sizes tried, one row puts every size at its minimum and
 one at its maximum. A ticked size the probe set to other values that no formula reads at the end is dropped with
-"it was tried at other values, and it changes nothing in this part" (`used` false, `tried` true).
+"it was tried at other values, and it changes nothing in this part" (`used` false, `tried` true). Every state also
+reads the body's box (and volume when the state has it): a size whose state alone changed the box but moved no
+followed sketch or reference is kept in `Motion.body_moved` (`SizeProbe.finish`). The translator treats it as doubtful
+with "it changes this part in a way the copy does not follow": loose when a formula reads it, else dropped with
+`used` true. It is never reported as changing nothing.
 
 Discovery tries come last, in the rows the cap leaves: up to 12 unticked plain parameters (`MAX_DISCOVERY`) from the
 discovery candidates of "Geometry links" (section 2), one row each with only that parameter at one end of its range
 (the upper end, the lower one when the upper is its value). They are not states of the motion: each read is only
-compared with the first read over the covered sketches (`SizeProbe.discover`, moved past the fit tolerance, or an
-outline with other keys). They never become sizes in this export. `probe.discovery` in `report.json` lists
-`{ param, moved }` (`moved` null when the row did not build or could not be read), and `also_changes` lists the
-parameters that moved a sketch; the result window says "These parameters also change this part: ... Tick them and
-export again to get them as sizes."
+compared with the first read over the covered sketches, the followed references and the body's box and volume
+(`SizeProbe.discover`, moved past the fit tolerance, or an outline with other keys). They never become sizes in this
+export. `probe.discovery` in `report.json` lists `{ param, moved }` (`moved` null when the row did not build or could
+not be read); a candidate the cap or the row room left without a row is listed as `{ param, moved: null, tried: false,
+reason }`, and the result window counts those in a "Not tried" group (ticking one makes the export try it).
+`also_changes` lists the parameters that moved the part; the result window says "These parameters also change this
+part: ... Tick them and export again to get them as sizes." For a parts file the group is "Also change these parts" and
+each parameter names the parts it changed (read from each part's `probe.discovery`).
 The sketch curves of each profile have `<item>/p<profile>/c<loop>.<curve>/<field>` in the capture's loop and curve
 order: a line's `offset` (its distance from the sketch origin along the left normal of its captured direction) and
 `turn` (degrees it turned), an arc's `center.0`, `center.1` and `radius`; `curves` lists the profiles

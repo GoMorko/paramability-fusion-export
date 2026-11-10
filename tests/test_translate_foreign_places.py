@@ -55,10 +55,9 @@ class MirrorPlaneTest(unittest.TestCase):
         plane = next(s for s in run(load_capture("component_foreign_mirror")).recipe["features"] if s["kind"] == "mirror")["plane"]
         self.assertEqual(plane, {"origin": [0.0, 0.0, 0.0], "normal": [1.0, 0.0, 0.0]})
 
-    def test_an_origin_plane_of_the_other_component_marks_nothing(self):
+    def test_an_origin_plane_of_the_other_component_is_marked_like_any_plane(self):
         capture = mirror_with(lambda c, plane: plane["ref"].update(origin=True))
-        result = run(capture)
-        self.assertEqual((marked(result), result.notes), ({}, []))
+        self.assertEqual(list(marked(run(capture))), ["gap_mm"])
 
     def test_a_component_no_size_acts_on_marks_nothing(self):
         def edit(c, plane):

@@ -4,7 +4,8 @@ The view is built from the manifest and report that plan_single_export returned,
 """
 from .dialog_rows import range_text
 from ..export_plan.health import FAILED, health_lines, with_lines
-from ..export_plan.messages import MAX_LISTED_FIXED, also_changes_line, listed_lines, recipe_saved_message
+from ..export_plan.messages import (
+    MAX_LISTED_FIXED, also_changes_line, also_changes_parts_line, listed_lines, not_tried_line, recipe_saved_message)
 
 KEPT_FIXED, NOT_USED = "kept fixed", "not used"
 NOT_FOLLOWED = "not followed"
@@ -74,10 +75,38 @@ def _dropped_lines(table, report):
     return _lines(table, [d for d in report["sizes"].get("dropped") or [] if d["used"] or d.get("tried")])
 
 
+ALSO_TITLE, ALSO_PARTS_TITLE = "Also change this part", "Also change these parts"
+
+
+def _probe_records(report):
+    """(part name or None, probe record) of the report: the file's own probe, then one per part that has one."""
+    out = [(None, report["probe"])] if isinstance(report.get("probe"), dict) else []
+    out += [(part.get("name") or "", part["probe"]) for part in report.get("parts") or []
+            if isinstance(part, dict) and isinstance(part.get("probe"), dict)]
+    return out
+
+
 def also_lines(report):
-    """The line for the unticked parameters the export saw changing this part, or none."""
+    """The line for the unticked parameters the export saw changing this part, or none. In a parts file the line says
+    which part each parameter changed."""
     names = report.get("also_changes") or []
-    return [also_changes_line(names)] if names else []
+    if not names:
+        return []
+    if "parts" not in report:
+        return [also_changes_line(names)]
+    where = {}
+    for part, probe in _probe_records(report):
+        for found in probe.get("discovery") or []:
+            if found.get("moved") and part and part not in where.setdefault(found["param"], []):
+                where[found["param"]].append(part)
+    return [also_changes_parts_line([(name, where.get(name) or []) for name in names])]
+
+
+def not_tried_lines(report):
+    """The line for the parameters of other components that the export had no room to try, or none."""
+    left = {found["param"] for _, probe in _probe_records(report) for found in probe.get("discovery") or []
+            if found.get("tried") is False}
+    return [not_tried_line(len(left), "parts" in report)] if left else []
 
 
 def variables_line(manifest):
@@ -94,7 +123,8 @@ def result_view(file_name, manifest, report, table, ticked):
     Keys: saved (first sentence), size_title, check_header (the title of the last column), rows ({name, range,
     check}), fixed (lines), loose (lines: sizes that stay free but may not follow every step, with why), dropped
     (lines: ticked parameters that a step reads but the copy could not follow, or tried and changed nothing, with
-    why), also (a line naming unticked parameters that also change this part), variables,
+    why), also (a line naming unticked parameters that also change this part) with its title `also_title`,
+    untried (a line counting the parameters of other components the export did not try), variables,
     warnings (what is wrong with the design or the sketch measuring, and what to do: empty when all is well),
     message (the whole story as plain text, for a message box, with the warnings below it).
     """
@@ -107,9 +137,9 @@ def result_view(file_name, manifest, report, table, ticked):
     story = recipe_saved_message(manifest, file_name)
     if dropped:
         story += "\n\n" + "\n".join("- " + line for line in dropped)
-    also = also_lines(report)
-    if also:
-        story += "\n\n" + also[0]
+    also, untried = also_lines(report), not_tried_lines(report)
+    for line in also + untried:
+        story += "\n\n" + line
     return {
         "saved": ("Saved %s. %s" % (file_name, notes[0] if notes else "")).strip(),
         "size_title": "%d %s ready for the form" % (count, "size" if count == 1 else "sizes"),
@@ -119,6 +149,8 @@ def result_view(file_name, manifest, report, table, ticked):
         "loose": _loose_lines(table, report),
         "dropped": dropped,
         "also": also,
+        "also_title": ALSO_TITLE,
+        "untried": untried,
         "variables": variables_line(manifest),
         "warnings": health_lines(report.get("health")),
         "message": with_lines(story, report.get("health")),
@@ -168,9 +200,9 @@ def parts_result_view(file_name, manifest, report, table, ticked):
     for group in (parts, fixed, loose, dropped):
         if group:
             story += "\n\n" + "\n".join("- " + line for line in group)
-    also = also_lines(report)
-    if also:
-        story += "\n\n" + also[0]
+    also, untried = also_lines(report), not_tried_lines(report)
+    for line in also + untried:
+        story += "\n\n" + line
     return {
         "saved": ("Saved %s. %s" % (file_name, notes[0] if notes else "")).strip(),
         "size_title": "%d %s ready for the form" % (len(rows), "size" if len(rows) == 1 else "sizes"),
@@ -181,6 +213,8 @@ def parts_result_view(file_name, manifest, report, table, ticked):
         "loose": loose,
         "dropped": dropped,
         "also": also,
+        "also_title": ALSO_PARTS_TITLE,
+        "untried": untried,
         "variables": variables_line(manifest),
         "warnings": health_lines(report.get("health")),
         "message": with_lines(story, report.get("health")),

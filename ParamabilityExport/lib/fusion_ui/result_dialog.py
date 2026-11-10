@@ -124,7 +124,8 @@ def build(command, view):
     _add_lines(inputs, "pm_result_fixed", "Stays fixed", view["fixed"])
     _add_lines(inputs, "pm_result_loose", "May give unexpected results", view.get("loose"))
     _add_lines(inputs, "pm_result_dropped", "Not followed", view.get("dropped"))
-    _add_lines(inputs, "pm_result_also", "Also change this part", view.get("also"))
+    _add_lines(inputs, "pm_result_also", view.get("also_title") or "Also change this part", view.get("also"))
+    _add_lines(inputs, "pm_result_untried", "Not tried", view.get("untried"))
     if view["variables"]:
         inputs.addTextBoxCommandInput("pm_result_variables", "", escape(view["variables"]), text_rows([view["variables"]]), True)
 

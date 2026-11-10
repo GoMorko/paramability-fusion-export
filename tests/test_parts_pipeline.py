@@ -15,9 +15,10 @@ from tests.translator_helpers import load_capture
 
 from lib.design_edit.errors import StepExportError
 from lib.design_edit.runner import ExportCancelled
-from lib.dialog_model.result_rows import parts_result_view
+from lib.dialog_model.result_rows import also_lines, not_tried_lines, parts_result_view
 from lib.export_plan import recipe_export
 from lib.export_plan.parts_pipeline import run_parts_pipeline
+from lib.export_plan.probe_flow import ProbeGroup
 from lib.export_plan.part_names import unique_names
 from lib.export_plan.pipeline import ExportRequest
 from lib.export_plan.size_offers import table_for_bodies, table_for_body
@@ -189,6 +190,79 @@ class LooseAndFixedTest(unittest.TestCase):
         self.assertIn("height_mm", result.report["sizes"]["free"])
 
 
+class StubProbe:
+    """A probe that gives the loose entries it was made with."""
+    table = None
+
+    def __init__(self, entries):
+        self.entries = entries
+
+    def finish(self, after, labels):
+        return self.entries
+
+
+class GroupReasonsTest(unittest.TestCase):
+    def entry(self, reason):
+        return {"name": "wall", "reason": reason, "param": "wall", "size": "wall"}
+
+    def finish(self, *reasons):
+        probes = [StubProbe([self.entry(r)] if r else []) for r in reasons]
+        probes[0].table = object()
+        names = ["Lid", "Base", "Clip"][:len(reasons)]
+        return ProbeGroup(probes, names).finish([None] * len(reasons), {})
+
+    def test_parts_with_one_reason_for_a_size_share_it(self):
+        (found,) = self.finish("it moves a joint.", "it moves a joint.")
+        self.assertEqual(found["reason"], "Lid, Base: it moves a joint.")
+
+    def test_parts_with_different_reasons_for_a_size_each_keep_theirs(self):
+        (found,) = self.finish("it moves a joint.", "it moves a sketch.", None)
+        self.assertIn("Lid: it moves a joint", found["reason"])
+        self.assertIn("Base: it moves a sketch", found["reason"])
+
+
+def parts_report(*, also, found, untried=0):
+    """A parts report whose parts tried `found` ({part: [moved parameters]}) and left `untried` parameters."""
+    parts = [{"name": name, "probe": {"discovery": [{"param": p, "moved": True} for p in moved]}}
+             for name, moved in found.items()]
+    parts[0]["probe"]["discovery"] += [{"param": "u%d" % n, "moved": None, "tried": False, "reason": "x"}
+                                       for n in range(untried)]
+    return {"parts": parts, "also_changes": also}
+
+
+class DiscoveryLinesTest(unittest.TestCase):
+    def test_a_parts_file_says_which_part_each_parameter_changed(self):
+        (line,) = also_lines(parts_report(also=["wall", "gap"], found={"Lid": ["wall", "gap"], "Base": ["gap"]}))
+        wall, gap = line.index("wall"), line.index("gap")
+        self.assertIn("Lid", line[wall:gap])
+        self.assertNotIn("Base", line[wall:gap])
+        self.assertIn("Lid, Base", line[gap:])
+
+    def test_one_part_keeps_the_plain_line(self):
+        (line,) = also_lines({"also_changes": ["wall"]})
+        self.assertIn("wall", line)
+
+    def test_the_parameters_the_export_did_not_try_are_counted_once_in_a_line(self):
+        (line,) = not_tried_lines(parts_report(also=[], found={"Lid": [], "Base": []}, untried=5))
+        self.assertIn("5 more", line)
+        self.assertEqual(not_tried_lines({"probe": {"discovery": [{"param": "a", "moved": False}]}}), [])
+        self.assertEqual(len(not_tried_lines({"probe": {"discovery": [
+            {"param": "a", "moved": None, "tried": False, "reason": "x"}]}})), 1)
+
+    def test_the_parts_view_titles_and_lists_what_was_not_tried(self):
+        result = export(FakePartsPort([BASE, second_body()]))
+        report = dict(result.report, also_changes=["wall_mm"])
+        report["parts"] = [dict(p, probe={"discovery": [
+            {"param": "wall_mm", "moved": p["name"] == "Body2"},
+            {"param": "u1", "moved": None, "tried": False, "reason": "x"}]}) for p in report["parts"]]
+        view = parts_result_view("box.paramability", result.manifest, report, result.table, TICKED)
+        self.assertIn("parts", view["also_title"])
+        self.assertIn("Body2", view["also"][0])
+        self.assertNotIn("Body1", view["also"][0])
+        self.assertIn("1 more", view["untried"][0])
+        self.assertIn(view["untried"][0], view["message"])
+
+
 class FixedShapeTest(unittest.TestCase):
     def test_a_body_that_cannot_be_copied_lands_as_a_fixed_shape_next_to_the_editable_part(self):
         port = FakePartsPort([BASE, stuck_body()])
@@ -271,6 +345,24 @@ class NamesTest(unittest.TestCase):
         self.assertEqual(names[:3], ["Lid", "LID 2", "Body"])
         self.assertEqual(len({n.lower() for n in names}), 5)
         self.assertTrue(all(1 <= len(n) <= 60 for n in names))
+
+
+class LinksPerPartTest(unittest.TestCase):
+    def test_a_part_translates_with_its_own_geometry_links_only(self):
+        """Two parts that both have a sketch named Sketch1: each is translated with the link of its own part."""
+        own = {BASE["target"]["name"]: [{"param": "pipe_d", "sketch": "Sketch1", "component": "Pipe", "via": "sketch"}],
+               "Body2": [{"param": "cover_h", "sketch": "Sketch1", "component": "Cover", "via": "sketch"}]}
+        seen = {}
+
+        def translate(capture, up_axis, table, motion):
+            seen[capture["target"]["name"]] = table.links
+            return recipe_export.translate_capture(capture, up_axis, table, motion)
+
+        with mock.patch("lib.export_plan.parts_pipeline.body_links", lambda c: own.get(c["target"]["name"], [])), \
+                mock.patch("lib.export_plan.parts_pipeline.translate_capture", translate):
+            export(FakePartsPort([BASE, renamed(BASE, ("t1", "Body1"), ("t2", "Body2"))]))
+        self.assertEqual({name: [l["param"] for l in links] for name, links in seen.items()},
+                         {"Body1": ["pipe_d"], "Body2": ["cover_h"]})
 
 
 class DialogTableTest(unittest.TestCase):

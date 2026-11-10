@@ -21,6 +21,37 @@ from ..translator.notes import loose_reason
 from .part_names import tagged
 
 _STATE_KEYS = ("sketches", "points", "lines", "params", "box", "refs", "unread")
+BODY_TOLERANCE_MM = 1e-4
+VOLUME_TOLERANCE_MM3 = 1e-4
+VOLUME_RELATIVE = 1e-6
+# Why a parameter of another component got no try; kept in the discovery record of `report.json`.
+NOT_TRIED = "not tried: the export tries only a limited number of parameters of other components"
+
+
+def _box_numbers(read):
+    box = read.get("box") if isinstance(read, dict) else None
+    if not isinstance(box, dict):
+        return None
+    low, high = box.get("min"), box.get("max")
+    if not all(isinstance(v, (list, tuple)) and len(v) == 3 for v in (low, high)):
+        return None
+    numbers = list(low) + list(high)
+    return numbers if all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in numbers) else None
+
+
+def _volume(read):
+    value = read.get("volume_mm3") if isinstance(read, dict) else None
+    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def body_changed(before, now):
+    """True when the body reads differently in two probe states: its box moved, or its volume changed when both states
+    read it. False when they agree or the body cannot be compared (a state without a box)."""
+    a, b = _box_numbers(before), _box_numbers(now)
+    if a is not None and b is not None and any(abs(x - y) > BODY_TOLERANCE_MM for x, y in zip(a, b)):
+        return True
+    va, vb = _volume(before), _volume(now)
+    return va is not None and vb is not None and abs(va - vb) > max(VOLUME_TOLERANCE_MM3, VOLUME_RELATIVE * abs(va))
 
 
 def kept_size_names(table, free_sizes):
@@ -180,24 +211,53 @@ class SizeProbe:
         return rows
 
     def discovery_rows(self, candidates, room):
-        """Rows that try unticked parameters once each (`size_offers.discovery_sizes`), within `room` rows."""
-        return plan.discovery_rows(candidates, room)
+        """Rows that try unticked parameters once each (`size_offers.discovery_sizes`), within `room` rows. The
+        candidates left without a row are kept in the discovery record as not tried."""
+        rows = plan.discovery_rows(candidates, room)
+        self.discovery.extend({"param": c["param"], "moved": None, "tried": False, "reason": NOT_TRIED}
+                              for c in plan.discovery_left(candidates, room))
+        return rows
 
     def discover(self, entries):
-        """Keep, per `(row, result, read)` of a discovery row, whether the body's sketches or the references of other
-        components its steps use moved with its parameter: `{ param, moved }`, `moved` None when the row did not build
-        or the read is missing. These reads are not states of the motion."""
-        found = plan.scan(self.capture)
-        targets = [t for t in found.targets if t["sketch_token"] in self.request["sketches"]]
+        """Keep, per `(row, result, read)` of a discovery row, whether the body moved with its parameter: its sketches,
+        the references of other components its steps use, or its box and volume. `{ param, moved }`, `moved` None when
+        the row did not build or the read is missing. These reads are not states of the motion."""
+        targets = self._followed_targets()
         for row, result, read in entries:
             param = (row.get("varied") or [None])[0]
             if param is None:
                 continue
             moved = None
             if not result.get("error") and isinstance(read, dict):
-                moved = (any(self._target_moved(t, read) for t in targets)
-                         or any(ref_fit.moved_in(r, read) for r in self.refs))
+                moved = self._followed_moved(targets, read) or body_changed(self.e0, read)
             self.discovery.append({"param": param, "moved": moved})
+
+    def _followed_targets(self):
+        return [t for t in plan.scan(self.capture).targets if t["sketch_token"] in self.request["sketches"]]
+
+    def _followed_moved(self, targets, read):
+        """True when a sketch or a measured reference the probe follows reads differently in `read` than at E0."""
+        return (any(self._target_moved(t, read) for t in targets)
+                or any(ref_fit.moved_in(r, read) for r in self.refs))
+
+    def _body_only(self, skip):
+        """Fusion names of the sizes that changed the body in a state where they alone differ, and in no such state
+        moved a sketch or reference the probe follows: the body changes by a route the copy does not model."""
+        current = {e.name: e.value for e in self.table.entries}
+        targets = self._followed_targets()
+        body, followed = [], set()
+        for state in self.states[1:]:
+            read = state.get("read")
+            if state.get("built") is False or not isinstance(read, dict):
+                continue
+            varied = [n for n, v in (state.get("values") or {}).items() if abs(v - current.get(n, v)) > 1e-9]
+            if len(varied) != 1:
+                continue
+            if self._followed_moved(targets, read):
+                followed.add(varied[0])
+            elif body_changed(self.e0, read) and varied[0] not in body:
+                body.append(varied[0])
+        return [n for n in body if n not in followed and n not in skip]
 
     def _target_moved(self, target, read):
         before, _ = match.state_values(target, self.e0, self.e0)
@@ -233,9 +293,10 @@ class SizeProbe:
             current = {e.name: e.value for e in self.table.entries}
             self.moved = list(dict.fromkeys(self.moved + build.moved_sizes(self.capture, self.states, current)))
             found.extend(self._entry(p, _UNREADABLE, labels) for p in self.moved if p not in self.untried)
+        found.extend(self._watched(labels, {f["param"] for f in found}))
         if self.motion is not None:
             self.motion.untried = list(self.untried)
-        found.extend(self._watched(labels, {f["param"] for f in found}))
+            self.motion.body_moved = self._body_only({f["param"] for f in found})
         self.measure_restore(after)
         return found
 
@@ -359,14 +420,20 @@ class ProbeGroup:
 
     def finish(self, afters, labels):
         """Build each part's motion. Returns the sizes the probes cannot follow, one entry per size. Its reason starts
-        with the parts that have that same reason (the rows are shared, so a size left untried is untried for all)."""
+        with the parts that have that reason (the rows are shared, so a size left untried is untried for all). When
+        parts give different reasons for one size, the entry holds each reason led by its parts."""
         found = {}
         for name, probe, after in zip(self.names, self.probes, afters):
             for entry in probe.finish(after, labels):
-                kept = found.setdefault(entry["param"], (entry, []))
-                if kept[0]["reason"] == entry["reason"]:
-                    kept[1].append(name)
-        return [dict(entry, reason=tagged(names, entry["reason"])) for entry, names in found.values()]
+                kept = found.setdefault(entry["param"], (entry, {}))
+                kept[1].setdefault(entry["reason"], []).append(name)
+        out = []
+        for entry, reasons in found.values():
+            parts = [tagged(names, reason) for reason, names in reasons.items()]
+            text = parts[0] if len(parts) == 1 else clip("; ".join(p.rstrip(".") for p in parts) + ".",
+                                                         MAX_FIXED_REASON)
+            out.append(dict(entry, reason=text))
+        return out
 
     def measure_restore(self, afters):
         """The largest gap over the parts, or None when one part cannot be compared."""

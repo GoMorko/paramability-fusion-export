@@ -376,6 +376,16 @@ class ForeignTest(unittest.TestCase):
         self.assertTrue(data["foreign"])
         self.assertEqual((data["position_refs"][0]["type"], data["position_refs"][0]["token"]), ("BRepFace", "lf"))
 
+    def test_a_hole_placed_by_offsets_from_an_edge_of_another_component_is_marked_foreign(self):
+        lid, occurrence, place = self.lid()
+        own = Obj("fusion::BRepFace", entityToken="tf", parentComponent=self.tray.component)
+        edge_one = Obj("fusion::BRepEdge", entityToken="le:path", assemblyContext=occurrence,
+                       nativeObject=Obj("fusion::BRepEdge", entityToken="le", parentComponent=lid))
+        definition = Obj("fusion::PlaneAndOffsetsHolePositionDefinition", planarEntity=own, edgeOne=edge_one)
+        data = self.read_data(self.hole(definition))
+        self.assertTrue(data["foreign"])
+        self.assertEqual([r["token"] for r in data["position_refs"]], ["le"])
+
     def test_a_hole_on_an_own_face_stays_a_plain_hole(self):
         own = Obj("fusion::BRepFace", entityToken="tf", parentComponent=self.tray.component)
         data = self.read_data(self.hole(Obj("fusion::PointHolePositionDefinition", planarEntity=own)))

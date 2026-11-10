@@ -9,6 +9,7 @@ import copy
 import json
 import os
 import unittest
+from unittest import mock
 
 from tests import context  # noqa: F401
 from tests.translator_helpers import FIXTURES, load_capture, steps_of
@@ -16,7 +17,8 @@ from tests.translator_helpers import FIXTURES, load_capture, steps_of
 from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.sketch_values.motion import OPTIMISTIC, Motion
-from lib.translator import translate
+from lib.translator import ref_motion, translate
+from lib.translator.values import Quantity
 
 MOTION = os.path.join(os.path.dirname(FIXTURES), "motion")
 SIZES = ["gap_mm", "ear_mm", "lid_mm"]
@@ -190,6 +192,19 @@ class MirrorTest(unittest.TestCase):
         self.assertEqual([value_at(origin[0], gap) for gap in (10, 15)], [0, 5])
         self.assertEqual(origin[1:], [0.0, 0.0])
 
+    def test_an_origin_plane_of_another_component_follows_the_occurrence_like_any_plane(self):
+        capture = load_capture(self.NAME)
+        capture["items"][4]["data"]["plane"]["ref"]["origin"] = True
+        result = run(capture, motion_with(self.NAME), ["gap_mm", "depth_mm"])
+        origin = self.mirror(result)["plane"]["origin"]
+        self.assertEqual([value_at(origin[0], gap) for gap in (10, 15)], [0, 5])
+
+    def test_an_origin_plane_that_was_not_measured_marks_its_sizes(self):
+        capture = load_capture(self.NAME)
+        capture["items"][4]["data"]["plane"]["ref"]["origin"] = True
+        motion = motion_with(self.NAME, {}, {"4.plane": "its first read did not match the capture"})
+        self.assertEqual(list(marked(run(capture, motion, ["gap_mm", "depth_mm"]))), ["gap_mm"])
+
     def test_a_plane_that_turns_marks_its_sizes_and_the_mirror_stays_put(self):
         motion = motion_with(self.NAME, {"4/r/plane/offset": TURNS})
         result = run(load_capture(self.NAME), motion, ["gap_mm", "depth_mm"])
@@ -345,6 +360,26 @@ class HoleTest(unittest.TestCase):
             data["position_refs"] = [ref("BRepFace", "positions.0")]
         result = run(self.on_a_face(edit), motion_with(self.NAME))
         self.assertIn("could not be read", result.refusal["reason"])
+
+
+class PlaneShiftTest(unittest.TestCase):
+    """`plane_shift` writes the plane's move only along its normal; along a slanted line it marks the sizes."""
+
+    def shift(self, direction):
+        marks = []
+        sized = Quantity(5.0, "gap_mm - 10", ["gap_mm"])
+        record = {"ref": {"slot": "plane"}, "normal": [0, 0, 1]}
+        with mock.patch.object(ref_motion, "moves", return_value=[sized]), \
+                mock.patch.object(ref_motion, "mark_all", side_effect=lambda *a: marks.append(a)):
+            return ref_motion.plane_shift(None, {}, record, direction, "a step"), marks
+
+    def test_a_line_along_the_normal_gets_the_move(self):
+        written, marks = self.shift([0, 0, -1])
+        self.assertEqual((written.sized, marks), (True, []))
+
+    def test_a_slanted_line_marks_the_sizes_and_writes_no_move(self):
+        written, marks = self.shift([0, 0.6, 0.8])
+        self.assertEqual((written.sized, len(marks)), (False, 1))
 
 
 class AuditTest(unittest.TestCase):

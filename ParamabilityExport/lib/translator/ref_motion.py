@@ -74,8 +74,6 @@ def reaching(ctx, item):
     some ticked size acts on: `names` are those sizes. The audit counts them as read by the step."""
     out = []
     for entry in geometry_links.item_refs(item):
-        if entry["ref"].get("origin"):
-            continue
         names, known = acting_sizes(ctx, entry["ref"])
         if known and names:
             out.append((entry, names))
@@ -89,9 +87,9 @@ def _phrase(item, ref, what):
 
 def mark_all(ctx, item, ref, what):
     """Marks every size that may move the reference: the copy keeps it where it is now. Without data on where sizes
-    act, or without the owning component, the step gets a note instead. An origin plane or axis only moves with the
-    occurrence, which joints cover, so it marks nothing."""
-    if ctx.table is None or ref.get("origin"):
+    act, or without the owning component, the step gets a note instead. An origin plane or axis of another component
+    moves with its occurrence, so it is marked like any other reference."""
+    if ctx.table is None:
         return
     names, known = acting_sizes(ctx, ref)
     if not known:
@@ -137,7 +135,7 @@ def raw_moves(ctx, item, ref, shape, what):
     here, naming the step and the other component, and their key is a constant zero."""
     zero = [Affine(0.0) for _ in range(_KEYS[shape])]
     motion = ctx.motion
-    if ctx.table is None or ref.get("origin") or (motion is not None and motion.optimistic):
+    if ctx.table is None or (motion is not None and motion.optimistic):
         return zero
     names, known = acting_sizes(ctx, ref)
     if not known or motion is None:
@@ -195,6 +193,11 @@ def plane_shift(ctx, item, record, direction, what):
     normal = _normal(record, ref)
     cosine = vec.dot(normal, direction) if normal is not None else 0.0
     if not offset.sized or abs(cosine) < 1e-9:
+        return Quantity(0.0)
+    if abs(abs(cosine) - 1.0) > 1e-9:
+        # The offset is along the plane normal; along a slanted line the move is offset / cosine, which is no
+        # fixed multiple of the sizes the way the callers write it, so the sizes are marked instead.
+        mark_all(ctx, item, ref, what)
         return Quantity(0.0)
     return offset.scaled(cosine)
 

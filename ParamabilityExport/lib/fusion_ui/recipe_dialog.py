@@ -68,12 +68,17 @@ def _set_text(inputs, key, index, text):
         box.formattedText = rows.escape(text)
 
 
-def build(command, offers, body, up_axis, design_unit="mm", stop=None, marker_note=None):
-    """Add the inputs. offers come from export_plan.size_offers.offers; body is the body or bodies already picked, or None.
+NO_SIZES_TEXT = "This design has no user parameters that can be sizes. The part is saved with fixed numbers."
 
-    Cells are named by row number, since a Fusion parameter name is not always a safe input id. `design_unit` is the unit the Min and Max cells use for lengths. `stop` is the warning for the body already
-    picked (dialog_model.stop_warning.summarize), if any. `marker_note` is the line shown when the timeline marker is
-    not at the end (design_edit.marker.marker_note).
+
+def build(command, offers, body, up_axis, design_unit="mm", stop=None, marker_note=None):
+    """Add the inputs. offers come from export_plan.size_offers.offers; body is the body or bodies already picked, or
+    None.
+
+    Cells are named by row number, since a Fusion parameter name is not always a safe input id. `design_unit` is the
+    unit the Min and Max cells use for lengths. `stop` is the warning for the body already picked
+    (dialog_model.stop_warning.summarize), if any. `marker_note` is the line shown when the timeline marker is not at
+    the end (design_edit.marker.marker_note).
     """
     inputs = command.commandInputs
     add_body_inputs(inputs, body, marker_note, MAX_PARTS)
@@ -93,8 +98,7 @@ def build(command, offers, body, up_axis, design_unit="mm", stop=None, marker_no
         _refresh_details(inputs, offers)
     else:
         inputs.addTextBoxCommandInput(
-            INTRO_ID, "", "This design has no user parameters that can be sizes. The part is saved with fixed numbers.",
-            rows.text_rows(["This design has no user parameters that can be sizes. The part is saved with fixed numbers."]),
+            INTRO_ID, "", NO_SIZES_TEXT, rows.text_rows([NO_SIZES_TEXT]),
             True)
 
     up = inputs.addDropDownCommandInput(UP_ID, "Design up direction", adsk.core.DropDownStyles.TextListDropDownStyle)
@@ -319,8 +323,8 @@ def restore_bodies(inputs, bodies):
 
 
 def read_form(inputs, offers):
-    """Plain dict: bodies (the picked bodies), body (the one picked body, else None), ticked (Fusion parameter names), ranges ({name: (min, max)} of the ticked ones),
-    range_problem ('' when every typed range is fine) and up_axis."""
+    """Plain dict: bodies (the picked bodies), body (the one picked body, else None), ticked (Fusion parameter names),
+    ranges ({name: (min, max)} of the ticked ones), range_problem ('' when every typed range is fine) and up_axis."""
     ticks = _ticks(inputs, offers)
     ranges, problem = rows.read_ranges(
         offers, ticks, _range_texts(inputs, offers, "min"), _range_texts(inputs, offers, "max"))

@@ -7,6 +7,8 @@ from tests.probe_helpers import capture, size, table, user
 from tests.test_probe_flow import START, Fusion, number, states
 from tests.test_probe_motion import CAPTURE, MODEL, PARAMS, TICKED, read_at
 from tests.test_probe_refs import MIRROR, plane_at, with_refs
+from tests.test_translate_ref_motion import marked, motion_with, run as translate_with
+from tests.translator_helpers import load_capture
 
 from lib.design_edit.runner import RowExport
 from lib.export_plan.probe_flow import SizeProbe, covers_a_sketch
@@ -112,6 +114,79 @@ class RefProbeTest(unittest.TestCase):
         probe = SizeProbe.start(capture(MIRROR), self.table, fusion.read)
         self.assertEqual((probe.request["sketches"], list(probe.request["refs"])), ([], ["8.plane"]))
         self.assertIsNone(SizeProbe.start(capture(MIRROR), self.table, lambda request: {"refs": {}}))
+
+
+class WallBody(Fusion):
+    """Sketches as in `Fusion`, and a body that grows with `wall`, which no sketch or reference shows."""
+
+    def __init__(self, grows=True):
+        super().__init__()
+        self.store = FakeStore(dict(START, wall="2 mm"))
+        self.grows = grows
+
+    def read(self, request):
+        out = super().read(request)
+        if self.grows and "box" in out:
+            wall = number(self.store.exprs["wall"])
+            out["box"] = {"min": out["box"]["min"], "max": out["box"]["max"][:2] + [out["box"]["max"][2] + wall]}
+        return out
+
+
+class BodyOnlyTest(unittest.TestCase):
+    """A ticked size that changes the body but no sketch or reference the probe follows."""
+
+    def setUp(self):
+        self.table = table(PARAMS + [user("wall", "2 mm", 2)], TICKED + ["wall"], MODEL)
+        self.units = dict(UNITS, wall="mm")
+        self.sizes = [size(self.table, n, self.units[n]) for n in TICKED + ["wall"]]
+
+    def probed(self, fusion):
+        probe = SizeProbe.start(CAPTURE, self.table, fusion.read)
+        rows = probe.probe_rows(self.sizes, extra=["wall"])
+        reads = []
+        job = RowExport(fusion.store, self.units, lambda path: reads.append(probe.read_now()))
+        results = job.run(rows, "", lambda *a: True, tolerate_build_errors=True)
+        probe.add_states(states([{p: r["state"][p] for p in r["varied"]} for r in rows], results, reads))
+        probe.finish(probe.read_now(), {})
+        return probe
+
+    def test_a_size_that_only_changes_the_body_is_kept_in_the_motion(self):
+        probe = self.probed(WallBody())
+        self.assertEqual(probe.motion.body_moved, ["wall"])
+        self.assertEqual(Motion.from_json(probe.report()["motion"]).body_moved, ["wall"])
+
+    def test_a_size_that_changes_no_body_is_not_kept(self):
+        self.assertEqual(self.probed(WallBody(grows=False)).motion.body_moved, [])
+
+    def test_a_size_that_changes_the_body_is_not_dropped_as_changing_nothing(self):
+        motion = motion_with("component_ref_reach")
+        motion.body_moved = ["ear_mm"]
+        result = translate_with(load_capture("component_ref_reach"), motion)
+        (ear,) = [d for d in result.dropped if d["name"] == "ear_mm"]
+        self.assertIn("ear_mm", marked(result))
+        self.assertTrue(ear["used"])
+        self.assertFalse(ear.get("tried"))
+
+    def test_an_unticked_size_that_only_changes_the_body_is_found_by_its_try(self):
+        probe = SizeProbe.start(CAPTURE, self.table, Fusion().read)
+        grown = read_at()
+        grown["box"] = {"min": [0, 0, 0], "max": [32, 20, 25]}
+        probe.discover([({"varied": ["wall"]}, {}, grown), ({"varied": ["cube"]}, {}, read_at())])
+        self.assertEqual(probe.also_changes, ["wall"])
+
+
+class DiscoveryCapTest(unittest.TestCase):
+    def test_candidates_past_the_cap_are_kept_as_not_tried(self):
+        table_ = table(PARAMS, TICKED, MODEL)
+        probe = SizeProbe.start(CAPTURE, table_, Fusion().read)
+        candidates = [{"param": "p%d" % n, "size": "p%d" % n, "unit": "mm", "value": 1, "min": 0, "max": 5, "end": 5}
+                      for n in range(plan.MAX_DISCOVERY + 3)]
+        rows = probe.discovery_rows(candidates, 100)
+        self.assertEqual(len(rows), plan.MAX_DISCOVERY)
+        left = [d for d in probe.report()["discovery"] if d["tried"] is False]
+        self.assertEqual([d["param"] for d in left], ["p12", "p13", "p14"])
+        self.assertTrue(all(d["moved"] is None and d["reason"] for d in left))
+        self.assertEqual(probe.also_changes, [])
 
 
 if __name__ == "__main__":

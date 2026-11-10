@@ -144,12 +144,11 @@ def capture_refs(capture, items=None):
 
 
 def _owners(refs):
-    """The (token, name) keys of the components that own the references, once each. An origin plane or axis only moves
-    with its occurrence, which joints cover, so it names no owner."""
+    """The (token, name) keys of the components that own the references, once each."""
     out = []
     for r in refs:
         key = _key(r["ref"].get("component"))
-        if any(key) and not r["ref"].get("origin") and not any(_same(key, k) for k in out):
+        if any(key) and not any(_same(key, k) for k in out):
             out.append(key)
     return out
 
@@ -158,7 +157,7 @@ def reference_links(capture, items=None):
     """The links of the user parameters that act on a component that owns a reference of the steps (`items` as in
     `capture_refs`), once per parameter and component, in parameter order. Without `dependents` in the capture there
     is nothing to say about where parameters act, so no links."""
-    refs = [r for r in capture_refs(capture, items) if not r["ref"].get("origin")]
+    refs = capture_refs(capture, items)
     if not refs:
         return []
     out = []

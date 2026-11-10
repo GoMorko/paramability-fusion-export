@@ -80,14 +80,13 @@ def _drawn_around(capture):
 
 
 def _reference_owners(node, found):
-    """Tokens of the components that own the measured references (`ref`, a hole's `position_refs`) under `node`; an
-    origin plane or axis only moves with its occurrence and counts for nothing."""
+    """Tokens of the components that own the measured references (`ref`, a hole's `position_refs`) under `node`."""
     if isinstance(node, dict):
         for key, value in node.items():
             refs = [value] if key == "ref" else value if key == "position_refs" else []
             for ref in refs:
                 owner = ((ref or {}).get("component") or {}).get("token")
-                if owner and not ref.get("origin"):
+                if owner:
                     found.add(owner)
             _reference_owners(value, found)
     elif isinstance(node, list):

@@ -108,7 +108,7 @@ class Motion:
     optimistic = False
 
     def __init__(self, values=None, box_max=None, states=None, dropped=None, curves=None, apart=None,
-                 unmeasured=None, untried=None, refs=None):
+                 unmeasured=None, untried=None, refs=None, body_moved=None):
         self.values = dict(values or {})
         self.box_max = box_max
         self.states = list(states or [])
@@ -118,6 +118,8 @@ class Motion:
         self.unmeasured = dict(unmeasured or {})  # sketch name to why the probe could not measure it
         self.untried = list(untried or [])  # Fusion names of sizes that moved a sketch and were not tried
         self.refs = dict(refs or {})  # reference key to "" (measured) or why it could not be measured
+        # Fusion names of sizes that changed the body (its box) in a try but moved no followed sketch or reference
+        self.body_moved = list(body_moved or [])
 
     def get(self, key):
         """`Affine`, `Stuck`, or None when the value did not move."""
@@ -140,6 +142,8 @@ class Motion:
             out["untried"] = list(self.untried)
         if self.refs:
             out["refs"] = dict(self.refs)
+        if self.body_moved:
+            out["body_moved"] = list(self.body_moved)
         return out
 
     @classmethod
@@ -154,7 +158,8 @@ class Motion:
             else:
                 values[key] = Affine(raw.get("const", 0.0), raw.get("terms"), raw.get("sketch", ""))
         return cls(values, data.get("box_max"), data.get("states"), data.get("dropped"), data.get("curves"),
-                   data.get("apart"), data.get("unmeasured"), data.get("untried"), data.get("refs"))
+                   data.get("apart"), data.get("unmeasured"), data.get("untried"), data.get("refs"),
+                   data.get("body_moved"))
 
 
 class _Optimistic(Motion):

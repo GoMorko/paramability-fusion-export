@@ -394,15 +394,17 @@ formulas.
       `sketch_token`.
 - [ ] **R4 Hole on a face of another component.** A hole placed by a point on a flat face of `Cover` whose offset follows
       `gap`: copied, the hole centre moves along the face normal with `gap` (check that Fusion moves the hole with the
-      face; if the hole stays put while the face moves, the copy is wrong and this test fails). A hole on an edge of
+      face; if the hole stays put while the face moves, the copy is wrong and this test fails). A hole placed by "plane and offsets"
+      from an edge of `Cover` is marked foreign with `position_refs`. A hole on an edge of
       `Cover`: the copy stops ("placed on an edge or point of another component") and `position_refs` names the
       entity.
 - [ ] **R5 Hole on sketch points of another component.** In `Cover`, a sketch with points; in `Tray`, a hole on them.
       Move the `Cover` occurrence by (100, 50, 0) and turn it 90 degrees first. Export: the hole sits where Fusion
       shows it (the right centres and the right direction into the material), the report has `position_refs` and no
       `sketch_token`. A size that moves that sketch moves the hole in Paramability.
-- [ ] **R6 Origin plane and no measuring.** A mirror across an origin plane of the root or of `Cover`: copied with no
-      warning, and `ref.origin` is true for the `Cover` one. Then a mirror across a plane of `Cover` driven by a
+- [ ] **R6 Origin plane and no measuring.** A mirror across an origin plane of the root: copied with no
+      warning. Across an origin plane of `Cover`, with a ticked parameter that moves the `Cover` occurrence:
+      `ref.origin` is true and the mirror follows the move (or the parameter is loose with a reason). Then a mirror across a plane of `Cover` driven by a
       ticked parameter, in an export where the sketch scan did not run (older motion file, or the scan failed): the
       parameter is loose with a reason, never silently fixed.
 - [ ] **R7 Pattern direction from another component.** A rectangular pattern whose direction is an axis or edge of `Cover`:
@@ -890,8 +892,11 @@ read the capture in `report.json`.
   owns the entity, `ref.token` finds it again, and that the geometry of a proxy (`geometry` of a plane or face,
   `worldGeometry` of a sketch point or line) is in the assembly's coordinates, as the move into the target's
   coordinates assumes (R1, R2, R5).
-- `HoleFeature.holePositionDefinition` of a hole on a face, plane or edge: the members `planarEntity`, `edge`, `edges`,
-  `face`, `plane` and the like are tried by name and may not all exist. A hole on a face of another component that is
+- `HoleFeature.holePositionDefinition` of a hole on a face, plane or edge: the members are read by definition type
+  (`PointHolePositionDefinition`: `planarEntity`, `point`; `PlaneAndOffsetsHolePositionDefinition`: `planarEntity`,
+  `edgeOne`, `edgeTwo`; `AtCenterHolePositionDefinition`: `planarEntity`, `centerEdge`); any other type, the edge
+  placement among them, is tried through every name (`edge`, `edges`, `face`, `plane` and the like) and may not all exist.
+  The member names are from memory of the API reference and not confirmed on a live Fusion: check each. A hole on a face of another component that is
   not marked `foreign` means none of them answered (R4b). `HoleFeature.direction` of a hole on sketch points of another
   component is taken as given: check it points into the material in R5.
 - `participantBodies` on extrude and revolve (may be unreadable; then the list is empty).

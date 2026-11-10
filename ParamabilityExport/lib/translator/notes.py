@@ -51,6 +51,10 @@ def tried_unmoved_reason(name):
                 MAX_NOTE)
 
 
+# Why a size that moved the body in a try, but no sketch or reference the copy follows, cannot be followed.
+BODY_MOVED_WHY = "it changes this part in a way the copy does not follow"
+
+
 def unmoved_link_reason(name, component):
     return clip("%s is not a size: it changes %s, but nothing in this part moved with it." % (
         name, clip(component, MAX_NAME)), MAX_NOTE)

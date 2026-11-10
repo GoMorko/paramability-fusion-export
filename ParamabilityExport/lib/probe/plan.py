@@ -319,3 +319,8 @@ def discovery_rows(candidates, room, limit=MAX_DISCOVERY):
                    {candidate["param"]: candidate["end"]}, "try %s" % candidate["param"])
         rows.append(row)
     return rows
+
+
+def discovery_left(candidates, room, limit=MAX_DISCOVERY):
+    """The candidates `discovery_rows` leaves without a row, in order."""
+    return list(candidates[max(0, min(limit, room)):])

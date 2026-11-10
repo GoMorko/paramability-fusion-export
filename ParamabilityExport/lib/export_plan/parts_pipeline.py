@@ -90,6 +90,7 @@ class _PartsPipeline:
         self.saved = None
         self.unrestored = []
         self.table = None
+        self.part_links = []  # the geometry links of each part's body, by part index
         self.group = None
         self.probed = []  # part indexes that have a probe, in the group's order
         self.probe_status = health_module.NOT_NEEDED
@@ -147,6 +148,7 @@ class _PartsPipeline:
         request = self.request
         readable = [c for c in self.captures if isinstance(c, dict)] or [None]
         tables = []
+        self.part_links = [body_links(c) if isinstance(c, dict) else [] for c in self.captures]
         for capture in readable:
             model, quantities = scope_inputs(capture, request.model_params)
             tables.append(size_tables.build(
@@ -189,10 +191,16 @@ class _PartsPipeline:
 
     # ---- translation ------------------------------------------------------------------------------------------
 
+    def _part_table(self, index):
+        """The merged table with only the geometry links of part `index`: sketch names repeat across components, so a
+        link of one part must not reach a sketch of another."""
+        links = self.part_links[index] if index < len(self.part_links) else []
+        return self.table.with_links(links)
+
     def _translation(self, index, motion):
         """The translator's result for part `index`, a refusal included, or None when it failed. Never raises."""
         try:
-            return translate_capture(self.captures[index], self.request.up_axis, self.table, motion)
+            return translate_capture(self.captures[index], self.request.up_axis, self._part_table(index), motion)
         except Exception as exc:
             self.port.log("translation of %s failed: %r" % (self.names[index], exc))
             return None
@@ -240,7 +248,7 @@ class _PartsPipeline:
                 continue
             problem = "The first read of the sketches of %s did not work." % self.names[index]
             try:
-                probe = SizeProbe.start(capture, self.table, self.port.probe_reader(index))
+                probe = SizeProbe.start(capture, self._part_table(index), self.port.probe_reader(index))
             except Exception as exc:
                 self.port.log("size probe of %s could not start: %r" % (self.names[index], exc))
                 problem = repr(exc)

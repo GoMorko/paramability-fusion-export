@@ -1,5 +1,6 @@
 """Plain sentences about sizes for the package notes and the message after the export. No dashes."""
 from ..package.text import clip
+from .part_names import parts_label
 
 MAX_NOTE = 200
 MAX_LISTED_FIXED = 5
@@ -41,6 +42,25 @@ def also_changes_line(names):
     """The line for unticked parameters that the export saw changing this part."""
     return ("These parameters also change this part: %s. Tick them and export again to get them as sizes."
             % ", ".join(names))
+
+
+def also_changes_parts_line(changes):
+    """The line for unticked parameters that the export saw changing parts of a parts file: `changes` is
+    `[(parameter, [part names])]`, so the person sees which part each one changed."""
+    shown = ["%s (%s)" % (name, parts_label(parts)) if parts else name for name, parts in changes]
+    return "These parameters also change parts of this file: %s. Tick them and export again to get them as sizes." % (
+        ", ".join(shown))
+
+
+def not_tried_line(count, several_parts=False):
+    """The line for parameters of other components that the export did not try, so it cannot say whether they change
+    the part. Ticking one makes the export try it."""
+    where = "these parts" if several_parts else "this part"
+    if count == 1:
+        return ("1 more parameter of other components was not tried, so it may change %s without showing here. "
+                "Tick it and export again to try it." % where)
+    return ("%d more parameters of other components were not tried, so some may change %s without showing here. "
+            "Tick one and export again to try it." % (count, where))
 
 
 def recipe_saved_message(manifest, file_name):
