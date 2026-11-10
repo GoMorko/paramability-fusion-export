@@ -261,6 +261,14 @@ class Slab(Placer):
         return None
 
 
+    def place_on_wall(self, p):
+        """The Place of an edge point that lies inside a side wall, away from its corners: an edge another step made
+        there (a round or a cut that meets the wall). It moves with the outline curve under it and with the length.
+        None when `p` is not on a side wall."""
+        found = self.place(p, False)
+        return found if found is not None and found.which == "side" else None
+
+
 class Place:
     """Where a point sits on a slab: `which` is start, end or side; it moves `factor` times the slab length.
 

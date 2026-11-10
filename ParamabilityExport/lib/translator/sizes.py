@@ -8,7 +8,7 @@ with a warning (`translate`).
 """
 from ..params.expressions import tokenize_formula
 from ..sketch_values.coverage import MOVED, NOT_MEASURED, NOT_TRIED, STILL, Answer
-from ..sketch_values.motion import Affine, Stuck
+from ..sketch_values.motion import Affine, Stuck, Terms
 
 # model parameter created_by kind -> what it moves, for the reason text
 _STATIC_KINDS = {
@@ -153,6 +153,8 @@ def _driven(table, value):
         names = set(value.movers) | (set(value.rest.terms) if value.rest is not None else set())
     elif isinstance(value, Affine):
         names = set(value.terms)
+    elif isinstance(value, Terms):
+        names = set(value.names())
     else:
         names = set()
     out = set()

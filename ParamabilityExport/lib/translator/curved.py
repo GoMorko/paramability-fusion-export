@@ -8,7 +8,7 @@ part plus square roots, products and quotients of other values. `render` writes 
 import math
 
 from ..package.numbers import round9
-from ..sketch_values.motion import UNREAD, Affine, Stuck
+from ..sketch_values.motion import UNREAD, Affine, Stuck, Terms
 from .values import Quantity, wrapped
 
 _EPS = 1e-12
@@ -135,7 +135,8 @@ def _as_curved(value):
 
 
 class Curved:
-    """`poly + sum(coef * node)`; a node is `("sqrt", x)`, `("mul", x, y)` or `("div", x, y)` of Curved values."""
+    """`poly + sum(coef * node)`; a node is `("sqrt", x)`, `("mul", x, y)`, `("div", x, y)`, or `("sin", x)`,
+    `("cos", x)`, `("tan", x)` of an angle `x` in degrees, all of Curved values."""
 
     def __init__(self, poly, nodes=(), sketch=""):
         self.poly = Poly.of(poly)
@@ -184,6 +185,10 @@ class Curved:
     def sqrt(self):
         return Curved(Poly(), [(1.0, ("sqrt", self))], self.sketch)
 
+    def trig(self, function):
+        """`sin`, `cos` or `tan` of this value as an angle in degrees."""
+        return Curved(Poly(), [(1.0, (function, self))], self.sketch)
+
     def render(self, table):
         """A Quantity over the sizes, or a Stuck ("unread") when a parameter cannot be written as a formula."""
         total = self.poly.render(table)
@@ -198,8 +203,15 @@ class Curved:
         return total
 
 
+_TRIG = {"sin": math.sin, "cos": math.cos, "tan": math.tan}
+
+
 def _apply(op, args):
     reads = tuple(dict.fromkeys(r for a in args for r in a.reads))
+    if op in _TRIG:
+        (a,) = args
+        n = _TRIG[op](math.radians(a.n))
+        return Quantity(n, "%s(%s)" % (op, a.text), reads) if a.sized else Quantity(n)
     if op == "sqrt":
         (a,) = args
         n = math.sqrt(max(a.n, 0.0))
@@ -231,11 +243,37 @@ def combine(parts, sketch=""):
     return total
 
 
+def _factor(factor, sketch):
+    """One factor of a `Terms` part as a Curved: a size, or a function of a share of an angle size (`cot` is
+    cos / sin)."""
+    function, name, scale = factor
+    angle = Curved(Poly({(name,): scale}), (), sketch)
+    if not function:
+        return angle
+    if function == "cot":
+        return angle.trig("cos").divided(angle.trig("sin"))
+    return angle.trig(function)
+
+
+def from_terms(value):
+    """A motion `Terms` value as a Curved over the same Fusion names."""
+    total = Curved(Poly({(): value.const}), (), value.sketch)
+    for coef, factors in value.parts:
+        part = Curved(Poly({(): coef}), (), value.sketch)
+        for factor in factors:
+            part = part.times(_factor(factor, value.sketch))
+        total = total.plus(part)
+    total.sketch = value.sketch
+    return total
+
+
 def names_of(value):
     """The Fusion names that move a raw value (Affine, Curved or Stuck)."""
     if isinstance(value, Stuck):
         return value.movers
     if isinstance(value, Curved):
+        return value.names()
+    if isinstance(value, Terms):
         return value.names()
     return tuple(value.terms)
 

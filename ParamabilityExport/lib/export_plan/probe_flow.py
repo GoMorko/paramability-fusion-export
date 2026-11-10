@@ -17,7 +17,7 @@ from ..package.manifest import MAX_FIXED_REASON
 from ..package.text import clip
 from ..params.expressions import format_number
 from ..probe import build, fit, match, plan, ref_fit
-from ..sketch_values.motion import CURVE, SHAPE, TURNS, UNREAD, Stuck
+from ..sketch_values.motion import CURVE, SHAPE, TURNS, UNREAD, Stuck, Terms
 from ..translator import borrowed
 from ..translator.notes import loose_reason
 from .part_names import tagged
@@ -253,28 +253,36 @@ class SizeProbe:
         return rows
 
     def curved_sizes(self):
-        """Fusion names of the sizes the states so far show moving a value along a curve on their own, while the
-        value follows the other sizes (a `Stuck` with `rest`)."""
+        """`(curved, partners)` from the states so far: the Fusion names of the sizes that move a value along a curve
+        on their own (a `Stuck` with `rest` blames them, or a `Terms` value reads them through an angle function),
+        and the other sizes of those values."""
         try:
             motion = build.build(self.capture, self.table, self.states)
         except Exception:
-            return []
-        return list(dict.fromkeys(n for v in motion.values.values()
-                                  if isinstance(v, Stuck) and v.cause == CURVE and v.rest is not None
-                                  for n in v.movers))
+            return [], []
+        curved, partners = [], []
+        for value in motion.values.values():
+            if isinstance(value, Stuck) and value.cause == CURVE and value.rest is not None:
+                curved.extend(value.movers)
+                partners.extend(value.rest.terms)
+            elif isinstance(value, Terms):
+                curved.extend(f[1] for _, factors in value.parts for f in factors if f[0])
+                partners.extend(value.names())
+        curved = list(dict.fromkeys(curved))
+        return curved, [n for n in dict.fromkeys(partners) if n not in curved]
 
     def spans_now(self):
         """`Motion.spans` of the states so far."""
         return build.spans(self.states[1:], {e.name: e.value for e in self.table.entries})
 
     def check_rows(self, sizes, room):
-        """Once per export: the rows that check the other sizes together when some size moves a value along a curve
-        on its own (`plan.check_rows`)."""
+        """Once per export: the rows that fit and check the values some size moves along a curve
+        (`plan.check_rows`)."""
         if self.checked:
             return []
         self.checked = True
-        curved = self.curved_sizes()
-        return plan.check_rows(sizes, set(curved), self.spans_now(), room) if curved else []
+        curved, partners = self.curved_sizes()
+        return plan.check_rows(sizes, curved, self.spans_now(), room, partners) if curved else []
 
     def moving_sizes(self):
         """Fusion names of the sizes whose state (the only size that differs) moved a followed sketch or reference."""
@@ -579,8 +587,10 @@ class ProbeGroup:
             return []
         for probe in self.probes:
             probe.checked = True
-        curved = set(n for probe in self.probes for n in probe.curved_sizes())
-        return plan.check_rows(sizes, curved, first.spans_now(), room) if curved else []
+        found = [probe.curved_sizes() for probe in self.probes]
+        curved = list(dict.fromkeys(n for c, _ in found for n in c))
+        partners = [n for n in dict.fromkeys(n for _, p in found for n in p) if n not in curved]
+        return plan.check_rows(sizes, curved, first.spans_now(), room, partners) if curved else []
 
     def discovery_rows(self, candidates, room):
         return self.probes[0].discovery_rows(candidates, room)

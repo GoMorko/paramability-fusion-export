@@ -18,12 +18,14 @@ _DEFICIENT = 1e-9
 
 
 class Column:
-    """A parameter's value per state. `rank` orders the candidates: lower is preferred."""
+    """A parameter's value per state. `rank` orders the candidates: lower is preferred. `kind` is the size kind
+    (length, angle, count) of a free size, else empty."""
 
-    def __init__(self, name, rank, values):
+    def __init__(self, name, rank, values, kind=""):
         self.name = name
         self.rank = rank
         self.values = list(values)
+        self.kind = kind
 
 
 class Result:

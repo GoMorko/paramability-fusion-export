@@ -58,7 +58,7 @@ def locate(ctx, p, edge=False, below=None):
     """The Place of a measured point on the latest slab or shell that has it (written before `below`), or None.
 
     An edge that lies inside a face of the latest step that has the point, or on no step's edge at all, is placed
-    where the walls of two steps cross when it can be.
+    where the walls of two steps cross when it can be, else inside the one flat side wall it lies on.
     """
     found = None
     for placer in _latest_first(ctx, below):
@@ -69,7 +69,20 @@ def locate(ctx, p, edge=False, below=None):
         crossed = crossings.cross(_walls(ctx, p, below), p)
         if crossed is not None:
             return crossed
+    if edge and found is None:
+        found = _on_a_wall(ctx, p, below)
     return found
+
+
+def _on_a_wall(ctx, p, below=None):
+    """The Place of an edge point inside one flat side wall of the latest slab that has it, where no second flat wall
+    crosses it (the other face is a round or a curved face): the point follows that wall. None when no slab has it."""
+    for placer in _latest_first(ctx, below):
+        on_wall = getattr(placer, "place_on_wall", None)
+        found = on_wall(p) if on_wall is not None else None
+        if found is not None:
+            return found
+    return None
 
 
 def inside(ctx, p):

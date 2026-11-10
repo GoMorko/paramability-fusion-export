@@ -9,6 +9,8 @@ What 0.6.0 to 0.7.2 added, and what this version adds, in this order. Each id is
 
 - [ ] Symmetric patterns: section "Symmetric patterns" under "Capture reader calls to watch (fillet, chamfer, shell,
       patterns, mirror)".
+- [ ] K16 and K17, an angle size that moves a bracket's points with sines and cosines, and a slot cut through all
+      whose rounds follow: section 9.
 - [ ] K12 to K15, a size whose far values do not rebuild is measured nearer, a curved size marks only itself, the
       tries of other parameters compare with the design as it is before them, and a revolve axis that cannot be
       copied says what it is: section 9.
@@ -575,6 +577,17 @@ the sizes on the form and compare the part with Fusion at the same values.
       `point` and `dir` for the first two; when the copy refuses, the axis record has `type` (and `geometry` or
       `error`), and the message says which kind of axis it is. Send the report of the pipe of the two body filter
       file: its axis could not be told apart before.
+- [ ] **K16 Angle size.** A bracket of two legs at an angle size (for example 120 degrees), a wall thickness and leg
+      lengths, drawn in one sketch. Tick all sizes and export. The progress window shows "(half way)" tries for the
+      angle and "<angle> and <size> (low/high)" tries. `report.json`: `probe.motion.values` has entries with `sum`
+      (a formula with `cos`, `sin` or `cot` of the angle); the result window shows the angle as a size. In
+      Paramability, set the angle to two other values inside its range (for example 100 and 140): the bracket matches
+      Fusion at the same values (measure a leg end and the inner corner). When the angle is still marked, note the
+      reason and send `report.json`.
+- [ ] **K17 Slot through a wall.** A slot cut "through all" from a sketch on a plane at the face of a wall, with its
+      corners rounded afterwards. Export: the rounds follow the wall and slot sizes (no "picks may move" warning). If
+      the cut direction was stored the other way, the step list says so in a note; in Paramability the slot is cut
+      through the wall.
 
 ## 10. Emboss
 

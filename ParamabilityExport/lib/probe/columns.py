@@ -78,7 +78,7 @@ def user_columns(table, overrides, envs, reads, dropped):
     out = []
     for e in table.entries:
         if e.state == FREE:
-            out.append(Column(e.name, RANK_FREE, [o.get(e.name, e.value) for o in overrides]))
+            out.append(Column(e.name, RANK_FREE, [o.get(e.name, e.value) for o in overrides], e.kind or "length"))
         elif e.state == DERIVED:
             values = [derived.get(e.name) for _, derived in envs]
             if None in values:

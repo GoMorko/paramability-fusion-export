@@ -103,12 +103,18 @@ progress window says "Trying size ..." for these steps, and Cancel works there t
 dropped; no size is fixed for it. The add-in then tries that size nearer to its value now (half way, then a quarter,
 then a tenth of the way to the end of its range; at most 24 such tries per export). When a nearer try builds, the
 size follows between the values that built, and the size says "it was followed between A and B". A size that did not
-rebuild at any value tried is not a size, and the reason names the values and the step Fusion stopped at. When one
-size moves a point along a curve (an angle, for example), only that size is marked; the other sizes of the sketch
-still follow, and two more tries check them together. A size the readings still cannot follow is loose.
+rebuild at any value tried is not a size, and the reason names the values and the step Fusion stopped at.
 
-These cases cannot be copied in a sketch even with the tries: a point that moves along a curve (an angle or a
-polar placement), an outline that changes shape (a line that only crosses the outline above some width, a sketch
+A point can also move along a curve: the end of a leg that turns with an angle, or a corner set back by a wall along
+half the angle. The add-in then looks for a formula with the angle's sine, cosine, tangent or cotangent (of the angle
+or of half of it), alone or times a length, and with products of two lengths. A formula is used only when the tries
+check it: every try must follow from the others. To have enough tries, the add-in sets each such size half way to its
+ends and together with each other size of the same sketch (about 2 tries per curved size, plus 2 per other size it
+shares a sketch with, inside the 64 tries). When no such formula fits, only that size is marked; the other sizes of
+the sketch still follow, and two more tries check them together. A size the readings still cannot follow is loose.
+
+These cases cannot be copied in a sketch even with the tries: a point that moves along a curve no such formula
+follows, an outline that changes shape (a line that only crosses the outline above some width, a sketch
 pattern whose count follows a size), a sketch plane that turns, a sketch that a step uses in another way (a pattern
 direction, a path), a construction plane or axis that a step reaches to directly, and a size that would shrink an
 outline to nothing. Such a size is loose, as above.
@@ -193,9 +199,13 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   parameters back and recomputes. A sketch with two solutions can still land on its other one after a try that did
   not rebuild; the add-in then does not blame the size (the sketch reads the same at two values of it), and when the
   sketch still reads another outline after the export, the result window names it so you can look at it in Fusion.
-- A sketch value that one size moves along a curve (a point that turns with an angle, a corner at a length divided
-  by a sine) cannot be copied: that size stays loose or is not a size. Formulas with sin, cos or products of sizes are
-  not fitted yet.
+- A sketch value that one size moves along a curve is copied only with the sine, cosine, tangent or cotangent of an
+  angle size (or of half of it), alone or times a length, and products of two lengths, up to 3 such terms per value.
+  Other curves (a square root, a power, an angle divided by a length) leave that size loose or not a size.
+- A cut through all to one side cuts on the side of its sketch where it meets the part. When Fusion's stored
+  direction points to a side without material there, the other side is used, with a note.
+- A round or chamfer that picks an edge inside one flat side wall of an extrude (where a round meets the wall) follows
+  that wall.
 - A revolve axis the copy cannot use (an edge that is not straight, a face that is not round, an axis that cannot be
   read) stops the copy; the reason says which of these it is.
 - One solid body per part. Several bodies go in one file as parts (see "Several bodies in one file").

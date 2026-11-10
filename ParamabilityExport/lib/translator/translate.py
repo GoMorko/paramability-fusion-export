@@ -16,7 +16,7 @@ from ..params import geometry_links
 from ..params.expressions import MAX_FORMULA_LENGTH
 from .values import Sized, number
 from ..sketch_values import coverage
-from ..sketch_values.motion import Motion, Stuck
+from ..sketch_values.motion import Motion, Stuck, Terms
 from .words import type_words
 
 RECIPE_VERSION = 12
@@ -238,10 +238,11 @@ def translate(capture, handlers=None, size_table=None, motion=None):
     for name in probed_sizes(size_table):
         if coverage.not_built(motion, name):
             upfront.setdefault(name, wording.not_built_why(coverage.span(motion, name)))
-    first = _settle(capture, table, size_table, motion, upfront, False, cache)
+    held = _Held(motion, size_table) if isinstance(motion, Motion) and not motion.optimistic else motion
+    first = _settle(capture, table, size_table, held, upfront, False, cache)
     if first.result.recipe is None or not first.whys:
         return _finish(first, {}, capture, motion)
-    pinned = _Pinned(motion) if isinstance(motion, Motion) and not motion.optimistic else motion
+    pinned = _Pinned(motion, size_table) if isinstance(motion, Motion) and not motion.optimistic else motion
     found = _settle(capture, table, size_table, pinned, {}, True, cache)
     doubts = dict(upfront)
     for name, why in list(first.whys.items()) + list(found.depends.items()):
@@ -249,20 +250,34 @@ def translate(capture, handlers=None, size_table=None, motion=None):
     return _finish(found, {name: why for name, why in doubts.items() if name not in found.whys}, capture, motion)
 
 
-class _Pinned:
-    """A motion file where a stuck value follows only the sizes that still move it (`Stuck.rest`, or nothing), as it
-    does once its own sizes are fixed. The second walk keeps those sizes free, so the other values still follow them."""
+class _Held:
+    """A motion file whose `Terms` values hold the sizes some stuck value names at their value now: those sizes cannot
+    be followed, so the values of one outline all follow the same other sizes."""
     optimistic = False
 
-    def __init__(self, motion):
+    def __init__(self, motion, table):
         self._motion = motion
+        held = {n for v in motion.values.values() if isinstance(v, Stuck) for n in v.movers}
+        self._held = {e.name: e.value for e in table.entries if e.name in held}
 
     def get(self, key):
         found = self._motion.get(key)
-        return found.rest if isinstance(found, Stuck) else found
+        if isinstance(found, Terms) and self._held:
+            return found.held(self._held)
+        return found
 
     def __getattr__(self, name):
         return getattr(self._motion, name)
+
+
+class _Pinned(_Held):
+    """A held motion file where a stuck value follows only the sizes that still move it (`Stuck.rest`, or nothing),
+    as it does once its own sizes are fixed. The second walk keeps those sizes free, so the other values still follow
+    them."""
+
+    def get(self, key):
+        found = super().get(key)
+        return found.rest if isinstance(found, Stuck) else found
 
 
 class _Settled:

@@ -87,6 +87,15 @@ class PicksTest(unittest.TestCase):
         self.assertEqual(steps_of(result.recipe, "round")[0]["edges"], {"near": [[5, 5, 16]]})
         self.assertEqual(steps_of(result.recipe, "round")[0]["size"], {"expr": "corner_mm"})
 
+    def test_an_edge_inside_one_side_wall_follows_that_wall(self):
+        def edit(capture):
+            capture["items"][3]["data"]["sets"][0]["edges"] = [{"token": "e9", "closed": False, "points": [[0, 30, 16]]}]
+        result, table = run(tray(edit))
+        self.assertEqual((fixed_names(result), loose_names(result)), ([], []))
+        (point,) = steps_of(result.recipe, "round")[0]["edges"]["near"]
+        big = {"FilterBox___height__contains_CeramicMedium": 2.5, CUBE: 30}
+        self.assertEqual(at(result.recipe, table, point[2], big), 38.5)
+
     def test_a_mirrored_round_follows_the_sizes_its_pick_follows(self):
         def edit(capture):
             edges = capture["items"][3]["data"]["sets"][0]["edges"]

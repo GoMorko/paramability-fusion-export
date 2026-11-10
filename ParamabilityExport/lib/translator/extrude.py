@@ -325,6 +325,60 @@ def _plan(item, data, frame, shift, combine, ctx, plane_q):
     return [side]
 
 
+# Points per side of the bounding box of an outline, and steps along the extrude, that the material test samples.
+_SAMPLE_GRID = 7
+_SAMPLE_STEPS = 48
+
+
+def _outline_samples(profile):
+    """Points inside the outline of `profile` (its holes left out), in its sketch plane: a grid over its box."""
+    footprint = Footprint(profile)
+    points = [p for curve in footprint.curves for p in polyline(curve)]
+    if not points:
+        return []
+    lo = [min(p[0] for p in points), min(p[1] for p in points)]
+    hi = [max(p[0] for p in points), max(p[1] for p in points)]
+    out = []
+    for i in range(_SAMPLE_GRID):
+        for j in range(_SAMPLE_GRID):
+            uv = [lo[0] + (hi[0] - lo[0]) * (i + 0.5) / _SAMPLE_GRID, lo[1] + (hi[1] - lo[1]) * (j + 0.5) / _SAMPLE_GRID]
+            if footprint.covers(uv):
+                out.append(uv)
+    return out
+
+
+def _meets_material(ctx, profiles, shift, sign, reach):
+    """True when the outlines, carried from the start plane `sign` along their normal up to `reach`, pass through the
+    part built so far."""
+    for profile in profiles:
+        frame = profile["frame"]
+        z = vec.unit(frame["z"])
+        for uv in _outline_samples(profile):
+            flat = vec.add(frame["origin"], vec.add(vec.scale(frame["x"], uv[0]), vec.scale(frame["y"], uv[1])))
+            for k in range(1, _SAMPLE_STEPS + 1):
+                if follow.inside(ctx, vec.add(flat, vec.scale(z, shift + sign * reach * k / _SAMPLE_STEPS))):
+                    return True
+    return False
+
+
+def _cut_toward_material(ctx, plan, data, profiles, shift, combine):
+    """A cut through all to one side with no measured end face cuts on the side where its outlines meet the part:
+    Fusion's stored direction is used only when both sides, or neither, hold material there."""
+    box = data.get("target_box_before")
+    if combine != "cut" or data.get("end_offset") is not None or not box:
+        return
+    reach = vec.length(vec.sub(box["max"], box["min"])) + 1.0
+    for entry in plan:
+        if entry["extent"] != "through-one":
+            continue
+        ahead = _meets_material(ctx, profiles, shift, entry["sign"], reach)
+        behind = _meets_material(ctx, profiles, shift, -entry["sign"], reach)
+        if behind and not ahead:
+            entry["sign"] = -entry["sign"]
+            ctx.note("Fusion stored the cut direction toward a side without material; the side the cut goes through "
+                     "was used.")
+
+
 def _box_union(box, other):
     if not box or not other:
         return box
@@ -710,6 +764,7 @@ def handle(item, ctx):
     if isinstance(thin_step, Refusal):
         return thin_step
     box_max = ctx.motion.box_max if sketch_motion.active(ctx) else None
+    _cut_toward_material(ctx, plan, data, profiles, shift, combine)
     refusal = _resolve_through(plan, data, start, z0, combine, box_max)
     if refusal:
         return refusal

@@ -131,10 +131,15 @@ class PlaneTest(unittest.TestCase):
         self.assertEqual(motion.get("8/r/plane/offset").terms, {"height": 1.0})
 
     def test_a_move_that_is_no_formula_of_the_sizes_is_stuck(self):
-        curved = [at(plane_at(20 + (h - 20) ** 2 / 10), height=h) for h in (30, 40, 50)]
+        curved = [at(plane_at(20 + (h - 20) ** 3 / 100), height=h) for h in (30, 40, 50)]
         value = run([MIRROR], with_e0(plane_at(20), *curved)).get("8/r/plane/offset")
         self.assertIsInstance(value, Stuck)
         self.assertEqual(value.movers, ("height",))
+
+    def test_a_move_by_the_square_of_a_size_is_followed(self):
+        curved = [at(plane_at(20 + (h - 20) ** 2 / 10), height=h) for h in (30, 40, 50)]
+        value = run([MIRROR], with_e0(plane_at(20), *curved)).get("8/r/plane/offset")
+        self.assertAlmostEqual(value.value({"height": 35.0}), 22.5)
 
 
 class StartReadTest(unittest.TestCase):

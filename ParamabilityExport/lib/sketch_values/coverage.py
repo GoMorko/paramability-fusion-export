@@ -14,7 +14,7 @@ A measured reference (a plane, axis or point of another component that a step us
 (`ref_answer`): `Motion.refs` lists every reference the probe looked at, with the reason when it could not measure it.
 """
 from . import keys
-from .motion import Affine, Stuck
+from .motion import Affine, Stuck, Terms
 
 STILL, MOVED, NOT_MEASURED = "still", "moved", "not measured"
 
@@ -78,6 +78,8 @@ def _driven(table, value):
         names = set(value.movers) | (set(value.rest.terms) if value.rest is not None else set())
     elif isinstance(value, Affine):
         names = set(value.terms)
+    elif isinstance(value, Terms):
+        names = set(value.names())
     else:
         names = set()
     out = set()

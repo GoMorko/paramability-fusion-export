@@ -117,10 +117,20 @@ class ExtentTest(unittest.TestCase):
         self.assertEqual(step["sketch"]["on"]["normal"], [1, 0, 0])
 
     def test_cut_through_the_other_way_goes_against_the_normal(self):
-        result = variant("extrude_cut_through_one", lambda d: d.update(side_one={"kind": "throughAll", "positive": False, "taper_deg": 0.0}, end_offset=None))
-        (step,) = under_test(result, 3)
+        def inside(d):
+            d.update(side_one={"kind": "throughAll", "positive": False, "taper_deg": 0.0}, end_offset=None)
+            d["profiles"][0]["frame"]["origin"] = [20, 0, 0]  # material on both sides of the sketch
+
+        (step,) = under_test(variant("extrude_cut_through_one", inside), 3)
         self.assertEqual(step["sketch"]["on"]["normal"], [-1, 0, 0])
         self.assertGreaterEqual(step["distance"], 1)
+
+    def test_a_cut_through_stored_toward_empty_space_goes_through_the_part_with_a_note(self):
+        result = variant("extrude_cut_through_one", lambda d: d.update(
+            side_one={"kind": "throughAll", "positive": False, "taper_deg": 0.0}, end_offset=None))
+        (step,) = under_test(result, 3)
+        self.assertEqual(step["sketch"]["on"]["normal"], [1, 0, 0])
+        self.assertTrue(verdict_of(result, 3)["note"])
 
     def test_through_all_join_refuses(self):
         result = variant("extrude_cut_through_one", lambda d: d.update(operation="join"))

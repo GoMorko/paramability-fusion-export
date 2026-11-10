@@ -3,7 +3,7 @@
 A series is one number per state, index 0 the state the export started from, None where a state gave none. `problems`
 lists why states gave none: `(cause, sizes)` for each state, `sizes` the Fusion names that state changes.
 """
-from . import fit
+from . import fit, terms
 from ..sketch_values.motion import CURVE, SHAPE, TURNS, UNREAD, Affine, Stuck
 
 _PRIORITY = (TURNS, SHAPE, UNREAD)
@@ -54,7 +54,19 @@ def fit_series(values, series, problems, candidates, varied, owner=""):
         if result.kind == "affine":
             values[key] = Affine(result.const, result.terms, owner)
         elif result.kind == "stuck":
-            values[key] = _narrowed(x, candidates, varied, found, owner) or Stuck(found, result.cause or CURVE, owner)
+            values[key] = (_curved_fit(x, candidates, found, owner) or _narrowed(x, candidates, varied, found, owner)
+                           or Stuck(found, result.cause or CURVE, owner))
+
+
+def _curved_fit(x, candidates, found, owner):
+    """The `Terms` fit of a value over the free sizes that moved it (`probe.terms`), or None when it has none that
+    the states check."""
+    by_name = {c.name: c for c in candidates if c.kind}
+    if not found or any(name not in by_name for name in found):
+        return None
+    sizes = [terms.Size(name, by_name[name].kind == terms.ANGLE, by_name[name].values) for name in found]
+    result = terms.fit_terms(x, sizes, owner=owner)
+    return result.value if result.kind == "terms" else None
 
 
 def _alone(x, varied, column):

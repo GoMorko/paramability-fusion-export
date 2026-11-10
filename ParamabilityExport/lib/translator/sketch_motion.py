@@ -12,9 +12,9 @@ Without a motion file, or with `OPTIMISTIC`, nothing here runs and the sketch is
 import math
 
 from ..sketch_values import keys
-from ..sketch_values.motion import CURVE, UNREAD, UNTRIED, Affine, Stuck
+from ..sketch_values.motion import CURVE, UNREAD, UNTRIED, Affine, Stuck, Terms
 from . import notes
-from .curved import Curved, combine, names_of, render
+from .curved import Curved, combine, from_terms, names_of, render
 from .footprint import nearest_point
 from .loops import profile_loops
 from .result import Refusal
@@ -58,6 +58,8 @@ def raw(ctx, key, number, sketch=""):
     is stuck for the sizes behind that sketch. A stuck value whose sizes are all fixed by now follows what the other
     sizes do (`rest`), else stands still."""
     found = ctx.motion.get(key)
+    if isinstance(found, Terms):
+        found = found.as_affine() or from_terms(found)
     if found is None:
         names = unmeasured_sizes(ctx.table, ctx.motion, sketch)
         found = Stuck(names, UNTRIED, sketch) if names else None

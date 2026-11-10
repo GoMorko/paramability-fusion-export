@@ -1024,9 +1024,11 @@ nothing left to try, gets one more row half way to that value, so the fit has tw
 24 per export (`MAX_NEARER_ROWS`, each is a Fusion recompute) and stay inside the 64 row cap; the discovery rows get
 what is left. The range ends come first for every size, also for one that reaches the part only through another
 component: a far end that builds gives the widest span measured, and only a failed end costs the nearer rows. When
-a value moves along a curve with one size on its own (below), two more rows set every other size to the lowest and
-then the highest value it was measured at, the curved sizes at their value now (`plan.check_rows`), so the formula of
-the other sizes is checked by a state that changes several of them at once. A state that did not build keeps the
+a value moves along a curve with one size on its own, or follows a `Terms` formula with an angle function (below),
+once per export (`plan.check_rows`, inside the row cap, in this order): each such size half way to the lowest and to
+the highest value it was measured at; each such size with each other size of those values, both low and both high
+(products show there); then every other size at the lowest and at the highest value it was measured at, the curved
+ones at their value now, so the formula over those sizes is checked by a state that changes several of them. A state that did not build keeps the
 first step that failed (`failed`). A ticked size the probe set to other values that no formula reads at the end is dropped with
 "it was tried at other values, and it changes nothing in this part" (`used` false, `tried` true), with "between A and
 B; beyond that it could not be tried" when the rows that built cover less than its range. A size that reaches a sketch
@@ -1095,7 +1097,19 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   a straight line, when the value fits over the states that keep those sizes at their value now: it is stuck with
   cause `curve` for them, and its `rest` follows the others (`probe.series`). Otherwise every size that moved it is
   listed. The fit takes up to four columns; columns that change in a state where the value moved are tried before
-  the others, so a design with many sizes does not push the right column past the 12 candidates. A sketch can
+  the others, so a design with many sizes does not push the right column past the 12 candidates.
+- Before that, a value no straight formula fits is tried as a sum of terms over the free sizes that moved it
+  (`probe.terms`): each size, the product of two length sizes, and for an angle size `sin`, `cos`, `tan` and `cot` of
+  the angle and of half the angle, alone and times a length size. The straight terms come first, then up to 3 others
+  chosen one at a time (each the one that leaves the smallest miss), then every term the value can do without is
+  dropped. The sum is used only when every measured state follows from the others within 1e-4 mm (solved without
+  that state, it still gives it), and when no other term in place of a chosen one also gives every state but another
+  value half way to an end or with every size at an end. The motion file keeps it as `{ const, sum: [{ k, of }] }`
+  (`Terms`): `of` lists the factors `[function, name, scale]`, `function` empty for a size, scale 1 or 0.5 for the
+  half angle. The translator writes it as a formula with `sin`, `cos` and `tan` in degrees (`cot` as `cos / sin`),
+  checked over the size ranges like any formula (a value that would reach zero, or a divisor that would cross zero,
+  marks its sizes; a formula past the length cap fixes them). A `Terms` value holds the sizes that a stuck value of the
+  motion names at their value now, so all values of one outline follow the same sizes. A sketch can
   have more than one solution, and Fusion may land on another one after the rows run before: when a sketch reads as
   the same different outline in states that change different sizes, or one size to two different values, those
   states blame no size for it (`apart` lists them, by number in `states`): a sketch that reads exactly alike at two
@@ -1117,7 +1131,9 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
 - Picks on an extrude whose outline moves follow it: a side corner moves with that corner, a point on an outline line
   between its two ends, a point on an arc with the arc's middle (or with the whole arc when it only shifts), on a
   circle with its centre and radius, and a point inside an end face with the outline's centre. A point on an arc that
-  changes shape fixes those sizes. The same holds for pattern and mirror copies, shell inner walls, crossing edges
+  changes shape fixes those sizes. An edge inside one flat side wall, away from its corners, where no second flat wall
+  crosses it (a round meets the wall), follows that wall: the outline curve under it and the length. The same holds
+  for pattern and mirror copies, shell inner walls, crossing edges
   and faces an `offsetFaces` step moved (the point moves back by the distance, then follows what made the face).
 - A pick on a tapered wall follows the taper and the length: the wall leans in by `tan(taper)` times the height along
   the extrude, also when the taper is a size.
@@ -1138,7 +1154,10 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   that copy out"); the range stays. Copies of a circular pattern keep their count and angle.
 - A taper that follows sizes should stay under 45 degrees either way: the sizes it reads are marked past the value
   where it reaches 45.
-- A through cut clears the part at the largest sizes tried (`box_max` of the motion file).
+- A through cut clears the part at the largest sizes tried (`box_max` of the motion file). A cut through all to one
+  side without a measured end face cuts toward the side where its outline meets the part built so far (sampled on a
+  grid over the outline); Fusion's stored direction is kept when both sides, or neither, hold material, and turned with
+  a note otherwise.
 - A construction plane or axis that a step uses itself (start from, reach to, turn about, mirror across, with `token`)
   fixes the sizes of the model parameters it made (`created_by.token`); without a token, of every construction plane
   or axis.

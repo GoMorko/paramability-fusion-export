@@ -11,6 +11,7 @@ from tests.schema_check import check_recipe
 from lib.export_plan.probe_flow import probe_view
 from lib.params import size_table
 from lib.probe import build as probe_build
+from lib.sketch_values.motion import Terms
 from lib.translator import translate
 
 REPORTS = os.path.expanduser("~/Documents/free-projects/3mf-compose/tmp/reports")
@@ -196,6 +197,7 @@ class OwnerCaptureTest(unittest.TestCase):
 # another solution), and a plain bracket whose angle size moves its points along a curve.
 PACKAGE_072 = "Pat - Pipe, Filter (Box, Cylinder) (7).paramability"
 PACKAGE_BRACKET = "simplfiideUntitled.paramability"
+PACKAGE_BRACKET_PATTERN = "withpatternUntitled.paramability"
 
 
 def replay(test, name):
@@ -230,6 +232,16 @@ class OwnerCapture072Test(unittest.TestCase):
         self.assertEqual((len(free), len(result.dropped)), (7, 1))
         curved = {n for v in motion.values.values() if getattr(v, "cause", "") == "curve" for n in v.movers}
         self.assertEqual(curved, {result.dropped[0]["name"]})
+        # The slot cut goes through the wall, so the rounds on its edges follow; the one loose size was measured over
+        # part of its range only.
+        self.assertEqual(len(result.loose), 1)
+        self.assertNotIn("picks", result.loose[0]["reason"])
+        # Some points follow the angle times a length through a cosine or a cotangent, checked by the states.
+        self.assertTrue(any(isinstance(v, Terms) for v in motion.values.values()))
+
+    def test_the_bracket_with_its_pattern_is_copied(self):
+        report = package_report(self, PACKAGE_BRACKET_PATTERN)
+        self.assertIsNotNone(translate(report["capture"]).recipe)
 
 
 if __name__ == "__main__":
