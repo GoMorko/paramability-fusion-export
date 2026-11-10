@@ -19,13 +19,15 @@ UNDO_ADVICE = (
     "save. Then export again.")
 
 
-def make_health(unrestored=(), gap_mm=None, probe=NOT_NEEDED, probe_error="", unchecked=()):
+def make_health(unrestored=(), gap_mm=None, probe=NOT_NEEDED, probe_error="", unchecked=(), flipped=()):
     """The record kept in `report.json` under `health`.
 
     unrestored: Fusion names of the parameters that could not be put back.
     gap_mm: how far the sketches are from their start after the restore, None when that was not measured.
     probe: MEASURED, NOT_NEEDED (no sketch to follow) or FAILED (sketches exist but could not be measured).
     unchecked: why the restore could not be checked, one text per sketch ("Sketch3 reads another outline").
+    flipped: names of the sketches that stayed on another outline for a while after the values were put back
+      (`Motion.flipped`); the tries made then blamed no size.
     """
     measured = probe == MEASURED
     out = {
@@ -38,6 +40,8 @@ def make_health(unrestored=(), gap_mm=None, probe=NOT_NEEDED, probe_error="", un
     }
     if measured and gap_mm is None and unchecked:
         out["unchecked"] = list(unchecked)[:MAX_LISTED]
+    if measured and flipped:
+        out["flipped"] = list(dict.fromkeys(flipped))[:MAX_LISTED]
     return out
 
 
@@ -76,6 +80,10 @@ def health_lines(health):
                                           "it" if len(health["unchecked"]) == 1 else "them"), MAX_LINE))
     elif health.get("restore_unverified"):
         lines.append("Could not check that the sketches came back to their first shape. Please look at them.")
+    if health.get("flipped"):
+        lines.append(clip("During the tries Fusion left %s on its other solution after a value was put back. The "
+                          "tries made while it stayed there were not used to judge any size." % _names(health["flipped"]),
+                          MAX_LINE))
     if health.get("probe") == FAILED:
         lines.append(
             "The sketches could not be measured, so sizes that move a sketch may give unexpected results.")

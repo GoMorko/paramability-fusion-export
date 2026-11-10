@@ -2,7 +2,8 @@ import math
 import unittest
 
 from tests import context  # noqa: F401
-from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, translate_fixture, variant, verdict_of
+from tests.translator_helpers import (
+    assert_schema_ok, edited, load_capture, steps_of, translate_fixture, variant, verdict_of)
 
 from lib.translator import translate, vec
 
@@ -17,6 +18,24 @@ class FilletTest(unittest.TestCase):
         self.assertNotIn("edgeSizes", step)
         self.assertEqual(verdict_of(result, 2)["verdict"], "translated")
         assert_schema_ok(self, result.recipe)
+
+    def test_round_ends_of_half_the_short_side_draw_the_extrude_as_a_slot(self):
+        def half_width(data):
+            data["sets"][0]["radius"] = 10.0
+        result = variant("fillet_four_edges", half_width)
+        (extrude,) = steps_of(result.recipe, "extrude")
+        self.assertEqual(extrude["sketch"]["outer"], {"kind": "slot", "center": [20.0, 10.0], "length": 40.0,
+                                                      "width": 20.0})
+        self.assertEqual(steps_of(result.recipe, "round"), [])
+        assert_schema_ok(self, result.recipe)
+
+    def test_a_slot_repeated_without_its_round_keeps_the_round(self):
+        def repeated(capture):
+            capture["items"][-1]["data"]["sets"][0]["radius"] = 10.0
+            pattern = load_capture("rpattern_fillet")["items"][-1]
+            capture["items"].append(dict(pattern, index=3, data=dict(pattern["data"], sources=[1])))
+        result = edited("fillet_four_edges", repeated)
+        self.assertEqual(verdict_of(result, 2)["verdict"], "translated")
 
     def test_two_radii_list_a_size_per_point(self):
         (step,) = steps_of(translate_fixture("fillet_two_radii").recipe, "round")

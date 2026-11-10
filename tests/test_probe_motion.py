@@ -170,6 +170,51 @@ class ProblemStateTests(unittest.TestCase):
         self.assertEqual(both.apart, [2, 6])
         self.assertNotIsInstance(both.get("6/p0/l0/radius"), Stuck)
 
+    @staticmethod
+    def lid_flipped(**sizes):
+        """The lid sketch on its other solution: another outline at any size."""
+        found = read_at(**sizes)
+        lid = found["sketches"]["sk2"]
+        found["sketches"]["sk2"] = dict(lid, profiles=[{"loops": [loop([circle((0, 0), 4, "c2")]),
+                                                                  loop([circle((1, 0), 1, "c3")], False)]}])
+        return found
+
+    def test_a_sketch_left_on_its_other_outline_after_a_row_that_did_not_build_blames_no_size(self):
+        motion = self.motion(s3=state({"off": 10}, None, built=False),
+                             s4=state({"height": 40}, self.lid_flipped(height=40)),
+                             s5=state({"count": 1}, self.lid_flipped(count=1)))
+        self.assertNotIsInstance(motion.get("6/p0/l0/radius"), Stuck)
+        self.assertEqual((motion.apart, motion.flipped), ([3, 4], []))
+        # The same other read in rows of sizes that do not move the lid: the lid stayed on its other solution.
+        stayed = self.motion(s3=state({"off": 10}, None, built=False),
+                             s4=state({"cube": 5}, self.lid_flipped(cube=5)),
+                             s5=state({"count": 1}, self.lid_flipped(count=1)))
+        self.assertEqual(stayed.flipped, ["Sketch2"])
+
+    def test_another_outline_blames_a_size_only_in_its_own_row_started_right_and_undone_after(self):
+        own = self.motion(s4=state({"height": 40}, self.lid_flipped(height=40)))
+        self.assertEqual(own.get("6/p0/l0/radius").movers, ("height",))
+        combined = self.motion(s10=state({"count": 6, "cube": 20, "off": 10, "height": 40},
+                                         self.lid_flipped(count=6, cube=20, off=10, height=40)))
+        self.assertNotIsInstance(combined.get("6/p0/l0/radius"), Stuck)
+        # The row after it starts on the other outline, so that outline did not come back once the values were back.
+        stays = self.motion(s4=state({"height": 40}, self.lid_flipped(height=40)),
+                            s5=dict(state({"count": 1}, read_at(count=1)), start=self.lid_flipped()))
+        self.assertNotIsInstance(stays.get("6/p0/l0/radius"), Stuck)
+        self.assertEqual(stays.flipped, ["Sketch2"])
+
+    def test_a_row_read_again_before_it_ran_counts_from_that_read(self):
+        # The row before did not build, but the read before this row shows the right outline: this row blames.
+        motion = self.motion(s3=state({"off": 10}, None, built=False),
+                             s4=dict(state({"height": 40}, self.lid_flipped(height=40)), start=read_at()))
+        self.assertEqual(motion.get("6/p0/l0/radius").movers, ("height",))
+        self.assertEqual(motion.flipped, [])
+
+    def test_a_read_that_shows_another_value_of_its_size_is_left_out(self):
+        # The read of another row (its parameters say height 40) kept under this row of height 10.
+        motion = self.motion(s8=state({"height": 10}, read_at(height=40)))
+        self.assertEqual(motion.get("6/p0/plane").terms, {"height": 1.0})
+
     def test_a_plane_that_turns_fixes_the_size_that_did_it(self):
         motion = self.motion(s8=state({"height": 10}, read_at(height=10, turned=True)))
         plane = motion.get("6/p0/plane")

@@ -185,6 +185,21 @@ class SymmetricSizedTest(unittest.TestCase):
         reasons = {f["name"]: f["reason"] for f in result.loose}
         self.assertIn("picks a copy made by Pattern1", reasons[CUBE])
 
+    def test_a_round_repeated_with_its_post_follows_the_count_on_every_copy(self):
+        count = {"quantity_one": param("d22", "ceil(%s / 5) - 1" % CUBE, 3.0)}
+        result, table = sized(centred(fillet(3, CENTRE + 4), row(4, [2, 3], 3, 24.0, params=dict(PITCH, **count))))
+        self.assertEqual(result.fixed, [])
+
+        def rounded(**sizes):
+            """x of every copy round the recipe keeps at these sizes."""
+            env = at(table, **sizes)
+            kept = [s for s in steps_of(result.recipe, "round")[1:] if not s.get("when") or evaluate(s["when"], env)]
+            return sorted(round(evaluate(s["edges"]["near"][0][0]["expr"], env), 6) for s in kept)
+
+        self.assertEqual(rounded(), [40.0, 88.0])
+        self.assertEqual(rounded(**{CUBE: 30}), [64 - 2 * 34, 64 - 34, 64 + 34, 64 + 68])
+        assert_schema_ok(self, result.recipe)
+
     def test_a_count_that_can_pass_the_copy_cap_marks_its_size(self):
         count = {"quantity_one": param("d22", "ceil(%s / 5)" % CUBE, 4.0)}
         result, _ = sized(centred(row(3, [2], 4, 24.0, params=dict(PITCH, **count))), ranges={CUBE: (10.0, 700.0)})

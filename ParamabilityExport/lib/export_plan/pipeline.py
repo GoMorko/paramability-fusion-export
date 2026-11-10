@@ -103,13 +103,36 @@ class ProbeRun:
     """Runs the probe's rows in one job: one baseline, and the parameters put back after every row. The rows only
     recompute (no STEP). It keeps the probe state read at every row that built, by row key, and `rows` lists
     (row, result) of every row run. `read_failure` holds the first probe read that failed: the probe is then not
-    used."""
+    used.
+
+    A row that did not build, or left a followed sketch on another outline, may leave that sketch there after the
+    parameters are put back. The design is then read again before the next row (`starts`, by row key), so the motion
+    knows whether that row started from the right outline."""
 
     def __init__(self, port, tmp, probe):
         self.port, self.tmp, self.probe = port, tmp, probe
-        self.reads, self.rows = {}, []
+        self.reads, self.rows, self.starts = {}, [], {}
         self.read_failure = None
-        self.job = RowExport(port.store, port.units, self._export)
+        self._previous = None  # key of the row run last
+        self.job = RowExport(port.store, port.units, self._export, self._before_row)
+
+    def _before_row(self, row):
+        """`RowExport`'s hook once the parameters are back: read the design when the row before did not build or
+        read a followed sketch on another outline."""
+        key = row.get("key", row["name"])
+        previous, self._previous = self._previous, key
+        if previous is None or self.read_failure is not None:
+            return
+        read = self.reads.get(previous)
+        if read is not None and not self.probe.off_outline(read):
+            return
+        try:
+            self.starts[key] = self.probe.read_now()
+        except ExportCancelled:
+            raise
+        except Exception as exc:
+            self.read_failure = exc
+            self.port.log(f"size probe read failed: {exc!r}")
 
     def _export(self, path):
         """`RowExport`'s step callback: a probe row has no STEP, so `path` is None and only the state is read."""
@@ -131,12 +154,13 @@ class ProbeRun:
         return results
 
     def probe_states(self, since=0):
-        """(values, result, read) of the rows run from number `since` on, for `SizeProbe.add_states`."""
+        """(values, result, read, start) of the rows run from number `since` on, for `SizeProbe.add_states`."""
         out = []
         for row, result in self.rows[since:]:
             state = row.get("state") or {}
             values = {param: state[param] for param in row.get("varied") or [] if param in state}
-            out.append((values, result, self.reads.get(row.get("key", row["name"]))))
+            key = row.get("key", row["name"])
+            out.append((values, result, self.reads.get(key), self.starts.get(key)))
         return out
 
     def run_rows(self, rows):
@@ -227,7 +251,7 @@ class _Pipeline:
         gap = self._restore_gap()
         probe_report = self._close_probe()
         health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error,
-                                           self._unchecked())
+                                           self._unchecked(), self.motion.flipped if self.motion is not None else ())
         manifest, files, report = plan_single_export(
             capture if capture is not None else RuntimeError("The steps were not read."),
             part_step, request.title, request.writer, request.up_axis,

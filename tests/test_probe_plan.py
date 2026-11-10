@@ -188,6 +188,8 @@ class NearerRowsTests(unittest.TestCase):
         rows = plan.check_rows(sizes, {"a"}, spans, room=10)
         self.assertEqual([r["state"] for r in rows[-2:]],
                          [{"a": 120.0, "b": 9.0, "c": 1.5}, {"a": 120.0, "b": 24.0, "c": 6.0}])
+        # The reads of the rows are kept by key: the two half way rows of one size must not share one.
+        self.assertEqual(len({r["key"] for r in rows}), len(rows))
 
 
 if __name__ == "__main__":

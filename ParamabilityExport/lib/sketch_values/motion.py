@@ -16,7 +16,7 @@
 The keys are written by `sketch_values.keys`. `curves` lists the profiles (`<item>/p<profile>`) whose sketch curves were
 measured.
 `apart` lists the states (by number in `states`) where Fusion solved a sketch another way, so a different outline
-there blames no size. A stuck value may carry `rest`: what it follows once its `stuck` sizes are fixed. `terms` keys
+there blames no size. `flipped` names the sketches that stayed on another outline after the values were put back. A stuck value may carry `rest`: what it follows once its `stuck` sizes are fixed. `terms` keys
 are Fusion parameter names; `const` plus the terms give the value at any size settings. A key that is not listed
 did not move: the translator writes the captured number, unless its sketch is in `unmeasured` (sketch name to the
 reason the probe could not measure it): then nothing is known about it, and the sizes behind that sketch cannot be
@@ -52,6 +52,8 @@ CURVE, SHAPE, TURNS, UNREAD, UNTRIED = "curve", "shape", "turns", "unread", "unt
 CAUSES = (CURVE, SHAPE, TURNS, UNREAD, UNTRIED)
 
 _EPS = 1e-12
+# A term whose factor rounds to zero at the 9 decimals the files keep (the sum of two parts that cancel) is no term.
+_TERM_EPS = 5e-10
 
 
 class Stuck:
@@ -85,7 +87,7 @@ class Affine:
 
     def __init__(self, const=0.0, terms=None, sketch=""):
         self.const = float(const)
-        self.terms = {k: float(v) for k, v in (terms or {}).items() if abs(v) > _EPS}
+        self.terms = {k: float(v) for k, v in (terms or {}).items() if abs(v) >= _TERM_EPS}
         self.sketch = sketch
 
     @property
@@ -209,13 +211,15 @@ class Motion:
     optimistic = False
 
     def __init__(self, values=None, box_max=None, states=None, dropped=None, curves=None, apart=None,
-                 unmeasured=None, untried=None, refs=None, body_moved=None, spans=None):
+                 unmeasured=None, untried=None, refs=None, body_moved=None, spans=None, flipped=None):
         self.values = dict(values or {})
         self.box_max = box_max
         self.states = list(states or [])
         self.dropped = list(dropped or [])  # columns left out of the fit, `{ name, reason }`
         self.curves = set(curves or ())  # profiles whose sketch curves were measured, `<item>/p<profile>`
         self.apart = list(apart or [])  # numbers in `states` where Fusion solved a sketch another way
+        # names of the sketches that stayed on another outline after the values were put back
+        self.flipped = list(flipped or [])
         self.unmeasured = dict(unmeasured or {})  # sketch name to why the probe could not measure it
         self.untried = list(untried or [])  # Fusion names of sizes that moved a sketch and were not tried
         self.refs = dict(refs or {})  # reference key to "" (measured) or why it could not be measured
@@ -239,6 +243,8 @@ class Motion:
             out["curves"] = sorted(self.curves)
         if self.apart:
             out["apart"] = list(self.apart)
+        if self.flipped:
+            out["flipped"] = list(self.flipped)
         if self.unmeasured:
             out["unmeasured"] = dict(self.unmeasured)
         if self.untried:
@@ -267,7 +273,7 @@ class Motion:
                 values[key] = Affine(raw.get("const", 0.0), raw.get("terms"), raw.get("sketch", ""))
         return cls(values, data.get("box_max"), data.get("states"), data.get("dropped"), data.get("curves"),
                    data.get("apart"), data.get("unmeasured"), data.get("untried"), data.get("refs"),
-                   data.get("body_moved"), data.get("spans"))
+                   data.get("body_moved"), data.get("spans"), data.get("flipped"))
 
 
 class _Optimistic(Motion):

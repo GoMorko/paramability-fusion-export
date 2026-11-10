@@ -1,5 +1,5 @@
-"""Captures of the owner's hybrid assembly (add-in 0.3.1, 0.3.2 for report (3), 0.3.3 to 0.4.3 and 0.7.2 inside the
-FilterBox packages) and of a bracket (0.7.2). They stay outside the repo; the tests skip without them."""
+"""Captures of the owner's hybrid assembly (add-in 0.3.1, 0.3.2 for report (3), 0.3.3 to 0.4.3, 0.7.2 and 0.7.4 inside
+the FilterBox packages) and of a bracket (0.7.2, 0.7.4). They stay outside the repo; the tests skip without them."""
 import json
 import os
 import unittest
@@ -83,9 +83,9 @@ class OwnerCaptureTest(unittest.TestCase):
         params = capture["parameters"]
         table = size_table.build(params["user"], PROBE_TICKED, params["model"], capture.get("design_units", "mm"))
         motion = probe_build.build(probe_view(capture), table, report["probe"]["states"])
-        # The lid rails slide with the box wall; pieces of one sketch line keep their own place in the loop.
-        rails = [v.rest for k, v in motion.values.items()
-                 if k.split("/")[0] in ("65", "66", "67", "68") and "/l" in k and getattr(v, "rest", None)]
+        # The lid rails slide with the box wall; pieces of one sketch line keep their own place in the loop. The lid
+        # sketch reads another outline in one row only after the row before it, so it blames no size there.
+        rails = [v for k, v in motion.values.items() if k.split("/")[0] in ("65", "66", "67", "68") and "/l" in k]
         self.assertTrue(rails)
         self.assertEqual({(tuple(r.terms), abs(r.terms["FilterBox_depth_mm"])) for r in rails},
                          {(("FilterBox_depth_mm",), 0.5)})
@@ -100,7 +100,7 @@ class OwnerCaptureTest(unittest.TestCase):
         marked = {f["name"]: f["reason"] for f in result.loose}
         self.assertEqual(sorted(marked), sorted([PROBE_TICKED[0], PROBE_TICKED[2], PROBE_TICKED[3], PROBE_TICKED[6]]))
         self.assertIn("past 44.98", marked[PROBE_TICKED[6]])
-        self.assertIn("past 23.4", marked[PROBE_TICKED[3]])
+        self.assertIn("past 20.52", marked[PROBE_TICKED[3]])
         self.assertEqual(check_recipe(result.recipe), [])
 
     def test_with_the_dialog_ranges_the_filter_box_sizes_stay_free_and_are_marked(self):
@@ -242,6 +242,42 @@ class OwnerCapture072Test(unittest.TestCase):
     def test_the_bracket_with_its_pattern_is_copied(self):
         report = package_report(self, PACKAGE_BRACKET_PATTERN)
         self.assertIsNotNone(translate(report["capture"]).recipe)
+
+
+# Add-in 0.7.4 exports: the box again (its lid sketches stay on their other solution after a row that did not build),
+# and a bracket with a slot whose ends are fully rounded and a symmetric pattern of a groove with its round and chamfer.
+PACKAGE_074_BOX = "Pat - Pipe, Filter (Box, Cylinder) (8).paramability"
+PACKAGE_074_BRACKET = "Untitled.paramability"
+
+
+class OwnerCapture074Test(unittest.TestCase):
+    def test_a_lid_sketch_left_on_its_other_solution_blames_no_size_and_the_ribs_follow_the_box(self):
+        result, motion = replay(self, PACKAGE_074_BOX)
+        self.assertEqual(len(motion.flipped), 2)
+        self.assertFalse([f for f in result.loose if "different outline" in f["reason"]])
+        free = [n for n, size in result.recipe["sizes"].items() if "value" in size]
+        self.assertEqual(len(free), 9)
+        rib = next(f for f in result.recipe["features"] if f["id"] == "extrude_53")
+        self.assertIn("FilterBox___width__contains_CeramicMedium", rib["sketch"]["outer"]["center"][0]["expr"])
+        self.assertEqual(check_recipe(result.recipe), [])
+
+    def test_the_bracket_slot_ends_are_its_outline_and_the_groove_finishes_follow_the_count(self):
+        result, motion = replay(self, PACKAGE_074_BRACKET)
+        steps = {f["id"]: f for f in result.recipe["features"]}
+        self.assertEqual(steps["extrude_4"]["sketch"]["outer"]["kind"], "slot")
+        self.assertNotIn("round_5", steps)
+        # One round and one chamfer per copy for every count the size allows, each kept while the count makes it.
+        (count,) = {s["linear"]["count"]["expr"] for s in steps.values() if s["kind"] == "pattern"}
+        copies = [s for s in steps.values() if s.get("when")]
+        self.assertEqual(len(copies), 28)
+        self.assertTrue(all(count in s["when"] for s in copies))
+        self.assertFalse([f for f in result.loose if "different outline" in f["reason"]])
+        self.assertEqual(len(result.dropped), 1)
+        # The two half way rows of the angle had one read between them; the one that does not match its row is left
+        # out, and a point follows the angle through the cotangent of its half.
+        self.assertTrue(any(isinstance(v, Terms) and any(f[0] == "cot" for _, fs in v.parts for f in fs)
+                            for v in motion.values.values()))
+        self.assertEqual(check_recipe(result.recipe), [])
 
 
 if __name__ == "__main__":

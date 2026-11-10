@@ -235,8 +235,13 @@ def _from_anchors(loop, anchors, sketch, sources=None):
 
     def at(uv):
         found = anchors.point(uv)
-        if found is None and sources is not None:
-            found = sources.point(uv)
+        if sources is not None and (found is None or any(isinstance(c, Stuck) for c in found)):
+            # A corner of the merged outline is where two of its sketch curves cross. The part it came from may
+            # hold it through a curve the merge leaves out (a line between two profiles that moves along a curve),
+            # so the crossing of the curves through it is used when it can follow.
+            crossing = sources.point(uv)
+            if found is None or isinstance(crossing, tuple):
+                found = crossing
         if isinstance(found, Stuck):
             return [found, found]
         return list(found) if isinstance(found, tuple) else [missing, missing]

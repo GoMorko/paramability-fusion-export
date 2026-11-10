@@ -6,9 +6,16 @@ probe state of `fusion_reader.probe_state` (sketches, points, lines, params in F
 state has `"e0": true`: the read at the current settings, before any size is changed. A state that is not `built`
 (Fusion could not build the part there) is left out of the fit; its `failed` names the first step that failed.
 
-A sketch can have more than one solution, and Fusion may land on another one depending on the rows run before. When
-a sketch reads as the same different outline in states that change different sizes, none of those sizes made it:
-those states blame no size for that outline (`Motion.apart`).
+A sketch can have more than one solution, and Fusion may land on another one depending on the rows run before (a row
+that did not build often leaves it there). A size is blamed for a different outline only by its own row (the row that
+changes that size alone), when the row started from the right outline and the outline came back once the values were
+put back. A state may carry `start`: the read of the design after the values were put back and before its row ran.
+Without it, the row started where the row before it ended (E0 for the first row), and the next row (or `after`, the
+read once all rows are done) tells whether the outline came back. A different outline that blames no size this way is
+listed in `Motion.apart`. A sketch known to have stayed on its other outline across a restore (a `start` read shows it,
+or it reads as the same other outline in rows of unrelated sizes) is named in `Motion.flipped`.
+When a sketch reads as the same different outline in states that change different sizes, none of those sizes made it
+either.
 """
 from . import columns as cols
 from . import match, plan, ref_fit
@@ -22,13 +29,16 @@ _SAME = 1e-9
 class _Run:
     """The states of one export, lined up with E0 first."""
 
-    def __init__(self, capture, states):
+    def __init__(self, capture, states, current=None, after=None):
+        self.current = current
+        self.after = after
         self.found = plan.scan(capture)
         self.e0 = next((s for s in states if s.get("e0")), None)
         self.base = (self.e0 or {}).get("read")
         self.states = [self.e0 or {"values": {}, "e0": True}] + [s for s in states if not s.get("e0")]
         self.targets = []
         self.apart = set()
+        self.apart_tokens = set()  # sketches that read as the same other outline in rows of unrelated sizes
         self._values = {}
         self.readable = set()
         if self.base:
@@ -48,6 +58,24 @@ class _Run:
     def built(self, at):
         return self.states[at].get("built") is not False
 
+    def mislabelled(self, at):
+        """True when the read of state `at` shows a size at another value than its row set: the read belongs to
+        another row, so it tells nothing about this one. Each parameter's read is scaled to the size's own units by
+        its read and value at E0."""
+        values = self.states[at].get("values") or {}
+        read = (self.states[at].get("read") or {}).get("params") or {}
+        first = (self.base or {}).get("params") or {}
+        for name, value in values.items():
+            now, before = read.get(name), first.get(name)
+            if not all(isinstance(v, (int, float)) for v in (now, before)) or name not in (self.current or {}):
+                continue
+            if abs(before) <= _SAME:
+                continue
+            scale = self.current[name] / before
+            if abs(now * scale - value) > 1e-6 * max(1.0, abs(value)):
+                return True
+        return False
+
     def values_at(self, target, at):
         """`(values, cause)` of a target in state `at`; (None, None) for a state that was not built."""
         key = (id(target), at)
@@ -56,13 +84,70 @@ class _Run:
         return self._values[key]
 
     def _read_values(self, target, at):
-        if not self.built(at):
+        if not self.built(at) or self.mislabelled(at):
             return None, None
         read = self.states[at].get("read")
         values, cause = match.state_values(target, read, self.base) if read else (None, UNREAD)
         if values is not None and values.keys() != match.captured_values(target).keys():
             return None, SHAPE
         return values, cause
+
+    def outline_right(self, token, read):
+        """True when every followed record of the sketch `token` reads as the captured outline in `read`."""
+        if not isinstance(read, dict):
+            return False
+        for target in self.targets:
+            if target["sketch_token"] == token:
+                values, _ = match.state_values(target, read, self.base)
+                if values is None or values.keys() != match.captured_values(target).keys():
+                    return False
+        return True
+
+    def started_right(self, token, at):
+        """True when the row of state `at` is known to have started on the captured outline of the sketch."""
+        start = self.states[at].get("start")
+        if isinstance(start, dict):
+            return self.outline_right(token, start)
+        before = at - 1
+        if before == 0:
+            return True
+        return self.built(before) and self.outline_right(token, self.states[before].get("read"))
+
+    def came_back(self, token, at):
+        """True when the sketch is known to read as captured again once the values of state `at` were put back."""
+        after = at + 1
+        if after >= len(self.states):
+            return self.after is not None and self.outline_right(token, self.after)
+        start = self.states[after].get("start")
+        if isinstance(start, dict):
+            return self.outline_right(token, start)
+        return self.built(after) and self.outline_right(token, self.states[after].get("read"))
+
+    def shape_blames(self, token, at):
+        """True when the different outline of the sketch in state `at` blames the size of that row: its own row,
+        started on the right outline, and the outline came back after it."""
+        return (len(self.varied(at, self.current)) == 1 and self.started_right(token, at)
+                and self.came_back(token, at))
+
+    def find_flips(self):
+        """Adds to `apart` the states whose different outline blames no size, and returns the names of the sketches
+        known to have stayed on another outline across a restore: a `start` read on another outline, or the same
+        different read in rows of unrelated sizes (`find_apart`)."""
+        flipped = []
+        for token in dict.fromkeys(t["sketch_token"] for t in self.targets):
+            name = next(t["sketch"] for t in self.targets if t["sketch_token"] == token)
+            if token in self.apart_tokens:
+                flipped.append(name)
+            for at in range(1, len(self.states)):
+                start = self.states[at].get("start")
+                if isinstance(start, dict) and not self.outline_right(token, start):
+                    flipped.append(name)
+                if (not self.built(at) or self.mislabelled(at)
+                        or self.outline_right(token, self.states[at].get("read"))):
+                    continue
+                if not self.shape_blames(token, at):
+                    self.apart.add(at)
+        return list(dict.fromkeys(flipped))
 
     def find_apart(self, current=None):
         """The states where a sketch reads as the same different outline as in another state that changes other
@@ -77,6 +162,7 @@ class _Run:
                     if (self._unrelated(a, b, current) and isinstance(reads[a], dict) and isinstance(reads[b], dict)
                             and match.same_read(reads[a], reads[b])):
                         self.apart.update((a, b))
+                        self.apart_tokens.add(token)
 
     def _unrelated(self, a, b, current):
         """True when states `a` and `b` change no size to the same value: other sizes, or the same ones elsewhere."""
@@ -140,10 +226,10 @@ def spans(states, current):
     return out
 
 
-def build(capture, table, states):
-    """The `Motion` of a capture. See the module text for `states`."""
-    run = _Run(capture, states)
+def build(capture, table, states, after=None):
+    """The `Motion` of a capture. See the module text for `states` and `after`."""
     current = {e.name: e.value for e in table.entries}
+    run = _Run(capture, states, current, after)
     out = Motion(box_max=_box_max(states), states=[_state_record(s) for s in run.states[1:]],
                  unmeasured=coverage.unmeasured(run.found, run.readable, bool(run.base)),
                  spans=spans(run.states[1:], current))
@@ -159,6 +245,7 @@ def build(capture, table, states):
     models = cols.model_columns(table, envs, reads, dropped)
     out.dropped = dropped
     run.find_apart(current)
+    out.flipped = run.find_flips()
     out.apart = sorted(at - 1 for at in run.apart)
     for target in run.targets:
         _fit_target(out, run, target, shared, models, current)
@@ -177,7 +264,8 @@ def _fit_target(out, run, target, shared, models, current):
         values, cause = run.values_at(target, at)
         for key in want:
             series[key].append(None if values is None else values[key])
-        if values is None and cause and not (cause == SHAPE and at in run.apart):
+        if values is None and cause and not (cause == SHAPE and (at in run.apart
+                                                                 or not run.shape_blames(target["sketch_token"], at))):
             problems.append((cause, run.varied(at, current)))
     sketch = target["sketch"]
     plane = (target.get("reference") or {}).get("token") or ""

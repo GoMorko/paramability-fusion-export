@@ -263,12 +263,78 @@ def _capture_profile_values(target):
     return out
 
 
-def _state_profile_values(target, read):
+def _loops_of(record):
+    """Every loop of a sketch read, as lists of curves."""
+    return [loop.get("curves") or [] for profile in record.get("profiles") or [] for loop in profile.get("loops") or []]
+
+
+def _tokens(record):
+    return {c.get("entity") for curves in _loops_of(record) for c in curves if c.get("entity")}
+
+
+def _rename_pairs(base_curves, curves, missing, new):
+    """The `{new token: missing token}` pairs of the one walk of a state loop along a base loop of the same length in
+    which every other curve keeps its token and each pair keeps its kind; None when no walk or more than one lines them
+    up that way. A walk counts only with at least one curve that kept its token, so a loop of new curves pairs nothing."""
+    n = len(base_curves)
+    found = []
+    for step in (1, -1):
+        for start in range(n):
+            order = [curves[(start + step * i) % n] for i in range(n)]
+            pairs, kept = {}, 0
+            for before, now in zip(base_curves, order):
+                if before.get("kind") != now.get("kind"):
+                    break
+                a, b = before.get("entity"), now.get("entity")
+                if a == b:
+                    kept += 1
+                elif a in missing and b in new and pairs.get(b, a) == a:
+                    pairs[b] = a
+                else:
+                    break
+            else:
+                if kept and pairs:
+                    found.append(pairs)
+    return found[0] if len(found) == 1 else None
+
+
+def renamed(record, base):
+    """`record` (a sketch read) with the curves Fusion made again under a new token named as in `base` (an earlier read
+    of the same sketch). Fusion may give a projected or intersection curve a new token when it recomputes it, although
+    it is the same curve: a curve of `base` whose token is gone pairs with a new curve of the same kind that sits in its
+    place along a loop, between curves that kept their tokens. A pair is used only when every loop agrees on it. The
+    record itself when nothing is renamed."""
+    if not isinstance(record, dict) or not isinstance(base, dict):
+        return record
+    before, now = _tokens(base), _tokens(record)
+    missing, new = before - now, now - before
+    if not missing or not new:
+        return record
+    pairs = {}
+    for curves in _loops_of(record):
+        if not any(c.get("entity") in new for c in curves):
+            continue
+        for base_curves in _loops_of(base):
+            if len(base_curves) != len(curves) or not any(c.get("entity") in missing for c in base_curves):
+                continue
+            for b, a in (_rename_pairs(base_curves, curves, missing, new) or {}).items():
+                pairs.setdefault(b, set()).add(a)
+    names = {b: next(iter(a)) for b, a in pairs.items() if len(a) == 1}
+    if not names or len(set(names.values())) != len(names):
+        return record
+    profiles = [dict(p, loops=[dict(loop, curves=[dict(c, entity=names.get(c.get("entity"), c.get("entity")))
+                                                    for c in loop.get("curves") or []])
+                               for loop in p.get("loops") or []]) for p in record.get("profiles") or []]
+    return dict(record, profiles=profiles)
+
+
+def _state_profile_values(target, read, e0=None):
     profile = target["profile"]
     ref = profile["frame"]
     record = (read.get("sketches") or {}).get(target["sketch_token"])
     if not isinstance(record, dict) or not isinstance(record.get("frame"), dict):
         return None, UNREAD
+    record = renamed(record, ((e0 or {}).get("sketches") or {}).get(target["sketch_token"]))
     frame = record["frame"]
     if _turned(frame["z"], ref["z"]):
         return None, TURNS
@@ -335,7 +401,7 @@ def captured_values(target):
 def state_values(target, read, e0=None):
     """`(values, cause)` of one covered record in a state read: the numbers by key, or None and the cause."""
     if target["kind"] == "profile":
-        return _state_profile_values(target, read)
+        return _state_profile_values(target, read, e0)
     if target["kind"] == "hole":
         return _hole_values(target, read, e0)
     return _axis_values(target, read)
@@ -384,8 +450,9 @@ def _close(a, b):
 
 
 def same_read(before, now):
-    """True when two reads of one sketch (`{ frame, profiles }`) have the same frame and curves, within 1e-4 mm."""
+    """True when two reads of one sketch (`{ frame, profiles }`) have the same frame and curves, within 1e-4 mm. A curve
+    Fusion made again under a new token counts as the same curve (`renamed`)."""
     frame_a, curves_a = _read_signature(before)
-    frame_b, curves_b = _read_signature(now)
+    frame_b, curves_b = _read_signature(renamed(now, before))
     return _close(frame_a, frame_b) and len(curves_a) == len(curves_b) and all(
         a[:2] == b[:2] and _close(a[2], b[2]) for a, b in zip(curves_a, curves_b))

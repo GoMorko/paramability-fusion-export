@@ -414,7 +414,8 @@ def check_rows(sizes, curved, spans, room, partners=()):
         for end in _span_ends(spans, size):
             middle = _toward(size, end, 0.5)
             if abs(middle - size["value"]) > _SAME and abs(middle - end) > _SAME:
-                wanted.append(("%s (half way)" % size["size"][:MAX_NAME_CHARS - 11], {name: middle}))
+                wanted.append(("%s (half way)" % size["size"][:MAX_NAME_CHARS - 11], {name: middle},
+                               "%s (half way to %r)" % (name, end)))
     for name in (n for n in curved if n in by_name):
         for other in (n for n in partners if n in by_name and n not in curved):
             ends = list(zip(_span_ends(spans, by_name[name]), _span_ends(spans, by_name[other])))
@@ -422,13 +423,14 @@ def check_rows(sizes, curved, spans, room, partners=()):
                 overrides = {n: v for n, v in ((name, mine), (other, theirs))
                              if abs(v - by_name[n]["value"]) > _SAME}
                 if len(overrides) == 2:
-                    wanted.append(("%s and %s (%s)" % (name, other, label), overrides))
+                    wanted.append(("%s and %s (%s)" % (name, other, label), overrides, None))
     for label, at in (("all low but curved", 0), ("all high but curved", 1)):
         overrides = {s["param"]: _span_ends(spans, s)[at] for s in sizes
                      if s["param"] not in curved and abs(_span_ends(spans, s)[at] - s["value"]) > _SAME}
         if len(overrides) >= 2:
-            wanted.append((label, overrides))
-    return [_row(sizes, name, overrides) for name, overrides in wanted[:max(0, room)]]
+            wanted.append((label, overrides, None))
+    # Each row has its own key: the reads of the rows are kept by key, so two rows under one key would share a read.
+    return [_row(sizes, name, overrides, key) for name, overrides, key in wanted[:max(0, room)]]
 
 
 def discovery_rows(candidates, room, limit=MAX_DISCOVERY):

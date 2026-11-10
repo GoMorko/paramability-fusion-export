@@ -3,7 +3,8 @@
 The copies are read from the measured transform of every pattern element, so the spacing, the turning sense and
 the copies Fusion left out come from what Fusion built, not from flags. Solid sources (extrudes, revolves, holes,
 other repeats) become one `pattern` or `mirror` step. Rounds and chamfers cannot be repeated by the recipe, so the
-copies get their own `round` or `bevel` step with the source's `near` points moved to each copy.
+copies get their own `round` or `bevel` step with the source's `near` points moved to each copy. When a rectangular
+pattern's count follows sizes, every copy any count can make gets its own step, kept by a `when` on the count.
 
 A direction that spreads copies to both sides of the original is written as a forward and a backward part that both
 start at the original (`symmetric.py`); the pattern then becomes one one-sided grid for each choice of a part per
@@ -33,6 +34,8 @@ from .result import Refusal, StepResult
 
 MAX_REFERENCES = 64
 MAX_COPIED_BODIES = 256
+# Most copies whose rounds and chamfers are written one by one for every count a size may give (`_counted_finishes`).
+MAX_COUNTED_COPIES = 64
 
 FIT_TOL_MM = 1e-4
 ROTATION_TOL = 1e-9
@@ -61,6 +64,9 @@ def _sources(data, ctx, what):
     solids, finishes = [], []
     for index in indexes:
         ids = ctx.steps_of(index)
+        if not ids and index in ctx.folded and any(ctx.folded[index] in ctx.steps_of(i) for i in indexes):
+            # A round drawn into the outline of a step this repeat copies too: the copies carry it.
+            continue
         if not ids:
             return Refusal("A step this %s copies is not part of the exported body." % what)
         if any(step_id in ctx.not_repeatable for step_id in ids):
@@ -129,6 +135,8 @@ def _finish_copies(ctx, item, finishes, motions):
                 groups.append((size_on, list(kept)))
         for size_on, group in groups:
             step = {"kind": source["kind"], "edges": {"near": [q for q, _ in group]}, "size": source["size"]}
+            if (source.get("edges") or {}).get("chain"):
+                step["edges"]["chain"] = source["edges"]["chain"]
             for key in ("otherSize", "cutAngleDeg"):
                 if key in source:
                     step[key] = source[key]
@@ -406,6 +414,58 @@ def _lattice_axes(item, ctx):
     return axes
 
 
+def _part_reach(ctx, part):
+    """How many copies a part may make over the size ranges, the original included, or None when that cannot be
+    told. A count that follows no size makes the copies it has now."""
+    count_q = part["count_q"]
+    if not count_q.sized:
+        return part["count"]
+    span = range_check.sweep(ctx.table, count_q.text, count_q.reads) if ctx.table is not None else None
+    if span is None or span.failed or span.high is None:
+        return None
+    return int(math.floor(span.high + 1e-9))
+
+
+def _counted_finishes(ctx, item, finishes, grids, axes):
+    """The round and bevel steps of every copy a pattern may make at any size setting, each kept by a `when` that
+    asks for the counts that make that copy: a copy n steps along a part needs a count of n + 1 or more. So the rounds
+    and chamfers follow the count, as Fusion repeats them with each copy. None when a count of the pattern follows
+    sizes in a way the copies cannot be listed (a skip list, an unknown range, or more than MAX_COUNTED_COPIES)."""
+    if not finishes or ctx.table is None or not any(p["count_q"].sized for parts, _, _ in grids for p in parts):
+        return None
+    if any(skip for _, skip, _ in grids):
+        return None
+    name = item.get("name", "")
+    seen, copies = set(), []
+    for parts, _, _ in grids:
+        reach = [_part_reach(ctx, part) for part in parts]
+        if None in reach:
+            return None
+        for steps in product(*(range(r) for r in reach)):
+            signed = tuple(part["sign"] * n for part, n in zip(parts, steps))
+            if not any(steps) or signed in seen:
+                continue
+            seen.add(signed)
+            shift = [Quantity(0.0)] * 3
+            needs = []
+            for part, n in zip(parts, steps):
+                if n:
+                    shift = [q.plus(part["axis"]["step_q"].scaled(n * d)) if abs(d) > 1e-12 else q
+                             for q, d in zip(shift, part["dir"])]
+                    if part["count_q"].sized:
+                        needs.append("%s >= %d" % (values.wrapped(part["count_q"].text), n + 1))
+            copies.append((" && ".join(needs), Motion(shift=shift, by=name)))
+    if len(copies) > MAX_COUNTED_COPIES:
+        return None
+    steps = []
+    for when, motion in copies:
+        for step in _finish_copies(ctx, item, finishes, [motion]):
+            if when:
+                step["when"] = when
+            steps.append(step)
+    return steps
+
+
 def _keep_pattern_fixed(ctx, item, skip, finishes, counts, turns=()):
     """Copies that are left out by number, or rounds that are copied one by one, cannot follow a changed count;
     turned copies cannot follow a changed angle either. The sizes behind them become fixed numbers."""
@@ -506,10 +566,13 @@ def rectangular(item, ctx):
         if skip:
             step["skip"] = skip
         steps.append((step, motions))
-    result = _build(ctx, item, solids, finishes, steps, "pattern")
+    counted = _counted_finishes(ctx, item, finishes, grids, axes) if solids else None
+    result = _build(ctx, item, solids, [] if counted is not None else finishes, steps, "pattern")
     if isinstance(result, Refusal):
         return result
-    _keep_pattern_fixed(ctx, item, left_out, finishes, ("quantity_one", "quantity_two"))
+    if counted is not None:
+        result.extend(StepResult.of(counted).entries)
+    _keep_pattern_fixed(ctx, item, left_out, [] if counted is not None else finishes, ("quantity_one", "quantity_two"))
     for (parts, skip, _), (step, _) in zip(grids, steps):
         for key, part in zip(("linear", "linear2"), parts):
             # A skip list names copies by number, so the app wants a fixed count beside it.

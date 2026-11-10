@@ -170,8 +170,51 @@ class DiscoveryTest(unittest.TestCase):
         self.assertIn("Sketch2", self.probe.restore_unchecked[0])
         health = make_health(gap_mm=None, probe="measured", unchecked=self.probe.restore_unchecked)
         self.assertTrue(any("Sketch2" in line for line in health_lines(health)))
+        stayed = make_health(gap_mm=0.0, probe="measured", flipped=["Sketch2"])
+        self.assertEqual(sum("Sketch2" in line for line in health_lines(stayed)), 1)
         self.assertEqual(self.probe.measure_restore(read_at()), 0.0)
         self.assertEqual(self.probe.restore_unchecked, [])
+
+
+class _Port:
+    """What `ProbeRun` needs of Fusion: the store, the units, a progress window and a log."""
+
+    def __init__(self, fusion):
+        self.store, self.units, self.logs = fusion.store, UNITS, []
+
+    def progress(self, verb):
+        import contextlib
+
+        class Step:
+            @staticmethod
+            def step(*args):
+                return True
+
+        return contextlib.nullcontext(Step())
+
+    def log(self, text):
+        self.logs.append(text)
+
+
+class StartReadTest(unittest.TestCase):
+    """After a row that did not build, the design is read again once the parameters are back, before the next row."""
+
+    def test_the_row_after_a_failed_row_keeps_the_read_it_started_from(self):
+        from lib.export_plan.pipeline import ProbeRun
+        fusion = Fusion(bad_when=lambda e: number(e["off"]) == 10)
+        tbl = table(PARAMS, TICKED, MODEL)
+        probe = SizeProbe.start(CAPTURE, tbl, fusion.read)
+        rows = [{"name": "off (max)", "key": "a", "values": {"off": 10.0}, "varied": ["off"], "state": {"off": 10.0},
+                 "step": False},
+                {"name": "height (max)", "key": "b", "values": {"height": 40.0}, "varied": ["height"],
+                 "state": {"height": 40.0}, "step": False},
+                {"name": "cube (max)", "key": "c", "values": {"cube": 20.0}, "varied": ["cube"], "state": {"cube": 20.0},
+                 "step": False}]
+        ProbeRun(_Port(fusion), "", probe).run_rows(rows)
+        self.assertEqual([("start" in s, s["built"]) for s in probe.states[1:]], [(False, False), (True, True),
+                                                                                   (False, True)])
+        self.assertEqual(probe.states[2]["start"], read_at())
+        self.assertIn("start", probe.report()["states"][2])
 
 
 class RowWithoutStepTest(unittest.TestCase):

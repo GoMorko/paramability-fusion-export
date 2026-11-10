@@ -944,7 +944,18 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   A point or face that no extrude explains may sit on geometry that moves, so every size read by the steps written
   before it is marked, with the step's name in the reason. Rounds and chamfers that a pattern or mirror copies take
   their source's written points (formulas included) through each copy's motion; their count is fixed, and a circular
-  angle too. A copied uneven chamfer turns its `sizeOn` with the copy. Without sizes the picks stay plain points.
+  angle too. A copied uneven chamfer turns its `sizeOn` with the copy, and a tangent chain pick stays one. Without
+  sizes the picks stay plain points. A rectangular pattern whose count follows sizes, with no copy left out, writes
+  instead one round or chamfer step per copy for every count the size ranges allow (at most 64 copies), each with
+  `when: "<count formula> >= n + 1"` for the copy n steps along a part, so the rounds and chamfers follow the count as
+  Fusion repeats them (`repeat._counted_finishes`); the count is not fixed for them. The app recipe cannot repeat a
+  round or chamfer itself, nor pick the edges of every copy of a step.
+- A round whose edges are exactly the four side edges of an earlier extrude with a plain rectangle outline, with a
+  radius equal to half the rectangle's short side at every size setting, is drawn into that extrude: its outline
+  becomes a `slot` (length the long side, width the short side, turned 90 degrees when the long side runs along the
+  sketch y) and the round writes no step, with a note (`finish._slot_outline`). Not when a later pattern or mirror
+  repeats the extrude without the round. Where the other side would get shorter than the short one, Fusion cannot make
+  the round either, and the app refuses the slot.
 - A formula longer than the app's cap (`MAX_FORMULA_LENGTH` in `lib/params/expressions.py`, 300 characters) fixes
   the sizes it reads (they become plain numbers), also when a step builds it from several values.
 - Sketch values follow sizes through the probe's motion file (next section). Without one, every size that a model
@@ -1110,12 +1121,27 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   checked over the size ranges like any formula (a value that would reach zero, or a divisor that would cross zero,
   marks its sizes; a formula past the length cap fixes them). A `Terms` value holds the sizes that a stuck value of the
   motion names at their value now, so all values of one outline follow the same sizes. A sketch can
-  have more than one solution, and Fusion may land on another one after the rows run before: when a sketch reads as
-  the same different outline in states that change different sizes, or one size to two different values, those
-  states blame no size for it (`apart` lists them, by number in `states`): a sketch that reads exactly alike at two
-  values of a size does not follow that size there.
+  have more than one solution, and Fusion may land on another one after the rows run before (a row that did not build
+  often leaves it there). A different outline blames a size only in that size's own row (the row that changes it
+  alone), when the row started on the captured outline and the outline came back once the parameters were put back
+  (`probe.build`): the read before the row (`start` of the state) or, without one, the row before it (E0 for the
+  first) tells how it started, and the next row's `start` or read (or the read once all rows are done) tells whether
+  it came back. A row of several sizes never blames one for a different outline. Every other state with a different
+  outline blames no size (`apart` lists them, by number in `states`), and so do the states where a sketch reads as
+  the same different outline in rows that change different sizes or one size to two values. A sketch known to have
+  stayed on its other outline after the parameters were put back (a `start` read shows it, or the same different
+  read in rows of unrelated sizes) is named in `flipped`, and `health.flipped` gives the result window one line about
+  it.
+- Fusion may give a projected or intersection curve a new token when it recomputes a sketch, although it is the same
+  curve. A curve of the first read whose token is gone pairs with a new curve of the same kind that sits in its place
+  along a loop, between curves that kept their tokens, when every loop agrees (`probe.match.renamed`); the sketch then
+  reads as its captured outline. The restore check and the discovery compare reads the same way.
+- A state whose read shows one of its sizes at another value than its row set (the read of another row) is left out
+  of the fit (`probe.build._Run.mislabelled`). The reads of the rows are kept by row key, so every row has its own key.
 - An outline merged from touching profiles takes each point from the part profile that has it (rect corners from
-  centre, width and height); a rect drawn through merged corners gets its centre, width and height from them. Pieces
+  centre, width and height); a rect drawn through merged corners gets its centre, width and height from them. A
+  corner whose part value cannot follow (it is held by a line between the profiles that the merge leaves out) is taken
+  from the two sketch curves of the outline that cross there, when the probe measured them. Pieces
   of one sketch line in a merged loop are joined back into the line, and a loop of arcs of one circle becomes the
   circle, with the centre and radius of that sketch circle.
 - A corner the probe could not fit (it moves along a curve) is rebuilt from the two sketch curves that cross there:
@@ -1258,7 +1284,11 @@ always empty. The report has a
 `probe` when a sketch could be followed (the rows only recompute and the parameters are restored), `marker` and
 `health`. `health.restore_unverified` is true when a followed sketch could not be compared with its first read after
 the parameters were put back; `health.unchecked` then names each such sketch and why ("reads another outline",
-"could not be read", "lies on a turned plane"), and the result window says so (`probe.restore_unchecked` too). A probe row that Fusion cannot build is listed in `probe.dropped`; no size is fixed for it.
+"could not be read", "lies on a turned plane"), and the result window says so (`probe.restore_unchecked` too).
+`health.flipped` names the sketches that stayed on their other outline after a restore during the rows (`Motion.flipped`);
+the result window says that the tries made then were not used to judge any size. After a row that did not build, or
+whose read showed a followed sketch on another outline, the design is read again once the parameters are back and
+before the next row (`ProbeRun`); that read is the next state's `start` in `probe.states`. A probe row that Fusion cannot build is listed in `probe.dropped`; no size is fixed for it.
 
 A file with several bodies (package kind `parts`) has one `report.json` with a `parts` list, one record per body:
 `{ name, outcome, items, notes, capture, probe, sizes }`, plus `refusal` or `error` for a body saved as a fixed shape.

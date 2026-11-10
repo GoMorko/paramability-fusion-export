@@ -13,9 +13,10 @@ import math
 
 from ..package.numbers import is_number
 
-from . import follow, picks, values, vec
+from . import follow, picks, range_check, step_kinds, values, vec
 from .placer_makers import ShellMaker
 from .result import Entry, Refusal, StepResult
+from .values import Sized
 
 SIZE_TOL = 1e-9
 ANGLE_TOL = 1e-6
@@ -117,6 +118,98 @@ def _input_pick(ctx, item, edges, sets):
     return None
 
 
+# How far the round may be from half the short side, and how far the sides may cross, at any size setting (mm).
+SLOT_TOL = 1e-6
+
+
+def _formula(value):
+    """(formula text, Fusion names it reads) of a written value: a number or a formula."""
+    if isinstance(value, Sized):
+        return "(%s)" % value["expr"], tuple(value.reads)
+    if isinstance(value, dict) and "expr" in value:
+        return None, ()
+    return "(%r)" % float(value), ()
+
+
+def _always_equal(ctx, a, b):
+    """True when the written values `a` and `b` (numbers or formulas) are equal at every size setting."""
+    (ta, ra), (tb, rb) = _formula(a), _formula(b)
+    if ta is None or tb is None:
+        return False
+    reads = tuple(dict.fromkeys(ra + rb))
+    if not reads or ctx.table is None:
+        return abs(values.number(a) - values.number(b)) <= SLOT_TOL
+    span = range_check.sweep(ctx.table, "%s - %s" % (ta, tb), reads)
+    return not span.failed and span.low is not None and max(abs(span.low), abs(span.high)) <= SLOT_TOL
+
+
+def _repeated_without(ctx, item, source_index):
+    """True when a later pattern or mirror repeats the item at `source_index` but not `item`."""
+    later = False
+    for other in ctx.capture.get("items") or []:
+        if other is item or other.get("index") == item.get("index"):
+            later = True
+            continue
+        sources = (other.get("data") or {}).get("sources") or []
+        spec = step_kinds.step_type(other.get("type"))
+        repeats = spec is not None and (spec.handler or "").startswith("repeat:")
+        if later and repeats and source_index in sources and item.get("index") not in sources:
+            return True
+    return False
+
+
+def _slot_outline(ctx, item, edges, size):
+    """`(step position, slot loop)` when the round is the round ends of a slot: `edges` are exactly the four side
+    edges of an earlier extrude whose outline is a plain rectangle, and the radius is half its short side at every
+    size setting (the short sides become half circles). The extrude drawn with that slot outline is the same part
+    with no round step, which the CAD kernel builds more reliably than a round that uses up a whole face. Where the
+    other side gets shorter than the short one, Fusion cannot make the round either, and the app refuses the slot.
+    None when any of this does not hold."""
+    found = [follow.locate(ctx, p, True) for edge in edges for p in edge.get("points") or []]
+    if not found or any(f is None for f in found):
+        return None
+    slab = found[0].slab
+    corners = {f.corner for f in found}
+    if (slab.is_copy or any(f.slab is not slab or f.which != "side" for f in found) or None in corners
+            or len(corners) != 4 or len(edges) != 4 or len(slab.footprint.corners) != 4):
+        return None
+    at = next((n for n, step in enumerate(ctx.steps) if step.get("id") == slab.id), None)
+    step = ctx.steps[at] if at is not None else None
+    if step is None or step.get("kind") != "extrude" or "taperDeg" in step or "twistDeg" in step:
+        return None
+    sketch = step.get("sketch") or {}
+    outer = sketch.get("outer") or {}
+    if outer.get("kind") != "rect" or sketch.get("inner"):
+        return None
+    width, height = outer["width"], outer["height"]
+    long_, short, turn = (width, height, 0.0) if values.number(width) >= values.number(height) else (height, width, 90.0)
+    diameter = Sized(expr="2 * %s" % _formula(size.json())[0]) if size.sized else 2.0 * size.n
+    if size.sized:
+        diameter.n, diameter.reads = 2.0 * size.n, size.reads
+    if not _always_equal(ctx, short, diameter):
+        return None
+    index = next((i for i, ids in ctx._ids_by_index.items() if slab.id in ids), None)
+    if index is None or _repeated_without(ctx, item, index):
+        return None
+    angle = outer.get("angleDeg", 0.0)
+    if not isinstance(angle, (int, float)):
+        return None
+    slot = {"kind": "slot", "center": outer["center"], "length": long_, "width": short}
+    if angle + turn:
+        slot["angleDeg"] = angle + turn
+    return at, slot
+
+
+def _fold_into_slot(ctx, item, folded):
+    """Draw the extrude of `_slot_outline` as that slot and record that this round's item lives in it."""
+    at, slot = folded
+    step = ctx.steps[at]
+    ctx.steps[at] = dict(step, sketch=dict(step["sketch"], outer=slot))
+    ctx.folded[item.get("index")] = step["id"]
+    ctx.note("The rounded ends of the slot are drawn into the outline of %s." % (step.get("label") or "the cut"))
+    return StepResult()
+
+
 def fillet(item, ctx):
     data = item.get("data") or {}
     sets = data.get("sets") or []
@@ -144,6 +237,10 @@ def fillet(item, ctx):
         ctx.note("Fusion used setback corners for this round. The copy uses rolling ball corners, so corners where "
                  "three or more rounded edges meet can look different.")
     sizes = [size for edge, size in pairs for _ in edge["points"]]
+    if len(sets) == 1:
+        folded = _slot_outline(ctx, item, [edge for edge, _ in pairs], sizes[0])
+        if folded is not None:
+            return _fold_into_slot(ctx, item, folded)
     entries = _edge_steps(ctx, item, "round", [edge for edge, _ in pairs], sizes, sets=sets)
     _split_note(ctx, entries)
     return StepResult(entries)

@@ -223,15 +223,31 @@ class SizeProbe:
         return self.read(self.request)
 
     def add_states(self, entries):
-        """Add one state per `(values, result, read)`: the size values a row set, its RowExport result and the probe
-        state read there (None when it did not build)."""
-        for values, result, read in entries:
+        """Add one state per `(values, result, read)` or `(values, result, read, start)`: the size values a row set,
+        its RowExport result, the probe state read there (None when it did not build) and the read of the design
+        before the row ran, once the parameters were back (None when it was not read)."""
+        for values, result, read, *rest in entries:
+            start = rest[0] if rest else None
             if result.get("error"):
                 detail = result.get("detail") or {}
-                self.states.append({"values": values, "built": False, "failed": (detail.get("items") or [""])[0]})
+                state = {"values": values, "built": False, "failed": (detail.get("items") or [""])[0]}
                 self.dropped.append({"name": result.get("name"), "error": result.get("error"), "detail": detail})
             else:
-                self.states.append({"values": values, "built": True, "read": read})
+                state = {"values": values, "built": True, "read": read}
+            if isinstance(start, dict):
+                state["start"] = start
+            self.states.append(state)
+
+    def off_outline(self, read):
+        """True when a sketch the probe follows reads as another outline than captured in `read` (a sketch on its
+        other solution, or one whose outline changed)."""
+        if not isinstance(read, dict):
+            return False
+        for target in self._followed_targets():
+            values, cause = match.state_values(target, read, self.e0)
+            if values is None and cause == SHAPE:
+                return True
+        return False
 
     def probe_rows(self, sizes, extra=()):
         """The extra rows, at the range ends of `sizes` that move a sketch: the sizes the states already show moving
@@ -438,7 +454,10 @@ class SizeProbe:
         for param in self.untried:
             found.append(self._entry(param, _UNTRIED, labels))
         try:
-            self.motion = build.build(self.capture, self.table, self.states)
+            # The read once the measured rows were done and the parameters back tells whether the last row's sketch
+            # came back; the discovery rows ran after it.
+            settled = self.discovery_base if isinstance(self.discovery_base, dict) else after
+            self.motion = build.build(self.capture, self.table, self.states, settled)
         except Exception:
             self.motion = None
             current = {e.name: e.value for e in self.table.entries}
@@ -537,8 +556,9 @@ class SizeProbe:
             out["failed"] = state["failed"]
         if state.get("e0"):
             out["e0"] = True
-        if isinstance(state.get("read"), dict):
-            out["read"] = {k: v for k, v in state["read"].items() if k in _STATE_KEYS}
+        for key in ("read", "start"):
+            if isinstance(state.get(key), dict):
+                out[key] = {k: v for k, v in state[key].items() if k in _STATE_KEYS}
         return out
 
 
@@ -565,9 +585,16 @@ class ProbeGroup:
         return [probe.probe_rows(sizes, extra) for probe in self.probes][0]
 
     def add_states(self, entries):
-        """Give each probe its own state per `(values, result, reads)`; `reads` has one read per probe."""
+        """Give each probe its own state per `(values, result, reads)` or `(values, result, reads, starts)`; `reads`
+        and `starts` have one read per probe."""
         for number, probe in enumerate(self.probes):
-            probe.add_states([(values, result, reads[number] if reads else None) for values, result, reads in entries])
+            probe.add_states([(values, result, reads[number] if reads else None,
+                               rest[0][number] if rest and rest[0] else None)
+                              for values, result, reads, *rest in entries])
+
+    def off_outline(self, reads):
+        """True when a part's followed sketch reads as another outline in its read of `reads`."""
+        return any(probe.off_outline(read) for probe, read in zip(self.probes, reads or []))
 
     def nearer_rows(self, sizes, room):
         """The nearer rows for all parts (`SizeProbe.nearer_rows`): the rows and their failures are shared, and a size

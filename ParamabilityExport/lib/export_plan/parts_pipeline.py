@@ -135,7 +135,10 @@ class _PartsPipeline:
         reports = self.group.reports() if self.group is not None and self._measured() else []
         probe_of = dict(zip(self.probed, reports))
         unchecked = self.group.restore_unchecked if self.group is not None else []
-        health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error, unchecked)
+        flipped = ["%s (%s)" % (name, self.names[i]) for i, motion in self.motions.items() if motion is not None
+                   for name in motion.flipped]
+        health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error, unchecked,
+                                           flipped)
         inputs = [PartInput(self.names[i], self.steps[i], self.captures[i], finals.get(i), self.motions.get(i),
                             probe_of.get(i)) for i in range(port.count)]
         manifest, files, report = plan_parts_export(

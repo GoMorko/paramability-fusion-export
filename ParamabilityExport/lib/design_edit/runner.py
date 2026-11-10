@@ -25,12 +25,15 @@ class RowExport:
     Later runs of the same job reuse both. Every row starts from the saved expressions (one more recompute per row
     after the first), and every run puts the parameters back at its end. restore_failures lists
     the parameters that could not be put back by any run, whatever the outcome.
+    before_row(row), when given, is called just before each row's values are set, once the parameters are back: the
+    place to read the design the row starts from.
     """
 
-    def __init__(self, store, units, export_step):
+    def __init__(self, store, units, export_step, before_row=None):
         self.store = store
         self.units = units
         self.export_step = export_step
+        self.before_row = before_row
         self.current_row = ""
         self.current_key = ""
         self.restore_failures = []
@@ -65,6 +68,8 @@ class RowExport:
                     raise ExportCancelled()
                 if index > 1:
                     self._back_to_current()
+                if self.before_row is not None:
+                    self.before_row(row)
                 try:
                     values = apply_row_values(self.store, self.units, row["values"], self._baseline)
                 except RowBuildError as exc:

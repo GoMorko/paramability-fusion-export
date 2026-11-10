@@ -28,5 +28,34 @@ class PiecesOfOneLineTest(unittest.TestCase):
         self.assertEqual({v for k, v in moved.items() if k.endswith(".1")}, {0.0})
 
 
+class CurveMadeAgainTest(unittest.TestCase):
+    """Fusion may give a projected or intersection curve a new token when it recomputes the sketch."""
+
+    @staticmethod
+    def split(top_token, y=3.0, extra=()):
+        """Two boxes on top of each other, split by one line (`top_token`) at height `y`."""
+        lower = [line((0, 0), (2, 0), "b"), line((2, 0), (2, y), "r1"), line((2, y), (0, y), top_token),
+                 line((0, y), (0, 0), "l1")]
+        upper = [line((0, y), (2, y), top_token), line((2, y), (2, 6), "r2"), line((2, 6), (0, 6), "t"),
+                 line((0, 6), (0, y), "l2")]
+        return [{"loops": [loop(lower)]}, {"loops": [loop(upper)]}] + list(extra)
+
+    def setUp(self):
+        self.target = plan.scan(capture(extrude(1, profile("S", "sk", [loop(self.split("m")[0]["loops"][0]["curves"])])))).targets[0]
+        self.e0 = read(sketch_state("sk", self.split("m")))
+
+    def test_a_curve_with_a_new_token_in_the_place_of_the_old_one_reads_as_the_captured_outline(self):
+        values, cause = match.state_values(self.target, read(sketch_state("sk", self.split("m2", y=3.5))), self.e0)
+        self.assertIsNone(cause)
+        self.assertAlmostEqual(values["1/p0/l0/height"], 3.5)
+        self.assertTrue(match.same_read(self.e0["sketches"]["sk"], sketch_state("sk", self.split("m2"))["sk"]))
+
+    def test_a_new_curve_with_no_curve_of_its_loop_kept_is_another_outline(self):
+        others = [{"loops": [loop([line((0, 0), (2, 0), "x1"), line((2, 0), (2, 3), "x2"), line((2, 3), (0, 3), "x3"),
+                                   line((0, 3), (0, 0), "x4")])]}]
+        _, cause = match.state_values(self.target, read(sketch_state("sk", others)), self.e0)
+        self.assertEqual(cause, "shape")
+
+
 if __name__ == "__main__":
     unittest.main()

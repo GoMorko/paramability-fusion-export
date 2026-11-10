@@ -7,6 +7,9 @@ note the Fusion version and system.
 
 What 0.6.0 to 0.7.2 added, and what this version adds, in this order. Each id is described in the section named.
 
+- [ ] K18 to K21, a sketch left on its other solution after a try that does not rebuild, a projected curve that
+      Fusion names again, slot ends rounded by half the slot width, and rounds and chamfers on pattern copies that
+      follow the count: section 9.
 - [ ] Symmetric patterns: section "Symmetric patterns" under "Capture reader calls to watch (fillet, chamfer, shell,
       patterns, mirror)".
 - [ ] K16 and K17, an angle size that moves a bracket's points with sines and cosines, and a slot cut through all
@@ -588,6 +591,23 @@ the sizes on the form and compare the part with Fusion at the same values.
       corners rounded afterwards. Export: the rounds follow the wall and slot sizes (no "picks may move" warning). If
       the cut direction was stored the other way, the step list says so in a note; in Paramability the slot is cut
       through the wall.
+- [ ] **K18 Sketch on its other solution.** A design with a sketch that has two solutions (a thin strip offset to one
+      side of a line) and a size whose far value does not rebuild. Export with that size
+      ticked. `report.json`: the state after the failed try has a `start` read; `probe.motion.flipped` names the
+      sketch when it stayed on its other solution; the sizes of the later tries are not loose with "makes a different
+      outline". The result window has one line that names the sketch. Check in Fusion that the sketch is back on its
+      first solution after the export.
+- [ ] **K19 Projected curve named again.** A sketch on a face with a projected or intersection line between two
+      profiles that one extrude uses. Export: the sizes that only move that line are not loose with "<sketch> makes a
+      different outline", and `health.unchecked` does not name the sketch.
+- [ ] **K20 Slot with round ends.** A rectangular slot cut with its four corner edges rounded by `SlotHeight / 2`.
+      Export: `recipe.json` has the cut with `"kind": "slot"` and no round for that fillet; the step list notes that
+      the rounded ends are drawn into the cut. In Paramability change `SlotHeight`: the ends stay half circles.
+- [ ] **K21 Pattern with its round and chamfer.** A symmetric rectangular pattern of a groove cut with its round and
+      chamfer, the count from a parameter. Export: `recipe.json` has one round and one chamfer step per possible copy,
+      each with a `when` that reads the count. In Paramability set the count lower and higher: each groove copy keeps
+      its round and chamfer and no step picks an edge where no copy is. Note copies where Paramability leaves a round
+      out (the step list says so).
 
 ## 10. Emboss
 

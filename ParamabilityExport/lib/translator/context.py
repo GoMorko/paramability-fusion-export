@@ -62,6 +62,8 @@ class Context:
         self.copied_items = []
         self.asked = set()
         self.not_repeatable = set()
+        # item index of a round drawn into an earlier extrude's outline (`finish._slot_outline`) -> that step's id
+        self.folded = {}
         self._ids_by_index = {}
         self.current = None
 

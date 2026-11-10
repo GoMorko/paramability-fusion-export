@@ -104,6 +104,35 @@ class OutlineTest(unittest.TestCase):
         self.assertEqual(corners[2:4], [["0.5 * box_width_mm", "-0.5 * depth_mm"], ["0.5 * box_width_mm", "0.5 * depth_mm"]])
         self.assertEqual(corners[1], [0.0, "-0.5 * depth_mm"])
 
+    def test_a_line_between_merged_profiles_that_moves_along_a_curve_does_not_hold_the_outline(self):
+        capture = load_capture(BOX)
+        whole = capture["items"][1]["data"]["profiles"][0]
+        halves = []
+        for n, (x0, x1) in enumerate(((-40, 0), (0, 40))):
+            corners = [[x0, -30], [x1, -30], [x1, 30], [x0, 30]]
+            curves = [{"kind": "line", "start": corners[k], "end": corners[(k + 1) % 4],
+                       "entity": "mid" if corners[k][0] == corners[(k + 1) % 4][0] == 0 else "h%d%d" % (n, k)}
+                      for k in range(4)]
+            halves.append(dict(whole, loops=[{"outer": True, "curves": curves}]))
+        capture["items"][1]["data"]["profiles"] = halves
+
+        def edit(values):
+            # Only the shared line moves, along a curve of the cube size; the outer lines stay where they are.
+            for key in [k for k in values if k.startswith("1/")]:
+                del values[key]
+            stuck = {"stuck": ["cube_mm"], "cause": "curve", "sketch": whole["sketch"]}
+            for n in (0, 1):
+                values["1/p%d/l0/center.0" % n] = stuck
+                values["1/p%d/l0/width" % n] = stuck
+
+        motion = motion_of(BOX, edit)
+        motion.curves = {"1/p0", "1/p1"}
+        result = run(capture, BOX_SIZES, motion)
+        outer = steps_of(result.recipe, "extrude")[0]["sketch"]["outer"]
+        self.assertEqual({tuple(p) for p in outer["points"]}, {(-40.0, -30.0), (0.0, -30.0), (40.0, -30.0),
+                                                                (40.0, 30.0), (0.0, 30.0), (-40.0, 30.0)})
+        self.assertNotIn("cube_mm", reasons(result))
+
 
 class StuckTest(unittest.TestCase):
     def test_a_stuck_value_marks_the_sizes_that_move_it_with_the_probe_cause(self):

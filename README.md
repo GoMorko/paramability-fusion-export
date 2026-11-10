@@ -197,8 +197,18 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 
 - Every size row and sketch try starts from the saved values: before each one after the first the add-in puts the
   parameters back and recomputes. A sketch with two solutions can still land on its other one after a try that did
-  not rebuild; the add-in then does not blame the size (the sketch reads the same at two values of it), and when the
-  sketch still reads another outline after the export, the result window names it so you can look at it in Fusion.
+  not rebuild, and stay there. After such a try the add-in reads the design again before the next one. A size is
+  blamed for a sketch that "makes a different outline" only when its own try started from the right outline and the
+  outline came back after it; the tries made while a sketch stayed on its other solution count against no size, and
+  the result window says so in one line. When the sketch still reads another outline after the export, the result
+  window names it so you can look at it in Fusion. Fusion sometimes gives a projected curve a new name when it
+  recomputes; the add-in then knows it by its place in the outline.
+- A round on the four side edges of a rectangle (a slot cut, a block) whose radius is half the short side at every
+  size makes round ends: the copy draws that outline as a slot and writes no round, which builds the same part.
+- The rounds and chamfers on the copies of a rectangular pattern follow its count: the copy writes them for every
+  count the size range allows, each kept only while the count makes its copy. Paramability cannot repeat a round
+  itself yet. A round that is wider than the face next to it, or a chamfer as big as a whole face (Fusion rolls over
+  such edges), may still be left out by Paramability on some copies.
 - A sketch value that one size moves along a curve is copied only with the sine, cosine, tangent or cotangent of an
   angle size (or of half of it), alone or times a length, and products of two lengths, up to 3 such terms per value.
   Other curves (a square root, a power, an angle divided by a length) leave that size loose or not a size.
