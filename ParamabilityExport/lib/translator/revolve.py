@@ -11,7 +11,7 @@ import math
 
 from ..package.numbers import round9
 
-from . import loops, notes, placement, sketch_motion, values, vec
+from . import follow, loops, notes, placement, sketch_motion, values, vec
 from .extrude import COMBINE
 from .result import Refusal, StepResult
 
@@ -201,6 +201,7 @@ def handle(item, ctx):
     axis = data.get("axis")
     if not axis or axis.get("kind") == "other" or "point" not in axis or "dir" not in axis:
         return Refusal("The axis of this revolve is not a straight line that can be copied.")
+    follow.foreign_place(ctx, item, axis, "turns about")
     angles = _angles(data.get("extent"))
     if isinstance(angles, Refusal):
         return angles

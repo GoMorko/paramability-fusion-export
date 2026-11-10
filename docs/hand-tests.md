@@ -19,6 +19,7 @@ In this order. Each id is described in the section named.
 - [ ] T1 to T5, thin walled extrudes of one closed outline: section "Thin extrudes".
 - [ ] S1 to S5 and X1 onward, spline outlines and sketch text: section 11.
 - [ ] Mirror plane and pattern axis reference reads: "Fusion calls to watch", the entry about `read_reference.py`.
+- [ ] R1 to R6, places of another component: section 8.1.
 - [ ] `%` with a negative left side: T5.
 
 ## 1. Install
@@ -139,6 +140,12 @@ builds agrees with the Fusion part.
       holes with one copy suppressed, a circular pattern of slots over 90 degrees, a mirrored boss. Matches; the
       pattern has one copy left out.
 - [ ] **Combine**: a separate cylinder body cut from the main body with Combine. Matches.
+- [ ] **Combine with a tool of several steps**: a separate body made by an extrude (new body) and two more extrudes
+      that join it (overlapping cylinders). Combine it as a cut from the main body, then undo and join it instead.
+      Both match. Make one of the joined steps read a user parameter that nothing else reads: it shows as a size.
+      Then add a fillet to the tool body: the part saves as a fixed shape and the message says the tool has a
+      rounded edge. Try a join whose first tool step lies apart from the main body and is bridged by a later step:
+      if Paramability refuses the step "does not touch the part built so far", note it.
 - [ ] **Marker and document**: after each export the timeline marker is where it was (at the end, or the step it was
       rolled back to), the design is unchanged, and
       Fusion's undo list and "unsaved changes" mark are as before (or, if moving the marker marks the document
@@ -360,6 +367,31 @@ inside a component, also a nested or turned one, lands where Fusion shows it.
       changed `gap_mm` moves the top. The report shows `faces_after` and `sides: "square"`. A pulled face with a
       fillet next to it, or a curved face, gives a fixed shape that names the offset. The offset item in the report
       has no `read_error`.
+
+### 8.1 Places of another component (R tests)
+
+These check the references to faces, planes, axes and points of another component. The copy keeps such a place where
+it is now; a size that acts on that component is marked loose. Read `report.json` for the `ref` records.
+
+- [ ] **R1 Extrude to a face of another component.** `Base` holds a block of height `base_h`; in `Top`, an extrude "to" the
+      top face of `Base`. Export `Top`: a fixed shape that names the extrude. The report shows `foreign` on `side_one`
+      and a `ref` with `type` `BRepFace`, the `Base` component and body, `point`, `normal` and `face_point` in the
+      coordinates of `Top`: move `Top` by (100, 50, 0) and turn it 90 degrees first, and check the numbers follow.
+- [ ] **R2 Mirror across a plane of another component.** In `Cover`, an offset plane driven by `gap`; in `Tray`, a
+      mirror across it. Export `Tray` with `gap` ticked: the mirror is copied at the plane's place now, `gap` is
+      loose with a reason that names the mirror and `Cover`, and `plane.ref` names `Cover`. A size that only acts in
+      `Tray` stays a free size.
+- [ ] **R3 Pattern around an axis of another component.** Same with a circular pattern around a construction axis of
+      `Cover` that moves with `gap`: the pattern is copied, `gap` is loose with the pattern named. A sketch line of
+      `Cover` as the axis: the `axis` record has no `sketch_token`.
+- [ ] **R5 Hole on sketch points of another component.** In `Cover`, a sketch with points; in `Tray`, a hole on them.
+      Move the `Cover` occurrence by (100, 50, 0) and turn it 90 degrees first. Export: the hole sits where Fusion
+      shows it (the right centres and the right direction into the material), the report has `position_refs` and no
+      `sketch_token`. A size that moves that sketch is loose with the hole named.
+- [ ] **R4b Hole on a face or edge of another component.** A hole placed by a point on a face of `Cover`, and one on an
+      edge of `Cover`: both stop the copy ("reaches into another component"), and `position_refs` names the entity.
+- [ ] **R6 Origin plane.** A mirror across an origin plane of the root or of `Cover`: copied with no warning, and
+      `ref.origin` is true for the `Cover` one.
 
 ## 9. Sketches that follow sizes
 
@@ -757,6 +789,19 @@ read the capture in `report.json`.
 - `HoleFeature.thread.isModeled`, `holePositionDefinition.sketchPoints[i].worldGeometry`, `position`, `direction`
   (into the material or out), `tipAngle` for a flat drill point, `participantBodies`, `sideFaces`, `endFaces`.
 - `CombineFeature.targetBody`, `toolBodies`, `isKeepToolBodies`; `ThreadFeature.isModeled`.
+- `BRepBody.volume` of the target with the marker before and after a Combine (`volume_before`, `volume_after`): a cut
+  must show a smaller volume. A null means the body could not be measured there; the volume check is skipped.
+- Entities of another component (`ref_record` in `placement.py`): `entity.assemblyContext.component` and `.fullPathName`
+  of a proxy plane, axis, face, sketch line or sketch point; `entity.nativeObject.entityToken`; `BRepFace.body` and
+  `SketchPoint.parentSketch` of the native entity; the origin members of the owning component
+  (`xYConstructionPlane`, `xConstructionAxis`, ...). Check in `report.json` that `ref.component` is the component that
+  owns the entity, `ref.token` finds it again, and that the geometry of a proxy (`geometry` of a plane or face,
+  `worldGeometry` of a sketch point or line) is in the assembly's coordinates, as the move into the target's
+  coordinates assumes (R1, R2, R5).
+- `HoleFeature.holePositionDefinition` of a hole on a face, plane or edge: the members `planarEntity`, `edge`, `edges`,
+  `face`, `plane` and the like are tried by name and may not all exist. A hole on a face of another component that is
+  not marked `foreign` means none of them answered (R4b). `HoleFeature.direction` of a hole on sketch points of another
+  component is taken as given: check it points into the material in R5.
 - `participantBodies` on extrude and revolve (may be unreadable; then the list is empty).
 - `Design.findEntityByToken` for the picked body at each marker position, with a name fallback in the root component.
 - `OffsetFacesFeature.inputFaces` with the marker just before the item: a Python list of `BRepFace` in newer Fusion

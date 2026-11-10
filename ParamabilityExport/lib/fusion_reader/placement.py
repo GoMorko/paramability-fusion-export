@@ -262,23 +262,114 @@ def _turned(move, v, offset):
             for i in range(3)]
 
 
-def from_assembly(record, entity, ctx, point="point", direction="normal"):
+# Members of a component that hold its origin planes and axes (they stay where the component sits).
+ORIGIN_MEMBERS = {
+    "ConstructionPlane": ("xYConstructionPlane", "xZConstructionPlane", "yZConstructionPlane"),
+    "ConstructionAxis": ("xConstructionAxis", "yConstructionAxis", "zConstructionAxis"),
+}
+# Keys of an axis record that name a sketch line of the target's own sketch. The size probe follows the line natively,
+# so a line of another component must not carry them.
+_OWN_SKETCH_KEYS = ("entity", "sketch_token", "sketch")
+
+
+def owner_component(entity):
+    """The component that owns an entity: the component of the occurrence it is seen through, else its own."""
+    context = geo.safe(lambda: entity.assemblyContext, None)
+    if context is not None:
+        found = geo.safe(lambda: context.component, None)
+        if found is not None:
+            return found
+    native = geo.safe(lambda: entity.nativeObject, None)
+    return geo.component_of(native if native is not None else entity)
+
+
+def _native_of(entity):
+    """The native object of an entity seen through an occurrence, else the entity."""
+    if geo.safe(lambda: entity.assemblyContext, None) is None:
+        return entity
+    return geo.safe(lambda: entity.nativeObject, None) or entity
+
+
+def _named(entity):
+    return {"token": geo.safe(lambda: entity.entityToken, "") or "", "name": geo.safe(lambda: entity.name, "") or ""}
+
+
+def _is_origin_of(native, component):
+    return any(geo.same_entity(native, geo.safe(lambda: getattr(component, member), None))
+               for member in ORIGIN_MEMBERS.get(geo.type_name(native), ()))
+
+
+def _back_move(entity, ctx):
+    """The move from root coordinates into the target's, for an entity whose geometry is in root coordinates (seen
+    through an occurrence, or owned by the root); None when it is not, or the target's place cannot be read."""
+    in_root = geo.safe(lambda: entity.assemblyContext, None) is not None or geo.same_entity(
+        geo.component_of(entity), geo.safe(lambda: ctx.root, None))
+    move = target_move(ctx) if in_root else None
+    return move.inverse() if move is not None else None
+
+
+def ref_record(entity, ctx, slot, geometry=None):
+    """The measured reference to an entity of another component (docs/capture-format.md "Measured references").
+
+    `slot` says where the step uses it (`start`, `side_one`, `side_two`, `plane`, `axis`, `positions.<n>`). The
+    record names the entity the way the sketch scan can find it again (`token` of the native entity, its `type`, the
+    owning `component`, the `body` or `sketch` it belongs to, the occurrence `path`) and holds its geometry brought
+    into the target's coordinates: `point` and `normal` or `dir`, and `face_point` for a face. `geometry` is the entity's
+    own plane or axis as read in root coordinates (`point`, `normal`, `dir`); without it a flat face or construction
+    plane gives its plane. The geometry is left out when the entity is not in root coordinates or the target's place
+    cannot be read. `origin` is true for an origin plane or axis of the owner: it only moves with the occurrence.
+    """
+    native = _native_of(entity)
+    kind = geo.type_name(native)
+    owner = owner_component(entity)
+    out = {"slot": slot, "type": kind, "token": geo.safe(lambda: native.entityToken, "") or "",
+           "component": _named(owner) if owner is not None else {"token": "", "name": ""},
+           "path": geo.safe(lambda: entity.assemblyContext.fullPathName, "") or ""}
+    for key, member in (("body", "body"), ("sketch", "parentSketch")):
+        found = geo.safe(lambda: _native_of(getattr(native, member)), None)
+        if found is not None and _named(found)["token"]:
+            out[key] = _named(found)
+    if owner is not None and _is_origin_of(native, owner):
+        out["origin"] = True
+    back = _back_move(entity, ctx)
+    if back is None:
+        return out
+    if geometry is None:
+        geometry = geo.safe(lambda: geo.plane_of(entity), None) or {}
+    if kind == "BRepFace":
+        geometry = dict(geometry, face_point=geo.safe(lambda: geo.point(entity.pointOnFace), None))
+    for key, value in geometry.items():
+        if value is not None:
+            out[key] = _turned(back, value, key in ("point", "face_point"))
+    return out
+
+
+def from_assembly(record, entity, ctx, point="point", direction="normal", slot=None):
     """A plane or axis record of another component brought into the target's coordinates.
 
     Such an entity is seen through an occurrence or belongs to the root, so its geometry is in the root's
     coordinates. The record then carries `assembly: true` instead of `foreign`; when the target's place is unknown,
-    or the entity is neither, it stays foreign.
+    or the entity is neither, it stays foreign. With `slot` the record also gets its measured reference (`ref`).
     """
     if not isinstance(record, dict) or not record.get("foreign") or point not in record or direction not in record:
         return record
-    in_root = geo.safe(lambda: entity.assemblyContext, None) is not None or geo.same_entity(
-        geo.component_of(entity), geo.safe(lambda: ctx.root, None))
-    move = target_move(ctx) if in_root else None
-    if move is None:
+    back = _back_move(entity, ctx)
+    if back is None:
         return record
-    back = move.inverse()
-    out = {k: v for k, v in record.items() if k != "foreign"}
+    out = {k: v for k, v in record.items() if k != "foreign" and k not in _OWN_SKETCH_KEYS}
     out[point] = _turned(back, record[point], True)
     out[direction] = _turned(back, record[direction], False)
     out["assembly"] = True
+    if slot is not None:
+        out["ref"] = ref_record(entity, ctx, slot, {point: record[point], direction: record[direction]})
     return out
+
+
+def foreign_target_ref(record, entity, ctx, slot):
+    """Adds the measured reference (`ref`) to the extent or start record `record` of a face or plane of another
+    component. The record itself stays foreign: the walk refuses the step."""
+    plane = record.get("plane") if isinstance(record, dict) else None
+    ref = geo.safe(lambda: ref_record(entity, ctx, slot, plane or {}), None)
+    if ref is not None:
+        record["ref"] = ref
+    return record

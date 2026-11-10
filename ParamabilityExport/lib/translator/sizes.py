@@ -177,7 +177,7 @@ def _construction_records(node, found):
         if kind is not None:
             found.append((kind, node.get("token") or ""))
         for key, value in node.items():
-            if key not in ("participants", "tools", "bodies_after", "bodies_before", "target", "profiles"):
+            if key not in ("participants", "tools", "bodies_after", "bodies_before", "target", "profiles", "ref"):
                 _construction_records(value, found)
     elif isinstance(node, list):
         for value in node:

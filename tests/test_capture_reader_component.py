@@ -246,7 +246,141 @@ class ForeignTest(unittest.TestCase):
                     geometry=Obj("core::Plane", origin=P(0, 0, 0), normal=Obj(x=1, y=0, z=0)))
         mirror = self.tray.feature("MirrorFeature", "Mirror1", inputEntities=Coll([]), mirrorPlane=plane)
         record = self.read_data(mirror)["plane"]
-        self.assertEqual(record, {"point": [-50, 100, 0], "normal": [0, -1, 0], "assembly": True})
+        self.assertEqual({k: record[k] for k in ("point", "normal", "assembly")},
+                         {"point": [-50, 100, 0], "normal": [0, -1, 0], "assembly": True})
+        self.assertEqual((record["ref"]["slot"], record["ref"]["component"]["token"], record["ref"]["path"]),
+                         ("plane", "root", ""))
+
+    def lid(self):
+        """The Lid component and an occurrence of it turned and moved in the assembly."""
+        lid = Obj(entityToken="lid", name="Lid")
+        place = turn_z(90, (110, 50, 32))
+        occurrence = FakeOccurrence("Lid:1", place, component=lid)
+        return lid, occurrence, place
+
+    def lid_plane(self, native_point=(0, 0, 4), normal=(1, 0, 0)):
+        lid, occurrence, place = self.lid()
+        native = Obj("fusion::ConstructionPlane", entityToken="cp1", parentComponent=lid,
+                     geometry=Obj("core::Plane", origin=P(*native_point), normal=Obj(x=normal[0], y=normal[1], z=normal[2])))
+        # Seen through its occurrence the plane is in the assembly's coordinates.
+        shown = apply_matrix(place, native_point)
+        turned = tuple(apply_matrix(place, normal)[i] - place[0][i] for i in range(3))
+        proxy = Obj("fusion::ConstructionPlane", entityToken="cp1:path", assemblyContext=occurrence, nativeObject=native,
+                    geometry=Obj("core::Plane", origin=P(*shown), normal=Obj(x=turned[0], y=turned[1], z=turned[2])))
+        return lid, native, proxy
+
+    def mirror_plane(self, plane):
+        mirror = self.tray.feature("MirrorFeature", "Mirror1", inputEntities=Coll([]), mirrorPlane=plane)
+        return self.read_data(mirror)["plane"]
+
+    def test_a_mirror_plane_of_another_component_is_brought_in_and_named(self):
+        lid, native, proxy = self.lid_plane()
+        record = self.mirror_plane(proxy)
+        self.assertNotIn("foreign", record)
+        self.assertTrue(record["assembly"])
+        # The tray sits at the assembly origin turned 90 degrees at (100, 50, 0): its frame is the lid's own, shifted.
+        self.assertEqual(record["normal"], record["ref"]["normal"])
+        self.assertEqual(record["point"], record["ref"]["point"])
+        self.assertEqual({k: record["ref"][k] for k in ("slot", "type", "token", "component", "path")},
+                         {"slot": "plane", "type": "ConstructionPlane", "token": "cp1",
+                          "component": {"token": "lid", "name": "Lid"}, "path": "Lid:1"})
+        self.assertNotIn("origin", record["ref"])
+
+    def test_an_origin_plane_of_another_component_is_marked_as_one(self):
+        lid, native, proxy = self.lid_plane()
+        lid.xYConstructionPlane = native
+        self.assertTrue(self.mirror_plane(proxy)["ref"]["origin"])
+
+    def test_an_axis_of_another_component_is_brought_in_without_sketch_tokens(self):
+        lid, occurrence, place = self.lid()
+        native = Obj("fusion::SketchLine", entityToken="ln1", parentSketch=Obj(entityToken="sk1", name="Axis sketch",
+                     parentComponent=lid), worldGeometry=Obj("core::Line3D", startPoint=P(0, 0, 0), endPoint=P(0, 0, 3)))
+        shown = [apply_matrix(place, p) for p in ((0, 0, 0), (0, 0, 3))]
+        proxy = Obj("fusion::SketchLine", entityToken="ln1:path", assemblyContext=occurrence, nativeObject=native,
+                    parentSketch=Obj(entityToken="sk1:path", name="Axis sketch", parentComponent=lid),
+                    worldGeometry=Obj("core::Line3D", startPoint=P(*shown[0]), endPoint=P(*shown[1])))
+        circular = self.tray.feature("CircularPatternFeature", "Pattern1", inputEntities=Coll([]), axis=proxy,
+                                     quantity=param_value(3), totalAngle=param_value(6.283185307179586),
+                                     isSymmetric=False, patternElements=Coll([]))
+        data = self.read_data(circular)
+        axis = data["axis"]
+        self.assertTrue(axis["assembly"])
+        for key in ("entity", "sketch_token", "sketch", "foreign"):
+            self.assertNotIn(key, axis)
+        self.assertEqual((axis["ref"]["slot"], axis["ref"]["type"], axis["ref"]["component"]["token"],
+                          axis["ref"]["sketch"]["token"]), ("axis", "SketchLine", "lid", "sk1"))
+        self.assertEqual(axis["ref"]["dir"], axis["dir"])
+
+    def test_a_face_another_component_owns_gives_an_extrude_extent_its_reference_and_stays_foreign(self):
+        lid, occurrence, place = self.lid()
+        body = Obj("fusion::BRepBody", entityToken="lb", name="LidBody", parentComponent=lid)
+        native = Obj("fusion::BRepFace", entityToken="lf", body=body, pointOnFace=P(1, 2, 4), parentComponent=lid)
+        proxy = Obj("fusion::BRepFace", entityToken="lf:path", assemblyContext=occurrence, nativeObject=native,
+                    pointOnFace=P(*apply_matrix(place, (1, 2, 4))), body=body,
+                    geometry=Obj("core::Plane", origin=P(*apply_matrix(place, (1, 2, 4))),
+                                 normal=Obj(x=0, y=0, z=1)))
+        extent = Obj("fusion::ToEntityExtentDefinition", entity=proxy, offset=param_value(0.0))
+        start = Obj("fusion::FromEntityStartDefinition", entity=proxy)
+        ext = self.tray.extrude(extentType="OneSideFeatureExtentType", extentOne=extent, startExtent=start)
+        data = self.read_data(ext)
+        for side in (data["side_one"], data["start"]):
+            self.assertTrue(side["foreign"])
+        ref = data["side_one"]["ref"]
+        self.assertEqual((ref["slot"], data["start"]["ref"]["slot"]), ("side_one", "start"))
+        self.assertEqual((ref["type"], ref["token"], ref["component"]["token"], ref["body"]["token"]),
+                         ("BRepFace", "lf", "lid", "lb"))
+        # The face is brought into the tray's own coordinates.
+        self.assertEqual(ref["normal"], [0.0, 0.0, 1.0])
+        self.assertEqual((ref["point"][2], ref["face_point"]), (36.0, [1, -8, 36]))
+
+    def test_a_hole_on_points_of_another_components_sketch_is_read_in_the_target_frame(self):
+        lid, occurrence, place = self.lid()
+        sketch = Obj("fusion::Sketch", entityToken="sk9", name="Holes", parentComponent=lid)
+        points = []
+        for n, at in enumerate(((0, 0, 0), (10, 0, 0))):
+            native = Obj("fusion::SketchPoint", entityToken="pt%d" % n, parentSketch=sketch,
+                         worldGeometry=P(*at))
+            points.append(Obj("fusion::SketchPoint", entityToken="pt%d:path" % n, assemblyContext=occurrence,
+                              nativeObject=native, parentSketch=sketch, worldGeometry=P(*apply_matrix(place, at))))
+        data = self.read_data(self.hole(Obj("fusion::SketchPointsHolePositionDefinition", sketchPoints=Coll(points))))
+        self.assertNotIn("foreign", data)
+        # The lid sits at (110, 50, 32) and the tray at (100, 50, 0), both turned 90 degrees about Z.
+        self.assertEqual(data["positions"], [[0, -10, 32], [10, -10, 32]])
+        self.assertEqual(data["positions"], [r["point"] for r in data["position_refs"]])
+        for key in ("sketch_token", "sketch", "point_tokens"):
+            self.assertNotIn(key, data)
+        self.assertEqual([r["slot"] for r in data["position_refs"]], ["positions.0", "positions.1"])
+        self.assertEqual(data["position_refs"][0]["component"]["token"], "lid")
+
+    def hole(self, definition, **kw):
+        base = dict(holeType="SimpleHoleType", holeTapType="SimpleHoleTapType", holeDiameter=param_value(0.5),
+                    tipAngle=param_value(2.0), direction=Obj(x=0.0, y=0.0, z=-1.0), position=P(0, 0, 0),
+                    holePositionDefinition=definition, extentDefinition=Obj("fusion::ThroughAllExtentDefinition"),
+                    sideFaces=Coll([]), endFaces=Coll([]))
+        base.update(kw)
+        return self.tray.feature("HoleFeature", "Hole1", **base)
+
+    def test_a_hole_whose_points_cannot_be_brought_in_is_marked_foreign(self):
+        sketch = Obj("fusion::Sketch", entityToken="sk9", name="Holes", parentComponent=self.other)
+        point = Obj("fusion::SketchPoint", entityToken="pt0", parentSketch=sketch, worldGeometry=P(1, 2, 3))
+        data = self.read_data(self.hole(Obj("fusion::SketchPointsHolePositionDefinition", sketchPoints=Coll([point]))))
+        self.assertTrue(data["foreign"])
+        self.assertNotIn("sketch_token", data)
+
+    def test_a_hole_placed_on_a_face_of_another_component_is_marked_foreign_with_its_reference(self):
+        lid, occurrence, place = self.lid()
+        face = Obj("fusion::BRepFace", entityToken="lf:path", assemblyContext=occurrence,
+                   nativeObject=Obj("fusion::BRepFace", entityToken="lf", parentComponent=lid),
+                   pointOnFace=P(*apply_matrix(place, (1, 2, 4))))
+        data = self.read_data(self.hole(Obj("fusion::PointHolePositionDefinition", planarEntity=face)))
+        self.assertTrue(data["foreign"])
+        self.assertEqual((data["position_refs"][0]["type"], data["position_refs"][0]["token"]), ("BRepFace", "lf"))
+
+    def test_a_hole_on_an_own_face_stays_a_plain_hole(self):
+        own = Obj("fusion::BRepFace", entityToken="tf", parentComponent=self.tray.component)
+        data = self.read_data(self.hole(Obj("fusion::PointHolePositionDefinition", planarEntity=own)))
+        self.assertNotIn("foreign", data)
+        self.assertNotIn("position_refs", data)
 
     def test_own_inputs_seen_through_the_occurrence_are_read_native(self):
         moved = rect_profile(w=90)

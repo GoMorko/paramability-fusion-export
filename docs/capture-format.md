@@ -478,7 +478,11 @@ The translator fits the app's spline through points chosen from the samples (`li
   `taperTapped`. `thread_modeled`: `thread.isModeled` for a tapped hole, else null.
 - `counterbore`: `{ "diameter", "depth" }`; `countersink`: `{ "diameter", "angle_deg" }`.
 - `positions`: one point per `SketchPointsHolePositionDefinition.sketchPoints` item (`worldGeometry`), else
-  `[position]`.
+  `[position]`. Points of another component's sketch are brought into the target's coordinates; such a hole gets
+  `position_refs` (one measured reference per point, slot `positions.<n>`) and no `sketch_token`, `sketch` or
+  `point_tokens`, so the size probe leaves the sketch alone. When a point cannot be brought in, the hole is marked
+  `foreign`. A hole placed on a face, plane or edge of another component (the `planarEntity`, `edge`, `face` and similar
+  members of the position definition) is marked `foreign` and carries `position_refs` too.
 - `sketch_token`, `sketch` (optional): token and name of the sketch of the first sketch point.
   `point_tokens` (optional): `entityToken` of each sketch point, same order as `positions`; absent when a token is
   missing or the points sit on more than one sketch.
@@ -617,6 +621,17 @@ for extrudes).
 { "target": BODY, "tools": [BODY, ...], "operation": "cut", "keep_tools": false }
 ```
 
+Optional `volume_before` and `volume_after` (mm3) hold the volume of the target with the marker before and after the
+Combine (`read_geometry.target_volume`; null when it cannot be read). When both are present the translator refuses a Combine that changes the part by more than its tool steps can
+fill (`combine_volume.py`).
+
+The translator copies a Combine when every tool body is built, in the target's component, by steps that only add
+material to it (`combine.adds_only`): `ExtrudeFeature` and `RevolveFeature` items whose recipe steps are `new` for the
+first and `add` for the rest. Each such step is written at the Combine's place with the Combine's operation. An
+intersect takes a tool of one step. A tool step that starts from or reaches to a face (`fromEntity`, `toEntity`) is
+refused when the tool has more than one step. Any other item that touches the tool body before the Combine (a cut, a
+round, a chamfer, a hole, a pattern, a step the walk could not copy) refuses the Combine, naming that item.
+
 **ThreadFeature**: `{ "modeled": bool }` (`isModeled`).
 
 **OffsetFacesFeature** (press pull; `inputFaces` (a list or a collection), else `faces`, read before the item;
@@ -720,7 +735,45 @@ whichever answers). An entity whose component cannot be read is not marked.
 A revolve or circular pattern `axis`, or a mirror `plane`, of another component that is seen through an occurrence
 or belongs to the root is read in the root's coordinates. The reader brings it into the target's coordinates
 (inverse of the target's placement) and writes `"assembly": true` instead of `"foreign"` (`from_assembly()` in
-`lib/fusion_reader/placement.py`); when the target's place cannot be read it stays foreign.
+`lib/fusion_reader/placement.py`); when the target's place cannot be read it stays foreign. An axis from a sketch line
+of another component loses `entity`, `sketch_token` and `sketch` (the probe follows only the target's own sketch
+lines); the sketch is named in its `ref`.
+
+### Measured references (`ref`)
+
+An entity of another component that a step uses (the face or plane an extrude starts from or reaches to, a mirror
+plane, a pattern or revolve axis, the point or face a hole sits on) is recorded as a plain `ref` dict, built by
+`ref_record()` in `lib/fusion_reader/placement.py`. The record keeps what is needed to find the entity again and to
+tell which sizes may move it:
+
+```json
+{ "slot": "plane", "type": "ConstructionPlane", "token": "<native token>",
+  "component": { "token": "...", "name": "Cover" }, "path": "Cover:1",
+  "body": { "token": "...", "name": "Body1" }, "sketch": { "token": "...", "name": "Sketch2" }, "origin": true,
+  "point": [0, 0, 21.6], "normal": [0, 0, 1], "face_point": [3, 4, 21.6] }
+```
+
+- `slot`: where the step uses it: `start`, `side_one`, `side_two` (extrude), `plane` (mirror), `axis` (revolve and
+  circular pattern), `positions.<n>` (hole). A reader of the references forms the key `<item index>.<slot>`.
+- `type`: the Fusion type of the native entity (`BRepFace`, `ConstructionPlane`, `ConstructionAxis`, `SketchLine`,
+  `SketchPoint`, `BRepEdge`). `token`: the `entityToken` of the native entity, which `Design.findEntityByToken` finds
+  again. `component`: the component that owns it (the component of the occurrence it is seen through, else its own).
+  `path`: the `fullPathName` of the occurrence it is seen through, empty for the root.
+- `body` (faces, edges) and `sketch` (sketch entities): the native body or sketch it belongs to.
+- `origin`: true for an origin plane or axis of the owning component. It moves only with its occurrence.
+- `point`, `normal` or `dir`, and for a face `face_point`: the entity's geometry in the target's coordinates. They are
+  left out when the entity is not in root coordinates or the target's place cannot be read.
+
+Mirror planes and pattern or revolve axes keep their geometry in the record (`assembly: true`); `ref` repeats it with
+the identity. An extrude `start` or `side_one` / `side_two` of kind `fromEntity` / `toEntity` on a face or plane of
+another component stays `foreign` (the walk refuses the step) and carries `ref` with the geometry in the target's
+coordinates; its own `plane` and `face_point` stay as Fusion gave them.
+
+The translator uses `ref.component` to mark sizes: for a record with `assembly: true` (and the `position_refs` of a
+hole) every ticked size whose user parameter acts on that component (`dependents` of the parameter, the rule in
+`lib/params/geometry_links.py`) may move the place, and is marked loose with the step and the component named. An
+`origin` reference marks nothing. A capture that lists no `dependents`, or a record without a component, gives the step
+a note instead (`follow.foreign_ref`).
 
 ### Parameters behind values (`data.params`)
 
@@ -833,9 +886,9 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
 - `TranslateResult.dropped` is `[{ name, reason, used }]`, one per ticked size the recipe does not hold: `used` is
   true when a step reads it and the copy could not follow it (the reason says why), false when no copied step reads it
   ("not used by any copied step") or a measured sketch does not move with it.
-- Only steps whose result reaches the exported body count. A step of another body is walked in a sandbox
-  (`Context.sandbox`): the sizes it cannot follow are held with it and join the walk only when a Combine takes that
-  body (`Context.release`), and only then do its items count for the audit.
+- Only steps whose result reaches the exported body count. The steps of another body wait in `Context.pending_tools`
+  with the doubts of their handlers: the sizes they cannot follow join the walk only when a Combine takes that body
+  (`StepResult.join`), and only then do its items count for the audit.
 - A step with no handler stops the copy, with two exceptions that the capture proves harmless: a step that lists no
   body and whose `target_changed` is false (a Remove of another body) is skipped, and so is a Split Face of the exported
   body with `target_changed` false, with the note that picks on its faces may not follow. A step of another body that

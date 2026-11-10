@@ -9,7 +9,7 @@ import math
 
 from ..package.numbers import round9
 
-from . import range_check, sketch_motion, values, vec
+from . import follow, range_check, sketch_motion, values, vec
 from .values import Quantity
 from .result import Refusal, StepResult
 
@@ -263,6 +263,7 @@ def hole(item, ctx):
     diameter = _diameter(data, ctx)
     if isinstance(diameter, Refusal):
         return diameter
+    follow.foreign_points(ctx, item, data)
     direction = _direction(data, ctx)
     _check_size(data, ctx, len(data["positions"]), diameter)
     sizes = _sizes(item, ctx, diameter, depth, counterbore, countersink)

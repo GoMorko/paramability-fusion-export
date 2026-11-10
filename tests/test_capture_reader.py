@@ -563,8 +563,33 @@ class CombineThreadTest(unittest.TestCase):
         items = read_capture(design, target, fusion="", name="", up_axis="z")["items"]
         self.assertEqual(items[0]["data"], {
             "target": {"token": "b1", "name": "Body1"}, "tools": [{"token": "b2", "name": "Body2"}],
-            "operation": "cut", "keep_tools": True})
+            "operation": "cut", "keep_tools": True, "volume_before": None, "volume_after": 8000.0})
         self.assertEqual(items[1]["data"], {"modeled": False})
+
+
+class CombineVolumeTest(unittest.TestCase):
+    def read(self, volume_at):
+        target = body()
+        combine = entry(feature("CombineFeature", "Combine1", bodies=[target], targetBody=target,
+                                toolBodies=Coll([body("b2", "Body2")]), operation="CutFeatureOperation"))
+        design = FakeDesign([combine], target, appears_at=0)
+        type(target).volume = property(lambda self: volume_at(design.timeline.markerPosition))
+        try:
+            return read_capture(design, target, fusion="", name="", up_axis="z")["items"][0]["data"]
+        finally:
+            del type(target).volume
+
+    def test_the_volume_of_the_target_is_read_around_the_combine(self):
+        data = self.read(lambda marker: 8.0 if marker == 0 else 7.0)
+        self.assertEqual((data["volume_before"], data["volume_after"]), (8000.0, 7000.0))
+
+    def test_a_volume_that_cannot_be_read_is_null(self):
+        def volume(marker):
+            if marker == 0:
+                raise RuntimeError("no volume")
+            return 7.0
+        data = self.read(volume)
+        self.assertEqual((data["volume_before"], data["volume_after"]), (None, 7000.0))
 
 
 class EdgeRecordTest(unittest.TestCase):

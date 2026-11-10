@@ -162,6 +162,9 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   where Fusion shows it and follows the sizes the probe saw move it; where it could stop meeting the part (a slot that
   no longer reaches its wall, a rail that comes off), the size may give unexpected results, with the reason and the
   value past which it starts.
+- A mirror plane, pattern or revolve axis, or a hole on sketch points of another component is copied where it is now.
+  A size that acts on that component may move it, so it is marked "may give unexpected results" with the step named.
+  An origin plane or axis marks nothing.
 - A link to another component is found only through the sketch itself: a projected curve or point, a constraint to
   one, or a sketch drawn on that component's face. A sketch that follows another component in another way (through
   a construction plane or axis built on it, or a pattern reaching into it) is not linked; the tries of unticked
@@ -178,10 +181,18 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   sizes or curvature continuity, shells that grow outward, close the body or round their corners, patterns of faces or bodies, patterns
   that spread to both sides of the start, mirrors of faces, a chamfer with two different sizes whose sides could not be
   measured, a press pull (offset
-  faces) of a curved face, of a face with a leaning or rounded side, or of two faces that meet, a combine with a tool
-  body that has more than one step, and every step type not listed above (sweep, loft, coil, move, draft).
+  faces) of a curved face, of a face with a leaning or rounded side, or of two faces that meet, a combine whose
+  tool body is made in another component or has any step that does not add material (a cut, a round, a chamfer, a
+  shell, a hole, a pattern or mirror), a keep-only-the-shared-part combine whose tool has more than one step, and every
+  step type not listed above (sweep, loft, coil, move, draft).
   A Remove of another body, a Split Face (the solid stays the same, so picks on its faces may not follow) and steps of
   other bodies that are never joined to the picked body do not stop the copy.
+- A Combine is copied when its tool body is made in the same component by steps that only add material (a new body,
+  then extrudes or revolves that join it). Each tool step is written with the Combine's operation: a cut removes the
+  tool steps one after the other, a join adds them. A step of the tool that starts from or reaches to a face is
+  refused when the tool has more than one step. A tool the Combine keeps can serve a second Combine. The message
+  after the export names the step of the tool that stops it (for example "Fillet1 (fillet)"), so you know what to
+  change in Fusion.
 - Sketch outlines with a spline edge, an elliptical arc or another free curve are copied as spline segments. The add-in
   reads the Fusion curve as a fine chain of points and picks points for the app's own smooth curve so that it stays
   within 0.005 mm of that chain, also between its points (a long or tight curve is split into several segments). A size that moves a sketch

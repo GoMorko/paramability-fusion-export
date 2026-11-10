@@ -168,7 +168,7 @@ def pattern_after(feature, ctx, data):
 
 def _plane_record(entity, ctx):
     entity = geo.native_input(entity, ctx)
-    record = from_assembly(geo.mark_foreign(geo.plane_of(entity), entity, ctx), entity, ctx)
+    record = from_assembly(geo.mark_foreign(geo.plane_of(entity), entity, ctx), entity, ctx, slot="plane")
     if isinstance(record, dict):
         record.update(read_solid.construction_token(entity))
         add_reference(record, entity, ctx)

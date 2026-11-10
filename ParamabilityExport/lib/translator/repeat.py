@@ -436,7 +436,10 @@ UNIT_DIRECTIONS = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0])
 def _axis_shift(ctx, item, axis, direction):
     """How the axis point moves with sizes, as three Quantities (zero where it stays). An axis on a face or edge that
     sizes move takes the move; the part of it along the axis is left out, it changes nothing. An axis that cannot be
-    followed stays where it is."""
+    followed stays where it is. So does an axis of another component; the sizes that may move it are marked."""
+    if axis.get("assembly"):
+        follow.foreign_place(ctx, item, axis, "turns copies about")
+        return [Quantity(0.0)] * 3
     shifts = []
     for unit in UNIT_DIRECTIONS:
         shift = follow.place_plane(ctx, item, axis, unit, "turns copies about")

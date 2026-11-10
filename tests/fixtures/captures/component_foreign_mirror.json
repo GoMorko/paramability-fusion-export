@@ -1,0 +1,436 @@
+{
+  "_comment": "Plate with a boss, mirrored across a plane of another component (Cover). gap_mm sets the first extrude and also moves that plane through a construction plane of Cover, depth_mm sets the second extrude and acts only in the plate's component.",
+  "capture": 3,
+  "fusion": "2.0.0",
+  "design": "Test",
+  "up_axis": "z",
+  "target": {
+    "token": "t1",
+    "name": "Body1",
+    "box": {
+      "min": [
+        -20.0,
+        -10.0,
+        0.0
+      ],
+      "max": [
+        20.0,
+        10.0,
+        15.0
+      ]
+    },
+    "volume_mm3": 8286.4,
+    "component": {
+      "token": "cmp_tray",
+      "name": "Tray",
+      "root": false
+    },
+    "placement": null
+  },
+  "items": [
+    {
+      "index": 0,
+      "name": "Sketch1",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {},
+      "component": "cmp_tray",
+      "sketch_inputs": []
+    },
+    {
+      "index": 1,
+      "name": "Extrude1",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "operation": "newBody",
+        "profiles": [
+          {
+            "sketch": "Sketch1",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      -20,
+                      -10
+                    ],
+                    "end": [
+                      20,
+                      -10
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      20,
+                      -10
+                    ],
+                    "end": [
+                      20,
+                      10
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      20,
+                      10
+                    ],
+                    "end": [
+                      -20,
+                      10
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      -20,
+                      10
+                    ],
+                    "end": [
+                      -20,
+                      -10
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 10.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [
+          {
+            "token": "t1",
+            "name": "Body1"
+          }
+        ],
+        "target_box_before": null,
+        "end_offset": 10.0,
+        "params": {
+          "side_one.distance": {
+            "name": "d1",
+            "expression": "gap_mm",
+            "value": 10.0
+          }
+        }
+      },
+      "component": "cmp_tray",
+      "sketch_inputs": []
+    },
+    {
+      "index": 2,
+      "name": "Sketch2",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {},
+      "component": "cmp_tray",
+      "sketch_inputs": []
+    },
+    {
+      "index": 3,
+      "name": "Extrude2",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "operation": "join",
+        "profiles": [
+          {
+            "sketch": "Sketch2",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                10
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "circle",
+                    "center": [
+                      -10,
+                      0
+                    ],
+                    "radius": 3
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 5.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [
+          {
+            "token": "t1",
+            "name": "Body1"
+          }
+        ],
+        "target_box_before": {
+          "min": [
+            -20.0,
+            -10.0,
+            0.0
+          ],
+          "max": [
+            20.0,
+            10.0,
+            10.0
+          ]
+        },
+        "end_offset": 5.0,
+        "params": {
+          "side_one.distance": {
+            "name": "d2",
+            "expression": "depth_mm",
+            "value": 5.0
+          }
+        }
+      },
+      "component": "cmp_tray",
+      "sketch_inputs": []
+    },
+    {
+      "index": 4,
+      "name": "Mirror1",
+      "type": "MirrorFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "entity_type": "features",
+        "sources": [
+          3
+        ],
+        "plane": {
+          "point": [
+            0,
+            0,
+            0
+          ],
+          "normal": [
+            1,
+            0,
+            0
+          ],
+          "assembly": true,
+          "ref": {
+            "slot": "plane",
+            "type": "ConstructionPlane",
+            "token": "tok_cover_plane",
+            "component": {
+              "token": "cmp_cover",
+              "name": "Cover"
+            },
+            "path": "Cover:1",
+            "point": [
+              0,
+              0,
+              0
+            ],
+            "normal": [
+              1,
+              0,
+              0
+            ]
+          }
+        },
+        "combine": false
+      },
+      "component": "cmp_tray",
+      "sketch_inputs": []
+    }
+  ],
+  "parameters": {
+    "user": [
+      {
+        "name": "gap_mm",
+        "expression": "10 mm",
+        "value": 1.0,
+        "display_value": 10,
+        "unit": "mm",
+        "kind": "length",
+        "comment": "",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "dependents": [
+          {
+            "name": "d1",
+            "kind": "feature",
+            "component": "cmp_tray",
+            "feature": "Extrude1"
+          },
+          {
+            "name": "d9",
+            "kind": "constructionPlane",
+            "component": "cmp_cover",
+            "feature": "CoverPlane"
+          }
+        ]
+      },
+      {
+        "name": "depth_mm",
+        "expression": "5 mm",
+        "value": 0.5,
+        "display_value": 5,
+        "unit": "mm",
+        "kind": "length",
+        "comment": "",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "dependents": [
+          {
+            "name": "d2",
+            "kind": "feature",
+            "component": "cmp_tray",
+            "feature": "Extrude2"
+          }
+        ]
+      }
+    ],
+    "model": [
+      {
+        "name": "d1",
+        "expression": "gap_mm",
+        "value": 1.0,
+        "unit": "mm",
+        "kind": "derived",
+        "role": "Distance",
+        "display_value": 10,
+        "dependency_parameters": [
+          "gap_mm"
+        ],
+        "is_favorite": false,
+        "value_type": "numeric",
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d1",
+          "name": "",
+          "sketch": "",
+          "component": "cmp_tray"
+        }
+      },
+      {
+        "name": "d2",
+        "expression": "depth_mm",
+        "value": 0.5,
+        "unit": "mm",
+        "kind": "derived",
+        "role": "Distance",
+        "display_value": 5,
+        "dependency_parameters": [
+          "depth_mm"
+        ],
+        "is_favorite": false,
+        "value_type": "numeric",
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d2",
+          "name": "",
+          "sketch": "",
+          "component": "cmp_tray"
+        }
+      }
+    ]
+  }
+}

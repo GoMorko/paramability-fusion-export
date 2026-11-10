@@ -9,7 +9,7 @@ that feed a note, such as the participant bodies, fall back to an empty list.
 """
 from . import read_geometry as geo
 from .param_refs import Params, with_params
-from .placement import from_assembly
+from .placement import foreign_target_ref, from_assembly, ref_record
 from .read_sketch import first_profile, profile_area, read_outlines, read_profiles
 
 _OPERATIONS = [
@@ -44,18 +44,22 @@ def construction_token(entity):
     return {}
 
 
-def _target(definition, ctx):
-    """The face or plane an extrude starts from or reaches to: its plane, its type, and a point on a face."""
+def _target(definition, ctx, slot):
+    """The face or plane an extrude starts from or reaches to: its plane, its type, and a point on a face. One of
+    another component is marked foreign and carries its measured reference (`ref`, see `placement.ref_record`)."""
     entity = geo.native_input(geo.safe(lambda: definition.entity, None), ctx)
     found = {"plane": geo.safe(lambda: geo.plane_of(entity), None),
              "entity_type": geo.safe(lambda: geo.type_name(entity), None)}
     found.update(construction_token(entity))
     if found["entity_type"] == "BRepFace":
         found["face_point"] = geo.safe(lambda: geo.point(entity.pointOnFace), None)
-    return geo.mark_foreign(found, entity, ctx)
+    geo.mark_foreign(found, entity, ctx)
+    if found.get("foreign"):
+        foreign_target_ref(found, entity, ctx, slot)
+    return found
 
 
-def _extent(definition, taper_deg, ctx):
+def _extent(definition, taper_deg, ctx, slot):
     """One side of an extrude as { kind, ... }."""
     name = geo.type_name(definition)
     if "ThroughAll" in name:
@@ -68,7 +72,7 @@ def _extent(definition, taper_deg, ctx):
         return {"kind": "all"}
     if "ToEntity" in name:
         return dict({"kind": "toEntity", "offset": geo.safe(lambda: geo.length(definition.offset), None)},
-                    **_target(definition, ctx))
+                    **_target(definition, ctx, slot))
     if name == "DistanceExtentDefinition":
         return {"kind": "distance", "distance": geo.length(definition.distance), "taper_deg": taper_deg}
     return {"kind": "other", "type": name}
@@ -80,7 +84,7 @@ def _start(feature, ctx):
     if "Offset" in name:
         return {"kind": "offset", "offset": geo.length(definition.offset)}
     if "Entity" in name:
-        return dict({"kind": "fromEntity"}, **_target(definition, ctx))
+        return dict({"kind": "fromEntity"}, **_target(definition, ctx, "start"))
     if "ProfilePlane" in name:
         return {"kind": "profilePlane"}
     return {"kind": "other", "type": name}
@@ -168,9 +172,9 @@ def extrude_before(feature, ctx):
             "taper_deg": geo.safe(lambda: geo.angle(sym.taperAngle), None),
         }
     else:
-        side_one = _extent(feature.extentOne, _taper(feature, "taperAngleOne"), ctx)
+        side_one = _extent(feature.extentOne, _taper(feature, "taperAngleOne"), ctx, "side_one")
         if extent_type == "two":
-            side_two = _extent(feature.extentTwo, _taper(feature, "taperAngleTwo"), ctx)
+            side_two = _extent(feature.extentTwo, _taper(feature, "taperAngleTwo"), ctx, "side_two")
     operation = _operation(feature.operation)
     profiles, areas = read_outlines(feature.profile, ctx)
     data = {
@@ -289,10 +293,12 @@ def axis_of(entity):
     return {"kind": "other"}
 
 
-def axis_record(entity, ctx):
-    """`axis_of` with "foreign": true when the axis entity is not the target component's."""
+def axis_record(entity, ctx, slot="axis"):
+    """`axis_of` with "foreign": true when the axis entity is not the target component's. An axis seen through an
+    occurrence or owned by the root is brought into the target's coordinates instead and marked `assembly`, with its
+    measured reference (`ref`, in `slot`)."""
     entity = geo.native_input(entity, ctx)
-    return from_assembly(geo.mark_foreign(axis_of(entity), entity, ctx), entity, ctx, "point", "dir")
+    return from_assembly(geo.mark_foreign(axis_of(entity), entity, ctx), entity, ctx, "point", "dir", slot)
 
 
 def _revolve_extent(definition):
@@ -360,17 +366,9 @@ def _sketch_points(feature, ctx):
     return [geo.native_input(p, ctx) for p in geo.collection_items(definition.sketchPoints)]
 
 
-def _hole_positions(feature, ctx):
-    points = _sketch_points(feature, ctx)
-    if points is not None:
-        return [geo.point(p.worldGeometry) for p in points]
-    return [geo.point(feature.position)]
-
-
-def _hole_sketch(feature, ctx):
-    """`sketch_token`, `sketch` and `point_tokens` (one per position) of a hole on sketch points. Points on several
+def _hole_sketch(points):
+    """`sketch_token`, `sketch` and `point_tokens` (one per position) of the sketch points of a hole. Points on several
     sketches give only the first sketch's token: the hole then cannot be followed and keeps that sketch fixed."""
-    points = _sketch_points(feature, ctx)
     if not points:
         return {}
     sketches = [geo.safe(lambda: p.parentSketch, None) for p in points]
@@ -385,6 +383,52 @@ def _hole_sketch(feature, ctx):
     if found and all(point_tokens) and len(set(tokens)) == 1:
         found["point_tokens"] = point_tokens
     return found
+
+
+def _foreign_sketch_points(points, ctx):
+    """`positions` of sketch points of another component, brought into the target's coordinates, with one measured
+    reference per point (`position_refs`). The sketch is not named, so the size probe leaves it alone. When a point
+    cannot be brought in (the target's or the point's place cannot be read) the positions stay as Fusion gives them and
+    the hole is marked foreign."""
+    worlds = [geo.point(p.worldGeometry) for p in points]
+    refs = [ref_record(p, ctx, "positions.%d" % n, {"point": world}) for n, (p, world) in enumerate(zip(points, worlds))]
+    if all("point" in ref for ref in refs):
+        return {"positions": [ref["point"] for ref in refs], "position_refs": refs}
+    return {"positions": worlds, "position_refs": refs, "foreign": True}
+
+
+# Members of a hole position definition that hold the faces, planes or edges it is placed on (a member a definition
+# type lacks reads as nothing).
+_PLACE_MEMBERS = ("planarEntity", "edge", "edges", "referenceEdge", "centerEdge", "face", "faces", "plane",
+                  "planeEntity", "entity")
+
+
+def _foreign_place(feature, ctx):
+    """`foreign` and `position_refs` of a hole placed on a face, plane or edge of another component, else {}."""
+    definition = geo.safe(lambda: feature.holePositionDefinition, None)
+    placed = []
+    for member in _PLACE_MEMBERS:
+        value = geo.safe(lambda: getattr(definition, member), None)
+        if value is None:
+            continue
+        placed += geo.collection_items(value) if geo.safe(lambda: value.count, None) is not None else [value]
+    outside = [geo.native_input(e, ctx) for e in placed]
+    outside = [e for e in outside if geo.foreign(e, ctx)]
+    if not outside:
+        return {}
+    return {"foreign": True, "position_refs": [ref_record(e, ctx, "positions.0") for e in outside]}
+
+
+def hole_place(feature, ctx):
+    """The hole centres (`positions`) and what they sit on. Sketch points give their sketch and point tokens (the size
+    probe follows them); those of another component's sketch are brought into the target's coordinates and give
+    `position_refs` instead. A face, plane or edge of another component marks the hole foreign."""
+    points = _sketch_points(feature, ctx)
+    if points is None:
+        return dict({"positions": [geo.point(feature.position)]}, **geo.safe(lambda: _foreign_place(feature, ctx), {}))
+    if any(geo.foreign(p, ctx) for p in points):
+        return _foreign_sketch_points(points, ctx)
+    return dict({"positions": [geo.point(p.worldGeometry) for p in points]}, **geo.safe(lambda: _hole_sketch(points), {}))
 
 
 def _hole_extent(feature):
@@ -432,8 +476,7 @@ def hole_before(feature, ctx):
             "angle_deg": geo.angle(feature.countersinkAngle),
         } if hole_type == "countersink" else None,
         "direction": geo.safe(lambda: geo.unit_vector(feature.direction), None),
-        "positions": _hole_positions(feature, ctx),
-        **geo.safe(lambda: _hole_sketch(feature, ctx), {}),
+        **hole_place(feature, ctx),
         "extent": geo.safe(lambda: _hole_extent(feature), {"kind": "other", "type": "unreadable"}),
         "side_cylinders": [],
         "end_points": [],
@@ -466,7 +509,14 @@ def combine_before(feature, ctx):
         "tools": geo.body_refs(feature.toolBodies, ctx),
         "operation": _operation(feature.operation),
         "keep_tools": geo.safe(lambda: bool(feature.isKeepToolBodies), False),
+        "volume_before": geo.target_volume(ctx),
+        "volume_after": None,
     }
+
+
+def combine_after(feature, ctx, data):
+    """volume_after: the target's volume in mm3 with the marker after the Combine (null when it cannot be read)."""
+    return {"volume_after": geo.target_volume(ctx)}
 
 
 def thread_before(feature, ctx):
@@ -478,6 +528,6 @@ READERS = {
     "ExtrudeFeature": (extrude_before, extrude_after),
     "RevolveFeature": (revolve_before, revolve_after),
     "HoleFeature": (hole_before, hole_after),
-    "CombineFeature": (combine_before, None),
+    "CombineFeature": (combine_before, combine_after),
     "ThreadFeature": (thread_before, None),
 }

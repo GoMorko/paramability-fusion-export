@@ -14,15 +14,11 @@ Every key is optional: a member Fusion does not give is left out, and the transl
 Entities of another component are left out of `built_on`.
 """
 from . import read_geometry as geo
+from .placement import ORIGIN_MEMBERS
 from .read_solid import axis_of, construction_token
 
 # How deep built_on goes (a plane built on a plane built on a face).
 _DEPTH = 3
-
-_ORIGIN_MEMBERS = {
-    "ConstructionPlane": ("xYConstructionPlane", "xZConstructionPlane", "yZConstructionPlane"),
-    "ConstructionAxis": ("xConstructionAxis", "yConstructionAxis", "zConstructionAxis"),
-}
 
 # Members of the definitions of construction planes and axes that hold the entities they are built on.
 _BUILT_ON_MEMBERS = (
@@ -36,7 +32,7 @@ def _is_origin(entity, name, ctx):
     """True for the origin plane or axis of the target's component."""
     component = getattr(ctx, "component", None)
     return any(geo.same_entity(entity, geo.safe(lambda: getattr(component, member), None))
-               for member in _ORIGIN_MEMBERS.get(name, ()))
+               for member in ORIGIN_MEMBERS.get(name, ()))
 
 
 def _built_on(entity, ctx, depth):
@@ -93,7 +89,7 @@ def reference_of(entity, ctx, depth=_DEPTH):
         points = geo.safe(lambda: geo.edge_record(entity, ctx)["points"], [])
         if points:
             out["edge_points"] = points
-    elif name in _ORIGIN_MEMBERS:
+    elif name in ORIGIN_MEMBERS:
         out.update(_construction(entity, name, ctx, depth))
     return out
 
