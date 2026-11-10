@@ -1,23 +1,24 @@
 """The driver: walks a capture's items, calls one handler per feature type, builds the recipe."""
 import importlib
 
-from . import borrowed, combine, range_check, ref_motion, step_kinds
+from . import range_check, step_kinds
 from .audit import audit
-from .sizes import construction_fixes, joint_reasons, probed_sizes, text_reasons, untried_reasons, used_sizes
+from .sizes import joint_reasons, probed_sizes, text_reasons, untried_reasons, used_sizes
 from . import notes as wording, place
 from .picks import MAX_NEAR_POINTS
 from .notes import (
     BODY_MOVED_WHY, dropped_reason, fixed_reason, loose_reason, tried_unmoved_reason, unmoved_link_reason,
     unmoved_reason, unused_reason)
-from .capture import outside_component, renamed_target, same_body, validate_capture
+from .capture import validate_capture
 from .context import Context
-from .result import Refusal, StepResult, TranslateResult, make_verdict
+from .result import TranslateResult
+from .step_walk import all_steps
 from ..params import geometry_links
 from ..params.expressions import MAX_FORMULA_LENGTH
 from .values import Sized, number
 from ..sketch_values import coverage
 from ..sketch_values.motion import Motion, Stuck, Terms
-from .words import type_words
+from .walk import walk_items
 
 RECIPE_VERSION = 12
 # Edge selector keys newer than RECIPE_VERSION, the same way.
@@ -25,7 +26,6 @@ SELECTOR_VERSIONS = {"chain": 14, "faceEdges": 14}
 MAX_FEATURES = 400
 MAX_PATTERN_COPIES = 64
 MAX_PASSES = 70
-
 
 
 def _resolve(handler):
@@ -36,30 +36,6 @@ def _resolve(handler):
 
 # Capture type -> handler, from the step kind table.
 HANDLERS = {t.name: _resolve(t.handler) for t in step_kinds.STEP_TYPES if t.handler}
-
-
-def _refusal(item, reason, note=None):
-    """The refusal record of the result. `note` is the package note when it differs from the usual wording."""
-    out = {"index": item.get("index"), "name": item.get("name", ""), "type": item.get("type", ""), "reason": reason}
-    if note:
-        out["note"] = note
-    return out
-
-
-def _label(item):
-    return wording.step_label(item.get("name"), item.get("type")) or "A step"
-
-
-def _foreign(node):
-    """A record of the step's data marked `foreign` by the reader: it belongs to another component. Other bodies a
-    step lists (participants) and the tool bodies a combine lists are left to their own rules."""
-    if isinstance(node, dict):
-        if node.get("foreign") is True:
-            return True
-        return any(_foreign(v) for k, v in node.items() if k not in ("participants", "tools"))
-    if isinstance(node, list):
-        return any(_foreign(v) for v in node)
-    return False
 
 
 def _placement_refusal(capture):
@@ -74,65 +50,6 @@ def _placement_refusal(capture):
     if problem:
         return {"index": None, "name": "", "type": "", "reason": "The place of this part in the assembly cannot be used. %s" % problem,
                 "note": wording.place_unreadable_note()}
-    return None
-
-
-def _data(item):
-    data = item.get("data")
-    return data if isinstance(data, dict) else {}
-
-
-def _touches_target(item, ctx):
-    """The item lists the target among its bodies, or its own data names the target as the body it works on."""
-    if any(ctx.is_target(b) for b in item.get("bodies_after") or []):
-        return True
-    data = _data(item)
-    if ctx.is_target(data.get("target")):
-        return True
-    if data.get("operation") != "newBody":
-        return any(ctx.is_target(b) for b in data.get("participants") or [])
-    return False
-
-
-def _existing_bodies(item):
-    """Bodies that existed before the item: the reader's `bodies_before`, else the bodies the item's data names."""
-    before = item.get("bodies_before")
-    if isinstance(before, list):
-        return before
-    data = _data(item)
-    named = list(data.get("participants") or []) + list(data.get("tools") or [])
-    if data.get("target"):
-        named.append(data["target"])
-    return named
-
-
-def _new_bodies(item, ctx):
-    """Bodies the item lists that are not the target and did not exist before it (a split, or a second new body)."""
-    existing = _existing_bodies(item)
-    return [
-        b for b in item.get("bodies_after") or []
-        if not ctx.is_target(b) and not any(same_body(b, e) for e in existing)
-    ]
-
-
-def _lost_target(item, ctx):
-    bodies = list(item.get("bodies_after") or []) + list(item.get("bodies_before") or [])
-    return any(renamed_target(b, ctx.target) for b in bodies)
-
-
-def _only_splits_faces(item, ctx):
-    """A split of faces that the capture shows left the exported body as it was: its solid is the same, only its faces
-    are cut up, so nothing is copied."""
-    spec = step_kinds.step_type(item.get("type"))
-    return (spec is not None and spec.splits_faces and item.get("target_changed") is False
-            and not _new_bodies(item, ctx))
-
-
-def _skip_reason(item):
-    if item.get("suppressed"):
-        return "Suppressed in Fusion."
-    if step_kinds.skipped(item.get("type")):
-        return ""
     return None
 
 
@@ -154,7 +71,7 @@ def _copy_counts(step):
 def _over_caps(recipe, ctx):
     """Return a plain reason when the recipe breaks a reader cap at its current values, else None. A count of copies
     that can pass its cap inside the size ranges marks the sizes it reads (`Context.doubt`)."""
-    features = recipe["features"]
+    features = all_steps(recipe["features"])
     if len(features) > MAX_FEATURES:
         return "The part has more than %d steps." % MAX_FEATURES
 
@@ -390,124 +307,17 @@ def _dropped(table, sizes, doubts, unmoved, unmoved_links=None, tried=(), spans=
 
 def _walk(capture, table, size_table, motion=None, cache=None):
     """One walk over the items: (TranslateResult, Context). `cache` is shared by the walks of one translation."""
-    ctx = Context(capture, size_table, motion, cache)
+    ctx = Context(capture, size_table, motion, cache, table)
     result = TranslateResult()
-
-    def refuse(item, reason, note=None):
-        result.items.append(make_verdict(item, "unsupported", note=reason))
-        result.refusal = _refusal(item, reason, note)
+    if not walk_items(ctx, result):
         return result, ctx
-
-    made_in_component = False
-    for item in capture["items"]:
-        ctx.current = item
-        reason = _skip_reason(item)
-        if reason is not None:
-            result.items.append(make_verdict(item, "skipped", note=reason))
-            continue
-
-        if step_kinds.is_assembly(item.get("type")):
-            # Components, joints and the like: in component coordinates they never change the part's shape.
-            if item.get("target_changed") is True:
-                if not made_in_component:
-                    return refuse(item, "This body was made in another component and moved here later. "
-                                  "Steps across components are not copied yet.", wording.made_elsewhere_note())
-                return refuse(item, "This step changes the part, which is not copied yet.")
-            result.items.append(make_verdict(item, "skipped", note=""))
-            continue
-
-        if outside_component(item) and item.get("helper_of"):
-            # A step of a tool body from another component, read for a Combine of the target.
-            _collect_foreign_helper(item, table.get(item.get("type")), ctx, motion is not None and size_table is not None)
-            result.items.append(make_verdict(item, "skipped", note="Helper geometry, not part of the exported body."))
-            continue
-
-        if outside_component(item):
-            # A step made in another component: harmless unless it changes the target.
-            if item.get("target_changed") is True or _touches_target(item, ctx):
-                if not made_in_component:
-                    return refuse(item, "This body was made in another component and moved here later. "
-                                  "Steps across components are not copied yet.", wording.made_elsewhere_note())
-                return refuse(item, "This step changes the part from another component. "
-                              "Steps across components are not copied yet.",
-                              wording.from_other_component_note(_label(item)))
-            result.items.append(make_verdict(item, "skipped", note="In another component."))
-            continue
-
-        if _lost_target(item, ctx):
-            return refuse(item, "The body could not be followed through the timeline.")
-        if item.get("bodies_after") is None:
-            return refuse(item, "The bodies this step changes could not be read.")
-
-        touches = _touches_target(item, ctx)
-        if item.get("health") == "error" and (touches or not item.get("bodies_after")):
-            return refuse(item, "This step does not build in Fusion.")
-
-        handler = table.get(item.get("type"))
-        if not touches and handler is None and not item["bodies_after"]:
-            if item.get("target_changed") is False:
-                result.items.append(make_verdict(item, "skipped", note="Does not change the exported body."))
-                continue
-            return refuse(item, "Steps of type %s are not copied yet." % type_words(item["type"]))
-        if not touches:
-            if not _foreign(_data(item)):
-                _collect_helper(item, handler, ctx, motion is not None and size_table is not None)
-            result.items.append(make_verdict(item, "skipped", note="Helper geometry, not part of the exported body."))
-            continue
-
-        if handler is None and _only_splits_faces(item, ctx):
-            note = wording.split_face_note(_label(item))
-            result.items.append(make_verdict(item, "skipped", note=note))
-            result.notes.append(note)
-            continue
-        if handler is None:
-            spec = step_kinds.step_type(item["type"])
-            return refuse(item, (spec and spec.unsupported)
-                          or "Steps of type %s are not copied yet." % type_words(item["type"]))
-        if _data(item).get("read_error"):
-            return refuse(item, "This step could not be read from Fusion.")
-        with ctx.recording() as brought:
-            item = ctx.current = ref_motion.bring_in(borrowed.bring_in(item, ctx))
-        ctx.doubts.extend(brought.doubts)
-        if _foreign(_data(item)):
-            return refuse(item, ref_motion.why_foreign(item)
-                          or "This step reaches into another component, which is not copied yet.",
-                          wording.reaches_component_note(_label(item)))
-        made_in_component = True
-        if motion is not None and size_table is not None:
-            for names, why in construction_fixes(size_table, item):
-                ctx.doubt(names, why)
-        if _new_bodies(item, ctx):
-            return refuse(item, "This step splits the part or makes another body, which is not copied yet.")
-        outcome = _handle(handler, item, ctx)
-        if isinstance(outcome, Refusal):
-            ctx.doubts.extend(outcome.doubts)
-            return refuse(item, outcome.reason)
-        ctx.commit(outcome)
-        notes = brought.notes + outcome.notes
-        if not outcome.entries:
-            result.items.append(make_verdict(item, "skipped", note=" ".join(notes)))
-            result.notes.extend(notes)
-            continue
-        if not ctx.steps and outcome.steps[0].get("combine") != "new":
-            return refuse(item, "The body starts in a way that cannot be copied.")
-        ids = ctx.add_steps(item, outcome)
-        ctx.copied_items.append(item)
-        if item.get("health") == "warning":
-            notes.append(wording.health_warning_note(_label(item), item.get("message")))
-        if notes:
-            result.items.append(make_verdict(item, "translatedWithNote", ids, " ".join(notes)))
-            result.notes.extend(notes)
-        else:
-            result.items.append(make_verdict(item, "translated", ids))
-
-    ctx.current = None
     if not ctx.steps:
         result.refusal = {"index": None, "name": "", "type": "", "reason": "Nothing in the timeline makes this body."}
         return result, ctx
 
-    version = max([RECIPE_VERSION] + [step_kinds.recipe_kind(step["kind"]).version for step in ctx.steps]
-                  + [SELECTOR_VERSIONS.get(key, 0) for step in ctx.steps for key in (step.get("edges") or {})])
+    written = all_steps(ctx.steps)
+    version = max([RECIPE_VERSION] + [step_kinds.recipe_kind(step["kind"]).version for step in written]
+                  + [SELECTOR_VERSIONS.get(key, 0) for step in written for key in (step.get("edges") or {})])
     recipe = {"schema": "paramability.recipe", "version": version, "features": ctx.steps}
     over = _over_caps(recipe, ctx)
     if over:
@@ -533,68 +343,3 @@ def _fix_long_formulas(recipe, ctx):
 
     for step in recipe["features"]:
         walk(step, step.get("label"))
-
-
-def _handle(handler, item, ctx):
-    """Run a handler. The doubts and notes it records on the context go into its StepResult, ahead of any it joined
-    itself; a Refusal gets the doubts as `doubts`."""
-    with ctx.recording() as recorded:
-        outcome = handler(item, ctx)
-    if not isinstance(outcome, (StepResult, Refusal)):
-        raise TypeError("The handler for %s returned %r, not a StepResult or a Refusal." % (item.get("type"), outcome))
-    if isinstance(outcome, Refusal):
-        outcome.doubts = recorded.doubts
-    else:
-        outcome.doubts[:0] = recorded.doubts
-        outcome.notes[:0] = recorded.notes
-        outcome.asked |= recorded.asked
-    return outcome
-
-
-def _collect_foreign_helper(item, handler, ctx, with_construction):
-    """`_collect_helper` for an item of a tool body from another component. The step is kept in that component's
-    frame; the Combine that takes the tool moves it. A step that is not built, was not read, or reaches into a third
-    component is left for the Combine to name."""
-    data = _data(item)
-    if item.get("health") == "error":
-        ctx.tool_refusals[item.get("index")] = "This step does not build in Fusion."
-    elif data.get("read_error"):
-        ctx.tool_refusals[item.get("index")] = "This step could not be read from Fusion."
-    elif _foreign(data):
-        ctx.tool_refusals[item.get("index")] = "This step reaches into another component, which is not copied yet."
-    elif item.get("bodies_after") is not None:
-        _collect_helper(item, handler, ctx, with_construction, foreign=True)
-
-
-def _collect_helper(item, handler, ctx, with_construction, foreign=False):
-    """Keep the steps of a body other than the target for a later Combine, while they only add material to that body
-    (`combine.adds_only`). A refusal, a missing handler or a step that does anything else drops the item; the Combine
-    finds it among the items that built the body and refuses with the reason kept in `ctx.tool_refusals`.
-
-    The doubts of the handler stay with its steps in `ctx.pending_tools`: they count only when a Combine takes the body
-    (`StepResult.join`), because until then nothing it wrote reaches the exported body. Its notes are dropped.
-    `foreign` is for an item of a tool body from another component (its body is keyed with the component)."""
-    if handler is None:
-        spec = step_kinds.step_type(item.get("type"))
-        if spec is not None and spec.unsupported:
-            ctx.tool_refusals[item.get("index")] = spec.unsupported
-        return
-    with ctx.recording() as construction:
-        if with_construction:
-            for names, why in construction_fixes(ctx.table, item):
-                ctx.doubt(names, why)
-    outcome = _handle(handler, item, ctx)
-    if isinstance(outcome, Refusal):
-        ctx.tool_refusals[item.get("index")] = outcome.reason
-        return
-    bodies = item.get("bodies_after") or []
-    if not outcome.entries or len(bodies) != 1:
-        return
-    key = combine.pending_key(bodies[0], item.get("component") if foreign else None)
-    if not combine.adds_only(outcome.entries, key in ctx.pending_tools):
-        return
-    held = ctx.pending_tools.setdefault(key, StepResult())
-    held.extend(outcome.entries)
-    held.doubts.extend(construction.doubts + outcome.doubts)
-    held.asked |= outcome.asked
-    held.items.append(item)

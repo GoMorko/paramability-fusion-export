@@ -189,7 +189,7 @@ class RefusedToolTest(unittest.TestCase):
             with self.subTest(kind):
                 reason = self.refusal(self.step_before_combine(kind, "Step1"))["reason"]
                 self.assertIn("Step1", reason)
-                self.assertIn(said, reason)
+                self.assertIn(said, reason.lower())
 
     def test_a_step_that_was_not_read_stops_the_copy_and_says_why(self):
         capture = self.step_before_combine("ExtrudeFeature", "Extrude9", {})

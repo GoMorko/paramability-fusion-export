@@ -6,6 +6,7 @@ only when the walk writes its steps.
 """
 from contextlib import contextmanager
 
+from . import tool_items
 from .capture import same_body
 from .result import Doubt, StepResult
 from .step_kinds import recipe_kind
@@ -18,13 +19,17 @@ MAX_LABEL = 120
 class Context:
     """State of one translate() run.
 
-    target: the exported body, {token, name, box, volume_mm3}.
-    capture: the whole capture (for up_axis and cross item lookups).
-    pending_tools: body token (or name) -> the StepResult of the steps that build a body other than the target, not
-      yet placed, with the doubts their handlers recorded and the capture items that made them. The Combine handler
-      takes them (`StepResult.join`), so these count only once the body joins the exported one.
-    tool_refusals: timeline index -> the reason the walk could not copy that step of a body other than the target. A
-      Combine that finds such a step among the history of its tool body names it in its own refusal.
+    target: the body this walk builds, {token, name, box, volume_mm3}: the exported body, or a tool body in a child.
+    capture: the capture this walk reads (for up_axis and cross item lookups). In a child, `items` are the items that
+      made the tool.
+    timeline: every item of the design, also in a child.
+    handlers: capture type -> handler.
+    component: the token of the component a child's body lives in, when a tool from another component led to it; None
+      while the walk is in the exported body's component.
+    depth: how many tools deep this walk is, 0 for the exported body.
+    id_prefix: starts the id of every step of this walk.
+    used_tools: keys (`tool_key`) of the tool bodies an earlier Combine used up. Fusion removes such a body.
+    entries_by_index: timeline index -> the `Entry` records written for that item.
     not_repeatable: ids of steps whose length Fusion recomputes per copy (`Entry.repeatable`). Pattern and mirror
       handlers refuse them as sources.
     table: the size table whose sizes the feature values may follow, or None for a recipe with plain
@@ -44,8 +49,13 @@ class Context:
       the capture many times). Handlers keep their own entry under their module name.
     """
 
-    def __init__(self, capture, table=None, motion=None, cache=None):
+    def __init__(self, capture, table=None, motion=None, cache=None, handlers=None):
         self.capture = capture
+        self.timeline = capture["items"]
+        self.handlers = handlers or {}
+        self.component = None
+        self.depth = 0
+        self.id_prefix = ""
         self.cache = {} if cache is None else cache
         self.table = table
         self.motion = motion
@@ -57,15 +67,46 @@ class Context:
         self.plain_picks = {}
         self.target = capture["target"]
         self.steps = []
-        self.pending_tools = {}
-        self.tool_refusals = {}
+        self.used_tools = set()
+        self.entries_by_index = {}
         self.copied_items = []
         self.asked = set()
         self.not_repeatable = set()
         # item index of a round drawn into an earlier extrude's outline (`finish._slot_outline`) -> that step's id
         self.folded = {}
         self._ids_by_index = {}
+        self._written_at = []
         self.current = None
+
+    def child(self, body, id_prefix, items=(), depth=None):
+        """The context of a walk that builds the tool `body` from `items` on its own. It has its own steps, placers
+        and doubts, and shares the table, the motion file, the cache and the handlers."""
+        found = Context(dict(self.capture, target=body, items=list(items)), self.table, self.motion, self.cache,
+                        self.handlers)
+        found.timeline = self.timeline
+        found.id_prefix = id_prefix
+        found.depth = self.depth + 1 if depth is None else depth
+        found.component = tool_items.component_token(body) if tool_items.is_foreign_tool(body) else self.component
+        return found
+
+    def enter(self, item):
+        """The walk reaches `item`: remember what is written so far, for `as_of`."""
+        self.current = item
+        self._written_at.append((item.get("index"), len(self.placers), len(self.slabs), self.written_reads))
+
+    @contextmanager
+    def as_of(self, item):
+        """Inside the block, `item` is the current item and the placers, slabs and sizes read are those written before
+        the walk reached it."""
+        saved = self.current, self.placers, self.slabs, self.written_reads
+        placers, slabs, reads = next(((p, s, r) for index, p, s, r in reversed(self._written_at)
+                                      if index <= item["index"]), (0, 0, ()))
+        self.current, self.placers, self.slabs, self.written_reads = (
+            item, self.placers[:placers], self.slabs[:slabs], reads)
+        try:
+            yield
+        finally:
+            self.current, self.placers, self.slabs, self.written_reads = saved
 
     def is_target(self, body):
         return same_body(body, self.target)
@@ -168,9 +209,10 @@ class Context:
         ids = []
         label = str(item.get("name", ""))[:MAX_LABEL]
         made = self._ids_by_index.setdefault(item["index"], [])
+        self.entries_by_index.setdefault(item["index"], []).extend(result.entries)
         for n, entry in enumerate(result.entries, start=len(made) + 1):
             step = entry.step
-            base = "%s_%s" % (step["kind"], item["index"])
+            base = "%s%s_%s" % (self.id_prefix, step["kind"], item["index"])
             step_id = base if n == 1 else "%s_%d" % (base, n)
             if len(step_id) > MAX_ID:
                 step_id = step_id[-MAX_ID:]

@@ -2,7 +2,14 @@ import copy
 import unittest
 
 from tests import context  # noqa: F401
-from tests.translator_helpers import assert_schema_ok, edited, steps_of, translate_fixture, verdict_of
+from tests.translator_helpers import assert_schema_ok, edited, load_capture, steps_of, translate_fixture, verdict_of
+
+from lib.params import size_table
+from lib.translator import translate, tool_walk
+from lib.translator.context import Context
+from lib.translator.finish import fillet
+from lib.translator.result import Refusal
+from lib.translator.step_walk import all_steps
 
 
 class CombineTest(unittest.TestCase):
@@ -136,6 +143,95 @@ class MoreThanOneToolStepTest(unittest.TestCase):
             data = capture["items"][-1]["data"]
             data["volume_before"], data["volume_after"] = 7000.0, 7000.0 - 1000.0
         self.assertIsNotNone(edited("combine_tool_two_steps", edit).recipe)
+
+
+def sized(capture):
+    params = capture["parameters"]
+    table = size_table.build(params["user"], [p["name"] for p in params["user"]], params["model"], "mm")
+    return translate(capture, size_table=table)
+
+
+def one_step_tool():
+    """The plate with a tool of one step, on a sketch 3 mm up; the plate's height follows `plate_h_mm`."""
+    capture = load_capture("combine_cut_tool_two_steps_sized")
+    del capture["items"][4:6]
+    return capture
+
+
+class ToolWalkTest(unittest.TestCase):
+    def seen_by_fillet(self, edit=None):
+        """What the handler of the tool's fillet sees: its context and its item."""
+        seen = []
+
+        def spy(item, ctx):
+            seen.append((item, ctx.target, list(ctx.steps)))
+            return fillet(item, ctx)
+        capture = load_capture("combine_tool_filleted")
+        if edit:
+            edit(capture)
+        translate(capture, {"FilletFeature": spy})
+        return seen[0]
+
+    def test_a_handler_in_a_tool_walk_sees_the_tool_as_its_target(self):
+        _, target, steps = self.seen_by_fillet()
+        self.assertEqual(target["token"], "t2")
+        self.assertEqual([s["kind"] for s in steps], ["extrude"])
+
+    def test_a_handler_reads_what_was_measured_on_the_tool(self):
+        box = {"min": [0, 0, 0], "max": [1, 1, 1]}
+
+        def edit(capture):
+            fillet_item = next(i for i in capture["items"] if i["type"] == "FilletFeature")
+            fillet_item["body_states"] = {"t2": {"box_before": box, "volume_before": 5.0, "volume_after": 4.0}}
+        item, _, _ = self.seen_by_fillet(edit)
+        self.assertEqual((item["data"]["target_box_before"], item["data"]["volume_after"]), (box, 4.0))
+
+    def test_tools_nested_too_deep_are_refused(self):
+        capture = load_capture("combine_cut")
+        built = tool_walk.build(Context(capture), {"token": "t2", "name": "Body2"}, 4, tool_walk.MAX_DEPTH + 1)
+        self.assertIsInstance(built, Refusal)
+
+
+class FlatToolOnThePartTest(unittest.TestCase):
+    def test_a_tool_that_reaches_a_face_of_the_part_follows_that_face(self):
+        capture = one_step_tool()
+        capture["items"][3]["data"].update(end_offset=7.0, side_one={
+            "kind": "toEntity", "plane": {"point": [12, 10, 10], "normal": [0, 0, 1]}, "offset": 0.0,
+            "entity_type": "BRepFace", "face_point": [12, 10, 10]})
+        cut = steps_of(sized(capture).recipe, "extrude")[1]
+        self.assertEqual(cut["distance"], {"expr": "plate_h_mm - 3"})
+
+    def test_a_joined_tool_starts_with_the_outline_that_meets_the_part(self):
+        def square(x):
+            corners = [[x, 5], [x + 8, 5], [x + 8, 15], [x, 15]]
+            return {"sketch": "Sketch3", "frame": {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]},
+                    "loops": [{"outer": True, "curves": [{"kind": "line", "start": corners[n], "end": corners[(n + 1) % 4]}
+                                                         for n in range(4)]}]}
+        capture = one_step_tool()
+        capture["items"][3]["data"]["profiles"] = [square(50), square(30)]
+        capture["items"][-1]["data"]["operation"] = "join"
+        first = steps_of(translate(capture).recipe, "extrude")[1]
+        self.assertEqual(first["sketch"]["outer"]["center"][0], 34)
+
+    def test_a_step_sees_only_what_was_written_before_it(self):
+        ctx = Context({"target": {"token": "t1"}, "items": []})
+        first, second = {"index": 1}, {"index": 2}
+        ctx.enter(first)
+        ctx.written_reads = ("a",)
+        ctx.enter(second)
+        ctx.written_reads = ("a", "b")
+        with ctx.as_of(first):
+            self.assertEqual(ctx.written_reads, ())
+        with ctx.as_of(second):
+            self.assertEqual(ctx.written_reads, ("a",))
+        self.assertEqual(ctx.written_reads, ("a", "b"))
+
+
+class AllStepsTest(unittest.TestCase):
+    def test_nested_steps_follow_the_step_that_holds_them(self):
+        inner = {"id": "c"}
+        tool = {"id": "b", "features": [{"id": "b1", "features": [inner]}]}
+        self.assertEqual([s["id"] for s in all_steps([{"id": "a"}, tool, {"id": "d"}])], ["a", "b", "b1", "c", "d"])
 
 
 if __name__ == "__main__":
