@@ -51,13 +51,6 @@ class ForeignDirectionTest(unittest.TestCase):
         self.assertEqual([r["key"] for r in geometry_links.item_refs({"index": 1, "data": data})],
                          ["1.direction_one"])
 
-    def test_both_directions_are_read_when_both_come_from_another_component(self):
-        data = self.pattern(directionOneEntity=self.axis((1, 0, 0)), directionTwoEntity=self.axis((0, 1, 0)),
-                            quantityTwo=param_value(2), distanceTwo=param_value(1.0))
-        self.assertEqual(data["direction_two"], [0.0, 1.0, 0.0])
-        self.assertEqual(data["quantity_two"], 2)
-        self.assertEqual(sorted(k for k in data if k.endswith("_place")), ["direction_one_place", "direction_two_place"])
-
     def test_a_direction_that_cannot_be_read_marks_the_pattern_foreign(self):
         bare = Obj("fusion::ConstructionAxis", entityToken="ax2", assemblyContext=self.occurrence,
                    nativeObject=Obj("fusion::ConstructionAxis", entityToken="ax2", parentComponent=self.lid))

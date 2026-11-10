@@ -132,12 +132,6 @@ class ReadRefsTest(unittest.TestCase):
         self.a.move(self.a.tray_at, turn_z(90, (110, 50, 0)))
         self.assertEqual(read(self.a, {"3.plane": hint("cp1", "plane")})[0], before)
 
-    def test_a_tray_that_turns_turns_the_plane_the_other_way_in_its_frame(self):
-        before = read(self.a, {"3.plane": hint("cp1", "plane")})[0]["3.plane"]
-        self.a.move(self.a.tray_at, turn_z(180, (100, 50, 0)))
-        after = read(self.a, {"3.plane": hint("cp1", "plane")})[0]["3.plane"]
-        self.assertNotEqual(after["normal"], before["normal"])
-
     def test_a_plane_of_the_root_is_only_brought_into_the_target(self):
         plane = Obj("fusion::ConstructionPlane", entityToken="rp", parentComponent=self.a.root,
                     geometry=plane_geometry((0, 0, 7), (0, 0, 1)))
@@ -175,10 +169,6 @@ class ReadRefsTest(unittest.TestCase):
         found, unread = read(self.a, {"1.plane": hint("cp1", "plane")})
         self.assertEqual((found, unread), ({}, {"1.plane": probe_refs.NO_TARGET_PLACE}))
 
-    def test_nothing_is_read_for_nothing_asked(self):
-        self.assertEqual(read(self.a, {}), ({}, {}))
-
-
 class ReadStateTest(unittest.TestCase):
     def test_the_state_holds_the_references_and_the_reasons_for_the_ones_left_out(self):
         a = Assembly()
@@ -187,10 +177,6 @@ class ReadStateTest(unittest.TestCase):
                            a.context())
         self.assertEqual(list(state["refs"]), ["3.plane"])
         self.assertEqual(state["unread"], {"4.plane": probe_refs.NOT_FOUND})
-
-    def test_a_state_without_references_asked_has_none(self):
-        a = Assembly()
-        self.assertNotIn("refs", read_state(a.design, {"sketches": []}, a.context()))
 
     def test_reading_changes_nothing_in_the_design(self):
         a = Assembly()

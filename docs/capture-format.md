@@ -58,7 +58,8 @@ TARGET:
 }
 ```
 
-`target` is the first of `targets` (the same object; a later version lists several bodies there). The token, name, box
+`target` is the first of `targets` (the same object). `targets` holds the one picked body; a file with several bodies
+has one capture per body. The token, name, box
 and volume are those of the **native** body (component coordinates), not of the occurrence proxy that the person
 picked. `component` is the component that owns the body. `placement` is `null` for a body of the root component;
 otherwise:
@@ -228,8 +229,7 @@ counts it as a size the sketch reads (`sizes.sketch_sizes`, section 5). The link
 probe decides.
 
 A step can also use a plane, axis, direction or point of another component directly (measured references, "Measured
-references", section 4). A user parameter that acts on the component that owns such a reference (not an `origin`
-plane or axis) gets a link `{ "param", "sketch": "", "component", "via": "reference", "step", "ref" }` once per
+references", section 4). A user parameter that acts on the component that owns such a reference gets a link `{ "param", "sketch": "", "component", "via": "reference", "step", "ref" }` once per
 component (`reference_links`; `step` is the step's name, `ref` the key of the first reference). It is offered, ticked
 to start with and probed like a sketch link; the offer text says which step uses which component.
 
@@ -803,7 +803,8 @@ The translator (`lib/translator/ref_motion.py`) reads these records as follows.
     place stays where the capture has it;
   - not measured (`probe.motion.refs` holds a reason, or the size was left without rows), not looked at (no entry),
     or no motion file: every such size is marked loose with the step and the component named.
-  The first translation of an export (`OPTIMISTIC`) marks nothing. An `origin` reference marks nothing. A capture that
+  The first translation of an export (`OPTIMISTIC`) marks nothing. An `origin` reference is handled like any other: it
+  moves with the occurrence of its component. A capture that
   lists no `dependents`, or a record without a component, gives the step a note instead.
 - A plane or face moves along its captured `normal`; an axis moves across its direction. A pattern direction stays the
   number read; only a turn marks sizes.
@@ -1056,7 +1057,8 @@ give the reference, `curve` or `untried` when the move is no exact formula of th
 `refs` lists every reference the probe looked at, by key `<item>.<slot>`: `""` when it was measured, else why not
 (it has no place in the target's coordinates or no token, the first read did not match the capture within 1e-4 mm, the
 reader could not read it, or there was no first read). Such a reference is not read at the other states. A key that is
-not in `refs` was not looked at (older motion file, or the export's first translation): nothing is known. For one
+not in `refs` was not looked at (a motion file written without references, or the export's first translation):
+nothing is known. For one
 reference and one size acting on its component, `sketch_values.coverage.ref_answer` gives the same three answers as for
 sketches: `STILL`, `MOVED` (with the keys) or `NOT_MEASURED` (with the reason, or `NOT_TRIED` for a size left without
 rows, `NOT_LOOKED` for a key not in `refs`).
@@ -1125,6 +1127,10 @@ from the translator and from the probe. `checks` in the manifest is
 always empty. The report has a
 `probe` when a sketch could be followed (the rows only recompute and the parameters are restored), `marker` and
 `health`. A probe row that Fusion cannot build is listed in `probe.dropped`; no size is fixed for it.
+
+A file with several bodies (package kind `parts`) has one `report.json` with a `parts` list, one record per body:
+`{ name, outcome, items, notes, capture, probe, sizes }`, plus `refusal` or `error` for a body saved as a fixed shape.
+The `sizes` record at the top is shared by all bodies.
 
 ## 7. API names and what is not verified
 

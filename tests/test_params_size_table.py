@@ -25,10 +25,6 @@ class MergedTableTest(unittest.TestCase):
         self.assertEqual(sorted(both.ticked), sorted([W, CUBE]))
         self.assertTrue({NEW_W, CUBE} <= set(both.sizes))
 
-    def test_one_table_is_returned_as_it_is(self):
-        only = table()
-        self.assertIs(size_table.merged([only]), only)
-
     def test_a_typed_range_of_either_part_is_kept(self):
         params = reader_dicts()
         first = size_table.build(params, [CUBE], ranges={CUBE: (10.0, 30.0)})

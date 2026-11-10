@@ -5,23 +5,20 @@ note the Fusion version and system.
 
 ## Check first in this version
 
-In this order. Each id is described in the section named.
+What 0.6.0 to 0.7.1 added, in this order. Each id is described in the section named.
 
-- [ ] K10 Hole drawn around another component's pipe: section 9. Export the box, the pipe diameter parameter is
-      ticked to start with, and the hole follows it in Paramability.
-- [ ] K11 Parameters found by trying: section 9. Untick the pipe diameter and export: the result window says it
-      also changes this part.
-- [ ] Compact export window: section 7.2, "The export window has no empty gaps", then "Early warning" and "Show in
-      timeline".
-- [ ] Result window with its warnings: section 7.2, "Click OK: ... the result window", and the export pipeline entry
-      under "Fusion calls to watch" ("These parameters could not be set back").
+- [ ] Compact export window and result window: section 7.2 ("The export window has no empty gaps", "Early warning",
+      "Show in timeline", the result window) and the export pipeline entry under "Fusion calls to watch".
 - [ ] E1 to E6, Emboss on a flat face: section 10.
-- [ ] T1 to T5, thin walled extrudes of one closed outline: section "Thin extrudes".
+- [ ] T1 to T5, thin walled extrudes of one closed outline (T5 is `%` with a negative left side): section "Thin
+      extrudes".
 - [ ] S1 to S5 and X1 onward, spline outlines and sketch text: section 11.
-- [ ] Mirror plane and pattern axis reference reads: "Fusion calls to watch", the entry about `read_reference.py`.
-- [ ] R1 to R7, places of another component: section 8.1.
+- [ ] K10 and K11, a parameter that reaches the part through another component, and the "Also change this part"
+      list: section 9.
+- [ ] R1 to R7, references to places of another component: section 8.1 (the reads are under "Fusion calls to watch").
 - [ ] M1 to M6, measuring those places at other sizes: section 8.2.
-- [ ] `%` with a negative left side: T5.
+- [ ] Combine with a tool of several steps: section 7, "Combine with a tool of several steps".
+- [ ] P1 to P4, several bodies in one file: section 8.3.
 
 ## 1. Install
 
@@ -405,7 +402,7 @@ formulas.
 - [ ] **R6 Origin plane and no measuring.** A mirror across an origin plane of the root: copied with no
       warning. Across an origin plane of `Cover`, with a ticked parameter that moves the `Cover` occurrence:
       `ref.origin` is true and the mirror follows the move (or the parameter is loose with a reason). Then a mirror across a plane of `Cover` driven by a
-      ticked parameter, in an export where the sketch scan did not run (older motion file, or the scan failed): the
+      ticked parameter, in an export where the sketch scan did not run (a motion file without references, or the scan failed): the
       parameter is loose with a reason, never silently fixed.
 - [ ] **R7 Pattern direction from another component.** A rectangular pattern whose direction is an axis or edge of `Cover`:
       copied with the direction as read. A parameter that turns that axis is loose ("turns").
@@ -897,7 +894,7 @@ read the capture in `report.json`.
   `edgeOne`, `edgeTwo`; `AtCenterHolePositionDefinition`: `planarEntity`, `centerEdge`); any other type, the edge
   placement among them, is tried through every name (`edge`, `edges`, `face`, `plane` and the like) and may not all exist.
   The member names are from memory of the API reference and not confirmed on a live Fusion: check each. A hole on a face of another component that is
-  not marked `foreign` means none of them answered (R4b). `HoleFeature.direction` of a hole on sketch points of another
+  not marked `foreign` means none of them answered (R4). `HoleFeature.direction` of a hole on sketch points of another
   component is taken as given: check it points into the material in R5.
 - `participantBodies` on extrude and revolve (may be unreadable; then the list is empty).
 - `Design.findEntityByToken` for the picked body at each marker position, with a name fallback in the root component.

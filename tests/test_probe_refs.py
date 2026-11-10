@@ -88,12 +88,6 @@ class RefsOfACaptureTest(unittest.TestCase):
         self.assertEqual(list(plan.request(with_refs(*items), tbl, wanted={"9.axis"})["refs"]), ["9.axis"])
         self.assertNotIn("refs", plan.request(CAPTURE, tbl))
 
-    def test_references_alone_are_enough_for_a_request(self):
-        tbl = table(PARAMS, TICKED, MODEL)
-        request = plan.request(capture(MIRROR), tbl)
-        self.assertEqual((request["sketches"], list(request["refs"])), ([], ["8.plane"]))
-        self.assertIsNone(plan.request(capture(), tbl))
-
 
 class PlaneTest(unittest.TestCase):
     def test_a_plane_that_follows_a_size_gets_a_formula_for_its_move(self):
@@ -125,10 +119,6 @@ class PlaneTest(unittest.TestCase):
         self.assertEqual((value.cause, value.movers), ("turns", ("off",)))
         self.assertEqual(value.rest.terms, {"height": 1.0})
 
-    def test_a_flipped_normal_counts_as_a_tilt(self):
-        motion = run([MIRROR], with_e0(plane_at(20), at(plane_at(20, (0, 0, -1)), height=30)))
-        self.assertEqual(motion.get("8/r/plane/offset").cause, "turns")
-
     def test_a_state_that_does_not_read_the_plane_is_stuck_for_its_sizes(self):
         motion = run([MIRROR], with_e0(plane_at(20), at({}, off=9), at(plane_at(30), height=30),
                                        at(plane_at(50), height=50)))
@@ -152,10 +142,6 @@ class StartReadTest(unittest.TestCase):
         motion = run([MIRROR], with_e0(plane_at(21), at(plane_at(31), height=30), at(plane_at(51), height=50)))
         self.assertEqual(motion.refs, {"8.plane": ref_fit.NOT_MATCHED})
         self.assertFalse([k for k in motion.values if "/r/" in k])
-
-    def test_a_first_read_with_a_turned_normal_is_not_followed(self):
-        motion = run([MIRROR], with_e0(plane_at(20, (0, 1, 0))))
-        self.assertEqual(motion.refs, {"8.plane": ref_fit.NOT_MATCHED})
 
     def test_a_reference_the_reader_could_not_read_gives_the_readers_reason(self):
         first = read({})

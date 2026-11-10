@@ -398,8 +398,8 @@ def _foreign_sketch_points(points, ctx):
 
 
 # Members of each hole position definition type that hold the faces, planes, edges or points it is placed on. A
-# definition of any other type (an edge placement among them, whose member names are not fixed here) is read through every member named below (a member a type lacks reads as
-# nothing).
+# definition of any other type (an edge placement among them, whose member names are not fixed) is read through
+# every member named in _ALL_PLACE_MEMBERS; a member a type lacks reads as nothing.
 _PLACE_MEMBERS = {
     "PointHolePositionDefinition": ("planarEntity", "point"),
     "PlaneAndOffsetsHolePositionDefinition": ("planarEntity", "edgeOne", "edgeTwo"),

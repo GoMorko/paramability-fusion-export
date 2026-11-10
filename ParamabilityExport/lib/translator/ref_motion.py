@@ -45,7 +45,7 @@ def _vector(value):
 
 def _acting(ctx):
     """{ component token: Fusion names of the user parameters that act on it } from the capture's parameter data
-    (`geometry_links.acts`), or None when the capture does not say where parameters act (an older capture)."""
+    (`geometry_links.acts`), or None when the capture does not say where parameters act (a capture without the parameter data)."""
     cache = ctx.cache.setdefault("ref_motion", {})
     if "acting" not in cache:
         users = (ctx.capture.get("parameters") or {}).get("user") or []
@@ -285,8 +285,8 @@ def _brought_hole(data):
 
 
 def bring_in(item):
-    """The item with the faces and planes of other components its extrude start and reach, or its hole, uses no longer
-    `foreign`, or the item itself when it uses none (or one that stays foreign)."""
+    """The item with the faces and planes of other components that its extrude start and reach, or its hole, uses
+    turned into records without `foreign`, or the item itself when it uses none (or one that stays foreign)."""
     data = item.get("data")
     if not isinstance(data, dict):
         return item

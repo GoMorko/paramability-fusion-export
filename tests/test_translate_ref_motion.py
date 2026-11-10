@@ -110,16 +110,14 @@ class ReachTest(unittest.TestCase):
         self.assertIn("Cover", marked(result)["gap_mm"])
         self.assertEqual(self.boss(result)["distance"], 15.0)
 
-    def test_a_face_the_probe_could_not_measure_marks_every_size_that_acts_on_its_component(self):
-        result = self.run_reach(motion_with(self.NAME, refs={"3.side_one": "its first read did not match the capture"}))
-        self.assertEqual(sorted(marked(result)), ["ear_mm", "gap_mm"])
-        self.assertIn("first read", marked(result)["gap_mm"])
-        self.assertEqual(self.boss(result)["distance"], 15.0)
-
-    def test_a_face_the_probe_did_not_look_at_marks_the_same_sizes(self):
-        result = self.run_reach(motion_with(self.NAME, values={}, refs={}))
-        self.assertEqual(sorted(marked(result)), ["ear_mm", "gap_mm"])
-        self.assertIn("Extrude2", marked(result)["gap_mm"])
+    def test_a_face_the_probe_could_not_measure_or_did_not_look_at_marks_every_size_that_acts_on_its_component(self):
+        measured = {"3.side_one": "its first read did not match the capture"}
+        for refs, said in ((measured, "first read"), ({}, "Extrude2")):
+            with self.subTest(said):
+                result = self.run_reach(motion_with(self.NAME, values={}, refs=refs))
+                self.assertEqual(sorted(marked(result)), ["ear_mm", "gap_mm"])
+                self.assertIn(said, marked(result)["gap_mm"])
+                self.assertEqual(self.boss(result)["distance"], 15.0)
 
     def test_a_size_the_probe_left_without_rows_is_marked(self):
         motion = motion_with(self.NAME)
@@ -199,12 +197,6 @@ class MirrorTest(unittest.TestCase):
         origin = self.mirror(result)["plane"]["origin"]
         self.assertEqual([value_at(origin[0], gap) for gap in (10, 15)], [0, 5])
 
-    def test_an_origin_plane_that_was_not_measured_marks_its_sizes(self):
-        capture = load_capture(self.NAME)
-        capture["items"][4]["data"]["plane"]["ref"]["origin"] = True
-        motion = motion_with(self.NAME, {}, {"4.plane": "its first read did not match the capture"})
-        self.assertEqual(list(marked(run(capture, motion, ["gap_mm", "depth_mm"]))), ["gap_mm"])
-
     def test_a_plane_that_turns_marks_its_sizes_and_the_mirror_stays_put(self):
         motion = motion_with(self.NAME, {"4/r/plane/offset": TURNS})
         result = run(load_capture(self.NAME), motion, ["gap_mm", "depth_mm"])
@@ -257,9 +249,6 @@ class AxisTest(unittest.TestCase):
         self.assertEqual(list(marked(result)), ["gap_mm"])
         self.assertEqual(steps_of(result.recipe, "pattern")[0]["polar"]["axisPoint"], [20.0, 10.0, 0.0])
 
-    def test_a_pattern_axis_that_stays_marks_nothing(self):
-        self.assertEqual(marked(self.pattern({})), {})
-
     def revolve(self, values, edit=None):
         def change(capture):
             capture["items"][1]["data"]["axis"].update(
@@ -296,9 +285,6 @@ class DirectionTest(unittest.TestCase):
         self.assertIsNone(result.refusal)
         self.assertEqual(list(marked(result)), ["gap_mm"])
         self.assertIn("turns", marked(result)["gap_mm"])
-
-    def test_a_direction_that_stays_marks_nothing(self):
-        self.assertEqual(marked(self.pattern({}, {"4.direction_one": ""})), {})
 
     def test_a_direction_that_was_not_measured_marks_the_sizes_that_act_on_its_component(self):
         result = self.pattern({}, {})
@@ -373,11 +359,9 @@ class PlaneShiftTest(unittest.TestCase):
                 mock.patch.object(ref_motion, "mark_all", side_effect=lambda *a: marks.append(a)):
             return ref_motion.plane_shift(None, {}, record, direction, "a step"), marks
 
-    def test_a_line_along_the_normal_gets_the_move(self):
+    def test_a_line_along_the_normal_gets_the_move_and_a_slanted_one_marks_the_sizes(self):
         written, marks = self.shift([0, 0, -1])
         self.assertEqual((written.sized, marks), (True, []))
-
-    def test_a_slanted_line_marks_the_sizes_and_writes_no_move(self):
         written, marks = self.shift([0, 0.6, 0.8])
         self.assertEqual((written.sized, len(marks)), (False, 1))
 

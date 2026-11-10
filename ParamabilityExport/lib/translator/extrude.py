@@ -10,7 +10,7 @@ A thin extrude of one closed outline without holes is written with the recipe's 
 thickness follows its parameter, and the side of the outline comes from the measured area of the end face. Open lines,
 several outlines, outlines with holes, two sided and tapered thin extrudes are refused.
 
-An extrude of text or spline outlines is also checked against the volume Fusion made (`_volume_refusal`).
+An extrude of text or spline outlines is also checked against the volume Fusion made.
 """
 import heapq
 import math

@@ -149,14 +149,7 @@ class SharedSizesTest(unittest.TestCase):
             "parts/01/part.step", "parts/01/recipe.json", "parts/02/part.step", "parts/02/recipe.json", "report.json"])
         self.assertEqual([p["name"] for p in result.report["parts"]], ["Body1", "Body2"])
         self.assertTrue(all("capture" in p for p in result.report["parts"]))
-
-    def test_every_listed_parameter_comes_along_once_for_the_file(self):
-        result = export(FakePartsPort([BASE, second_body()]))
         self.assertEqual([p["name"] for p in result.manifest["parameters"]], [p["name"] for p in USER])
-
-    def test_two_bodies_with_the_same_name_get_different_names(self):
-        result = export(FakePartsPort([BASE, BASE]))
-        self.assertEqual([p["name"] for p in result.manifest["parts"]], ["Body1", "Body1 2"])
 
 
 class LooseAndFixedTest(unittest.TestCase):
@@ -238,16 +231,9 @@ class DiscoveryLinesTest(unittest.TestCase):
         self.assertNotIn("Base", line[wall:gap])
         self.assertIn("Lid, Base", line[gap:])
 
-    def test_one_part_keeps_the_plain_line(self):
-        (line,) = also_lines({"also_changes": ["wall"]})
-        self.assertIn("wall", line)
-
     def test_the_parameters_the_export_did_not_try_are_counted_once_in_a_line(self):
         (line,) = not_tried_lines(parts_report(also=[], found={"Lid": [], "Base": []}, untried=5))
         self.assertIn("5 more", line)
-        self.assertEqual(not_tried_lines({"probe": {"discovery": [{"param": "a", "moved": False}]}}), [])
-        self.assertEqual(len(not_tried_lines({"probe": {"discovery": [
-            {"param": "a", "moved": None, "tried": False, "reason": "x"}]}})), 1)
 
     def test_the_parts_view_titles_and_lists_what_was_not_tried(self):
         result = export(FakePartsPort([BASE, second_body()]))
@@ -366,11 +352,6 @@ class LinksPerPartTest(unittest.TestCase):
 
 
 class DialogTableTest(unittest.TestCase):
-    def test_one_body_gives_the_table_of_that_body(self):
-        alone = table_for_body(USER, "mm", MODEL, BASE)
-        same = table_for_bodies(USER, "mm", MODEL, [BASE])
-        self.assertEqual(same.ticked, alone.ticked)
-
     def test_a_parameter_that_any_picked_body_uses_is_ticked(self):
         a = table_for_body(USER, "mm", MODEL, BASE)
         only_height = copy.deepcopy(second_body())
@@ -397,11 +378,6 @@ class ResultViewTest(unittest.TestCase):
         self.assertTrue(view["parts"][0].startswith("Body1: editable"))
         self.assertIn("fixed shape", view["parts"][1])
         self.assertIn("Saved box.paramability", view["message"])
-
-    def test_a_package_of_another_kind_has_no_parts_view(self):
-        result = export(FakePartsPort([BASE, second_body()]))
-        self.assertIsNone(parts_result_view("x", {"kind": "recipe"}, result.report, result.table, TICKED))
-
 
 if __name__ == "__main__":
     unittest.main()

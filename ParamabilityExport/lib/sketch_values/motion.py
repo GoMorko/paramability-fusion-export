@@ -27,7 +27,7 @@ answers `NOT_MEASURED`.
 an empty text when it was measured, else why it could not be. Its values are keyed `<item>/r/<slot>/...`: how far the
 plane, axis or point moved from where the capture has it (zero at the current sizes), as an `Affine` of the sizes, or
 a `Stuck` when it turned or the move does not fit. A measured reference without keys stayed where it is. A reference
-that is not in `refs` was not looked at (a motion file from before references were measured, or the first translation
+that is not in `refs` was not looked at (a motion file written without references, or the first translation
 of an export): nothing is known about it.
 
 The translator reads this file; `probe.build` makes it.

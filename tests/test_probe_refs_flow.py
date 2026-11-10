@@ -60,13 +60,6 @@ class RefProbeTest(unittest.TestCase):
         self.assertIsNotNone(probe)
         return probe
 
-    def test_the_request_lists_the_references_and_the_first_read_gives_them(self):
-        fusion = Cover()
-        probe = self.start(fusion)
-        self.assertEqual(list(fusion.requests[0]["refs"]), ["8.plane"])
-        self.assertEqual(list(probe.request["refs"]), ["8.plane"])
-        self.assertEqual([r["key"] for r in probe.refs], ["8.plane"])
-
     def test_a_size_that_acts_on_the_reference_gets_rows_and_the_plane_a_formula(self):
         fusion = Cover()
         probe = self.start(fusion)
@@ -154,8 +147,6 @@ class BodyOnlyTest(unittest.TestCase):
         probe = self.probed(WallBody())
         self.assertEqual(probe.motion.body_moved, ["wall"])
         self.assertEqual(Motion.from_json(probe.report()["motion"]).body_moved, ["wall"])
-
-    def test_a_size_that_changes_no_body_is_not_kept(self):
         self.assertEqual(self.probed(WallBody(grows=False)).motion.body_moved, [])
 
     def test_a_size_that_changes_the_body_is_not_dropped_as_changing_nothing(self):

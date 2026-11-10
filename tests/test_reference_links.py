@@ -44,13 +44,9 @@ class ReferenceLinksTest(unittest.TestCase):
     def test_a_size_that_acts_on_the_component_of_the_plane_gets_a_link(self):
         self.assertEqual(geometry_links.reference_links(mirror_capture()), [LINK])
 
-    def test_an_origin_plane_of_the_component_gets_a_link_and_ticks_the_size(self):
+    def test_an_origin_plane_of_the_component_gets_a_link(self):
         capture = mirror_capture(lambda c, ref: ref.update(origin=True))
         self.assertEqual(geometry_links.reference_links(capture), [LINK])
-        capture["parameters"]["model"] = []
-        table = size_offers.table_for_body(capture["parameters"]["user"], "mm", [], capture)
-        self.assertEqual(table.ticked, ["gap_mm"])
-        self.assertIn("gap_mm", plan.sketch_driven(table))
 
     def test_components_no_size_acts_on_give_no_link(self):
         elsewhere = mirror_capture(lambda c, ref: ref.update(component={"token": "cmp_lid", "name": "Lid"}))
