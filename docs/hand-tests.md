@@ -7,6 +7,9 @@ note the Fusion version and system.
 
 What 0.6.0 to 0.7.2 added, and what this version adds, in this order. Each id is described in the section named.
 
+- [ ] Export the bracket and the box once with this version and send the two `.paramability` files. Nothing needs
+      checking by eye: each file holds a `derived` record in its `report.json` that says how well reading the sketch
+      dimensions agrees with what the tries measured ("Derived values" in `docs/capture-format.md`, section 6).
 - [ ] D1 and D5 to D13, the sketch graph in the capture, the marker held early during the tries, the new first tries
       near the value, the progress window text and sketch dimensions in `dependents`: section 12 (the calls are under
       "Sketch graph, marker roll and progress window" in "Fusion calls to watch").

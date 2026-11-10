@@ -146,13 +146,15 @@ class _PartsPipeline:
             for report in reports:
                 report["timeline"] = self.roll.record
         probe_of = dict(zip(self.probed, reports))
+        shadows = self.group.derived_records(port.log) if self.group is not None else []
+        derived_of = dict(zip(self.probed, shadows))
         unchecked = self.group.restore_unchecked if self.group is not None else []
         flipped = ["%s (%s)" % (name, self.names[i]) for i, motion in self.motions.items() if motion is not None
                    for name in motion.flipped]
         health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error, unchecked,
                                            flipped)
         inputs = [PartInput(self.names[i], self.steps[i], self.captures[i], finals.get(i), self.motions.get(i),
-                            probe_of.get(i)) for i in range(port.count)]
+                            probe_of.get(i), derived_of.get(i)) for i in range(port.count)]
         manifest, files, report = plan_parts_export(
             inputs, request.title, request.writer, request.up_axis, size_table=self.table, listing=self._listing(),
             marker=request.marker, loose=[{"name": m["name"], "reason": m["reason"]} for m in self.doubtful],

@@ -16,7 +16,7 @@ motion file says so (`Motion.refs`).
 from ..package.manifest import MAX_FIXED_REASON
 from ..package.text import clip
 from ..params.expressions import format_number
-from ..probe import build, fit, match, plan, ref_fit
+from ..probe import build, derived, fit, match, plan, ref_fit
 from ..sketch_values.motion import CURVE, SHAPE, TURNS, UNREAD, Stuck, Terms
 from ..translator import borrowed
 from ..translator.notes import loose_reason
@@ -525,6 +525,11 @@ class SizeProbe:
         reason = loose_reason(labels.get(size, param), why)
         return {"name": param, "reason": clip(reason, MAX_FIXED_REASON), "param": param, "size": size}
 
+    def derived_record(self):
+        """The `derived` block of `report.json` (`probe.derived.shadow`): what reading the sketch graphs gives, set
+        against the states this probe read. None when the capture has no sketch graphs."""
+        return derived.shadow(self.capture, self.table, self.states, self.motion)
+
     def _gap(self, after):
         """Largest difference in mm between E0 and a read after the restore, over the covered values and the places of
         the measured references (one that cannot be read again is left out). None when a sketch cannot be compared;
@@ -699,3 +704,22 @@ class ProbeGroup:
     def reports(self):
         """The `SizeProbe.report` of each part."""
         return [probe.report() for probe in self.probes]
+
+    def derived_records(self, log=None):
+        """The `shadow_of` block of each part; `log(text)` gets one line per part."""
+        return [shadow_of(probe, log, name) for probe, name in zip(self.probes, self.names)]
+
+
+def shadow_of(probe, log, name=""):
+    """The `derived` block of a probe, or `{ "error": text }` when working it out failed: shadow mode never stops an
+    export. `log(text)` gets one line about it (`name` leads the line of a part)."""
+    try:
+        block = probe.derived_record()
+    except Exception as exc:
+        block = {"error": ("%s: %s" % (type(exc).__name__, exc))[:300]}
+        line = "sketch reading, shadow: failed (%s)" % block["error"]
+    else:
+        line = derived.log_line(block) if block is not None else ""
+    if log is not None and line:
+        log("%s%s" % ("%s: " % name if name else "", line))
+    return block

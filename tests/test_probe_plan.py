@@ -115,7 +115,7 @@ class ProbeRowTests(unittest.TestCase):
         count = size_dict("n", 2.0, 1.0, 5.0, kind="count")
         zero = size_dict("z", 0.0, -8.0, 4.0)
         edge = size_dict("e", 1.0, 1.0, 5.0, kind="count")
-        found = {s["param"]: plan._near_values(s) for s in (tight, count, zero, edge)}
+        found = {s["param"]: plan.near_values(s) for s in (tight, count, zero, edge)}
         self.assertEqual(found, {"tight": (9.0, 11.0), "n": (1.0, 3.0), "z": (-2.0, 1.0), "e": (None, 2.0)})
 
     def test_row_values_are_in_the_units_fusion_shows(self):

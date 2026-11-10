@@ -558,11 +558,13 @@ class _Solver(Crossings):
         return progress
 
     def _check_known(self, item):
-        """A relation whose slots are all known must hold at every setting."""
+        """A relation whose unknowns cancel out must hold at every setting."""
         unknown, const = self.slots.reduce(item.lin)
         scale = num(1.0)
         for slot, coef in item.lin.terms.items():
-            scale = scale + coef * self.slots.known(slot)
+            known = self.slots.known(slot)
+            if known is not None:
+                scale = scale + coef * known
         if not self._zero_everywhere(const, scale):
             raise _Conflict("%s does not agree with the other rules when the sizes change" % item.source)
 

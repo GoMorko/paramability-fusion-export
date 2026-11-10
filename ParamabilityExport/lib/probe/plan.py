@@ -323,7 +323,7 @@ def _row(sizes, name, overrides, key=None, retry=False):
     return row
 
 
-def _near_values(size):
+def near_values(size):
     """`(low, high)`: the value `NEAR_SHARE` of itself below and above, inside the range. A value of zero moves by that
     share of the way to the range ends. A count is a whole number and at least one step from the value. A side that
     cannot move off the value is None."""
@@ -365,7 +365,7 @@ def probe_rows(sizes, moved, limit=MAX_PROBE_ROWS, extra=()):
     """
     rows, untried = [], []
     tried = _tried_sizes(sizes, moved, extra)
-    near = {s["param"]: _near_values(s) for s in tried}
+    near = {s["param"]: near_values(s) for s in tried}
     for size in tried:
         wanted = [(label, v) for label, v in zip(("near min", "near max"), near[size["param"]]) if v is not None]
         if len(rows) + len(wanted) > limit:
@@ -390,7 +390,7 @@ def far_rows(sizes, moved, room, extra=()):
     rows = []
     tried = _tried_sizes(sizes, moved, extra)
     for size in tried:
-        wanted = _far_ends(size, _near_values(size))
+        wanted = _far_ends(size, near_values(size))
         if len(rows) + len(wanted) > room:
             continue
         for end in wanted:

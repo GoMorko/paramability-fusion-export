@@ -1415,8 +1415,85 @@ whose read showed a followed sketch on another outline, the design is read again
 before the next row (`ProbeRun`); that read is the next state's `start` in `probe.states`. A probe row that Fusion cannot build is listed in `probe.dropped`; no size is fixed for it.
 
 A file with several bodies (package kind `parts`) has one `report.json` with a `parts` list, one record per body:
-`{ name, outcome, items, notes, capture, probe, sizes }`, plus `refusal` or `error` for a body saved as a fixed shape.
-The `sizes` record at the top is shared by all bodies.
+`{ name, outcome, items, notes, capture, probe, sizes, derived }`, plus `refusal` or `error` for a body saved as a fixed
+shape. The `sizes` record at the top is shared by all bodies; `derived` is per body.
+
+### Derived values (`derived`)
+
+Shadow mode of reading sketches directly (`lib/probe/derived.py`, `derived_keys.py`, `derived_sizes.py`). When the
+capture has `sketch_graphs`, the export solves each graph with `sketch_solve`, works out the values the probe keys
+(section 5, "Sketch values that follow sizes") from the solution, and compares them with what the probe read. The
+result is written as `derived` in `report.json` and used for nothing else: the recipe, the size lists, the notes and
+the result window are the same with or without it, and the add-in log gets one line. It runs after the tries and
+calls Fusion no more. A capture without graphs has no `derived`.
+
+```json
+{ "version": 1,
+  "summary": { "sketches": 4, "derived": 3, "partly": 1, "not_derived": 0, "values": 21, "agree": 20, "disagree": 1,
+               "skipped": 0, "errors": 0 },
+  "sketches": [ { "sketch": "Sketch1", "token": "...", "outcome": "derived", "solver_outcome": "derived",
+                  "values": { "derived": 15, "not_derived": 0 }, "reasons": { "piece": 2 },
+                  "formulas": { "affine": 8, "const": 7 }, "solver_open": { "blocked": 3 },
+                  "leaves": { "d1": { "kind": "dimension", "value": 40, "expression": "width", "formula": "width" } },
+                  "constants": ["c3", "p7"], "assumptions": [ { "text": "...", "flips": [] } ],
+                  "keys": { "4/p0/l0/center.0": { "formula": "0.5 * width", "kind": "affine" },
+                            "4/p0/l0/points.1.0": { "numbers": true, "why": "..." },
+                            "4/p0/c0.0/offset": { "open": "piece", "reason": "..." } },
+                  "compare": { "states": 5, "values": 15, "compared": 15, "agree": 14, "disagree": 1,
+                               "never_compared": 0, "max_diff": 2.0,
+                               "listed": [ { "key": "4/p0/l1/center.0", "state": 4, "derived": 37, "read": 35,
+                                             "sizes": { "margin": 3 } } ],
+                               "measured_fit": { "same": 14, "differs": 1 } },
+                  "solver": { } } ] }
+```
+
+- Per sketch: `error` (text, the solving stopped on an exception; the others go on) or `skipped` (more than
+  `MAX_ENTITIES` = 400 points and curves, or past `MAX_SKETCHES` = 60 sketches) instead of the fields below.
+  `outcome` is `derived` when every key of the sketch's profiles, hole points and axis lines has numbers, `partly` when
+  some have, `not_derived` when none do; a sketch no step reads has no keys and takes `solver_outcome`, the solver's
+  verdict on points and radii (`outcome.Solution.outcome`). `solver` is `Solution.json()`; `leaves` repeats its leaves
+  with each dimension's formula over the recipe size names.
+- `keys`: every key the probe reads for the sketch (at most 300 listed). The sketch plane (`<prefix>/plane`) is not
+  counted. A key has `formula` (text over recipe size names, as the translator writes it) and `kind` (`const`, `affine`
+  or `curved`: sines, cosines, products), or `numbers: true` (it has numbers at every size setting but no formula, for
+  example a line's turn or a width along a slanted line), or `open` with a `code`. A formula may carry `inputs` (it
+  reads the measured coordinate of a projected entity, named `@p3.x`, `@p3.y`, `@c5.r`) and `unread_dimensions`
+  (it reads a dimension whose expression could not be written; its comparison runs at the first state only).
+- Codes in `reasons` (keys without values, by code): the solver's (`blocked`, `refused`, `free`, `no_rule`,
+  `conflict`, `unread`; `solver_open` counts the same for points and radii) and the key mapping's: `not_in_sketch` (the
+  profile curve or hole point is not an entity of the graph), `piece` (a profile curve is only a part of a sketch
+  curve, so its ends are crossings with other curves), `kind` (an ellipse or other curve the solver does not work
+  out), `loop` (the curve is drawn but another curve of its loop is open: a loop is drawn from the solution as a
+  whole), `no_frame` (a hole point or axis needs the sketch frame of the first read), `no_match` (the outline drawn from
+  the solution is not the captured one).
+- How a key is found. A profile curve is found in the graph by its sketch entity token (`entity` equals the graph
+  curve's `token`). Its ends, centre and radius are the solver's formulas for that curve; an arc's middle point is
+  worked out from them. The profile is drawn again from those numbers and run through `match.state_values`, so the key
+  means exactly what a read in Fusion gives it. The formula of a key is fitted as a constant plus a sum of coefficients
+  times the solver's point coordinates and radii of its own loop (or its own curve, for `c<loop>.<curve>` keys), over the
+  size settings below, then each dimension leaf is replaced by its expression over the sizes
+  (`translate` of the dimension parameter's expression). A hole point or axis start is the solver's point put
+  through the frame of its sketch at the first read.
+- Size settings (`derived_sizes.override_sets`): the sizes the sketch's dimensions read, at most 12, each at 25 percent
+  below and above its value (as the first tries), then all low and all high. Two dimensions that read one size move
+  together. The solver checks its redundant rules and choices at these settings, and the formulas are fitted over them.
+  Settings where a value has no number (a square root of a negative value) leave the key without a formula.
+- Constants (`derived.constants_of`): a projected entity from another component that no parameter reaches through
+  `geometry_links.reach`, and an implicit line through the sketch origin (an origin axis). Other projected entities
+  (from the body's own edges or sketches) are measured inputs: the solver leaves them where they are, the fit moves
+  each one up and down by a quarter of its value (at most 40 inputs, `derived.MAX_INPUTS`), and a derived value that
+  reads one is flagged `inputs`. Their values at other states are not read, so such a value is compared with the
+  input at its first value and its disagreements are flagged `reads_inputs`.
+- `compare`: for each state the probe read (state 0 is the first read; `sizes` in a listed disagreement are the
+  sizes that state changed), the derived value of each key (the formula over the state's size values, else the numbers
+  drawn from the solution) against the number read there, within 1e-4 mm. `agree` counts keys that match at every state
+  they were compared at, `disagree` the others (the first disagreement of each is listed, at most 12), `never_compared`
+  the keys no state gave a read for. `formula_off` lists keys where the formula and the numbers drawn from the solution
+  differ at a state. `target_not_read` counts keys of a profile whose first read did not match the capture.
+  `measured_fit` counts each key against the measured motion (`probe.motion`): `same` (the same free sizes, both linear
+  or both not), `differs` (listed in `measured_fit_listed`), `derived_only` (the measured fit is stuck or did not look
+  at the sketch, the derived side has a formula) and `numbers_only` (no formula to compare). Moving a hole or axis
+  sketch's plane is not followed: those keys are compared in the frame of the first read.
 
 ## 7. API names and what is not verified
 

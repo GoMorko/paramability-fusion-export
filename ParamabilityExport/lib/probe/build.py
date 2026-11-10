@@ -26,7 +26,7 @@ from ..sketch_values.motion import SHAPE, UNREAD, Motion
 _SAME = 1e-9
 
 
-class _Run:
+class StateRun:
     """The states of one export, lined up with E0 first."""
 
     def __init__(self, capture, states, current=None, after=None):
@@ -177,7 +177,7 @@ def moved_sizes(capture, states, current=None):
     """Fusion names of the sizes whose state (the only size that differs) moved a covered sketch value.
 
     `current` gives the size values of E0 for a size its `values` does not list (`plan.state_values`)."""
-    run = _Run(capture, states)
+    run = StateRun(capture, states)
     moved = []
     for at in range(1, len(run.states)):
         names = run.varied(at, current)
@@ -229,7 +229,7 @@ def spans(states, current):
 def build(capture, table, states, after=None):
     """The `Motion` of a capture. See the module text for `states` and `after`."""
     current = {e.name: e.value for e in table.entries}
-    run = _Run(capture, states, current, after)
+    run = StateRun(capture, states, current, after)
     out = Motion(box_max=_box_max(states), states=[_state_record(s) for s in run.states[1:]],
                  unmeasured=coverage.unmeasured(run.found, run.readable, bool(run.base)),
                  spans=spans(run.states[1:], current))

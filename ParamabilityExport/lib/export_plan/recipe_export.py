@@ -148,7 +148,7 @@ def _uses(capture):
 
 def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
                        size_table=None, listing=None, motion=None, probe=None, marker=None, loose=None,
-                       translated=None, health=None, also=None):
+                       translated=None, health=None, also=None, derived=None):
     """Return (manifest, files, report) for one body.
 
     A body inside a component is translated like a root body: its capture carries the place of the part in the
@@ -173,6 +173,8 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
     marker: { position, count } of the timeline marker the export worked at (`design_edit.marker.read_marker`), for
       `report.json`. Steps after the position are left out of the part.
     also: Fusion names of unticked parameters the size probe saw changing the part (`report.json` "also_changes").
+    derived: the `derived` block (`probe.derived.shadow`) for `report.json`: what reading the sketch graphs gives, kept
+      beside the measured result and used for nothing else.
     files maps entry paths to a file path or bytes, as write_package expects. The manifest `checks` list is empty.
     Raises ValueError when the manifest breaks the package rules.
     """
@@ -224,6 +226,8 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         report["capture"] = capture
     if probe is not None:
         report["probe"] = probe
+    if derived is not None:
+        report["derived"] = derived
     if health is not None:
         report["health"] = health
     if listing is not None:
@@ -281,7 +285,8 @@ class PartInput:
 
     name: the part's name in the file. step_file: the STEP file on disk. capture: the reader's capture dict, or the
     exception it raised. translated: the translator's result for the same inputs (None translates here). motion: what
-    the size probe found for this part's sketches. probe: that probe's record for `report.json`.
+    the size probe found for this part's sketches. probe: that probe's record for `report.json`. derived: the part's
+    `derived` block for `report.json`.
     """
 
     name: str
@@ -290,6 +295,7 @@ class PartInput:
     translated: Optional[Any] = None
     motion: Optional[Any] = None
     probe: Optional[dict] = None
+    derived: Optional[dict] = None
 
 
 class _Part:
@@ -382,6 +388,8 @@ def _part_record(part, loose):
         record["capture"] = part.capture
     if part.given.probe is not None:
         record["probe"] = part.given.probe
+    if part.given.derived is not None:
+        record["derived"] = part.given.derived
     if part.is_recipe:
         record["sizes"] = {"free": part.free, "loose": [e["name"] for e in loose]}
     return record

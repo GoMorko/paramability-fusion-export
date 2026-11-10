@@ -79,6 +79,18 @@ class RedundantTest(unittest.TestCase):
         self.assertEqual(out.outcome, outcome.DERIVED, out.reason)
 
 
+    def test_redundant_heights_of_the_two_sides_agree_when_they_move_together(self):
+        """The two heights relate points that no rule knows yet: the relation holds in the unknowns, so only its
+        constant part is checked."""
+        s, (p1, p2, p3), _ = corner_rectangle()
+        s.dim("linear", [P(0), P(p3)], 7.0, "d5", "vertical")
+        settings = [{"d1": 20.0, "d2": h, "d5": h} for h in (3.0, 9.0)]
+        out = solve_sketch(s.record(), settings=settings)
+        self.assertEqual(out.outcome, outcome.DERIVED, out.reason)
+        apart = solve_sketch(s.record(), settings=[{"d2": 3.0, "d5": 9.0}])
+        self.assertEqual(apart.outcome, outcome.NOT_DERIVED)
+
+
 class RecordTest(unittest.TestCase):
     def test_a_sketch_the_reader_cut_is_not_derived(self):
         out = solve_sketch({"sketch": "Sketch1", "token": "s1", "cut": "entities", "points": [], "curves": []})

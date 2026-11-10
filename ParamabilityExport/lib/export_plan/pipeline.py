@@ -24,7 +24,7 @@ from . import health as health_module
 from . import messages
 from .body_scope import body_links, scope_inputs
 from .marker_roll import MarkerRoll
-from .probe_flow import SizeProbe, covers_a_sketch, extra_size_params, kept_size_names
+from .probe_flow import SizeProbe, covers_a_sketch, extra_size_params, kept_size_names, shadow_of
 from .recipe_export import free_sizes, plan_single_export, translate_capture
 from ..design_edit.restore import restore_parameters
 from ..design_edit.runner import ExportCancelled, RowExport
@@ -286,6 +286,7 @@ class _Pipeline:
         gap = self._restore_gap()
         self._end_roll()
         probe_report = self._close_probe()
+        shadow = shadow_of(self.probe, port.log) if self.probe is not None else None
         health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error,
                                            self._unchecked(), self.motion.flipped if self.motion is not None else ())
         manifest, files, report = plan_single_export(
@@ -293,7 +294,7 @@ class _Pipeline:
             part_step, request.title, request.writer, request.up_axis,
             size_table=self.table, listing=self._listing(), motion=self.motion, probe=probe_report,
             marker=request.marker, loose=[{"name": m["name"], "reason": m["reason"]} for m in self.doubtful],
-            translated=final, health=health, also=self.also)
+            translated=final, health=health, also=self.also, derived=shadow)
         return PipelineResult(manifest, files, report, self.table, health)
 
     def _translate_and_measure(self, capture):

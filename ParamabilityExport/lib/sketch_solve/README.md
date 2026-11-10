@@ -2,7 +2,8 @@
 
 Works out each point of a sketch as a formula of the sketch's own dimensions, from one `capture.sketch_graphs`
 record (`docs/capture-format.md`, "Sketch graphs"). Pure Python, no Fusion, no numeric solving. Imports `package` and
-`sketch_values` only.
+`sketch_values` only. `probe.derived` calls it in shadow mode, after the tries, and records the result in
+`report.json` (`docs/capture-format.md`, "Derived values").
 
 ## Interface
 
