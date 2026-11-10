@@ -46,6 +46,11 @@ def unmoved_reason(name):
     return clip("%s is not a size: changing it changes nothing in the copied steps." % name, MAX_NOTE)
 
 
+def tried_unmoved_reason(name):
+    return clip("%s is not a size: it was tried at other values, and it changes nothing in this part." % name,
+                MAX_NOTE)
+
+
 def unmoved_link_reason(name, component):
     return clip("%s is not a size: it changes %s, but nothing in this part moved with it." % (
         name, clip(component, MAX_NAME)), MAX_NOTE)

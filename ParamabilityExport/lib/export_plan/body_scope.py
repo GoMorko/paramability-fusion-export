@@ -138,12 +138,23 @@ def quantity_refs(capture):
     return list(found.values())
 
 
+def _body_sketch_names(capture):
+    return {name for _, name in _sketches_of(body_items(capture))}
+
+
 def body_links(capture):
     """The geometry links (`params.geometry_links.reach`) of the sketches that the picked body's own steps use."""
     if not isinstance(capture, dict) or not capture.get("sketch_links"):
         return []
-    used = {name for _, name in _sketches_of(body_items(capture))}
-    return geometry_links.reach(capture, used)
+    return geometry_links.reach(capture, _body_sketch_names(capture))
+
+
+def body_outside(capture):
+    """Fusion names of the user parameters worth a try to find links the reader cannot see
+    (`params.geometry_links.outside`), for the sketches the picked body's own steps use."""
+    if not isinstance(capture, dict) or not capture.get("sketch_links"):
+        return []
+    return geometry_links.outside(capture, _body_sketch_names(capture))
 
 
 def scope_inputs(capture, fallback_model=()):

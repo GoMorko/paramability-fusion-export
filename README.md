@@ -61,12 +61,19 @@ that would make the recipe invalid (for example a formula too long to write). A 
 reads is not a size; it still comes along as a variable.
 
 A sketch can also follow another component without a parameter of the body: a hole drawn around a pipe, with its
-circle projected from the pipe or constrained to it. The add-in reads which components each sketch is tied to this
-way, and which components each user parameter changes. A parameter that changes such a component is tried like a
-size behind a sketch dimension: if the sketch moves with it and the tries can follow, it is a free size and the
-outline follows it; if the outline changes in a way the tries cannot follow, it is "not followed" with the reason;
-if nothing in the part moves with it, it is "not used". Up to 8 more ticked parameters that nothing seems to tie to
-the part are tried too, after the others, since you know your design.
+circle projected from the pipe or constrained to it. The add-in reads which components and bodies each sketch is tied
+to this way. For each user parameter it follows where it acts: a sketch dimension acts on its sketch and on the steps
+that use that sketch, and those steps shape bodies of their component. A parameter that shapes the pipe body the hole
+is drawn around is ticked to start with and tried like a size behind a sketch dimension: if the sketch moves with it
+and the tries can follow, it is a free size and the outline follows it; if the outline changes in a way the tries
+cannot follow, it is "not followed" with the reason; if nothing in the part moves with it, it is "not used", with the
+reason that it was tried and changes nothing in this part. Up to 8 more ticked parameters that nothing seems to tie
+to the part are tried too, after the others, since you know your design.
+
+When a sketch of the part is tied to another component, the export also tries up to 12 unticked parameters that act
+on other components, once each, in the rows left under the cap. These tries only look: a parameter that moves the
+part is named in the result window ("These parameters also change this part"), and you tick it and export again to
+get it as a size.
 
 Some sizes the add-in cannot follow fully: a size that moves a sketch in a way the tries could not follow, a plane or
 axis, a joint, a pick (an edge of a round or chamfer) that may move with it, a pick on a pattern copy whose count would
@@ -157,8 +164,8 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   value past which it starts.
 - A link to another component is found only through the sketch itself: a projected curve or point, a constraint to
   one, or a sketch drawn on that component's face. A sketch that follows another component in another way (through
-  a construction plane or axis built on it, or a pattern reaching into it) is not linked; tick the parameter by hand
-  and the export tries it.
+  a construction plane or axis built on it, or a pattern reaching into it) is not linked; the tries of unticked
+  parameters may still name it, and a parameter you tick by hand is tried.
 - A recipe covers the picked body only. Parameters made by steps or sketches of other bodies are left out where the
   add-in can match them by name; construction planes, axes and joints are read for the component and the ones above
   it. A size that turns a sketch plane, moves a point along a curve, or changes the shape of an outline may give

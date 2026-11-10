@@ -9,6 +9,8 @@ In this order. Each id is described in the section named.
 
 - [ ] K10 Hole drawn around another component's pipe: section 9. Export the box, the pipe diameter parameter is
       ticked to start with, and the hole follows it in Paramability.
+- [ ] K11 Parameters found by trying: section 9. Untick the pipe diameter and export: the result window says it
+      also changes this part.
 - [ ] Compact export window: section 7.2, "The export window has no empty gaps", then "Early warning" and "Show in
       timeline".
 - [ ] Result window with its warnings: section 7.2, "Click OK: ... the result window", and the export pipeline entry
@@ -401,7 +403,14 @@ the sizes on the form and compare the part with Fusion at the same values.
       names the pipe component. In Paramability, change the diameter: the hole grows and shrinks with it and matches
       Fusion at the same value. Then break the link (delete the projection and give the hole its own diameter): the
       row is not ticked to start with; tick it by hand and export: the progress window still tries it, and the result
-      says "not used".
+      says "not used" with the reason that it was tried and changes nothing in this part (never "not used by any
+      copied step"). In `report.json`, `capture.parameters.user` lists the pipe diameter's `dependents`: its sketch
+      dimension names the pipe's sketch, and `capture.items` gives the pipe's extrude `sketch_inputs` with that sketch.
+- [ ] **K11 Found by trying.** The K10 design with the pipe diameter unticked. Export: the progress window tries it
+      once ("(try)"); the result window has the group "Also change this part" with the line "These parameters also
+      change this part: ... Tick them and export again to get them as sizes."; `report.json` has `also_changes` with
+      the pipe diameter and `probe.discovery` with `moved: true`. The pipe diameter is not a size in that file. Tick
+      it, export again: it is a size.
 
 ## 10. Emboss
 
@@ -681,16 +690,20 @@ These were written from the API reference and never run:
     parameters only.
   - `BRepFace.pointOnFace` and `BRepFace.geometry` (type name `Plane` or `Cylinder`) of the mirror face or the pattern
     axis face; `BRepEdge` points through `edge_record`.
-- Geometry links (`lib/fusion_reader/read_links.py` and `dependent_components` in `parameters.py`), K10. Read in the
+- Geometry links (`lib/fusion_reader/read_links.py`, `dependents` in `parameters.py`), K10 and K11. Read in the
   API reference: `Sketch.sketchCurves`, `sketchPoints`, `geometricConstraints`, `referencePlane`;
-  `SketchEntity.isReference` and `referencedEntity` (null for a reference that is not parametric, counted as
-  `unknown`); `CoincidentConstraint.point` and `entity`, `ConcentricConstraint.entityOne` and `entityTwo`,
-  `EqualConstraint` and `TangentConstraint` `curveOne` and `curveTwo`; `ModelParameter.component` and
-  `dependentParameters`. Not confirmed: that `referencedEntity` of a curve projected from another component's body
-  comes as a proxy whose `assemblyContext.component` is that component; that `lineOne`, `lineTwo`, `line` and
-  `curve` are the members of the other line constraints; that `UserParameter.dependentParameters` lists the model
-  parameters of every component. Print `capture.sketch_links` and the pipe diameter's `dependent_components` from
-  `report.json`: the pipe component must be named in both.
+  `SketchEntity.isReference` and `referencedEntity`; `CoincidentConstraint.point` and `entity`,
+  `ConcentricConstraint.entityOne` and `entityTwo`, `EqualConstraint` and `TangentConstraint` `curveOne` and
+  `curveTwo`; `ModelParameter.createdBy`, `component` and `dependentParameters`; `ExtrudeFeature.profile`,
+  `SweepFeature.profile`, `path` and `guideRail`, `PathEntity.entity`, `LoftSection.entity`. A real export confirmed
+  that `referencedEntity` names the other component through `assemblyContext.component`, and showed that
+  `ModelParameter.component` answers the root component for every dependent, so it is used only as a last fallback.
+  Not confirmed yet: that `createdBy` of a parameter from `dependentParameters` names its sketch or feature (print
+  the pipe diameter's `dependents` from `report.json`: a sketch dimension must name the pipe's sketch and the pipe
+  component); that `sketch_inputs` of the pipe's own steps name that sketch; that the `body` of a referenced edge
+  has the token `bodies_after` gives (compare `sketch_links[].links[].bodies` with the pipe steps' `bodies_after`);
+  that `lineOne`, `lineTwo`, `line` and `curve` are members of the other line constraints; that reading `profile` and
+  `path` on steps of other components with the marker before them is quick on a large design (note the export time).
 - The export pipeline (`lib/export_plan/pipeline.py`, wired in `commands/ExportForParamability/export_flow.py`):
   the export measures the sketches, and the probe reads the sketches once more after the last restore, so
   `report.json` `probe.restore_gap_mm` and `health` describe the design as the person gets it back. Check that the

@@ -4,7 +4,8 @@ import unittest
 from tests import context  # noqa: F401
 from tests.test_capture_reader import Coll, Obj
 
-from lib.fusion_reader.parameters import dependent_components
+from lib.fusion_reader.parameters import dependents
+from lib.fusion_reader.read_links import sketch_inputs
 from lib.fusion_reader.read_geometry import ReadContext
 from lib.fusion_reader.read_links import sketch_links
 
@@ -25,7 +26,10 @@ class Broken:
 
 def pipe_edge():
     """An edge of the pipe's body, seen through the pipe's occurrence."""
-    return Obj("fusion::BRepEdge", entityToken="edge", assemblyContext=Obj(component=PIPE))
+    context = Obj(component=PIPE)
+    body = Obj("fusion::BRepBody", entityToken="pb1 seen", name="Pipe body", assemblyContext=context,
+               nativeObject=Obj("fusion::BRepBody", entityToken="pb1", name="Pipe body"))
+    return Obj("fusion::BRepEdge", entityToken="edge", assemblyContext=context, body=body)
 
 
 def arc(token, reference=None):
@@ -64,7 +68,8 @@ class SketchLinksTest(unittest.TestCase):
         [record] = read(sketch([projected, drawn], [concentric]))
         self.assertEqual((record["sketch"], record["token"], record["unknown"]), ("PipeHole", "s2", 0))
         self.assertEqual(record["links"], [{"token": "cmp_pipe", "name": "Pipe", "references": 1, "constrained": 1,
-                                            "plane": False}])
+                                            "plane": False, "bodies": [{"token": "pb1", "name": "Pipe body"}],
+                                            "sketches": []}])
 
     def test_a_reference_to_the_part_itself_or_without_a_source_is_no_link(self):
         own = arc("a0", Obj("fusion::BRepEdge", entityToken="e", body=Obj(parentComponent=BOX)))
@@ -85,22 +90,49 @@ class SketchLinksTest(unittest.TestCase):
         self.assertEqual(read(broken)[0]["links"], [])
 
 
-def parameter(name, component=None, dependents=()):
-    kw = {"component": component} if component is not None else {}
-    return Obj("fusion::ModelParameter" if component is not None else "fusion::UserParameter", name=name,
-               dependentParameters=Coll(dependents), **kw)
+ROOT = Obj(entityToken="root", name="Design")
+PROFILE_SKETCH = Obj("fusion::Sketch", entityToken="sk_pipe", name="PipeProfile", parentComponent=ROOT)
 
 
-class DependentComponentsTest(unittest.TestCase):
-    def test_components_of_dependents_are_listed_through_parameters_that_read_it(self):
-        lid = Obj(entityToken="cmp_lid", name="Lid")
-        helper = parameter("pipe_r", dependents=[parameter("d7", lid)])
-        top = parameter("pipe_d", dependents=[parameter("d1", PIPE), helper, parameter("d2", PIPE)])
-        self.assertEqual(sorted(c["name"] for c in dependent_components(top)), ["Lid", "Pipe"])
+def parameter(name, made_by=None, dependents=()):
+    """A model parameter (with its maker) or, without one, a user parameter. Fusion names the root as the component
+    of every dependent, as it did in a real design."""
+    kind = "fusion::ModelParameter" if made_by is not None else "fusion::UserParameter"
+    return Obj(kind, name=name, createdBy=made_by, component=ROOT, dependentParameters=Coll(dependents))
 
-    def test_an_unreadable_dependent_list_gives_none(self):
-        self.assertEqual(dependent_components(Broken()), [])
-        self.assertEqual(dependent_components(parameter("pipe_d", dependents=[Broken()])), [])
+
+class DependentsTest(unittest.TestCase):
+    def test_each_dependent_names_its_sketch_or_feature_and_their_component_through_parameters_that_read_it(self):
+        dimension = Obj("fusion::SketchLinearDimension", entityToken="dim", parentSketch=PROFILE_SKETCH,
+                        parameter=None)
+        extrude = Obj("fusion::ExtrudeFeature", entityToken="ext", name="PipeExtrude", parentComponent=PIPE)
+        helper = parameter("pipe_r", dependents=[parameter("d2", extrude)])
+        found = {d["name"]: d for d in dependents(parameter("pipe_d", dependents=[parameter("d1", dimension), helper]))}
+        self.assertEqual(found["d1"], {"name": "d1", "kind": "sketchDimension", "component": "root",
+                                       "sketch": "PipeProfile", "sketch_token": "sk_pipe"})
+        self.assertEqual(found["d2"], {"name": "d2", "kind": "feature", "component": "cmp_pipe",
+                                       "feature": "PipeExtrude"})
+        self.assertEqual(set(found), {"d1", "d2"})
+
+    def test_an_unreadable_dependent_list_or_maker_adds_nothing_it_cannot_read(self):
+        self.assertEqual(dependents(Broken()), [])
+        self.assertEqual(dependents(parameter("pipe_d", dependents=[Broken()])), [])
+        self.assertEqual(dependents(parameter("pipe_d", dependents=[parameter("d1", Broken())])),
+                         [{"name": "d1", "kind": "other", "component": ""}])
+
+
+class SketchInputsTest(unittest.TestCase):
+    def test_outlines_and_path_of_a_step_name_their_sketches_once(self):
+        path_sketch = Obj("fusion::Sketch", entityToken="sk_path", name="Rail")
+        sweep = Obj("fusion::SweepFeature",
+                    profile=Coll([Obj(parentSketch=PROFILE_SKETCH), Obj(parentSketch=PROFILE_SKETCH)]),
+                    path=Coll([Obj(entity=Obj(parentSketch=path_sketch))]))
+        self.assertEqual(sketch_inputs(sweep), [{"token": "sk_pipe", "name": "PipeProfile"},
+                                                {"token": "sk_path", "name": "Rail"}])
+
+    def test_a_step_whose_inputs_cannot_be_read_names_none(self):
+        self.assertEqual(sketch_inputs(Broken()), [])
+        self.assertEqual(sketch_inputs(Obj("fusion::ExtrudeFeature", profile=Obj("fusion::BRepFace"))), [])
 
 
 if __name__ == "__main__":

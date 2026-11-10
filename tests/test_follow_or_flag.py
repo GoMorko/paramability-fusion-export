@@ -58,14 +58,23 @@ def _refs(item):
 
 
 def _drawn_around(capture):
-    """{sketch name: user parameter names} of the parameters whose model parameters live in a component that the
-    sketch is tied to through geometry, other than the part's own."""
+    """{sketch name: user parameter names} of the parameters that act on a component a sketch is tied to through
+    geometry (other than the part's own): through the component of a model parameter that reads them, or of a step
+    that takes the sketch such a parameter sits on."""
     own = ((capture.get("target") or {}).get("component") or {}).get("token")
+    takes = {}
+    for item in capture["items"]:
+        for used in item.get("sketch_inputs") or []:
+            takes.setdefault(used.get("token"), set()).add(item.get("component"))
     out = {}
     for record in capture.get("sketch_links") or []:
         tied = {link.get("token") for link in record.get("links") or []} - {own, None, ""}
         for p in capture["parameters"]["user"]:
-            if tied & {c.get("token") for c in p.get("dependent_components") or []}:
+            homes = set()
+            for dep in p.get("dependents") or []:
+                homes.add(dep.get("component"))
+                homes |= takes.get(dep.get("sketch_token"), set())
+            if tied & homes:
                 out.setdefault(record["sketch"], set()).add(p["name"])
     return out
 

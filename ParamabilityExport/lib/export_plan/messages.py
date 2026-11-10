@@ -31,6 +31,18 @@ def dropped_note(names):
     return clip(text, MAX_NOTE)
 
 
+def unchanged_note(names):
+    """One note naming ticked parameters that were tried at other values and changed nothing in this part."""
+    return clip("Tried at other values, these change nothing in this part, so not sizes: %s." % ", ".join(names),
+                MAX_NOTE)
+
+
+def also_changes_line(names):
+    """The line for unticked parameters that the export saw changing this part."""
+    return ("These parameters also change this part: %s. Tick them and export again to get them as sizes."
+            % ", ".join(names))
+
+
 def recipe_saved_message(manifest, file_name):
     """What the person reads after the file is written: the notes, why each fixed number stays fixed, then why each
     loose size may give unexpected results."""

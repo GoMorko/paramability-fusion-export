@@ -19,7 +19,7 @@ from ..translator import step_kinds
 from . import read_geometry as geo
 from .parameters import list_model_parameters, list_user_parameters
 from .placement import occurrence_path, read_placement
-from .read_links import sketch_links
+from .read_links import sketch_inputs, sketch_links
 
 CAPTURE_VERSION = 3
 
@@ -142,6 +142,10 @@ def _start_item(timeline, ctx, readers, index, items, group_indices):
         item["in_target_component"] = not step_kinds.makes_no_body(item["type"])
     if item["suppressed"]:
         return
+    if item["type"] != "Sketch":
+        inputs = geo.safe(lambda: sketch_inputs(entity), [])
+        if inputs:
+            item["sketch_inputs"] = inputs
     bodies_before = geo.safe(lambda: _component_bodies(ctx), None)
     if bodies_before is not None:
         item["bodies_before"] = bodies_before

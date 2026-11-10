@@ -11,7 +11,7 @@ from ..translator import CaptureError, translate
 from ..translator.notes import (
     recipe_note, reader_failure_note, step_only_note, translate_failure_note, used_several_times_note)
 from .health import measuring_note
-from .messages import MAX_NOTE, dropped_note, fixed_note, loose_note, sizes_note
+from .messages import MAX_NOTE, dropped_note, fixed_note, loose_note, sizes_note, unchanged_note
 
 MAX_RECIPE_BYTES = 8 * 1024 * 1024
 MAX_NOTES = 5  # the manifest limit; the last notes (not followed, not used) give way
@@ -126,7 +126,7 @@ def _uses(capture):
 
 def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
                        size_table=None, listing=None, motion=None, probe=None, marker=None, loose=None,
-                       translated=None, health=None):
+                       translated=None, health=None, also=None):
     """Return (manifest, files, report) for one body.
 
     A body inside a component is translated like a root body: its capture carries the place of the part in the
@@ -150,6 +150,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
     probe: the size probe's own record for `report.json` (request, states read, motion, restore gap), or None.
     marker: { position, count } of the timeline marker the export worked at (`design_edit.marker.read_marker`), for
       `report.json`. Steps after the position are left out of the part.
+    also: Fusion names of unticked parameters the size probe saw changing the part (`report.json` "also_changes").
     files maps entry paths to a file path or bytes, as write_package expects. The manifest `checks` list is empty.
     Raises ValueError when the manifest breaks the package rules.
     """
@@ -209,6 +210,8 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         report["sizes"] = {"free": free, "fixed": all_fixed, "loose": all_loose, "dropped": dropped}
     if size_table is not None and size_table.links:
         report["links"] = link_outcomes(size_table, report.get("sizes"))
+    if also:
+        report["also_changes"] = list(also)
 
     files = {"part.step": step_file}
     listed = listing.entries if listing is not None else None
@@ -227,9 +230,12 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         if all_fixed:
             notes.append(fixed_note([f["name"] for f in all_fixed]))
         not_followed = [d["name"] for d in dropped if d["used"]]
-        unused = [d["name"] for d in dropped if not d["used"]]
+        unused = [d["name"] for d in dropped if not d["used"] and not d.get("tried")]
+        unchanged = [d["name"] for d in dropped if not d["used"] and d.get("tried")]
         if not_followed:
             notes.append(_not_followed_note(not_followed))
+        if unchanged:
+            notes.append(unchanged_note(unchanged))
         if unused:
             notes.append(dropped_note(unused))
         del notes[MAX_NOTES:]

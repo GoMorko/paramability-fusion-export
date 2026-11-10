@@ -1,7 +1,7 @@
 """User and model parameters as plain dicts. Uses the objects it is given and imports no adsk (tests use fakes)."""
 from ..params.expressions import is_plain_number
 from ..package.units import internal_to_unit, unit_kind
-from .read_geometry import collection_items, enum_name, safe, type_name
+from .read_geometry import collection_items, component_of, enum_name, safe, type_name
 
 # At most this many dependents are visited per user parameter.
 MAX_DEPENDENTS = 2000
@@ -48,25 +48,54 @@ def _common(p):
     }
 
 
-def dependent_components(parameter):
-    """`[{ token, name }]` of the components that hold a model parameter reading `parameter`, directly or through
-    other parameters that read it (`dependentParameters`, `ModelParameter.component`). Empty when unreadable."""
+def _token(entity):
+    return safe(lambda: entity.entityToken, "") or ""
+
+
+def _native(entity):
+    """The native object of an entity seen through an occurrence, else the entity."""
+    if safe(lambda: entity.assemblyContext, None) is None:
+        return entity
+    return safe(lambda: entity.nativeObject, None) or entity
+
+
+def dependent_record(parameter):
+    """Where one model parameter acts: `{ name, kind, component }` plus, for a sketch dimension or text, `sketch` and
+    `sketch_token` of its sketch, and for a feature or other maker, `feature` (its name). `component` is the token of
+    the component its maker lives in (the sketch's, the feature's), else of `ModelParameter.component`."""
+    name = safe(lambda: parameter.name, "") or ""
+    entity = _native(safe(lambda: parameter.createdBy, None))
+    record = {"name": name, "kind": "other", "component": ""}
+    if entity is not None and (_is_sketch_dimension(entity) or _is_sketch_text(entity)):
+        sketch = _native(safe(lambda: entity.parentSketch, None))
+        record.update(kind="sketchText" if _is_sketch_text(entity) and not _is_sketch_dimension(entity)
+                      else "sketchDimension",
+                      sketch=safe(lambda: sketch.name, "") or "", sketch_token=_token(sketch),
+                      component=_token(safe(lambda: sketch.parentComponent, None)))
+    elif entity is not None:
+        record.update(kind=created_by_kind(entity), feature=safe(lambda: entity.name, "") or "",
+                      component=_token(component_of(entity)))
+    if not record["component"]:
+        record["component"] = _token(safe(lambda: parameter.component, None))
+    return record
+
+
+def dependents(parameter):
+    """`[dependent_record]` of every model parameter that reads `parameter`, directly or through other parameters
+    that read it (`dependentParameters`, walked transitively, at most MAX_DEPENDENTS visits). Empty when unreadable."""
     found, seen = [], set()
     stack = collection_items(safe(lambda: parameter.dependentParameters, None))
     visits = 0
     while stack and visits < MAX_DEPENDENTS:
         dependent = stack.pop()
         visits += 1
-        key = (safe(lambda: type_name(dependent), ""), safe(lambda: dependent.name, None))
-        if key[1] is None or key in seen:
+        kind = safe(lambda: type_name(dependent), "")
+        name = safe(lambda: dependent.name, None)
+        if name is None or (kind, name) in seen:
             continue
-        seen.add(key)
-        component = safe(lambda: dependent.component, None)
-        if component is not None:
-            record = {"token": safe(lambda: component.entityToken, "") or "",
-                      "name": safe(lambda: component.name, "") or ""}
-            if (record["token"] or record["name"]) and record not in found:
-                found.append(record)
+        seen.add((kind, name))
+        if "UserParameter" not in kind:
+            found.append(safe(lambda: dependent_record(dependent), {"name": name, "kind": "other", "component": ""}))
         stack.extend(collection_items(safe(lambda: dependent.dependentParameters, None)))
     return found
 
@@ -77,7 +106,7 @@ def list_user_parameters(design):
     Keys: name, expression, value (Fusion internal cm or rad), display_value (in the parameter's own unit),
     unit, comment, is_favorite, kind (length, angle, count; derived when the expression is a formula; unsupported
     when the unit is not in the unit tables), value_type ("numeric"), dependency_parameters and
-    dependent_parameters (names), and dependent_components (`dependent_components`).
+    dependent_parameters (names), and dependents (`dependents`: where each model parameter that reads it acts).
     """
     out = []
     params = design.userParameters
@@ -88,7 +117,7 @@ def list_user_parameters(design):
             continue
         d["comment"] = p.comment or ""
         d["dependent_parameters"] = _names(safe(lambda: p.dependentParameters, None))
-        d["dependent_components"] = dependent_components(p)
+        d["dependents"] = dependents(p)
         out.append(d)
     return out
 

@@ -7,7 +7,8 @@ from .sizes import construction_fixes, joint_reasons, text_reasons, untried_reas
 from . import notes as wording, place
 from .picks import MAX_NEAR_POINTS
 from .notes import (
-    dropped_reason, fixed_reason, loose_reason, unmoved_link_reason, unmoved_reason, unused_reason)
+    dropped_reason, fixed_reason, loose_reason, tried_unmoved_reason, unmoved_link_reason, unmoved_reason,
+    unused_reason)
 from .capture import outside_component, renamed_target, same_body, validate_capture
 from .context import Context
 from .result import Refusal, StepResult, TranslateResult, make_verdict
@@ -304,7 +305,7 @@ def _finish(settled, doubts, capture, motion):
     sizes = used_sizes(result.recipe["features"], table.sizes)
     result.loose = [{"name": name, "reason": loose_reason(name, why)} for name, why in doubts.items()
                     if table.size_name(name) in sizes]
-    result.dropped = _dropped(table, sizes, doubts, checked.unmoved, checked.unmoved_links)
+    result.dropped = _dropped(table, sizes, doubts, checked.unmoved, checked.unmoved_links, _tried(motion))
     result.notes.extend(d["reason"] for d in result.dropped)
     result.recipe["sizesAsWritten"] = True
     if sizes:
@@ -312,10 +313,19 @@ def _finish(settled, doubts, capture, motion):
     return result
 
 
-def _dropped(table, sizes, doubts, unmoved, unmoved_links=None):
+def _tried(motion):
+    """Fusion names of the sizes the size probe set to other values in a state that built."""
+    if not isinstance(motion, Motion) or motion.optimistic:
+        return set()
+    return {name for state in motion.states or () if state.get("built", True) for name in state.get("values") or {}}
+
+
+def _dropped(table, sizes, doubts, unmoved, unmoved_links=None, tried=()):
     """`{ name, reason, used }` for each ticked size that no written formula reads. `used` is True when a step reads
     it and the copy could not follow it, False when nothing copied depends on it. `unmoved_links` names, per size
-    tied to a sketch only through another component that did not move with it, that component."""
+    tied to a sketch only through another component that did not move with it, that component. A size in `tried`
+    (set to other values by the size probe) that nothing reads was measured to change nothing: it gets
+    `"tried": True` and says so."""
     out = []
     for name in table.ticked:
         if table.size_name(name) in sizes:
@@ -325,9 +335,16 @@ def _dropped(table, sizes, doubts, unmoved, unmoved_links=None):
         else:
             if name in (unmoved_links or {}):
                 reason = unmoved_link_reason(name, unmoved_links[name])
+            elif name in unmoved:
+                reason = unmoved_reason(name)
+            elif name in tried:
+                reason = tried_unmoved_reason(name)
             else:
-                reason = unmoved_reason(name) if name in unmoved else unused_reason(name)
-            out.append({"name": name, "reason": reason, "used": False})
+                reason = unused_reason(name)
+            entry = {"name": name, "reason": reason, "used": False}
+            if name in tried or name in unmoved or name in (unmoved_links or {}):
+                entry["tried"] = True
+            out.append(entry)
     return out
 
 

@@ -13,7 +13,7 @@ changes it, or leaves it unreadable, is loose.
 """
 from ..package.manifest import MAX_FIXED_REASON
 from ..package.text import clip
-from ..probe import build, match, plan
+from ..probe import build, fit, match, plan
 from ..translator import borrowed
 from ..translator.notes import loose_reason
 
@@ -122,6 +122,7 @@ class SizeProbe:
         self.restore_gap_mm = None
         self.motion = None
         self.moved = []
+        self.discovery = []
 
     @classmethod
     def start(cls, capture, table, read):
@@ -169,6 +170,39 @@ class SizeProbe:
         moved = set(self.moved) | {s["param"] for s in sizes if s["param"] in reach}
         rows, self.untried = plan.probe_rows(sizes, moved, extra=set(extra))
         return rows
+
+    def discovery_rows(self, candidates, room):
+        """Rows that try unticked parameters once each (`size_offers.discovery_sizes`), within `room` rows."""
+        return plan.discovery_rows(candidates, room)
+
+    def discover(self, entries):
+        """Keep, per `(row, result, read)` of a discovery row, whether the body's sketches moved with its parameter:
+        `{ param, moved }`, `moved` None when the row did not build or the sketches could not be read. These reads
+        are not states of the motion."""
+        found = plan.scan(self.capture)
+        targets = [t for t in found.targets if t["sketch_token"] in self.request["sketches"]]
+        for row, result, read in entries:
+            param = (row.get("varied") or [None])[0]
+            if param is None:
+                continue
+            moved = None
+            if not result.get("error") and isinstance(read, dict):
+                moved = any(self._target_moved(t, read) for t in targets)
+            self.discovery.append({"param": param, "moved": moved})
+
+    def _target_moved(self, target, read):
+        before, _ = match.state_values(target, self.e0, self.e0)
+        now, _ = match.state_values(target, read, self.e0)
+        if before is None:
+            return False
+        if now is None or now.keys() != before.keys():
+            return True
+        return any(abs(now[k] - v) > fit.TOLERANCE for k, v in before.items())
+
+    @property
+    def also_changes(self):
+        """Fusion names of the unticked parameters that a discovery row showed moving the body's sketches."""
+        return [d["param"] for d in self.discovery if d["moved"]]
 
     # ---- result -----------------------------------------------------------------------------------------------
 
@@ -255,6 +289,7 @@ class SizeProbe:
             "untried": list(self.untried),
             "restore_gap_mm": self.restore_gap_mm,
             "motion": self.motion.json() if self.motion is not None else None,
+            "discovery": list(self.discovery),
         }
 
     @staticmethod

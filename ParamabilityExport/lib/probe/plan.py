@@ -19,6 +19,8 @@ from ..translator.step_kinds import AXIS, HOLE_POINTS, PROFILES, step_type
 MAX_PROBE_ROWS = 64
 # Ticked sizes that nothing ties to a sketch, tried after all the others while rows are left.
 MAX_EXTRA_SIZES = 8
+# Unticked parameters that act on another component, tried once each to find links the reader cannot see.
+MAX_DISCOVERY = 12
 FOLLOWED_KINDS = ("sketchDimension", "constructionPlane")
 _SAME = 1e-9
 _CURVES = ("line", "arc", "circle", "ellipse")
@@ -254,3 +256,16 @@ def probe_rows(sizes, moved, limit=MAX_PROBE_ROWS, extra=()):
         for label, key in (("all min", "min"), ("all max", "max")):
             rows.append(_row(sizes, label, {s["param"]: s[key] for s in sizes}))
     return rows, untried
+
+
+def discovery_rows(candidates, room, limit=MAX_DISCOVERY):
+    """One row per candidate, in order, at most `limit` and `room`: the parameter alone set to its `end`.
+
+    A candidate is a size dict as in `probe_rows` plus `end` (a manifest number). These rows only tell whether a
+    sketch moves with the parameter; they are not states of the motion fit."""
+    rows = []
+    for candidate in candidates[:max(0, min(limit, room))]:
+        row = _row([candidate], "%s (try)" % candidate["size"][:MAX_NAME_CHARS - 6],
+                   {candidate["param"]: candidate["end"]}, "try %s" % candidate["param"])
+        rows.append(row)
+    return rows

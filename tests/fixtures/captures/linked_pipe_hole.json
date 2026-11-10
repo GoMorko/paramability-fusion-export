@@ -1,5 +1,5 @@
 {
- "_comment": "A box 40 by 30 by 20 with a pipe hole cut through it. The hole is drawn around the pipe of another component (Pipe): its two arcs are projected from the pipe, so no parameter of the box sets them. pipe_d_mm sets the pipe and has its model parameters only in Pipe. spare_mm reads nothing.",
+ "_comment": "A box 40 by 30 by 20 with a pipe hole cut through it. The hole is drawn around the pipe body of another component (Pipe): its two arcs are projected from the pipe, so no parameter of the box sets them. pipe_d_mm is a dimension of the sketch PipeProfile, which the root component owns and the Pipe step PipeExtrude extrudes into the pipe body. lid_mm sets a step of a Lid component. spare_mm reads nothing.",
  "capture": 3,
  "fusion": "2.0.0",
  "design": "Test",
@@ -44,10 +44,13 @@
     "dependent_parameters": [
      "d1"
     ],
-    "dependent_components": [
+    "dependents": [
      {
-      "token": "cmp_box",
-      "name": "Box"
+      "name": "d1",
+      "kind": "sketchDimension",
+      "component": "cmp_box",
+      "sketch": "BoxBase",
+      "sketch_token": "s1"
      }
     ]
    },
@@ -65,10 +68,13 @@
     "dependent_parameters": [
      "d2"
     ],
-    "dependent_components": [
+    "dependents": [
      {
-      "token": "cmp_box",
-      "name": "Box"
+      "name": "d2",
+      "kind": "sketchDimension",
+      "component": "cmp_box",
+      "sketch": "BoxBase",
+      "sketch_token": "s1"
      }
     ]
    },
@@ -86,10 +92,12 @@
     "dependent_parameters": [
      "d3"
     ],
-    "dependent_components": [
+    "dependents": [
      {
-      "token": "cmp_box",
-      "name": "Box"
+      "name": "d3",
+      "kind": "feature",
+      "component": "cmp_box",
+      "feature": "Extrude1"
      }
     ]
    },
@@ -105,13 +113,38 @@
     "value_type": "numeric",
     "dependency_parameters": [],
     "dependent_parameters": [
-     "d20",
-     "d21"
+     "d20"
     ],
-    "dependent_components": [
+    "dependents": [
      {
-      "token": "cmp_pipe",
-      "name": "Pipe"
+      "name": "d20",
+      "kind": "sketchDimension",
+      "component": "cmp_root",
+      "sketch": "PipeProfile",
+      "sketch_token": "sk_pipe"
+     }
+    ]
+   },
+   {
+    "name": "lid_mm",
+    "expression": "3 mm",
+    "value": 0.3,
+    "display_value": 3,
+    "unit": "mm",
+    "kind": "length",
+    "comment": "",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [
+     "d30"
+    ],
+    "dependents": [
+     {
+      "name": "d30",
+      "kind": "feature",
+      "component": "cmp_lid",
+      "feature": "LidExtrude"
      }
     ]
    },
@@ -127,7 +160,7 @@
     "value_type": "numeric",
     "dependency_parameters": [],
     "dependent_parameters": [],
-    "dependent_components": []
+    "dependents": []
    }
   ],
   "model": [
@@ -215,6 +248,43 @@
  "items": [
   {
    "index": 0,
+   "name": "PipeProfile",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "cmp_root",
+   "in_target_component": false,
+   "bodies_after": [],
+   "target_changed": false,
+   "data": {}
+  },
+  {
+   "index": 1,
+   "name": "PipeExtrude",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "cmp_pipe",
+   "in_target_component": false,
+   "bodies_after": [
+    {
+     "token": "pb1",
+     "name": "Pipe body"
+    }
+   ],
+   "target_changed": false,
+   "data": {},
+   "sketch_inputs": [
+    {
+     "token": "sk_pipe",
+     "name": "PipeProfile"
+    }
+   ]
+  },
+  {
+   "index": 2,
    "name": "BoxBase",
    "type": "Sketch",
    "suppressed": false,
@@ -227,7 +297,7 @@
    "data": {}
   },
   {
-   "index": 1,
+   "index": 3,
    "name": "Extrude1",
    "type": "ExtrudeFeature",
    "suppressed": false,
@@ -353,7 +423,7 @@
    }
   },
   {
-   "index": 2,
+   "index": 4,
    "name": "PipeHole",
    "type": "Sketch",
    "suppressed": false,
@@ -366,7 +436,7 @@
    "data": {}
   },
   {
-   "index": 3,
+   "index": 5,
    "name": "Extrude2",
    "type": "ExtrudeFeature",
    "suppressed": false,
@@ -511,14 +581,21 @@
      "name": "Pipe",
      "references": 2,
      "constrained": 0,
-     "plane": false
+     "plane": false,
+     "bodies": [
+      {
+       "token": "pb1",
+       "name": "Pipe body"
+      }
+     ],
+     "sketches": []
     }
    ],
    "unknown": 0
   }
  ],
  "marker": {
-  "position": 4,
-  "count": 4
+  "position": 6,
+  "count": 6
  }
 }

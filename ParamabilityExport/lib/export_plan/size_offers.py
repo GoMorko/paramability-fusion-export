@@ -9,7 +9,7 @@ from ..params.expressions import format_number
 from ..params.size_table import CONSTANT, DERIVED, FIXED, FREE, MAX_SIZES
 from ..translator.notes import loose_reason
 from ..translator.sizes import joint_reasons
-from .body_scope import body_links, scope_inputs
+from .body_scope import body_links, body_outside, scope_inputs
 
 # The most sizes one recipe holds.
 MAX_TICKED = MAX_SIZES
@@ -136,6 +136,26 @@ def probe_sizes(table, params, keep=None):
             "favorite": bool(by_name[entry.name].get("is_favorite")),
         })
     return sizes
+
+
+def discovery_sizes(table, params, capture):
+    """The unticked plain parameters that act on another component a sketch of the body is tied to, or on any
+    other component (`body_scope.body_outside`), as probe size dicts plus `end`: the end of the range that differs
+    from the value now (the upper one when both do). In that order; the probe caps them (`plan.MAX_DISCOVERY`)."""
+    by_name = {p["name"]: p for p in params}
+    ticked = set(table.ticked)
+    out = []
+    for name in body_outside(capture):
+        entry, p = table.entry(name), by_name.get(name)
+        if p is None or entry is None or name in ticked or entry.state != CONSTANT or not defaults.is_offered(p):
+            continue
+        lo, hi = defaults.size_range(p, entry.kind, entry.value)
+        end = hi if abs(hi - entry.value) > 1e-9 else lo
+        if abs(end - entry.value) <= 1e-9:
+            continue
+        out.append({"param": name, "size": entry.size_name or name, "unit": p["unit"], "kind": entry.kind,
+                    "value": entry.value, "min": lo, "max": hi, "end": end})
+    return out
 
 
 def labels(table):

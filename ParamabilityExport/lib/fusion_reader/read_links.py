@@ -1,10 +1,11 @@
-"""Which other components the target's sketches are tied to through geometry, and where each user parameter acts.
+"""Which other components the target's sketches are tied to through geometry, and which sketches each step takes.
 
 A sketch can follow another component without a parameter of its own: a circle projected from a pipe (a reference
 entity, `SketchEntity.isReference` and `referencedEntity`), an arc constrained to such a projection, or a sketch
-drawn on a face of another component (`Sketch.referencePlane`). `sketch_links` lists those components per sketch.
-With `dependent_components` of each user parameter (`parameters.py`) they tell which user parameter may reach the
-exported body through another component (`params.geometry_links`).
+drawn on a face of another component (`Sketch.referencePlane`). `sketch_links` lists those components per sketch,
+with the bodies and sketches the references point at. `sketch_inputs` lists the sketches a timeline step takes its
+outlines or path from, for every step of the design. With `dependents` of each user parameter (`parameters.py`)
+they tell which user parameter may reach the exported body through another component (`params.geometry_links`).
 
 No adsk import; every Fusion call is guarded, so an unreadable member leaves its part out and nothing raises.
 """
@@ -50,9 +51,26 @@ class _Links:
         for known, record in self.found:
             if geo.same_entity(known, component):
                 return record
-        record = dict(_component_record(component), references=0, constrained=0, plane=False)
+        record = dict(_component_record(component), references=0, constrained=0, plane=False, bodies=[], sketches=[])
         self.found.append((component, record))
         return record
+
+
+def _named(entity):
+    """`{ token, name }` of the native object of an entity."""
+    native = geo.safe(lambda: entity.nativeObject, None) if geo.safe(lambda: entity.assemblyContext, None) else None
+    native = native or entity
+    return {"token": geo.safe(lambda: native.entityToken, "") or "", "name": geo.safe(lambda: native.name, "") or ""}
+
+
+def _add_source(record, source):
+    """Note the body (of an edge, face or vertex) or the sketch (of a sketch curve or point) a reference points at."""
+    for key, read in (("bodies", lambda: source.body), ("sketches", lambda: source.parentSketch)):
+        found = geo.safe(read, None)
+        if found is not None:
+            named = _named(found)
+            if (named["token"] or named["name"]) and named not in record[key]:
+                record[key].append(named)
 
 
 def _entities(sketch):
@@ -83,6 +101,7 @@ def _read_sketch(sketch, ctx):
         record = links.record(_owner(source))
         if record is not None:
             record["references"] += 1
+            _add_source(record, source)
             references.append((entity, record))
     if references:
         constraints = geo.collection_items(geo.safe(lambda: sketch.geometricConstraints, None))
@@ -122,7 +141,8 @@ def _sketch_tokens(node, found):
 
 def sketch_links(design, ctx, items):
     """One record per sketch of the target's component that a step of that component uses:
-    `{ sketch, token, links: [{ token, name, references, constrained, plane }], unknown }`, or `{ sketch, token,
+    `{ sketch, token, links: [{ token, name, references, constrained, plane, bodies, sketches }], unknown }`, or
+    `{ sketch, token,
     error }` when the sketch cannot be found. `items` are the capture items."""
     tokens = {}
     for item in items:
@@ -140,3 +160,41 @@ def sketch_links(design, ctx, items):
             continue
         out.append({"sketch": name or geo.safe(lambda: sketch.name, "") or "", "token": token, **read})
     return out
+
+
+def _sketch_of(entity):
+    """The sketch an input belongs to: a profile's or sketch text's `parentSketch`, a sketch curve's or point's."""
+    return geo.safe(lambda: entity.parentSketch, None)
+
+
+def _each(value):
+    """The entries of an ObjectCollection or a Path, or the value itself."""
+    if value is None:
+        return []
+    if geo.safe(lambda: value.count, None) is not None:
+        return geo.collection_items(value)
+    return [value]
+
+
+def sketch_inputs(entity):
+    """`[{ token, name }]` of the sketches a timeline step takes its outlines, path or points from: `profile` and
+    `profiles` (extrude, revolve, sweep, emboss), `path` and `guideRail` (sweep, `PathEntity.entity`), `loftSections`
+    (`LoftSection.entity`) and the sketch points of a hole (`holePositionDefinition.sketchPoints`). No geometry is
+    read; an input that cannot be read adds nothing."""
+    inputs = []
+    for member in ("profile", "profiles"):
+        inputs += _each(geo.safe(lambda: getattr(entity, member), None))
+    for member in ("path", "guideRail"):
+        inputs += [geo.safe(lambda: e.entity, None) for e in _each(geo.safe(lambda: getattr(entity, member), None))]
+    for section in geo.collection_items(geo.safe(lambda: entity.loftSections, None)):
+        inputs += _each(geo.safe(lambda: section.entity, None))
+    inputs += geo.collection_items(geo.safe(lambda: entity.holePositionDefinition.sketchPoints, None))
+    found = []
+    for item in inputs:
+        sketch = _sketch_of(item) if item is not None else None
+        if sketch is None:
+            continue
+        named = _named(sketch)
+        if (named["token"] or named["name"]) and named not in found:
+            found.append(named)
+    return found

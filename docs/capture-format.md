@@ -95,8 +95,8 @@ in Fusion's internal cm and radians, unit, kind, favourite, dependency lists, an
 dimension (`SketchDimension.parentSketch`) and empty otherwise, and `component` is the token of the component the maker
 lives in: the sketch's component for a dimension, else the component the parameter is listed from) for the target's
 component, then for each component on its occurrence path up to the root, merged by name (the nearest component wins).
-Both are empty lists when unreadable. Each user parameter also has `dependent_components` (see "Geometry links"
-below). The export builds its size table from them
+Both are empty lists when unreadable. Each user parameter also has `dependents` (see "Geometry links" below). The
+export builds its size table from them
 (`lib/params/size_table.py`); the translator reads only `data.params` of the items and, through the size table,
 the `created_by` kinds. How a Fusion expression becomes an app formula (operators, `if`, units, functions) is in
 `docs/expressions.md`.
@@ -160,7 +160,7 @@ ITEM:
 - A member that cannot be read never becomes a plausible value: it reads as `null` or as an `other` entry
   (`"extent_type": "other"`, `"hole_type": "other"`, `{ "kind": "other" }`), and the translator refuses it.
 
-### Geometry links (`sketch_links`, `dependent_components`)
+### Geometry links (`sketch_links`, `dependents`, `sketch_inputs`)
 
 A sketch of the target can follow another component without any parameter of its own: a circle projected from a
 pipe in another component, an arc constrained to such a projection, a sketch drawn on a face of another component.
@@ -169,7 +169,8 @@ pipe in another component, an arc constrained to such a projection, a sketch dra
 
 ```json
 { "sketch": "PipeHole", "token": "...", "unknown": 0,
-  "links": [{ "token": "...", "name": "Pipe", "references": 2, "constrained": 1, "plane": false }] }
+  "links": [{ "token": "...", "name": "Pipe", "references": 2, "constrained": 1, "plane": false,
+              "bodies": [{ "token": "...", "name": "Pipe body" }], "sketches": [] }] }
 ```
 
 - `links`: one entry per component other than the target's that the sketch is tied to. `references` counts the
@@ -179,22 +180,56 @@ pipe in another component, an arc constrained to such a projection, a sketch dra
   constraints (`Sketch.geometricConstraints`) that tie such a reference to an entity that is not a reference
   (members `point`, `entity`, `entityOne`, `entityTwo`, `curveOne`, `curveTwo`, `lineOne`, `lineTwo`, `line`,
   `curve`). `plane` is true when the sketch lies on a face or plane of that component (`Sketch.referencePlane`).
+- `bodies` and `sketches`: what the references point at, by the token and name of the native object: the `body` of
+  a referenced edge, face or vertex, the `parentSketch` of a referenced sketch curve or point.
 - `unknown` counts reference entities whose `referencedEntity` is null (a reference that is not parametric).
 - A sketch that cannot be found by its token (`Design.findEntityByToken`) or read is `{ sketch, token, error }`.
 - At most 200 sketches, 5000 entities and 5000 constraints per sketch are read.
 
-Each user parameter has `dependent_components`: `[{ token, name }]` of the components that hold a model parameter
-reading it, directly or through other parameters that read it (`dependentParameters`, walked transitively, at most
-2000 visits; `ModelParameter.component`). The model parameters of other components are not listed in
-`parameters.model`; only their components are named here.
+Each item that is not a sketch, of any component, has `sketch_inputs` when it takes outlines, a path or points from
+sketches: `[{ token, name }]` of each `parentSketch` of its `profile` and `profiles` (a profile, a sketch text or an
+ObjectCollection of them; a planar face adds nothing), of the `PathEntity.entity` items of its `path` and
+`guideRail`, of the `LoftSection.entity` of its `loftSections`, and of the sketch points of a hole
+(`holePositionDefinition.sketchPoints`). It is read with the marker before the item and reads no geometry. The key
+is left out when nothing is found.
 
-A user parameter may reach the target through another component (`lib/params/geometry_links.py`) when one of its
-`dependent_components` is a component that a sketch of the target is tied to; tokens are compared, names only when a
-token is missing. The export works with the sketches the picked body's own steps use (`body_scope.body_links`), and
-the translator, given a size table without links, takes them from the whole capture. A link is
-`{ "param", "sketch", "component" }` (the component's name). Such a parameter is ticked to start with like one the body
-reads, the size probe tries it like a size behind a sketch dimension, and the translator counts it as a size the
-sketch reads (`sizes.sketch_sizes`, section 5).
+Each user parameter has `dependents`: one record per model parameter that reads it, directly or through other
+parameters that read it (`dependentParameters`, walked transitively, at most 2000 visits; user parameters on the way
+are walked but not listed):
+
+```json
+{ "name": "d26", "kind": "sketchDimension", "component": "<token>", "sketch": "Top_thick", "sketch_token": "..." }
+{ "name": "d30", "kind": "feature", "component": "<token>", "feature": "Extrude8" }
+```
+
+`kind` is the maker kind of `created_by` (section 2), read from `ModelParameter.createdBy` (made native when it comes
+through an occurrence). `component` is the token of the maker's component: `parentSketch.parentComponent` for a
+sketch dimension or text, `component_of` of the feature or construction geometry; `ModelParameter.component` only
+when the maker gives none (in a real design Fusion answered the root component there for every parameter). A maker
+that cannot be read gives `{ name, kind: "other", component: "" }`. The model parameters of other components are not
+listed in `parameters.model`; these records are all the capture keeps of them.
+
+Where a user parameter acts (`lib/params/geometry_links.py`, `acts`): the component of each dependent; for a sketch
+dimension, every item whose `sketch_inputs` names that sketch (by token, else by name in the same component) and that
+item's component; for a feature value, the item of that name in that component. A user parameter may reach the
+target through a link (`reach`), in this order:
+
+1. `via: "sketch"`: the link's `sketches` names a sketch one of its dimensions sits on;
+2. `via: "body"`: when the link's `bodies` name a body that items before the target's sketch made or changed
+   (`bodies_after`), one of those items is one it drives; when such items exist and it drives none of them, it has
+   no link through that component;
+3. `via: "component"`: otherwise, when the link's component is one it acts on.
+
+Tokens are compared, names only when a token is missing. The export works with the sketches the picked body's own
+steps use (`body_scope.body_links`), and the translator, given a size table without links, takes them from the whole
+capture. A link is `{ "param", "sketch", "component", "via" }` (the component's name). Such a parameter is ticked to
+start with like one the body reads, the size probe tries it like a size behind a sketch dimension, and the translator
+counts it as a size the sketch reads (`sizes.sketch_sizes`, section 5). The link only makes it worth trying; the
+probe decides.
+
+When a sketch of the body is tied to another component (a link, or only `unknown` references), the user parameters
+that act on a component other than the target's (`outside`: the ones acting on a tied component first, then the
+rest, each in parameter order) are candidates for discovery tries ("Probe states", section 5).
 
 ## 3. Walk and marker
 
@@ -827,7 +862,17 @@ a sketch dimension, a construction plane or, through another component, a sketch
 at the ends of its range. Then up to 8 ticked sizes that nothing ties to a sketch (`MAX_EXTRA_SIZES`, in table order)
 while rows are left: the person ticked them, so a sketch may follow them in a way the capture cannot show. Such a size
 left without rows is not listed as untried. With two or more sizes tried, one row puts every size at its minimum and
-one at its maximum.
+one at its maximum. A ticked size the probe set to other values that no formula reads at the end is dropped with
+"it was tried at other values, and it changes nothing in this part" (`used` false, `tried` true).
+
+Discovery tries come last, in the rows the cap leaves: up to 12 unticked plain parameters (`MAX_DISCOVERY`) from the
+discovery candidates of "Geometry links" (section 2), one row each with only that parameter at one end of its range
+(the upper end, the lower one when the upper is its value). They are not states of the motion: each read is only
+compared with the first read over the covered sketches (`SizeProbe.discover`, moved past the fit tolerance, or an
+outline with other keys). They never become sizes in this export. `probe.discovery` in `report.json` lists
+`{ param, moved }` (`moved` null when the row did not build or could not be read), and `also_changes` lists the
+parameters that moved a sketch; the result window says "These parameters also change this part: ... Tick them and
+export again to get them as sizes."
 The sketch curves of each profile have `<item>/p<profile>/c<loop>.<curve>/<field>` in the capture's loop and curve
 order: a line's `offset` (its distance from the sketch origin along the left normal of its captured direction) and
 `turn` (degrees it turned), an arc's `center.0`, `center.1` and `radius`; `curves` lists the profiles
@@ -935,12 +980,14 @@ The export writes `report.json` into the package: `{ "writer", "outcome": "recip
 VERDICT, ...], "capture": CAPTURE }` (verdicts: see the translator, `lib/translator/result.py`). The app never reads it. A report saved from a real
 design gives a fixture: its `capture` is copied as is.
 
+`also_changes` (only when not empty) names the unticked parameters that a discovery try showed changing the part.
 `links` (only when the export found geometry links) lists each link of the picked body with what became of its
 parameter: `{ param, sketch, component, outcome, reason }`, `outcome` one of `size`, `loose`, `fixed`, `dropped` or
 `not ticked` (`recipe_export.link_outcomes`; `reason` when the size has one).
 
 `sizes` holds `free` (recipe size names), `fixed` and `loose` (`{ name, reason }` by recipe size name, as in the
-manifest), and `dropped` (`{ name, reason, used }` by Fusion name: the ticked parameters that are not sizes, from
+manifest), and `dropped` (`{ name, reason, used }` by Fusion name, plus `tried: true` for a size the probe set to
+other values that changed nothing: the ticked parameters that are not sizes, from
 `TranslateResult.dropped`; `used` is true when a step reads the parameter and the copy could not follow it). `loose` comes
 from the translator and from the probe. `checks` in the manifest is
 always empty. The report has a
@@ -951,7 +998,10 @@ always empty. The report has a
 
 Read in the API reference on 2026-11-10: `SketchEntity` (`isReference`, `referencedEntity`, `isLinked`,
 `geometricConstraints`, `parentSketch`), `Sketch` (`sketchCurves`, `sketchPoints`, `geometricConstraints`,
-`referencePlane`, `parentComponent`), `CoincidentConstraint` (`point`, `entity`), `ConcentricConstraint`
+`referencePlane`, `parentComponent`), `SweepFeature` (`profile`, `path`, `guideRail`), `PathEntity.entity` (a sketch
+curve or an edge), `LoftSection.entity`, `ExtrudeFeature.profile` (a profile, a planar face or an ObjectCollection;
+null for a feature that is not parametric), `BRepFace` (no member names the feature that made it, so links are
+matched through `body` and `bodies_after`), `CoincidentConstraint` (`point`, `entity`), `ConcentricConstraint`
 (`entityOne`, `entityTwo`), `EqualConstraint` and `TangentConstraint` (`curveOne`, `curveTwo`), `ModelParameter`
 (`component`, `dependentParameters`, `createdBy`).
 
@@ -1008,5 +1058,5 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | `SketchText.asCurves()` returns the text outline as closed `Curve3D` loops (lines, arcs, free curves) without changing the design; the points are in sketch or model space; `SketchText.boundingBox` is in sketch space | `space` is decided by the bounding box and `ambiguous` or a failed read gives a text marker; an emboss checks the text area against the measured volume; the Text hand tests (section 11 of `docs/hand-tests.md`) |
 | Free curves (`NurbsCurve3D`, `EllipticalArc3D`) evaluate through `CurveEvaluator3D.getPointAtParameter` over `getParameterExtents`, and `getTangent` gives the direction at an end | a curve that cannot be evaluated has no samples and is refused; a missing tangent is left out; the Spline hand tests (section 11 of `docs/hand-tests.md`) |
 | `Sketch.parentComponent`, `ConstructionPlane.component`, `BRepFace.body`, `BRepEdge.body` | `foreign` reads them in a try; an unreadable one leaves the record unmarked |
-| `SketchEntity.referencedEntity` of an entity projected from another component comes as a proxy whose `assemblyContext.component` is that component; `lineOne`, `lineTwo`, `line` and `curve` name the entities of the other line constraints; `UserParameter.dependentParameters` lists the model parameters of every component | a wrong read only leaves a link out (the parameter is then tried only when ticked by hand); the K10 hand test in `docs/hand-tests.md` |
+| `SketchEntity.referencedEntity` of an entity projected from another component comes as a proxy whose `assemblyContext.component` is that component (confirmed by a real export: the pipe component was found); the `body` of such an edge and its `nativeObject` token equal the token `bodies_after` gives; `lineOne`, `lineTwo`, `line` and `curve` name the entities of the other line constraints; `ModelParameter.createdBy` of a parameter that `dependentParameters` gives names the same maker as when the parameter is listed from its component (`ModelParameter.component` answered the root for every one); `profile`, `path`, `guideRail`, `loftSections` and `holePositionDefinition` can be read with the marker before a step of another component | a wrong read only leaves a link out; the discovery tries still find a parameter that moves the part; the K10 hand test in `docs/hand-tests.md` |
 | `BRepBody.copyToComponent(proxy)` keeps the assembly place | the copy guard in `step_export.py` compares the bounding boxes (1e-3 mm) and refuses before writing |

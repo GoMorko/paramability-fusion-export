@@ -1,7 +1,7 @@
 """A parameter that reaches the part through the geometry of another component: found, offered, tried and followed.
 
-The fixture is a box with a pipe hole drawn around the pipe of another component. pipe_d_mm sets the pipe and has its
-model parameters only there, so no parameter of the box reads it.
+The fixture is a box with a pipe hole drawn around the pipe body of another component. pipe_d_mm is a dimension of a
+sketch the root owns, which a step of the pipe component extrudes into that body, so no parameter of the box reads it.
 """
 import copy
 import re
@@ -27,7 +27,7 @@ CAPTURE = load_capture(NAME)
 USER = CAPTURE["parameters"]["user"]
 MODEL = CAPTURE["parameters"]["model"]
 ALL = [p["name"] for p in USER]
-LINK = {"param": "pipe_d_mm", "sketch": "PipeHole", "component": "Pipe"}
+LINK = {"param": "pipe_d_mm", "sketch": "PipeHole", "component": "Pipe", "via": "body"}
 
 
 def run(capture, motion, ticked=ALL):
@@ -43,8 +43,14 @@ def expr(value):
     return value["expr"] if isinstance(value, dict) else value
 
 
+def _pipe_acts_through(capture, dependent):
+    out = copy.deepcopy(capture)
+    next(p for p in out["parameters"]["user"] if p["name"] == "pipe_d_mm")["dependents"] = [dependent]
+    return out
+
+
 class RuleTest(unittest.TestCase):
-    def test_a_parameter_with_model_parameters_in_the_linked_component_reaches_the_sketch(self):
+    def test_a_dimension_of_a_sketch_a_step_of_the_pipe_body_takes_reaches_the_hole(self):
         self.assertEqual(geometry_links.reach(CAPTURE), [LINK])
 
     def test_the_part_itself_and_sketches_other_steps_use_give_no_link(self):
@@ -53,13 +59,21 @@ class RuleTest(unittest.TestCase):
         own["sketch_links"][1]["links"][0].update(token="cmp_box", name="Box")
         self.assertEqual(geometry_links.reach(own), [])
 
-    def test_components_without_tokens_match_by_name(self):
-        bare = copy.deepcopy(CAPTURE)
-        bare["sketch_links"][1]["links"][0]["token"] = ""
-        for p in bare["parameters"]["user"]:
-            for c in p.get("dependent_components") or []:
-                c["token"] = ""
-        self.assertEqual(geometry_links.reach(bare), [LINK])
+    def test_with_the_body_known_only_its_own_steps_count_else_the_component_does(self):
+        elsewhere = _pipe_acts_through(CAPTURE, {"name": "d40", "kind": "feature", "component": "cmp_pipe",
+                                                 "feature": "PipeLabel"})
+        self.assertEqual(geometry_links.reach(elsewhere), [])
+        elsewhere["sketch_links"][1]["links"][0]["bodies"] = []
+        self.assertEqual([link["via"] for link in geometry_links.reach(elsewhere)], ["component"])
+
+    def test_a_reference_to_a_sketch_the_parameter_sits_on_reaches_it(self):
+        drawn = copy.deepcopy(CAPTURE)
+        drawn["sketch_links"][1]["links"][0].update(bodies=[], sketches=[{"token": "sk_pipe", "name": "PipeProfile"}])
+        self.assertEqual([link["via"] for link in geometry_links.reach(drawn)], ["sketch"])
+
+    def test_parameters_acting_on_a_tied_component_come_first_among_those_acting_outside(self):
+        self.assertEqual(geometry_links.outside(CAPTURE), ["pipe_d_mm", "lid_mm"])
+        self.assertEqual(geometry_links.outside(CAPTURE, sketches={"BoxBase"}), [])
 
 
 class DialogTest(unittest.TestCase):
@@ -95,17 +109,17 @@ class TranslateTest(unittest.TestCase):
         outline = steps_of(result.recipe, "extrude")[1]["sketch"]["outer"]
         self.assertEqual(expr(outline["start"][0]), "0.5 * pipe_d_mm")
         self.assertEqual(expr(outline["segments"][0]["to"][0]), "-0.5 * pipe_d_mm")
-        self.assertEqual(set(dropped(result)), {"spare_mm"})
+        self.assertEqual(set(dropped(result)), {"spare_mm", "lid_mm"})
 
     def test_a_circle_that_follows_the_pipe_writes_its_radius_as_a_formula(self):
         capture = copy.deepcopy(CAPTURE)
-        profile = capture["items"][3]["data"]["profiles"][0]
+        profile = capture["items"][5]["data"]["profiles"][0]
         profile["loops"][0]["curves"] = [{"kind": "circle", "center": [0, 0], "radius": 6.0, "entity": "c0"}]
 
         def edit(values):
-            for key in [k for k in values if k.startswith("3/")]:
+            for key in [k for k in values if k.startswith("5/")]:
                 del values[key]
-            values["3/p0/l0/radius"] = {"const": 0, "terms": {"pipe_d_mm": 0.5}, "sketch": "PipeHole"}
+            values["5/p0/l0/radius"] = {"const": 0, "terms": {"pipe_d_mm": 0.5}, "sketch": "PipeHole"}
 
         result = run(capture, motion_of(NAME, edit))
         outline = steps_of(result.recipe, "extrude")[1]["sketch"]["outer"]
@@ -114,7 +128,7 @@ class TranslateTest(unittest.TestCase):
 
     def test_a_hole_that_stays_put_leaves_the_pipe_out_as_unused(self):
         def edit(values):
-            for key in [k for k in values if k.startswith("3/")]:
+            for key in [k for k in values if k.startswith("5/")]:
                 del values[key]
 
         found = dropped(run(CAPTURE, motion_of(NAME, edit)))["pipe_d_mm"]
@@ -122,7 +136,7 @@ class TranslateTest(unittest.TestCase):
 
     def test_a_hole_whose_outline_changes_shape_leaves_the_pipe_out_naming_the_sketch(self):
         def edit(values):
-            for key in [k for k in values if k.startswith("3/")]:
+            for key in [k for k in values if k.startswith("5/")]:
                 values[key] = Stuck(["pipe_d_mm"], "shape", "PipeHole").json()
 
         found = dropped(run(CAPTURE, motion_of(NAME, edit)))["pipe_d_mm"]
@@ -198,6 +212,18 @@ class ExportTest(unittest.TestCase):
         view = result_view("Box.paramability", result.manifest, result.report, result.table, ALL)
         rows = {r["name"]: r["check"] for r in view["rows"]}
         self.assertEqual((rows["pipe_d_mm"], rows["spare_mm"]), (NOT_USED, NOT_USED))
+        spare = next(d for d in result.report["sizes"]["dropped"] if d["name"] == "spare_mm")
+        self.assertEqual((spare["used"], spare.get("tried")), (False, True))
+
+    def test_an_unticked_parameter_acting_on_the_pipe_is_tried_once_and_named_when_it_moves_the_hole(self):
+        port = PipePort()
+        ticked = ["width_mm", "depth_mm", "height_mm"]
+        result = export(port, ticked)
+        self.assertEqual([v for v in port.varied if v & {"pipe_d_mm", "lid_mm"}], [{"pipe_d_mm"}, {"lid_mm"}])
+        self.assertEqual(result.report["also_changes"], ["pipe_d_mm"])
+        self.assertNotIn("pipe_d_mm", result.report["sizes"]["free"])
+        view = result_view("Box.paramability", result.manifest, result.report, result.table, ticked)
+        self.assertEqual(len(view["also"]), 1)
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ The view is built from the manifest and report that plan_single_export returned,
 """
 from .dialog_rows import range_text
 from ..export_plan.health import FAILED, health_lines, with_lines
-from ..export_plan.messages import listed_lines, recipe_saved_message
+from ..export_plan.messages import also_changes_line, listed_lines, recipe_saved_message
 
 KEPT_FIXED, NOT_USED = "kept fixed", "not used"
 NOT_FOLLOWED = "not followed"
@@ -69,9 +69,15 @@ def _loose_lines(table, report):
 
 
 def _dropped_lines(table, report):
-    """The reasons of the ticked parameters that a step reads and the copy could not follow. A parameter that no step
-    reads has its own row and needs no reason."""
-    return _lines(table, [d for d in report["sizes"].get("dropped") or [] if d["used"]])
+    """The reasons of the ticked parameters that a step reads and the copy could not follow, or that were tried and
+    changed nothing. A parameter that no step reads has its own row and needs no reason."""
+    return _lines(table, [d for d in report["sizes"].get("dropped") or [] if d["used"] or d.get("tried")])
+
+
+def also_lines(report):
+    """The line for the unticked parameters the export saw changing this part, or none."""
+    names = report.get("also_changes") or []
+    return [also_changes_line(names)] if names else []
 
 
 def variables_line(manifest):
@@ -87,7 +93,8 @@ def result_view(file_name, manifest, report, table, ticked):
 
     Keys: saved (first sentence), size_title, check_header (the title of the last column), rows ({name, range,
     check}), fixed (lines), loose (lines: sizes that stay free but may not follow every step, with why), dropped
-    (lines: ticked parameters that a step reads but the copy could not follow, with why), variables,
+    (lines: ticked parameters that a step reads but the copy could not follow, or tried and changed nothing, with
+    why), also (a line naming unticked parameters that also change this part), variables,
     warnings (what is wrong with the design or the sketch measuring, and what to do: empty when all is well),
     message (the whole story as plain text, for a message box, with the warnings below it).
     """
@@ -100,6 +107,9 @@ def result_view(file_name, manifest, report, table, ticked):
     story = recipe_saved_message(manifest, file_name)
     if dropped:
         story += "\n\n" + "\n".join("- " + line for line in dropped)
+    also = also_lines(report)
+    if also:
+        story += "\n\n" + also[0]
     return {
         "saved": ("Saved %s. %s" % (file_name, notes[0] if notes else "")).strip(),
         "size_title": "%d %s ready for the form" % (count, "size" if count == 1 else "sizes"),
@@ -108,6 +118,7 @@ def result_view(file_name, manifest, report, table, ticked):
         "fixed": _fixed_lines(table, report),
         "loose": _loose_lines(table, report),
         "dropped": dropped,
+        "also": also,
         "variables": variables_line(manifest),
         "warnings": health_lines(report.get("health")),
         "message": with_lines(story, report.get("health")),

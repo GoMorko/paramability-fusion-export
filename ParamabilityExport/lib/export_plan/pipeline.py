@@ -18,6 +18,7 @@ from typing import Optional, Protocol
 
 from ..params import size_table as size_tables
 from ..params.listing import list_parameters
+from ..probe.plan import MAX_PROBE_ROWS
 from ..sketch_values.motion import OPTIMISTIC
 from . import health as health_module
 from .body_scope import body_links, scope_inputs
@@ -25,7 +26,12 @@ from .probe_flow import SizeProbe, covers_a_sketch, extra_size_params, kept_size
 from .recipe_export import free_sizes, plan_single_export, translate_capture
 from ..design_edit.restore import restore_parameters
 from ..design_edit.runner import ExportCancelled, RowExport
-from .size_offers import labels, probe_sizes
+from .size_offers import discovery_sizes, labels, probe_sizes
+
+
+def plan_rows_left(rows):
+    """How many probe rows the cap leaves after `rows`."""
+    return max(0, MAX_PROBE_ROWS - len(rows))
 
 
 class ExportPort(Protocol):
@@ -145,6 +151,7 @@ class _Pipeline:
         self.probe_error = ""
         self.motion = None
         self.doubtful = []
+        self.also = []
 
     def run(self):
         self.saved = self.port.store.saved_expressions()
@@ -187,7 +194,7 @@ class _Pipeline:
             part_step, request.title, request.writer, request.up_axis,
             size_table=self.table, listing=self._listing(), motion=self.motion, probe=probe_report,
             marker=request.marker, loose=[{"name": m["name"], "reason": m["reason"]} for m in self.doubtful],
-            translated=final, health=health)
+            translated=final, health=health, also=self.also)
         return PipelineResult(manifest, files, report, self.table, health)
 
     def _translate_and_measure(self, capture):
@@ -208,7 +215,8 @@ class _Pipeline:
 
         self.probe = self._start_probe(capture)
         if self.probe is not None:
-            found = self._measure(ProbeRun(self.port, self.tmp, self.probe), sizes, extra)
+            tries = discovery_sizes(self.table, self.request.parameters, capture)
+            found = self._measure(ProbeRun(self.port, self.tmp, self.probe), sizes, extra, tries)
             if found is not None:
                 self.doubtful.extend(found)
         return self._translation(capture, self.motion)
@@ -253,11 +261,13 @@ class _Pipeline:
             self.probe_error = ""
         return probe
 
-    def _measure(self, run, sizes, extra=()):
+    def _measure(self, run, sizes, extra=(), tries=()):
         """The probe's rows and its result: the sizes the probe cannot follow, or None when the probe failed.
 
         The rows put every size at the ends of its range where a size moves a sketch, then the sizes in `extra` (tried
-        on a guess, `probe_flow.extra_size_params`) while rows are left. A failure other than a cancel
+        on a guess, `probe_flow.extra_size_params`) while rows are left. Rows still left try the unticked parameters
+        in `tries` once each (`size_offers.discovery_sizes`); they only find which of them also change the part
+        (`self.also`) and are not used for the motion. A failure other than a cancel
         leaves the translation without a motion (no size behind a sketch is then followed, by the translator's own
         rule) and is noted for the person. The parameters are put back before the last read."""
         probe = self.probe
@@ -268,6 +278,7 @@ class _Pipeline:
                 if run.read_failure is not None:
                     raise run.read_failure
                 probe.add_states(run.probe_states())
+            self._discover(run, rows, tries)
             self._restore()
             found = probe.finish(probe.read_now(), labels(self.table))
         except ExportCancelled:
@@ -279,6 +290,19 @@ class _Pipeline:
             return None
         self.motion = probe.motion
         return found
+
+    def _discover(self, run, rows, tries):
+        """Run the discovery rows in the room the measured rows left, and keep what they found."""
+        found = self.probe.discovery_rows(list(tries), plan_rows_left(rows))
+        if not found:
+            return
+        done = len(run.rows)
+        run.try_rows(found)
+        if run.read_failure is not None:
+            raise run.read_failure
+        self.probe.discover([(row, result, run.reads.get(row.get("key", row["name"])))
+                             for row, result in run.rows[done:]])
+        self.also = self.probe.also_changes
 
     def _restore_gap(self):
         """How far the sketches are from their start after the last restore, or None when that cannot be told. Read
