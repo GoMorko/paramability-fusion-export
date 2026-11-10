@@ -151,6 +151,7 @@ def rectangular_before(feature, ctx):
         "distance_type": geo.pick_by_text(
             geo.safe(lambda: geo.enum_name(feature.patternDistanceType, "PatternDistanceType", "PatternDistanceTypes"), ""),
             _DISTANCE_TYPES, "other"),
+        # Copies on both sides of the original; false when the flag cannot be read (the measured copies then decide).
         "symmetric_one": geo.safe(lambda: bool(feature.isSymmetricInDirectionOne), False),
         "symmetric_two": geo.safe(lambda: bool(feature.isSymmetricInDirectionTwo), False),
         "elements": [],

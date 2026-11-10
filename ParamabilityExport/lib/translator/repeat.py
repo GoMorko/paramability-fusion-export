@@ -5,6 +5,10 @@ the copies Fusion left out come from what Fusion built, not from flags. Solid so
 other repeats) become one `pattern` or `mirror` step. Rounds and chamfers cannot be repeated by the recipe, so the
 copies get their own `round` or `bevel` step with the source's `near` points moved to each copy.
 
+A direction that spreads copies to both sides of the original is written as a forward and a backward part that both
+start at the original (`symmetric.py`); the pattern then becomes one one-sided grid for each choice of a part per
+direction, and a place that two grids share is made by the first.
+
 Each copy is a `follow.Motion`. A linear spacing that follows sizes moves the copied points with it, and the copies of
 extrudes are handed to the walk (`placer_makers.CopiesMaker`), so later picks on them follow sizes too.
 
@@ -14,10 +18,11 @@ cannot be followed fixes the sizes written so far. A plane or axis of another co
 it (`ref_motion`).
 """
 import math
+from itertools import product
 
 from ..package.numbers import round9
 from ..params.expressions import ExpressionError, evaluate
-from . import follow, range_check, ref_motion, values, vec
+from . import follow, range_check, ref_motion, symmetric, values, vec
 from .vec import POINT_TOL
 from .step_kinds import FINISH, SOLID, recipe_kind
 from .follow import Motion
@@ -161,19 +166,21 @@ def _copied_bodies(steps):
     return total
 
 
-def _build(ctx, item, solids, finishes, repeat_step, motions, what):
-    """The repeat step (when there are solid sources) followed by the finish copies."""
+def _build(ctx, item, solids, finishes, repeat_steps, what):
+    """The repeat steps (when there are solid sources) followed by the finish copies. `repeat_steps` are
+    `(step, motions)`: a step and the Motions of the copies it makes. The finish copies use every Motion."""
     out = StepResult()
     if solids:
-        repeat_step["of"] = solids
-        out.add(repeat_step, [CopiesMaker(motions)])
+        for repeat_step, owned in repeat_steps:
+            repeat_step["of"] = solids
+            out.add(repeat_step, [CopiesMaker(owned)])
         if _copied_bodies(list(ctx.steps) + out.steps) > MAX_COPIED_BODIES:
             return Refusal("This %s makes more than %d copies in all." % (what, MAX_COPIED_BODIES))
+    motions = [motion for _, owned in repeat_steps for motion in owned]
     out.extend(StepResult.of(_finish_copies(ctx, item, finishes, motions)).entries)
     if not out.entries:
         return Refusal("This %s makes no copies." % what)
     return out
-
 
 
 # ---------------------------------------------------------------- elements
@@ -202,21 +209,81 @@ def _skip_places(places, total):
     return [n for n in range(1, total) if n not in places]
 
 
-def _grid_motions(item, placed, axes, columns):
-    """One Motion per kept copy (not the original), in copy order: the copy's place times the spacing, which may
-    follow sizes. A pick on a copy needs each count that follows sizes to keep that copy."""
-    by_place = {}
+def _grid_motions(item, placed, axes):
+    """`(signed steps, Motion)` for each kept copy except the original, in copy order (the first direction running
+    fastest): the copy's place times the spacing, which may follow sizes. A pick on a copy of an ordinary direction
+    needs its count to keep that copy. In a symmetric direction the places move when the count changes, so a pick
+    on a copy off the middle keeps the sizes behind the count."""
+    name = item.get("name", "")
+    out = []
     for _, indexes in placed:
-        number_ = indexes[0] + (indexes[1] * columns if len(indexes) == 2 else 0)
+        if not any(indexes):
+            continue
         shift = [Quantity(0.0)] * 3
+        needs, requires = [], []
         for index, axis in zip(indexes, axes):
-            if index:
-                shift = [s.plus(axis["step_q"].scaled(index * d)) if abs(d) > 1e-12 else s
-                         for s, d in zip(shift, axis["dir"])]
-        requires = [(axis["count_q"], index + 1, item.get("name", "")) for index, axis in zip(indexes, axes)
-                    if index and axis["count_q"].sized]
-        by_place[number_] = Motion(shift=shift, by=item.get("name", ""), requires=requires)
-    return [by_place[n] for n in sorted(by_place) if n > 0]
+            if not index:
+                continue
+            shift = [s.plus(axis["step_q"].scaled(index * d)) if abs(d) > 1e-12 else s
+                     for s, d in zip(shift, axis["dir"])]
+            if not axis["count_q"].sized:
+                continue
+            if axis["symmetric"]:
+                needs += axis["count_q"].reads
+            else:
+                requires.append((axis["count_q"], index + 1, name))
+        out.append((tuple(indexes), Motion(shift=shift, needs=needs, by=name, requires=requires)))
+    return sorted(out, key=lambda entry: entry[0][::-1])
+
+
+def _parts(axes):
+    """Each direction as the parts that start at the original: one for an ordinary direction, a forward and a backward
+    one for a symmetric direction (`symmetric.py`). A part has its direction, `sign` (+1 forward, -1 backward) and
+    its number and Quantity of copies, the original included."""
+    for axis in axes:
+        step = {"axis": axis}
+        if not axis["symmetric"]:
+            axis["parts"] = [dict(step, dir=axis["dir"], sign=1, count=axis["count"], count_q=axis["count_q"])]
+            continue
+        back_q, forward_q = symmetric.part_counts(axis["count_q"], axis["back"], axis["forward"])
+        axis["parts"] = [dict(step, dir=axis["dir"], sign=1, count=axis["forward"] + 1, count_q=forward_q),
+                         dict(step, dir=vec.scale(axis["dir"], -1), sign=-1, count=axis["back"] + 1, count_q=back_q)]
+
+
+def _grids(axes, present):
+    """The one-sided grids that together make the pattern: one for each choice of a part in every direction.
+
+    Returns a list of `(parts, skip, left_out)`. `skip` lists the grid's copy numbers to leave out: the places with no
+    measured copy, and (when no count of the grid follows sizes, so the numbers stay put) the places another grid
+    already makes. `left_out` holds the first kind only. A grid that makes no copy is dropped, unless it is the
+    only one or a count of it can grow."""
+    grids = []
+    choices = list(product(*(range(len(axis["parts"])) for axis in axes)))
+    for choice in choices:
+        parts = [axis["parts"][c] for axis, c in zip(axes, choice)]
+        columns = parts[0]["count"]
+        total = columns * (parts[1]["count"] if len(parts) == 2 else 1)
+        fixed = not any(part["count_q"].sized for part in parts)
+        skip, left_out = [], []
+        for number_ in range(1, total):
+            steps = [number_ % columns, number_ // columns][:len(parts)]
+            if tuple(part["sign"] * step for part, step in zip(parts, steps)) not in present:
+                skip.append(number_)
+                left_out.append(number_)
+            elif fixed and any(part["sign"] < 0 and not step for part, step in zip(parts, steps)):
+                skip.append(number_)
+        if len(choices) > 1 and len(skip) == total - 1 and fixed:
+            continue
+        grids.append((parts, skip, left_out))
+    return grids
+
+
+def _owner(grids, signed):
+    """Index of the first grid that makes the copy at `signed` steps (a part per direction by the sign of the step)."""
+    for n, (parts, _, _) in enumerate(grids):
+        if all((part["sign"] > 0) == (step >= 0) for part, step in zip(parts, signed)):
+            return n
+    return 0
 
 
 # ---------------------------------------------------------------- rectangular
@@ -240,7 +307,9 @@ def _distance_kind(data):
             direction = data.get("direction_" + which)
             if count > 1 and direction and vec.length(direction) > 1e-9:
                 distance = abs(float(data.get("distance_" + which) or 0.0))
-                axes.append((vec.unit(direction), distance if guess == "spacing" else distance / (count - 1), count))
+                reach = _extent_sides(data, which)
+                axes.append((vec.unit(direction), distance if guess == "spacing" else distance * reach / (count - 1),
+                             count))
         if not axes or not all(step > 1e-9 for _, step, _ in axes):
             return None
         if len(axes) == 2 and 1.0 - vec.dot(axes[0][0], axes[1][0]) ** 2 < 1e-9:
@@ -256,6 +325,12 @@ def _distance_kind(data):
     return None
 
 
+def _extent_sides(data, which):
+    """How many times the extent distance is spanned by a direction: a symmetric direction reaches the distance on
+    both sides of the original (2), an ordinary one runs from the first copy to the last (1)."""
+    return 2 if data.get("symmetric_" + which) else 1
+
+
 def _axis_step(item, ctx, which, quantity, count_q, kind):
     """Spacing along one direction as a Quantity, from the pattern distance and how Fusion measures it."""
     data = item["data"]
@@ -263,7 +338,10 @@ def _axis_step(item, ctx, which, quantity, count_q, kind):
     if kind not in ("spacing", "extent"):
         return Refusal("The spacing of this pattern could not be read.")
     distance = values.quantity(ctx, item, "distance_" + which, abs(raw), sign=-1 if raw < 0 else 1, absolute=True)
-    step = distance if kind == "spacing" else distance.divided_by(_gaps(count_q))
+    if kind == "extent":
+        step = distance.scaled(_extent_sides(data, which)).divided_by(_gaps(count_q))
+    else:
+        step = distance
     if not step.n > 1e-9:
         return Refusal("The spacing of this pattern could not be read.")
     return step
@@ -319,8 +397,8 @@ def _lattice_axes(item, ctx):
         step_q = _axis_step(item, ctx, which, quantity, count_q, kind)
         if isinstance(step_q, Refusal):
             return step_q
-        axes.append({"dir": vec.unit(direction), "step": step_q.n, "count": quantity,
-                     "step_q": step_q, "count_q": count_q})
+        axes.append({"dir": vec.unit(direction), "step": step_q.n, "count": quantity, "step_q": step_q,
+                     "count_q": count_q, "symmetric": bool(data.get("symmetric_" + which)), "which": which})
     if not axes:
         return Refusal("This pattern makes no copies.")
     if len(axes) == 2 and 1.0 - vec.dot(axes[0]["dir"], axes[1]["dir"]) ** 2 < 1e-9:
@@ -341,14 +419,35 @@ def _keep_pattern_fixed(ctx, item, skip, finishes, counts, turns=()):
 
 
 
+def _symmetric_reach(axes, data):
+    """Sets `back` and `forward` (steps behind and ahead of the original) on each symmetric direction from every
+    measured copy, suppressed ones too; returns a Refusal when they do not follow the rule of `symmetric.py`."""
+    places = [[] for _ in axes]
+    for element in data["elements"]:
+        frame = element["frame"]
+        if not _is_identity_rotation(frame):
+            continue
+        indexes, residual = _solve_lattice(frame["origin"], [(a["dir"], a["step"]) for a in axes])
+        if residual <= FIT_TOL_MM:
+            for n, index in enumerate(indexes):
+                places[n].append(index)
+    for axis, found in zip(axes, places):
+        if not axis["symmetric"]:
+            continue
+        reach = symmetric.reach(found, axis["count"])
+        if reach is None:
+            return Refusal("The copies of this pattern do not spread to both sides of the first one by the rule that "
+                           "was expected.")
+        axis["back"], axis["forward"] = reach
+    return None
+
+
 def rectangular(item, ctx):
     data = item.get("data") or {}
     sources = _sources(data, ctx, "pattern")
     if isinstance(sources, Refusal):
         return sources
     solids, finishes = sources
-    if data.get("symmetric_one") or data.get("symmetric_two"):
-        return Refusal("Patterns that spread to both sides of the start are not copied yet.")
     axes = _lattice_axes(item, ctx)
     if isinstance(axes, Refusal):
         return axes
@@ -359,6 +458,8 @@ def rectangular(item, ctx):
     # Element transforms are relative to the original, so offsets are measured from the origin, and the original
     # itself must be among the elements or the lattice could be off by one place.
     if not any(_is_identity(e["frame"]) for e in data["elements"]):
+        if any(axis["symmetric"] for axis in axes):
+            return Refusal("The original sits between two copies of this pattern, which is not copied yet.")
         return Refusal("The original copy was not found among the copies of this pattern.")
     placed = []
     for element in kept:
@@ -370,35 +471,52 @@ def rectangular(item, ctx):
             return Refusal("The copies of this pattern do not sit on an even grid.")
         placed.append((element, indexes))
 
+    reach = _symmetric_reach(axes, data)
+    if isinstance(reach, Refusal):
+        return reach
     for n, axis in enumerate(axes):
-        values = [indexes[n] for _, indexes in placed]
-        if any(v > 0 for v in values) and any(v < 0 for v in values):
-            return Refusal("The copies of this pattern reach both sides of the first one, which is not copied yet.")
-        if any(v < 0 for v in values):
+        if axis["symmetric"]:
+            continue
+        steps = [indexes[n] for _, indexes in placed]
+        if any(v > 0 for v in steps) and any(v < 0 for v in steps):
+            return Refusal("The copies of this pattern reach both sides of the first one, but the pattern is not set to "
+                           "spread to both sides.")
+        if any(v < 0 for v in steps):
             axis["dir"] = vec.scale(axis["dir"], -1)
             for _, indexes in placed:
                 indexes[n] = -indexes[n]
         if any(not 0 <= indexes[n] < axis["count"] for _, indexes in placed):
             return Refusal("The copies of this pattern do not match its count.")
+    for axis in axes:
+        if axis["symmetric"]:
+            symmetric.check_even_unseen(ctx, item, axis["count_q"], axis["count"])
+    _parts(axes)
 
-    columns = axes[0]["count"]
-    total = columns * (axes[1]["count"] if len(axes) == 2 else 1)
-    by_place = {indexes[0] + (indexes[1] * columns if len(indexes) == 2 else 0): element for element, indexes in placed}
-    skip = _skip_places(by_place, total)
-
-    pattern = {"kind": "pattern"}
-    for key, axis in zip(("linear", "linear2"), axes):
-        pattern[key] = {"dir": _vec(axis["dir"]), "count": axis["count"], "step": round9(axis["step"])}
-    if skip:
-        pattern["skip"] = skip
-    steps = _build(ctx, item, solids, finishes, pattern, _grid_motions(item, placed, axes, columns), "pattern")
-    if isinstance(steps, Refusal):
-        return steps
-    _keep_pattern_fixed(ctx, item, skip, finishes, ("quantity_one", "quantity_two"))
-    for key, axis in zip(("linear", "linear2"), axes):
-        pattern[key]["count"] = axis["count_q"].json() if axis["count_q"].sized else axis["count"]
-        pattern[key]["step"] = axis["step_q"].json()
-    return steps
+    grids = _grids(axes, {tuple(indexes) for _, indexes in placed})
+    moves = _grid_motions(item, placed, axes)
+    owned = [[] for _ in grids]
+    for signed, motion in moves:
+        owned[_owner(grids, signed)].append(motion)
+    left_out = any(left for _, _, left in grids)
+    steps = []
+    for (parts, skip, _), motions in zip(grids, owned):
+        step = {"kind": "pattern"}
+        for key, part in zip(("linear", "linear2"), parts):
+            step[key] = {"dir": _vec(part["dir"]), "count": part["count"], "step": round9(part["axis"]["step"])}
+        if skip:
+            step["skip"] = skip
+        steps.append((step, motions))
+    result = _build(ctx, item, solids, finishes, steps, "pattern")
+    if isinstance(result, Refusal):
+        return result
+    _keep_pattern_fixed(ctx, item, left_out, finishes, ("quantity_one", "quantity_two"))
+    for (parts, skip, _), (step, _) in zip(grids, steps):
+        for key, part in zip(("linear", "linear2"), parts):
+            # A skip list names copies by number, so the app wants a fixed count beside it.
+            sized = part["count_q"].sized and not skip
+            step[key]["count"] = part["count_q"].json() if sized else part["count"]
+            step[key]["step"] = part["axis"]["step_q"].json()
+    return result
 
 
 # ---------------------------------------------------------------- circular
@@ -469,14 +587,80 @@ def _turn_motion(point, moved, direction, angle, needs, by):
     return Motion(base.rows, shift, needs, by)
 
 
+def _signed_copy(angle, delta, count):
+    """The signed copy number k when `angle` sits at k * delta (a turn of 360 degrees more or less counts as the
+    same), with k inside the copies a pattern of `count` can reach; else None."""
+    for wrap in (0.0, -FULL_TURN_DEG, FULL_TURN_DEG):
+        k = round((angle + wrap) / delta)
+        if abs(angle + wrap - k * delta) <= ANGLE_TOL_DEG and abs(k) < count:
+            return k
+    return None
+
+
+def _symmetric_circular(item, ctx, setup):
+    """A circular pattern that turns copies to both sides of the original: a part turning one way and a part turning
+    the other, both from the original (`symmetric.py`). `setup` holds what `circular` has read."""
+    count, delta, point, direction, turns = (setup[key] for key in ("count", "delta", "point", "direction", "turns"))
+    steps = [(element, _signed_copy(turn, delta, count)) for element, turn in turns]
+    if any(k is None for _, k in steps):
+        return Refusal("The copies of this pattern are not spread evenly round the axis.")
+    every = []
+    for element in setup["data"]["elements"]:
+        turn = _turn_about(element["frame"], direction)
+        if turn is not None and vec.close(vec.frame_apply(element["frame"], point), point, FIT_TOL_MM):
+            k = _signed_copy(turn, delta, count)
+            if k is not None:
+                every.append(k)
+    if 0 not in every:
+        return Refusal("The original sits between two copies of this pattern, which is not copied yet.")
+    reach = symmetric.reach(every, count)
+    if reach is None:
+        return Refusal("The copies of this pattern do not spread to both sides of the first one by the rule that was "
+                       "expected.")
+    back, forward = reach
+    count_q, angle_q = setup["count_q"], setup["angle_q"]
+    symmetric.check_even_unseen(ctx, item, count_q, count)
+    back_q, forward_q = symmetric.part_counts(count_q, back, forward)
+    moved = _axis_shift(ctx, item, setup["axis"], direction)
+    present = {k for _, k in steps}
+    needs = count_q.reads + angle_q.reads
+    name = item.get("name", "")
+    motions = {k: _turn_motion(point, moved, direction, k * delta, needs, name) for k in sorted(present) if k}
+    parts = []
+    for sign, part_count, part_q in ((1, forward + 1, forward_q), (-1, back + 1, back_q)):
+        skip = [n for n in range(1, part_count) if sign * n not in present]
+        if part_count == 1 and not part_q.sized:
+            continue
+        parts.append((sign, part_count, part_q, skip))
+    built = []
+    for sign, part_count, part_q, skip in parts:
+        polar = {"axisPoint": _vec(point), "axis": _vec(vec.scale(direction, sign)), "count": part_count,
+                 "angleDeg": round9((part_count - 1) * delta)}
+        step = {"kind": "pattern", "polar": polar}
+        if skip:
+            step["skip"] = skip
+        built.append((step, [m for k, m in motions.items() if (k > 0) == (sign > 0)]))
+    result = _build(ctx, item, setup["solids"], setup["finishes"], built, "pattern")
+    if isinstance(result, Refusal):
+        return result
+    left_out = any(skip for *_, skip in parts)
+    _keep_pattern_fixed(ctx, item, left_out, setup["finishes"], ("quantity",), ("total_angle_deg",))
+    for (sign, part_count, part_q, skip), (step, _) in zip(parts, built):
+        polar = step["polar"]
+        if any(q.sized for q in moved):
+            polar["axisPoint"] = [q.plus(c).json() if q.sized else round9(c) for q, c in zip(moved, point)]
+        side = angle_q.times(part_q.plus(-1.0)).divided_by(_gaps(count_q))
+        polar["angleDeg"] = side.json()
+        polar["count"] = part_q.json() if part_q.sized and not skip else part_count
+    return result
+
+
 def circular(item, ctx):
     data = item.get("data") or {}
     sources = _sources(data, ctx, "pattern")
     if isinstance(sources, Refusal):
         return sources
     solids, finishes = sources
-    if data.get("symmetric"):
-        return Refusal("Patterns that spread to both sides of the start are not copied yet.")
     axis = data.get("axis") or {}
     if "point" not in axis or "dir" not in axis:
         return Refusal("The turning axis of this pattern could not be read.")
@@ -504,6 +688,14 @@ def circular(item, ctx):
             return Refusal("The copies of this pattern do not turn about the axis that was read.")
         turns.append((element, turn))
 
+    if data.get("symmetric") and not full:
+        count_q = values.quantity(ctx, item, "quantity", count, dim="scalar", whole=True)
+        angle_q = values.quantity(ctx, item, "total_angle_deg", total_deg, dim="angle",
+                                  sign=-1 if raw_total < 0 else 1, absolute=True)
+        return _symmetric_circular(item, ctx, {
+            "data": data, "solids": solids, "finishes": finishes, "axis": axis, "count": count, "delta": delta,
+            "point": point, "direction": direction, "turns": turns, "count_q": count_q, "angle_q": angle_q})
+
     sign = next((s for s in (1, -1) if all(_copy_number(t, delta, s, count, full) is not None for _, t in turns)), 0)
     if not sign:
         return Refusal("The copies of this pattern are not spread evenly round the axis.")
@@ -530,7 +722,7 @@ def circular(item, ctx):
     needs = count_q.reads + (angle_q.reads if angle_q is not None else ())
     motions = [_turn_motion(point, moved, direction, n * delta, needs, item.get("name", ""))
                for n in sorted(by_place) if n > 0]
-    steps = _build(ctx, item, solids, finishes, pattern, motions, "pattern")
+    steps = _build(ctx, item, solids, finishes, [(pattern, motions)], "pattern")
     if isinstance(steps, Refusal):
         return steps
     if any(q.sized for q in moved):
@@ -538,7 +730,7 @@ def circular(item, ctx):
     if angle_q is not None:
         polar["angleDeg"] = angle_q.json()
     _keep_pattern_fixed(ctx, item, skip, finishes, ("quantity",), ("total_angle_deg",))
-    polar["count"] = count_q.json() if count_q.sized else count
+    polar["count"] = count_q.json() if count_q.sized and not skip else count
     return steps
 
 
@@ -817,4 +1009,4 @@ def mirror(item, ctx):
     else:
         return Refusal("Mirrors of faces are not copied yet.")
     motion = _mirror_motion(plane, moved, item.get("name", ""))
-    return _build(ctx, item, solids, finishes, {"kind": "mirror", "plane": written}, [motion], "mirror")
+    return _build(ctx, item, solids, finishes, [({"kind": "mirror", "plane": written}, [motion])], "mirror")

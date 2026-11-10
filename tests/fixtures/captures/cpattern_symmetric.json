@@ -1,5 +1,5 @@
 {
-  "_comment": "Symmetric circular pattern: refused.",
+  "_comment": "Symmetric flag on a full circle: the copies are the ordinary full circle.",
   "capture": 3,
   "fusion": "2.0.0",
   "design": "Test",

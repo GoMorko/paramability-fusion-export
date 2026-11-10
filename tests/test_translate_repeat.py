@@ -183,7 +183,6 @@ class CircularPatternTest(unittest.TestCase):
             pattern_data(capture)["axis"]["point"] = [0, 0, 0]
 
         cases = [
-            ("symmetric", translate_fixture("cpattern_symmetric")),
             ("uneven spread", edited("cpattern_full", lambda c: pattern_data(c)["elements"][1]["frame"].update(
                 x=[0.8, 0.6, 0], y=[-0.6, 0.8, 0]))),
             ("other axis point", edited("cpattern_full", other_axis)),

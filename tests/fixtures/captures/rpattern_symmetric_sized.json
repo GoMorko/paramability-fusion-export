@@ -1,0 +1,747 @@
+{
+  "_comment": "Post on a plate, a symmetric row of it with its count ceil(cube width / 5) and its spacing from a size, then a round picking an edge on a copy.",
+  "capture": 3,
+  "fusion": "2.0.0",
+  "design": "Filter box",
+  "up_axis": "z",
+  "design_units": "mm",
+  "target": {
+    "token": "t1",
+    "name": "Body1",
+    "box": {
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        80.0,
+        60.0,
+        32.0
+      ]
+    },
+    "volume_mm3": null
+  },
+  "parameters": {
+    "user": [
+      {
+        "name": "FilterBox_$_height__contains_CeramicMedium",
+        "expression": "1.5",
+        "value": 1.5,
+        "unit": "",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [
+          "FilterBox_height_mm"
+        ],
+        "kind": "count",
+        "display_value": 1.5
+      },
+      {
+        "name": "_CeramicMedium__Cube_width_mm",
+        "expression": "20 mm",
+        "value": 2.0,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [
+          "FilterBox_height_mm",
+          "hole_pitch_mm"
+        ],
+        "kind": "length",
+        "display_value": 20.0
+      },
+      {
+        "name": "wall_mm",
+        "expression": "2 mm",
+        "value": 0.2,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [
+          "d4"
+        ],
+        "kind": "length",
+        "display_value": 2.0
+      },
+      {
+        "name": "corner_mm",
+        "expression": "3 mm",
+        "value": 0.3,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [
+          "d5"
+        ],
+        "kind": "length",
+        "display_value": 3.0
+      },
+      {
+        "name": "pipe_d_mm",
+        "expression": "12 mm",
+        "value": 1.2,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [
+          "d6"
+        ],
+        "kind": "length",
+        "display_value": 12.0
+      },
+      {
+        "name": "holes_count",
+        "expression": "3",
+        "value": 3,
+        "unit": "",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [
+          "d8"
+        ],
+        "kind": "count",
+        "display_value": 3
+      },
+      {
+        "name": "turn_deg",
+        "expression": "90 deg",
+        "value": 1.5707963267948966,
+        "unit": "deg",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "angle",
+        "display_value": 1.5707963267948966
+      },
+      {
+        "name": "FilterBox_height_mm",
+        "expression": "FilterBox_$_height__contains_CeramicMedium * _CeramicMedium__Cube_width_mm + 2 mm",
+        "value": 3.2,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [
+          "FilterBox_$_height__contains_CeramicMedium",
+          "_CeramicMedium__Cube_width_mm"
+        ],
+        "dependent_parameters": [],
+        "kind": "derived",
+        "display_value": 32.0
+      },
+      {
+        "name": "hole_pitch_mm",
+        "expression": "_CeramicMedium__Cube_width_mm + 4 mm",
+        "value": 2.4,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [
+          "_CeramicMedium__Cube_width_mm"
+        ],
+        "dependent_parameters": [],
+        "kind": "derived",
+        "display_value": 24.0
+      }
+    ],
+    "model": [
+      {
+        "name": "d1",
+        "expression": "80 mm",
+        "value": 8.0,
+        "unit": "mm",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "role": "Linear Dimension",
+        "created_by": {
+          "kind": "sketchDimension",
+          "token": "tok_d1",
+          "name": ""
+        },
+        "kind": "length",
+        "display_value": 80.0
+      },
+      {
+        "name": "d2",
+        "expression": "60 mm",
+        "value": 6.0,
+        "unit": "mm",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "role": "Linear Dimension",
+        "created_by": {
+          "kind": "sketchDimension",
+          "token": "tok_d2",
+          "name": ""
+        },
+        "kind": "length",
+        "display_value": 60.0
+      },
+      {
+        "name": "d3",
+        "expression": "FilterBox_height_mm",
+        "value": 3.2,
+        "unit": "mm",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [
+          "FilterBox_height_mm"
+        ],
+        "role": "Distance",
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d3",
+          "name": ""
+        },
+        "kind": "derived",
+        "display_value": 32.0
+      },
+      {
+        "name": "d4",
+        "expression": "wall_mm",
+        "value": 0.2,
+        "unit": "mm",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [
+          "wall_mm"
+        ],
+        "role": "Inside Thickness",
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d4",
+          "name": ""
+        },
+        "kind": "derived",
+        "display_value": 2.0
+      },
+      {
+        "name": "d5",
+        "expression": "corner_mm",
+        "value": 0.3,
+        "unit": "mm",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [
+          "corner_mm"
+        ],
+        "role": "Radius",
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d5",
+          "name": ""
+        },
+        "kind": "derived",
+        "display_value": 3.0
+      },
+      {
+        "name": "d6",
+        "expression": "pipe_d_mm",
+        "value": 1.2,
+        "unit": "mm",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [
+          "pipe_d_mm"
+        ],
+        "role": "Hole Diameter",
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d6",
+          "name": ""
+        },
+        "kind": "derived",
+        "display_value": 12.0
+      },
+      {
+        "name": "d7",
+        "expression": "118 deg",
+        "value": 2.0594885173533086,
+        "unit": "deg",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "role": "Tip Angle",
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d7",
+          "name": ""
+        },
+        "kind": "angle",
+        "display_value": 2.0594885173533086
+      },
+      {
+        "name": "d8",
+        "expression": "holes_count",
+        "value": 3,
+        "unit": "",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [
+          "holes_count"
+        ],
+        "role": "Quantity One",
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d8",
+          "name": ""
+        },
+        "kind": "derived",
+        "display_value": 3
+      },
+      {
+        "name": "d9",
+        "expression": "hole_pitch_mm",
+        "value": 2.4,
+        "unit": "mm",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [
+          "hole_pitch_mm"
+        ],
+        "role": "Distance One",
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d9",
+          "name": ""
+        },
+        "kind": "derived",
+        "display_value": 24.0
+      }
+    ]
+  },
+  "items": [
+    {
+      "index": 1,
+      "name": "Plate",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "operation": "newBody",
+        "profiles": [
+          {
+            "sketch": "Plate",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      0,
+                      0
+                    ],
+                    "end": [
+                      120,
+                      0
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      120,
+                      0
+                    ],
+                    "end": [
+                      120,
+                      20
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      120,
+                      20
+                    ],
+                    "end": [
+                      0,
+                      20
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      0,
+                      20
+                    ],
+                    "end": [
+                      0,
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 10.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [],
+        "end_offset": 10.0,
+        "params": {}
+      }
+    },
+    {
+      "index": 2,
+      "name": "Post",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "operation": "join",
+        "profiles": [
+          {
+            "sketch": "Post",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                10
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      56,
+                      4
+                    ],
+                    "end": [
+                      64,
+                      4
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      64,
+                      4
+                    ],
+                    "end": [
+                      64,
+                      12
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      64,
+                      12
+                    ],
+                    "end": [
+                      56,
+                      12
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      56,
+                      12
+                    ],
+                    "end": [
+                      56,
+                      4
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 10.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [],
+        "end_offset": 10.0,
+        "params": {}
+      }
+    },
+    {
+      "index": 3,
+      "name": "Pattern1",
+      "type": "RectangularPatternFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "entity_type": "features",
+        "sources": [
+          2
+        ],
+        "direction_one": [
+          1,
+          0,
+          0
+        ],
+        "quantity_one": 4,
+        "distance_one": 24.0,
+        "direction_two": null,
+        "quantity_two": 1,
+        "distance_two": 0.0,
+        "distance_type": "spacing",
+        "symmetric_one": true,
+        "symmetric_two": false,
+        "elements": [
+          {
+            "id": 1,
+            "suppressed": false,
+            "frame": {
+              "origin": [
+                -48.0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            }
+          },
+          {
+            "id": 2,
+            "suppressed": false,
+            "frame": {
+              "origin": [
+                -24.0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            }
+          },
+          {
+            "id": 3,
+            "suppressed": false,
+            "frame": {
+              "origin": [
+                0.0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            }
+          },
+          {
+            "id": 4,
+            "suppressed": false,
+            "frame": {
+              "origin": [
+                24.0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            }
+          }
+        ],
+        "params": {
+          "distance_one": {
+            "name": "d21",
+            "expression": "_CeramicMedium__Cube_width_mm + 4 mm",
+            "value": 24.0
+          },
+          "quantity_one": {
+            "name": "d22",
+            "expression": "ceil(_CeramicMedium__Cube_width_mm / 5)",
+            "value": 4.0
+          }
+        }
+      }
+    },
+    {
+      "index": 4,
+      "name": "Fillet1",
+      "type": "FilletFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "sets": [
+          {
+            "kind": "constant",
+            "input_kinds": [
+              "edge"
+            ],
+            "radius": 1.0,
+            "continuity": "tangent",
+            "edges": [
+              {
+                "token": "e0",
+                "closed": false,
+                "points": [
+                  [
+                    88.0,
+                    12,
+                    15
+                  ]
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

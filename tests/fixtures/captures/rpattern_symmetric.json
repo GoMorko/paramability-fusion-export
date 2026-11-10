@@ -1,5 +1,5 @@
 {
-  "_comment": "Symmetric pattern: refused.",
+  "_comment": "Symmetric flag set, but the measured copies run one way only: refused.",
   "capture": 3,
   "fusion": "2.0.0",
   "design": "Test",
