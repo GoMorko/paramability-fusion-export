@@ -499,3 +499,31 @@ def build(params, ticked, model_params=(), design_unit="mm", fixed=None, quantit
     `links` are the geometry links of the body (`params.geometry_links.reach`).
     """
     return SizeTable(params, ticked, model_params, design_unit, fixed, quantity_params, ranges, max_sizes, links)
+
+
+def merged(tables, max_sizes=MAX_SIZES):
+    """One table for several parts of a design built from the same user parameters.
+
+    The model parameters, pattern quantities, geometry links, typed ranges and fixed names of all tables are joined
+    (the first table wins on a repeated name; model parameter names are unique in a design). A parameter is ticked when
+    any table ticks it, the first `max_sizes` of them in parameter order. A single table is returned as it is.
+    """
+    tables = list(tables)
+    if len(tables) == 1:
+        return tables[0]
+    first = tables[0]
+    model, quantities, links, ranges, fixed = {}, {}, [], {}, {}
+    for table in tables:
+        for m in table._model:
+            model.setdefault(m["name"], m)
+        for q in table._quantity_params:
+            quantities.setdefault(q["name"], q)
+        links.extend(link for link in table.links if link not in links)
+        for name, span in table._ranges.items():
+            ranges.setdefault(name, span)
+        for name, reason in table._fixed_in.items():
+            fixed.setdefault(name, reason)
+    wanted = {name for table in tables for name in table._ticked_in}
+    ticked = [p["name"] for p in first._params if p["name"] in wanted and p["name"] not in fixed][:max_sizes]
+    return SizeTable(first._params, ticked, list(model.values()), first._design_unit, fixed,
+                     list(quantities.values()), ranges, max_sizes, links)

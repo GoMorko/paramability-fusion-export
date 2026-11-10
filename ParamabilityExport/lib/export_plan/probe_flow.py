@@ -18,6 +18,7 @@ from ..package.text import clip
 from ..probe import build, fit, match, plan, ref_fit
 from ..translator import borrowed
 from ..translator.notes import loose_reason
+from .part_names import tagged
 
 _STATE_KEYS = ("sketches", "points", "lines", "params", "box", "refs", "unread")
 
@@ -315,3 +316,67 @@ class SizeProbe:
         if isinstance(state.get("read"), dict):
             out["read"] = {k: v for k, v in state["read"].items() if k in _STATE_KEYS}
         return out
+
+
+class ProbeGroup:
+    """The probes of several parts of one export, run over one set of rows.
+
+    Every part has its own `SizeProbe` (its sketches, references and motion), all over the same size table. The rows
+    are the same for all of them (sizes that move a sketch of any part), so Fusion recomputes once per row and each
+    probe reads its own part there. The row limit (`plan.MAX_PROBE_ROWS`) is for the whole export, not per part. It
+    offers the calls of `SizeProbe` that `ProbeRun` and the pipeline use; a read is a list with one entry per probe.
+    """
+
+    def __init__(self, probes, names):
+        self.probes = list(probes)
+        self.names = list(names)
+        self.table = self.probes[0].table
+
+    def read_now(self):
+        """The probe state of each part as the design is now."""
+        return [probe.read_now() for probe in self.probes]
+
+    def probe_rows(self, sizes, extra=()):
+        """The extra rows. Every probe plans them (that sets what it leaves untried); they are the same for all."""
+        return [probe.probe_rows(sizes, extra) for probe in self.probes][0]
+
+    def add_states(self, entries):
+        """Give each probe its own state per `(values, result, reads)`; `reads` has one read per probe."""
+        for number, probe in enumerate(self.probes):
+            probe.add_states([(values, result, reads[number] if reads else None) for values, result, reads in entries])
+
+    def discovery_rows(self, candidates, room):
+        return self.probes[0].discovery_rows(candidates, room)
+
+    def discover(self, entries):
+        """Give each probe its own reads of the discovery rows `(row, result, reads)`."""
+        for number, probe in enumerate(self.probes):
+            probe.discover([(row, result, reads[number] if reads else None) for row, result, reads in entries])
+
+    @property
+    def also_changes(self):
+        return list(dict.fromkeys(name for probe in self.probes for name in probe.also_changes))
+
+    def finish(self, afters, labels):
+        """Build each part's motion. Returns the sizes the probes cannot follow, one entry per size. Its reason starts
+        with the parts that have that same reason (the rows are shared, so a size left untried is untried for all)."""
+        found = {}
+        for name, probe, after in zip(self.names, self.probes, afters):
+            for entry in probe.finish(after, labels):
+                kept = found.setdefault(entry["param"], (entry, []))
+                if kept[0]["reason"] == entry["reason"]:
+                    kept[1].append(name)
+        return [dict(entry, reason=tagged(names, entry["reason"])) for entry, names in found.values()]
+
+    def measure_restore(self, afters):
+        """The largest gap over the parts, or None when one part cannot be compared."""
+        gaps = [probe.measure_restore(after) for probe, after in zip(self.probes, afters)]
+        return None if any(gap is None for gap in gaps) else max(gaps)
+
+    @property
+    def motions(self):
+        return [probe.motion for probe in self.probes]
+
+    def reports(self):
+        """The `SizeProbe.report` of each part."""
+        return [probe.report() for probe in self.probes]

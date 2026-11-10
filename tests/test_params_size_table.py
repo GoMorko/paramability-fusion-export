@@ -13,6 +13,29 @@ def table(ticked=TICKED, **kw):
     return size_table.build(reader_dicts(), ticked, **kw)
 
 
+class MergedTableTest(unittest.TestCase):
+    def test_the_tables_of_two_parts_join_their_model_parameters_and_their_ticks(self):
+        params = reader_dicts()
+        model_a = [{"name": "d1", "expression": W, "value": 1.8, "unit": ""}]
+        model_b = [{"name": "d2", "expression": CUBE, "value": 18.0, "unit": "mm"}]
+        first = size_table.build(params, [W], model_a)
+        second = size_table.build(params, [CUBE, W], model_b)
+        both = size_table.merged([first, second])
+        self.assertEqual(sorted(both.model_params), ["d1", "d2"])
+        self.assertEqual(sorted(both.ticked), sorted([W, CUBE]))
+        self.assertTrue({NEW_W, CUBE} <= set(both.sizes))
+
+    def test_one_table_is_returned_as_it_is(self):
+        only = table()
+        self.assertIs(size_table.merged([only]), only)
+
+    def test_a_typed_range_of_either_part_is_kept(self):
+        params = reader_dicts()
+        first = size_table.build(params, [CUBE], ranges={CUBE: (10.0, 30.0)})
+        second = size_table.build(params, [CUBE, W])
+        self.assertEqual(size_table.merged([first, second]).sizes[CUBE]["max"], 30.0)
+
+
 class FilterBoxTableTest(unittest.TestCase):
     def test_counts_and_cube_are_free_sizes_with_renamed_dollar_names(self):
         t = table()

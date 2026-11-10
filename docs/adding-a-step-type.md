@@ -63,7 +63,10 @@ the two against each other.
 
 - Wrap each Fusion call in `geo.safe` (`read_geometry.py`). A member that cannot be read becomes null or `"other"`,
   never a guess; the handler refuses it.
-- Mark inputs that belong to another component with `mark_foreign`, so the walk refuses the step.
+- Mark inputs that belong to another component with `mark_foreign`, so the walk refuses the step. A flat face or plane
+  of another component that the translator can follow carries a measured `ref` (`ref_motion.bring_in` turns it into
+  an `assembly` record, `ref_motion.plane_shift` and `axis_moves` give its move as a formula); see
+  `docs/capture-format.md`, "Measured references".
 - Read the parameters behind each value into `data.params` (see "Parameters behind values" in
   `docs/capture-format.md`). The size table and the end of walk audit read them.
 - A reader that raises leaves `{"read_error": ...}` as the data; the walk refuses the step.

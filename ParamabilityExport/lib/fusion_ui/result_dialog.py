@@ -112,6 +112,7 @@ def build(command, view):
     inputs = command.commandInputs
     inputs.addTextBoxCommandInput("pm_result_saved", "", escape(view["saved"]), text_rows(view["saved"].split("\n")), True)
     _add_lines(inputs, "pm_result_warnings", "Check your design", view.get("warnings"))
+    _add_lines(inputs, "pm_result_parts", "Parts", view.get("parts"))
 
     sizes = inputs.addGroupCommandInput("pm_result_sizes", view["size_title"])
     sizes.isExpanded = True

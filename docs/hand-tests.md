@@ -19,7 +19,7 @@ In this order. Each id is described in the section named.
 - [ ] T1 to T5, thin walled extrudes of one closed outline: section "Thin extrudes".
 - [ ] S1 to S5 and X1 onward, spline outlines and sketch text: section 11.
 - [ ] Mirror plane and pattern axis reference reads: "Fusion calls to watch", the entry about `read_reference.py`.
-- [ ] R1 to R6, places of another component: section 8.1.
+- [ ] R1 to R7, places of another component: section 8.1.
 - [ ] M1 to M6, measuring those places at other sizes: section 8.2.
 - [ ] `%` with a negative left side: T5.
 
@@ -371,33 +371,47 @@ inside a component, also a nested or turned one, lands where Fusion shows it.
 
 ### 8.1 Places of another component (R tests)
 
-These check the references to faces, planes, axes and points of another component. The copy keeps such a place where
-it is now; a size that acts on that component is marked loose. Read `report.json` for the `ref` records.
+These check the steps that use a face, plane, axis, direction or point of another component. The copy follows such a
+place when the export measured how it moves with the sizes (section 8.2); a size it cannot follow is loose, and the
+reason names the step and the other component. Read `report.json` for the `ref` records, and the recipe for the
+formulas.
 
 - [ ] **R1 Extrude to a face of another component.** `Base` holds a block of height `base_h`; in `Top`, an extrude "to" the
-      top face of `Base`. Export `Top`: a fixed shape that names the extrude. The report shows `foreign` on `side_one`
-      and a `ref` with `type` `BRepFace`, the `Base` component and body, `point`, `normal` and `face_point` in the
-      coordinates of `Top`: move `Top` by (100, 50, 0) and turn it 90 degrees first, and check the numbers follow.
+      top face of `Base`. Export `Top` with `base_h` ticked: the extrude is copied, its length is a formula of
+      `base_h`, and `base_h` is a free size with no warning. The report shows a `ref` with `type` `BRepFace`, the `Base`
+      component and body, `point`, `normal` and `face_point` in the coordinates of `Top`: move `Top` by (100, 50, 0)
+      and turn it 90 degrees first, and check the numbers follow. Change `base_h` in Paramability: the extrude
+      reaches the new top. Then an extrude that starts from the face (not reaches to it): its sketch moves with
+      `base_h`. A round face of `Base` stops the copy ("reaches to a curved face of another component").
 - [ ] **R2 Mirror across a plane of another component.** In `Cover`, an offset plane driven by `gap`; in `Tray`, a
-      mirror across it. Export `Tray` with `gap` ticked: the mirror is copied at the plane's place now, `gap` is
-      loose with a reason that names the mirror and `Cover`, and `plane.ref` names `Cover`. A size that only acts in
-      `Tray` stays a free size.
+      mirror across it. Export `Tray` with `gap` ticked: the mirror plane is a formula of `gap` and the mirrored half
+      follows `gap` in Paramability. Then add an angle parameter that tilts the plane and tick it: that parameter is
+      loose with "turns" and the mirror and `Cover` named. A size that only acts in `Tray` stays a free size.
 - [ ] **R3 Pattern around an axis of another component.** Same with a circular pattern around a construction axis of
-      `Cover` that moves with `gap`: the pattern is copied, `gap` is loose with the pattern named. A sketch line of
-      `Cover` as the axis: the `axis` record has no `sketch_token`.
+      `Cover` that moves with `gap`: the axis point is a formula of `gap` and the pattern centre follows it. A revolve
+      about such an axis behaves the same; an axis that leaves the plane of the revolve's sketch makes that size
+      loose ("moves out of the plane of its sketch"). A sketch line of `Cover` as the axis: the `axis` record has no
+      `sketch_token`.
+- [ ] **R4 Hole on a face of another component.** A hole placed by a point on a flat face of `Cover` whose offset follows
+      `gap`: copied, the hole centre moves along the face normal with `gap` (check that Fusion moves the hole with the
+      face; if the hole stays put while the face moves, the copy is wrong and this test fails). A hole on an edge of
+      `Cover`: the copy stops ("placed on an edge or point of another component") and `position_refs` names the
+      entity.
 - [ ] **R5 Hole on sketch points of another component.** In `Cover`, a sketch with points; in `Tray`, a hole on them.
       Move the `Cover` occurrence by (100, 50, 0) and turn it 90 degrees first. Export: the hole sits where Fusion
       shows it (the right centres and the right direction into the material), the report has `position_refs` and no
-      `sketch_token`. A size that moves that sketch is loose with the hole named.
-- [ ] **R4b Hole on a face or edge of another component.** A hole placed by a point on a face of `Cover`, and one on an
-      edge of `Cover`: both stop the copy ("reaches into another component"), and `position_refs` names the entity.
-- [ ] **R6 Origin plane.** A mirror across an origin plane of the root or of `Cover`: copied with no warning, and
-      `ref.origin` is true for the `Cover` one.
+      `sketch_token`. A size that moves that sketch moves the hole in Paramability.
+- [ ] **R6 Origin plane and no measuring.** A mirror across an origin plane of the root or of `Cover`: copied with no
+      warning, and `ref.origin` is true for the `Cover` one. Then a mirror across a plane of `Cover` driven by a
+      ticked parameter, in an export where the sketch scan did not run (older motion file, or the scan failed): the
+      parameter is loose with a reason, never silently fixed.
+- [ ] **R7 Pattern direction from another component.** A rectangular pattern whose direction is an axis or edge of `Cover`:
+      copied with the direction as read. A parameter that turns that axis is loose ("turns").
 
 ### 8.2 Measuring places of another component (M tests)
 
 The export reads each plane, axis, direction or point of another component that a step uses again at every size it
-tries, and fits how far it moves. The copy does not use the result yet; check it in `report.json`: `probe.request.refs`
+tries, and fits how far it moves. The copy writes the result as formulas (R tests); check it in `report.json`: `probe.request.refs`
 lists the references, `probe.motion.refs` says which were measured (empty text) or why not, `probe.motion.values` has
 the keys `<item>/r/<slot>/...`, and each state's `read.refs` has the places in the part's coordinates.
 
@@ -421,6 +435,26 @@ the keys `<item>/r/<slot>/...`, and each state's `read.refs` has the places in t
       back) and `health.restore_gap_mm` is 0. A size that acts only on a referenced component is ticked to start with
       (its row says it changes that component) and has probe rows; unticked, it is listed under "These parameters also
       change this part" when it moves the plane. Note the export time with and without the references.
+
+### 8.3 Several bodies in one file (P tests)
+
+Pick two or more bodies in the body picker of Export for Paramability. Open the file in Paramability and look at
+`report.json` (one record per body under `parts`, shared `sizes`).
+
+- [ ] **P1 Shared size.** Two bodies in two components that both read `Wall`. Pick both (hold Ctrl or Shift). The
+      table ticks `Wall` and what either body uses. One file, two objects at the places Fusion shows, and one `Wall`
+      field on the form that rebuilds both. Parameters are back, no temporary component is left, the timeline marker
+      is where it was.
+- [ ] **P2 Time.** Export 2, 4 and 8 bodies of a real design with sketches. Note the time and the number of probe
+      rows in `report.json` (`parts[].probe.states`). The export reads each body's steps once (N captures) and tries
+      the sketches over one set of rows of at most 64.
+- [ ] **P3 Fixed shape.** One picked body has a Sweep (or another step that stops the copy), the other copies. The
+      warning under the picker names the first body. The file holds an editable part and a fixed shape with a note;
+      the editable part keeps its sizes.
+- [ ] **P4 Moves in the assembly.** A size that drives a joint offset moving one of the bodies. Tick it: it is marked
+      "may give unexpected results" with the joint reason, the bodies stay where Fusion shows them now.
+- [ ] Pick one body again: the file is the usual single body file (`kind: recipe`).
+- [ ] After picking a body, "Show in timeline" selects the step and the picker still holds all picked bodies.
 
 ## 9. Sketches that follow sizes
 
@@ -772,6 +806,18 @@ These were written from the API reference and never run:
   that returns to its start, and that a restore the add-in cannot finish (a parameter locked by hand during the
   export) shows "These parameters could not be set back" in the result window and in a message box.
 
+### Several bodies in the picker
+
+Never run in Fusion (section 8.3):
+
+- `SelectionCommandInput.setSelectionLimits(1, 32)`, `selectionCount`, `selection(i).entity` for several bodies, and
+  `clearSelection` then `addSelection` per body to put them back (`restore_bodies`).
+- `Component.entityToken`, `Component.name` and `bRepBodies.count` of a body's parent component, for the part name
+  (`body_label`; any failure falls back to the body name).
+- One `ReadContext` and one probe reader per body, over the same rows: each body's `read_state` finds the user
+  parameters by name and its own component's model parameters; the model parameters of the other bodies read as
+  missing, which only means they are not used as columns for that body.
+
 ## Capture reader calls to watch (extrude, revolve, hole, combine, thread, sketch profiles)
 
 These members and values were written from the API reference and never run. A member that cannot be read gives
@@ -815,6 +861,12 @@ read the capture in `report.json`.
   of that occurrence, `Sketch.sketchDimensions`, `SketchDimension.parameter`, `Parameter.dependencyParameters`.
 - A construction plane or axis of the root (or of another component, seen through its occurrence) used as a mirror
   plane or turning axis gives `geometry` in root coordinates (`from_assembly`).
+- What the translator assumes about references of other components (no new `adsk` call; R1 to R7 pin it): a face
+  or plane of another component read through its occurrence has `point`, `normal` and `face_point` that, brought into
+  the part's coordinates, equal the read at the current sizes; a hole placed by a point on a flat face keeps its
+  place on the face while the face moves along its normal (the copy moves the hole centre by the face's offset); the
+  extrude length to a face of another component is the face's distance from the sketch plane, so it follows the
+  face's offset one to one.
 - `HoleFeature.thread.isModeled`, `holePositionDefinition.sketchPoints[i].worldGeometry`, `position`, `direction`
   (into the material or out), `tipAngle` for a flat drill point, `participantBodies`, `sideFaces`, `endFaces`.
 - `CombineFeature.targetBody`, `toolBodies`, `isKeepToolBodies`; `ThreadFeature.isModeled`.

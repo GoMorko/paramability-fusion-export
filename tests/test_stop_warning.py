@@ -4,7 +4,29 @@ from tests import context  # noqa: F401
 from tests.test_recipe_export import plate_then_loft
 from tests.translator_helpers import load_capture
 
-from lib.dialog_model.stop_warning import saved_message, status_text, summarize
+from lib.dialog_model.stop_warning import saved_message, status_text, summarize, summarize_many
+
+
+class SummarizeManyTest(unittest.TestCase):
+    def test_only_the_bodies_that_stop_are_named_and_one_line_says_what_happens_to_them(self):
+        summary = summarize_many([("Tray", load_capture("extrude_plate")), ("Cover", plate_then_loft())])
+        self.assertTrue(summary["stops"])
+        self.assertEqual(summary["index"], 2)
+        self.assertTrue(summary["lines"][0].startswith("Cover: "))
+        self.assertIn("Loft1", summary["lines"][0])
+        self.assertFalse(any(line.startswith("Tray") for line in summary["lines"]))
+        self.assertIn("fixed shapes", summary["lines"][-1])
+        self.assertIn("Cover: ", summary["tooltip"])
+
+    def test_bodies_that_copy_cleanly_have_nothing_to_warn_about(self):
+        clean = load_capture("extrude_plate")
+        self.assertIsNone(summarize_many([("A", clean), ("B", clean)]))
+
+    def test_a_body_that_could_not_be_read_stops_the_copy_of_that_body_only(self):
+        summary = summarize_many([("A", RuntimeError("boom")), ("B", load_capture("extrude_plate"))])
+        self.assertTrue(summary["stops"])
+        self.assertIsNone(summary["index"])
+        self.assertTrue(summary["lines"][0].startswith("A: "))
 
 
 class SummarizeTest(unittest.TestCase):

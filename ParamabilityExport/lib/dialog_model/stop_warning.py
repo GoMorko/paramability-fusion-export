@@ -101,6 +101,40 @@ def summarize(capture, has_parameters=True):
     return summary if summary["lines"] else None
 
 
+def summarize_many(named, has_parameters=True):
+    """`summarize` for several picked bodies: `named` is [(body name, capture or the exception that stopped the read)].
+
+    Each body that stops the copy or has a noted step gets its lines, led by its name; one closing line says that the
+    stopped bodies are saved as fixed shapes. The keys are those of `summarize`; `index` is the first stopping step and
+    `tooltip` joins the bodies' tooltips. None when there is nothing to warn about.
+    """
+    lines, tooltips, noted, index = [], [], [], None
+    stopped = False
+    for name, capture in named:
+        summary = summarize(capture, has_parameters)
+        if summary is None:
+            continue
+        if summary["stops"]:
+            stopped = True
+            index = summary["index"] if index is None else index
+            lines.append("%s: %s" % (name, summary["title"]))
+            if summary["reason"] and summary["reason"] != summary["title"]:
+                lines.append(clip(summary["reason"], MAX_SHORT_REASON))
+        line = _noted_line(summary["noted"])
+        if line:
+            lines.append(line if summary["stops"] else "%s: %s" % (name, line))
+        noted.extend(summary["noted"])
+        if summary["tooltip"]:
+            tooltips.append("%s: %s" % (name, summary["tooltip"]))
+    if stopped:
+        lines.append("These parts will be saved as fixed shapes; the other parts stay editable."
+                     + (" Your parameters still come along as variables." if has_parameters else ""))
+    if not lines:
+        return None
+    return {"stops": stopped, "index": index, "label": "", "title": lines[0], "reason": "", "lines": lines,
+            "tooltip": "\n".join(tooltips), "noted": noted}
+
+
 def saved_message(manifest, report, file_name):
     """The message box text after the export. A part saved as a fixed shape starts with the stopping step."""
     refusal = report.get("refusal")

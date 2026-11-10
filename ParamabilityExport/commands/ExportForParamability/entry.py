@@ -5,8 +5,8 @@ import adsk.core
 
 from ... import config
 from ...lib.design_edit.marker import marker_note, read_marker
-from ...lib.dialog_model.stop_warning import summarize as summarize_stop
-from ...lib.export_plan.size_offers import offers as size_offers, table_for_body
+from ...lib.dialog_model.stop_warning import summarize as summarize_stop, summarize_many as summarize_stops
+from ...lib.export_plan.size_offers import offers as size_offers, table_for_bodies, table_for_body
 from ...lib.fusion_reader.design_info import default_length_unit, detect_up_axis
 from ...lib.fusion_reader.parameters import list_model_parameters, list_user_parameters
 from ...lib.fusion_reader.step_export import count_solid_bodies
@@ -56,11 +56,16 @@ def _on_created(args):
     captures = export_flow.CaptureCache(design)
 
     def inspect(picked):
-        """(dialog rows, warning) for a body. The rows hold its own parameters when its steps can be read, else the
-        whole design's. The warning says which step stops the copy; it is None when nothing is picked."""
-        capture = captures.get(picked) if picked is not None else None
-        rows = size_offers(table_for_body(parameters, design_unit, model_params, capture), parameters, design_unit)
-        return rows, _stop_for(capture)
+        """(dialog rows, warning) for the picked bodies (a list). The rows hold their own parameters when their steps
+        can be read, else the whole design's; with several bodies a parameter any of them uses is ticked. The warning
+        says which step stops the copy, per body; it is None when nothing is picked."""
+        found = [captures.get(b) for b in picked]
+        if len(picked) <= 1:
+            capture = found[0] if found else None
+            rows = size_offers(table_for_body(parameters, design_unit, model_params, capture), parameters, design_unit)
+            return rows, _stop_for(capture)
+        table = table_for_bodies(parameters, design_unit, model_params, found)
+        return size_offers(table, parameters, design_unit), _stops_for([b.name for b in picked], found)
 
     def _stop_for(capture):
         try:
@@ -69,18 +74,25 @@ def _on_created(args):
             log(f"stop warning failed: {exc!r}")
             return None
 
-    offers, stop = inspect(body)
+    def _stops_for(names, found):
+        try:
+            return summarize_stops(list(zip(names, found)), has_parameters=bool(parameters))
+        except Exception as exc:
+            log(f"stop warning failed: {exc!r}")
+            return None
+
+    offers, stop = inspect([body] if body is not None else [])
     recipe_dialog.build(
         command, offers, body, detect_up_axis(adsk.core.Application.get()), design_unit=design_unit, stop=stop,
         marker_note=note)
-    shown = {"body": body.entityToken if body is not None else None, "stop": stop}
+    shown = {"bodies": (body.entityToken,) if body is not None else (), "stop": stop}
 
     def show_step(inputs, button):
         """Select the stopping step in Fusion, then put the body picker and the button back as they were."""
-        picked = recipe_dialog.picked_body(inputs)
+        picked = recipe_dialog.picked_bodies(inputs)
         problem = timeline_select.select_step(design, (shown["stop"] or {}).get("index"))
         try:
-            recipe_dialog.restore_body(inputs, picked)
+            recipe_dialog.restore_bodies(inputs, picked)
             adsk.core.BoolValueCommandInput.cast(button).value = False
         except Exception as exc:
             log(f"restoring the dialog failed: {exc!r}")
@@ -90,13 +102,13 @@ def _on_created(args):
     def on_changed(args):
         inputs = args.inputs
         if args.input.id == recipe_dialog.BODY_ID:
-            picked = recipe_dialog.picked_body(inputs)
-            token = picked.entityToken if picked is not None else None
-            if picked is None:
-                shown["body"], shown["stop"] = None, None
+            picked = recipe_dialog.picked_bodies(inputs)
+            tokens = tuple(b.entityToken for b in picked)
+            if not picked:
+                shown["bodies"], shown["stop"] = (), None
                 recipe_dialog.show_stop(inputs, None)
-            elif token != shown["body"]:
-                shown["body"] = token
+            elif tokens != shown["bodies"]:
+                shown["bodies"] = tokens
                 fresh, shown["stop"] = inspect(picked)
                 recipe_dialog.apply_offers(inputs, offers, fresh)
                 recipe_dialog.show_stop(inputs, shown["stop"])

@@ -4,14 +4,19 @@ Whatever goes wrong while reading or translating, the person still gets the STEP
 plain note. The caller writes the STEP before it reads the capture.
 """
 import json
+from dataclasses import dataclass
+from typing import Any, Optional
 
-from ..package.manifest import MAX_FIXED, build_recipe_manifest, build_step_only_manifest, validate_manifest
+from ..package.manifest import (
+    MAX_FIXED, MAX_PART_NOTE, build_parts_manifest, build_recipe_manifest, build_step_only_manifest, part_recipe_path,
+    part_step_path, validate_manifest)
 from ..package.text import clip
 from ..translator import CaptureError, translate
 from ..translator.notes import (
     recipe_note, reader_failure_note, step_only_note, translate_failure_note, used_several_times_note)
 from .health import measuring_note
 from .messages import MAX_NOTE, dropped_note, fixed_note, loose_note, sizes_note, unchanged_note
+from .part_names import tagged
 
 MAX_RECIPE_BYTES = 8 * 1024 * 1024
 MAX_NOTES = 5  # the manifest limit; the last notes (not followed, not used) give way
@@ -251,3 +256,192 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
     if problems:
         raise ValueError(" ".join(problems))
     return manifest, files, report
+
+
+@dataclass
+class PartInput:
+    """One picked body of a several-body export, as `plan_parts_export` takes it.
+
+    name: the part's name in the file. step_file: the STEP file on disk. capture: the reader's capture dict, or the
+    exception it raised. translated: the translator's result for the same inputs (None translates here). motion: what
+    the size probe found for this part's sketches. probe: that probe's record for `report.json`.
+    """
+
+    name: str
+    step_file: str
+    capture: Any
+    translated: Optional[Any] = None
+    motion: Optional[Any] = None
+    probe: Optional[dict] = None
+
+
+class _Part:
+    """What one part of `plan_parts_export` came to: its recipe bytes, or the reason it is a fixed shape."""
+
+    def __init__(self, given, up_axis, size_table):
+        self.given = given
+        self.result = self.refusal = self.note = self.error = self.recipe_data = None
+        self.capture = given.capture if isinstance(given.capture, dict) else None
+        if self.capture is None:
+            self.error, self.note = given.capture, reader_failure_note()
+        else:
+            self.capture = _with_up_axis(self.capture, up_axis)
+            try:
+                self.result = given.translated or translate(self.capture, size_table=size_table, motion=given.motion)
+            except CaptureError as exc:
+                self.error, self.note = exc, reader_failure_note()
+            except Exception as exc:
+                self.error, self.note = exc, translate_failure_note()
+        if self.result is not None and self.result.recipe is not None:
+            self.recipe_data, self.refusal = _recipe_bytes(self.result.recipe)
+        elif self.result is not None:
+            self.refusal = self.result.refusal
+        self.free = free_sizes(self.result.recipe) if self.recipe_data is not None else []
+
+    @property
+    def is_recipe(self):
+        return self.recipe_data is not None
+
+    def fixed_note(self):
+        return self.note or step_only_note(self.refusal)
+
+
+def _shared_dropped(size_table, parts, fixed_names, free):
+    """The dropped entries of all parts, one per size: a size some part writes as a size, or that is fixed, is not
+    dropped. A size no part uses is listed once, and `used` is True when any part reads it."""
+    out = {}
+    for part in parts:
+        for d in part.result.dropped:
+            if size_table.recipe_name(d["name"]) in fixed_names or size_table.recipe_name(d["name"]) in free:
+                continue
+            found = out.setdefault(d["name"], dict(d))
+            if d["used"] and not found["used"]:
+                out[d["name"]] = dict(d)
+    return list(out.values())
+
+
+def _tagged_loose(recipes):
+    """The translators' loose sizes of all parts: one entry per size and reason, led by the parts that gave it. The
+    size table is shared, so a doubt about a size usually comes from every part."""
+    found = {}
+    for part in recipes:
+        for entry in part.result.loose:
+            found.setdefault((entry["name"], entry["reason"]), []).append(part.given.name)
+    return [{"name": name, "reason": tagged(names, reason)} for (name, reason), names in found.items()]
+
+
+def _parts_notes(parts, free, loose, fixed, health):
+    """The package notes of a several-body export, the most useful first (at most `MAX_NOTES`)."""
+    recipes = sum(1 for p in parts if p.is_recipe)
+    notes = ["%d %s, %d %s." % (len(parts), "part" if len(parts) == 1 else "parts", len(free),
+                                "size" if len(free) == 1 else "sizes")]
+    if recipes < len(parts):
+        names = [p.given.name for p in parts if not p.is_recipe]
+        notes.append(clip("Added as fixed shapes: %s." % ", ".join(names), MAX_NOTE))
+    doubt = measuring_note(health)
+    if doubt:
+        notes.append(doubt)
+    if loose:
+        notes.append(loose_note([f["name"] for f in loose]))
+    if fixed:
+        notes.append(fixed_note([f["name"] for f in fixed]))
+    return notes[:MAX_NOTES]
+
+
+def _part_record(part, loose):
+    """The part's entry in `report.json`."""
+    result = part.result
+    record = {
+        "name": part.given.name,
+        "outcome": "recipe" if part.is_recipe else "stepOnly",
+        "items": list(result.items) if result is not None else [],
+        "notes": list(result.notes) if result is not None else [],
+    }
+    if part.refusal is not None:
+        record["refusal"] = part.refusal
+    if part.error is not None:
+        record["error"] = ("%s: %s" % (type(part.error).__name__, part.error))[:500]
+    if part.capture is not None:
+        record["capture"] = part.capture
+    if part.given.probe is not None:
+        record["probe"] = part.given.probe
+    if part.is_recipe:
+        record["sizes"] = {"free": part.free, "loose": [e["name"] for e in loose]}
+    return record
+
+
+def plan_parts_export(inputs, title, writer, up_axis, size_table=None, listing=None, marker=None, loose=None,
+                      health=None, also=None):
+    """Return (manifest, files, report) for several bodies of one design in one file (package kind `parts`).
+
+    inputs: a `PartInput` per picked body, in order. Each part is translated like `plan_single_export` does; one that
+    cannot be copied (or whose steps could not be read) is a fixed shape in the file with its own note, and the
+    others keep their recipes. All parts were translated with the same `size_table`, so a size is one size for every
+    part that reads it.
+    A size that is fixed in one part is fixed in all (the caller translates with it fixed; `size_table.fixed` and
+    each result's `fixed` are joined here). A size that is loose in one part (a translator doubt, or `loose` from the
+    size probe) is listed as loose for every part whose recipe holds it; each reason starts with the part it was found
+    in. A ticked size that no part writes as a size is listed once in `report.json` under "dropped".
+    loose, health, listing, marker, also: as in `plan_single_export`.
+    files holds `parts/NN/part.step`, `parts/NN/recipe.json` and one `report.json` with a record per part.
+    Raises ValueError when the manifest breaks the package rules.
+    """
+    parts = [_Part(given, up_axis, size_table) for given in inputs]
+    recipes = [p for p in parts if p.is_recipe]
+    free = list(dict.fromkeys(name for p in recipes for name in p.free))
+    all_fixed, all_loose, dropped = [], [], []
+    if recipes and size_table is not None:
+        all_fixed = _merge_fixed(size_table, size_table.fixed, *[p.result.fixed for p in recipes])
+        fixed_names = {f["name"] for f in all_fixed}
+        found = list(loose or []) + _tagged_loose(recipes)
+        all_loose = _merge_fixed(size_table, found, skip=fixed_names, only=set(free))
+        dropped = _shared_dropped(size_table, recipes, fixed_names, set(free))
+
+    sizes = {"free": free, "fixed": all_fixed, "loose": all_loose, "dropped": dropped}
+    report = {"writer": writer, "outcome": "parts", "parts": []}
+    if marker is not None:
+        report["marker"] = dict(marker)
+    if health is not None:
+        report["health"] = health
+    if listing is not None:
+        report["parameters"] = listing.report()
+    if recipes:
+        report["sizes"] = sizes
+        if size_table is not None and size_table.links:
+            report["links"] = link_outcomes(size_table, sizes)
+    if also:
+        report["also_changes"] = list(also)
+
+    files, entries = {}, []
+    for number, part in enumerate(parts, start=1):
+        mine = [e for e in all_loose if e["name"] in part.free]
+        report["parts"].append(_part_record(part, mine))
+        entry = {"name": part.given.name, "step": part_step_path(number)}
+        files[entry["step"]] = part.given.step_file
+        if part.is_recipe:
+            entry["recipe"] = part_recipe_path(number)
+            files[entry["recipe"]] = part.recipe_data
+            entry["loose"] = mine
+            if _uses(part.capture) > 1:
+                entry["note"] = clip(used_several_times_note(_uses(part.capture)), MAX_PART_NOTE)
+        else:
+            entry["note"] = clip(part.fixed_note(), MAX_PART_NOTE)
+        entries.append(entry)
+    manifest = build_parts_manifest(
+        title, writer, entries, up_axis=up_axis, notes=_parts_notes(parts, free, all_loose, all_fixed, health),
+        fixed=all_fixed, parameters=listing.entries if listing is not None else None)
+    files["report.json"] = _parts_report_bytes(report)
+
+    problems = validate_manifest(manifest)
+    if problems:
+        raise ValueError(" ".join(problems))
+    return manifest, files, report
+
+
+def _parts_report_bytes(report):
+    """`report.json` of a several-body export; the captures are left out when the report cannot be written with them."""
+    try:
+        return _json_bytes(report, indent=2, default=str)
+    except (TypeError, ValueError):
+        trimmed = dict(report, parts=[{k: v for k, v in part.items() if k != "capture"} for part in report["parts"]])
+        return _json_bytes(trimmed, indent=2, default=str)

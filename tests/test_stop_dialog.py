@@ -38,8 +38,16 @@ class WarningBoxTest(unittest.TestCase):
         _, inputs = make_dialog([offer("wall")], body)
         picker = inputs.itemById(recipe_dialog.BODY_ID)
         picker.picked[:] = []
-        recipe_dialog.restore_body(inputs, body)
+        recipe_dialog.restore_bodies(inputs, [body])
         self.assertEqual(picker.picked, [body])
+
+    def test_every_picked_body_gets_its_place_back_in_the_same_order(self):
+        bodies = [type("Body", (), {"entityToken": "b%d" % i})() for i in range(3)]
+        _, inputs = make_dialog([offer("wall")], bodies)
+        picker = inputs.itemById(recipe_dialog.BODY_ID)
+        picker.picked[:] = [bodies[1]]
+        recipe_dialog.restore_bodies(inputs, bodies)
+        self.assertEqual(picker.picked, bodies)
 
 
 class _Selections:

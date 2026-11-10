@@ -69,6 +69,16 @@ def table_for_body(params, design_unit, fallback_model, capture, limit=MAX_TICKE
     return initial_table(params, model, design_unit, quantities, limit, body_links(capture))
 
 
+def table_for_bodies(params, design_unit, fallback_model, captures, limit=MAX_TICKED):
+    """The dialog table for several picked bodies: the default ticks of each body's own table joined
+    (`size_table.merged`), so a parameter any body uses is ticked. A body whose steps could not be read is left out
+    unless no body could be read. One capture gives `table_for_body`'s table."""
+    captures = list(captures)
+    readable = [c for c in captures if isinstance(c, dict)] or captures[:1]
+    tables = [table_for_body(params, design_unit, fallback_model, c, limit) for c in readable]
+    return size_table.merged(tables, limit)
+
+
 def range_unit(kind, design_unit="mm"):
     """The unit the Min, Max and Now cells use: the design's length unit, deg for an angle, '' for a count."""
     if kind == "length":

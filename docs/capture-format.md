@@ -782,14 +782,31 @@ tell which sizes may move it:
 
 Mirror planes and pattern or revolve axes keep their geometry in the record (`assembly: true`); `ref` repeats it with
 the identity. An extrude `start` or `side_one` / `side_two` of kind `fromEntity` / `toEntity` on a face or plane of
-another component stays `foreign` (the walk refuses the step) and carries `ref` with the geometry in the target's
-coordinates; its own `plane` and `face_point` stay as Fusion gave them.
+another component is read as `foreign` and carries `ref` with the geometry in the target's coordinates; its own `plane`
+and `face_point` stay as Fusion gave them (the translator replaces them from `ref` when the face is flat).
 
-The translator uses `ref.component` to mark sizes: for a record with `assembly: true` (and the `position_refs` of a
-hole) every ticked size whose user parameter acts on that component (`dependents` of the parameter, the rule in
-`lib/params/geometry_links.py`) may move the place, and is marked loose with the step and the component named. An
-`origin` reference marks nothing. A capture that lists no `dependents`, or a record without a component, gives the step
-a note instead (`follow.foreign_ref`).
+The translator (`lib/translator/ref_motion.py`) reads these records as follows.
+
+- `bring_in` makes a flat face or plane of another component that an extrude starts from or reaches to usable: the
+  record loses `foreign`, gets `assembly: true`, and its `plane` and `face_point` are taken from `ref` (the target's
+  coordinates). The same for a hole whose `position_refs` are all flat faces or planes. A record without a flat `ref`
+  (a curved face, an edge, a place that could not be brought in) stays `foreign` and the step is refused, with a reason
+  that says which.
+- For a record with `assembly: true` (and the `position_refs` of a hole, a `direction_*_place` of a pattern) the
+  size marks come from the motion file (`probe.motion.refs` and the `<item>/r/<slot>/...` keys,
+  `sketch_values.coverage.ref_answer`), for each ticked size whose user parameter acts on `ref.component`
+  (`dependents` of the parameter, the rule in `lib/params/geometry_links.py`):
+  - measured and the size does not move it: nothing is marked;
+  - measured and moved by an `Affine`: the step writes the move as a formula (mirror plane origin, pattern `axisPoint`,
+    revolve axis point, extrude start shift or reach, hole centre) and the size stays free;
+  - a `Stuck` key (the reference turns, or the move is no exact formula): the sizes behind it are marked loose and the
+    place stays where the capture has it;
+  - not measured (`probe.motion.refs` holds a reason, or the size was left without rows), not looked at (no entry),
+    or no motion file: every such size is marked loose with the step and the component named.
+  The first translation of an export (`OPTIMISTIC`) marks nothing. An `origin` reference marks nothing. A capture that
+  lists no `dependents`, or a record without a component, gives the step a note instead.
+- A plane or face moves along its captured `normal`; an axis moves across its direction. A pattern direction stays the
+  number read; only a turn marks sizes.
 
 ### Parameters behind values (`data.params`)
 

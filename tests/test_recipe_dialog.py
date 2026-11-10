@@ -5,6 +5,7 @@ from tests import fakes
 
 fakes.install_adsk_core()
 from lib.fusion_ui import recipe_dialog  # noqa: E402
+from lib.package.manifest import MAX_PARTS  # noqa: E402
 
 
 def offer(param, state="size", reason="", now="2 mm", lo=1.0, hi=4.0, value=2.0, **extra):
@@ -131,7 +132,34 @@ class DoubtfulTest(unittest.TestCase):
         self.assertEqual(row(inputs, "status", 0).formattedText, "size, may be unexpected")
         self.assertEqual(row(inputs, "status", 1).formattedText, "size")
         self.assertEqual(set(recipe_dialog.read_form(inputs, offers)),
-                         {"body", "ticked", "ranges", "range_problem", "up_axis"})
+                         {"bodies", "body", "ticked", "ranges", "range_problem", "up_axis"})
+
+
+class SeveralBodiesTest(unittest.TestCase):
+    def test_up_to_the_part_limit_of_bodies_can_be_picked_and_the_form_lists_them(self):
+        offers = [offer("wall")]
+        _, inputs = make_dialog(offers)
+        self.assertEqual(inputs.itemById(recipe_dialog.BODY_ID).limits, (1, MAX_PARTS))
+        pick_body(inputs)
+        pick_body(inputs)
+        form = recipe_dialog.read_form(inputs, offers)
+        self.assertEqual(len(form["bodies"]), 2)
+        self.assertIsNone(form["body"])
+        self.assertTrue(recipe_dialog.inputs_valid(inputs, offers))
+
+    def test_one_picked_body_is_the_form_body(self):
+        offers = [offer("wall")]
+        _, inputs = make_dialog(offers)
+        pick_body(inputs)
+        form = recipe_dialog.read_form(inputs, offers)
+        self.assertIs(form["body"], form["bodies"][0])
+
+    def test_a_pick_with_something_that_is_not_a_solid_body_is_not_valid(self):
+        offers = [offer("wall")]
+        _, inputs = make_dialog(offers)
+        pick_body(inputs)
+        inputs.itemById(recipe_dialog.BODY_ID).picked.append(type("Face", (), {"isSolid": False})())
+        self.assertFalse(recipe_dialog.inputs_valid(inputs, offers))
 
 
 class RangeTest(unittest.TestCase):

@@ -83,6 +83,49 @@ LISTED = [{"name": "wall", "label": "wall", "value": 2, "unit": "mm", "comment":
           {"name": "outer", "label": "outer", "value": 84, "unit": "mm", "expr": "wall * 2"}]
 
 
+def parts_manifest(names=("Tray", "Cover")):
+    parts = [{"name": name, "step": mf.part_step_path(i), "recipe": mf.part_recipe_path(i),
+              "loose": [{"name": "wall", "reason": "%s: wall may give unexpected results: it moves a joint." % name}]}
+             for i, name in enumerate(names, start=1)]
+    parts[-1] = {"name": names[-1], "step": mf.part_step_path(len(names)), "note": "Added as a fixed shape."}
+    return mf.build_parts_manifest(
+        "Planter", "w", parts, notes=["2 parts, 1 size."], parameters=LISTED,
+        fixed=[{"name": "gap", "reason": "gap stays fixed for now."}])
+
+
+class PartsManifestTest(unittest.TestCase):
+    def test_a_parts_manifest_follows_the_rules_and_the_schema_copy(self):
+        manifest = parts_manifest()
+        self.assertEqual(mf.validate_manifest(manifest), [])
+        self.assertEqual(validate(manifest, load_schema(PACKAGE_SCHEMA)), [])
+        self.assertEqual(manifest["parts"][0]["recipe"], "parts/01/recipe.json")
+        self.assertNotIn("recipe", manifest["parts"][1])
+        self.assertNotIn("loose", manifest["parts"][1])
+
+    def test_part_names_must_differ_ignoring_case(self):
+        manifest = parts_manifest(("Tray", "TRAY"))
+        self.assertTrue(mf.validate_manifest(manifest))
+
+    def test_the_number_of_parts_and_the_name_length_are_limited_by_both_the_rules_and_the_schema(self):
+        schema = load_schema(PACKAGE_SCHEMA)
+        for what, edit in (
+                ("none", lambda m: m.update(parts=[])),
+                ("too many", lambda m: m.update(parts=[dict(m["parts"][0], name="P%d" % i,
+                                                            step=mf.part_step_path(i), recipe=None)
+                                                       for i in range(1, mf.MAX_PARTS + 2)])),
+                ("long name", lambda m: m["parts"][0].update(name="x" * (mf.MAX_PART_NAME + 1)))):
+            manifest = parts_manifest()
+            edit(manifest)
+            with self.subTest(what):
+                self.assertTrue(mf.validate_manifest(manifest))
+                self.assertTrue(validate(manifest, schema))
+
+    def test_two_parts_cannot_share_a_file(self):
+        manifest = parts_manifest()
+        manifest["parts"][1]["step"] = manifest["parts"][0]["step"]
+        self.assertTrue(mf.validate_manifest(manifest))
+
+
 class SchemaCopyTest(unittest.TestCase):
     """The writers' manifests fit the app's schema copy, so a cap that drifts from the app is noticed here."""
 

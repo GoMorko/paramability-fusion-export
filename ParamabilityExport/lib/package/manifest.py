@@ -4,9 +4,14 @@ import re
 
 SCHEMA = "paramability.recipePackage"
 VERSION = 1
-KINDS = ("valueRows", "recipe", "stepOnly")
+KINDS = ("valueRows", "recipe", "stepOnly", "parts")
 UNITS = ("mm", "deg", "")
 MAX_CHECKS = 64
+MAX_PARTS = 32
+MAX_PART_NAME = 60
+MAX_PART_NOTE = 200
+MAX_PART_CHECKS = 16
+MAX_PARTS_CHECKS = 128
 MAX_FIXED = 64
 MAX_FIXED_REASON = 200
 MAX_NAME_CHARS = 64
@@ -90,6 +95,51 @@ def build_recipe_manifest(name, writer, up_axis="z", notes=None, checks=None, fi
     return manifest
 
 
+def build_parts_manifest(name, writer, parts, up_axis="z", notes=None, fixed=None, parameters=None):
+    """Several bodies of one design in one file: shared sizes, one object per part.
+
+    parts: [{'name', 'step', 'recipe', 'note', 'loose', 'checks'}] in order. `step` is a path in the zip. A part
+      without `recipe` is a fixed shape (`note` says why). `loose` ([{'name', 'reason'}]) lists the sizes of that
+      part's recipe that may not follow every step. `note` and `checks` are left out when empty.
+    fixed: [{'name', 'reason'}] for sizes that stay fixed numbers in every part. Left out when empty.
+    parameters: the design's user parameter entries, shared by all parts. Left out when empty.
+    """
+    out_parts = []
+    for part in parts:
+        entry = {"name": part["name"], "step": part["step"]}
+        if part.get("recipe"):
+            entry["recipe"] = part["recipe"]
+        if part.get("note"):
+            entry["note"] = part["note"]
+        if part.get("loose"):
+            entry["loose"] = [dict(f) for f in part["loose"]]
+        if part.get("checks"):
+            entry["checks"] = [dict(c) for c in part["checks"]]
+        out_parts.append(entry)
+    manifest = {
+        "schema": SCHEMA,
+        "version": VERSION,
+        "kind": "parts",
+        "name": name,
+        "upAxis": up_axis,
+        "writer": writer,
+        "notes": list(notes or []),
+        "parts": out_parts,
+    }
+    if fixed:
+        manifest["fixed"] = [dict(f) for f in fixed]
+    _add_parameters(manifest, parameters)
+    return manifest
+
+
+def part_step_path(number):
+    return f"parts/{number:02d}/part.step"
+
+
+def part_recipe_path(number):
+    return f"parts/{number:02d}/recipe.json"
+
+
 def _add_parameters(manifest, parameters):
     if parameters:
         manifest["parameters"] = [dict(p) for p in parameters]
@@ -132,7 +182,7 @@ def validate_manifest(m):
         problems.append(f"version must be {VERSION}.")
     kind = m.get("kind")
     if kind not in KINDS:
-        problems.append("kind must be valueRows, recipe or stepOnly.")
+        problems.append("kind must be valueRows, recipe, stepOnly or parts.")
     name = m.get("name")
     if not isinstance(name, str) or not 1 <= _clean_len(name) <= 120:
         problems.append("name must be 1 to 120 characters.")
@@ -148,7 +198,7 @@ def validate_manifest(m):
         elif any(not isinstance(n, str) or len(n) > 200 for n in notes):
             problems.append("each note must be text of at most 200 characters.")
 
-    if kind in ("stepOnly", "recipe"):
+    if kind in ("stepOnly", "recipe", "parts"):
         _validate_parameters(m.get("parameters"), problems)
 
     paths = []
@@ -183,9 +233,60 @@ def validate_manifest(m):
                 check_path(c.get("step") if isinstance(c, dict) else None, label, step_suffixes)
         _validate_fixed(m.get("fixed"), problems)
         _validate_fixed(m.get("loose"), problems, "loose")
+    elif kind == "parts":
+        _validate_parts(m, problems, check_path, step_suffixes)
     elif kind == "valueRows":
         _validate_value_rows(m, problems, check_path, step_suffixes)
     return problems
+
+
+def _validate_checks(checks, label, problems, check_path, step_suffixes, limit):
+    """The `checks` list of a recipe or a part: at most `limit` entries of size values and a STEP path each."""
+    if not isinstance(checks, list) or len(checks) > limit:
+        problems.append(f"{label}: checks must be a list of at most {limit}.")
+        return 0
+    for i, c in enumerate(checks, start=1):
+        name = f"{label} check {i}"
+        vals = c.get("values") if isinstance(c, dict) else None
+        if not isinstance(vals, dict) or not vals or not all(
+                _finite(v) and abs(v) <= VALUE_LIMIT for v in vals.values()):
+            problems.append(f"{name}: values must be a non empty map of numbers within 1e6.")
+        elif not all(isinstance(k, str) and 1 <= len(k) <= MAX_NAME_CHARS for k in vals):
+            problems.append(f"{name}: size names must be 1 to {MAX_NAME_CHARS} characters.")
+        check_path(c.get("step") if isinstance(c, dict) else None, name, step_suffixes)
+    return len(checks)
+
+
+def _validate_parts(m, problems, check_path, step_suffixes):
+    parts = m.get("parts")
+    if not isinstance(parts, list) or not 1 <= len(parts) <= MAX_PARTS:
+        problems.append(f"parts must be a list of 1 to {MAX_PARTS}.")
+        return
+    _validate_fixed(m.get("fixed"), problems)
+    seen, checks = set(), 0
+    for i, part in enumerate(parts, start=1):
+        label = f"part {i}"
+        if not isinstance(part, dict):
+            problems.append(f"{label}: must be an object.")
+            continue
+        name = part.get("name")
+        if not isinstance(name, str) or not 1 <= _clean_len(name) <= MAX_PART_NAME:
+            problems.append(f"{label}: name must be 1 to {MAX_PART_NAME} characters.")
+        elif name.lower() in seen:
+            problems.append(f"{label}: name \"{name}\" is used twice.")
+        else:
+            seen.add(name.lower())
+        check_path(part.get("step"), label, step_suffixes)
+        if part.get("recipe") is not None:
+            check_path(part["recipe"], f"{label} recipe", (".json",))
+        note = part.get("note")
+        if note is not None and (not isinstance(note, str) or len(note) > MAX_PART_NOTE):
+            problems.append(f"{label}: note must be text of at most {MAX_PART_NOTE} characters.")
+        _validate_fixed(part.get("loose"), problems, f"{label} loose")
+        if part.get("checks") is not None:
+            checks += _validate_checks(part["checks"], label, problems, check_path, step_suffixes, MAX_PART_CHECKS)
+    if checks > MAX_PARTS_CHECKS:
+        problems.append(f"checks must be at most {MAX_PARTS_CHECKS} in all.")
 
 
 def _validate_fixed(fixed, problems, key="fixed"):

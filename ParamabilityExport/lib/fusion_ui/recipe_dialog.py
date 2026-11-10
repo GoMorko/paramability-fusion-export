@@ -13,6 +13,7 @@ from .log import log
 
 from ..dialog_model import dialog_rows as rows
 from ..export_plan.size_offers import MAX_TICKED
+from ..package.manifest import MAX_PARTS
 from ..fusion_reader.bodies import is_pickable_body
 
 UP_ID = "pm_up"
@@ -68,14 +69,14 @@ def _set_text(inputs, key, index, text):
 
 
 def build(command, offers, body, up_axis, design_unit="mm", stop=None, marker_note=None):
-    """Add the inputs. offers come from export_plan.size_offers.offers; body may be None.
+    """Add the inputs. offers come from export_plan.size_offers.offers; body is the body or bodies already picked, or None.
 
     Cells are named by row number, since a Fusion parameter name is not always a safe input id. `design_unit` is the unit the Min and Max cells use for lengths. `stop` is the warning for the body already
     picked (dialog_model.stop_warning.summarize), if any. `marker_note` is the line shown when the timeline marker is
     not at the end (design_edit.marker.marker_note).
     """
     inputs = command.commandInputs
-    add_body_inputs(inputs, body, marker_note)
+    add_body_inputs(inputs, body, marker_note, MAX_PARTS)
     warning = inputs.addTextBoxCommandInput(WARN_ID, "", "", 1, True)
     warning.isVisible = False
     button = inputs.addBoolValueInput(SHOW_ID, "Show in timeline", False, "", False)
@@ -295,29 +296,39 @@ def handle_change(inputs, offers, changed):
     _refresh_details(inputs, offers, index if key in ("tick", "min", "max") else None, over)
 
 
-def restore_body(inputs, body):
-    """Put `body` back in the body picker when something else took its place (selecting a step can do that)."""
+def picked_bodies(inputs):
+    """The bodies in the picker, in the order they were picked."""
     selection = inputs.itemById(BODY_ID)
-    current = selection.selection(0).entity if selection.selectionCount == 1 else None
-    if body is not None and (current is None or current.entityToken != body.entityToken):
-        selection.clearSelection()
-        selection.addSelection(body)
+    return [selection.selection(i).entity for i in range(selection.selectionCount)]
 
 
 def picked_body(inputs):
+    """The one picked body, or None when none or several are picked."""
+    bodies = picked_bodies(inputs)
+    return bodies[0] if len(bodies) == 1 else None
+
+
+def restore_bodies(inputs, bodies):
+    """Put `bodies` back in the picker when something else took their place (selecting a step can do that)."""
     selection = inputs.itemById(BODY_ID)
-    return selection.selection(0).entity if selection.selectionCount == 1 else None
+    current = [b.entityToken for b in picked_bodies(inputs)]
+    if bodies and current != [b.entityToken for b in bodies]:
+        selection.clearSelection()
+        for body in bodies:
+            selection.addSelection(body)
 
 
 def read_form(inputs, offers):
-    """Plain dict: body, ticked (Fusion parameter names), ranges ({name: (min, max)} of the ticked ones),
+    """Plain dict: bodies (the picked bodies), body (the one picked body, else None), ticked (Fusion parameter names), ranges ({name: (min, max)} of the ticked ones),
     range_problem ('' when every typed range is fine) and up_axis."""
     ticks = _ticks(inputs, offers)
     ranges, problem = rows.read_ranges(
         offers, ticks, _range_texts(inputs, offers, "min"), _range_texts(inputs, offers, "max"))
     up_item = inputs.itemById(UP_ID).selectedItem
+    bodies = picked_bodies(inputs)
     return {
-        "body": picked_body(inputs),
+        "bodies": bodies,
+        "body": bodies[0] if len(bodies) == 1 else None,
         "ticked": [o["param"] for o, on in zip(offers, ticks) if on],
         "ranges": ranges,
         "range_problem": problem,
@@ -331,8 +342,8 @@ def allow_preselect(args):
 
 
 def inputs_valid(inputs, offers):
-    selection = inputs.itemById(BODY_ID)
-    if selection.selectionCount != 1 or not is_pickable_body(selection.selection(0).entity):
+    bodies = picked_bodies(inputs)
+    if not 1 <= len(bodies) <= MAX_PARTS or not all(is_pickable_body(b) for b in bodies):
         return False
     form = read_form(inputs, offers)
     return len(form["ticked"]) <= MAX_TICKED and not form["range_problem"]

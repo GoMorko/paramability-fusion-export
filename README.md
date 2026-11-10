@@ -25,7 +25,7 @@ Saves one body with its modeling steps and your user parameters as sizes. Parama
 Nothing is typed in Fusion.
 
 1. In Fusion, mark the user parameters you want to change in Paramability as favourites (optional).
-2. Click Export for Paramability and pick the body.
+2. Click Export for Paramability and pick the body (or several bodies, see "Several bodies in one file").
 3. Look at the parameter table. Each row is one user parameter: a tick, its name, its value now, and what it becomes in
    Paramability. Parameters the picked body uses are ticked to start with (your favourites first); pick another body
    and the ticks follow that body. "Tick what the body uses" and "Untick all" set them again in one click. A ticked
@@ -73,9 +73,12 @@ to the part are tried too, after the others, since you know your design.
 A step can also use a plane, axis or point of another component directly (a mirror plane, a pattern axis, a face an
 extrude reaches to, a hole point). The export reads where that place is at every size it tries and fits how far it
 moves (a plane along its normal, an axis or point in space). A parameter that acts on the component that owns such a
-place is ticked to start with and tried like a parameter behind a sketch. The copy does not follow these places yet:
-the result is kept in `report.json` (`probe.motion.refs`), and such a parameter is still marked "may give unexpected
-results".
+place is ticked to start with and tried like a parameter behind a sketch. The copy then follows the place as a formula
+of the sizes: a mirror plane, a pattern or revolve axis, the face or plane an extrude reaches to or starts from, and the
+point or flat face a hole sits on move with the parameter, and the parameter stays a free size. A parameter that acts
+on that component but does not move the place is not marked. A place that turns with a parameter, or moves in a way the
+tries cannot follow, marks that parameter "may give unexpected results" with the step and the other component named;
+so does a place the tries could not measure. The result is kept in `report.json` (`probe.motion.refs`).
 
 When a sketch of the part is tied to another component, or a step uses a place of one, the export also tries up to 12
 unticked parameters that act on other components, once each, in the rows left under the cap. These tries only look: a parameter that moves the
@@ -122,6 +125,29 @@ helper parameters that only other formulas read. Parameters in other units than 
 time) are left out. In Export for Paramability, `report.json` says how many were
 listed and which were left out and why.
 
+### Several bodies in one file
+
+Pick two or more bodies (up to 32) in the body picker of Export for Paramability to save them in one file. Paramability
+opens one object per body, each where Fusion shows it, with one set of sizes on the form: a parameter is one size for
+every body that reads it, so changing `Wall` rebuilds every body that uses it. One body gives the file described above,
+unchanged.
+
+- The table ticks every parameter that any picked body uses. The warning under the picker names each body that stops
+  the copy.
+- A body that cannot be copied (or whose steps cannot be read) is saved as a fixed shape next to the editable bodies,
+  with its own note. The other bodies keep their recipes and sizes.
+- The sketches of all bodies are tried together over one set of rows (at most 64 in all, not per body), so the export
+  takes about as long as for the body with the most sketches plus one read per body per row. A size left without a row
+  is marked "may give unexpected results".
+- A size that must stay a fixed number for one body is fixed for all. A size that may give unexpected results in one
+  body is marked for the whole file; each reason starts with the bodies it was found for.
+- Places are fixed: each body lands where Fusion shows it now. A size that moves a body in the assembly (a joint) is
+  marked, as for one body. A component used several times is not expanded: one body is saved once per pick.
+- The result window lists the sizes once and has a short line per body.
+- The file is a package of kind `parts`: `manifest.json` (`parts`: name, step, optional recipe, note and loose sizes per
+  part; shared `parameters`, `fixed` and `notes`), `parts/NN/part.step`, `parts/NN/recipe.json` and one `report.json`
+  with a record per body (its capture, steps, sizes and probe).
+
 ### Export size choices
 
 Saves ready-made sizes of one body as a dropdown. Paramability opens one shape per size.
@@ -159,19 +185,21 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 - Every size row and sketch try starts from the saved values: before each one after the first the add-in puts the
   parameters back and recomputes, so a sketch with two solutions cannot stay flipped from the row before. This costs
   one more recompute per row.
-- One solid body per export.
+- One solid body per part. Several bodies go in one file as parts (see "Several bodies in one file").
 - A body inside a component (at any depth) exports as a recipe with sizes, like a root body, and lands where Fusion
   shows it. If the part was moved by hand, capture its position first (Position, Capture Position); the export asks
   for it. A component used several times exports the copy you picked.
 - These stay a fixed shape with a note: a part from a linked design, a place in the assembly that cannot be read, a
   step of another component that changes the body, a body made in another component and moved in, and a step that
-  reaches into another component's faces, edges or bodies. A step that uses a sketch of another component is copied
+  reaches into another component's edges, bodies or curved faces. A step that uses a sketch of another component is copied
   where Fusion shows it and follows the sizes the probe saw move it; where it could stop meeting the part (a slot that
   no longer reaches its wall, a rail that comes off), the size may give unexpected results, with the reason and the
   value past which it starts.
-- A mirror plane, pattern or revolve axis, or a hole on sketch points of another component is copied where it is now.
-  A size that acts on that component may move it, so it is marked "may give unexpected results" with the step named.
-  An origin plane or axis marks nothing.
+- A mirror plane, pattern or revolve axis, a flat face or plane an extrude starts from or reaches to, a hole on sketch
+  points or on a flat face of another component, and a pattern direction taken from one, are copied and follow the
+  sizes the tries measured (see above). Where the tries could not measure the place, or it turns, the size that may move
+  it is marked "may give unexpected results" with the step named. An origin plane or axis marks nothing. A hole placed
+  on an edge of another component, and an extrude that starts from or reaches to a curved face of one, stop the copy.
 - A link to another component is found only through the sketch itself: a projected curve or point, a constraint to
   one, or a sketch drawn on that component's face. A sketch that follows another component in another way (through
   a construction plane or axis built on it, or a pattern reaching into it) is not linked; the tries of unticked

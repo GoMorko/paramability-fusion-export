@@ -14,7 +14,8 @@ from ...lib.export_plan import health as health_module
 from ...lib.design_edit.marker import read_marker
 from ...lib.package.naming import design_title, package_file_name
 from ...lib.export_plan.pipeline import ExportRequest, run_pipeline
-from ...lib.dialog_model.result_rows import result_view
+from ...lib.export_plan.parts_pipeline import run_parts_pipeline
+from ...lib.dialog_model.result_rows import parts_result_view, result_view
 from ...lib.dialog_model.stop_warning import saved_message, status_text
 from ...lib.fusion_reader import design_info
 from ...lib.fusion_reader.capture import MarkerError, read_capture
@@ -99,6 +100,61 @@ class FusionPort:
         log(text)
 
 
+class FusionPartsPort:
+    """The parts pipeline's door to Fusion (`export_plan.parts_pipeline.PartsPort`) for several picked bodies."""
+
+    def __init__(self, design, bodies, units, captures=None):
+        self.design, self.bodies, self.units = design, list(bodies), units
+        self.tokens = [b.entityToken for b in self.bodies]
+        self.count = len(self.bodies)
+        self.store = DesignParameterStore(design)
+        self._captures = captures
+
+    def _current(self, index):
+        return resolve_body(self.design, self.tokens[index], self.bodies[index])
+
+    def body_names(self):
+        root = self.design.rootComponent
+        return [body_label(b, root) for b in self.bodies]
+
+    def export_step(self, index, path):
+        export_body_step(self.design, self._current(index), path)
+
+    def read_capture(self, index):
+        if self._captures is not None:
+            return self._captures.get(self.bodies[index])
+        return _read_capture(self.design, self._current(index))
+
+    def probe_reader(self, index):
+        ctx = ReadContext(self.design, self._current(index))
+        return lambda request: read_state(self.design, request, ctx)
+
+    def progress(self, verb):
+        return ProgressDialog("Export for Paramability", verb=verb)
+
+    def warn_unrestored(self, names):
+        export_common.warn_unrestored(names)
+
+    def log(self, text):
+        log(text)
+
+
+def body_label(body, root):
+    """The name a picked body has in the file: the name of its component when that holds only this body, else the
+    component and body names, or the body name for a body of the root. Never raises."""
+    try:
+        name = body.name
+        component = body.parentComponent
+        if component.entityToken == root.entityToken:
+            return name
+        return component.name if component.bRepBodies.count == 1 else "%s %s" % (component.name, name)
+    except Exception:
+        try:
+            return body.name
+        except Exception:
+            return ""
+
+
 PENDING_POSITION_MESSAGE = (
     "Capture the position of moved parts first (Position, Capture Position), then export again.")
 
@@ -113,7 +169,7 @@ def position_pending(design):
         return False
 
 
-def _show_result(file_name, result, ticked):
+def _show_result(file_name, result, ticked, parts=False):
     """The result dialog for a recipe. A part saved as a fixed shape (or a dialog that cannot start) gets the message
     box, which starts with the stopping step, and then a line in Fusion's status area. A design that may be changed
     gets its own message box first.
@@ -121,13 +177,17 @@ def _show_result(file_name, result, ticked):
     The file is saved by now, so nothing here may report a failed export."""
     manifest, report, health = result.manifest, result.report, result.health
     try:
-        view = result_view(file_name, manifest, report, result.table, ticked)
+        make_view = parts_result_view if parts else result_view
+        view = make_view(file_name, manifest, report, result.table, ticked)
     except Exception as exc:
         log(f"result view failed: {exc!r}")
         view = None
     if view is None:
         try:
-            text, notice = saved_message(manifest, report, file_name), status_text(report)
+            if parts:
+                text, notice = "Saved %s. %s" % (file_name, " ".join(manifest.get("notes") or [])), ""
+            else:
+                text, notice = saved_message(manifest, report, file_name), status_text(report)
         except Exception as exc:
             log(f"saved message failed: {exc!r}")
             text, notice = "Saved %s." % file_name, ""
@@ -144,8 +204,9 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
 
     `captures` is the dialog's CaptureCache; a capture it already holds for the picked body is not read again."""
     app = export_common.app()
+    bodies = form["bodies"]
     body = form["body"]
-    if body is None:
+    if not bodies:
         message_box("Pick a body to export.")
         return
     if position_pending(design):
@@ -162,13 +223,17 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
         model_params=model_params, design_unit=design_unit, ticked=form["ticked"], ranges=form["ranges"],
         marker=marker)
 
+    units = {p["name"]: p["unit"] for p in parameters}
+
     def work():
-        port = FusionPort(design, body, {p["name"]: p["unit"] for p in parameters}, captures)
         with tempfile.TemporaryDirectory(prefix="paramability_", ignore_cleanup_errors=True) as tmp:
-            result = run_pipeline(port, request, tmp)
+            if body is not None:
+                result = run_pipeline(FusionPort(design, body, units, captures), request, tmp)
+            else:
+                result = run_parts_pipeline(FusionPartsPort(design, bodies, units, captures), request, tmp)
             write_package(out_path, result.manifest, result.files)
         return os.path.basename(out_path), result
 
     saved = export_common.run_guarded(design, marker, work)
     if saved is not None:
-        _show_result(saved[0], saved[1], form["ticked"])
+        _show_result(saved[0], saved[1], form["ticked"], parts=body is None)

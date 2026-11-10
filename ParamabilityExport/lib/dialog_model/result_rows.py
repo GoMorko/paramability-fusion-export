@@ -4,7 +4,7 @@ The view is built from the manifest and report that plan_single_export returned,
 """
 from .dialog_rows import range_text
 from ..export_plan.health import FAILED, health_lines, with_lines
-from ..export_plan.messages import also_changes_line, listed_lines, recipe_saved_message
+from ..export_plan.messages import MAX_LISTED_FIXED, also_changes_line, listed_lines, recipe_saved_message
 
 KEPT_FIXED, NOT_USED = "kept fixed", "not used"
 NOT_FOLLOWED = "not followed"
@@ -117,6 +117,68 @@ def result_view(file_name, manifest, report, table, ticked):
         "rows": rows + _left_out_rows(table, report, ticked) + _probe_rows(report),
         "fixed": _fixed_lines(table, report),
         "loose": _loose_lines(table, report),
+        "dropped": dropped,
+        "also": also,
+        "variables": variables_line(manifest),
+        "warnings": health_lines(report.get("health")),
+        "message": with_lines(story, report.get("health")),
+    }
+
+
+def _reason_lines(entries):
+    """The reasons of the first entries as they are (each already starts with its part and size), then one line that
+    counts the rest."""
+    lines = [e["reason"] for e in entries[:MAX_LISTED_FIXED]]
+    if len(entries) > MAX_LISTED_FIXED:
+        lines.append("and %d more (see report.json)." % (len(entries) - MAX_LISTED_FIXED))
+    return lines
+
+
+def part_lines(manifest):
+    """One short line per part of a parts package: whether it is editable, how many sizes it has, or why it is a fixed
+    shape."""
+    lines = []
+    for part in manifest.get("parts") or []:
+        if part.get("recipe"):
+            line = "%s: editable part." % part["name"]
+            if part.get("loose"):
+                line += " %d %s may give unexpected results." % (
+                    len(part["loose"]), "size" if len(part["loose"]) == 1 else "sizes")
+        else:
+            line = ("%s: fixed shape. %s" % (part["name"], part.get("note") or "")).strip()
+        lines.append(line)
+    return lines
+
+
+def parts_result_view(file_name, manifest, report, table, ticked):
+    """`result_view` for a parts package (`recipe_export.plan_parts_export`), or None for any other file.
+
+    The sizes are the file's: each is listed once, whatever number of parts read it. The extra key `parts` holds one
+    line per part (`part_lines`). `fixed`, `loose` and `dropped` are for the whole file, each reason names its part."""
+    if manifest.get("kind") != "parts" or "parts" not in report:
+        return None
+    sizes = report.get("sizes") or {"free": [], "fixed": [], "loose": [], "dropped": []}
+    shaped = dict(report, sizes=sizes)
+    notes = manifest.get("notes") or []
+    rows = _size_rows(table, shaped)
+    parts = part_lines(manifest)
+    dropped = _lines(table, [d for d in sizes.get("dropped") or [] if d["used"] or d.get("tried")])
+    fixed, loose = _reason_lines(sizes.get("fixed") or []), _reason_lines(sizes.get("loose") or [])
+    story = "Saved %s. %s" % (file_name, " ".join(notes))
+    for group in (parts, fixed, loose, dropped):
+        if group:
+            story += "\n\n" + "\n".join("- " + line for line in group)
+    also = also_lines(report)
+    if also:
+        story += "\n\n" + also[0]
+    return {
+        "saved": ("Saved %s. %s" % (file_name, notes[0] if notes else "")).strip(),
+        "size_title": "%d %s ready for the form" % (len(rows), "size" if len(rows) == 1 else "sizes"),
+        "check_header": STATUS_HEADER,
+        "rows": rows + _left_out_rows(table, shaped, ticked) + _probe_rows(report),
+        "parts": parts,
+        "fixed": fixed,
+        "loose": loose,
         "dropped": dropped,
         "also": also,
         "variables": variables_line(manifest),
