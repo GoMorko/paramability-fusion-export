@@ -38,6 +38,7 @@ that lacks `capture`, `target` or `items`, with a `CaptureError`.
   "targets": [ TARGET ],
   "target": TARGET,
   "items": [ ITEM, ... ],
+  "sketch_links": [ SKETCH LINK, ... ],
   "marker": { "position": 48, "count": 120 }
 }
 ```
@@ -94,7 +95,8 @@ in Fusion's internal cm and radians, unit, kind, favourite, dependency lists, an
 dimension (`SketchDimension.parentSketch`) and empty otherwise, and `component` is the token of the component the maker
 lives in: the sketch's component for a dimension, else the component the parameter is listed from) for the target's
 component, then for each component on its occurrence path up to the root, merged by name (the nearest component wins).
-Both are empty lists when unreadable. The export builds its size table from them
+Both are empty lists when unreadable. Each user parameter also has `dependent_components` (see "Geometry links"
+below). The export builds its size table from them
 (`lib/params/size_table.py`); the translator reads only `data.params` of the items and, through the size table,
 the `created_by` kinds. How a Fusion expression becomes an app formula (operators, `if`, units, functions) is in
 `docs/expressions.md`.
@@ -157,6 +159,42 @@ ITEM:
   `"data": {}`. When a reader fails, `data` is `{ "read_error": "<message>" }`.
 - A member that cannot be read never becomes a plausible value: it reads as `null` or as an `other` entry
   (`"extent_type": "other"`, `"hole_type": "other"`, `{ "kind": "other" }`), and the translator refuses it.
+
+### Geometry links (`sketch_links`, `dependent_components`)
+
+A sketch of the target can follow another component without any parameter of its own: a circle projected from a
+pipe in another component, an arc constrained to such a projection, a sketch drawn on a face of another component.
+`lib/fusion_reader/read_links.py` reads, with the marker back at its start position, every sketch whose
+`sketch_token` a record of an item in the target's component names (records marked `foreign` are skipped):
+
+```json
+{ "sketch": "PipeHole", "token": "...", "unknown": 0,
+  "links": [{ "token": "...", "name": "Pipe", "references": 2, "constrained": 1, "plane": false }] }
+```
+
+- `links`: one entry per component other than the target's that the sketch is tied to. `references` counts the
+  reference entities of the sketch (`Sketch.sketchCurves` and `sketchPoints` with `SketchEntity.isReference`) whose
+  `referencedEntity` belongs to it: the component of the occurrence it is seen through (`assemblyContext.component`),
+  else its own (`component_of`, through `nativeObject` when there is one). `constrained` counts the geometric
+  constraints (`Sketch.geometricConstraints`) that tie such a reference to an entity that is not a reference
+  (members `point`, `entity`, `entityOne`, `entityTwo`, `curveOne`, `curveTwo`, `lineOne`, `lineTwo`, `line`,
+  `curve`). `plane` is true when the sketch lies on a face or plane of that component (`Sketch.referencePlane`).
+- `unknown` counts reference entities whose `referencedEntity` is null (a reference that is not parametric).
+- A sketch that cannot be found by its token (`Design.findEntityByToken`) or read is `{ sketch, token, error }`.
+- At most 200 sketches, 5000 entities and 5000 constraints per sketch are read.
+
+Each user parameter has `dependent_components`: `[{ token, name }]` of the components that hold a model parameter
+reading it, directly or through other parameters that read it (`dependentParameters`, walked transitively, at most
+2000 visits; `ModelParameter.component`). The model parameters of other components are not listed in
+`parameters.model`; only their components are named here.
+
+A user parameter may reach the target through another component (`lib/params/geometry_links.py`) when one of its
+`dependent_components` is a component that a sketch of the target is tied to; tokens are compared, names only when a
+token is missing. The export works with the sketches the picked body's own steps use (`body_scope.body_links`), and
+the translator, given a size table without links, takes them from the whole capture. A link is
+`{ "param", "sketch", "component" }` (the component's name). Such a parameter is ticked to start with like one the body
+reads, the size probe tries it like a size behind a sketch dimension, and the translator counts it as a size the
+sketch reads (`sizes.sketch_sizes`, section 5).
 
 ## 3. Walk and marker
 
@@ -754,8 +792,9 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   construction geometry it uses. A value of a step's `data.params` that its handler never dealt with
   (`values.quantity`, `values.pin` or `values.handled` record the path) and that reads a free size, or a sketch size that a measured motion says moves something and no formula reads, and that no handler named, gets the
   reason "<step> reads it, and the copy does not follow it": loose when another formula reads it, else dropped. A sketch
-  size that a measured motion says moves nothing is dropped as "changes nothing in the copied steps". This makes a
-  value a handler forgets to record safe by default.
+  size that a measured motion says moves nothing is dropped as "changes nothing in the copied steps" (for a size tied
+  to the sketch only through another component, as "nothing in this part moved with it"). This makes a value a
+  handler forgets to record safe by default.
 - `TranslateResult.dropped` is `[{ name, reason, used }]`, one per ticked size the recipe does not hold: `used` is
   true when a step reads it and the copy could not follow it (the reason says why), false when no copied step reads it
   ("not used by any copied step") or a measured sketch does not move with it.
@@ -782,6 +821,13 @@ keys `<item>/p<profile>/l<loop>/<field path>` (loop 0 is the outer one, then the
 `segments.2.through.1`), `<item>/p<profile>/plane` (the sketch plane along its normal, from the component origin),
 `<item>/positions/<n>/<0|1|2>` (hole points) and `<item>/axis/point/<0|1|2>` (a revolve axis from a sketch line).
 `lib/sketch_values/keys.py` writes all keys; the probe and the translator both use it.
+
+The probe tries (`lib/probe/plan.py`, at most 64 rows): each ticked size that moves a covered sketch value or reaches
+a sketch dimension, a construction plane or, through another component, a sketch ("Geometry links" in section 2),
+at the ends of its range. Then up to 8 ticked sizes that nothing ties to a sketch (`MAX_EXTRA_SIZES`, in table order)
+while rows are left: the person ticked them, so a sketch may follow them in a way the capture cannot show. Such a size
+left without rows is not listed as untried. With two or more sizes tried, one row puts every size at its minimum and
+one at its maximum.
 The sketch curves of each profile have `<item>/p<profile>/c<loop>.<curve>/<field>` in the capture's loop and curve
 order: a line's `offset` (its distance from the sketch origin along the left normal of its captured direction) and
 `turn` (degrees it turned), an arc's `center.0`, `center.1` and `radius`; `curves` lists the profiles
@@ -798,11 +844,18 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   parameter in a sum is written through its own expression. Its number stays the captured one; a formula that misses
   it by more than 1e-3 mm fixes its sizes ("could not be read at other values"). A width, height or radius that would
   reach zero over the size ranges fixes its sizes ("would shrink to nothing").
-- A value of an unmeasured sketch is stuck with cause `untried` for every size behind that sketch's dimensions (model
-  parameters made by a sketch dimension of that sketch). The size is loose, with "it
-  changes <sketch> and could not be tried at other values". A size that none of the sketch's dimensions read is not
-  touched. Dimensions are the only link: a size that moves the sketch only through its construction plane is not
-  named here.
+- A value of an unmeasured sketch is stuck with cause `untried` for every size the sketch reads (`sizes.sketch_sizes`:
+  the sizes behind that sketch's dimensions, and the sizes that may reach it through the geometry of another
+  component, "Geometry links" in section 2). The size is loose, with "it changes <sketch> and could not be tried at
+  other values". A size the sketch does not read is not touched: a size that moves the sketch only through its
+  construction plane is not named here.
+- A size that may reach a sketch only through another component follows the measured motion like any other: when the
+  probe saw the sketch move with it and the fit holds, the outline is written as formulas of it (two arcs of radius
+  `pipe_d_mm / 2` give points such as `0.5 * pipe_d_mm`; a circle writes its `radius`). When the fit fails or the
+  outline changes shape, its sizes are loose or dropped with the probe's cause, which names the sketch. When the
+  sketch was measured and did not move, the size is dropped ("it changes <component>, but nothing in this part moved
+  with it", `used` false). Without a motion (`motion=None`), it is dropped with "it changes <component>, which
+  <sketch> is drawn around, and could not be tried at other values".
 - A stuck value that a step writes fixes every size the probe lists for it, with the probe's cause: `curve` (a point
   moves along a curve), `shape` (the outline changes), `turns` (the sketch plane turns), `unread`, `untried`. When
   only some states failed (a size whose state changed the outline), the probe lists only those sizes and fits the
@@ -882,6 +935,10 @@ The export writes `report.json` into the package: `{ "writer", "outcome": "recip
 VERDICT, ...], "capture": CAPTURE }` (verdicts: see the translator, `lib/translator/result.py`). The app never reads it. A report saved from a real
 design gives a fixture: its `capture` is copied as is.
 
+`links` (only when the export found geometry links) lists each link of the picked body with what became of its
+parameter: `{ param, sketch, component, outcome, reason }`, `outcome` one of `size`, `loose`, `fixed`, `dropped` or
+`not ticked` (`recipe_export.link_outcomes`; `reason` when the size has one).
+
 `sizes` holds `free` (recipe size names), `fixed` and `loose` (`{ name, reason }` by recipe size name, as in the
 manifest), and `dropped` (`{ name, reason, used }` by Fusion name: the ticked parameters that are not sizes, from
 `TranslateResult.dropped`; `used` is true when a step reads the parameter and the copy could not follow it). `loose` comes
@@ -891,6 +948,12 @@ always empty. The report has a
 `health`. A probe row that Fusion cannot build is listed in `probe.dropped`; no size is fixed for it.
 
 ## 7. API names and what is not verified
+
+Read in the API reference on 2026-11-10: `SketchEntity` (`isReference`, `referencedEntity`, `isLinked`,
+`geometricConstraints`, `parentSketch`), `Sketch` (`sketchCurves`, `sketchPoints`, `geometricConstraints`,
+`referencePlane`, `parentComponent`), `CoincidentConstraint` (`point`, `entity`), `ConcentricConstraint`
+(`entityOne`, `entityTwo`), `EqualConstraint` and `TangentConstraint` (`curveOne`, `curveTwo`), `ModelParameter`
+(`component`, `dependentParameters`, `createdBy`).
 
 Read in the API reference on 2026-11-08: `HoleFeature` (all members above, plus `isDefaultDirection`;
 the page says "the extent type of a hole is currently limited to a distance extent" but also lists
@@ -945,4 +1008,5 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | `SketchText.asCurves()` returns the text outline as closed `Curve3D` loops (lines, arcs, free curves) without changing the design; the points are in sketch or model space; `SketchText.boundingBox` is in sketch space | `space` is decided by the bounding box and `ambiguous` or a failed read gives a text marker; an emboss checks the text area against the measured volume; the Text hand tests (section 11 of `docs/hand-tests.md`) |
 | Free curves (`NurbsCurve3D`, `EllipticalArc3D`) evaluate through `CurveEvaluator3D.getPointAtParameter` over `getParameterExtents`, and `getTangent` gives the direction at an end | a curve that cannot be evaluated has no samples and is refused; a missing tangent is left out; the Spline hand tests (section 11 of `docs/hand-tests.md`) |
 | `Sketch.parentComponent`, `ConstructionPlane.component`, `BRepFace.body`, `BRepEdge.body` | `foreign` reads them in a try; an unreadable one leaves the record unmarked |
+| `SketchEntity.referencedEntity` of an entity projected from another component comes as a proxy whose `assemblyContext.component` is that component; `lineOne`, `lineTwo`, `line` and `curve` name the entities of the other line constraints; `UserParameter.dependentParameters` lists the model parameters of every component | a wrong read only leaves a link out (the parameter is then tried only when ticked by hand); the K10 hand test in `docs/hand-tests.md` |
 | `BRepBody.copyToComponent(proxy)` keeps the assembly place | the copy guard in `step_export.py` compares the bounding boxes (1e-3 mm) and refuses before writing |

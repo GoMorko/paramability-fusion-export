@@ -6,10 +6,12 @@ from .audit import audit
 from .sizes import construction_fixes, joint_reasons, text_reasons, untried_reasons, used_sizes
 from . import notes as wording, place
 from .picks import MAX_NEAR_POINTS
-from .notes import dropped_reason, fixed_reason, loose_reason, unmoved_reason, unused_reason
+from .notes import (
+    dropped_reason, fixed_reason, loose_reason, unmoved_link_reason, unmoved_reason, unused_reason)
 from .capture import outside_component, renamed_target, same_body, validate_capture
 from .context import Context
 from .result import Refusal, StepResult, TranslateResult, make_verdict
+from ..params import geometry_links
 from ..params.expressions import MAX_FORMULA_LENGTH
 from .values import Sized, number
 from ..sketch_values.motion import Motion, Stuck
@@ -210,6 +212,9 @@ def translate(capture, handlers=None, size_table=None, motion=None):
     points and revolve axes are then written as formulas where they follow sizes. `sketch_values.motion.OPTIMISTIC` writes
     them as numbers without fixing anything for them (the first translation of an export). Without it, no size that
     moves a sketch or construction geometry can be followed.
+
+    A size table without geometry links gets the capture's (`params.geometry_links.reach`): a ticked size that may
+    reach a sketch through another component counts as a size that sketch reads.
     """
     validate_capture(capture)
     unplaced = _placement_refusal(capture)
@@ -221,6 +226,8 @@ def translate(capture, handlers=None, size_table=None, motion=None):
     cache = {}
     if size_table is None:
         return _walk(capture, table, None, cache=cache)[0]
+    if not size_table.links:
+        size_table = size_table.with_links(geometry_links.reach(capture))
     upfront = joint_reasons(size_table) if motion is not None else untried_reasons(size_table)
     for name, why in text_reasons(size_table, capture).items():
         upfront.setdefault(name, why)
@@ -297,7 +304,7 @@ def _finish(settled, doubts, capture, motion):
     sizes = used_sizes(result.recipe["features"], table.sizes)
     result.loose = [{"name": name, "reason": loose_reason(name, why)} for name, why in doubts.items()
                     if table.size_name(name) in sizes]
-    result.dropped = _dropped(table, sizes, doubts, checked.unmoved)
+    result.dropped = _dropped(table, sizes, doubts, checked.unmoved, checked.unmoved_links)
     result.notes.extend(d["reason"] for d in result.dropped)
     result.recipe["sizesAsWritten"] = True
     if sizes:
@@ -305,9 +312,10 @@ def _finish(settled, doubts, capture, motion):
     return result
 
 
-def _dropped(table, sizes, doubts, unmoved):
+def _dropped(table, sizes, doubts, unmoved, unmoved_links=None):
     """`{ name, reason, used }` for each ticked size that no written formula reads. `used` is True when a step reads
-    it and the copy could not follow it, False when nothing copied depends on it."""
+    it and the copy could not follow it, False when nothing copied depends on it. `unmoved_links` names, per size
+    tied to a sketch only through another component that did not move with it, that component."""
     out = []
     for name in table.ticked:
         if table.size_name(name) in sizes:
@@ -315,7 +323,10 @@ def _dropped(table, sizes, doubts, unmoved):
         if name in doubts:
             out.append({"name": name, "reason": dropped_reason(name, doubts[name]), "used": True})
         else:
-            reason = unmoved_reason(name) if name in unmoved else unused_reason(name)
+            if name in (unmoved_links or {}):
+                reason = unmoved_link_reason(name, unmoved_links[name])
+            else:
+                reason = unmoved_reason(name) if name in unmoved else unused_reason(name)
             out.append({"name": name, "reason": reason, "used": False})
     return out
 

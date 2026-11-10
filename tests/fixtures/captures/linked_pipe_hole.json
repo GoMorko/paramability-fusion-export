@@ -1,0 +1,524 @@
+{
+ "_comment": "A box 40 by 30 by 20 with a pipe hole cut through it. The hole is drawn around the pipe of another component (Pipe): its two arcs are projected from the pipe, so no parameter of the box sets them. pipe_d_mm sets the pipe and has its model parameters only in Pipe. spare_mm reads nothing.",
+ "capture": 3,
+ "fusion": "2.0.0",
+ "design": "Test",
+ "up_axis": "z",
+ "design_units": "mm",
+ "target": {
+  "token": "t1",
+  "name": "Box body",
+  "box": {
+   "min": [
+    -20,
+    -15,
+    0
+   ],
+   "max": [
+    20,
+    15,
+    20
+   ]
+  },
+  "volume_mm3": 21738.053289,
+  "component": {
+   "token": "cmp_box",
+   "name": "Box",
+   "root": false
+  },
+  "placement": null
+ },
+ "parameters": {
+  "user": [
+   {
+    "name": "width_mm",
+    "expression": "40 mm",
+    "value": 4.0,
+    "display_value": 40,
+    "unit": "mm",
+    "kind": "length",
+    "comment": "",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [
+     "d1"
+    ],
+    "dependent_components": [
+     {
+      "token": "cmp_box",
+      "name": "Box"
+     }
+    ]
+   },
+   {
+    "name": "depth_mm",
+    "expression": "30 mm",
+    "value": 3.0,
+    "display_value": 30,
+    "unit": "mm",
+    "kind": "length",
+    "comment": "",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [
+     "d2"
+    ],
+    "dependent_components": [
+     {
+      "token": "cmp_box",
+      "name": "Box"
+     }
+    ]
+   },
+   {
+    "name": "height_mm",
+    "expression": "20 mm",
+    "value": 2.0,
+    "display_value": 20,
+    "unit": "mm",
+    "kind": "length",
+    "comment": "",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [
+     "d3"
+    ],
+    "dependent_components": [
+     {
+      "token": "cmp_box",
+      "name": "Box"
+     }
+    ]
+   },
+   {
+    "name": "pipe_d_mm",
+    "expression": "12 mm",
+    "value": 1.2,
+    "display_value": 12,
+    "unit": "mm",
+    "kind": "length",
+    "comment": "",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [
+     "d20",
+     "d21"
+    ],
+    "dependent_components": [
+     {
+      "token": "cmp_pipe",
+      "name": "Pipe"
+     }
+    ]
+   },
+   {
+    "name": "spare_mm",
+    "expression": "5 mm",
+    "value": 0.5,
+    "display_value": 5,
+    "unit": "mm",
+    "kind": "length",
+    "comment": "",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "dependent_components": []
+   }
+  ],
+  "model": [
+   {
+    "name": "d1",
+    "expression": "width_mm",
+    "value": 4.0,
+    "unit": "mm",
+    "kind": "derived",
+    "role": "",
+    "dependency_parameters": [
+     "width_mm"
+    ],
+    "created_by": {
+     "kind": "sketchDimension",
+     "token": "tok_d1",
+     "name": "",
+     "sketch": "BoxBase",
+     "component": "cmp_box"
+    }
+   },
+   {
+    "name": "d2",
+    "expression": "depth_mm",
+    "value": 3.0,
+    "unit": "mm",
+    "kind": "derived",
+    "role": "",
+    "dependency_parameters": [
+     "depth_mm"
+    ],
+    "created_by": {
+     "kind": "sketchDimension",
+     "token": "tok_d2",
+     "name": "",
+     "sketch": "BoxBase",
+     "component": "cmp_box"
+    }
+   },
+   {
+    "name": "d3",
+    "expression": "height_mm",
+    "value": 2.0,
+    "unit": "mm",
+    "kind": "derived",
+    "role": "",
+    "dependency_parameters": [
+     "height_mm"
+    ],
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d3",
+     "name": "",
+     "sketch": "",
+     "component": "cmp_box"
+    }
+   }
+  ]
+ },
+ "targets": [
+  {
+   "token": "t1",
+   "name": "Box body",
+   "box": {
+    "min": [
+     -20,
+     -15,
+     0
+    ],
+    "max": [
+     20,
+     15,
+     20
+    ]
+   },
+   "volume_mm3": 21738.053289,
+   "component": {
+    "token": "cmp_box",
+    "name": "Box",
+    "root": false
+   },
+   "placement": null
+  }
+ ],
+ "items": [
+  {
+   "index": 0,
+   "name": "BoxBase",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "cmp_box",
+   "in_target_component": true,
+   "bodies_after": [],
+   "target_changed": false,
+   "data": {}
+  },
+  {
+   "index": 1,
+   "name": "Extrude1",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "cmp_box",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Box body"
+    }
+   ],
+   "target_changed": true,
+   "data": {
+    "operation": "newBody",
+    "profiles": [
+     {
+      "sketch": "BoxBase",
+      "sketch_token": "s1",
+      "frame": {
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "x": [
+        1,
+        0,
+        0
+       ],
+       "y": [
+        0,
+        1,
+        0
+       ],
+       "z": [
+        0,
+        0,
+        1
+       ]
+      },
+      "space": "sketch",
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "line",
+          "start": [
+           -20,
+           -15
+          ],
+          "end": [
+           20,
+           -15
+          ],
+          "entity": "e0"
+         },
+         {
+          "kind": "line",
+          "start": [
+           20,
+           -15
+          ],
+          "end": [
+           20,
+           15
+          ],
+          "entity": "e1"
+         },
+         {
+          "kind": "line",
+          "start": [
+           20,
+           15
+          ],
+          "end": [
+           -20,
+           15
+          ],
+          "entity": "e2"
+         },
+         {
+          "kind": "line",
+          "start": [
+           -20,
+           15
+          ],
+          "end": [
+           -20,
+           -15
+          ],
+          "entity": "e3"
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "distance",
+     "distance": 20.0,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": false,
+    "participants": [],
+    "target_box_before": null,
+    "end_offset": 20.0,
+    "params": {
+     "side_one.distance": {
+      "name": "d3",
+      "expression": "height_mm",
+      "value": 20.0
+     }
+    }
+   }
+  },
+  {
+   "index": 2,
+   "name": "PipeHole",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "cmp_box",
+   "in_target_component": true,
+   "bodies_after": [],
+   "target_changed": false,
+   "data": {}
+  },
+  {
+   "index": 3,
+   "name": "Extrude2",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "cmp_box",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Box body"
+    }
+   ],
+   "target_changed": true,
+   "data": {
+    "operation": "cut",
+    "profiles": [
+     {
+      "sketch": "PipeHole",
+      "sketch_token": "s2",
+      "frame": {
+       "origin": [
+        0,
+        0,
+        20
+       ],
+       "x": [
+        1,
+        0,
+        0
+       ],
+       "y": [
+        0,
+        1,
+        0
+       ],
+       "z": [
+        0,
+        0,
+        1
+       ]
+      },
+      "space": "sketch",
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "arc",
+          "start": [
+           6,
+           0
+          ],
+          "end": [
+           -6,
+           0
+          ],
+          "mid": [
+           0,
+           6
+          ],
+          "center": [
+           0,
+           0
+          ],
+          "radius": 6.0,
+          "entity": "a0"
+         },
+         {
+          "kind": "arc",
+          "start": [
+           -6,
+           0
+          ],
+          "end": [
+           6,
+           0
+          ],
+          "mid": [
+           0,
+           -6
+          ],
+          "center": [
+           0,
+           0
+          ],
+          "radius": 6.0,
+          "entity": "a1"
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "throughAll",
+     "positive": false,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": false,
+    "participants": [
+     {
+      "token": "t1",
+      "name": "Box body"
+     }
+    ],
+    "target_box_before": {
+     "min": [
+      -20,
+      -15,
+      0
+     ],
+     "max": [
+      20,
+      15,
+      20
+     ]
+    },
+    "end_offset": -25.0
+   }
+  }
+ ],
+ "sketch_links": [
+  {
+   "sketch": "BoxBase",
+   "token": "s1",
+   "links": [],
+   "unknown": 0
+  },
+  {
+   "sketch": "PipeHole",
+   "token": "s2",
+   "links": [
+    {
+     "token": "cmp_pipe",
+     "name": "Pipe",
+     "references": 2,
+     "constrained": 0,
+     "plane": false
+    }
+   ],
+   "unknown": 0
+  }
+ ],
+ "marker": {
+  "position": 4,
+  "count": 4
+ }
+}

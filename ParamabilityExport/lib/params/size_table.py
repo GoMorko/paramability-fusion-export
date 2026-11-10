@@ -8,7 +8,8 @@ parameters, for inlining, counts and defaults), `design_unit` (what a bare numbe
 `fixed` (ticked names that cannot follow, with the reason; they become plain numbers), `quantity_params` (the model
 parameters the steps use as a pattern quantity; the user parameters behind them become whole-number counts) and
 `ranges` (min and max per size from the dialog, instead of the default range; a range equal to the default is not
-typed, `typed_ends`).
+typed, `typed_ends`) and `links` (the parameters that may reach a sketch through the geometry of another component,
+`params.geometry_links`; a ticked one counts as a size that sketch reads).
 
 The table holds, per parameter, one entry whose `state` is:
 
@@ -99,8 +100,9 @@ def _round(x):
 
 class SizeTable:
     def __init__(self, params, ticked, model_params=(), design_unit="mm", fixed=None, quantity_params=(),
-                 ranges=None, max_sizes=MAX_SIZES):
+                 ranges=None, max_sizes=MAX_SIZES, links=()):
         self._params = [p for p in params]
+        self.links = tuple(dict(link) for link in links)
         self._max_sizes = max_sizes
         self._ranges = dict(ranges or {})
         self._model = list(model_params)
@@ -432,7 +434,7 @@ class SizeTable:
         merged = dict(self._fixed_in)
         merged.update(reasons)
         return SizeTable(self._params, [n for n in self._ticked_in if n not in merged], self._model,
-                         self._design_unit, merged, self._quantity_params, self._ranges, self._max_sizes)
+                         self._design_unit, merged, self._quantity_params, self._ranges, self._max_sizes, self.links)
 
     def typed_ends(self, name):
         """(min typed, max typed) of a free size: the person set that end to another number than the default range
@@ -452,7 +454,20 @@ class SizeTable:
     def with_ticked(self, names):
         """A new table where these Fusion names are the ticked ones (the size cap still applies)."""
         return SizeTable(self._params, list(names), self._model, self._design_unit, self._fixed_in,
-                         self._quantity_params, self._ranges, self._max_sizes)
+                         self._quantity_params, self._ranges, self._max_sizes, self.links)
+
+    def with_links(self, links):
+        """A new table with these geometry links (`params.geometry_links`) instead of its own."""
+        return SizeTable(self._params, self._ticked_in, self._model, self._design_unit, self._fixed_in,
+                         self._quantity_params, self._ranges, self._max_sizes, links)
+
+    def linked(self, sketch):
+        """Fusion names of the parameters that may reach the sketch named `sketch` through another component."""
+        return [link["param"] for link in self.links if link["sketch"] == sketch]
+
+    def links_of(self, name):
+        """The geometry links of one parameter (Fusion name), in order."""
+        return [link for link in self.links if link["param"] == name]
 
     def report(self):
         """Plain data for report.json: renames, derived formulas with their value check, fixed and unoffered names."""
@@ -476,10 +491,11 @@ def _fmt(x):
 
 
 def build(params, ticked, model_params=(), design_unit="mm", fixed=None, quantity_params=(), ranges=None,
-          max_sizes=MAX_SIZES):
+          max_sizes=MAX_SIZES, links=()):
     """SizeTable for the user parameters and the names ticked as sizes.
 
     `ranges` maps a Fusion name to the (min, max) the person typed; a ticked size without one gets its default range.
     `max_sizes` caps the named sizes (free and derived); past it a derived formula is written out where it is read.
+    `links` are the geometry links of the body (`params.geometry_links.reach`).
     """
-    return SizeTable(params, ticked, model_params, design_unit, fixed, quantity_params, ranges, max_sizes)
+    return SizeTable(params, ticked, model_params, design_unit, fixed, quantity_params, ranges, max_sizes, links)

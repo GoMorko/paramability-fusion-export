@@ -112,9 +112,19 @@ def sketch_params(table, sketch):
             if _kind(param) == "sketchDimension" and (param.get("created_by") or {}).get("sketch") == sketch]
 
 
-def sketch_sizes(table, sketch):
-    """Fusion names of the free sizes that the dimensions of the sketch named `sketch` read, in table order."""
+def linked_sizes(table, sketch):
+    """Fusion names of the free sizes that may reach the sketch named `sketch` through the geometry of another
+    component (`table.links`), in table order."""
     reached = set()
+    for name in table.linked(sketch) if sketch else ():
+        reached |= table.depends(name)
+    return [name for name in table.ticked if name in reached]
+
+
+def sketch_sizes(table, sketch):
+    """Fusion names of the free sizes that the sketch named `sketch` reads, in table order: through its dimensions,
+    or through the geometry of another component it is drawn around (`linked_sizes`)."""
+    reached = set(linked_sizes(table, sketch))
     for name in sketch_params(table, sketch):
         reached |= table.depends(name)
     return [name for name in table.ticked if name in reached]
@@ -136,7 +146,7 @@ def _driven(table, value):
 
 def sketch_answer(table, motion, sketch, size):
     """What the motion file says about size `size` (a Fusion name) and the sketch named `sketch`: an `Answer` of
-    `STILL`, `MOVED` or `NOT_MEASURED`. A size that none of the sketch's dimensions read cannot move it, so it is
+    `STILL`, `MOVED` or `NOT_MEASURED`. A size the sketch does not read (`sketch_sizes`) cannot move it, so it is
     still whatever the probe did."""
     if size not in sketch_sizes(table, sketch):
         return Answer(STILL)

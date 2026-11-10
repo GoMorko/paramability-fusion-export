@@ -14,18 +14,6 @@ from .read_solid import line_axis
 MAX_PROFILES = 200
 
 
-def _find(design, token):
-    """The native entity for a token: the match without an assembly context, else the native object of the first."""
-    raw = geo.safe(lambda: design.findEntityByToken(token), None)
-    found = list(raw) if raw else []
-    for entity in found:
-        if geo.safe(lambda: entity.assemblyContext, None) is None:
-            return entity
-    if found:
-        return geo.safe(lambda: found[0].nativeObject, None)
-    return None
-
-
 def _read_sketch(sketch, ctx):
     """{ frame, profiles } of a sketch, or None when it has too many profiles or one cannot be read well."""
     items = geo.collection_items(geo.safe(lambda: sketch.profiles, None))
@@ -103,7 +91,7 @@ def read_state(design, request, ctx):
     unread = {}
 
     def entity(token, read):
-        found = _find(design, token)
+        found = geo.find_native(design, token)
         if found is None and token in hints:
             unread[token] = "The sketch was not found."
         return None if found is None else read(found)

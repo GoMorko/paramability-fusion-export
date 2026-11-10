@@ -32,9 +32,11 @@ Nothing is typed in Fusion.
    row has a Min and a Max: they start from the comment rule below, and you can type your own numbers (in the length
    unit of your design, in degrees, or whole numbers for a count; a typed unit such as `2 in` is read too). The
    current value must sit between them. An unticked row says "stays 3 mm". A parameter worked out by a formula says
-   "formula" and follows the parameters it reads. A parameter that drives a joint is not ticked to start with: the part
-   does not follow it in the assembly. You can still tick it; its row then says "size, may be unexpected". Click a row
-   to read its comment, its formula or the full reason in the box under the table. You can tick up to 64 sizes.
+   "formula" and follows the parameters it reads. A parameter that changes another component that the body is drawn
+   around (for example the diameter of a pipe whose outline a hole in the body follows) is ticked too, and its row
+   says so. A parameter that drives a joint is not ticked to start with: the part does not follow it in the assembly.
+   You can still tick it; its row then says "size, may be unexpected". Click a row to read its comment, its formula
+   or the full reason in the box under the table. You can tick up to 64 sizes.
 4. If a step of the body cannot be copied, a warning shows under the body picker as soon as you pick it: which
    step stops the copy (for example "Extrude9 (extrude)"), and that the part will be saved as a fixed shape while your
    parameters still come along as variables. Hover the warning for the full reason. "Show in timeline" selects that
@@ -57,6 +59,14 @@ size with its current value and the range in the table. You set the final Min an
 size checks (`checks` is empty). The only sizes that become fixed numbers are the ones
 that would make the recipe invalid (for example a formula too long to write). A ticked parameter that no copied step
 reads is not a size; it still comes along as a variable.
+
+A sketch can also follow another component without a parameter of the body: a hole drawn around a pipe, with its
+circle projected from the pipe or constrained to it. The add-in reads which components each sketch is tied to this
+way, and which components each user parameter changes. A parameter that changes such a component is tried like a
+size behind a sketch dimension: if the sketch moves with it and the tries can follow, it is a free size and the
+outline follows it; if the outline changes in a way the tries cannot follow, it is "not followed" with the reason;
+if nothing in the part moves with it, it is "not used". Up to 8 more ticked parameters that nothing seems to tie to
+the part are tried too, after the others, since you know your design.
 
 Some sizes the add-in cannot follow fully: a size that moves a sketch in a way the tries could not follow, a plane or
 axis, a joint, a pick (an edge of a round or chamfer) that may move with it, a pick on a pattern copy whose count would
@@ -145,6 +155,10 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   where Fusion shows it and follows the sizes the probe saw move it; where it could stop meeting the part (a slot that
   no longer reaches its wall, a rail that comes off), the size may give unexpected results, with the reason and the
   value past which it starts.
+- A link to another component is found only through the sketch itself: a projected curve or point, a constraint to
+  one, or a sketch drawn on that component's face. A sketch that follows another component in another way (through
+  a construction plane or axis built on it, or a pattern reaching into it) is not linked; tick the parameter by hand
+  and the export tries it.
 - A recipe covers the picked body only. Parameters made by steps or sketches of other bodies are left out where the
   add-in can match them by name; construction planes, axes and joints are read for the component and the ones above
   it. A size that turns a sketch plane, moves a point along a curve, or changes the shape of an outline may give

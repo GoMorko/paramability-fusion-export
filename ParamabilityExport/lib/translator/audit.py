@@ -10,23 +10,26 @@ Every value of a step in its `data.params` is checked on its own: a handler must
 (`Context.ask`: `values.quantity`, `values.pin` or `values.handled`), or the sizes it reads end loose.
 
 A size is read by a copied step through the model parameters in its `data.params`, through the dimensions of the
-sketches it draws on, and through the construction geometry it uses.
+sketches it draws on or the geometry of another component those sketches are drawn around (`table.links`), and
+through the construction geometry it uses.
 """
 from ..sketch_values.coverage import STILL
 from ..sketch_values.motion import Motion
-from .notes import step_label
-from .sizes import construction_fixes, sketch_answer, sketch_sizes, used_sizes
+from .notes import step_label, untried_link_reason
+from .sizes import construction_fixes, linked_sizes, sketch_answer, sketch_params, sketch_sizes, used_sizes
 from .values import reads_in
 
 
 class Audit:
     """`forgotten`: Fusion name of a free size to why, for each size a copied step reads that has no state.
     `unmoved`: Fusion names of the sizes that copied steps read only through sketches the probe measured, and that did
-    not move anything."""
+    not move anything. `unmoved_links`: of those, the ones tied to such a sketch only through another component, with
+    that component's name."""
 
     def __init__(self):
         self.forgotten = {}
         self.unmoved = set()
+        self.unmoved_links = {}
 
 
 def _sketch_names(node, found):
@@ -62,6 +65,22 @@ def _label(item):
     return step_label(item.get("name"), None) or "a step"
 
 
+def _link_component(table, sketch, name):
+    """The name of the other component through which the free size `name` may reach `sketch`."""
+    for link in table.links:
+        if link["sketch"] == sketch and name in table.depends(link["param"]):
+            return link["component"]
+    return "another component"
+
+
+def _only_linked(table, sketch):
+    """The free sizes that reach `sketch` through another component and not through its dimensions."""
+    dimensions = set()
+    for param in sketch_params(table, sketch):
+        dimensions |= table.depends(param)
+    return set(linked_sizes(table, sketch)) - dimensions
+
+
 def audit(capture, ctx, table, named, motion):
     """The `Audit` of one finished walk.
 
@@ -81,13 +100,18 @@ def audit(capture, ctx, table, named, motion):
             if name not in named and (name not in own or name in unasked):
                 out.forgotten.setdefault(name, "%s reads it, and the copy does not follow it" % label)
         for sketch in _sketch_names(item.get("data") or {}, {}):
+            linked = _only_linked(table, sketch)
             for name in sketch_sizes(table, sketch):
                 if name in named or name in reached or name in out.forgotten:
                     continue
                 if not measured:
+                    if motion is None and name in linked:
+                        out.forgotten[name] = untried_link_reason(sketch, _link_component(table, sketch, name))
                     continue
                 if sketch_answer(table, motion, sketch, name).kind == STILL:
                     out.unmoved.add(name)
+                    if name in linked:
+                        out.unmoved_links.setdefault(name, _link_component(table, sketch, name))
                 else:
                     out.forgotten[name] = "%s reads it through %s, and the copy does not follow it" % (label, sketch)
         for names, _ in construction_fixes(table, item):
@@ -95,4 +119,5 @@ def audit(capture, ctx, table, named, motion):
                 if name in free and name not in named and name not in reached:
                     out.forgotten.setdefault(name, "%s uses geometry that it moves, and the copy does not follow it" % label)
     out.unmoved -= set(out.forgotten) | named | reached
+    out.unmoved_links = {name: c for name, c in out.unmoved_links.items() if name in out.unmoved}
     return out

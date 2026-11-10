@@ -4,12 +4,12 @@ The size table decides what each parameter becomes. This module turns it into di
 the probe.
 """
 from ..package.units import display_from_manifest, unit_kind
-from ..params import defaults, size_table
+from ..params import defaults, geometry_links, size_table
 from ..params.expressions import format_number
 from ..params.size_table import CONSTANT, DERIVED, FIXED, FREE, MAX_SIZES
 from ..translator.notes import loose_reason
 from ..translator.sizes import joint_reasons
-from .body_scope import scope_inputs
+from .body_scope import body_links, scope_inputs
 
 # The most sizes one recipe holds.
 MAX_TICKED = MAX_SIZES
@@ -19,24 +19,35 @@ def limit_message(limit=MAX_TICKED):
     return "You can tick up to %d sizes. Untick one to tick another." % limit
 
 
-def initial_table(params, model_params=(), design_unit="mm", quantity_params=(), limit=MAX_TICKED):
+def initial_table(params, model_params=(), design_unit="mm", quantity_params=(), limit=MAX_TICKED, links=()):
     """The table for the first look at the dialog (or after another body is picked).
 
     The sensible default parameters are ticked, at most `limit`. A parameter that a joint reads is not ticked to
     start with: it can be a size, but the part does not follow it in the assembly (`doubts`). Sketch dimensions and
-    construction planes are offered as well: the export tries them at other values.
+    construction planes are offered as well: the export tries them at other values. So is a parameter that may reach
+    a sketch of the body through the geometry of another component (`links`, `params.geometry_links`).
     """
     def build(ticked):
-        return size_table.build(params, ticked, model_params, design_unit, None, quantity_params)
+        return size_table.build(params, ticked, model_params, design_unit, None, quantity_params, links=links)
 
     offered = [p["name"] for p in params if defaults.is_offered(p)]
     doubtful = joint_reasons(build(offered), offered)
-    if model_params:
-        wanted = defaults.default_ticked(params, model_params)
+    if model_params or links:
+        wanted = defaults.default_ticked(params, model_params, geometry_links.linked_names(links))
     else:
         # Without the model parameters nothing tells what the body reads: start from the favourites.
         wanted = [p["name"] for p in params if defaults.is_offered(p) and p.get("is_favorite")] or offered
     return build([n for n in wanted if n not in doubtful][:limit])
+
+
+def link_text(links):
+    """Why a parameter is offered although no step of the body reads it: the other component it changes, which a
+    sketch of the body follows. Empty without links."""
+    if not links:
+        return ""
+    first = links[0]
+    return ("It changes %s, and the sketch %s of this part is drawn around %s. The export tries it to see if the "
+            "part follows." % (first["component"], first["sketch"], first["component"]))
 
 
 def doubts(table, params):
@@ -52,7 +63,7 @@ def table_for_body(params, design_unit, fallback_model, capture, limit=MAX_TICKE
     `capture` is the body's capture, or anything else (None, an exception) to use the whole root's parameters.
     """
     model, quantities = scope_inputs(capture, fallback_model)
-    return initial_table(params, model, design_unit, quantities, limit)
+    return initial_table(params, model, design_unit, quantities, limit, body_links(capture))
 
 
 def range_unit(kind, design_unit="mm"):
@@ -71,7 +82,7 @@ def offers(table, params, design_unit="mm"):
     """One dict per parameter the dialog lists, in parameter order.
 
     Keys: param (Fusion name), ticked, enabled, reason (why it is greyed or what the tick does), doubt (why a size
-    may give unexpected results, else ''),
+    may give unexpected results, else ''), link (why a parameter no step reads is offered: `link_text`, else ''),
     state ('size' or 'keep' for a plain number, 'formula', 'locked'), now (value with unit), comment, formula (the
     Fusion expression of a formula), kind, value, min and max (the default range of a plain number, else None),
     range_unit (the unit of the Now, Min and Max cells). value, min and max are mm, deg or plain numbers; the cells
@@ -93,7 +104,7 @@ def offers(table, params, design_unit="mm"):
                   "comment": (p.get("comment") or "").strip(), "formula": p.get("expression") or "",
                   "kind": entry.kind, "value": entry.value,
                   "range_unit": range_unit(entry.kind, design_unit), "min": None, "max": None,
-                  "doubt": doubtful.get(entry.name, "")}
+                  "doubt": doubtful.get(entry.name, ""), "link": link_text(table.links_of(entry.name))}
         if entry.state == DERIVED or (entry.state == CONSTANT and not plain):
             out.append({**common, "ticked": False, "enabled": False,
                         "state": "formula", "reason": "A formula. It follows the parameters it reads."})

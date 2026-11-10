@@ -20,8 +20,8 @@ from ..params import size_table as size_tables
 from ..params.listing import list_parameters
 from ..sketch_values.motion import OPTIMISTIC
 from . import health as health_module
-from .body_scope import scope_inputs
-from .probe_flow import SizeProbe, covers_a_sketch, kept_size_names
+from .body_scope import body_links, scope_inputs
+from .probe_flow import SizeProbe, covers_a_sketch, extra_size_params, kept_size_names
 from .recipe_export import free_sizes, plan_single_export, translate_capture
 from ..design_edit.restore import restore_parameters
 from ..design_edit.runner import ExportCancelled, RowExport
@@ -174,7 +174,7 @@ class _Pipeline:
         model, quantities = scope_inputs(capture, request.model_params)
         self.table = size_tables.build(
             request.parameters, request.ticked, model, request.design_unit, quantity_params=quantities,
-            ranges=request.ranges)
+            ranges=request.ranges, links=body_links(capture))
 
         final = self._translate_and_measure(capture) if isinstance(capture, dict) else None
 
@@ -201,12 +201,14 @@ class _Pipeline:
             # The plan translates without a motion at this point, so the first look's refusal is its result only
             # when the first look had none either.
             return first if first_motion is None else None
-        keep = kept_size_names(self.table, free_sizes(first.recipe))
+        free = free_sizes(first.recipe)
+        extra = extra_size_params(self.table, free)
+        keep = kept_size_names(self.table, free) | {self.table.size_name(n) for n in extra}
         sizes = probe_sizes(self.table, self.request.parameters, keep=keep)
 
         self.probe = self._start_probe(capture)
         if self.probe is not None:
-            found = self._measure(ProbeRun(self.port, self.tmp, self.probe), sizes)
+            found = self._measure(ProbeRun(self.port, self.tmp, self.probe), sizes, extra)
             if found is not None:
                 self.doubtful.extend(found)
         return self._translation(capture, self.motion)
@@ -251,15 +253,16 @@ class _Pipeline:
             self.probe_error = ""
         return probe
 
-    def _measure(self, run, sizes):
+    def _measure(self, run, sizes, extra=()):
         """The probe's rows and its result: the sizes the probe cannot follow, or None when the probe failed.
 
-        The rows put every size at the ends of its range where a size moves a sketch. A failure other than a cancel
+        The rows put every size at the ends of its range where a size moves a sketch, then the sizes in `extra` (tried
+        on a guess, `probe_flow.extra_size_params`) while rows are left. A failure other than a cancel
         leaves the translation without a motion (no size behind a sketch is then followed, by the translator's own
         rule) and is noted for the person. The parameters are put back before the last read."""
         probe = self.probe
         try:
-            rows = probe.probe_rows(sizes)
+            rows = probe.probe_rows(sizes, extra)
             if rows:
                 run.try_rows(rows)
                 if run.read_failure is not None:

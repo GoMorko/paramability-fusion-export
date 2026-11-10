@@ -17,6 +17,8 @@ from ..translator.result import Refusal
 from ..translator.step_kinds import AXIS, HOLE_POINTS, PROFILES, step_type
 
 MAX_PROBE_ROWS = 64
+# Ticked sizes that nothing ties to a sketch, tried after all the others while rows are left.
+MAX_EXTRA_SIZES = 8
 FOLLOWED_KINDS = ("sketchDimension", "constructionPlane")
 _SAME = 1e-9
 _CURVES = ("line", "arc", "circle", "ellipse")
@@ -170,17 +172,29 @@ def request(capture, table, covered=None):
 
 def sketch_driven(table):
     """Fusion names of the ticked sizes that reach a model parameter made by a sketch dimension or a construction
-    plane (of the body's scope), in table order."""
+    plane (of the body's scope), or a sketch through the geometry of another component (`table.links`), in table
+    order."""
     reached = set()
     for m in table.model_params.values():
         if (m.get("created_by") or {}).get("kind") in FOLLOWED_KINDS:
             reached |= table.depends(m["name"])
+    for link in table.links:
+        reached |= table.depends(link["param"])
     return [name for name in table.ticked if name in reached]
+
+
+def extra_sizes(table, kept, limit=MAX_EXTRA_SIZES):
+    """Fusion names of the ticked sizes the probe also tries although nothing ties them to a sketch: the person ticked
+    them, so they may move a sketch in a way the capture cannot show. At most `limit`, in table order; `kept` are the
+    sizes probed anyway."""
+    kept = set(kept)
+    return [name for name in table.ticked if name not in kept][:limit]
 
 
 def kept_sizes(table, free_sizes):
     """Fusion names of the sizes to probe: the free sizes of the first translation (recipe names in `free_sizes`),
-    plus every ticked size that reaches a sketch dimension or a construction plane. In table order."""
+    plus every ticked size that reaches a sketch dimension, a construction plane or a sketch through another component
+    (`sketch_driven`). In table order."""
     free = set(free_sizes)
     driven = set(sketch_driven(table))
     return [n for n in table.ticked if table.size_name(n) in free or n in driven]
@@ -213,27 +227,30 @@ def _others(size):
     return [end for end in (size["min"], size["max"]) if abs(end - size["value"]) > _SAME]
 
 
-def probe_rows(sizes, moved, limit=MAX_PROBE_ROWS):
+def probe_rows(sizes, moved, limit=MAX_PROBE_ROWS, extra=()):
     """The states to try, as `(rows, untried)`.
 
     sizes: the kept sizes, with the range ends to try. moved: the params that move covered sketch values. A moved
     size gets a row at each range end that differs from its current value; with two or more moved sizes, one row
     puts all kept sizes at their minimum and one at their maximum. A row has no STEP (`"step": False`); `state` holds
     the manifest values, `varied` the params that differ. `untried` lists the moved params left without rows by the
-    row limit.
+    row limit. `extra` are params tried on a guess (`extra_sizes`): their rows come after the moved ones, and one
+    left without rows is not listed in `untried`.
     """
     rows, untried = [], []
     moved_sizes = [s for s in sizes if s["param"] in moved]
-    for size in moved_sizes:
+    guessed = [s for s in sizes if s["param"] in extra and s["param"] not in moved]
+    for size in moved_sizes + guessed:
         wanted = _others(size)
         if len(rows) + len(wanted) > limit:
-            untried.append(size["param"])
+            if size["param"] in moved:
+                untried.append(size["param"])
             continue
         for end in wanted:
             label = "min" if end == size["min"] else "max"
             rows.append(_row(sizes, "%s (%s)" % (size["size"][:MAX_NAME_CHARS - 6], label), {size["param"]: end},
                              "%s (%s)" % (size["param"], label)))
-    if len(moved_sizes) >= 2 and len(rows) + 2 <= limit:
+    if len(moved_sizes) + len(guessed) >= 2 and len(rows) + 2 <= limit:
         for label, key in (("all min", "min"), ("all max", "max")):
             rows.append(_row(sizes, label, {s["param"]: s[key] for s in sizes}))
     return rows, untried

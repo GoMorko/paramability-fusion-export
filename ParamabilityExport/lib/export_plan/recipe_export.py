@@ -90,6 +90,33 @@ def _not_followed_note(names):
     return clip(text, MAX_NOTE)
 
 
+def link_outcomes(size_table, sizes):
+    """What happened to each geometry link of the export (`size_table.links`): the link with `outcome` ("size",
+    "loose", "fixed", "dropped" or "not ticked") and the reason when there is one. `sizes` is the report's `sizes`
+    record, or None when no recipe was written."""
+    sizes = sizes or {}
+    free = set(sizes.get("free") or [])
+    loose = {e["name"]: e["reason"] for e in sizes.get("loose") or []}
+    fixed = {e["name"]: e["reason"] for e in sizes.get("fixed") or []}
+    dropped = {e["name"]: e["reason"] for e in sizes.get("dropped") or []}
+    out = []
+    for link in size_table.links:
+        name = link["param"]
+        recipe = size_table.recipe_name(name)
+        if recipe in fixed:
+            found = {"outcome": "fixed", "reason": fixed[recipe]}
+        elif recipe in loose:
+            found = {"outcome": "loose", "reason": loose[recipe]}
+        elif recipe in free:
+            found = {"outcome": "size"}
+        elif name in dropped:
+            found = {"outcome": "dropped", "reason": dropped[name]}
+        else:
+            found = {"outcome": "not ticked" if name not in size_table.ticked else "dropped"}
+        out.append({**link, **found})
+    return out
+
+
 def _uses(capture):
     """How many times Fusion uses the component of the picked body (1 for a root body)."""
     placement = ((capture or {}).get("target") or {}).get("placement")
@@ -180,6 +207,8 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         report["parameters"] = listing.report()
     if recipe_data is not None:
         report["sizes"] = {"free": free, "fixed": all_fixed, "loose": all_loose, "dropped": dropped}
+    if size_table is not None and size_table.links:
+        report["links"] = link_outcomes(size_table, report.get("sizes"))
 
     files = {"part.step": step_file}
     listed = listing.entries if listing is not None else None

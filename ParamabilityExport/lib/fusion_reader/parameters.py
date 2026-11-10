@@ -1,7 +1,10 @@
 """User and model parameters as plain dicts. Uses the objects it is given and imports no adsk (tests use fakes)."""
 from ..params.expressions import is_plain_number
 from ..package.units import internal_to_unit, unit_kind
-from .read_geometry import enum_name, safe, type_name
+from .read_geometry import collection_items, enum_name, safe, type_name
+
+# At most this many dependents are visited per user parameter.
+MAX_DEPENDENTS = 2000
 
 
 def _kind_of_value(expression, unit):
@@ -45,13 +48,36 @@ def _common(p):
     }
 
 
+def dependent_components(parameter):
+    """`[{ token, name }]` of the components that hold a model parameter reading `parameter`, directly or through
+    other parameters that read it (`dependentParameters`, `ModelParameter.component`). Empty when unreadable."""
+    found, seen = [], set()
+    stack = collection_items(safe(lambda: parameter.dependentParameters, None))
+    visits = 0
+    while stack and visits < MAX_DEPENDENTS:
+        dependent = stack.pop()
+        visits += 1
+        key = (safe(lambda: type_name(dependent), ""), safe(lambda: dependent.name, None))
+        if key[1] is None or key in seen:
+            continue
+        seen.add(key)
+        component = safe(lambda: dependent.component, None)
+        if component is not None:
+            record = {"token": safe(lambda: component.entityToken, "") or "",
+                      "name": safe(lambda: component.name, "") or ""}
+            if (record["token"] or record["name"]) and record not in found:
+                found.append(record)
+        stack.extend(collection_items(safe(lambda: dependent.dependentParameters, None)))
+    return found
+
+
 def list_user_parameters(design):
     """One dict per numeric user parameter (text parameters are left out).
 
     Keys: name, expression, value (Fusion internal cm or rad), display_value (in the parameter's own unit),
     unit, comment, is_favorite, kind (length, angle, count; derived when the expression is a formula; unsupported
     when the unit is not in the unit tables), value_type ("numeric"), dependency_parameters and
-    dependent_parameters (names).
+    dependent_parameters (names), and dependent_components (`dependent_components`).
     """
     out = []
     params = design.userParameters
@@ -62,6 +88,7 @@ def list_user_parameters(design):
             continue
         d["comment"] = p.comment or ""
         d["dependent_parameters"] = _names(safe(lambda: p.dependentParameters, None))
+        d["dependent_components"] = dependent_components(p)
         out.append(d)
     return out
 

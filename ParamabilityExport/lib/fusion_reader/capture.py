@@ -19,6 +19,7 @@ from ..translator import step_kinds
 from . import read_geometry as geo
 from .parameters import list_model_parameters, list_user_parameters
 from .placement import occurrence_path, read_placement
+from .read_links import sketch_links
 
 CAPTURE_VERSION = 3
 
@@ -313,6 +314,8 @@ def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_reade
     final = ctx.find_target() or ctx.target
     parameters, design_units = _parameters(design, ctx)
     target = _target_record(ctx, final)
+    ordered = [items[i] for i in sorted(items)]
+    links = geo.safe(lambda: sketch_links(design, ctx, ordered), [])
     app_fusion, app_name, app_up = _app_details() if None in (fusion, name, up_axis) else ("", "", "z")
     return {
         "capture": CAPTURE_VERSION,
@@ -323,6 +326,7 @@ def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_reade
         "parameters": parameters,
         "targets": [target],
         "target": target,
-        "items": [items[i] for i in sorted(items)],
+        "items": ordered,
+        "sketch_links": links,
         "marker": {"position": end, "count": count},
     }

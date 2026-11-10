@@ -22,9 +22,15 @@ _STATE_KEYS = ("sketches", "points", "lines", "params", "box", "unread")
 
 def kept_size_names(table, free_sizes):
     """Recipe names of the sizes to probe: the free sizes of the first translation and every ticked size that
-    reaches a sketch dimension or a construction plane."""
+    reaches a sketch dimension, a construction plane or a sketch through the geometry of another component."""
     names = plan.kept_sizes(table, free_sizes)
     return {table.size_name(n) for n in names if table.size_name(n)}
+
+
+def extra_size_params(table, free_sizes):
+    """Fusion names of the ticked sizes tried on a guess (`plan.extra_sizes`): nothing ties them to a sketch, but
+    the person ticked them, so a sketch may follow them in a way the capture cannot show."""
+    return plan.extra_sizes(table, plan.kept_sizes(table, free_sizes))
 
 
 def _profile_lists(capture):
@@ -153,14 +159,15 @@ class SizeProbe:
             else:
                 self.states.append({"values": values, "built": True, "read": read})
 
-    def probe_rows(self, sizes):
+    def probe_rows(self, sizes, extra=()):
         """The extra rows, at the range ends of `sizes` that move a sketch: the sizes the states already show moving
-        one, and every size that reaches a sketch."""
+        one, and every size that reaches a sketch. Then the sizes in `extra` (Fusion names tried on a guess,
+        `extra_size_params`) while rows are left."""
         current = {e.name: e.value for e in self.table.entries}
         self.moved = build.moved_sizes(self.capture, self.states, current)
         reach = set(plan.sketch_driven(self.table))
         moved = set(self.moved) | {s["param"] for s in sizes if s["param"] in reach}
-        rows, self.untried = plan.probe_rows(sizes, moved)
+        rows, self.untried = plan.probe_rows(sizes, moved, extra=set(extra))
         return rows
 
     # ---- result -----------------------------------------------------------------------------------------------

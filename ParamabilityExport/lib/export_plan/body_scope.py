@@ -9,6 +9,7 @@ Sketch and feature names repeat across components (each has its own `Sketch1`), 
 the component token the capture records (`item.component`, `created_by.component`). Those tokens come from one read
 and are only compared with each other. Captures without component tokens match by name alone.
 """
+from ..params import geometry_links
 from ..params.defaults import reads_of
 from ..translator.capture import same_body
 
@@ -135,6 +136,14 @@ def quantity_refs(capture):
             if isinstance(ref, dict) and ref.get("name"):
                 found[ref["name"]] = ref
     return list(found.values())
+
+
+def body_links(capture):
+    """The geometry links (`params.geometry_links.reach`) of the sketches that the picked body's own steps use."""
+    if not isinstance(capture, dict) or not capture.get("sketch_links"):
+        return []
+    used = {name for _, name in _sketches_of(body_items(capture))}
+    return geometry_links.reach(capture, used)
 
 
 def scope_inputs(capture, fallback_model=()):

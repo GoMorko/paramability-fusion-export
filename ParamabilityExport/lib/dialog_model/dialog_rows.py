@@ -172,6 +172,11 @@ def name_cell(name):
     return escape(shorten_name(name)), 1
 
 
+def name_tooltip(offer):
+    """The tooltip of a name cell: the full name, and why it is offered when another component links it."""
+    return offer["param"] + ("\n" + offer["link"] if offer.get("link") else "")
+
+
 def _detail_parts(offer, ticked, lo_text, hi_text):
     """(name, rest of the first line, further lines) of the details of a row, all plain text."""
     name, now = offer["param"], offer["now"]
@@ -190,6 +195,8 @@ def _detail_parts(offer, ticked, lo_text, hi_text):
         lines.append("Size in Paramability from %s to %s%s." % (lo, hi, unit))
     else:
         lines.append("Stays a fixed number. Tick it to make it a size.")
+    if offer.get("link"):
+        lines.append(offer["link"])
     if offer.get("doubt"):
         lines.append(offer["doubt"])
     return name, ", " + now, lines

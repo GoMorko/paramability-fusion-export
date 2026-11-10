@@ -7,6 +7,8 @@ note the Fusion version and system.
 
 In this order. Each id is described in the section named.
 
+- [ ] K10 Hole drawn around another component's pipe: section 9. Export the box, the pipe diameter parameter is
+      ticked to start with, and the hole follows it in Paramability.
 - [ ] Compact export window: section 7.2, "The export window has no empty gaps", then "Early warning" and "Show in
       timeline".
 - [ ] Result window with its warnings: section 7.2, "Click OK: ... the result window", and the export pipeline entry
@@ -390,6 +392,16 @@ the sizes on the form and compare the part with Fusion at the same values.
 - [ ] **K9 Report.** Send the K1 report. It pins token stability (the curves are found again in every state), the
       first read against the capture (a sketch that differs is not followed), `restore_gap_mm` (should
       be 0 or tiny) and the column checks (`motion.dropped`).
+- [ ] **K10 Drawn around another component.** A box body in its own component with a hole whose circle (or two
+      arcs) is projected from a pipe in another component, or constrained to such a projection; the pipe diameter is
+      a user parameter used only in the pipe's component (the filter box with `MainPipe__Top_diameter_mm` is one).
+      Open Export for Paramability and pick the box: the pipe diameter row is ticked, and clicking it says it changes
+      the pipe component that the hole sketch is drawn around. Export: the progress window tries the pipe diameter;
+      the result window shows it as "size"; `report.json` has `links` with outcome `size` and `capture.sketch_links`
+      names the pipe component. In Paramability, change the diameter: the hole grows and shrinks with it and matches
+      Fusion at the same value. Then break the link (delete the projection and give the hole its own diameter): the
+      row is not ticked to start with; tick it by hand and export: the progress window still tries it, and the result
+      says "not used".
 
 ## 10. Emboss
 
@@ -669,6 +681,16 @@ These were written from the API reference and never run:
     parameters only.
   - `BRepFace.pointOnFace` and `BRepFace.geometry` (type name `Plane` or `Cylinder`) of the mirror face or the pattern
     axis face; `BRepEdge` points through `edge_record`.
+- Geometry links (`lib/fusion_reader/read_links.py` and `dependent_components` in `parameters.py`), K10. Read in the
+  API reference: `Sketch.sketchCurves`, `sketchPoints`, `geometricConstraints`, `referencePlane`;
+  `SketchEntity.isReference` and `referencedEntity` (null for a reference that is not parametric, counted as
+  `unknown`); `CoincidentConstraint.point` and `entity`, `ConcentricConstraint.entityOne` and `entityTwo`,
+  `EqualConstraint` and `TangentConstraint` `curveOne` and `curveTwo`; `ModelParameter.component` and
+  `dependentParameters`. Not confirmed: that `referencedEntity` of a curve projected from another component's body
+  comes as a proxy whose `assemblyContext.component` is that component; that `lineOne`, `lineTwo`, `line` and
+  `curve` are the members of the other line constraints; that `UserParameter.dependentParameters` lists the model
+  parameters of every component. Print `capture.sketch_links` and the pipe diameter's `dependent_components` from
+  `report.json`: the pipe component must be named in both.
 - The export pipeline (`lib/export_plan/pipeline.py`, wired in `commands/ExportForParamability/export_flow.py`):
   the export measures the sketches, and the probe reads the sketches once more after the last restore, so
   `report.json` `probe.restore_gap_mm` and `health` describe the design as the person gets it back. Check that the

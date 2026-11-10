@@ -1,0 +1,99 @@
+{
+ "version": 1,
+ "values": {
+  "1/p0/l0/width": {
+   "const": 0,
+   "terms": {
+    "width_mm": 1
+   },
+   "sketch": "BoxBase"
+  },
+  "1/p0/l0/height": {
+   "const": 0,
+   "terms": {
+    "depth_mm": 1
+   },
+   "sketch": "BoxBase"
+  },
+  "3/p0/l0/start.0": {
+   "const": 0,
+   "terms": {
+    "pipe_d_mm": 0.5
+   },
+   "sketch": "PipeHole"
+  },
+  "3/p0/l0/segments.0.through.1": {
+   "const": 0,
+   "terms": {
+    "pipe_d_mm": 0.5
+   },
+   "sketch": "PipeHole"
+  },
+  "3/p0/l0/segments.0.to.0": {
+   "const": 0,
+   "terms": {
+    "pipe_d_mm": -0.5
+   },
+   "sketch": "PipeHole"
+  },
+  "3/p0/l0/segments.1.through.1": {
+   "const": 0,
+   "terms": {
+    "pipe_d_mm": -0.5
+   },
+   "sketch": "PipeHole"
+  },
+  "3/p0/l0/segments.1.to.0": {
+   "const": 0,
+   "terms": {
+    "pipe_d_mm": 0.5
+   },
+   "sketch": "PipeHole"
+  },
+  "3/p0/c0.0/radius": {
+   "const": 0,
+   "terms": {
+    "pipe_d_mm": 0.5
+   },
+   "sketch": "PipeHole"
+  },
+  "3/p0/c0.1/radius": {
+   "const": 0,
+   "terms": {
+    "pipe_d_mm": 0.5
+   },
+   "sketch": "PipeHole"
+  }
+ },
+ "box_max": {
+  "min": [
+   -40,
+   -30,
+   0
+  ],
+  "max": [
+   40,
+   30,
+   40
+  ]
+ },
+ "curves": [
+  "1/p0",
+  "3/p0"
+ ],
+ "states": [
+  {
+   "values": {
+    "pipe_d_mm": 6.0
+   },
+   "built": true
+  },
+  {
+   "values": {
+    "pipe_d_mm": 24.0
+   },
+   "built": true
+  }
+ ],
+ "unmeasured": {}
+}

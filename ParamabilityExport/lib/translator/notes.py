@@ -46,6 +46,17 @@ def unmoved_reason(name):
     return clip("%s is not a size: changing it changes nothing in the copied steps." % name, MAX_NOTE)
 
 
+def unmoved_link_reason(name, component):
+    return clip("%s is not a size: it changes %s, but nothing in this part moved with it." % (
+        name, clip(component, MAX_NAME)), MAX_NOTE)
+
+
+def untried_link_reason(sketch, component):
+    """Why a size that may reach a sketch through another component cannot follow: it was not tried."""
+    return "it changes %s, which %s is drawn around, and could not be tried at other values" % (
+        clip(component, MAX_NAME), clip(sketch, MAX_NAME))
+
+
 def recipe_note(step_count):
     return "%d %s copied from Fusion." % (step_count, "step" if step_count == 1 else "steps")
 

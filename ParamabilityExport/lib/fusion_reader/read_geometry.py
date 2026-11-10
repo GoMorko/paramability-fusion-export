@@ -127,6 +127,18 @@ def same_entity(a, b):
         return False
 
 
+def find_native(design, token):
+    """The native entity for a token: the match without an assembly context, else the native object of the first."""
+    raw = safe(lambda: design.findEntityByToken(token), None)
+    found = list(raw) if raw else []
+    for entity in found:
+        if safe(lambda: entity.assemblyContext, None) is None:
+            return entity
+    if found:
+        return safe(lambda: found[0].nativeObject, None)
+    return None
+
+
 def component_of(entity):
     """The component that owns an entity (a body, sketch, profile, plane, face or edge), or None."""
     for read in (lambda: entity.parentComponent, lambda: entity.component, lambda: entity.body.parentComponent,

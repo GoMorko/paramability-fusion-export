@@ -57,17 +57,34 @@ def _refs(item):
     return names, sketches
 
 
+def _drawn_around(capture):
+    """{sketch name: user parameter names} of the parameters whose model parameters live in a component that the
+    sketch is tied to through geometry, other than the part's own."""
+    own = ((capture.get("target") or {}).get("component") or {}).get("token")
+    out = {}
+    for record in capture.get("sketch_links") or []:
+        tied = {link.get("token") for link in record.get("links") or []} - {own, None, ""}
+        for p in capture["parameters"]["user"]:
+            if tied & {c.get("token") for c in p.get("dependent_components") or []}:
+                out.setdefault(record["sketch"], set()).add(p["name"])
+    return out
+
+
 def reads_by_step(capture, only=None):
-    """{user parameter name: first step that reads it}, following dependencies through model parameters. `only` is a
-    set of item indexes to look at (the items the translator copied), else every item."""
+    """{user parameter name: first step that reads it}, following dependencies through model parameters and the
+    geometry of other components a sketch is drawn around. `only` is a set of item indexes to look at (the items the
+    translator copied), else every item."""
     params = capture["parameters"]
     user = {p["name"] for p in params["user"]}
     everything = {p["name"]: p for p in params["user"] + params["model"]}
+    around = _drawn_around(capture)
     found = {}
     for item in capture["items"]:
         if only is not None and item["index"] not in only:
             continue
         names, sketches = _refs(item)
+        for sketch in sketches:
+            names |= around.get(sketch, set())
         for p in params["model"]:
             made = p.get("created_by") or {}
             if made.get("kind") == "sketchDimension" and made.get("sketch") in sketches:
@@ -251,7 +268,7 @@ class FollowOrFlagTest(unittest.TestCase):
 
     def test_a_fixture_with_a_probe_follows_or_flags_what_its_sketch_reads(self):
         from tests.test_translate_sketch_motion import motion_of
-        for name in ("sketch_rect_centred", "sketch_offset_plane"):
+        for name in ("sketch_rect_centred", "sketch_offset_plane", "linked_pipe_hole"):
             with self.subTest(fixture=name):
                 self.assertEqual(offending_sizes(load_capture(name), motion=motion_of(name)), [])
 

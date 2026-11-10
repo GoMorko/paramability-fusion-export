@@ -134,9 +134,12 @@ def is_offered(p):
             and dim_of_unit(p.get("unit")) is not None)
 
 
-def default_ticked(params, model_params=()):
-    """Favourites the body reads. With no favourite among them, every plain parameter the body reads."""
-    read = names_read_by(params, model_params)
+def default_ticked(params, model_params=(), linked=()):
+    """Favourites the body uses. With no favourite among them, every plain parameter the body uses.
+
+    The body uses what its model parameters read, and `linked`: the parameters that may reach one of its sketches
+    through the geometry of another component (`geometry_links.linked_names`)."""
+    read = names_read_by(params, model_params) | set(linked)
     offered = [p for p in params if is_offered(p) and p["name"] in read]
     favourites = [p["name"] for p in offered if p.get("is_favorite")]
     if favourites:

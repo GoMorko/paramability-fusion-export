@@ -158,7 +158,7 @@ def _make_cell(inputs, key, index, offer):
     if key == "name":
         text, lines = rows.name_cell(offer["param"])
         box = inputs.addTextBoxCommandInput(cell_id, "", text, lines, True)
-        _safely("Name tooltip", lambda: setattr(box, "tooltipDescription", offer["param"]))
+        _safely("Name tooltip", lambda: setattr(box, "tooltipDescription", rows.name_tooltip(offer)))
         return box
     return inputs.addTextBoxCommandInput(cell_id, "", rows.escape(cells[key]), 1, True)
 
@@ -239,6 +239,9 @@ def apply_offers(inputs, offers, fresh):
         def update(index=index, new=new):
             _bool(inputs, index).value = new["ticked"]
             _show_row(inputs, index, new, new["ticked"])
+            name = inputs.itemById(_cell_id("name", index))
+            if name is not None:
+                name.tooltipDescription = rows.name_tooltip(new)
 
         if _safely("Updating " + offer["param"], update):
             merged[index] = new
