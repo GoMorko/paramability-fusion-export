@@ -59,14 +59,35 @@ def _native(entity):
     return safe(lambda: entity.nativeObject, None) or entity
 
 
+def _owned_by_sketch(sketch, name):
+    """"sketchDimension" or "sketchText" when `sketch` holds a dimension whose parameter is `name`, or a text whose
+    height parameter is `name`; else None. Fusion answers the owning Sketch, not the dimension, as the `createdBy` of
+    a sketch dimension's parameter."""
+    if not name or type_name(sketch) != "Sketch":
+        return None
+    for members, parameter_of, kind in (("sketchDimensions", lambda d: d.parameter, "sketchDimension"),
+                                        ("sketchTexts", lambda t: t.heightParameter, "sketchText")):
+        for item in collection_items(safe(lambda: getattr(sketch, members), None)):
+            if safe(lambda: parameter_of(item).name, "") == name:
+                return kind
+    return None
+
+
 def dependent_record(parameter):
     """Where one model parameter acts: `{ name, kind, component }` plus, for a sketch dimension or text, `sketch` and
     `sketch_token` of its sketch, and for a feature or other maker, `feature` (its name). `component` is the token of
-    the component its maker lives in (the sketch's, the feature's), else of `ModelParameter.component`."""
+    the component its maker lives in (the sketch's, the feature's), else of `ModelParameter.component`.
+
+    A sketch dimension's parameter may name the Sketch as its maker: it counts as a sketch dimension (or sketch text)
+    of that sketch when one of the sketch's own dimensions (texts) has this parameter."""
     name = safe(lambda: parameter.name, "") or ""
     entity = _native(safe(lambda: parameter.createdBy, None))
     record = {"name": name, "kind": "other", "component": ""}
-    if entity is not None and (_is_sketch_dimension(entity) or _is_sketch_text(entity)):
+    sketch_kind = _owned_by_sketch(entity, name) if entity is not None else None
+    if sketch_kind:
+        record.update(kind=sketch_kind, sketch=safe(lambda: entity.name, "") or "", sketch_token=_token(entity),
+                      component=_token(safe(lambda: entity.parentComponent, None)))
+    elif entity is not None and (_is_sketch_dimension(entity) or _is_sketch_text(entity)):
         sketch = _native(safe(lambda: entity.parentSketch, None))
         record.update(kind="sketchText" if _is_sketch_text(entity) and not _is_sketch_dimension(entity)
                       else "sketchDimension",

@@ -6,6 +6,7 @@ from tests.test_capture_reader import Coll, Obj
 
 from lib.fusion_reader.parameters import dependents
 from lib.fusion_reader.read_links import sketch_inputs
+from lib.params.geometry_links import acts
 from lib.fusion_reader.read_geometry import ReadContext
 from lib.fusion_reader.read_links import sketch_links
 
@@ -113,6 +114,34 @@ class DependentsTest(unittest.TestCase):
         self.assertEqual(found["d2"], {"name": "d2", "kind": "feature", "component": "cmp_pipe",
                                        "feature": "PipeExtrude"})
         self.assertEqual(set(found), {"d1", "d2"})
+
+    def test_a_dimension_whose_maker_is_its_sketch_is_a_sketch_dimension_of_that_sketch(self):
+        dimension = Obj("fusion::SketchLinearDimension", entityToken="dim", parameter=Obj(name="d7"))
+        text = Obj("fusion::SketchText", entityToken="txt", heightParameter=Obj(name="d8"))
+        sketch = Obj("fusion::Sketch", entityToken="sk_pipe", name="PipeProfile", parentComponent=PIPE,
+                     sketchDimensions=Coll([Obj("fusion::SketchLinearDimension", parameter=Obj(name="d1")),
+                                            dimension]),
+                     sketchTexts=Coll([text]))
+        found = {d["name"]: d for d in dependents(parameter("pipe_d", dependents=[
+            parameter("d7", sketch), parameter("d8", sketch), parameter("d9", sketch)]))}
+        self.assertEqual(found["d7"], {"name": "d7", "kind": "sketchDimension", "component": "cmp_pipe",
+                                       "sketch": "PipeProfile", "sketch_token": "sk_pipe"})
+        self.assertEqual(found["d8"]["kind"], "sketchText")
+        self.assertEqual(found["d8"]["sketch_token"], "sk_pipe")
+        # A parameter the sketch does not own by a dimension or text keeps the plain maker record.
+        self.assertEqual((found["d9"]["kind"], found["d9"]["feature"]), ("other", "PipeProfile"))
+
+    def test_the_corrected_kind_reaches_the_steps_that_take_the_sketch(self):
+        sketch = Obj("fusion::Sketch", entityToken="sk_pipe", name="PipeProfile", parentComponent=PIPE,
+                     sketchDimensions=Coll([Obj("fusion::SketchLinearDimension", parameter=Obj(name="d7"))]))
+        param = {"name": "pipe_d", "dependents": dependents(parameter("pipe_d", dependents=[parameter("d7", sketch)]))}
+        capture = {"items": [{"index": 3, "name": "PipeExtrude", "component": "cmp_pipe",
+                              "sketch_inputs": [{"token": "sk_pipe", "name": "PipeProfile"}]},
+                             {"index": 4, "name": "Other", "component": "cmp_pipe", "sketch_inputs": []}]}
+        where = acts(capture, param)
+        self.assertEqual(where.items, {3})
+        self.assertEqual(len(where.sketches), 1)
+        self.assertEqual(where.components, [("cmp_pipe", "")])
 
     def test_an_unreadable_dependent_list_or_maker_adds_nothing_it_cannot_read(self):
         self.assertEqual(dependents(Broken()), [])

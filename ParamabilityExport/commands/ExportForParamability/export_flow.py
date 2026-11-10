@@ -27,7 +27,6 @@ from ...lib.fusion_ui import result_dialog
 from ...lib.fusion_ui.file_dialog import ask_save_path
 from ...lib.fusion_ui.log import log, message_box
 from ...lib.fusion_ui.notice import status_notice
-from ...lib.fusion_ui.progress import ProgressDialog
 from ...lib.package.writer import write_package
 from .. import export_common
 
@@ -91,7 +90,7 @@ class FusionPort:
         return lambda request: read_state(self.design, request, ctx)
 
     def progress(self, verb):
-        return ProgressDialog("Export for Paramability", verb=verb)
+        return export_common.progress_dialog(verb)
 
     def warn_unrestored(self, names):
         export_common.warn_unrestored(names)
@@ -130,7 +129,7 @@ class FusionPartsPort:
         return lambda request: read_state(self.design, request, ctx)
 
     def progress(self, verb):
-        return ProgressDialog("Export for Paramability", verb=verb)
+        return export_common.progress_dialog(verb)
 
     def warn_unrestored(self, names):
         export_common.warn_unrestored(names)

@@ -190,6 +190,7 @@ class SizeProbe:
         self.discovery = []
         self.nearer_count = 0
         self.checked = False
+        self._far = None  # (moved, extra) of the near rows, until the far rows are asked for
         self.discovery_base = None  # the read the discovery rows are compared with
         self.after_rows = None  # what read differently from E0 once the parameters were put back after the rows
         self.restore_unchecked = []  # "<sketch>: <why>" for each sketch the restore check could not compare
@@ -238,6 +239,16 @@ class SizeProbe:
                 state["start"] = start
             self.states.append(state)
 
+    def matches_start(self, read):
+        """True when `read` has the same sketches, points, lines, references and body box as the first read (E0), within
+        the fit tolerance: the design reads the same at another timeline marker."""
+        if not isinstance(read, dict):
+            return False
+        keys = ("sketches", "points", "lines", "refs", "box")
+        before = {k: self.e0.get(k) or {} for k in keys}
+        now = {k: read.get(k) or {} for k in keys}
+        return all(set(before[k]) == set(now[k]) for k in keys) and _same_numbers(before, now)
+
     def off_outline(self, read):
         """True when a sketch the probe follows reads as another outline than captured in `read` (a sketch on its
         other solution, or one whose outline changed)."""
@@ -250,15 +261,25 @@ class SizeProbe:
         return False
 
     def probe_rows(self, sizes, extra=()):
-        """The extra rows, at the range ends of `sizes` that move a sketch: the sizes the states already show moving
-        one, and every size that reaches a sketch. Then the sizes in `extra` (Fusion names tried on a guess,
-        `extra_size_params`) while rows are left."""
+        """The first extra rows, near the value of each size that moves a sketch: the sizes the states already show
+        moving one, and every size that reaches a sketch. Then the sizes in `extra` (Fusion names tried on a guess,
+        `extra_size_params`) while rows are left. A size that only feeds step values has no row. The far range
+        ends come later (`far_rows`)."""
         current = {e.name: e.value for e in self.table.entries}
         self.moved = build.moved_sizes(self.capture, self.states, current)
         reach = set(plan.sketch_driven(self.table))
         moved = set(self.moved) | {s["param"] for s in sizes if s["param"] in reach}
         rows, self.untried = plan.probe_rows(sizes, moved, extra=set(extra))
+        self._far = (moved, set(extra))
         return rows
+
+    def far_rows(self, sizes, room):
+        """The rows at the far range ends of the sizes `probe_rows` tried, within `room` rows (`plan.far_rows`)."""
+        if self._far is None:
+            return []
+        moved, extra = self._far
+        self._far = None
+        return plan.far_rows(sizes, moved, room, extra=extra)
 
     def nearer_rows(self, sizes, room):
         """The next rows that try the sizes nearer to their value now where rows did not build (`plan.nearer_rows`),
@@ -584,6 +605,10 @@ class ProbeGroup:
         """The extra rows. Every probe plans them (that sets what it leaves untried); they are the same for all."""
         return [probe.probe_rows(sizes, extra) for probe in self.probes][0]
 
+    def far_rows(self, sizes, room):
+        """The far rows: every probe plans them (that clears what it holds); they are the same for all."""
+        return [probe.far_rows(sizes, room) for probe in self.probes][0]
+
     def add_states(self, entries):
         """Give each probe its own state per `(values, result, reads)` or `(values, result, reads, starts)`; `reads`
         and `starts` have one read per probe."""
@@ -591,6 +616,10 @@ class ProbeGroup:
             probe.add_states([(values, result, reads[number] if reads else None,
                                rest[0][number] if rest and rest[0] else None)
                               for values, result, reads, *rest in entries])
+
+    def matches_start(self, reads):
+        """True when every part's read equals its first read (`SizeProbe.matches_start`)."""
+        return all(probe.matches_start(read) for probe, read in zip(self.probes, reads or []))
 
     def off_outline(self, reads):
         """True when a part's followed sketch reads as another outline in its read of `reads`."""

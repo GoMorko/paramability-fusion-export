@@ -10,9 +10,11 @@ from ..lib.design_edit.errors import StepExportError
 from ..lib.design_edit.marker import not_put_back_message, put_back
 from ..lib.package.naming import addin_version, writer_text
 from ..lib.design_edit.runner import ExportCancelled
+from ..lib.export_plan import messages
 from ..lib.fusion_reader import design_info
 from ..lib.fusion_reader.capture import MarkerError
 from ..lib.fusion_ui.log import error_box, log, message_box
+from ..lib.fusion_ui.progress import ProgressDialog
 from ..lib.package.caps import PackageCapError
 
 _ADDIN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -30,6 +32,14 @@ def _manifest_path():
         return named
     found = sorted(n for n in os.listdir(_ADDIN_DIR) if n.endswith(".manifest"))
     return os.path.join(_ADDIN_DIR, found[0]) if found else named
+
+
+def progress_dialog(verb):
+    """The progress window of an export step. The sketch tries get an explanation that stays and a line per try."""
+    if verb == messages.TRY_VERB:
+        return ProgressDialog("Export for Paramability", intro=messages.TRY_INTRO, line=messages.try_line,
+                              shown="Try %v of %m")
+    return ProgressDialog("Export for Paramability", verb=verb)
 
 
 def warn_unrestored(names):

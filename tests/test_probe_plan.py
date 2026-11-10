@@ -102,29 +102,82 @@ class ProbeRowTests(unittest.TestCase):
         self.tbl = table(PARAMS, ["count", "cube", "off"], MODEL)
         self.sizes = [size(self.tbl, "count", ""), size(self.tbl, "cube"), size(self.tbl, "off")]
 
-    def test_a_moved_size_gets_a_row_at_each_end(self):
+    def test_a_moved_size_first_gets_a_row_a_quarter_below_and_above_its_value(self):
         rows, untried = plan.probe_rows(self.sizes, {"count"})
-        self.assertEqual([r["name"] for r in rows], ["count (min)", "count (max)"])
-        self.assertEqual(rows[0]["state"], {"count": 1.5, "cube": 10, "off": 5})
+        self.assertEqual([r["name"] for r in rows], ["count (near min)", "count (near max)"])
+        self.assertEqual([r["state"]["count"] for r in rows], [2.25, 3.75])
         self.assertEqual(rows[0]["varied"], ["count"])
         self.assertFalse(rows[0]["step"])
         self.assertEqual(untried, [])
 
+    def test_the_near_values_stay_inside_the_range_and_a_count_moves_by_whole_numbers(self):
+        tight = size_dict("tight", 10.0, 9.0, 11.0)
+        count = size_dict("n", 2.0, 1.0, 5.0, kind="count")
+        zero = size_dict("z", 0.0, -8.0, 4.0)
+        edge = size_dict("e", 1.0, 1.0, 5.0, kind="count")
+        found = {s["param"]: plan._near_values(s) for s in (tight, count, zero, edge)}
+        self.assertEqual(found, {"tight": (9.0, 11.0), "n": (1.0, 3.0), "z": (-2.0, 1.0), "e": (None, 2.0)})
+
     def test_row_values_are_in_the_units_fusion_shows(self):
         rows, _ = plan.probe_rows(self.sizes, {"cube"})
-        self.assertEqual({r["name"]: r["values"]["cube"] for r in rows}, {"cube (min)": 5, "cube (max)": 20})
+        self.assertEqual({r["name"]: r["values"]["cube"] for r in rows}, {"cube (near min)": 7.5, "cube (near max)": 12.5})
+        far = plan.far_rows(self.sizes, {"cube"}, 10)
+        self.assertEqual({r["name"]: r["values"]["cube"] for r in far}, {"cube (min)": 5, "cube (max)": 20})
 
-    def test_two_moved_sizes_add_one_row_with_all_at_min_and_one_at_max(self):
+    def test_two_moved_sizes_add_near_pair_rows_and_later_far_rows_with_all_at_min_and_at_max(self):
         rows, _ = plan.probe_rows(self.sizes, {"count", "cube"})
-        self.assertEqual([r["name"] for r in rows],
+        self.assertEqual([r["name"] for r in rows], ["count (near min)", "count (near max)", "cube (near min)",
+                                                     "cube (near max)", "all lower", "all higher"])
+        self.assertEqual(rows[-2]["state"], {"count": 2.25, "cube": 7.5, "off": 5.0})
+        self.assertEqual(rows[-1]["state"], {"count": 3.75, "cube": 12.5, "off": 5.0})
+        far = plan.far_rows(self.sizes, {"count", "cube"}, 20)
+        self.assertEqual([r["name"] for r in far],
                          ["count (min)", "count (max)", "cube (min)", "cube (max)", "all min", "all max"])
-        self.assertEqual(rows[-2]["state"], {"count": 1.5, "cube": 5, "off": 2.5})
-        self.assertEqual(rows[-1]["state"], {"count": 6, "cube": 20, "off": 10})
+        self.assertEqual(far[-2]["state"], {"count": 1.5, "cube": 5, "off": 2.5})
+        self.assertEqual(far[-1]["state"], {"count": 6, "cube": 20, "off": 10})
+
+    def test_the_far_ends_only_take_the_rows_that_are_left(self):
+        self.assertEqual([r["name"] for r in plan.far_rows(self.sizes, {"count", "cube"}, 2)],
+                         ["count (min)", "count (max)"])
+        self.assertEqual(plan.far_rows(self.sizes, {"count", "cube"}, 1), [])
+
+    def test_a_far_end_the_near_value_already_reached_is_not_tried_again(self):
+        tight = [size_dict("tight", 10.0, 9.0, 30.0)]
+        self.assertEqual([r["name"] for r in plan.probe_rows(tight, {"tight"})[0]],
+                         ["tight (near min)", "tight (near max)"])
+        self.assertEqual([r["values"]["tight"] for r in plan.far_rows(tight, {"tight"}, 10)], [30.0])
 
     def test_the_row_limit_leaves_a_size_untried(self):
         rows, untried = plan.probe_rows(self.sizes, {"count", "cube"}, limit=3)
         self.assertEqual(untried, ["cube"])
-        self.assertEqual([r["name"] for r in rows], ["count (min)", "count (max)"])
+        self.assertEqual([r["name"] for r in rows], ["count (near min)", "count (near max)"])
+
+    def test_a_size_that_reaches_no_sketch_gets_no_row_and_is_never_untried(self):
+        # `off` only feeds step values: it is exact from its formula, so only the moved size is tried.
+        rows, untried = plan.probe_rows(self.sizes, {"count"}, limit=2)
+        far = plan.far_rows(self.sizes, {"count"}, 20)
+        self.assertEqual(untried, [])
+        self.assertEqual({p for r in rows + far for p in r["varied"]}, {"count"})
+
+    def test_rows_carry_the_line_the_progress_window_shows(self):
+        rows, _ = plan.probe_rows(self.sizes, {"cube", "count"})
+        self.assertEqual([r["label"] for r in rows],
+                         ["count at 2.25", "count at 3.75", "cube at 7.5 mm", "cube at 12.5 mm",
+                          "several sizes together", "several sizes together"])
+
+    def test_a_label_gives_the_value_in_the_unit_the_person_typed(self):
+        inches = dict(size_dict("gap", 25.4, 2.54, 254.0), unit="in")
+        angle = dict(size_dict("tilt", 30.0, 0.0, 90.0, kind="angle"), unit="deg")
+        self.assertEqual(plan.probe_rows([inches], {"gap"})[0][1]["label"], "gap at 1.25 in")
+        self.assertEqual(plan.probe_rows([angle], {"tilt"})[0][1]["label"], "tilt at 37.5 deg")
+
+    def test_a_row_tried_again_nearer_says_so_and_a_discovery_row_says_what_it_checks(self):
+        sizes = [size_dict("gap", 10.0, 0.0, 100.0)]
+        states = [{"values": {"gap": 100.0}, "built": False}]
+        retry = plan.nearer_rows(sizes, states)
+        self.assertEqual(retry[0]["label"], "gap at 55 mm" + plan.RETRY_NOTE)
+        candidate = dict(size_dict("lid", 5.0, 0.0, 9.0), end=9.0)
+        self.assertEqual(plan.discovery_rows([candidate], 5)[0]["label"], "checking if lid changes this part")
 
 
 class CandidateProfileTests(unittest.TestCase):

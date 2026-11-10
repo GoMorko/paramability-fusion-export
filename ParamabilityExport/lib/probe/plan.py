@@ -9,9 +9,22 @@ settings to try.
 
 Sizes are dicts as in `export_plan.size_offers.probe_sizes`: param (Fusion name), size (recipe name), unit, value,
 min, max (manifest numbers).
+
+Row order, each step only while rows are left under `MAX_PROBE_ROWS` (64), steps 1 and 2 in `probe_rows`:
+1. Near rows: every size that moves a sketch, then the sizes tried on a guess, gets one row `NEAR_SHARE` (25 percent)
+   of its value below and one above, kept inside its range (a count is a whole number, at least one step away).
+2. When two or more sizes are tried, one row with all of them at their lower near value and one at the higher.
+3. Far rows (`far_rows`, run after the nearer tries of step 1 and 2): the range ends that differ from the value and
+   from the near values, so the measured span grows.
+4. When two or more sizes are tried, all sizes at their minimum, then all at their maximum.
+A row that does not build is tried again nearer (`nearer_rows`, `NEARER_STEPS`: 50, 25 and 10 percent of the way to
+the range end, the first one nearer than the value tried). A size that only feeds step values is exact from its
+formula and gets no row: rows go to the sizes that move a sketch or a measured reference (`moved`) and to the
+guessed ones, and only a size left without a near row because of the limit is reported as untried.
 """
 from ..package.manifest import MAX_NAME_CHARS
-from ..package.units import display_from_manifest
+from ..package.units import display_from_manifest, unit_kind
+from ..params.expressions import format_number
 from ..params import defaults, geometry_links
 from ..params.size_table import DERIVED, FREE
 from ..translator.loops import profile_loops
@@ -20,6 +33,8 @@ from ..translator.sizes import probed_sizes
 from ..translator.step_kinds import AXIS, HOLE_POINTS, PROFILES, step_type
 
 MAX_PROBE_ROWS = 64
+# How far from its value a size is first tried, as a share of the value, below and above.
+NEAR_SHARE = 0.25
 # Ticked sizes that nothing ties to a sketch, tried after all the others while rows are left.
 MAX_EXTRA_SIZES = 8
 # Unticked parameters that act on another component, tried once each to find links the reader cannot see.
@@ -31,6 +46,8 @@ NEARER_STEPS = (0.5, 0.25, 0.1)
 # Rows the export adds for those tries in all, inside `MAX_PROBE_ROWS`: discovery rows get what is left.
 MAX_NEARER_ROWS = 24
 _SAME = 1e-9
+# Added to the progress line of a row that tries again nearer after a value that did not build.
+RETRY_NOTE = ". The last value did not rebuild, so this one is nearer."
 _CURVES = ("line", "arc", "circle", "ellipse")
 
 
@@ -272,51 +289,118 @@ def state_values(sizes, overrides=None):
     return values
 
 
-def _row(sizes, name, overrides, key=None):
+def _value_text(size, manifest_value):
+    """The value as the person typed it: in the parameter's own unit, with the unit for a length or an angle."""
+    unit = (size.get("unit") or "").strip()
+    text = format_number(round(display_from_manifest(manifest_value, unit), 3))
+    return "%s %s" % (text, unit) if unit_kind(unit) in ("length", "angle") else text
+
+
+def _label(sizes, manifest, varied, retry):
+    """The line the progress window shows for a row: one size at its value, or several sizes together."""
+    if not varied:
+        return ""
+    if len(varied) > 1:
+        return "several sizes together"
+    size = next(s for s in sizes if s["param"] == varied[0])
+    text = "%s at %s" % (size["param"], _value_text(size, manifest[size["param"]]))
+    return text + RETRY_NOTE if retry else text
+
+
+def _row(sizes, name, overrides, key=None, retry=False):
     manifest = state_values(sizes, overrides)
     current = {s["param"]: s["value"] for s in sizes}
-    return {
+    varied = sorted(p for p in overrides if abs(manifest[p] - current[p]) > _SAME)
+    row = {
         "name": name[:MAX_NAME_CHARS],
         "key": "probe: " + (key or name),
         "values": {s["param"]: display_from_manifest(manifest[s["param"]], s["unit"]) for s in sizes},
         "step": False,
         "state": manifest,
-        "varied": sorted(p for p in overrides if abs(manifest[p] - current[p]) > _SAME),
+        "varied": varied,
     }
+    row["label"] = _label(sizes, manifest, varied, retry) or row["name"]
+    return row
 
 
-def _others(size):
-    """The ends of the size's range that differ from its current value."""
-    return [end for end in (size["min"], size["max"]) if abs(end - size["value"]) > _SAME]
+def _near_values(size):
+    """`(low, high)`: the value `NEAR_SHARE` of itself below and above, inside the range. A value of zero moves by that
+    share of the way to the range ends. A count is a whole number and at least one step from the value. A side that
+    cannot move off the value is None."""
+    value, lo, hi = size["value"], size["min"], size["max"]
+    step = NEAR_SHARE * abs(value)
+    sides = [value - step, value + step] if step > _SAME else [value + NEAR_SHARE * (lo - value),
+                                                                 value + NEAR_SHARE * (hi - value)]
+    out = []
+    for number, sign in zip(sides, (-1, 1)):
+        if size.get("kind") == "count":
+            number = float(round(number))
+            if abs(number - value) <= _SAME:
+                number = value + sign
+        number = min(max(number, lo), hi)
+        out.append(number if abs(number - value) > _SAME else None)
+    return tuple(out)
+
+
+def _far_ends(size, near):
+    """The ends of the size's range that differ from its value and from the near values."""
+    return [end for end in (size["min"], size["max"])
+            if abs(end - size["value"]) > _SAME and all(n is None or abs(end - n) > _SAME for n in near)]
+
+
+def _tried_sizes(sizes, moved, extra):
+    """The sizes that get rows: the ones that move a sketch or a measured reference, then those tried on a guess."""
+    moved_sizes = [s for s in sizes if s["param"] in moved]
+    return moved_sizes + [s for s in sizes if s["param"] in extra and s["param"] not in moved]
 
 
 def probe_rows(sizes, moved, limit=MAX_PROBE_ROWS, extra=()):
-    """The states to try, as `(rows, untried)`.
+    """The first states to try, as `(rows, untried)`: the near rows, then the near pair rows (steps 1 and 2 of the
+    module docstring).
 
-    sizes: the kept sizes, with the range ends to try. moved: the params that move covered sketch values. A moved
-    size gets a row at each range end that differs from its current value; with two or more moved sizes, one row
-    puts all kept sizes at their minimum and one at their maximum. A row has no STEP (`"step": False`); `state` holds
-    the manifest values, `varied` the params that differ. `untried` lists the moved params left without rows by the
-    row limit. `extra` are params tried on a guess (`extra_sizes`): their rows come after the moved ones, and one
-    left without rows is not listed in `untried`.
+    sizes: the kept sizes. moved: the params that move covered sketch values. A row has no STEP (`"step": False`);
+    `state` holds the manifest values, `varied` the params that differ, `label` the progress line. `untried` lists
+    the moved params left without near rows by the row limit. `extra` are params tried on a guess (`extra_sizes`):
+    their rows follow the moved ones, and one left without rows is not listed in `untried`.
     """
     rows, untried = [], []
-    moved_sizes = [s for s in sizes if s["param"] in moved]
-    guessed = [s for s in sizes if s["param"] in extra and s["param"] not in moved]
-    for size in moved_sizes + guessed:
-        wanted = _others(size)
+    tried = _tried_sizes(sizes, moved, extra)
+    near = {s["param"]: _near_values(s) for s in tried}
+    for size in tried:
+        wanted = [(label, v) for label, v in zip(("near min", "near max"), near[size["param"]]) if v is not None]
         if len(rows) + len(wanted) > limit:
             if size["param"] in moved:
                 untried.append(size["param"])
+            continue
+        for label, value in wanted:
+            rows.append(_row(sizes, "%s (%s)" % (size["size"][:MAX_NAME_CHARS - 11], label), {size["param"]: value},
+                             "%s (%s)" % (size["param"], label)))
+    if len(tried) >= 2 and len(rows) + 2 <= limit:
+        for label, side in (("all lower", 0), ("all higher", 1)):
+            overrides = {s["param"]: near[s["param"]][side] for s in tried if near[s["param"]][side] is not None}
+            if len(overrides) >= 2:
+                rows.append(_row(sizes, label, overrides, "all near %d" % side))
+    return rows, untried
+
+
+def far_rows(sizes, moved, room, extra=()):
+    """The far rows, then the far pair rows (steps 3 and 4 of the module docstring), at most `room` of them: every
+    tried size at the range ends that differ from its value and from its near values, so the measured span grows.
+    Sizes and arguments as in `probe_rows`; the export asks for these after the near rows and their nearer tries."""
+    rows = []
+    tried = _tried_sizes(sizes, moved, extra)
+    for size in tried:
+        wanted = _far_ends(size, _near_values(size))
+        if len(rows) + len(wanted) > room:
             continue
         for end in wanted:
             label = "min" if end == size["min"] else "max"
             rows.append(_row(sizes, "%s (%s)" % (size["size"][:MAX_NAME_CHARS - 6], label), {size["param"]: end},
                              "%s (%s)" % (size["param"], label)))
-    if len(moved_sizes) + len(guessed) >= 2 and len(rows) + 2 <= limit:
+    if len(tried) >= 2 and rows and len(rows) + 2 <= room:
         for label, key in (("all min", "min"), ("all max", "max")):
             rows.append(_row(sizes, label, {s["param"]: s[key] for s in sizes}))
-    return rows, untried
+    return rows
 
 
 def _tried_alone(states, name, value):
@@ -386,7 +470,8 @@ def nearer_rows(sizes, states, moved=(), limit=MAX_NEARER_ROWS):
             if len(rows) >= limit:
                 return rows
             name = "%s (%s, nearer)" % (size["size"][:MAX_NAME_CHARS - 16], label)
-            rows.append(_row(sizes, name, {size["param"]: value}, "%s (%s %r)" % (size["param"], label, value)))
+            rows.append(_row(sizes, name, {size["param"]: value}, "%s (%s %r)" % (size["param"], label, value),
+                             retry=label != "check"))
     return rows
 
 
@@ -442,6 +527,7 @@ def discovery_rows(candidates, room, limit=MAX_DISCOVERY):
     for candidate in candidates[:max(0, min(limit, room))]:
         row = _row([candidate], "%s (try)" % candidate["size"][:MAX_NAME_CHARS - 6],
                    {candidate["param"]: candidate["end"]}, "try %s" % candidate["param"])
+        row["label"] = "checking if %s changes this part" % candidate["param"]
         rows.append(row)
     return rows
 

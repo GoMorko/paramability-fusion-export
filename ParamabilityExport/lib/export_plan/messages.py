@@ -5,6 +5,16 @@ from .part_names import parts_label
 MAX_NOTE = 200
 MAX_LISTED_FIXED = 5
 
+# The progress window of the sketch tries: a first line that stays and a line that changes with every try.
+TRY_VERB = "Trying"
+TRY_INTRO = ("Measuring how your sketches follow each size. Fusion rebuilds the design for every try; all values go "
+             "back at the end.")
+
+
+def try_line(index, total, label):
+    """The changing line of the tries window: "Try 5 of 31: HolderWidth at 32 mm"."""
+    return "Try %d of %d: %s" % (index, total, label)
+
 
 def _count(n, one, many):
     return "%d %s" % (n, one if n == 1 else many)

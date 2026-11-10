@@ -98,12 +98,17 @@ the same at the current values. The result window lists these loose sizes.
 A size can also move a sketch: a rectangle width, a hole position, or a plane that a sketch sits on. The add-in then
 sets the size to other values, lets Fusion rebuild, and reads the sketch each time. From these
 readings it writes the sketch value as a formula of your parameters, such as `0.5 * FilterBox_width_mm`, so the
-sketch follows the size in Paramability. This adds about one rebuild per size that moves a sketch, plus two. The
-progress window says "Trying size ..." for these steps, and Cancel works there too. A try that Fusion cannot build is
-dropped; no size is fixed for it. The add-in then tries that size nearer to its value now (half way, then a quarter,
-then a tenth of the way to the end of its range; at most 24 such tries per export). When a nearer try builds, the
-size follows between the values that built, and the size says "it was followed between A and B". A size that did not
-rebuild at any value tried is not a size, and the reason names the values and the step Fusion stopped at.
+sketch follows the size in Paramability. Each size that moves a sketch is first tried a quarter below and a quarter
+above its value (inside its range), then, while tries are left, at the ends of its range. A size that only feeds step
+values (an extrude distance, a fillet radius, a pattern count) needs no try: its formula is exact. The progress window
+explains what happens and shows the try ("Try 5 of 31: HolderWidth at 32 mm"), and Cancel works there too. To save
+time, Fusion rebuilds only the timeline up to the last step the part needs while the tries run (the marker moves
+there, and goes back when they end; `report.json` says how many items each try rebuilt, `probe.timeline`). A try that
+Fusion cannot build is dropped; no size is fixed for it. The add-in then tries that size nearer to its value now (half
+way, then a quarter, then a tenth of the way to the end of its range; at most 24 such tries per export). When a nearer
+try builds, the size follows between the values that built, and the size says "it was followed between A and B". A
+size that did not rebuild at any value tried is not a size, and the reason names the values and the step Fusion
+stopped at.
 
 A point can also move along a curve: the end of a leg that turns with an angle, or a corner set back by a wall along
 half the angle. The add-in then looks for a formula with the angle's sine, cosine, tangent or cotangent (of the angle

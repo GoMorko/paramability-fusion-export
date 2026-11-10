@@ -42,6 +42,7 @@ class Cover(Fusion):
 
 def run(fusion, probe, sizes):
     rows = probe.probe_rows(sizes)
+    rows += probe.far_rows(sizes, plan.MAX_PROBE_ROWS - len(rows))
     reads = []
     job = RowExport(fusion.store, UNITS, lambda path: reads.append(probe.read_now()))
     results = job.run(rows, "", lambda *a: True, tolerate_build_errors=True)

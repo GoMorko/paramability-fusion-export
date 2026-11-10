@@ -76,6 +76,13 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(on["origin"], [100.0, 50.0, 0.0])
         self.assertEqual(report["capture"]["target"]["placement"]["path"], "Tray:1")
 
+    def test_sketch_graphs_pass_the_capture_check_and_reach_report_json(self):
+        capture = load_capture("component_moved")
+        capture["sketch_graphs"] = [{"sketch": "Sketch1", "token": "t", "points": [], "curves": []}]
+        manifest, files, report = self.plan(capture)
+        self.assertEqual(manifest["kind"], "recipe")
+        self.assertEqual(json.loads(files["report.json"])["capture"]["sketch_graphs"], capture["sketch_graphs"])
+
     def test_a_part_used_several_times_says_which_copy_the_file_holds(self):
         capture = load_capture("component_moved")
         capture["target"]["placement"]["uses"] = 3

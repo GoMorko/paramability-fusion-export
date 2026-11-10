@@ -21,7 +21,9 @@ from ..params.listing import list_parameters
 from ..probe.plan import MAX_PROBE_ROWS, NEARER_STEPS
 from ..sketch_values.motion import OPTIMISTIC
 from . import health as health_module
+from . import messages
 from .body_scope import body_links, scope_inputs
+from .marker_roll import MarkerRoll
 from .probe_flow import SizeProbe, covers_a_sketch, extra_size_params, kept_size_names
 from .recipe_export import free_sizes, plan_single_export, translate_capture
 from ..design_edit.restore import restore_parameters
@@ -99,6 +101,10 @@ def run_pipeline(port, request, tmp):
     return _Pipeline(port, request, tmp).run()
 
 
+class MarkerNotHeld(Exception):
+    """A probe read was asked for while the timeline marker sat before the position the tries need."""
+
+
 class ProbeRun:
     """Runs the probe's rows in one job: one baseline, and the parameters put back after every row. The rows only
     recompute (no STEP). It keeps the probe state read at every row that built, by row key, and `rows` lists
@@ -116,6 +122,14 @@ class ProbeRun:
         self._previous = None  # key of the row run last
         self.job = RowExport(port.store, port.units, self._export, self._before_row)
 
+    def _read_now(self):
+        """The probe state of the design now. Raises when the timeline marker is not where the tries keep it: a read
+        before it would miss items the sketches need, so the row counts as not read."""
+        holds = getattr(self.port.store, "marker_holds", None)
+        if holds is not None and not holds():
+            raise MarkerNotHeld("The timeline marker was not where the tries keep it.")
+        return self.probe.read_now()
+
     def _before_row(self, row):
         """`RowExport`'s hook once the parameters are back: read the design when the row before did not build or
         read a followed sketch on another outline."""
@@ -127,7 +141,7 @@ class ProbeRun:
         if read is not None and not self.probe.off_outline(read):
             return
         try:
-            self.starts[key] = self.probe.read_now()
+            self.starts[key] = self._read_now()
         except ExportCancelled:
             raise
         except Exception as exc:
@@ -139,7 +153,7 @@ class ProbeRun:
         key = self.job.current_key
         if self.read_failure is None:
             try:
-                self.reads[key] = self.probe.read_now()
+                self.reads[key] = self._read_now()
             except ExportCancelled:
                 raise
             except Exception as exc:
@@ -148,8 +162,13 @@ class ProbeRun:
 
     def try_rows(self, rows):
         """Run the probe's rows. Returns their results."""
-        with self.port.progress("Trying") as progress:
-            results = self.job.run(rows, self.tmp, progress.step, tolerate_build_errors=True)
+        done = len(self.rows)
+        with self.port.progress(messages.TRY_VERB) as progress:
+            def step(index, total, label):
+                # The window counts the tries of the whole export, not of this batch.
+                return progress.step(done + index, done + total, label)
+
+            results = self.job.run(rows, self.tmp, step, tolerate_build_errors=True)
         self.rows.extend(zip(rows, results))
         return results
 
@@ -171,17 +190,26 @@ class ProbeRun:
             raise self.read_failure
         self.probe.add_states(self.probe_states(done))
 
-    def measure(self, rows, sizes):
-        """The measured rows, then, while room is left, rows nearer to the value now for the sizes whose rows did not
-        build (`SizeProbe.nearer_rows`, one step per batch), then the rows that check the other sizes of a value that
-        one size moves along a curve (`SizeProbe.check_rows`)."""
-        if rows:
-            self.run_rows(rows)
+    def _retry(self, sizes):
+        """Rows nearer to the value for the sizes whose rows did not build (`SizeProbe.nearer_rows`), one step per
+        batch, while rows and steps are left."""
         for _ in range(len(NEARER_STEPS) + 1):
             nearer = self.probe.nearer_rows(sizes, plan_rows_left(self.rows))
             if not nearer:
                 break
             self.run_rows(nearer)
+
+    def measure(self, rows, sizes):
+        """The near rows, rows nearer still for the sizes whose rows did not build, then the far range ends while
+        rows are left (and nearer rows for those that did not build), then the rows that check the other sizes of a
+        value that one size moves along a curve (`SizeProbe.check_rows`)."""
+        if rows:
+            self.run_rows(rows)
+        self._retry(sizes)
+        far = self.probe.far_rows(sizes, plan_rows_left(self.rows))
+        if far:
+            self.run_rows(far)
+            self._retry(sizes)
         check = self.probe.check_rows(sizes, plan_rows_left(self.rows))
         if check:
             self.run_rows(check)
@@ -189,7 +217,7 @@ class ProbeRun:
     def discover(self, tries):
         """Read the design once the parameters are back, then run the discovery rows in the room the other rows left
         and keep what they found. Returns the parameters that changed the part."""
-        self.probe.set_discovery_base(self.probe.read_now())
+        self.probe.set_discovery_base(self._read_now())
         found = self.probe.discovery_rows(list(tries), plan_rows_left(self.rows))
         if not found:
             return []
@@ -209,6 +237,7 @@ class _Pipeline:
         self.unrestored = []
         self.table = None
         self.probe = None
+        self.roll = None
         self.probe_status = health_module.NOT_NEEDED
         self.probe_error = ""
         self.motion = None
@@ -224,8 +253,14 @@ class _Pipeline:
             return result
         finally:
             failed = self._restore()
+            self._end_roll()
             if not done and failed:
                 self.port.warn_unrestored(failed)
+
+    def _end_roll(self):
+        """Put the timeline marker back where the export found it (a no-op when it was not moved)."""
+        if self.roll is not None:
+            self.roll.end()
 
     def _restore(self):
         """Put every parameter back to its saved expression. Returns the names that would not go back, and keeps
@@ -249,6 +284,7 @@ class _Pipeline:
 
         self._restore()
         gap = self._restore_gap()
+        self._end_roll()
         probe_report = self._close_probe()
         health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error,
                                            self._unchecked(), self.motion.flipped if self.motion is not None else ())
@@ -278,6 +314,9 @@ class _Pipeline:
 
         self.probe = self._start_probe(capture)
         if self.probe is not None:
+            self.roll = MarkerRoll(self.port.store, self.port.log)
+            probe = self.probe
+            self.roll.begin([capture], lambda: probe.matches_start(probe.read_now()))
             tries = discovery_sizes(self.table, self.request.parameters, capture)
             found = self._measure(ProbeRun(self.port, self.tmp, self.probe), sizes, extra, tries)
             if found is not None:
@@ -369,4 +408,7 @@ class _Pipeline:
         """The probe's record for `report.json`, or None when it did not run or failed."""
         if self.probe is None or self.probe_status != health_module.MEASURED:
             return None
-        return self.probe.report()
+        report = self.probe.report()
+        if self.roll is not None and self.roll.record is not None:
+            report["timeline"] = self.roll.record
+        return report

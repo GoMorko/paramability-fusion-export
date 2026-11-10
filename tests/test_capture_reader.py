@@ -1,6 +1,7 @@
 import json
 import math
 import unittest
+from unittest import mock
 
 from tests import context  # noqa: F401
 from lib.fusion_reader import read_sketch
@@ -160,6 +161,16 @@ class WalkTest(unittest.TestCase):
         self.assertEqual(c["targets"], [c["target"]])
         self.assertEqual([i["type"] for i in c["items"]], ["Sketch", "ExtrudeFeature"])
         self.assertEqual(json.loads(json.dumps(c)), c)
+
+    def test_the_capture_carries_the_sketch_graphs_and_survives_a_graph_read_that_raises(self):
+        self.assertEqual(self.capture["sketch_graphs"], [])
+        read = lambda: read_capture(self.design, self.target, fusion="", name="", up_axis="z")  # noqa: E731
+        with mock.patch("lib.fusion_reader.capture.sketch_graphs", return_value=[{"sketch": "Sketch1"}]):
+            self.assertEqual(read()["sketch_graphs"], [{"sketch": "Sketch1"}])
+        with mock.patch("lib.fusion_reader.capture.sketch_graphs", side_effect=RuntimeError("no")):
+            capture = read()
+        self.assertEqual(capture["sketch_graphs"], [])
+        self.assertEqual([i["type"] for i in capture["items"]], ["Sketch", "ExtrudeFeature"])
 
     def test_item_fields(self):
         sketch, ext = self.capture["items"]

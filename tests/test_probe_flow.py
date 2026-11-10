@@ -9,6 +9,7 @@ from tests.test_probe_motion import CAPTURE, MODEL, PARAMS, TICKED, W, read_at
 
 from lib.export_plan.probe_flow import SizeProbe, covers_a_sketch, kept_size_names
 from lib.design_edit.runner import RowExport
+from lib.probe import plan
 from lib.sketch_values import coverage
 from lib.sketch_values.motion import Motion
 from lib.translator.sizes import sketch_answer, sketch_sizes
@@ -44,6 +45,7 @@ def states(values, results, reads):
 def run(fusion, probe, sizes):
     """The probe's rows as the export runs them. Returns (rows, results)."""
     rows = probe.probe_rows(sizes)
+    rows += probe.far_rows(sizes, plan.MAX_PROBE_ROWS - len(rows))
     reads = []
     job = RowExport(fusion.store, UNITS, lambda path: reads.append(probe.read_now()))
     results = job.run(rows, "", lambda *a: True, tolerate_build_errors=True)
@@ -86,7 +88,9 @@ class SizeProbeTest(unittest.TestCase):
         probe = self.start()
         sizes = [s for s in self.sizes if s["param"] == "off"]
         rows = probe.probe_rows(sizes)
-        self.assertEqual([r["name"] for r in rows], ["off (min)", "off (max)"])
+        self.assertEqual([r["name"] for r in rows], ["off (near min)", "off (near max)"])
+        self.assertEqual([r["name"] for r in probe.far_rows(sizes, 10)], ["off (min)", "off (max)"])
+        self.assertEqual(probe.far_rows(sizes, 10), [])
 
     def test_a_size_left_without_rows_is_loose_with_its_reason(self):
         probe = self.start()
@@ -215,6 +219,46 @@ class StartReadTest(unittest.TestCase):
                                                                                    (False, True)])
         self.assertEqual(probe.states[2]["start"], read_at())
         self.assertIn("start", probe.report()["states"][2])
+
+
+class ProgressTextTest(unittest.TestCase):
+    """The window counts the tries of the whole export and shows the row's own line."""
+
+    class Port(_Port):
+        def __init__(self, fusion):
+            super().__init__(fusion)
+            self.shown = []
+
+        def progress(self, verb):
+            import contextlib
+            outer = self
+            self.verb = verb
+
+            class Step:
+                @staticmethod
+                def step(index, total, label):
+                    outer.shown.append((index, total, label))
+                    return True
+
+            return contextlib.nullcontext(Step())
+
+    def test_two_batches_are_numbered_as_one_run_and_labelled_with_the_value_tried(self):
+        from lib.export_plan import messages
+        from lib.export_plan.pipeline import ProbeRun
+        fusion = Fusion()
+        tbl = table(PARAMS, TICKED, MODEL)
+        probe = SizeProbe.start(CAPTURE, tbl, fusion.read)
+        port = self.Port(fusion)
+        sizes = [s for s in [size(tbl, n, UNITS[n]) for n in TICKED] if s["param"] in ("off", "height")]
+        rows, _ = plan.probe_rows(sizes, {"off", "height"})
+        run = ProbeRun(port, "", probe)
+        run.run_rows(rows[:2])
+        run.run_rows(rows[2:4])
+        self.assertEqual(port.verb, messages.TRY_VERB)
+        self.assertEqual([(i, n) for i, n, _ in port.shown], [(1, 2), (2, 2), (3, 4), (4, 4)])
+        self.assertEqual([label for _, _, label in port.shown],
+                         ["off at 3.75 mm", "off at 6.25 mm", "height at 15 mm", "height at 25 mm"])
+        self.assertEqual(messages.try_line(5, 31, "HolderWidth at 32 mm"), "Try 5 of 31: HolderWidth at 32 mm")
 
 
 class RowWithoutStepTest(unittest.TestCase):

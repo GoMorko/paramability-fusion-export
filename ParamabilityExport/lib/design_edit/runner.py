@@ -49,7 +49,8 @@ class RowExport:
         self.restore_failures = list(dict.fromkeys(self.restore_failures + failed))
 
     def run(self, rows, tmpdir, progress, tolerate_build_errors=False):
-        """Return [{'name', 'values', 'step_file'}]. progress(index, total, name) returns False to cancel.
+        """Return [{'name', 'values', 'step_file'}]. progress(index, total, text) returns False to cancel; `text` is
+        the row's `label` (what the person reads) or its name.
 
         With tolerate_build_errors a row Fusion cannot build gives {'name', 'values': None, 'step_file': None,
         'error': sentence, 'detail': why} and the run goes on (`why` is RowBuildError.detail). The next row must
@@ -64,7 +65,7 @@ class RowExport:
             results = []
             count = len(rows)
             for index, row in enumerate(rows, start=1):
-                if not progress(index, count, row["name"]):
+                if not progress(index, count, row.get("label") or row["name"]):
                     raise ExportCancelled()
                 if index > 1:
                     self._back_to_current()

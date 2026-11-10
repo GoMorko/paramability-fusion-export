@@ -23,6 +23,7 @@ from ..design_edit.restore import restore_parameters
 from ..design_edit.runner import ExportCancelled
 from . import health as health_module
 from .body_scope import body_links, scope_inputs
+from .marker_roll import MarkerRoll
 from .part_names import tagged, unique_names
 from .pipeline import ProbeRun
 from .probe_flow import ProbeGroup, SizeProbe, covers_a_sketch, extra_size_params, kept_size_names
@@ -92,6 +93,7 @@ class _PartsPipeline:
         self.table = None
         self.part_links = []  # the geometry links of each part's body, by part index
         self.group = None
+        self.roll = None
         self.probed = []  # part indexes that have a probe, in the group's order
         self.probe_status = health_module.NOT_NEEDED
         self.probe_error = ""
@@ -108,8 +110,14 @@ class _PartsPipeline:
             return result
         finally:
             failed = self._restore()
+            self._end_roll()
             if not done and failed:
                 self.port.warn_unrestored(failed)
+
+    def _end_roll(self):
+        """Put the timeline marker back where the export found it (a no-op when it was not moved)."""
+        if self.roll is not None:
+            self.roll.end()
 
     def _restore(self):
         """Put every parameter back to its saved expression. Returns the names that would not go back and keeps them for
@@ -132,7 +140,11 @@ class _PartsPipeline:
 
         self._restore()
         gap = self._restore_gap()
+        self._end_roll()
         reports = self.group.reports() if self.group is not None and self._measured() else []
+        if self.roll is not None and self.roll.record is not None:
+            for report in reports:
+                report["timeline"] = self.roll.record
         probe_of = dict(zip(self.probed, reports))
         unchecked = self.group.restore_unchecked if self.group is not None else []
         flipped = ["%s (%s)" % (name, self.names[i]) for i, motion in self.motions.items() if motion is not None
@@ -278,6 +290,8 @@ class _PartsPipeline:
         the whole export. A failure other than a cancel leaves every part without a motion and is noted for the person.
         The parameters are put back before the last read."""
         group = self.group
+        self.roll = MarkerRoll(self.port.store, self.port.log)
+        self.roll.begin([self.captures[i] for i in self.probed], lambda: group.matches_start(group.read_now()))
         run = ProbeRun(self.port, self.tmp, group)
         tries = self._tries()
         try:

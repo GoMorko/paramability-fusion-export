@@ -7,6 +7,9 @@ note the Fusion version and system.
 
 What 0.6.0 to 0.7.2 added, and what this version adds, in this order. Each id is described in the section named.
 
+- [ ] D1 and D5 to D13, the sketch graph in the capture, the marker held early during the tries, the new first tries
+      near the value, the progress window text and sketch dimensions in `dependents`: section 12 (the calls are under
+      "Sketch graph, marker roll and progress window" in "Fusion calls to watch").
 - [ ] K18 to K21, a sketch left on its other solution after a try that does not rebuild, a projected curve that
       Fusion names again, slot ends rounded by half the slot width, and rounds and chamfers on pattern copies that
       follow the count: section 9.
@@ -698,6 +701,52 @@ The calls behind these tests are listed under "Capture reader calls to watch (sp
 - [ ] **X6 Text of another component.** A text in a sketch of another component used by an extrude of this one: the
       part saves as a fixed shape.
 
+## 12. Sketches read directly, the marker during the tries, progress text
+
+Send `report.json` after each of these; the capture and `probe` are what is checked.
+
+- [ ] **D1 Rectangle from the origin.** A sketch with a rectangle from the origin, a width and a height dimension, used
+      by an extrude. In `report.json`, `capture.sketch_graphs` has an entry for it: 4 lines, 4 corner points (two
+      lines share each corner point id in their `points`), 2 dimensions with their `param` names and `driving` true,
+      the geometric constraints (horizontal, vertical, coincident) and `fully_constrained` true. Nothing in the export
+      changes because of it.
+- [ ] **D5 Marker held early.** An export of a part in a design with many later steps that the part does not need (the
+      FilterBox, or a second component with a few extrudes after it). Note the export time. Watch the timeline while the
+      tries run: the marker sits just after the last step the part needs and not at the end. After the export the marker
+      is back where it was, the timeline is unchanged and Undo shows no new entries. In `report.json`, `probe.timeline`
+      is `{ rolled: true, items: N, of: M }` with N below M. A design where the part needs every step shows
+      `rolled: false` with a reason, and the marker never moves.
+- [ ] **D6 Progress window.** While the tries run the window shows the explanation ("Measuring how your sketches follow
+      each size. Fusion rebuilds the design for every try; all values go back at the end.") and, under it, a line
+      such as "Try 5 of 31: HolderWidth at 32 mm". The value has the unit you typed (inches in an inch design, degrees
+      for an angle). A try on several sizes says "several sizes together"; a discovery try says "checking if X changes
+      this part"; a try nearer after one that did not rebuild ends with "The last value did not rebuild, so this one is
+      nearer." If Fusion shows only one line, note which one; the explanation then moves to the window title.
+- [ ] **D7 Rectangle with no position dimension.** The rectangle floats (no dimension from the origin). Its entry in
+      `sketch_graphs` has `fully_constrained` false and its points and lines `free` true. The export gives the same
+      part as before.
+- [ ] **D8 Driven dimension.** A reference (driven) dimension in a sketch. It is listed with `driving` false and its
+      value; the export is unchanged.
+- [ ] **D9 Design in inches.** A design whose default unit is inches. `sketch_graphs` lengths are mm (a 1 in dimension
+      reads 25.4) and angles are degrees; `xy` of points is in mm.
+- [ ] **D10 Reads to check.** In one sketch graph, check: `xy` of a point is in the sketch's own frame (the same frame as
+      the profile curves of the extrude); two connected lines share one sketch point id; exactly one point has
+      `origin: true` and it is the sketch origin; `fixed` of the origin; an angular dimension gives its `value` in
+      degrees (note which of the four angles it is); a linear dimension's `orientation` reads horizontal, vertical or
+      aligned the way it is drawn.
+- [ ] **D11 Sketch dimension in `dependents`.** In `report.json`, a user parameter that sets a sketch dimension (the pipe
+      diameter of the K10 design) has a `dependents` record with `kind: "sketchDimension"`, the sketch name, its token
+      and the component, and not `kind: "other"` with the sketch name in `feature`. The parameter of a sketch text height
+      reads `kind: "sketchText"`. The offer text of a linked parameter (K10) is the same as before.
+- [ ] **D12 First tries near the value.** In `probe.states` the first single size tries are about a quarter below and
+      above the current value (inside the range), the far range ends follow only after them (and the retries of near
+      tries that did not build), and a size that only feeds an extrude distance or a fillet radius has no try. Compare
+      the number of tries and the export time with the last version.
+- [ ] **D13 Cancel and failure with the marker held.** Cancel during the tries on a design where D5 shows `rolled: true`:
+      the marker is back where it was, the parameters are back, no entries were added to Undo and the later steps have
+      their normal look (they are rebuilt once at the end). Then pull the marker back by hand before exporting and check
+      the same.
+
 ## Thin extrudes
 
 A thin extrude of one closed outline is copied as an extrude with a wall. Send `report.json` from any thin extrude
@@ -907,6 +956,36 @@ These were written from the API reference and never run:
   extra read after a restore does not move the timeline marker, that `health.sketch_drift` stays false on a design
   that returns to its start, and that a restore the add-in cannot finish (a parameter locked by hand during the
   export) shows "These parameters could not be set back" in the result window and in a message box.
+
+### Sketch graph, marker roll and progress window
+
+Written from the API reference and never run (sections: "Sketch graphs" in `docs/capture-format.md`, hand tests D1 and
+D5 to D13). Every read is guarded: a member that raises is listed in the record's `unread` or leaves the old behaviour.
+
+- Sketch graph (`lib/fusion_reader/read_constraints.py`): `Sketch.sketchPoints`, `sketchCurves`, `sketchDimensions`,
+  `geometricConstraints`, `isFullyConstrained`, `originPoint`; `SketchEntity.isFixed`, `isFullyConstrained`, `isLinked`,
+  `isReference`, `referencedEntity`, `entityToken`; `SketchPoint.geometry` (sketch space, cm); `SketchLine.startSketchPoint`,
+  `endSketchPoint`, `isCenterLine`; `SketchArc` and `SketchCircle.centerSketchPoint`, `radius`; `SketchCurve.isConstruction`;
+  `SketchDimension.parameter`, `value`, `isDriving`, `textPosition` and each dimension class's members (`entityOne`,
+  `entityTwo`, `lineOne`, `lineTwo`, `entity`, `circleOne`, `circleTwo`, ...); `SketchLinearDimension.orientation`; the
+  members of each geometric constraint class (`point`, `entity`, `pointOne`, `lineOne`, `curveOne`, `symmetryLine`,
+  `midPointCurve`, `parentCurves`, `childCurves`, ...); `OffsetConstraint.dimension` and
+  `SketchOffsetCurvesDimension.offsetConstraint`. Check that a collection item can be fetched by index, that the wrappers
+  of one entity compare equal with `same_entity`, that one sketch point is shared by connected lines and that the origin
+  point is the same object as the one in `sketchPoints`.
+- `Sketch.sketchDimensions` with `SketchDimension.parameter.name` and `Sketch.sketchTexts` with
+  `SketchText.heightParameter.name`, used to tell what a parameter made by a sketch is (`parameters.dependent_record`). The
+  premise is that `ModelParameter.createdBy` of a sketch dimension's parameter answers the Sketch, not the dimension; D11
+  shows which it is.
+- Marker held early (`fusion_reader/rows.py` `roll_marker`, `unroll_marker`; `export_plan/marker_roll.py`): setting
+  `Timeline.markerPosition` to a position before the end while parameters change; `Design.computeAll` then rebuilds only
+  the items before the marker and leaves the marker in place (the store sets it back after each recompute anyway); a
+  read of sketches, points, lines, references and the body box at that marker equals the read at the full marker (the
+  export checks this once and does not roll when it differs); moving the marker forward again and calling
+  `computeAll` builds the later items with the restored parameter values and leaves no entry in Undo.
+- Progress window (`fusion_ui/progress.py`): `ProgressDialog.message` with a line break (`\n`) shows two lines, and
+  `show` with the text "Try %v of %m" accepts the placeholders as "Size %v of %m" did. If it shows one line only, move
+  the explanation (`export_plan/messages.TRY_INTRO`) to the title passed to `show`.
 
 ### Several bodies in the picker
 

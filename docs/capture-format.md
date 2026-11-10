@@ -39,11 +39,15 @@ that lacks `capture`, `target` or `items`, with a `CaptureError`.
   "target": TARGET,
   "items": [ ITEM, ... ],
   "sketch_links": [ SKETCH LINK, ... ],
+  "sketch_graphs": [ SKETCH GRAPH, ... ],
   "marker": { "position": 48, "count": 120 }
 }
 ```
 
-`marker` says where the timeline marker was: `position` items sat before it, `count` is the length of the timeline.
+`sketch_graphs` (section 2, "Sketch graphs") is optional, is kept in `report.json` with the rest of the capture and
+nothing reads it yet: it holds the points, curves,
+dimensions and constraints of every sketch the target's steps use, so a later version can work out sketch values
+without trying sizes. `marker` says where the timeline marker was: `position` items sat before it, `count` is the length of the timeline.
 `items` holds only the items before the marker; the design is read as it is there. The translator does not read
 `marker` (captures without it read as before).
 
@@ -214,6 +218,11 @@ when the maker gives none (in a real design Fusion answered the root component t
 that cannot be read gives `{ name, kind: "other", component: "" }`. The model parameters of other components are not
 listed in `parameters.model`; these records are all the capture keeps of them.
 
+For a sketch dimension, `ModelParameter.createdBy` can answer the owning Sketch and not the dimension. A record whose
+maker is a Sketch is then `kind: "sketchDimension"` when one of the sketch's `sketchDimensions` has this parameter
+(`sketchText` when a `sketchTexts` height parameter does), with the sketch's name, token and component; a parameter the
+sketch does not own that way keeps `kind: "other"` and the sketch name in `feature`.
+
 Where a user parameter acts (`lib/params/geometry_links.py`, `acts`): the component of each dependent; for a sketch
 dimension, every item whose `sketch_inputs` names that sketch (by token, else by name in the same component) and that
 item's component; for a feature value, the item of that name in that component. A user parameter may reach the
@@ -243,6 +252,96 @@ uses a reference of another component, the user parameters that act on a compone
 candidates for discovery tries ("Probe states", section 5). A try also counts as moving the part when a measured
 reference moved.
 
+### Sketch graphs (`sketch_graphs`)
+
+For every sketch that a step of the target's component uses (the target's own sketches and sketches borrowed from
+another component), `lib/fusion_reader/read_constraints.py` records the sketch as plain data: its points and curves,
+what each dimension measures and what each geometric constraint ties together. It is read once, with the marker back
+at its start position. Nothing is solved or evaluated: values are what Fusion gives directly. Lengths are in mm,
+angles in degrees, points in the sketch's own 2D frame (`SketchPoint.geometry`, the same frame as the profile
+curves). A borrowed sketch is read through its native object, so its numbers are in its own component's frame.
+
+```json
+{ "sketch": "Sketch5", "token": "...", "borrowed": true,
+  "component": { "token": "...", "name": "Lid" },
+  "fully_constrained": true, "origin": 3, "cut": "",
+  "points": [ { "id": 0, "xy": [12.5, 0.0], "origin": false, "fixed": false, "free": false, "linked": false,
+                "reference": null, "token": "..." } ],
+  "curves": [ { "id": 0, "kind": "line", "points": [3, 0], "center_line": false, "construction": false,
+                "fixed": false, "free": false, "linked": false, "reference": null, "token": "..." },
+              { "id": 1, "kind": "arc", "center": 4, "points": [2, 3], "radius": 5.0, "construction": false, "...": "..." },
+              { "id": 2, "kind": "circle", "center": 5, "radius": 3.0, "construction": true, "...": "..." } ],
+  "dimensions": [ { "id": 0, "type": "linear", "orientation": "horizontal",
+                    "on": [["point", 3], ["point", 0]], "param": "d16", "expression": "WallThickness",
+                    "reads": ["WallThickness"], "value": 3.0, "driving": true, "text": [10.0, -4.0],
+                    "token": "..." } ],
+  "constraints": [ { "id": 0, "type": "horizontal", "on": [["line", 0]], "token": "..." },
+                   { "id": 1, "type": "coincident", "on": [["point", 3], ["line", 0]], "token": "..." },
+                   { "id": 2, "type": "other", "name": "adsk::fusion::FutureConstraint", "unknown": true,
+                     "on": [["curve", 7]], "token": "..." } ] }
+```
+
+- `borrowed` is present (true) only for a sketch that every record naming it marks `foreign`. `component` is the
+  sketch's component. A sketch that cannot be found or read is `{ sketch, token, error }`; at most 200 sketches are
+  read, the rest are `{ sketch, token, cut: "sketches" }`.
+- Ids are local to the record: `points[i].id == i`, `curves[i].id == i`. Entities are matched by object identity
+  (`read_geometry.same_entity`), never by token text, because Fusion can give one entity several tokens. A token is
+  kept for finding the entity again later.
+- `fully_constrained` is `Sketch.isFullyConstrained`. `origin` is the id of the sketch's origin point. If the
+  sketch's own point list does not hold it, it is added with `implicit: true`.
+- Per entity: `fixed` is `isFixed`; `free` is `not isFullyConstrained`; `linked` is `isLinked`; `construction` is
+  `SketchCurve.isConstruction`. `reference` is `null` for own geometry, else
+  `{ "source": "own" | "other" | "none", "component", "token" }` from `referencedEntity`: `own` is a source in the
+  target's component, `other` one in another component, `none` a reference with no source (not parametric).
+- Curve kinds: `line` (`points`: start, end; `center_line`), `arc` (`center`, `points`: start, end, counter clockwise;
+  `radius`), `circle` (`center`, `radius`), and for curves the reader does not tabulate `ellipse`, `elliptical_arc`,
+  `conic`, `spline` or `other` (with `name`, the class name); these carry no geometry beyond the common fields.
+- `on` is a list of entity refs, in the member order of the API. A ref is `["point", id]`, `["line", id]`,
+  `["arc", id]`, `["circle", id]` or `["curve", id]` (ids of `points` or `curves`), `["surface", "BRepFace" |
+  "ConstructionPlane"]` for a face or plane, `["other", "<class>"]` for anything else, or `null` when the member is
+  null or cannot be read. An entity a dimension or constraint names that the sketch's lists do not hold (for example
+  an axis line) is added to `points` or `curves` with `implicit: true`.
+- `dimensions[].type`, with the API class and members read into `on`:
+
+  | `type` | Class | `on` |
+  | --- | --- | --- |
+  | `linear` | `SketchLinearDimension` | `entityOne`, `entityTwo`; `orientation`: `aligned`, `horizontal`, `vertical` or `other` |
+  | `offset` | `SketchOffsetDimension` | `line`, `entityTwo` |
+  | `angular` | `SketchAngularDimension` | `lineOne`, `lineTwo` (value in degrees; which of the four angles it is has to be decided from the solved lines) |
+  | `diameter`, `radial` | `SketchDiameterDimension`, `SketchRadialDimension` | `entity` |
+  | `concentric_circles` | `SketchConcentricCircleDimension` | `circleOne`, `circleTwo` |
+  | `linear_diameter` | `SketchLinearDiameterDimension` | `line`, `entityTwo` |
+  | `tangent_distance` | `SketchTangentDistanceDimension` | `entityOne`, `circleOrArc` |
+  | `offset_curves` | `SketchOffsetCurvesDimension` | none; `offset_constraint` is the id of its offset constraint |
+  | `ellipse_major_radius`, `ellipse_minor_radius` | `SketchEllipse...RadiusDimension` | `ellipse` |
+  | `point_surface` | `SketchDistanceBetweenPointAndSurfaceDimension` | `point`, `surface` |
+  | `line_surface` | `SketchDistanceBetweenLineAndPlanarSurfaceDimension` | `line`, `planarSurface` |
+  | `other` | any other class | every entity named by a member of the common names; `name` is `objectType`, `unknown: true`, `value: null` |
+
+  Every dimension also has `param` (the model parameter name, or null), `expression`, `reads` (the parameters the
+  expression reads, directly or through others), `value` (mm, or degrees for `angular`; null when unreadable),
+  `driving` (`isDriving`: a driven dimension is a measurement, not an input), `text` (`textPosition`, x and y in mm)
+  and `token`.
+- `constraints[].type`: `coincident` (`point`, `entity`), `horizontal`, `vertical` (`line`), `horizontal_points`,
+  `vertical_points` (`pointOne`, `pointTwo`), `parallel`, `collinear` (`lineOne`, `lineTwo`), `perpendicular` (`line`,
+  `curve`; the retired `lineOne`, `lineTwo` are tried when the new ones fail), `equal`, `tangent`, `smooth`
+  (`curveOne`, `curveTwo`), `concentric` (`entityOne`, `entityTwo`), `midpoint` (`point`, `midPointCurve`), `symmetry`
+  (`entityOne`, `entityTwo`, `symmetryLine`), `coincident_surface` (`point`, `surface`), `line_on_surface` (`line`,
+  `planarSurface`). Constraints whose members are lists list every entity flat in `on`: `offset` (`parents`,
+  `children`, `distance` in mm, `topology_matched`, `dimension` = id of its dimension), `polygon` (centre first, then
+  the points), `rectangular_pattern` and `circular_pattern` (entities, created entities, direction entities or centre;
+  `suppressed`). Any other class, including `LineParallelToPlanarSurfaceConstraint` and
+  `PerpendicularToSurfaceConstraint`, is `{ "type": "other", "name": "<objectType>", "unknown": true, "on": [...] }`
+  with every entity a member of the common names holds.
+- A member that raises, or does not exist, never stops the read. It is listed in the record's `unread` (for a
+  sketch: the collections or `isFullyConstrained`), the value reads `null` and an entity place in `on` reads `null`.
+  A consumer must not use a dimension or constraint that has `unread`, `unknown` or a `null` in `on`; it keeps its
+  entities open instead of ignoring it. A collection item that cannot be fetched keeps its id as an unknown record
+  with `unread: ["item"]`.
+- Limits: a sketch with more than 2000 points and curves, more than 2000 dimensions or more than 2000 constraints is
+  `cut: "entities"`, `"dimensions"` or `"constraints"`, with empty lists; it must not be used.
+- The read costs no recompute and evaluates no geometry beyond `SketchPoint.geometry`.
+
 ## 3. Walk and marker
 
 `lib/fusion_reader/capture.py`, `read_capture(design, body) -> dict`:
@@ -259,7 +358,8 @@ reference moved.
    check it reads `end`; else `MarkerError`. After that, each `timeline.timelineGroups` entry that starts before
    `end` must be covered by the walk up to `end`; else `read_capture` raises `CaptureReadError` and the export lands
    as a fixed shape.
-5. The STEP file is written before the capture, with the marker at `end`. The sketch tries keep it there: the
+5. The STEP file is written before the capture, with the marker at `end`. The sketch tries keep it there, or at a
+   rolled position just after the last item they need (`lib/export_plan/marker_roll.py`, "Sketch values that follow sizes" in section 5): the
    parameter store puts the marker back after every recompute and counts only the items before it for health
    (`lib/fusion_reader/rows.py`), and the temporary copy of a component body deletes only what it added
    (`lib/design_edit/temp_copy.py`). `report.json` records `marker` (`position`, `count`).
@@ -1021,12 +1121,35 @@ keys `<item>/p<profile>/l<loop>/<field path>` (loop 0 is the outer one, then the
 
 Measured references of other components (below) have their own keys, `<item>/r/<slot>/...`, and their own list `refs`.
 
-The probe tries (`lib/probe/plan.py`, at most 64 rows): each ticked size that moves a covered sketch value or reaches
-a sketch dimension, a construction plane or, through another component, a sketch ("Geometry links" in section 2),
-at the ends of its range. Then up to 8 ticked sizes that nothing ties to a sketch (`MAX_EXTRA_SIZES`, in table order)
-while rows are left: the person ticked them, so a sketch may follow them in a way the capture cannot show. Such a size
-left without rows is not listed as untried. With two or more sizes tried, one row puts every size at its minimum and
-one at its maximum.
+The probe tries (`lib/probe/plan.py`, at most 64 rows), in this order:
+
+1. Near rows (`plan.probe_rows`): each ticked size that moves a covered sketch value or reaches a sketch dimension, a
+   construction plane or, through another component, a sketch ("Geometry links" in section 2), at 25 percent of its
+   value below and above (`NEAR_SHARE`), inside its range; a count moves by whole numbers, a value of zero by that
+   share of the way to the range ends. Then up to 8 ticked sizes that nothing ties to a sketch (`MAX_EXTRA_SIZES`, in
+   table order) while rows are left: the person ticked them, so a sketch may follow them in a way the capture cannot
+   show. Such a size left without rows is not listed as untried.
+2. With two or more sizes tried, one near row puts every tried size at its lower near value and one at its higher.
+3. The nearer rows below, for near rows that did not build.
+4. Far rows (`plan.far_rows`): the range ends that differ from the value and from the near values, so the measured span
+   grows; then, with two or more sizes tried, every size at its minimum and one at its maximum. Nearer rows follow
+   for the far rows that did not build.
+
+A size that only feeds step values (a free size that moves no covered sketch value and reaches no sketch dimension or
+reference) has no row: its formula is exact, and it is never reported as untried (only a moved size left without a
+near row by the cap is). Each row has a `label`, the line of the progress window: "HolderWidth at 32 mm" (the value in
+the parameter's own unit), "several sizes together", "checking if X changes this part" for a discovery row, or the
+label with "The last value did not rebuild, so this one is nearer." for a nearer row.
+
+While the rows run, the timeline marker waits just after the last item the part needs (`lib/export_plan/marker_roll.py`),
+so Fusion rebuilds fewer items per recompute. The items needed: any that may change the target, the sketches the steps
+use (matched by name and component), the last item of every other component a sketch link or measured reference
+depends on, the steps of tool bodies of other components, and joints, rigid groups and items of unknown types. sketch record without a name gives no roll; a reference without a component, or a link with an unsourced reference,
+keeps every other component. The marker is moved only after the first read (E0), and only stays when a read
+at the rolled marker gives the same sketches, points, lines, references and body box as E0. `report.json` keeps
+`probe.timeline`: `{ rolled, items, of, reason? }`, the items each try rebuilt out of the items before the person's
+marker, and why it did not move. A read while the marker sits before the rolled position counts as not read: the probe
+is not used. The marker and the later items are put back and rebuilt once when the tries end, also on cancel and error.
 
 A row that Fusion cannot build is tried again nearer to the value now (`plan.nearer_rows`, `NEARER_STEPS`): half way
 to that range end, then a quarter, then a tenth, one step per batch and per side, until a row on that side builds.
@@ -1281,7 +1404,8 @@ other values that changed nothing: the ticked parameters that are not sizes, fro
 `TranslateResult.dropped`; `used` is true when a step reads the parameter and the copy could not follow it). `loose` comes
 from the translator and from the probe. `checks` in the manifest is
 always empty. The report has a
-`probe` when a sketch could be followed (the rows only recompute and the parameters are restored), `marker` and
+`probe` when a sketch could be followed (the rows only recompute and the parameters are restored; its `timeline`
+says how many timeline items each try rebuilt, section 5), `marker` and
 `health`. `health.restore_unverified` is true when a followed sketch could not be compared with its first read after
 the parameters were put back; `health.unchecked` then names each such sketch and why ("reads another outline",
 "could not be read", "lies on a turned plane"), and the result window says so (`probe.restore_unchecked` too).

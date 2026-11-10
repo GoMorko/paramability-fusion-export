@@ -21,6 +21,7 @@ from . import helper_pass
 from . import read_geometry as geo
 from .parameters import list_model_parameters, list_user_parameters
 from .placement import occurrence_path, read_placement
+from .read_constraints import sketch_graphs
 from .read_links import sketch_inputs, sketch_links
 
 CAPTURE_VERSION = 3
@@ -333,6 +334,7 @@ def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_reade
     target = _target_record(ctx, final)
     ordered = [items[i] for i in sorted(items)]
     links = geo.safe(lambda: sketch_links(design, ctx, ordered), [])
+    graphs = geo.safe(lambda: sketch_graphs(design, ctx, ordered), [])
     app_fusion, app_name, app_up = _app_details() if None in (fusion, name, up_axis) else ("", "", "z")
     return {
         "capture": CAPTURE_VERSION,
@@ -345,5 +347,6 @@ def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_reade
         "target": target,
         "items": ordered,
         "sketch_links": links,
+        "sketch_graphs": graphs,
         "marker": {"position": end, "count": count},
     }
