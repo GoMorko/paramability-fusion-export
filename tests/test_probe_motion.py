@@ -165,6 +165,10 @@ class ProblemStateTests(unittest.TestCase):
         self.assertNotIsInstance(motion.get("6/p0/l0/radius"), Stuck)
         alone = self.motion(s3=flipped(off=10))
         self.assertEqual((alone.apart, alone.get("6/p0/l0/radius")), ([], Stuck(["off"], "shape", "Sketch2")))
+        # The same other outline at both ends of one size: the sketch does not follow that size there.
+        both = self.motion(s3=flipped(off=10), s7=flipped(off=2.5))
+        self.assertEqual(both.apart, [2, 6])
+        self.assertNotIsInstance(both.get("6/p0/l0/radius"), Stuck)
 
     def test_a_plane_that_turns_fixes_the_size_that_did_it(self):
         motion = self.motion(s8=state({"height": 10}, read_at(height=10, turned=True)))

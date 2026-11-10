@@ -11,6 +11,7 @@ from ..package.manifest import (
     MAX_FIXED, MAX_PART_NOTE, build_parts_manifest, build_recipe_manifest, build_step_only_manifest, part_recipe_path,
     part_step_path, validate_manifest)
 from ..package.text import clip
+from ..params.size_table import CONSTANT, DERIVED
 from ..translator import CaptureError, translate
 from ..translator.notes import (
     recipe_note, reader_failure_note, step_only_note, translate_failure_note, used_several_times_note)
@@ -97,7 +98,8 @@ def _not_followed_note(names):
 
 def link_outcomes(size_table, sizes):
     """What happened to each geometry link of the export (`size_table.links`): the link with `outcome` ("size",
-    "loose", "fixed", "dropped" or "not ticked") and the reason when there is one. `sizes` is the report's `sizes`
+    "loose", "fixed", "dropped", "formula" for a parameter worked out by a formula, which cannot be ticked, or
+    "not ticked") and the reason when there is one. `sizes` is the report's `sizes`
     record, or None when no recipe was written."""
     sizes = sizes or {}
     free = set(sizes.get("free") or [])
@@ -116,10 +118,25 @@ def link_outcomes(size_table, sizes):
             found = {"outcome": "size"}
         elif name in dropped:
             found = {"outcome": "dropped", "reason": dropped[name]}
+        elif _is_formula(size_table, name):
+            found = {"outcome": "formula", "reason": _formula_reason(size_table, name)}
         else:
             found = {"outcome": "not ticked" if name not in size_table.ticked else "dropped"}
         out.append({**link, **found})
     return out
+
+
+def _is_formula(size_table, name):
+    entry = size_table.entry(name)
+    return entry is not None and (entry.state == DERIVED or (entry.state == CONSTANT and bool(entry.formula)))
+
+
+def _formula_reason(size_table, name):
+    """Why a parameter worked out by a formula has no tick: it follows the parameters it reads."""
+    reads = list(size_table.entry(name).reads)
+    if not reads:
+        return "%s is a formula of parameters that are not sizes, so it keeps its value." % name
+    return clip("%s is a formula: it follows %s." % (name, ", ".join(reads)), MAX_PART_NOTE)
 
 
 def _uses(capture):

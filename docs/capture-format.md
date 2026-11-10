@@ -459,7 +459,8 @@ The translator fits the app's spline through points chosen from the samples (`li
 
 - `axis` from a `SketchLine` (`worldGeometry`), a `ConstructionAxis` (`geometry`, an `InfiniteLine3D`), a linear
   `BRepEdge` (`geometry`, a `Line3D`) or a cylindrical `BRepFace` (`geometry`, a `Cylinder`); else `{ "kind":
-  "other" }`. An axis from a sketch line also has `entity` (the line's token), `sketch_token` and `sketch` (the
+  "other", "type" }` with the entity type, plus `geometry` (the curve or surface type) for an edge or face, or `error`
+  when reading the revolve axis raised. The translator's refusal says which of these the axis is. An axis from a sketch line also has `entity` (the line's token), `sketch_token` and `sketch` (the
   sketch's token and name); one from a construction axis has `token`. Circular pattern axes are read the same way.
 - `extent`: `{ "kind": "angle", "angle_deg", "symmetric" }` (`AngleExtentDefinition.angle`, `isSymmetric`),
   `{ "kind": "twoSidesAngle", "angle_one_deg", "angle_two_deg" }`, `{ "kind": "other", "type" }`.
@@ -594,7 +595,11 @@ neither way, refuses an uneven chamfer.
   feature.
 - `distance_type`: `spacing` or `extent` (enum `PatternDistanceType`), `other` when unreadable. The translator then
   takes the kind whose grid holds every kept element.
-- `elements`: every `PatternElement` (`id`, `isSuppressed`, `transform` as a frame; the first is the identity).
+- `elements`: every `PatternElement` (`id`, `isSuppressed`, `transform` as a frame). The original is the element with
+  the identity frame; in a symmetric direction it is not the first one.
+- `symmetric_one`, `symmetric_two`: the copies spread to both sides of the original along that direction (false when
+  the flag cannot be read). In a symmetric direction an `extent` distance is the reach to each side, so the step is
+  `2 * distance / (count - 1)`; a `spacing` distance is the step as usual.
 - `direction_one_sketch`, `direction_two_sketch` (optional): `{ "sketch_token", "sketch" }` when that direction is a
   sketch line, so the sketch is known to feed a pattern.
 - `direction_one_place`, `direction_two_place` (optional): a direction taken from an axis, edge or face of another
@@ -610,6 +615,9 @@ neither way, refuses an uneven chamfer.
 ```json
 { "entity_type": "features", "sources": [4], "axis": AXIS, "quantity": 6, "total_angle_deg": 360, "symmetric": false, "elements": [...], "suppressed_ids": [] }
 ```
+
+`symmetric` (circular): the copies turn to both sides of the original. It matters for a part turn only; on a full
+circle the copies are the ordinary full circle.
 
 **MirrorFeature** (`inputEntities`, `mirrorPlane`, `isCombine`):
 
@@ -1007,8 +1015,26 @@ a sketch dimension, a construction plane or, through another component, a sketch
 at the ends of its range. Then up to 8 ticked sizes that nothing ties to a sketch (`MAX_EXTRA_SIZES`, in table order)
 while rows are left: the person ticked them, so a sketch may follow them in a way the capture cannot show. Such a size
 left without rows is not listed as untried. With two or more sizes tried, one row puts every size at its minimum and
-one at its maximum. A ticked size the probe set to other values that no formula reads at the end is dropped with
-"it was tried at other values, and it changes nothing in this part" (`used` false, `tried` true). Every state also
+one at its maximum.
+
+A row that Fusion cannot build is tried again nearer to the value now (`plan.nearer_rows`, `NEARER_STEPS`): half way
+to that range end, then a quarter, then a tenth, one step per batch and per side, until a row on that side builds.
+Sizes that no row built go first. A size that moved a sketch or a measured place with only one row that built, and
+nothing left to try, gets one more row half way to that value, so the fit has two readings. These rows are at most
+24 per export (`MAX_NEARER_ROWS`, each is a Fusion recompute) and stay inside the 64 row cap; the discovery rows get
+what is left. The range ends come first for every size, also for one that reaches the part only through another
+component: a far end that builds gives the widest span measured, and only a failed end costs the nearer rows. When
+a value moves along a curve with one size on its own (below), two more rows set every other size to the lowest and
+then the highest value it was measured at, the curved sizes at their value now (`plan.check_rows`), so the formula of
+the other sizes is checked by a state that changes several of them at once. A state that did not build keeps the
+first step that failed (`failed`). A ticked size the probe set to other values that no formula reads at the end is dropped with
+"it was tried at other values, and it changes nothing in this part" (`used` false, `tried` true), with "between A and
+B; beyond that it could not be tried" when the rows that built cover less than its range. A size that reaches a sketch
+or a measured place (`translator.sizes.probed_sizes`) and whose rows all failed to build was not measured: it is
+doubted up front with "the design does not rebuild in Fusion at A (step) or B (step), the nearest values tried, so it
+could not be measured" (loose when a formula reads it, else dropped with `used` true), never called unchanging. A
+free size measured over less than its range is loose with "it was followed between A and B; beyond that it could not
+be tried" (added to its other reason when there is one and it fits the note). Every state also
 reads the body's box (and volume when the state has it): a size whose state alone changed the box but moved no
 followed sketch or reference is kept in `Motion.body_moved` (`SizeProbe.finish`). The translator treats it as doubtful
 with "it changes this part in a way the copy does not follow": loose when a formula reads it, else dropped with
@@ -1016,11 +1042,17 @@ with "it changes this part in a way the copy does not follow": loose when a form
 
 Discovery tries come last, in the rows the cap leaves: up to 12 unticked plain parameters (`MAX_DISCOVERY`) from the
 discovery candidates of "Geometry links" (section 2), one row each with only that parameter at one end of its range
-(the upper end, the lower one when the upper is its value). They are not states of the motion: each read is only
-compared with the first read over the covered sketches, the followed references and the body's box and volume
-(`SizeProbe.discover`, moved past the fit tolerance, or an outline with other keys). They never become sizes in this
-export. `probe.discovery` in `report.json` lists `{ param, moved }` (`moved` null when the row did not build or could
-not be read); a candidate the cap or the row room left without a row is listed as `{ param, moved: null, tried: false,
+(the upper end, the lower one when the upper is its value). They are not states of the motion. Before them the
+design is read once more with the parameters back (`SizeProbe.set_discovery_base`), and each discovery read is
+compared with that read, not with the first one: a sketch Fusion left on another solution after the rows reads the
+same in both and is not a move. What reads differently from the first read at that point is kept in
+`probe.after_rows` (`{ changed, unread }`). The comparison covers the followed sketches as read (frame and curves
+within 1e-4 mm), hole points, axis lines, the followed references and the body's box and volume
+(`SizeProbe.differences`): `changed` and `unread` in a discovery entry name what read differently and what one of
+the two reads lacked; `moved` is true when something changed, false when the rest compared the same, null when
+nothing could be compared. A row that did not build (`failed` names the step) or gave no read has `moved: null`,
+`tried: false` and a `reason`, so it is never a move. They never become sizes in this
+export. `probe.discovery` in `report.json` lists `{ param, value, built, moved, changed, unread }` (see below); a candidate the cap or the row room left without a row is listed as `{ param, moved: null, tried: false,
 reason }`, and the result window counts those in a "Not tried" group (ticking one makes the export try it).
 `also_changes` lists the parameters that moved the part; the result window says "These parameters also change this
 part: ... Tick them and export again to get them as sizes." For a parts file the group is "Also change these parts" and
@@ -1029,7 +1061,9 @@ The sketch curves of each profile have `<item>/p<profile>/c<loop>.<curve>/<field
 order: a line's `offset` (its distance from the sketch origin along the left normal of its captured direction) and
 `turn` (degrees it turned), an arc's `center.0`, `center.1` and `radius`; `curves` lists the profiles
 (`<item>/p<profile>`) whose curves were measured. For a sketch the probe measured, a key that is not listed did not
-move. A sketch the probe could not measure (a step uses it in a way the probe cannot follow, its first read did not
+move. `spans` gives, per size the probe set to other values, the lowest and highest value of the states that built
+(the value now included) and `failed`, `[value, step]` for each value tried alone that did not build
+(`probe.build.spans`). A sketch the probe could not measure (a step uses it in a way the probe cannot follow, its first read did not
 match the capture, or there was no read at the current sizes) is listed in `unmeasured` (sketch name to reason), and
 nothing is known about it. For one sketch and one size the motion file therefore gives one of three answers: measured
 and still, measured and moved (the keys), or not measured (`translator.sizes.sketch_answer`). A motion file without
@@ -1056,10 +1090,16 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
 - A stuck value that a step writes fixes every size the probe lists for it, with the probe's cause: `curve` (a point
   moves along a curve), `shape` (the outline changes), `turns` (the sketch plane turns), `unread`, `untried`. When
   only some states failed (a size whose state changed the outline), the probe lists only those sizes and fits the
-  value over the other states as `rest`, which the translator writes once the listed sizes are fixed. A sketch can
+  value over the other states as `rest`, which the translator writes once the listed sizes are fixed. A value that
+  does not fit as a whole blames only the sizes whose own readings (every other size at its value now) do not lie on
+  a straight line, when the value fits over the states that keep those sizes at their value now: it is stuck with
+  cause `curve` for them, and its `rest` follows the others (`probe.series`). Otherwise every size that moved it is
+  listed. The fit takes up to four columns; columns that change in a state where the value moved are tried before
+  the others, so a design with many sizes does not push the right column past the 12 candidates. A sketch can
   have more than one solution, and Fusion may land on another one after the rows run before: when a sketch reads as
-  the same different outline in states that change different sizes, those states blame no size for it (`apart`
-  lists them, by number in `states`).
+  the same different outline in states that change different sizes, or one size to two different values, those
+  states blame no size for it (`apart` lists them, by number in `states`): a sketch that reads exactly alike at two
+  values of a size does not follow that size there.
 - An outline merged from touching profiles takes each point from the part profile that has it (rect corners from
   centre, width and height); a rect drawn through merged corners gets its centre, width and height from them. Pieces
   of one sketch line in a merged loop are joined back into the line, and a loop of arcs of one circle becomes the
@@ -1081,6 +1121,17 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   and faces an `offsetFaces` step moved (the point moves back by the distance, then follows what made the face).
 - A pick on a tapered wall follows the taper and the length: the wall leans in by `tan(taper)` times the height along
   the extrude, also when the taper is a size.
+- Symmetric patterns (`lib/translator/symmetric.py`, `repeat.py`). A symmetric direction is written as a forward and a
+  backward pattern that both start at the original; the grids that result (one per choice of a part in each direction)
+  skip the places another grid already makes when their counts are numbers. The copies follow this rule, and the
+  measured copies must match it or the pattern is refused: for `n` copies, an odd `n` has `n // 2` steps each way and
+  an even `n` has `n // 2` on one side and one less on the other, the longer side being the one measured. The two part
+  counts are `floor(n / 2) + 1` and `floor((n - 1) / 2) + 1`, so a count formula keeps the pattern centred. A count
+  measured odd that can be even inside its range marks its sizes (the even places were not seen). A pick on a copy
+  off the middle of a symmetric direction fixes the sizes behind the count, since Fusion moves its copies when the
+  count changes. A pattern whose original is not among the copies (it sits between two) is refused. The circular
+  case turns the copies back and forth from the original by `k * total / (count - 1)`. Copies left out by number need
+  a fixed count in the app, so the count is written as a number and its size is dropped with the reason.
 - A pick on a copy of a rectangular pattern needs that copy at every size: copy n needs a count of n or more over
   the size range (count formulas such as `ceil(width_count) * 2` are evaluated at the range ends, `lib/translator/
   copy_counts.py`). When the count can drop below that, the sizes it reads are marked ("a smaller value would leave
@@ -1176,6 +1227,7 @@ design gives a fixture: its `capture` is copied as is.
 `also_changes` (only when not empty) names the unticked parameters that a discovery try showed changing the part.
 `links` (only when the export found geometry links) lists each link of the picked body with what became of its
 parameter: `{ param, sketch, component, outcome, reason }`, `outcome` one of `size`, `loose`, `fixed`, `dropped` or
+`formula` (a parameter worked out by a formula, which cannot be ticked; the reason names what it follows) or
 `not ticked` (`recipe_export.link_outcomes`; `reason` when the size has one).
 
 `sizes` holds `free` (recipe size names), `fixed` and `loose` (`{ name, reason }` by recipe size name, as in the
@@ -1185,7 +1237,9 @@ other values that changed nothing: the ticked parameters that are not sizes, fro
 from the translator and from the probe. `checks` in the manifest is
 always empty. The report has a
 `probe` when a sketch could be followed (the rows only recompute and the parameters are restored), `marker` and
-`health`. A probe row that Fusion cannot build is listed in `probe.dropped`; no size is fixed for it.
+`health`. `health.restore_unverified` is true when a followed sketch could not be compared with its first read after
+the parameters were put back; `health.unchecked` then names each such sketch and why ("reads another outline",
+"could not be read", "lies on a turned plane"), and the result window says so (`probe.restore_unchecked` too). A probe row that Fusion cannot build is listed in `probe.dropped`; no size is fixed for it.
 
 A file with several bodies (package kind `parts`) has one `report.json` with a `parts` list, one record per body:
 `{ name, outcome, items, notes, capture, probe, sizes }`, plus `refusal` or `error` for a body saved as a fixed shape.

@@ -286,11 +286,13 @@ def axis_of(entity):
         line = entity.geometry
         if geo.type_name(line) == "Line3D":
             return line_axis(line)
+        return {"kind": "other", "type": name, "geometry": geo.type_name(line)}
     if name == "BRepFace":
         cylinder = entity.geometry
         if geo.type_name(cylinder) == "Cylinder":
             return {"point": geo.point(cylinder.origin), "dir": geo.unit_vector(cylinder.axis)}
-    return {"kind": "other"}
+        return {"kind": "other", "type": name, "geometry": geo.type_name(cylinder)}
+    return {"kind": "other", "type": name}
 
 
 def axis_record(entity, ctx, slot="axis"):
@@ -299,6 +301,18 @@ def axis_record(entity, ctx, slot="axis"):
     measured reference (`ref`, in `slot`)."""
     entity = geo.native_input(entity, ctx)
     return from_assembly(geo.mark_foreign(axis_of(entity), entity, ctx), entity, ctx, "point", "dir", slot)
+
+
+def revolve_axis(feature, ctx):
+    """`axis_record` of a revolve's axis. One that cannot be read is `{ kind: "other" }` with the entity `type` and the
+    `error`, so the reason can say what the axis is."""
+    entity = geo.safe(lambda: feature.axis, None)
+    if entity is None:
+        return {"kind": "other", "type": "none", "error": "Fusion gave no axis"}
+    try:
+        return axis_record(entity, ctx)
+    except Exception as exc:
+        return {"kind": "other", "type": geo.type_name(entity), "error": ("%s: %s" % (type(exc).__name__, exc))[:200]}
 
 
 def _revolve_extent(definition):
@@ -322,7 +336,7 @@ def revolve_before(feature, ctx):
     return with_params({
         "operation": _operation(feature.operation),
         "profiles": read_profiles(feature.profile, ctx),
-        "axis": geo.safe(lambda: axis_record(feature.axis, ctx), {"kind": "other"}),
+        "axis": revolve_axis(feature, ctx),
         "project_axis": geo.safe(lambda: bool(feature.isProjectAxis), None),
         "extent": _revolve_extent(feature.extentDefinition),
         "participants": geo.safe(lambda: geo.body_refs(feature.participantBodies, ctx), []),

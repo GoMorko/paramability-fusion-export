@@ -18,7 +18,7 @@ from typing import Optional, Protocol
 
 from ..params import size_table as size_tables
 from ..params.listing import list_parameters
-from ..probe.plan import MAX_PROBE_ROWS
+from ..probe.plan import MAX_PROBE_ROWS, NEARER_STEPS
 from ..sketch_values.motion import OPTIMISTIC
 from . import health as health_module
 from .body_scope import body_links, scope_inputs
@@ -130,14 +130,52 @@ class ProbeRun:
         self.rows.extend(zip(rows, results))
         return results
 
-    def probe_states(self):
-        """(values, result, read) of the rows run, for `SizeProbe.add_states`."""
+    def probe_states(self, since=0):
+        """(values, result, read) of the rows run from number `since` on, for `SizeProbe.add_states`."""
         out = []
-        for row, result in self.rows:
+        for row, result in self.rows[since:]:
             state = row.get("state") or {}
             values = {param: state[param] for param in row.get("varied") or [] if param in state}
             out.append((values, result, self.reads.get(row.get("key", row["name"]))))
         return out
+
+    def run_rows(self, rows):
+        """Run `rows` and give the probe the states they gave. Raises the first failed read."""
+        done = len(self.rows)
+        self.try_rows(rows)
+        if self.read_failure is not None:
+            raise self.read_failure
+        self.probe.add_states(self.probe_states(done))
+
+    def measure(self, rows, sizes):
+        """The measured rows, then, while room is left, rows nearer to the value now for the sizes whose rows did not
+        build (`SizeProbe.nearer_rows`, one step per batch), then the rows that check the other sizes of a value that
+        one size moves along a curve (`SizeProbe.check_rows`)."""
+        if rows:
+            self.run_rows(rows)
+        for _ in range(len(NEARER_STEPS) + 1):
+            nearer = self.probe.nearer_rows(sizes, plan_rows_left(self.rows))
+            if not nearer:
+                break
+            self.run_rows(nearer)
+        check = self.probe.check_rows(sizes, plan_rows_left(self.rows))
+        if check:
+            self.run_rows(check)
+
+    def discover(self, tries):
+        """Read the design once the parameters are back, then run the discovery rows in the room the other rows left
+        and keep what they found. Returns the parameters that changed the part."""
+        self.probe.set_discovery_base(self.probe.read_now())
+        found = self.probe.discovery_rows(list(tries), plan_rows_left(self.rows))
+        if not found:
+            return []
+        done = len(self.rows)
+        self.try_rows(found)
+        if self.read_failure is not None:
+            raise self.read_failure
+        self.probe.discover([(row, result, self.reads.get(row.get("key", row["name"])))
+                             for row, result in self.rows[done:]])
+        return self.probe.also_changes
 
 
 class _Pipeline:
@@ -188,7 +226,8 @@ class _Pipeline:
         self._restore()
         gap = self._restore_gap()
         probe_report = self._close_probe()
-        health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error)
+        health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error,
+                                           self._unchecked())
         manifest, files, report = plan_single_export(
             capture if capture is not None else RuntimeError("The steps were not read."),
             part_step, request.title, request.writer, request.up_axis,
@@ -265,20 +304,16 @@ class _Pipeline:
         """The probe's rows and its result: the sizes the probe cannot follow, or None when the probe failed.
 
         The rows put every size at the ends of its range where a size moves a sketch, then the sizes in `extra` (tried
-        on a guess, `probe_flow.extra_size_params`) while rows are left. Rows still left try the unticked parameters
+        on a guess, `probe_flow.extra_size_params`) while rows are left. A row that does not build is tried again
+        nearer to the value now (`ProbeRun.measure`). Rows still left try the unticked parameters
         in `tries` once each (`size_offers.discovery_sizes`); they only find which of them also change the part
         (`self.also`) and are not used for the motion. A failure other than a cancel
         leaves the translation without a motion (no size behind a sketch is then followed, by the translator's own
         rule) and is noted for the person. The parameters are put back before the last read."""
         probe = self.probe
         try:
-            rows = probe.probe_rows(sizes, extra)
-            if rows:
-                run.try_rows(rows)
-                if run.read_failure is not None:
-                    raise run.read_failure
-                probe.add_states(run.probe_states())
-            self._discover(run, rows, tries)
+            run.measure(probe.probe_rows(sizes, extra), sizes)
+            self.also = run.discover(tries)
             self._restore()
             found = probe.finish(probe.read_now(), labels(self.table))
         except ExportCancelled:
@@ -291,19 +326,6 @@ class _Pipeline:
         self.motion = probe.motion
         return found
 
-    def _discover(self, run, rows, tries):
-        """Run the discovery rows in the room the measured rows left, and keep what they found."""
-        found = self.probe.discovery_rows(list(tries), plan_rows_left(rows))
-        if not found:
-            return
-        done = len(run.rows)
-        run.try_rows(found)
-        if run.read_failure is not None:
-            raise run.read_failure
-        self.probe.discover([(row, result, run.reads.get(row.get("key", row["name"])))
-                             for row, result in run.rows[done:]])
-        self.also = self.probe.also_changes
-
     def _restore_gap(self):
         """How far the sketches are from their start after the last restore, or None when that cannot be told. Read
         again here because the probe rows changed the design once more."""
@@ -314,6 +336,10 @@ class _Pipeline:
         except Exception as exc:
             self.port.log(f"reading the sketches after the restore failed: {exc!r}")
             return None
+
+    def _unchecked(self):
+        """What the restore check could not compare, for the health record."""
+        return list(self.probe.restore_unchecked) if self.probe is not None else []
 
     def _close_probe(self):
         """The probe's record for `report.json`, or None when it did not run or failed."""

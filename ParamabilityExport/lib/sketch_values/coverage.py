@@ -38,6 +38,21 @@ class Answer:
         return "Answer(%r, %r, %r)" % (self.kind, self.keys, self.reason)
 
 
+def span(motion, size):
+    """`{ low, high, failed }` of a size the probe set to other values (`Motion.spans`), or None."""
+    if motion is None or getattr(motion, "optimistic", False):
+        return None
+    found = (getattr(motion, "spans", None) or {}).get(size)
+    return found if isinstance(found, dict) else None
+
+
+def not_built(motion, size):
+    """True when the probe set the size to other values and Fusion rebuilt the design at none of them: nothing was
+    measured for it."""
+    found = span(motion, size)
+    return bool(found and found.get("failed") and abs(found["high"] - found["low"]) <= 1e-9)
+
+
 def unmeasured(found, readable, read):
     """{ sketch name: reason } of the sketches of a `plan.Scan` that the probe could not measure.
 

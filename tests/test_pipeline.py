@@ -179,7 +179,11 @@ class SizeRangeTest(unittest.TestCase):
         port = FakePort(bad_when=lambda e: float(e["depth_mm"].split()[0]) > 80)
         result = export(port, ranges={"depth_mm": (30, 120)})
         self.assertEqual(result.manifest["kind"], "recipe")
-        self.assertEqual([d["name"] for d in result.report["probe"]["dropped"]], ["depth_mm (max)", "all max"])
+        self.assertEqual([d["name"] for d in result.report["probe"]["dropped"]],
+                         ["depth_mm (max)", "all max", "depth_mm (max, nearer)"])
+        # 120 and then 90 do not build; a quarter of the way up, 75, does, so the size is measured up to there.
+        span = result.report["probe"]["motion"]["spans"]["depth_mm"]
+        self.assertEqual((span["low"], span["high"], [v for v, _ in span["failed"]]), (30, 75, [120, 90]))
         self.assertEqual(result.report["sizes"]["fixed"], [])
         self.assertEqual(port.store.exprs, START)
 

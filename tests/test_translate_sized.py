@@ -186,14 +186,14 @@ class TrayTest(unittest.TestCase):
         self.assertNotIn(H, result.recipe["sizes"])
         self.assertEqual(steps_of(result.recipe, "extrude")[0]["distance"], 32)
 
-    def test_left_out_copies_mark_the_count_and_keep_the_spacing_free(self):
+    def test_left_out_copies_fix_the_count_and_keep_the_spacing_free(self):
         def edit(capture):
             data = capture["items"][6]["data"]
             data["elements"] = [data["elements"][0], data["elements"][2]]
         result, _ = run(on_tray(edit))
-        self.assertEqual([f["name"] for f in result.loose], ["holes_count"])
+        self.assertEqual([f["name"] for f in result.dropped if "leaves copies out" in f["reason"]], ["holes_count"])
         pattern = steps_of(result.recipe, "pattern")[0]
-        self.assertEqual((pattern["skip"], pattern["linear"]["count"]), ([1], {"expr": "holes_count"}))
+        self.assertEqual((pattern["skip"], pattern["linear"]["count"]), ([1], 3))
         self.assertEqual(pattern["linear"]["step"], {"expr": "hole_pitch_mm"})
 
     def test_a_negative_parameter_is_written_negated(self):

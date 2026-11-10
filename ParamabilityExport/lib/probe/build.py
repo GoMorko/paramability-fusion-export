@@ -4,7 +4,7 @@ A state is `{ "values": { Fusion name: manifest number }, "built": bool, "read":
 kept sizes that differ from the current settings (a size that is missing stays at its current value). `read` is the
 probe state of `fusion_reader.probe_state` (sketches, points, lines, params in Fusion's own units, box). Exactly one
 state has `"e0": true`: the read at the current settings, before any size is changed. A state that is not `built`
-(Fusion could not build the part there) is left out of the fit.
+(Fusion could not build the part there) is left out of the fit; its `failed` names the first step that failed.
 
 A sketch can have more than one solution, and Fusion may land on another one depending on the rows run before. When
 a sketch reads as the same different outline in states that change different sizes, none of those sizes made it:
@@ -65,17 +65,26 @@ class _Run:
         return values, cause
 
     def find_apart(self, current=None):
-        """The states where a sketch reads as the same different outline as in a state that changes other sizes."""
+        """The states where a sketch reads as the same different outline as in another state that changes other
+        sizes, or the same sizes to other values. A sketch that reads exactly alike at two values of a size does not
+        follow that size there: it landed on another solution."""
         for token in dict.fromkeys(t["sketch_token"] for t in self.targets):
             shaped = [at for at in range(1, len(self.states))
                       if any(self.values_at(t, at)[1] == SHAPE for t in self.targets if t["sketch_token"] == token)]
             reads = {at: self.states[at]["read"]["sketches"].get(token) for at in shaped}
             for i, a in enumerate(shaped):
                 for b in shaped[i + 1:]:
-                    sizes_a, sizes_b = self.varied(a, current), self.varied(b, current)
-                    if (sizes_a and sizes_b and not sizes_a & sizes_b and isinstance(reads[a], dict)
-                            and isinstance(reads[b], dict) and match.same_read(reads[a], reads[b])):
+                    if (self._unrelated(a, b, current) and isinstance(reads[a], dict) and isinstance(reads[b], dict)
+                            and match.same_read(reads[a], reads[b])):
                         self.apart.update((a, b))
+
+    def _unrelated(self, a, b, current):
+        """True when states `a` and `b` change no size to the same value: other sizes, or the same ones elsewhere."""
+        sizes_a, sizes_b = self.varied(a, current), self.varied(b, current)
+        if not sizes_a or not sizes_b:
+            return False
+        values_a, values_b = self.states[a].get("values") or {}, self.states[b].get("values") or {}
+        return all(abs(values_a[n] - values_b[n]) > _SAME for n in sizes_a & sizes_b)
 
 
 def moved_sizes(capture, states, current=None):
@@ -107,14 +116,37 @@ def _box_max(states):
             "max": [max(b["max"][i] for b in boxes) for i in range(3)]}
 
 
+def _state_record(state):
+    out = {"values": state.get("values") or {}, "built": state.get("built") is not False}
+    if state.get("failed"):
+        out["failed"] = state["failed"]
+    return out
+
+
+def spans(states, current):
+    """`Motion.spans`: per size a state sets to another value than `current` has, the lowest and highest value of the
+    states that built (the current value included), and `[value, step]` for each state that set it alone and did not
+    build."""
+    out = {}
+    for state in states:
+        values = state.get("values") or {}
+        moved = {n: v for n, v in values.items() if n in current and abs(v - current[n]) > _SAME}
+        for name, value in moved.items():
+            span = out.setdefault(name, {"low": current[name], "high": current[name], "failed": []})
+            if state.get("built") is not False:
+                span["low"], span["high"] = min(span["low"], value), max(span["high"], value)
+            elif len(moved) == 1:
+                span["failed"].append([value, state.get("failed") or ""])
+    return out
+
+
 def build(capture, table, states):
     """The `Motion` of a capture. See the module text for `states`."""
     run = _Run(capture, states)
     current = {e.name: e.value for e in table.entries}
-    out = Motion(box_max=_box_max(states),
-                 states=[{"values": s.get("values") or {}, "built": s.get("built") is not False}
-                         for s in run.states[1:]],
-                 unmeasured=coverage.unmeasured(run.found, run.readable, bool(run.base)))
+    out = Motion(box_max=_box_max(states), states=[_state_record(s) for s in run.states[1:]],
+                 unmeasured=coverage.unmeasured(run.found, run.readable, bool(run.base)),
+                 spans=spans(run.states[1:], current))
     refs = ref_fit.measurable(plan.refs(capture), run.base)
     out.refs = refs.notes
     if not run.targets and not refs.usable:

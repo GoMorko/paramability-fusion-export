@@ -15,7 +15,9 @@ motion file says so (`Motion.refs`).
 """
 from ..package.manifest import MAX_FIXED_REASON
 from ..package.text import clip
+from ..params.expressions import format_number
 from ..probe import build, fit, match, plan, ref_fit
+from ..sketch_values.motion import CURVE, SHAPE, TURNS, UNREAD, Stuck
 from ..translator import borrowed
 from ..translator.notes import loose_reason
 from .part_names import tagged
@@ -26,6 +28,7 @@ VOLUME_TOLERANCE_MM3 = 1e-4
 VOLUME_RELATIVE = 1e-6
 # Why a parameter of another component got no try; kept in the discovery record of `report.json`.
 NOT_TRIED = "not tried: the export tries only a limited number of parameters of other components"
+NOT_READ_TRY = "not tried: the design could not be read at the value tried"
 
 
 def _box_numbers(read):
@@ -42,6 +45,30 @@ def _box_numbers(read):
 def _volume(read):
     value = read.get("volume_mm3") if isinstance(read, dict) else None
     return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def _numbers(node, out):
+    if isinstance(node, dict):
+        for key in sorted(node):
+            _numbers(node[key], out)
+    elif isinstance(node, (list, tuple)):
+        for value in node:
+            _numbers(value, out)
+    elif isinstance(node, (int, float)) and not isinstance(node, bool):
+        out.append(float(node))
+    return out
+
+
+def _same_numbers(a, b):
+    """True when two records hold the same numbers in the same places, within the fit tolerance."""
+    x, y = _numbers(a, []), _numbers(b, [])
+    return len(x) == len(y) and all(abs(p - q) <= fit.TOLERANCE for p, q in zip(x, y))
+
+
+def not_built_try(value, step):
+    """Why a discovery row gave no answer: Fusion did not rebuild the design at the value tried."""
+    at = " at %s" % format_number(value) if isinstance(value, (int, float)) else ""
+    return "not tried: the design does not rebuild in Fusion%s%s" % (at, " (%s)" % step if step else "")
 
 
 def body_changed(before, now):
@@ -133,6 +160,8 @@ def _with_borrowed(request, hints, watch):
 
 
 _UNTRIED = "it changes a sketch and could not be tried at other values"
+# Why a sketch could not be compared with its first read after the parameters were put back, by `match` cause.
+_RESTORE_WHY = {SHAPE: "reads another outline", TURNS: "lies on a turned plane", UNREAD: "could not be read"}
 _UNREADABLE = "a sketch it changes could not be read at other values"
 
 
@@ -159,6 +188,11 @@ class SizeProbe:
         self.motion = None
         self.moved = []
         self.discovery = []
+        self.nearer_count = 0
+        self.checked = False
+        self.discovery_base = None  # the read the discovery rows are compared with
+        self.after_rows = None  # what read differently from E0 once the parameters were put back after the rows
+        self.restore_unchecked = []  # "<sketch>: <why>" for each sketch the restore check could not compare
 
     @classmethod
     def start(cls, capture, table, read):
@@ -193,9 +227,9 @@ class SizeProbe:
         state read there (None when it did not build)."""
         for values, result, read in entries:
             if result.get("error"):
-                self.states.append({"values": values, "built": False})
-                self.dropped.append({"name": result.get("name"), "error": result.get("error"),
-                                     "detail": result.get("detail") or {}})
+                detail = result.get("detail") or {}
+                self.states.append({"values": values, "built": False, "failed": (detail.get("items") or [""])[0]})
+                self.dropped.append({"name": result.get("name"), "error": result.get("error"), "detail": detail})
             else:
                 self.states.append({"values": values, "built": True, "read": read})
 
@@ -210,6 +244,51 @@ class SizeProbe:
         rows, self.untried = plan.probe_rows(sizes, moved, extra=set(extra))
         return rows
 
+    def nearer_rows(self, sizes, room):
+        """The next rows that try the sizes nearer to their value now where rows did not build (`plan.nearer_rows`),
+        within `room` rows and the export's `plan.MAX_NEARER_ROWS`."""
+        rows = plan.nearer_rows(sizes, self.states[1:], self.moving_sizes(),
+                                min(room, plan.MAX_NEARER_ROWS - self.nearer_count))
+        self.nearer_count += len(rows)
+        return rows
+
+    def curved_sizes(self):
+        """Fusion names of the sizes the states so far show moving a value along a curve on their own, while the
+        value follows the other sizes (a `Stuck` with `rest`)."""
+        try:
+            motion = build.build(self.capture, self.table, self.states)
+        except Exception:
+            return []
+        return list(dict.fromkeys(n for v in motion.values.values()
+                                  if isinstance(v, Stuck) and v.cause == CURVE and v.rest is not None
+                                  for n in v.movers))
+
+    def spans_now(self):
+        """`Motion.spans` of the states so far."""
+        return build.spans(self.states[1:], {e.name: e.value for e in self.table.entries})
+
+    def check_rows(self, sizes, room):
+        """Once per export: the rows that check the other sizes together when some size moves a value along a curve
+        on its own (`plan.check_rows`)."""
+        if self.checked:
+            return []
+        self.checked = True
+        curved = self.curved_sizes()
+        return plan.check_rows(sizes, set(curved), self.spans_now(), room) if curved else []
+
+    def moving_sizes(self):
+        """Fusion names of the sizes whose state (the only size that differs) moved a followed sketch or reference."""
+        current = {e.name: e.value for e in self.table.entries}
+        targets = self._followed_targets()
+        found = []
+        for state in self.states[1:]:
+            values, read = state.get("values") or {}, state.get("read")
+            varied = [n for n, v in values.items() if abs(v - current.get(n, v)) > 1e-9]
+            if (len(varied) == 1 and varied[0] not in found and isinstance(read, dict)
+                    and self._followed_moved(targets, read)):
+                found.append(varied[0])
+        return found
+
     def discovery_rows(self, candidates, room):
         """Rows that try unticked parameters once each (`size_offers.discovery_sizes`), within `room` rows. The
         candidates left without a row are kept in the discovery record as not tried."""
@@ -218,19 +297,83 @@ class SizeProbe:
                               for c in plan.discovery_left(candidates, room))
         return rows
 
+    def set_discovery_base(self, read):
+        """Keep the read of the design once the parameters are back after the measured rows. The discovery rows are
+        compared with it, not with E0: a sketch that Fusion left on another solution, or a place it left elsewhere,
+        must not count as moved by every parameter tried later. What reads differently from E0 is kept in the report
+        (`after_rows`)."""
+        self.discovery_base = read
+        changed, unread = self.differences(self.e0, read)
+        self.after_rows = {"changed": changed, "unread": unread}
+
     def discover(self, entries):
         """Keep, per `(row, result, read)` of a discovery row, whether the body moved with its parameter: its sketches,
-        the references of other components its steps use, or its box and volume. `{ param, moved }`, `moved` None when
-        the row did not build or the read is missing. These reads are not states of the motion."""
-        targets = self._followed_targets()
+        the references of other components its steps use, or its box and volume, against `discovery_base` (E0 when
+        there is none). `{ param, value, built, moved, changed, unread }`; `changed` and `unread` name what read
+        differently and what could not be compared. A row that did not build or gave no read is not tried
+        (`moved` None, `tried` false, with the reason); a row where nothing could be compared has `moved` None.
+        These reads are not states of the motion."""
+        base = self.discovery_base if isinstance(self.discovery_base, dict) else self.e0
         for row, result, read in entries:
             param = (row.get("varied") or [None])[0]
             if param is None:
                 continue
-            moved = None
-            if not result.get("error") and isinstance(read, dict):
-                moved = self._followed_moved(targets, read) or body_changed(self.e0, read)
-            self.discovery.append({"param": param, "moved": moved})
+            value = (row.get("state") or {}).get(param)
+            entry = {"param": param, "value": value, "built": not result.get("error"), "moved": None}
+            if result.get("error"):
+                step = ((result.get("detail") or {}).get("items") or [""])[0]
+                entry.update(failed=step, tried=False, reason=not_built_try(value, step))
+            elif not isinstance(read, dict):
+                entry.update(tried=False, reason=NOT_READ_TRY)
+            else:
+                changed, unread = self.differences(base, read)
+                entry.update(changed=changed, unread=unread)
+                if changed:
+                    entry["moved"] = True
+                elif self._comparable(base):
+                    entry["moved"] = False
+            self.discovery.append(entry)
+
+    def _names(self):
+        """Sketch token to the name a reason uses."""
+        named = dict(plan.scan(self.capture).named)
+        for token, hint in self.watch.items():
+            named[token] = "%s of %s" % (hint["sketch"], hint["component"]) if hint.get("component") else (
+                hint.get("sketch") or named.get(token, ""))
+        return named
+
+    def _comparable(self, read):
+        """True when `read` holds anything the discovery compares."""
+        return isinstance(read, dict) and bool(read.get("sketches") or read.get("refs") or _box_numbers(read))
+
+    def differences(self, base, read):
+        """`(changed, unread)` between two reads of the design: names of the sketches, hole points, axis lines and
+        measured references the probe follows, and "the body" (its box and volume), that read differently in `read`,
+        and of those that one of the two reads does not hold. Sketches are compared as read (frame and curves within
+        1e-4 mm), so a sketch on another outline in both reads is the same."""
+        changed, unread = [], []
+        names = self._names()
+
+        def sort(name, a, b, same):
+            if a is None or b is None:
+                unread.append(name)
+            elif not same(a, b):
+                changed.append(name)
+
+        for token in self.request.get("sketches") or []:
+            sort(names.get(token) or "a sketch", ((base or {}).get("sketches") or {}).get(token),
+                 ((read or {}).get("sketches") or {}).get(token), match.same_read)
+        for kind in ("points", "lines"):
+            for token in self.request.get(kind) or []:
+                sort("a sketch %s" % kind[:-1], ((base or {}).get(kind) or {}).get(token),
+                     ((read or {}).get(kind) or {}).get(token), _same_numbers)
+        for ref in self.refs:
+            sort(ref["key"], ref_fit.state_values(ref, base)[0], ref_fit.state_values(ref, read)[0], _same_numbers)
+        if _box_numbers(base) is None or _box_numbers(read) is None:
+            unread.append("the body")
+        elif body_changed(base, read):
+            changed.append("the body")
+        return list(dict.fromkeys(changed)), list(dict.fromkeys(n for n in unread if n not in changed))
 
     def _followed_targets(self):
         return [t for t in plan.scan(self.capture).targets if t["sketch_token"] in self.request["sketches"]]
@@ -336,9 +479,11 @@ class SizeProbe:
 
     def _gap(self, after):
         """Largest difference in mm between E0 and a read after the restore, over the covered values and the places of
-        the measured references (one that cannot be read again is left out). None when the sketches cannot be
-        compared."""
+        the measured references (one that cannot be read again is left out). None when a sketch cannot be compared;
+        `restore_unchecked` then says which and why."""
+        self.restore_unchecked = []
         if not isinstance(after, dict):
+            self.restore_unchecked = ["the design could not be read after the tries"]
             return None
         found = plan.scan(self.capture)
         gap = 0.0
@@ -351,15 +496,18 @@ class SizeProbe:
             if target["sketch_token"] not in self.request["sketches"]:
                 continue
             before, _ = match.state_values(target, self.e0, self.e0)
-            now, _ = match.state_values(target, after, self.e0)
+            now, cause = match.state_values(target, after, self.e0)
             if before is None or now is None or before.keys() != now.keys():
-                return None
+                why = _RESTORE_WHY.get(cause, _RESTORE_WHY[SHAPE])
+                self.restore_unchecked.append("%s %s" % (target["sketch"] or "a sketch", why))
+                continue
             gap = max([gap] + [abs(now[k] - v) for k, v in before.items()])
-        return gap
+        self.restore_unchecked = list(dict.fromkeys(self.restore_unchecked))
+        return None if self.restore_unchecked else gap
 
     def report(self):
         """The record kept in `report.json`: what was asked, what was read, and what was found."""
-        return {
+        out = {
             "request": self.request,
             "states": [self._state_json(s) for s in self.states],
             "dropped": list(self.dropped),
@@ -368,10 +516,17 @@ class SizeProbe:
             "motion": self.motion.json() if self.motion is not None else None,
             "discovery": list(self.discovery),
         }
+        if self.after_rows is not None:
+            out["after_rows"] = dict(self.after_rows)
+        if self.restore_unchecked:
+            out["restore_unchecked"] = list(self.restore_unchecked)
+        return out
 
     @staticmethod
     def _state_json(state):
         out = {"values": state.get("values") or {}, "built": state.get("built") is not False}
+        if state.get("failed"):
+            out["failed"] = state["failed"]
         if state.get("e0"):
             out["e0"] = True
         if isinstance(state.get("read"), dict):
@@ -406,8 +561,34 @@ class ProbeGroup:
         for number, probe in enumerate(self.probes):
             probe.add_states([(values, result, reads[number] if reads else None) for values, result, reads in entries])
 
+    def nearer_rows(self, sizes, room):
+        """The nearer rows for all parts (`SizeProbe.nearer_rows`): the rows and their failures are shared, and a size
+        that moved a part counts as moving for all."""
+        moving = list(dict.fromkeys(n for probe in self.probes for n in probe.moving_sizes()))
+        first = self.probes[0]
+        rows = plan.nearer_rows(sizes, first.states[1:], moving,
+                                min(room, plan.MAX_NEARER_ROWS - first.nearer_count))
+        for probe in self.probes:
+            probe.nearer_count += len(rows)
+        return rows
+
+    def check_rows(self, sizes, room):
+        """The check rows for all parts: a size curved in any part counts as curved for all."""
+        first = self.probes[0]
+        if first.checked:
+            return []
+        for probe in self.probes:
+            probe.checked = True
+        curved = set(n for probe in self.probes for n in probe.curved_sizes())
+        return plan.check_rows(sizes, curved, first.spans_now(), room) if curved else []
+
     def discovery_rows(self, candidates, room):
         return self.probes[0].discovery_rows(candidates, room)
+
+    def set_discovery_base(self, reads):
+        """Give each probe its own read of the design before the discovery rows."""
+        for probe, read in zip(self.probes, reads):
+            probe.set_discovery_base(read)
 
     def discover(self, entries):
         """Give each probe its own reads of the discovery rows `(row, result, reads)`."""
@@ -439,6 +620,11 @@ class ProbeGroup:
         """The largest gap over the parts, or None when one part cannot be compared."""
         gaps = [probe.measure_restore(after) for probe, after in zip(self.probes, afters)]
         return None if any(gap is None for gap in gaps) else max(gaps)
+
+    @property
+    def restore_unchecked(self):
+        """What the restore check could not compare, led by the part."""
+        return [tagged([name], why) for name, probe in zip(self.names, self.probes) for why in probe.restore_unchecked]
 
     @property
     def motions(self):

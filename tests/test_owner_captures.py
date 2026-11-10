@@ -1,5 +1,5 @@
-"""Captures of the owner's hybrid assembly (add-in 0.3.1, 0.3.2 for report (3), 0.3.3 to 0.4.3 inside the FilterBox
-packages). They stay outside the repo; the tests skip without them."""
+"""Captures of the owner's hybrid assembly (add-in 0.3.1, 0.3.2 for report (3), 0.3.3 to 0.4.3 and 0.7.2 inside the
+FilterBox packages) and of a bracket (0.7.2). They stay outside the repo; the tests skip without them."""
 import json
 import os
 import unittest
@@ -189,6 +189,47 @@ class OwnerCaptureTest(unittest.TestCase):
             [PROBE_TICKED[0], PROBE_TICKED[2], PROBE_TICKED[3], PROBE_TICKED[6], "_Filter__Wall_thickness_mm"]))
         self.assertNotIn("FilterBox__PipeTop_offsetFromCenter_mm", [f["name"] for f in result.loose])
         self.assertEqual(check_recipe(result.recipe), [])
+
+
+
+# Add-in 0.7.2 exports: the box with the pipe hole (many rows do not build at the range ends, and a sketch lands on
+# another solution), and a plain bracket whose angle size moves its points along a curve.
+PACKAGE_072 = "Pat - Pipe, Filter (Box, Cylinder) (7).paramability"
+PACKAGE_BRACKET = "simplfiideUntitled.paramability"
+
+
+def replay(test, name):
+    """The translation of a package from its own probe states, with the sizes its rows varied as the ticked ones."""
+    from lib.export_plan.body_scope import body_links, scope_inputs
+    report = package_report(test, name)
+    capture, states = report["capture"], report["probe"]["states"]
+    varied = {n for s in states for n in s.get("values") or {}}
+    ticked = [p["name"] for p in capture["parameters"]["user"] if p["name"] in varied]
+    model, quantities = scope_inputs(capture, capture["parameters"]["model"])
+    table = size_table.build(capture["parameters"]["user"], ticked, model, capture.get("design_units", "mm"),
+                             quantity_params=quantities, links=body_links(capture))
+    motion = probe_build.build(probe_view(capture), table, states)
+    return translate(capture, size_table=table, motion=motion), motion
+
+
+class OwnerCapture072Test(unittest.TestCase):
+    def test_the_box_sizes_follow_and_a_size_no_row_built_is_not_called_unchanging(self):
+        result, motion = replay(self, PACKAGE_072)
+        free = [n for n, size in result.recipe["sizes"].items() if "value" in size]
+        self.assertEqual(len(free), 7)
+        never = {n for n, span in motion.spans.items() if span["low"] == span["high"]}
+        self.assertTrue(never)
+        for entry in result.dropped:
+            if entry["name"] in never:
+                self.assertTrue(entry["used"])
+                self.assertNotIn("tried", entry)
+
+    def test_the_bracket_keeps_every_size_but_the_angle_that_curves_its_points(self):
+        result, motion = replay(self, PACKAGE_BRACKET)
+        free = [n for n, size in result.recipe["sizes"].items() if "value" in size]
+        self.assertEqual((len(free), len(result.dropped)), (7, 1))
+        curved = {n for v in motion.values.values() if getattr(v, "cause", "") == "curve" for n in v.movers}
+        self.assertEqual(curved, {result.dropped[0]["name"]})
 
 
 if __name__ == "__main__":

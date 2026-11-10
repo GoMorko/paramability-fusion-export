@@ -5,8 +5,13 @@ note the Fusion version and system.
 
 ## Check first in this version
 
-What 0.6.0 to 0.7.1 added, in this order. Each id is described in the section named.
+What 0.6.0 to 0.7.2 added, and what this version adds, in this order. Each id is described in the section named.
 
+- [ ] Symmetric patterns: section "Symmetric patterns" under "Capture reader calls to watch (fillet, chamfer, shell,
+      patterns, mirror)".
+- [ ] K12 to K15, a size whose far values do not rebuild is measured nearer, a curved size marks only itself, the
+      tries of other parameters compare with the design as it is before them, and a revolve axis that cannot be
+      copied says what it is: section 9.
 - [ ] Compact export window and result window: section 7.2 ("The export window has no empty gaps", "Early warning",
       "Show in timeline", the result window) and the export pipeline entry under "Fusion calls to watch".
 - [ ] E1 to E6, Emboss on a flat face: section 10.
@@ -545,6 +550,31 @@ the sizes on the form and compare the part with Fusion at the same values.
       change this part: ... Tick them and export again to get them as sizes."; `report.json` has `also_changes` with
       the pipe diameter and `probe.discovery` with `moved: true`. The pipe diameter is not a size in that file. Tick
       it, export again: it is a size.
+- [ ] **K12 Measured nearer.** A size whose range ends do not rebuild in Fusion (a pipe diameter with a range of half
+      to double, where a chamfer or round fails at both ends). Export: the progress window shows tries named
+      "(min, nearer)" and "(max, nearer)" after the first ones. `report.json`: `probe.states` has `failed` with the
+      step on each state that did not build, and `probe.motion.spans` gives, for that size, `low` and `high` (the
+      values that built) and `failed` (the values that did not, with the step). When a nearer try built, the size is a
+      size (or "not used") and its reason says "between A and B"; in Paramability it matches Fusion between those
+      values. When no try built, the result window shows it as not followed, and the reason names the nearest values
+      tried and the step that failed there; it never says "changes nothing". Note how many extra tries ran (at most 24)
+      and the export time.
+- [ ] **K13 Only the curved size is marked.** A bracket with two legs at an angle parameter, a wall thickness and leg
+      lengths. Export: the angle is marked ("along a curve"), the wall thickness and the leg lengths stay sizes, and
+      the progress window shows "all low but curved" and "all high but curved". In Paramability, change the wall and
+      a leg length (not the angle): the part matches Fusion.
+- [ ] **K14 Tries of other parameters after a flipped sketch.** In a design where a sketch can land on its other
+      solution (the filter box lid), export with parameters of another component unticked. `probe.after_rows` names
+      what reads differently from the first read once the parameters are back; `probe.discovery` entries have
+      `changed` and `unread`; a parameter that does not touch the part has `moved: false`, and "Also change this part"
+      lists only parameters whose `changed` is not empty. A try that does not rebuild has `tried: false` and counts as
+      not tried. If `health.restore_unverified` is true, `health.unchecked` names the sketch and the result window
+      says which sketch to look at: check in Fusion that it is back as before.
+- [ ] **K15 Revolve axis.** A revolve whose axis is the pipe component's own axis (origin Z axis), then one about a
+      straight edge, then one about a round edge (if Fusion lets you pick it). `capture.items[...].data.axis` has
+      `point` and `dir` for the first two; when the copy refuses, the axis record has `type` (and `geometry` or
+      `error`), and the message says which kind of axis it is. Send the report of the pipe of the two body filter
+      file: its axis could not be told apart before.
 
 ## 10. Emboss
 
@@ -995,6 +1025,26 @@ capture in `report.json`.
 - `CircularPatternFeature.axis` (construction axis, sketch line, linear edge, cylindrical face).
 - `Feature.timelineObject.index` of each pattern or mirror input feature matches the item `index` in the capture.
 - `MirrorFeature.patternEntityType`, `mirrorPlane` (construction plane or planar face), `isCombine`.
+
+### Symmetric patterns
+
+Written from the API reference and the owner's 0.7.2 export, never run on the new code.
+
+- [ ] A rectangular pattern of an extrude with its round and chamfer, **Symmetric** on, an odd count taken from a
+      count parameter and an `Extent` distance written as a formula of a length parameter. Export. The copies sit at
+      `step` apart from the original (in the middle), `step = 2 * extent / (count - 1)`. In Paramability, change the
+      length parameter: the copies follow. The count parameter is marked, since the rounds of the copies are placed one
+      by one and an odd count may become even. Without the round and chamfer, an odd count follows the parameter.
+- [ ] Same with an even count (4 or 6) and **Spacing** as the distance. Look at where the copies really are:
+      `report.json` `elements` shows each origin. The export expects the original to be one of the two middle copies.
+      If the original is not among the elements, the export stops with "sits between two copies"; note which Fusion
+      version did that.
+- [ ] Symmetric in both directions (3 by 3). The copies fill the grid once.
+- [ ] A circular pattern over 90 degrees with **Symmetric** on and 5 copies: the copies sit at -45, -22.5, 0, 22.5, 45
+      degrees from the original.
+- [ ] Members read: `RectangularPatternFeature.isSymmetricInDirectionOne` and `isSymmetricInDirectionTwo`,
+      `CircularPatternFeature.isSymmetric` (a flag that fails reads as not symmetric, then the measured copies are
+      refused). Which element is the identity (not always the first).
 
 ## Capture reader calls to watch (emboss)
 

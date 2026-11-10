@@ -24,7 +24,7 @@ from ..design_edit.runner import ExportCancelled
 from . import health as health_module
 from .body_scope import body_links, scope_inputs
 from .part_names import tagged, unique_names
-from .pipeline import ProbeRun, plan_rows_left
+from .pipeline import ProbeRun
 from .probe_flow import ProbeGroup, SizeProbe, covers_a_sketch, extra_size_params, kept_size_names
 from .recipe_export import PartInput, free_sizes, plan_parts_export, translate_capture
 from .size_offers import discovery_sizes, labels, probe_sizes
@@ -134,7 +134,8 @@ class _PartsPipeline:
         gap = self._restore_gap()
         reports = self.group.reports() if self.group is not None and self._measured() else []
         probe_of = dict(zip(self.probed, reports))
-        health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error)
+        unchecked = self.group.restore_unchecked if self.group is not None else []
+        health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error, unchecked)
         inputs = [PartInput(self.names[i], self.steps[i], self.captures[i], finals.get(i), self.motions.get(i),
                             probe_of.get(i)) for i in range(port.count)]
         manifest, files, report = plan_parts_export(
@@ -277,13 +278,8 @@ class _PartsPipeline:
         run = ProbeRun(self.port, self.tmp, group)
         tries = self._tries()
         try:
-            rows = group.probe_rows(sizes, extra)
-            if rows:
-                run.try_rows(rows)
-                if run.read_failure is not None:
-                    raise run.read_failure
-                group.add_states(run.probe_states())
-            self._discover(run, rows, tries)
+            run.measure(group.probe_rows(sizes, extra), sizes)
+            self.also = run.discover(tries)
             self._restore()
             found = group.finish(group.read_now(), labels(self.table))
         except ExportCancelled:
@@ -303,19 +299,6 @@ class _PartsPipeline:
             for size in discovery_sizes(self.table, self.request.parameters, self.captures[index]):
                 found.setdefault(size["param"], size)
         return list(found.values())
-
-    def _discover(self, run, rows, tries):
-        """Run the discovery rows in the room the measured rows left, and keep what they found."""
-        found = self.group.discovery_rows(list(tries), plan_rows_left(rows))
-        if not found:
-            return
-        done = len(run.rows)
-        run.try_rows(found)
-        if run.read_failure is not None:
-            raise run.read_failure
-        self.group.discover([(row, result, run.reads.get(row.get("key", row["name"])))
-                             for row, result in run.rows[done:]])
-        self.also = self.group.also_changes
 
     def _restore_gap(self):
         """How far the sketches are from their start after the last restore, or None when that cannot be told."""

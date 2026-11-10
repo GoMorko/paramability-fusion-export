@@ -12,21 +12,23 @@ RESTORE_TOLERANCE_MM = 1e-4
 MEASURED, NOT_NEEDED, FAILED = "measured", "not needed", "failed"
 MAX_LISTED = 5
 MAX_NOTE = 200
+MAX_LINE = 400
 
 UNDO_ADVICE = (
     "Use Undo in Fusion until the design looks as it did before the export, or reopen the design from its last "
     "save. Then export again.")
 
 
-def make_health(unrestored=(), gap_mm=None, probe=NOT_NEEDED, probe_error=""):
+def make_health(unrestored=(), gap_mm=None, probe=NOT_NEEDED, probe_error="", unchecked=()):
     """The record kept in `report.json` under `health`.
 
     unrestored: Fusion names of the parameters that could not be put back.
     gap_mm: how far the sketches are from their start after the restore, None when that was not measured.
     probe: MEASURED, NOT_NEEDED (no sketch to follow) or FAILED (sketches exist but could not be measured).
+    unchecked: why the restore could not be checked, one text per sketch ("Sketch3 reads another outline").
     """
     measured = probe == MEASURED
-    return {
+    out = {
         "unrestored": list(unrestored),
         "sketch_gap_mm": gap_mm,
         "sketch_drift": gap_mm is not None and gap_mm > RESTORE_TOLERANCE_MM,
@@ -34,6 +36,9 @@ def make_health(unrestored=(), gap_mm=None, probe=NOT_NEEDED, probe_error=""):
         "probe": probe,
         "probe_error": probe_error[:200],
     }
+    if measured and gap_mm is None and unchecked:
+        out["unchecked"] = list(unchecked)[:MAX_LISTED]
+    return out
 
 
 def design_changed(health):
@@ -65,6 +70,10 @@ def health_lines(health):
             "The sketches did not come back to their first shape after the tries (largest gap %.4g mm). "
             "Your design may be changed, and sizes that move a sketch may be off. %s"
             % (health["sketch_gap_mm"], UNDO_ADVICE))
+    elif health.get("restore_unverified") and health.get("unchecked"):
+        lines.append(clip("Could not check that the sketches came back to their first shape: %s. Please look at %s "
+                          "in Fusion." % ("; ".join(health["unchecked"]),
+                                          "it" if len(health["unchecked"]) == 1 else "them"), MAX_LINE))
     elif health.get("restore_unverified"):
         lines.append("Could not check that the sketches came back to their first shape. Please look at them.")
     if health.get("probe") == FAILED:

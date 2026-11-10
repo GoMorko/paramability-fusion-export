@@ -10,11 +10,7 @@ unexpected results. A size whose range the person typed gets no value: the rules
 import math
 
 from . import range_check
-from .notes import Past
-
-
-def _number(value):
-    return ("%.6f" % value).rstrip("0").rstrip(".")
+from .notes import Past, number_text as _number
 
 
 def past_reasons(table, found, why):

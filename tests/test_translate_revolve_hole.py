@@ -51,6 +51,16 @@ class RevolveTest(unittest.TestCase):
             self.assertIsNone(result.recipe)
             self.assertIn("flat face", result.refusal["reason"])
 
+    def test_an_axis_that_cannot_be_copied_is_refused_with_a_reason_per_kind_of_axis(self):
+        axes = ({"kind": "other"}, {"kind": "other", "type": "BRepEdge", "geometry": "Arc3D"},
+                {"kind": "other", "type": "ConstructionAxis", "error": "RuntimeError: x"})
+        reasons = []
+        for axis in axes:
+            result = variant("revolve_full", lambda item, axis=axis: item["data"].update(axis=axis))
+            self.assertIsNone(result.recipe)
+            reasons.append(result.refusal["reason"])
+        self.assertEqual(len(set(reasons)), len(axes))
+
     def test_full_turn_has_no_angle(self):
         result = translate_fixture("revolve_full")
         (step,) = result.recipe["features"]

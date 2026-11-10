@@ -221,7 +221,24 @@ def read_pattern(type_name, elements, **kw):
     return item["data"]
 
 
+class Unreadable:
+    """A flag Fusion cannot answer."""
+
+    def __bool__(self):
+        raise RuntimeError("no answer")
+
+
 class RectangularPatternTest(unittest.TestCase):
+    def test_symmetric_flags_are_read_and_a_flag_that_fails_reads_as_not_symmetric(self):
+        elements = [element(i + 1, (10 * (i - 1), 0, 0)) for i in range(3)]
+        both = read_pattern("RectangularPatternFeature", elements, isSymmetricInDirectionOne=True,
+                            isSymmetricInDirectionTwo=True, **rectangular())
+        self.assertEqual((both["symmetric_one"], both["symmetric_two"]), (True, True))
+        failing = read_pattern("RectangularPatternFeature", elements, isSymmetricInDirectionOne=Unreadable(),
+                               **rectangular())
+        self.assertEqual((failing["symmetric_one"], failing["symmetric_two"]), (False, False))
+        self.assertEqual(len(failing["elements"]), 3)
+
     def test_row_with_elements_read_after_the_item(self):
         elements = [element(i + 1, (20 * i, 0, 0)) for i in range(3)]
         data = read_pattern("RectangularPatternFeature", elements, suppressedElementsIds=[2],
@@ -263,6 +280,14 @@ class RectangularPatternTest(unittest.TestCase):
 
 
 class CircularPatternTest(unittest.TestCase):
+    def test_the_symmetric_flag_is_read_and_a_flag_that_fails_reads_as_not_symmetric(self):
+        axis = Obj("fusion::ConstructionAxis", geometry=Obj(origin=P(5, 5, 0), direction=Obj(x=0.0, y=0.0, z=1.0)))
+        common = dict(inputEntities=Coll([source_feature(1)]), patternEntityType="FeaturesPatternEntityType", axis=axis,
+                      quantity=param(3.0), totalAngle=param(1.5707963267948966))
+        for flag, expected in ((True, True), (Unreadable(), False)):
+            data = read_pattern("CircularPatternFeature", [element(1, (0, 0, 0))], isSymmetric=flag, **common)
+            self.assertEqual(data["symmetric"], expected)
+
     def test_full_turn_with_turned_elements(self):
         turned = element(2, (0, 0, 0), x=(0, 1, 0), y=(-1, 0, 0))
         data = read_pattern(

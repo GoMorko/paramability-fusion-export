@@ -3,7 +3,7 @@ import importlib
 
 from . import borrowed, combine, range_check, ref_motion, step_kinds
 from .audit import audit
-from .sizes import construction_fixes, joint_reasons, text_reasons, untried_reasons, used_sizes
+from .sizes import construction_fixes, joint_reasons, probed_sizes, text_reasons, untried_reasons, used_sizes
 from . import notes as wording, place
 from .picks import MAX_NEAR_POINTS
 from .notes import (
@@ -15,6 +15,7 @@ from .result import Refusal, StepResult, TranslateResult, make_verdict
 from ..params import geometry_links
 from ..params.expressions import MAX_FORMULA_LENGTH
 from .values import Sized, number
+from ..sketch_values import coverage
 from ..sketch_values.motion import Motion, Stuck
 from .words import type_words
 
@@ -234,6 +235,9 @@ def translate(capture, handlers=None, size_table=None, motion=None):
         upfront.setdefault(name, why)
     for name in getattr(motion, "body_moved", None) or ():
         upfront.setdefault(name, BODY_MOVED_WHY)
+    for name in probed_sizes(size_table):
+        if coverage.not_built(motion, name):
+            upfront.setdefault(name, wording.not_built_why(coverage.span(motion, name)))
     first = _settle(capture, table, size_table, motion, upfront, False, cache)
     if first.result.recipe is None or not first.whys:
         return _finish(first, {}, capture, motion)
@@ -305,14 +309,31 @@ def _finish(settled, doubts, capture, motion):
     for name, why in checked.forgotten.items():
         doubts.setdefault(name, why)
     sizes = used_sizes(result.recipe["features"], table.sizes)
+    spans = _narrow_spans(table, motion)
+    for name, (span, low, high) in spans.items():
+        if table.size_name(name) in sizes:
+            doubts[name] = wording.with_span(doubts.get(name), span, low, high)
     result.loose = [{"name": name, "reason": loose_reason(name, why)} for name, why in doubts.items()
                     if table.size_name(name) in sizes]
-    result.dropped = _dropped(table, sizes, doubts, checked.unmoved, checked.unmoved_links, _tried(motion))
+    result.dropped = _dropped(table, sizes, doubts, checked.unmoved, checked.unmoved_links, _tried(motion),
+                              {name: found[0] for name, found in spans.items()})
     result.notes.extend(d["reason"] for d in result.dropped)
     result.recipe["sizesAsWritten"] = True
     if sizes:
         result.recipe["sizes"] = sizes
     return result
+
+
+def _narrow_spans(table, motion):
+    """`{ Fusion name: (span, min, max) }` of the probed sizes that the probe measured over less than their range
+    (`Motion.spans`): the copy follows them only between the values measured."""
+    out = {}
+    for name in probed_sizes(table):
+        span = coverage.span(motion, name)
+        size = table.sizes.get(table.size_name(name)) or {}
+        if span and "min" in size and wording.narrow_span(span, size["min"], size["max"]):
+            out[name] = (span, size["min"], size["max"])
+    return out
 
 
 def _tried(motion):
@@ -322,12 +343,13 @@ def _tried(motion):
     return {name for state in motion.states or () if state.get("built", True) for name in state.get("values") or {}}
 
 
-def _dropped(table, sizes, doubts, unmoved, unmoved_links=None, tried=()):
+def _dropped(table, sizes, doubts, unmoved, unmoved_links=None, tried=(), spans=None):
     """`{ name, reason, used }` for each ticked size that no written formula reads. `used` is True when a step reads
     it and the copy could not follow it, False when nothing copied depends on it. `unmoved_links` names, per size
     tied to a sketch only through another component that did not move with it, that component. A size in `tried`
     (set to other values by the size probe) that nothing reads was measured to change nothing: it gets
-    `"tried": True` and says so."""
+    `"tried": True` and says so; with a span in `spans` (measured over less than its range) it says between which
+    values."""
     out = []
     for name in table.ticked:
         if table.size_name(name) in sizes:
@@ -335,12 +357,13 @@ def _dropped(table, sizes, doubts, unmoved, unmoved_links=None, tried=()):
         if name in doubts:
             out.append({"name": name, "reason": dropped_reason(name, doubts[name]), "used": True})
         else:
+            span = (spans or {}).get(name)
             if name in (unmoved_links or {}):
-                reason = unmoved_link_reason(name, unmoved_links[name])
+                reason = unmoved_link_reason(name, unmoved_links[name], span)
             elif name in unmoved:
                 reason = unmoved_reason(name)
             elif name in tried:
-                reason = tried_unmoved_reason(name)
+                reason = tried_unmoved_reason(name, span)
             else:
                 reason = unused_reason(name)
             entry = {"name": name, "reason": reason, "used": False}

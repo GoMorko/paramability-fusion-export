@@ -93,6 +93,14 @@ class FeatureTokensTest(unittest.TestCase):
                    geometry=Obj("core::InfiniteLine3D", origin=P(0, 0, 4), direction=Obj(x=1.0, y=0.0, z=0.0)))
         self.assertEqual(self.revolve(axis)["axis"], {"point": [0, 0, 4], "dir": [1, 0, 0], "token": "ax1"})
 
+    def test_a_revolve_axis_that_cannot_be_used_records_what_it_is(self):
+        curved = Obj("fusion::BRepEdge", geometry=Obj("core::Arc3D"))
+        self.assertEqual(self.revolve(curved)["axis"], {"kind": "other", "type": "BRepEdge", "geometry": "Arc3D"})
+        broken = Obj("fusion::ConstructionAxis", entityToken="ax1")  # no geometry: reading it raises
+        found = self.revolve(broken)["axis"]
+        self.assertEqual((found["kind"], found["type"]), ("other", "ConstructionAxis"))
+        self.assertTrue(found["error"])
+
     def test_extrude_target_token_only_for_construction_planes(self):
         plane = Obj("fusion::ConstructionPlane", entityToken="cp1",
                     geometry=Obj("core::Plane", origin=P(0, 0, 5), normal=Obj(x=0.0, y=0.0, z=1.0)))

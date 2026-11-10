@@ -83,7 +83,9 @@ so does a place the tries could not measure. The result is kept in `report.json`
 When a sketch of the part is tied to another component, or a step uses a place of one, the export also tries up to 12
 unticked parameters that act on other components, once each, in the rows left under the cap. These tries only look: a parameter that moves the
 part is named in the result window ("These parameters also change this part"), and you tick it and export again to
-get it as a size.
+get it as a size. These tries are compared with the design as it reads just before them, so a sketch that Fusion
+left on its other solution after the earlier tries does not count as a change. A try that does not rebuild is listed
+as not tried.
 
 Some sizes the add-in cannot follow fully: a size that moves a sketch in a way the tries could not follow, a plane or
 axis, a joint, a pick (an edge of a round or chamfer) that may move with it, a pick on a pattern copy whose count would
@@ -98,7 +100,12 @@ sets the size to other values, lets Fusion rebuild, and reads the sketch each ti
 readings it writes the sketch value as a formula of your parameters, such as `0.5 * FilterBox_width_mm`, so the
 sketch follows the size in Paramability. This adds about one rebuild per size that moves a sketch, plus two. The
 progress window says "Trying size ..." for these steps, and Cancel works there too. A try that Fusion cannot build is
-dropped; no size is fixed for it. A size the readings still cannot follow is loose.
+dropped; no size is fixed for it. The add-in then tries that size nearer to its value now (half way, then a quarter,
+then a tenth of the way to the end of its range; at most 24 such tries per export). When a nearer try builds, the
+size follows between the values that built, and the size says "it was followed between A and B". A size that did not
+rebuild at any value tried is not a size, and the reason names the values and the step Fusion stopped at. When one
+size moves a point along a curve (an angle, for example), only that size is marked; the other sizes of the sketch
+still follow, and two more tries check them together. A size the readings still cannot follow is loose.
 
 These cases cannot be copied in a sketch even with the tries: a point that moves along a curve (an angle or a
 polar placement), an outline that changes shape (a line that only crosses the outline above some width, a sketch
@@ -183,8 +190,14 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 ## Limits
 
 - Every size row and sketch try starts from the saved values: before each one after the first the add-in puts the
-  parameters back and recomputes, so a sketch with two solutions cannot stay flipped from the row before. This costs
-  one more recompute per row.
+  parameters back and recomputes. A sketch with two solutions can still land on its other one after a try that did
+  not rebuild; the add-in then does not blame the size (the sketch reads the same at two values of it), and when the
+  sketch still reads another outline after the export, the result window names it so you can look at it in Fusion.
+- A sketch value that one size moves along a curve (a point that turns with an angle, a corner at a length divided
+  by a sine) cannot be copied: that size stays loose or is not a size. Formulas with sin, cos or products of sizes are
+  not fitted yet.
+- A revolve axis the copy cannot use (an edge that is not straight, a face that is not round, an axis that cannot be
+  read) stops the copy; the reason says which of these it is.
 - One solid body per part. Several bodies go in one file as parts (see "Several bodies in one file").
 - A body inside a component (at any depth) exports as a recipe with sizes, like a root body, and lands where Fusion
   shows it. If the part was moved by hand, capture its position first (Position, Capture Position); the export asks
@@ -195,6 +208,10 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   where Fusion shows it and follows the sizes the probe saw move it; where it could stop meeting the part (a slot that
   no longer reaches its wall, a rail that comes off), the size may give unexpected results, with the reason and the
   value past which it starts.
+- A rectangular or circular pattern that spreads copies to both sides of the original is copied as a forward and a
+  backward pattern from the original, at the places Fusion measured. Its count and spacing can follow sizes. A count that
+  was measured odd and can become even inside its size range may give unexpected results, since the places Fusion
+  uses for an even count were not checked for it.
 - A mirror plane, pattern or revolve axis, a flat face or plane an extrude starts from or reaches to, a hole on sketch
   points or on a flat face of another component, and a pattern direction taken from one, are copied and follow the
   sizes the tries measured (see above). Where the tries could not measure the place, or it turns, the size that may move
@@ -214,7 +231,8 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   a tilted or curved surface, an emboss on a curved face, an emboss that is moved or turned on its face, drawn on a
   plane tilted to its face or set to follow tangent faces that are rounded, extrudes that make a new component, modeled threads, rounds with variable or chord length
   sizes or curvature continuity, shells that grow outward, close the body or round their corners, patterns of faces or bodies, patterns
-  that spread to both sides of the start, mirrors of faces, a chamfer with two different sizes whose sides could not be
+  that spread to both sides of the start when the original sits between two copies or the copies do not follow the
+  usual places, mirrors of faces, a chamfer with two different sizes whose sides could not be
   measured, a press pull (offset
   faces) of a curved face, of a face with a leaning or rounded side, or of two faces that meet, a combine whose
   tool body has any step that does not add material (a cut, a round, a chamfer, a shell, a hole, a pattern or mirror,

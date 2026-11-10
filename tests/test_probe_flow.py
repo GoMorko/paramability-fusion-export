@@ -131,6 +131,49 @@ class SizeProbeTest(unittest.TestCase):
         self.assertEqual(kept_size_names(self.table, []), {self.table.size_name(n) for n in ("count", "cube", "off", "height")})
 
 
+class DiscoveryTest(unittest.TestCase):
+    """Discovery rows are compared with the design as it reads once the parameters are back, not with E0."""
+
+    def setUp(self):
+        self.table = table(PARAMS, TICKED, MODEL)
+        self.fusion = Fusion()
+        self.probe = SizeProbe.start(CAPTURE, self.table, self.fusion.read)
+
+    @staticmethod
+    def flipped(**sizes):
+        found = read_at(**sizes)
+        found["sketches"]["sk2"] = dict(found["sketches"]["sk2"], profiles=[{"loops": []}])
+        return found
+
+    def test_a_sketch_left_on_another_solution_after_the_rows_is_not_a_move_of_every_parameter_tried_later(self):
+        self.probe.set_discovery_base(self.flipped())
+        self.probe.discover([({"varied": ["lid"], "state": {"lid": 4.0}}, {}, self.flipped()),
+                             ({"varied": ["pipe"], "state": {"pipe": 9.0}}, {}, self.flipped(cube=20))])
+        self.assertEqual(self.probe.also_changes, ["pipe"])
+        self.assertEqual(self.probe.after_rows["changed"], ["Sketch2"])
+        self.assertEqual([d["moved"] for d in self.probe.discovery], [False, True])
+        self.assertIn("Sketch1", self.probe.discovery[1]["changed"])
+
+    def test_a_row_that_did_not_build_or_was_not_read_is_not_tried(self):
+        self.probe.set_discovery_base(read_at())
+        failed = {"error": "x", "detail": {"items": ["Chamfer3"]}}
+        self.probe.discover([({"varied": ["lid"], "state": {"lid": 4.0}}, failed, None),
+                             ({"varied": ["pipe"], "state": {"pipe": 9.0}}, {}, None)])
+        self.assertEqual([(d["moved"], d["tried"]) for d in self.probe.discovery], [(None, False), (None, False)])
+        self.assertEqual(self.probe.discovery[0]["failed"], "Chamfer3")
+        self.assertEqual(self.probe.also_changes, [])
+
+    def test_the_restore_check_names_the_sketch_it_could_not_compare_and_the_person_is_told(self):
+        from lib.export_plan.health import health_lines, make_health
+        self.assertIsNone(self.probe.measure_restore(self.flipped()))
+        self.assertEqual(len(self.probe.restore_unchecked), 1)
+        self.assertIn("Sketch2", self.probe.restore_unchecked[0])
+        health = make_health(gap_mm=None, probe="measured", unchecked=self.probe.restore_unchecked)
+        self.assertTrue(any("Sketch2" in line for line in health_lines(health)))
+        self.assertEqual(self.probe.measure_restore(read_at()), 0.0)
+        self.assertEqual(self.probe.restore_unchecked, [])
+
+
 class RowWithoutStepTest(unittest.TestCase):
     def test_the_callback_gets_none_and_no_file_is_expected(self):
         store = FakeStore({"w": "5 mm"})

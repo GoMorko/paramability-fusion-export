@@ -1,7 +1,7 @@
 """Fit one written value as an exact affine formula over parameter columns. Pure numbers.
 
 States are aligned lists, index 0 the state the export started from. A value `x` is `const + sum(a_j * c_j)` over at
-most three columns `c_j`. The fit is exact only when every state agrees within the tolerance and the columns moved
+most four columns `c_j`. The fit is exact only when every state agrees within the tolerance and the columns moved
 in enough states to tell a line from a coincidence.
 """
 import itertools
@@ -10,7 +10,7 @@ import math
 from ..sketch_values.motion import CURVE, UNTRIED
 
 TOLERANCE = 1e-4
-MAX_COLUMNS = 3
+MAX_COLUMNS = 4
 MAX_CANDIDATES = 12
 SNAP_DENOMINATOR = 24
 SNAP_TOLERANCE = 1e-6
@@ -44,10 +44,19 @@ def _same(a, b):
     return all(abs(x - y) <= _DEFICIENT * (1.0 + abs(x)) for x, y in zip(a, b))
 
 
-def _candidates(columns, usable):
-    """Columns that change in some usable state, equal ones merged into the best ranked, at most `MAX_CANDIDATES`."""
+def _candidates(columns, usable, moving=()):
+    """Columns that change in some usable state, equal ones merged into the best ranked, at most `MAX_CANDIDATES`.
+
+    `moving` are the states where the value moved. A column that changes in one of them goes before every column that
+    does not, whatever its rank: with many sizes tried, the columns that cannot explain the move would otherwise take
+    the places and leave a value that follows its sizes exactly without a fit."""
+
+    def order(column):
+        explains = any(abs(column.values[i] - column.values[0]) > _DEFICIENT for i in moving)
+        return (not explains, column.rank)
+
     out = []
-    for column in sorted(columns, key=lambda c: c.rank):
+    for column in sorted(columns, key=order):
         values = [column.values[i] for i in usable]
         if not _moves(values, _DEFICIENT):
             continue
@@ -113,7 +122,7 @@ def fit_value(x, columns, tol=TOLERANCE):
     if not _moves(xs, tol):
         return Result("const", const=x[0])
     dx = [v - xs[0] for v in xs[1:]]
-    candidates = _candidates(columns, usable)
+    candidates = _candidates(columns, usable, [i for i in usable[1:] if abs(x[i] - x[0]) > tol])
     too_few = False
     for size in range(1, MAX_COLUMNS + 1):
         for subset in itertools.combinations(candidates, size):

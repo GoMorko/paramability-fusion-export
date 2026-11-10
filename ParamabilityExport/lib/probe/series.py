@@ -54,4 +54,47 @@ def fit_series(values, series, problems, candidates, varied, owner=""):
         if result.kind == "affine":
             values[key] = Affine(result.const, result.terms, owner)
         elif result.kind == "stuck":
-            values[key] = Stuck(found, result.cause or CURVE, owner)
+            values[key] = _narrowed(x, candidates, varied, found, owner) or Stuck(found, result.cause or CURVE, owner)
+
+
+def _alone(x, varied, column):
+    """`[(size value, reading)]` of the value now and of every state that changes only `column`'s size."""
+    out = [(column.values[0], x[0])]
+    for at in range(1, len(x)):
+        if x[at] is not None and varied(at) == {column.name}:
+            out.append((column.values[at], x[at]))
+    return out
+
+
+def _on_a_line(points):
+    """False when three or more readings of one size alone do not lie on one straight line; True for fewer."""
+    if len(points) < 3:
+        return True
+    (s0, v0), rest = points[0], points[1:]
+    slopes = [(v - v0) / (s - s0) for s, v in rest if abs(s - s0) > 1e-12]
+    reach = max(abs(s - s0) for s, _ in rest)
+    return max(slopes) - min(slopes) <= fit.TOLERANCE / max(reach, 1e-12) * 2
+
+
+def curved_sizes(x, candidates, varied, found):
+    """The sizes in `found` (they moved the value) whose own readings, with every other size at its value now, do not
+    lie on a straight line: a move along a curve that only they make."""
+    by_name = {c.name: c for c in candidates}
+    return [name for name in found if name in by_name and not _on_a_line(_alone(x, varied, by_name[name]))]
+
+
+def _narrowed(x, candidates, varied, found, owner):
+    """A `Stuck` that blames only the sizes that move the value along a curve on their own, with the formula the
+    value follows over the other sizes once those are fixed (`rest`): fitted over the states that keep the curved
+    sizes at their value now, and accepted only as exact as any other fit (with a state to check it). None when no
+    size is curved on its own, or the rest does not fit: then every size that moved the value is blamed."""
+    curved = curved_sizes(x, candidates, varied, found)
+    if not curved:
+        return None
+    kept = [x[0]] + [None if varied(at) & set(curved) else x[at] for at in range(1, len(x))]
+    rest = fit.fit_value(kept, candidates)
+    if rest.kind == "affine":
+        return Stuck(curved, CURVE, owner, Affine(rest.const, rest.terms, owner))
+    if rest.kind == "const":
+        return Stuck(curved, CURVE, owner)
+    return None

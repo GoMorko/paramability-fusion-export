@@ -10,7 +10,8 @@
       "apart": [ 3 ],
       "unmeasured": { "Sketch7": "its first read did not match the capture" },
       "untried": [ "FilterBox_width_mm" ],
-      "refs": { "57.plane": "", "60.axis": "its first read did not match the capture" } }
+      "refs": { "57.plane": "", "60.axis": "its first read did not match the capture" },
+      "spans": { "width": { "low": 1.8, "high": 3.6, "failed": [ [0.9, "Chamfer3"] ] } } }
 
 The keys are written by `sketch_values.keys`. `curves` lists the profiles (`<item>/p<profile>`) whose sketch curves were
 measured.
@@ -29,6 +30,11 @@ plane, axis or point moved from where the capture has it (zero at the current si
 a `Stuck` when it turned or the move does not fit. A measured reference without keys stayed where it is. A reference
 that is not in `refs` was not looked at (a motion file written without references, or the first translation
 of an export): nothing is known about it.
+
+`spans` says, per size the probe set to other values, between which values it was really measured: `low` and `high`
+are the lowest and highest values of the states that built (the value now included), `failed` lists each value tried
+alone that Fusion could not rebuild, with the first step that failed there. A size whose `low` and `high` are its
+value now and that has `failed` entries was not measured at all.
 
 The translator reads this file; `probe.build` makes it.
 """
@@ -108,7 +114,7 @@ class Motion:
     optimistic = False
 
     def __init__(self, values=None, box_max=None, states=None, dropped=None, curves=None, apart=None,
-                 unmeasured=None, untried=None, refs=None, body_moved=None):
+                 unmeasured=None, untried=None, refs=None, body_moved=None, spans=None):
         self.values = dict(values or {})
         self.box_max = box_max
         self.states = list(states or [])
@@ -120,6 +126,8 @@ class Motion:
         self.refs = dict(refs or {})  # reference key to "" (measured) or why it could not be measured
         # Fusion names of sizes that changed the body (its box) in a try but moved no followed sketch or reference
         self.body_moved = list(body_moved or [])
+        # Fusion name to { low, high, failed }: the values a size was measured between, and the ones that did not build
+        self.spans = dict(spans or {})
 
     def get(self, key):
         """`Affine`, `Stuck`, or None when the value did not move."""
@@ -144,6 +152,8 @@ class Motion:
             out["refs"] = dict(self.refs)
         if self.body_moved:
             out["body_moved"] = list(self.body_moved)
+        if self.spans:
+            out["spans"] = {name: dict(span) for name, span in self.spans.items()}
         return out
 
     @classmethod
@@ -159,7 +169,7 @@ class Motion:
                 values[key] = Affine(raw.get("const", 0.0), raw.get("terms"), raw.get("sketch", ""))
         return cls(values, data.get("box_max"), data.get("states"), data.get("dropped"), data.get("curves"),
                    data.get("apart"), data.get("unmeasured"), data.get("untried"), data.get("refs"),
-                   data.get("body_moved"))
+                   data.get("body_moved"), data.get("spans"))
 
 
 class _Optimistic(Motion):

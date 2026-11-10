@@ -146,5 +146,49 @@ class CandidateProfileTests(unittest.TestCase):
         self.assertEqual(values["1/p0/l0/center.0"], 5.0)
 
 
+def size_dict(name, value, low, high, kind="length"):
+    return {"param": name, "size": name, "unit": "" if kind == "count" else "mm", "kind": kind, "value": value,
+            "min": low, "max": high}
+
+
+def tried(name, *pairs):
+    return [{"values": {name: value}, "built": built} for value, built in pairs]
+
+
+class NearerRowsTests(unittest.TestCase):
+    def values(self, rows):
+        return [r["state"][r["varied"][0]] for r in rows]
+
+    def test_a_side_that_did_not_build_is_tried_half_then_a_quarter_then_a_tenth_of_the_way(self):
+        d = size_dict("d", 16.0, 8.0, 32.0)
+        steps = [tried("d", (8.0, False), (32.0, False)),
+                 tried("d", (8.0, False), (32.0, False), (12.0, False), (24.0, False)),
+                 tried("d", (8.0, False), (32.0, False), (12.0, False), (24.0, False), (14.0, False), (20.0, True))]
+        self.assertEqual([self.values(plan.nearer_rows([d], s)) for s in steps], [[12.0, 24.0], [14.0, 20.0], [15.2]])
+        done = steps[2] + tried("d", (15.2, False))
+        self.assertEqual(plan.nearer_rows([d], done), [])
+
+    def test_a_size_that_moved_with_one_reading_gets_a_second_one_half_way(self):
+        d = size_dict("d", 16.0, 16.0, 32.0)
+        self.assertEqual(self.values(plan.nearer_rows([d], tried("d", (32.0, True)), moved=["d"])), [24.0])
+        self.assertEqual(plan.nearer_rows([d], tried("d", (32.0, True))), [])
+
+    def test_counts_stay_whole_and_sizes_without_any_built_row_come_first(self):
+        count = size_dict("n", 3.0, 1.0, 6.0, kind="count")
+        width = size_dict("w", 10.0, 5.0, 20.0)
+        states = tried("n", (1.0, False), (6.0, True)) + tried("w", (5.0, False), (20.0, False))
+        rows = plan.nearer_rows([count, width], states, limit=2)
+        self.assertEqual([(r["varied"][0], r["state"][r["varied"][0]]) for r in rows], [("w", 7.5), ("w", 15.0)])
+        self.assertEqual(self.values(plan.nearer_rows([count], states)), [2.0])
+
+    def test_the_check_rows_set_every_other_size_to_its_measured_ends(self):
+        sizes = [size_dict("a", 120.0, 75.0, 165.0, "angle"), size_dict("b", 12.0, 6.0, 24.0),
+                 size_dict("c", 3.0, 1.5, 6.0)]
+        spans = {"a": {"low": 75.0, "high": 165.0}, "b": {"low": 9.0, "high": 24.0}, "c": {"low": 1.5, "high": 6.0}}
+        rows = plan.check_rows(sizes, {"a"}, spans, room=10)
+        self.assertEqual([r["state"] for r in rows], [{"a": 120.0, "b": 9.0, "c": 1.5}, {"a": 120.0, "b": 24.0, "c": 6.0}])
+        self.assertEqual(plan.check_rows(sizes, {"a"}, spans, room=1), [])
+
+
 if __name__ == "__main__":
     unittest.main()

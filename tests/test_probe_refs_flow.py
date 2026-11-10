@@ -98,7 +98,9 @@ class RefProbeTest(unittest.TestCase):
         moved, still = dict(read_at(), refs=plane_at(24)), dict(read_at(), refs=plane_at(20))
         probe.discover([({"varied": ["gap"]}, {}, moved), ({"varied": ["cube"]}, {}, still),
                         ({"varied": ["off"]}, {}, dict(read_at(), refs={}))])
-        self.assertEqual(probe.also_changes, ["gap", "off"])
+        # A try whose read lacks the place is not a move: nothing was compared there.
+        self.assertEqual(probe.also_changes, ["gap"])
+        self.assertEqual([d["unread"] for d in probe.discovery], [[], [], ["8.plane"]])
 
     def test_references_alone_are_enough_to_start_a_probe(self):
         self.assertTrue(covers_a_sketch(capture(MIRROR)))

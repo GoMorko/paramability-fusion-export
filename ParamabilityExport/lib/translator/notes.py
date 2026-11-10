@@ -26,6 +26,60 @@ class Past(str):
         return out
 
 
+def number_text(value):
+    """A size value as the reasons write it: at most 6 decimals, no trailing zeros."""
+    return ("%.6f" % value).rstrip("0").rstrip(".")
+
+
+def _nearest_failures(span):
+    """The failed value nearest to the value now on each side, lowest first, as `(value, step)`."""
+    now = span["low"]
+    out = []
+    for side in (-1, 1):
+        found = [f for f in span.get("failed") or () if (f[0] - now) * side > 0]
+        if found:
+            out.append(min(found, key=lambda f: abs(f[0] - now)))
+    return out
+
+
+def not_built_why(span):
+    """Why a size was not measured: Fusion rebuilt the design at none of the values tried. Names the value nearest to
+    the value now on each side and the step that failed there."""
+    tried = ["%s%s" % (number_text(v), " (%s)" % clip(step, MAX_NAME) if step else "")
+             for v, step in _nearest_failures(span)]
+    return "the design does not rebuild in Fusion at %s, the nearest values tried, so it could not be measured" % (
+        " or ".join(tried) or "the values tried")
+
+
+def narrow_span(span, low, high):
+    """True when a size was measured over less than its range `low` to `high`, and at more than its value now."""
+    return bool(span) and span["high"] - span["low"] > 1e-9 and (
+        span["low"] > low + 1e-9 or span["high"] < high - 1e-9)
+
+
+def span_words(span):
+    return "between %s and %s" % (number_text(span["low"]), number_text(span["high"]))
+
+
+def span_why(span, low, high):
+    """A `Past` for a size measured over less than its range: "below 1.8", "past 3.6" or "outside 1.8 to 3.6"."""
+    below, past = span["low"] > low + 1e-9, span["high"] < high - 1e-9
+    a, b = number_text(span["low"]), number_text(span["high"])
+    where = "outside %s to %s" % (a, b) if below and past else "below %s" % a if below else "past %s" % b
+    return Past(where, "it was followed %s; beyond that it could not be tried" % span_words(span))
+
+
+def with_span(why, span, low, high):
+    """`why` with the measured span added, or the span reason alone when there is no `why`. A `why` that would grow
+    past the note limit stays as it is."""
+    if why is None:
+        return span_why(span, low, high)
+    text = "%s; it was followed %s, beyond that it could not be tried" % (_ends(why), span_words(span))
+    if len(text) > MAX_NOTE - 80:
+        return why
+    return Past(why.where, text) if getattr(why, "where", None) else text
+
+
 def loose_reason(name, why):
     """Why a size that stays free may not follow every step: "<name> may give unexpected results: <why>."., or
     "<name> may give unexpected results past 2.05: <why>." when the reason is a `Past`."""
@@ -46,18 +100,20 @@ def unmoved_reason(name):
     return clip("%s is not a size: changing it changes nothing in the copied steps." % name, MAX_NOTE)
 
 
-def tried_unmoved_reason(name):
-    return clip("%s is not a size: it was tried at other values, and it changes nothing in this part." % name,
-                MAX_NOTE)
+def tried_unmoved_reason(name, span=None):
+    where = " " + span_words(span) + "; beyond that it could not be tried" if span else ""
+    return clip("%s is not a size: it was tried at other values, and it changes nothing in this part%s." % (
+        name, where), MAX_NOTE)
 
 
 # Why a size that moved the body in a try, but no sketch or reference the copy follows, cannot be followed.
 BODY_MOVED_WHY = "it changes this part in a way the copy does not follow"
 
 
-def unmoved_link_reason(name, component):
-    return clip("%s is not a size: it changes %s, but nothing in this part moved with it." % (
-        name, clip(component, MAX_NAME)), MAX_NOTE)
+def unmoved_link_reason(name, component, span=None):
+    where = " " + span_words(span) + "; beyond that it could not be tried" if span else ""
+    return clip("%s is not a size: it changes %s, but nothing in this part moved with it%s." % (
+        name, clip(component, MAX_NAME), where), MAX_NOTE)
 
 
 def untried_link_reason(sketch, component):

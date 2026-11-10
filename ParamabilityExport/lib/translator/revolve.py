@@ -212,6 +212,28 @@ def _angle_value(ctx, item, mode, angle):
     return values.Quantity(angle)
 
 
+# What a revolve axis the copy cannot use is, by the Fusion type the reader recorded.
+_AXIS_WORDS = {"BRepEdge": "an edge", "BRepFace": "a face", "SketchLine": "a sketch line",
+               "ConstructionAxis": "a construction axis"}
+
+
+def _axis_refusal(axis):
+    """Why a revolve axis cannot be copied, saying what the axis is when the reader recorded it."""
+    kind = axis.get("type")
+    if kind == "none":
+        return "Fusion gives no axis for this revolve."
+    words = _AXIS_WORDS.get(kind, "a %s" % kind if kind else "")
+    if kind == "BRepEdge" and axis.get("geometry"):
+        return "The axis of this revolve is an edge that is not straight, which cannot be copied."
+    if kind == "BRepFace" and axis.get("geometry"):
+        return "The axis of this revolve is a face that is not round, which cannot be copied."
+    if axis.get("error") and words:
+        return "The axis of this revolve (%s) could not be read." % words
+    if words:
+        return "The axis of this revolve is %s, which cannot be copied yet." % words
+    return "The axis of this revolve is not a straight line that can be copied."
+
+
 def handle(item, ctx):
     data = item.get("data") or {}
     operation = data.get("operation")
@@ -225,7 +247,7 @@ def handle(item, ctx):
         return Refusal("This revolve has no sketch outline.")
     axis = data.get("axis")
     if not axis or axis.get("kind") == "other" or "point" not in axis or "dir" not in axis:
-        return Refusal("The axis of this revolve is not a straight line that can be copied.")
+        return Refusal(_axis_refusal(axis or {}))
     coords = _foreign_axis(ctx, item, axis) if axis.get("assembly") else None
     angles = _angles(data.get("extent"))
     if isinstance(angles, Refusal):

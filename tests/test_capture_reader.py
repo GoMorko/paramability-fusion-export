@@ -501,7 +501,7 @@ class RevolveTest(unittest.TestCase):
         self.assertEqual(data["axis"], {"point": [0, 0, 4], "dir": [1, 0, 0]})
         self.assertEqual(data["extent"], {"kind": "twoSidesAngle", "angle_one_deg": 30.0, "angle_two_deg": 60.0})
         odd = self.read(Obj("fusion::Vertex"), Obj("fusion::NewExtentDefinition"))
-        self.assertEqual(odd["axis"], {"kind": "other"})
+        self.assertEqual(odd["axis"], {"kind": "other", "type": "Vertex"})
         self.assertEqual(odd["extent"], {"kind": "other", "type": "NewExtentDefinition"})
 
 

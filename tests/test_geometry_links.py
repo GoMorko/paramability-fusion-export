@@ -151,6 +151,41 @@ class TranslateTest(unittest.TestCase):
                 self.assertIn("PipeHole", found["reason"])
 
 
+class MeasuredSpanTest(unittest.TestCase):
+    """pipe_d_mm is 12, with the range 6 to 24; the probe tried it alone at the values in `failed` and `built`."""
+
+    def run_with(self, failed, built=(), moved=False):
+        def edit(values):
+            if not moved:
+                for key in [k for k in values if k.startswith("5/")]:
+                    del values[key]
+
+        motion = motion_of(NAME, edit)
+        low, high = min((12.0,) + tuple(built)), max((12.0,) + tuple(built))
+        motion.spans = {"pipe_d_mm": {"low": low, "high": high, "failed": [list(f) for f in failed]}}
+        return run(CAPTURE, motion)
+
+    def test_a_size_whose_rows_never_built_was_not_measured_and_is_not_called_unchanging(self):
+        found = dropped(self.run_with([(6.0, "Fillet16"), (24.0, "Chamfer3")]))["pipe_d_mm"]
+        self.assertTrue(found["used"])
+        self.assertNotIn("tried", found)
+        self.assertIn("Fillet16", found["reason"])
+        self.assertIn("Chamfer3", found["reason"])
+
+    def test_nothing_moved_over_part_of_the_range_says_between_which_values(self):
+        part = dropped(self.run_with([(6.0, "Fillet16")], built=[24.0]))["pipe_d_mm"]
+        whole = dropped(self.run_with([], built=[6.0, 24.0]))["pipe_d_mm"]
+        self.assertTrue(part["tried"] and whole["tried"])
+        self.assertNotEqual(part["reason"], whole["reason"])
+        self.assertIn("between 12 and 24", part["reason"])
+
+    def test_a_size_followed_over_part_of_its_range_stays_a_size_with_the_values_it_was_followed_between(self):
+        result = self.run_with([(6.0, "Fillet16")], built=[24.0], moved=True)
+        self.assertIn("pipe_d_mm", result.recipe["sizes"])
+        loose = {f["name"]: f["reason"] for f in result.loose}
+        self.assertIn("between 12 and 24", loose["pipe_d_mm"])
+
+
 # ---- the whole export against a simulated Fusion ---------------------------------------------------------------
 
 START = {p["name"]: p["expression"] for p in USER}
@@ -193,6 +228,17 @@ def export(port, ticked):
                             design_unit="mm", ticked=ticked, ranges={})
     with tempfile.TemporaryDirectory() as tmp:
         return run_pipeline(port, request, tmp)
+
+
+class LinkOutcomeTest(unittest.TestCase):
+    def test_a_linked_formula_is_reported_as_a_formula_and_a_plain_unticked_one_as_not_ticked(self):
+        from lib.export_plan.recipe_export import link_outcomes
+        from tests.probe_helpers import user
+        params = [user("tol_mm", "0.2 mm", 0.2), user("bore_mm", "16 mm + tol_mm", 16.2), user("wall_mm", "1 mm", 1)]
+        links = [dict(LINK, param=name) for name in ("bore_mm", "wall_mm")]
+        table = size_table.build(params, ["tol_mm"], links=links)
+        found = {o["param"]: o["outcome"] for o in link_outcomes(table, {"free": [], "dropped": []})}
+        self.assertEqual(found, {"bore_mm": "formula", "wall_mm": "not ticked"})
 
 
 class ExportTest(unittest.TestCase):

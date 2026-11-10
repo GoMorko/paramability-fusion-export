@@ -45,6 +45,23 @@ def _reasons(table, kinds, why, names=None):
     return found
 
 
+# Makers of the model parameters the size probe follows: a size that reads one may move a sketch.
+PROBED_KINDS = ("sketchDimension", "constructionPlane")
+
+
+def probed_sizes(table):
+    """Fusion names of the ticked sizes that reach a model parameter made by a sketch dimension or a construction
+    plane, or a sketch or a measured place through the geometry of another component (`table.links`), in table order:
+    the sizes the probe must measure to follow them."""
+    reached = set()
+    for m in table.model_params.values():
+        if (m.get("created_by") or {}).get("kind") in PROBED_KINDS:
+            reached |= table.depends(m["name"])
+    for link in table.links:
+        reached |= table.depends(link["param"])
+    return [name for name in table.ticked if name in reached]
+
+
 def joint_reasons(table, names=None):
     """{ Fusion name: why } for each ticked size (or each of `names`) that a joint reads. A joint is not copied, so
     the part does not follow such a size in the assembly."""

@@ -16,6 +16,7 @@ from ..params import defaults, geometry_links
 from ..params.size_table import DERIVED, FREE
 from ..translator.loops import profile_loops
 from ..translator.result import Refusal
+from ..translator.sizes import probed_sizes
 from ..translator.step_kinds import AXIS, HOLE_POINTS, PROFILES, step_type
 
 MAX_PROBE_ROWS = 64
@@ -23,7 +24,12 @@ MAX_PROBE_ROWS = 64
 MAX_EXTRA_SIZES = 8
 # Unticked parameters that act on another component, tried once each to find links the reader cannot see.
 MAX_DISCOVERY = 12
-FOLLOWED_KINDS = ("sketchDimension", "constructionPlane")
+# A row that does not build is tried again nearer to the value now: this share of the way to the range end, in turn.
+# Each try is one more Fusion recompute; a nearer value that builds is enough for the fit, which then holds between
+# the values measured.
+NEARER_STEPS = (0.5, 0.25, 0.1)
+# Rows the export adds for those tries in all, inside `MAX_PROBE_ROWS`: discovery rows get what is left.
+MAX_NEARER_ROWS = 24
 _SAME = 1e-9
 _CURVES = ("line", "arc", "circle", "ellipse")
 
@@ -236,14 +242,8 @@ def request(capture, table, covered=None, wanted=None):
 def sketch_driven(table):
     """Fusion names of the ticked sizes that reach a model parameter made by a sketch dimension or a construction
     plane (of the body's scope), or a sketch or a measured reference through the geometry of another component
-    (`table.links`), in table order."""
-    reached = set()
-    for m in table.model_params.values():
-        if (m.get("created_by") or {}).get("kind") in FOLLOWED_KINDS:
-            reached |= table.depends(m["name"])
-    for link in table.links:
-        reached |= table.depends(link["param"])
-    return [name for name in table.ticked if name in reached]
+    (`table.links`), in table order (`translator.sizes.probed_sizes`)."""
+    return probed_sizes(table)
 
 
 def extra_sizes(table, kept, limit=MAX_EXTRA_SIZES):
@@ -317,6 +317,95 @@ def probe_rows(sizes, moved, limit=MAX_PROBE_ROWS, extra=()):
         for label, key in (("all min", "min"), ("all max", "max")):
             rows.append(_row(sizes, label, {s["param"]: s[key] for s in sizes}))
     return rows, untried
+
+
+def _tried_alone(states, name, value):
+    """`(value, built)` of every state that set only `name` to another value than `value`."""
+    out = []
+    for state in states:
+        values = state.get("values") or {}
+        if list(values) == [name] and abs(values[name] - value) > _SAME:
+            out.append((values[name], state.get("built") is not False))
+    return out
+
+
+def _toward(size, end, share):
+    """The value `share` of the way from the size's value to `end`; a count is rounded to a whole number."""
+    value = size["value"] + share * (end - size["value"])
+    return float(round(value)) if size.get("kind") == "count" else value
+
+
+def _next_nearer(size, end, tried):
+    """The next value toward `end` to try after rows on that side that did not build, or None when the steps are used
+    up. `tried` are the values tried alone on that side."""
+    span = end - size["value"]
+    nearest = min(abs((v - size["value"]) / span) for v in tried)
+    for share in NEARER_STEPS:
+        if share >= nearest - _SAME:
+            continue
+        value = _toward(size, end, share)
+        if abs(value - size["value"]) > _SAME and all(abs(value - v) > _SAME for v in tried):
+            return value
+    return None
+
+
+def _nearer_for(size, states, moved):
+    """`[(label, value)]`: the rows that try `size` nearer to its value after rows that did not build."""
+    tried = _tried_alone(states, size["param"], size["value"])
+    out = []
+    for label, end in (("min", size["min"]), ("max", size["max"])):
+        side = [(v, ok) for v, ok in tried if (v - size["value"]) * (end - size["value"]) > 0]
+        if side and not any(ok for _, ok in side):
+            value = _next_nearer(size, end, [v for v, _ in side])
+            if value is not None:
+                out.append((label, value))
+    built = [v for v, ok in tried if ok]
+    if not out and size["param"] in moved and len(built) == 1:
+        value = _toward(size, built[0], 0.5)
+        if abs(value - size["value"]) > _SAME and all(abs(value - v) > _SAME for v, _ in tried):
+            out.append(("check", value))
+    return out
+
+
+def nearer_rows(sizes, states, moved=(), limit=MAX_NEARER_ROWS):
+    """The next rows that try sizes nearer to their value now, after rows that did not build.
+
+    `states` are the probe states so far (`values` and `built`). For each size and each side of its value whose rows
+    all failed to build: one row `NEARER_STEPS` of the way toward that range end, the first step nearer than the
+    nearest value tried there. A size in `moved` (it moved a sketch or a measured place) with only one row that built
+    and nothing left to try gets one more row half way to that value, so the fit has two readings to tell a straight
+    line from a curve. Sizes that no row built come first. At most `limit` rows; the export calls this again after
+    each batch, so each call gives one step per side."""
+    plans = [(size, _nearer_for(size, states, set(moved))) for size in sizes]
+    unbuilt = {size["param"] for size in sizes
+               if not any(ok for _, ok in _tried_alone(states, size["param"], size["value"]))}
+    plans.sort(key=lambda entry: entry[0]["param"] not in unbuilt)
+    rows = []
+    for size, wanted in plans:
+        for label, value in wanted:
+            if len(rows) >= limit:
+                return rows
+            name = "%s (%s, nearer)" % (size["size"][:MAX_NAME_CHARS - 16], label)
+            rows.append(_row(sizes, name, {size["param"]: value}, "%s (%s %r)" % (size["param"], label, value)))
+    return rows
+
+
+def check_rows(sizes, curved, spans, room):
+    """Two rows that check the other sizes together once some sizes move a value along a curve on their own
+    (`curved`): every other size at the lowest, then at the highest value it was measured at (`spans`, as
+    `Motion.spans`), the curved ones at their value now. The fit of such a value over the other sizes (`Stuck.rest`)
+    is then checked by a state that changes several of them at once. Empty when fewer than two other sizes would
+    change, or `room` is under two rows."""
+    if room < 2:
+        return []
+    rows = []
+    for label, end in (("all low but curved", "low"), ("all high but curved", "high")):
+        overrides = {s["param"]: spans[s["param"]][end] for s in sizes
+                     if s["param"] not in curved and s["param"] in spans
+                     and abs(spans[s["param"]][end] - s["value"]) > _SAME}
+        if len(overrides) >= 2:
+            rows.append(_row(sizes, label, overrides))
+    return rows
 
 
 def discovery_rows(candidates, room, limit=MAX_DISCOVERY):
