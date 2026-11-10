@@ -3,7 +3,8 @@
 Profiles that share a curve are merged into one outline (outlines.py); each outline becomes one recipe `extrude` step
 per side. Fusion's sign conventions are checked against the measured
 `end_offset` (where the end face landed), which wins when the two disagree. With the probe's motion file the outline
-and its sketch plane follow sizes (sketch_motion.py).
+and its sketch plane follow sizes (sketch_motion.py). A start or reach on a flat face or plane of another component
+moves with the offset the probe measured for it (follow.target_shift, ref_motion.py).
 
 A thin extrude of one closed outline without holes is written with the recipe's `thin` wall (thin_wall.py): the wall
 thickness follows its parameter, and the side of the outline comes from the measured area of the end face. Open lines,

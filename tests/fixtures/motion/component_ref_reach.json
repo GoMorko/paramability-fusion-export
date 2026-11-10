@@ -1,0 +1,15 @@
+{
+ "version": 1,
+ "values": {
+  "3/r/side_one/offset": {
+   "const": -10,
+   "terms": {
+    "gap_mm": 1
+   }
+  }
+ },
+ "states": [],
+ "refs": {
+  "3.side_one": ""
+ }
+}

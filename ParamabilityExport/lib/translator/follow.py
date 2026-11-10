@@ -12,15 +12,14 @@ slab places may sit on geometry that moves, so the sizes of the steps written be
 A pattern or mirror copy of an extrude is a slab too, with the `Motion` that carries the original to the copy. A
 point on a copy is placed on the original and moved back: its coordinates follow the length and the spacing.
 
-A plane, axis or face of another component (`assembly` records, with their `ref`) is not measured by the capture. Every
-size that acts on its component (`foreign_place`) is marked, since the copy keeps it where it is now.
+A plane, axis or face of another component (`assembly` records, with their `ref`) moves with the sizes the probe
+measured (`ref_motion`): its place is a formula of them, or the sizes that act on its component are marked.
 
 A point on the inner wall of a shell is placed through the outer wall it was moved from (shells.py), and a point on
 a face that an offsetFaces step moved through the face before the move (offset_faces.py). An edge where the walls of
 two steps cross is placed on both walls (crossings.py).
 """
-from ..params import geometry_links
-from . import crossings, notes, picks, shells, sketch_motion, vec
+from . import crossings, notes, picks, ref_motion, shells, sketch_motion, vec
 from .copy_counts import stays_at_least
 from .placer import ADD
 from .slabs import (AXIAL_TOL, CONSTANT_TOL, FACTOR_DIGITS, IDENTITY_ROWS, LATERAL_TOL, Motion, Place, Slab,
@@ -167,64 +166,6 @@ def faces(ctx, item, face_list):
     return {"near": followed if followed is not None else points}
 
 
-_NOUNS = {"ConstructionPlane": "a plane", "ConstructionAxis": "an axis", "BRepFace": "a face", "BRepEdge": "an edge",
-          "SketchPoint": "a sketch point", "SketchLine": "a sketch line"}
-
-
-def _acting(ctx):
-    """{ component token: Fusion names of the user parameters that act on it } from the capture's parameter data
-    (`geometry_links.acts`), or None when the capture does not say where parameters act (an older capture)."""
-    cache = ctx.cache.setdefault("follow", {})
-    if "acting" not in cache:
-        users = (ctx.capture.get("parameters") or {}).get("user") or []
-        found = None
-        if any("dependents" in p for p in users):
-            found = {}
-            for p in users:
-                for token, _ in geometry_links.acts(ctx.capture, p).components:
-                    found.setdefault(token, []).append(p["name"])
-        cache["acting"] = found
-    return cache["acting"]
-
-
-def foreign_ref(ctx, item, ref, what):
-    """Marks the sizes that may move the plane, axis, face or point of another component that a step uses (`ref`, the
-    measured reference of the capture, see `fusion_reader.placement.ref_record`). The copy keeps that place where it
-    is now, so every size that acts on the owning component is doubted. Without data on where sizes act, or without
-    the owning component, the step gets a note instead. An origin plane or axis only moves with the occurrence, which
-    joints cover, so it marks nothing."""
-    if ctx.table is None or ref.get("origin"):
-        return
-    owner = ref.get("component") or {}
-    noun = _NOUNS.get(ref.get("type"), "geometry")
-    where = owner.get("name") or "another component"
-    acting = _acting(ctx)
-    if acting is None or not owner.get("token"):
-        ctx.note("%s %s %s of %s, and the sizes that may move it could not be found, so the copy keeps it where it "
-                 "is now." % (_name(item), what, noun, where))
-        return
-    names = [n for n in acting.get(owner["token"], ()) if n in ctx.table.ticked]
-    if names:
-        ctx.doubt(names, "%s %s %s of %s that may move with it, and the copy cannot follow that"
-                  % (_name(item), what, noun, where))
-
-
-def foreign_place(ctx, item, record, what):
-    """`foreign_ref` for a plane, axis or target record of another component (`assembly: true`), else nothing."""
-    if record.get("assembly"):
-        foreign_ref(ctx, item, record.get("ref") or {}, what)
-
-
-def foreign_points(ctx, item, data, what="is placed on"):
-    """`foreign_ref` once per component and kind of entity among the `position_refs` of a hole."""
-    seen = set()
-    for ref in data.get("position_refs") or ():
-        key = ((ref.get("component") or {}).get("token"), ref.get("type"))
-        if key not in seen:
-            seen.add(key)
-            foreign_ref(ctx, item, ref, what)
-
-
 def target_shift(ctx, item, target, direction, what="reaches to"):
     """How a face an extrude starts from or reaches to moves along unit `direction`: a Quantity whose formula gives
     the face's offset and whose number is that offset at the measured sizes (plain zero when it does not move); None
@@ -235,8 +176,7 @@ def target_shift(ctx, item, target, direction, what="reaches to"):
     """
     zero = Quantity(0.0)
     if target.get("assembly"):
-        foreign_place(ctx, item, target, what)
-        return zero
+        return ref_motion.plane_shift(ctx, item, target, direction, what)
     if not ctx.written_reads or target.get("entity_type") == "ConstructionPlane":
         return zero
     point = target.get("face_point")
@@ -339,8 +279,7 @@ def place_plane(ctx, item, ref, direction, what="mirrors across"):
     """
     zero = Quantity(0.0)
     if ref.get("assembly"):
-        foreign_place(ctx, item, ref, what)
-        return zero
+        return ref_motion.shift_along(ctx, item, ref, direction, what)
     if not ctx.written_reads or ref.get("origin") or ref.get("foreign"):
         return zero
     kind = ref.get("entity_type")

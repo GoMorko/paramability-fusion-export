@@ -1,7 +1,7 @@
 """The driver: walks a capture's items, calls one handler per feature type, builds the recipe."""
 import importlib
 
-from . import borrowed, combine, range_check, step_kinds
+from . import borrowed, combine, range_check, ref_motion, step_kinds
 from .audit import audit
 from .sizes import construction_fixes, joint_reasons, text_reasons, untried_reasons, used_sizes
 from . import notes as wording, place
@@ -421,10 +421,11 @@ def _walk(capture, table, size_table, motion=None, cache=None):
         if _data(item).get("read_error"):
             return refuse(item, "This step could not be read from Fusion.")
         with ctx.recording() as brought:
-            item = ctx.current = borrowed.bring_in(item, ctx)
+            item = ctx.current = ref_motion.bring_in(borrowed.bring_in(item, ctx))
         ctx.doubts.extend(brought.doubts)
         if _foreign(_data(item)):
-            return refuse(item, "This step reaches into another component, which is not copied yet.",
+            return refuse(item, ref_motion.why_foreign(item)
+                          or "This step reaches into another component, which is not copied yet.",
                           wording.reaches_component_note(_label(item)))
         made_in_component = True
         if motion is not None and size_table is not None:

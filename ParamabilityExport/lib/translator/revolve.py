@@ -5,13 +5,14 @@ the measured outward normal of the start face decides whether the axis direction
 bounds the new material for a new body, join or intersect, so its outward normal points against the travel. After a
 cut it bounds the material that stays, so the normal points along the travel. Two sided revolves are refused: their
 start face is the end of one side, which does not name the side. With the probe's motion file the outline, its plane
-and an axis from a sketch line follow sizes (sketch_motion.py).
+and an axis from a sketch line follow sizes (sketch_motion.py). An axis of another component follows the sizes the
+probe measured it move with (ref_motion.py).
 """
 import math
 
 from ..package.numbers import round9
 
-from . import follow, loops, notes, placement, sketch_motion, values, vec
+from . import loops, notes, placement, ref_motion, sketch_motion, values, vec
 from .extrude import COMBINE
 from .result import Refusal, StepResult
 
@@ -152,10 +153,34 @@ def _turned(on, dir3, point3, degrees):
     }
 
 
-def _turned_sized(ctx, item, drawn, dir3, point3, degrees):
+def _foreign_axis(ctx, item, axis):
+    """The raw 3D point of an axis of another component as it moves with sizes (`ref_motion`), or None when sketch
+    values do not follow sizes in this walk. The sizes that move it are marked here when the move cannot be followed."""
+    moved = ref_motion.raw_moves(ctx, item, axis.get("ref") or {}, ref_motion.AXIS, "turns about")
+    if not sketch_motion.active(ctx):
+        return None
+    return [sketch_motion.Affine(float(p)).plus(m) for p, m in zip(axis["point"], moved)]
+
+
+def _keep_in_plane(ctx, item, coords, outlines):
+    """An axis of another component that moves out of the plane of a sketch that does not move with it would leave
+    that plane at other sizes: the sizes behind the difference are marked."""
+    for drawn in outlines:
+        if drawn is None or not isinstance(drawn.plane, sketch_motion.Affine):
+            continue
+        z = drawn.frame["z"]
+        along = sketch_motion.combine([(z[c], coords[c]) for c in range(3)], drawn.sketch)
+        if not sketch_motion.same(along, drawn.plane):
+            names = sketch_motion.movers(ctx.table, along) + sketch_motion.movers(ctx.table, drawn.plane)
+            ctx.doubt(tuple(dict.fromkeys(names)), "%s turns about an axis of another component that moves out of "
+                      "the plane of its sketch, and the copy cannot follow that" % item.get("name", "a step"))
+
+
+def _turned_sized(ctx, item, drawn, dir3, point3, degrees, axis=None):
     """The sketch origin turned about the axis when the plane or the axis moves with sizes: R o + (I - R) a, as
-    written values; None when neither moves."""
-    axis = sketch_motion.axis_raw(ctx, item)
+    written values; None when neither moves. `axis` is the raw axis point when it comes from another component."""
+    if axis is None:
+        axis = sketch_motion.axis_raw(ctx, item)
     moving_axis = axis is not None and any(not (isinstance(a, sketch_motion.Affine) and a.is_constant) for a in axis)
     still = isinstance(drawn.plane, sketch_motion.Affine) and drawn.plane.is_constant if drawn is not None else True
     if drawn is None or (not moving_axis and still):
@@ -201,7 +226,7 @@ def handle(item, ctx):
     axis = data.get("axis")
     if not axis or axis.get("kind") == "other" or "point" not in axis or "dir" not in axis:
         return Refusal("The axis of this revolve is not a straight line that can be copied.")
-    follow.foreign_place(ctx, item, axis, "turns about")
+    coords = _foreign_axis(ctx, item, axis) if axis.get("assembly") else None
     angles = _angles(data.get("extent"))
     if isinstance(angles, Refusal):
         return angles
@@ -220,6 +245,8 @@ def handle(item, ctx):
         drawn = sketch_motion.outline(ctx, item, profile, outline[0], outline[1], [(at, profile)])
         built.append((profile, outline, located, drawn))
     sketch_motion.planes_apart(ctx, [drawn for _, _, _, drawn in built], item)
+    if coords is not None and not data.get("project_axis"):
+        _keep_in_plane(ctx, item, coords, [drawn for _, _, _, drawn in built])
 
     profile, (outer, _), (point2, dir2, point3, dir3), _ = built[0]
     sign = 1
@@ -237,7 +264,7 @@ def handle(item, ctx):
     for profile, (outer, inners), (point2, dir2, point3, dir3), drawn in built:
         on = placement.from_frame(profile["frame"])
         if mode == "symmetric":
-            moved = _turned_sized(ctx, item, drawn, dir3, point3, -angle / 2.0)
+            moved = _turned_sized(ctx, item, drawn, dir3, point3, -angle / 2.0, coords)
             on = _turned(on, dir3, point3, -angle / 2.0)
             if moved is not None:
                 on["origin"] = moved
@@ -251,7 +278,7 @@ def handle(item, ctx):
         step = {
             "kind": "revolve",
             "sketch": sketch,
-            "axis": {"point": sketch_motion.axis_point(ctx, item, profile["frame"], point2),
+            "axis": {"point": sketch_motion.axis_point(ctx, item, profile["frame"], point2, coords),
                      "dir": _pt([sign * dir2[0], sign * dir2[1]])},
             "combine": combine if not steps else ("add" if combine == "new" else combine),
         }

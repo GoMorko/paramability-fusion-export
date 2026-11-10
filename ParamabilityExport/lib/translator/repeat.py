@@ -10,13 +10,14 @@ extrudes are handed to the walk (`placer_makers.CopiesMaker`), so later picks on
 
 A mirror plane or a turning axis that sits on a face or edge of the part moves when a size moves that face or edge
 (`follow.place_plane`): its origin or axis point is then written as a formula, and the copies move with it. One that
-cannot be followed fixes the sizes written so far.
+cannot be followed fixes the sizes written so far. A plane or axis of another component moves as the probe measured
+it (`ref_motion`).
 """
 import math
 
 from ..package.numbers import round9
 from ..params.expressions import ExpressionError, evaluate
-from . import follow, range_check, values, vec
+from . import follow, range_check, ref_motion, values, vec
 from .vec import POINT_TOL
 from .step_kinds import FINISH, SOLID, recipe_kind
 from .follow import Motion
@@ -311,6 +312,9 @@ def _lattice_axes(item, ctx):
         direction = data.get(dir_key)
         if not direction or vec.length(direction) < 1e-9:
             return Refusal("The direction of this pattern could not be read.")
+        place = data.get(dir_key + "_place")
+        if isinstance(place, dict) and place.get("assembly"):
+            ref_motion.check_direction(ctx, item, place, "spreads copies along")
         count_q = values.quantity(ctx, item, "quantity_" + which, quantity, dim="scalar", whole=True)
         step_q = _axis_step(item, ctx, which, quantity, count_q, kind)
         if isinstance(step_q, Refusal):
@@ -436,16 +440,16 @@ UNIT_DIRECTIONS = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0])
 def _axis_shift(ctx, item, axis, direction):
     """How the axis point moves with sizes, as three Quantities (zero where it stays). An axis on a face or edge that
     sizes move takes the move; the part of it along the axis is left out, it changes nothing. An axis that cannot be
-    followed stays where it is. So does an axis of another component; the sizes that may move it are marked."""
+    followed stays where it is. An axis of another component moves as the probe measured it (`ref_motion`)."""
     if axis.get("assembly"):
-        follow.foreign_place(ctx, item, axis, "turns copies about")
-        return [Quantity(0.0)] * 3
-    shifts = []
-    for unit in UNIT_DIRECTIONS:
-        shift = follow.place_plane(ctx, item, axis, unit, "turns copies about")
-        if shift is None:
-            return [Quantity(0.0)] * 3
-        shifts.append(shift)
+        shifts = ref_motion.axis_moves(ctx, item, axis, "turns copies about")
+    else:
+        shifts = []
+        for unit in UNIT_DIRECTIONS:
+            shift = follow.place_plane(ctx, item, axis, unit, "turns copies about")
+            if shift is None:
+                return [Quantity(0.0)] * 3
+            shifts.append(shift)
     return [shift if shift.sized and abs(abs(d) - 1) >= 1e-9 else Quantity(0.0) for shift, d in zip(shifts, direction)]
 
 

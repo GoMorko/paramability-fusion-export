@@ -3,13 +3,14 @@
 A hole with a flat end, or through all the way, is a recipe `hole`. A blind hole with a drill tip has no recipe
 `hole` form, so it becomes a revolve cut of the hole's profile (shank, optional step or cone, and the cone of the
 tip) turned about the hole axis. Measured `end_points` and `side_cylinders` check the stored direction and size.
-Hole points follow sizes when the probe's motion file moves them (sketch_motion.py).
+Hole points follow sizes when the probe's motion file moves them (sketch_motion.py). A hole on a sketch point, or on a
+flat face, of another component moves with that place (ref_motion.py).
 """
 import math
 
 from ..package.numbers import round9
 
-from . import follow, range_check, sketch_motion, values, vec
+from . import range_check, ref_motion, sketch_motion, values, vec
 from .values import Quantity
 from .result import Refusal, StepResult
 
@@ -263,7 +264,7 @@ def hole(item, ctx):
     diameter = _diameter(data, ctx)
     if isinstance(diameter, Refusal):
         return diameter
-    follow.foreign_points(ctx, item, data)
+    moved = ref_motion.hole_moves(ctx, item, data)
     direction = _direction(data, ctx)
     _check_size(data, ctx, len(data["positions"]), diameter)
     sizes = _sizes(item, ctx, diameter, depth, counterbore, countersink)
@@ -286,10 +287,22 @@ def hole(item, ctx):
     _keep_fit(ctx, item, sizes, tipped)
     if tipped:
         profile = _tip_profile(sizes.diameter, sizes.depth, float(tip), sizes.counterbore, sizes.countersink)
-        points = sketch_motion.points(ctx, item, data["positions"])
+        points = _moved_points(ctx, item, data["positions"], moved)
         return StepResult.of(_tip_step(p, direction, profile) for p in points)
     return StepResult.of(_hole_step(p, direction, sizes.diameter, sizes.depth, sizes.counterbore, sizes.countersink)
-                         for p in sketch_motion.points(ctx, item, data["positions"]))
+                         for p in _moved_points(ctx, item, data["positions"], moved))
+
+
+def _moved_points(ctx, item, rows, moved):
+    """The written hole points, each moved by the formulas of `moved` (how far the place it sits on moves)."""
+    points = sketch_motion.points(ctx, item, rows)
+    for point, move in zip(points, moved):
+        for c, q in enumerate(move):
+            if q.sized:
+                at = point[c]
+                base = Quantity(at.n, at["expr"], at.reads) if isinstance(at, values.Sized) else Quantity(float(at))
+                point[c] = base.plus(q).json()
+    return points
 
 
 def thread(item, ctx):

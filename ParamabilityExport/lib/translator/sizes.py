@@ -169,8 +169,12 @@ def unmeasured_sizes(table, motion, sketch):
 
 
 def _construction_records(node, found):
-    """Records of construction planes and axes in a step's data: `(kind, token)`, the token empty when unknown."""
+    """Records of construction planes and axes in a step's data: `(kind, token)`, the token empty when unknown. A
+    record of another component (`assembly`) is left out: its sizes come from its measured reference
+    (`ref_motion`)."""
     if isinstance(node, dict):
+        if node.get("assembly"):
+            return found
         kind = _CONSTRUCTION.get(node.get("entity_type"))
         if kind is None and node.get("token") and ("normal" in node or "dir" in node):
             kind = "constructionAxis" if "dir" in node else "constructionPlane"

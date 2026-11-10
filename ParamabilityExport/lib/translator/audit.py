@@ -13,8 +13,9 @@ A size is read by a copied step through the model parameters in its `data.params
 sketches it draws on or the geometry of another component those sketches are drawn around (`table.links`), and
 through the construction geometry it uses.
 """
-from ..sketch_values.coverage import STILL
+from ..sketch_values.coverage import MOVED, STILL, ref_answer
 from ..sketch_values.motion import Motion
+from . import ref_motion
 from .notes import step_label, untried_link_reason
 from .sizes import construction_fixes, linked_sizes, sketch_answer, sketch_params, sketch_sizes, used_sizes
 from .values import reads_in
@@ -81,6 +82,27 @@ def _only_linked(table, sketch):
     return set(linked_sizes(table, sketch)) - dimensions
 
 
+def _references(ctx, table, item, label, named, own, measured, motion, out):
+    """The sizes that act on a component whose plane, axis, face or point the step uses (a measured reference) are
+    read by the step: one that moves it must be written into the step's formulas or named, one that does not move it changes nothing, and
+    without a motion file every one must be named."""
+    if getattr(motion, "optimistic", False):
+        return
+    free = set(table.ticked)
+    for entry, names in ref_motion.reaching(ctx, item):
+        component = (entry["ref"].get("component") or {}).get("name") or "another component"
+        for name in names:
+            if name not in free or name in named or name in out.forgotten:
+                continue
+            answer = ref_answer(table, motion, entry["key"], name) if measured else None
+            if answer is not None and answer.kind == STILL:
+                out.unmoved.add(name)
+                out.unmoved_links.setdefault(name, component)
+            elif answer is None or answer.kind != MOVED or name not in own:
+                out.forgotten[name] = "%s uses geometry of %s that it moves, and the copy does not follow it" % (
+                    label, component)
+
+
 def audit(capture, ctx, table, named, motion):
     """The `Audit` of one finished walk.
 
@@ -118,6 +140,7 @@ def audit(capture, ctx, table, named, motion):
             for name in names:
                 if name in free and name not in named and name not in reached:
                     out.forgotten.setdefault(name, "%s uses geometry that it moves, and the copy does not follow it" % label)
+        _references(ctx, table, item, label, named, own, measured, motion, out)
     out.unmoved -= set(out.forgotten) | named | reached
     out.unmoved_links = {name: c for name, c in out.unmoved_links.items() if name in out.unmoved}
     return out

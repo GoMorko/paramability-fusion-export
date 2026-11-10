@@ -508,14 +508,16 @@ def points(ctx, item, rows):
     return out
 
 
-def axis_point(ctx, item, frame, point2):
+def axis_point(ctx, item, frame, point2, coords=None):
     """The revolve axis point in the sketch plane (`point2`, numbers) as written: it follows the axis line when the
-    probe moved it. The plane only moves along its normal, so the in-plane coordinates read the line alone."""
+    probe moved it. The plane only moves along its normal, so the in-plane coordinates read the line alone. `coords`
+    are the raw 3D axis point when the axis is not a line of a sketch of the part (an axis of another component)."""
     if not active(ctx):
         return [round(v, 9) + 0.0 for v in point2]
     axis = (item.get("data") or {}).get("axis") or {}
     sketch = axis.get("sketch") or ""
-    coords = [raw(ctx, keys.axis_point(item.get("index"), c), float(axis["point"][c]), sketch) for c in range(3)]
+    if coords is None:
+        coords = [raw(ctx, keys.axis_point(item.get("index"), c), float(axis["point"][c]), sketch) for c in range(3)]
     if all(isinstance(v, Affine) and v.is_constant for v in coords):
         return [round(v, 9) + 0.0 for v in point2]
     out = []

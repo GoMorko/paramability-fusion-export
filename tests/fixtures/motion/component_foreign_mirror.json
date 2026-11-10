@@ -1,0 +1,15 @@
+{
+ "version": 1,
+ "values": {
+  "4/r/plane/offset": {
+   "const": -10,
+   "terms": {
+    "gap_mm": 1
+   }
+  }
+ },
+ "states": [],
+ "refs": {
+  "4.plane": ""
+ }
+}

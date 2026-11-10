@@ -79,6 +79,39 @@ def _drawn_around(capture):
     return out
 
 
+def _reference_owners(node, found):
+    """Tokens of the components that own the measured references (`ref`, a hole's `position_refs`) under `node`; an
+    origin plane or axis only moves with its occurrence and counts for nothing."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            refs = [value] if key == "ref" else value if key == "position_refs" else []
+            for ref in refs:
+                owner = ((ref or {}).get("component") or {}).get("token")
+                if owner and not ref.get("origin"):
+                    found.add(owner)
+            _reference_owners(value, found)
+    elif isinstance(node, list):
+        for value in node:
+            _reference_owners(value, found)
+    return found
+
+
+def _acting_on(capture, tokens):
+    """User parameter names whose dimensions or features sit in one of the components `tokens`, or in a sketch that a
+    step of such a component takes."""
+    takes = {}
+    for item in capture["items"]:
+        for used in item.get("sketch_inputs") or []:
+            takes.setdefault(used.get("token"), set()).add(item.get("component"))
+    out = set()
+    for p in capture["parameters"]["user"]:
+        for dep in p.get("dependents") or []:
+            homes = {dep.get("component")} | takes.get(dep.get("sketch_token"), set())
+            if homes & tokens:
+                out.add(p["name"])
+    return out
+
+
 def reads_by_step(capture, only=None):
     """{user parameter name: first step that reads it}, following dependencies through model parameters and the
     geometry of other components a sketch is drawn around. `only` is a set of item indexes to look at (the items the
@@ -94,6 +127,7 @@ def reads_by_step(capture, only=None):
         names, sketches = _refs(item)
         for sketch in sketches:
             names |= around.get(sketch, set())
+        names |= _acting_on(capture, _reference_owners(item.get("data") or {}, set()))
         for p in params["model"]:
             made = p.get("created_by") or {}
             if made.get("kind") == "sketchDimension" and made.get("sketch") in sketches:
@@ -277,7 +311,8 @@ class FollowOrFlagTest(unittest.TestCase):
 
     def test_a_fixture_with_a_probe_follows_or_flags_what_its_sketch_reads(self):
         from tests.test_translate_sketch_motion import motion_of
-        for name in ("sketch_rect_centred", "sketch_offset_plane", "linked_pipe_hole"):
+        for name in ("sketch_rect_centred", "sketch_offset_plane", "linked_pipe_hole", "component_ref_reach",
+                     "component_ref_hole", "component_foreign_mirror"):
             with self.subTest(fixture=name):
                 self.assertEqual(offending_sizes(load_capture(name), motion=motion_of(name)), [])
 

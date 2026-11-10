@@ -1,0 +1,15 @@
+{
+ "version": 1,
+ "values": {
+  "3/r/positions.0/point/0": {
+   "const": -10,
+   "terms": {
+    "gap_mm": 1
+   }
+  }
+ },
+ "states": [],
+ "refs": {
+  "3.positions.0": ""
+ }
+}
