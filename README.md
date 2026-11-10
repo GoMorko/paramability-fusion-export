@@ -70,8 +70,15 @@ cannot follow, it is "not followed" with the reason; if nothing in the part move
 reason that it was tried and changes nothing in this part. Up to 8 more ticked parameters that nothing seems to tie
 to the part are tried too, after the others, since you know your design.
 
-When a sketch of the part is tied to another component, the export also tries up to 12 unticked parameters that act
-on other components, once each, in the rows left under the cap. These tries only look: a parameter that moves the
+A step can also use a plane, axis or point of another component directly (a mirror plane, a pattern axis, a face an
+extrude reaches to, a hole point). The export reads where that place is at every size it tries and fits how far it
+moves (a plane along its normal, an axis or point in space). A parameter that acts on the component that owns such a
+place is ticked to start with and tried like a parameter behind a sketch. The copy does not follow these places yet:
+the result is kept in `report.json` (`probe.motion.refs`), and such a parameter is still marked "may give unexpected
+results".
+
+When a sketch of the part is tied to another component, or a step uses a place of one, the export also tries up to 12
+unticked parameters that act on other components, once each, in the rows left under the cap. These tries only look: a parameter that moves the
 part is named in the result window ("These parameters also change this part"), and you tick it and export again to
 get it as a size.
 
@@ -234,10 +241,10 @@ list (lowest first); `tests/test_boundary.py` holds the exact table.
 
 - `package`: the `.paramability` file: units, rows, manifest, caps, file names, zip writer.
 - `params`: Fusion parameters as sizes: names, defaults, expression to formula, the size table.
-- `sketch_values`: the motion file of sketch values that follow sizes, its keys and per sketch coverage.
+- `sketch_values`: the motion file of sketch values and measured references that follow sizes, its keys and coverage.
 - `design_edit`: setting parameter values row by row, restoring them, the timeline marker, the temporary copy.
 - `translator`: a capture dict in, a recipe plus verdicts out (one handler per step kind).
-- `probe`: measures sketches at other size values and fits the motion file.
+- `probe`: measures sketches and the places of other components' planes, axes and points at other size values and fits the motion file.
 - `export_plan`: the export itself: the pipeline, the recipe and its notes, the probe run, size offers.
 - `dialog_model`: what the dialogs show, as plain data (rows, Sizes table, result view, stop warning).
 - `fusion_reader`: reads the design with `adsk` into a capture (one of two packages that use `adsk`).

@@ -2,15 +2,17 @@
 
 `scan` finds the sketches whose numbers the probe can follow ("covered" ones): every capture record that names them
 is a profile, a hole point set or a revolve axis line that the reader gave tokens for. Which records a step type
-carries comes from the step kind table (`translator/step_kinds.py`, `sketches`). `request` is what the reader
-reads per state, `kept_sizes` the sizes worth probing, `probe_rows` the size settings to try.
+carries comes from the step kind table (`translator/step_kinds.py`, `sketches`). `refs` finds the measured
+references of other components (a plane, axis, direction or point a step uses) that the probe reads again at every
+state. `request` is what the reader reads per state, `kept_sizes` the sizes worth probing, `probe_rows` the size
+settings to try.
 
 Sizes are dicts as in `export_plan.size_offers.probe_sizes`: param (Fusion name), size (recipe name), unit, value,
 min, max (manifest numbers).
 """
 from ..package.manifest import MAX_NAME_CHARS
 from ..package.units import display_from_manifest
-from ..params import defaults
+from ..params import defaults, geometry_links
 from ..params.size_table import DERIVED, FREE
 from ..translator.loops import profile_loops
 from ..translator.result import Refusal
@@ -140,21 +142,66 @@ def _scan_hole(out, index, data):
 _SCANNERS = {PROFILES: _scan_profiles, AXIS: _scan_axis, HOLE_POINTS: _scan_hole}
 
 
+# ---- measured references ---------------------------------------------------------------------------------------
+
+SHAPE_PLANE, SHAPE_AXIS, SHAPE_DIRECTION, SHAPE_POINT = "plane", "axis", "direction", "point"
+NO_TOKEN = "it has no token to find it again"
+NO_PLACE = "its place could not be brought into the part's coordinates"
+_POINT_TYPES = ("SketchPoint", "BRepVertex")
+
+
+def is_vector(value):
+    return isinstance(value, (list, tuple)) and len(value) == 3 and all(
+        isinstance(v, (int, float)) and not isinstance(v, bool) for v in value)
+
+
+def _shape(ref):
+    """What of a reference is followed: a plane (point and normal), an axis (point and direction), a direction alone,
+    or a point (a sketch point or vertex); None when its record has no usable geometry."""
+    point, normal, direction = (is_vector(ref.get(k)) for k in ("point", "normal", "dir"))
+    if point and normal:
+        return SHAPE_PLANE
+    if point and direction:
+        return SHAPE_AXIS
+    if direction:
+        return SHAPE_DIRECTION
+    return SHAPE_POINT if point and ref.get("type") in _POINT_TYPES else None
+
+
+def refs(capture, items=None):
+    """The measured references of the capture's steps (`params.geometry_links.item_refs`), each with its `shape` and,
+    when the probe cannot follow it, a `reason` (else empty)."""
+    out = []
+    for entry in geometry_links.capture_refs(capture, items):
+        ref = entry["ref"]
+        shape = _shape(ref)
+        reason = "" if shape else NO_PLACE
+        if shape and not ref.get("token"):
+            shape, reason = None, NO_TOKEN
+        out.append(dict(entry, shape=shape, reason=reason))
+    return out
+
+
 # ---- what to read per state ----------------------------------------------------------------------------------
 
 def _numeric_model(table):
     return [m for m in table.model_params.values() if defaults.dim_of_unit(m.get("unit")) is not None]
 
 
-def request(capture, table, covered=None):
-    """What the reader reads at each state, or None when no sketch is covered.
+def request(capture, table, covered=None, wanted=None):
+    """What the reader reads at each state, or None when no sketch is covered and no reference can be followed.
 
-    `covered` limits the sketches to these tokens (the ones whose first read matched the capture).
-    `{ "sketches": [token], "points": [token], "lines": [token], "params": [Fusion name], "target": True }`
+    `covered` limits the sketches to these tokens (the ones whose first read matched the capture). `wanted` limits the
+    references to these keys.
+    `{ "sketches": [token], "points": [token], "lines": [token], "params": [Fusion name], "target": True,
+       "refs": { key: { "token", "type", "path", "shape" } } }`; `refs` is left out when empty.
     """
     found = scan(capture)
     tokens = [t for t in found.covered if covered is None or t in covered]
-    if not tokens:
+    followed = {r["key"]: {"token": r["ref"]["token"], "type": r["ref"].get("type") or "",
+                           "path": r["ref"].get("path") or "", "shape": r["shape"]}
+                for r in refs(capture) if r["shape"] and (wanted is None or r["key"] in wanted)}
+    if not tokens and not followed:
         return None
     points, lines = [], []
     for target in found.targets:
@@ -166,16 +213,19 @@ def request(capture, table, covered=None):
             lines.append(target["entity"])
     names = [e.name for e in table.entries if e.state in (FREE, DERIVED)]
     names += [m["name"] for m in _numeric_model(table)]
-    return {"sketches": tokens, "points": list(dict.fromkeys(points)), "lines": list(dict.fromkeys(lines)),
-            "params": list(dict.fromkeys(names)), "target": True}
+    out = {"sketches": tokens, "points": list(dict.fromkeys(points)), "lines": list(dict.fromkeys(lines)),
+           "params": list(dict.fromkeys(names)), "target": True}
+    if followed:
+        out["refs"] = followed
+    return out
 
 
 # ---- which sizes to probe ------------------------------------------------------------------------------------
 
 def sketch_driven(table):
     """Fusion names of the ticked sizes that reach a model parameter made by a sketch dimension or a construction
-    plane (of the body's scope), or a sketch through the geometry of another component (`table.links`), in table
-    order."""
+    plane (of the body's scope), or a sketch or a measured reference through the geometry of another component
+    (`table.links`), in table order."""
     reached = set()
     for m in table.model_params.values():
         if (m.get("created_by") or {}).get("kind") in FOLLOWED_KINDS:

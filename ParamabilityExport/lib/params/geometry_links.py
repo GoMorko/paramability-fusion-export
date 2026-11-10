@@ -18,6 +18,11 @@ A user parameter may reach the body through a link when:
 
 The link only says the parameter is worth trying: whether the sketch really moves with it is what the size probe
 measures. A link is `{ "param", "sketch", "component", "via" }`, `via` one of "sketch", "body" or "component".
+
+A step can also use the plane, axis, face or point of another component directly. The reader records it as a measured
+reference (`ref`, docs/capture-format.md). A parameter that acts on the component that owns such a reference may move
+it, so it gets a link with `via` "reference" (`reference_links`): `sketch` is empty, `step` names the step that uses the
+reference and `ref` is its key (`<item index>.<slot>`).
 """
 
 
@@ -88,6 +93,88 @@ def acts(capture, param):
     return out
 
 
+# ---- measured references of the steps ------------------------------------------------------------------------
+
+def ref_key(index, slot):
+    """The key of a measured reference: the timeline index of the step and the slot the step uses it in."""
+    return "%s.%s" % (index, slot)
+
+
+def _collect(node, found):
+    """The `ref` records under `node`, then the `position_refs` of a hole (their slot is their place in the list)."""
+    if isinstance(node, dict):
+        ref = node.get("ref")
+        if isinstance(ref, dict) and ref.get("slot"):
+            found.append(ref)
+        for key, value in node.items():
+            if key == "position_refs" and isinstance(value, list):
+                found.extend(dict(r, slot="positions.%d" % n) for n, r in enumerate(value) if isinstance(r, dict))
+            elif key != "ref":
+                _collect(value, found)
+    elif isinstance(node, list):
+        for value in node:
+            _collect(value, found)
+
+
+def item_refs(item):
+    """The measured references of one step: `{ "key", "item", "slot", "name", "ref" }` each, in data order. A step
+    that is suppressed, lies in another component or could not be read has none. A slot used twice keeps the first."""
+    data = item.get("data")
+    if item.get("suppressed") or item.get("in_target_component") is False or not isinstance(data, dict) \
+            or "read_error" in data:
+        return []
+    found = []
+    _collect(data, found)
+    out, seen = [], set()
+    for ref in found:
+        key = ref_key(item.get("index"), ref["slot"])
+        if key not in seen:
+            seen.add(key)
+            out.append({"key": key, "item": item.get("index"), "slot": ref["slot"], "name": item.get("name") or "",
+                        "ref": ref})
+    return out
+
+
+def capture_refs(capture, items=None):
+    """The measured references of the capture's steps (`items`: only these steps, default all), in step order."""
+    out = []
+    for item in (capture.get("items") or []) if items is None else items:
+        out.extend(item_refs(item))
+    return out
+
+
+def _owners(refs):
+    """The (token, name) keys of the components that own the references, once each. An origin plane or axis only moves
+    with its occurrence, which joints cover, so it names no owner."""
+    out = []
+    for r in refs:
+        key = _key(r["ref"].get("component"))
+        if any(key) and not r["ref"].get("origin") and not any(_same(key, k) for k in out):
+            out.append(key)
+    return out
+
+
+def reference_links(capture, items=None):
+    """The links of the user parameters that act on a component that owns a reference of the steps (`items` as in
+    `capture_refs`), once per parameter and component, in parameter order. Without `dependents` in the capture there
+    is nothing to say about where parameters act, so no links."""
+    refs = [r for r in capture_refs(capture, items) if not r["ref"].get("origin")]
+    if not refs:
+        return []
+    out = []
+    for param in ((capture.get("parameters") or {}).get("user") or []):
+        where = acts(capture, param)
+        seen = []
+        for r in refs:
+            owner = _key(r["ref"].get("component"))
+            if not any(owner) or any(_same(owner, k) for k in seen) or not any(_same(owner, c) for c in where.components):
+                continue
+            seen.append(owner)
+            out.append({"param": param["name"], "sketch": "", "component": owner[1] or "another component",
+                        "via": "reference", "step": r["name"], "ref": r["key"]})
+    return out
+
+
 def _sketch_index(capture, name):
     """Timeline index of the target's sketch named `name`, or None."""
     for item in capture.get("items") or []:
@@ -153,16 +240,17 @@ def reach(capture, sketches=None):
     return out
 
 
-def outside(capture, sketches=None):
+def outside(capture, sketches=None, items=None):
     """Fusion names of the user parameters that act on another component than the body's, when a sketch of the body
-    is tied to another component (`tied_sketches`); else empty. The ones that act on a component a sketch is tied to
-    come first, then the rest, each in parameter order. The size probe tries them to find links the reader cannot
-    see."""
+    is tied to another component (`tied_sketches`) or a step uses a reference of one (`items` as in `capture_refs`);
+    else empty. The ones that act on a component a sketch is tied to or that owns a reference come first, then the
+    rest, each in parameter order. The size probe tries them to find links the reader cannot see."""
     tied = tied_sketches(capture, sketches)
-    if not tied:
+    owners = _owners(capture_refs(capture, items))
+    if not tied and not owners:
         return []
     own = _target_component(capture)
-    linked = [_key(link) for links in tied.values() for link in links]
+    linked = [_key(link) for links in tied.values() for link in links] + owners
     near, far = [], []
     for param in ((capture.get("parameters") or {}).get("user") or []):
         others = [c for c in acts(capture, param).components if not _same(c, own)]

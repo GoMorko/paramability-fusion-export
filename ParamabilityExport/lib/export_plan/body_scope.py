@@ -142,19 +142,34 @@ def _body_sketch_names(capture):
     return {name for _, name in _sketches_of(body_items(capture))}
 
 
+def _own_items(capture):
+    """The steps of the picked body, or None (all steps) when the capture does not say which body is picked."""
+    try:
+        return body_items(capture)
+    except (KeyError, TypeError):
+        return None
+
+
 def body_links(capture):
-    """The geometry links (`params.geometry_links.reach`) of the sketches that the picked body's own steps use."""
-    if not isinstance(capture, dict) or not capture.get("sketch_links"):
+    """The geometry links (`params.geometry_links`) of the picked body: those of the sketches its own steps use
+    (`reach`), then those of the references of other components its steps use (`reference_links`)."""
+    if not isinstance(capture, dict):
         return []
-    return geometry_links.reach(capture, _body_sketch_names(capture))
+    found = []
+    if capture.get("sketch_links"):
+        found = geometry_links.reach(capture, _body_sketch_names(capture))
+    return found + geometry_links.reference_links(capture, _own_items(capture))
 
 
 def body_outside(capture):
     """Fusion names of the user parameters worth a try to find links the reader cannot see
-    (`params.geometry_links.outside`), for the sketches the picked body's own steps use."""
-    if not isinstance(capture, dict) or not capture.get("sketch_links"):
+    (`params.geometry_links.outside`), for the sketches and the references of other components the picked body's own
+    steps use."""
+    if not isinstance(capture, dict):
         return []
-    return geometry_links.outside(capture, _body_sketch_names(capture))
+    items = _own_items(capture)
+    names = None if items is None else {name for _, name in _sketches_of(items)}
+    return geometry_links.outside(capture, names, items)
 
 
 def scope_inputs(capture, fallback_model=()):

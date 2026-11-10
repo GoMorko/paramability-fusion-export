@@ -9,7 +9,8 @@
       "states": [ { "values": { "width": 2.0 }, "built": true } ],
       "apart": [ 3 ],
       "unmeasured": { "Sketch7": "its first read did not match the capture" },
-      "untried": [ "FilterBox_width_mm" ] }
+      "untried": [ "FilterBox_width_mm" ],
+      "refs": { "57.plane": "", "60.axis": "its first read did not match the capture" } }
 
 The keys are written by `sketch_values.keys`. `curves` lists the profiles (`<item>/p<profile>`) whose sketch curves were
 measured.
@@ -21,6 +22,13 @@ reason the probe could not measure it): then nothing is known about it, and the 
 followed (`sketch_values.coverage`). A motion file without `unmeasured` says nothing about such sketches.
 `untried` lists the Fusion names of sizes that move a sketch but were left without probe rows: for them every sketch
 answers `NOT_MEASURED`.
+
+`refs` has one entry per measured reference the probe looked at (`<item>.<slot>`, `params.geometry_links.ref_key`):
+an empty text when it was measured, else why it could not be. Its values are keyed `<item>/r/<slot>/...`: how far the
+plane, axis or point moved from where the capture has it (zero at the current sizes), as an `Affine` of the sizes, or
+a `Stuck` when it turned or the move does not fit. A measured reference without keys stayed where it is. A reference
+that is not in `refs` was not looked at (a motion file from before references were measured, or the first translation
+of an export): nothing is known about it.
 
 The translator reads this file; `probe.build` makes it.
 """
@@ -100,7 +108,7 @@ class Motion:
     optimistic = False
 
     def __init__(self, values=None, box_max=None, states=None, dropped=None, curves=None, apart=None,
-                 unmeasured=None, untried=None):
+                 unmeasured=None, untried=None, refs=None):
         self.values = dict(values or {})
         self.box_max = box_max
         self.states = list(states or [])
@@ -109,6 +117,7 @@ class Motion:
         self.apart = list(apart or [])  # numbers in `states` where Fusion solved a sketch another way
         self.unmeasured = dict(unmeasured or {})  # sketch name to why the probe could not measure it
         self.untried = list(untried or [])  # Fusion names of sizes that moved a sketch and were not tried
+        self.refs = dict(refs or {})  # reference key to "" (measured) or why it could not be measured
 
     def get(self, key):
         """`Affine`, `Stuck`, or None when the value did not move."""
@@ -129,6 +138,8 @@ class Motion:
             out["unmeasured"] = dict(self.unmeasured)
         if self.untried:
             out["untried"] = list(self.untried)
+        if self.refs:
+            out["refs"] = dict(self.refs)
         return out
 
     @classmethod
@@ -143,7 +154,7 @@ class Motion:
             else:
                 values[key] = Affine(raw.get("const", 0.0), raw.get("terms"), raw.get("sketch", ""))
         return cls(values, data.get("box_max"), data.get("states"), data.get("dropped"), data.get("curves"),
-                   data.get("apart"), data.get("unmeasured"), data.get("untried"))
+                   data.get("apart"), data.get("unmeasured"), data.get("untried"), data.get("refs"))
 
 
 class _Optimistic(Motion):

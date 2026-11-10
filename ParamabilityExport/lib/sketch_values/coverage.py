@@ -9,13 +9,20 @@ For one sketch and one size the motion file gives one of three answers:
 
 A motion file keeps the reason for each sketch (by name) that was not measured. A sketch that is missing there was
 measured, or is not used by a step the probe looks at.
+
+A measured reference (a plane, axis or point of another component that a step uses) has the same three answers
+(`ref_answer`): `Motion.refs` lists every reference the probe looked at, with the reason when it could not measure it.
 """
+from . import keys
+from .motion import Affine, Stuck
+
 STILL, MOVED, NOT_MEASURED = "still", "moved", "not measured"
 
 NOT_FOLLOWABLE = "a step uses it in a way the probe cannot follow"
 NOT_MATCHED = "its first read did not match the capture"
 NOT_TRIED = "the sketch could not be tried for this size"
 NOT_READ = "the design could not be read at its current sizes"
+NOT_LOOKED = "the probe did not look at it"
 
 
 class Answer:
@@ -48,3 +55,34 @@ def unmeasured(found, readable, read):
             continue
         out.setdefault(name, reason)
     return out
+
+
+def _driven(table, value):
+    """Fusion names of the free sizes behind a motion value (an Affine's terms, a Stuck's movers and its rest)."""
+    if isinstance(value, Stuck):
+        names = set(value.movers) | (set(value.rest.terms) if value.rest is not None else set())
+    elif isinstance(value, Affine):
+        names = set(value.terms)
+    else:
+        names = set()
+    out = set()
+    for name in names:
+        out |= table.depends(name)
+    return out
+
+
+def ref_answer(table, motion, ref_key, size):
+    """What the motion file says about size `size` (a Fusion name of a size that acts on the component owning the
+    reference) and the measured reference `ref_key` (`<item>.<slot>`): an `Answer` of `STILL`, `MOVED` (with the keys
+    of the reference the size moves) or `NOT_MEASURED`."""
+    refs = getattr(motion, "refs", {})
+    if ref_key not in refs:
+        return Answer(NOT_MEASURED, reason=NOT_LOOKED)
+    if refs[ref_key]:
+        return Answer(NOT_MEASURED, reason=refs[ref_key])
+    if size in getattr(motion, "untried", ()):
+        return Answer(NOT_MEASURED, reason=NOT_TRIED)
+    item, _, slot = ref_key.partition(".")
+    prefix = keys.reference(item, slot) + "/"
+    moved = [key for key, value in motion.values.items() if key.startswith(prefix) and size in _driven(table, value)]
+    return Answer(MOVED, moved) if moved else Answer(STILL)

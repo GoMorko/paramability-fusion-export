@@ -20,6 +20,7 @@ In this order. Each id is described in the section named.
 - [ ] S1 to S5 and X1 onward, spline outlines and sketch text: section 11.
 - [ ] Mirror plane and pattern axis reference reads: "Fusion calls to watch", the entry about `read_reference.py`.
 - [ ] R1 to R6, places of another component: section 8.1.
+- [ ] M1 to M6, measuring those places at other sizes: section 8.2.
 - [ ] `%` with a negative left side: T5.
 
 ## 1. Install
@@ -392,6 +393,34 @@ it is now; a size that acts on that component is marked loose. Read `report.json
       edge of `Cover`: both stop the copy ("reaches into another component"), and `position_refs` names the entity.
 - [ ] **R6 Origin plane.** A mirror across an origin plane of the root or of `Cover`: copied with no warning, and
       `ref.origin` is true for the `Cover` one.
+
+### 8.2 Measuring places of another component (M tests)
+
+The export reads each plane, axis, direction or point of another component that a step uses again at every size it
+tries, and fits how far it moves. The copy does not use the result yet; check it in `report.json`: `probe.request.refs`
+lists the references, `probe.motion.refs` says which were measured (empty text) or why not, `probe.motion.values` has
+the keys `<item>/r/<slot>/...`, and each state's `read.refs` has the places in the part's coordinates.
+
+- [ ] **M1 Plane that follows a size.** R2's design: in `Cover`, an offset plane driven by `gap`; in `Tray`, a mirror
+      across it. Export `Tray` with `gap` ticked. `motion.refs` has `<item>.plane` with empty text; the key
+      `<item>/r/plane/offset` is a formula of `gap` (slope 1 for a plane offset by `gap`, 0.5 for a plane halfway), and
+      its number at the current `gap` is 0. Every state's `read.refs` `point` moves along `normal` by the same amount.
+- [ ] **M2 Plane that turns.** Add an angle parameter that tilts the `Cover` plane and tick it. The key is stuck with
+      cause `turns` and names the angle parameter; `gap` is not named. Untick the angle: the stuck key is gone.
+- [ ] **M3 The part's own component moves.** Move `Tray` with a parameter (a joint or an offset plane under it), keep
+      `Cover` fixed. The plane's `offset` follows that parameter with the opposite sign, and a parameter that moves
+      both by the same amount gives no key.
+- [ ] **M4 Occurrence moved and turned.** Move `Cover` by (100, 50, 0) and turn it 90 degrees in the assembly first.
+      `read.refs` of the first state equals the capture's `ref.point` and `ref.normal` (`motion.refs` empty text); if
+      not, `motion.refs` says "its first read did not match the capture" and nothing is fitted.
+- [ ] **M5 Pattern direction from another component.** A rectangular pattern whose direction is an axis or edge of
+      `Cover`. The capture has `direction_one_place` with `ref`; a size that tilts that axis gives a stuck
+      `<item>/r/direction_one/dir`. A direction the add-in cannot bring in stops the copy ("reaches into another
+      component").
+- [ ] **M6 Restore and time.** After the export every parameter is back (the window lists none that would not go
+      back) and `health.restore_gap_mm` is 0. A size that acts only on a referenced component is ticked to start with
+      (its row says it changes that component) and has probe rows; unticked, it is listed under "These parameters also
+      change this part" when it moves the plane. Note the export time with and without the references.
 
 ## 9. Sketches that follow sizes
 
@@ -791,6 +820,17 @@ read the capture in `report.json`.
 - `CombineFeature.targetBody`, `toolBodies`, `isKeepToolBodies`; `ThreadFeature.isModeled`.
 - `BRepBody.volume` of the target with the marker before and after a Combine (`volume_before`, `volume_after`): a cut
   must show a smaller volume. A null means the body could not be measured there; the volume check is skipped.
+- Measuring references at each state (`lib/fusion_reader/probe_refs.py`, M1 to M6): `Design.findEntityByToken` of a
+  native construction plane, axis, face or sketch point of another component after a recompute;
+  `Component.allOccurrencesByComponent` and `fullPathName` to find the occurrence again;
+  `ConstructionPlane`, `ConstructionAxis`, `BRepFace`, `SketchPoint.createForAssemblyContext(occurrence)` and the
+  geometry of the proxy it gives (`geometry`, `worldGeometry`) in the assembly's coordinates at the state's own
+  occurrence place, equal to the capture's at the first state; `BRepBody.createForAssemblyContext(occurrence)` of the
+  target, to read the target's own place again at each state (`read_placement`). Every one is guarded: a failure
+  leaves that reference unread with a reason (`probe.states[].read.unread`), never stops the probe.
+- The direction of a rectangular pattern taken from an entity of another component
+  (`directionOneEntity` / `directionTwoEntity`, `read_repeat._foreign_direction`): its `geometry` or `worldGeometry`
+  in the assembly's coordinates, turned into the target's frame (M5).
 - Entities of another component (`ref_record` in `placement.py`): `entity.assemblyContext.component` and `.fullPathName`
   of a proxy plane, axis, face, sketch line or sketch point; `entity.nativeObject.entityToken`; `BRepFace.body` and
   `SketchPoint.parentSketch` of the native entity; the origin members of the owning component

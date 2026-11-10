@@ -42,10 +42,13 @@ def initial_table(params, model_params=(), design_unit="mm", quantity_params=(),
 
 def link_text(links):
     """Why a parameter is offered although no step of the body reads it: the other component it changes, which a
-    sketch of the body follows. Empty without links."""
+    sketch of the body follows or which owns a plane, axis or point a step of the body uses. Empty without links."""
     if not links:
         return ""
     first = links[0]
+    if first.get("via") == "reference":
+        return ("It changes %s, and the step %s of this part uses a plane, axis or point of %s. The export tries it "
+                "to see if the part follows." % (first["component"], first.get("step") or "a step", first["component"]))
     return ("It changes %s, and the sketch %s of this part is drawn around %s. The export tries it to see if the "
             "part follows." % (first["component"], first["sketch"], first["component"]))
 

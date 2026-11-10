@@ -227,9 +227,17 @@ start with like one the body reads, the size probe tries it like a size behind a
 counts it as a size the sketch reads (`sizes.sketch_sizes`, section 5). The link only makes it worth trying; the
 probe decides.
 
-When a sketch of the body is tied to another component (a link, or only `unknown` references), the user parameters
-that act on a component other than the target's (`outside`: the ones acting on a tied component first, then the
-rest, each in parameter order) are candidates for discovery tries ("Probe states", section 5).
+A step can also use a plane, axis, direction or point of another component directly (measured references, "Measured
+references", section 4). A user parameter that acts on the component that owns such a reference (not an `origin`
+plane or axis) gets a link `{ "param", "sketch": "", "component", "via": "reference", "step", "ref" }` once per
+component (`reference_links`; `step` is the step's name, `ref` the key of the first reference). It is offered, ticked
+to start with and probed like a sketch link; the offer text says which step uses which component.
+
+When a sketch of the body is tied to another component (a link, or only `unknown` references), or a step of the body
+uses a reference of another component, the user parameters that act on a component other than the target's
+(`outside`: the ones acting on a tied or referenced component first, then the rest, each in parameter order) are
+candidates for discovery tries ("Probe states", section 5). A try also counts as moving the part when a measured
+reference moved.
 
 ## 3. Walk and marker
 
@@ -582,6 +590,12 @@ neither way, refuses an uneven chamfer.
 - `elements`: every `PatternElement` (`id`, `isSuppressed`, `transform` as a frame; the first is the identity).
 - `direction_one_sketch`, `direction_two_sketch` (optional): `{ "sketch_token", "sketch" }` when that direction is a
   sketch line, so the sketch is known to feed a pattern.
+- `direction_one_place`, `direction_two_place` (optional): a direction taken from an axis, edge or face of another
+  component. The entity is seen in the root's coordinates, so its direction is turned into the target's
+  (`direction_one` holds the result) and the place is `{ "assembly": true, "dir": [..], "ref": REF }` (slot
+  `direction_one` or `direction_two`, see "Measured references"). When the direction cannot be brought in, `direction_*`
+  is null and the place is `{ "foreign": true, "ref": REF }`, so the pattern is refused. The sketch of a foreign sketch
+  line is not named in `direction_*_sketch`.
 
 **CircularPatternFeature** (`inputEntities`, `axis`, `quantity`, `totalAngle`, `isSymmetric`, `patternElements`,
 `suppressedElementsIds`):
@@ -754,7 +768,9 @@ tell which sizes may move it:
 ```
 
 - `slot`: where the step uses it: `start`, `side_one`, `side_two` (extrude), `plane` (mirror), `axis` (revolve and
-  circular pattern), `positions.<n>` (hole). A reader of the references forms the key `<item index>.<slot>`.
+  circular pattern), `direction_one`, `direction_two` (rectangular pattern), `positions.<n>` (hole). The key of a
+  reference is `<item index>.<slot>` (`params.geometry_links.ref_key`, `item_refs`). The holes' `position_refs` take
+  `<n>` from their place in the list.
 - `type`: the Fusion type of the native entity (`BRepFace`, `ConstructionPlane`, `ConstructionAxis`, `SketchLine`,
   `SketchPoint`, `BRepEdge`). `token`: the `entityToken` of the native entity, which `Design.findEntityByToken` finds
   again. `component`: the component that owns it (the component of the occurrence it is seen through, else its own).
@@ -910,6 +926,8 @@ keys `<item>/p<profile>/l<loop>/<field path>` (loop 0 is the outer one, then the
 `<item>/positions/<n>/<0|1|2>` (hole points) and `<item>/axis/point/<0|1|2>` (a revolve axis from a sketch line).
 `lib/sketch_values/keys.py` writes all keys; the probe and the translator both use it.
 
+Measured references of other components (below) have their own keys, `<item>/r/<slot>/...`, and their own list `refs`.
+
 The probe tries (`lib/probe/plan.py`, at most 64 rows): each ticked size that moves a covered sketch value or reaches
 a sketch dimension, a construction plane or, through another component, a sketch ("Geometry links" in section 2),
 at the ends of its range. Then up to 8 ticked sizes that nothing ties to a sketch (`MAX_EXTRA_SIZES`, in table order)
@@ -993,10 +1011,37 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   fixes the sizes of the model parameters it made (`created_by.token`); without a token, of every construction plane
   or axis.
 
+### Measured references in the motion file (`lib/probe/ref_fit.py`)
+
+The probe reads every measured reference (`ref`, section 4) that has a place in the target's coordinates and fits how
+far it moves from the captured place. A size that acts on the reference's component is probed like a size behind a
+sketch (`reference` links, section 2). The values are moves, zero at the sizes the capture was read at:
+
+| Reference | Keys | Meaning |
+|---|---|---|
+| plane (`point` and `normal`: a mirror plane, a plane or face an extrude reaches or starts from, a hole's face) | `<item>/r/<slot>/offset` | distance the plane moved along its captured normal |
+| axis (`point` and `dir`) | `<item>/r/<slot>/point/<0|1|2>` | how far the axis moved across its direction, per coordinate (a slide along the axis is not a move) |
+| point (a sketch point or vertex) | `<item>/r/<slot>/point/<0|1|2>` | how far the point moved, per coordinate |
+| direction (`dir` alone: a pattern direction) | `<item>/r/<slot>/dir` | stuck only, when the direction turns |
+
+Each value is an `Affine` of the sizes (exact within 1e-4 mm, same fit and checks as sketch values), or a `Stuck`: with
+cause `turns` when the normal or direction changes or flips (the sizes of those states), `unread` when a state did not
+give the reference, `curve` or `untried` when the move is no exact formula of the sizes. Like the sketch values, a
+`Stuck` may carry `rest`. A measured reference that stays has no key.
+
+`refs` lists every reference the probe looked at, by key `<item>.<slot>`: `""` when it was measured, else why not
+(it has no place in the target's coordinates or no token, the first read did not match the capture within 1e-4 mm, the
+reader could not read it, or there was no first read). Such a reference is not read at the other states. A key that is
+not in `refs` was not looked at (older motion file, or the export's first translation): nothing is known. For one
+reference and one size acting on its component, `sketch_values.coverage.ref_answer` gives the same three answers as for
+sketches: `STILL`, `MOVED` (with the keys) or `NOT_MEASURED` (with the reason, or `NOT_TRIED` for a size left without
+rows, `NOT_LOOKED` for a key not in `refs`).
+
 ### Probe states (`lib/fusion_reader/probe_state.py`)
 
 The size probe sets other size values, recomputes and reads a state with `read_state(design, request, ctx)`.
-`request` is `{ "sketches": [token], "points": [token], "lines": [token], "params": [name], "target": true }`. Every
+`request` is `{ "sketches": [token], "points": [token], "lines": [token], "params": [name], "target": true }`, plus
+`borrowed` and `refs` below. Every
 entity is found with `Design.findEntityByToken` (the match without `assemblyContext`; for a proxy only, its
 `nativeObject`), so values are in component coordinates like the capture. The result, mm and degrees except `params`:
 
@@ -1006,7 +1051,8 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
   "points": { "<sketch point token>": [x, y, z] },
   "lines": { "<sketch line token>": { "point": [x, y, z], "dir": [x, y, z] } },
   "params": { "d12": 2.0 },
-  "box": { "min": [..], "max": [..] }
+  "box": { "min": [..], "max": [..] },
+  "refs": { "57.plane": { "point": [x, y, z], "normal": [x, y, z] } }
 }
 ```
 
@@ -1025,6 +1071,15 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
   it compares with the capture profile's brought-in `frame`; it adds `native_frame` and `placement` (`{ path, source }`).
   When it cannot be read or placed, it has no key under `sketches` and `unread` (only then present) gives
   `{ token: reason }`.
+- Measured references are requested with `refs`: `{ "<key>": { "token", "type", "path", "shape" } }` (`shape` is
+  `plane`, `axis`, `direction` or `point`, from the record: `lib/probe/plan.py` `refs`). Each is found by the token of
+  its native entity (`lib/fusion_reader/probe_refs.py`), shown through the occurrence with the recorded `path` as that
+  occurrence sits now (`createForAssemblyContext`), read the way the capture read it (`plane_of`, `axis_of`,
+  `direction_of`, `worldGeometry`), and brought into the target's coordinates with the inverse of the target's own
+  place read again at this state (the body is shown through its occurrence again, so a size that moves the target's
+  component is taken out). `refs` maps a key to `{ point, normal }`, `{ point, dir }`, `{ dir }` or `{ point }`; a
+  reference that cannot be read has no key there and `unread` gives `{ key: reason }`. The reads change nothing in the
+  design.
 - Nothing raises. A part that cannot be read has no key, which the fit treats as unread.
 
 ## 6. Report and capture file

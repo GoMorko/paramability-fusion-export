@@ -1,23 +1,25 @@
 """The size probe of one export: which sketch states to read, and how the answers become a motion. Pure: no Fusion.
 
-The export reads the sketches of the part at its current settings (E0) and at extra settings that only recompute: the
-range ends of the sizes that move a sketch, and all sizes low or high (`probe_rows`). `SizeProbe` keeps that record
-and hands the states to `probe.build`. Fusion is reached through the `read` callable given to `start`:
+The export reads the sketches of the part, and the measured references of other components its steps use (a plane,
+axis, direction or point), at its current settings (E0) and at extra settings that only recompute: the range ends of
+the sizes that move a sketch or such a reference, and all sizes low or high (`probe_rows`). `SizeProbe` keeps that
+record and hands the states to `probe.build`. Fusion is reached through the `read` callable given to `start`:
 `read(request)` returns one probe state (`fusion_reader.probe_state.read_state`).
 
 A step of the target can use a sketch of another component (a borrowed sketch). The probe reads it like the
 target's own sketches: its frame is brought into the target's coordinates at every state, so the fit sees its
 outline move with the sizes. The probe works on a view of the capture where such profiles are written as own ones.
 A borrowed sketch that the fit cannot follow (it did not read back as captured) is watched instead: a size that
-changes it, or leaves it unreadable, is loose.
+changes it, or leaves it unreadable, is loose. A reference that did not read back as captured is not read again; the
+motion file says so (`Motion.refs`).
 """
 from ..package.manifest import MAX_FIXED_REASON
 from ..package.text import clip
-from ..probe import build, fit, match, plan
+from ..probe import build, fit, match, plan, ref_fit
 from ..translator import borrowed
 from ..translator.notes import loose_reason
 
-_STATE_KEYS = ("sketches", "points", "lines", "params", "box", "unread")
+_STATE_KEYS = ("sketches", "points", "lines", "params", "box", "refs", "unread")
 
 
 def kept_size_names(table, free_sizes):
@@ -83,8 +85,9 @@ def probe_view(capture):
 
 
 def covers_a_sketch(capture):
-    """True when the probe can follow or watch at least one sketch of the capture."""
-    return bool(plan.scan(probe_view(capture)).covered) or bool(borrowed_sketches(capture))
+    """True when the probe can follow or watch at least one sketch, or follow a measured reference, of the capture."""
+    return (bool(plan.scan(probe_view(capture)).covered) or bool(borrowed_sketches(capture))
+            or any(r["shape"] for r in plan.refs(capture)))
 
 
 def _with_borrowed(request, hints, watch):
@@ -109,8 +112,9 @@ class SizeProbe:
     """One export's sketch states and what they gave. Build it with `start`, which returns None when there is
     nothing to follow."""
 
-    def __init__(self, capture, table, read, request, e0, watch=None):
+    def __init__(self, capture, table, read, request, e0, watch=None, refs=()):
         self.capture = probe_view(capture)
+        self.refs = list(refs)  # the measured references that read back as captured (`plan.refs`)
         self.watch = dict(watch or {})  # borrowed sketch token to { sketch, component, path }
         self.table = table
         self.read = read
@@ -134,14 +138,17 @@ class SizeProbe:
         if wide is None:
             return None
         e0 = read(_with_borrowed(wide, hints, hints))
-        if not isinstance(e0, dict) or not e0.get("sketches") and not e0.get("points") and not e0.get("lines"):
+        if not isinstance(e0, dict) or not (e0.get("sketches") or e0.get("points") or e0.get("lines")
+                                            or e0.get("refs")):
             return None
         readable = match.readable(plan.scan(view), e0)
         watch = {t: h for t, h in hints.items() if t not in readable}
-        request = plan.request(view, table, covered=readable) or (bare if watch else None)
+        measured = ref_fit.measurable(plan.refs(view), e0)
+        keys = {r["key"] for r in measured.usable}
+        request = plan.request(view, table, covered=readable, wanted=keys) or (bare if watch else None)
         if request is None:
             return None
-        return cls(capture, table, read, _with_borrowed(request, hints, watch), e0, watch)
+        return cls(capture, table, read, _with_borrowed(request, hints, watch), e0, watch, measured.usable)
 
     # ---- states -----------------------------------------------------------------------------------------------
 
@@ -176,9 +183,9 @@ class SizeProbe:
         return plan.discovery_rows(candidates, room)
 
     def discover(self, entries):
-        """Keep, per `(row, result, read)` of a discovery row, whether the body's sketches moved with its parameter:
-        `{ param, moved }`, `moved` None when the row did not build or the sketches could not be read. These reads
-        are not states of the motion."""
+        """Keep, per `(row, result, read)` of a discovery row, whether the body's sketches or the references of other
+        components its steps use moved with its parameter: `{ param, moved }`, `moved` None when the row did not build
+        or the read is missing. These reads are not states of the motion."""
         found = plan.scan(self.capture)
         targets = [t for t in found.targets if t["sketch_token"] in self.request["sketches"]]
         for row, result, read in entries:
@@ -187,7 +194,8 @@ class SizeProbe:
                 continue
             moved = None
             if not result.get("error") and isinstance(read, dict):
-                moved = any(self._target_moved(t, read) for t in targets)
+                moved = (any(self._target_moved(t, read) for t in targets)
+                         or any(ref_fit.moved_in(r, read) for r in self.refs))
             self.discovery.append({"param": param, "moved": moved})
 
     def _target_moved(self, target, read):
@@ -201,7 +209,8 @@ class SizeProbe:
 
     @property
     def also_changes(self):
-        """Fusion names of the unticked parameters that a discovery row showed moving the body's sketches."""
+        """Fusion names of the unticked parameters that a discovery row showed moving the body's sketches or the
+        references its steps use."""
         return [d["param"] for d in self.discovery if d["moved"]]
 
     # ---- result -----------------------------------------------------------------------------------------------
@@ -264,12 +273,18 @@ class SizeProbe:
         return {"name": param, "reason": clip(reason, MAX_FIXED_REASON), "param": param, "size": size}
 
     def _gap(self, after):
-        """Largest difference in mm between E0 and a read after the restore, over the covered values. None when the
-        read does not give them."""
+        """Largest difference in mm between E0 and a read after the restore, over the covered values and the places of
+        the measured references (one that cannot be read again is left out). None when the sketches cannot be
+        compared."""
         if not isinstance(after, dict):
             return None
         found = plan.scan(self.capture)
         gap = 0.0
+        for ref in self.refs:
+            before, _ = ref_fit.state_values(ref, self.e0)
+            now, _ = ref_fit.state_values(ref, after)
+            if before is not None and now is not None:
+                gap = max([gap] + [abs(now[k] - v) for k, v in before.items()])
         for target in found.targets:
             if target["sketch_token"] not in self.request["sketches"]:
                 continue

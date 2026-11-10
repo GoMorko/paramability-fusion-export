@@ -11,12 +11,12 @@ a sketch reads as the same different outline in states that change different siz
 those states blame no size for that outline (`Motion.apart`).
 """
 from . import columns as cols
-from . import fit, match, plan
+from . import match, plan, ref_fit
+from .series import fit_series, moved as _moved
 from ..sketch_values import coverage
-from ..sketch_values.motion import CURVE, SHAPE, TURNS, UNREAD, Affine, Motion, Stuck
+from ..sketch_values.motion import SHAPE, UNREAD, Motion
 
 _SAME = 1e-9
-_PRIORITY = (TURNS, SHAPE, UNREAD)
 
 
 class _Run:
@@ -78,10 +78,6 @@ class _Run:
                         self.apart.update((a, b))
 
 
-def _moved(a, b):
-    return abs(a - b) > fit.TOLERANCE
-
-
 def moved_sizes(capture, states, current=None):
     """Fusion names of the sizes whose state (the only size that differs) moved a covered sketch value.
 
@@ -111,25 +107,6 @@ def _box_max(states):
             "max": [max(b["max"][i] for b in boxes) for i in range(3)]}
 
 
-def _movers(run, series, current):
-    """Sizes whose own state moved the value; when only a state of several sizes moved it, all of those."""
-    single, several = [], []
-    for at in range(1, len(series)):
-        if series[at] is None or not _moved(series[at], series[0]):
-            continue
-        names = run.varied(at, current)
-        (single if len(names) == 1 else several).extend(sorted(names))
-    return list(dict.fromkeys(single or several))
-
-
-def _blocked(problems):
-    """The sizes behind the states that could not be read. A state of several sizes adds nothing when a size of it
-    already fails alone, since that size stays fixed and the state cannot happen."""
-    alone = set().union(*[p[1] for p in problems if len(p[1]) == 1])
-    several = [p[1] for p in problems if len(p[1]) != 1 and not p[1] & alone]
-    return sorted(alone.union(*several))
-
-
 def build(capture, table, states):
     """The `Motion` of a capture. See the module text for `states`."""
     run = _Run(capture, states)
@@ -138,7 +115,9 @@ def build(capture, table, states):
                  states=[{"values": s.get("values") or {}, "built": s.get("built") is not False}
                          for s in run.states[1:]],
                  unmeasured=coverage.unmeasured(run.found, run.readable, bool(run.base)))
-    if not run.targets:
+    refs = ref_fit.measurable(plan.refs(capture), run.base)
+    out.refs = refs.notes
+    if not run.targets and not refs.usable:
         return out
     overrides = [s.get("values") or {} for s in run.states]
     reads = [s.get("read") for s in run.states]
@@ -152,6 +131,9 @@ def build(capture, table, states):
     for target in run.targets:
         _fit_target(out, run, target, shared, models, current)
     out.curves = {match.prefix(t) for t in run.targets if t["kind"] == "profile"}
+    for ref in refs.usable:
+        ref_fit.fit_ref(out, ref, [s.get("read") for s in run.states], [run.built(at) for at in range(len(run.states))],
+                        shared, models, lambda at: run.varied(at, current))
     return out
 
 
@@ -168,22 +150,4 @@ def _fit_target(out, run, target, shared, models, current):
     sketch = target["sketch"]
     plane = (target.get("reference") or {}).get("token") or ""
     candidates = shared + [m.ranked(sketch, plane) for m in models]
-    stuck_causes = [c for c in _PRIORITY if any(p[0] == c for p in problems)]
-    blocked = _blocked(problems)
-    for key, x in series.items():
-        movers = _movers(run, x, current)
-        if problems:
-            # The states that failed are left out: the value may still follow the other sizes.
-            rest = fit.fit_value(x, candidates)
-            if rest.kind == "affine":
-                out.values[key] = Stuck(blocked, stuck_causes[0], sketch, Affine(rest.const, rest.terms, sketch))
-            elif rest.kind == "const":
-                out.values[key] = Stuck(blocked, stuck_causes[0], sketch)
-            else:
-                out.values[key] = Stuck(dict.fromkeys(blocked + movers), stuck_causes[0], sketch)
-            continue
-        result = fit.fit_value(x, candidates)
-        if result.kind == "affine":
-            out.values[key] = Affine(result.const, result.terms, sketch)
-        elif result.kind == "stuck":
-            out.values[key] = Stuck(movers, result.cause or CURVE, sketch)
+    fit_series(out.values, series, problems, candidates, lambda at: run.varied(at, current), sketch)

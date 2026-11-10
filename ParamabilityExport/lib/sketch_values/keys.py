@@ -8,8 +8,14 @@
                                           `center.0`, `center.1` and `radius`)
     <item>/positions/<n>/<0|1|2>          a coordinate of a hole point
     <item>/axis/point/<0|1|2>             a coordinate of a revolve axis point
+    <item>/r/<slot>/offset                how far a measured reference plane moved along its captured normal
+    <item>/r/<slot>/point/<0|1|2>         how far a measured reference axis (across its direction) or point moved,
+                                          per coordinate
+    <item>/r/<slot>/dir                   a measured reference direction (only ever stuck: it turned)
 
-A key belongs to one sketch; the sketch is named by the record the key stands for, not by the key.
+A key of a sketch belongs to one sketch; the sketch is named by the record the key stands for, not by the key. A
+reference key belongs to the reference `<item>.<slot>` of the capture (`params.geometry_links.ref_key`); its values are
+moves from the captured place, so they are zero at the sizes the capture was read at.
 """
 
 
@@ -47,3 +53,20 @@ def axis(item):
 
 def axis_point(item, coordinate):
     return "%s/%d" % (axis(item), coordinate)
+
+
+def reference(item, slot):
+    """The prefix of the keys of a measured reference: the step's timeline index and the reference slot."""
+    return "%s/r/%s" % (item, slot)
+
+
+def reference_offset(item, slot):
+    return reference(item, slot) + "/offset"
+
+
+def reference_point(item, slot, coordinate):
+    return "%s/point/%d" % (reference(item, slot), coordinate)
+
+
+def reference_dir(item, slot):
+    return reference(item, slot) + "/dir"

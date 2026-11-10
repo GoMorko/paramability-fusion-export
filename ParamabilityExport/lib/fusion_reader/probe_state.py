@@ -3,10 +3,12 @@ probe compares across size settings (docs/capture-format.md, "Probe states").
 
 Everything is read by token from the native objects of the target's component, so values are in component
 coordinates (mm), like the capture. A sketch of another component (one a step of the target borrows) is read native
-too, and its frame is brought into the target's coordinates through that component's place at this state. `params` stay in Fusion's own units (cm, radians). A part that cannot be read is
-left out of the result and reads as "unread" to the fit; nothing here raises. No adsk import.
+too, and its frame is brought into the target's coordinates through that component's place at this state. `params` stay in Fusion's own units (cm, radians). The
+measured references of other components (planes, axes, directions, points) are read again too, in the target's
+coordinates as the target sits at this state (`probe_refs`). A part that cannot be read is left out of the result and
+reads as "unread" to the fit; nothing here raises and nothing here changes the design. No adsk import.
 """
-from . import placement
+from . import placement, probe_refs
 from . import read_geometry as geo
 from .read_sketch import into_target, read_profile
 from .read_solid import line_axis
@@ -75,16 +77,18 @@ def _each(tokens, read):
 
 
 def read_state(design, request, ctx):
-    """The state asked for by `request`: { sketches, points, lines, params, box }, plus `unread` when needed.
+    """The state asked for by `request`: { sketches, points, lines, params, box }, plus `refs` and `unread` when needed.
 
     `request` has `sketches`, `points`, `lines` (entity tokens), `params` (Fusion parameter names), `target`
     (true to read the target body's box) and optionally `borrowed`: { sketch token: { path } } for sketches of other
-    components, with the occurrence path the capture recorded.
+    components, with the occurrence path the capture recorded, and `refs`: { reference key: { token, path, shape } }.
 
     `sketches` maps a token to { frame, profiles } (profiles as in the capture, each curve with `entity`); a borrowed
     one also has `native_frame` and `placement`. `points` maps a token to [x, y, z] mm; `lines` to { point, dir };
     `params` a name to its value in cm or radians; `box` is the target's { min, max } and absent when it cannot be
-    read. `unread` gives a reason per borrowed sketch token that could not be read or placed.
+    read. `refs` maps a reference key to its place in the target's coordinates, in mm: { point, normal },
+    { point, dir }, { dir } or { point }. `unread` gives a reason per borrowed sketch token that could not be read or
+    placed, and per reference key that could not be read.
     """
     request = request or {}
     hints = request.get("borrowed") if isinstance(request.get("borrowed"), dict) else {}
@@ -110,6 +114,10 @@ def read_state(design, request, ctx):
         "lines": _each(request.get("lines"), lambda t: entity(t, lambda e: line_axis(e.worldGeometry))),
         "params": _each(request.get("params"), lambda n: _param_value(design, ctx, n)),
     }
+    wanted = request.get("refs") if isinstance(request.get("refs"), dict) else {}
+    if wanted:
+        state["refs"], missed = probe_refs.read_refs(design, ctx, wanted)
+        unread.update(missed)
     if unread:
         state["unread"] = unread
     if request.get("target"):

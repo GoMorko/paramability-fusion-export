@@ -10,7 +10,7 @@ what it is built on; see read_reference.py), so the translator can tell whether 
 """
 from . import read_geometry as geo
 from . import read_solid
-from .placement import from_assembly
+from .placement import from_assembly, ref_record
 from .param_refs import Params, with_params
 from .read_finish import strict_items
 from .read_reference import add_reference
@@ -57,7 +57,7 @@ def _common(feature):
     return {"entity_type": entity_type, "sources": _sources(inputs, entity_type)}
 
 
-def _direction(entity):
+def direction_of(entity):
     """Unit direction of a vector, sketch line, construction axis, linear edge or planar face; None otherwise."""
     if entity is None:
         return None
@@ -70,10 +70,28 @@ def _direction(entity):
     return plane["normal"] if plane else None
 
 
+def _direction_entity(feature, entity_name, ctx):
+    """The entity a rectangular pattern direction is taken from when it belongs to another component, else None."""
+    entity = geo.safe(lambda: geo.native_input(getattr(feature, entity_name), ctx), None)
+    return entity if entity is not None and geo.safe(lambda: geo.foreign(entity, ctx), False) else None
+
+
+def _foreign_direction(entity, ctx, slot):
+    """`(direction, place)` of a pattern direction taken from an axis, edge or face of another component. The entity
+    is seen in the root's coordinates, so its direction is turned into the target's. `place` holds the direction and
+    its measured reference (`ref`) with `assembly: true`; when the direction cannot be brought in, `direction` is None
+    and `place` is marked `foreign`, so the pattern is refused."""
+    raw = geo.safe(lambda: direction_of(entity), None)
+    ref = geo.safe(lambda: ref_record(entity, ctx, slot, {"dir": raw} if raw is not None else {}), None) or {}
+    if "dir" in ref:
+        return ref["dir"], {"assembly": True, "dir": ref["dir"], "ref": ref}
+    return None, {"foreign": True, "ref": ref}
+
+
 def _direction_member(feature, vector_name, entity_name, ctx):
     """The direction of a rectangular pattern: a vector member when the API has one, else the direction entity."""
     for name in (vector_name, entity_name):
-        found = geo.safe(lambda: _direction(geo.native_input(getattr(feature, name), ctx)), None)
+        found = geo.safe(lambda: direction_of(geo.native_input(getattr(feature, name), ctx)), None)
         if found is not None:
             return found
     return None
@@ -114,9 +132,17 @@ def _suppressed_ids(feature):
 def rectangular_before(feature, ctx):
     data = _common(feature)
     quantity_two = geo.safe(lambda: _number(feature.quantityTwo, 1), 1)
-    direction_two = _direction_member(feature, "directionTwo", "directionTwoEntity", ctx)
+    places, found = {}, {}
+    for which, vector_name, entity_name in (("one", "directionOne", "directionOneEntity"),
+                                            ("two", "directionTwo", "directionTwoEntity")):
+        entity = _direction_entity(feature, entity_name, ctx)
+        if entity is not None:
+            found[which], places[which] = _foreign_direction(entity, ctx, "direction_" + which)
+        else:
+            found[which] = _direction_member(feature, vector_name, entity_name, ctx)
+    direction_two = found["two"]
     data.update({
-        "direction_one": _direction_member(feature, "directionOne", "directionOneEntity", ctx),
+        "direction_one": found["one"],
         "quantity_one": _number(feature.quantityOne, 1),
         "distance_one": geo.length(feature.distanceOne),
         "direction_two": direction_two,
@@ -130,10 +156,12 @@ def rectangular_before(feature, ctx):
         "elements": [],
         "suppressed_ids": [],
     })
-    for key, entity_name in (("direction_one_sketch", "directionOneEntity"), ("direction_two_sketch", "directionTwoEntity")):
-        source = _direction_sketch(feature, entity_name, ctx)
+    for which, entity_name in (("one", "directionOneEntity"), ("two", "directionTwoEntity")):
+        source = _direction_sketch(feature, entity_name, ctx) if which not in places else None
         if source is not None:
-            data[key] = source
+            data["direction_%s_sketch" % which] = source
+    for which, place in places.items():
+        data["direction_%s_place" % which] = place
     return with_params(data, Params().add("quantity_one", lambda: feature.quantityOne, "scalar")
                        .add("quantity_two", lambda: feature.quantityTwo, "scalar")
                        .add("distance_one", lambda: feature.distanceOne)
