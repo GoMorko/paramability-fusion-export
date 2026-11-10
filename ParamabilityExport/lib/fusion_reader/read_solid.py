@@ -8,8 +8,10 @@ an `other` entry (which the translator refuses), or the reader raises and the it
 that feed a note, such as the participant bodies, fall back to an empty list.
 """
 from . import read_geometry as geo
+from . import read_intersect
 from .param_refs import Params, with_params
-from .placement import foreign_target_ref, from_assembly, ref_record, tool_identity
+from .placement import foreign_target_ref, from_assembly, ref_record
+from .read_bodies import tool_ref
 from .read_sketch import first_profile, profile_area, read_outlines, read_profiles
 
 _OPERATIONS = [
@@ -525,31 +527,40 @@ def hole_after(feature, ctx, data):
 
 
 def _tool_bodies(collection, ctx):
-    """The tool body refs of a Combine. A tool of another component is `foreign` and also names its native token, its
-    component and the occurrence path (`placement.tool_identity`), so the steps that made it can be read there."""
+    """The tool body refs of a Combine, each with its `volume` in mm3 (null when unreadable). A tool of another
+    component is `foreign` and also names its native token, its component and the occurrence path
+    (`read_bodies.tool_ref`), so the steps that made it can be read there."""
     out = []
     for body in geo.collection_items(collection):
-        ref = geo.body_ref(body, ctx)
-        if ref.get("foreign"):
-            ref.update(geo.safe(lambda: tool_identity(body), {}))
+        ref = tool_ref(body, ctx)
+        ref["volume"] = geo.volume_mm3(body)
         out.append(ref)
     return out
 
 
 def combine_before(feature, ctx):
-    return {
+    operation = _operation(feature.operation)
+    tools = _tool_bodies(feature.toolBodies, ctx)
+    data = {
         "target": geo.body_ref(feature.targetBody, ctx),
-        "tools": _tool_bodies(feature.toolBodies, ctx),
-        "operation": _operation(feature.operation),
+        "tools": tools,
+        "operation": operation,
         "keep_tools": geo.safe(lambda: bool(feature.isKeepToolBodies), False),
         "volume_before": geo.target_volume(ctx),
         "volume_after": None,
     }
+    if operation == "intersect" and len(tools) >= 2:
+        data["intersect_volumes"] = read_intersect.volumes(feature, tools)
+    return data
 
 
 def combine_after(feature, ctx, data):
-    """volume_after: the target's volume in mm3 with the marker after the Combine (null when it cannot be read)."""
-    return {"volume_after": geo.target_volume(ctx)}
+    """volume_after: the target's volume in mm3 with the marker after the Combine (null when it cannot be read).
+    intersect_model: for an intersect of several tools, which shape the Combine made (`read_intersect.model`)."""
+    found = {"volume_after": geo.target_volume(ctx)}
+    if "intersect_volumes" in data:
+        found["intersect_model"] = read_intersect.model(data["intersect_volumes"], found["volume_after"])
+    return found
 
 
 def thread_before(feature, ctx):

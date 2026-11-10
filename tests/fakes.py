@@ -225,6 +225,48 @@ class FakeSolid:
         self.name = name
 
 
+class FakeCellBody:
+    """A body made of named cells of one cm3 each, for boolean tests: a boolean is a set operation on the cells."""
+
+    def __init__(self, cells):
+        self.cells = set(cells)
+
+    @property
+    def volume(self):
+        return float(len(self.cells))
+
+
+class FakeBRepManager:
+    """TemporaryBRepManager stand-in. `copy` leaves the original alone, like Fusion; `failing` makes every boolean
+    report failure."""
+
+    def __init__(self, failing=False):
+        self.failing = failing
+        self.copies = 0
+
+    def copy(self, body):
+        self.copies += 1
+        return FakeCellBody(body.cells)
+
+    def booleanOperation(self, target, tool, kind):
+        if self.failing:
+            return False
+        target.cells = target.cells & tool.cells if kind == FakeBooleanTypes.IntersectionBooleanType \
+            else target.cells | tool.cells
+        return True
+
+
+class FakeBooleanTypes:
+    IntersectionBooleanType = "intersection"
+    UnionBooleanType = "union"
+    DifferenceBooleanType = "difference"
+
+
+def fake_brep_tools(failing=False):
+    """`(manager, types)` as `read_intersect._brep_tools` gives them."""
+    return FakeBRepManager(failing), FakeBooleanTypes
+
+
 # Fake command inputs for the dialog tests. They keep what the code sets, like Fusion's inputs do.
 
 

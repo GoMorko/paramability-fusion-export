@@ -573,7 +573,7 @@ class CombineThreadTest(unittest.TestCase):
         design = FakeDesign([combine, modeled], target)
         items = read_capture(design, target, fusion="", name="", up_axis="z")["items"]
         self.assertEqual(items[0]["data"], {
-            "target": {"token": "b1", "name": "Body1"}, "tools": [{"token": "b2", "name": "Body2"}],
+            "target": {"token": "b1", "name": "Body1"}, "tools": [{"token": "b2", "name": "Body2", "volume": 8000.0}],
             "operation": "cut", "keep_tools": True, "volume_before": None, "volume_after": 8000.0})
         self.assertEqual(items[1]["data"], {"modeled": False})
 

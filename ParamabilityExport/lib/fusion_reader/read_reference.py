@@ -15,7 +15,7 @@ Entities of another component are left out of `built_on`.
 """
 from . import read_geometry as geo
 from .placement import ORIGIN_MEMBERS
-from .read_solid import axis_of, construction_token
+from .read_solid import axis_of, axis_record, construction_token
 
 # How deep built_on goes (a plane built on a plane built on a face).
 _DEPTH = 3
@@ -100,4 +100,13 @@ def add_reference(record, entity, ctx):
     if isinstance(record, dict) and not record.get("foreign") and not record.get("assembly"):
         for key, value in geo.safe(lambda: reference_of(entity, ctx), {}).items():
             record.setdefault(key, value)
+    return record
+
+
+def axis_with_reference(entity, ctx):
+    """`read_solid.axis_record` of an axis entity (pattern axis, rotate axis), with what it is (`add_reference`) when
+    the axis could be read."""
+    record = axis_record(entity, ctx)
+    if isinstance(record, dict) and "dir" in record:
+        add_reference(record, geo.native_input(entity, ctx), ctx)
     return record

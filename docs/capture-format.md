@@ -150,9 +150,16 @@ ITEM:
   `lib/translator/step_kinds.py`). Feature readers run only for items in the target's component, plus the second pass
   below for the steps of a Combine's tool bodies from other components; the other items keep `"data": {}` with their
   `bodies_after`, health and message.
-- `helper_of`, `helper_unread`: only on items of another component that made a tool body of a Combine (see
-  CombineFeature in section 5): `helper_of` is the tool body's token and the item's `data` was read in a second pass in
-  that component's frame; `helper_unread` says why such an item was not read.
+- `helper_of`, `helper_unread`, `body_states`: only on items that made a body a Combine of the target takes as a tool,
+  or a body such a tool is copied from (see CombineFeature in section 5). `helper_of` (items of another component):
+  the body's token; the item's `data` was read in a second pass in that component's frame. `body_states` (any such
+  item, in the target's component or another): per body token the state of that body around the item,
+  `{ "box_before": BOX, "volume_before": 8000.0, "volume_after": 7000.0 }` (mm3). `box_before` and `volume_before` are
+  null when the body does not exist before the item (the item made it) or cannot be read, `volume_after` when it
+  does not exist after it or cannot be read. The feature readers measure the exported body around an item; these are
+  the numbers of the tool body. One item can serve several bodies (a pattern makes many copies), so the map has one
+  entry per token. `helper_unread` says why such an item was not read (a limit, or a body or place that could not be
+  read).
 - `entity_context`: `"proxy"` only when `TimelineObject.entity` came as an occurrence proxy and was turned native
   (`nativeObject`) before reading; absent otherwise.
 - `bodies_before` (not for suppressed items): the bodies of the target's component at the marker before the item.
@@ -351,9 +358,10 @@ curves). A borrowed sketch is read through its native object, so its numbers are
 2. For `k` from 0 to `end`: set `timeline.markerPosition = k`. Read the target's box and volume once. Read
    `bodies_after` and `target_changed` of item `k - 1` and, for items of the target's component, the inputs of item `k`
    (profiles, edges, faces, tool bodies, the target box before it). One recompute per item.
-3. The second pass (`lib/fusion_reader/helper_pass.py`), only when a Combine of the target lists a tool body of another
-   component: roll to the Combine to read the tool's place, then to the few items that made the tool (see CombineFeature
-   in section 5). Two marker moves per such item at most, none for other items.
+3. The second pass (`lib/fusion_reader/helper_pass.py`), only when a Combine that changes the target lists a tool
+   body: roll to the item that holds a body of another component to read its place, then to the items that made the
+   tool body, and those that made the bodies it is copied from (see CombineFeature in section 5). It runs in rounds,
+   since the items it reads name more bodies. Two marker moves per such item at most, none for other items.
 4. `finally`: put the marker back at `end` (`moveToEnd` when `end == count`, else `markerPosition = end`), then
    check it reads `end`; else `MarkerError`. After that, each `timeline.timelineGroups` entry that starts before
    `end` must be covered by the walk up to `end`; else `read_capture` raises `CaptureReadError` and the export lands
@@ -693,6 +701,11 @@ neither way, refuses an uneven chamfer.
 
 - `entity_type`: `features`, `faces`, `bodies`, `occurrences`. `sources`: `timelineObject.index` of each input
   feature.
+- For `entity_type: bodies` (rectangular and circular patterns, and the mirror below) the item also has
+  `source_bodies` and `result_bodies`: each a list of body records with `points` (see "Body records" below).
+  `source_bodies` come from `inputEntities` with the marker before the item, `result_bodies` from `bodies` with the
+  marker after it (null when they cannot be read). `PatternElement` has no `bodies` member, so the translator matches a
+  copy to its source and element by the points.
 - `distance_type`: `spacing` or `extent` (enum `PatternDistanceType`), `other` when unreadable. The translator then
   takes the kind whose grid holds every kept element.
 - `elements`: every `PatternElement` (`id`, `isSuppressed`, `transform` as a frame). The original is the element with
@@ -752,7 +765,16 @@ for extrudes).
 
 Optional `volume_before` and `volume_after` (mm3) hold the volume of the target with the marker before and after the
 Combine (`read_geometry.target_volume`; null when it cannot be read). When both are present the translator refuses a Combine that changes the part by more than its tool steps can
-fill (`combine_volume.py`).
+fill (`combine_volume.py`). Each tool also has `volume` (mm3, null when unreadable), read with the marker before the
+Combine.
+
+An intersect of two or more tools has `intersect_volumes` and `intersect_model`. Fusion's help does not say whether the
+result keeps the part and every tool or the part and any tool. `combine_before` copies the part and the tools with
+`TemporaryBRepManager` (temporary bodies, nothing is added to the design) and measures two volumes in mm3:
+`{ "every": part AND each tool in turn, "any": part AND the union of the tools }` (null when a boolean failed, no
+manager was available, or a tool is of another component, whose coordinates differ). `combine_after` compares them with
+`volume_after`: `intersect_model` is `every`, `any` or `unknown` (no match, a volume missing, or `intersect_volumes`
+null). Volumes match within 1e-3 mm3 or 1e-6 of the larger. When the two candidates are equal the model is `every`.
 
 The translator copies a Combine when every tool body is built by steps that only add material to it
 (`combine.adds_only`): `ExtrudeFeature` and `RevolveFeature` items whose recipe steps are `new` for the
@@ -796,11 +818,19 @@ The steps that made a foreign tool are read in a second pass (`lib/fusion_reader
 with the same feature readers and a `ReadContext` whose target is the tool body, so the tool component's own sketches,
 planes and faces are not `foreign` and every value is in that component's coordinates. Only the items that
 `translator/tool_items.py` picks are rolled to: the modeling steps before the Combine whose `bodies_after` list the tool
-and that sit in the tool's component, at most 40 for the whole capture and 8 foreign tools. Each gets `helper_of` (the
-tool's token) and `bodies_before` of the tool's component; their `in_target_component` stays false. An item past the
-cap, or one whose tool body or place could not be read, keeps `data: {}` and gets `helper_unread` with the reason.
-The model parameters of the tool component and the components above it are added to `parameters.model` (names already
-listed win).
+and that sit in the tool's component. Tools of the target's own component are planned the same way: their items are
+already read, and only `body_states` is added. The plan follows the bodies behind a tool: the source of a Paste
+(`sources`), the source bodies of a pattern or mirror of bodies (`source_bodies`) and the tools of a Combine that
+changed the tool. Limits: `MAX_ITEMS` 120 steps for the whole capture, `MAX_TOOLS` 32 bodies counted by distinct
+sources (the copies of a Paste or a body pattern count as their source, so a pattern of many copies is one), and
+source depth 3 (`tool_items.MAX_DEPTH`). Each item of another component gets `helper_of` (the body's token) and
+`bodies_before` of its component; their `in_target_component` stays false. An item past a limit keeps its data (empty
+for another component) and gets `helper_unread` with the limit as the reason; a body of another component past the
+tool limit has `place: { "error": reason }`. An item whose body or place could not be read keeps `data: {}` and gets
+`helper_unread` too. A Paste source or pattern source of another component carries `foreign`, `component`, `path` and
+`place` like a tool does (the place is read with the marker just before the item that holds it, slot `tool<n>.<plane>`
+with `n` its place in that item's list). The model parameters of the tool component and the components above it are
+added to `parameters.model` (names already listed win).
 
 The translator keeps the steps of a `helper_of` item in `Context.pending_tools` like those of another body of the
 target's component. The Combine moves them by the tool's frame and the inverse of the exported body's own
@@ -808,6 +838,41 @@ target's component. The Combine moves them by the tool's frame and the inverse o
 (`ref_motion.moves`, formulas of the sizes, or sizes marked loose where the probe could not follow, as for any
 reference). A frame that is scaled or mirrored refuses the Combine, naming the component. The placers of the moved steps
 (`moved_placer.py`) answer `material_at` for the moved points and cannot place a pick on their faces.
+
+**CopyPasteBody** (`sourceBody` with the marker before the item, `bodies` after it):
+
+```json
+{ "sources": [ BODY WITH POINTS ], "result_bodies": [ BODY WITH POINTS ] }
+```
+
+`sources` holds the one body that was copied, empty when `sourceBody` is gone or cannot be read. A source of another
+component is `foreign` and has the identity keys of a foreign tool. `result_bodies` is null when `bodies` cannot be read.
+
+**MoveFeature** (`inputEntities`, `definition`, with the marker before the item and again after it):
+
+```json
+{ "input_kind": "bodies", "bodies": [BODY], "move_type": "translateXYZ",
+  "points_before": [[[x, y, z], ...]], "points_after": [[[x, y, z], ...]],
+  "translate": [dx, dy, dz], "is_design_space": true, "params": { "translate.0": PARAM } }
+```
+
+- `input_kind`: `bodies`, `faces` or `other` (mixed or unreadable inputs). `bodies` is empty unless the kind is bodies.
+- `move_type`: from the class of `definition`: `translateXYZ`, `rotate`, `free`, `pointToPoint`, `pointToPosition`,
+  `alongEntity` (translate along entity), else `other`.
+- `points_before`, `points_after`: per body in `bodies`, its first vertex points in the body's own coordinates and
+  vertex order; `points_after` is found again by token with the marker after the item and is empty for a body that
+  cannot be found. The translator fits the rigid move from them.
+- `translateXYZ`: `translate` is the three distances in mm (`xDistance`, `yDistance`, `zDistance`; null for one that
+  cannot be read), `is_design_space` from `isDesignSpace` (null when unreadable). Params paths: `translate.0`,
+  `translate.1`, `translate.2`.
+- `rotate`: `angle_deg` (null when unreadable), `axis` (an axis record with what it is, as for a circular pattern; the
+  axis comes from `axisEntity`, `{ "kind": "other" }` when unreadable). Params path: `angle_deg`.
+- `free`: `transform` as a frame from `MoveFeature.transform` (null when it is retired or cannot be read).
+- The other types carry only the points.
+
+Body records (`lib/fusion_reader/read_bodies.py`): `{ "token", "name" }`, `foreign` and the identity keys of a foreign
+tool for a body of another component, and `points`: up to 8 vertices in mm of the native body, in the body's vertex
+order (empty when one cannot be read, since a gap would shift the order).
 
 **ThreadFeature**: `{ "modeled": bool }` (`isModeled`).
 
@@ -1506,6 +1571,10 @@ matched through `body` and `bodies_after`), `CoincidentConstraint` (`point`, `en
 (`entityOne`, `entityTwo`), `EqualConstraint` and `TangentConstraint` (`curveOne`, `curveTwo`), `ModelParameter`
 (`component`, `dependentParameters`, `createdBy`).
 
+Read in the API reference on 2026-11-10 for the tool body readers: `CombineFeature`, `MoveFeature`,
+`MoveFeatureDefinition` and its translate, rotate and free move classes, `CopyPasteBody`, `PatternElement`,
+`CircularPatternFeature`, `TemporaryBRepManager`, `BooleanTypes`.
+
 Read in the API reference on 2026-11-08: `HoleFeature` (all members above, plus `isDefaultDirection`;
 the page says "the extent type of a hole is currently limited to a distance extent" but also lists
 `setAllExtent` and `setOneSideToExtent`), `SketchPointsHolePositionDefinition.sketchPoints`,
@@ -1563,3 +1632,13 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | `Component.xYConstructionPlane` / `xZConstructionPlane` / `yZConstructionPlane` and `ConstructionPlane.createForAssemblyContext(occurrence)` (in the API reference) show a component's origin planes in the root's coordinates; the three tips 10 mm along the normals fix the occurrence frame | `tool_place` lands the frame on them within 1e-3 mm or records an error; the G tests in `docs/hand-tests.md` |
 | The `entityToken` of a tool body's native body equals the token in `bodies_after` of the steps that made it, and `Design.findEntityByToken` finds it with the marker just before the Combine | an unmatched token leaves the steps unread and the Combine refused naming the step; G1 |
 | `BRepBody.copyToComponent(proxy)` keeps the assembly place | the copy guard in `step_export.py` compares the bounding boxes (1e-3 mm) and refuses before writing |
+| `MoveFeature.inputEntities` (only bodies or only faces) read with the marker before the item; the same bodies found by token after it, with their vertices in the same order | `points_before` and `points_after` are fitted by the translator; a mismatch is refused; the Move hand tests B3 to B5 |
+| `MoveFeature.definition` has a class per type, and the type name contains `TranslateXYZ`, `Rotate`, `FreeMove`, `PointToPoint`, `PointToPosition` or `TranslateAlongEntity` | an unknown name reads `other` and the Move is refused; B3 to B5 |
+| `xDistance`, `yDistance`, `zDistance` (model parameters in cm) and `isDesignSpace` of a translate move; `angle` (model parameter in radians) and `axisEntity` of a rotate move | a member that cannot be read is null, and the Move is refused; the sign and the space (component or design) come from the fit against the points; B4, B5 |
+| `MoveFeature.transform` answers for a free move although the reference marks it retired | null when it cannot be read; the fit against the points decides alone; B3 |
+| `CopyPasteBody.sourceBody` can be read with the marker before the item (and is empty when the source was consumed), `CopyPasteBody.bodies` after it, also when the source lives in another component | empty `sources` or null `result_bodies` refuse the Paste; B2, B8 |
+| `inputEntities` of a rectangular, circular or mirror pattern of bodies with the marker before the item, `bodies` after it holding every copy (not the sources) | null `result_bodies` refuses the pattern; copies are matched to the elements by the points; B6 |
+| `BRepBody.vertices` and `BRepVertex.geometry` of the native body: the first 8 in a stable order across a paste, a move and a pattern copy | fewer than 3 usable points refuses the fit; B2, B3, B6 |
+| `BRepBody.volume` of a tool body with the marker before the Combine, and of any body the second pass finds by token (`Design.findEntityByToken`) | null in `tools[].volume` and `body_states`; the volume checks on a tool are left out; B1, B9 |
+| `TemporaryBRepManager.get()`, `copy(body)`, `booleanOperation(targetBody, toolBody, booleanType)` (changes the target body in place and answers true or false), `BooleanTypes.IntersectionBooleanType` and `UnionBooleanType`, and the `volume` of a temporary body; none of it changes the design | any exception or a false answer gives null `intersect_volumes` and `intersect_model: unknown`, which refuses the Combine; B7 |
+| An intersect with several tools keeps the part and every tool, or the part and any tool | measured per export from the volumes and written as `intersect_model`; B7 |

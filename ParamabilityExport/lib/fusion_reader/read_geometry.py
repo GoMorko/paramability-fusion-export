@@ -116,6 +116,35 @@ def target_volume(ctx):
     return safe(lambda: round(body.volume * 1000.0, 6) + 0.0, None) if body is not None else None
 
 
+def volume_mm3(body):
+    """Volume of a body in mm3, or None when it cannot be read."""
+    return safe(lambda: round(body.volume * 1000.0, 6) + 0.0, None)
+
+
+# Vertices read per body to follow a body through a Paste, a Move or a pattern.
+BODY_POINTS = 8
+
+
+def native_object(entity):
+    """The native object of an entity seen through an occurrence, else the entity."""
+    if safe(lambda: entity.assemblyContext, None) is None:
+        return entity
+    return safe(lambda: entity.nativeObject, None) or entity
+
+
+def vertex_points(body, limit=BODY_POINTS):
+    """The first `limit` vertex points of a body in mm, in the body's own coordinates and vertex order. A list with
+    one vertex that cannot be read is empty, since a gap would shift the order the points are matched by."""
+    vertices = safe(lambda: body.vertices, None)
+    found = []
+    for i in range(min(safe(lambda: int(vertices.count), 0), limit)):
+        p = safe(lambda: point(vertices.item(i).geometry), None)
+        if p is None:
+            return []
+        found.append(p)
+    return found
+
+
 def same_entity(a, b):
     """True when two Fusion objects are the same entity. Token text is not compared: Fusion can give one entity
     different tokens over time."""

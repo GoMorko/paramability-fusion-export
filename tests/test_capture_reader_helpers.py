@@ -177,6 +177,29 @@ class HelperFailureTest(unittest.TestCase):
         self.assertNotIn("helper_of", items[2])
 
 
+def ref(token, **kw):
+    return dict({"token": token, "name": "Body" + token}, **kw)
+
+
+def step(index, bodies, component="root", data=None, type_="ExtrudeFeature", **kw):
+    return dict({"index": index, "name": "S%d" % index, "type": type_, "component": component,
+                 "bodies_after": [ref(t) for t in bodies], "data": data or {}}, **kw)
+
+
+def combine(index, tools, target="t", **kw):
+    return step(index, [target], data={"target": ref(target), "tools": [ref(t) for t in tools]},
+                type_="CombineFeature", **kw)
+
+
+def paste(index, result, source, **kw):
+    return step(index, [result], data={"sources": [ref(source)], "result_bodies": [ref(result)]},
+                type_="CopyPasteBody", **kw)
+
+
+def indices(pairs):
+    return [pair[0]["index"] for pair in pairs]
+
+
 class PlanTest(unittest.TestCase):
     def items(self, count, tool_component="rod"):
         tool = {"token": "b2", "name": "Body2", "foreign": True, "component": {"token": tool_component, "name": "Rod"}}
@@ -188,18 +211,64 @@ class PlanTest(unittest.TestCase):
         return out
 
     def test_the_steps_before_the_combine_that_touch_the_tool_are_planned_in_order(self):
-        wanted, left = tool_items.plan(self.items(3))
-        self.assertEqual(([i["index"] for i, _ in wanted], left), ([0, 1, 2], []))
+        plan = tool_items.plan(self.items(3))
+        self.assertEqual((indices(plan.wanted), plan.left), ([0, 1, 2], []))
 
     def test_steps_past_the_cap_are_left(self):
-        wanted, left = tool_items.plan(self.items(5), cap=3)
-        self.assertEqual((len(wanted), [i["index"] for i, _ in left]), (3, [3, 4]))
+        plan = tool_items.plan(self.items(5), max_items=3)
+        self.assertEqual((len(plan.wanted), [(i["index"], r) for i, r in plan.left]),
+                         (3, [(3, tool_items.TOO_MANY), (4, tool_items.TOO_MANY)]))
 
     def test_a_step_of_another_component_with_the_same_body_name_is_not_planned(self):
         items = self.items(2)
         items[0]["component"] = "elsewhere"
-        wanted, _ = tool_items.plan(items)
-        self.assertEqual([i["index"] for i, _ in wanted], [1])
+        self.assertEqual(indices(tool_items.plan(items).wanted), [1])
+
+    def test_a_tool_of_the_same_component_is_planned_from_the_steps_of_that_component(self):
+        items = [step(0, ["b2"]), step(1, ["b2"], component="elsewhere"), step(2, ["b1"]), combine(3, ["b2"])]
+        self.assertEqual(indices(tool_items.plan(items, ref("t")).wanted), [0])
+
+    def test_only_combines_of_the_exported_body_give_tools(self):
+        items = [step(0, ["b2"]), combine(1, ["b2"], target="other")]
+        self.assertEqual(tool_items.plan(items, ref("t")).sources, [])
+        self.assertEqual(indices(tool_items.plan(items).wanted), [0])
+
+    def test_the_source_of_a_paste_is_followed_with_its_depth(self):
+        items = [step(0, ["b2"]), step(1, ["b2"]), paste(2, "b3", "b2"), combine(3, ["b3"])]
+        plan = tool_items.plan(items, ref("t"))
+        self.assertEqual((indices(plan.wanted), [(s.record["token"], s.depth) for s in plan.sources]),
+                         ([2, 0, 1], [("b3", 1), ("b2", 2)]))
+        self.assertEqual([r["token"] for r in plan.wanted[1][1]], ["b2"])
+
+    def test_the_exported_body_is_never_a_source(self):
+        items = [step(0, ["t"]), paste(1, "b3", "t"), combine(2, ["b3"])]
+        plan = tool_items.plan(items, ref("t"))
+        self.assertEqual(([s.record["token"] for s in plan.sources], indices(plan.wanted)), (["b3"], [1]))
+
+    def test_the_tools_of_a_combine_that_changed_a_tool_are_followed(self):
+        items = [step(0, ["b2"]), step(1, ["b4"]), combine(2, ["b4"], target="b2"), combine(3, ["b2"])]
+        self.assertEqual(sorted(indices(tool_items.plan(items, ref("t")).wanted)), [0, 1, 2])
+
+    def test_copies_of_one_source_count_as_one_body(self):
+        copies = ["c%d" % n for n in range(5)]
+        pattern = step(1, copies, data={"source_bodies": [ref("b2")], "result_bodies": [ref(c) for c in copies]},
+                       type_="RectangularPatternFeature")
+        items = [step(0, ["b2"]), pattern, combine(2, copies)]
+        plan = tool_items.plan(items, ref("t"), max_tools=1)
+        self.assertEqual((plan.refused, indices(plan.wanted)), ([], [1, 0]))
+
+    def test_bodies_past_the_tool_limit_are_refused_with_their_steps_left(self):
+        items = [step(0, ["b2"]), step(1, ["b3"]), combine(2, ["b2", "b3"])]
+        plan = tool_items.plan(items, ref("t"), max_tools=1)
+        self.assertEqual(([(r["token"], why) for r, why in plan.refused], [(i["index"], why) for i, why in plan.left]),
+                         ([("b3", tool_items.TOO_MANY_TOOLS)], [(1, tool_items.TOO_MANY_TOOLS)]))
+        self.assertEqual(indices(plan.wanted), [0])
+
+    def test_sources_deeper_than_the_limit_are_left_with_their_steps(self):
+        items = [step(0, ["b4"]), paste(1, "b3", "b4"), paste(2, "b2", "b3"), combine(3, ["b2"])]
+        plan = tool_items.plan(items, ref("t"), max_depth=2)
+        self.assertEqual(([s.record["token"] for s in plan.sources], [(i["index"], why) for i, why in plan.left]),
+                         (["b2", "b3"], [(0, tool_items.TOO_DEEP)]))
 
 
 if __name__ == "__main__":
