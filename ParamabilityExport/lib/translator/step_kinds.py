@@ -64,7 +64,8 @@ class RecipeKind:
       walks a list; a path that is absent in a step is skipped.
     repeat: SOLID or FINISH when a pattern or mirror can repeat it, else None (the repeat refuses).
     repeats: it repeats other steps (`of`): it makes copies of the bodies they make.
-    combine_tool: a body built by one such step alone can be the tool body of a Combine.
+    combine_tool: the step can be one of the steps that build the tool body of a Combine (a body made by such steps
+      that only add material).
     always_cuts: it removes material whatever its `combine`.
     written: False for kinds the recipe schema has but the translator never writes.
     """

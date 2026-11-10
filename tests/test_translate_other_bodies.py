@@ -58,6 +58,38 @@ class OtherBodyTest(unittest.TestCase):
         self.assertIn("LidExtrude", result.loose[0]["reason"])
 
 
+def two_step_tool(combine=True, tool_step_reads="peg_len_mm"):
+    """The plate cut by a tool of two joined cylinders. `peg_len_mm` is read by the second tool step alone."""
+    capture = load_capture("combine_cut_tool_two_steps_sized")
+    if not combine:
+        capture["items"].pop()
+    if tool_step_reads != "peg_len_mm":
+        capture["items"][5]["data"]["params"]["side_one.distance"]["expression"] = tool_step_reads
+        next(p for p in capture["parameters"]["model"] if p["name"] == "d3")["expression"] = tool_step_reads
+    return capture
+
+
+class ToolOfSeveralStepsTest(unittest.TestCase):
+    def test_a_size_only_a_tool_step_reads_stays_free_and_a_recipe_formula_reads_it(self):
+        result = translated(two_step_tool())
+        self.assertEqual((result.fixed, result.loose, result.dropped), ([], [], []))
+        reads = [s.get("distance") for s in result.recipe["features"]]
+        self.assertIn({"expr": "peg_len_mm"}, reads)
+
+    def test_a_tool_that_is_never_combined_marks_nothing_and_its_size_is_unused(self):
+        result = translated(two_step_tool(combine=False))
+        self.assertEqual((result.fixed, result.loose), ([], []))
+        self.assertEqual([(d["name"], d["used"]) for d in result.dropped], [("peg_len_mm", False)])
+
+    def test_a_tool_step_value_the_copy_cannot_follow_marks_its_size_once_the_tool_is_combined(self):
+        # The formula gives 8 mm at the measured sizes while Fusion measured 4 mm.
+        combined = translated(two_step_tool(tool_step_reads="peg_len_mm * 2"))
+        self.assertEqual([(d["name"], d["used"]) for d in combined.dropped], [("peg_len_mm", True)])
+        self.assertIn("Extrude4", combined.dropped[0]["reason"])
+        alone = translated(two_step_tool(combine=False, tool_step_reads="peg_len_mm * 2"))
+        self.assertEqual([(d["name"], d["used"]) for d in alone.dropped], [("peg_len_mm", False)])
+
+
 def tray_with(*items):
     capture = load_capture(TRAY)
     capture["items"].extend(items)

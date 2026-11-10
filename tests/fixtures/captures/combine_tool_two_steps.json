@@ -1,5 +1,5 @@
 {
-  "_comment": "The tool body takes a second extrude before it is combined: refused.",
+  "_comment": "The tool body takes a second extrude that joins it before it is combined: both extrudes are written with the Combine's operation.",
   "capture": 3,
   "fusion": "2.0.0",
   "design": "Test",

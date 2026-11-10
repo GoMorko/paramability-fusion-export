@@ -1,7 +1,7 @@
 """The driver: walks a capture's items, calls one handler per feature type, builds the recipe."""
 import importlib
 
-from . import borrowed, range_check, step_kinds
+from . import borrowed, combine, range_check, step_kinds
 from .audit import audit
 from .sizes import construction_fixes, joint_reasons, text_reasons, untried_reasons, used_sizes
 from . import notes as wording, place
@@ -505,7 +505,9 @@ def _handle(handler, item, ctx):
 
 
 def _collect_helper(item, handler, ctx, with_construction):
-    """Keep steps of a body other than the target for a later Combine. A refusal or a missing handler drops it.
+    """Keep the steps of a body other than the target for a later Combine, while they only add material to that body
+    (`combine.adds_only`). A refusal, a missing handler or a step that does anything else drops the item; the Combine
+    finds it among the items that built the body and refuses with the reason kept in `ctx.tool_refusals`.
 
     The doubts of the handler stay with its steps in `ctx.pending_tools`: they count only when a Combine takes the body
     (`StepResult.join`), because until then nothing it wrote reaches the exported body. Its notes are dropped."""
@@ -516,13 +518,17 @@ def _collect_helper(item, handler, ctx, with_construction):
             for names, why in construction_fixes(ctx.table, item):
                 ctx.doubt(names, why)
     outcome = _handle(handler, item, ctx)
+    if isinstance(outcome, Refusal):
+        ctx.tool_refusals[item.get("index")] = outcome.reason
+        return
     bodies = item.get("bodies_after") or []
-    if isinstance(outcome, Refusal) or not outcome.entries or not bodies:
+    if not outcome.entries or len(bodies) != 1:
         return
     key = bodies[0].get("token") or bodies[0].get("name")
-    if key in ctx.pending_tools or outcome.steps[0].get("combine") == "new":
-        held = ctx.pending_tools.setdefault(key, StepResult())
-        held.extend(outcome.entries)
-        held.doubts.extend(construction.doubts + outcome.doubts)
-        held.asked |= outcome.asked
-        held.items.append(item)
+    if not combine.adds_only(outcome.entries, key in ctx.pending_tools):
+        return
+    held = ctx.pending_tools.setdefault(key, StepResult())
+    held.extend(outcome.entries)
+    held.doubts.extend(construction.doubts + outcome.doubts)
+    held.asked |= outcome.asked
+    held.items.append(item)

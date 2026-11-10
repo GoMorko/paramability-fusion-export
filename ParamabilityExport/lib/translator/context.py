@@ -23,6 +23,8 @@ class Context:
     pending_tools: body token (or name) -> the StepResult of the steps that build a body other than the target, not
       yet placed, with the doubts their handlers recorded and the capture items that made them. The Combine handler
       takes them (`StepResult.join`), so these count only once the body joins the exported one.
+    tool_refusals: timeline index -> the reason the walk could not copy that step of a body other than the target. A
+      Combine that finds such a step among the history of its tool body names it in its own refusal.
     not_repeatable: ids of steps whose length Fusion recomputes per copy (`Entry.repeatable`). Pattern and mirror
       handlers refuse them as sources.
     table: the size table whose sizes the feature values may follow, or None for a recipe with plain
@@ -56,6 +58,7 @@ class Context:
         self.target = capture["target"]
         self.steps = []
         self.pending_tools = {}
+        self.tool_refusals = {}
         self.copied_items = []
         self.asked = set()
         self.not_repeatable = set()
