@@ -19,6 +19,8 @@ What 0.6.0 to 0.7.1 added, in this order. Each id is described in the section na
 - [ ] M1 to M6, measuring those places at other sizes: section 8.2.
 - [ ] Combine with a tool of several steps: section 7, "Combine with a tool of several steps".
 - [ ] P1 to P4, several bodies in one file: section 8.3.
+- [ ] G1 to G7, a Combine whose tool body is made in another component: section 8.4 (the reads are under "Capture
+      reader calls to watch", the last entry of the combine list).
 
 ## 1. Install
 
@@ -455,6 +457,44 @@ Pick two or more bodies in the body picker of Export for Paramability. Open the 
 - [ ] Pick one body again: the file is the usual single body file (`kind: recipe`).
 - [ ] After picking a body, "Show in timeline" selects the step and the picker still holds all picked bodies.
 
+### 8.4 Tool bodies made in another component (G tests)
+
+A Combine in the exported body's component can take a tool body made in another component. The add-in reads the steps
+that made the tool a second time (in the tool component's own frame), carries them to the Combine's place with the
+tool component's place in the assembly, and writes them with the Combine's operation. Look in `report.json` at the
+Combine's `data.tools[]` (`component`, `path`, `place` with `frame`, `target_frame` and the three plane `ref`s) and at
+the items of the tool component (`helper_of`, `data`). A tool step that cannot be copied stops the copy, and the
+reason names the step and the component. Copy Paste Body and Move are not copied: they stop the copy with their own
+reason (G3, G4).
+
+- [ ] **G1 Cut with a tool from another component.** Component `Rod` holds a body made by two join extrudes (two
+      cylinders, one sketch each). `Rod` is moved by (30, 10, 0) and turned 90 degrees about Z. In the root (or in
+      `Tray`, moved too) a box, then a Combine "cut" with the Rod body as the tool. Export the box: copied; the recipe
+      has the box and two cut extrudes at the places Fusion shows (the cylinders cut where the tool sits, not at the
+      Rod's origin), and the part in Paramability matches the STEP. The report shows `place.frame` equal to the
+      occurrence, `checked_points` 3, and `helper_of` on the two Rod extrudes. Then a "join" Combine with the same
+      tool, and a tool kept (`isKeepToolBodies`) that serves a second Combine.
+- [ ] **G2 A size in the tool.** The tool extrude height is a model parameter of `Rod` that reads a user parameter
+      `tool_len`; a cylinder radius is a sketch dimension of `Rod` driven by `tool_r`. Tick both: each is a free size,
+      and changing it in Paramability changes the cut. The probe request lists the `Rod` sketches under `native`, and
+      `probe.motion.values` has keys for the extrude items of `Rod`. A size that acts on `Rod` without moving
+      anything (a joint it is not part of) is dropped as "tried, changes nothing".
+- [ ] **G3 Pasted body.** A body in `Rod` made by Copy Paste Body of another body, used as the tool. The copy stops
+      ("A pasted body is not copied yet") and the reason names the paste step and `Rod`. Nothing is guessed.
+- [ ] **G4 Moved tool.** A body in `Rod` moved by Move/Copy (free move) before the Combine: the copy stops ("A Move is
+      not copied yet") and names the Move. A Move of the exported body itself stops the copy the same way.
+- [ ] **G5 Time.** Export a body whose tool chain has about 20 steps in other components; note the export time with
+      and without the tool (the second pass moves the marker at most twice per tool step, and not for other steps).
+      More than 40 tool steps stop the copy ("reads at most 40 steps").
+- [ ] **G6 Tool with a fillet.** Round the edges of the `Rod` body before the Combine: the copy stops and the reason
+      names the fillet step and `Rod` ("has Fillet1 (fillet)"). A cut inside the tool stops it the same way.
+- [ ] **G7 Tool component moved by a size.** Move `Rod` with a ticked parameter (an offset on a joint or a move
+      driven by `rod_x`). The probe request lists three `refs` per tool (`<Combine index>.tool0.xy|xz|yz`) and
+      `probe.motion.refs` marks them measured. The cut follows the move in Paramability (the recipe positions are
+      formulas of `rod_x`). Turn `Rod` with an angle parameter: that parameter is loose with "puts its tool at the
+      place of Rod that turns with it". Run once with the references unmeasured (scan failed): every size that acts on
+      `Rod` is loose, never silently fixed.
+
 ## 9. Sketches that follow sizes
 
 Send `report.json` from any export that surprises; its `probe` record (the states read, the motion and
@@ -869,6 +909,17 @@ read the capture in `report.json`.
 - `HoleFeature.thread.isModeled`, `holePositionDefinition.sketchPoints[i].worldGeometry`, `position`, `direction`
   (into the material or out), `tipAngle` for a flat drill point, `participantBodies`, `sideFaces`, `endFaces`.
 - `CombineFeature.targetBody`, `toolBodies`, `isKeepToolBodies`; `ThreadFeature.isModeled`.
+- `CombineFeature.toolBodies` of a body in another component, in the capture of the exported body's component
+  (`tool_identity`, `place.py`): the proxy's `assemblyContext.fullPathName`, `nativeObject.entityToken` (must equal the
+  token that `bodies_after` of the tool's steps give) and `parentComponent`. The second reading pass
+  (`fusion_reader/helper_pass.py`, G1 to G7) moves the marker to the Combine (`Timeline.markerPosition`), finds the
+  native tool body with `Design.findEntityByToken` there, and reads the tool's place: `Component.xYConstructionPlane`,
+  `xZConstructionPlane`, `yZConstructionPlane`, `ConstructionPlane.createForAssemblyContext(occurrence)` (in the API
+  reference), `ConstructionPlane.geometry` (`Plane.origin`, `normal`) of the native and the shown plane,
+  `Component.allOccurrencesByComponent` with `Occurrence.fullPathName` and `transform2`. It then rolls to each step
+  that made the tool and reads it with the feature readers of its type. Check that the tool's token matches, that
+  `place.frame` equals the occurrence's transform with `checked_points` 3, and that every guarded read that fails
+  leaves a `place.error`, a `read_error` or a `helper_unread` in the report rather than stopping the export.
 - `BRepBody.volume` of the target with the marker before and after a Combine (`volume_before`, `volume_after`): a cut
   must show a smaller volume. A null means the body could not be measured there; the volume check is skipped.
 - Measuring references at each state (`lib/fusion_reader/probe_refs.py`, M1 to M6): `Design.findEntityByToken` of a

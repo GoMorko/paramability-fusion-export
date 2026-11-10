@@ -81,7 +81,9 @@ def read_state(design, request, ctx):
 
     `request` has `sketches`, `points`, `lines` (entity tokens), `params` (Fusion parameter names), `target`
     (true to read the target body's box) and optionally `borrowed`: { sketch token: { path } } for sketches of other
-    components, with the occurrence path the capture recorded, and `refs`: { reference key: { token, path, shape } }.
+    components, with the occurrence path the capture recorded, `native`: sketch tokens of tool bodies from other
+    components, read in their own component's frame like the target's sketches, and `refs`: { reference key: { token,
+    path, shape } }.
 
     `sketches` maps a token to { frame, profiles } (profiles as in the capture, each curve with `entity`); a borrowed
     one also has `native_frame` and `placement`. `points` maps a token to [x, y, z] mm; `lines` to { point, dir };
@@ -92,6 +94,7 @@ def read_state(design, request, ctx):
     """
     request = request or {}
     hints = request.get("borrowed") if isinstance(request.get("borrowed"), dict) else {}
+    native = set(request.get("native") or ())
     unread = {}
 
     def entity(token, read):
@@ -101,7 +104,7 @@ def read_state(design, request, ctx):
         return None if found is None else read(found)
 
     def sketch(found, token):
-        if not _is_borrowed(found, ctx):
+        if token in native or not _is_borrowed(found, ctx):
             return _read_sketch(found, ctx)
         record, reason = _read_borrowed(found, ctx, (hints.get(token) or {}).get("path") or "")
         if record is None:

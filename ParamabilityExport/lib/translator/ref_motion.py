@@ -29,7 +29,8 @@ _TARGET_SLOTS = ("start", "side_one", "side_two")
 _KEYS = {PLANE: 1, AXIS: 3, POINT: 3, DIRECTION: 1}
 
 _NOUNS = {"ConstructionPlane": "a plane", "ConstructionAxis": "an axis", "BRepFace": "a face", "BRepEdge": "an edge",
-          "SketchPoint": "a sketch point", "SketchLine": "a sketch line", "BRepVertex": "a corner"}
+          "SketchPoint": "a sketch point", "SketchLine": "a sketch line", "BRepVertex": "a corner",
+          "Place": "the place"}
 
 
 def _name(item):

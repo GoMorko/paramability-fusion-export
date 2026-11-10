@@ -6,7 +6,8 @@ k - 1 (bodies, health, what the feature produced, whether the target changed) an
 marker always goes back to where it was.
 
 The target is the native body of its component, so every value is in component coordinates; `placement` says where
-the component sits in the assembly. Feature readers run only for items of the target's component.
+the component sits in the assembly. Feature readers run only for items of the target's component, and then for the steps of tool bodies from other
+components (`helper_pass`).
 
 Feature readers come in pairs `(before, after)` (see read_solid). Each reader module registers its pairs in a module
 level READERS dict keyed by capture type, and the step kind table (`translator/step_kinds.py`) names the module for
@@ -16,6 +17,7 @@ import importlib
 
 from ..design_edit.marker import put_back, read_marker
 from ..translator import step_kinds
+from . import helper_pass
 from . import read_geometry as geo
 from .parameters import list_model_parameters, list_user_parameters
 from .placement import occurrence_path, read_placement
@@ -262,6 +264,13 @@ def _parameters(design, ctx):
     return {"user": user, "model": model}, unit
 
 
+def _add_tool_parameters(parameters, components):
+    """Adds the model parameters of the components that tool bodies of other components live in (merged by name; the
+    names already listed win)."""
+    known = {p["name"] for p in parameters["model"]}
+    parameters["model"].extend(p for p in helper_pass.model_parameters(components) if p["name"] not in known)
+
+
 def _target_record(ctx, final):
     """The TARGET of the envelope: the native body, its component and its place in the assembly."""
     return {
@@ -312,11 +321,15 @@ def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_reade
             previous = state
             if k < end:
                 _start_item(timeline, ctx, readers, k, items, group_indices)
+        tool_components = geo.safe(
+            lambda: helper_pass.read_helpers(design, ctx, timeline, items, readers, _native_entity, _component_bodies),
+            [])
     finally:
         _restore_marker(timeline, end)
     _check_groups(timeline, end, count, items, group_indices)
     final = ctx.find_target() or ctx.target
     parameters, design_units = _parameters(design, ctx)
+    _add_tool_parameters(parameters, tool_components)
     target = _target_record(ctx, final)
     ordered = [items[i] for i in sorted(items)]
     links = geo.safe(lambda: sketch_links(design, ctx, ordered), [])

@@ -378,6 +378,12 @@ def _walk(capture, table, size_table, motion=None, cache=None):
             result.items.append(make_verdict(item, "skipped", note=""))
             continue
 
+        if outside_component(item) and item.get("helper_of"):
+            # A step of a tool body from another component, read for a Combine of the target.
+            _collect_foreign_helper(item, table.get(item.get("type")), ctx, motion is not None and size_table is not None)
+            result.items.append(make_verdict(item, "skipped", note="Helper geometry, not part of the exported body."))
+            continue
+
         if outside_component(item):
             # A step made in another component: harmless unless it changes the target.
             if item.get("target_changed") is True or _touches_target(item, ctx):
@@ -507,14 +513,33 @@ def _handle(handler, item, ctx):
     return outcome
 
 
-def _collect_helper(item, handler, ctx, with_construction):
+def _collect_foreign_helper(item, handler, ctx, with_construction):
+    """`_collect_helper` for an item of a tool body from another component. The step is kept in that component's
+    frame; the Combine that takes the tool moves it. A step that is not built, was not read, or reaches into a third
+    component is left for the Combine to name."""
+    data = _data(item)
+    if item.get("health") == "error":
+        ctx.tool_refusals[item.get("index")] = "This step does not build in Fusion."
+    elif data.get("read_error"):
+        ctx.tool_refusals[item.get("index")] = "This step could not be read from Fusion."
+    elif _foreign(data):
+        ctx.tool_refusals[item.get("index")] = "This step reaches into another component, which is not copied yet."
+    elif item.get("bodies_after") is not None:
+        _collect_helper(item, handler, ctx, with_construction, foreign=True)
+
+
+def _collect_helper(item, handler, ctx, with_construction, foreign=False):
     """Keep the steps of a body other than the target for a later Combine, while they only add material to that body
     (`combine.adds_only`). A refusal, a missing handler or a step that does anything else drops the item; the Combine
     finds it among the items that built the body and refuses with the reason kept in `ctx.tool_refusals`.
 
     The doubts of the handler stay with its steps in `ctx.pending_tools`: they count only when a Combine takes the body
-    (`StepResult.join`), because until then nothing it wrote reaches the exported body. Its notes are dropped."""
+    (`StepResult.join`), because until then nothing it wrote reaches the exported body. Its notes are dropped.
+    `foreign` is for an item of a tool body from another component (its body is keyed with the component)."""
     if handler is None:
+        spec = step_kinds.step_type(item.get("type"))
+        if spec is not None and spec.unsupported:
+            ctx.tool_refusals[item.get("index")] = spec.unsupported
         return
     with ctx.recording() as construction:
         if with_construction:
@@ -527,7 +552,7 @@ def _collect_helper(item, handler, ctx, with_construction):
     bodies = item.get("bodies_after") or []
     if not outcome.entries or len(bodies) != 1:
         return
-    key = bodies[0].get("token") or bodies[0].get("name")
+    key = combine.pending_key(bodies[0], item.get("component") if foreign else None)
     if not combine.adds_only(outcome.entries, key in ctx.pending_tools):
         return
     held = ctx.pending_tools.setdefault(key, StepResult())

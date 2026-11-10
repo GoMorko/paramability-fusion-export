@@ -9,7 +9,7 @@ that feed a note, such as the participant bodies, fall back to an empty list.
 """
 from . import read_geometry as geo
 from .param_refs import Params, with_params
-from .placement import foreign_target_ref, from_assembly, ref_record
+from .placement import foreign_target_ref, from_assembly, ref_record, tool_identity
 from .read_sketch import first_profile, profile_area, read_outlines, read_profiles
 
 _OPERATIONS = [
@@ -510,10 +510,22 @@ def hole_after(feature, ctx, data):
     return {"side_cylinders": side, "end_points": ends, "end_face_types": end_types}
 
 
+def _tool_bodies(collection, ctx):
+    """The tool body refs of a Combine. A tool of another component is `foreign` and also names its native token, its
+    component and the occurrence path (`placement.tool_identity`), so the steps that made it can be read there."""
+    out = []
+    for body in geo.collection_items(collection):
+        ref = geo.body_ref(body, ctx)
+        if ref.get("foreign"):
+            ref.update(geo.safe(lambda: tool_identity(body), {}))
+        out.append(ref)
+    return out
+
+
 def combine_before(feature, ctx):
     return {
         "target": geo.body_ref(feature.targetBody, ctx),
-        "tools": geo.body_refs(feature.toolBodies, ctx),
+        "tools": _tool_bodies(feature.toolBodies, ctx),
         "operation": _operation(feature.operation),
         "keep_tools": geo.safe(lambda: bool(feature.isKeepToolBodies), False),
         "volume_before": geo.target_volume(ctx),

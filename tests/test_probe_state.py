@@ -142,6 +142,13 @@ class BorrowedSketchTest(unittest.TestCase):
     def test_without_a_path_a_component_with_one_occurrence_is_used(self):
         self.assertIn("skL", self.read()["sketches"])
 
+    def test_a_sketch_of_a_tool_body_is_read_in_its_own_frame_without_a_place(self):
+        record = self.read(native=["skL"])["sketches"]["skL"]
+        self.assertEqual(record["frame"]["origin"], [0, 0, 0])
+        self.assertNotIn("native_frame", record)
+        self.design.rootComponent.allOccurrencesByComponent = lambda c: Coll([])
+        self.assertIn("skL", self.read(native=["skL"])["sketches"])
+
     def test_a_path_that_matches_no_occurrence_leaves_the_sketch_out_with_a_reason(self):
         self.design.rootComponent.allOccurrencesByComponent = lambda c: Coll([self.occurrence, self.occurrence])
         got = self.read(borrowed={"skL": {"path": "Lid:2"}})

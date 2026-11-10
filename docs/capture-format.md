@@ -143,8 +143,12 @@ ITEM:
   not by token text. When the component cannot be read it is true for a feature (so the translator still refuses a
   feature of the target it cannot read) and false for the items that are not modeling steps (sketches, construction
   geometry, occurrences, joints and the like: the roles `sketch` and `assembly` in the step kind table,
-  `lib/translator/step_kinds.py`). Feature readers run only for items in the target's component; the other items
-  keep `"data": {}` with their `bodies_after`, health and message.
+  `lib/translator/step_kinds.py`). Feature readers run only for items in the target's component, plus the second pass
+  below for the steps of a Combine's tool bodies from other components; the other items keep `"data": {}` with their
+  `bodies_after`, health and message.
+- `helper_of`, `helper_unread`: only on items of another component that made a tool body of a Combine (see
+  CombineFeature in section 5): `helper_of` is the tool body's token and the item's `data` was read in a second pass in
+  that component's frame; `helper_unread` says why such an item was not read.
 - `entity_context`: `"proxy"` only when `TimelineObject.entity` came as an occurrence proxy and was turned native
   (`nativeObject`) before reading; absent otherwise.
 - `bodies_before` (not for suppressed items): the bodies of the target's component at the marker before the item.
@@ -248,11 +252,14 @@ reference moved.
 2. For `k` from 0 to `end`: set `timeline.markerPosition = k`. Read the target's box and volume once. Read
    `bodies_after` and `target_changed` of item `k - 1` and, for items of the target's component, the inputs of item `k`
    (profiles, edges, faces, tool bodies, the target box before it). One recompute per item.
-3. `finally`: put the marker back at `end` (`moveToEnd` when `end == count`, else `markerPosition = end`), then
+3. The second pass (`lib/fusion_reader/helper_pass.py`), only when a Combine of the target lists a tool body of another
+   component: roll to the Combine to read the tool's place, then to the few items that made the tool (see CombineFeature
+   in section 5). Two marker moves per such item at most, none for other items.
+4. `finally`: put the marker back at `end` (`moveToEnd` when `end == count`, else `markerPosition = end`), then
    check it reads `end`; else `MarkerError`. After that, each `timeline.timelineGroups` entry that starts before
    `end` must be covered by the walk up to `end`; else `read_capture` raises `CaptureReadError` and the export lands
    as a fixed shape.
-4. The STEP file is written before the capture, with the marker at `end`. The sketch tries keep it there: the
+5. The STEP file is written before the capture, with the marker at `end`. The sketch tries keep it there: the
    parameter store puts the marker back after every recompute and counts only the items before it for health
    (`lib/fusion_reader/rows.py`), and the temporary copy of a component body deletes only what it added
    (`lib/design_edit/temp_copy.py`). `report.json` records `marker` (`position`, `count`).
@@ -639,12 +646,60 @@ Optional `volume_before` and `volume_after` (mm3) hold the volume of the target 
 Combine (`read_geometry.target_volume`; null when it cannot be read). When both are present the translator refuses a Combine that changes the part by more than its tool steps can
 fill (`combine_volume.py`).
 
-The translator copies a Combine when every tool body is built, in the target's component, by steps that only add
-material to it (`combine.adds_only`): `ExtrudeFeature` and `RevolveFeature` items whose recipe steps are `new` for the
+The translator copies a Combine when every tool body is built by steps that only add material to it
+(`combine.adds_only`): `ExtrudeFeature` and `RevolveFeature` items whose recipe steps are `new` for the
 first and `add` for the rest. Each such step is written at the Combine's place with the Combine's operation. An
 intersect takes a tool of one step. A tool step that starts from or reaches to a face (`fromEntity`, `toEntity`) is
 refused when the tool has more than one step. Any other item that touches the tool body before the Combine (a cut, a
-round, a chamfer, a hole, a pattern, a step the walk could not copy) refuses the Combine, naming that item.
+round, a chamfer, a hole, a pattern, a step the walk could not copy) refuses the Combine, naming that item. A Copy Paste
+Body or a Move on the tool body refuses it the same way, with the reason of their rows in the step kind table.
+
+A tool body of another component is `foreign` and names where to find it:
+
+```json
+{ "token": "<native token>", "name": "Body2", "foreign": true,
+  "component": { "token": "...", "name": "Rod" }, "path": "Rod:1", "place": TOOL PLACE }
+```
+
+`token` is the native body's (the one `bodies_after` of the steps that made it give), `component` the component that
+owns it, `path` the `fullPathName` of the occurrence the tool is seen through (empty for a tool in the root). Without
+`component` the Combine stays refused ("in another component").
+
+TOOL PLACE (`placement.tool_place`, read with the marker just before the Combine, since the places of the two
+components at that moment shape the result):
+
+```json
+{ "path": "Rod:1", "frame": FRAME, "source": "transform2", "checked_points": 3, "target_frame": null,
+  "xy": { "ref": REF }, "xz": { "ref": REF }, "yz": { "ref": REF } }
+```
+
+- `frame` maps the tool component's coordinates to the root's. It is checked like the target's placement, with the
+  points 10 mm along the normals of the component's three origin planes (native against shown through the occurrence),
+  since a body proxy is not needed for that. A tool in the root has `source: "root"` and the identity frame.
+- `target_frame` is the same for the exported body's component at that moment, `null` for a body of the root;
+  `target_error` replaces it when it could not be read. `{ "path", "error" }` replaces the whole record when the tool
+  component's place could not be read (the tool body or the occurrence was not found, the frame did not land the
+  planes, a plane could not be shown).
+- `xy`, `xz`, `yz` hold a measured reference (section "Measured references") of the origin plane, slot
+  `tool<n>.<plane>` (`n` is the tool's place in `tools`), with `point` and `normal` in the exported body's
+  coordinates. The size probe reads them again at other sizes; they only move with the component's occurrence.
+
+The steps that made a foreign tool are read in a second pass (`lib/fusion_reader/helper_pass.py`) after the main walk,
+with the same feature readers and a `ReadContext` whose target is the tool body, so the tool component's own sketches,
+planes and faces are not `foreign` and every value is in that component's coordinates. Only the items that
+`translator/tool_items.py` picks are rolled to: the modeling steps before the Combine whose `bodies_after` list the tool
+and that sit in the tool's component, at most 40 for the whole capture and 8 foreign tools. Each gets `helper_of` (the
+tool's token) and `bodies_before` of the tool's component; their `in_target_component` stays false. An item past the
+cap, or one whose tool body or place could not be read, keeps `data: {}` and gets `helper_unread` with the reason.
+The model parameters of the tool component and the components above it are added to `parameters.model` (names already
+listed win).
+
+The translator keeps the steps of a `helper_of` item in `Context.pending_tools` like those of another body of the
+target's component. The Combine moves them by the tool's frame and the inverse of the exported body's own
+(`combine.tool_move`), plus a move that follows sizes: the offsets of the three origin planes along their normals
+(`ref_motion.moves`, formulas of the sizes, or sizes marked loose where the probe could not follow, as for any
+reference). A frame that is scaled or mirrored refuses the Combine, naming the component. The placers of the moved steps
+(`moved_placer.py`) answer `material_at` for the moved points and cannot place a pick on their faces.
 
 **ThreadFeature**: `{ "modeled": bool }` (`isModeled`).
 
@@ -768,7 +823,8 @@ tell which sizes may move it:
 ```
 
 - `slot`: where the step uses it: `start`, `side_one`, `side_two` (extrude), `plane` (mirror), `axis` (revolve and
-  circular pattern), `direction_one`, `direction_two` (rectangular pattern), `positions.<n>` (hole). The key of a
+  circular pattern), `direction_one`, `direction_two` (rectangular pattern), `positions.<n>` (hole), `tool<n>.<xy|xz|yz>` (an origin plane
+  of the component a Combine's tool body lives in). The key of a
   reference is `<item index>.<slot>` (`params.geometry_links.ref_key`, `item_refs`). The holes' `position_refs` take
   `<n>` from their place in the list.
 - `type`: the Fusion type of the native entity (`BRepFace`, `ConstructionPlane`, `ConstructionAxis`, `SketchLine`,
@@ -1067,7 +1123,7 @@ rows, `NOT_LOOKED` for a key not in `refs`).
 
 The size probe sets other size values, recomputes and reads a state with `read_state(design, request, ctx)`.
 `request` is `{ "sketches": [token], "points": [token], "lines": [token], "params": [name], "target": true }`, plus
-`borrowed` and `refs` below. Every
+`borrowed`, `native` and `refs` below. Every
 entity is found with `Design.findEntityByToken` (the match without `assemblyContext`; for a proxy only, its
 `nativeObject`), so values are in component coordinates like the capture. The result, mm and degrees except `params`:
 
@@ -1097,6 +1153,9 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
   it compares with the capture profile's brought-in `frame`; it adds `native_frame` and `placement` (`{ path, source }`).
   When it cannot be read or placed, it has no key under `sketches` and `unread` (only then present) gives
   `{ token: reason }`.
+- `native` lists the sketches of tool bodies from other components (the steps of `helper_of` items). They are read like
+  the target's own sketches, in their own component's frame (not brought into the part's), since the translator writes
+  those steps in that frame before it moves them.
 - Measured references are requested with `refs`: `{ "<key>": { "token", "type", "path", "shape" } }` (`shape` is
   `plane`, `axis`, `direction` or `point`, from the record: `lib/probe/plan.py` `refs`). Each is found by the token of
   its native entity (`lib/fusion_reader/probe_refs.py`), shown through the occurrence with the recorded `path` as that
@@ -1197,4 +1256,6 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | Free curves (`NurbsCurve3D`, `EllipticalArc3D`) evaluate through `CurveEvaluator3D.getPointAtParameter` over `getParameterExtents`, and `getTangent` gives the direction at an end | a curve that cannot be evaluated has no samples and is refused; a missing tangent is left out; the Spline hand tests (section 11 of `docs/hand-tests.md`) |
 | `Sketch.parentComponent`, `ConstructionPlane.component`, `BRepFace.body`, `BRepEdge.body` | `foreign` reads them in a try; an unreadable one leaves the record unmarked |
 | `SketchEntity.referencedEntity` of an entity projected from another component comes as a proxy whose `assemblyContext.component` is that component (confirmed by a real export: the pipe component was found); the `body` of such an edge and its `nativeObject` token equal the token `bodies_after` gives; `lineOne`, `lineTwo`, `line` and `curve` name the entities of the other line constraints; `ModelParameter.createdBy` of a parameter that `dependentParameters` gives names the same maker as when the parameter is listed from its component (`ModelParameter.component` answered the root for every one); `profile`, `path`, `guideRail`, `loftSections` and `holePositionDefinition` can be read with the marker before a step of another component | a wrong read only leaves a link out; the discovery tries still find a parameter that moves the part; the K10 hand test in `docs/hand-tests.md` |
+| `Component.xYConstructionPlane` / `xZConstructionPlane` / `yZConstructionPlane` and `ConstructionPlane.createForAssemblyContext(occurrence)` (in the API reference) show a component's origin planes in the root's coordinates; the three tips 10 mm along the normals fix the occurrence frame | `tool_place` lands the frame on them within 1e-3 mm or records an error; the G tests in `docs/hand-tests.md` |
+| The `entityToken` of a tool body's native body equals the token in `bodies_after` of the steps that made it, and `Design.findEntityByToken` finds it with the marker just before the Combine | an unmatched token leaves the steps unread and the Combine refused naming the step; G1 |
 | `BRepBody.copyToComponent(proxy)` keeps the assembly place | the copy guard in `step_export.py` compares the bounding boxes (1e-3 mm) and refuses before writing |

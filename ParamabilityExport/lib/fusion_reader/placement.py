@@ -373,3 +373,98 @@ def foreign_target_ref(record, entity, ctx, slot):
     if ref is not None:
         record["ref"] = ref
     return record
+
+
+# ---- bodies of other components used as tools ---------------------------------------------------------------------
+
+# The origin planes of a component, by the slot name of their reference: they move only with the component's place.
+PLANE_SLOTS = (("xy", "xYConstructionPlane"), ("xz", "xZConstructionPlane"), ("yz", "yZConstructionPlane"))
+_PROBE_LENGTH_MM = 10.0
+ROOT_FRAME = {"origin": [0.0, 0.0, 0.0], "x": [1.0, 0.0, 0.0], "y": [0.0, 1.0, 0.0], "z": [0.0, 0.0, 1.0]}
+
+
+def tool_identity(body):
+    """What a Combine's tool body of another component needs to be found and read again: the native `token` and
+    `name`, the owning `component` and the `path` of the occurrence it is seen through (empty for the root)."""
+    native = _native_of(body)
+    owner = owner_component(body)
+    return {"token": geo.safe(lambda: native.entityToken, "") or "", "name": geo.safe(lambda: native.name, "") or "",
+            "component": _named(owner) if owner is not None else {"token": "", "name": ""},
+            "path": geo.safe(lambda: body.assemblyContext.fullPathName, "") or ""}
+
+
+def _origin_planes(component, occurrence):
+    """`{ slot: (native plane, plane seen through occurrence) }` for the origin planes that can be shown through the
+    occurrence."""
+    out = {}
+    for slot, member in PLANE_SLOTS:
+        native = geo.safe(lambda: getattr(component, member), None)
+        proxy = geo.safe(lambda: native.createForAssemblyContext(occurrence), None) if native is not None else None
+        if native is not None and proxy is not None:
+            out[slot] = (native, proxy)
+    return out
+
+
+def _tip(plane):
+    """The point 10 mm out along the normal of a plane, in the coordinates the plane is shown in."""
+    found = geo.safe(lambda: geo.plane_of(plane), None)
+    if not found:
+        return None
+    return [found["point"][i] + _PROBE_LENGTH_MM * found["normal"][i] for i in range(3)]
+
+
+def component_place(root, component, path_name=""):
+    """`(record, planes)`: where a component sits in the assembly, as `read_placement` records a body's place, and its
+    origin planes seen through the occurrence. The record is None for the root. The frame is checked by the three
+    origin planes (the point 10 mm along each normal, native against shown), since only they can be shown through an
+    occurrence without a body. A failure is `{ "path", "error" }`."""
+    if component is None:
+        return {"path": path_name, "error": "The component could not be read."}, {}
+    if geo.same_entity(component, root):
+        return None, {}
+    path = find_occurrence(root, component, path_name)
+    if not path:
+        return {"path": path_name, "error": "The place of the component could not be found."}, {}
+    name = geo.safe(lambda: path[0].fullPathName, "") or _names(path)
+    planes = _origin_planes(component, path[0])
+    native_points = [_tip(n) for n, _ in planes.values()]
+    proxy_points = [_tip(p) for _, p in planes.values()]
+    if len(planes) < POINTS_TO_CHECK or None in native_points or None in proxy_points:
+        return {"path": name, "error": "No planes of the component could be compared."}, planes
+    found = _checked_frame(path, native_points, proxy_points, "component", "origin planes")
+    if "error" in found:
+        return {"path": name, "error": found["error"]}, planes
+    return dict({"path": name}, **found), planes
+
+
+def target_place_now(ctx):
+    """The place of the target's component as it is at the current marker position: a record of `component_place`,
+    or None for a body of the root."""
+    context = geo.safe(lambda: ctx.picked.assemblyContext, None)
+    if context is None:
+        return None
+    return component_place(ctx.root, ctx.component, geo.safe(lambda: context.fullPathName, "") or "")[0]
+
+
+def tool_place(ctx, component, path_name, number):
+    """The place of a tool body's component relative to the target, with the marker at the Combine: the component's
+    `frame` in the root's coordinates, the target's own (`target_frame`, or `target_error`), and for each origin plane
+    of the component a measured reference (`xy`, `xz`, `yz`, slot `tool<number>.<plane>`) that the size probe reads
+    again at other sizes. A tool in the root has the identity frame and no references."""
+    record, planes = component_place(ctx.root, component, path_name)
+    if record is None:
+        record = {"path": "", "frame": dict(ROOT_FRAME), "source": "root", "checked_points": 0}
+    if "error" in record:
+        return record
+    target = target_place_now(ctx)
+    if target is None:
+        record["target_frame"] = None
+    elif "frame" in target:
+        record["target_frame"] = target["frame"]
+    else:
+        record["target_error"] = target.get("error") or "The place of the part could not be read."
+    for slot, (_, proxy) in planes.items():
+        ref = geo.safe(lambda: ref_record(proxy, ctx, "tool%d.%s" % (number, slot)), None)
+        if ref is not None:
+            record[slot] = {"ref": ref}
+    return record

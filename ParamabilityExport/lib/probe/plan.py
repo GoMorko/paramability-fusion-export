@@ -32,10 +32,12 @@ class Scan:
     """`targets`: the covered records (dicts with `kind` "profile", "hole" or "axis", `item` and what the fit reads).
     `covered`: sketch token to name ("" when the record has none). `uncovered`: tokens of sketches that some record
     uses in a way the probe cannot follow. `named`: the name of every sketch a record names, covered or not, by token
-    (a sketch no record gives a name for is missing)."""
+    (a sketch no record gives a name for is missing). `native`: tokens of the covered sketches of tool bodies from other
+    components: they are read in their own component's frame, not brought into the part's (`request`)."""
 
     def __init__(self):
         self.targets = []
+        self.native = set()
         self.covered = {}
         self.uncovered = set()
         self.named = {}
@@ -69,18 +71,23 @@ def _stray_tokens(node, out):
 
 
 def scan(capture):
-    """The `Scan` of a capture: its items in the target's component that carry a profile, a hole or a revolve axis."""
+    """The `Scan` of a capture: its items in the target's component, and the steps of tool bodies from other
+    components (`helper_of`), that carry a profile, a hole or a revolve axis."""
     out = Scan()
     for item in capture.get("items") or []:
         data = item.get("data") or {}
-        if item.get("suppressed") or item.get("in_target_component") is False or "read_error" in data:
+        if (item.get("suppressed") or (item.get("in_target_component") is False and not item.get("helper_of"))
+                or "read_error" in data):
             continue
         spec = step_type(item.get("type"))
         records = spec.sketches if spec is not None else ()
+        before = len(out.targets)
         for record in records:
             _SCANNERS[record](out, item.get("index"), data)
         if not records:
             _stray_tokens(data, out)
+        if item.get("helper_of"):
+            out.native.update(t["sketch_token"] for t in out.targets[before:])
     for token in out.uncovered:
         out.covered.pop(token, None)
     out.targets = [t for t in out.targets if t["sketch_token"] in out.covered]
@@ -194,7 +201,8 @@ def request(capture, table, covered=None, wanted=None):
     `covered` limits the sketches to these tokens (the ones whose first read matched the capture). `wanted` limits the
     references to these keys.
     `{ "sketches": [token], "points": [token], "lines": [token], "params": [Fusion name], "target": True,
-       "refs": { key: { "token", "type", "path", "shape" } } }`; `refs` is left out when empty.
+       "refs": { key: { "token", "type", "path", "shape" } } }`; `refs` is left out when empty. `native` lists the sketches of
+    tool bodies from other components, and is left out when there are none.
     """
     found = scan(capture)
     tokens = [t for t in found.covered if covered is None or t in covered]
@@ -215,6 +223,9 @@ def request(capture, table, covered=None, wanted=None):
     names += [m["name"] for m in _numeric_model(table)]
     out = {"sketches": tokens, "points": list(dict.fromkeys(points)), "lines": list(dict.fromkeys(lines)),
            "params": list(dict.fromkeys(names)), "target": True}
+    native = [t for t in tokens if t in found.native]
+    if native:
+        out["native"] = native
     if followed:
         out["refs"] = followed
     return out

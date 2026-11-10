@@ -111,7 +111,7 @@ def _is_triple(value):
         isinstance(v, Sized) or isinstance(v, (int, float)) and not isinstance(v, bool) for v in value)
 
 
-def _mapped(triple, move, offset):
+def _mapped(triple, move, offset, shift=None):
     coords = [_quantity(v) for v in triple]
     out = []
     for i in range(3):
@@ -122,7 +122,11 @@ def _mapped(triple, move, offset):
             term = coord.scaled(coef)
             total = term if total is None else total.plus(term)
         total = Quantity(0.0) if total is None else total
-        out.append((total.plus(move.offset[i]) if offset and move.offset[i] else total).json())
+        if offset and move.offset[i]:
+            total = total.plus(move.offset[i])
+        if offset and shift is not None and (shift[i].sized or shift[i].n):
+            total = total.plus(shift[i])
+        out.append(total.json())
     return out
 
 
@@ -145,15 +149,20 @@ def _apply(node, path, fn):
         node[key] = [fn(p) if _is_triple(p) else p for p in node[key]]
 
 
-def place(recipe, move):
-    """A copy of the recipe with every position moved and every direction turned. The input is kept."""
+def place(recipe, move, shift=None):
+    """A copy of the recipe with every position moved and every direction turned. The input is kept.
+
+    `shift` is three Quantities added to every position after the move (not to directions): a move that follows
+    sizes, zero at the sizes the recipe was measured at."""
     out = copy.deepcopy(recipe)
-    if move.is_identity:
+    if shift is not None and not any(q.sized or q.n for q in shift):
+        shift = None
+    if move.is_identity and shift is None:
         return out
     for step in out.get("features", []):
         kind = step.get("kind")
         for path in POSITIONS.get(kind, ()):
-            _apply(step, path, lambda t: _mapped(t, move, True))
+            _apply(step, path, lambda t: _mapped(t, move, True, shift))
         for path in DIRECTIONS.get(kind, ()):
             _apply(step, path, lambda t: _mapped(t, move, False))
     return out
