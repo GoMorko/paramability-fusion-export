@@ -11,13 +11,16 @@ thickness follows its parameter, and the side of the outline comes from the meas
 several outlines, outlines with holes, two sided and tapered thin extrudes are refused.
 
 An extrude of text or spline outlines is also checked against the volume Fusion made.
+
+A flat face of the part used as the outline is drawn again from the earlier extrude that made it, or written as
+measured with the sizes that may change it marked (face_outline.py).
 """
 import heapq
 import math
 
 from ..package.numbers import round9
 
-from . import follow, kept_ranges, loops, outlines, placement, sketch_motion, thin_wall, values, vec
+from . import face_outline, follow, kept_ranges, loops, outlines, placement, sketch_motion, thin_wall, values, vec
 from .footprint import Footprint, polyline
 from .placer_makers import SlabMaker, ThinWallMaker
 from .result import Refusal, StepResult
@@ -691,6 +694,32 @@ def _thin_step(ctx, item, data, wall, profile):
     return side, values.quantity(ctx, item, "thin.thickness", wall["thickness"], absolute=True)
 
 
+def _sketch_built(ctx, item, profiles, thin):
+    """`(profile, (outer, inners), drawn)` per outline of sketch profiles (touching ones merged), or a Refusal."""
+    if any(not isinstance(p.get("frame"), dict) for p in profiles):
+        return Refusal("A sketch outline has no readable position.")
+    if not _same_plane(profiles):
+        return Refusal("This extrude uses outlines on different planes, which is not copied yet.")
+    built = []
+    for profile in outlines.merge_touching(profiles):
+        outcome = loops.profile_loops(profile)
+        if isinstance(outcome, Refusal):
+            return outcome
+        if thin and outcome[1]:
+            return Refusal("A thin extrude of an outline with holes is not copied yet.")
+        drawn = sketch_motion.outline(ctx, item, profile, outcome[0], outcome[1], _parts(profile, profiles))
+        built.append((profile, outcome, drawn))
+    sketch_motion.planes_apart(ctx, [drawn for _, _, drawn in built], item)
+    return built
+
+
+def _face_built(face, thin):
+    """The one outline of a flat face (face_outline.py), as `_sketch_built` gives it, or a Refusal."""
+    if thin and face.loops[1]:
+        return Refusal("A thin extrude of an outline with holes is not copied yet.")
+    return [(face.profile, face.loops, face.drawn)]
+
+
 def handle(item, ctx):
     data = item.get("data") or {}
     operation = data.get("operation")
@@ -715,32 +744,29 @@ def handle(item, ctx):
             refusal = Refusal("A thin extrude of several outlines is not copied yet.")
         if refusal is not None:
             return refusal
-    for profile in profiles:
-        refusal = loops.outline_refusal(profile)
-        if refusal is not None:
-            return refusal
+    face = face_outline.prepare(ctx, item, profiles)
+    if isinstance(face, Refusal):
+        return face
+    if face is None:
+        for profile in profiles:
+            refusal = loops.outline_refusal(profile)
+            if refusal is not None:
+                return refusal
     combine = COMBINE[operation]
     # Several outlines that Fusion made into one body touch each other, so the first makes it and the rest join.
     if combine == "new" and len(profiles) > 1 and len(item.get("bodies_after") or []) != 1:
         return Refusal("A new body from several outlines makes several bodies, which is not copied yet.")
-    if any(not isinstance(p.get("frame"), dict) for p in profiles):
-        return Refusal("A sketch outline has no readable position.")
-    if not _same_plane(profiles):
-        return Refusal("This extrude uses outlines on different planes, which is not copied yet.")
-    picked = len(profiles)
-    sources = profiles
-    profiles = outlines.merge_touching(profiles)
-
-    built = []
-    for profile in profiles:
-        outcome = loops.profile_loops(profile)
-        if isinstance(outcome, Refusal):
-            return outcome
-        if thin and outcome[1]:
-            return Refusal("A thin extrude of an outline with holes is not copied yet.")
-        drawn = sketch_motion.outline(ctx, item, profile, outcome[0], outcome[1], _parts(profile, sources))
-        built.append((profile, outcome, drawn))
-    sketch_motion.planes_apart(ctx, [drawn for _, _, drawn in built], item)
+    if face is not None:
+        built = _face_built(face, thin)
+        if isinstance(built, Refusal):
+            return built
+        picked, sources, profiles = 1, [face.profile], [face.profile]
+    else:
+        built = _sketch_built(ctx, item, profiles, thin)
+        if isinstance(built, Refusal):
+            return built
+        picked, sources = len(profiles), profiles
+        profiles = [profile for profile, _, _ in built]
     first_drawn = built[0][2]
     plane_q = first_drawn.plane_shift(ctx) if first_drawn is not None else Quantity(0.0)
 

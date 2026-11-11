@@ -5,8 +5,20 @@ note the Fusion version and system.
 
 ## Check first in this version
 
-What 0.6.0 to 0.7.2 added, and what this version adds, in this order. Each id is described in the section named.
+What 0.6.0 to 0.8.0 added, and what this version adds, in this order. Each id is described in the section named,
+except F1, which is described here.
 
+- [ ] F1, an extrude of a flat face. Sketch a circle of 10 mm on the XY plane and extrude it 20 mm as a new body, with
+      the distance set by a user parameter `post_mm`. Extrude its top face 2 mm (join) with a taper of -25 degrees,
+      and its bottom face the same way. Make a box around it and Combine (cut) the post body from the box. Tick
+      `post_mm` and export. Expect: the Combine is translated, `post_mm` is a free size without a warning, and in
+      Paramability both face extrudes move with the post when `post_mm` changes, staying tapered. Then add a round
+      on the top edge of the post before the top face extrude and export again: that face is copied as measured and
+      `post_mm` is marked "may give unexpected results". In `report.json`, each face extrude has a profile with
+      `"face": true`, a `frame` whose `z` points out of the post, closed `loops`, and `made_by` naming the post
+      extrude with `which` `start` or `end` (the stub says the start faces of a symmetric extrude are on its positive
+      side). Watch the calls listed under "Face outlines" in "Capture reader calls to watch (extrude, revolve, hole,
+      combine, thread, sketch profiles)".
 - [ ] B1 to B12, tool bodies: a Combine whose tool has rounds, chamfers or cuts, Copy Paste Body, Move, patterns and
       mirrors of bodies, and an intersect of several tools: section "Tool bodies". B6 (does the Combine take the new
       copies when a count changes) and B7 (what an intersect of several tools keeps) answer questions only Fusion can.
@@ -1098,6 +1110,13 @@ read the capture in `report.json`.
   "ambiguous"` is refused.
 - `Timeline.timelineGroups`, `TimelineGroup.startIndex` and `endIndex`: a design with a collapsed group must export;
   a group whose children `Timeline.item` does not list makes the capture fail and the export a fixed shape.
+- Face outlines (`read_face.py`, hand test F1): `ExtrudeFeature.profile` gives a `BRepFace` with the marker before
+  the step; `BRepFace.geometry` (a `Plane`: `origin`, `uDirection`), `BRepFace.evaluator.getNormalAtPoint` at
+  `pointOnFace` points out of the body, `BRepFace.loops`, `BRepLoop.isOuter`, `BRepLoop.edges`, `BRepEdge.geometry`
+  (`Line3D`, `Arc3D`, `Circle3D`, `Ellipse3D`, else sampled through `BRepEdge.evaluator`, which must cover only the
+  edge), `BRepFace.area`, `BRepFace.body`, `BRepFace.entityToken`; `Component.features.extrudeFeatures`,
+  `Feature.timelineObject.index`, and `startFaces`, `endFaces`, `sideFaces` of the earlier extrudes holding the same
+  face. A positive distance must go along the outward normal: `end_offset` of the face extrude is positive.
 - `BRepFace.geometry` type of the hole end faces (`plane` flat, `cone` tipped; anything else gives null), compared with `tipAngle`.
 - `HoleFeature.holeType` names that do not match fall to `other`; the same for `FeatureExtentTypes` on extrudes.
 - `Matrix3D.getAsCoordinateSystem()` returning `(origin, xAxis, yAxis, zAxis)` in Python.

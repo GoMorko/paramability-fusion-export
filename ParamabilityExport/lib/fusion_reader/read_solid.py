@@ -114,7 +114,10 @@ def _new_bodies_volume(feature):
     return None if not found or any(v is None for v in found) else round(sum(found), 6) + 0.0
 
 
-def _first_profile_area(feature):
+def _first_profile_area(feature, profiles, areas):
+    """Area in mm2 of the first sketch profile, or of the face when the first outline is a flat face."""
+    if profiles and isinstance(profiles[0], dict) and profiles[0].get("face"):
+        return areas[0] if areas else None
     first = first_profile(geo.safe(lambda: feature.profile, None))
     return profile_area(first) if first is not None else None
 
@@ -181,7 +184,7 @@ def extrude_before(feature, ctx):
         if extent_type == "two":
             side_two = _extent(feature.extentTwo, _taper(feature, "taperAngleTwo"), ctx, "side_two")
     operation = _operation(feature.operation)
-    profiles, areas = read_outlines(feature.profile, ctx)
+    profiles, areas = read_outlines(feature.profile, ctx, before=geo.safe(lambda: feature.timelineObject.index, None))
     data = {
         "operation": operation,
         "profiles": profiles,
@@ -194,7 +197,7 @@ def extrude_before(feature, ctx):
         "participants": geo.safe(lambda: geo.body_refs(feature.participantBodies, ctx), []),
         "target_box_before": ctx.target_box(),
         "end_offset": None,
-        "profile_area": _first_profile_area(feature),
+        "profile_area": _first_profile_area(feature, profiles, areas),
         "end_area": None,
     }
     if thin:

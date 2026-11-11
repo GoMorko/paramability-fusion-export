@@ -113,7 +113,8 @@ sketches. A value the other handler asks for under another path is mapped back w
 an optional field of its data, and must not change what that handler writes without it.
 
 A step that takes sketch outlines checks each profile record with `loops.outline_refusal` (sketch text that could not
-be read, a flat face or an unknown entity is not an outline) and gets its loops from `loops.profile_loops`. Its reader
+be read, a flat face or an unknown entity is not an outline) and gets its loops from `loops.profile_loops`. Only the
+extrude takes a flat face as its outline, through `face_outline.prepare`, which marks the sizes the face may follow. Its reader
 reads them with `read_sketch.read_outlines(raw, ctx)`, which gives the profile records and one area per record: a
 sketch text becomes one record per outer outline, so the list can be longer than the feature's own list of profiles.
 Records are expanded in the reader, never in the handler, so the position of a profile in `data.profiles` (the key of

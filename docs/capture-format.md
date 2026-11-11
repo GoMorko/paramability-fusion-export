@@ -389,7 +389,9 @@ Reading inputs at the position before the item covers the getters that the refer
       { "outer": false, "curves": [ CURVE, ... ] }
     ]
   },
-  { "face": true, "type": "BRepFace" },
+  { "face": true, "type": "BRepFace", "surface": "Plane", "frame": { ... }, "space": "sketch", "loops": [ ... ],
+    "token": "...", "face_point": [x, y, z], "body": { "token": "...", "name": "Body1" },
+    "made_by": { "index": 3, "name": "Extrude3", "which": "end" } },
   { "text": true, "sketch": "Sketch2", "sketch_token": "...", "frame": { ... }, "space": "sketch", "loops": [ ... ] },
   { "text": true, "sketch": "Sketch2", "sketch_token": "...", "problem": "open" }
 ]
@@ -401,7 +403,40 @@ Optional keys that let the size probe find the sketch again (section 5, "Probe s
 sketch curve (`ProfileCurve.sketchEntity.entityToken`). A key is left out when Fusion does not give it.
 
 From `Profile.parentSketch.transform`, `Profile.profileLoops`, `ProfileLoop.isOuter`, `ProfileLoop.profileCurves`,
-`ProfileCurve.geometry` and `ProfileCurve.geometryType`. A planar face used as a profile is `{ "face": true }` and a
+`ProfileCurve.geometry` and `ProfileCurve.geometryType`.
+
+A flat face of a body used as the outline (`ExtrudeFeature.profile` is a `BRepFace`) is read by
+`lib/fusion_reader/read_face.py` into a record shaped like a sketch profile, plus `"face": true`:
+
+- `surface`: the type of `BRepFace.geometry` (`Plane`, `Cylinder`, `Cone`, `other`), null when it cannot be read. A
+  face that is not a `Plane` has only `face`, `type` and `surface`.
+- `frame`: the plane (`Plane.origin`, `Plane.uDirection` as `x`), with `z` the outward normal
+  (`BRepFace.evaluator.getNormalAtPoint` at `pointOnFace`), in the target component's coordinates.
+- `loops`: one entry per `BRepFace.loops` item (`BRepLoop.isOuter`, `BRepLoop.edges`), each edge's
+  `BRepEdge.geometry` read as a CURVE in the face's 2D frame (`Line3D`, `Arc3D`, `Circle3D`, `Ellipse3D`). Any other
+  curve (a NURBS edge) is sampled like a free sketch curve through `BRepEdge.evaluator`, so the samples stop at the
+  edge's ends. `space` is `sketch`.
+- `token` (`entityToken`), `face_point` (`pointOnFace`), `body` (`{ token, name }` of `BRepFace.body`).
+- `made_by` (optional): the latest extrude before the step, of the face's component (`Component.features.
+  extrudeFeatures`, `Feature.timelineObject.index`), whose `startFaces`, `endFaces` or `sideFaces` hold the face (the
+  same entity, or the same `entityToken`), read with the marker before the step. `index` is that extrude's timeline
+  index, `which` is `start`, `end` or `side`. At most 200 earlier extrudes are looked at.
+- A face whose surface, plane or edges cannot be read has `"problem": "unread"` and no `frame` or `loops`.
+
+The area of the face (`BRepFace.area`, mm2) is the record's entry in `areas` and the extrude's `profile_area`, and
+`end_offset` and `side_leans` are measured along the face's `z`. A capture made before add-in 0.8.1 has
+`{ "face": true, "type": "BRepFace" }` only; the translator refuses it and asks for a new export.
+
+The translator (`lib/translator/face_outline.py`) copies an extrude of one such face, alone. When `made_by` names the
+`start` or `end` face of an extrude step written earlier in the same walk, that step has no taper, `face_point` lies
+on its start or end face and the face's edges lie on that step's outline and back (within 1e-3 mm), the step's written
+outline is drawn again on a plane at that face: the plane's origin is the step's origin plus its length (times the
+place of the face along it) along its direction, so it follows the sizes of that step. Any other flat face is written
+from `loops` and `frame` as numbers, and every size the steps written so far read (every ticked size when the face
+lies on a body this walk does not build) is marked loose with the reason. A tool body with such a step is written as a
+tool step (`toolBody`), never step by step onto the part, since the part alone does not hold the tool's earlier
+faces.
+
 A `SketchText` is read from `SketchText.asCurves()` (transient curves; the text and the design are not changed): the
 curves are chained into closed loops, and each loop is an outer outline or a hole by how many loops contain it (even
 count: outer, odd: hole of the nearest loop around it). Each outer outline with its holes is one profile record like
@@ -497,6 +532,8 @@ The translator fits the app's spline through points chosen from the samples (`li
 
 - `operation`: `join`, `cut`, `intersect`, `newBody`, `newComponent` (from `FeatureOperations`). A new body from
   several profiles is copied only when `bodies_after` lists one body (the profiles touch).
+- `profiles`: section 4. A flat face of a body as the outline is a face record (section 4); the extrude's own
+  length, taper and operation are read and followed as for a sketch outline.
 - `start`: `{ "kind": "profilePlane" }`, `{ "kind": "offset", "offset": mm }` (`OffsetStartDefinition.offset`),
   `{ "kind": "fromEntity", "plane": PLANE or null, "entity_type": "...", "face_point": [..] }`
   (`FromEntityStartDefinition`, TARGET below).
@@ -1641,6 +1678,13 @@ the page says "the extent type of a hole is currently limited to a distance exte
 Read on 2026-11-07: `TimelineObject`, `FilletFeature`, `ChamferFeature`, `CircularPatternFeature`,
 `MirrorFeature`, `CombineFeature`, `Sketch`, `Profile`, `ProfileLoop`, `FeatureOperations`.
 
+Read in the API stubs of the installed Fusion (`API/Python/defs/adsk/fusion.py` and `core.py`) on 2026-11-11 for
+face outlines: `BRepFace` (`loops`, `geometry`, `evaluator`, `pointOnFace`, `entityToken`, `body`, `area`),
+`BRepLoop` (`isOuter`, `edges`), `BRepEdge` (`geometry`, `evaluator`), `Plane` (`origin`, `uDirection`), `Line3D`,
+`Arc3D`, `Circle3D`, `Ellipse3D`, `NurbsCurve3D` (`controlPointCount`, `degree`), `Component.features`,
+`Features.extrudeFeatures`, `Feature.timelineObject`, `TimelineObject.index`, `ExtrudeFeature` (`startFaces`,
+`endFaces`, `sideFaces`; the stub says the start faces of a symmetric extrude are on the positive normal side).
+
 Not verified (each has a measured check or a test in section 7 of `docs/hand-tests.md`):
 
 | Item | Check |
@@ -1690,4 +1734,5 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | `BRepBody.vertices` and `BRepVertex.geometry` of the native body: the first 8 in a stable order across a paste, a move and a pattern copy | fewer than 3 usable points refuses the fit; B2, B3, B6 |
 | `BRepBody.volume` of a tool body with the marker before the Combine, and of any body the second pass finds by token (`Design.findEntityByToken`) | null in `tools[].volume` and `body_states`; the volume checks on a tool are left out; B1, B9 |
 | `TemporaryBRepManager.get()`, `copy(body)`, `booleanOperation(targetBody, toolBody, booleanType)` (changes the target body in place and answers true or false), `BooleanTypes.IntersectionBooleanType` and `UnionBooleanType`, and the `volume` of a temporary body; none of it changes the design | any exception or a false answer gives null `intersect_volumes` and `intersect_model: unknown`, which refuses the Combine; B7 |
+| Face outlines, to confirm by hand: `ExtrudeFeature.profile` gives the `BRepFace` with the marker before the step; `BRepFace.loops`, `BRepLoop.isOuter`, `BRepLoop.edges` and `BRepEdge.geometry` give the edges in the component's coordinates; `BRepEdge.evaluator` covers only the edge; `Plane.uDirection` lies in the face; `BRepFace.evaluator.getNormalAtPoint` points out of the body; `BRepFace.area`; `Component.features.extrudeFeatures` lists the earlier extrudes and `Feature.timelineObject.index` their places; `startFaces`, `endFaces` and `sideFaces` of an earlier extrude, read with the marker before the step, hold the face the step uses (the same entity or `entityToken`); a positive distance goes along the outward normal | a face that cannot be read refuses the step; a face no extrude lists is copied as measured with its sizes marked; `end_offset` and `side_leans` check the direction and taper; hand test F1 in `docs/hand-tests.md` |
 | An intersect with several tools keeps the part and every tool, or the part and any tool | measured per export from the volumes and written as `intersect_model`; B7 |

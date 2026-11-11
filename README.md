@@ -252,7 +252,7 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   unexpected results.
   These stop the copy and leave a plain part:
   thin extrudes of an open line, of several outlines, of an outline with holes, that go two ways, reach to a face or
-  have a taper, face outlines, a text or spline outline that is too big or too complex (see below), extrudes that start or end on
+  have a taper, an extrude of a curved face, of several faces or of a face together with sketch outlines, a text or spline outline that is too big or too complex (see below), extrudes that start or end on
   a tilted or curved surface, an emboss on a curved face, an emboss that is moved or turned on its face, drawn on a
   plane tilted to its face or set to follow tangent faces that are rounded, extrudes that make a new component, modeled threads, rounds with variable or chord length
   sizes or curvature continuity, shells that grow outward, close the body or round their corners, patterns of faces, patterns
@@ -319,6 +319,13 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   when its depth is positive and sinks it when the depth is negative. The depth follows a parameter. The copy checks
   that the part grows or shrinks by the outline area times the depth, so an outline that runs past its face stops the
   copy.
+- An extrude whose outline is a flat face of the part is copied. When the face is the top or bottom face of an earlier
+  extrude without a taper, and no round, cut or join changed that face, the copy draws that extrude's outline again
+  on the face. The outline and the face then follow the sizes of the earlier extrude (its length, its start and its
+  sketch). Any other flat face (the top of a tapered extrude, a face after a round) is copied as Fusion measured it,
+  and the sizes of the steps before it are marked "may give unexpected results", since they may change that face. The
+  length, taper and operation of the face extrude follow its own parameters in both cases. Exports made with
+  version 0.8.0 or older did not read the face, so export again.
 - A thin extrude of one closed outline (a wall along a rectangle or circle, for lids and boxes) is copied with its wall
   thickness as a size. The side of the wall (inside, outside or both ways) is taken from the measured end face, since
   the API does not say which of Fusion's side one and side two is which. Where Fusion keeps the corners of the wall
@@ -336,7 +343,7 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 - Paramability opens up to 256 MB per size and 1 GB per file. The export stops with a message above that.
 - The design needs history (a parametric design).
 - Made for the current Fusion release.
-- This is version 0.8.0. The Fusion side has not been run by a tool: see `docs/hand-tests.md`.
+- This is version 0.8.1. The Fusion side has not been run by a tool: see `docs/hand-tests.md`.
 
 ## Code layout
 

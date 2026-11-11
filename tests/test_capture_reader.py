@@ -412,7 +412,7 @@ class ExtrudeDataTest(unittest.TestCase):
         faceish = Obj("fusion::BRepFace")
         data = self.read(profile=Coll([rect_profile(), faceish]))
         self.assertEqual(len(data["profiles"]), 2)
-        self.assertEqual(data["profiles"][1], {"face": True, "type": "BRepFace"})
+        self.assertEqual(data["profiles"][1], {"face": True, "type": "BRepFace", "surface": None, "problem": "unread"})
 
 
 class SketchCurveTest(unittest.TestCase):

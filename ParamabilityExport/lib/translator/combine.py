@@ -66,11 +66,13 @@ def tool_key(body):
     return "%s/%s" % (component, name) if component and name else name
 
 
-def _reaches_face(item):
+def _uses_face(item):
+    """True when a step starts from or reaches to a face, or takes a flat face as its outline."""
     data = item.get("data") or {}
     kinds = ((data.get("start") or {}).get("kind"), (data.get("side_one") or {}).get("kind"),
              (data.get("side_two") or {}).get("kind"))
-    return "fromEntity" in kinds or "toEntity" in kinds
+    drawn_on_face = any(isinstance(p, dict) and p.get("face") for p in data.get("profiles") or [])
+    return "fromEntity" in kinds or "toEntity" in kinds or drawn_on_face
 
 
 def _writes_flat(tool):
@@ -82,8 +84,9 @@ def _writes_flat(tool):
                 or not adds_only(tool.entries_of(item), joining)):
             return False
         joining = True
-    reaches = any(_reaches_face(item) for item in tool.chain)
-    # A step written onto the part is worked out in the part's frame, which is not the frame of another component.
+    reaches = any(_uses_face(item) for item in tool.chain)
+    # A step written onto the part is worked out in the part's frame, which is not the frame of another component,
+    # and against the part alone, which does not hold the faces of the tool's earlier steps.
     return not (reaches and (len(tool.entries) > 1 or tool_items.is_foreign_tool(tool.body)))
 
 
