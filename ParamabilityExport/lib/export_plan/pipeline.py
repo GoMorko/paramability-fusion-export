@@ -22,7 +22,7 @@ from typing import Optional, Protocol
 
 from ..params import size_table as size_tables
 from ..params.listing import list_parameters
-from ..probe.plan import MAX_PROBE_ROWS, NEARER_STEPS
+from ..probe.plan import BISECT_STEPS, MAX_PROBE_ROWS, NEARER_STEPS
 from ..sketch_values.motion import OPTIMISTIC
 from . import health as health_module
 from . import messages
@@ -212,8 +212,9 @@ class ProbeRun:
 
     def _retry(self, sizes):
         """Rows nearer to the value for the sizes whose rows did not build (`SizeProbe.nearer_rows`), one step per
-        batch, while rows and steps are left."""
-        for _ in range(len(NEARER_STEPS) + 1):
+        batch, while rows and steps are left (the steps toward the value, then the halving between a value that built
+        and one that did not)."""
+        for _ in range(len(NEARER_STEPS) + BISECT_STEPS + 1):
             nearer = self.probe.nearer_rows(sizes, plan_rows_left(self.rows))
             if not nearer:
                 break

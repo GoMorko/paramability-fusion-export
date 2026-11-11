@@ -10,8 +10,8 @@ parameters the steps use as a pattern quantity; the user parameters behind them 
 `ranges` (min and max per size from the dialog, instead of the default range; a range equal to the default is not
 typed, `typed_ends`) and `links` (the parameters that may reach a sketch through the geometry of another component,
 `params.geometry_links`; a ticked one counts as a size that sketch reads). `with_narrowed` gives a table whose
-ranges stop where the design was seen not to rebuild (`kept_ranges.built_ranges`); such a range still counts as
-not typed.
+ranges stop where the design was seen not to rebuild (`kept_ranges.built_ranges`, a `Cut` each); such a range still
+counts as not typed.
 
 The table holds, per parameter, one entry whose `state` is:
 
@@ -43,6 +43,25 @@ MAX_SIZES = 64
 VALUE_TOLERANCE = 1e-6
 
 FREE, DERIVED, CONSTANT, FIXED, NOT_OFFERED = "free", "derived", "constant", "fixed", "not_offered"
+
+
+class Cut(tuple):
+    """`(low, high)` a size range is cut to. `failed` holds, for each end that was cut (`"low"`, `"high"`), the
+    `(value, step)` of the nearest try Fusion did not rebuild past it."""
+
+    def __new__(cls, low, high, failed=None):
+        out = super().__new__(cls, (low, high))
+        out.failed = dict(failed or {})
+        return out
+
+    def meet(self, other):
+        """The cut that holds both: the higher low end and the lower high end, each with the failure behind it."""
+        failed = {}
+        for side, at, pick in (("low", 0, max), ("high", 1, min)):
+            won = other if pick(self[at], other[at]) != self[at] else self
+            if side in won.failed:
+                failed[side] = won.failed[side]
+        return Cut(max(self[0], other[0]), min(self[1], other[1]), failed)
 
 
 @dataclass
@@ -476,13 +495,20 @@ class SizeTable:
                          self._quantity_params, self._ranges, self._max_sizes, links, self._narrowed)
 
     def with_narrowed(self, ranges):
-        """A new table where the ranges of these Fusion names ((min, max) each) are cut to those values. The typed
-        ends stay as they were (`typed_ends`)."""
+        """A new table where the ranges of these Fusion names (a `Cut` or (min, max) each) are cut to those values,
+        on top of the cuts it has. The typed ends stay as they were (`typed_ends`)."""
         if not ranges:
             return self
+        merged = dict(self._narrowed)
+        for name, found in ranges.items():
+            found = found if isinstance(found, Cut) else Cut(*found)
+            merged[name] = merged[name].meet(found) if name in merged else found
         return SizeTable(self._params, self._ticked_in, self._model, self._design_unit, self._fixed_in,
-                         self._quantity_params, self._ranges, self._max_sizes, self.links,
-                         {**self._narrowed, **ranges})
+                         self._quantity_params, self._ranges, self._max_sizes, self.links, merged)
+
+    def cut_of(self, name):
+        """The `Cut` of a Fusion name (`with_narrowed`), or None."""
+        return self._narrowed.get(name)
 
     def linked(self, sketch):
         """Fusion names of the parameters that may reach the sketch named `sketch` through another component."""

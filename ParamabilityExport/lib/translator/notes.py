@@ -87,6 +87,30 @@ def loose_reason(name, why):
     return clip("%s may give unexpected results%s: %s." % (name, " " + where if where else "", _ends(why)), MAX_NOTE)
 
 
+def cut_words(cut_low, cut_high, low, high):
+    """Where a cut range stops, for the ends that were cut ("the range stops at 0.5", "starts at 1", "runs from 1 to
+    20")."""
+    if cut_low and cut_high:
+        return "the range runs from %s to %s" % (number_text(low), number_text(high))
+    if cut_high:
+        return "the range stops at %s" % number_text(high)
+    return "the range starts at %s" % number_text(low)
+
+
+def not_rebuilt_why(failures):
+    """What the size probe saw at the cut ends, from `(value, step)` of each: "Fusion did not rebuild the design at 5
+    (Chamfer3) or 0.5 (Fillet2)"."""
+    return "Fusion did not rebuild the design at %s" % " or ".join(
+        "%s%s" % (number_text(v), " (%s)" % clip(step, MAX_NAME) if step else "") for v, step in failures)
+
+
+def cut_reason(name, words, why, shared=False):
+    """Why a size range was cut: "<name>: the range stops at 0.5, since Fusion did not rebuild the design at 5 (Chamfer3).".
+    `shared` says that every part of the file that uses the size has this range."""
+    return clip("%s: %s%s, since %s." % (name, words, " in every part that uses it" if shared else "", _ends(why)),
+                MAX_NOTE)
+
+
 def dropped_reason(name, why):
     """Why a ticked size is not a size although a step reads it: "<name> is not a size: <why>."."""
     return clip("%s is not a size: %s." % (name, _ends(why)), MAX_NOTE)

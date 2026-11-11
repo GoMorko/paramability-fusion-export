@@ -10,12 +10,13 @@ size whose range the person typed gets no value: the rules cannot be kept for it
 
 `built_ranges` does change ranges: where Fusion itself did not rebuild the design at a value the size probe tried, the
 range stops at the farthest value that built on that side, since the form should not offer a value the design cannot
-take.
+take. Only a failure in a step the part is built from counts.
 """
 import math
 
 from . import range_check
 from .notes import Past, number_text as _number
+from ..params.size_table import Cut
 from ..sketch_values import coverage
 
 _SAME = 1e-9
@@ -34,26 +35,44 @@ def past_reasons(table, found, why):
     return out
 
 
-def built_ranges(table, motion):
-    """`{Fusion name: (min, max)}` of the free sizes whose range goes past a value at which Fusion did not rebuild the
-    design (`Motion.spans`: a value tried with only that size changed). On that side the range stops at the farthest
-    value that built. An end the person typed is kept, and a range that would shrink to the value now is left as it
-    is (the size could not be measured)."""
+def _part_step(capture):
+    """A test for the step names (`Motion.spans` `failed`) of timeline items the part is built from: items of the
+    target's component and the steps that made a tool body of a Combine. A name that also belongs to an item outside
+    those, or to no item, is not the part's. A failure with no step name (the design did not recompute at all), or
+    without a capture, counts for the part."""
+    if capture is None:
+        return lambda step: True
+    mine, other = set(), set()
+    for item in capture.get("items") or ():
+        owned = item.get("in_target_component") or item.get("helper_of") or item.get("body_states")
+        (mine if owned else other).add(item.get("name"))
+    return lambda step: not step or (step in mine and step not in other)
+
+
+def built_ranges(table, motion, capture=None):
+    """`{Fusion name: Cut}` of the free sizes whose range goes past a value at which Fusion did not rebuild the design
+    (`Motion.spans`: a value tried with only that size changed). On that side the range stops at the farthest value
+    that built. An end the person typed is kept, and a range that would shrink to the value now is left as it is (the
+    size could not be measured). A failure in a step the part is not built from (`capture` items of other components)
+    cuts nothing: the part itself may rebuild there."""
     out = {}
+    mine = _part_step(capture)
     for e in table.entries:
         span = coverage.span(motion, e.name)
         size = table.sizes.get(e.size_name) if e.size_name else None
         if not span or not size or "min" not in size:
             continue
-        failed = [value for value, _ in span.get("failed") or ()]
+        failed = [(value, step) for value, step in span.get("failed") or () if mine(step)]
         typed_low, typed_high = table.typed_ends(e.name)
-        low, high = size["min"], size["max"]
-        if not typed_low and any(value < span["low"] - _SAME for value in failed):
-            low = max(low, span["low"])
-        if not typed_high and any(value > span["high"] + _SAME for value in failed):
-            high = min(high, span["high"])
+        low, high, found = size["min"], size["max"], {}
+        below = [f for f in failed if f[0] < span["low"] - _SAME]
+        past = [f for f in failed if f[0] > span["high"] + _SAME]
+        if not typed_low and below:
+            low, found["low"] = max(low, span["low"]), max(below, key=lambda f: f[0])
+        if not typed_high and past:
+            high, found["high"] = min(high, span["high"]), min(past, key=lambda f: f[0])
         if (low, high) != (size["min"], size["max"]) and high - low > _SAME:
-            out[e.name] = (low, high)
+            out[e.name] = Cut(low, high, found)
     return out
 
 

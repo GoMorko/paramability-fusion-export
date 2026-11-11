@@ -200,6 +200,15 @@ class Context:
                 found[name] = (max(low, was[0]), min(high, was[1]))
         return found
 
+    @property
+    def cut_causes(self):
+        """Fusion name of a size -> {(min, max) it was cut to: why} for each `cut` record that names it."""
+        found = {}
+        for record in self.doubts:
+            for name, ends in (record.cut or {}).items():
+                found.setdefault(name, {})[tuple(ends)] = record.why
+        return found
+
     def _reasons(self, fixed):
         found = {}
         for record in self.doubts:

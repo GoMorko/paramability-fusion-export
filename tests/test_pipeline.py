@@ -176,13 +176,15 @@ class SizeRangeTest(unittest.TestCase):
         self.assertEqual(port.store.exprs, START)
 
     def test_a_size_that_does_not_build_at_the_end_of_its_range_is_left_out_of_the_probe_and_the_export_goes_on(self):
-        port = FakePort(bad_when=lambda e: float(e["depth_mm"].split()[0]) > 80)
+        port = FakePort(bad_when=lambda e: float(e["depth_mm"].split()[0]) > 90)
         result = export(port, ranges={"depth_mm": (30, 120)})
         self.assertEqual(result.manifest["kind"], "recipe")
-        self.assertEqual([d["name"] for d in result.report["probe"]["dropped"]], ["depth_mm (max)", "all max"])
-        # A quarter above the value, 75, builds and 120 does not, so the size is measured up to 75.
+        self.assertEqual([d["name"] for d in result.report["probe"]["dropped"]][:2], ["depth_mm (max)", "all max"])
+        # 75 builds and 120 does not: the values between are halved, so the size is measured up to the last of them
+        # that builds, not just to 75. (The cut itself is in `test_geometry_links`.)
         span = result.report["probe"]["motion"]["spans"]["depth_mm"]
-        self.assertEqual((span["low"], span["high"], [v for v, _ in span["failed"]]), (30, 75, [120]))
+        self.assertEqual((span["low"], span["high"]), (30, 86.25))
+        self.assertEqual([v for v, _ in span["failed"]], [120, 97.5, 91.875])
         self.assertEqual(result.report["sizes"]["fixed"], [])
         self.assertEqual(port.store.exprs, START)
 

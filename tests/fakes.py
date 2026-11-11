@@ -6,9 +6,10 @@ import re
 class FakeStore:
     """Parameter store holding expressions as text. Values are the leading number as Fusion stores it (mm to cm, deg to rad)."""
 
-    def __init__(self, expressions, bad_when=None, reject=(), flaky=()):
+    def __init__(self, expressions, bad_when=None, reject=(), flaky=(), bad_item="Fillet1"):
         self.exprs = dict(expressions)
         self.bad_when = bad_when or (lambda exprs: False)
+        self.bad_item = bad_item  # the timeline item that goes into error when `bad_when` holds
         self.reject = set(reject)  # values that set_expression always refuses
         self.flaky = set(flaky)  # names refused once, then accepted
         self.recomputes = 0
@@ -37,7 +38,7 @@ class FakeStore:
         return number / 10.0  # lengths are mm, stored as cm
 
     def error_items(self):
-        return ["Fillet1"] if self.bad_when(self.exprs) else []
+        return [self.bad_item] if self.bad_when(self.exprs) else []
 
 
 class _Item:
