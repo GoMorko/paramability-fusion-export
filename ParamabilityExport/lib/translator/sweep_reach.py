@@ -9,7 +9,7 @@ import math
 
 from ..params.expressions import ExpressionError, evaluate
 from . import range_check, spline_fit
-from .paths import REACH_SHARE
+from .path_limits import REACH_SHARE
 
 ARC_STEPS = 16      # points per arc, as the app samples an arc of an outline
 SPLINE_STEPS = 16   # readings of a fitted spline between two of its points

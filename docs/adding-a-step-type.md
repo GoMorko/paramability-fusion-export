@@ -3,7 +3,8 @@
 This guide is for a developer who wants the export to copy one more kind of Fusion timeline step (for example a
 modeled thread or a coil). Read `docs/capture-format.md` sections 1 and 5 first. The Emboss
 step (`read_emboss.py`, `emboss.py`, `tests/test_translate_emboss.py`) is a small worked example of every part below,
-and of a step that reuses another handler. The sweep handler (`sweep.py`, `paths.py`) is a second example of that.
+and of a step that reuses another handler. The sweep handler (`sweep.py`, `paths.py` and the `sweep_*.py` and `path_*.py` modules next to them) is a second example
+of that.
 
 ## What a new step type touches
 
@@ -129,6 +130,15 @@ taper, rail, part of the path, a path that is not square to the outline) before 
 plain reason. A size the written path cannot follow is marked on the sweep's side, whichever form is written: the
 sizes behind the path sketch (its plane, face or projected curves), behind a plane that moves the outline away from
 the path, and behind an outline that could reach past the tightest bend (`sweep_reach.py`).
+
+The sweep code is split by concern. `sweep.py` is the handler. `sweep_settings` (twist, taper, direction, rail),
+`sweep_outline`, `sweep_volume` (volume checks), `sweep_marks` (sizes the copy cannot follow), `sweep_rules` (the path's
+rules held over the size ranges) and `sweep_write` (the extrude, revolve or `sweep` step written) each hold one part, and
+`sweep_limits` holds the refusal texts. The path side follows the same pattern: `paths.py` orders and classifies the path,
+`path_curves` (curve geometry, chaining), `path_checks` (the app's limits as refusals), `path_writing` (arc, circle, flat
+and corners forms), `path_closed` (closed chains), `path_rebuilt` (a path read back from numbers, for the range rules),
+`path_model` (`PathOptions`, `PathPlan`) and `path_limits` (tolerances, caps, refusal texts). A new refusal text goes into
+the limits module of its side.
 
 A step that takes sketch outlines checks each profile record with `loops.outline_refusal` (sketch text that could not
 be read, a flat face or an unknown entity is not an outline) and gets its loops from `loops.profile_loops`. Only the

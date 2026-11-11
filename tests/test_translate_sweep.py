@@ -11,7 +11,7 @@ from tests.translator_helpers import assert_schema_ok, left_out, load_capture, s
 
 from lib.params import size_table
 from lib.sketch_values.motion import Affine, Motion, Stuck, Terms
-from lib.translator import paths, sweep, translate
+from lib.translator import path_limits, sweep, sweep_limits, sweep_rules, sweep_settings, translate
 from lib.translator.translate import _sweep_version
 
 PIPE = "sweep_pipe"
@@ -320,7 +320,7 @@ class ToolBodyTest(unittest.TestCase):
         self.assertIsNone(translate(self.sweep_tool(None)).refusal)
 
     def test_a_tool_body_with_the_wrong_volume_is_refused(self):
-        self.assertIn(sweep.NOT_MATCHING, left_out(translate(self.sweep_tool(3000.0)))["reason"])
+        self.assertIn(sweep_limits.NOT_MATCHING, left_out(translate(self.sweep_tool(3000.0)))["reason"])
 
 
 class VolumeTest(unittest.TestCase):
@@ -329,7 +329,7 @@ class VolumeTest(unittest.TestCase):
             capture = load_capture(name)
             capture["items"][2]["target_after"]["volume_mm3"] *= 1.2
             with self.subTest(name):
-                self.assertEqual(stopped(translate(capture))["reason"], sweep.NOT_MATCHING)
+                self.assertEqual(stopped(translate(capture))["reason"], sweep_limits.NOT_MATCHING)
 
     def test_a_bent_path_off_the_centre_of_the_outline_is_not_checked(self):
         def off_centre(data):
@@ -359,43 +359,43 @@ class RefusalTest(unittest.TestCase):
             ("other operation", lambda d: d.update(operation="other"),
              "This sweep combines with the part in a way that is not copied yet."),
             ("surface", lambda d: d.update(solid=False), "Surface sweeps are not copied."),
-            ("solid unread", lambda d: d.update(solid=None), sweep.UNREADABLE),
+            ("solid unread", lambda d: d.update(solid=None), sweep_limits.UNREADABLE),
         ])
 
     def test_outlines_that_are_not_one_sketch_outline(self):
         self.reasons([
             ("none", lambda d: d.update(profiles=[]), "This sweep has no sketch outline."),
-            ("several", lambda d: d["profiles"].append(copy.deepcopy(d["profiles"][0])), sweep.SEVERAL_OUTLINES),
-            ("a face", lambda d: d["profiles"][0].update(face=True), sweep.FACE_OUTLINE),
-            ("unread", lambda d: d.update(profiles=None), sweep.UNREADABLE),
+            ("several", lambda d: d["profiles"].append(copy.deepcopy(d["profiles"][0])), sweep_limits.SEVERAL_OUTLINES),
+            ("a face", lambda d: d["profiles"][0].update(face=True), sweep_limits.FACE_OUTLINE),
+            ("unread", lambda d: d.update(profiles=None), sweep_limits.UNREADABLE),
         ])
 
     def test_rails_and_other_kinds(self):
         self.reasons([
-            ("rail", lambda d: d.update(rail=copy.deepcopy(d["path"])), sweep.RAIL),
-            ("rail unread", lambda d: d.update(rail={"kind": "unread"}), sweep.RAIL_UNREADABLE),
-            ("other orientation", lambda d: d.update(orientation="other"), sweep.OTHER_KIND),
-            ("orientation unread", lambda d: d.update(orientation=None), sweep.UNREADABLE),
-            ("twist unread", lambda d: d.update(twist_deg=None), sweep.UNREADABLE),
+            ("rail", lambda d: d.update(rail=copy.deepcopy(d["path"])), sweep_limits.RAIL),
+            ("rail unread", lambda d: d.update(rail={"kind": "unread"}), sweep_limits.RAIL_UNREADABLE),
+            ("other orientation", lambda d: d.update(orientation="other"), sweep_limits.OTHER_KIND),
+            ("orientation unread", lambda d: d.update(orientation=None), sweep_limits.UNREADABLE),
+            ("twist unread", lambda d: d.update(twist_deg=None), sweep_limits.UNREADABLE),
         ])
 
     def test_part_of_the_path(self):
         self.reasons([
-            ("distance one", lambda d: d.update(distance_one=0.5), sweep.PART_OF_PATH),
-            ("distance two", lambda d: d.update(distance_two=0.25), sweep.PART_OF_PATH),
-            ("distance one unread", lambda d: d.update(distance_one=None), sweep.UNREADABLE),
+            ("distance one", lambda d: d.update(distance_one=0.5), sweep_limits.PART_OF_PATH),
+            ("distance two", lambda d: d.update(distance_two=0.25), sweep_limits.PART_OF_PATH),
+            ("distance one unread", lambda d: d.update(distance_one=None), sweep_limits.UNREADABLE),
         ])
 
     def test_a_parallel_outline_on_a_bent_path(self):
-        self.reasons([("parallel", lambda d: d.update(orientation="parallel"), sweep.KEEPS_DIRECTION)])
+        self.reasons([("parallel", lambda d: d.update(orientation="parallel"), sweep_limits.KEEPS_DIRECTION)])
 
     def test_paths_that_cannot_be_read(self):
         self.reasons([
-            ("none", lambda d: d.update(path=None), sweep.PATH_UNREADABLE),
-            ("sketch and edges", lambda d: d["path"].update(kind="mixed"), sweep.MIXED_PATH),
-            ("an entity that is neither", lambda d: d["path"].update(kind="other"), paths.NOT_SKETCH),
-            ("curves unread", lambda d: d["path"].update(curves=None), paths.UNREADABLE),
-            ("longer than what is read", lambda d: d["path"].update(truncated=True), sweep.PATH_TOO_LONG),
+            ("none", lambda d: d.update(path=None), sweep_limits.PATH_UNREADABLE),
+            ("sketch and edges", lambda d: d["path"].update(kind="mixed"), sweep_limits.MIXED_PATH),
+            ("an entity that is neither", lambda d: d["path"].update(kind="other"), path_limits.NOT_SKETCH),
+            ("curves unread", lambda d: d["path"].update(curves=None), path_limits.UNREADABLE),
+            ("longer than what is read", lambda d: d["path"].update(truncated=True), sweep_limits.PATH_TOO_LONG),
         ])
 
     def test_a_path_of_another_component_is_not_copied(self):
@@ -412,9 +412,9 @@ class PathShapeTest(unittest.TestCase):
     """Paths the recipe cannot hold leave the sweep out as a gap after the block."""
 
     def test_each_path_the_recipe_cannot_hold_leaves_the_sweep_out_with_its_reason(self):
-        cases = (("sweep_closed_outline", paths.CLOSED_AT_CORNER), ("sweep_sharp_corner", paths.SHARP_CORNER),
-                 ("sweep_middle_outline", paths.BOTH_SIDES), ("sweep_tilted_outline", paths.NOT_SQUARE),
-                 ("sweep_bend_3d", paths.BENDS_3D))
+        cases = (("sweep_closed_outline", path_limits.CLOSED_AT_CORNER), ("sweep_sharp_corner", path_limits.SHARP_CORNER),
+                 ("sweep_middle_outline", path_limits.BOTH_SIDES), ("sweep_tilted_outline", path_limits.NOT_SQUARE),
+                 ("sweep_bend_3d", path_limits.BENDS_3D))
         for name, reason in cases:
             with self.subTest(name):
                 result = translate(load_capture(name))
@@ -506,9 +506,9 @@ class TwistTest(unittest.TestCase):
 
     def test_a_twist_over_ten_turns_or_with_a_taper_or_a_parallel_outline_is_left_out(self):
         for label, edit, reason in (
-                ("long", dict(twist_deg=3700.0), sweep.TWIST_LONG),
-                ("and taper", dict(twist_deg=10.0, taper_deg=1.0), sweep.TWIST_AND_TAPER),
-                ("and parallel", dict(twist_deg=10.0, orientation="parallel"), sweep.PARALLEL_AND_SHAPE)):
+                ("long", dict(twist_deg=3700.0), sweep_limits.TWIST_LONG),
+                ("and taper", dict(twist_deg=10.0, taper_deg=1.0), sweep_limits.TWIST_AND_TAPER),
+                ("and parallel", dict(twist_deg=10.0, orientation="parallel"), sweep_limits.PARALLEL_AND_SHAPE)):
             with self.subTest(label):
                 self.assertEqual(gap_reason(on_plate(lambda d, edit=edit: d.update(**edit))), reason)
 
@@ -560,7 +560,7 @@ class TaperTest(unittest.TestCase):
 
     def test_a_taper_that_scales_the_outline_is_left_out(self):
         result = translate(self.straight(self.scaled(self.SLOPE)))
-        self.assertEqual(stopped(result)["reason"], sweep.SCALED_OUTLINE)
+        self.assertEqual(stopped(result)["reason"], sweep_limits.SCALED_OUTLINE)
 
     def test_a_taper_without_a_measured_volume_is_written_as_read(self):
         step = only_sweep(self, translate(self.straight(None)))
@@ -582,18 +582,18 @@ class TaperTest(unittest.TestCase):
         samples = [[10 + k, 0.01 * k * k, 0.0] for k in range(21)]
         spline = {"kind": "other", "start": samples[0], "end": samples[-1], "samples": samples, "opposed": False}
         capture = edited_after(pipe_along([line((0, 0, 0), (10, 0, 0)), spline]), taper_deg=2.0)
-        self.assertEqual(stopped(translate(capture))["reason"], sweep.TAPER_CURVES)
+        self.assertEqual(stopped(translate(capture))["reason"], sweep_limits.TAPER_CURVES)
 
     def test_a_taper_through_too_many_path_parts_is_left_out(self):
-        parts = types.SimpleNamespace(recipe={"kind": "corners"}, curves=[None] * sweep.MAX_TAPER_STATIONS)
-        self.assertEqual(sweep._taper_path_refusal(parts).reason, sweep.TAPER_STATIONS)
+        parts = types.SimpleNamespace(recipe={"kind": "corners"}, curves=[None] * sweep_limits.MAX_TAPER_STATIONS)
+        self.assertEqual(sweep_settings.taper_path_refusal(parts).reason, sweep_limits.TAPER_STATIONS)
         parts.curves = parts.curves[:-1]
-        self.assertIsNone(sweep._taper_path_refusal(parts))
+        self.assertIsNone(sweep_settings.taper_path_refusal(parts))
 
     def test_a_steep_taper_or_one_with_a_parallel_outline_is_left_out(self):
-        for label, edit, reason in (("steep", dict(taper_deg=-50.0), sweep.TAPER_STEEP),
+        for label, edit, reason in (("steep", dict(taper_deg=-50.0), sweep_limits.TAPER_STEEP),
                                     ("parallel", dict(taper_deg=2.0, orientation="parallel"),
-                                     sweep.PARALLEL_AND_SHAPE)):
+                                     sweep_limits.PARALLEL_AND_SHAPE)):
             with self.subTest(label):
                 self.assertEqual(gap_reason(on_plate(lambda d, edit=edit: d.update(**edit))), reason)
 
@@ -618,7 +618,7 @@ class ParallelTest(unittest.TestCase):
             capture = edited_after(pipe_along(curves), orientation="parallel") if curves else with_options(
                 PIPE, PIPE_ITEM, orientation="parallel")
             with self.subTest(len(curves or [])):
-                self.assertEqual(stopped(translate(capture))["reason"], sweep.KEEPS_DIRECTION)
+                self.assertEqual(stopped(translate(capture))["reason"], sweep_limits.KEEPS_DIRECTION)
 
 
 
@@ -653,7 +653,7 @@ class ClosedTest(unittest.TestCase):
     def test_a_volume_that_does_not_match_the_rim_is_refused(self):
         capture = edited(RIM, RIM_ITEM, lambda d: None)
         capture["items"][RIM_ITEM]["target_after"]["volume_mm3"] *= 1.1
-        self.assertEqual(stopped(translate(capture))["reason"], sweep.NOT_MATCHING)
+        self.assertEqual(stopped(translate(capture))["reason"], sweep_limits.NOT_MATCHING)
 
     def test_a_full_circle_that_twists_is_a_closed_path_and_a_plain_one_stays_a_revolve(self):
         result = translate(edited("sweep_ring", 2, lambda d: d.update(twist_deg=360.0)))
@@ -682,11 +682,11 @@ class ClosedTest(unittest.TestCase):
         for name in (RIM, "sweep_ring"):
             with self.subTest(name):
                 result = translate(edited_after(load_capture(name), twist_deg=90.0))
-                self.assertEqual(stopped(result)["reason"], sweep.TWIST_CLOSED)
+                self.assertEqual(stopped(result)["reason"], sweep_limits.TWIST_CLOSED)
 
     def test_a_taper_or_a_parallel_outline_along_a_closed_path_is_left_out(self):
-        for edit, reason in ((dict(taper_deg=2.0), paths.CLOSED_TAPER),
-                             (dict(orientation="parallel"), paths.CLOSED_PARALLEL)):
+        for edit, reason in ((dict(taper_deg=2.0), path_limits.CLOSED_TAPER),
+                             (dict(orientation="parallel"), path_limits.CLOSED_PARALLEL)):
             for name in (RIM, "sweep_ring"):
                 with self.subTest(name, edit=edit):
                     self.assertEqual(stopped(translate(edited_after(load_capture(name), **edit)))["reason"], reason)
@@ -909,7 +909,7 @@ class PathKeptTest(unittest.TestCase):
         self.assertEqual(only_sweep(self, result)["path"]["start"], [{"expr": "wire_mm - 6"}, 0.0])
 
     def test_a_path_that_takes_too_many_settings_to_test_marks_its_sizes_instead_of_cutting(self):
-        with unittest.mock.patch.object(sweep, "MAX_PATH_TESTS", 3):
+        with unittest.mock.patch.object(sweep_rules, "MAX_PATH_TESTS", 3):
             result = followed(bend_values(), ("run_mm", "bend_mm", "wire_mm"), outline=self.OUTLINE)
         self.assertEqual(sorted(f["name"] for f in result.loose), ["bend_mm", "run_mm", "wire_mm"])
         self.assertEqual(result.recipe["sizes"]["wire_mm"]["max"], 12.0)
@@ -930,7 +930,7 @@ class PathKeptTest(unittest.TestCase):
     def test_a_check_that_runs_out_of_settings_or_time_marks_the_sizes_and_cuts_nothing(self):
         for limit in ({"MAX_PATH_TESTS": 40}, {"MAX_PATH_SECONDS": -1.0}):
             capture, motion, ticked = many_sizes()
-            with self.subTest(limit), unittest.mock.patch.multiple(sweep, **limit):
+            with self.subTest(limit), unittest.mock.patch.multiple(sweep_rules, **limit):
                 result = sized(capture, motion, ticked)
             self.assertEqual(sorted(f["name"] for f in result.loose), sorted(ticked))
             self.assertIn("too many settings", result.loose[0]["reason"])

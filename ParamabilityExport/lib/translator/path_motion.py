@@ -2,7 +2,7 @@
 
 The probe measures each sketch curve of a sweep path (`sketch_values.keys`: points in the path sketch's plane, radii,
 the angle an arc turns, the plane's position). Here those raw values are looked up for the points the path planner
-wrote (`paths.PathPlan`): a written point is the start, end or middle of a curve of the sketch, found by its place.
+wrote (`path_model.PathPlan`): a written point is the start, end or middle of a curve of the sketch, found by its place.
 The exception is the place where a closed path was cut open at the outline's plane: when that is inside a straight
 line square to the plane, the point follows the line and the plane. A path where some written point is none of these
 (a cut inside an arc, a free curve) is not followed: the caller writes it as measured.
@@ -15,7 +15,7 @@ What follows depends on how the sweep is written:
 - a straight path that twists is a path of two corner points: both points follow.
 
 `Followed.curves_at` gives the path as plain numbers at any size setting, so the caller can test the app's rules over
-the size ranges (`paths.rebuilt_refusal`).
+the size ranges (`path_rebuilt.rebuilt_refusal`).
 """
 import copy
 import math
@@ -26,11 +26,11 @@ from typing import Optional
 from ..params.expressions import ExpressionError, _eval, parse_formula
 from ..sketch_values import keys
 from ..sketch_values.motion import Stuck
-from . import paths, range_check, sketch_motion, vec
+from . import path_curves, path_limits, path_rebuilt, range_check, sketch_motion, vec
 from .curved import combine
 from .values import Quantity, Sized, reads_in
 
-MATCH_TOL = 1e-4      # a written point is a curve's point when this close (mm), as curves join in `paths.chain`
+MATCH_TOL = 1e-4      # a written point is a curve's point when this close (mm), as curves join in `path_curves.chain`
 FRAME_TOL = 1e-6      # the written placement is the sketch's own when this close
 LENGTH_TOL = 1e-3     # a formula gives the measured length (mm) or angle (degrees) this closely at every setting
 _POINTS = {"line": ("start", "end"), "arc": ("start", "mid", "end"), "circle": ()}
@@ -94,7 +94,7 @@ class Followed:
     def curves_at(self, env):
         """The path as lines and arcs with numbers at the size values `env` (raises ValueError, ExpressionError,
         ZeroDivisionError when it cannot be worked out)."""
-        return paths.flat_curves(_numbers(self.flat or self.written, env))
+        return path_rebuilt.flat_curves(_numbers(self.flat or self.written, env))
 
     def disagrees_at(self, env, curves):
         """True when a formula does not give what the path measures at the size values `env`."""
@@ -237,7 +237,7 @@ def _as_flat(raw, found):
 
 
 def follow(ctx, item, path, found, form, drawn):
-    """The `Followed` path for a path the planner found (`found`, a `paths.PathPlan`) that is written as `form`
+    """The `Followed` path for a path the planner found (`found`, a `path_model.PathPlan`) that is written as `form`
     (`extrude` for a line, `revolve` for an arc, `sweep` for a flat chain or for a line that twists), or None when it is not followed: no motion
     values for it, a form that cannot follow, or a point that is none of the sketch's. `drawn` is the outline's
     `sketch_motion.Outline`."""
@@ -270,7 +270,7 @@ def follow(ctx, item, path, found, form, drawn):
         followed.centre = raw.in_space(centre)
         followed.on_plane.append(followed.centre)
         followed.turn = sketch_motion.quantity(ctx, raw.fields[0]["turn"], found.angle_deg, positive=True)
-        followed.pairs.append((followed.turn, lambda curves: paths.turn_degrees(curves[0])))
+        followed.pairs.append((followed.turn, lambda curves: path_curves.turn_degrees(curves[0])))
     elif found.kind == "line":
         followed.flat = written
         followed.written = dict(found.recipe, points=[
@@ -297,5 +297,5 @@ def keep_on_plane(ctx, followed, profile_frame, drawn, name):
                 ctx.doubt(names, why)
         elif q.sized:
             span = range_check.sweep(ctx.table, q.text, q.reads)
-            if not (span.at_least(-paths.PLANE_TOL) and span.at_most(paths.PLANE_TOL)):
+            if not (span.at_least(-path_limits.PLANE_TOL) and span.at_most(path_limits.PLANE_TOL)):
                 ctx.doubt(q.reads, why)

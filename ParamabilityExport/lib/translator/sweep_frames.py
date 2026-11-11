@@ -10,11 +10,11 @@ path of lines and tangent arcs in one plane (the outline turns about each arc's 
 """
 import math
 
-from . import paths, vec
+from . import path_curves, path_limits, vec
 
 PLANE_TOL = 1e-3
 LATERAL_TOL = 1e-3
-JOIN_TOL_DEG = paths.SMOOTH_JOIN_DEG
+JOIN_TOL_DEG = path_limits.SMOOTH_JOIN_DEG
 
 
 def _same(v):
@@ -46,10 +46,10 @@ def _carry(found, fixed):
     """The map of directions that moves the outline from the path's start to its end, or None when it is not known."""
     if fixed:
         return _same
-    normal = _plane_normal(paths.points_along(found.curves))
+    normal = _plane_normal(path_curves.points_along(found.curves))
     if normal is False:
         return None
-    start, end = found.direction, paths.tangents(found.curves[-1])[1]
+    start, end = found.direction, path_curves.tangents(found.curves[-1])[1]
     if normal is None:
         return _same if vec.dot(start, end) > 0 else None
     degrees = math.degrees(math.atan2(vec.dot(vec.cross(start, end), normal), vec.dot(start, end)))
@@ -57,8 +57,8 @@ def _carry(found, fixed):
 
 
 def end_frame(frame, found, fixed=False):
-    """The outline's frame carried to the path's end (`found` is the paths.PathPlan the sweep is written from), or None
-    when that is not known."""
+    """The outline's frame carried to the path's end (`found` is the path_model.PathPlan the sweep is written from),
+    or None when that is not known."""
     carry = _carry(found, fixed)
     if carry is None:
         return None
@@ -79,11 +79,11 @@ class SideWalk:
         curves = found.curves
         if any(curve["kind"] not in ("line", "arc") for curve in curves):
             return None
-        if _plane_normal(paths.points_along(curves)) is False:
+        if _plane_normal(path_curves.points_along(curves)) is False:
             return None
         x, y, parts, last = list(frame["x"]), list(frame["y"]), [], None
         for curve in curves:
-            first, end = paths.tangents(curve)
+            first, end = path_curves.tangents(curve)
             if last is not None:
                 axis = vec.cross(last, first)
                 degrees = math.degrees(math.atan2(vec.length(axis), vec.dot(last, first)))
@@ -93,7 +93,7 @@ class SideWalk:
                     x, y = vec.rotate(x, axis, degrees), vec.rotate(y, axis, degrees)
             parts.append((curve, x, y))
             if curve["kind"] == "arc":
-                _, _, normal, turn = paths.arc_of(curve)
+                _, _, normal, turn = path_curves.arc_of(curve)
                 x, y = vec.rotate(x, normal, math.degrees(turn)), vec.rotate(y, normal, math.degrees(turn))
             last = end
         return cls(frame, found, parts)
@@ -122,7 +122,7 @@ class SideWalk:
 
     @staticmethod
     def _across_arc(curve, x, y, p):
-        centre, radius, normal, turn = paths.arc_of(curve)
+        centre, radius, normal, turn = path_curves.arc_of(curve)
         radial = vec.sub(p, centre)
         radial = vec.sub(radial, vec.scale(normal, vec.dot(radial, normal)))
         if vec.length(radial) <= 1e-9:
