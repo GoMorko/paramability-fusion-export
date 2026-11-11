@@ -113,7 +113,7 @@ except U1, L1 to L15, F1 and F2, which are described here.
       copied says what it is: section 9.
 - [ ] Compact export window and result window: section 7.2 ("The export window has no empty gaps", "Early warning",
       "Show in timeline", the result window) and the export pipeline entry under "Fusion calls to watch".
-- [ ] SW1 to SW16 and LF1 to LF5, sweeps and lofts (0.9.2): section 13 (the calls are under "Capture reader calls to watch
+- [ ] SW1 to SW18 and LF1 to LF5, sweeps and lofts (0.9.2): section 13 (the calls are under "Capture reader calls to watch
       (sweep and loft)").
 - [ ] E1 to E6, Emboss on a flat face: section 10.
 - [ ] T1 to T5, thin walled extrudes of one closed outline (T5 is `%` with a negative left side): section "Thin
@@ -857,7 +857,8 @@ surprises.
       `sweep` step with a flat path, the part matches, and `volume_after` minus `volume_before` is the circle area
       times the path length. Sizes behind the path sketch are marked "may give unexpected results".
 - [ ] **SW3 Ring.** A triangle swept along a full sketch circle. The recipe holds a full turn `revolve` and the part
-      matches. `path.closed` is true.
+      matches. `path.closed` is true. With a twist of 360 degrees the same ring becomes a `sweep` step along a closed
+      flat path of two half arcs (see SW18).
 - [ ] **SW4 Profile at the far end.** Draw the path from the far end towards the profile. Note the order of
       `path.curves` and the `opposed` flags. The copy turns the path round and the part matches.
 - [ ] **SW5 Profile in the middle.** Put the profile plane through the middle of the path. Note `distance_one` and
@@ -876,7 +877,8 @@ surprises.
 - [ ] **SW8 Parallel orientation.** The SW2 path with orientation parallel is left out ("The outline keeps one
       direction along a path that turns back past its plane"). Along a path that keeps moving away from the outline's
       plane (one arc of 60 degrees) it is copied as a `sweep` step with `orientation: "fixed"`, and the part matches.
-      On a straight path it is copied as an extrude. A twist or taper together with parallel is left out.
+      On a straight path it is copied as an extrude. A twist or taper together with parallel is left out, and so is
+      parallel along a closed path ("along a closed path").
 - [ ] **SW9 Guide rail.** A sweep with a guide rail is left out ("Sweeps with a guide rail"). `rail` holds the rail
       curves and `scaling` holds the dialog's choice. If a build cannot read the rail, `rail` is `{ "kind": "unread" }`
       and the reason says the rail could not be read.
@@ -897,6 +899,18 @@ surprises.
       ("both twist and taper").
 - [ ] **SW16 Taper on an arc.** A rectangle along one arc with taper 3 degrees. Copied with the note. Compare the sizes
       at the far end with Fusion. A taper along a path with a spline curve is left out ("along curves").
+- [ ] **SW17 Closed rim.** A 2 by 2 mm rectangle swept once round a rounded rectangle sketch (40 by 20 mm, corner
+      radius 5 mm), the rectangle inside the loop at the middle of a long side. The recipe holds a `sweep` step with a
+      flat path that has `closed: true`, starts at the profile plane and ends on its start (version 16), and the part
+      matches. `volume_after` is the area times the length the centre travels: the path length minus 2 pi times how
+      far the centre sits inside the loop. Then put the rectangle on a corner of a rectangle sketch with sharp
+      corners: the sweep is left out ("sits on a sharp corner of its closed path"). A closed sketch with a spline side
+      is copied when the profile sits on the spline too; note whether the two halves of the spline meet smoothly in
+      the recipe.
+- [ ] **SW18 Twist along a closed path.** The SW17 path with a bar centred on it and a twist of 360 degrees. Copied
+      with the note; whether the end of the part meets its start, and the handedness of the twist, are the same as
+      in Fusion. A twist of 90 degrees is left out ("not whole turns"). A taper on a closed path is left out
+      ("Tapered sweeps along a closed path").
 - [ ] **SW14 Round on a sweep end.** After SW2, add a fillet on an edge of the end cap. The fillet is copied as
       measured, and every size written before it is marked "may give unexpected results", since a sweep step has no
       faces that follow sizes yet. After SW1 (the extrude form) the fillet follows sizes like a round on an extrude.

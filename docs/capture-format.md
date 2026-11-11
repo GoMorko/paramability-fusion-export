@@ -1144,6 +1144,15 @@ face), and a measured volume change that is not
   free curves or more than 64 parts, a taper of 45 degrees or more, a twist over 3600 degrees, and a parallel
   outline along a path that turns back past its plane (every tangent must rise at least 0.05 along the outline's
   normal).
+- Closed paths (`lib/translator/paths.py`): a closed chain in one plane becomes a flat path with `closed: true`. The
+  chain is cut where it meets the outline's plane nearest to the outline (a line, an arc or a spline sample is split
+  in two; a joint is used as it is), turned to start there, and its last segment ends exactly on the start. The cut
+  must not be at a sharp corner, and the written directions at the seam must differ by at most 2 degrees (spline
+  halves are fitted apart). A closed chain that bends in 3D, or a taper or `parallel` along a closed path, is left
+  out. A full circle stays a revolve; with a twist it becomes a closed flat path of two half arcs. The twist must be
+  whole turns and is written as a number. The overlap check measures the distance along the path round the loop. A
+  new body must have the volume of Pappus: the area times the path length less 2 pi times the offset of the
+  outline's centre towards the inside; a twisting outline is checked only when its centre sits on the path.
 - `faces_after`: a point and the outward normal of the made start and end faces (`startFaces` and `endFaces` of a
   sweep, `startFace` and `endFace` of a loft), read with the marker after the item. Each side is null when the member
   cannot be read. The key is not a pick.
@@ -1441,7 +1450,7 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   count that can pass its limit inside the size ranges (`range_check.sweep`) marks the sizes it reads.
 - The recipe is version 12, or the lowest version that holds its steps and selectors (13 with an `offsetFaces` step, 14
   with a `chain` or `faceEdges` pick, 15 with a tool step, a `move` step, or a pattern whose copy count passes 64: a
-  polar count or the two linear counts together, at the current values or anywhere in the size ranges; 16 with a `sweep` step that has `twistDeg`, `taperDeg` or `orientation`: `SWEEP_VERSIONS` in `translator/translate.py`). With a size table it carries `sizesAsWritten: true` and `sizes`: the sizes that a written
+  polar count or the two linear counts together, at the current values or anywhere in the size ranges; 16 with a `sweep` step that has `twistDeg`, `taperDeg`, `orientation` or a path with `closed`: `SWEEP_VERSIONS` and `SWEEP_PATH_VERSIONS` in `translator/translate.py`). With a size table it carries `sizesAsWritten: true` and `sizes`: the sizes that a written
   formula reads, plus the sizes those formulas read. A ticked size that nothing reads is left out (see `dropped`).
   Without a table the recipe has no `sizes`, and no marker.
 

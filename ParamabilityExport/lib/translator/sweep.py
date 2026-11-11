@@ -3,14 +3,17 @@
 The path decides what is written (`paths.plan` orders it and checks the limits of the recipe's sweep step):
 - a straight path is an extrude of the outline (`extrude.handle`);
 - one arc or a full circle is a revolve of the outline about the arc's axis (`revolve.handle`);
-- a chain of lines, arcs and free curves in one plane, or of lines and tangent arcs in 3D, is a `sweep` step;
+- a chain of lines, arcs and free curves in one plane, or of lines and tangent arcs in 3D, is a `sweep` step; a closed
+  chain in one plane is a `sweep` step along a closed flat path (a full circle stays a revolve unless it twists);
 - a twist, a taper, or an outline kept in one direction (parallel) along a path that turns, also makes a `sweep` step
   (a line becomes a path of two points, an arc a flat path), with `twistDeg`, `taperDeg` and `orientation`.
 
 The outline follows sizes as an extrude outline does. The path is written as measured, so the sizes behind its sketch
 are marked: a path that follows sizes needs its own motion values. A new body must have the volume the outline area
-and the path give. Twist together with taper or parallel, tapers along free curves, guide rails, a path that is not
-square to the outline, closed paths and sweeps along part of a path are refused.
+and the path give; along a closed path that is Pappus' volume. Twist together with taper or parallel, tapers along
+free curves, guide rails, a path that is not square to the outline, closed paths that bend in 3D or that taper or keep
+the outline's direction, a twist along a closed path that is not whole turns, and sweeps along part of a path are
+refused.
 
 Fusion does not document how it measures the sweep taper (an offset of the outline or a scale) or which way a twist
 turns. Until a hand test settles both, every written twist or taper marks the sizes behind it and the outline, and
@@ -30,6 +33,7 @@ ZERO_TOL = 1e-6
 VOLUME_RELATIVE_TOL = 0.01
 VOLUME_ABSOLUTE_TOL = 1e-3
 CENTROID_ON_PATH_TOL = 0.01   # the path runs through the outline's centroid when it starts this close to it (mm)
+WHOLE_TURN_TOL = 1e-6 / 360.0  # a twist along a closed path is whole turns within this share of a turn, as in the app
 MAX_TAPER_DEG = 45.0          # the recipe takes a taper under this either way
 MAX_TWIST_DEG = 3600.0        # the recipe takes a twist up to this either way
 MAX_TAPER_STATIONS = 65       # the recipe builds a taper through at most this many places along the path
@@ -48,6 +52,7 @@ FACE_OUTLINE = "The outline of this sweep is a face of the part."
 TWIST_AND_TAPER = "Sweeps that both twist and taper are not copied yet."
 TAPER_CURVES = "Tapered sweeps along curves are not copied yet."
 TAPER_STATIONS = "Tapered sweeps along a path with so many parts are not copied."
+TWIST_CLOSED = "The twist of this sweep along a closed path is not whole turns, which is not copied."
 TAPER_STEEP = "The taper of this sweep is too steep to copy."
 TWIST_LONG = "The twist of this sweep is more than ten turns, which is not copied."
 SCALED_OUTLINE = "This sweep scales its outline along the path, which is not copied yet."
@@ -156,21 +161,26 @@ def _settings_refusal(data):
     return None
 
 
-def _pin_settings(ctx, item, data):
+def _pin_settings(ctx, item, data, closed):
     """Values the copy writes as fixed settings: a size that moves one is marked. A twist or taper that is set is
-    written as a value that can follow sizes instead (`_angle`)."""
+    written as a value that can follow sizes instead (`_angle`), except a twist along a closed path, which has to
+    stay whole turns."""
     name = item.get("name", "a sweep")
     for path, what in (("twist_deg", "twist"), ("taper_deg", "taper"), ("distance_one", "length along its path"),
                        ("distance_two", "length along its path")):
-        if path in ("twist_deg", "taper_deg") and abs(data.get(path) or 0.0) > ZERO_TOL:
+        if path in ("twist_deg", "taper_deg") and abs(data.get(path) or 0.0) > ZERO_TOL and not (
+                closed and path == "twist_deg"):
             continue
         values.pin(ctx, item, path, "it sets the %s of %s, which the copy keeps as it is now" % (what, name))
 
 
-def _angle(ctx, item, path, fusion_deg, sign):
-    """The twist or taper as the recipe writes it, a Quantity that follows sizes when its parameter does."""
+def _angle(ctx, item, path, fusion_deg, sign, follows=True):
+    """The twist or taper as the recipe writes it, a Quantity that follows sizes when its parameter does (unless
+    `follows` is false: then it is the plain number, and `_pin_settings` marks the sizes behind it)."""
     if abs(fusion_deg) <= ZERO_TOL:
         return None
+    if not follows:
+        return Quantity(sign * fusion_deg)
     return values.quantity(ctx, item, path, sign * fusion_deg, dim="angle", sign=sign)
 
 
@@ -190,13 +200,26 @@ def _axis_distance(point, axis):
     return vec.length(vec.sub(along, vec.scale(direction, vec.dot(along, direction))))
 
 
-def _expected_volume(profile, area, found):
+def _closed_volume(area, middle, found, twisted):
+    """The volume of an outline swept once round a closed flat path (Pappus): the area times the length its centre
+    travels, which is the path's length less the centre's offset towards the inside times the turn of the path. A
+    twisting outline turns its centre about the path, so that counts only when the centre sits on the path."""
+    offset = vec.sub(middle, found.start)
+    if twisted:
+        return area * found.length if vec.length(offset) <= CENTROID_ON_PATH_TOL else None
+    inward = vec.dot(offset, vec.cross(found.recipe["on"]["normal"], found.direction)) * found.winding
+    return area * (found.length - inward * 2.0 * math.pi)
+
+
+def _expected_volume(profile, area, found, twisted):
     """The volume the outline sweeps along the path (area times the length its centre travels), or None when that is
     not known: a bent path counts only when it runs through the centre of the outline."""
     centre = _centroid(profile)
     if centre is None:
         return None
     middle = vec.frame_apply(profile["frame"], [centre[0], centre[1], 0.0])
+    if found.closed:
+        return _closed_volume(area, middle, found, twisted)
     if found.kind == "line":
         return area * found.length
     if found.kind in ("arc", "circle"):
@@ -215,7 +238,7 @@ def _volume_refusal(item, data, combine, profile, found):
     if not isinstance(areas, list) or len(areas) != 1 or not _number(areas[0]) or areas[0] <= 0:
         return None
     made = _made_volume(item, data)
-    expected = _expected_volume(profile, areas[0], found)
+    expected = _expected_volume(profile, areas[0], found, abs(data["twist_deg"]) > ZERO_TOL)
     if made is None or expected is None:
         return None
     if abs(made - expected) > VOLUME_RELATIVE_TOL * expected + VOLUME_ABSOLUTE_TOL:
@@ -423,11 +446,13 @@ def handle(item, ctx):
         return Refusal(PATH_TOO_LONG)
     twist, taper = data["twist_deg"], data["taper_deg"]
     twisted, tapered, fixed = abs(twist) > ZERO_TOL, abs(taper) > ZERO_TOL, data["orientation"] == "parallel"
-    options = paths.PathOptions(as_step=twisted or tapered or fixed, twisted=twisted,
+    options = paths.PathOptions(as_step=twisted or tapered or fixed, twisted=twisted, tapered=tapered,
                                 growth=_taper_growth(profile, taper), fixed=fixed)
     found = paths.plan(path, profile["frame"], _profile_points(profile), options)
     if isinstance(found, Refusal):
         return found
+    if found.closed and twisted and abs(twist / 360.0 - round(twist / 360.0)) > WHOLE_TURN_TOL:
+        return Refusal(TWIST_CLOSED)
     taper_sign = TAPER_SIGN
     if tapered:
         refusal = _taper_path_refusal(found)
@@ -441,14 +466,15 @@ def handle(item, ctx):
     refusal = _volume_refusal(item, data, combine, profile, found)
     if refusal is not None:
         return refusal
-    _pin_settings(ctx, item, data)
+    _pin_settings(ctx, item, data, found.closed)
     _mark_path(ctx, item, path)
     _keep_path_on_plane(ctx, item, profile)
     if found.kind != "line":
         borrowed.mark_unchecked(ctx, item, profile)
     angles = [(what, key, quantity, confirmed)
               for what, key, quantity, confirmed in (
-                  ("twist", "twistDeg", _angle(ctx, item, "twist_deg", twist, TWIST_SIGN), TWIST_SIGN_CONFIRMED),
+                  ("twist", "twistDeg", _angle(ctx, item, "twist_deg", twist, TWIST_SIGN, not found.closed),
+                   TWIST_SIGN_CONFIRMED),
                   ("taper", "taperDeg", _angle(ctx, item, "taper_deg", taper, taper_sign), TAPER_MEANING_CONFIRMED))
               if quantity is not None]
     if twisted or tapered or (fixed and found.kind != "line"):

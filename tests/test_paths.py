@@ -57,10 +57,10 @@ def pipe_in_3d():
             line((15, 20, 5), (15, 20, 20))]
 
 
-def sweep_with(recipe_path):
+def sweep_with(recipe_path, version=15):
     sketch = {"on": {"origin": [0, 0, 0], "normal": [1, 0, 0], "xDir": [0, 1, 0]},
               "outer": {"kind": "circle", "center": [0, 0], "radius": 1}}
-    return {"schema": "paramability.recipe", "version": 15, "features": [
+    return {"schema": "paramability.recipe", "version": version, "features": [
         {"id": "sweep_1", "kind": "sweep", "sketch": sketch, "path": recipe_path, "combine": "new"}]}
 
 
@@ -242,11 +242,23 @@ class OptionsTest(unittest.TestCase):
         found = self.planned([quarter([0, 5, 0], [0, -1, 0], [1, 0, 0], 5)], as_step=True)
         self.assertEqual((found.kind, [s["kind"] for s in found.recipe["segments"]]), ("flat", ["arc"]))
 
-    def test_a_circle_stays_a_closed_path_for_any_option(self):
+    def test_a_circle_with_a_taper_or_a_kept_direction_is_refused(self):
         ring = {"kind": "circle", "center": [0, 5, 0], "normal": [0, 0, 1], "radius": 5}
-        for option in ("as_step", "twisted", "fixed"):
+        for option, reason in (("tapered", paths.CLOSED_TAPER), ("fixed", paths.CLOSED_PARALLEL)):
             with self.subTest(option):
-                self.assertEqual(self.planned([ring], **{option: True}).reason, paths.CLOSED)
+                self.assertEqual(self.planned([ring], as_step=True, **{option: True}).reason, reason)
+
+    def test_a_twisted_circle_is_a_closed_flat_path_of_two_half_arcs(self):
+        ring = {"kind": "circle", "center": [0, 5, 0], "normal": [0, 0, 1], "radius": 5}
+        found = self.planned([ring], as_step=True, twisted=True)
+        self.assertEqual((found.kind, found.closed), ("flat", True))
+        self.assertEqual(found.winding * found.recipe["on"]["normal"][2], 1.0)
+        self.assertTrue(close(found.start, [0, 0, 0]) and close(found.end, found.start))
+        recipe = found.recipe
+        self.assertEqual([s["kind"] for s in recipe["segments"]], ["arc", "arc"])
+        self.assertEqual(recipe["segments"][-1]["to"], recipe["start"])
+        self.assertTrue(recipe["closed"])
+        self.assertEqual(check_recipe(sweep_with(recipe, 16)), [])
 
     def test_a_kept_direction_needs_the_path_to_keep_moving_away_from_the_outline_plane(self):
         self.assertEqual(self.planned(pipe_with_bend(), fixed=True, as_step=True).reason, paths.TURNS_BACK)
@@ -268,16 +280,144 @@ class OptionsTest(unittest.TestCase):
         self.assertIsInstance(twisted, Refusal)
 
 
+def rounded_rectangle():
+    """A 40 by 20 rounded rectangle (corner radius 5) in the plane z = 0, counter clockwise, listed from its left side."""
+    def corner(cx, cy, from_deg, to_deg):
+        def at(deg):
+            return (cx + 5 * math.cos(math.radians(deg)), cy + 5 * math.sin(math.radians(deg)), 0)
+        return arc(at(from_deg), at(to_deg), at((from_deg + to_deg) / 2), (cx, cy, 0))
+
+    return [line((0, 15, 0), (0, 5, 0)), corner(5, 5, 180, 270), line((5, 0, 0), (35, 0, 0)), corner(35, 5, 270, 360),
+            line((40, 5, 0), (40, 15, 0)), corner(35, 15, 0, 90), line((35, 20, 0), (5, 20, 0)), corner(5, 15, 90, 180)]
+
+
+def at_point(point, normal):
+    """The outline's plane through `point` square to `normal`, and a small outline around the point."""
+    plane = {"origin": list(point), "z": list(normal)}
+    first = vec.unit(vec.cross(normal, [0, 0, 1]))
+    return plane, [vec.add(point, vec.add(vec.scale(first, a), [0, 0, b])) for a in (-1, 1) for b in (-1, 1)]
+
+
+class ClosedTest(unittest.TestCase):
+    """A closed chain in one plane is cut open where it meets the outline's plane and written as a closed flat path."""
+
+    def closed_at(self, point, normal, curves=None, **options):
+        plane, points = at_point(point, normal)
+        found = paths.plan(path_of(curves or rounded_rectangle(), frame=XY_SKETCH), plane, points,
+                           paths.PathOptions(**options))
+        if not isinstance(found, Refusal):
+            self.assertTrue(found.closed)
+            self.assertEqual(found.recipe["segments"][-1]["to"], found.recipe["start"])
+            self.assertTrue(found.recipe["closed"])
+            self.assertEqual(check_recipe(sweep_with(found.recipe, 16)), [])
+        return found
+
+    def kinds(self, found):
+        return [s["kind"] for s in found.recipe["segments"]]
+
+    def test_a_chain_met_inside_a_line_splits_the_line(self):
+        found = self.closed_at((20, 0, 0), [1, 0, 0])
+        self.assertEqual(self.kinds(found), ["line", "arc", "line", "arc", "line", "arc", "line", "arc", "line"])
+        self.assertTrue(close(found.recipe["start"], [20, 0]) and close(found.recipe["segments"][0]["to"], [35, 0]))
+        self.assertTrue(close(found.start, [20, 0, 0]) and close(found.end, found.start))
+        self.assertTrue(close(found.direction, [1, 0, 0]))
+        self.assertEqual((found.winding, found.kind), (1, "flat"))
+        self.assertAlmostEqual(found.length, 80 + 10 * math.pi, places=6)
+
+    def test_a_chain_met_inside_an_arc_splits_the_arc(self):
+        found = self.closed_at((5 * S2 + 35, 5 - 5 * S2, 0), [S2, S2, 0])
+        self.assertEqual(self.kinds(found), ["arc", "line", "arc", "line", "arc", "line", "arc", "line", "arc"])
+        self.assertTrue(close(found.recipe["start"], [35 + 5 * S2, 5 - 5 * S2], 1e-8))
+        self.assertTrue(close(found.recipe["segments"][0]["to"], [40, 5], 1e-8))
+
+    def test_a_chain_met_at_the_joint_of_a_line_and_an_arc_is_not_split(self):
+        found = self.closed_at((35, 0, 0), [1, 0, 0])
+        self.assertEqual(self.kinds(found), ["arc", "line", "arc", "line", "arc", "line", "arc", "line"])
+        self.assertTrue(close(found.recipe["start"], [35, 0]))
+
+    def test_a_chain_met_inside_a_free_curve_splits_it_into_two_fitted_parts(self):
+        side = [[5 + 0.5 * k, 0.2 * math.sin(math.pi * 0.5 * k / 30), 0.0] for k in range(61)]
+        curve = {"kind": "other", "start": side[0], "end": side[-1], "samples": side}
+        rim = rounded_rectangle()
+        rim[2] = curve
+        rim[1] = dict(rim[1], end=side[0])
+        rim[3] = dict(rim[3], start=side[-1])
+        found = self.closed_at((20, 0.2, 0), [1, 0, 0], rim)
+        self.assertEqual(found.recipe["segments"][0]["kind"], "spline")
+        self.assertEqual(found.recipe["segments"][-1]["kind"], "spline")
+        self.assertLessEqual(paths._seam_turn(found.recipe["start"], found.recipe["segments"]), paths.SMOOTH_JOIN_DEG)
+
+    def test_a_chain_listed_the_other_way_round_runs_clockwise(self):
+        backwards = paths.turned_round(rounded_rectangle())
+        found = self.closed_at((20, 0, 0), [1, 0, 0], backwards)
+        self.assertEqual(found.winding, -1)
+        self.assertTrue(close(found.direction, [-1, 0, 0]))
+
+    def test_the_outline_may_sit_inside_the_loop_as_long_as_it_clears_the_bends(self):
+        plane, points = at_point((20, 0, 0), [1, 0, 0])
+        points = [vec.add(p, [0, 2, 0]) for p in points]
+        self.assertNotIsInstance(paths.plan(path_of(rounded_rectangle(), frame=XY_SKETCH), plane, points), Refusal)
+
+    def test_a_cut_at_a_sharp_corner_is_refused(self):
+        square = [line((0, 0, 0), (10, 0, 0)), line((10, 0, 0), (10, 10, 0)), line((10, 10, 0), (0, 10, 0)),
+                  line((0, 10, 0), (0, 0, 0))]
+        self.assertEqual(self.closed_at((10, 0, 0), [1, 0, 0], square).reason, paths.CLOSED_AT_CORNER)
+
+    def test_a_sharp_corner_elsewhere_is_refused(self):
+        square = [line((0, 0, 0), (10, 0, 0)), line((10, 0, 0), (10, 10, 0)), line((10, 10, 0), (0, 10, 0)),
+                  line((0, 10, 0), (0, 0, 0))]
+        self.assertEqual(self.closed_at((5, 0, 0), [1, 0, 0], square).reason, paths.SHARP_CORNER)
+
+    def test_a_closed_chain_that_bends_in_3d_is_refused(self):
+        skew = [line((0, 0, 0), (10, 0, 0)), line((10, 0, 0), (10, 10, 0)), line((10, 10, 0), (0, 10, 5)),
+                line((0, 10, 5), (0, 0, 0))]
+        self.assertEqual(self.closed_at((5, 0, 0), [1, 0, 0], skew).reason, paths.CLOSED_3D)
+
+    def test_a_plane_that_misses_the_chain_is_refused(self):
+        self.assertEqual(self.closed_at((60, 0, 0), [1, 0, 0]).reason, paths.OFF_PLANE)
+
+    def test_a_chain_that_meets_the_plane_at_a_slant_is_refused(self):
+        self.assertEqual(self.closed_at((20, 0, 0), [S2, S2, 0]).reason, paths.NOT_SQUARE)
+
+    def test_a_taper_or_a_kept_direction_is_refused(self):
+        for option, reason in (("tapered", paths.CLOSED_TAPER), ("fixed", paths.CLOSED_PARALLEL)):
+            with self.subTest(option):
+                found = self.closed_at((20, 0, 0), [1, 0, 0], as_step=True, **{option: True})
+                self.assertEqual(found.reason, reason)
+
+    def test_an_outline_wider_than_the_bend_is_refused(self):
+        plane, points = at_point((20, 0, 0), [1, 0, 0])
+        wide = [vec.add(p, [0, 6, 0]) for p in points]
+        found = paths.plan(path_of(rounded_rectangle(), frame=XY_SKETCH), plane, wide)
+        self.assertIn("bends in a radius", found.reason)
+
+    def test_a_loop_whose_parts_pass_closer_than_the_outline_allows_is_refused(self):
+        ends = [(20 + 2 * math.sin(math.radians(a)), 2 - 2 * math.cos(math.radians(a))) for a in range(0, 181, 5)]
+        back = [(-x, 4 - y) for x, y in ends]
+        slim = [[x, y, 0.0] for x, y in [(-20, 0)] + ends + back + [(-20, 0)]]
+        self.assertIsNotNone(paths._overlap_refusal(slim, 2.2, True))
+        self.assertIsNone(paths._overlap_refusal(slim, 1.9, True))
+
+    def test_the_start_and_end_of_a_closed_loop_are_neighbours(self):
+        circle = [[10 * math.cos(t), 10 * math.sin(t), 0.0] for t in (2 * math.pi * k / 120 for k in range(121))]
+        circle[-1] = circle[0]
+        self.assertIsNone(paths._overlap_refusal(circle, 1.0, True))
+        self.assertIsNotNone(paths._overlap_refusal(circle, 1.0, False))
+
+    def test_the_written_directions_at_the_seam_are_compared(self):
+        circle = [{"kind": "arc", "through": [10.0, 10.0], "to": [0.0, 20.0]},
+                  {"kind": "arc", "through": [-10.0, 10.0], "to": [0.0, 0.0]}]
+        self.assertAlmostEqual(paths._seam_turn([0.0, 0.0], circle), 0.0, places=6)
+        triangle = [{"kind": "line", "to": [10.0, 0.0]}, {"kind": "line", "to": [10.0, 10.0]},
+                    {"kind": "line", "to": [0.0, 0.0]}]
+        self.assertAlmostEqual(paths._seam_turn([0.0, 0.0], triangle), 135.0, places=6)
+
+
 class RefusalTest(unittest.TestCase):
     def refused(self, curves, reason, **kwargs):
         found = plan(curves, **kwargs)
         self.assertIsInstance(found, Refusal)
         self.assertEqual(found.reason, reason)
-
-    def test_a_closed_chain_other_than_a_circle(self):
-        square = [line((0, 0, 0), (10, 0, 0)), line((10, 0, 0), (10, 10, 0)), line((10, 10, 0), (0, 10, 0)),
-                  line((0, 10, 0), (0, 0, 0))]
-        self.refused(square, paths.CLOSED)
 
     def test_a_path_the_capture_calls_closed_is_not_taken_as_open(self):
         self.refused([line((0, 0, 0), (30, 0, 0))], paths.CLOSED, closed=True)

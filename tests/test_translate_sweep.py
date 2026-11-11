@@ -411,7 +411,7 @@ class PathShapeTest(unittest.TestCase):
     """Paths the recipe cannot hold leave the sweep out as a gap after the block."""
 
     def test_each_path_the_recipe_cannot_hold_leaves_the_sweep_out_with_its_reason(self):
-        cases = (("sweep_closed_outline", paths.CLOSED), ("sweep_sharp_corner", paths.SHARP_CORNER),
+        cases = (("sweep_closed_outline", paths.CLOSED_AT_CORNER), ("sweep_sharp_corner", paths.SHARP_CORNER),
                  ("sweep_middle_outline", paths.BOTH_SIDES), ("sweep_tilted_outline", paths.NOT_SQUARE),
                  ("sweep_bend_3d", paths.BENDS_3D))
         for name, reason in cases:
@@ -485,10 +485,6 @@ class TwistTest(unittest.TestCase):
         self.assertIsNone(translate(plain).refusal)
         twisted = edited_after(plain, twist_deg=10.0)
         self.assertIn("bends in a radius", stopped(translate(twisted))["reason"])
-
-    def test_a_twist_on_a_full_circle_is_left_for_the_closed_paths(self):
-        result = translate(edited("sweep_ring", 2, lambda d: d.update(twist_deg=90.0)))
-        self.assertEqual(stopped(result)["reason"], paths.CLOSED)
 
     def test_a_twist_that_follows_a_size_marks_the_outline_sizes(self):
         outline = Motion({"2/p0/l0/radius": Affine(0, {"wire_mm": 0.5}, "Sketch1")})
@@ -623,9 +619,76 @@ class ParallelTest(unittest.TestCase):
             with self.subTest(len(curves or [])):
                 self.assertEqual(stopped(translate(capture))["reason"], sweep.KEEPS_DIRECTION)
 
-    def test_a_parallel_outline_on_a_full_circle_is_left_for_the_closed_paths(self):
-        result = translate(edited("sweep_ring", 2, lambda d: d.update(orientation="parallel")))
-        self.assertEqual(stopped(result)["reason"], paths.CLOSED)
+
+
+RIM, RIM_ITEM = "sweep_closed_rim", 2
+
+
+def reversed_path(data):
+    data["path"]["curves"] = [dict(c, start=c["end"], end=c["start"], mid=c.get("mid")) if c["kind"] == "arc"
+                              else dict(c, start=c["end"], end=c["start"]) for c in reversed(data["path"]["curves"])]
+
+
+class ClosedTest(unittest.TestCase):
+    """A closed flat path is one sweep step with no end faces; the volume is the area times the length the centre
+    travels."""
+
+    def test_a_rim_round_a_rounded_rectangle_is_a_closed_flat_path(self):
+        result = translate(load_capture(RIM))
+        step = only_sweep(self, result)
+        path = step["path"]
+        self.assertEqual((path["kind"], path["closed"], path["start"]), ("flat", True, [20.0, 0.0]))
+        self.assertEqual(path["segments"][-1]["to"], path["start"])
+        self.assertEqual(len(path["segments"]), 9)
+        self.assertNotIn("twistDeg", step)
+        self.assertEqual(result.recipe["version"], 16)
+        self.assertEqual(verdict_of(result, 2)["verdict"], "translated")
+
+    def test_a_rim_drawn_the_other_way_round_has_the_same_volume(self):
+        capture = edited(RIM, RIM_ITEM, reversed_path)
+        step = only_sweep(self, translate(capture))
+        self.assertEqual(step["path"]["segments"][0], {"kind": "line", "to": [5.0, 0.0]})
+
+    def test_a_volume_that_does_not_match_the_rim_is_refused(self):
+        capture = edited(RIM, RIM_ITEM, lambda d: None)
+        capture["items"][RIM_ITEM]["target_after"]["volume_mm3"] *= 1.1
+        self.assertEqual(stopped(translate(capture))["reason"], sweep.NOT_MATCHING)
+
+    def test_a_full_circle_that_twists_is_a_closed_path_and_a_plain_one_stays_a_revolve(self):
+        result = translate(edited("sweep_ring", 2, lambda d: d.update(twist_deg=360.0)))
+        step = only_sweep(self, result)
+        self.assertEqual([s["kind"] for s in step["path"]["segments"]], ["arc", "arc"])
+        self.assertEqual((step["path"]["closed"], step["twistDeg"], result.recipe["version"]), (True, 360.0, 16))
+        self.assertEqual(len(steps_of(translate(load_capture("sweep_ring")).recipe, "revolve")), 1)
+
+    def test_a_twist_of_whole_turns_is_copied_with_the_note(self):
+        result = translate(load_capture("sweep_closed_twist"))
+        step = only_sweep(self, result)
+        self.assertEqual((step["twistDeg"], step["path"]["closed"]), (360.0, True))
+        self.assertIn("check the shape", verdict_of(result, 2)["note"])
+
+    def test_a_twist_along_a_closed_path_stays_a_number_and_its_size_is_dropped(self):
+        result = sized(load_capture("sweep_closed_twist"))
+        self.assertEqual(only_sweep(self, result)["twistDeg"], 360.0)
+        self.assertEqual([(d["name"], "twist" in d["reason"]) for d in result.dropped], [("spin_deg", True)])
+
+    def test_a_twisting_rim_with_its_centre_off_the_path_has_no_volume_to_check(self):
+        capture = edited_after(load_capture(RIM), twist_deg=720.0)
+        capture["items"][RIM_ITEM]["target_after"]["volume_mm3"] = 1.0
+        self.assertEqual(only_sweep(self, translate(capture))["twistDeg"], 720.0)
+
+    def test_a_twist_that_is_not_whole_turns_is_left_out(self):
+        for name in (RIM, "sweep_ring"):
+            with self.subTest(name):
+                result = translate(edited_after(load_capture(name), twist_deg=90.0))
+                self.assertEqual(stopped(result)["reason"], sweep.TWIST_CLOSED)
+
+    def test_a_taper_or_a_parallel_outline_along_a_closed_path_is_left_out(self):
+        for edit, reason in ((dict(taper_deg=2.0), paths.CLOSED_TAPER),
+                             (dict(orientation="parallel"), paths.CLOSED_PARALLEL)):
+            for name in (RIM, "sweep_ring"):
+                with self.subTest(name, edit=edit):
+                    self.assertEqual(stopped(translate(edited_after(load_capture(name), **edit)))["reason"], reason)
 
 
 if __name__ == "__main__":
