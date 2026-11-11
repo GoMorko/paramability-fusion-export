@@ -182,11 +182,11 @@ def read_curve(geometry, space):
 
 
 def _chord_gap(p, a, b):
-    """Distance of a 2D point from the segment a-b."""
-    dx, dy = b[0] - a[0], b[1] - a[1]
-    size = dx * dx + dy * dy
-    t = 0.0 if size <= 0 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / size))
-    return math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy)
+    """Distance of a point (2D or 3D) from the segment a-b."""
+    d = [bi - ai for ai, bi in zip(a, b)]
+    size = sum(c * c for c in d)
+    t = 0.0 if size <= 0 else max(0.0, min(1.0, sum((pi - ai) * di for pi, ai, di in zip(p, a, d)) / size))
+    return math.sqrt(sum((pi - ai - t * di) ** 2 for pi, ai, di in zip(p, a, d)))
 
 
 def _start_spans(geometry):
@@ -214,13 +214,14 @@ def _own_length_mm(evaluator, low, high):
 
 
 def _chord_length(points):
-    return sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(points, points[1:]))
+    return sum(math.dist(a, b) for a, b in zip(points, points[1:]))
 
 
-def _dense_samples(geometry, space):
-    """([[x, y], ...], truncated): the curve as a polyline within `_CHORD_TOL_MM` of it, or None when the curve
-    cannot be evaluated. `truncated` is set when the point cap stopped the refinement or when the chords do not add up
-    to the curve's own length (so the samples do not stand for the whole curve)."""
+def dense_samples(geometry, space):
+    """([point, ...], truncated): the curve as a polyline within `_CHORD_TOL_MM` of it, or None when the curve
+    cannot be evaluated. The points are what `space.xy` gives (2D, or 3D for a path). `truncated` is set when the
+    point cap stopped the refinement or when the chords do not add up to the curve's own length (so the samples do
+    not stand for the whole curve)."""
     evaluator = geo.safe(lambda: geometry.evaluator, None)
     extents = geo.safe(lambda: evaluator.getParameterExtents(), None)
     if not extents or not extents[0]:
@@ -278,7 +279,7 @@ def _end_direction(geometry, space, parameter_at_end):
 def _read_free_curve(geometry, name, space):
     """A curve that is not a line, circle, arc or ellipse (a spline, an elliptical arc): its dense samples, ends,
     middle point and end directions. A curve that cannot be evaluated has no samples and is refused later."""
-    dense = _dense_samples(geometry, space)
+    dense = dense_samples(geometry, space)
     samples, truncated = dense if dense else ([], False)
     record = {
         "kind": "other",

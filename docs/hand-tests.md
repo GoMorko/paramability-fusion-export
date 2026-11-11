@@ -1388,6 +1388,39 @@ Emboss tests of section 10 and read the capture in `report.json`.
   at the marker before and after the item.
 - `SketchText.parentSketch` for the sketch of a text item (X1).
 
+## Capture reader calls to watch (sweep and loft)
+
+These members were written from the API reference and never run. A member that cannot be read, or that the running
+Fusion build does not have, gives `null` in the capture of the step, so a wrong guess shows up in `report.json` and
+the step stays a gap. Export a design with a sweep (straight path, a path of lines and arcs, a closed circle, a path
+of body edges, a guide rail) and one with a loft (two outlines, a point end, a tangent end, rails, a centre line,
+Closed on), and read the `data` of each step.
+
+- `SweepFeature.path` and `guideRail` as `Path` objects: `Path.count`, `Path.item(i)` and `Path.isClosed`. Note the
+  order of `curves` and the `opposed` flags for a path drawn from the far end towards the outline.
+- `PathEntity.entity` is a sketch curve or a `BRepEdge`. The reader maps `SketchCurve.geometry` (assumed to be in
+  sketch space) with the sketch's `transform` into the component frame. `PathEntity.curve` is read only as `check`
+  (its start and end). In a design where the component is moved in the assembly, `check` and `curves[].start` and `end`
+  must agree in the component's frame. A 3D sketch path must keep `flat` null for curves off the plane.
+- `BRepEdge.geometry` (native object, component frame) for path edges, and the edge records in `path.edges`. An edge
+  of another component must be marked `foreign`.
+- `SweepFeature.orientation` (`SweepOrientationTypes`, read as `perpendicular` or `parallel`), `profileScaling`
+  (`SweepProfileScalingOptions`, read as `scale`, `stretch` or `none`) and `extent`. Check which of these exist in the
+  running Fusion build: `extent` in particular may be missing and then reads as null.
+- `distanceOne`, `distanceTwo`, `taperAngle` and `twistAngle` as `ModelParameter`s: `distance_one` and `distance_two`
+  are assumed to be the share of the path (1 and 0 for a full sweep). Note the values for an outline at one end and in
+  the middle of the path, and the sign of the taper and the twist.
+- `SweepFeature.startFaces` and `endFaces`, and `LoftFeature.startFace` and `endFace`, with the marker after the item
+  (`faces_after`): a point on each made end cap and its outward normal.
+- `LoftFeature.loftSections` and `LoftSection.entity`: the entity type decides the section kind (`Profile`, a sketch
+  or construction point, `BRepVertex`, `BRepFace`, a `Path`). Note which type a point end gives.
+- `LoftSection.endCondition` type names (`LoftFreeEndCondition`, `LoftDirectionEndCondition`,
+  `LoftTangentEndCondition`, `LoftSmoothEndCondition`, `LoftPointSharpEndCondition`,
+  `LoftPointTangentEndCondition`) and their `angle` and `weight` members (read as model parameters when they are).
+  A name that does not match reads as `other`.
+- `LoftFeature.centerLineOrRails` (`count`, `isCenterLine`, `item(i)`): what it returns when the loft has neither
+  (assumed null or an empty collection, read as no rails), and `isClosed`, `isTangentEdgesMerged`.
+
 ## Capture reader calls to watch (thin extrude)
 
 These members and values were written from the API reference and never run. A member that cannot be read gives

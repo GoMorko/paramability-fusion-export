@@ -1107,6 +1107,99 @@ tangent neighbour that is curved or not on the input plane (when the neighbours 
 face), and a measured volume change that is not
 `sum(areas) * abs(depth)` within 1 percent in the direction the sign of `depth` says.
 
+**SweepFeature** and **LoftFeature** (`lib/fusion_reader/read_sweep.py`; the types are listed in the step kind table
+without a handler, so a step of either type becomes a gap that holds this data):
+
+```json
+{
+  "operation": "join", "solid": true,
+  "profiles": [ ... ], "areas": [120.5],
+  "path": PATH, "rail": null,
+  "orientation": "perpendicular", "distance_one": 1.0, "distance_two": 0.0,
+  "taper_deg": 0.0, "twist_deg": 0.0, "scaling": "scale", "extent": null,
+  "participants": [{ "token": "...", "name": "Body1" }],
+  "target_box_before": { "min": [..], "max": [..] },
+  "params": { "distance_one": {..}, "taper_deg": {..}, "twist_deg": {..} },
+  "faces_after": { "start": [{ "point": [x, y, z], "normal": [x, y, z] }], "end": [ ... ] }
+}
+```
+
+- Sweep: `profiles` and `areas` are `SweepFeature.profile` read like an extrude's outline (section 4, a flat face
+  included). `path` is `SweepFeature.path`; `rail` is `guideRail` read the same way, null when there is none.
+  `orientation` is `perpendicular`, `parallel` or `other`. `distance_one` and `distance_two` are the unitless
+  `distanceOne` and `distanceTwo` (the share of the path the sweep covers), `taper_deg` and `twist_deg` are
+  `taperAngle` and `twistAngle` in degrees. `scaling` (`profileScaling`) is `scale`, `stretch`, `none` or `other`.
+  `extent` is the `extent` setting as text. Every one of these is null when the member cannot be read or does not
+  exist in the running Fusion build, which holds for `extent` in particular. `params` follows the usual rules (the
+  scalar ones have kind `scalar`).
+- `faces_after`: a point and the outward normal of the made start and end faces (`startFaces` and `endFaces` of a
+  sweep, `startFace` and `endFace` of a loft), read with the marker after the item. Each side is null when the member
+  cannot be read. The key is not a pick.
+
+PATH, the record of a `Path` (a sweep's path or guide rail, a loft's rails and centre line):
+
+```json
+{
+  "closed": false, "kind": "sketch",
+  "sketch": "Sketch3", "sketch_token": "...", "frame": FRAME,
+  "curves": [
+    { "kind": "line", "start": [x, y, z], "end": [x, y, z], "opposed": false, "entity": "<token>",
+      "flat": { "kind": "line", "start": [x, y], "end": [x, y] },
+      "check": { "start": [x, y, z], "end": [x, y, z] } }
+  ],
+  "edges": []
+}
+```
+
+- `kind`: `sketch` (every entity is a curve of one sketch; only then `sketch`, `sketch_token` and `frame` are set),
+  `edges` (every entity is a body edge), `mixed` (edges and sketch curves, or curves of several sketches) or `other`
+  (an entity that is neither, or one that cannot be read). `closed` is `Path.isClosed`.
+- `curves`: every `PathEntity` in path order, with the geometry in the target component's coordinates: `line`
+  (`start`, `end`), `arc` (`start`, `end`, `mid`, `center`, `normal`, `radius`), `circle` (`center`, `normal`,
+  `radius`) or `other` (`type` and dense 3D `samples`, as for a free profile curve, with `truncated` when the sampling
+  was cut). A sketch curve is read from `SketchCurve.geometry` (sketch space) and mapped with the sketch's
+  `transform`. `flat` is the same curve in the sketch's own 2D frame (a profile curve record), null for an edge and for
+  a curve that leaves the sketch plane. `entity` is the token of the sketch curve or edge, `opposed` is
+  `PathEntity.isOpposedToEntity`, and `check` holds the end points of `PathEntity.curve`, read only to compare with
+  the mapped curve in a moved component (hand test SW13). An entity that cannot be read is `{ "kind": "other",
+  "type": ... }`.
+- `edges`: an edge record (`token`, `closed`, `points`, as for a round's edges) for each body edge of the path. The key
+  name makes them pick records, so a sweep along edges of a step that is left out is left out too.
+- A curve or edge of another component carries `"foreign": true`, and so does the path record.
+
+Loft `data`:
+
+```json
+{
+  "operation": "newBody", "solid": true,
+  "profiles": [ PROFILE, PROFILE ], "areas": [ .. ],
+  "sections": [
+    { "kind": "profile", "profile": 0, "end": "free" },
+    { "kind": "profile", "profile": 1, "end": "direction", "angle": 10.0, "weight": 1.5 },
+    { "kind": "point", "point": [x, y, z], "end": "pointSharp" },
+    { "kind": "face", "face": FACE, "end": "free" },
+    { "kind": "other", "type": "Path", "end": null }
+  ],
+  "rails": [ PATH ], "centerline": null,
+  "closed": false, "merge_tangent": true,
+  "participants": [ .. ], "target_box_before": { .. },
+  "params": { "sections.1.angle": {..}, "sections.1.weight": {..} },
+  "faces_after": { "start": [..], "end": [..] }
+}
+```
+
+- `sections`: `LoftFeature.loftSections` in order, null when they cannot be listed. `kind` is `profile` (a `Profile`:
+  its record is appended to `profiles` and `areas`, and `profile` is its place there, so the size probe follows the
+  sketches under the usual keys), `point` (a sketch point, construction point or vertex, in the component frame),
+  `face` (a `BRepFace`, as the face record of section 4, under a key the probe does not follow) or `other` (with the
+  entity `type`, `Path` for a chain of curves).
+- `end`: the `LoftSection.endCondition` as `free`, `direction`, `tangent`, `smooth`, `pointSharp`, `pointTangent` or
+  `other`; null when it cannot be read. `angle` (degrees) and `weight` are added where the condition has them, and
+  the ones that are model parameters are in `params` as `sections.<n>.angle` and `sections.<n>.weight`.
+- `rails` and `centerline` come from `centerLineOrRails`: `rails` is the list of rail paths (empty when there are
+  none), `centerline` the path when `isCenterLine` is true (then `rails` is empty). Both are null when the member
+  cannot be read. `closed` is `isClosed`, `merge_tangent` is `isTangentEdgesMerged`.
+
 ### Inputs from another component (`foreign`)
 
 A record whose entity does not belong to the target's component carries `"foreign": true`; the key is absent

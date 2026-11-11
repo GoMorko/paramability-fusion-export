@@ -29,7 +29,7 @@ _TAP_TYPES = [("taper", "taperTapped"), ("tapped", "tapped"), ("clearance", "cle
 _FULL_TURN_DEG = 360.0 - 1e-6
 
 
-def _operation(value):
+def operation_of(value):
     return geo.pick_by_text(geo.enum_name(value, "FeatureOperations"), _OPERATIONS, "other")
 
 
@@ -183,7 +183,7 @@ def extrude_before(feature, ctx):
         side_one = _extent(feature.extentOne, _taper(feature, "taperAngleOne"), ctx, "side_one")
         if extent_type == "two":
             side_two = _extent(feature.extentTwo, _taper(feature, "taperAngleTwo"), ctx, "side_two")
-    operation = _operation(feature.operation)
+    operation = operation_of(feature.operation)
     profiles, areas = read_outlines(feature.profile, ctx, before=geo.safe(lambda: feature.timelineObject.index, None))
     data = {
         "operation": operation,
@@ -342,7 +342,7 @@ def _revolve_extent(definition):
 
 def revolve_before(feature, ctx):
     return with_params({
-        "operation": _operation(feature.operation),
+        "operation": operation_of(feature.operation),
         "profiles": read_profiles(feature.profile, ctx),
         "axis": revolve_axis(feature, ctx),
         "project_axis": geo.safe(lambda: bool(feature.isProjectAxis), None),
@@ -545,7 +545,7 @@ def _tool_bodies(collection, ctx):
 
 
 def combine_before(feature, ctx):
-    operation = _operation(feature.operation)
+    operation = operation_of(feature.operation)
     tools = _tool_bodies(feature.toolBodies, ctx)
     data = {
         "target": geo.body_ref(feature.targetBody, ctx),
