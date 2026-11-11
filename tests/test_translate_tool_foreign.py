@@ -171,18 +171,18 @@ class RefusedToolTest(unittest.TestCase):
         self.assertIsNotNone(left_out(result))
         return left_out(result)
 
-    def test_a_round_on_the_tool_stops_the_copy_and_names_the_step_and_the_component(self):
+    def test_a_round_on_the_tool_leaves_the_combine_out_and_names_the_step_and_the_component(self):
         refusal = self.refusal(self.step_before_combine("FilletFeature", "Fillet1"))
         self.assertEqual(refusal["name"], "Combine1")
         self.assertIn("Fillet1", refusal["reason"])
         self.assertIn("Rod", refusal["reason"])
 
-    def test_a_pasted_tool_and_a_moved_tool_that_were_not_read_stop_the_copy_and_name_the_step(self):
+    def test_a_pasted_tool_and_a_moved_tool_that_were_not_read_leave_the_combine_out_and_name_the_step(self):
         for kind in ("CopyPasteBody", "MoveFeature"):
             with self.subTest(kind):
                 self.assertIn("Step1", self.refusal(self.step_before_combine(kind, "Step1"))["reason"])
 
-    def test_a_step_that_was_not_read_stops_the_copy_and_says_why(self):
+    def test_a_step_that_was_not_read_leaves_the_combine_out_and_says_why(self):
         capture = self.step_before_combine("ExtrudeFeature", "Extrude9", {})
         del capture["items"][7]["helper_of"]
         capture["items"][7]["helper_unread"] = "the export reads at most 40 steps of tool bodies"
@@ -190,17 +190,17 @@ class RefusedToolTest(unittest.TestCase):
         self.assertIn("Extrude9", reason)
         self.assertIn("at most 40", reason)
 
-    def test_a_step_that_could_not_be_read_stops_the_copy(self):
+    def test_a_step_that_could_not_be_read_leaves_the_combine_out(self):
         capture = load_capture(NAME)
         capture["items"][6]["data"] = {"read_error": "boom"}
         self.assertIn("Extrude2", self.refusal(capture)["reason"])
 
-    def test_a_step_that_reaches_into_a_third_component_stops_the_copy(self):
+    def test_a_step_that_reaches_into_a_third_component_leaves_the_combine_out(self):
         capture = load_capture(NAME)
         capture["items"][6]["data"]["side_one"] = {"kind": "toEntity", "foreign": True}
         self.assertIn("another component", self.refusal(capture)["reason"])
 
-    def test_a_tool_whose_place_cannot_be_used_stops_the_copy_and_names_the_component(self):
+    def test_a_tool_whose_place_cannot_be_used_leaves_the_combine_out_and_names_the_component(self):
         cases = {
             "error": lambda t, c: t.update(place={"path": "Rod:1", "error": "No planes of the component could be compared."}),
             "scaled": lambda t, c: t["place"]["frame"].update(x=[2, 0, 0]),
@@ -218,7 +218,7 @@ class RefusedToolTest(unittest.TestCase):
             del tool["place"]
         self.assertIn("another component", self.refusal(with_tool(edit))["reason"])
 
-    def test_a_tool_of_a_third_component_inside_the_tool_stops_the_copy(self):
+    def test_a_tool_of_a_third_component_inside_the_tool_leaves_the_combine_out(self):
         capture = load_capture(NAME)
         third = {"token": "t9", "name": "Body9", "foreign": True, "component": {"token": "c3", "name": "Third"},
                  "place": {"frame": capture["items"][-1]["data"]["tools"][0]["place"]["frame"]}}

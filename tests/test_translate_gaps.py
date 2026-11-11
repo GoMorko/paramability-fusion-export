@@ -57,7 +57,6 @@ class LeftOutTest(unittest.TestCase):
         self.assertEqual(gap_names(result)[0], "Shell1")
 
 
-
 def _at_shell(**changes):
     def edit(capture):
         capture["items"][SHELL].update(changes)

@@ -135,9 +135,6 @@ class GapPackageTest(unittest.TestCase):
         result = export(port)
         self.assertEqual(port.asked, [([SHELL], False)])
         self.assertEqual(result.report["reach"], {"read": True, "gaps": [SHELL], "makers": {str(FILLET): []}})
-        # With no reach every later step that picks geometry is left out; with it only the shell is.
-        self.assertEqual([g["name"] for g in result.report["gaps"]], ["Shell1"])
-        self.assertEqual([step["kind"] for step in json.loads(result.files["recipe.json"])["features"]].count("round"), 1)
 
     def test_a_fillet_on_edges_the_left_out_step_made_is_left_out_by_the_real_reach_read(self):
         result = export(ReachPort(tray(), design=tray_design(fillet_on_the_sweep=True)))

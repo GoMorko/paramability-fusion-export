@@ -1310,11 +1310,12 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
 - Only steps whose result reaches the exported body count. The steps of another body are walked on their own when a
   Combine takes that body (`tool_walk.build`): the sizes they cannot follow join the walk only when the Combine writes
   them, and only then do its items count for the audit.
-- A step with no handler stops the copy, with two exceptions that the capture proves harmless: a step that lists no
-  body and whose `target_changed` is false (a Remove of another body) is skipped, and so is a Split Face of the exported
-  body with `target_changed` false, with the note that picks on its faces may not follow. In the walk of a tool,
-  `target_changed` is false when `body_states` shows the tool's volume unchanged. A step of another body that
-  has no handler is helper geometry and is skipped. A `target_changed` of true or null keeps the stop.
+- A step with no handler is left out as a gap (`docs/recipe-gaps.md`), with two exceptions that the capture proves
+  harmless: a step that lists no body and whose `target_changed` is false (a Remove of another body) is skipped, and so
+  is a Split Face of the exported body with `target_changed` false, with the note that picks on its faces may not
+  follow. In the walk of a tool, `target_changed` is false when `body_states` shows the tool's volume unchanged. A step
+  of another body that has no handler is helper geometry and is skipped. A `target_changed` of true leaves the step out
+  as a gap, and null stops the copy.
 - A copied step that Fusion reports with a `warning` health gets a note with Fusion's message.
 - The copy limits (`MAX_PATTERN_COPIES`, `MAX_FEATURES`, `MAX_NEAR_POINTS`) are checked at the current values; a pattern
   count that can pass its limit inside the size ranges (`range_check.sweep`) marks the sizes it reads.

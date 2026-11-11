@@ -541,7 +541,7 @@ Pick two or more bodies in the body picker of Export for Paramability. Open the 
 - [ ] **P2 Time.** Export 2, 4 and 8 bodies of a real design with sketches. Note the time and the number of probe
       rows in `report.json` (`parts[].probe.states`). The export reads each body's steps once (N captures) and tries
       the sketches over one set of rows of at most 64.
-- [ ] **P3 Fixed shape.** One picked body has a Sweep (or another step that stops the copy), the other copies. The
+- [ ] **P3 Fixed shape.** One picked body starts with a Sweep (a step before the first copied one stops the copy), the other copies. The
       warning under the picker names the first body. The file holds an editable part and a fixed shape with a note;
       the editable part keeps its sizes.
 - [ ] **P4 Moves in the assembly.** A size that drives a joint offset moving one of the bodies. Tick it: it is marked
@@ -555,7 +555,7 @@ A Combine in the exported body's component can take a tool body made in another 
 that made the tool a second time (in the tool component's own frame), carries them to the Combine's place with the
 tool component's place in the assembly, and writes them with the Combine's operation. Look in `report.json` at the
 Combine's `data.tools[]` (`component`, `path`, `place` with `frame`, `target_frame` and the three plane `ref`s) and at
-the items of the tool component (`helper_of`, `data`). A tool step that cannot be copied stops the copy, and the
+the items of the tool component (`helper_of`, `data`). A tool step that cannot be copied leaves the Combine out as a gap, and the
 reason names the step and the component. The tool is written as a tool step, like a tool of the same component
 ("Tool bodies").
 
@@ -580,7 +580,7 @@ reason names the step and the component. The tool is written as a tool step, lik
       and without the tool (the second pass moves the marker at most twice per tool step, and not for other steps).
       More than 120 tool steps stop the copy ("reads at most 120 steps").
 - [ ] **G6 Tool with a fillet.** Round the edges of the `Rod` body before the Combine: the tool step holds the round
-      and it follows the sizes of `Rod`. A tool with a sweep stops the copy and the reason names the sweep and `Rod`.
+      and it follows the sizes of `Rod`. A tool with a sweep leaves the Combine out and the reason names the sweep and `Rod`.
 - [ ] **G7 Tool component moved by a size.** Move `Rod` with a ticked parameter (an offset on a joint or a move
       driven by `rod_x`). The probe request lists three `refs` per tool (`<Combine index>.tool0.xy|xz|yz`) and
       `probe.motion.refs` marks them measured. The cut follows the move in Paramability (the recipe positions are
@@ -863,7 +863,7 @@ A Combine takes its tool bodies as they stand at the Combine. A tool made only b
 step by step. Any other tool is written as one tool step that holds the steps that made it (cuts, rounds, chamfers,
 holes, shells, a Combine of its own, Copy Paste Body, Move, patterns and mirrors of bodies). Look in `report.json` at
 the Combine's verdict: `tool_steps` holds the verdicts of the items inside the tools, and the recipe shows a `toolBody`
-step with its own `features`. A step that cannot be copied stops the copy and the reason names it, for example "The
+step with its own `features`. A step that cannot be copied is left out as a gap (inside the tool, or the whole Combine when the tool cannot be built) and the reason names it, for example "The
 tool body Body3 cannot be copied: Sweep1 (sweep)". The calls behind these tests are listed under "Capture reader calls
 to watch (tool bodies)". Use a design with a user parameter behind a tool's size, and check each result in
 Paramability against the STEP, at the current sizes and at one other size.
@@ -925,7 +925,7 @@ Paramability against the STEP, at the current sizes and at one other size.
       stops with "was used up by an earlier combine".
 - [ ] **B10 Export the kept tool.** Export the kept tool body itself. The Combine that kept it is skipped (its target
       is another body) and the tool is copied with its own steps.
-- [ ] **B11 Sweep in a tool.** A tool made by a sweep (or a loft). The copy stops, naming the sweep and the tool body.
+- [ ] **B11 Sweep in a tool.** A tool made by a sweep (or a loft). The Combine is left out as a gap, naming the sweep and the tool body.
       Nothing is guessed.
 - [ ] **B12 Time and a real design.** A design with about 20 tool steps: note the export time with and without the
       tools (a tool is walked once per pass of the sizes). Then export the body of the real design that has Combines

@@ -86,7 +86,6 @@ class SameOutlineTest(unittest.TestCase):
             base["sketch"], on=dict(base["sketch"]["on"], origin=[0, 0, 0])))))
         assert_schema_ok(self, result.recipe)
 
-
     def test_a_cut_between_that_reaches_the_face_only_at_other_sizes_marks_the_sizes(self):
         # A pocket from the base whose depth follows pipe_d_mm: at 12 mm it stays below the 32 mm top face.
         made = face(UP, square((0, 0), (80, 60)), [40, 30, 32], {"index": 1, "name": "Extrude1", "which": "end"})

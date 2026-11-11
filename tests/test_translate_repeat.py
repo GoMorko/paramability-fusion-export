@@ -283,7 +283,6 @@ class MirrorTest(unittest.TestCase):
         faces = edited("mirror_features", lambda c: pattern_data(c).update(entity_type="faces"))
         for result in (no_plane, faces):
             self.assertIsNotNone(left_out(result))
-            self.assertIsNotNone(left_out(result))
 
 
 class RepeatedStepsTest(unittest.TestCase):
