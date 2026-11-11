@@ -328,8 +328,9 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   square to it, and runs one way. A straight path becomes an extrude, one arc or a full circle becomes a revolve, and
   a chain of lines, arcs and spline curves in one plane, or of lines joined by tangent arcs in 3D, becomes a sweep
   step. A path of body edges is copied as measured, and such a step cannot be repeated by a pattern. The path is
-  written as measured: a size that moves the sketch of the path is marked "may give unexpected results". The outline
-  follows sizes like an extrude outline. These sweeps are left out of the copy: twist or taper, a guide rail,
+  written as measured: a size that moves the sketch of the path (or the plane, face or projected edges it sits on), or
+  the plane of the outline, or that can make the outline reach past the tightest bend, is marked "may give
+  unexpected results". The outline follows sizes like an extrude outline. These sweeps are left out of the copy: twist or taper, a guide rail,
   parallel orientation on a bent path, several outlines at once, an outline that is a face of the part, a path of
   sketch curves mixed with edges, a closed path other than one circle, a sharp corner in the path, a path that
   crosses itself or bends tighter than the outline allows, a path in 3D with splines or arcs that are not tangent, an

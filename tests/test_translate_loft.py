@@ -93,6 +93,12 @@ class LoftSizesTest(unittest.TestCase):
         self.assertEqual((result.fixed, result.loose, result.dropped), ([], [], []))
         assert_schema_ok(self, result.recipe)
 
+    def test_an_outline_from_another_component_marks_the_sizes_of_its_sketch(self):
+        capture = load_capture(SQUARES)
+        loft_data(capture)["profiles"][0]["borrowed"] = "Lid"
+        result = run(capture, SIZES, motion_of(SQUARES))
+        self.assertEqual([f["name"] for f in result.loose], ["base_mm"])
+
     def test_without_the_sketch_values_no_size_behind_a_sketch_stays_free(self):
         result = run(load_capture(SQUARES), SIZES, None)
         self.assertEqual(steps_of(result.recipe, "loft")[0]["sections"][1]["on"]["origin"][2], 30.0)

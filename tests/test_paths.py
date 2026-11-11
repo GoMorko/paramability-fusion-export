@@ -212,6 +212,15 @@ class OrderTest(unittest.TestCase):
         self.assertTrue(found.reversed)
         self.assertTrue(close(found.start, [0, -1, 0]) and close(found.end, [0, 0, 0]))
 
+    def test_when_both_ends_leave_square_the_one_nearest_the_outline_starts_the_path(self):
+        hook = [line((0, 0, 0), (10, 0, 0)), arc((10, 0, 0), (10, 6, 0), (13, 3, 0), (10, 3, 0)),
+                line((10, 6, 0), (0, 6, 0))]
+        points = [[0, y, z] for y in (5.5, 6.5) for z in (-0.5, 0.5)]
+        found = plan(hook, points=points)
+        self.assertTrue(found.reversed)
+        self.assertTrue(close(found.start, [0, 6, 0]) and close(found.end, [0, 0, 0]))
+        self.assertFalse(plan(hook, points=[[0, y, z] for y in (-0.5, 0.5) for z in (-0.5, 0.5)]).reversed)
+
     def test_a_curve_run_backwards_keeps_its_middle_and_swaps_its_ends(self):
         flipped = paths.turned_round([quarter([0, 5, 0], [0, -1, 0], [1, 0, 0], 5)])[0]
         self.assertTrue(close(flipped["start"], [5, 5, 0]) and close(flipped["end"], [0, 0, 0]))

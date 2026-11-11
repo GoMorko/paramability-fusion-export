@@ -370,7 +370,7 @@ def _borrowed(proxy, sketch, frame, ctx):
 _REFERENCE_KINDS = {"ConstructionPlane": "constructionPlane", "BRepFace": "face", "Plane": "plane"}
 
 
-def _reference(sketch, ctx):
+def sketch_reference(sketch, ctx):
     """{ kind, token } of what the sketch sits on (`Sketch.referencePlane`), or None when it cannot be read."""
     entity = geo.safe(lambda: sketch.referencePlane, None)
     if entity is None:
@@ -420,7 +420,7 @@ def read_profile(profile, ctx=None):
     token = geo.safe(lambda: sketch.entityToken, "")
     if token:
         record["sketch_token"] = token
-    reference = _reference(sketch, ctx)
+    reference = sketch_reference(sketch, ctx)
     if reference is not None:
         record["reference"] = reference
     if proxy is not None:
@@ -516,7 +516,7 @@ def read_text_outlines(text, ctx=None):
     token = geo.safe(lambda: sketch.entityToken, "")
     if token:
         base["sketch_token"] = token
-    reference = _reference(sketch, ctx)
+    reference = sketch_reference(sketch, ctx)
     if reference is not None:
         base["reference"] = reference
     profiles = [dict(base, loops=outline["loops"]) for outline in found]

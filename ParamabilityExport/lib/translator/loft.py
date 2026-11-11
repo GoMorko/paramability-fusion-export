@@ -8,7 +8,7 @@ Refused, with the step left out as a gap: more than two outlines, a section that
 outline, end conditions other than free, rails, a centre line, a closed loft, outlines with different numbers of
 openings, and outlines whose planes cross or touch (the kernel needs the sections in order along the loft).
 """
-from . import loops, placement, sketch_motion, vec
+from . import borrowed, loops, placement, sketch_motion, vec
 from .extrude import COMBINE
 from .footprint import polyline
 from .result import Refusal, StepResult
@@ -173,6 +173,7 @@ def handle(item, ctx):
 
     sections = []
     for number, (profile, (outer, inners)) in enumerate(zip(profiles, built)):
+        borrowed.mark_unchecked(ctx, item, profile)
         drawn = sketch_motion.outline(ctx, item, profile, outer, inners, [(number, profile)])
         if drawn is not None:
             outer, inners = drawn.written(ctx)

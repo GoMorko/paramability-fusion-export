@@ -1125,7 +1125,8 @@ face), and a measured volume change that is not
 ```
 
 - Sweep: `profiles` and `areas` are `SweepFeature.profile` read like an extrude's outline (section 4, a flat face
-  included). `path` is `SweepFeature.path`; `rail` is `guideRail` read the same way, null when there is none.
+  included). `path` is `SweepFeature.path`; `rail` is `guideRail` read the same way, null when there is none and
+  `{ "kind": "unread" }` when the member raised (the sweep is then left out).
   `orientation` is `perpendicular`, `parallel` or `other`. `distance_one` and `distance_two` are the unitless
   `distanceOne` and `distanceTwo` (the share of the path the sweep covers; the translator takes 1 and 0 or null as the whole path), `taper_deg` and `twist_deg` are
   `taperAngle` and `twistAngle` in degrees. `scaling` (`profileScaling`) is `scale`, `stretch`, `none` or `other`.
@@ -1147,13 +1148,19 @@ PATH, the record of a `Path` (a sweep's path or guide rail, a loft's rails and c
       "flat": { "kind": "line", "start": [x, y], "end": [x, y] },
       "check": { "start": [x, y, z], "end": [x, y, z] } }
   ],
-  "edges": []
+  "edges": [],
+  "reference": { "kind": "constructionPlane", "token": "..." }, "projected": false
 }
 ```
 
-- `kind`: `sketch` (every entity is a curve of one sketch; only then `sketch`, `sketch_token` and `frame` are set),
+- `kind`: `sketch` (every entity is a curve of one sketch; only then `sketch`, `sketch_token`, `frame`, `reference` and
+  `projected` are set),
   `edges` (every entity is a body edge), `mixed` (edges and sketch curves, or curves of several sketches) or `other`
-  (an entity that is neither, or one that cannot be read). `closed` is `Path.isClosed`.
+  (an entity that is neither, or one that cannot be read). `closed` is `Path.isClosed`. `truncated` is true when the
+  path has more than 256 entities: only the first 256 are read, and the sweep is not copied.
+- `reference`: what the path sketch sits on, as on a profile record (`{ kind, token }` from `Sketch.referencePlane`,
+  null when it cannot be read); `projected` is true when the sketch holds projected (reference) curves, null when
+  that cannot be read. The translator marks the sizes that move such a plane, face or projection.
 - `curves`: every `PathEntity` in path order, with the geometry in the target component's coordinates: `line`
   (`start`, `end`), `arc` (`start`, `end`, `mid`, `center`, `normal`, `radius`), `circle` (`center`, `normal`,
   `radius`) or `other` (`type` and dense 3D `samples`, as for a free profile curve, with `truncated` when the sampling
@@ -1163,8 +1170,9 @@ PATH, the record of a `Path` (a sweep's path or guide rail, a loft's rails and c
   `PathEntity.isOpposedToEntity`, and `check` holds the end points of `PathEntity.curve`, read only to compare with
   the mapped curve in a moved component (hand test SW13). An entity that cannot be read is `{ "kind": "other",
   "type": ... }`.
-- `edges`: an edge record (`token`, `closed`, `points`, as for a round's edges) for each body edge of the path. The key
-  name makes them pick records, so a sweep along edges of a step that is left out is left out too.
+- `edges`: an edge record (`token`, `closed`, `points`, as for a round's edges, and `body`, the body the edge lies
+  on, when Fusion gives it) for each body edge of the path. The key name makes them pick records, so a sweep along
+  edges of a step that is left out is left out too.
 - A curve or edge of another component carries `"foreign": true`, and so does the path record.
 
 Loft `data`:

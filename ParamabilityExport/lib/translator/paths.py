@@ -74,6 +74,7 @@ class PathPlan:
       coordinates, `bendRadius` one number when every bend has it, else one per inner point.
     axis: for an arc or circle, `{ "point": centre, "dir": unit }` with the path turning positively about `dir`.
     radius, angle_deg: for an arc or circle (360).
+    tightest: for a `flat` or `corners` path, the radius of its tightest bend (infinity when it has none).
     """
 
     kind: str
@@ -87,6 +88,7 @@ class PathPlan:
     axis: Optional[dict] = None
     radius: Optional[float] = None
     angle_deg: Optional[float] = None
+    tightest: float = math.inf
 
 
 # ---- curves -----------------------------------------------------------------------------------------------------
@@ -286,7 +288,7 @@ def _plan(path, profile_frame, profile_points):
     if closed or path.get("closed"):
         return Refusal(CLOSED)
     origin, normal = profile_frame["origin"], vec.unit(profile_frame["z"])
-    oriented = _toward_plane(ordered, origin, normal)
+    oriented = _toward_plane(ordered, origin, normal, profile_points)
     if isinstance(oriented, Refusal):
         return oriented
     ordered, reversed_ = oriented
@@ -321,14 +323,21 @@ def _distances(ordered, origin, normal):
     return [vec.dot(vec.sub(p, origin), normal) for c in ordered for p in _polyline(c)]
 
 
-def _toward_plane(ordered, origin, normal):
+def _toward_plane(ordered, origin, normal, profile_points):
     """`(chain, reversed)` with the chain starting on the plane, or a Refusal when neither end lies on it. When both
-    ends do, the one the path leaves at a right angle wins."""
+    ends do, the one the path leaves at a right angle wins; when both leave square, the one nearest the outline."""
     first = abs(vec.dot(vec.sub(ordered[0]["start"], origin), normal)) <= PLANE_TOL
     last = abs(vec.dot(vec.sub(ordered[-1]["end"], origin), normal)) <= PLANE_TOL
     if first and last:
-        if _off_square(_tangents(ordered[0])[0], normal) and not _off_square(_tangents(ordered[-1])[1], normal):
-            return turned_round(ordered), True
+        square_first = not _off_square(_tangents(ordered[0])[0], normal)
+        square_last = not _off_square(_tangents(ordered[-1])[1], normal)
+        if square_first != square_last:
+            return (ordered, False) if square_first else (turned_round(ordered), True)
+        if profile_points:
+            mean = [sum(p[i] for p in profile_points) / len(profile_points) for i in range(3)]
+            if (vec.length(vec.sub(ordered[-1]["end"], mean)) + 1e-9
+                    < vec.length(vec.sub(ordered[0]["start"], mean))):
+                return turned_round(ordered), True
         return ordered, False
     if first:
         return ordered, False
@@ -507,7 +516,7 @@ def _flat_plan(base, ordered, frame, profile_points):
         "start": _round2(local(ordered[0]["start"])),
         "segments": segments,
     }
-    return PathPlan(kind="flat", recipe=recipe, **base)
+    return PathPlan(kind="flat", recipe=recipe, tightest=tightest, **base)
 
 
 def _round2(p):
@@ -603,7 +612,7 @@ def _corners_plan(base, ordered, junctions, profile_points):
         "points": [_round(p) for p in points],
         "bendRadius": round9(radii[0]) if max(radii) - min(radii) <= CHAIN_TOL else [round9(r) for r in radii],
     }
-    return PathPlan(kind="corners", recipe=recipe, **base)
+    return PathPlan(kind="corners", recipe=recipe, tightest=min(radii), **base)
 
 
 def _carried_reach_refusal(profile_points, start, radii, turns):

@@ -99,6 +99,12 @@ def face(z, geometry="Plane"):
                evaluator=Obj(getNormalAtPoint=lambda p: (True, normal)))
 
 
+class RailBroken(Obj):
+    @property
+    def guideRail(self):
+        raise RuntimeError("not available")
+
+
 class Broken(Obj):
     @property
     def distanceTwo(self):
@@ -190,6 +196,29 @@ class SweepPathTest(unittest.TestCase):
         rail = path(step(sketch_curve(line3((0, 0, 0), (0, 50, 0)), sketch("Rail", "sk_rail"), "r1")))
         data = read_sweep(guideRail=rail)["rail"]
         self.assertEqual((data["kind"], data["sketch_token"], data["curves"][0]["entity"]), ("sketch", "sk_rail", "r1"))
+
+    def test_a_guide_rail_that_cannot_be_read_is_not_taken_for_no_rail(self):
+        self.assertEqual(read_sweep(kind=RailBroken)["rail"], {"kind": "unread"})
+        self.assertIsNone(read_sweep()["rail"])
+
+    def test_a_path_of_more_entities_than_are_read_is_marked_truncated(self):
+        def many(count):
+            return path(*[step(sketch_curve(line3((0, i, 0), (0, i + 1, 0)), sketch(), "c%d" % i))
+                          for i in range(count)])
+        found = read_sweep(path=many(257))["path"]
+        self.assertEqual((len(found["curves"]), found["truncated"]), (256, True))
+        self.assertNotIn("truncated", read_sweep(path=many(256))["path"])
+
+    def test_a_path_sketch_says_what_it_sits_on_and_whether_it_holds_projected_curves(self):
+        sk = sketch()
+        sk.referencePlane = Obj("fusion::ConstructionPlane", entityToken="cp1")
+        sk.sketchCurves = Coll([Obj(isReference=False), Obj(isReference=True)])
+        found = read_sweep(path=path(step(sketch_curve(line3((0, 0, 0), (0, 50, 0)), sk))))["path"]
+        self.assertEqual((found["reference"], found["projected"]), ({"kind": "constructionPlane", "token": "cp1"}, True))
+
+    def test_an_edge_says_which_body_it_lies_on(self):
+        found = read_sweep(path=path(step(edge("e1"))))["path"]
+        self.assertEqual(found["edges"][0]["body"]["token"], "eb")
 
     def test_edges_are_pick_records_and_not_pick_free_curves(self):
         data = read_sweep(path=path(step(edge("e1")), step(edge("e2", a=(30, 0, 0), b=(30, 20, 0)))))

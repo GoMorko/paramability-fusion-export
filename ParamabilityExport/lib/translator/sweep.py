@@ -13,11 +13,11 @@ circle and sweeps along part of a path are refused.
 import copy
 import math
 
-from . import extrude, loops, paths, placement, revolve, sketch_motion, values, vec
+from . import borrowed, extrude, loops, paths, placement, revolve, sketch_motion, sweep_reach, values, vec
 from .extrude import COMBINE
 from .footprint import is_full, polyline
 from .result import Refusal, StepResult
-from .sizes import sketch_sizes
+from .sizes import construction_sizes, sketch_sizes
 from .values import Quantity
 
 ZERO_TOL = 1e-6
@@ -33,6 +33,8 @@ FACE_OUTLINE = "The outline of this sweep is a face of the part."
 TWISTED = "Twisted sweeps are not copied yet."
 TAPERED = "Tapered sweeps are not copied yet."
 RAIL = "Sweeps with a guide rail are not copied yet."
+RAIL_UNREADABLE = "The guide rail of this sweep could not be read from Fusion."
+PATH_TOO_LONG = "The path of this sweep has more parts than can be read, so it is not copied."
 OTHER_KIND = "This kind of sweep is not copied yet."
 KEEPS_DIRECTION = "The outline keeps one direction along a bent path, which is not copied yet."
 PART_OF_PATH = "This sweep covers only part of its path, which is not copied yet."
@@ -109,7 +111,10 @@ def _number(value):
 
 def _settings_refusal(data):
     """A Refusal for a setting the copy does not follow (twist, taper, guide rail, other kinds, part of the path)."""
-    if data.get("rail") is not None:
+    rail = data.get("rail")
+    if isinstance(rail, dict) and rail.get("kind") == "unread":
+        return Refusal(RAIL_UNREADABLE)
+    if rail is not None:
         return Refusal(RAIL)
     twist, taper = data.get("twist_deg"), data.get("taper_deg")
     one, two = data.get("distance_one"), data.get("distance_two")
@@ -137,16 +142,11 @@ def _pin_settings(ctx, item):
 # ---- the volume ------------------------------------------------------------------------------------------------
 
 def _made_volume(item, data):
-    """The volume the sweep made (the body after, less the body before), or None when it was not measured."""
-    after = data.get("volume_after")
-    if after is None:
-        after = (item.get("target_after") or {}).get("volume_mm3")
-    if after is None:
-        return None
-    before = data.get("volume_before")
-    if before is None:
-        before = (item.get("target_before") or {}).get("volume_mm3") or 0.0
-    return after - before
+    """The volume of the body a new body sweep made, or None when it was not measured. A walk of a tool body lists
+    its own `volume_after` (null when not measured); otherwise the body of the capture is the one made."""
+    if "volume_after" in data:
+        return data["volume_after"]
+    return (item.get("target_after") or {}).get("volume_mm3")
 
 
 def _axis_distance(point, axis):
@@ -188,40 +188,72 @@ def _volume_refusal(item, data, combine, profile, found):
 
 # ---- sizes the copy cannot follow --------------------------------------------------------------------------------
 
-def _mark_path(ctx, item, path, found):
+def _mark_path(ctx, item, path):
     """The path is written as measured: the sizes behind its sketch (or, for edges, behind the steps written so far)
     stay free with a warning."""
     name = item.get("name", "a sweep")
     if ctx.table is None:
         return
     if path.get("kind") == "edges":
-        if ctx.written_reads:
-            ctx.doubt(ctx.written_reads, "%s follows edges of the part, which the copy keeps as measured" % name)
+        _mark_edges(ctx, name, path)
         return
     sketch = path.get("sketch") or ""
     names = sketch_sizes(ctx.table, sketch) if sketch else ()
     if names:
         ctx.doubt(names, "%s copies its path from %s as measured" % (name, sketch))
+    _mark_sketch_place(ctx, name, path)
 
 
-def _mark_borrowed(ctx, item, profile):
-    """A sweep has no placer that checks an outline of another component against the part."""
-    if not profile.get("borrowed") or ctx.table is None:
+def _mark_edges(ctx, name, path):
+    """Edges of the part move with the steps written so far; edges of another body of the component may move with any
+    size."""
+    if any(edge.get("body") and not ctx.is_target(edge["body"]) for edge in path.get("edges") or []):
+        ctx.doubt(ctx.table.ticked, "%s follows edges of another body, which the copy keeps as measured" % name)
+    elif ctx.written_reads:
+        ctx.doubt(ctx.written_reads, "%s follows edges of the part, which the copy keeps as measured" % name)
+
+
+def _mark_sketch_place(ctx, name, path):
+    """A path sketch sits on a plane or face and may hold projected curves: sizes that move those move the path in
+    Fusion, not in the copy."""
+    reference = path.get("reference")
+    kind = reference.get("kind") if isinstance(reference, dict) else None
+    if kind == "constructionPlane":
+        names = construction_sizes(ctx.table, "constructionPlane", reference.get("token") or "")
+        if names:
+            ctx.doubt(names, "%s copies its path from a sketch on a construction plane, as measured" % name)
+    elif kind in ("face", "other") or path.get("projected") or ("reference" in path and reference is None):
+        if ctx.written_reads:
+            ctx.doubt(ctx.written_reads, "%s copies its path from a sketch on or projected from the part, as measured"
+                      % name)
+
+
+def _keep_path_on_plane(ctx, item, profile):
+    """The path is written as numbers and starts on the plane the outline had when it was captured: a size that moves
+    that plane is marked, whichever form the sweep is written in."""
+    outcome = loops.profile_loops(profile)
+    if isinstance(outcome, Refusal):
         return
-    names = sketch_sizes(ctx.table, profile.get("sketch") or "")
-    if names:
-        ctx.doubt(names, "%s cannot check that its outline from %s still meets the part"
-                  % (item.get("name", "a sweep"), profile.get("sketch") or "another component"))
-
-
-def _keep_path_on_plane(ctx, item, drawn):
-    """A path written as numbers starts on the plane the outline had when it was captured: a size that moves that
-    plane is marked."""
+    drawn = sketch_motion.outline(ctx, item, profile, outcome[0], outcome[1], [(0, profile)])
     if drawn is None:
         return
     shift = drawn.plane_shift(ctx)
     if shift.sized:
         ctx.doubt(shift.reads, "%s starts its path on the plane of its outline, which the copy cannot move with it"
+                  % item.get("name", "a sweep"))
+
+
+def _keep_outline_in_bends(ctx, item, profile, found, outer):
+    """A larger outline can reach past the tightest bend of the path, which the app refuses: mark the sizes behind
+    the outline that can do so."""
+    if ctx.table is None or found.tightest == math.inf:
+        return
+    frame = profile["frame"]
+    offset = vec.sub(found.start, frame["origin"])
+    names = sweep_reach.outgrown_reads(ctx.table, outer, [vec.dot(offset, frame["x"]), vec.dot(offset, frame["y"])],
+                                       found.tightest)
+    if names:
+        ctx.doubt(names, "it can make the outline of %s reach past the tightest bend of its path"
                   % item.get("name", "a sweep"))
 
 
@@ -268,7 +300,7 @@ def _as_sweep(item, combine, profile, found, ctx):
     if drawn is not None:
         on["origin"] = drawn.origin(ctx, Quantity(0.0))
         outer, inners = drawn.written(ctx)
-    _keep_path_on_plane(ctx, item, drawn)
+        _keep_outline_in_bends(ctx, item, profile, found, outer)
     sketch = {"on": on, "outer": outer}
     if inners:
         sketch["inner"] = inners
@@ -298,6 +330,8 @@ def handle(item, ctx):
         return Refusal(PATH_UNREADABLE)
     if path.get("kind") == "mixed":
         return Refusal(MIXED_PATH)
+    if path.get("truncated"):
+        return Refusal(PATH_TOO_LONG)
     found = paths.plan(path, profile["frame"], _profile_points(profile))
     if isinstance(found, Refusal):
         return found
@@ -307,9 +341,10 @@ def handle(item, ctx):
     if refusal is not None:
         return refusal
     _pin_settings(ctx, item)
-    _mark_path(ctx, item, path, found)
+    _mark_path(ctx, item, path)
+    _keep_path_on_plane(ctx, item, profile)
     if found.kind != "line":
-        _mark_borrowed(ctx, item, profile)
+        borrowed.mark_unchecked(ctx, item, profile)
     if found.kind == "line":
         outcome = _as_extrude(item, data, profile, found, ctx)
     elif found.kind in ("arc", "circle"):

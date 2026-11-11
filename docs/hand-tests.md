@@ -873,11 +873,13 @@ surprises.
 - [ ] **SW8 Parallel orientation.** The SW2 path with orientation parallel is left out ("The outline keeps one
       direction along a bent path"). On a straight path it is copied.
 - [ ] **SW9 Guide rail.** A sweep with a guide rail is left out ("Sweeps with a guide rail"). `rail` holds the rail
-      curves and `scaling` holds the dialog's choice.
+      curves and `scaling` holds the dialog's choice. If a build cannot read the rail, `rail` is `{ "kind": "unread" }`
+      and the reason says the rail could not be read.
 - [ ] **SW10 Path of edges.** Sweep a small circle along two edges of an extruded box. It is copied as measured, the
       sizes behind the box are marked "may give unexpected results", and `path.edges` lists the two edges with
-      tokens. A pattern of that sweep is left out. Then do the same on an edge of another component: the sweep is
-      left out as a step in another component.
+      tokens and `body`. A pattern of that sweep is left out. Then do the same on an edge of another component: the
+      sweep is left out as a step in another component. Edges of a second body of the same component mark every
+      ticked size.
 - [ ] **SW11 Tilted profile.** A profile at 30 degrees to the path at its start. The sweep is left out ("The outline is
       not square to the path at its start"). Note what Fusion builds.
 - [ ] **SW12 3D path.** A 3D sketch of three lines with sketch fillets at the two corners. The recipe holds a sweep

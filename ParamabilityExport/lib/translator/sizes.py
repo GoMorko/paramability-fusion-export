@@ -208,6 +208,17 @@ def _construction_records(node, found):
     return found
 
 
+def construction_sizes(table, kind, token=""):
+    """Fusion names of the ticked sizes behind the construction planes or axes of `kind` (`constructionPlane` or
+    `constructionAxis`): only the one named by `token` when given."""
+    names = []
+    for param in table.model_params.values():
+        made = param.get("created_by") or {}
+        if _kind(param) == kind and (not token or made.get("token") == token):
+            names += [n for n in table.depends(param["name"]) if n in table.ticked]
+    return tuple(dict.fromkeys(names))
+
+
 def construction_fixes(table, item):
     """[(Fusion names, reason)] for the ticked sizes behind each construction plane or axis that the step uses itself
     (to start from, reach to, turn about or mirror across). A record without a token stands for every one of its kind.
@@ -215,13 +226,9 @@ def construction_fixes(table, item):
     out = []
     data = item.get("data") if isinstance(item.get("data"), dict) else {}
     for kind, token in _construction_records(data, []):
-        names = []
-        for param in table.model_params.values():
-            made = param.get("created_by") or {}
-            if _kind(param) == kind and (not token or made.get("token") == token):
-                names += [n for n in table.depends(param["name"]) if n in table.ticked]
+        names = construction_sizes(table, kind, token)
         if names:
-            out.append((tuple(dict.fromkeys(names)), "it moves the %s that %s uses" % (
+            out.append((names, "it moves the %s that %s uses" % (
                 _CONSTRUCTION_WORDS[kind], item.get("name") or "a step")))
     return out
 

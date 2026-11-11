@@ -13,7 +13,7 @@ from . import read_geometry as geo
 from .param_refs import Params, with_params
 from .read_face import face_outline
 from .read_solid import operation_of
-from .read_sketch import dense_samples, read_curve, read_outlines
+from .read_sketch import dense_samples, read_curve, read_outlines, sketch_reference
 
 MAX_PATH_ENTITIES = 256
 MAX_SECTIONS = 64
@@ -113,7 +113,11 @@ def _entity_curve(item, ctx):
     record, source = None, (None, None)
     if name == "BRepEdge":
         record = geo.safe(lambda: _curve_record(entity.geometry, _Place()), None)
-        source = ("edge", geo.safe(lambda: geo.edge_record(entity, ctx), None))
+        found = geo.safe(lambda: geo.edge_record(entity, ctx), None)
+        owner = geo.safe(lambda: geo.owner_body(entity, ctx), None)
+        if found is not None and owner:
+            found["body"] = owner
+        source = ("edge", found)
     elif name.startswith("Sketch"):
         sketch = geo.safe(lambda: entity.parentSketch, None)
         frame = geo.safe(lambda: geo.frame_of(sketch.transform), None)
@@ -144,20 +148,27 @@ def _listed(read, cap):
 
 
 def path_record(path, ctx):
-    """A `Path` as { closed, kind, curves, edges, sketch?, sketch_token?, frame? }, or None when there is none.
+    """A `Path` as { closed, kind, curves, edges, truncated?, sketch?, sketch_token?, frame?, reference?, projected? },
+    or None when there is none.
 
     `kind`: `sketch` (every entity is a curve of one sketch), `edges` (every entity is a body edge), `mixed` (both,
     or several sketches) or `other` (an entity that is neither). `curves` lists every entity in path order with its
     geometry in the target component's frame; sketch curves add `flat`, the curve in the sketch's own 2D frame
     (null for a curve off the sketch plane). `edges` holds the edge records (`token`, `points`), so a later pick
-    check sees them. Sketch curves also carry `entity`, the token of the curve."""
+    check sees them, each with `body` (the body it lies on) when Fusion gives it. Sketch curves also carry `entity`,
+    the token of the curve. `truncated` is true when the path has more than MAX_PATH_ENTITIES entities (only the
+    first are read). For a sketch path, `reference` is what the sketch sits on (as on a profile; null when unreadable) and
+    `projected` is true when the sketch holds projected curves (null when unreadable)."""
     if path is None:
         return None
-    items = _listed(lambda: path, MAX_PATH_ENTITIES)
+    items = _listed(lambda: path, MAX_PATH_ENTITIES + 1)
     record = {"closed": geo.safe(lambda: bool(path.isClosed), None), "kind": "other",
               "curves": None, "edges": []}
     if items is None:
         return record
+    if len(items) > MAX_PATH_ENTITIES:
+        items = items[:MAX_PATH_ENTITIES]
+        record["truncated"] = True
     curves, sketches, edges, others = [], [], [], 0
     for item in items:
         read = geo.safe(lambda: _entity_curve(item, ctx), None)
@@ -180,6 +191,9 @@ def path_record(path, ctx):
         if token:
             record["sketch_token"] = token
         record["frame"] = geo.safe(lambda: geo.frame_of(sketch.transform), None)
+        record["reference"] = geo.safe(lambda: sketch_reference(sketch, ctx), None)
+        record["projected"] = geo.safe(lambda: any(
+            bool(c.isReference) for c in geo.collection_items(sketch.sketchCurves)), None)
     if any(c.get("foreign") for c in curves):
         record["foreign"] = True
     return record
@@ -235,6 +249,16 @@ def _before_index(feature):
     return geo.safe(lambda: feature.timelineObject.index, None)
 
 
+def _rail(feature, ctx):
+    """The guide rail as a path record, null when the sweep has none, `{ "kind": "unread" }` when it cannot be read."""
+    unread = {"kind": "unread"}
+    try:
+        rail = feature.guideRail
+    except Exception:
+        return unread
+    return geo.safe(lambda: path_record(rail, ctx), unread)
+
+
 def sweep_before(feature, ctx):
     params = Params()
     params.add("distance_one", lambda: feature.distanceOne, "scalar")
@@ -247,7 +271,7 @@ def sweep_before(feature, ctx):
         "profiles": profiles,
         "areas": areas,
         "path": geo.safe(lambda: path_record(feature.path, ctx), None),
-        "rail": geo.safe(lambda: path_record(feature.guideRail, ctx), None),
+        "rail": _rail(feature, ctx),
         "orientation": geo.safe(lambda: geo.pick_by_text(
             geo.enum_name(feature.orientation, "SweepOrientationTypes"), _ORIENTATIONS, "other"), None),
         "distance_one": _number(lambda: feature.distanceOne),

@@ -39,10 +39,10 @@ def gap_reason(result):
     return gap["reason"]
 
 
-def sized(capture, motion=None, ticked=None):
+def sized(capture, motion=None, ticked=None, ranges=None):
     params = capture["parameters"]
     names = ticked or [p["name"] for p in params["user"]]
-    table = size_table.build(params["user"], names, params["model"], "mm")
+    table = size_table.build(params["user"], names, params["model"], "mm", ranges=ranges)
     return translate(capture, size_table=table, motion=motion)
 
 
@@ -219,6 +219,12 @@ class SizesTest(unittest.TestCase):
         result = self.run_pipe({"2/p0/l0/radius": self.OUTLINE, "2/p0/plane": Affine(-6, {"wire_mm": 1.0}, "Sketch1")})
         self.assertEqual([f["name"] for f in result.loose], ["wire_mm"])
 
+    def test_a_size_that_moves_the_outline_plane_is_marked_for_the_straight_and_ring_forms(self):
+        for name, size, shift in (("sweep_straight", "width_mm", -10), ("sweep_ring", "tri_mm", -6)):
+            with self.subTest(name):
+                moved = Motion({"2/p0/plane": Affine(shift, {size: 1.0}, "Sketch1")})
+                self.assertEqual([f["name"] for f in sized(load_capture(name), moved).loose], [size])
+
     def test_a_size_that_also_drives_a_setting_the_copy_fixes_is_marked(self):
         capture = load_capture("sweep_straight")
         sweep_of(capture, 2)["params"] = {"taper_deg": {"name": "d1", "expression": "width_mm", "value": 0.0}}
@@ -236,6 +242,82 @@ class BorrowedOutlineTest(unittest.TestCase):
         self.assertEqual(step["sketch"]["outer"]["radius"], {"expr": "0.5 * rim_mm"})
         self.assertEqual([f["name"] for f in result.loose], ["rim_mm"])
         assert_schema_ok(self, result.recipe)
+
+
+class PathPlaceTest(unittest.TestCase):
+    WIRE = Motion({"3/p0/l0/radius": Affine(0, {"wire_mm": 0.5}, "Sketch2")})
+
+    def loose_of(self, edit, ticked=("wire_mm", "plate_mm")):
+        capture = edited(PLATE, PLATE_ITEM, edit)
+        return [f["name"] for f in sized(capture, self.WIRE, list(ticked)).loose]
+
+    def test_edges_of_another_body_mark_every_size(self):
+        def other_body(data):
+            for edge in data["path"]["edges"]:
+                edge["body"] = {"token": "t9", "name": "Other"}
+        self.assertEqual(sorted(self.loose_of(other_body)), ["plate_mm", "wire_mm"])
+
+    def test_edges_of_the_part_mark_only_the_sizes_read_so_far(self):
+        def own_body(data):
+            for edge in data["path"]["edges"]:
+                edge["body"] = {"token": "t1", "name": "Body1"}
+        self.assertEqual(self.loose_of(own_body), ["plate_mm"])
+
+    def test_a_path_sketch_on_a_face_or_with_projected_curves_marks_the_sizes_read_so_far(self):
+        def sketch_path(**more):
+            def edit(data):
+                data["path"].update(kind="sketch", edges=[], sketch="Sketch9", **more)
+            return edit
+        self.assertEqual(self.loose_of(sketch_path()), [])
+        for label, more in (("face", {"reference": {"kind": "face", "token": "f1"}}), ("projected", {"projected": True})):
+            with self.subTest(label):
+                self.assertEqual(self.loose_of(sketch_path(**more)), ["plate_mm"])
+
+    def test_a_path_sketch_on_a_construction_plane_marks_the_sizes_that_move_the_plane(self):
+        capture = edited(PIPE, PIPE_ITEM, lambda d: d["path"].update(reference={"kind": "constructionPlane",
+                                                                                "token": "tok_plane"}))
+        capture["parameters"]["model"].append(
+            {"name": "d9", "expression": "wire_mm", "value": 0.6, "unit": "mm", "kind": "derived", "role": "",
+             "dependency_parameters": ["wire_mm"],
+             "created_by": {"kind": "constructionPlane", "token": "tok_plane", "name": "", "sketch": "",
+                            "component": ""}})
+        outline = Motion({"2/p0/l0/radius": Affine(0, {"wire_mm": 0.5}, "Sketch1")})
+        self.assertEqual([f["name"] for f in sized(capture, outline).loose], ["wire_mm"])
+
+    def loose_for_wire_range(self, wire_range):
+        outline = Motion({"2/p0/l0/radius": Affine(0, {"wire_mm": 0.5}, "Sketch1")})
+        return sized(load_capture(PIPE), outline, ranges={"wire_mm": wire_range}).loose
+
+    def test_an_outline_that_can_outgrow_the_tightest_bend_marks_its_sizes(self):
+        self.assertEqual([f["name"] for f in self.loose_for_wire_range((2.0, 24.0))], ["wire_mm"])
+
+    def test_an_outline_that_stays_clear_of_the_bend_is_not_marked(self):
+        self.assertEqual(self.loose_for_wire_range((2.0, 12.0)), [])
+
+
+class ToolBodyTest(unittest.TestCase):
+    def sweep_tool(self, volume_after):
+        """The plate and a Combine that cuts a tool body made by the straight sweep."""
+        capture = load_capture("combine_cut")
+        made = load_capture("sweep_straight")["items"][2]
+        plate = capture["items"][1]["data"]
+        made.update(index=3, bodies_after=[{"token": "t2", "name": "Body2"}],
+                    target_before={"box": plate["target_box_before"], "volume_mm3": 7209.6},
+                    target_after={"box": plate["target_box_before"], "volume_mm3": 7209.6},
+                    body_states={"t2": {"box_before": None, "volume_before": None, "volume_after": volume_after}})
+        capture["items"][3] = made
+        return capture
+
+    def test_a_tool_body_made_by_a_sweep_is_measured_on_the_tool_and_not_the_part(self):
+        result = translate(self.sweep_tool(2400.0))
+        self.assertIsNone(result.refusal)
+        self.assertEqual(len(steps_of(result.recipe, "extrude")), 2)
+
+    def test_a_tool_body_that_was_not_measured_is_not_checked(self):
+        self.assertIsNone(translate(self.sweep_tool(None)).refusal)
+
+    def test_a_tool_body_with_the_wrong_volume_is_refused(self):
+        self.assertIn(sweep.NOT_MATCHING, left_out(translate(self.sweep_tool(3000.0)))["reason"])
 
 
 class VolumeTest(unittest.TestCase):
@@ -290,6 +372,7 @@ class RefusalTest(unittest.TestCase):
             ("twist", lambda d: d.update(twist_deg=5.0), sweep.TWISTED),
             ("taper", lambda d: d.update(taper_deg=2.0), sweep.TAPERED),
             ("rail", lambda d: d.update(rail=copy.deepcopy(d["path"])), sweep.RAIL),
+            ("rail unread", lambda d: d.update(rail={"kind": "unread"}), sweep.RAIL_UNREADABLE),
             ("other orientation", lambda d: d.update(orientation="other"), sweep.OTHER_KIND),
             ("orientation unread", lambda d: d.update(orientation=None), sweep.UNREADABLE),
             ("twist unread", lambda d: d.update(twist_deg=None), sweep.UNREADABLE),
@@ -311,6 +394,7 @@ class RefusalTest(unittest.TestCase):
             ("sketch and edges", lambda d: d["path"].update(kind="mixed"), sweep.MIXED_PATH),
             ("an entity that is neither", lambda d: d["path"].update(kind="other"), paths.NOT_SKETCH),
             ("curves unread", lambda d: d["path"].update(curves=None), paths.UNREADABLE),
+            ("longer than what is read", lambda d: d["path"].update(truncated=True), sweep.PATH_TOO_LONG),
         ])
 
     def test_a_path_of_another_component_is_not_copied(self):
