@@ -100,8 +100,7 @@ as not tried.
 
 Some sizes the add-in cannot follow fully: a size that moves a sketch in a way the tries could not follow, a plane or
 axis, a joint, a pick (an edge of a round or chamfer) that may move with it, a pick on a pattern copy whose count would
-have to change, a step drawn on another component's sketch that could stop meeting the part, a taper that could reach
-45 degrees. Such a size stays a free size. It is marked "may give unexpected results" with the reason, which starts
+have to change, a step drawn on another component's sketch that could stop meeting the part. Such a size stays a free size. It is marked "may give unexpected results" with the reason, which starts
 with the Fusion name of the parameter and, where the add-in can tell, the value past which the problem starts. Paramability
 shows a warning mark next to it. The parts of the shape that cannot follow it keep their numbers, so the part looks
 the same at the current values. The result window lists these loose sizes.
@@ -117,9 +116,11 @@ time, Fusion rebuilds only the timeline up to the last step the part needs while
 there, and goes back when they end; `report.json` says how many items each try rebuilt, `probe.timeline`). A try that
 Fusion cannot build is dropped; no size is fixed for it. The add-in then tries that size nearer to its value now (half
 way, then a quarter, then a tenth of the way to the end of its range; at most 24 such tries per export). When a nearer
-try builds, the size follows between the values that built, and the size says "it was followed between A and B". A
-size that did not rebuild at any value tried is not a size, and the reason names the values and the step Fusion
-stopped at.
+try builds, the size follows between the values that built. On a side where Fusion did not rebuild, the range on the
+form stops at the last value that built, unless you typed that end in the dialog; on a side the tries did not reach,
+the size says "it was followed between A and B". A size that did not rebuild at any value tried is not a size, and
+the reason names the values and the step Fusion stopped at. A taper that follows sizes gets the same kind of range:
+it stops before the taper reaches 45 degrees, the steepest Paramability builds.
 
 The box "Faster tries" under the body picker is off to start with. When you tick it, the tries also turn off the
 timeline steps of other components that the body does not use, so each try rebuilds less. Every step is turned back

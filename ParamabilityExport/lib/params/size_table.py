@@ -9,7 +9,9 @@ parameters, for inlining, counts and defaults), `design_unit` (what a bare numbe
 parameters the steps use as a pattern quantity; the user parameters behind them become whole-number counts) and
 `ranges` (min and max per size from the dialog, instead of the default range; a range equal to the default is not
 typed, `typed_ends`) and `links` (the parameters that may reach a sketch through the geometry of another component,
-`params.geometry_links`; a ticked one counts as a size that sketch reads).
+`params.geometry_links`; a ticked one counts as a size that sketch reads). `with_narrowed` gives a table whose
+ranges stop where the design was seen not to rebuild (`kept_ranges.built_ranges`); such a range still counts as
+not typed.
 
 The table holds, per parameter, one entry whose `state` is:
 
@@ -100,8 +102,9 @@ def _round(x):
 
 class SizeTable:
     def __init__(self, params, ticked, model_params=(), design_unit="mm", fixed=None, quantity_params=(),
-                 ranges=None, max_sizes=MAX_SIZES, links=()):
+                 ranges=None, max_sizes=MAX_SIZES, links=(), narrowed=None):
         self._params = [p for p in params]
+        self._narrowed = dict(narrowed or {})
         self.links = tuple(dict(link) for link in links)
         self._max_sizes = max_sizes
         self._ranges = dict(ranges or {})
@@ -209,6 +212,8 @@ class SizeTable:
             return {"expr": e.formula, "label": e.label}
         p = self._cand[e.name]
         lo, hi = self._ranges.get(e.name) or defaults.size_range(p, e.kind, e.value)
+        if e.name in self._narrowed:
+            lo, hi = max(lo, self._narrowed[e.name][0]), min(hi, self._narrowed[e.name][1])
         size = {"kind": e.kind, "value": e.value, "min": lo, "max": hi, "label": e.label}
         if e.kind == "count":
             size["step"] = 1
@@ -434,7 +439,8 @@ class SizeTable:
         merged = dict(self._fixed_in)
         merged.update(reasons)
         return SizeTable(self._params, [n for n in self._ticked_in if n not in merged], self._model,
-                         self._design_unit, merged, self._quantity_params, self._ranges, self._max_sizes, self.links)
+                         self._design_unit, merged, self._quantity_params, self._ranges, self._max_sizes, self.links,
+                         self._narrowed)
 
     def typed_ends(self, name):
         """(min typed, max typed) of a free size: the person set that end to another number than the default range
@@ -447,6 +453,14 @@ class SizeTable:
         base_lo, base_hi = defaults.default_range(e.kind, e.value)
         return abs(lo - base_lo) > VALUE_TOLERANCE, abs(hi - base_hi) > VALUE_TOLERANCE
 
+    def uncut_range(self, name):
+        """(min, max) of a free size before `with_narrowed` cut it: the typed or default range; None for another
+        entry."""
+        e = self._entries.get(name)
+        if e is None or e.state != FREE:
+            return None
+        return tuple(self._ranges.get(name) or defaults.size_range(self._cand[name], e.kind, e.value))
+
     def typed_range(self, name):
         """True when the person typed either end of the range of this size (`typed_ends`)."""
         return any(self.typed_ends(name))
@@ -454,12 +468,21 @@ class SizeTable:
     def with_ticked(self, names):
         """A new table where these Fusion names are the ticked ones (the size cap still applies)."""
         return SizeTable(self._params, list(names), self._model, self._design_unit, self._fixed_in,
-                         self._quantity_params, self._ranges, self._max_sizes, self.links)
+                         self._quantity_params, self._ranges, self._max_sizes, self.links, self._narrowed)
 
     def with_links(self, links):
         """A new table with these geometry links (`params.geometry_links`) instead of its own."""
         return SizeTable(self._params, self._ticked_in, self._model, self._design_unit, self._fixed_in,
-                         self._quantity_params, self._ranges, self._max_sizes, links)
+                         self._quantity_params, self._ranges, self._max_sizes, links, self._narrowed)
+
+    def with_narrowed(self, ranges):
+        """A new table where the ranges of these Fusion names ((min, max) each) are cut to those values. The typed
+        ends stay as they were (`typed_ends`)."""
+        if not ranges:
+            return self
+        return SizeTable(self._params, self._ticked_in, self._model, self._design_unit, self._fixed_in,
+                         self._quantity_params, self._ranges, self._max_sizes, self.links,
+                         {**self._narrowed, **ranges})
 
     def linked(self, sketch):
         """Fusion names of the parameters that may reach the sketch named `sketch` through another component."""
