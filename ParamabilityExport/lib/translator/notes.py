@@ -122,6 +122,47 @@ def untried_link_reason(sketch, component):
         clip(component, MAX_NAME), clip(sketch, MAX_NAME))
 
 
+def _names(names):
+    """'A', 'A and B', 'A, B and C', each name clipped."""
+    names = [clip(n, MAX_NAME) for n in names]
+    return names[0] if len(names) == 1 else "%s and %s" % (", ".join(names[:-1]), names[-1])
+
+
+def _missing(names):
+    return "%s, which %s missing from the copy" % (_names(names), "is" if len(names) == 1 else "are")
+
+
+def picks_gap_reason(names, sure):
+    """Why a step that picks faces made by steps missing from the copy is left out too."""
+    return clip("It %s faces of %s." % ("picks" if sure else "may pick", _missing(names)), MAX_NOTE)
+
+
+def repeats_gap_reason(names):
+    """Why a pattern or mirror of steps missing from the copy is left out too."""
+    return clip("It repeats %s." % _missing(names), MAX_NOTE)
+
+
+def too_many_gaps_reason(limit):
+    return "More than %d steps of this part cannot be copied." % limit
+
+
+def no_gap_place_reason():
+    return "A step that could not be copied has no place in the copy."
+
+
+def gap_only_why(names):
+    """Why a size that only steps missing from the copy read is loose. It stays true once those steps are added."""
+    return "Fusion uses it only in %s, %s the export could not copy, so it changes nothing in the copy yet" % (
+        _names(names), "a step" if len(names) == 1 else "steps")
+
+
+def left_out_note(names):
+    """'2 steps were left out: Extrude5, Fillet3.'"""
+    count = len(names)
+    return clip("%d %s left out: %s." % (count, "step was" if count == 1 else "steps were", ", ".join(names)),
+                MAX_NOTE)
+
+
 def recipe_note(step_count):
     return "%d %s copied from Fusion." % (step_count, "step" if step_count == 1 else "steps")
 

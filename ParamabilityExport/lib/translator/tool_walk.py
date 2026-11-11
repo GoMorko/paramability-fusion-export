@@ -23,8 +23,8 @@ class ToolBuild:
     """A tool body walked on its own.
 
     body: the tool's record in the Combine. chain: the items that made it, as the walk saw them. ctx: the child
-    context, with the tool's steps, placers and doubts. verdicts: the verdict of each item of the chain. notes: the
-    plain remarks of the walk.
+    context, with the tool's steps, placers, doubts and gaps. verdicts: the verdict of each item of the chain. notes:
+    the plain remarks of the walk.
     """
 
     def __init__(self, body, chain, ctx, verdicts, notes=()):
@@ -46,6 +46,11 @@ class ToolBuild:
     def items(self):
         return self.ctx.copied_items
 
+    @property
+    def gaps(self):
+        """The steps of the tool left out of its copy (`gaps.Gap`)."""
+        return self.ctx.gaps
+
     def entries_of(self, item):
         """The `Entry` records the walk wrote for one item of the chain."""
         return self.ctx.entries_by_index.get(item["index"], [])
@@ -61,6 +66,7 @@ class ToolBuild:
         out.asked |= self.asked
         out.notes.extend(self.notes)
         out.tool_steps.extend(self.verdicts)
+        out.gaps.extend(self.gaps)
 
 
 def name_of(body):
@@ -168,7 +174,8 @@ def build(ctx, body, before, depth, place=0):
 def on_part(ctx, tool):
     """The `StepResult` of a walked tool whose steps are written one by one onto the part, or a Refusal. Each step is
     worked out against the part as it stood at that step: a tool that reaches to a face of the part follows that face,
-    and outlines are ordered so that each one meets what is built. Doubts count only once the Combine writes them."""
+    and outlines are ordered so that each one meets what is built. Doubts count only once the Combine writes them. A
+    tool with gaps is never written this way, since its left out steps have no handler result to replay."""
     out = StepResult()
     for item in tool.chain:
         with ctx.as_of(item):

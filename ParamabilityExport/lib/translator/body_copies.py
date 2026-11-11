@@ -219,8 +219,10 @@ def _adds_solid(ctx, step):
 
 def _own_steps(ctx, out, item):
     """The ids to repeat for the walk's own body. Steps that only add can be repeated one by one; anything else must
-    be finished first, so the steps so far are gathered into one tool."""
-    if len(ctx.steps) <= repeat.MAX_REFERENCES and all(_adds_solid(ctx, step) for step in ctx.steps):
+    be finished first, so the steps so far are gathered into one tool. So is a body with a step left out (a gap): a
+    step added there later is then repeated with the rest."""
+    if (not ctx.gaps and len(ctx.steps) <= repeat.MAX_REFERENCES
+            and all(_adds_solid(ctx, step) for step in ctx.steps)):
         return [step["id"] for step in ctx.steps]
     step_id = "%sbody_%s" % (ctx.id_prefix, item["index"])
     out.wraps_body = wrap_body(step_id, ctx.target.get("name"))

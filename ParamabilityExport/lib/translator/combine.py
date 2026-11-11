@@ -10,8 +10,9 @@ tool of one step. Such recipes open in older versions of the app.
 
 Any other tool (with a cut, a round, a hole, a shell, a Move, a Paste or a Combine of its own) becomes one `toolBody`
 step that holds the tool's steps. A pattern of bodies the Combine takes whole becomes a tool per source and one step
-that repeats them (`body_copies.py`). A step that cannot be copied at all stops the copy, and the reason names it. A
-tool the Combine keeps can be used again by a later Combine.
+that repeats them (`body_copies.py`). A tool whose walk leaves a step out (a gap) is always a `toolBody` step. A tool
+that cannot be built refuses the Combine, and the reason names the step that stops it. A tool the Combine keeps can be
+used again by a later Combine.
 
 Fusion's help does not say what an intersect of several tools keeps, so the export measures it (`intersect_model`):
 what every tool holds is one `toolBody` per tool, what any tool holds is one `toolBody` that holds the tools. When the
@@ -76,7 +77,10 @@ def _uses_face(item):
 
 
 def _writes_flat(tool):
-    """True when the steps of a walked tool can be written one by one onto the part."""
+    """True when the steps of a walked tool can be written one by one onto the part. A tool with a step left out
+    (a gap) is not: the missing step belongs in the tool's own list."""
+    if tool.gaps:
+        return False
     joining = False
     for item in tool.chain:
         data = item.get("data") or {}

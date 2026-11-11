@@ -5,11 +5,12 @@ from typing import Optional
 
 class Refusal:
     """Returned by a handler instead of a `StepResult` when its item cannot be copied. `reason` is one plain
-    sentence."""
+    sentence. `depends_on` names the gaps (gaps.py) that make the item impossible to copy, when that is the cause."""
 
-    def __init__(self, reason):
+    def __init__(self, reason, depends_on=()):
         self.reason = reason
         self.doubts = []
+        self.depends_on = list(depends_on)
 
     def __repr__(self):
         return "Refusal(%r)" % (self.reason,)
@@ -66,7 +67,8 @@ class StepResult:
     the handlers dealt with (`values.quantity`, `values.pin`, `values.handled`); the audit compares it with each
     item's `data.params`. `tool_steps` are the verdicts of the items inside the tool steps written here. `wraps_body`,
     when set, is a function of the context that gathers everything written so far into one tool step and gives its
-    `Entry`: the walk writes it first (a pattern can then repeat the finished body).
+    `Entry`: the walk writes it first (a pattern can then repeat the finished body). `gaps` are the steps of other
+    bodies left out of these steps (`gaps.Gap`); they count once these steps are written.
     """
 
     def __init__(self, entries=()):
@@ -77,6 +79,7 @@ class StepResult:
         self.asked = set()
         self.tool_steps = []
         self.wraps_body = None
+        self.gaps = []
 
     @classmethod
     def of(cls, steps):
@@ -104,9 +107,11 @@ class StepResult:
         self.asked |= other.asked
         self.notes.extend(other.notes)
         self.tool_steps.extend(other.tool_steps)
+        self.gaps.extend(other.gaps)
 
 
-VERDICTS = ("translated", "translatedWithNote", "skipped", "unsupported")
+# `leftOut`: the step is a gap (gaps.py); its verdict also has `gap`, the gap's id.
+VERDICTS = ("translated", "translatedWithNote", "skipped", "unsupported", "leftOut")
 
 
 def make_verdict(item, verdict, steps=(), note=""):
@@ -133,3 +138,7 @@ class TranslateResult:
     # [{ name, reason, used }]: ticked parameters that are not sizes of the recipe, with the plain reason. `used` is
     # True when a copied step reads the parameter and the copy cannot follow it, False when nothing copied depends on it.
     dropped: list = field(default_factory=list)
+    # The steps left out of the recipe (gaps.py, `gaps.record`), in timeline order; empty when the copy stops.
+    gaps: list = field(default_factory=list)
+    # The 12 numbers that map the capture's coordinates to the recipe's (`gaps.to_recipe`), when there are gaps.
+    to_recipe: Optional[list] = None

@@ -4,7 +4,7 @@ import unittest
 from copy import deepcopy
 
 from tests import context  # noqa: F401
-from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
+from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, not_copied
 
 from lib.params import size_table
 from lib.probe import build
@@ -20,9 +20,9 @@ def step_of(capture, kind="EmbossFeature"):
 
 def reason_of(capture, kind="EmbossFeature"):
     result = translate(capture)
-    assert result.recipe is None, "the text was copied"
-    assert result.refusal["index"] == step_of(capture, kind)["index"]
-    return result.refusal["reason"]
+    assert not_copied(result) is not None, "the text was copied"
+    assert not_copied(result)["index"] == step_of(capture, kind)["index"]
+    return not_copied(result)["reason"]
 
 
 def square(x, y, size):

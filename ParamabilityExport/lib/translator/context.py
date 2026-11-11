@@ -6,7 +6,7 @@ only when the walk writes its steps.
 """
 from contextlib import contextmanager
 
-from . import tool_items
+from . import gaps as gap_records, tool_items
 from .capture import same_body
 from .result import Doubt, StepResult
 from .step_kinds import recipe_kind
@@ -47,6 +47,7 @@ class Context:
     motion: the probe's motion file (`sketch_values.motion.Motion`), `sketch_values.motion.OPTIMISTIC`, or None. With a motion file the
       sketch values follow sizes (sketch_motion.py); otherwise they are written as numbers.
     plain_picks: round or bevel step id -> `Entry.picks`; patterns and mirrors copy these points.
+    gaps: the steps this walk left out (`gaps.Gap`), in order, with those of the tools it wrote (`commit`).
     cache: results that depend on the capture alone, shared by every walk of one translation (one translation walks
       the capture many times). Handlers keep their own entry under their module name.
     """
@@ -63,6 +64,7 @@ class Context:
         self.table = table
         self.motion = motion
         self.doubts = []
+        self.gaps = []
         self._recordings = []
         self.placers = []
         self.slabs = []
@@ -158,6 +160,19 @@ class Context:
         self.doubts.extend(result.doubts)
         self.asked |= result.asked
         self.copied_items.extend(result.items)
+        self.gaps.extend(result.gaps)
+
+    def leave_out(self, item, reason, depends_on=()):
+        """Record `item` as a gap of this walk, after the steps written so far; returns the `gaps.Gap`."""
+        before, after = gap_records.measures(self, item)
+        gap = gap_records.Gap(gap_records.gap_id(self, item), item, reason, depends_on,
+                              [step["id"] for step in self.steps], before, after)
+        self.gaps.append(gap)
+        return gap
+
+    def gap_of(self, index):
+        """The gap of this walk recorded for the timeline item at `index`, or None."""
+        return next((gap for gap in self.gaps if gap.index == index), None)
 
     @property
     def depends(self):

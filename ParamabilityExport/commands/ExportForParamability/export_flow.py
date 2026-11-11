@@ -85,6 +85,9 @@ class FusionPort:
             return self._captures.get(self.body)
         return _read_capture(self.design, self._current())
 
+    def read_reach(self, capture, gaps):
+        return export_common.read_gap_reach(self.design, capture, gaps)
+
     def probe_reader(self):
         ctx = ReadContext(self.design, self._current())
         return lambda request: read_state(self.design, request, ctx)
@@ -123,6 +126,9 @@ class FusionPartsPort:
         if self._captures is not None:
             return self._captures.get(self.bodies[index])
         return _read_capture(self.design, self._current(index))
+
+    def read_reach(self, index, capture, gaps):
+        return export_common.read_gap_reach(self.design, capture, gaps)
 
     def probe_reader(self, index):
         ctx = ReadContext(self.design, self._current(index))

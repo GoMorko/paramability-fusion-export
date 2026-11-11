@@ -4,7 +4,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.schema_check import check_recipe
-from tests.translator_helpers import load_capture, steps_of, verdict_of
+from tests.translator_helpers import load_capture, steps_of, verdict_of, not_copied
 
 from lib.params import size_table
 from lib.params.expressions import evaluate
@@ -135,7 +135,7 @@ class WrittenMoveTest(unittest.TestCase):
                 "input_kind": "bodies", "bodies": body, "move_type": "translateXYZ", "translate": [1, 0, 0],
                 "is_design_space": False, "points_before": [points], "points_after": [[vec.add(p, [1, 0, 0]) for p in points]]}})
         capture["items"].append(dict(pattern, index=pattern["index"] + 1))
-        self.assertEqual(translate(capture).refusal["name"], pattern["name"])
+        self.assertEqual(not_copied(translate(capture))["name"], pattern["name"])
 
 
 class RefusedMoveTest(unittest.TestCase):
@@ -169,13 +169,13 @@ class RefusedMoveTest(unittest.TestCase):
         }
         for name, edit in cases.items():
             with self.subTest(name):
-                self.assertEqual(translate(moved(edit)).refusal["name"], "Combine1")
+                self.assertEqual(not_copied(translate(moved(edit)))["type"], "MoveFeature")
 
     def test_a_turn_that_cannot_be_copied_exactly_refuses(self):
         cases = {"axis unread": lambda d: d.update(axis={"kind": "other"}), "angle disagrees": lambda d: d.update(angle_deg=45.0)}
         for name, edit in cases.items():
             with self.subTest(name):
-                self.assertEqual(translate(moved(edit, "move_rotate_sized")).refusal["name"], "Combine1")
+                self.assertEqual(not_copied(translate(moved(edit, "move_rotate_sized")))["type"], "MoveFeature")
 
     def test_a_move_that_names_no_body_and_may_change_the_part_refuses(self):
         capture = load_capture("extrude_plate")

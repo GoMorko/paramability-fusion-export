@@ -2,6 +2,7 @@ import copy
 import unittest
 
 from tests import context  # noqa: F401
+from tests.translator_helpers import not_copied
 from tests.translator_helpers import assert_schema_ok, edited, load_capture, steps_of, translate_fixture, verdict_of
 
 from lib.params import size_table
@@ -42,13 +43,12 @@ class CombineTest(unittest.TestCase):
         self.assertEqual(verdict_of(result, 6)["steps"], ["extrude_6", "extrude_6_2"])
         self.assertEqual([s["combine"] for s in steps_of(result.recipe, "extrude")], ["new", "cut", "cut"])
 
-    def test_a_tool_step_that_cannot_be_copied_refuses_and_names_it(self):
+    def test_a_tool_step_that_cannot_be_copied_is_left_out_of_the_tool(self):
         def edit(capture):
             capture["items"][4]["type"] = "SweepFeature"
         result = edited("combine_tool_filleted", edit)
-        self.assertIsNone(result.recipe)
-        self.assertEqual(result.refusal["type"], "CombineFeature")
-        self.assertIn("Fillet1", result.refusal["reason"])
+        self.assertEqual(not_copied(result)["name"], "Fillet1")
+        self.assertEqual(result.gaps[0]["list"], steps_of(result.recipe, "toolBody")[0]["id"])
 
     def test_other_refusals(self):
         def other_target(capture):
@@ -64,8 +64,8 @@ class CombineTest(unittest.TestCase):
                             ("operation", unknown_operation)):
             with self.subTest(label):
                 result = edited("combine_cut", edit)
-                self.assertIsNone(result.recipe)
-                self.assertEqual(result.refusal["index"], 4)
+                self.assertIsNotNone(not_copied(result))
+                self.assertEqual(not_copied(result)["index"], 4)
 
 
 def tool_steps_of(operation, tool_operation="join"):
@@ -86,14 +86,13 @@ class MoreThanOneToolStepTest(unittest.TestCase):
                 self.assertEqual([verdict_of(result, n)["verdict"] for n in (3, 5)], ["skipped", "skipped"])
                 assert_schema_ok(self, result.recipe)
 
-    def test_a_tool_step_that_reaches_to_a_curved_face_refuses(self):
+    def test_a_tool_step_that_reaches_to_a_curved_face_is_left_out(self):
         def edit(capture):
             tool_steps_of("cut")(capture)
             capture["items"][5]["data"]["side_one"] = {"kind": "toEntity", "plane": None, "offset": 0.0,
                                                        "entity_type": "BRepFace", "face_point": [20, 10, 14]}
         result = edited("combine_tool_two_steps", edit)
-        self.assertIsNone(result.recipe)
-        self.assertEqual(result.refusal["index"], 6)
+        self.assertEqual(not_copied(result)["index"], 5)
 
     def test_a_tool_the_combine_keeps_can_be_used_by_a_second_combine(self):
         def edit(capture):
@@ -116,8 +115,8 @@ class MoreThanOneToolStepTest(unittest.TestCase):
             again["index"], again["name"] = 7, "Combine2"
             items.append(again)
         result = edited("combine_tool_two_steps", edit)
-        self.assertIsNone(result.recipe)
-        self.assertEqual(result.refusal["index"], 7)
+        self.assertIsNotNone(not_copied(result))
+        self.assertEqual(not_copied(result)["index"], 7)
 
     def test_a_change_the_steps_cannot_fill_refuses(self):
         def edit(capture):
@@ -125,8 +124,8 @@ class MoreThanOneToolStepTest(unittest.TestCase):
             data = capture["items"][-1]["data"]
             data["volume_before"], data["volume_after"] = 7000.0, 7000.0 - 1500.0
         result = edited("combine_tool_two_steps", edit)
-        self.assertIsNone(result.recipe)
-        self.assertEqual(result.refusal["index"], 6)
+        self.assertIsNotNone(not_copied(result))
+        self.assertEqual(not_copied(result)["index"], 6)
 
     def test_a_change_the_steps_can_fill_is_copied(self):
         def edit(capture):

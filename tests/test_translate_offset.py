@@ -3,7 +3,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.test_translate_sized import TRAY, run
-from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
+from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, not_copied
 
 from lib.translator import offset, translate
 from lib.translator.footprint import Footprint
@@ -135,7 +135,7 @@ class OffsetFacesTest(unittest.TestCase):
                 (top_face(), [{"point": [5, 5, 8], "normal": [0, 0, 1]}]),
         }
         for reason, (face, moved) in cases.items():
-            refusal = translate(plate_with_offset(2.0, [face], moved)).refusal
+            refusal = not_copied(translate(plate_with_offset(2.0, [face], moved)))
             self.assertEqual((refusal["index"], refusal["reason"]), (2, reason))
 
 

@@ -3,6 +3,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.schema_check import check_recipe
+from tests.translator_helpers import not_copied
 from tests.translator_helpers import load_capture, steps_of
 
 from lib.params import size_table
@@ -116,7 +117,7 @@ class CopyByCopyTest(unittest.TestCase):
                                      bodies_after=[{"token": "t3", "name": "Body3"}], data={}))
         combine["index"] = 6
         capture["items"].append(combine)
-        self.assertIn("Elsewhere", translate(capture).refusal["reason"])
+        self.assertIn("Elsewhere", not_copied(translate(capture))["reason"])
 
     def test_an_uneven_layout_falls_back_to_one_tool_per_copy(self):
         capture = load_capture(ROW)
@@ -202,7 +203,7 @@ class RefusedPatternTest(unittest.TestCase):
             with self.subTest(name):
                 capture = load_capture(ROW)
                 edit(pattern_item(capture)["data"])
-                self.assertEqual(translate(capture).refusal["name"], "Combine1")
+                self.assertEqual(not_copied(translate(capture))["name"], "Combine1")
 
     def test_a_mirrored_copy_without_its_source_refuses(self):
         capture = load_capture(ROW)
@@ -213,7 +214,7 @@ class RefusedPatternTest(unittest.TestCase):
         item["data"] = {"entity_type": "bodies", "sources": [], "source_bodies": [source], "result_bodies": [image], "combine": False,
                         "plane": {"point": [0, 0, 0], "normal": [1, 0, 0], "origin": True}}
         capture["items"][-1]["data"].update(tools=[{"token": "t3", "name": "Body3"}], volume_before=None, volume_after=None)
-        self.assertEqual(translate(capture).refusal["name"], "Combine1")
+        self.assertEqual(not_copied(translate(capture))["name"], "Combine1")
 
     def test_a_mirror_of_the_whole_body_after_a_cutting_tool_refuses(self):
         capture = load_capture("combine_tool_chamfer")
@@ -222,7 +223,7 @@ class RefusedPatternTest(unittest.TestCase):
             "in_target_component": True, "bodies_after": [{"token": "t1", "name": "Body1"}], "data": {
                 "entity_type": "bodies", "combine": True, "sources": [], "plane": {"point": [40, 0, 0], "normal": [1, 0, 0], "origin": True},
                 "target_box_before": capture["target"]["box"]}})
-        self.assertEqual(translate(capture).refusal["name"], "Mirror1")
+        self.assertEqual(not_copied(translate(capture))["name"], "Mirror1")
 
     def test_more_copies_than_the_recipe_holds_refuse(self):
         capture = load_capture(ROW)

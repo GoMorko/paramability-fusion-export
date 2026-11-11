@@ -92,6 +92,12 @@ def _target_state(ctx):
     return True, state
 
 
+def _measure(state):
+    """{ box, volume_mm3 } of a target state (`_target_state`), or None when the target did not exist or could not be
+    read."""
+    return state[1] if state[0] else None
+
+
 def _box_numbers(box):
     return box["min"] + box["max"]
 
@@ -129,6 +135,8 @@ def _start_item(timeline, ctx, readers, index, items, group_indices):
         "in_target_component": True,
         "bodies_after": [],
         "target_changed": None,
+        "target_before": None,
+        "target_after": None,
         "data": {},
     }
     if is_proxy:
@@ -178,7 +186,8 @@ def _bodies_after(item, entity):
 def _finish_item(timeline, ctx, readers, index, items, states):
     """Marker is just after `index`: read bodies, health, whether the target changed and what the feature produced.
 
-    `states` is the target state before and after the item (see `_target_state`).
+    `states` is the target state before and after the item (see `_target_state`). They also go to the item as
+    `target_before` and `target_after`, so a step with no reader still says where it changed the part.
     """
     item = items.get(index)
     if item is None:
@@ -190,6 +199,7 @@ def _finish_item(timeline, ctx, readers, index, items, states):
     if entity is None or item["suppressed"]:
         return
     item["target_changed"] = _target_changed(*states)
+    item["target_before"], item["target_after"] = _measure(states[0]), _measure(states[1])
     item["bodies_after"] = [] if step_kinds.makes_no_body(item["type"]) else _bodies_after(item, entity)
     after = (readers.get(item["type"]) or (None, None))[1]
     if after is not None and item["in_target_component"] and "read_error" not in item["data"]:
@@ -217,8 +227,10 @@ def _check_groups(timeline, end, count, items, group_indices):
             raise CaptureReadError("The timeline groups hide steps that could not be read.")
 
 
-def _restore_marker(timeline, end):
-    if not put_back(timeline, end):
+def restore_marker(timeline, marker):
+    """Moves the marker back to `marker` (a position or a `read_marker` dict); raises MarkerError when it does not
+    read there after."""
+    if not put_back(timeline, marker):
         raise MarkerError("The timeline marker could not be moved back to where it was.")
 
 
@@ -326,7 +338,7 @@ def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_reade
             lambda: helper_pass.read_helpers(design, ctx, timeline, items, readers, _native_entity, _component_bodies),
             [])
     finally:
-        _restore_marker(timeline, end)
+        restore_marker(timeline, end)
     _check_groups(timeline, end, count, items, group_indices)
     final = ctx.find_target() or ctx.target
     parameters, design_units = _parameters(design, ctx)

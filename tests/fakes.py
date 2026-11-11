@@ -442,3 +442,91 @@ def install_adsk_core():
         setattr(core, kind, type(kind, (), {}))
     core.DropDownStyles = types.SimpleNamespace(TextListDropDownStyle=0)
     return core
+
+
+# Faces, edges, features and a timeline for the reach read (`lib/fusion_reader/read_gap_reach.py`).
+
+
+class FakeFace:
+    def __init__(self, token, body=None):
+        self.entityToken = token
+        self.body = body
+
+
+class FakeEdge:
+    def __init__(self, token, faces):
+        self.entityToken = token
+        self.faces = _Collection(list(faces))
+
+
+class FakeMadeFeature:
+    """A timeline feature with the faces it created. `faces=None` makes the member raise, like an unreadable one."""
+
+    def __init__(self, faces):
+        self._faces = faces
+
+    @property
+    def faces(self):
+        if self._faces is None:
+            raise RuntimeError("faces unreadable")
+        return _Collection(list(self._faces))
+
+
+class FakeSolidBody:
+    """A body whose component finds the faces whose point is the given one."""
+
+    def __init__(self, token, faces_at):
+        self.entityToken = token
+        self.parentComponent = self
+        self._faces_at = faces_at
+
+    def findBRepUsingPoint(self, point, entity_type, *rest):
+        return _Collection(list(self._faces_at.get(tuple(point), ())))
+
+
+class FakeMarkerTimeline:
+    """A timeline of features with a marker. `refuse` is a position whose assignment raises; `moves_allowed` ignores
+    every assignment after that many, like a design that cannot be rolled back."""
+
+    def __init__(self, features, marker=None, refuse=None, moves_allowed=None):
+        self._features = features
+        self._marker = len(features) if marker is None else marker
+        self._refuse, self._allowed, self._moves = refuse, moves_allowed, 0
+        self.visited = []
+
+    count = property(lambda self: len(self._features))
+
+    @property
+    def markerPosition(self):
+        return self._marker
+
+    @markerPosition.setter
+    def markerPosition(self, value):
+        if value == self._refuse:
+            raise RuntimeError("marker refused")
+        if self._allowed is not None and self._moves >= self._allowed:
+            return
+        self._moves += 1
+        self._marker = value
+        self.visited.append(value)
+
+    def moveToEnd(self):
+        if self._allowed is not None:
+            return False
+        self._marker = len(self._features)
+        return True
+
+    def item(self, i):
+        return _Item(entity=self._features[i])
+
+
+class FakeReachDesign:
+    """A design that finds entities by token."""
+
+    def __init__(self, timeline, entities=()):
+        self.timeline = timeline
+        self._entities = {e.entityToken: e for e in entities}
+
+    def findEntityByToken(self, token):
+        found = self._entities.get(token)
+        return [found] if found is not None else []

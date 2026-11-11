@@ -25,7 +25,7 @@ from itertools import product
 
 from ..package.numbers import round9
 from ..params.expressions import ExpressionError, evaluate
-from . import follow, range_check, ref_motion, symmetric, tool_walk, values, vec
+from . import follow, notes as wording, range_check, ref_motion, symmetric, tool_walk, values, vec
 from .vec import POINT_TOL
 from .step_kinds import FINISH, SOLID, recipe_kind
 from .follow import Motion
@@ -130,6 +130,9 @@ def _sources(data, ctx, what):
             # A step that built a tool of a Combine this repeat copies: the Combine's steps carry it.
             continue
         if not ids:
+            missing = [gap for gap in (ctx.gap_of(i) for i in indexes) if gap is not None]
+            if missing:
+                return Refusal(wording.repeats_gap_reason([gap.name for gap in missing]), [gap.id for gap in missing])
             return Refusal("A step this %s copies is not part of the exported body." % what)
         if any(moved_later(ctx.steps, step_id) for step_id in ids):
             return Refusal("A step this %s copies was moved by a later Move, which is not copied yet." % what)
@@ -1125,6 +1128,10 @@ def mirror(item, ctx, sources=None):
     elif entity == "bodies":
         if not data.get("combine"):
             return Refusal("A mirrored body is only copied when it is joined to the part.")
+        if ctx.gaps:
+            # The mirror repeats the written steps one by one and checks them against the plane, so it cannot
+            # hold a step left out of the copy.
+            return Refusal(wording.repeats_gap_reason([gap.name for gap in ctx.gaps]), [gap.id for gap in ctx.gaps])
         if any(recipe_kind(step["kind"]).repeat != SOLID for step in ctx.steps):
             return Refusal("A mirror of the whole body after a round, chamfer, shell or Move is not copied yet.")
         problem = _body_mirror_problem(data, plane, ctx.steps)

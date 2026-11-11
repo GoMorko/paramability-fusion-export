@@ -3,7 +3,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.test_translate_start_from_face import height_at, origin_height
-from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
+from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, not_copied
 
 from lib.params import size_table
 from lib.probe import plan
@@ -35,9 +35,9 @@ def sized(capture, ticked=("lid_mm", "raise_mm")):
 
 
 def reason_of(result):
-    assert result.recipe is None, "the emboss was copied"
-    assert result.refusal["index"] == EMBOSS
-    return result.refusal["reason"]
+    assert not_copied(result) is not None, "the emboss was copied"
+    assert not_copied(result)["index"] == EMBOSS
+    return not_copied(result)["reason"]
 
 
 class EmbossCopyTest(unittest.TestCase):
@@ -125,8 +125,8 @@ class EmbossTangentChainTest(unittest.TestCase):
     def test_without_neighbours_a_curved_made_face_refuses_and_flat_ones_copy(self):
         refused = with_edit(lambda d: d.update(tangent_faces=None, made_surfaces=["Plane", "Cylinder"]))
         self.assertIn("Tangent Chain", reason_of(refused))
-        self.assertIsNone(with_edit(lambda d: d.update(tangent_faces=None, made_surfaces=["Plane"])).refusal)
-        self.assertIsNone(with_edit(lambda d: d.update(tangent_faces=None, made_surfaces=None)).refusal)
+        self.assertIsNone(not_copied(with_edit(lambda d: d.update(tangent_faces=None, made_surfaces=["Plane"]))))
+        self.assertIsNone(not_copied(with_edit(lambda d: d.update(tangent_faces=None, made_surfaces=None))))
 
 
 class EmbossRefusalTest(unittest.TestCase):

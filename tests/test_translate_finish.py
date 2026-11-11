@@ -2,6 +2,7 @@ import math
 import unittest
 
 from tests import context  # noqa: F401
+from tests.translator_helpers import not_copied
 from tests.translator_helpers import (
     assert_schema_ok, edited, load_capture, steps_of, translate_fixture, variant, verdict_of)
 
@@ -64,9 +65,9 @@ class FilletTest(unittest.TestCase):
         for name, word in (("fillet_variable", "changing radius"), ("fillet_g2", "curvature"),
                            ("fillet_feature_input", "another step")):
             result = translate_fixture(name)
-            self.assertIsNone(result.recipe, name)
-            self.assertIn(word, result.refusal["reason"], name)
-            self.assertEqual(result.refusal["index"], 2)
+            self.assertIsNotNone(not_copied(result), name)
+            self.assertIn(word, not_copied(result)["reason"], name)
+            self.assertEqual(not_copied(result)["index"], 2)
 
     def test_other_set_kinds_and_bad_radius_refuse(self):
         for label, edit in (("chord length", lambda d: d["sets"][0].update(kind="chordLength")),
@@ -75,7 +76,7 @@ class FilletTest(unittest.TestCase):
                             ("edge without points", lambda d: d["sets"][0].update(
                                 edges=[{"token": "x", "closed": False, "points": []}]))):
             with self.subTest(label):
-                self.assertIsNone(variant("fillet_four_edges", edit).recipe)
+                self.assertIsNotNone(not_copied(variant("fillet_four_edges", edit)))
 
     def test_unreadable_continuity_translates_with_a_note(self):
         result = variant("fillet_four_edges", lambda d: d["sets"][0].update(continuity="other"))
@@ -184,8 +185,8 @@ class ChamferTest(unittest.TestCase):
 
     def test_uneven_without_measured_faces_refuses(self):
         result = translate_fixture("chamfer_uneven")
-        self.assertIsNone(result.recipe)
-        self.assertIn("face each size is on", result.refusal["reason"])
+        self.assertIsNotNone(not_copied(result))
+        self.assertIn("face each size is on", not_copied(result)["reason"])
 
     def test_other_corner_type_notes(self):
         result = variant("chamfer_equal", lambda d: d.update(corner_type="miter"))
@@ -211,8 +212,8 @@ class ShellTest(unittest.TestCase):
         for name, word in (("shell_outside", "outward"), ("shell_closed", "Closed hollow"),
                            ("shell_rounded", "rounded")):
             result = translate_fixture(name)
-            self.assertIsNone(result.recipe, name)
-            self.assertIn(word, result.refusal["reason"], name)
+            self.assertIsNotNone(not_copied(result), name)
+            self.assertIn(word, not_copied(result)["reason"], name)
 
     def test_no_faces_no_thickness_or_too_many_faces_refuse(self):
         many = [{"token": "f%d" % i, "point": [i, 0, 10]} for i in range(33)]
@@ -220,7 +221,7 @@ class ShellTest(unittest.TestCase):
                             ("no thickness", lambda d: d.update(inside=0.0)),
                             ("too many faces", lambda d: d.update(faces=many))):
             with self.subTest(label):
-                self.assertIsNone(variant("shell_open_top", edit).recipe)
+                self.assertIsNotNone(not_copied(variant("shell_open_top", edit)))
 
 
 if __name__ == "__main__":

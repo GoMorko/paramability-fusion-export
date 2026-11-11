@@ -12,11 +12,14 @@ from lib.export_plan.recipe_export import plan_single_export
 from lib.package.manifest import validate_manifest
 
 
-def plate_then_loft():
+def loft_then_plate():
+    """A loft that starts the body: nothing is copied before it, so the copy stops there."""
     capture = load_capture("extrude_plate")
     body = capture["items"][1]["bodies_after"]
-    capture["items"].append({"index": 2, "name": "Loft1", "type": "LoftFeature", "suppressed": False,
-                             "health": "ok", "message": "", "in_target_component": True, "bodies_after": body, "data": {}})
+    capture["items"][1]["index"] = 3
+    capture["items"].insert(1, {"index": 2, "name": "Loft1", "type": "LoftFeature", "suppressed": False,
+                                "health": "ok", "message": "", "in_target_component": True, "bodies_after": body,
+                                "data": {}})
     return capture
 
 
@@ -122,7 +125,7 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(json.loads(files["report.json"])["capture"]["design"], "Test")
 
     def test_unsupported_feature_gives_step_only_naming_it(self):
-        manifest, files, report = self.plan(plate_then_loft())
+        manifest, files, report = self.plan(loft_then_plate())
         self.assertEqual(manifest["kind"], "stepOnly")
         self.assertNotIn("recipe", manifest)
         self.assertEqual(sorted(files), ["part.step", "report.json"])
@@ -199,7 +202,7 @@ class MotionHandoverTest(unittest.TestCase):
         self.assertEqual(report["probe"], {"restore_gap_mm": 0.0})
 
     def test_a_translation_that_refused_is_used_as_given_and_nothing_translates_again(self):
-        capture = plate_then_loft()
+        capture = loft_then_plate()
         refused = recipe_export.translate(capture)
         self.assertIsNone(refused.recipe)
         self.seen.clear()

@@ -4,6 +4,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.schema_check import check_recipe
+from tests.translator_helpers import not_copied
 from tests.translator_helpers import load_capture, steps_of, verdict_of
 
 from lib.params import size_table
@@ -138,12 +139,12 @@ class RefusedPasteTest(unittest.TestCase):
             with self.subTest(name):
                 capture = short_chain()
                 edit(paste_data(capture))
-                self.assertEqual(translate(capture).refusal["name"], "Combine1")
+                self.assertEqual(not_copied(translate(capture))["name"], "Combine1")
 
     def test_a_source_that_cannot_be_copied_names_its_step(self):
         capture = short_chain()
         capture["items"][3]["type"] = "SweepFeature"
-        self.assertIn("Extrude2", translate(capture).refusal["reason"])
+        self.assertIn("Extrude2", not_copied(translate(capture))["reason"])
 
     def test_a_paste_chain_past_the_depth_limit_refuses(self):
         capture = short_chain()
@@ -157,7 +158,7 @@ class RefusedPasteTest(unittest.TestCase):
         combine = capture["items"][-1]
         combine["index"] = 8
         combine["data"]["tools"] = [{"token": "t9", "name": "Body9"}]
-        self.assertEqual(translate(capture).refusal["name"], "Combine1")
+        self.assertEqual(not_copied(translate(capture))["name"], "Combine1")
 
 
 if __name__ == "__main__":

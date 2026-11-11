@@ -46,9 +46,9 @@ def with_joint_on(capture, size):
 
 
 def stuck_body():
-    """A body whose last step has a type nothing can copy."""
+    """A body whose last step does not build in Fusion."""
     capture = renamed(BASE, ("t1", "Body1"), ("t3", "Body3"))
-    capture["items"][-1]["type"] = "MysteryFeature"
+    capture["items"][-1]["health"] = "error"
     return capture
 
 

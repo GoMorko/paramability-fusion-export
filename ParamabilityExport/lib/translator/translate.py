@@ -1,7 +1,7 @@
 """The driver: walks a capture's items, calls one handler per feature type, builds the recipe."""
 import importlib
 
-from . import range_check, repeat, step_kinds
+from . import gaps, range_check, repeat, step_kinds
 from .audit import audit
 from .sizes import joint_reasons, probed_sizes, text_reasons, untried_reasons, used_sizes
 from . import notes as wording, place
@@ -132,6 +132,10 @@ def translate(capture, handlers=None, size_table=None, motion=None):
     The walk runs twice when some value cannot follow. The first walk fixes every size such a value reads, to learn
     which sizes and reasons there are. The second keeps them free.
 
+    A step the copy cannot hold but whose effect stays on the body is left out as a gap (gaps.py, walk.py): the recipe
+    is written without it and `result.gaps` describes it, with where it belongs. A size that only such steps read stays
+    a size, loose, with a reason that holds once the steps are added.
+
     `motion` is what the size probe measured about sketch values (`sketch_values.motion.Motion`): sketch points, planes, hole
     points and revolve axes are then written as formulas where they follow sizes. `sketch_values.motion.OPTIMISTIC` writes
     them as numbers without fixing anything for them (the first translation of an export). Without it, no size that
@@ -246,6 +250,8 @@ def _finish(settled, doubts, capture, motion):
     for name, why in checked.forgotten.items():
         doubts.setdefault(name, why)
     sizes = used_sizes(result.recipe["features"], table.sizes)
+    if result.gaps:
+        sizes = _gap_sizes(settled.ctx, result, table, sizes, doubts, checked.gap_reads)
     spans = _narrow_spans(table, motion)
     for name, (span, low, high) in spans.items():
         if table.size_name(name) in sizes:
@@ -259,6 +265,31 @@ def _finish(settled, doubts, capture, motion):
     if sizes:
         result.recipe["sizes"] = sizes
     return result
+
+
+def _gap_sizes(ctx, result, table, sizes, doubts, reads):
+    """The recipe sizes with those that only left out steps read added, and each gap record's `sizes` and
+    `looseSizes`. Such a size is loose with a reason in `doubts`, unless it has a state already: a fixed size has no
+    recipe name, and a doubted one keeps its reason."""
+    readers, kept, loose = {}, set(), {}
+    for gap in ctx.gaps:
+        for name in reads.get(gap.id, ()):
+            readers.setdefault(name, []).append(gap)
+    for name, found in readers.items():
+        size = table.size_name(name)
+        if size is None or size not in table.sizes or size in sizes:
+            continue
+        kept.add(size)
+        if name not in doubts:
+            doubts[name] = wording.gap_only_why([gap.name for gap in found])
+            for gap in found:
+                loose.setdefault(gap.id, set()).add(size)
+    out = {name: spec for name, spec in table.sizes.items() if name in sizes or name in kept}
+    for gap, written in zip(ctx.gaps, result.gaps):
+        names = {table.size_name(name) for name in reads.get(gap.id, ())}
+        written["sizes"] = [name for name in out if name in names]
+        written["looseSizes"] = [name for name in written["sizes"] if name in loose.get(gap.id, ())]
+    return out
 
 
 def _narrow_spans(table, motion):
@@ -328,8 +359,18 @@ def _walk(capture, table, size_table, motion=None, cache=None):
     if over:
         result.refusal = {"index": None, "name": "", "type": "", "reason": over}
         return result, ctx
-    recipe = place.place(recipe, place.move_for(capture))
+    move = place.move_for(capture)
+    recipe = place.place(recipe, move)
     _fix_long_formulas(recipe, ctx)
+    if ctx.gaps:
+        problem = (wording.too_many_gaps_reason(gaps.MAX_GAPS) if len(ctx.gaps) > gaps.MAX_GAPS
+                   else gaps.place_all(ctx.gaps, recipe["features"]))
+        if problem:
+            result.refusal = {"index": None, "name": "", "type": "", "reason": problem}
+            return result, ctx
+        result.gaps = [gaps.record(gap, size_table, move) for gap in ctx.gaps]
+        result.to_recipe = gaps.to_recipe(move)
+        result.notes.append(wording.left_out_note([gap.name for gap in ctx.gaps]))
     result.recipe = recipe
     return result, ctx
 

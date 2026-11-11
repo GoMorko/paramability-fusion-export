@@ -2,8 +2,13 @@
 
 The same loop copies the exported body and each tool body of a Combine. The context says what it builds
 (`Context.target`, `Context.capture`, `Context.handlers`), so a handler always sees the body it works on as its target.
+
+An item the copy cannot hold either stops the copy or, when its effect stays on the body and the rest of the timeline
+still reads right, is left out as a gap (gaps.py). A gap is a step type with no handler, a handler's Refusal, a step
+that reaches into another component, and a step that picks faces a gap made. What a left out item would have recorded
+(doubts, notes) is dropped with it. Anything that leaves the body unknown still stops the copy.
 """
-from . import borrowed, notes as wording, ref_motion, step_kinds
+from . import borrowed, gaps, notes as wording, ref_motion, step_kinds
 from .capture import outside_component, renamed_target, same_body
 from .result import Refusal, StepResult, make_verdict
 from .sizes import construction_fixes
@@ -132,6 +137,11 @@ def run_handler(handler, item, ctx):
     return outcome
 
 
+def _gap_ids(ctx, item):
+    """Ids of the gaps whose faces `item` picks, or may pick."""
+    return [gap.id for gap in gaps.picked_gaps(ctx, item)[0]]
+
+
 def walk_items(ctx, result):
     """Walk the items of `ctx.capture`: True when every item was dealt with, False when one stops the copy (then
     `result.refusal` says why). Verdicts and notes go to `result`, steps and doubts to `ctx`."""
@@ -140,6 +150,17 @@ def walk_items(ctx, result):
         result.items.append(make_verdict(item, "unsupported", note=reason))
         result.refusal = _refusal(item, reason, note)
         return False
+
+    def leave_out(item, reason, depends_on=(), note=None):
+        """Leave the item out as a gap: True, or False when the copy stops here instead."""
+        stop = gaps.stop_reason(ctx, reason)
+        if stop is not None:
+            return refuse(item, stop, note if stop == reason else None)
+        gap = ctx.leave_out(item, reason, depends_on)
+        verdict = make_verdict(item, "leftOut", note=gap.reason)
+        verdict["gap"] = gap.id
+        result.items.append(verdict)
+        return True
 
     made_in_component = False
     for item in ctx.capture["items"]:
@@ -192,7 +213,11 @@ def walk_items(ctx, result):
                 continue
             if handler is not None:
                 return refuse(item, "The bodies this %s changes could not be read." % type_words(item["type"]))
-            return refuse(item, "Steps of type %s are not copied yet." % type_words(item["type"]))
+            if not leave_out(item, "Steps of type %s are not copied yet." % type_words(item["type"]),
+                             _gap_ids(ctx, item)):
+                return False
+            made_in_component = True
+            continue
         if not touches:
             result.items.append(make_verdict(item, "skipped", note="Helper geometry, not part of the exported body."))
             continue
@@ -204,25 +229,40 @@ def walk_items(ctx, result):
             continue
         if handler is None:
             spec = step_kinds.step_type(item["type"])
-            return refuse(item, (spec and spec.unsupported)
-                          or "Steps of type %s are not copied yet." % type_words(item["type"]))
+            if not leave_out(item, (spec and spec.unsupported)
+                             or "Steps of type %s are not copied yet." % type_words(item["type"]),
+                             _gap_ids(ctx, item)):
+                return False
+            made_in_component = True
+            continue
         if _data(item).get("read_error"):
             return refuse(item, "This step could not be read from Fusion.")
+        picked, sure = gaps.picked_gaps(ctx, item)
         with ctx.recording() as brought:
             item = ctx.current = ref_motion.bring_in(borrowed.bring_in(item, ctx))
-        ctx.doubts.extend(brought.doubts)
         if is_foreign(_data(item)):
-            return refuse(item, ref_motion.why_foreign(item)
-                          or "This step reaches into another component, which is not copied yet.",
-                          wording.reaches_component_note(_label(item)))
+            if not leave_out(item, ref_motion.why_foreign(item)
+                             or "This step reaches into another component, which is not copied yet.",
+                             [gap.id for gap in picked], wording.reaches_component_note(_label(item))):
+                return False
+            made_in_component = True
+            continue
         made_in_component = True
-        fix_construction(ctx, item)
+        with ctx.recording() as construction:
+            fix_construction(ctx, item)
         if _new_bodies(item, ctx) and not copies_bodies(item):
             return refuse(item, "This step splits the part or makes another body, which is not copied yet.")
+        if picked:
+            if not leave_out(item, wording.picks_gap_reason([gap.name for gap in picked], sure),
+                             [gap.id for gap in picked]):
+                return False
+            continue
         outcome = run_handler(handler, item, ctx)
         if isinstance(outcome, Refusal):
-            ctx.doubts.extend(outcome.doubts)
-            return refuse(item, outcome.reason)
+            if not leave_out(item, outcome.reason, outcome.depends_on):
+                return False
+            continue
+        ctx.doubts.extend(brought.doubts + construction.doubts)
         ctx.commit(outcome)
         notes = brought.notes + outcome.notes
         if not outcome.entries:

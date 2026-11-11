@@ -13,6 +13,7 @@ from ..lib.design_edit.runner import ExportCancelled
 from ..lib.export_plan import messages
 from ..lib.fusion_reader import design_info
 from ..lib.fusion_reader.capture import MarkerError
+from ..lib.fusion_reader.read_gap_reach import read_reach
 from ..lib.fusion_ui.log import error_box, log, message_box
 from ..lib.fusion_ui.progress import ProgressDialog
 from ..lib.package.caps import PackageCapError
@@ -70,6 +71,18 @@ def run_guarded(design, marker, work, unrestored=lambda: ()):
         if marker is not None and not put_back(design.timeline, marker):
             message_box(not_put_back_message(marker), error=True)
     return None
+
+
+def read_gap_reach(design, capture, gaps):
+    """Which left out step made the geometry each later step picks (`read_gap_reach.read_reach`). A read that fails
+    gives `{ read: false, error }`; only a marker that could not be put back is raised."""
+    try:
+        return read_reach(design, capture, gaps)
+    except MarkerError:
+        raise
+    except Exception as exc:
+        log(f"reach read failed: {exc!r}")
+        return {"read": False, "error": str(exc) or type(exc).__name__}
 
 
 def app():

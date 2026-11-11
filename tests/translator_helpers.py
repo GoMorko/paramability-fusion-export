@@ -55,3 +55,24 @@ def variant(name, edit):
     capture = load_capture(name)
     edit(capture["items"][-1]["data"])
     return translate(capture)
+
+
+def _left_out(verdicts):
+    for verdict in verdicts:
+        if verdict["verdict"] == "leftOut":
+            return verdict
+        found = _left_out(verdict.get("tool_steps") or [])
+        if found is not None:
+            return found
+    return None
+
+
+def not_copied(result):
+    """Why a step is missing from the copy, as {index, name, type, reason}: the refusal that stopped the copy, else the
+    first step left out as a gap (at any depth), else None."""
+    if result.refusal is not None:
+        return result.refusal
+    verdict = _left_out(result.items)
+    if verdict is None:
+        return None
+    return {"index": verdict["index"], "name": verdict["name"], "type": verdict["type"], "reason": verdict["note"]}

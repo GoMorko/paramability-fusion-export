@@ -12,6 +12,7 @@ import unittest
 from unittest import mock
 
 from tests import context  # noqa: F401
+from tests.translator_helpers import not_copied
 from tests.translator_helpers import FIXTURES, load_capture, steps_of
 
 from lib.params import size_table
@@ -145,20 +146,20 @@ class ReachTest(unittest.TestCase):
             for key in ("point", "normal", "face_point"):
                 del side["ref"][key]
         result = self.run_reach(edit=edit)
-        self.assertEqual(result.refusal["index"], 3)
-        self.assertIn("curved face", result.refusal["reason"])
+        self.assertEqual(not_copied(result)["index"], 3)
+        self.assertIn("curved face", not_copied(result)["reason"])
 
     def test_a_tilted_face_of_another_component_is_refused(self):
         def edit(capture):
             side = capture["items"][3]["data"]["side_one"]
             side["ref"]["normal"] = side["plane"]["normal"] = [0, 0.6, 0.8]
-        self.assertIn("tilted", self.run_reach(edit=edit).refusal["reason"])
+        self.assertIn("tilted", not_copied(self.run_reach(edit=edit))["reason"])
 
     def test_a_face_whose_place_was_not_brought_in_is_refused(self):
         def edit(capture):
             for key in ("point", "normal", "face_point"):
                 del capture["items"][3]["data"]["side_one"]["ref"][key]
-        self.assertIn("could not be read", self.run_reach(edit=edit).refusal["reason"])
+        self.assertIn("could not be read", not_copied(self.run_reach(edit=edit))["reason"])
 
     def test_a_start_on_a_plane_of_another_component_moves_the_sketch_origin(self):
         def edit(capture):
@@ -338,14 +339,14 @@ class HoleTest(unittest.TestCase):
         def edit(data):
             data["position_refs"] = [ref("BRepEdge", "positions.0", point=[10, 10, 10])]
         result = run(self.on_a_face(edit), motion_with(self.NAME))
-        self.assertEqual(result.refusal["index"], 3)
-        self.assertIn("edge", result.refusal["reason"])
+        self.assertEqual(not_copied(result)["index"], 3)
+        self.assertIn("edge", not_copied(result)["reason"])
 
     def test_a_hole_on_a_face_whose_place_was_not_brought_in_is_refused(self):
         def edit(data):
             data["position_refs"] = [ref("BRepFace", "positions.0")]
         result = run(self.on_a_face(edit), motion_with(self.NAME))
-        self.assertIn("could not be read", result.refusal["reason"])
+        self.assertIn("could not be read", not_copied(result)["reason"])
 
 
 class PlaneShiftTest(unittest.TestCase):

@@ -9,7 +9,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.schema_check import check_recipe
-from tests.translator_helpers import load_capture, steps_of
+from tests.translator_helpers import load_capture, steps_of, not_copied
 
 from lib.params import size_table
 from lib.params.expressions import evaluate
@@ -168,8 +168,8 @@ class RefusedToolTest(unittest.TestCase):
 
     def refusal(self, capture):
         result = translate(capture)
-        self.assertIsNone(result.recipe)
-        return result.refusal
+        self.assertIsNotNone(not_copied(result))
+        return not_copied(result)
 
     def test_a_round_on_the_tool_stops_the_copy_and_names_the_step_and_the_component(self):
         refusal = self.refusal(self.step_before_combine("FilletFeature", "Fillet1"))

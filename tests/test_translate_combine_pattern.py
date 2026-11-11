@@ -3,7 +3,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.schema_check import check_recipe
-from tests.translator_helpers import load_capture, steps_of
+from tests.translator_helpers import load_capture, steps_of, not_copied
 
 from lib.params import size_table
 from lib.params.expressions import evaluate
@@ -61,11 +61,11 @@ class CombinePatternTest(unittest.TestCase):
         for sources in ([3, 6], [6]):
             with self.subTest(sources):
                 result = translate(with_sources(load_capture("combine_tool_pattern"), sources))
-                self.assertEqual(result.refusal["index"], PATTERN)
+                self.assertEqual(not_copied(result)["index"], PATTERN)
 
     def test_the_steps_of_a_tool_without_their_combine_refuse(self):
         result = translate(with_sources(load_capture("combine_tool_pattern"), [3, 5]))
-        self.assertEqual(result.refusal["index"], PATTERN)
+        self.assertEqual(not_copied(result)["index"], PATTERN)
 
     def test_an_intersecting_combine_refuses(self):
         capture = load_capture("combine_tool_pattern")
@@ -74,7 +74,7 @@ class CombinePatternTest(unittest.TestCase):
         for key in ("volume_before", "volume_after"):
             data.pop(key)
         result = translate(capture)
-        self.assertEqual(result.refusal["index"], PATTERN)
+        self.assertEqual(not_copied(result)["index"], PATTERN)
 
 
 if __name__ == "__main__":

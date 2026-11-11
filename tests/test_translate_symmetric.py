@@ -4,7 +4,7 @@ import unittest
 from tests import context  # noqa: F401
 from tests.test_translate_copies import FLAT, _edges_set, _extrude, _item, _turned
 from tests.test_translate_sized import CUBE, TICKED, param, table_of
-from tests.translator_helpers import assert_schema_ok, edited, load_capture, steps_of, translate_fixture
+from tests.translator_helpers import assert_schema_ok, edited, load_capture, steps_of, translate_fixture, not_copied
 
 from lib.params import size_table
 from lib.params.expressions import evaluate
@@ -134,14 +134,14 @@ class SymmetricRowTest(unittest.TestCase):
                               ("flag on, extent misread", edited("rpattern_symmetric_extent", lambda capture: capture[
                                   "items"][-1]["data"].update(distance_one=40.0)))):
             with self.subTest(label):
-                self.assertIsNone(result.recipe)
-                self.assertEqual(result.refusal["index"], 4)
+                self.assertIsNotNone(not_copied(result))
+                self.assertEqual(not_copied(result)["index"], 4)
 
     def test_copies_on_both_sides_need_the_flag(self):
         result = edited("rpattern_symmetric_odd", lambda capture: capture["items"][-1]["data"].update(
             symmetric_one=False))
-        self.assertIsNone(result.recipe)
-        self.assertEqual(result.refusal["index"], 4)
+        self.assertIsNotNone(not_copied(result))
+        self.assertEqual(not_copied(result)["index"], 4)
 
 
 class SymmetricSizedTest(unittest.TestCase):
@@ -241,8 +241,8 @@ class SymmetricCircularTest(unittest.TestCase):
                                ("copies run one way", centred(circular(3, 4, 90.0, [0, 30, 60, 90])))):
             with self.subTest(label):
                 result = translate(capture)
-                self.assertIsNone(result.recipe)
-                self.assertEqual(result.refusal["index"], 3)
+                self.assertIsNotNone(not_copied(result))
+                self.assertEqual(not_copied(result)["index"], 3)
 
 
 if __name__ == "__main__":

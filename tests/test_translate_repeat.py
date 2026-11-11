@@ -3,7 +3,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.test_translate_sized import table_of
-from tests.translator_helpers import assert_schema_ok, edited, load_capture, steps_of, translate_fixture, verdict_of
+from tests.translator_helpers import assert_schema_ok, edited, load_capture, steps_of, translate_fixture, verdict_of, not_copied
 
 from lib.translator import translate
 
@@ -46,8 +46,8 @@ class RectangularPatternTest(unittest.TestCase):
         def edit(capture):
             del pattern_data(capture)["elements"][0]
         result = edited("rpattern_row", edit)
-        self.assertIsNone(result.recipe)
-        self.assertEqual(result.refusal["index"], 4)
+        self.assertIsNotNone(not_copied(result))
+        self.assertEqual(not_copied(result)["index"], 4)
 
     def test_copies_running_against_the_direction_negate_it(self):
         (pattern,) = steps_of(translate_fixture("rpattern_negative").recipe, "pattern")
@@ -88,8 +88,8 @@ class RectangularPatternTest(unittest.TestCase):
         ]
         for label, result in cases:
             with self.subTest(label):
-                self.assertIsNone(result.recipe)
-                self.assertEqual(result.refusal["index"], 4)
+                self.assertIsNotNone(not_copied(result))
+                self.assertEqual(not_copied(result)["index"], 4)
 
     def test_drill_tip_and_multi_point_holes(self):
         tip = translate_fixture("rpattern_drill_tip")
@@ -190,8 +190,8 @@ class CircularPatternTest(unittest.TestCase):
         ]
         for label, result in cases:
             with self.subTest(label):
-                self.assertIsNone(result.recipe)
-                self.assertEqual(result.refusal["index"], 4)
+                self.assertIsNotNone(not_copied(result))
+                self.assertEqual(not_copied(result)["index"], 4)
 
     def test_fillet_points_turn_with_each_copy(self):
         def edit(capture):
@@ -232,7 +232,7 @@ class MirrorTest(unittest.TestCase):
         assert_schema_ok(self, result.recipe)
 
     def test_fillet_on_the_plane_refuses_instead_of_rounding_twice(self):
-        self.assertIsNotNone(translate_fixture("mirror_fillet_on_plane").refusal)
+        self.assertIsNotNone(not_copied(translate_fixture("mirror_fillet_on_plane")))
 
     def test_fillet_partly_on_the_plane_copies_only_the_off_plane_edge_with_its_size(self):
         source, copy_step = steps_of(translate_fixture("mirror_fillet_partly_on_plane").recipe, "round")
@@ -262,7 +262,7 @@ class MirrorTest(unittest.TestCase):
             data = capture["items"][3]["data"]
             data["positions"] = [[1, 0, 10]]
             data["side_cylinders"][0]["origin"] = [1, 0, 10]
-        self.assertIsNone(edited("mirror_body_tip_hole", across).recipe)
+        self.assertIsNotNone(not_copied(edited("mirror_body_tip_hole", across)))
 
     def test_body_mirror_refusals(self):
         no_box = edited("mirror_body", lambda c: pattern_data(c).pop("target_box_before"))
@@ -275,15 +275,15 @@ class MirrorTest(unittest.TestCase):
         ]
         for label, result in cases:
             with self.subTest(label):
-                self.assertIsNone(result.recipe)
-                self.assertEqual(result.refusal["type"], "MirrorFeature")
+                self.assertIsNotNone(not_copied(result))
+                self.assertEqual(not_copied(result)["type"], "MirrorFeature")
 
     def test_other_refusals(self):
         no_plane = edited("mirror_features", lambda c: pattern_data(c).update(plane=None))
         faces = edited("mirror_features", lambda c: pattern_data(c).update(entity_type="faces"))
         for result in (no_plane, faces):
-            self.assertIsNone(result.recipe)
-            self.assertIsNotNone(result.refusal)
+            self.assertIsNotNone(not_copied(result))
+            self.assertIsNotNone(not_copied(result))
 
 
 class RepeatedStepsTest(unittest.TestCase):
@@ -300,8 +300,8 @@ class RepeatedStepsTest(unittest.TestCase):
         for label, edit in (("through all", through), ("to a face", to_face), ("new body", separate_body)):
             with self.subTest(label):
                 result = edited("rpattern_row", edit)
-                self.assertIsNone(result.recipe)
-                self.assertEqual(result.refusal["index"], 4)
+                self.assertIsNotNone(not_copied(result))
+                self.assertEqual(not_copied(result)["index"], 4)
 
 
 class CopyCapTest(unittest.TestCase):
@@ -332,8 +332,8 @@ class CopyCapTest(unittest.TestCase):
     def test_nested_pattern_over_the_cap(self):
         # 63 + 4 * 64 = 319
         result = self.nested(5)
-        self.assertIsNone(result.recipe)
-        self.assertEqual(result.refusal["index"], 5)
+        self.assertIsNotNone(not_copied(result))
+        self.assertEqual(not_copied(result)["index"], 5)
 
 
 if __name__ == "__main__":

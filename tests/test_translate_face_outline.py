@@ -6,7 +6,7 @@ from tests import context  # noqa: F401
 from tests.test_translate_follow import at, loose_names, tray
 from tests.test_translate_sized import CUBE, H, run
 from tests.test_translate_tool_body import sized, tool_of
-from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, verdict_of
+from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, verdict_of, not_copied
 
 from lib.translator import translate
 from lib.translator.values import number
@@ -163,7 +163,7 @@ class RefusalTest(unittest.TestCase):
                 capture = on_tray(made)
                 capture["items"][-1]["data"]["profiles"] = profiles
                 result = translate(capture)
-                self.assertEqual(result.refusal["index"], 2)
+                self.assertEqual(not_copied(result)["index"], 2)
 
 
 if __name__ == "__main__":
