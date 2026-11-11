@@ -11,7 +11,7 @@ from tests.schema_check import check_recipe
 from lib.export_plan.probe_flow import probe_view
 from lib.params import size_table
 from lib.probe import build as probe_build
-from lib.sketch_values.motion import Terms
+from lib.sketch_values.motion import Stuck, Terms
 from lib.translator import translate
 
 REPORTS = os.path.expanduser("~/Documents/free-projects/3mf-compose/tmp/reports")
@@ -276,7 +276,10 @@ class OwnerCapture074Test(unittest.TestCase):
         self.assertEqual(len(copies), 28)
         self.assertTrue(all(count in s["when"] for s in copies))
         self.assertFalse([f for f in result.loose if "different outline" in f["reason"]])
-        self.assertEqual(len(result.dropped), 1)
+        # The size that moves the side outline along a curve stays a loose size: another step still follows it.
+        curved = {n for v in motion.values.values() if isinstance(v, Stuck) and v.cause == "curve" for n in v.movers}
+        self.assertEqual(result.dropped, [])
+        self.assertTrue(curved & {f["name"] for f in result.loose})
         # The two half way rows of the angle had one read between them; the one that does not match its row is left
         # out, and a point follows the angle through the cotangent of its half.
         self.assertTrue(any(isinstance(v, Terms) and any(f[0] == "cot" for _, fs in v.parts for f in fs)

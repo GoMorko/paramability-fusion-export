@@ -1597,7 +1597,9 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   half angle. The translator writes it as a formula with `sin`, `cos` and `tan` in degrees (`cot` as `cos / sin`),
   checked over the size ranges like any formula (a value that would reach zero, or a divisor that would cross zero,
   marks its sizes; a formula past the length cap fixes them). A `Terms` value holds the sizes that a stuck value of the
-  motion names at their value now, so all values of one outline follow the same sizes. A sketch can
+  same item names at their value now, so all values of the step's outlines follow the same sizes; values of other
+  items still follow them. A stuck curve key (`<prefix>/c<loop>.<curve>/...`, such as a line's `turn`) holds nothing:
+  a line's direction can turn along a curve while both its ends follow. A sketch can
   have more than one solution, and Fusion may land on another one after the rows run before (a row that did not build
   often leaves it there). A different outline blames a size only in that size's own row (the row that changes it
   alone), when the row started on the captured outline and the outline came back once the parameters were put back

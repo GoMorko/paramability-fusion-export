@@ -17,7 +17,7 @@ from .tool_walk import MAX_DEPTH as MAX_TOOL_DEPTH
 from ..params import geometry_links
 from ..params.expressions import MAX_FORMULA_LENGTH
 from .values import Sized, number
-from ..sketch_values import coverage
+from ..sketch_values import coverage, keys
 from ..sketch_values.motion import Motion, Stuck, Terms
 from .walk import walk_items
 
@@ -197,20 +197,25 @@ def translate(capture, handlers=None, size_table=None, motion=None):
 
 
 class _Held:
-    """A motion file whose `Terms` values hold the sizes some stuck value names at their value now: those sizes cannot
-    be followed, so the values of one outline all follow the same other sizes."""
+    """A motion file whose `Terms` values hold, at their value now, the sizes a stuck point or plane of the same step
+    names: those sizes cannot be followed there, so the values of the step's outlines all follow the same other
+    sizes. The other steps still follow them. A stuck sketch curve does not hold sizes: a line's direction turns along a
+    curve even when both its ends follow, and a corner found through such a curve is stuck on its own."""
     optimistic = False
 
     def __init__(self, motion, table):
         self._motion = motion
-        held = {n for v in motion.values.values() if isinstance(v, Stuck) for n in v.movers}
-        self._held = {e.name: e.value for e in table.entries if e.name in held}
+        now = {e.name: e.value for e in table.entries}
+        self._held = {}
+        for key, value in motion.values.items():
+            if isinstance(value, Stuck) and not keys.is_curve(key):
+                held = self._held.setdefault(keys.item_of(key), {})
+                held.update((name, now[name]) for name in value.movers if name in now)
 
     def get(self, key):
         found = self._motion.get(key)
-        if isinstance(found, Terms) and self._held:
-            return found.held(self._held)
-        return found
+        held = self._held.get(keys.item_of(key)) if isinstance(found, Terms) else None
+        return found.held(held) if held else found
 
     def __getattr__(self, name):
         return getattr(self._motion, name)

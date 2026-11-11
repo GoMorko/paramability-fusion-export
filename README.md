@@ -142,6 +142,9 @@ check it: every try must follow from the others. To have enough tries, the add-i
 ends and together with each other size of the same sketch (about 2 tries per curved size, plus 2 per other size it
 shares a sketch with, inside the 64 tries). When no such formula fits, only that size is marked; the other sizes of
 the sketch still follow, and two more tries check them together. A size the readings still cannot follow is loose.
+In the step with the point that cannot follow, the formulas with sines or products leave that size out, so the
+outline keeps its shape; every other step still follows it. A line whose direction turns while both its ends follow
+leaves out nothing.
 
 These cases cannot be copied in a sketch even with the tries: a point that moves along a curve no such formula
 follows, an outline that changes shape (a line that only crosses the outline above some width, a sketch

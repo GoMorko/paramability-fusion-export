@@ -70,3 +70,14 @@ def reference_point(item, slot, coordinate):
 
 def reference_dir(item, slot):
     return reference(item, slot) + "/dir"
+
+
+def item_of(key):
+    """The timeline item a key belongs to."""
+    return key.split("/", 1)[0]
+
+
+def is_curve(key):
+    """True for a key of a sketch curve (`<prefix>/c<loop>.<curve>/<field>`)."""
+    parts = key.split("/")
+    return len(parts) == 4 and parts[1].startswith("p") and parts[2].startswith("c")
