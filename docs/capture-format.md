@@ -739,7 +739,10 @@ neither way, refuses an uneven chamfer.
 ```
 
 - `entity_type`: `features`, `faces`, `bodies`, `occurrences`. `sources`: `timelineObject.index` of each input
-  feature.
+  feature. A Combine of the target among the sources is repeated by the steps it wrote (its `toolBody` step, or its
+  tool's steps written one by one) when every item that built its tools is a source too (`repeat._combined_tools`;
+  the same holds for a circular pattern and a mirror of features). Only some of those items, the items of a tool
+  without its Combine, or an intersect Combine refuse the pattern.
 - For `entity_type: bodies` (rectangular and circular patterns, and the mirror below) the item also has
   `source_bodies` and `result_bodies`: each a list of body records with `points` (see "Body records" below).
   `source_bodies` come from `inputEntities` with the marker before the item, `result_bodies` from `bodies` with the
@@ -838,6 +841,8 @@ copied stops that walk, and the Combine is refused with the reason naming the to
   steps (`body_copies.groups`, `write`); a subset of the copies, or a layout `repeat.py` refuses, is one tool per copy
   with a `move`. An intersect never uses the pattern form. A size the count reads is marked, since it is not known
   whether Fusion adds new copies to the Combine (hand test B6); spacing and angle follow without a mark.
+- A later pattern or mirror of features may hold the Combine and the items that built its tools as sources; it then
+  repeats the steps the Combine wrote (see RectangularPatternFeature above, hand test F2).
 - A Combine whose result differs from the tools' own volumes by more than they can give (`combine_volume.exceeds_tools`
   for tool steps, `exceeds` for steps written one by one) is refused.
 - A tool the Combine keeps (`keep_tools`) stays usable: a later Combine walks it again up to its own index. A tool

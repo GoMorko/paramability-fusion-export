@@ -290,6 +290,10 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   behind the layout are marked. A count that follows a size is written as if the Combine also takes the new copies.
   Since it is not known whether Fusion does this (hand test B6), that size is marked "may give unexpected results". A mirror of bodies is copied only in a Combine, together
   with its source. A body that is a copy in a pattern is copied by writing its source's steps and a Move.
+- A pattern or mirror of features whose sources hold a Combine of the part, together with every step that built its tool
+  bodies, repeats the Combine as it was copied, so its count, spacing and skipped copies follow sizes as for any
+  pattern. A pattern that holds only some of those steps, the steps of a tool without its Combine, or a Combine that
+  keeps only the shared part stops the copy.
 - Fusion does not say what a keep-only-the-shared-part Combine with several tools keeps (the part and every tool, or
   the part and any tool). The export tries it on temporary copies, which are never added to your design, compares
   the volumes with the result Fusion made, and copies it that way. When the volumes fit neither way, or a tool lives
@@ -343,7 +347,7 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 - Paramability opens up to 256 MB per size and 1 GB per file. The export stops with a message above that.
 - The design needs history (a parametric design).
 - Made for the current Fusion release.
-- This is version 0.8.1. The Fusion side has not been run by a tool: see `docs/hand-tests.md`.
+- This is version 0.8.2. The Fusion side has not been run by a tool: see `docs/hand-tests.md`.
 
 ## Code layout
 

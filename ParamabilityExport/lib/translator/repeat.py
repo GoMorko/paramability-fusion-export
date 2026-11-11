@@ -3,7 +3,9 @@
 The copies are read from the measured transform of every pattern element, so the spacing, the turning sense and
 the copies Fusion left out come from what Fusion built, not from flags. Solid sources (extrudes, revolves, holes,
 other repeats) become one `pattern` or `mirror` step. Rounds and chamfers cannot be repeated by the recipe, so the
-copies get their own `round` or `bevel` step with the source's `near` points moved to each copy. When a rectangular
+copies get their own `round` or `bevel` step with the source's `near` points moved to each copy. A Combine among the
+sources, with every item that built its tools, is repeated by the steps the Combine wrote (a `toolBody` step or its
+tool's steps one by one). When a rectangular
 pattern's count follows sizes, every copy any count can make gets its own step, kept by a `when` on the count.
 
 A direction that spreads copies to both sides of the original is written as a forward and a backward part that both
@@ -23,7 +25,7 @@ from itertools import product
 
 from ..package.numbers import round9
 from ..params.expressions import ExpressionError, evaluate
-from . import follow, range_check, ref_motion, symmetric, values, vec
+from . import follow, range_check, ref_motion, symmetric, tool_walk, values, vec
 from .vec import POINT_TOL
 from .step_kinds import FINISH, SOLID, recipe_kind
 from .follow import Motion
@@ -54,6 +56,59 @@ def _vec(values):
 # ---------------------------------------------------------------- sources
 
 
+def _tools_of(item):
+    """The tool bodies of a Combine item (its data lists `tools`), else an empty list."""
+    tools = (item.get("data") or {}).get("tools")
+    return [tool for tool in tools if isinstance(tool, dict)] if isinstance(tools, list) else []
+
+
+def _built_by(ctx, body, before, depth=0):
+    """Timeline indexes of the items that built the tool `body` before `before`, with those that built the tools of a
+    Combine among them."""
+    found = set()
+    for item in tool_walk.chain_of(ctx, body, before):
+        found.add(item["index"])
+        if depth < tool_walk.MAX_DEPTH:
+            for tool in _tools_of(item):
+                found |= _built_by(ctx, tool, item["index"], depth + 1)
+    return found
+
+
+def _written_combines(ctx):
+    """`(item, [(tool name, indexes that built the tool)])` for each Combine of this walk's body that wrote steps."""
+    for item in ctx.timeline:
+        tools = _tools_of(item)
+        if tools and ctx.steps_of(item["index"]) and ctx.is_target(item["data"].get("target")):
+            yield item, [(tool_walk.name_of(tool), _built_by(ctx, tool, item["index"])) for tool in tools]
+
+
+def _combined_tools(indexes, ctx, what):
+    """The source items a Combine among the sources writes, or a Refusal.
+
+    Fusion repeats a Combine with the items that built its tools when all of them are sources, and the copy repeats
+    what the Combine wrote. Only some of those items, or the items without their Combine, give a result the copy cannot
+    follow. A Combine that keeps only what its tools share with the part cannot be repeated."""
+    chosen, covered = set(indexes), set()
+    combines = list(_written_combines(ctx))
+    for item, tools in combines:
+        if item["index"] not in chosen:
+            continue
+        if (item.get("data") or {}).get("operation") == "intersect":
+            return Refusal("%s keeps only what its tool shares with the part, so this %s cannot repeat it."
+                           % (item.get("name") or "A Combine", what))
+        for name, found in tools:
+            if not found or not found <= chosen:
+                return Refusal("This %s copies %s but not every step that builds its tool body %s, which is not "
+                               "copied yet." % (what, item.get("name") or "a Combine", name))
+            covered |= found
+    for item, tools in combines:
+        for name, found in tools:
+            if item["index"] not in chosen and any(not ctx.steps_of(i) for i in (found & chosen) - covered):
+                return Refusal("This %s copies steps that build the tool body %s without %s, which uses it. That is "
+                               "not copied yet." % (what, name, item.get("name") or "the Combine"))
+    return covered
+
+
 def _sources(data, ctx, what):
     """Split the source items into (solid step ids, finish steps), or a Refusal."""
     if data.get("entity_type") != "features":
@@ -61,12 +116,18 @@ def _sources(data, ctx, what):
     indexes = data.get("sources") or []
     if not indexes:
         return Refusal("This %s has no features to copy." % what)
+    covered = _combined_tools(indexes, ctx, what)
+    if isinstance(covered, Refusal):
+        return covered
     by_id = {step["id"]: step for step in ctx.steps}
     solids, finishes = [], []
     for index in indexes:
         ids = ctx.steps_of(index)
         if not ids and index in ctx.folded and any(ctx.folded[index] in ctx.steps_of(i) for i in indexes):
             # A round drawn into the outline of a step this repeat copies too: the copies carry it.
+            continue
+        if not ids and index in covered:
+            # A step that built a tool of a Combine this repeat copies: the Combine's steps carry it.
             continue
         if not ids:
             return Refusal("A step this %s copies is not part of the exported body." % what)

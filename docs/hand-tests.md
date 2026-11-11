@@ -6,7 +6,7 @@ note the Fusion version and system.
 ## Check first in this version
 
 What 0.6.0 to 0.8.0 added, and what this version adds, in this order. Each id is described in the section named,
-except F1, which is described here.
+except F1 and F2, which are described here.
 
 - [ ] F1, an extrude of a flat face. Sketch a circle of 10 mm on the XY plane and extrude it 20 mm as a new body, with
       the distance set by a user parameter `post_mm`. Extrude its top face 2 mm (join) with a taper of -25 degrees,
@@ -19,6 +19,12 @@ except F1, which is described here.
       extrude with `which` `start` or `end` (the stub says the start faces of a symmetric extrude are on its positive
       side). Watch the calls listed under "Face outlines" in "Capture reader calls to watch (extrude, revolve, hole,
       combine, thread, sketch profiles)".
+- [ ] F2, a pattern of a Combine with its tool steps. In the F1 design (without the round), add a rectangular pattern
+      of features whose sources are the post extrude, both face extrudes and the Combine: count from a user parameter
+      `posts` (5), set to both sides, distance type extent from `row_mm / 2`. Tick `posts`, `row_mm` and `post_mm` and
+      export. Expect: a recipe, the pattern written as two patterns that repeat the Combine's tool step, and in
+      Paramability the row of holes follows `posts` and `row_mm`. Then take one face extrude out of the sources and
+      export again: the pattern stops the copy with a reason that names the Combine and the tool body.
 - [ ] B1 to B12, tool bodies: a Combine whose tool has rounds, chamfers or cuts, Copy Paste Body, Move, patterns and
       mirrors of bodies, and an intersect of several tools: section "Tool bodies". B6 (does the Combine take the new
       copies when a count changes) and B7 (what an intersect of several tools keeps) answer questions only Fusion can.
