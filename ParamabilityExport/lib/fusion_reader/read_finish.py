@@ -30,8 +30,8 @@ _SHELL_TYPES = [("sharp", "sharp"), ("round", "rounded")]
 
 
 def strict_items(collection):
-    """Items of a Fusion collection; unlike geo.collection_items, an unreadable collection raises."""
-    return [collection.item(i) for i in range(collection.count)]
+    """Items of a Fusion collection or vector; unlike geo.collection_items, an unreadable one raises."""
+    return geo.sequence_items(collection)
 
 
 def _named(read, enum_class, table, unreadable, unknown):

@@ -30,10 +30,8 @@ def _face_record(face, ctx):
 
 
 def _input_faces(feature):
-    """The faces the outline lands on: `inputFaces` as a list or as a collection. An unreadable list raises."""
-    raw = feature.inputFaces
-    faces = list(raw) if isinstance(raw, (list, tuple)) else strict_items(raw)
-    return faces[:MAX_FACES]
+    """The faces the outline lands on: `inputFaces` as a list, a collection or a vector. An unreadable list raises."""
+    return strict_items(feature.inputFaces)[:MAX_FACES]
 
 
 def _surface_record(face):

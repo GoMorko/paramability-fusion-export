@@ -65,12 +65,8 @@ UNREADABLE = "The faces of this offset could not be read."
 
 
 def _items(value):
-    """Items of a Fusion collection (count and item(i)) or of a plain list; empty when neither."""
-    if value is None:
-        return []
-    if isinstance(value, (list, tuple)):
-        return list(value)
-    return geo.safe(lambda: strict_items(value), None) or []
+    """Items of a Fusion collection or vector, or of a plain list; empty when none of these."""
+    return geo.collection_items(value)
 
 
 def _input_faces(feature):

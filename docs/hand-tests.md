@@ -1501,8 +1501,9 @@ Emboss tests of section 10 and read the capture in `report.json`.
   preview, so members may change. A Fusion build without it cannot hold the step (E5).
 - `EmbossFeature.profiles` with the marker just before the item: a collection of `Profile` and `SketchText` items on
   one plane. A text item is read as outlines (X1).
-- `EmbossFeature.inputFaces` with the marker just before the item: a list or a collection of `BRepFace`. The reader
-  accepts both and raises when it cannot list them.
+- `EmbossFeature.inputFaces` with the marker just before the item: Fusion 2706 gives a `BRepFaceVector`, which has
+  only len and indexing, no `count` or `item`. Every collection reader accepts lists, collections and such vectors,
+  and raises when it cannot list them.
 - `EmbossFeature.faces` with the marker just after the item: the faces the feature made. The reader takes the flat
   face parallel to the input face that lies farthest from the sketch plane (`end_offset`, `end_area`); check that it
   is the top of a raised outline and the floor of a sunk one.

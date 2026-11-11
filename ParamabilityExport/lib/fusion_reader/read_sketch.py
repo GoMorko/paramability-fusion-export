@@ -496,7 +496,7 @@ def read_text_outlines(text, ctx=None):
         return [_text_marker(text, ctx, "foreign")], [None]
     sketch = geo.safe(lambda: text.parentSketch, None)
     raw = geo.safe(lambda: text.asCurves(), None)
-    geometries = list(raw) if isinstance(raw, (list, tuple)) else geo.collection_items(raw)
+    geometries = geo.collection_items(raw)
     if sketch is None or not geometries:
         return [_text_marker(text, ctx, "unread")], [None]
     if len(geometries) > _MAX_TEXT_CURVES:
