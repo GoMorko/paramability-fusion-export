@@ -1,8 +1,9 @@
 """Copy Paste Body handler (CopyPasteBody).
 
 A pasted body starts here: its steps are those of its source, as the source stood at the paste, written again with ids
-of their own (`tool_walk.build`). A paste of a body that is itself pasted repeats this. The first vertices of the source
-and of the result say where the result sits. In one component that is the same place; any other place is written as a
+of their own (`tool_walk.build`). A paste of a body that is itself pasted repeats this. A paste of several bodies makes
+several results, paired with their sources by their points. The first vertices of the source and of the result say
+where the result sits. In one component that is the same place; any other place is written as a
 `move` in plain numbers, and the sizes that could change it are marked.
 """
 from . import follow, move, ref_motion, tool_items, tool_walk
@@ -40,6 +41,26 @@ def _place_of(source, result):
     return found if found is not None else Refusal("The pasted body does not match the body it was copied from.")
 
 
+def _source_of(result, sources, results):
+    """The source of the pasted body `result`, or None when sources and results do not pair up one to one. A source at
+    the same place wins over one that only has the same shape."""
+    if len(sources) != len(results):
+        return None
+    if len(sources) == 1:
+        return sources[0]
+    paired = [(r, _candidates(r, sources)) for r in results]
+    if any(len(found) != 1 for _, found in paired) or len({id(found[0]) for _, found in paired}) != len(paired):
+        return None
+    return next(found[0] for r, found in paired if r is result)
+
+
+def _candidates(result, sources):
+    """The sources `result` can be a copy of: those at its place, else those of its shape."""
+    places = [(source, _place_of(source, result)) for source in sources]
+    fitting = [(source, place) for source, place in places if not isinstance(place, Refusal)]
+    return [source for source, place in fitting if place.is_identity] or [source for source, _ in fitting]
+
+
 def _mark_place(ctx, item, source, tool):
     """The result sits away from its source. Its place is a number, so the sizes that could move it are marked."""
     if tool_items.is_foreign_tool(source):
@@ -52,21 +73,24 @@ def _mark_place(ctx, item, source, tool):
 def handle(item, ctx):
     data = item.get("data") or {}
     sources, results = data.get("sources") or [], data.get("result_bodies")
-    if len(sources) != 1:
+    if not sources:
         return Refusal("The body this paste copies could not be read.")
     result = next((r for r in results if ctx.is_target(r)), None) if isinstance(results, list) else None
     if result is None:
         return Refusal("The body this paste makes could not be read.")
     if ctx.steps:
         return Refusal("This paste lands on a body that already has steps, which is not copied yet.")
-    motion = _place_of(sources[0], result)
+    source = _source_of(result, sources, results)
+    if source is None:
+        return Refusal("The bodies this paste copies could not be paired with the bodies it made.")
+    motion = _place_of(source, result)
     if isinstance(motion, Refusal):
         return motion
-    tool = rebuild(ctx, item, sources[0])
+    tool = rebuild(ctx, item, source)
     if isinstance(tool, Refusal):
         return tool
     out = written_again(tool)
     if not motion.is_identity:
-        _mark_place(ctx, item, sources[0], tool)
+        _mark_place(ctx, item, source, tool)
         out.add(move.written(motion), [MoveMaker(motion)])
     return out

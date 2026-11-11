@@ -21,8 +21,10 @@ class ToolPlacer(Placer):
         self.opaque = any(placer.opaque for placer in placers)
 
     def copied(self, owner, motion):
-        """This tool carried on by `motion`, made by step `owner`."""
-        return ToolPlacer(owner, [carried(p, owner, motion) for p in self.placers], self.combine, self.unrelated)
+        """This tool carried on by `motion`, made by step `owner`. A size the motion reads now moves the tool."""
+        moved_by = set(motion.needs).union(*(q.reads for q in motion.shift))
+        return ToolPlacer(owner, [carried(p, owner, motion) for p in self.placers], self.combine,
+                          set(self.unrelated) - moved_by)
 
     def place(self, p, edge):
         for placer in reversed(self.placers):

@@ -238,10 +238,11 @@ class FakeCellBody:
 
 class FakeBRepManager:
     """TemporaryBRepManager stand-in. `copy` leaves the original alone, like Fusion; `failing` makes every boolean
-    report failure."""
+    report failure, `empty_fails` only an intersect that leaves nothing."""
 
-    def __init__(self, failing=False):
+    def __init__(self, failing=False, empty_fails=False):
         self.failing = failing
+        self.empty_fails = empty_fails
         self.copies = 0
 
     def copy(self, body):
@@ -249,7 +250,8 @@ class FakeBRepManager:
         return FakeCellBody(body.cells)
 
     def booleanOperation(self, target, tool, kind):
-        if self.failing:
+        if self.failing or (self.empty_fails and kind == FakeBooleanTypes.IntersectionBooleanType
+                            and not target.cells & tool.cells):
             return False
         target.cells = target.cells & tool.cells if kind == FakeBooleanTypes.IntersectionBooleanType \
             else target.cells | tool.cells
@@ -262,9 +264,9 @@ class FakeBooleanTypes:
     DifferenceBooleanType = "difference"
 
 
-def fake_brep_tools(failing=False):
+def fake_brep_tools(failing=False, empty_fails=False):
     """`(manager, types)` as `read_intersect._brep_tools` gives them."""
-    return FakeBRepManager(failing), FakeBooleanTypes
+    return FakeBRepManager(failing, empty_fails), FakeBooleanTypes
 
 
 # Fake command inputs for the dialog tests. They keep what the code sets, like Fusion's inputs do.

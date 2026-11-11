@@ -11,6 +11,9 @@ A Combine that takes a whole pattern is written better (`groups`, `write`): the 
 pattern one `pattern` or `mirror` step that repeats them, so the layout can follow sizes. A source that is the Combine's
 own target is repeated by its steps when they only add material; otherwise its steps are gathered into one tool first.
 A subset of the copies, or a layout `repeat.py` refuses, falls back to one tool per copy.
+
+A Combine holds a fixed list of bodies, and it is not known whether Fusion adds new copies to it when a count changes,
+so the sizes a count reads are marked. Spacing and angle only move the same copies, so they follow without a mark.
 """
 from dataclasses import dataclass
 
@@ -25,6 +28,7 @@ from .tool_placer import ToolMaker, WrittenFor, wrap_body
 
 GRID_PATHS = ("quantity_one", "quantity_two", "distance_one", "distance_two")
 TURN_PATHS = ("quantity", "total_angle_deg")
+COUNT_PATHS = ("quantity_one", "quantity_two", "quantity")
 
 
 @dataclass
@@ -125,8 +129,10 @@ def _in_walk(item, ctx, paths):
     tool = paste.rebuild(ctx, item, found.source)
     if isinstance(tool, Refusal):
         return tool
-    _mark_layout(item, tool.ctx, paths)
+    with tool.ctx.recording() as marked:
+        _mark_layout(item, tool.ctx, paths)
     out = paste.written_again(tool)
+    out.join(marked)
     out.add(move.written(found.motion), [MoveMaker(found.motion)])
     return out
 
@@ -160,6 +166,8 @@ def _pattern_that_made(ctx, tool, before):
     """The pattern item that made the copy `tool`, when nothing changed the copy since; else None."""
     chain = tool_walk.chain_of(ctx, tool, before)
     if len(chain) != 1 or not _of_bodies(chain[0]) or not walk.copies_bodies(chain[0]):
+        return None
+    if tool_walk.unseen_change(ctx, tool, before) is not None:
         return None
     results = (chain[0].get("data") or {}).get("result_bodies") or []
     return chain[0] if _listed(tool, results) else None
@@ -225,6 +233,14 @@ def _repeater(data):
     return repeat.circular if "axis" in data else repeat.rectangular
 
 
+def _mark_counts(ctx, item):
+    """The recipe repeats the tools for any count, and Fusion may keep the Combine's list as it is."""
+    why = "%s makes more or fewer copies with it, and Fusion may not change what its Combine takes" % (
+        item.get("name") or "A pattern")
+    for path in COUNT_PATHS:
+        values.pin(ctx, item, path, why)
+
+
 def write(ctx, combine_item, group, combine, number):
     """A `StepResult` with the sources of `group` and the step that repeats them; None when the layout cannot be
     written as a pattern; a Refusal when a source cannot be copied."""
@@ -249,6 +265,8 @@ def write(ctx, combine_item, group, combine, number):
     with ctx.recording() as recorded:
         walk.fix_construction(where, group.item)
         copies = _repeater(group.item["data"])(group.item, where, (ids, []))
+        if not isinstance(copies, Refusal):
+            _mark_counts(ctx, group.item)
     if isinstance(copies, Refusal):
         return None
     for entry in copies.entries:

@@ -218,6 +218,16 @@ class RefusedToolTest(unittest.TestCase):
             del tool["place"]
         self.assertIn("another component", self.refusal(with_tool(edit))["reason"])
 
+    def test_a_tool_of_a_third_component_inside_the_tool_stops_the_copy(self):
+        capture = load_capture(NAME)
+        third = {"token": "t9", "name": "Body9", "foreign": True, "component": {"token": "c3", "name": "Third"},
+                 "place": {"frame": capture["items"][-1]["data"]["tools"][0]["place"]["frame"]}}
+        capture["items"][5] = dict(copy.deepcopy(capture["items"][4]), index=5, name="Extrude9", component="c3", helper_of="t9",
+                                   bodies_after=[{"token": "t9", "name": "Body9"}])
+        capture["items"][6].update(type="CombineFeature", name="Combine2", data={
+            "target": {"token": "t2", "name": "Body2"}, "tools": [third], "operation": "join", "keep_tools": False})
+        self.assertIn("Body9", self.refusal(capture)["reason"])
+
     def test_a_combine_that_removes_more_than_the_tool_fills_is_refused(self):
         capture = load_capture(NAME)
         capture["items"][-1]["data"]["volume_after"] = 100.0
@@ -234,6 +244,17 @@ class KeptToolTest(unittest.TestCase):
         result = translate(capture)
         self.assertIsNone(result.refusal)
         self.assertEqual(len([s for s in result.recipe["features"] if s.get("combine") == "cut"]), 4)
+
+
+class ReachingToolTest(unittest.TestCase):
+    def test_a_single_step_that_reaches_a_face_is_a_tool_step(self):
+        capture = load_capture(NAME)
+        del capture["items"][5:7]
+        capture["items"][4]["data"].update(side_one={
+            "kind": "toEntity", "plane": {"point": [0, 0, 20], "normal": [0, 0, 1]}, "offset": 0.0,
+            "entity_type": "BRepFace", "face_point": [0, 0, 20]}, params={})
+        result = translate(capture)
+        self.assertEqual([s["kind"] for s in result.recipe["features"]], ["extrude", "toolBody"])
 
 
 class MovedPlacerTest(unittest.TestCase):

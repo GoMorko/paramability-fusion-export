@@ -5,15 +5,15 @@ move to the steps before it, and every later value stays as Fusion measured it a
 
 What the body really did is measured: the first vertices of the body before and after the item. A Move along the axes,
 a rotation and a free move also say what they were made from, and that must agree with the measured points, or the Move
-is refused. Their distances and angles follow sizes. The other kinds are written as the measured numbers, and the sizes
-written so far may move the point they follow, so those sizes are marked.
+is refused. Their distances and angles follow sizes. The other kinds are written as the measured numbers. What
+they follow (a point, an edge) may move with any size, whether a written step reads it or not, so every size is marked.
 
 After the step, the walk's placers stand where the Move put them (`moved_placer.MoveMaker`), so later picks follow sizes.
 """
 import math
 
 from ..package.numbers import round9
-from . import follow, place, repeat, tool_items, values, vec
+from . import place, repeat, tool_items, values, vec
 from .moved_placer import MoveMaker
 from .result import Refusal, StepResult
 from .slabs import IDENTITY_ROWS, Motion
@@ -114,10 +114,11 @@ def _is_vector(value):
 
 
 def _component_frame(ctx):
-    """The place of the component this walk builds in, or None when it has none on record."""
-    if tool_items.is_foreign_tool(ctx.target):
-        return (ctx.target.get("place") or {}).get("frame")
+    """The place of the component this walk builds in, or None when it has none on record. A tool of the same
+    component as the walk that holds it has that walk's place."""
     while ctx.outer is not None:
+        if tool_items.is_foreign_tool(ctx.target):
+            return (ctx.target.get("place") or {}).get("frame")
         ctx = ctx.outer
     return (ctx.capture["target"].get("placement") or {}).get("frame")
 
@@ -205,7 +206,11 @@ def _fitted(item, before, after):
 def _follows_a_point(item, ctx, data, before, after):
     found = _fitted(item, before, after)
     if not isinstance(found, Refusal):
-        ctx.doubt(follow.reads_with_outer(ctx, item), "%s follows a point that may move with it" % _name(item))
+        as_numbers = "%s is written as the numbers Fusion measured, so it cannot follow this" % _name(item)
+        for path in data.get("params") or {}:
+            values.pin(ctx, item, path, as_numbers)
+        ctx.doubt(ctx.table.ticked if ctx.table is not None else (),
+                  "%s follows a point or an edge that may move with it, and the copy cannot follow that" % _name(item))
     return found
 
 

@@ -14,7 +14,8 @@ that repeats them (`body_copies.py`). A step that cannot be copied at all stops 
 tool the Combine keeps can be used again by a later Combine.
 
 Fusion's help does not say what an intersect of several tools keeps, so the export measures it (`intersect_model`):
-what every tool holds is one `toolBody` per tool, what any tool holds is one `toolBody` that holds the tools.
+what every tool holds is one `toolBody` per tool, what any tool holds is one `toolBody` that holds the tools. When the
+measures cannot tell the two apart, the sizes the tools read are marked.
 
 A tool body made in another component (`foreign`) is handled the same way. Its steps were read in that component's
 frame (`helper_of` items); the Combine carries them into the exported body's frame with the tool's place in the
@@ -24,11 +25,11 @@ them.
 import copy
 
 from . import body_copies, place, ref_motion, step_kinds, tool_items, tool_walk
-from .combine_volume import exceeds, exceeds_tools
+from .combine_volume import exceeds, exceeds_tools, rule_unproven
 from .moved_placer import MovedMaker, motion_of
 from .result import Refusal, StepResult
 from .tool_placer import ToolMaker
-from .values import Quantity
+from .values import Quantity, reads_in
 from .walk import copies_bodies, is_foreign
 
 
@@ -81,7 +82,9 @@ def _writes_flat(tool):
                 or not adds_only(tool.entries_of(item), joining)):
             return False
         joining = True
-    return len(tool.entries) == 1 or not any(_reaches_face(item) for item in tool.chain)
+    reaches = any(_reaches_face(item) for item in tool.chain)
+    # A step written onto the part is worked out in the part's frame, which is not the frame of another component.
+    return not (reaches and (len(tool.entries) > 1 or tool_items.is_foreign_tool(tool.body)))
 
 
 def _unusable(ctx, body):
@@ -89,6 +92,9 @@ def _unusable(ctx, body):
     if body.get("foreign") and not (tool_items.is_foreign_tool(body) and isinstance(body.get("place"), dict)):
         return Refusal("The tool body of %s is in another component, which is not copied yet."
                        % (body.get("name") or "a body"))
+    if tool_items.is_foreign_tool(body) and ctx.component is not None:
+        return Refusal("The tool body %s is taken by a Combine inside a tool body of another component, which is not "
+                       "copied yet." % tool_walk.name_of(body))
     if tool_key(body) in ctx.used_tools:
         return Refusal("The tool body %s was used up by an earlier combine." % tool_walk.name_of(body))
     return None
@@ -253,6 +259,9 @@ def handle(item, ctx):
         out = _tool_steps(found, combine)
     if isinstance(out, Refusal):
         return out
+    if combine == "intersect" and len(tools) > 1 and rule_unproven(data.get("intersect_volumes")):
+        ctx.doubt(reads_in(out.steps), "%s keeps the same shape under both rules for several tools at these sizes, and "
+                  "at other sizes the rules can differ" % (item.get("name") or "This combine"))
     for written in patterns:
         out.extend(written.entries)
         out.join(written)

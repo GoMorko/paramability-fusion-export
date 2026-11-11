@@ -7,8 +7,9 @@ until the Combine decides how to write them.
 Steps written one by one onto the part are a different matter: they meet the part, not the tool. `on_part` works such
 steps out again against the part as it stood at each step.
 """
-from . import tool_items, walk
-from .capture import outside_component
+from . import step_kinds, tool_items, walk
+from .capture import outside_component, renamed_target, same_body
+from .combine_volume import intersect_model, same_volume
 from .result import Refusal, StepResult, TranslateResult
 from .words import type_words
 
@@ -82,15 +83,59 @@ def chain_of(ctx, body, before):
     return found if owner else [item for item in found if not outside_component(item)]
 
 
-def _seen_from_tool(item, body):
+def _keeps(item, body):
+    """The item only holds `body` as a tool it keeps, so it does not change it."""
+    data = item.get("data") or {}
+    return bool(data.get("keep_tools")) and any(same_body(t, body) for t in data.get("tools") or [])
+
+
+def _names_foreign_twin(item, body):
+    """The item takes a body of another component with the name of `body`: names repeat between components."""
+    return any(record.get("foreign") and record.get("name") == body.get("name")
+               for record, _ in tool_items.source_records(item))
+
+
+def unseen_change(ctx, body, before):
+    """`(item, why)` for an item before `before` that `chain_of` cannot see but that may have changed `body`: one of
+    another component that lists it, or one that lists its name under another token after the body first appears.
+    None when there is no such item."""
+    owner = tool_items.component_token(body) if tool_items.is_foreign_tool(body) else ctx.component
+    chain = chain_of(ctx, body, before)
+    start = chain[0]["index"] if chain else before
+    for item in ctx.timeline:
+        if item["index"] >= before or item.get("suppressed") or step_kinds.skipped(item.get("type")):
+            continue
+        listed = item.get("bodies_after") or []
+        elsewhere = item.get("component") and item["component"] != owner if owner else outside_component(item)
+        if elsewhere:
+            if body.get("token") and any(b.get("token") == body["token"] for b in listed) and not _keeps(item, body):
+                return item, "This step changes the body from another component, which is not copied yet."
+        elif (item["index"] > start and any(renamed_target(b, body) for b in listed)
+              and not _names_foreign_twin(item, body)):
+            return item, "The body could not be followed through the timeline."
+    return None
+
+
+def _exported(ctx, body):
+    while ctx.outer is not None:
+        ctx = ctx.outer
+    return ctx.is_target(body)
+
+
+def _seen_from_tool(item, body, exported):
     """The item as a walk of `body` reads it: in the body's component, with what was measured on the body itself. What
-    the capture says about the exported body does not apply, and a capture without measures of the body keeps its
-    fields."""
+    the capture says about the exported body does not apply to a tool: without measures of the tool the fields are
+    null, so handlers refuse or skip their checks. `exported` is True when `body` is the exported body."""
     data = item.get("data")
     state = (item.get("body_states") or {}).get(body.get("token"))
-    if isinstance(state, dict) and isinstance(data, dict):
+    state = state if isinstance(state, dict) else {}
+    if isinstance(data, dict) and not exported:
         data = dict(data, **{field: state.get(key) for key, field in _BODY_STATE_FIELDS})
-    return dict(item, data=data, in_target_component=True, target_changed=None)
+        if "intersect_volumes" in data:
+            data["intersect_model"] = intersect_model(data["intersect_volumes"], data["volume_after"])
+    before, after = state.get("volume_before"), state.get("volume_after")
+    unchanged = before is not None and after is not None and same_volume(before, after)
+    return dict(item, data=data, in_target_component=True, target_changed=False if unchanged else None)
 
 
 def build(ctx, body, before, depth, place=0):
@@ -99,7 +144,11 @@ def build(ctx, body, before, depth, place=0):
     of its Combine, which keeps the ids of its steps apart from those of the other tools."""
     if depth > MAX_DEPTH:
         return Refusal("The tool body %s is built from tools nested too deep to copy." % name_of(body))
-    chain = [_seen_from_tool(item, body) for item in chain_of(ctx, body, before)]
+    unseen = unseen_change(ctx, body, before)
+    if unseen is not None:
+        return cannot_copy(body, *unseen)
+    exported = _exported(ctx, body)
+    chain = [_seen_from_tool(item, body, exported) for item in chain_of(ctx, body, before)]
     if not chain:
         return Refusal("The tool body %s is built in a way that cannot be copied." % name_of(body))
     for item in chain:

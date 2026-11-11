@@ -276,29 +276,34 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 - Copy Paste Body is copied by writing the steps of the source again, as the source stood at the paste. The pasted
   body must be a new body: a paste that lands on a body that already has steps stops the copy. A copy that sits where
   its source sits keeps the sizes; a copy that sits elsewhere gets a plain-number Move, and the sizes that could change
-  its place are marked "may give unexpected results".
+  its place are marked "may give unexpected results". A paste of several bodies is copied when each pasted body can
+  be matched to its source by its corners.
 - Move of bodies is copied when the body moves as one solid. A Move along X, Y and Z, a Rotate and a free Move follow
   their distances and angles as sizes. The other kinds (point to point, to a position, along an entity) are written
-  as the numbers Fusion measured, and the sizes written so far are marked. A Move of faces, and a Move that mirrors or
+  as the numbers Fusion measured. What they follow can move with any size, so every ticked size is marked or left
+  out with the reason. A Move of faces, and a Move that mirrors or
   scales, stop the copy.
 - A rectangular, circular or mirror pattern of bodies is copied when a Combine takes the copies. When the Combine takes
   the whole pattern (the original and every copy), the pattern is written as a pattern, so its count and spacing follow
   sizes. For a join the original may be the part itself. When the Combine takes only some of the copies, or the layout
   is uneven, or it keeps only the shared part, each copy is written as a tool with its place as numbers, and the sizes
-  behind the layout are marked. A count that follows a size is written as if the Combine also takes the new copies;
-  whether Fusion does this is checked by hand (hand test B6). A mirror of bodies is copied only in a Combine, together
+  behind the layout are marked. A count that follows a size is written as if the Combine also takes the new copies.
+  Since it is not known whether Fusion does this (hand test B6), that size is marked "may give unexpected results". A mirror of bodies is copied only in a Combine, together
   with its source. A body that is a copy in a pattern is copied by writing its source's steps and a Move.
 - Fusion does not say what a keep-only-the-shared-part Combine with several tools keeps (the part and every tool, or
   the part and any tool). The export tries it on temporary copies, which are never added to your design, compares
   the volumes with the result Fusion made, and copies it that way. When the volumes fit neither way, or a tool lives
   in another component, the Combine stops with "This combine keeps a shared part that the copy could not work out".
+  When both ways give the same volume, the export cannot tell which one Fusion used, so the sizes of the tools are
+  marked "may give unexpected results".
   A Combine whose result is more than its tool bodies can give (a cut that removes more than the tools hold) stops too.
 - The tool body may be made in another component. The add-in then reads the steps that made it in that component
   (they count in the 120), and writes them where the tool component sits in the assembly, turned and moved as
   Fusion shows it. The sizes of those steps, including sketch dimensions of the tool, are sizes of the part like any
   other. A size that moves the tool's component is followed when the tries can measure it; one they cannot follow
   ("puts its tool at the place of Rod that turns with it") may give unexpected results. The message after the export
-  names the step and the component of a tool that stops the copy.
+  names the step and the component of a tool that stops the copy. A tool from another component that reaches to a
+  face becomes a tool step. A Combine inside such a tool that takes a body from yet another component stops the copy.
 - Sketch outlines with a spline edge, an elliptical arc or another free curve are copied as spline segments. The add-in
   reads the Fusion curve as a fine chain of points and picks points for the app's own smooth curve so that it stays
   within 0.005 mm of that chain, also between its points (a long or tight curve is split into several segments). A size that moves a sketch

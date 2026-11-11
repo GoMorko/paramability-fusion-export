@@ -40,7 +40,7 @@ class PasteTest(unittest.TestCase):
     def read(self, **kw):
         source = kw.pop("source", Brick(vertices=SQUARE, token="b2", name="Body2"))
         result = Brick(vertices=[(p[0] + 20, p[1], p[2]) for p in SQUARE], token="b3", name="Body3")
-        members = dict(sourceBody=source)
+        members = dict(sourceBody=Coll([source]))
         members.update(kw)
         design, target = with_feature(feature("CopyPasteBody", "Paste1", bodies=[result], **members))
         data = item_of(design, target, "Paste1")["data"]
@@ -51,6 +51,15 @@ class PasteTest(unittest.TestCase):
         data = self.read()
         self.assertEqual(data["sources"], [{"token": "b2", "name": "Body2", "points": [list(map(float, p)) for p in SQUARE]}])
         self.assertEqual([(b["token"], b["points"][0]) for b in data["result_bodies"]], [("b3", [20, 0, 0])])
+
+    def test_every_body_of_the_collection_is_a_source(self):
+        other = Brick(vertices=SQUARE, token="b4", name="Body4")
+        data = self.read(sourceBody=Coll([Brick(vertices=SQUARE, token="b2", name="Body2"), other]))
+        self.assertEqual([s["token"] for s in data["sources"]], ["b2", "b4"])
+
+    def test_a_single_body_is_taken_as_the_source(self):
+        data = self.read(sourceBody=Brick(vertices=SQUARE, token="b2", name="Body2"))
+        self.assertEqual([s["token"] for s in data["sources"]], ["b2"])
 
     def test_a_source_that_cannot_be_read_leaves_the_sources_empty(self):
         data = self.read(source=Obj())
@@ -65,7 +74,7 @@ class PasteTest(unittest.TestCase):
     def test_results_that_cannot_be_read_are_null(self):
         target = body()
         paste = Obj("fusion::CopyPasteBody", parentComponent=Obj(entityToken="root"),
-                    sourceBody=Brick(vertices=SQUARE))
+                    sourceBody=Coll([Brick(vertices=SQUARE)]))
         design = FakeDesign([sketch_entry(), entry((paste, "Paste1"))], target)
         self.assertIsNone(item_of(design, target, "Paste1")["data"]["result_bodies"])
 
@@ -121,10 +130,20 @@ class MoveTest(unittest.TestCase):
         self.assertEqual((data["angle_deg"], data["axis"]), (None, {"kind": "other"}))
 
     def test_a_free_move_has_its_transform_when_it_can_be_read(self):
-        free = Obj("fusion::MoveFeatureFreeMoveDefinition")
-        data = self.read(free, transform=matrix(origin=(10, 0, 0)))
+        free = Obj("fusion::MoveFeatureFreeMoveDefinition", transform=matrix(origin=(10, 0, 0)))
+        data = self.read(free)
         self.assertEqual((data["move_type"], data["transform"]["origin"]), ("free", [10, 0, 0]))
-        self.assertIsNone(self.read(free)["transform"])
+        self.assertIsNone(self.read(Obj("fusion::MoveFeatureFreeMoveDefinition"))["transform"])
+
+    def test_a_move_along_an_entity_lists_the_parameter_of_its_distance(self):
+        data = self.read(Obj("fusion::MoveFeatureTranslateAlongEntityDefinition", distance=named(0.5)))
+        self.assertEqual(data["params"], {"distance": {"name": "d1", "expression": "gap", "value": 5.0}})
+
+    def test_a_move_to_a_position_lists_the_parameters_of_its_distances(self):
+        data = self.read(Obj("fusion::MoveFeaturePointToPositionDefinition", xDistance=named(0.5),
+                             yDistance=named(0.2, "d2", "lift"), zDistance=Obj(value=0.0)))
+        self.assertEqual({path: ref["expression"] for path, ref in data["params"].items()},
+                         {"translate.0": "gap", "translate.1": "lift"})
 
     def test_the_other_kinds_of_move_are_named_and_a_definition_that_cannot_be_read_is_other(self):
         for name, expected in (("PointToPoint", "pointToPoint"), ("PointToPosition", "pointToPosition"),
@@ -254,8 +273,12 @@ class CombineToolTest(unittest.TestCase):
         self.assertEqual(self.read_intersect(same, 2.0)[0]["intersect_model"], "every")
 
     def test_a_failed_temporary_boolean_is_unknown(self):
-        data, _ = self.read_intersect(self.tools(), 2.0, failing=True)
-        self.assertEqual((data["intersect_volumes"], data["intersect_model"]), (None, "unknown"))
+        self.assertEqual(self.read_intersect(self.tools(), 2.0, failing=True)[0]["intersect_model"], "unknown")
+
+    def test_tools_that_share_nothing_still_measure_what_any_tool_holds(self):
+        apart = [self.cell_tool("b2", {1, 2}), self.cell_tool("b3", {3, 4})]
+        data, _ = self.read_intersect(apart, 4.0, empty_fails=True)
+        self.assertEqual((data["intersect_volumes"], data["intersect_model"]), ({"every": 0.0, "any": 4000.0}, "any"))
 
     def test_without_the_temporary_body_manager_it_is_unknown(self):
         design, target = self.combine(self.tools(), "IntersectFeatureOperation")
@@ -352,7 +375,7 @@ class PastedFromAnotherComponentTest(unittest.TestCase):
         tool_step, name, extra = extrude(rect_profile(), name="Extrude2", target=rod.native)
         tool_step.parentComponent = rod.component
         entries = [sketch_entry(), extrude(rect_profile(), target=target), (tool_step, name, extra),
-                   entry(feature("CopyPasteBody", "Paste1", bodies=[pasted], sourceBody=rod.proxy)),
+                   entry(feature("CopyPasteBody", "Paste1", bodies=[pasted], sourceBody=Coll([rod.proxy]))),
                    entry(feature("CombineFeature", "Combine1", bodies=[target], targetBody=target,
                                  toolBodies=Coll([pasted]), operation="CutFeatureOperation", isKeepToolBodies=False))]
         design = self.PasteDesign(entries, target, rod, pasted)

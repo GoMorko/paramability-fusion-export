@@ -64,7 +64,7 @@ class WholePatternTest(unittest.TestCase):
         self.assertEqual(pattern["of"], [tool["id"]])
         self.assertEqual((pattern["linear"]["count"], pattern["linear"]["step"]), ({"expr": "row_n"}, {"expr": "pitch_mm"}))
         self.assertEqual(tool["combine"], "add")
-        self.assertEqual(marked(result), [])
+        self.assertEqual(marked(result), ["row_n"])
         self.assertEqual(check_recipe(result.recipe), [])
 
     def test_the_verdict_names_the_pattern(self):
@@ -107,6 +107,20 @@ class CopyByCopyTest(unittest.TestCase):
         self.assertEqual([t["features"][1]["turn"]["angleDeg"] for t in tools[1:]], [60.0, 180.0])
         self.assertEqual(marked(result), ["ring_n"])
         self.assertEqual(check_recipe(result.recipe), [])
+
+    def test_a_direction_in_another_component_with_unknown_sizes_gives_a_note(self):
+        capture = load_capture(SUBSET)
+        pattern_item(capture)["data"]["direction_one_place"] = {"assembly": True, "ref": {"type": "BRepEdge", "slot": "d"}}
+        self.assertGreater(len(sized(capture).notes), len(sized(load_capture(SUBSET)).notes))
+
+    def test_a_copy_changed_from_another_component_refuses(self):
+        capture = load_capture(ROW)
+        combine = capture["items"].pop()
+        capture["items"].append(dict(capture["items"][3], index=5, name="Elsewhere", in_target_component=False,
+                                     bodies_after=[{"token": "t3", "name": "Body3"}], data={}))
+        combine["index"] = 6
+        capture["items"].append(combine)
+        self.assertIn("Elsewhere", translate(capture).refusal["reason"])
 
     def test_an_uneven_layout_falls_back_to_one_tool_per_copy(self):
         capture = load_capture(ROW)

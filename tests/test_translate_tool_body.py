@@ -11,7 +11,7 @@ from lib.fusion_reader import read_geometry as geo
 from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.sketch_values.motion import Motion
-from lib.translator import follow, translate
+from lib.translator import follow, tool_walk, translate
 from lib.translator.combine_volume import exceeds_tools
 from lib.translator.context import Context
 from lib.translator.place import Move, place
@@ -117,6 +117,53 @@ class WrittenToolTest(unittest.TestCase):
         inner = tool_of(translate(capture))["features"][1]
         self.assertAlmostEqual(inner["distance"], 14 + (100 + 100 + 196) ** 0.5 + 1, places=6)
 
+    def test_a_cut_through_all_without_measures_of_the_tool_refuses(self):
+        capture = load_capture("combine_tool_cut_inside")
+        item = capture["items"][5]
+        del item["body_states"]
+        item["data"].update(side_one={"kind": "throughAll", "positive": True, "taper_deg": 0.0}, params={}, end_offset=None,
+                            target_box_before={"min": [0, 0, 0], "max": [400, 400, 400]})
+        self.assertIn("Extrude5", translate(capture).refusal["reason"])
+
+    def test_a_step_of_the_tool_from_another_component_stops_the_copy(self):
+        capture = load_capture("combine_tool_cut_inside")
+        capture["items"][5]["in_target_component"] = False
+        self.assertIn("Extrude5", translate(capture).refusal["reason"])
+
+    def test_a_tool_listed_under_another_token_stops_the_copy(self):
+        capture = load_capture("combine_tool_cut_inside")
+        capture["items"][5]["bodies_after"] = [{"token": "t9", "name": "Body2"}]
+        self.assertIn("Extrude5", translate(capture).refusal["reason"])
+
+    def test_a_name_used_by_another_body_before_the_tool_existed_does_not_stop_the_copy(self):
+        capture = load_capture("combine_tool_cut_inside")
+        capture["items"][1]["bodies_after"] = [{"token": "t1", "name": "Body1"}, {"token": "t9", "name": "Body2"}]
+        capture["items"][1]["bodies_before"] = [{"token": "t9", "name": "Body2"}]
+        self.assertIsNone(translate(capture).refusal)
+
+    def test_a_kept_tool_with_the_name_of_a_body_of_another_component_is_not_lost(self):
+        capture = load_capture("combine_kept_tool_grows")
+        twin = {"token": "x2", "name": "Body2", "foreign": True, "component": {"token": "rod", "name": "Rod"},
+                "place": {"frame": FRAME}, "volume": None}
+        capture["items"][4]["data"]["tools"].append(twin)
+        capture["items"][4]["bodies_after"].append({"token": "p2", "name": "Body2"})
+        self.assertIsNone(tool_walk.unseen_change(Context(capture), TOOL, 8))
+
+    def test_a_combine_of_another_component_that_keeps_the_tool_does_not_change_it(self):
+        capture = load_capture("combine_kept_tool_grows")
+        capture["items"][4].update(in_target_component=False, component="rod")
+        self.assertIsNone(tool_walk.unseen_change(Context(capture), TOOL, 8))
+
+    def test_a_split_face_inside_a_tool_is_skipped(self):
+        capture = load_capture("combine_tool_chamfer")
+        chamfer = next(i for i in capture["items"] if i["type"] == "ChamferFeature")
+        chamfer.update(type="SplitFaceFeature", name="Split1", data={},
+                       body_states={"t2": {"box_before": None, "volume_before": 5.0, "volume_after": 5.0}})
+        capture["items"][-1]["data"].update(volume_before=None, volume_after=None)
+        self.assertIsNone(translate(capture).refusal)
+        chamfer["body_states"]["t2"]["volume_after"] = 4.0
+        self.assertEqual(translate(capture).refusal["name"], "Combine1")
+
     def test_a_tool_of_another_component_is_carried_into_place(self):
         result = translate(load_capture("combine_tool_foreign_fillet"))
         first = tool_of(result)["features"][0]
@@ -130,6 +177,16 @@ class WrittenToolTest(unittest.TestCase):
 
 
 class IntersectOfSeveralToolsTest(unittest.TestCase):
+    def test_equal_candidates_mark_the_sizes_the_tools_read(self):
+        capture = load_capture("intersect_every")
+        capture["items"][-1]["data"]["intersect_volumes"]["any"] = 2000.0
+        self.assertEqual(marked(sized(capture)), ["tool_a_mm"])
+
+    def test_the_model_of_a_combine_inside_a_tool_comes_from_the_tool_volume(self):
+        item = {"data": {"intersect_volumes": {"every": 2.0, "any": 5.0}, "intersect_model": "unknown"},
+                "body_states": {"t2": {"volume_before": 9.0, "volume_after": 5.0}}}
+        self.assertEqual(tool_walk._seen_from_tool(item, TOOL, False)["data"]["intersect_model"], "any")
+
     def test_a_part_kept_where_every_tool_reaches_is_a_tool_step_per_tool(self):
         result = sized(load_capture("intersect_every"))
         self.assertEqual([(s["kind"], s.get("combine")) for s in result.recipe["features"][1:]],
@@ -413,6 +470,11 @@ class ToolPlacerTest(unittest.TestCase):
         found = self.tool("cut").place([0, 0, 4], False)
         self.assertTrue(found.moves)
         self.assertTrue(found.slab.is_copy)
+
+    def test_a_size_that_moves_the_copy_is_no_longer_unrelated(self):
+        tool = ToolPlacer("tool", self.tool("cut").placers, "cut", {"gap", "plate"})
+        copied = tool.copied("move", CopyMotion(shift=(Quantity(30.0, "gap", ("gap",)), 0, 0)))
+        self.assertEqual(set(copied.not_moved_by([30, 0, 2])), {"plate"})
 
     def test_a_copy_of_the_tool_is_placed_where_the_copy_is(self):
         copied = self.tool("cut").copied("ring", CopyMotion(shift=(30, 0, 0)))

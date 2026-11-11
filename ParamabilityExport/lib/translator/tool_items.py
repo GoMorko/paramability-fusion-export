@@ -8,7 +8,8 @@ data too for steps of another component (`helper_of`). The same rules pick those
 translator.
 
 `plan` is a pure function of the items read so far. The reader calls it again after each round of reading, since the
-steps it reads name more source bodies.
+steps it reads name more source bodies. A body held by several items (a kept tool used again, a source pasted later)
+is followed up to the latest of them, so steps added between those items are read too.
 """
 from dataclasses import dataclass, field
 
@@ -139,13 +140,14 @@ def plan(items, target=None, max_items=MAX_ITEMS, max_tools=MAX_TOOLS, max_depth
         # An exported body that is itself a copy is built from the steps of its source.
         queue += [(source, item, n, 1) for item in items if _readable(item) and _is_copy(item, target)
                   for source, n in source_records(item)]
-    visited, built, found, why = [], 0, {}, {}
+    visited, built, found, why = [], 0, {}, {}  # visited: (record, indices of the items that serve it)
     while queue:
         record, anchor, number, depth = queue.pop(0)
         if target is not None and same_body(record, target):
             continue
         steps = chain(items, record, anchor["index"], _owner(anchor, record))
-        if not any(same_body(record, other) for other in visited):
+        served = next((indices for other, indices in visited if same_body(record, other)), None)
+        if served is None:
             if depth > max_depth:
                 why.update((item["index"], TOO_DEEP) for item in steps)
                 continue
@@ -155,8 +157,11 @@ def plan(items, target=None, max_items=MAX_ITEMS, max_tools=MAX_TOOLS, max_depth
                 why.update((item["index"], TOO_MANY_TOOLS) for item in steps)
                 continue
             built += 0 if copy else 1
-            visited.append(record)
-            for item in steps:
+            served = set()
+            visited.append((record, served))
+        for item in steps if depth <= max_depth else ():
+            if item["index"] not in served:
+                served.add(item["index"])
                 found.setdefault(item["index"], (item, []))[1].append(record)
                 queue.extend((child, item, n, depth + 1) for child, n in source_records(item))
         result.sources.append(Source(record, anchor, number, depth))

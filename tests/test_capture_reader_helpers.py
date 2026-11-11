@@ -253,6 +253,16 @@ class PlanTest(unittest.TestCase):
         items = [step(0, ["b2"]), step(1, ["b4"]), combine(2, ["b4"], target="b2"), combine(3, ["b2"])]
         self.assertEqual(sorted(indices(tool_items.plan(items, ref("t")).wanted)), [0, 1, 2])
 
+    def test_a_kept_tool_used_again_is_followed_up_to_the_later_combine(self):
+        kept = combine(1, ["b2"])
+        kept["data"]["keep_tools"] = True
+        items = [step(0, ["b2"]), kept, step(2, ["b2"]), combine(3, ["b2"])]
+        self.assertEqual(sorted(indices(tool_items.plan(items, ref("t")).wanted)), [0, 2])
+
+    def test_a_kept_tool_pasted_later_is_followed_up_to_the_paste(self):
+        items = [step(0, ["b2"]), combine(1, ["b2"]), step(2, ["b2"]), paste(3, "b3", "b2"), combine(4, ["b3"])]
+        self.assertEqual(sorted(indices(tool_items.plan(items, ref("t")).wanted)), [0, 2, 3])
+
     def test_copies_of_one_source_count_as_one_body(self):
         copies = ["c%d" % n for n in range(5)]
         pattern = step(1, copies, data={"source_bodies": [ref("b2")], "result_bodies": [ref(c) for c in copies]},

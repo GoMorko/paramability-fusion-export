@@ -9,6 +9,7 @@ from tests.translator_helpers import load_capture, steps_of, verdict_of
 from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.translator import move, translate, vec
+from lib.translator.context import Context
 
 FLAT = {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
 
@@ -70,10 +71,16 @@ class WrittenMoveTest(unittest.TestCase):
     def test_a_free_move_that_was_not_read_is_measured(self):
         self.assertEqual(inner(translate(moved(lambda d: as_measured(d, "free"))))[1]["translate"], [20.0, 0.0, 0.0])
 
-    def test_a_move_that_follows_a_point_marks_the_sizes_written_so_far(self):
+    def test_a_move_written_as_numbers_marks_every_size_also_one_no_step_reads(self):
         result = sized(moved(lambda d: as_measured(d, "pointToPoint")))
         self.assertEqual(inner(result)[1]["translate"], [20.0, 0.0, 0.0])
-        self.assertEqual(marked(result), ["peg_len_mm", "plate_h_mm"])
+        self.assertEqual(marked(result), ["gap_mm", "peg_len_mm", "plate_h_mm"])
+
+    def test_a_tool_of_the_walks_own_component_has_the_place_of_that_component(self):
+        turned = {"origin": [0, 0, 0], "x": [0, 1, 0], "y": [-1, 0, 0], "z": [0, 0, 1]}
+        root = Context({"target": {"token": "t1", "placement": {"frame": turned}}, "items": []})
+        rod = root.child({"token": "t2", "foreign": True, "component": {"token": "rod"}, "place": {"frame": FLAT}}, "a_")
+        self.assertEqual(move._component_frame(rod.child({"token": "t3"}, "b_")), FLAT)
 
     def test_a_round_body_with_two_corners_moves_by_its_distances(self):
         def round_body(data):

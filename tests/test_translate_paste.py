@@ -46,7 +46,7 @@ class PastedToolTest(unittest.TestCase):
         self.assertEqual([s["kind"] for s in tool["features"]], ["extrude", "move", "move", "move", "offsetFaces"])
         self.assertEqual(result.recipe["features"][2]["of"], [tool["id"]])
         self.assertEqual(result.recipe["features"][2]["polar"]["count"], {"expr": "ring_n"})
-        self.assertEqual(marked(result), [])
+        self.assertEqual(marked(result), ["ring_n"])
         self.assertEqual(check_recipe(result.recipe), [])
 
     def test_ids_are_unique(self):
@@ -96,6 +96,15 @@ class PastedToolTest(unittest.TestCase):
         self.assertEqual(result.recipe["features"][1]["features"][1]["translate"], [5.0, 0.0, 0.0])
         self.assertIn("peg_len_mm", marked(result))
 
+    def test_a_paste_of_several_bodies_pairs_each_result_with_its_source_by_points(self):
+        capture = short_chain()
+        data = paste_data(capture)
+        points = [vec.add(p, [50, 0, 0]) for p in data["sources"][0]["points"]]
+        data["sources"].insert(0, {"token": "t8", "name": "Body8", "points": points})
+        data["result_bodies"].append({"token": "t9", "name": "Body9", "points": points})
+        tool = translate(capture).recipe["features"][1]
+        self.assertEqual([s["kind"] for s in tool["features"]], ["extrude"])
+
     def test_a_source_of_another_component_is_not_a_step_that_reaches_into_it(self):
         capture = short_chain()
         peg = capture["items"][3]
@@ -110,7 +119,15 @@ class RefusedPasteTest(unittest.TestCase):
             points = data["result_bodies"][0]["points"]
             points[0] = vec.add(points[0], [1, 0, 0])
 
+        def fewer_sources(data):
+            data["result_bodies"].append({"token": "t9", "name": "Body9", "points": data["result_bodies"][0]["points"]})
+
+        def twins(data):
+            data["sources"].append(dict(data["sources"][0], token="t8", name="Body8"))
+            fewer_sources(data)
+
         cases = {
+            "fewer sources than results": fewer_sources, "two sources fit one result": twins,
             "no source": lambda d: d.update(sources=[]),
             "results unread": lambda d: d.update(result_bodies=None),
             "another result": lambda d: d.update(result_bodies=[{"token": "t9", "name": "Body9", "points": []}]),

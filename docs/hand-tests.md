@@ -804,12 +804,14 @@ Paramability against the STEP, at the current sizes and at one other size.
       holds the steps of the source, written again with their own ids, and the verdict is "translated". A paste that
       sits on its source has no `move`; a paste moved afterwards has one. Change a size of the source: both the
       source and the pasted tool follow. A paste onto a body that already has steps stops with "lands on a body that
-      already has steps".
+      already has steps". Fusion documents `sourceBody` as a collection: check that `data.sources` is filled. Also
+      paste two bodies at once: `data.sources` has both, and each pasted body gets the steps of its own source.
 - [ ] **B3 Free Move.** Move a tool body by hand (Move/Copy, Free Move, a turn and a shift) before the Combine. The cut
       sits where Fusion shows it. The capture item has `data.move_type` `free`, `points_before` and `points_after`
       (up to 8 corner points of the body each); the recipe has a `move` step with numbers. Also try Point to Point,
-      Point to Position and Translate Along Entity: the same result, and the sizes written before are marked "may give
-      unexpected results" ("follows a point that may move with it"). A Move of faces stops with "moves faces of the
+      Point to Position and Translate Along Entity: the same result, and every ticked size is marked "may give
+      unexpected results" ("follows a point or an edge that may move with it") or left out with that reason. A Move of
+      faces stops with "moves faces of the
       body".
 - [ ] **B4 Move by X, Y, Z.** Move a tool by distances that read user parameters, in a component that is not at the
       origin and is turned. Do it once with the Move in component space and once in design space (the option in the
@@ -821,9 +823,13 @@ Paramability against the STEP, at the current sizes and at one other size.
       do not tell which way ... turns"; note which axis kind gave that.
 - [ ] **B6 Pattern of bodies.** Make a circular pattern of bodies (a tool with a count parameter), then Combine join
       all copies with the part. Export: one `pattern` step that repeats the tool steps, not one tool per copy, and the
-      verdict of the pattern item is "translated". Change the count in Paramability. Then answer this in Fusion:
-      change the count there and edit the Combine. Does the Combine take the new copies? The export writes it as if it
-      does. If Fusion leaves them out, say so: the app and Fusion then differ for a changed count. Also try a
+      verdict of the pattern item is "translated". The size behind the count is marked "may give unexpected results";
+      spacing and angle are not. Change the count in Paramability. Then answer this in Fusion: change the count there
+      and edit the Combine. Does the Combine take the new copies? The recipe repeats the tools for any count. Once
+      Fusion is confirmed to take the new copies, the mark can go. If Fusion leaves them out, say so: the app and
+      Fusion then differ for a changed count. Copies are matched on their first 8 vertices: on a body with more than 8,
+      a copy that lists its vertices in another order is not matched, and the pattern stops with "could not be matched
+      to the bodies it made" or falls back to one tool per copy; note if that happens on a real pattern. Also try a
       rectangular pattern, a mirror of bodies (with "Combine" off), a Combine that takes only some of the copies (each
       copy becomes a tool with its place in numbers, and the sizes behind the layout are marked), and a cut instead of
       a join.
@@ -832,7 +838,9 @@ Paramability against the STEP, at the current sizes and at one other size.
       `data.intersect_model`. Compare with the shape Fusion made: `every` means the part keeps only what lies in the
       part and in all tools; `any` means what lies in the part and in at least one tool. Write down which one Fusion
       made, and whether `intersect_model` says the same. With `every` the recipe has one tool step per tool, each
-      with `combine` intersect. With `any` it has one intersect step that holds the tools. An intersect of one tool
+      with `combine` intersect. With `any` it has one intersect step that holds the tools. When the two volumes are
+      equal the sizes the tools read are marked "may give unexpected results"; once the rule is known, that mark can
+      go. Also try two tools that do not overlap each other at all: `every` should be 0. An intersect of one tool
       with several steps is a tool step too. An intersect with a tool from another component, or where the two
       volumes fit neither way, stops with "keeps a shared part that the copy could not work out".
 - [ ] **B8 The whole chain.** In component `Rod`, paste a body from another component, Move it, Offset Faces on it,
@@ -1236,12 +1244,13 @@ Written from the API reference and the owner's 0.7.2 export, never run on the ne
 These members were written from the API reference and never run. A member that cannot be read gives `null` or `other`,
 and the translator refuses the item, so a wrong guess shows up in `report.json` as a refusal. Run B1 to B12.
 
-- `CopyPasteBody.sourceBody` with the marker before the item (empty when the source was consumed), `CopyPasteBody.bodies`
+- `CopyPasteBody.sourceBody` (a collection in the API stubs) with the marker before the item (empty or shorter when a source was consumed), `CopyPasteBody.bodies`
   after it, also for a source in another component (`read_paste.py`).
 - `MoveFeature.inputEntities` (bodies, or faces: a mix is `other`), `MoveFeature.definition` and the class it names
   (`TranslateXYZ`, `Rotate`, `FreeMove`, `PointToPoint`, `PointToPosition`, `TranslateAlongEntity`),
-  `xDistance`, `yDistance`, `zDistance`, `isDesignSpace`, `angle`, `axisEntity` and `MoveFeature.transform` (retired in
-  the reference; read for a free move only, and the fit against the points decides alone) (`read_move.py`).
+  `xDistance`, `yDistance`, `zDistance`, `isDesignSpace`, `angle`, `axisEntity`, `distance` (along an entity) and
+  `transform` of the free move definition (when it cannot be read, the fit against the points decides alone)
+  (`read_move.py`).
 - The first 8 vertices of a body (`BRepBody.vertices`, `BRepVertex.geometry`) in a stable order: with the marker before
   a Paste, a Move or a pattern, and again after it for the same body found by its token. A gap in the list gives an
   empty list, which refuses the fit.

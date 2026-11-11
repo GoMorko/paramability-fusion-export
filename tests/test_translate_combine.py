@@ -168,6 +168,10 @@ class ToolWalkTest(unittest.TestCase):
         self.assertEqual(target["token"], "t2")
         self.assertEqual([s["kind"] for s in steps], ["extrude"])
 
+    def test_the_exported_body_keeps_the_measures_of_its_own_steps(self):
+        item = {"data": {"volume_after": 7.0}}
+        self.assertEqual(tool_walk._seen_from_tool(item, {"token": "t1"}, True)["data"]["volume_after"], 7.0)
+
     def test_a_handler_reads_what_was_measured_on_the_tool(self):
         box = {"min": [0, 0, 0], "max": [1, 1, 1]}
 
