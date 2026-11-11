@@ -1,15 +1,19 @@
 """Steps left out of the copy as gaps (lib/translator/gaps.py, walk.py)."""
 import copy
 import json
+import math
 import unittest
+from types import SimpleNamespace
+from unittest import mock
 
 from tests import context  # noqa: F401
 from tests.schema_check import check_recipe
 from tests.test_translate_sized import H, run
-from tests.translator_helpers import load_capture, steps_of
+from tests.translator_helpers import load_capture, steps_of, stopped
 
-from lib.translator import CaptureError, Refusal, translate
-from lib.translator.gaps import MAX_DATA_BYTES, MAX_GAPS, pick_records
+from lib.translator import CaptureError, Refusal, gaps as gaps_module, translate
+from lib.translator.translate import _gap_sizes
+from lib.translator.gaps import MAX_DATA_BYTES, MAX_DATA_DEPTH, MAX_GAPS, MAX_SIZES, pick_records
 
 TRAY = "filter_tray_sized"  # Extrude1, Shell1, Fillet1 (picks edges), Hole1, a pattern of Hole1
 SHELL, FILLET, HOLE, PATTERN = 2, 3, 5, 6
@@ -52,19 +56,61 @@ class LeftOutTest(unittest.TestCase):
         self.assertIsNone(result.refusal)
         self.assertEqual(gap_names(result)[0], "Shell1")
 
-    def test_a_gap_before_the_first_written_step_stops_the_copy(self):
-        result = translate(tray(unsupported(1, "LoftFeature")))
-        self.assertIsNone(result.recipe)
-        self.assertEqual((result.refusal["index"], result.gaps), (1, []))
 
-    def test_more_gaps_than_the_cap_stop_the_copy(self):
-        def edit(capture):
-            shell = capture["items"][SHELL]
-            capture["items"][SHELL:] = [dict(copy.deepcopy(shell), index=10 + n, name="Sweep%d" % n, type="SweepFeature")
-                                        for n in range(MAX_GAPS + 1)]
-        result = translate(tray(edit))
-        self.assertIsNone(result.recipe)
-        self.assertEqual(result.refusal["index"], 10 + MAX_GAPS)
+
+def _at_shell(**changes):
+    def edit(capture):
+        capture["items"][SHELL].update(changes)
+    return edit
+
+
+def _shell_with_new_body(type_name=None, **data):
+    def edit(capture):
+        shell = capture["items"][SHELL]
+        shell["bodies_after"] = shell["bodies_after"] + [{"token": "t9", "name": "Body9"}]
+        shell["type"] = type_name or shell["type"]
+        shell["data"].update(data)
+    return edit
+
+
+def _more_gaps_than_the_cap(capture):
+    shell = capture["items"][SHELL]
+    capture["items"][SHELL:] = [dict(copy.deepcopy(shell), index=10 + n, name="Sweep%d" % n, type="SweepFeature")
+                                for n in range(MAX_GAPS + 1)]
+
+
+class StopTest(unittest.TestCase):
+    def test_each_case_that_leaves_the_body_unknown_stops_the_copy_instead_of_leaving_a_gap(self):
+        cases = {
+            "Fusion marks the step as an error": (_at_shell(health="error"), SHELL),
+            "its bodies could not be read": (_at_shell(bodies_after=None), SHELL),
+            "its data could not be read": (_at_shell(data={"read_error": "boom"}), SHELL),
+            "a type without a handler whose data could not be read":
+                (_at_shell(type="SweepFeature", data={"read_error": "boom"}), SHELL),
+            "the body cannot be followed": (_at_shell(bodies_after=[{"token": "t9", "name": "Body1"}]), SHELL),
+            "a type without a handler makes another body": (_shell_with_new_body("SweepFeature"), SHELL),
+            "a step that reaches into another component makes another body":
+                (_shell_with_new_body(inside={"foreign": True}), SHELL),
+            "a step its handler refuses makes another body": (_shell_with_new_body(shell_type="rounded"), SHELL),
+            "the first step is a gap": (unsupported(1, "LoftFeature"), 1),
+            "more gaps than the cap": (_more_gaps_than_the_cap, 10 + MAX_GAPS),
+        }
+        for label, (edit, index) in cases.items():
+            with self.subTest(label):
+                result = translate(tray(edit))
+                self.assertIsNotNone(stopped(result))
+                self.assertEqual((stopped(result)["index"], result.gaps), (index, []))
+
+    def test_a_tool_body_that_passes_the_gap_cap_stops_the_whole_copy(self):
+        # Two left out steps after the tool's first one: the second meets the cap inside the tool walk.
+        capture = load_capture("combine_tool_two_steps")
+        items = capture["items"]
+        items[5]["type"] = "SweepFeature"
+        items[6:] = [dict(copy.deepcopy(items[5]), index=6, name="Extrude4"), dict(items[6], index=7)]
+        with mock.patch.object(gaps_module, "MAX_GAPS", 1):
+            result = translate(capture)
+        self.assertIsNotNone(stopped(result))
+        self.assertEqual(result.gaps, [])
 
 
 class PicksTest(unittest.TestCase):
@@ -78,10 +124,20 @@ class PicksTest(unittest.TestCase):
         for makers, expected in (([SHELL], ["Shell1", "Fillet1"]), ([], ["Shell1"])):
             with self.subTest(makers=makers):
                 capture = tray(unsupported(SHELL))
-                capture["reach"] = {"read": True, "makers": {str(FILLET): makers}}
+                capture["reach"] = {"read": True, "gaps": [SHELL], "makers": {str(FILLET): makers}}
                 result = translate(capture)
                 self.assertEqual(gap_names(result), expected)
                 self.assertEqual(len(steps_of(result.recipe, "round")), 0 if makers else 1)
+
+    def test_a_gap_the_reach_was_not_read_for_may_be_picked(self):
+        for reach in ({"read": True, "gaps": [], "makers": {str(FILLET): []}},
+                      {"read": True, "makers": {str(FILLET): []}}):
+            with self.subTest(reach=reach):
+                capture = tray(unsupported(SHELL))
+                capture["reach"] = reach
+                result = translate(capture)
+                self.assertEqual(gap_names(result), ["Shell1", "Fillet1"])
+                self.assertEqual(result.gaps[1]["dependsOn"], ["gap_2"])
 
     def test_a_reach_read_that_failed_counts_as_no_reach(self):
         capture = tray(unsupported(SHELL))
@@ -106,16 +162,16 @@ class PicksTest(unittest.TestCase):
         self.assertEqual(gap_names(result), ["Extrude2", "Mirror1"])
         self.assertEqual(steps_of(result.recipe, "mirror"), [])
 
-    def test_the_pick_records_of_an_item_name_each_picked_edge_face_and_point(self):
+    def test_the_pick_records_of_an_item_are_the_edges_and_faces_it_picks_by_measured_points(self):
         item = {"data": {
             "sets": [{"edges": [{"token": "e1", "points": [[0, 0, 0]]}], "faces": [{"token": "f1", "point": [1, 0, 0]}]}],
-            "profiles": [{"sketch": "Sketch1", "loops": []}, {"face": True, "token": "f2", "loops": []}],
+            "profiles": [{"sketch": "Sketch1", "loops": []}, {"face": True, "face_point": [0, 0, 5], "loops": []}],
             "side_one": {"kind": "toEntity", "face_point": [0, 0, 5]},
+            "faces": [{"surface": "Plane", "face_point": [0, 0, 5]}],
             "participants": [{"token": "t1"}], "faces_after": [{"point": [0, 0, 0]}],
         }}
         found = [(r["kind"], r["path"]) for r in pick_records(item)]
-        self.assertEqual(found, [("edge", ["sets", 0, "edges", 0]), ("face", ["sets", 0, "faces", 0]),
-                                 ("face", ["profiles", 1]), ("point", ["side_one"])])
+        self.assertEqual(found, [("edge", ["sets", 0, "edges", 0]), ("face", ["sets", 0, "faces", 0])])
         self.assertIs(pick_records(item)[0]["record"], item["data"]["sets"][0]["edges"][0])
 
 
@@ -194,6 +250,36 @@ class RecordTest(unittest.TestCase):
         self.assertTrue(gap["trimmed"])
         self.assertLessEqual(len(json.dumps(gap["data"]).encode("utf-8")), MAX_DATA_BYTES)
         self.assertEqual(gap["data"]["inside"], 2.0)
+
+    def test_data_the_app_would_refuse_is_made_plain_json_and_marked_trimmed(self):
+        def deepest(node, level=1):
+            children = node.values() if isinstance(node, dict) else node if isinstance(node, list) else ()
+            return max([level] + [deepest(child, level + 1) for child in children])
+
+        def edit(capture):
+            unsupported(SHELL)(capture)
+            nested = 1.0
+            for _ in range(MAX_DATA_DEPTH + 8):
+                nested = {"in": nested}
+            capture["items"][SHELL]["data"].update(outside=math.nan, nested=nested)
+        gap = translate(tray(edit)).gaps[0]
+        json.dumps(gap["data"], allow_nan=False)
+        self.assertLessEqual(deepest(gap["data"]), MAX_DATA_DEPTH)
+        self.assertEqual((gap["data"]["outside"], gap["data"]["inside"], gap["trimmed"]), (None, 2.0, True))
+
+    def test_a_name_of_only_spaces_gives_the_type_in_words(self):
+        def edit(capture):
+            unsupported(SHELL)(capture)
+            capture["items"][SHELL]["name"] = "   "
+        self.assertEqual(translate(tray(edit)).gaps[0]["name"], "sweep")
+
+    def test_the_size_lists_of_a_gap_stay_within_the_cap(self):
+        names = ["s%d" % n for n in range(MAX_SIZES + 6)]
+        table = SimpleNamespace(size_name=lambda name: name, sizes={name: {} for name in names})
+        written = {}
+        _gap_sizes(SimpleNamespace(gaps=[SimpleNamespace(id="gap_2", name="Shell1")]),
+                   SimpleNamespace(gaps=[written]), table, {}, {}, {"gap_2": names})
+        self.assertEqual((len(written["sizes"]), len(written["looseSizes"])), (MAX_SIZES, MAX_SIZES))
 
 
 if __name__ == "__main__":

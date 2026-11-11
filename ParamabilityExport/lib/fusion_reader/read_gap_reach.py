@@ -3,21 +3,31 @@
 When steps are left out of the copy, a later round, chamfer or shell that picks edges or faces of the left out step's
 result would pick something else in the copy. For each later step that picks geometry, the marker is moved to just
 before the step. Each picked face (for an edge: each face it joins) is then compared with `Feature.faces` of every
-earlier candidate step. `Feature.faces` holds the faces a step created, and they are all there with the marker before
-the next step.
+earlier candidate step: the left out steps, the steps that made the tool bodies of a left out Combine, and the picking
+steps after the first left out step.
 
-The answer is `{ read: true, makers: { "<item index>": [indexes of the candidates that made a picked face] } }`, with
-an entry for every picking step that was tested, or `{ read: false, error }` when the read failed. A pick that cannot
-be found, or a candidate whose faces cannot be read, counts as reached: the safe side for the translator.
+`Feature.faces` holds the faces a step created, but only all of them with the marker right after the step: a later
+step that trims, splits, moves or replaces those faces can take them out of the list. So each candidate's list is also
+read once with the marker right after it. A candidate whose list is empty, or shorter than it was right after the step,
+counts as reached by every later pick, since a picked face may be one that dropped out.
+
+The answer is `{ read: true, gaps, makers: { "<item index>": [indexes of the candidates that made a picked face] } }`,
+with `gaps` the left out steps the read was asked about and an entry for every picking step that was tested, or
+`{ read: false, error }` when the read failed. A step that made a tool body of a left out Combine is reported under the
+Combine's index. A pick that cannot be found, or a candidate whose faces cannot be read, counts as reached: the safe
+side for the translator.
 """
 from ..design_edit.marker import read_marker
-from ..translator import step_kinds
+from ..translator import step_kinds, tool_items
 from ..translator.gaps import pick_records
 from . import read_geometry as geo
 from .capture import MarkerError, restore_marker
 
-# Picking steps tested in one read; a longer list gives `read: false` (each one moves the marker).
+# Picking steps tested and candidates read in one read; a longer list gives `read: false` (each one moves the marker).
 MAX_PICKING_ITEMS = 100
+MAX_CANDIDATES = 200
+# How many tool bodies deep the steps that made a left out Combine's tools are followed.
+MAX_TOOL_DEPTH = 3
 _FACE_ENTITY = 1  # BRepEntityTypes.BRepFaceEntityType
 
 
@@ -76,17 +86,48 @@ def _pick_faces(design, pick, home):
 
 
 def _maker_faces(timeline, index):
-    """The faces the timeline item `index` created, or None when they cannot be read."""
+    """The faces the timeline item `index` created that Fusion still lists, or None when they cannot be read."""
     entity = geo.safe(lambda: geo.native_object(timeline.item(index).entity), None)
     faces = geo.safe(lambda: entity.faces, None) if entity is not None else None
     return _natives(geo.collection_items(faces)) if faces is not None else None
 
 
-def _candidates(items, gaps, picking):
-    """Timeline indexes that may have made a picked face: the left out steps and the picking steps after the first
-    one. An item that makes no body (a sketch, construction geometry) makes no faces and is left out."""
+def _move(timeline, position):
+    geo.safe(lambda: setattr(timeline, "markerPosition", position), None)
+    if geo.safe(lambda: timeline.markerPosition, None) != position:
+        raise ReachReadError("The timeline marker could not be moved.")
+
+
+def _tool_makers(items, gaps):
+    """{ index: [left out Combines] } of the steps that made the tool bodies of each left out Combine, also of the
+    tools of a Combine among those steps. The faces of a joined or cut tool belong to the steps that made it."""
+    found = {}
+
+    def follow(combine, before, owner_index, depth):
+        if depth > MAX_TOOL_DEPTH:
+            return
+        tools = (combine.get("data") or {}).get("tools") if isinstance(combine.get("data"), dict) else None
+        for tool in tools if isinstance(tools, list) else []:
+            if not isinstance(tool, dict):
+                continue
+            for item in tool_items.chain(list(items.values()), tool, before):
+                found.setdefault(item["index"], [])
+                if owner_index not in found[item["index"]]:
+                    found[item["index"]].append(owner_index)
+                follow(item, item["index"], owner_index, depth + 1)
+
+    for index in sorted(gaps):
+        item = items.get(index)
+        if item is not None:
+            follow(item, index, index, 1)
+    return found
+
+
+def _candidates(items, indexes):
+    """The timeline indexes among `indexes` that may have made a picked face. An item that makes no body (a sketch,
+    construction geometry) makes no faces and is left out."""
     found = []
-    for index in sorted(set(gaps) | set(picking)):
+    for index in sorted(set(indexes)):
         item = items.get(index)
         if item is None or not step_kinds.makes_no_body(item.get("type")):
             found.append(index)
@@ -104,8 +145,24 @@ def _picking_items(items, gaps):
     return found
 
 
-def _reached(design, timeline, index, picks, candidates, home):
-    """The candidates before `index` that made a face the picks touch (the marker is before `index`)."""
+def _complete_counts(timeline, candidates):
+    """{ index: how many faces the step lists with the marker right after it, or None when unreadable }."""
+    counts = {}
+    for index in candidates:
+        _move(timeline, index + 1)
+        faces = _maker_faces(timeline, index)
+        counts[index] = len(faces) if faces is not None else None
+    return counts
+
+
+def _maybe_dropped(faces, complete):
+    """True when the step's list may miss a face it made: unreadable, empty, or shorter than right after the step."""
+    return faces is None or not faces or complete is None or len(faces) < complete
+
+
+def _reached(design, timeline, index, picks, candidates, complete, home):
+    """The candidates before `index` that made, or may have made, a face the picks touch (the marker is before
+    `index`)."""
     earlier = [m for m in candidates if m < index]
     faces = {m: _maker_faces(timeline, m) for m in earlier}
     touched = []
@@ -114,7 +171,8 @@ def _reached(design, timeline, index, picks, candidates, home):
         if found is None:
             return earlier
         touched.extend(found)
-    return [m for m in earlier if faces[m] is None or any(_same(a, b) for a in touched for b in faces[m])]
+    return [m for m in earlier if _maybe_dropped(faces[m], complete.get(m))
+            or any(_same(a, b) for a in touched for b in faces[m])]
 
 
 def _read(design, capture, gaps):
@@ -123,30 +181,37 @@ def _read(design, capture, gaps):
     picking = _picking_items(items, gaps)
     if len(picking) > MAX_PICKING_ITEMS:
         raise ReachReadError("More than %d later steps pick geometry." % MAX_PICKING_ITEMS)
-    candidates = _candidates(items, gaps, picking)
+    tools = _tool_makers(items, gaps)
+    candidates = _candidates(items, set(gaps) | set(picking) | set(tools))
+    if len(candidates) > MAX_CANDIDATES:
+        raise ReachReadError("More than %d steps may have made the faces later steps pick." % MAX_CANDIDATES)
     home = (capture.get("target") or {}).get("token") or ""
     timeline = design.timeline
+    complete = _complete_counts(timeline, candidates)
     makers = {}
     for index in sorted(picking):
-        timeline.markerPosition = index
-        if timeline.markerPosition != index:
-            raise ReachReadError("The timeline marker could not be moved.")
-        makers[str(index)] = _reached(design, timeline, index, picking[index], candidates, home)
+        _move(timeline, index)
+        reached = _reached(design, timeline, index, picking[index], candidates, complete, home)
+        found = list(reached)
+        for m in reached:
+            found.extend(c for c in tools.get(m, ()) if c < index)
+        makers[str(index)] = sorted(set(found))
     return makers
 
 
 def read_reach(design, capture, gaps):
-    """The `reach` of a capture. `gaps` are the timeline indexes of the steps the first translation left out; with
-    none, nothing is read. The timeline marker goes back to where it was; MarkerError when it cannot."""
+    """The `reach` of a capture. `gaps` are the timeline indexes of the steps the first translation left out for their
+    own reason (`reach_pass.left_out_indexes`); with none, nothing is read. The timeline marker goes back to where it
+    was; MarkerError when it cannot."""
     if not gaps:
-        return {"read": True, "makers": {}}
+        return {"read": True, "gaps": [], "makers": {}}
     timeline = design.timeline
     marker = read_marker(timeline)
     if marker is None:
         return {"read": False, "error": "The design has no readable timeline."}
     try:
         makers = _read(design, capture, set(gaps))
-        reach = {"read": True, "makers": makers}
+        reach = {"read": True, "gaps": sorted(set(gaps)), "makers": makers}
     except MarkerError:
         raise
     except Exception as exc:

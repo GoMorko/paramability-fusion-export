@@ -4,7 +4,7 @@ import unittest
 from copy import deepcopy
 
 from tests import context  # noqa: F401
-from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, not_copied
+from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of, stopped
 
 from lib.params import size_table
 from lib.probe import build
@@ -18,11 +18,13 @@ def step_of(capture, kind="EmbossFeature"):
     return next(i for i in capture["items"] if i["type"] == kind)
 
 
-def reason_of(capture, kind="EmbossFeature"):
-    result = translate(capture)
-    assert not_copied(result) is not None, "the text was copied"
-    assert not_copied(result)["index"] == step_of(capture, kind)["index"]
-    return not_copied(result)["reason"]
+def reason_of(capture, kind="EmbossFeature", missing=left_out):
+    """Why the text step is not copied. `missing` is `left_out` when the copy goes on without it, `stopped` when the
+    copy stops there."""
+    found = missing(translate(capture))
+    assert found is not None, "the text was copied"
+    assert found["index"] == step_of(capture, kind)["index"]
+    return found["reason"]
 
 
 def square(x, y, size):
@@ -69,7 +71,7 @@ class TextRefusalTest(unittest.TestCase):
             capture = load_capture(EXTRUDE)
             step_of(capture, "ExtrudeFeature")["data"]["profiles"] = [
                 {"text": True, "sketch": "Sketch2", "problem": problem}]
-            reasons.add(reason_of(capture, "ExtrudeFeature"))
+            reasons.add(reason_of(capture, "ExtrudeFeature", stopped))
         self.assertEqual(len(reasons), 5)
 
     def test_an_emboss_whose_measured_volume_is_not_the_outline_area_times_the_depth(self):
@@ -177,7 +179,7 @@ class TextSortTest(unittest.TestCase):
         capture = load_capture(EXTRUDE)
         step_of(capture, "ExtrudeFeature")["data"]["profiles"] = [
             {"text": True, "sketch": "Sketch2", "problem": text_outlines.OVERLAP}]
-        self.assertEqual(reason_of(capture, "ExtrudeFeature"), loops.TEXT_PROBLEMS["overlap"])
+        self.assertEqual(reason_of(capture, "ExtrudeFeature", stopped), loops.TEXT_PROBLEMS["overlap"])
 
     def test_two_hundred_outlines_are_sorted_fast(self):
         curves = []

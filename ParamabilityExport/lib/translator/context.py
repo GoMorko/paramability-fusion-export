@@ -162,11 +162,12 @@ class Context:
         self.copied_items.extend(result.items)
         self.gaps.extend(result.gaps)
 
-    def leave_out(self, item, reason, depends_on=()):
-        """Record `item` as a gap of this walk, after the steps written so far; returns the `gaps.Gap`."""
+    def leave_out(self, item, reason, depends_on=(), picks=False):
+        """Record `item` as a gap of this walk, after the steps written so far; returns the `gaps.Gap`. `picks` says
+        it is a gap only because it picks, or may pick, faces of earlier gaps."""
         before, after = gap_records.measures(self, item)
         gap = gap_records.Gap(gap_records.gap_id(self, item), item, reason, depends_on,
-                              [step["id"] for step in self.steps], before, after)
+                              [step["id"] for step in self.steps], before, after, picks)
         self.gaps.append(gap)
         return gap
 

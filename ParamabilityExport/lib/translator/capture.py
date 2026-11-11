@@ -57,8 +57,9 @@ def _is_index(value):
 
 
 def _check_reach(reach):
-    """`reach` (optional) says which earlier steps made the faces each step picks: `{ read: true, makers: { "<index>":
-    [indexes] } }`, or `{ read: false, error }` when that could not be read."""
+    """`reach` (optional) says which earlier steps made the faces each step picks: `{ read: true, gaps: [indexes],
+    makers: { "<index>": [indexes] } }`, or `{ read: false, error }` when that could not be read. `gaps` are the
+    left out steps the read was asked about; without it no answer is trusted (gaps.picked_gaps)."""
     if reach is None:
         return
     if not isinstance(reach, dict) or not isinstance(reach.get("read"), bool):
@@ -70,6 +71,9 @@ def _check_reach(reach):
             isinstance(key, str) and isinstance(found, list) and all(_is_index(i) for i in found)
             for key, found in makers.items()):
         raise CaptureError("The capture 'reach' has no list of makers per step.")
+    read_for = reach.get("gaps")
+    if read_for is not None and not (isinstance(read_for, list) and all(_is_index(i) for i in read_for)):
+        raise CaptureError("The capture 'reach' names its left out steps in a way that cannot be read.")
 
 
 def outside_component(item):

@@ -164,6 +164,8 @@ def build(ctx, body, before, depth, place=0):
     child = ctx.child(body, "%st%s_%s_" % (ctx.id_prefix, before, place), chain, depth)
     walked = TranslateResult()
     if not walk.walk_items(child, walked):
+        if walked.over_gap_cap:
+            return Refusal(walked.refusal["reason"], over_gap_cap=True)
         stopped = next(item for item in chain if item["index"] == walked.refusal["index"])
         return cannot_copy(body, stopped, walked.refusal["reason"])
     if not child.steps:

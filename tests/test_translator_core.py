@@ -5,7 +5,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests import schema_check
-from tests.translator_helpers import not_copied
+from tests.translator_helpers import left_out
 from tests.translator_helpers import (
     assert_schema_ok, fixture_path, load_capture, translate_fixture,
 )
@@ -40,8 +40,8 @@ class CoreTest(unittest.TestCase):
 
     def test_unknown_feature_is_left_out_at_that_item(self):
         result = translate_fixture("core_unknown_feature", {"ExtrudeFeature": extrude_handler})
-        self.assertIsNotNone(not_copied(result))
-        self.assertEqual((not_copied(result)["index"], not_copied(result)["type"]), (2, "EmbossFeature"))
+        self.assertIsNotNone(left_out(result))
+        self.assertEqual((left_out(result)["index"], left_out(result)["type"]), (2, "EmbossFeature"))
         verdicts = {v["index"]: v["verdict"] for v in result.items}
         self.assertEqual(verdicts[1], "translated")
         self.assertEqual(verdicts[2], "leftOut")
@@ -51,7 +51,7 @@ class CoreTest(unittest.TestCase):
             "ExtrudeFeature": extrude_handler,
             "EmbossFeature": lambda item, ctx: Refusal("Not today."),
         })
-        self.assertEqual((not_copied(result)["index"], not_copied(result)["reason"]), (2, "Not today."))
+        self.assertEqual((left_out(result)["index"], left_out(result)["reason"]), (2, "Not today."))
 
     def test_helper_body_is_skipped_and_kept_pending(self):
         result = translate_fixture("core_helper_body", {"ExtrudeFeature": extrude_handler})

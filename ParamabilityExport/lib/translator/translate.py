@@ -287,7 +287,7 @@ def _gap_sizes(ctx, result, table, sizes, doubts, reads):
     out = {name: spec for name, spec in table.sizes.items() if name in sizes or name in kept}
     for gap, written in zip(ctx.gaps, result.gaps):
         names = {table.size_name(name) for name in reads.get(gap.id, ())}
-        written["sizes"] = [name for name in out if name in names]
+        written["sizes"] = [name for name in out if name in names][:gaps.MAX_SIZES]
         written["looseSizes"] = [name for name in written["sizes"] if name in loose.get(gap.id, ())]
     return out
 

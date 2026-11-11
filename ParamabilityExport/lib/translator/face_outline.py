@@ -7,7 +7,8 @@ the outward normal, its loops in that plane and, when it knows, the earlier extr
 - Same outline: the face is the start or end face of an earlier extrude step of this walk, that step has no taper,
   and the face still has that step's outline (no round, cut or join changed it). The step's written outline is used
   again on a plane at that face, so the outline and the plane follow the sizes that step follows (its length, its
-  start, its sketch).
+  start, its sketch). The face is compared at the measured sizes only: when steps came after that extrude, one of
+  them may reach the face at other sizes, so the sizes read so far stay free with a warning.
 - As measured: any other flat face is written from its read loops as numbers. The sizes read by the steps written so
   far may change that face, so they stay free with a warning (`Context.doubt`).
 
@@ -67,7 +68,7 @@ def prepare(ctx, item, profiles):
     measured = loops.profile_loops(plain)
     if isinstance(measured, Refusal):
         return measured
-    return _same_outline(ctx, plain) or _as_measured(ctx, item, plain, measured)
+    return _same_outline(ctx, item, plain) or _as_measured(ctx, item, plain, measured)
 
 
 def _as_measured(ctx, item, face, measured):
@@ -103,7 +104,7 @@ def _same_shape(face, slab):
                for p in _moved_into(_points(slab.profile), slab.frame, face["frame"]))
 
 
-def _same_outline(ctx, face):
+def _same_outline(ctx, item, face):
     """The `FaceOutline` of a face that is the untouched start or end face of an untapered extrude step of this walk,
     else None."""
     made = face.get("made_by") or {}
@@ -125,8 +126,19 @@ def _same_outline(ctx, face):
         step = next((s for s in ctx.steps if s.get("id") == slab.id), None)
         if step is None or step.get("kind") != "extrude" or not _flips(step) or not _same_shape(face, slab):
             continue
+        _doubt_later_steps(ctx, item, made, step)
         return _on_cap(slab, found.factor, step, outward)
     return None
+
+
+def _doubt_later_steps(ctx, item, made, step):
+    """Mark the sizes read so far when a step written, or left out, after the extrude that made the face may reach
+    that face at other sizes: the face was only compared with its outline at the measured sizes."""
+    later = ctx.steps[ctx.steps.index(step) + 1:]
+    gaps_after = [gap for gap in ctx.gaps if gap.index is not None and gap.index > made.get("index", -1)]
+    if (later or gaps_after) and ctx.written_reads:
+        ctx.doubt(ctx.written_reads, "%s uses the face of %s as its outline, and a later step may change that face at "
+                  "other sizes" % (item.get("name", "a step"), made.get("name") or "an earlier extrude"))
 
 
 def _flips(step):

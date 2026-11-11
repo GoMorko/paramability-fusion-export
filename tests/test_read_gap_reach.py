@@ -47,9 +47,9 @@ class ReachTest(unittest.TestCase):
 
     def test_a_pick_on_a_face_of_a_left_out_step_is_reported_and_another_is_not(self):
         design, reach = self.read([item(1), item(2), item(3, "FilletFeature", edge_pick("top_wall"))])
-        self.assertEqual(reach, {"read": True, "makers": {"3": [1]}})
+        self.assertEqual(reach, {"read": True, "gaps": [1], "makers": {"3": [1]}})
         _, reach = self.read([item(1), item(2), item(3, "FilletFeature", edge_pick("floor_rim"))])
-        self.assertEqual(reach, {"read": True, "makers": {"3": []}})
+        self.assertEqual(reach, {"read": True, "gaps": [1], "makers": {"3": []}})
 
     def test_a_face_pick_is_tested_by_the_face_itself(self):
         _, reach = self.read([item(1), item(3, "ShellFeature", face_pick("wall"))])
@@ -67,16 +67,45 @@ class ReachTest(unittest.TestCase):
                  item(2, "FilletFeature", edge_pick("floor_rim"))]
         design, reach = self.read(items)
         self.assertEqual(reach["makers"], {"2": []})
-        self.assertEqual(design.timeline.visited, [2])
+        self.assertNotIn(0, design.timeline.visited)
 
-    def test_a_pick_by_point_finds_its_face_through_the_body(self):
+    def test_a_face_whose_token_is_gone_is_found_by_its_point_on_the_body(self):
         body = FakeSolidBody("b1", {(1, 2, 3): [self.world.top]})
-        data = {"start": {"kind": "fromEntity", "face_point": [1, 2, 3], "body": {"token": "b1", "name": "Body1"}}}
+        data = {"faces": [{"token": "gone", "point": [1, 2, 3]}]}
         design = self.world.design()
         design._entities["b1"] = body
         with mock.patch.object(read_gap_reach.geo, "point3d", lambda p: tuple(p)):
-            reach = read_reach(design, {"items": [item(1), item(3, "ExtrudeFeature", data)]}, {1})
+            reach = read_reach(design, {"items": [item(1), item(3, "ShellFeature", data)], "target": {"token": "b1"}},
+                               {1})
         self.assertEqual(reach["makers"], {"3": [1]})
+
+    def test_a_point_on_a_face_or_a_face_outline_is_not_a_pick(self):
+        data = {"start": {"kind": "fromEntity", "face_point": [1, 2, 3]},
+                "profiles": [{"face": True, "loops": [], "face_point": [1, 2, 3]}]}
+        design, reach = self.read([item(1), item(3, "ExtrudeFeature", data)])
+        self.assertEqual(reach["makers"], {})
+
+    def test_a_candidate_whose_faces_are_no_longer_all_listed_counts_as_reached(self):
+        # Right after step 1 it listed top and wall; a later step took wall out of the list.
+        self.world.features[1] = FakeMadeFeature([self.world.top], complete=[self.world.top, self.world.wall])
+        _, reach = self.read([item(1), item(3, "FilletFeature", edge_pick("floor_rim"))])
+        self.assertEqual(reach["makers"], {"3": [1]})
+
+    def test_a_candidate_that_lists_no_faces_counts_as_reached(self):
+        self.world.features[1] = FakeMadeFeature([])
+        _, reach = self.read([item(1, "MoveFeature"), item(3, "FilletFeature", edge_pick("floor_rim"))])
+        self.assertEqual(reach["makers"], {"3": [1]})
+
+    def test_a_pick_on_a_face_of_a_left_out_combines_tool_is_reported_under_the_combine(self):
+        # Step 1 made the tool body; the Combine at step 2 joined it and is left out.
+        tool = {"token": "tool", "name": "Tool"}
+        self.world.features[2] = FakeMadeFeature([FakeFace("seam")])
+        items = [dict(item(1), bodies_after=[tool]), item(2, "CombineFeature", {"tools": [tool]}),
+                 item(3, "FilletFeature", edge_pick("top_wall"))]
+        _, reach = self.read(items, gaps=(2,))
+        self.assertIn(2, reach["makers"]["3"])
+        _, reach = self.read([items[0], items[1], item(3, "FilletFeature", edge_pick("floor_rim"))], gaps=(2,))
+        self.assertNotIn(2, reach["makers"]["3"])
 
     def test_a_pick_that_cannot_be_found_counts_as_reached_by_every_earlier_candidate(self):
         _, reach = self.read([item(1), item(2), item(3, "FilletFeature", edge_pick("gone"))], gaps=(1, 2))
@@ -91,7 +120,7 @@ class ReachTest(unittest.TestCase):
 
     def test_without_gaps_nothing_is_read_and_the_marker_does_not_move(self):
         design, reach = self.read([item(3, "FilletFeature", edge_pick("top_wall"))], gaps=())
-        self.assertEqual((reach, design.timeline.visited), ({"read": True, "makers": {}}, []))
+        self.assertEqual((reach, design.timeline.visited), ({"read": True, "gaps": [], "makers": {}}, []))
 
 
 class MarkerTest(unittest.TestCase):
@@ -100,10 +129,10 @@ class MarkerTest(unittest.TestCase):
         self.items = [item(1), item(2, "FilletFeature", edge_pick("top_wall")),
                       item(3, "FilletFeature", edge_pick("top_wall"))]
 
-    def test_the_marker_is_before_each_picking_step_and_back_where_it_was_after(self):
+    def test_the_marker_is_after_each_candidate_then_before_each_picking_step_and_back_where_it_was_after(self):
         design = self.world.design(marker=2)
         read_reach(design, {"items": self.items}, {1})
-        self.assertEqual(design.timeline.visited, [2, 3, 2])
+        self.assertEqual(design.timeline.visited, [2, 3, 4, 2, 3, 2])
         self.assertEqual(design.timeline.markerPosition, 2)
 
     def test_a_marker_at_the_end_goes_to_the_end(self):

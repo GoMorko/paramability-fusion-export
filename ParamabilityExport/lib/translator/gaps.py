@@ -7,7 +7,6 @@ step's Fusion data, so the missing step can be added to the copy later.
 The walk records a `Gap` with the ids of the steps it wrote before it. Where the gap belongs is worked out once the
 recipe is final (`place_all`), since later steps can move what was written into a tool step.
 """
-import copy
 import json
 import math
 
@@ -15,14 +14,17 @@ from ..package.text import clip
 from . import notes as wording
 from .words import type_words
 
+# The app refuses a whole gaps file that breaks one of these (`RECIPE_GAPS_CAPS` in the app's recipe package).
 MAX_GAPS = 16
 MAX_ID = 64
 MAX_NAME = 120
 MAX_WORDS = 64
+MAX_SIZES = 64
 MAX_VALUES = 64
 MAX_EXPRESSION = 300
 MAX_PATH = 200
 MAX_DATA_BYTES = 48 * 1024
+MAX_DATA_DEPTH = 32  # the data object itself is level 1
 MAX_SAMPLES = 200
 MAX_LOOPS = 8
 MAX_MEASURE = 1e6
@@ -37,26 +39,22 @@ def _is_edge(record):
 
 
 def _is_face(record):
-    return isinstance(record, dict) and any(record.get(k) for k in ("token", "point", "face_point", "loops"))
+    return isinstance(record, dict) and any(record.get(k) for k in ("token", "point", "loops"))
 
 
 def pick_records(item):
-    """`[{ kind, path, record }]`: one entry per geometry the item picks on the body, in the order of its data.
+    """`[{ kind, path, record }]`: one entry per edge or face the item picks on the body, in the order of its data.
 
-    `kind` is `edge` (an edge record of a round or bevel set), `face` (a face record: shell and offset faces, the face
-    inputs of a round, the faces of an emboss, a face used as an outline) or `point` (any other record that picks a
-    face by a point on it, such as a face an extrude starts from or reaches to). `path` is the keys into `item["data"]`
-    that lead to `record`, which is the record as the capture holds it."""
+    These are the picks the copy writes as measured points (`near`), which the kernel matches to the closest edge or
+    face: a pick on geometry missing from the copy would land on something else. `kind` is `edge` (an edge record of
+    a round or bevel set) or `face` (a shell or offset face, a face input of a round). A face given only by a point on
+    it (an emboss face, a face an extrude starts from or reaches to) and a face used as an outline are not picks: the
+    copy writes those as measured numbers or shifts, and marks the sizes it cannot follow. `path` is the keys into
+    `item["data"]` that lead to `record`, which is the record as the capture holds it."""
     found = []
 
     def walk(node, path):
         if isinstance(node, dict):
-            if node.get("face") is True and path[-2:-1] == ["profiles"]:
-                found.append({"kind": "face", "path": path, "record": node})
-                return
-            if node.get("face_point") is not None:
-                found.append({"kind": "point", "path": path, "record": node})
-                return
             for key, value in node.items():
                 if key in _NOT_PICKS:
                     continue
@@ -83,15 +81,17 @@ class Gap:
     item: the capture item as the walk saw it. reason: why it is missing. depends_on: ids of the earlier gaps whose
     faces it picks or repeats. written_before: ids of the steps of its walk's list written before it. before, after:
     `{ box, volume }` of the walk's body around the step, in the capture's coordinates, or None when not measured.
+    picks: True when the step is a gap only because it picks, or may pick, faces of earlier gaps.
     """
 
-    def __init__(self, gap_id, item, reason, depends_on, written_before, before=None, after=None):
+    def __init__(self, gap_id, item, reason, depends_on, written_before, before=None, after=None, picks=False):
         self.id = gap_id
         self.item = item
         self.reason = clip(reason, wording.MAX_NOTE) or "This step cannot be copied."
         self.depends_on = list(dict.fromkeys(depends_on))
         self.written_before = list(written_before)
         self.before, self.after = before, after
+        self.picks = picks
         self.place = None  # (after, before, list) once placed in the final recipe
 
     @property
@@ -100,7 +100,9 @@ class Gap:
 
     @property
     def name(self):
-        return str(self.item.get("name") or "")[:MAX_NAME] or type_words(self.item.get("type") or "") or "A step"
+        """The item's name, or its type in words when the name is empty or only spaces."""
+        return (str(self.item.get("name") or "").strip()[:MAX_NAME].strip()
+                or type_words(self.item.get("type") or "").strip() or "A step")
 
 
 def gap_id(ctx, item):
@@ -136,36 +138,54 @@ def measures(ctx, item):
     return _measure(data.get("target_box_before"), data.get("volume_before")), None
 
 
+def _first_body_stop(ctx):
+    return not ctx.steps or ctx.component is not None
+
+
+def at_cap(ctx):
+    """True when a gap at the walk's current place stops the copy because the part already holds MAX_GAPS gaps,
+    counting those of the walks that hold this one. A tool walk that stops this way stops the whole copy."""
+    if _first_body_stop(ctx):
+        return False
+    count, walk = 0, ctx
+    while walk is not None:
+        count += len(walk.gaps)
+        walk = walk.outer
+    return count >= MAX_GAPS
+
+
 def stop_reason(ctx, reason):
     """The reason that stops the copy instead of a gap at the walk's current place, or None when a gap is kept.
 
     A gap needs a body to add to, so one before the walk's first step stops it with its own reason. So does a gap in a
     walk of another component's body, whose data is not in the part's coordinates. A part with too many gaps stops
     too."""
-    if not ctx.steps or ctx.component is not None:
+    if _first_body_stop(ctx):
         return reason
-    count, walk = 0, ctx
-    while walk is not None:
-        count += len(walk.gaps)
-        walk = walk.outer
-    if count >= MAX_GAPS:
+    if at_cap(ctx):
         return wording.too_many_gaps_reason(MAX_GAPS)
     return None
 
 
 def picked_gaps(ctx, item):
-    """`(gaps, sure)`: the gaps of this walk whose faces `item` picks. With the capture's `reach` read, these are the
-    gaps among the steps that made the faces it picks (`sure` True). Without it, every gap before the item counts, since
-    any of them may have made those faces. Empty when the item picks nothing or no gap comes before it."""
+    """`(gaps, sure)`: the gaps of this walk whose faces `item` picks, or may pick. Empty when the item picks nothing
+    or no gap comes before it.
+
+    With the capture's `reach` read, these are the gaps among the steps that made the faces it picks, and `sure` is
+    True. A gap the read did not cover (not among the left out steps it was asked about, and not a later picking step
+    it tested) may have made any face, so it counts too and `sure` is False. Without the read every gap before the item
+    counts."""
     earlier = [gap for gap in ctx.gaps if gap.index is not None and gap.index < item.get("index", 0)]
     if not earlier or not pick_records(item):
         return [], False
     reach = ctx.capture.get("reach")
-    makers = reach.get("makers") if isinstance(reach, dict) and reach.get("read") is True else None
+    read = reach if isinstance(reach, dict) and reach.get("read") is True else {}
+    makers, read_for = read.get("makers"), read.get("gaps")
     found = makers.get(str(item.get("index"))) if isinstance(makers, dict) else None
-    if not isinstance(found, list):
+    if not isinstance(found, list) or not isinstance(read_for, list):
         return earlier, False
-    return [gap for gap in earlier if gap.index in found], True
+    unseen = [gap for gap in earlier if gap.index not in read_for and str(gap.index) not in makers]
+    return [gap for gap in earlier if gap.index in found or gap in unseen], not unseen
 
 
 def _tree(features):
@@ -234,7 +254,8 @@ def _values(item, table):
     out = []
     for path, ref in (params.items() if isinstance(params, dict) else ()):
         expression = ref.get("expression") if isinstance(ref, dict) else None
-        if not isinstance(expression, str) or not expression or len(expression) > MAX_EXPRESSION:
+        if (not isinstance(expression, str) or not expression or len(expression) > MAX_EXPRESSION
+                or not str(path).strip()):
             continue
         entry = {"path": str(path)[:MAX_PATH], "fusion": expression}
         if table is not None:
@@ -284,13 +305,32 @@ def _drop_loops(node):
     return cut
 
 
+def _plain_json(node, depth):
+    """`(node, cut)`: `node` as JSON the app reads. A number that is not finite becomes null, and an object or list
+    that would hold values past MAX_DATA_DEPTH levels becomes null; `cut` says one was changed."""
+    if node is None or isinstance(node, (bool, str)):
+        return node, False
+    if isinstance(node, (int, float)):
+        return (node, False) if math.isfinite(node) else (None, True)
+    if isinstance(node, (dict, list, tuple)):
+        if depth >= MAX_DATA_DEPTH and node:
+            return None, True
+        pairs = node.items() if isinstance(node, dict) else enumerate(node)
+        found, cut = {}, False
+        for key, value in pairs:
+            found[key], changed = _plain_json(value, depth + 1)
+            cut = cut or changed
+        return (found if isinstance(node, dict) else list(found.values())), cut
+    return None, True
+
+
 def trimmed_data(data):
-    """`(data, trimmed)`: the item's data cut until it fits MAX_DATA_BYTES as UTF-8 JSON. First free curve samples are
-    thinned, then outlines lose their loops past the first few, then the outlines go; data that still does not fit is
-    left out whole."""
-    out = copy.deepcopy(data) if isinstance(data, dict) else {}
+    """`(data, trimmed)`: the item's data as plain JSON (`_plain_json`), cut until it fits MAX_DATA_BYTES as UTF-8
+    JSON. First free curve samples are thinned, then outlines lose their loops past the first few, then the outlines
+    go; data that still does not fit is left out whole."""
+    out, trimmed = _plain_json(data, 1) if isinstance(data, dict) else ({}, False)
     if _size_of(out) <= MAX_DATA_BYTES:
-        return out, False
+        return out, trimmed
     for cut in (_thin_samples, _drop_loops, lambda node: node.pop("profiles", None) is not None):
         cut(out)
         if _size_of(out) <= MAX_DATA_BYTES:

@@ -6,7 +6,7 @@ from tests import context  # noqa: F401
 from tests.test_translate_follow import at, loose_names, tray
 from tests.test_translate_sized import CUBE, H, run
 from tests.test_translate_tool_body import sized, tool_of
-from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, verdict_of, not_copied
+from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of, verdict_of
 
 from lib.translator import translate
 from lib.translator.values import number
@@ -87,6 +87,22 @@ class SameOutlineTest(unittest.TestCase):
         assert_schema_ok(self, result.recipe)
 
 
+    def test_a_cut_between_that_reaches_the_face_only_at_other_sizes_marks_the_sizes(self):
+        # A pocket from the base whose depth follows pipe_d_mm: at 12 mm it stays below the 32 mm top face.
+        made = face(UP, square((0, 0), (80, 60)), [40, 30, 32], {"index": 1, "name": "Extrude1", "which": "end"})
+        pocket = face_extrude(2, dict(load_capture("filter_tray_sized")["items"][1]["data"]["profiles"][0],
+                                      loops=square((10, 10), (20, 20))), distance=12.0, operation="cut",
+                              params={"side_one.distance": {"name": "d9", "expression": "pipe_d_mm", "value": 12.0}})
+
+        def edit(capture):
+            capture["items"] += [pocket, dict(face_extrude(3, made), name="Extrude3")]
+        result, _ = run(tray(edit, keep=[0, 1]))
+        self.assertIsNone(result.refusal)
+        self.assertIn("pipe_d_mm", loose_names(result))
+        self.assertEqual(steps_of(result.recipe, "extrude")[2]["sketch"]["outer"],
+                         steps_of(result.recipe, "extrude")[0]["sketch"]["outer"])
+
+
 class AsMeasuredTest(unittest.TestCase):
     def tapered_tray(self):
         grow = 32 * math.tan(math.radians(5))
@@ -147,7 +163,7 @@ class ToolBodyTest(unittest.TestCase):
 
 
 class RefusalTest(unittest.TestCase):
-    def test_each_face_that_cannot_be_an_outline_stops_the_copy(self):
+    def test_each_face_that_cannot_be_an_outline_is_left_out(self):
         made = face(UP, square((0, 0), (80, 60)), [40, 30, 32])
         sketch = load_capture("filter_tray_sized")["items"][1]["data"]["profiles"][0]
         cases = {
@@ -163,7 +179,7 @@ class RefusalTest(unittest.TestCase):
                 capture = on_tray(made)
                 capture["items"][-1]["data"]["profiles"] = profiles
                 result = translate(capture)
-                self.assertEqual(not_copied(result)["index"], 2)
+                self.assertEqual(left_out(result)["index"], 2)
 
 
 if __name__ == "__main__":

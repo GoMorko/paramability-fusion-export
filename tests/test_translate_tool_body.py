@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from tests import context  # noqa: F401
 from tests.schema_check import check_recipe
-from tests.translator_helpers import not_copied
+from tests.translator_helpers import left_out
 from tests.translator_helpers import load_capture, steps_of, verdict_of
 
 from lib.fusion_reader import read_geometry as geo
@@ -121,17 +121,17 @@ class WrittenToolTest(unittest.TestCase):
         del item["body_states"]
         item["data"].update(side_one={"kind": "throughAll", "positive": True, "taper_deg": 0.0}, params={}, end_offset=None,
                             target_box_before={"min": [0, 0, 0], "max": [400, 400, 400]})
-        self.assertEqual(not_copied(translate(capture))["name"], "Extrude5")
+        self.assertEqual(left_out(translate(capture))["name"], "Extrude5")
 
-    def test_a_step_of_the_tool_from_another_component_stops_the_copy(self):
+    def test_a_step_of_the_tool_from_another_component_leaves_the_combine_out(self):
         capture = load_capture("combine_tool_cut_inside")
         capture["items"][5]["in_target_component"] = False
-        self.assertIn("Extrude5", not_copied(translate(capture))["reason"])
+        self.assertIn("Extrude5", left_out(translate(capture))["reason"])
 
-    def test_a_tool_listed_under_another_token_stops_the_copy(self):
+    def test_a_tool_listed_under_another_token_leaves_the_combine_out(self):
         capture = load_capture("combine_tool_cut_inside")
         capture["items"][5]["bodies_after"] = [{"token": "t9", "name": "Body2"}]
-        self.assertIn("Extrude5", not_copied(translate(capture))["reason"])
+        self.assertIn("Extrude5", left_out(translate(capture))["reason"])
 
     def test_a_name_used_by_another_body_before_the_tool_existed_does_not_stop_the_copy(self):
         capture = load_capture("combine_tool_cut_inside")
@@ -158,9 +158,10 @@ class WrittenToolTest(unittest.TestCase):
         chamfer.update(type="SplitFaceFeature", name="Split1", data={},
                        body_states={"t2": {"box_before": None, "volume_before": 5.0, "volume_after": 5.0}})
         capture["items"][-1]["data"].update(volume_before=None, volume_after=None)
-        self.assertIsNone(not_copied(translate(capture)))
+        copied = translate(capture)
+        self.assertEqual((copied.refusal, copied.gaps), (None, []))
         chamfer["body_states"]["t2"]["volume_after"] = 4.0
-        self.assertEqual(not_copied(translate(capture))["name"], "Split1")
+        self.assertEqual(left_out(translate(capture))["name"], "Split1")
 
     def test_a_tool_of_another_component_is_carried_into_place(self):
         result = translate(load_capture("combine_tool_foreign_fillet"))
@@ -207,7 +208,7 @@ class IntersectOfSeveralToolsTest(unittest.TestCase):
             with self.subTest(model):
                 capture = load_capture("intersect_every")
                 capture["items"][-1]["data"]["intersect_model"] = model
-                self.assertEqual(not_copied(translate(capture))["name"], "Combine1")
+                self.assertEqual(left_out(translate(capture))["name"], "Combine1")
 
 
 class RefusedToolTest(unittest.TestCase):
@@ -215,7 +216,7 @@ class RefusedToolTest(unittest.TestCase):
     def test_a_change_bigger_than_the_tools_refuses(self):
         capture = load_capture("combine_tool_chamfer")
         capture["items"][-1]["data"]["volume_after"] = 5000.0
-        self.assertEqual(not_copied(translate(capture))["index"], 5)
+        self.assertEqual(left_out(translate(capture))["index"], 5)
 
     def test_measured_tool_volumes_bound_the_change(self):
         tools = [{"volume": 100.0}, {"volume": 50.0}]
@@ -438,7 +439,7 @@ class KeptToolTest(unittest.TestCase):
         self.assertEqual(len(result.recipe["features"]), 1)
 
     def test_a_combine_that_changes_the_exported_body_as_a_tool_refuses(self):
-        self.assertEqual(not_copied(translate(self.exported_as_kept_tool(True)))["index"], 4)
+        self.assertEqual(left_out(translate(self.exported_as_kept_tool(True)))["index"], 4)
 
 
 class OwnerBodyTest(unittest.TestCase):

@@ -5,7 +5,7 @@ import unittest
 from tests import context  # noqa: F401
 from tests.test_translate_sized import TICKED, run, table_of
 from tests.test_translate_sketch_motion import run as run_with_motion
-from tests.translator_helpers import not_copied
+from tests.translator_helpers import left_out, stopped
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, translate_fixture
 
 from lib.sketch_values.motion import OPTIMISTIC, Affine, Motion, Stuck
@@ -60,23 +60,24 @@ class PlacementTest(unittest.TestCase):
 
 
 class RefusalTest(unittest.TestCase):
-    def refusal(self, name):
-        result = translate_fixture(name)
-        self.assertIsNotNone(not_copied(result))
-        return not_copied(result)
+    def refusal(self, name, missing):
+        """Why the fixture's step is not copied: `stopped` when the copy stops, `left_out` when it goes on."""
+        found = missing(translate_fixture(name))
+        self.assertIsNotNone(found)
+        return found
 
     def test_a_step_of_another_component_that_changes_the_part(self):
-        refusal = self.refusal("component_cross_cut")
+        refusal = self.refusal("component_cross_cut", stopped)
         self.assertEqual((refusal["index"], refusal["name"]), (3, "Extrude5"))
         self.assertIn("Extrude5 (extrude) changes this part from another component", step_only_note(refusal))
 
     def test_a_body_made_in_another_component(self):
-        refusal = self.refusal("component_made_elsewhere")
+        refusal = self.refusal("component_made_elsewhere", stopped)
         self.assertEqual(refusal["index"], 1)
         self.assertIn("made in another component and moved here later", step_only_note(refusal))
 
     def test_a_step_that_reaches_into_another_component(self):
-        refusal = self.refusal("component_foreign_extent")
+        refusal = self.refusal("component_foreign_extent", left_out)
         self.assertEqual((refusal["index"], refusal["name"]), (3, "Extrude2"))
         self.assertIn("another component", refusal["reason"])
 
@@ -84,9 +85,11 @@ class RefusalTest(unittest.TestCase):
         capture = load_capture("component_foreign_extent")
         capture["items"][3]["data"]["side_one"] = {"kind": "distance", "distance": 8.0, "taper_deg": 0.0}
         capture["items"][3]["data"]["end_offset"] = 8.0
-        self.assertIsNone(not_copied(translate(copy.deepcopy(capture))))
+        copied = translate(copy.deepcopy(capture))
+        self.assertIsNotNone(copied.recipe)
+        self.assertIsNone(left_out(copied))
         capture["items"][3]["data"]["profiles"][0]["foreign"] = True
-        self.assertIn("another component", not_copied(translate(capture))["reason"])
+        self.assertIn("another component", left_out(translate(capture))["reason"])
 
     def test_a_participant_from_another_component_is_ignored(self):
         capture = load_capture("component_foreign_extent")
@@ -116,7 +119,7 @@ class RefusalTest(unittest.TestCase):
             "bodies_after": [{"token": "t1", "name": "Body1"}],
             "data": {"operation": "cut", "target": {"token": "t1", "name": "Body1"},
                      "tools": [{"token": "tL", "name": "Lid", "foreign": True}], "keep_tools": False}})
-        refusal = not_copied(translate(capture))
+        refusal = left_out(translate(capture))
         self.assertEqual(refusal["name"], "Combine1")
         self.assertIn("Lid is in another component", refusal["reason"])
 
@@ -215,7 +218,7 @@ class BorrowedSketchTest(unittest.TestCase):
     def test_a_borrowed_sketch_without_a_readable_place_refuses(self):
         capture = load_capture("component_moved")
         capture["items"].append(lid_rim(placement={"path": "Lid:1", "error": "No points of the sketch could be compared."}))
-        self.assertIn("another component", not_copied(translate(capture))["reason"])
+        self.assertIn("another component", left_out(translate(capture))["reason"])
 
 
 class AssemblyStepsTest(unittest.TestCase):

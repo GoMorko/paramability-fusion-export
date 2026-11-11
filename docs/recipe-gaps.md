@@ -15,7 +15,8 @@ The item loop (`walk_items`) has two outcomes for an item it cannot copy: stop t
 leaves out when the effect stays on the body and the rest of the timeline still reads right:
 
 - a step type with no handler that changes the part (`StepType.unsupported`, or "Steps of type X are not copied
-  yet"): sweep, loft, coil, draft and the like;
+  yet"): sweep, loft, coil, draft and the like. A step that lists no body counts only when the reader saw the part
+  change (`target_changed` true); when it cannot tell, the copy stops;
 - a handler that answers a `Refusal` (an extrude with a taper on a face, a revolve axis it cannot use, a Combine whose
   tool cannot be built, a pattern whose sources it cannot repeat);
 - a step that reaches into another component (`foreign` records in its data);
@@ -23,9 +24,11 @@ leaves out when the effect stays on the body and the rest of the timeline still 
 
 Everything that leaves the body unknown still stops the copy and the part is a fixed shape: the place of the part in
 the assembly, a step of another component or an assembly item that changes the part, a body that cannot be followed,
-a step or its bodies that cannot be read, a step Fusion marks as an error, a step that splits the part or makes another
-body, a gap before the copy has written its first step (a gap needs a body to add to), a gap inside a walk of
-another component's body, more than 16 gaps in one part, and the size caps of the recipe.
+a step or its bodies that cannot be read (also a step type with no handler whose data could not be read), a step Fusion
+marks as an error, a step that splits the part or makes another body (whether or not it has a handler or reaches into
+another component), a gap before the copy has written its first step (a gap needs a body to add to), a gap inside a
+walk of another component's body, more than 16 gaps in one part (the gaps inside the tool bodies count, and a tool
+that meets the cap stops the whole copy), and the size caps of the recipe.
 
 A tool body of a Combine is walked by the same loop. A gap inside a tool body is kept only when the Combine writes that
 tool, and the tool is then always a `toolBody` step (the gap is in its list). When the tool cannot be built (its first
@@ -92,16 +95,16 @@ GAP:
 | Field | What the add-in writes |
 | --- | --- |
 | `id` | `gap_<timeline index>`; inside a tool body the walk's id prefix comes first, the way step ids are made. The step added for the gap takes this id, so the app can tell which gaps were filled |
-| `name`, `type`, `words` | The Fusion name and type of the step, and the type in plain words (`step_kinds`) |
+| `name`, `type`, `words` | The Fusion name and type of the step, and the type in plain words (`step_kinds`). A name that is empty or only spaces is the type in words |
 | `reason` | The refusal sentence, at most 200 characters. For a step that picks faces of a gap, a pattern of a gap, or a Combine with a tool that failed, it names the gap or the step |
 | `after`, `before`, `list` | Where the step belongs (above) |
 | `dependsOn` | Ids of earlier gaps whose faces the step picks, or whose steps it repeats |
-| `sizes` | Names of the recipe sizes the step reads: through its values, the sketches it names (unless the probe measured that the size does not move the sketch), its construction geometry and its measured references |
+| `sizes` | Names of the recipe sizes the step reads: through its values, the sketches it names (unless the probe measured that the size does not move the sketch), its construction geometry and its measured references; at most 64 |
 | `looseSizes` | Of those, the sizes that are loose only because of this gap: no copied step reads them. They stay in the recipe `sizes` so the missing step can use them, and the reason says they change nothing in the copy yet |
 | `values` | One entry per `data.params` value: the Fusion expression (`fusion`, at most 300 characters) and, when the size table can write it, the formula of the recipe (`expr`) |
 | `bodyBefore`, `bodyAfter` | Box and volume of the part around the step, moved to the recipe's coordinates (the box of the moved corners). From the item's `target_before` and `target_after` (`docs/capture-format.md`, section 2). Left out when a side was not measured. Inside a tool body only `bodyBefore` can exist |
-| `data` | The item's `data` as the reader wrote it, in the capture's coordinates, trimmed to 48 KiB. Item level fields such as `body_states` never go in. The app does not read into it |
-| `trimmed` | True when `data` was cut |
+| `data` | The item's `data` as the reader wrote it, in the capture's coordinates, trimmed to 48 KiB and 32 levels (the object itself is level 1). A number that is not finite becomes null, and so does an object or list that would hold values past level 32. Item level fields such as `body_states` never go in. The app does not read into it |
+| `trimmed` | True when `data` was cut or changed |
 
 Trimming goes in this order until `data` fits: free curve `samples` cut to 200 points each, loops past the first 8 of
 an outline dropped, `profiles` dropped, and as a last resort `data` is left empty. When the whole file is over 1 MiB it
@@ -110,16 +113,23 @@ it is saved as a fixed shape with the note "The list of steps left out could not
 
 ## Later steps that pick faces of a gap
 
-A round, chamfer, shell, offset of faces or "up to face" extent picks its edges and faces with measured points. When
-the step that made those faces is missing from the copy, the kernel would take the nearest edge it finds and round
-the wrong one without a word. So the pipeline looks again when the first translation has gaps:
+A round, chamfer, shell or offset of faces picks its edges and faces with measured points (`near`). When the step that
+made those faces is missing from the copy, the kernel would take the nearest edge it finds and round the wrong one
+without a word. So the pipeline looks again when the first translation has gaps:
 
 1. `reach_pass.with_reach` asks Fusion (`read_gap_reach.read_reach`) which step made the faces each later picking step
-   touches. The answer is the capture's `reach` (`docs/capture-format.md`, section 2).
+   touches. It asks about the steps left out for their own reason, also inside tool bodies, and not about the steps
+   left out only because they may pick faces of a gap: those are tested as picking steps. The answer is the capture's
+   `reach` (`docs/capture-format.md`, section 2).
 2. The capture is translated again. A step that picks faces of a gap becomes a gap itself (reason "It picks faces of
-   Extrude5, which is missing from the copy.") with `dependsOn`.
+   Extrude5, which is missing from the copy.") with `dependsOn`. A gap the read did not cover (one that only this
+   translation leaves out) counts as "may pick".
 3. Without an answer (`read: false`, or no Fusion run, as in translator samples and fixtures) every later step that
    picks geometry becomes a gap ("It may pick faces of ..."). A step that picks nothing is copied.
+
+A face given only by a point on it (an extrude that starts from or reaches to a face, the faces an emboss lands on) and
+a face used as an outline are not such picks: the copy writes them as measured numbers or as shifts that follow sizes,
+and marks the sizes it cannot follow, so they do not make a step a gap.
 
 A mirror of bodies after a gap is left out, since it repeats the steps written so far and checks them against the
 plane.

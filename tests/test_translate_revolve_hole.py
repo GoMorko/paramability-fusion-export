@@ -2,7 +2,7 @@ import math
 import unittest
 
 from tests import context  # noqa: F401
-from tests.translator_helpers import not_copied
+from tests.translator_helpers import left_out
 from tests.translator_helpers import assert_schema_ok, close, load_capture, steps_of, translate_fixture, verdict_of
 
 from lib.translator import translate, vec
@@ -134,7 +134,6 @@ class RevolveTest(unittest.TestCase):
 
     def test_refusals(self):
         cases = {
-            "read error": lambda i: i["data"].clear() or i["data"].update(read_error="boom"),
             "other axis": lambda i: i["data"].update(axis={"kind": "other"}),
             "other extent": lambda i: i["data"].update(extent={"kind": "other", "type": "X"}),
             "new component": lambda i: i["data"].update(operation="newComponent"),
@@ -221,8 +220,8 @@ class HoleTest(unittest.TestCase):
 
     def test_tapped_modeled_refuses(self):
         result = translate_fixture("hole_tapped_modeled")
-        self.assertIsNotNone(not_copied(result))
-        self.assertEqual((not_copied(result)["index"], not_copied(result)["type"]), (3, "HoleFeature"))
+        self.assertIsNotNone(left_out(result))
+        self.assertEqual((left_out(result)["index"], left_out(result)["type"]), (3, "HoleFeature"))
 
     def test_tapped_cosmetic_uses_the_measured_drill_size(self):
         result = translate_fixture("hole_tapped_cosmetic")
@@ -237,8 +236,8 @@ class HoleTest(unittest.TestCase):
 
     def test_tapped_hole_without_a_measured_cylinder_refuses(self):
         result = translate_fixture("hole_tapped_no_cylinder")
-        self.assertIsNotNone(not_copied(result))
-        self.assertIn("drill size", not_copied(result)["reason"])
+        self.assertIsNotNone(left_out(result))
+        self.assertIn("drill size", left_out(result)["reason"])
 
     def test_taper_tapped_and_unreadable_thread_refuse(self):
         for label, edit in {
@@ -246,7 +245,7 @@ class HoleTest(unittest.TestCase):
             "thread unknown": lambda i: i["data"].update(thread_modeled=None),
         }.items():
             with self.subTest(label):
-                self.assertIsNotNone(not_copied(variant("hole_tapped_cosmetic", edit)))
+                self.assertIsNotNone(left_out(variant("hole_tapped_cosmetic", edit)))
 
     def test_measured_flat_end_wins_over_the_stored_tip_angle(self):
         result = translate_fixture("hole_flat_point_stored_tip")
@@ -256,15 +255,14 @@ class HoleTest(unittest.TestCase):
 
     def test_measured_cone_without_a_tip_angle_refuses(self):
         result = variant("hole_blind_tip", lambda i: i["data"].update(tip_angle_deg=None))
-        self.assertIsNotNone(not_copied(result))
+        self.assertIsNotNone(left_out(result))
 
     def test_unclear_end_faces_refuse(self):
         result = variant("hole_blind_tip", lambda i: i["data"].update(end_face_types=["cone", "plane"]))
-        self.assertIsNotNone(not_copied(result))
+        self.assertIsNotNone(left_out(result))
 
-    def test_hole_refusals(self):
+    def test_a_hole_that_cannot_be_copied_is_left_out(self):
         cases = {
-            "read error": lambda i: i["data"].clear() or i["data"].update(read_error="boom"),
             "to entity": lambda i: i["data"].update(extent={"kind": "toEntity"}),
             "other extent": lambda i: i["data"].update(extent={"kind": "other"}),
             "no positions": lambda i: i["data"].update(positions=[]),
@@ -276,8 +274,8 @@ class HoleTest(unittest.TestCase):
         for label, edit in cases.items():
             with self.subTest(label):
                 result = variant("hole_through", edit)
-                self.assertIsNotNone(not_copied(result))
-                self.assertEqual(not_copied(result)["type"], "HoleFeature")
+                self.assertIsNotNone(left_out(result))
+                self.assertEqual(left_out(result)["type"], "HoleFeature")
 
 
 class HoleTipSizeTest(unittest.TestCase):
@@ -311,8 +309,8 @@ class ThreadTest(unittest.TestCase):
 
     def test_modeled_thread_refuses(self):
         result = translate_fixture("thread_modeled")
-        self.assertIsNotNone(not_copied(result))
-        self.assertEqual((not_copied(result)["index"], not_copied(result)["type"]), (4, "ThreadFeature"))
+        self.assertIsNotNone(left_out(result))
+        self.assertEqual((left_out(result)["index"], left_out(result)["type"]), (4, "ThreadFeature"))
 
 
 if __name__ == "__main__":

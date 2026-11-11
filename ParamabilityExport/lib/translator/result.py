@@ -5,12 +5,15 @@ from typing import Optional
 
 class Refusal:
     """Returned by a handler instead of a `StepResult` when its item cannot be copied. `reason` is one plain
-    sentence. `depends_on` names the gaps (gaps.py) that make the item impossible to copy, when that is the cause."""
+    sentence. `depends_on` names the gaps (gaps.py) that make the item impossible to copy, when that is the cause.
+    `over_gap_cap` says a tool body walk met more gaps than a part may hold: the whole copy stops, the item does not
+    become a gap."""
 
-    def __init__(self, reason, depends_on=()):
+    def __init__(self, reason, depends_on=(), over_gap_cap=False):
         self.reason = reason
         self.doubts = []
         self.depends_on = list(depends_on)
+        self.over_gap_cap = over_gap_cap
 
     def __repr__(self):
         return "Refusal(%r)" % (self.reason,)
@@ -110,7 +113,8 @@ class StepResult:
         self.gaps.extend(other.gaps)
 
 
-# `leftOut`: the step is a gap (gaps.py); its verdict also has `gap`, the gap's id.
+# `leftOut`: the step is a gap (gaps.py); its verdict also has `gap`, the gap's id, and `cause`: `picks` when the step
+# is a gap only because it picks, or may pick, faces of earlier gaps, else `own`.
 VERDICTS = ("translated", "translatedWithNote", "skipped", "unsupported", "leftOut")
 
 
@@ -142,3 +146,5 @@ class TranslateResult:
     gaps: list = field(default_factory=list)
     # The 12 numbers that map the capture's coordinates to the recipe's (`gaps.to_recipe`), when there are gaps.
     to_recipe: Optional[list] = None
+    # True when the walk stopped because the part holds more gaps than `gaps.MAX_GAPS`.
+    over_gap_cap: bool = False

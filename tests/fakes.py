@@ -460,16 +460,21 @@ class FakeEdge:
 
 
 class FakeMadeFeature:
-    """A timeline feature with the faces it created. `faces=None` makes the member raise, like an unreadable one."""
+    """A timeline feature with the faces it created. `faces=None` makes the member raise, like an unreadable one.
+    `complete` is the list Fusion gives with the marker right after the feature, when later steps took faces out of
+    `faces`."""
 
-    def __init__(self, faces):
-        self._faces = faces
+    def __init__(self, faces, complete=None):
+        self._faces, self._complete = faces, complete
+        self.timeline, self.place = None, None
 
     @property
     def faces(self):
-        if self._faces is None:
+        right_after = self.timeline is not None and self.timeline.markerPosition == self.place + 1
+        found = self._complete if right_after and self._complete is not None else self._faces
+        if found is None:
             raise RuntimeError("faces unreadable")
-        return _Collection(list(self._faces))
+        return _Collection(list(found))
 
 
 class FakeSolidBody:
@@ -490,6 +495,9 @@ class FakeMarkerTimeline:
 
     def __init__(self, features, marker=None, refuse=None, moves_allowed=None):
         self._features = features
+        for place, feature in enumerate(features):
+            if isinstance(feature, FakeMadeFeature):
+                feature.timeline, feature.place = self, place
         self._marker = len(features) if marker is None else marker
         self._refuse, self._allowed, self._moves = refuse, moves_allowed, 0
         self.visited = []

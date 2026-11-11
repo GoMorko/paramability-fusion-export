@@ -151,14 +151,17 @@ def walk_items(ctx, result):
         result.refusal = _refusal(item, reason, note)
         return False
 
-    def leave_out(item, reason, depends_on=(), note=None):
-        """Leave the item out as a gap: True, or False when the copy stops here instead."""
+    def leave_out(item, reason, depends_on=(), note=None, picks=False):
+        """Leave the item out as a gap: True, or False when the copy stops here instead. `picks` says the item is a
+        gap only because it picks, or may pick, faces of earlier gaps."""
         stop = gaps.stop_reason(ctx, reason)
         if stop is not None:
+            result.over_gap_cap = gaps.at_cap(ctx)
             return refuse(item, stop, note if stop == reason else None)
-        gap = ctx.leave_out(item, reason, depends_on)
+        gap = ctx.leave_out(item, reason, depends_on, picks)
         verdict = make_verdict(item, "leftOut", note=gap.reason)
         verdict["gap"] = gap.id
+        verdict["cause"] = "picks" if picks else "own"
         result.items.append(verdict)
         return True
 
@@ -211,7 +214,8 @@ def walk_items(ctx, result):
             if item.get("target_changed") is False:
                 result.items.append(make_verdict(item, "skipped", note="Does not change the exported body."))
                 continue
-            if handler is not None:
+            if handler is not None or item.get("target_changed") is not True:
+                # Only a step the reader saw change the body is a gap: one that may have done anything stops.
                 return refuse(item, "The bodies this %s changes could not be read." % type_words(item["type"]))
             if not leave_out(item, "Steps of type %s are not copied yet." % type_words(item["type"]),
                              _gap_ids(ctx, item)):
@@ -222,11 +226,16 @@ def walk_items(ctx, result):
             result.items.append(make_verdict(item, "skipped", note="Helper geometry, not part of the exported body."))
             continue
 
+        if _new_bodies(item, ctx) and not copies_bodies(item):
+            # Later steps may belong to the other body, so no single missing step can stand for this one.
+            return refuse(item, "This step splits the part or makes another body, which is not copied yet.")
         if handler is None and _only_splits_faces(item, ctx):
             note = wording.split_face_note(_label(item))
             result.items.append(make_verdict(item, "skipped", note=note))
             result.notes.append(note)
             continue
+        if _data(item).get("read_error"):
+            return refuse(item, "This step could not be read from Fusion.")
         if handler is None:
             spec = step_kinds.step_type(item["type"])
             if not leave_out(item, (spec and spec.unsupported)
@@ -235,8 +244,6 @@ def walk_items(ctx, result):
                 return False
             made_in_component = True
             continue
-        if _data(item).get("read_error"):
-            return refuse(item, "This step could not be read from Fusion.")
         picked, sure = gaps.picked_gaps(ctx, item)
         with ctx.recording() as brought:
             item = ctx.current = ref_motion.bring_in(borrowed.bring_in(item, ctx))
@@ -250,15 +257,16 @@ def walk_items(ctx, result):
         made_in_component = True
         with ctx.recording() as construction:
             fix_construction(ctx, item)
-        if _new_bodies(item, ctx) and not copies_bodies(item):
-            return refuse(item, "This step splits the part or makes another body, which is not copied yet.")
         if picked:
             if not leave_out(item, wording.picks_gap_reason([gap.name for gap in picked], sure),
-                             [gap.id for gap in picked]):
+                             [gap.id for gap in picked], picks=True):
                 return False
             continue
         outcome = run_handler(handler, item, ctx)
         if isinstance(outcome, Refusal):
+            if outcome.over_gap_cap:
+                result.over_gap_cap = True
+                return refuse(item, outcome.reason)
             if not leave_out(item, outcome.reason, outcome.depends_on):
                 return False
             continue

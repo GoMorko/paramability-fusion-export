@@ -57,22 +57,27 @@ def variant(name, edit):
     return translate(capture)
 
 
-def _left_out(verdicts):
+def _left_out(verdicts, index):
     for verdict in verdicts:
-        if verdict["verdict"] == "leftOut":
+        if verdict["verdict"] == "leftOut" and index in (None, verdict["index"]):
             return verdict
-        found = _left_out(verdict.get("tool_steps") or [])
+        found = _left_out(verdict.get("tool_steps") or [], index)
         if found is not None:
             return found
     return None
 
 
-def not_copied(result):
-    """Why a step is missing from the copy, as {index, name, type, reason}: the refusal that stopped the copy, else the
-    first step left out as a gap (at any depth), else None."""
-    if result.refusal is not None:
-        return result.refusal
-    verdict = _left_out(result.items)
+def stopped(result):
+    """The refusal `{index, name, type, reason}` when the copy stopped and no recipe was written, else None."""
+    return result.refusal if result.recipe is None else None
+
+
+def left_out(result, index=None):
+    """`{index, name, type, reason}` of the step left out as a gap (the first one, at any depth, or the one at
+    timeline `index`) when the copy went on and a recipe was written, else None."""
+    if result.recipe is None:
+        return None
+    verdict = _left_out(result.items, index)
     if verdict is None:
         return None
     return {"index": verdict["index"], "name": verdict["name"], "type": verdict["type"], "reason": verdict["note"]}

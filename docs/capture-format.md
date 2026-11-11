@@ -363,38 +363,48 @@ curves). A borrowed sketch is read through its native object, so its numbers are
 
 ### Reach (`reach`)
 
-Which step made the faces a later step picks. It exists because a later round, chamfer, shell, offset of faces,
-draft or "up to face" extent picks its edges and faces with measured points, and the capture does not say which step
-made a face (only `made_by` on face outlines, section 4). When a step is left out of the copy, a pick on its faces
-would land on some other edge of the copy. `lib/fusion_reader/read_gap_reach.py` reads the answer, and only when the
-first translation left a step out (`lib/export_plan/reach_pass.py`; the capture is then translated again with it):
+Which step made the faces a later step picks. It exists because a later round, chamfer, shell or offset of faces picks
+its edges and faces with measured points (`near`), and the capture does not say which step made a face (only `made_by`
+on face outlines, section 4). When a step is left out of the copy, a pick on its faces would land on some other edge of
+the copy. `lib/fusion_reader/read_gap_reach.py` reads the answer, and only when the first translation left a step out
+(`lib/export_plan/reach_pass.py`; the capture is then translated again with it):
 
 ```json
-"reach": { "read": true, "makers": { "17": [12], "19": [12, 17] } }
+"reach": { "read": true, "gaps": [12], "makers": { "17": [12], "19": [12, 17] } }
 ```
 
 or `{ "read": false, "error": "<reason>" }` when the read failed.
 
+- `gaps` are the steps the read was asked about: the steps the first translation left out for their own reason (verdict
+  `leftOut` with `cause: "own"`, also inside the `tool_steps` of a Combine). A step left out only because it may pick
+  faces of another gap (`cause: "picks"`) is not one of them; the read tests it as a picking step.
 - `makers` has one entry per later step that was tested: the key is the item `index`, the list holds the `index` of
-  each candidate step that made a face the step picks. Candidates are the steps left out and every later step that
-  picks geometry (a step that made a pick can itself have been left out because of one), without items that make no
-  body (sketches, construction geometry). Only steps after the first left out step are tested, and a left out step is
-  not tested.
+  each candidate step that made, or may have made, a face the step picks. Candidates are the steps of `gaps`, the
+  steps that made the tool bodies of a Combine among them (reported under the Combine's index), and every later step
+  that picks geometry, without items that make no body (sketches, construction geometry). Only steps after the first
+  step of `gaps` are tested, and a step of `gaps` is not tested.
 - Which items pick geometry is decided by `translator.gaps.pick_records(item)`: the edge records of rounds and
-  bevels, face records (shell and offset faces, the faces of an emboss, the face inputs of a round, a face used as an
-  outline) and records with a `face_point` (a face an extrude starts from or reaches to). Lists of bodies and of the
-  faces a step made (`faces_after`, `tangent_faces`, `end_points` and the like) are not picks.
-- The reader moves the marker to just before each tested step and compares each picked face (for an edge: each face
-  it joins, found by `BRepEdge.faces`) with `Feature.faces` of every candidate before it. A face is found by its
-  entity token, or by `Component.findBRepUsingPoint` at the recorded point. A pick that cannot be found, or a
-  candidate whose faces cannot be read, counts as reached: the translator takes the safe side. More than 100 tested
-  steps give `read: false`. The marker goes back to where it was at the end, with the same check as `read_capture`
+  bevels, and face records with a token, a point or loops (shell and offset faces, the face inputs of a round). These
+  are the picks the copy writes as measured points. A face given only by a `face_point` (an emboss face, a face an
+  extrude starts from or reaches to) and a face used as an outline are not picks: the copy writes them as numbers or
+  shifts and marks the sizes it cannot follow. Lists of bodies and of the faces a step made (`faces_after`,
+  `tangent_faces`, `end_points` and the like) are not picks either.
+- `Feature.faces` lists the faces a step made, but only all of them with the marker right after the step: the API
+  says a later change to the body can take faces out of the list. So the reader first reads each candidate's list
+  with the marker right after it. Then it moves the marker to just before each tested step and compares each picked
+  face (for an edge: each face it joins, found by `BRepEdge.faces`) with the candidate's list at that point. A face is
+  found by its entity token, or by `Component.findBRepUsingPoint` at the recorded point. A candidate counts as reached
+  by every pick when its list is empty (a Move, a Combine, a draft may list none), shorter than right after the step,
+  or cannot be read; so does every candidate when a pick cannot be found. More than 100 tested steps or 200 candidates
+  give `read: false`. The marker goes back to where it was at the end, with the same check as `read_capture`
   (`MarkerError` when it does not read there).
 - The translator (`gaps.picked_gaps`): a later step that picks faces of a left out step is left out too, with the gap
-  in its `dependsOn`. Without `reach`, or with `read: false`, every later step that picks geometry is left out ("It
-  may pick faces of Extrude5, which is missing from the copy."). A step that picks nothing is copied either way.
-- `validate_capture` refuses a `reach` that is not `{ read: bool }`, and a `read: true` without a `makers` dict of
-  index lists.
+  in its `dependsOn`. A left out step that the read did not cover (not in `gaps` and not a tested step, for example
+  one that only the final translation leaves out) counts as "may pick". Without `reach`, without `gaps`, or with
+  `read: false`, every later step that picks geometry is left out ("It may pick faces of Extrude5, which is missing
+  from the copy."). A step that picks nothing is copied either way.
+- `validate_capture` refuses a `reach` that is not `{ read: bool }`, a `read: true` without a `makers` dict of index
+  lists, and a `gaps` that is not a list of indexes.
 
 ## 3. Walk and marker
 
@@ -477,7 +487,9 @@ The translator (`lib/translator/face_outline.py`) copies an extrude of one such 
 `start` or `end` face of an extrude step written earlier in the same walk, that step has no taper, `face_point` lies
 on its start or end face and the face's edges lie on that step's outline and back (within 1e-3 mm), the step's written
 outline is drawn again on a plane at that face: the plane's origin is the step's origin plus its length (times the
-place of the face along it) along its direction, so it follows the sizes of that step. Any other flat face is written
+place of the face along it) along its direction, so it follows the sizes of that step. The face is compared only at
+the measured sizes, so when any step was written or left out after that extrude, every size the steps written so far
+read is marked loose: a later step may reach the face at other sizes. Any other flat face is written
 from `loops` and `frame` as numbers, and every size the steps written so far read (every ticked size when the face
 lies on a body this walk does not build) is marked loose with the reason. A tool body with such a step is written as a
 tool step (`toolBody`), never step by step onto the part, since the part alone does not hold the tool's earlier
@@ -1602,9 +1614,10 @@ parameter: `{ param, sketch, component, outcome, reason }`, `outcome` one of `si
 
 `gaps` (only when the recipe leaves steps out of the copy) holds the gap records exactly as they go into the gaps file
 of the package (`docs/recipe-gaps.md`), and `reach` (the capture's, as read, or `{ read: false, error }`) is beside it.
-An item verdict of a left out step is `leftOut`, with `gap` (the gap id) and `note` (the reason); a step that picks
-faces of a gap is `leftOut` too. `outcome` stays `recipe`, and the package notes say how many steps were left out and
-which ("2 steps were left out: Extrude5, Fillet3."). A parts file has `gaps` and `reach` in the record of each part.
+An item verdict of a left out step is `leftOut`, with `gap` (the gap id), `note` (the reason) and `cause`: `picks` for a
+step left out only because it picks, or may pick, faces of a gap, `own` otherwise. `outcome` stays `recipe`, and the
+package notes say how many steps were left out and which ("2 steps were left out: Extrude5, Fillet3."). A parts file
+has `gaps` and `reach` in the record of each part.
 
 `sizes` holds `free` (recipe size names), `fixed` and `loose` (`{ name, reason }` by recipe size name, as in the
 manifest), and `dropped` (`{ name, reason, used }` by Fusion name, plus `tried: true` for a size the probe set to
@@ -1745,7 +1758,9 @@ face outlines: `BRepFace` (`loops`, `geometry`, `evaluator`, `pointOnFace`, `ent
 
 Used by the reach read and not yet confirmed on a real design (see its row below): `Feature.faces` (the faces a
 feature created, for each feature type that can be a candidate), `BRepEdge.faces`, `Design.findEntityByToken`,
-`Component.findBRepUsingPoint`, `Timeline.markerPosition`, `TimelineObject.entity`.
+`Component.findBRepUsingPoint`, `Timeline.markerPosition`, `TimelineObject.entity`. The stub of `Feature.faces` says it
+may not return every face the feature made once later steps changed the body; the read takes that into account
+(section 2, `reach`).
 
 Not verified (each has a measured check or a test in section 7 of `docs/hand-tests.md`):
 
@@ -1797,5 +1812,5 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | `BRepBody.volume` of a tool body with the marker before the Combine, and of any body the second pass finds by token (`Design.findEntityByToken`) | null in `tools[].volume` and `body_states`; the volume checks on a tool are left out; B1, B9 |
 | `TemporaryBRepManager.get()`, `copy(body)`, `booleanOperation(targetBody, toolBody, booleanType)` (changes the target body in place and answers true or false), `BooleanTypes.IntersectionBooleanType` and `UnionBooleanType`, and the `volume` of a temporary body; none of it changes the design | any exception or a false answer gives null `intersect_volumes` and `intersect_model: unknown`, which refuses the Combine; B7 |
 | Face outlines, to confirm by hand: `ExtrudeFeature.profile` gives the `BRepFace` with the marker before the step; `BRepFace.loops`, `BRepLoop.isOuter`, `BRepLoop.edges` and `BRepEdge.geometry` give the edges in the component's coordinates; `BRepEdge.evaluator` covers only the edge; `Plane.uDirection` lies in the face; `BRepFace.evaluator.getNormalAtPoint` points out of the body; `BRepFace.area`; `Component.features.extrudeFeatures` lists the earlier extrudes and `Feature.timelineObject.index` their places; `startFaces`, `endFaces` and `sideFaces` of an earlier extrude, read with the marker before the step, hold the face the step uses (the same entity or `entityToken`); a positive distance goes along the outward normal | a face that cannot be read refuses the step; a face no extrude lists is copied as measured with its sizes marked; `end_offset` and `side_leans` check the direction and taper; hand test F1 in `docs/hand-tests.md` |
-| Reach, to confirm by hand: `Feature.faces` of the entity of a timeline item, read with the marker just before a later step, lists the faces that step created and gives the same faces (the same entity or `entityToken`) as the ones a later pick finds through `BRepEdge.faces`, `findEntityByToken` or `findBRepUsingPoint`, for each feature type that can be a candidate (extrude, revolve, sweep, loft, round, chamfer, shell, pattern, combine, move); the faces of a feature the later steps reshape (a round that cuts into them) still give the same entities; `Component.findBRepUsingPoint` with `BRepFaceEntityType` finds a face from a `face_point` | a feature whose faces cannot be read counts as reached by every pick, a pick that cannot be found counts as reached, and the translator then leaves the later step out (safe side); hand tests L2 and L3 in "Check first in this version" of `docs/hand-tests.md` |
+| Reach, to confirm by hand: `Feature.faces` of the entity of a timeline item, read with the marker right after the step, lists every face that step created, and read with the marker just before a later step it still gives the same faces (the same entity or `entityToken`) as the ones a later pick finds through `BRepEdge.faces`, `findEntityByToken` or `findBRepUsingPoint`, for each feature type that can be a candidate (extrude, revolve, sweep, loft, round, chamfer, shell, pattern, combine, move); whether the list of a Move, a Combine join and a draft is empty; whether a face a later step trimmed or split drops out of the list; `Component.findBRepUsingPoint` with `BRepFaceEntityType` finds a face from a recorded point | a list that is empty, shorter than right after the step or unreadable counts as reached by every pick, a pick that cannot be found counts as reached, and the translator then leaves the later step out (safe side); hand tests L2, L3, L5 and L14 in "Check first in this version" of `docs/hand-tests.md` |
 | An intersect with several tools keeps the part and every tool, or the part and any tool | measured per export from the volumes and written as `intersect_model`; B7 |
