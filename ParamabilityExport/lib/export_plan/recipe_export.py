@@ -9,7 +9,7 @@ from typing import Any, Optional
 
 from ..package.gaps_file import gaps_file_bytes
 from ..package.manifest import (
-    GAPS_ENTRY, MAX_FIXED, MAX_FIXED_REASON, MAX_PART_NOTE, build_parts_manifest, build_recipe_manifest, build_step_only_manifest,
+    GAPS_ENTRY, MAX_FIXED, MAX_PART_NOTE, build_parts_manifest, build_recipe_manifest, build_step_only_manifest,
     part_gaps_path, part_recipe_path, part_step_path, validate_manifest)
 from ..package.text import clip
 from ..params.size_table import CONSTANT, DERIVED
@@ -133,17 +133,9 @@ def _cut_entries(size_table, cuts, free, shared=()):
     return out[:MAX_FIXED]
 
 
-def _loose_with_cuts(loose, cuts):
-    """The manifest `loose` entries with the cut reasons: the app marks a size with a reason, and a cut size has one.
-    A size that is loose already gets the cut reason after its own when both fit in a reason."""
-    out = {entry["name"]: dict(entry) for entry in loose}
-    for cut in cuts:
-        found = out.get(cut["name"])
-        if found is None:
-            out[cut["name"]] = {"name": cut["name"], "reason": cut["reason"]}
-        elif len(found["reason"]) + 1 + len(cut["reason"]) <= MAX_FIXED_REASON:
-            found["reason"] = "%s %s" % (found["reason"], cut["reason"])
-    return list(out.values())[:MAX_FIXED]
+def _cut_listed(cuts):
+    """The manifest `cuts` entries: the app shows each cut size with its reason as a quiet note, apart from `loose`."""
+    return [{"name": cut["name"], "reason": cut["reason"]} for cut in cuts]
 
 
 def _not_followed_note(names):
@@ -326,7 +318,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         ])
         manifest = build_recipe_manifest(
             title, writer, up_axis=up_axis, notes=notes, fixed=all_fixed, parameters=listed,
-            loose=_loose_with_cuts(all_loose, all_cut), gaps=GAPS_ENTRY if gaps_data is not None else None)
+            loose=all_loose, cuts=_cut_listed(all_cut), gaps=GAPS_ENTRY if gaps_data is not None else None)
         files["recipe.json"] = recipe_data
         if gaps_data is not None:
             files[GAPS_ENTRY] = gaps_data
@@ -500,8 +492,6 @@ def plan_parts_export(inputs, title, writer, up_axis, size_table=None, listing=N
         users = [name for part in recipes for name in part.free]
         all_cut = _cut_entries(size_table, [c for part in recipes for c in part.result.cuts], set(free),
                                shared={name for name in free if users.count(name) > 1})
-    listed_loose = _loose_with_cuts(all_loose, all_cut)
-
     sizes = {"free": free, "fixed": all_fixed, "loose": all_loose, "dropped": dropped}
     if all_cut:
         sizes["cut"] = all_cut
@@ -522,14 +512,15 @@ def plan_parts_export(inputs, title, writer, up_axis, size_table=None, listing=N
     files, entries = {}, []
     for number, part in enumerate(parts, start=1):
         mine = [e for e in all_loose if e["name"] in part.free]
-        marked = [e for e in listed_loose if e["name"] in part.free]
-        report["parts"].append(_part_record(part, mine, [e for e in all_cut if e["name"] in part.free]))
+        cut = [e for e in all_cut if e["name"] in part.free]
+        report["parts"].append(_part_record(part, mine, cut))
         entry = {"name": part.given.name, "step": part_step_path(number)}
         files[entry["step"]] = part.given.step_file
         if part.is_recipe:
             entry["recipe"] = part_recipe_path(number)
             files[entry["recipe"]] = part.recipe_data
-            entry["loose"] = marked
+            entry["loose"] = mine
+            entry["cuts"] = _cut_listed(cut)
             sentences = []
             if part.gaps:
                 entry["gaps"] = part_gaps_path(number)

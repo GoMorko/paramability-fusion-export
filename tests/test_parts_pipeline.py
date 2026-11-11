@@ -216,7 +216,8 @@ class SharedCutTest(unittest.TestCase):
         [cut] = report["sizes"]["cut"]
         self.assertTrue(cut["shared"] and cut["reason"].startswith("height_mm: the range stops at 30 in every part"))
         for part in manifest["parts"]:
-            self.assertIn(cut["reason"], [e["reason"] for e in part["loose"]])
+            self.assertEqual(part["cuts"], [{"name": "height_mm", "reason": cut["reason"]}])
+            self.assertNotIn("loose", part)
 
 
 class StubProbe:

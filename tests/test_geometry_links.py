@@ -281,7 +281,8 @@ class RangeCutTest(unittest.TestCase):
         self.assertEqual(cut["name"], "pipe_d_mm")
         self.assertEqual(cut["reason"], "pipe_d_mm: the range stops at 19.5, since Fusion did not rebuild the design "
                                         "at 20.625 (Extrude2).")
-        self.assertIn(cut["reason"], [e["reason"] for e in result.manifest["loose"]])
+        self.assertEqual(result.manifest["cuts"], [{"name": "pipe_d_mm", "reason": cut["reason"]}])
+        self.assertNotIn("loose", result.manifest)
         self.assertTrue(any("pipe_d_mm" in note and "cut" in note for note in result.manifest["notes"]))
         view = result_view("Box.paramability", result.manifest, result.report, result.table, ALL)
         [line] = [x for x in section_lines(view, "sizes") if x.startswith("pipe_d_mm")]

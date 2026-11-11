@@ -1762,8 +1762,9 @@ package notes say how many steps were left out and which ("2 steps were left out
 has `gaps` and `reach` in the record of each part.
 
 `sizes` holds `free` (recipe size names), `fixed` and `loose` (`{ name, reason }` by recipe size name; `loose` here is
-the doubts only, while the manifest `loose` also lists the cut sizes with their cut reason, which the app shows with
-its warning mark), `cut` (only when a range was cut: `{ name, reason, words, why, min, max, shared }` by recipe size
+the doubts only, and the manifest `loose` the same; the cut sizes go in the manifest `cuts` list, `{ name, reason }`,
+which the app shows as a quiet note, not a warning; `cuts` is an optional field of manifest version 1 and 2, so an
+older app ignores it), `cut` (only when a range was cut: `{ name, reason, words, why, min, max, shared }` by recipe size
 name, `min` and `max` the range left, `shared` true when several bodies of a parts file read the size), and `dropped` (`{ name, reason, used }` by Fusion name, plus `tried: true` for a size the probe set to
 other values that changed nothing: the ticked parameters that are not sizes, from
 `TranslateResult.dropped`; `used` is true when a step reads the parameter and the copy could not follow it). `loose` comes
