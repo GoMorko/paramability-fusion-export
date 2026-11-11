@@ -847,6 +847,21 @@ def flat_curves(recipe):
     return out
 
 
+def tangents(curve):
+    """Unit directions of travel at the start and at the end of a line, arc or free curve."""
+    return _tangents(curve)
+
+
+def arc_of(curve):
+    """Centre, radius, unit normal and turn (radians) of an arc; the normal makes the arc run counter clockwise."""
+    return _arc_of(curve)
+
+
+def points_along(curves):
+    """Points along a chain of curves, in order (arcs every few degrees, free curves by their samples)."""
+    return [p for curve in curves for p in _polyline(curve)]
+
+
 def turn_degrees(arc):
     """The angle in degrees an arc turns from its start through its middle to its end."""
     return math.degrees(_arc_of(arc)[3])

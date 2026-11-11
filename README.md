@@ -353,12 +353,19 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   sweep that makes a new component. A new body must have the volume the outline and path give (a parallel outline: its area times the rise of the
   path), or the sweep is left out; so is a tapered one whose volume fits neither an offset nor a scaled outline. A
   twist or taper that follows a size marks the size past the values where it would reach the limits. A twist along a
-  closed path turns as Fusion walks the path.
+  closed path turns as Fusion walks the path. A later round or chamfer on all edges of a sweep's start or end cap names
+  the step and follows its sizes, as on an extrude. The end cap is placed on a path in one plane, or for an outline
+  kept in one direction. After a twist, a taper or a path that leaves one plane only the start cap is placed; a closed
+  path or an outline with holes has no cap placed. A pick on part of a cap, or on a side edge at a corner of the
+  outline along a path of lines and arcs, keeps its points and marks only the sizes the sweep reads. Any other pick on
+  a sweep marks every size written before it.
 - A loft is copied when it joins two closed sketch outlines with free ends and no rails or centre line. It is written
   with straight faces between the outlines. Both outlines need the same number of holes, and their planes must not
   cross. Outlines of different shapes are copied with a note, since Fusion may pair the corners differently. These
   lofts are left out: three or more outlines, a point end, an outline that is a face of the part, tangent or direction
-  ends, rails, a centre line, a closed loft, a surface loft and a loft that makes a new component.
+  ends, rails, a centre line, a closed loft, a surface loft and a loft that makes a new component. A round or chamfer
+  on all edges of an outline of a loft (no holes) names the loft and follows its sizes; a pick on part of an outline
+  keeps its points and marks the sizes the loft reads, and a pick on its side marks every size before it.
 - A Combine (join, cut or keep only the shared part) is copied with its tool bodies. A tool made only by steps that add
   material (a new body, then extrudes or revolves that join it) is written step by step, each with the Combine's
   operation. Any other tool becomes one tool step that holds all the steps that made the tool: its cuts, rounds,

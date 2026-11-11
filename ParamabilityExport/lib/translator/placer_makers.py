@@ -6,11 +6,13 @@ calls `make(ctx, step_id, step)` once the step is written. A maker registers its
 (`Context.add_placer`, `Context.add_slab`).
 """
 from . import follow, meets_part
+from .end_caps import Cap, EndCaps
 from .offset_faces import MovedFaces
 from .picks import face_points
 from .shells import Shell
 from .slabs import Slab
 from .thin_wall import ThinWall
+from .values import reads_in
 
 
 class SlabMaker:
@@ -31,6 +33,19 @@ class SlabMaker:
                 label, self.profile.get("sketch") or "a sketch", borrowed))
         ctx.add_slab(Slab(step_id, self.on, self.extent, self.length, self.profile, combine=combine,
                           taper=self.taper, outline=self.outline))
+
+
+class EndCapsMaker:
+    """A sweep or loft: `faces` maps start (and end, when its place is known) to the `(frame, profile)` of that face's
+    outline, `walk` is the sweep's `sweep_frames.SideWalk` or None. The faces follow the sizes the written step
+    reads."""
+
+    def __init__(self, faces, walk=None):
+        self.faces, self.walk = faces, walk
+
+    def make(self, ctx, step_id, step):
+        caps = {which: Cap(frame, profile) for which, (frame, profile) in self.faces.items()}
+        ctx.add_placer(EndCaps(step_id, step.get("label") or "a step", reads_in(step), caps, self.walk))
 
 
 class ThinWallMaker:

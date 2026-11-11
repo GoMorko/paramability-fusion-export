@@ -95,7 +95,9 @@ A handler is `handle(item, ctx) -> StepResult | Refusal` (`lib/translator/result
   slab, shell, moved faces and copies makers do not describe the new faces. A step that leaves material whose faces
   the copy cannot place (a thin wall, `thin_wall.ThinWall`) gives a placer whose `place` returns None and whose
   `material_at` answers for the material; it sets `opaque = True`, so a step on another part's sketch (`meets_part`)
-  says it cannot check that it still meets the material.
+  says it cannot check that it still meets the material. A sweep or loft gives `EndCapsMaker`
+  (`lib/translator/end_caps.py`): its start and end faces are named by a later pick of all their edges, and any other
+  pick on them keeps its points and marks the sizes the step reads.
 - `picks`: for a round or bevel, the measured edge points, so a later pattern or mirror can copy them.
 - `repeatable=False`: Fusion recomputes the step for each copy of a pattern (it reaches to a face or through the
   part), so patterns and mirrors refuse it as a source.

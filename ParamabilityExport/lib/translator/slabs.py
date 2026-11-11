@@ -185,6 +185,16 @@ class Slab(Placer):
         local = vec.frame_to_local(self.frame, p)
         return vec.dot(p, self.axis) - self.base, [local[0], local[1]]
 
+    @property
+    def followed_reads(self):
+        """The sizes a pick of whole faces or edges of this slab follows."""
+        return self.length.reads
+
+    def edge_count(self, which):
+        """How many edges the face `which` (start, end or side) has: the outline's curves, or its corners for the
+        sides."""
+        return len(self.footprint.corners) if which == "side" else len(self.footprint.curves)
+
     def inset(self, h):
         """How far the outline lies inside the profile at height `h` (the taper), in mm."""
         if self.taper is None:

@@ -925,9 +925,17 @@ surprises.
       stops where the long side would end before the profile plane. A path with a spline curve, a full circle, 3D
       corner points, or a taper keeps its sizes marked, as before. Send `report.json` from a sweep whose path sizes
       do not follow or whose range stops too early.
-- [ ] **SW14 Round on a sweep end.** After SW2, add a fillet on an edge of the end cap. The fillet is copied as
-      measured, and every size written before it is marked "may give unexpected results", since a sweep step has no
-      faces that follow sizes yet. After SW1 (the extrude form) the fillet follows sizes like a round on an extrude.
+- [ ] **SW14 Round on a sweep end.** After SW2 (a circle of a user parameter `wire_mm` swept along a bent path), add
+      a fillet on the whole edge of the end cap and tick `wire_mm`. The `round` step picks `featureEdges` of the sweep
+      with `which: "end"`, `wire_mm` is not marked "may give unexpected results", and in Paramability the round
+      follows the end of the pipe when `wire_mm` changes. Do the same on the edge of the start cap (`which: "start"`).
+      After SW1 (the extrude form) the fillet follows sizes like a round on an extrude.
+- [ ] **SW20 Faces of a sweep that stay as measured.** On the SW14 part, pick one edge of the end cap of a square
+      wire instead of all four: the round holds a point, `wire_mm` is marked, and a size of an earlier step (a plate
+      the wire sits on) is not. A fillet on an edge along the wire at a corner of the square does the same. A fillet on
+      a round wire's side edge, or on the end of a twisted, tapered or hollow wire, or of a closed path, marks every
+      size written before it. A twisted sweep names its start cap but not its end cap. Send `report.json` when
+      Paramability picks another edge than Fusion after a size changes.
 - [ ] **LF1 Two squares.** A loft from a 20 mm square to a 10 mm square, 30 mm apart, free ends. The recipe holds a
       loft with `ruled` set and `volume_after` is the frustum volume (7000 mm3). Note whether Fusion builds straight
       faces between the two outlines (a curved side would show in the volume).
@@ -939,6 +947,10 @@ surprises.
       Each is left out with its own reason, and `sections[].end`, `rails`, `centerline` and `closed` read as set.
 - [ ] **LF5 Tube loft.** Two rings (circle with a circle hole) of different sizes. The recipe holds a loft with one
       hole key and the part matches. A ring and a plain circle are left out ("different numbers of openings").
+- [ ] **LF6 Round on a loft end.** After LF1 with its sizes on the form, add a fillet on all four edges of the top
+      outline and tick the sizes. The round picks `featureEdges` of the loft with `which: "end"` and no size is marked;
+      the bottom outline gives `which: "start"`. A fillet on one edge of an outline marks the sizes the loft reads, and
+      one on the loft's side marks every size before it. A tube loft (LF5) has no end faces to name.
 
 Members of the running Fusion build to note in the same exports: whether `SweepFeature.extent`, the guide surface
 sweep type and the loft end condition classes exist (an absent one reads as null or `other` and the step is left

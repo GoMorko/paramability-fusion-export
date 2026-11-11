@@ -116,6 +116,9 @@ def _keep_copies(ctx, item, found):
             if ctx.table is not None and not stays_at_least(ctx.table, count, least):
                 ctx.doubt(count.reads, "%s picks copy %d of %s, and a smaller value would leave that copy out"
                           % (_name(item), least, by or "a pattern"))
+    for names, what in getattr(found, "keeps", ()):
+        ctx.doubt(names, "%s picks %s, which moves with these sizes, and the copy cannot follow that"
+                  % (_name(item), what))
     for stuck in found.blocked:
         why = (notes.bends_reason(_name(item), stuck.sketch) if stuck.cause == sketch_motion.BENDS
                else notes.stuck_reason(stuck.cause, stuck.sketch))
@@ -174,8 +177,8 @@ def whole_edges(ctx, edge_list):
             return None
         keys.append(edge_keys.pop())
     slab = first.slab
-    wanted = len(slab.footprint.corners) if first.which == "side" else len(slab.footprint.curves)
-    if not first.moves or len(set(keys)) != len(keys) or len(keys) != wanted:
+    wanted = slab.edge_count(first.which)
+    if wanted is None or not first.moves or len(set(keys)) != len(keys) or len(keys) != wanted:
         return None
     return {"featureEdges": slab.id, "which": "sides" if first.which == "side" else first.which}
 
@@ -277,7 +280,8 @@ def target_shift(ctx, item, target, direction, what="reaches to"):
         return zero
     _keep_copies(ctx, item, found)
     slab = found.slab
-    if found.which in ("start", "end") and not slab.is_copy and not any(q.sized for q in slab.origin):
+    if (isinstance(slab, Slab) and found.which in ("start", "end") and not slab.is_copy
+            and not any(q.sized for q in slab.origin)):
         return slab.length.scaled(found.factor * vec.dot(slab.axis, direction))
     shift = zero
     for q, p, d in zip(found.quantities(point), point, direction):

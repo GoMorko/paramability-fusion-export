@@ -2,9 +2,18 @@
 import unittest
 from unittest import mock
 
+import copy
+
 from tests import context  # noqa: F401
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
+from tests.test_translate_loft import SIZES, SQUARES, circle_hole, loft_data
 from tests.test_translate_sized import CUBE, H, param, run
+from tests.test_translate_sketch_motion import motion_of
+from tests.test_translate_sketch_motion import run as run_sketch
+from tests.test_translate_sweep import (PIPE, PIPE_ITEM, PLATE, arc_xy, edited_after, line, pipe_along, sized,
+                                        with_options)
+
+from lib.sketch_values.motion import Affine, Motion
 
 from lib.params.expressions import evaluate
 from lib.translator import translate
@@ -211,6 +220,152 @@ class CapsTest(unittest.TestCase):
             capture["items"][6]["data"]["params"]["quantity_one"] = param("d8", "holes_count * 1", 3.0)
         result, _ = run(tray(edit))
         self.assertEqual(steps_of(result.recipe, "pattern")[0]["linear"]["count"], {"expr": "holes_count"})
+
+
+def round_on(sets, index=3):
+    """A round of 0.2 mm over `sets`, each `(closed, points)` one edge, after the item at index - 1."""
+    edges = [{"token": "e%d" % n, "closed": closed, "points": points} for n, (closed, points) in enumerate(sets)]
+    return {"index": index, "name": "Fillet1", "type": "FilletFeature", "suppressed": False, "health": "ok",
+            "message": "", "in_target_component": True, "bodies_after": [{"token": "t1", "name": "Body1"}],
+            "data": {"sets": [{"kind": "constant", "radius": 0.2, "continuity": "tangent", "input_kinds": ["edge"],
+                               "edges": edges}]}}
+
+
+def with_round(capture, sets):
+    capture = copy.deepcopy(capture)
+    capture["items"].append(round_on(sets, capture["items"][-1]["index"] + 1))
+    return capture
+
+
+def edges_of_round(result):
+    return steps_of(result.recipe, "round")[0]["edges"]
+
+
+WIRE = Motion({"2/p0/l0/radius": Affine(0, {"wire_mm": 0.5}, "Sketch1")})
+# The pipe's wire is a circle of 3 mm: its two ends, as the closed edges a round picks.
+PIPE_END = [(True, [[30, 40, 3], [30, 40, -3]])]
+PIPE_START = [(True, [[0, 3, 0], [0, -3, 0]])]
+
+
+class SweepFacesTest(unittest.TestCase):
+    """Picks on the faces of a sweep step: its two end faces are named, the rest marks the sizes the sweep reads."""
+
+    def test_all_edges_of_an_end_face_name_the_sweep_and_mark_nothing(self):
+        for which, sets in (("end", PIPE_END), ("start", PIPE_START)):
+            with self.subTest(which):
+                result = sized(with_round(load_capture(PIPE), sets), WIRE)
+                self.assertEqual(edges_of_round(result), {"featureEdges": "sweep_2", "which": which})
+                self.assertEqual((result.loose, result.fixed), ([], []))
+                assert_schema_ok(self, result.recipe)
+
+    def test_a_path_drawn_from_the_far_end_has_its_end_face_where_the_written_path_ends(self):
+        for which, sets in (("end", PIPE_END), ("start", PIPE_START)):
+            with self.subTest(which):
+                result = sized(with_round(load_capture("sweep_far_end"), sets), WIRE)
+                self.assertEqual(edges_of_round(result), {"featureEdges": "sweep_2", "which": which})
+
+    def test_an_outline_kept_in_one_direction_has_its_end_face_square_to_the_outline_and_not_to_the_path(self):
+        curves = [line((0, 0, 0), (10, 0, 0)), arc_xy((10, 10), 10, -90, -45),
+                  line((17.071068, 2.928932, 0), (30, 15.857864, 0))]
+        capture = edited_after(pipe_along(curves), orientation="parallel")
+        result = sized(with_round(capture, [(True, [[30, 15.857864, 3], [30, 15.857864, -3]])]), WIRE)
+        self.assertEqual(edges_of_round(result), {"featureEdges": "sweep_2", "which": "end"})
+
+    def test_a_twist_leaves_only_the_start_face_placed(self):
+        capture = with_options(PIPE, PIPE_ITEM, twist_deg=90.0)
+        start = sized(with_round(capture, PIPE_START), WIRE)
+        self.assertEqual(edges_of_round(start), {"featureEdges": "sweep_2", "which": "start"})
+        end = sized(with_round(capture, PIPE_END), WIRE)
+        self.assertEqual(edges_of_round(end), {"near": [[30.0, 40.0, 3.0], [30.0, 40.0, -3.0]]})
+        self.assertEqual([f["name"] for f in end.loose], ["wire_mm"])
+
+    def test_a_closed_path_has_no_end_faces(self):
+        points = [[20, 0, -0.5], [20, 1, 0], [20, 0, 0.5], [20, -1, 0]]
+        capture = with_round(load_capture("sweep_closed_twist"), [(False, [p]) for p in points])
+        self.assertNotIn("featureEdges", edges_of_round(sized(capture)))
+
+    def test_an_outline_with_an_opening_has_no_end_faces(self):
+        capture = load_capture(PIPE)
+        capture["items"][PIPE_ITEM]["data"]["profiles"][0]["loops"].append(circle_hole([0.0, 0.0], 1.0, "c1"))
+        capture["items"][PIPE_ITEM]["target_after"]["volume_mm3"] = None
+        result = sized(with_round(capture, PIPE_END), WIRE)
+        self.assertEqual(edges_of_round(result), {"near": [[30.0, 40.0, 3.0], [30.0, 40.0, -3.0]]})
+
+
+def square_wire_on_plate():
+    """The plate with a sweep of a 2 mm square wire along a path sketch on it; `wire_mm` is the side of the square."""
+    capture = load_capture(PLATE)
+    data = capture["items"][3]["data"]
+    square = [[[-1, -1], [1, -1]], [[1, -1], [1, 1]], [[1, 1], [-1, 1]], [[-1, 1], [-1, -1]]]
+    data["profiles"][0]["loops"][0]["curves"] = [
+        {"kind": "line", "start": a, "end": b, "entity": "r%d" % n} for n, (a, b) in enumerate(square)]
+    data["path"].update(kind="sketch", edges=[], sketch="Sketch9")
+    data["areas"] = [4.0]
+    capture["items"][3]["target_after"]["volume_mm3"] = None
+    return capture
+
+
+SQUARE_WIRE = Motion({"3/p0/l0/width": Affine(0, {"wire_mm": 1.0}, "Sketch2"),
+                      "3/p0/l0/height": Affine(0, {"wire_mm": 1.0}, "Sketch2")})
+
+
+class SweepPointsTest(unittest.TestCase):
+    """A pick that is not a whole end face keeps its points and marks only the sizes the sweep reads."""
+
+    def loose_of(self, sets):
+        result = sized(with_round(square_wire_on_plate(), sets), SQUARE_WIRE, ["wire_mm", "plate_mm"])
+        self.assertEqual(edges_of_round(result), {"near": [p for _, points in sets for p in points]})
+        return [f["name"] for f in result.loose]
+
+    def test_an_edge_along_the_side_at_a_corner_of_the_outline(self):
+        self.assertEqual(self.loose_of([(False, [[17.5, 1, 5]])]), ["wire_mm"])
+
+    def test_one_edge_of_an_end_face(self):
+        self.assertEqual(self.loose_of([(False, [[40, 30, 5]])]), ["wire_mm"])
+
+    def test_all_four_edges_of_the_end_face_name_the_sweep(self):
+        ends = [(False, [p]) for p in ([41, 30, 4], [40, 30, 5], [39, 30, 4], [40, 30, 3])]
+        result = sized(with_round(square_wire_on_plate(), ends), SQUARE_WIRE, ["wire_mm", "plate_mm"])
+        self.assertEqual(edges_of_round(result), {"featureEdges": "sweep_3", "which": "end"})
+        self.assertEqual(result.loose, [])
+
+    def test_an_edge_that_is_not_at_a_corner_of_the_outline_marks_every_size_before(self):
+        side = [(False, [[17.5, 0.5, 5]])]
+        self.assertEqual(sorted(self.loose_of(side)), ["plate_mm", "wire_mm"])
+
+    def test_a_side_edge_of_a_wire_with_no_sizes_marks_nothing(self):
+        result = sized(with_round(square_wire_on_plate(), [(False, [[17.5, 1, 5]])]), Motion({}), ["plate_mm"])
+        self.assertEqual(edges_of_round(result), {"near": [[17.5, 1, 5]]})
+        self.assertEqual([f["name"] for f in result.loose], [])
+
+
+LOFT_TOP = [(False, [p]) for p in ([0, -5, 30], [5, 0, 30], [0, 5, 30], [-5, 0, 30])]
+LOFT_BOTTOM = [(False, [p]) for p in ([0, -10, 0], [10, 0, 0], [0, 10, 0], [-10, 0, 0])]
+
+
+class LoftFacesTest(unittest.TestCase):
+    def run_loft(self, capture, sets):
+        return run_sketch(with_round(capture, sets), SIZES, motion_of(SQUARES))
+
+    def test_all_edges_of_an_end_face_name_the_loft_and_mark_nothing(self):
+        for which, sets in (("end", LOFT_TOP), ("start", LOFT_BOTTOM)):
+            with self.subTest(which):
+                result = self.run_loft(load_capture(SQUARES), sets)
+                self.assertEqual(edges_of_round(result), {"featureEdges": "loft_2", "which": which})
+                self.assertEqual((result.loose, result.fixed), ([], []))
+                assert_schema_ok(self, result.recipe)
+
+    def test_one_edge_of_an_end_face_keeps_its_point_and_marks_the_sizes_the_loft_reads(self):
+        result = self.run_loft(load_capture(SQUARES), LOFT_TOP[:1])
+        self.assertEqual(edges_of_round(result), {"near": [[0, -5, 30]]})
+        self.assertEqual(sorted(f["name"] for f in result.loose), sorted(SIZES))
+
+    def test_outlines_with_openings_have_no_end_faces(self):
+        capture = load_capture(SQUARES)
+        for profile, radius in zip(loft_data(capture)["profiles"], (3, 1.5)):
+            profile["loops"].append(circle_hole([0, 0], radius, "h"))
+        result = self.run_loft(capture, LOFT_TOP)
+        self.assertNotIn("featureEdges", edges_of_round(result))
 
 
 if __name__ == "__main__":

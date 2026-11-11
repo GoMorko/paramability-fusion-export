@@ -11,6 +11,7 @@ openings, and outlines whose planes cross or touch (the kernel needs the section
 from . import borrowed, loops, placement, sketch_motion, vec
 from .extrude import COMBINE
 from .footprint import polyline
+from .placer_makers import EndCapsMaker
 from .result import Refusal, StepResult
 from .values import Quantity
 
@@ -190,5 +191,9 @@ def handle(item, ctx):
         ctx.note("Merge tangent edges is off in %s. This only changes how Fusion splits the faces, so the copy has the "
                  "same shape." % item.get("name", "this loft"))
     out = StepResult()
-    out.add({"kind": "loft", "sections": sections, "ruled": True, "combine": COMBINE[data["operation"]]})
+    # A section with openings leaves no end faces to name.
+    faces = None if any(inners for _, inners in built) else {
+        "start": (profiles[0]["frame"], profiles[0]), "end": (profiles[1]["frame"], profiles[1])}
+    out.add({"kind": "loft", "sections": sections, "ruled": True, "combine": COMBINE[data["operation"]]},
+            [EndCapsMaker(faces)] if faces else [])
     return out

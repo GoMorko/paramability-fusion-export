@@ -1,5 +1,5 @@
 {
-  "_comment": "A bar of 2 mm by 1 mm centred on the path of a rounded rectangle sketch of 40 mm by 20 mm (corner radius 5 mm) and swept once round it with a twist of one whole turn (Sweep1). The twist is a size.",
+  "_comment": "A bar of 2 mm by 1 mm centred on the path of a rounded rectangle sketch of 40 mm by 20 mm (corner radius 5 mm) and swept once round it with a twist of one whole turn (Sweep1). The twist is a size. The box is the reach of the turning bar: it leaves the path by 0.76 mm at the short sides and 1.12 mm at the long ones.",
   "capture": 3,
   "fusion": "2.0.0",
   "design": "Test",
@@ -10,13 +10,13 @@
     "name": "Body1",
     "box": {
       "min": [
-        0.0,
-        0.0,
+        -0.76,
+        -1.12,
         -1.12
       ],
       "max": [
-        40.0,
-        20.0,
+        40.76,
+        21.12,
         1.12
       ]
     },
@@ -98,13 +98,13 @@
       "target_after": {
         "box": {
           "min": [
-            0.0,
-            0.0,
+            -0.76,
+            -1.12,
             -1.12
           ],
           "max": [
-            40.0,
-            20.0,
+            40.76,
+            21.12,
             1.12
           ]
         },

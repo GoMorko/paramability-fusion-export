@@ -17,6 +17,9 @@ free curves, guide rails, a path that is not square to the outline, closed paths
 the outline's direction, a twist along a closed path that is not whole turns, and sweeps along part of a path are
 refused.
 
+A sweep step gets the placer of `end_caps` (the start face, the end face where the path leaves it known, the side walls
+along a path of lines and arcs), so a later round or chamfer on a whole end face names the step.
+
 Fusion does not document how it measures the sweep taper (an offset of the outline or a scale) or which way a twist
 turns, and no export has confirmed either (`TAPER_MEANING_CONFIRMED`, `TWIST_SIGN_CONFIRMED`). Every written twist or
 taper marks the sizes behind it and the outline, and adds a note asking the person to check the shape.
@@ -26,9 +29,10 @@ import math
 
 from ..params.expressions import ExpressionError
 from . import (borrowed, extrude, kept_ranges, loops, path_motion, paths, placement, range_check, revolve,
-               sketch_motion, sweep_reach, sweep_taper, values, vec)
+               sketch_motion, sweep_frames, sweep_reach, sweep_taper, values, vec)
 from .extrude import COMBINE, MAX_TAPER_DEG, keep_angle_within
 from .footprint import is_full, polyline
+from .placer_makers import EndCapsMaker
 from .result import Refusal, StepResult
 from .sizes import construction_sizes, sketch_sizes
 from .values import Quantity
@@ -503,9 +507,24 @@ def _as_sweep(item, combine, profile, found, ctx, angles=(), fixed=False, growth
             _doubt_angle(ctx, item, what, quantity, sweep_reach.written_reads(outer, *inners))
     if fixed:
         step["orientation"] = "fixed"
+    maker = _faces_maker(profile, found, bool(angles), fixed)
     out = StepResult()
-    out.add(step)
+    out.add(step, [maker] if maker else [])
     return out
+
+
+def _faces_maker(profile, found, shaped, fixed):
+    """The placer maker for the faces of a written sweep, or None when it has none the recipe can name: a closed path
+    has no end faces and a hollow outline leaves none. A twist or taper (`shaped`) turns or shrinks the end face and the
+    walls, so only the start face is placed then."""
+    if found.closed or any(not loop.get("outer") for loop in profile.get("loops") or []):
+        return None
+    faces = {"start": (profile["frame"], profile)}
+    end = None if shaped else sweep_frames.end_frame(profile["frame"], found, fixed)
+    if end is not None:
+        faces["end"] = (end, profile)
+    walk = None if shaped or fixed else sweep_frames.SideWalk.of(profile["frame"], found)
+    return EndCapsMaker(faces, walk)
 
 
 def _taper_growth(profile, taper_deg):
