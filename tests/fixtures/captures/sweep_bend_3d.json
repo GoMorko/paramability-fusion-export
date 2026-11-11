@@ -1,0 +1,696 @@
+{
+  "_comment": "A 10 mm block, then a 2 mm wire joined along a 3D sketch: a 20 mm line and then a free curve that rises out of the plane (Sweep1).",
+  "capture": 3,
+  "fusion": "2.0.0",
+  "design": "Test",
+  "up_axis": "z",
+  "design_units": "mm",
+  "target": {
+    "token": "t1",
+    "name": "Body1",
+    "box": {
+      "min": [
+        -5.0,
+        -5.0,
+        -1.0
+      ],
+      "max": [
+        41.0,
+        15.8,
+        15.6
+      ]
+    },
+    "volume_mm3": 354.5
+  },
+  "parameters": {
+    "user": [
+      {
+        "name": "base_mm",
+        "expression": "2 mm",
+        "value": 0.2,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 2
+      },
+      {
+        "name": "wire_mm",
+        "expression": "2 mm",
+        "value": 0.2,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 2.0
+      },
+      {
+        "name": "reach_mm",
+        "expression": "20 mm",
+        "value": 2.0,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 20
+      }
+    ],
+    "model": [
+      {
+        "name": "d3",
+        "expression": "base_mm",
+        "value": 0.2,
+        "unit": "mm",
+        "kind": "derived",
+        "role": "",
+        "dependency_parameters": [
+          "base_mm"
+        ],
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d3",
+          "name": "Extrude1",
+          "sketch": "",
+          "component": ""
+        }
+      },
+      {
+        "name": "d1",
+        "expression": "wire_mm",
+        "value": 0.2,
+        "unit": "mm",
+        "kind": "derived",
+        "role": "",
+        "dependency_parameters": [
+          "wire_mm"
+        ],
+        "created_by": {
+          "kind": "sketchDimension",
+          "token": "tok_d1",
+          "name": "",
+          "sketch": "Sketch2",
+          "component": ""
+        }
+      },
+      {
+        "name": "d2",
+        "expression": "reach_mm",
+        "value": 2.0,
+        "unit": "mm",
+        "kind": "derived",
+        "role": "",
+        "dependency_parameters": [
+          "reach_mm"
+        ],
+        "created_by": {
+          "kind": "sketchDimension",
+          "token": "tok_d2",
+          "name": "",
+          "sketch": "Sketch3",
+          "component": ""
+        }
+      }
+    ]
+  },
+  "items": [
+    {
+      "index": 0,
+      "name": "Sketch1",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 1,
+      "name": "Extrude1",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "operation": "newBody",
+        "profiles": [
+          {
+            "sketch": "Sketch1",
+            "sketch_token": "s1",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "space": "sketch",
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      -5,
+                      -5
+                    ],
+                    "end": [
+                      5,
+                      -5
+                    ],
+                    "entity": "e0"
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      5,
+                      -5
+                    ],
+                    "end": [
+                      5,
+                      5
+                    ],
+                    "entity": "e1"
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      5,
+                      5
+                    ],
+                    "end": [
+                      -5,
+                      5
+                    ],
+                    "entity": "e2"
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      -5,
+                      5
+                    ],
+                    "end": [
+                      -5,
+                      -5
+                    ],
+                    "entity": "e3"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 2.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [],
+        "target_box_before": null,
+        "end_offset": 2.0,
+        "params": {
+          "side_one.distance": {
+            "name": "d3",
+            "expression": "base_mm",
+            "value": 2.0
+          }
+        }
+      },
+      "target_after": {
+        "box": {
+          "min": [
+            -5.0,
+            -5.0,
+            0.0
+          ],
+          "max": [
+            5.0,
+            5.0,
+            2.0
+          ]
+        },
+        "volume_mm3": 200.0
+      }
+    },
+    {
+      "index": 2,
+      "name": "Sketch2",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 3,
+      "name": "Sketch3",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 4,
+      "name": "Sweep1",
+      "type": "SweepFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "target_before": {
+        "box": {
+          "min": [
+            -5.0,
+            -5.0,
+            0.0
+          ],
+          "max": [
+            5.0,
+            5.0,
+            2.0
+          ]
+        },
+        "volume_mm3": 200.0
+      },
+      "target_after": {
+        "box": {
+          "min": [
+            -5.0,
+            -5.0,
+            0.0
+          ],
+          "max": [
+            5.0,
+            5.0,
+            2.0
+          ]
+        },
+        "volume_mm3": null
+      },
+      "data": {
+        "operation": "join",
+        "solid": true,
+        "profiles": [
+          {
+            "sketch": "Sketch2",
+            "sketch_token": "s2",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                0,
+                1,
+                0
+              ],
+              "y": [
+                0,
+                0,
+                1
+              ],
+              "z": [
+                1,
+                0,
+                0
+              ]
+            },
+            "space": "sketch",
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "circle",
+                    "center": [
+                      0.0,
+                      0.0
+                    ],
+                    "radius": 1.0,
+                    "entity": "c0"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "areas": [
+          3.141592653589793
+        ],
+        "path": {
+          "closed": false,
+          "kind": "sketch",
+          "sketch": "Sketch3",
+          "sketch_token": "s3",
+          "frame": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "x": [
+              1,
+              0,
+              0
+            ],
+            "y": [
+              0,
+              1,
+              0
+            ],
+            "z": [
+              0,
+              0,
+              1
+            ]
+          },
+          "curves": [
+            {
+              "kind": "line",
+              "start": [
+                0,
+                0,
+                0
+              ],
+              "end": [
+                20,
+                0,
+                0
+              ],
+              "opposed": false,
+              "entity": "p0",
+              "check": {
+                "start": [
+                  0,
+                  0,
+                  0
+                ],
+                "end": [
+                  20,
+                  0,
+                  0
+                ]
+              },
+              "flat": {
+                "kind": "line",
+                "start": [
+                  0,
+                  0
+                ],
+                "end": [
+                  20,
+                  0
+                ]
+              }
+            },
+            {
+              "kind": "other",
+              "type": "NurbsCurve3D",
+              "start": [
+                20.0,
+                0.0,
+                0.0
+              ],
+              "end": [
+                40.0,
+                15.0,
+                15.0
+              ],
+              "mid": [
+                30.0,
+                3.75,
+                1.875
+              ],
+              "samples": [
+                [
+                  20.0,
+                  0.0,
+                  0.0
+                ],
+                [
+                  20.625,
+                  0.014648,
+                  0.000458
+                ],
+                [
+                  21.25,
+                  0.058594,
+                  0.003662
+                ],
+                [
+                  21.875,
+                  0.131836,
+                  0.01236
+                ],
+                [
+                  22.5,
+                  0.234375,
+                  0.029297
+                ],
+                [
+                  23.125,
+                  0.366211,
+                  0.05722
+                ],
+                [
+                  23.75,
+                  0.527344,
+                  0.098877
+                ],
+                [
+                  24.375,
+                  0.717773,
+                  0.157013
+                ],
+                [
+                  25.0,
+                  0.9375,
+                  0.234375
+                ],
+                [
+                  25.625,
+                  1.186523,
+                  0.33371
+                ],
+                [
+                  26.25,
+                  1.464844,
+                  0.457764
+                ],
+                [
+                  26.875,
+                  1.772461,
+                  0.609283
+                ],
+                [
+                  27.5,
+                  2.109375,
+                  0.791016
+                ],
+                [
+                  28.125,
+                  2.475586,
+                  1.005707
+                ],
+                [
+                  28.75,
+                  2.871094,
+                  1.256104
+                ],
+                [
+                  29.375,
+                  3.295898,
+                  1.544952
+                ],
+                [
+                  30.0,
+                  3.75,
+                  1.875
+                ],
+                [
+                  30.625,
+                  4.233398,
+                  2.248993
+                ],
+                [
+                  31.25,
+                  4.746094,
+                  2.669678
+                ],
+                [
+                  31.875,
+                  5.288086,
+                  3.139801
+                ],
+                [
+                  32.5,
+                  5.859375,
+                  3.662109
+                ],
+                [
+                  33.125,
+                  6.459961,
+                  4.239349
+                ],
+                [
+                  33.75,
+                  7.089844,
+                  4.874268
+                ],
+                [
+                  34.375,
+                  7.749023,
+                  5.569611
+                ],
+                [
+                  35.0,
+                  8.4375,
+                  6.328125
+                ],
+                [
+                  35.625,
+                  9.155273,
+                  7.152557
+                ],
+                [
+                  36.25,
+                  9.902344,
+                  8.045654
+                ],
+                [
+                  36.875,
+                  10.678711,
+                  9.010162
+                ],
+                [
+                  37.5,
+                  11.484375,
+                  10.048828
+                ],
+                [
+                  38.125,
+                  12.319336,
+                  11.164398
+                ],
+                [
+                  38.75,
+                  13.183594,
+                  12.359619
+                ],
+                [
+                  39.375,
+                  14.077148,
+                  13.637238
+                ],
+                [
+                  40.0,
+                  15.0,
+                  15.0
+                ]
+              ],
+              "opposed": false,
+              "entity": "p1",
+              "flat": null,
+              "check": {
+                "start": [
+                  20.0,
+                  0.0,
+                  0.0
+                ],
+                "end": [
+                  40.0,
+                  15.0,
+                  15.0
+                ]
+              }
+            }
+          ],
+          "edges": []
+        },
+        "rail": null,
+        "orientation": "perpendicular",
+        "distance_one": 1.0,
+        "distance_two": 0.0,
+        "taper_deg": 0.0,
+        "twist_deg": 0.0,
+        "scaling": "scale",
+        "extent": null,
+        "participants": [
+          {
+            "token": "t1",
+            "name": "Body1"
+          }
+        ],
+        "target_box_before": {
+          "min": [
+            -5.0,
+            -5.0,
+            0.0
+          ],
+          "max": [
+            5.0,
+            5.0,
+            2.0
+          ]
+        },
+        "params": {},
+        "faces_after": {
+          "start": [],
+          "end": []
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,492 @@
+{
+  "_comment": "The plate with a loft through three squares (20, 10 and 6 mm).",
+  "capture": 3,
+  "fusion": "2.0.0",
+  "design": "Test",
+  "up_axis": "z",
+  "design_units": "mm",
+  "target": {
+    "token": "t1",
+    "name": "Body1",
+    "box": {
+      "min": [
+        -20.0,
+        -20.0,
+        0.0
+      ],
+      "max": [
+        20.0,
+        20.0,
+        45.0
+      ]
+    },
+    "volume_mm3": null
+  },
+  "items": [
+    {
+      "index": 0,
+      "name": "Sketch1",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 1,
+      "name": "Extrude1",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "operation": "newBody",
+        "profiles": [
+          {
+            "sketch": "Sketch1",
+            "sketch_token": "s1",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "space": "sketch",
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      -20,
+                      -20
+                    ],
+                    "end": [
+                      20,
+                      -20
+                    ],
+                    "entity": "p0"
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      20,
+                      -20
+                    ],
+                    "end": [
+                      20,
+                      20
+                    ],
+                    "entity": "p1"
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      20,
+                      20
+                    ],
+                    "end": [
+                      -20,
+                      20
+                    ],
+                    "entity": "p2"
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      -20,
+                      20
+                    ],
+                    "end": [
+                      -20,
+                      -20
+                    ],
+                    "entity": "p3"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 5.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [],
+        "target_box_before": null,
+        "end_offset": 5.0
+      }
+    },
+    {
+      "index": 2,
+      "name": "Sketch2",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 3,
+      "name": "Sketch3",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 4,
+      "name": "Loft1",
+      "type": "LoftFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "operation": "join",
+        "solid": true,
+        "profiles": [
+          {
+            "sketch": "Sketch2",
+            "sketch_token": "s2",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                5
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "space": "sketch",
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      -10.0,
+                      -10.0
+                    ],
+                    "end": [
+                      10.0,
+                      -10.0
+                    ],
+                    "entity": "a0"
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      10.0,
+                      -10.0
+                    ],
+                    "end": [
+                      10.0,
+                      10.0
+                    ],
+                    "entity": "a1"
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      10.0,
+                      10.0
+                    ],
+                    "end": [
+                      -10.0,
+                      10.0
+                    ],
+                    "entity": "a2"
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      -10.0,
+                      10.0
+                    ],
+                    "end": [
+                      -10.0,
+                      -10.0
+                    ],
+                    "entity": "a3"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "sketch": "Sketch3",
+            "sketch_token": "s3",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                35
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "space": "sketch",
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      -5.0,
+                      -5.0
+                    ],
+                    "end": [
+                      5.0,
+                      -5.0
+                    ],
+                    "entity": "b0"
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      5.0,
+                      -5.0
+                    ],
+                    "end": [
+                      5.0,
+                      5.0
+                    ],
+                    "entity": "b1"
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      5.0,
+                      5.0
+                    ],
+                    "end": [
+                      -5.0,
+                      5.0
+                    ],
+                    "entity": "b2"
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      -5.0,
+                      5.0
+                    ],
+                    "end": [
+                      -5.0,
+                      -5.0
+                    ],
+                    "entity": "b3"
+                  }
+                ]
+              }
+            ],
+            "reference": {
+              "kind": "constructionPlane",
+              "token": "cp1"
+            }
+          },
+          {
+            "sketch": "Sketch4",
+            "sketch_token": "s4",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                45
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "space": "sketch",
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      -3.0,
+                      -3.0
+                    ],
+                    "end": [
+                      3.0,
+                      -3.0
+                    ],
+                    "entity": "c0"
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      3.0,
+                      -3.0
+                    ],
+                    "end": [
+                      3.0,
+                      3.0
+                    ],
+                    "entity": "c1"
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      3.0,
+                      3.0
+                    ],
+                    "end": [
+                      -3.0,
+                      3.0
+                    ],
+                    "entity": "c2"
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      -3.0,
+                      3.0
+                    ],
+                    "end": [
+                      -3.0,
+                      -3.0
+                    ],
+                    "entity": "c3"
+                  }
+                ]
+              }
+            ],
+            "reference": {
+              "kind": "constructionPlane",
+              "token": "cp1"
+            }
+          }
+        ],
+        "areas": null,
+        "sections": [
+          {
+            "kind": "profile",
+            "profile": 0,
+            "end": "free"
+          },
+          {
+            "kind": "profile",
+            "profile": 1,
+            "end": "free"
+          },
+          {
+            "kind": "profile",
+            "profile": 2,
+            "end": "free"
+          }
+        ],
+        "rails": [],
+        "centerline": null,
+        "closed": false,
+        "merge_tangent": true,
+        "participants": [
+          {
+            "token": "t1",
+            "name": "Body1"
+          }
+        ],
+        "target_box_before": {
+          "min": [
+            -20.0,
+            -20.0,
+            0.0
+          ],
+          "max": [
+            20.0,
+            20.0,
+            5.0
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,349 @@
+{
+  "_comment": "A 10 by 6 rectangle swept 40 mm along one straight sketch line from its plane (Sweep1). Its width and the line length are sizes.",
+  "capture": 3,
+  "fusion": "2.0.0",
+  "design": "Test",
+  "up_axis": "z",
+  "design_units": "mm",
+  "target": {
+    "token": "t1",
+    "name": "Body1",
+    "box": {
+      "min": [
+        -5.0,
+        -3.0,
+        0.0
+      ],
+      "max": [
+        5.0,
+        3.0,
+        40.0
+      ]
+    },
+    "volume_mm3": 2400.0
+  },
+  "parameters": {
+    "user": [
+      {
+        "name": "width_mm",
+        "expression": "10 mm",
+        "value": 1.0,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 10
+      },
+      {
+        "name": "length_mm",
+        "expression": "40 mm",
+        "value": 4.0,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 40
+      }
+    ],
+    "model": [
+      {
+        "name": "d1",
+        "expression": "width_mm",
+        "value": 1.0,
+        "unit": "mm",
+        "kind": "derived",
+        "role": "",
+        "dependency_parameters": [
+          "width_mm"
+        ],
+        "created_by": {
+          "kind": "sketchDimension",
+          "token": "tok_d1",
+          "name": "",
+          "sketch": "Sketch1",
+          "component": ""
+        }
+      },
+      {
+        "name": "d2",
+        "expression": "length_mm",
+        "value": 4.0,
+        "unit": "mm",
+        "kind": "derived",
+        "role": "",
+        "dependency_parameters": [
+          "length_mm"
+        ],
+        "created_by": {
+          "kind": "sketchDimension",
+          "token": "tok_d2",
+          "name": "",
+          "sketch": "Sketch2",
+          "component": ""
+        }
+      }
+    ]
+  },
+  "items": [
+    {
+      "index": 0,
+      "name": "Sketch1",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 1,
+      "name": "Sketch2",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 2,
+      "name": "Sweep1",
+      "type": "SweepFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "target_before": null,
+      "target_after": {
+        "box": {
+          "min": [
+            -5.0,
+            -3.0,
+            0.0
+          ],
+          "max": [
+            5.0,
+            3.0,
+            40.0
+          ]
+        },
+        "volume_mm3": 2400.0
+      },
+      "data": {
+        "operation": "newBody",
+        "solid": true,
+        "profiles": [
+          {
+            "sketch": "Sketch1",
+            "sketch_token": "s1",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "space": "sketch",
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      -5,
+                      -3
+                    ],
+                    "end": [
+                      5,
+                      -3
+                    ],
+                    "entity": "e0"
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      5,
+                      -3
+                    ],
+                    "end": [
+                      5,
+                      3
+                    ],
+                    "entity": "e1"
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      5,
+                      3
+                    ],
+                    "end": [
+                      -5,
+                      3
+                    ],
+                    "entity": "e2"
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      -5,
+                      3
+                    ],
+                    "end": [
+                      -5,
+                      -3
+                    ],
+                    "entity": "e3"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "areas": [
+          60.0
+        ],
+        "path": {
+          "closed": false,
+          "kind": "sketch",
+          "sketch": "Sketch2",
+          "sketch_token": "s2",
+          "frame": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "x": [
+              1,
+              0,
+              0
+            ],
+            "y": [
+              0,
+              0,
+              1
+            ],
+            "z": [
+              0,
+              -1,
+              0
+            ]
+          },
+          "curves": [
+            {
+              "kind": "line",
+              "start": [
+                0,
+                0,
+                0
+              ],
+              "end": [
+                0,
+                0,
+                40
+              ],
+              "opposed": false,
+              "entity": "p0",
+              "check": {
+                "start": [
+                  0,
+                  0,
+                  0
+                ],
+                "end": [
+                  0,
+                  0,
+                  40
+                ]
+              },
+              "flat": {
+                "kind": "line",
+                "start": [
+                  0,
+                  0
+                ],
+                "end": [
+                  0,
+                  40
+                ]
+              }
+            }
+          ],
+          "edges": []
+        },
+        "rail": null,
+        "orientation": "perpendicular",
+        "distance_one": 1.0,
+        "distance_two": 0.0,
+        "taper_deg": 0.0,
+        "twist_deg": 0.0,
+        "scaling": "scale",
+        "extent": null,
+        "participants": [],
+        "target_box_before": null,
+        "params": {},
+        "faces_after": {
+          "start": [
+            {
+              "point": [
+                0,
+                0,
+                0
+              ],
+              "normal": [
+                0,
+                0,
+                -1
+              ]
+            }
+          ],
+          "end": [
+            {
+              "point": [
+                0,
+                0,
+                40
+              ],
+              "normal": [
+                0,
+                0,
+                1
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

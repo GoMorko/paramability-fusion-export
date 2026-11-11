@@ -26,8 +26,8 @@ class FixtureGeometryTest(unittest.TestCase):
         self.assertEqual(capture["target"]["box"], box, name)
         self.assertAlmostEqual(capture["target"]["volume_mm3"], volume, delta=volume_tolerance + 0.05, msg=name)
 
-    def test_prism_hole_mirror_and_revolve_fixtures_match_their_stored_geometry(self):
-        for name in ("extrude_plate", "hole_through", "mirror_body", "revolve_full"):
+    def test_prism_hole_mirror_revolve_and_loft_fixtures_match_their_stored_geometry(self):
+        for name in ("extrude_plate", "hole_through", "mirror_body", "revolve_full", "loft_two_squares"):
             with self.subTest(name):
                 self.check(name)
 

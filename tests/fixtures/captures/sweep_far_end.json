@@ -1,0 +1,416 @@
+{
+  "_comment": "The bent pipe of sweep_pipe with its path sketched from the far end towards the outline (Sweep1).",
+  "capture": 3,
+  "fusion": "2.0.0",
+  "design": "Test",
+  "up_axis": "z",
+  "design_units": "mm",
+  "target": {
+    "token": "t1",
+    "name": "Body1",
+    "box": {
+      "min": [
+        0.0,
+        -3.0,
+        -3.0
+      ],
+      "max": [
+        33.0,
+        40.0,
+        3.0
+      ]
+    },
+    "volume_mm3": 1857.848892
+  },
+  "parameters": {
+    "user": [
+      {
+        "name": "wire_mm",
+        "expression": "6 mm",
+        "value": 0.6,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 6
+      },
+      {
+        "name": "bend_mm",
+        "expression": "10 mm",
+        "value": 1.0,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 10
+      },
+      {
+        "name": "run_mm",
+        "expression": "30 mm",
+        "value": 3.0,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 30
+      }
+    ],
+    "model": [
+      {
+        "name": "d1",
+        "expression": "wire_mm",
+        "value": 0.6,
+        "unit": "mm",
+        "kind": "derived",
+        "role": "",
+        "dependency_parameters": [
+          "wire_mm"
+        ],
+        "created_by": {
+          "kind": "sketchDimension",
+          "token": "tok_d1",
+          "name": "",
+          "sketch": "Sketch1",
+          "component": ""
+        }
+      },
+      {
+        "name": "d2",
+        "expression": "bend_mm",
+        "value": 1.0,
+        "unit": "mm",
+        "kind": "derived",
+        "role": "",
+        "dependency_parameters": [
+          "bend_mm"
+        ],
+        "created_by": {
+          "kind": "sketchDimension",
+          "token": "tok_d2",
+          "name": "",
+          "sketch": "Sketch2",
+          "component": ""
+        }
+      },
+      {
+        "name": "d3",
+        "expression": "run_mm",
+        "value": 3.0,
+        "unit": "mm",
+        "kind": "derived",
+        "role": "",
+        "dependency_parameters": [
+          "run_mm"
+        ],
+        "created_by": {
+          "kind": "sketchDimension",
+          "token": "tok_d3",
+          "name": "",
+          "sketch": "Sketch2",
+          "component": ""
+        }
+      }
+    ]
+  },
+  "items": [
+    {
+      "index": 0,
+      "name": "Sketch1",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 1,
+      "name": "Sketch2",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 2,
+      "name": "Sweep1",
+      "type": "SweepFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "target_before": null,
+      "target_after": {
+        "box": {
+          "min": [
+            0.0,
+            -3.0,
+            -3.0
+          ],
+          "max": [
+            33.0,
+            40.0,
+            3.0
+          ]
+        },
+        "volume_mm3": 1857.848892
+      },
+      "data": {
+        "operation": "newBody",
+        "solid": true,
+        "profiles": [
+          {
+            "sketch": "Sketch1",
+            "sketch_token": "s1",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                0,
+                1,
+                0
+              ],
+              "y": [
+                0,
+                0,
+                1
+              ],
+              "z": [
+                1,
+                0,
+                0
+              ]
+            },
+            "space": "sketch",
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "circle",
+                    "center": [
+                      0.0,
+                      0.0
+                    ],
+                    "radius": 3.0,
+                    "entity": "c0"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "areas": [
+          28.274333882308138
+        ],
+        "path": {
+          "closed": false,
+          "kind": "sketch",
+          "sketch": "Sketch2",
+          "sketch_token": "s2",
+          "frame": {
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "x": [
+              1,
+              0,
+              0
+            ],
+            "y": [
+              0,
+              1,
+              0
+            ],
+            "z": [
+              0,
+              0,
+              1
+            ]
+          },
+          "curves": [
+            {
+              "kind": "line",
+              "start": [
+                30,
+                40,
+                0
+              ],
+              "end": [
+                30,
+                10,
+                0
+              ],
+              "opposed": true,
+              "entity": "p2",
+              "check": {
+                "start": [
+                  30,
+                  40,
+                  0
+                ],
+                "end": [
+                  30,
+                  10,
+                  0
+                ]
+              },
+              "flat": {
+                "kind": "line",
+                "start": [
+                  30,
+                  40
+                ],
+                "end": [
+                  30,
+                  10
+                ]
+              }
+            },
+            {
+              "kind": "arc",
+              "start": [
+                30,
+                10,
+                0
+              ],
+              "end": [
+                20,
+                0,
+                0
+              ],
+              "mid": [
+                27.071068,
+                2.928932,
+                0.0
+              ],
+              "center": [
+                20,
+                10,
+                0
+              ],
+              "normal": [
+                0,
+                0,
+                -1
+              ],
+              "radius": 10.0,
+              "opposed": true,
+              "entity": "p1",
+              "check": {
+                "start": [
+                  30,
+                  10,
+                  0
+                ],
+                "end": [
+                  20,
+                  0,
+                  0
+                ]
+              },
+              "flat": {
+                "kind": "arc",
+                "center": [
+                  20,
+                  10
+                ],
+                "radius": 10.0,
+                "start": [
+                  30,
+                  10
+                ],
+                "end": [
+                  20,
+                  0
+                ],
+                "mid": [
+                  27.071068,
+                  2.928932
+                ]
+              }
+            },
+            {
+              "kind": "line",
+              "start": [
+                20,
+                0,
+                0
+              ],
+              "end": [
+                0,
+                0,
+                0
+              ],
+              "opposed": true,
+              "entity": "p0",
+              "check": {
+                "start": [
+                  20,
+                  0,
+                  0
+                ],
+                "end": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "flat": {
+                "kind": "line",
+                "start": [
+                  20,
+                  0
+                ],
+                "end": [
+                  0,
+                  0
+                ]
+              }
+            }
+          ],
+          "edges": []
+        },
+        "rail": null,
+        "orientation": "perpendicular",
+        "distance_one": 1.0,
+        "distance_two": 0.0,
+        "taper_deg": 0.0,
+        "twist_deg": 0.0,
+        "scaling": "scale",
+        "extent": null,
+        "participants": [],
+        "target_box_before": null,
+        "params": {},
+        "faces_after": {
+          "start": [],
+          "end": []
+        }
+      }
+    }
+  ]
+}

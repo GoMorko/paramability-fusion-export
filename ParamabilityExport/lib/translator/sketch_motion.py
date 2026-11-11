@@ -518,10 +518,11 @@ def points(ctx, item, rows):
 def axis_point(ctx, item, frame, point2, coords=None):
     """The revolve axis point in the sketch plane (`point2`, numbers) as written: it follows the axis line when the
     probe moved it. The plane only moves along its normal, so the in-plane coordinates read the line alone. `coords`
-    are the raw 3D axis point when the axis is not a line of a sketch of the part (an axis of another component)."""
-    if not active(ctx):
-        return [round(v, 9) + 0.0 for v in point2]
+    are the raw 3D axis point when the axis is not a line of a sketch of the part (an axis of another component). An
+    axis marked `fixed` is not a sketch line (the centre of a sweep path arc): it stays as written."""
     axis = (item.get("data") or {}).get("axis") or {}
+    if not active(ctx) or axis.get("fixed"):
+        return [round(v, 9) + 0.0 for v in point2]
     sketch = axis.get("sketch") or ""
     if coords is None:
         coords = [raw(ctx, keys.axis_point(item.get("index"), c), float(axis["point"][c]), sketch) for c in range(3)]
@@ -537,10 +538,8 @@ def axis_point(ctx, item, frame, point2, coords=None):
 
 def axis_raw(ctx, item):
     """The raw 3D axis point of a revolve, or None when sketch values do not follow sizes."""
-    if not active(ctx):
-        return None
     axis = (item.get("data") or {}).get("axis") or {}
-    if "point" not in axis:
+    if not active(ctx) or axis.get("fixed") or "point" not in axis:
         return None
     sketch = axis.get("sketch") or ""
     return [raw(ctx, keys.axis_point(item.get("index"), c), float(axis["point"][c]), sketch) for c in range(3)]

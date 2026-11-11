@@ -5,7 +5,7 @@ Run from the add-in root (needs numpy; the add-in and its tests do not):
     python3 scripts/fixture_geometry.py --write    write the computed values into the fixtures
     python3 scripts/fixture_geometry.py name ...   limit to the named fixtures
 
-The model is a voxel count of extrudes (thin walls with round corners included), embosses on flat faces, revolves, holes, combines, patterns and mirrors, pastes, moves and offsets of flat faces with square sides, read straight from the
+The model is a voxel count of extrudes (thin walls with round corners included), embosses on flat faces, revolves, sweeps of one outline along a path, lofts of two convex polygons (other lofts give their box only), holes, combines, patterns and mirrors, pastes, moves and offsets of flat faces with square sides, read straight from the
 capture data (not from the translated recipe). Boxes are exact to half a voxel (0.1 mm), volumes within about
 0.5 percent. Fillets, chamfers, shells, modeled threads, tapers, face profiles and unreadable fields
 are not modelled: the box stays, `volume_mm3` becomes null. The same box rule fills each item's
@@ -345,6 +345,72 @@ def emboss_as_extrude(data):
             "end_offset": data.get("end_offset")}
 
 
+def _outer_world(profile):
+    """The outer loop of a profile as world points, one per corner for line only outlines (else a polyline)."""
+    origin, rot = frame_of(profile["frame"])
+    outer = [loop for loop in profile["loops"] if loop.get("outer")]
+    if len(outer) != 1:
+        raise Unmodelled("outer loops")
+    curves = outer[0]["curves"]
+    if len(curves) == 1 and curves[0]["kind"] == "circle":
+        c = curves[0]
+        angles = np.linspace(0, 2 * math.pi, ARC_POINTS, endpoint=False)
+        local = np.column_stack([c["center"][0] + c["radius"] * np.cos(angles),
+                                 c["center"][1] + c["radius"] * np.sin(angles)])
+    else:
+        local = _chain(curves)[:-1]
+    return np.column_stack([local, np.zeros(len(local))]) @ rot.T + origin, all(
+        c["kind"] == "line" for c in outer[0]["curves"])
+
+
+def _paired_corners(points, basis_x, basis_y):
+    """Corners as 2D points in the basis, counter clockwise, starting at the one with the lowest angle."""
+    flat = np.column_stack([points @ basis_x, points @ basis_y])
+    if 0.5 * np.sum(flat[:, 0] * np.roll(flat[:, 1], -1) - np.roll(flat[:, 0], -1) * flat[:, 1]) < 0:
+        flat = flat[::-1]
+    centre = flat.mean(axis=0)
+    angles = np.arctan2(flat[:, 1] - centre[1], flat[:, 0] - centre[0])
+    return np.roll(flat, -int(np.argmin(angles)), axis=0)
+
+
+def loft_shape(data):
+    """A loft. Two parallel outlines of convex polygons with the same corner count (corners paired from the lowest
+    angle) give the stack of interpolated polygons. Any other loft keeps the box around its outlines and the volume
+    becomes null."""
+    sections = [data["profiles"][s["profile"]] for s in data["sections"] if s.get("kind") == "profile"]
+    if not sections or len(sections) != len(data["sections"]):
+        raise Unmodelled("loft sections")
+    worlds = [_outer_world(p) for p in sections]
+    everything = np.vstack([w for w, _ in worlds])
+    lo, hi = everything.min(axis=0), everything.max(axis=0)
+    first = frame_of(sections[0]["frame"])
+    normal = first[1][:, 2]
+    exact = (len(sections) == 2 and all(line_only for _, line_only in worlds)
+             and len(worlds[0][0]) == len(worlds[1][0])
+             and all(len(p["loops"]) == 1 for p in sections)
+             and all(abs(abs(np.dot(frame_of(p["frame"])[1][:, 2], normal)) - 1) < 1e-9 for p in sections))
+    if not exact:
+        _bend("loft")
+        return Shape(lambda p: np.ones(len(p), bool), lo, hi)
+    bx, by = first[1][:, 0], first[1][:, 1]
+    a = _paired_corners(worlds[0][0], bx, by)
+    b = _paired_corners(worlds[1][0], bx, by)
+    h = [float(np.dot(w[0], normal)) for w, _ in worlds]
+    base = first[0]
+
+    def test(p):
+        t = (p @ normal - h[0]) / (h[1] - h[0])
+        inside = (t >= 0) & (t <= 1)
+        mix = np.clip(t, 0, 1)[:, None, None]
+        corners = (1 - mix) * a[None] + mix * b[None]
+        flat = np.column_stack([(p - base) @ bx, (p - base) @ by])[:, None, :]
+        edge = np.roll(corners, -1, axis=1) - corners
+        side = edge[..., 0] * (flat[..., 1] - corners[..., 1]) - edge[..., 1] * (flat[..., 0] - corners[..., 0])
+        return inside & np.all(side >= -1e-9, axis=1)
+
+    return Shape(test, lo, hi)
+
+
 def revolve_shape(data):
     ext = data["extent"]
     if ext["kind"] not in ("angle", "twoSidesAngle"):
@@ -402,6 +468,122 @@ def revolve_shape(data):
     lo = np.min(ends, axis=0) - reach
     hi = np.max(ends, axis=0) + reach
     return Shape(test, lo, hi)
+
+
+def _curve3(c):
+    """Points along one 3D path curve of a sweep."""
+    if c["kind"] == "line":
+        return [list(c["start"]), list(c["end"])]
+    if c["kind"] == "other" and c.get("samples"):
+        return [list(p) for p in c["samples"]]
+    if c["kind"] in ("arc", "circle"):
+        centre, normal = np.asarray(c["center"], float), np.asarray(c["normal"], float)
+        normal /= np.linalg.norm(normal)
+        start = np.asarray(c["start"] if c["kind"] == "arc" else c.get("start") or c["center"], float)
+        if c["kind"] == "circle":
+            ref = np.array([1.0, 0, 0]) if abs(normal[0]) < 0.9 else np.array([0, 1.0, 0])
+            start = centre + c["radius"] * np.cross(normal, np.cross(ref, normal)) / np.linalg.norm(np.cross(normal, np.cross(ref, normal)))
+        e1 = start - centre
+        e2 = np.cross(normal, e1)
+        if c["kind"] == "circle":
+            sweep = 2 * math.pi
+        else:
+            end, mid = np.asarray(c["end"], float) - centre, np.asarray(c["mid"], float) - centre
+            ccw = math.atan2(np.dot(end, e2), np.dot(end, e1)) % (2 * math.pi)
+            sweep = ccw if math.atan2(np.dot(mid, e2), np.dot(mid, e1)) % (2 * math.pi) <= ccw else ccw - 2 * math.pi
+        count = max(ARC_POINTS, int(abs(sweep) / math.radians(1.0)))
+        return [(centre + math.cos(sweep * k / count) * e1 + math.sin(sweep * k / count) * e2).tolist()
+                for k in range(count + 1)]
+    raise Unmodelled("path curve " + c["kind"])
+
+
+def _unit(v):
+    return v / np.linalg.norm(v)
+
+
+def _path_points(path, origin, z):
+    """The path as one polyline that starts on the outline's plane."""
+    pieces = [_curve3(c) for c in path["curves"]]
+    chain = pieces.pop(0)
+    while pieces:
+        for i, piece in enumerate(pieces):
+            if math.dist(piece[0], chain[-1]) < 1e-3:
+                chain += piece[1:]
+            elif math.dist(piece[-1], chain[-1]) < 1e-3:
+                chain += piece[::-1][1:]
+            elif math.dist(piece[-1], chain[0]) < 1e-3:
+                chain = piece + chain[1:]
+            elif math.dist(piece[0], chain[0]) < 1e-3:
+                chain = piece[::-1] + chain[1:]
+            else:
+                continue
+            pieces.pop(i)
+            break
+        else:
+            raise Unmodelled("path chain")
+    points = np.array(chain, float)
+    closed = math.dist(points[0], points[-1]) < 1e-3
+    along = (points - origin) @ z
+    if closed:
+        at = int(np.argmin(np.linalg.norm(points[:-1] - origin, axis=1)))
+        return np.vstack([points[at:-1], points[:at + 1]])
+    if abs(along[0]) > 1e-3:
+        if abs(along[-1]) > 1e-3:
+            raise Unmodelled("outline off the path ends")
+        points = points[::-1]
+    return points
+
+
+def sweep_shape(data):
+    """A sweep as the outline carried along its path polyline, turning with the path (a moving frame)."""
+    profiles = data["profiles"]
+    if len(profiles) != 1 or profiles[0].get("face") or data.get("rail") or data.get("taper_deg") or data.get("twist_deg"):
+        raise Unmodelled("sweep settings")
+    if data.get("path") is None or data["path"].get("curves") is None or data["path"]["kind"] == "other":
+        raise Unmodelled("sweep path")
+    test2d, pts2d = profile_test(profiles[0])
+    origin, rot = frame_of(profiles[0]["frame"])
+    points = _path_points(data["path"], origin, rot[:, 2])
+    everything = points
+    segments = np.diff(points, axis=0)
+    lengths = np.linalg.norm(segments, axis=1)
+    keep = lengths > 1e-9
+    points, segments, lengths = points[:-1][keep], segments[keep], lengths[keep]
+    tangents = segments / lengths[:, None]
+    if data.get("orientation") == "parallel" and np.abs(np.diff(tangents, axis=0)).max(initial=0.0) > 1e-9:
+        raise Unmodelled("parallel sweep")
+    start_local = (points[0] - origin) @ rot[:, :2]
+    frames, x, y = [], rot[:, 0].copy(), rot[:, 1].copy()
+    for i, tangent in enumerate(tangents):
+        if i:
+            axis = np.cross(tangents[i - 1], tangent)
+            size = np.linalg.norm(axis)
+            if size > 1e-12:
+                angle = math.atan2(size, float(tangents[i - 1] @ tangent))
+                axis /= size
+                for vector in (x, y):
+                    vector[:] = (vector * math.cos(angle) + np.cross(axis, vector) * math.sin(angle)
+                                 + axis * (axis @ vector) * (1 - math.cos(angle)))
+        frames.append((x.copy(), y.copy()))
+    reach = float(np.max(np.linalg.norm(pts2d - start_local, axis=1)))
+
+    # Each segment owns the points between the bisector planes at its two ends (the first and last use the end planes).
+    ends = np.vstack([points, points[-1] + segments[keep][-1]])
+    planes = [tangents[0]] + [_unit(tangents[i - 1] + tangents[i]) for i in range(1, len(tangents))] + [tangents[-1]]
+
+    def test(p):
+        inside = np.zeros(len(p), bool)
+        for i, (a, tangent, (fx, fy)) in enumerate(zip(points, tangents, frames)):
+            d = p - a
+            t = d @ tangent
+            off = d - t[:, None] * tangent
+            owned = (d @ planes[i] >= 0) & ((p - ends[i + 1]) @ planes[i + 1] <= 0)
+            near = np.nonzero(owned & ((off ** 2).sum(axis=1) <= reach ** 2) & ~inside)[0]
+            if len(near):
+                inside[near] = test2d(off[near] @ fx + start_local[0], off[near] @ fy + start_local[1])
+        return inside
+
+    return Shape(test, np.min(everything, axis=0) - reach, np.max(everything, axis=0) + reach)
 
 
 def cylinder(origin, axis, radius, a, b):
@@ -609,6 +791,20 @@ def evaluate(capture):
             elif kind == "RevolveFeature":
                 shape = revolve_shape(data)
                 key = body_key(item, data, target)
+                bodies[key] = apply_op(bodies.get(key), data["operation"], shape)
+                features[item["index"]] = (key, data["operation"], shape)
+            elif kind == "LoftFeature":
+                shape = loft_shape(data)
+                key = body_key(item, data, target)
+                if data.get("target_box_before") is not None and bodies.get(key) is not None:
+                    before[item["index"]] = measure(bodies[key], 0.5)[0]
+                bodies[key] = apply_op(bodies.get(key), data["operation"], shape)
+                features[item["index"]] = (key, data["operation"], shape)
+            elif kind == "SweepFeature":
+                shape = sweep_shape(data)
+                key = body_key(item, data, target)
+                if data.get("target_box_before") is not None and bodies.get(key) is not None:
+                    before[item["index"]] = measure(bodies[key], 0.5)[0]
                 bodies[key] = apply_op(bodies.get(key), data["operation"], shape)
                 features[item["index"]] = (key, data["operation"], shape)
             elif kind == "HoleFeature":

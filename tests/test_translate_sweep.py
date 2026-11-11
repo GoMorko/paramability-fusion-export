@@ -1,0 +1,355 @@
+"""Sweep of one outline along a path: written as an extrude, a revolve or a sweep step; each case it cannot copy is left
+out with its own reason."""
+import copy
+import math
+import unittest
+
+from tests import context  # noqa: F401
+from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of, stopped
+
+from lib.params import size_table
+from lib.sketch_values.motion import Affine, Motion
+from lib.translator import paths, sweep, translate
+
+PIPE = "sweep_pipe"
+PLATE = "sweep_edges"
+PIPE_ITEM, PLATE_ITEM = 2, 3
+PIPE_KINDS = {"join": "add", "cut": "cut", "intersect": "intersect"}
+
+
+def sweep_of(capture, index):
+    return capture["items"][index]["data"]
+
+
+def edited(name, index, edit):
+    """The capture `name` with `edit(sweep data)` applied to its sweep at timeline `index`."""
+    capture = load_capture(name)
+    edit(sweep_of(capture, index))
+    return capture
+
+
+def on_plate(edit):
+    """Translation of the plate with its wire edited: the sweep is the second step, so a refusal is a gap."""
+    return translate(edited(PLATE, PLATE_ITEM, edit))
+
+
+def gap_reason(result):
+    gap = left_out(result, PLATE_ITEM)
+    assert gap is not None, "the sweep was copied"
+    return gap["reason"]
+
+
+def sized(capture, motion=None, ticked=None):
+    params = capture["parameters"]
+    names = ticked or [p["name"] for p in params["user"]]
+    table = size_table.build(params["user"], names, params["model"], "mm")
+    return translate(capture, size_table=table, motion=motion)
+
+
+def line(a, b):
+    return {"kind": "line", "start": list(a), "end": list(b), "opposed": False}
+
+
+def quarter(centre, start_dir, end_dir, radius):
+    def at(d):
+        return [centre[i] + radius * d[i] for i in range(3)]
+
+    size = math.hypot(*[start_dir[i] + end_dir[i] for i in range(3)])
+    mid = [(start_dir[i] + end_dir[i]) / size for i in range(3)]
+    a, b = start_dir, end_dir
+    normal = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+    return {"kind": "arc", "start": at(start_dir), "end": at(end_dir), "mid": at(mid), "center": list(centre),
+            "normal": normal, "radius": radius, "opposed": False}
+
+
+def pipe_along(curves):
+    """The pipe capture with another path and no measured volume (the new path has another length)."""
+    capture = edited(PIPE, PIPE_ITEM, lambda data: data["path"].update(curves=curves))
+    capture["items"][PIPE_ITEM]["target_after"]["volume_mm3"] = None
+    return capture
+
+
+class CopyTest(unittest.TestCase):
+    def test_a_straight_path_is_an_extrude_of_the_outline(self):
+        result = translate(load_capture("sweep_straight"))
+        self.assertIsNone(result.refusal)
+        (step,) = steps_of(result.recipe, "extrude")
+        self.assertEqual((step["combine"], step["extent"], step["distance"]), ("new", "oneSide", 40.0))
+        self.assertEqual(step["sketch"]["on"]["normal"], [0.0, 0.0, 1.0])
+        assert_schema_ok(self, result.recipe)
+
+    def test_a_straight_path_against_the_outline_normal_extrudes_the_other_way(self):
+        def turned(data):
+            data["profiles"][0]["frame"].update(y=[0, -1, 0], z=[0, 0, -1])
+        result = translate(edited("sweep_straight", 2, turned))
+        (step,) = steps_of(result.recipe, "extrude")
+        self.assertEqual((step["distance"], step["sketch"]["on"]["normal"]), (40.0, [0.0, 0.0, 1.0]))
+
+    def test_a_path_drawn_from_the_far_end_gives_the_same_sweep(self):
+        near, far = (translate(load_capture(name)).recipe["features"][0] for name in (PIPE, "sweep_far_end"))
+        self.assertEqual(far["path"], near["path"])
+        self.assertEqual(far["sketch"], near["sketch"])
+
+    def test_a_flat_chain_of_lines_and_an_arc_is_a_sweep_step(self):
+        result = translate(load_capture(PIPE))
+        assert_schema_ok(self, result.recipe)
+        (step,) = steps_of(result.recipe, "sweep")
+        self.assertEqual(step["combine"], "new")
+        self.assertEqual(step["sketch"]["outer"], {"kind": "circle", "center": [0.0, 0.0], "radius": 3.0})
+        self.assertEqual(step["path"]["kind"], "flat")
+        self.assertEqual([s["kind"] for s in step["path"]["segments"]], ["line", "arc", "line"])
+        self.assertEqual(step["path"]["segments"][2]["to"], [30.0, 40.0])
+        self.assertEqual(result.recipe["version"], 12)
+
+    def test_lines_joined_by_tangent_arcs_in_3d_are_a_corners_path(self):
+        curves = [line((0, 0, 0), (10, 0, 0)), quarter([10, 5, 0], [0, -1, 0], [1, 0, 0], 5),
+                  line((15, 5, 0), (15, 15, 0)), quarter([15, 15, 5], [0, 0, -1], [0, 1, 0], 5),
+                  line((15, 20, 5), (15, 20, 20))]
+        result = translate(pipe_along(curves))
+        assert_schema_ok(self, result.recipe)
+        (step,) = steps_of(result.recipe, "sweep")
+        self.assertEqual(step["path"], {"kind": "corners", "points": [[0.0, 0.0, 0.0], [15.0, 0.0, 0.0],
+                                                                      [15.0, 20.0, 0.0], [15.0, 20.0, 20.0]],
+                                        "bendRadius": 5.0})
+
+    def test_a_full_circle_is_a_full_turn_revolve(self):
+        result = translate(load_capture("sweep_ring"))
+        assert_schema_ok(self, result.recipe)
+        (step,) = steps_of(result.recipe, "revolve")
+        self.assertNotIn("angleDeg", step)
+        self.assertEqual(step["axis"]["point"], [-20.0, 0.0])
+        self.assertEqual(step["sketch"]["outer"]["kind"], "polygon")
+
+    def test_an_arc_is_a_revolve_that_turns_the_way_the_path_goes(self):
+        # The wire leaves along +x. An arc bending towards +y turns about +z, one bending towards -y about -z.
+        for side, axis in ((1, [0.0, 1.0]), (-1, [0.0, -1.0])):
+            curves = [quarter([0, 10 * side, 0], [0, -side, 0], [1, 0, 0], 10)]
+            result = translate(pipe_along(curves))
+            with self.subTest(side=side):
+                (step,) = steps_of(result.recipe, "revolve")
+                self.assertEqual((step["angleDeg"], step["axis"]["dir"]), (90.0, axis))
+                self.assertEqual(step["axis"]["point"], [10.0 * side, 0.0])
+                assert_schema_ok(self, result.recipe)
+
+    def test_every_operation_is_written_with_its_combine(self):
+        for operation, combine in PIPE_KINDS.items():
+            result = on_plate(lambda data, operation=operation: data.update(operation=operation))
+            with self.subTest(operation=operation):
+                self.assertEqual(steps_of(result.recipe, "sweep")[0]["combine"], combine)
+
+    def test_a_parallel_outline_is_copied_on_a_straight_path(self):
+        result = translate(edited("sweep_straight", 2, lambda data: data.update(orientation="parallel")))
+        self.assertEqual(len(steps_of(result.recipe, "extrude")), 1)
+
+    def moved_into_component(self, capture):
+        capture["target"]["component"] = {"token": "cTray", "name": "Tray", "root": False}
+        capture["target"]["placement"] = {"path": "Tray:1", "source": "transform2", "checked_points": 3, "uses": 1,
+                                          "linked": False, "frame": {"origin": [100, 50, 0], "x": [0, 1, 0],
+                                                                     "y": [-1, 0, 0], "z": [0, 0, 1]}}
+        for item in capture["items"]:
+            item["component"] = "cTray"
+        return steps_of(translate(capture).recipe, "sweep")[0]
+
+    def test_a_flat_sweep_moves_with_its_component_in_the_assembly(self):
+        step = self.moved_into_component(load_capture(PIPE))
+        self.assertEqual(step["path"]["on"]["origin"], [100.0, 50.0, 0.0])
+        self.assertEqual(step["path"]["on"]["xDir"], [0.0, 1.0, 0.0])
+        self.assertEqual(step["sketch"]["on"]["normal"], [0.0, 1.0, 0.0])
+
+    def test_the_corner_points_of_a_sweep_move_with_its_component_too(self):
+        curves = [line((0, 0, 0), (10, 0, 0)), quarter([10, 5, 0], [0, -1, 0], [1, 0, 0], 5),
+                  line((15, 5, 0), (15, 15, 0)), quarter([15, 15, 5], [0, 0, -1], [0, 1, 0], 5),
+                  line((15, 20, 5), (15, 20, 20))]
+        step = self.moved_into_component(pipe_along(curves))
+        self.assertEqual(step["path"]["points"], [[100.0, 50.0, 0.0], [100.0, 65.0, 0.0], [80.0, 65.0, 0.0],
+                                                  [80.0, 65.0, 20.0]])
+
+
+class EdgesPathTest(unittest.TestCase):
+    def test_a_path_of_body_edges_is_copied_and_cannot_be_repeated_by_a_pattern(self):
+        written = []
+
+        def recording(item, ctx):
+            written.append(sweep.handle(item, ctx))
+            return written[-1]
+
+        result = translate(load_capture(PLATE), {"SweepFeature": recording})
+        self.assertIsNone(left_out(result))
+        self.assertEqual([e.repeatable for e in written[0].entries], [False])
+        self.assertEqual(steps_of(result.recipe, "sweep")[0]["path"]["kind"], "flat")
+
+    def test_the_sizes_the_plate_reads_stay_free_with_a_warning(self):
+        result = sized(load_capture(PLATE), ticked=["plate_mm", "plate_w_mm"])
+        self.assertEqual([f["name"] for f in result.loose], ["plate_mm"])
+        self.assertEqual(result.fixed, [])
+
+    def test_a_wire_along_edges_after_a_step_that_is_left_out_is_left_out_too(self):
+        capture = load_capture(PLATE)
+        coil = {"index": 2, "name": "Coil1", "type": "CoilFeature", "suppressed": False, "health": "ok", "message": "",
+                "in_target_component": True, "bodies_after": [{"token": "t1", "name": "Body1"}], "data": {}}
+        capture["items"].insert(2, coil)
+        for position, item in enumerate(capture["items"]):
+            item["index"] = position
+        result = translate(capture)
+        self.assertEqual(left_out(result, 4)["name"], "Sweep1")
+        self.assertEqual(steps_of(result.recipe, "sweep"), [])
+
+
+class SizesTest(unittest.TestCase):
+    OUTLINE = Affine(0, {"wire_mm": 0.5}, "Sketch1")
+
+    def run_pipe(self, values):
+        return sized(load_capture(PIPE), Motion(values))
+
+    def test_the_outline_follows_its_size_and_the_path_sizes_are_left_out_with_a_reason(self):
+        result = self.run_pipe({"2/p0/l0/radius": self.OUTLINE})
+        (step,) = steps_of(result.recipe, "sweep")
+        self.assertEqual(step["sketch"]["outer"]["radius"], {"expr": "0.5 * wire_mm"})
+        self.assertEqual(sorted(result.recipe["sizes"]), ["wire_mm"])
+        self.assertEqual(sorted(d["name"] for d in result.dropped), ["bend_mm", "run_mm"])
+        self.assertEqual(result.fixed, [])
+
+    def test_the_path_sizes_of_a_straight_sweep_are_left_out_too(self):
+        width = Motion({"2/p0/l0/width": Affine(0, {"width_mm": 1.0}, "Sketch1")})
+        result = sized(load_capture("sweep_straight"), width)
+        self.assertEqual(sorted(result.recipe["sizes"]), ["width_mm"])
+        self.assertEqual([d["name"] for d in result.dropped], ["length_mm"])
+
+    def test_a_size_that_moves_the_outline_plane_away_from_the_fixed_path_is_marked(self):
+        result = self.run_pipe({"2/p0/l0/radius": self.OUTLINE, "2/p0/plane": Affine(-6, {"wire_mm": 1.0}, "Sketch1")})
+        self.assertEqual([f["name"] for f in result.loose], ["wire_mm"])
+
+    def test_a_size_that_also_drives_a_setting_the_copy_fixes_is_marked(self):
+        capture = load_capture("sweep_straight")
+        sweep_of(capture, 2)["params"] = {"taper_deg": {"name": "d1", "expression": "width_mm", "value": 0.0}}
+        motion = Motion({"2/p0/l0/width": Affine(0, {"width_mm": 1.0}, "Sketch1")})
+        result = sized(capture, motion, ticked=["width_mm"])
+        self.assertEqual([f["name"] for f in result.loose], ["width_mm"])
+        self.assertEqual(steps_of(result.recipe, "extrude")[0]["sketch"]["outer"]["width"], {"expr": "width_mm"})
+
+
+class BorrowedOutlineTest(unittest.TestCase):
+    def test_an_outline_from_another_component_is_copied_with_its_sizes_marked(self):
+        outline = Motion({"1/p0/l0/radius": Affine(0, {"rim_mm": 0.5}, "Rim")})
+        result = sized(load_capture("sweep_borrowed"), outline)
+        (step,) = steps_of(result.recipe, "sweep")
+        self.assertEqual(step["sketch"]["outer"]["radius"], {"expr": "0.5 * rim_mm"})
+        self.assertEqual([f["name"] for f in result.loose], ["rim_mm"])
+        assert_schema_ok(self, result.recipe)
+
+
+class VolumeTest(unittest.TestCase):
+    def test_a_new_body_with_the_wrong_volume_is_refused_for_each_kind_of_path(self):
+        for name in ("sweep_straight", PIPE, "sweep_ring"):
+            capture = load_capture(name)
+            capture["items"][2]["target_after"]["volume_mm3"] *= 1.2
+            with self.subTest(name):
+                self.assertEqual(stopped(translate(capture))["reason"], sweep.NOT_MATCHING)
+
+    def test_a_bent_path_off_the_centre_of_the_outline_is_not_checked(self):
+        def off_centre(data):
+            data["profiles"][0]["loops"][0]["curves"][0]["center"] = [1.0, 0.0]
+        capture = edited(PIPE, PIPE_ITEM, off_centre)
+        capture["items"][2]["target_after"]["volume_mm3"] *= 2
+        self.assertIsNone(translate(capture).refusal)
+
+    def test_a_volume_that_was_not_measured_is_not_checked(self):
+        capture = load_capture(PIPE)
+        capture["items"][2]["target_after"]["volume_mm3"] = None
+        self.assertIsNone(translate(capture).refusal)
+
+
+class RefusalTest(unittest.TestCase):
+    """Settings the copy does not follow leave the sweep out as a gap after the plate."""
+
+    def reasons(self, cases):
+        for label, edit, reason in cases:
+            with self.subTest(label):
+                self.assertEqual(gap_reason(on_plate(edit)), reason)
+
+    def test_what_makes_a_new_body_or_a_surface_is_not_copied(self):
+        self.reasons([
+            ("new component", lambda d: d.update(operation="newComponent"),
+             "Sweeps that make a new component are not copied."),
+            ("other operation", lambda d: d.update(operation="other"),
+             "This sweep combines with the part in a way that is not copied yet."),
+            ("surface", lambda d: d.update(solid=False), "Surface sweeps are not copied."),
+            ("solid unread", lambda d: d.update(solid=None), sweep.UNREADABLE),
+        ])
+
+    def test_outlines_that_are_not_one_sketch_outline(self):
+        self.reasons([
+            ("none", lambda d: d.update(profiles=[]), "This sweep has no sketch outline."),
+            ("several", lambda d: d["profiles"].append(copy.deepcopy(d["profiles"][0])), sweep.SEVERAL_OUTLINES),
+            ("a face", lambda d: d["profiles"][0].update(face=True), sweep.FACE_OUTLINE),
+            ("unread", lambda d: d.update(profiles=None), sweep.UNREADABLE),
+        ])
+
+    def test_twist_taper_rails_and_other_kinds(self):
+        self.reasons([
+            ("twist", lambda d: d.update(twist_deg=5.0), sweep.TWISTED),
+            ("taper", lambda d: d.update(taper_deg=2.0), sweep.TAPERED),
+            ("rail", lambda d: d.update(rail=copy.deepcopy(d["path"])), sweep.RAIL),
+            ("other orientation", lambda d: d.update(orientation="other"), sweep.OTHER_KIND),
+            ("orientation unread", lambda d: d.update(orientation=None), sweep.UNREADABLE),
+            ("twist unread", lambda d: d.update(twist_deg=None), sweep.UNREADABLE),
+        ])
+
+    def test_part_of_the_path(self):
+        self.reasons([
+            ("distance one", lambda d: d.update(distance_one=0.5), sweep.PART_OF_PATH),
+            ("distance two", lambda d: d.update(distance_two=0.25), sweep.PART_OF_PATH),
+            ("distance one unread", lambda d: d.update(distance_one=None), sweep.UNREADABLE),
+        ])
+
+    def test_a_parallel_outline_on_a_bent_path(self):
+        self.reasons([("parallel", lambda d: d.update(orientation="parallel"), sweep.KEEPS_DIRECTION)])
+
+    def test_paths_that_cannot_be_read(self):
+        self.reasons([
+            ("none", lambda d: d.update(path=None), sweep.PATH_UNREADABLE),
+            ("sketch and edges", lambda d: d["path"].update(kind="mixed"), sweep.MIXED_PATH),
+            ("an entity that is neither", lambda d: d["path"].update(kind="other"), paths.NOT_SKETCH),
+            ("curves unread", lambda d: d["path"].update(curves=None), paths.UNREADABLE),
+        ])
+
+    def test_a_path_of_another_component_is_not_copied(self):
+        result = on_plate(lambda d: d["path"].update(foreign=True))
+        self.assertIn("another component", gap_reason(result))
+
+    def test_the_gap_keeps_the_plate_and_its_settings(self):
+        result = on_plate(lambda d: d.update(twist_deg=5.0))
+        self.assertEqual(len(steps_of(result.recipe, "extrude")), 1)
+        self.assertEqual(steps_of(result.recipe, "sweep"), [])
+
+
+class PathShapeTest(unittest.TestCase):
+    """Paths the recipe cannot hold leave the sweep out as a gap after the block."""
+
+    def check(self, name, reason):
+        result = translate(load_capture(name))
+        self.assertEqual(left_out(result, 4)["reason"], reason)
+        self.assertEqual(len(steps_of(result.recipe, "extrude")), 1)
+
+    def test_a_closed_path_that_is_not_a_circle(self):
+        self.check("sweep_closed_outline", paths.CLOSED)
+
+    def test_a_sharp_corner(self):
+        self.check("sweep_sharp_corner", paths.SHARP_CORNER)
+
+    def test_an_outline_in_the_middle_of_the_path(self):
+        self.check("sweep_middle_outline", paths.BOTH_SIDES)
+
+    def test_an_outline_that_is_not_square_to_the_path(self):
+        self.check("sweep_tilted_outline", paths.NOT_SQUARE)
+
+    def test_a_path_that_bends_in_3d_with_a_free_curve(self):
+        self.check("sweep_bend_3d", paths.BENDS_3D)
+
+    def test_an_outline_wider_than_the_bend_is_refused(self):
+        capture = edited(PIPE, PIPE_ITEM, lambda d: d["profiles"][0]["loops"][0]["curves"][0].update(radius=12.0))
+        self.assertIn("bends in a radius", stopped(translate(capture))["reason"])
+
+
+if __name__ == "__main__":
+    unittest.main()
