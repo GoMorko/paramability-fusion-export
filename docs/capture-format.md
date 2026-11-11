@@ -174,7 +174,7 @@ ITEM:
 - `target_before`, `target_after`: the native target's box and volume (`{ "box": BOX, "volume_mm3": number }`, in the
   coordinates of section 1) at the marker before the item and at the marker after it, the same two reads that give
   `target_changed`. A side is `null` when the target did not exist there or could not be read. They are written for
-  every item, also one with no reader (`"data": {}`: a sweep, a loft), so a step the copy leaves out still says where
+  every item, also one with no reader (`"data": {}`: a coil), so a step the copy leaves out still says where
   it changed the part and by how much. A left out step (see `docs/recipe-gaps.md`) gets them as `bodyBefore` and
   `bodyAfter`, moved into the recipe's coordinates. The item level `target_box_before` of section 5 stays the
   box the handlers use.
@@ -1107,8 +1107,8 @@ tangent neighbour that is curved or not on the input plane (when the neighbours 
 face), and a measured volume change that is not
 `sum(areas) * abs(depth)` within 1 percent in the direction the sign of `depth` says.
 
-**SweepFeature** and **LoftFeature** (`lib/fusion_reader/read_sweep.py`; the types are listed in the step kind table
-without a handler, so a step of either type becomes a gap that holds this data):
+**SweepFeature** and **LoftFeature** (`lib/fusion_reader/read_sweep.py`; the handlers `lib/translator/sweep.py` and
+`lib/translator/loft.py` copy the simple cases, and a step they refuse becomes a gap that holds this data):
 
 ```json
 {
@@ -1127,7 +1127,7 @@ without a handler, so a step of either type becomes a gap that holds this data):
 - Sweep: `profiles` and `areas` are `SweepFeature.profile` read like an extrude's outline (section 4, a flat face
   included). `path` is `SweepFeature.path`; `rail` is `guideRail` read the same way, null when there is none.
   `orientation` is `perpendicular`, `parallel` or `other`. `distance_one` and `distance_two` are the unitless
-  `distanceOne` and `distanceTwo` (the share of the path the sweep covers), `taper_deg` and `twist_deg` are
+  `distanceOne` and `distanceTwo` (the share of the path the sweep covers; the translator takes 1 and 0 or null as the whole path), `taper_deg` and `twist_deg` are
   `taperAngle` and `twistAngle` in degrees. `scaling` (`profileScaling`) is `scale`, `stretch`, `none` or `other`.
   `extent` is the `extent` setting as text. Every one of these is null when the member cannot be read or does not
   exist in the running Fusion build, which holds for `extent` in particular. `params` follows the usual rules (the

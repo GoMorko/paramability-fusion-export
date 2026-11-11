@@ -113,6 +113,8 @@ except U1, L1 to L15, F1 and F2, which are described here.
       copied says what it is: section 9.
 - [ ] Compact export window and result window: section 7.2 ("The export window has no empty gaps", "Early warning",
       "Show in timeline", the result window) and the export pipeline entry under "Fusion calls to watch".
+- [ ] SW1 to SW14 and LF1 to LF5, sweeps and lofts: section 13 (the calls are under "Capture reader calls to watch
+      (sweep and loft)").
 - [ ] E1 to E6, Emboss on a flat face: section 10.
 - [ ] T1 to T5, thin walled extrudes of one closed outline (T5 is `%` with a negative left side): section "Thin
       extrudes".
@@ -838,6 +840,70 @@ Send `report.json` after each of these; the capture and `probe` are what is chec
       their normal look (they are rebuilt once at the end). Then pull the marker back by hand before exporting and check
       the same.
 
+## 13. Sweeps and lofts
+
+A sweep along a straight path is copied as an extrude, a sweep along one arc or a full circle as a revolve, and a sweep
+along a flat chain of lines, arcs and spline curves (or a 3D chain of lines and tangent arcs) as a sweep step. A loft
+between two closed outlines with free ends is copied as a loft with straight faces. Everything else is left out with a
+reason. "Matches" means the part Paramability builds agrees with the Fusion part. The calls behind these tests are
+listed under "Capture reader calls to watch (sweep and loft)". Send `report.json` from any sweep or loft that
+surprises.
+
+- [ ] **SW1 Straight sweep.** A rectangle swept along one sketch line, profile at the line start. The recipe holds an
+      `extrude`, the part matches, and a size behind the profile resizes it in Paramability. A size behind the length
+      of the line is marked "may give unexpected results" (the path is not followed yet) unless an extrude size
+      reads it too.
+- [ ] **SW2 Pipe with bends.** A circle swept along a flat path of lines joined by tangent arcs. The recipe holds a
+      `sweep` step with a flat path, the part matches, and `volume_after` minus `volume_before` is the circle area
+      times the path length. Sizes behind the path sketch are marked "may give unexpected results".
+- [ ] **SW3 Ring.** A triangle swept along a full sketch circle. The recipe holds a full turn `revolve` and the part
+      matches. `path.closed` is true.
+- [ ] **SW4 Profile at the far end.** Draw the path from the far end towards the profile. Note the order of
+      `path.curves` and the `opposed` flags. The copy turns the path round and the part matches.
+- [ ] **SW5 Profile in the middle.** Put the profile plane through the middle of the path. Note `distance_one` and
+      `distance_two` and what Fusion builds. The sweep is left out with "This sweep runs to both sides of its
+      outline".
+- [ ] **SW6 Sharp corner.** Two sketch lines at 90 degrees, no arc between them. The sweep is left out with "The path
+      of this sweep has a sharp corner". Note what Fusion builds (a mitre, a rounded corner or an error) and measure
+      the outer corner, so a later version can copy it.
+- [ ] **SW7 Taper and twist.** On a straight path, a 20 by 10 mm rectangle with taper 5 degrees, then with twist 90
+      degrees. Each is left out with its reason. Note `taper_deg` and `twist_deg` in degrees with the dialog's sign;
+      whether the far end of the rectangle is offset (both sides shrink by the same mm) or scaled (both shrink by the
+      same share); and which way the twist turns, seen along the path.
+- [ ] **SW8 Parallel orientation.** The SW2 path with orientation parallel is left out ("The outline keeps one
+      direction along a bent path"). On a straight path it is copied.
+- [ ] **SW9 Guide rail.** A sweep with a guide rail is left out ("Sweeps with a guide rail"). `rail` holds the rail
+      curves and `scaling` holds the dialog's choice.
+- [ ] **SW10 Path of edges.** Sweep a small circle along two edges of an extruded box. It is copied as measured, the
+      sizes behind the box are marked "may give unexpected results", and `path.edges` lists the two edges with
+      tokens. A pattern of that sweep is left out. Then do the same on an edge of another component: the sweep is
+      left out as a step in another component.
+- [ ] **SW11 Tilted profile.** A profile at 30 degrees to the path at its start. The sweep is left out ("The outline is
+      not square to the path at its start"). Note what Fusion builds.
+- [ ] **SW12 3D path.** A 3D sketch of three lines with sketch fillets at the two corners. The recipe holds a sweep
+      step with a 3D path with two bends and the part matches. With a spline or an arc that is not tangent to its
+      neighbours the sweep is left out ("bends in 3D in a way that is not copied yet").
+- [ ] **SW13 Space of the path curves.** In a design where the sweep's component is moved in the assembly, check that
+      `path.curves` and `check` (read from `PathEntity.curve`) agree in the component's frame, not the root frame.
+- [ ] **SW14 Round on a sweep end.** After SW2, add a fillet on an edge of the end cap. The fillet is copied as
+      measured, and every size written before it is marked "may give unexpected results", since a sweep step has no
+      faces that follow sizes yet. After SW1 (the extrude form) the fillet follows sizes like a round on an extrude.
+- [ ] **LF1 Two squares.** A loft from a 20 mm square to a 10 mm square, 30 mm apart, free ends. The recipe holds a
+      loft with `ruled` set and `volume_after` is the frustum volume (7000 mm3). Note whether Fusion builds straight
+      faces between the two outlines (a curved side would show in the volume).
+- [ ] **LF2 Circle to square.** A loft from a circle to a square. It is copied with a note that the outlines have
+      different shapes. Compare the part's volume in Paramability with Fusion's, and note how the corners are
+      paired.
+- [ ] **LF3 Three sections.** Left out with "Lofts through more than two outlines".
+- [ ] **LF4 Loft options.** One loft each with a tangent end, a point end, two rails, a centre line and Closed on.
+      Each is left out with its own reason, and `sections[].end`, `rails`, `centerline` and `closed` read as set.
+- [ ] **LF5 Tube loft.** Two rings (circle with a circle hole) of different sizes. The recipe holds a loft with one
+      hole key and the part matches. A ring and a plain circle are left out ("different numbers of openings").
+
+Members of the running Fusion build to note in the same exports: whether `SweepFeature.extent`, the guide surface
+sweep type and the loft end condition classes exist (an absent one reads as null or `other` and the step is left
+out).
+
 ## Thin extrudes
 
 A thin extrude of one closed outline is copied as an extrude with a wall. Send `report.json` from any thin extrude
@@ -1392,7 +1458,7 @@ Emboss tests of section 10 and read the capture in `report.json`.
 
 These members were written from the API reference and never run. A member that cannot be read, or that the running
 Fusion build does not have, gives `null` in the capture of the step, so a wrong guess shows up in `report.json` and
-the step stays a gap. Export a design with a sweep (straight path, a path of lines and arcs, a closed circle, a path
+the step is left out as a gap. Export a design with a sweep (straight path, a path of lines and arcs, a closed circle, a path
 of body edges, a guide rail) and one with a loft (two outlines, a point end, a tangent end, rails, a centre line,
 Closed on), and read the `data` of each step.
 

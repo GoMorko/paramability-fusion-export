@@ -155,8 +155,8 @@ for the sketches, and its `health` record says whether the design came back to i
 
 ### When a step cannot be copied
 
-Some steps cannot be copied yet: a sweep, a loft, an extrude with a taper on a face, and others (the limits below
-say which). What the add-in does then depends on the step.
+Some steps cannot be copied yet: a coil, a twisted sweep, an extrude with a taper on a face, and others (the limits
+below say which). What the add-in does then depends on the step.
 
 Most of the time the step is left out. The add-in goes on with the steps after it, writes the copy without the
 missing step, and keeps what it knew about that step in the file: its name and type, why it was left out, where it
@@ -167,7 +167,7 @@ the missing steps are added. If you connect an AI assistant to Paramability, it 
 The add-in itself has no AI in it.
 
 A step that picks edges or faces of a left out step is left out too, since in the copy those faces do not exist (a
-round on the edges of a sweep, for example). The add-in asks Fusion which step made the faces each later round,
+round on the edges of a coil, for example). The add-in asks Fusion which step made the faces each later round,
 chamfer or shell picks, and leaves out only the ones that pick faces of a missing step. When Fusion does not
 answer, every later step that picks edges or faces is left out. A pattern or mirror of a left out step is left out
 too, and so is a Combine whose tool body cannot be copied (the Combine is one missing step; the rest of the part is
@@ -321,9 +321,26 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   usual places, mirrors of faces, a chamfer with two different sizes whose sides could not be
   measured, a press pull (offset
   faces) of a curved face, of a face with a leaning or rounded side, or of two faces that meet, and every
-  step type not listed above (sweep, loft, coil, draft). A step of that kind in a tool body leaves the Combine that
+  step type not listed above (coil, draft). A step of that kind in a tool body leaves the Combine that
   takes the tool out of the copy, as one missing step. A Remove of another body, a Split Face (the solid stays the same, so picks on its faces may not follow) and steps of
   other bodies that are never joined to the picked body do not stop the copy.
+- A sweep is copied when its outline is one closed sketch outline (holes allowed) and its path starts at the outline,
+  square to it, and runs one way. A straight path becomes an extrude, one arc or a full circle becomes a revolve, and
+  a chain of lines, arcs and spline curves in one plane, or of lines joined by tangent arcs in 3D, becomes a sweep
+  step. A path of body edges is copied as measured, and such a step cannot be repeated by a pattern. The path is
+  written as measured: a size that moves the sketch of the path is marked "may give unexpected results". The outline
+  follows sizes like an extrude outline. These sweeps are left out of the copy: twist or taper, a guide rail,
+  parallel orientation on a bent path, several outlines at once, an outline that is a face of the part, a path of
+  sketch curves mixed with edges, a closed path other than one circle, a sharp corner in the path, a path that
+  crosses itself or bends tighter than the outline allows, a path in 3D with splines or arcs that are not tangent, an
+  outline in the middle of the path or not square to it, a sweep along only part of the path, a surface sweep and a
+  sweep that makes a new component. A new body must have the volume the outline and path give, or the sweep is left
+  out.
+- A loft is copied when it joins two closed sketch outlines with free ends and no rails or centre line. It is written
+  with straight faces between the outlines. Both outlines need the same number of holes, and their planes must not
+  cross. Outlines of different shapes are copied with a note, since Fusion may pair the corners differently. These
+  lofts are left out: three or more outlines, a point end, an outline that is a face of the part, tangent or direction
+  ends, rails, a centre line, a closed loft, a surface loft and a loft that makes a new component.
 - A Combine (join, cut or keep only the shared part) is copied with its tool bodies. A tool made only by steps that add
   material (a new body, then extrudes or revolves that join it) is written step by step, each with the Combine's
   operation. Any other tool becomes one tool step that holds all the steps that made the tool: its cuts, rounds,
@@ -331,7 +348,7 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   those steps are sizes of the part like any other, and a later round or chamfer on the result follows them. A tool the
   Combine keeps can serve a later Combine, which gets the tool with the steps added since. Tools made from tools are
   followed 3 levels deep. The export reads up to 120 steps and 32 tool bodies in all (a pattern of many copies counts
-  as one body). The message after the export names the step that stops a tool (for example "Sweep1 (sweep)" or "the
+  as one body). The message after the export names the step that stops a tool (for example "Coil1 (coil)" or "the
   tool body Body3 cannot be copied"), so you know what to change in Fusion. A tool step that starts from or reaches to a
   face of the part follows that face where the add-in can place it, and marks the sizes it cannot follow.
 - Copy Paste Body is copied by writing the steps of the source again, as the source stood at the paste. The pasted

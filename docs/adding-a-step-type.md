@@ -1,9 +1,9 @@
 # Adding a Fusion step type
 
 This guide is for a developer who wants the export to copy one more kind of Fusion timeline step (for example a
-modeled thread, a loft or a sweep). Read `docs/capture-format.md` sections 1 and 5 first. The Emboss
+modeled thread or a coil). Read `docs/capture-format.md` sections 1 and 5 first. The Emboss
 step (`read_emboss.py`, `emboss.py`, `tests/test_translate_emboss.py`) is a small worked example of every part below,
-and of a step that reuses another handler.
+and of a step that reuses another handler. The sweep handler (`sweep.py`, `paths.py`) is a second example of that.
 
 ## What a new step type touches
 
@@ -117,6 +117,15 @@ sketches. A value the other handler asks for under another path is mapped back w
 `values.handled(ctx, item, "depth", same_as="side_one.distance")`. A key that only the new step needs (a fixed direction of travel, for instance) goes into the other handler as
 an optional field of its data, and must not change what that handler writes without it.
 
+A sweep hands over in two ways (`sweep.py`). `paths.plan` orders the path and names it. A straight path builds the data
+of an extrude (`start` on the profile plane, one `side_one` distance as long as the path, no taper) and returns
+`extrude.handle(...)`, so the sweep gets the extrude's slab placer and later rounds follow sizes. One arc or a full
+circle builds the data of a revolve (the arc's axis, the arc's angle, the direction the start face looks) and returns
+`revolve.handle(...)`. Only a chain of lines, arcs and free curves, or a 3D chain with tangent arcs, is written as a
+`sweep` step of its own, with the path as measured. The handler checks every setting it does not follow (twist,
+taper, rail, part of the path, a path that is not square to the outline) before it hands over, and refuses with a
+plain reason.
+
 A step that takes sketch outlines checks each profile record with `loops.outline_refusal` (sketch text that could not
 be read, a flat face or an unknown entity is not an outline) and gets its loops from `loops.profile_loops`. Only the
 extrude takes a flat face as its outline, through `face_outline.prepare`, which marks the sizes the face may follow. Its reader
@@ -177,7 +186,7 @@ on its own (`lib/translator/tool_walk.py`) by the same item loop, in a child con
   bodies: `makes_bodies` on the step type) or moves them (`moves_bodies`) must say so, or the walk skips it when it
   names no body of its target.
 - A step type that cannot be copied inside a tool gives `unsupported` as usual, and the Combine becomes one gap whose
-  reason names it: "The tool body Body3 cannot be copied: Sweep1 (sweep): ...". The gaps inside the tool are dropped
+  reason names it: "The tool body Body3 cannot be copied: Coil1 (coil): ...". The gaps inside the tool are dropped
   with the failed tool. A tool that is written but has a gap is always a `toolBody` step, never written one by one
   onto the part (`combine._writes_flat`).
 
