@@ -1,11 +1,13 @@
 """The second reading pass: steps of a tool body that lives in another component (lib/fusion_reader/helper_pass.py)."""
 import json
 import unittest
+from types import SimpleNamespace
 
 from tests import context  # noqa: F401
 from tests.fakes import FakeOccurrence, FakeSolid, Vec, apply_matrix, turn_z
 from tests.test_capture_reader import Coll, FakeDesign, Obj, P, entry, extrude, feature, rect_profile, sketch_entry, body
 
+from lib.fusion_reader import helper_pass
 from lib.fusion_reader.capture import read_capture
 from lib.translator import tool_items
 
@@ -283,6 +285,31 @@ class PlanTest(unittest.TestCase):
         plan = tool_items.plan(items, ref("t"), max_depth=2)
         self.assertEqual(([s.record["token"] for s in plan.sources], [(i["index"], why) for i, why in plan.left]),
                          (["b2", "b3"], [(0, tool_items.TOO_DEEP)]))
+
+
+
+class BuiltByTest(unittest.TestCase):
+    def test_the_steps_behind_a_pasted_or_patterned_body_are_those_of_its_source_in_its_component(self):
+        copies = step(6, ["c0"], data={"source_bodies": [ref("b3")], "result_bodies": [ref("c0")]},
+                      type_="RectangularPatternFeature")
+        items = [step(0, ["b4"]), step(1, ["b4"], component="elsewhere"), step(2, ["b2"]),
+                 combine(3, ["b4"], target="b2"), paste(4, "b3", "b2"), combine(5, ["b3"]), copies, combine(7, ["c0"])]
+        self.assertEqual(tool_items.built_by(items, ref("b3"), items[5]), {0, 2, 3, 4})
+        self.assertEqual(tool_items.built_by(items, ref("c0"), items[7]), {6, 4, 3, 2})
+
+
+class HelperRoundsTest(unittest.TestCase):
+    def test_a_step_with_no_read_context_in_one_round_is_read_in_a_later_one(self):
+        timeline = SimpleNamespace(markerPosition=0, item=lambda index: index)
+        run = helper_pass._Pass(None, None, timeline, {}, {}, lambda entity: [entity], lambda hctx: [])
+        item = step(2, [], in_target_component=False)
+        first, second = {"name": "Body2"}, {"name": "Body5"}
+        self.assertEqual(run.job(item, [first]), (False, []))
+        run.contexts[id(second)] = SimpleNamespace(target_ref={"token": "b5"})
+        hctx, tokens = run.job(item, [first, second])
+        run.read({2: (item, hctx, tokens)})
+        self.assertEqual(item["helper_of"], "b5")
+        self.assertNotIn("helper_unread", item)
 
 
 if __name__ == "__main__":

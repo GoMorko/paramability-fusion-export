@@ -53,6 +53,8 @@ def _state_after(design, token):
 
 
 def _read_start(entity, item, hctx, readers, component_bodies):
+    # An earlier round may have found no context for the item; its data is read now.
+    item.pop("helper_unread", None)
     item["helper_of"] = hctx.target_ref["token"]
     bodies = geo.safe(lambda: component_bodies(hctx), None)
     if bodies is not None:

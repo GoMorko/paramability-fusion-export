@@ -26,7 +26,7 @@ from .body_scope import body_links, scope_inputs
 from .marker_roll import MarkerRoll
 from .part_names import tagged, unique_names
 from .pipeline import ProbeRun
-from .reach_pass import with_reach
+from .reach_pass import needs_reach, with_reach
 from .probe_flow import ProbeGroup, SizeProbe, covers_a_sketch, extra_size_params, kept_size_names
 from .recipe_export import PartInput, free_sizes, plan_parts_export, translate_capture
 from .size_offers import discovery_sizes, labels, probe_sizes
@@ -189,7 +189,7 @@ class _PartsPipeline:
                 continue
             motion = OPTIMISTIC if covers_a_sketch(capture) else None
             first = self._translation(index, motion)
-            if first is not None and first.gaps:
+            if needs_reach(first):
                 first = self._with_reach(index, first, motion)
             if first is None:
                 continue

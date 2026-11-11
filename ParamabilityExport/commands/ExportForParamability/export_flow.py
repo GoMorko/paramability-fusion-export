@@ -20,6 +20,7 @@ from ...lib.dialog_model.stop_warning import saved_message, status_text
 from ...lib.fusion_reader import design_info
 from ...lib.fusion_reader.capture import MarkerError, read_capture
 from ...lib.fusion_reader.probe_state import read_state
+from ...lib.fusion_reader.read_gap_reach import read_reach
 from ...lib.fusion_reader.read_geometry import ReadContext
 from ...lib.fusion_reader.rows import DesignParameterStore
 from ...lib.fusion_reader.step_export import export_body_step, resolve_body
@@ -86,7 +87,7 @@ class FusionPort:
         return _read_capture(self.design, self._current())
 
     def read_reach(self, capture, gaps):
-        return export_common.read_gap_reach(self.design, capture, gaps)
+        return read_reach(self.design, capture, gaps)
 
     def probe_reader(self):
         ctx = ReadContext(self.design, self._current())
@@ -128,7 +129,7 @@ class FusionPartsPort:
         return _read_capture(self.design, self._current(index))
 
     def read_reach(self, index, capture, gaps):
-        return export_common.read_gap_reach(self.design, capture, gaps)
+        return read_reach(self.design, capture, gaps)
 
     def probe_reader(self, index):
         ctx = ReadContext(self.design, self._current(index))

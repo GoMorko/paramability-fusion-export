@@ -26,6 +26,9 @@ RECIPE_VERSION = 12
 SELECTOR_VERSIONS = {"chain": 14, "faceEdges": 14}
 MAX_FEATURES = 400
 MAX_PATTERN_COPIES = 256
+# Recipes before version 15 take at most 64 copies per pattern count (both linear counts together for a grid).
+OLD_PATTERN_COPIES = 64
+WIDE_PATTERN_VERSION = 15
 MAX_PASSES = 70
 
 
@@ -67,6 +70,21 @@ def _copy_counts(step):
     second = _count_part(step.get("linear2", {}).get("count", 1))
     return [("%s * %s" % (first[0], second[0]), first[1] + second[1]),
             _count_part(step.get("polar", {}).get("count", 1))]
+
+
+def _counts_version(step, table):
+    """WIDE_PATTERN_VERSION for a pattern step whose copy counts pass OLD_PATTERN_COPIES, at the current values or
+    anywhere in the size ranges (a count that cannot be worked out counts as passing), else 0."""
+    if step.get("kind") != "pattern":
+        return 0
+    now = [number(step.get("linear", {}).get("count", 1)) * number(step.get("linear2", {}).get("count", 1)),
+           number(step.get("polar", {}).get("count", 1))]
+    for (formula, reads), copies in zip(_copy_counts(step), now):
+        if copies > OLD_PATTERN_COPIES:
+            return WIDE_PATTERN_VERSION
+        if reads and table is not None and not range_check.sweep(table, formula, reads).at_most(OLD_PATTERN_COPIES):
+            return WIDE_PATTERN_VERSION
+    return 0
 
 
 def _over_caps(recipe, ctx):
@@ -353,7 +371,8 @@ def _walk(capture, table, size_table, motion=None, cache=None):
 
     written = all_steps(ctx.steps)
     version = max([RECIPE_VERSION] + [step_kinds.recipe_kind(step["kind"]).version for step in written]
-                  + [SELECTOR_VERSIONS.get(key, 0) for step in written for key in (step.get("edges") or {})])
+                  + [SELECTOR_VERSIONS.get(key, 0) for step in written for key in (step.get("edges") or {})]
+                  + [_counts_version(step, ctx.table) for step in written])
     recipe = {"schema": "paramability.recipe", "version": version, "features": ctx.steps}
     over = _over_caps(recipe, ctx)
     if over:
@@ -363,7 +382,8 @@ def _walk(capture, table, size_table, motion=None, cache=None):
     recipe = place.place(recipe, move)
     _fix_long_formulas(recipe, ctx)
     if ctx.gaps:
-        problem = (wording.too_many_gaps_reason(gaps.MAX_GAPS) if len(ctx.gaps) > gaps.MAX_GAPS
+        result.over_gap_cap = len(ctx.gaps) > gaps.MAX_GAPS
+        problem = (wording.too_many_gaps_reason(gaps.MAX_GAPS) if result.over_gap_cap
                    else gaps.place_all(ctx.gaps, recipe["features"]))
         if problem:
             result.refusal = {"index": None, "name": "", "type": "", "reason": problem}

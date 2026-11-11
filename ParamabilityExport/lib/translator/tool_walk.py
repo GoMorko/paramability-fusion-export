@@ -165,7 +165,7 @@ def build(ctx, body, before, depth, place=0):
     walked = TranslateResult()
     if not walk.walk_items(child, walked):
         if walked.over_gap_cap:
-            return Refusal(walked.refusal["reason"], over_gap_cap=True)
+            return Refusal(walked.refusal["reason"], over_gap_cap=True, tool_steps=walked.items)
         stopped = next(item for item in chain if item["index"] == walked.refusal["index"])
         return cannot_copy(body, stopped, walked.refusal["reason"])
     if not child.steps:

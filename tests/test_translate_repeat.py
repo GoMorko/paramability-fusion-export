@@ -2,6 +2,7 @@ import copy
 import unittest
 
 from tests import context  # noqa: F401
+from tests.test_translate_copies import counted
 from tests.test_translate_sized import table_of
 from tests.translator_helpers import assert_schema_ok, edited, left_out, load_capture, steps_of, translate_fixture, verdict_of
 
@@ -333,6 +334,29 @@ class CopyCapTest(unittest.TestCase):
         result = self.nested(5)
         self.assertIsNotNone(left_out(result))
         self.assertEqual(left_out(result)["index"], 5)
+
+
+def _grid(capture, columns, rows):
+    pattern_data(capture).update(
+        quantity_one=columns, quantity_two=rows, direction_two=[0, 1, 0], distance_one=5.0, distance_two=5.0,
+        elements=[{"id": n + 1, "suppressed": False,
+                   "frame": {"origin": [5.0 * (n % columns), 5.0 * (n // columns), 0], "x": [1, 0, 0],
+                             "y": [0, 1, 0], "z": [0, 0, 1]}} for n in range(columns * rows)])
+
+
+class CountVersionTest(unittest.TestCase):
+    """Recipes before version 15 take at most 64 copies per pattern count."""
+
+    def test_a_pattern_of_more_than_64_copies_is_a_version_15_recipe(self):
+        for columns, rows, wide in ((64, 1, False), (65, 1, True), (8, 9, True)):
+            with self.subTest(columns=columns, rows=rows):
+                result = edited("rpattern_row", lambda capture: _grid(capture, columns, rows))
+                self.assertEqual(result.recipe["version"] >= 15, wide)
+                assert_schema_ok(self, result.recipe)
+
+    def test_a_count_whose_size_range_passes_64_copies_is_a_version_15_recipe(self):
+        capture, table = counted(ranges={"holes_count": (1, 80)})
+        self.assertEqual(translate(capture, size_table=table).recipe["version"], 15)
 
 
 if __name__ == "__main__":

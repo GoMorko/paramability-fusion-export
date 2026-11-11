@@ -115,7 +115,8 @@ it is saved as a fixed shape with the note "The list of steps left out could not
 
 A round, chamfer, shell or offset of faces picks its edges and faces with measured points (`near`). When the step that
 made those faces is missing from the copy, the kernel would take the nearest edge it finds and round the wrong one
-without a word. So the pipeline looks again when the first translation has gaps:
+without a word. So the pipeline looks again when the first translation has gaps, or stopped only because the part
+holds more gaps than it may (later picking steps count as gaps until the read clears them):
 
 1. `reach_pass.with_reach` asks Fusion (`read_gap_reach.read_reach`) which step made the faces each later picking step
    touches. It asks about the steps left out for their own reason, also inside tool bodies, and not about the steps

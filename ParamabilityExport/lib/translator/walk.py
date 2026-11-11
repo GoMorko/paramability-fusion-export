@@ -266,7 +266,10 @@ def walk_items(ctx, result):
         if isinstance(outcome, Refusal):
             if outcome.over_gap_cap:
                 result.over_gap_cap = True
-                return refuse(item, outcome.reason)
+                refuse(item, outcome.reason)
+                if outcome.tool_steps:
+                    result.items[-1]["tool_steps"] = outcome.tool_steps
+                return False
             if not leave_out(item, outcome.reason, outcome.depends_on):
                 return False
             continue

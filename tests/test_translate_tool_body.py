@@ -1,6 +1,8 @@
 """A Combine written as a step that builds its tool on its own (lib/translator/combine.py, tool_placer.py)."""
 import copy
+import importlib
 import unittest
+from unittest import mock
 from types import SimpleNamespace
 
 from tests import context  # noqa: F401
@@ -21,6 +23,8 @@ from lib.translator.slabs import Motion as CopyMotion, Slab
 from lib.translator.step_walk import all_steps
 from lib.translator.tool_placer import ToolPlacer
 from lib.translator.translate import _over_caps as over_caps
+
+translate_module = importlib.import_module("lib.translator.translate")
 from lib.translator.values import Quantity
 
 PLATE = {"token": "t1", "name": "Body1"}
@@ -407,6 +411,17 @@ class NestingCapTest(unittest.TestCase):
         ctx = Context({"target": PLATE, "items": []})
         self.assertIsNone(over_caps({"features": [nested(3)]}, ctx))
         self.assertIsNotNone(over_caps({"features": [nested(4)]}, ctx))
+
+
+    def test_a_tool_level_that_holding_or_gathering_tools_adds_leaves_the_combine_out(self):
+        # Tools kept where any of them reaches sit inside one more tool step, and a pattern of the whole body after a
+        # round gathers the body into one. With the limit one level lower, each of them passes it.
+        for name, limit in (("intersect_any", 1), ("pattern_target_finish", 0)):
+            with self.subTest(name), mock.patch.object(tool_walk, "MAX_DEPTH", limit), \
+                    mock.patch.object(translate_module, "MAX_TOOL_DEPTH", limit):
+                result = translate(load_capture(name))
+                self.assertIsNotNone(result.recipe)
+                self.assertEqual(left_out(result)["name"], "Combine1")
 
 
 class KeptToolTest(unittest.TestCase):

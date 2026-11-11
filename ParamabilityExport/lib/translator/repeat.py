@@ -25,7 +25,7 @@ from itertools import product
 
 from ..package.numbers import round9
 from ..params.expressions import ExpressionError, evaluate
-from . import follow, notes as wording, range_check, ref_motion, symmetric, tool_walk, values, vec
+from . import follow, notes as wording, range_check, ref_motion, symmetric, tool_items, tool_walk, values, vec
 from .vec import POINT_TOL
 from .step_kinds import FINISH, SOLID, recipe_kind
 from .follow import Motion
@@ -62,24 +62,22 @@ def _tools_of(item):
     return [tool for tool in tools if isinstance(tool, dict)] if isinstance(tools, list) else []
 
 
-def _built_by(ctx, body, before, depth=0):
-    """Timeline indexes of the items that built the tool `body` before `before`, with those that built the tools of a
-    Combine among them."""
-    found = set()
-    for item in tool_walk.chain_of(ctx, body, before):
-        found.add(item["index"])
-        if depth < tool_walk.MAX_DEPTH:
-            for tool in _tools_of(item):
-                found |= _built_by(ctx, tool, item["index"], depth + 1)
-    return found
+def _combines(ctx):
+    """`(item, [(tool name, indexes that built the tool)])` for each Combine of the timeline (`tool_items.built_by`).
+    It depends on the capture alone, so it is worked out once per translation."""
+    cache = ctx.cache.setdefault(__name__, {})
+    if "combines" not in cache:
+        cache["combines"] = [
+            (item, [(tool_walk.name_of(tool), tool_items.built_by(ctx.timeline, tool, item)) for tool in tools])
+            for item, tools in ((item, _tools_of(item)) for item in ctx.timeline) if tools]
+    return cache["combines"]
 
 
 def _written_combines(ctx):
-    """`(item, [(tool name, indexes that built the tool)])` for each Combine of this walk's body that wrote steps."""
-    for item in ctx.timeline:
-        tools = _tools_of(item)
-        if tools and ctx.steps_of(item["index"]) and ctx.is_target(item["data"].get("target")):
-            yield item, [(tool_walk.name_of(tool), _built_by(ctx, tool, item["index"])) for tool in tools]
+    """The `_combines` entries of the Combines of this walk's body that wrote steps."""
+    for item, tools in _combines(ctx):
+        if ctx.steps_of(item["index"]) and ctx.is_target(item["data"].get("target")):
+            yield item, tools
 
 
 def _combined_tools(indexes, ctx, what):

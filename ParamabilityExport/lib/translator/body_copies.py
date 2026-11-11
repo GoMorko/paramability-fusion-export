@@ -24,6 +24,7 @@ from .place import move_from_frame
 from .result import Refusal, StepResult, make_verdict
 from .slabs import Motion
 from .step_kinds import SOLID, recipe_kind
+from .step_walk import nesting
 from .tool_placer import ToolMaker, WrittenFor, wrap_body
 
 GRID_PATHS = ("quantity_one", "quantity_two", "distance_one", "distance_two")
@@ -218,12 +219,15 @@ def _adds_solid(ctx, step):
 
 
 def _own_steps(ctx, out, item):
-    """The ids to repeat for the walk's own body. Steps that only add can be repeated one by one; anything else must
-    be finished first, so the steps so far are gathered into one tool. So is a body with a step left out (a gap): a
-    step added there later is then repeated with the rest."""
+    """The ids to repeat for the walk's own body, or a Refusal. Steps that only add can be repeated one by one;
+    anything else must be finished first, so the steps so far are gathered into one tool. So is a body with a step
+    left out (a gap): a step added there later is then repeated with the rest. Gathering puts the steps one tool level
+    deeper, which must stay within the nesting the recipe allows."""
     if (not ctx.gaps and len(ctx.steps) <= repeat.MAX_REFERENCES
             and all(_adds_solid(ctx, step) for step in ctx.steps)):
         return [step["id"] for step in ctx.steps]
+    if ctx.depth + 1 + nesting(ctx.steps) > tool_walk.MAX_DEPTH:
+        return Refusal("The body %s is built from tools nested too deep to copy." % tool_walk.name_of(ctx.target))
     step_id = "%sbody_%s" % (ctx.id_prefix, item["index"])
     out.wraps_body = wrap_body(step_id, ctx.target.get("name"))
     return [step_id]
@@ -249,7 +253,10 @@ def write(ctx, combine_item, group, combine, number):
     out, walked, ids = StepResult(), [], []
     for place, source in enumerate(group.sources):
         if ctx.is_target(source):
-            ids.extend(_own_steps(ctx, out, combine_item))
+            own = _own_steps(ctx, out, combine_item)
+            if isinstance(own, Refusal):
+                return own
+            ids.extend(own)
             continue
         tool = tool_walk.build(ctx, source, group.item["index"], ctx.depth + 1,
                                "%s_%d_%d" % (combine_item["index"], number, place))

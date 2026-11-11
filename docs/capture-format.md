@@ -367,7 +367,8 @@ Which step made the faces a later step picks. It exists because a later round, c
 its edges and faces with measured points (`near`), and the capture does not say which step made a face (only `made_by`
 on face outlines, section 4). When a step is left out of the copy, a pick on its faces would land on some other edge of
 the copy. `lib/fusion_reader/read_gap_reach.py` reads the answer, and only when the first translation left a step out
-(`lib/export_plan/reach_pass.py`; the capture is then translated again with it):
+or stopped because the part holds more gaps than it may (`lib/export_plan/reach_pass.py`; the capture is then
+translated again with it, and the gap cap applies to that translation):
 
 ```json
 "reach": { "read": true, "gaps": [12], "makers": { "17": [12], "19": [12, 17] } }
@@ -380,8 +381,10 @@ or `{ "read": false, "error": "<reason>" }` when the read failed.
   faces of another gap (`cause: "picks"`) is not one of them; the read tests it as a picking step.
 - `makers` has one entry per later step that was tested: the key is the item `index`, the list holds the `index` of
   each candidate step that made, or may have made, a face the step picks. Candidates are the steps of `gaps`, the
-  steps that made the tool bodies of a Combine among them (reported under the Combine's index), and every later step
-  that picks geometry, without items that make no body (sketches, construction geometry). Only steps after the first
+  steps that built the bodies a step among them takes (the tools of a Combine, the source of a Paste, the source
+  bodies of a pattern, and the bodies behind those, by the same rules as the reading pass, `tool_items.built_by`;
+  reported under the index of that step of `gaps`), and every later step that picks geometry, without items that make
+  no body (sketches, construction geometry). Only steps after the first
   step of `gaps` are tested, and a step of `gaps` is not tested.
 - Which items pick geometry is decided by `translator.gaps.pick_records(item)`: the edge records of rounds and
   bevels, and face records with a token, a point or loops (shell and offset faces, the face inputs of a round). These
@@ -396,7 +399,7 @@ or `{ "read": false, "error": "<reason>" }` when the read failed.
   found by its entity token, or by `Component.findBRepUsingPoint` at the recorded point. A candidate counts as reached
   by every pick when its list is empty (a Move, a Combine, a draft may list none), shorter than right after the step,
   or cannot be read; so does every candidate when a pick cannot be found. More than 100 tested steps or 200 candidates
-  give `read: false`. The marker goes back to where it was at the end, with the same check as `read_capture`
+  give `read: false`, and so does any other failure of the read. The marker goes back to where it was at the end, with the same check as `read_capture`
   (`MarkerError` when it does not read there).
 - The translator (`gaps.picked_gaps`): a later step that picks faces of a left out step is left out too, with the gap
   in its `dependsOn`. A left out step that the read did not cover (not in `gaps` and not a tested step, for example
@@ -892,7 +895,10 @@ copied stops that walk, and the Combine is refused with the reason naming the to
 - Any other tool is written as one `toolBody` step per tool, whose `features` are the tool's steps and whose `combine`
   is the Combine's operation. Its steps are those of rounds, chamfers, cuts, holes, shells, a Combine of the tool
   itself, `move` steps, and a pasted or patterned body (the steps of the source written again).
-- Tool bodies nest 3 levels deep (`tool_walk.MAX_DEPTH`); deeper refuses.
+- Tool bodies nest 3 levels deep (`tool_walk.MAX_DEPTH`); deeper refuses the Combine. The level a tool step adds
+  around other tools counts where it is made: the tools of an intersect with the model `any` are walked one level
+  deeper, and a pattern of the whole body that gathers the body into one tool step refuses when that would pass the
+  limit.
 - An intersect with several tools has the model `every` (one `toolBody` per tool, each `intersect`) or `any` (one
   `intersect` step that holds the tools as inner steps, the first `new` and the rest `add`); `unknown` refuses.
 - A pattern or mirror of bodies that the Combine takes whole is written as a `pattern` or `mirror` step over the tool
@@ -945,7 +951,8 @@ The steps that made a foreign tool are read in a second pass (`lib/fusion_reader
 with the same feature readers and a `ReadContext` whose target is the tool body, so the tool component's own sketches,
 planes and faces are not `foreign` and every value is in that component's coordinates. Only the items that
 `translator/tool_items.py` picks are rolled to: the modeling steps before the Combine whose `bodies_after` list the tool
-and that sit in the tool's component. Tools of the target's own component are planned the same way: their items are
+and that sit in the tool's component (the component a foreign body names, else the one of the item that holds the
+body). Tools of the target's own component are planned the same way: their items are
 already read, and only `body_states` is added. The plan follows the bodies behind a tool: the source of a Paste
 (`sources`), the source bodies of a pattern or mirror of bodies (`source_bodies`) and the tools of a Combine that
 changed the tool. A body held by several items is followed up to the latest of them, so steps added to a kept tool
@@ -955,7 +962,8 @@ source depth 3 (`tool_items.MAX_DEPTH`). Each item of another component gets `he
 `bodies_before` of its component; their `in_target_component` stays false. An item past a limit keeps its data (empty
 for another component) and gets `helper_unread` with the limit as the reason; a body of another component past the
 tool limit has `place: { "error": reason }`. An item whose body or place could not be read keeps `data: {}` and gets
-`helper_unread` too. A Paste source or pattern source of another component carries `foreign`, `component`, `path` and
+`helper_unread` too, unless a later round finds a body it serves whose place can be read and reads its data. A Paste
+source or pattern source of another component carries `foreign`, `component`, `path` and
 `place` like a tool does (the place is read with the marker just before the item that holds it, slot `tool<n>.<plane>`
 with `n` its place in that item's list). The model parameters of the tool component and the components above it are
 added to `parameters.model` (names already listed win).
@@ -1320,7 +1328,8 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
 - The copy limits (`MAX_PATTERN_COPIES`, `MAX_FEATURES`, `MAX_NEAR_POINTS`) are checked at the current values; a pattern
   count that can pass its limit inside the size ranges (`range_check.sweep`) marks the sizes it reads.
 - The recipe is version 12, or the lowest version that holds its steps and selectors (13 with an `offsetFaces` step, 14
-  with a `chain` or `faceEdges` pick). With a size table it carries `sizesAsWritten: true` and `sizes`: the sizes that a written
+  with a `chain` or `faceEdges` pick, 15 with a tool step, a `move` step, or a pattern whose copy count passes 64: a
+  polar count or the two linear counts together, at the current values or anywhere in the size ranges). With a size table it carries `sizesAsWritten: true` and `sizes`: the sizes that a written
   formula reads, plus the sizes those formulas read. A ticked size that nothing reads is left out (see `dropped`).
   Without a table the recipe has no `sizes`, and no marker.
 

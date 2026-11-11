@@ -23,7 +23,7 @@ from .messages import (
 from .part_names import tagged
 
 MAX_RECIPE_BYTES = 8 * 1024 * 1024
-MAX_NOTES = 5  # the manifest limit; the last notes (not followed, not used) give way
+MAX_NOTES = 5  # the manifest limit; `_most_useful` picks which notes stay
 _TOO_LARGE = {"index": None, "name": "", "type": "", "reason": "The recipe is too large to open."}
 _NOT_WRITTEN = {"index": None, "name": "", "type": "", "reason": "The steps could not be written."}
 _GAPS_NOT_WRITTEN = {"index": None, "name": "", "type": "",
@@ -65,9 +65,13 @@ def _recipe_and_gaps(result):
     return data, gaps, None
 
 
-def _gap_notes(gaps):
-    """The two notes of a recipe that leaves steps out: how many and which, and what the part opens with."""
-    return [left_out_note([gap["name"] for gap in gaps]), ORIGINAL_KEPT_NOTE]
+def _most_useful(ranked):
+    """The notes of `[(rank, note)]` (in the order they are shown) that fit in MAX_NOTES: the lowest ranks stay, in
+    their order, and empty notes are dropped. The count of steps, the steps left out and the loose and fixed sizes
+    rank first, so that the notes about sizes that are not followed or not used give way first."""
+    present = [(rank, n, note) for n, (rank, note) in enumerate(ranked) if note]
+    kept = sorted(sorted(present)[:MAX_NOTES], key=lambda entry: entry[1])
+    return [note for _, _, note in kept]
 
 
 def _with_up_axis(capture, up_axis):
@@ -271,26 +275,22 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         first = recipe_note(len(result.recipe["features"]))
         if _uses(capture) > 1:
             first += " " + used_several_times_note(_uses(capture))
-        notes = [first] + (_gap_notes(result.gaps) if gaps_data is not None else [])
-        doubt = measuring_note(health)
-        if doubt:
-            notes.append(doubt)
-        if free:
-            notes.append(sizes_note(len(free)))
-        if all_loose:
-            notes.append(loose_note([f["name"] for f in all_loose]))
-        if all_fixed:
-            notes.append(fixed_note([f["name"] for f in all_fixed]))
+        gapped = gaps_data is not None
         not_followed = [d["name"] for d in dropped if d["used"]]
         unused = [d["name"] for d in dropped if not d["used"] and not d.get("tried")]
         unchanged = [d["name"] for d in dropped if not d["used"] and d.get("tried")]
-        if not_followed:
-            notes.append(_not_followed_note(not_followed))
-        if unchanged:
-            notes.append(unchanged_note(unchanged))
-        if unused:
-            notes.append(dropped_note(unused))
-        del notes[MAX_NOTES:]
+        notes = _most_useful([
+            (0, first),
+            (1, left_out_note([gap["name"] for gap in result.gaps]) if gapped else ""),
+            (4, ORIGINAL_KEPT_NOTE if gapped else ""),
+            (3, measuring_note(health)),
+            (5, sizes_note(len(free)) if free else ""),
+            (2, loose_note([f["name"] for f in all_loose]) if all_loose else ""),
+            (2, fixed_note([f["name"] for f in all_fixed]) if all_fixed else ""),
+            (6, _not_followed_note(not_followed) if not_followed else ""),
+            (7, unchanged_note(unchanged) if unchanged else ""),
+            (8, dropped_note(unused) if unused else ""),
+        ])
         manifest = build_recipe_manifest(
             title, writer, up_axis=up_axis, notes=notes, fixed=all_fixed, parameters=listed, loose=all_loose,
             gaps=GAPS_ENTRY if gaps_data is not None else None)
@@ -388,24 +388,21 @@ def _tagged_loose(recipes):
 
 
 def _parts_notes(parts, free, loose, fixed, health):
-    """The package notes of a several-body export, the most useful first (at most `MAX_NOTES`)."""
+    """The package notes of a several-body export, at most `MAX_NOTES` (`_most_useful`)."""
     recipes = sum(1 for p in parts if p.is_recipe)
-    notes = ["%d %s, %d %s." % (len(parts), "part" if len(parts) == 1 else "parts", len(free),
-                                "size" if len(free) == 1 else "sizes")]
+    first = "%d %s, %d %s." % (len(parts), "part" if len(parts) == 1 else "parts", len(free),
+                               "size" if len(free) == 1 else "sizes")
     left_out = [(p.given.name, len(p.gaps)) for p in parts if p.gaps]
-    if left_out:
-        notes += [left_out_parts_note(left_out), ORIGINAL_KEPT_PARTS_NOTE]
-    if recipes < len(parts):
-        names = [p.given.name for p in parts if not p.is_recipe]
-        notes.append(clip("Added as fixed shapes: %s." % ", ".join(names), MAX_NOTE))
-    doubt = measuring_note(health)
-    if doubt:
-        notes.append(doubt)
-    if loose:
-        notes.append(loose_note([f["name"] for f in loose]))
-    if fixed:
-        notes.append(fixed_note([f["name"] for f in fixed]))
-    return notes[:MAX_NOTES]
+    shapes = [p.given.name for p in parts if not p.is_recipe] if recipes < len(parts) else []
+    return _most_useful([
+        (0, first),
+        (1, left_out_parts_note(left_out) if left_out else ""),
+        (5, ORIGINAL_KEPT_PARTS_NOTE if left_out else ""),
+        (4, clip("Added as fixed shapes: %s." % ", ".join(shapes), MAX_NOTE) if shapes else ""),
+        (3, measuring_note(health)),
+        (2, loose_note([f["name"] for f in loose]) if loose else ""),
+        (2, fixed_note([f["name"] for f in fixed]) if fixed else ""),
+    ])
 
 
 def _part_record(part, loose):

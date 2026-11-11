@@ -4,8 +4,8 @@ A Combine of the exported body takes tool bodies, from its own component or anot
 made it are needed, and so are the steps behind it: the bodies a Paste or a body pattern copies (`sources`,
 `source_bodies`) and the tools of a Combine that changed the tool. The reader records every such body with its
 component (`foreign`, `component`) and reads the steps that made it: `body_states` for all of them, and the feature
-data too for steps of another component (`helper_of`). The same rules pick those items for the reader and for the
-translator.
+data too for steps of another component (`helper_of`). The same rules (`makers`, `built_by`) pick those items for the
+reader, for the translator's patterns of a Combine (`repeat.py`) and for the reach read (`read_gap_reach.py`).
 
 `plan` is a pure function of the items read so far. The reader calls it again after each round of reading, since the
 steps it reads name more source bodies. A body held by several items (a kept tool used again, a source pasted later)
@@ -122,9 +122,35 @@ class Plan:
     refused: list = field(default_factory=list)
 
 
-def _owner(anchor, record):
-    """The token of the component whose steps made `record`: the one it names, else the one of its anchor item."""
-    return component_token(record) if is_foreign_tool(record) else anchor.get("component") or ""
+def makers(items, record, anchor):
+    """The items before the `anchor` item (the Combine, Paste or pattern that holds `record`) that made or changed the
+    body `record`, in the component whose steps made it: the one a foreign record names, else the anchor's. When that
+    component cannot be read and the anchor sits in the exported body's component, items of other components do not
+    count."""
+    owner = component_token(record) if is_foreign_tool(record) else anchor.get("component") or ""
+    found = chain(items, record, anchor["index"], owner)
+    if owner or anchor.get("in_target_component") is False:
+        return found
+    return [item for item in found if item.get("in_target_component") is not False]
+
+
+def built_by(items, record, anchor, max_depth=MAX_DEPTH):
+    """Timeline indexes of every item that built the body `record` before `anchor`: its `makers`, and the makers of
+    the bodies those items take (a Combine's tools, a Paste's sources, a pattern's source bodies), `max_depth` bodies
+    deep at most."""
+    reached = {}  # item index -> the shallowest depth it was reached at
+
+    def follow(body, holder, depth):
+        for item in makers(items, body, holder):
+            if reached.get(item["index"], max_depth + 1) <= depth:
+                continue
+            reached[item["index"]] = depth
+            if depth < max_depth:
+                for child, _ in source_records(item):
+                    follow(child, item, depth + 1)
+
+    follow(record, anchor, 1)
+    return set(reached)
 
 
 def plan(items, target=None, max_items=MAX_ITEMS, max_tools=MAX_TOOLS, max_depth=MAX_DEPTH):
@@ -145,7 +171,7 @@ def plan(items, target=None, max_items=MAX_ITEMS, max_tools=MAX_TOOLS, max_depth
         record, anchor, number, depth = queue.pop(0)
         if target is not None and same_body(record, target):
             continue
-        steps = chain(items, record, anchor["index"], _owner(anchor, record))
+        steps = makers(items, record, anchor)
         served = next((indices for other, indices in visited if same_body(record, other)), None)
         if served is None:
             if depth > max_depth:

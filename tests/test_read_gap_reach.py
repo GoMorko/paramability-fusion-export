@@ -107,6 +107,19 @@ class ReachTest(unittest.TestCase):
         _, reach = self.read([items[0], items[1], item(3, "FilletFeature", edge_pick("floor_rim"))], gaps=(2,))
         self.assertNotIn(2, reach["makers"]["3"])
 
+    def test_a_pick_on_a_face_of_the_source_of_a_pasted_tool_is_reported_under_the_left_out_combine(self):
+        # Step 1 made the source body, step 2 pasted it, and the left out Combine at step 3 took the copy.
+        source, pasted = {"token": "src", "name": "Source"}, {"token": "copy", "name": "Copy"}
+        self.world.features[2] = FakeMadeFeature([FakeFace("pasted")])
+        self.world.features[3] = FakeMadeFeature([FakeFace("seam")])
+        self.world.features.append(FakeMadeFeature([]))
+        items = [dict(item(1), bodies_after=[source]),
+                 dict(item(2, "CopyPasteBody", {"sources": [source], "result_bodies": [pasted]}),
+                      bodies_after=[source, pasted]),
+                 item(3, "CombineFeature", {"tools": [pasted]}), item(4, "FilletFeature", edge_pick("top_wall"))]
+        _, reach = self.read(items, gaps=(3,))
+        self.assertIn(3, reach["makers"]["4"])
+
     def test_a_pick_that_cannot_be_found_counts_as_reached_by_every_earlier_candidate(self):
         _, reach = self.read([item(1), item(2), item(3, "FilletFeature", edge_pick("gone"))], gaps=(1, 2))
         self.assertEqual(reach["makers"], {"3": [1, 2]})

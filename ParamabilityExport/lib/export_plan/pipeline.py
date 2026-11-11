@@ -5,8 +5,9 @@ cannot follow is left free with a warning, and the ranges are the ones in the di
 
 Steps, in order: read the capture, translate once to learn which sizes the recipe keeps, run the sketch probe (it
 only recomputes), translate again with the motion it found, and assemble the package. The probe runs whenever a
-sketch can be followed. When the first translation leaves steps out, Fusion is asked which step made the faces each
-later step picks (`reach_pass`) before anything else, and the part is translated again with the answer.
+sketch can be followed. When the first translation leaves steps out, or stops because the part holds too many gaps,
+Fusion is asked which step made the faces each later step picks (`reach_pass`) before anything else, and the part is
+translated again with the answer.
 
 Fusion is reached only through the port the caller hands in (see `ExportPort`), so tests run the whole sequence with
 fakes. Parameters are changed by the probe and put back on every way out: when a step fails, when the person
@@ -25,7 +26,7 @@ from . import health as health_module
 from . import messages
 from .body_scope import body_links, scope_inputs
 from .marker_roll import MarkerRoll
-from .reach_pass import with_reach
+from .reach_pass import needs_reach, with_reach
 from .probe_flow import SizeProbe, covers_a_sketch, extra_size_params, kept_size_names, shadow_of
 from .recipe_export import free_sizes, plan_single_export, translate_capture
 from ..design_edit.restore import restore_parameters
@@ -313,7 +314,7 @@ class _Pipeline:
         first = self._translation(capture, first_motion)
         if first is None:
             return None
-        if first.gaps:
+        if needs_reach(first):
             capture = self.capture = with_reach(self.port.read_reach, capture, first, self.port.log)
             first = self._translation(capture, first_motion)
             if first is None:

@@ -2,13 +2,16 @@ import json
 import os
 import tempfile
 import unittest
+from types import SimpleNamespace
 
 from tests import context  # noqa: F401
 from tests.schema_check import check_recipe
 from tests.translator_helpers import load_capture
 
 from lib.export_plan import recipe_export
+from lib.export_plan.messages import fixed_note, loose_note
 from lib.export_plan.recipe_export import plan_single_export
+from lib.params import size_table
 from lib.package.manifest import validate_manifest
 
 
@@ -70,6 +73,26 @@ class PlanTest(unittest.TestCase):
         loose = {f["name"]: f["reason"] for f in manifest["loose"]}
         self.assertIn("below 1.01", loose["wall_mm"])
         self.assertEqual(report["sizes"]["loose"], manifest["loose"])
+
+    def test_with_steps_left_out_the_loose_and_fixed_size_notes_stay_within_the_note_cap(self):
+        capture = load_capture("filter_tray_sized")
+        capture["items"][2]["type"] = "SweepFeature"
+        params = capture["parameters"]
+        table = size_table.build(params["user"], ["wall_mm", "pipe_d_mm", "holes_count"], params["model"], "mm",
+                                 fixed={"pipe_d_mm": "it cannot follow"})
+        loose = [{"name": "wall_mm", "reason": "wall_mm may give unexpected results: x."}]
+        manifest, _, _ = plan_single_export(capture, self.step, "Tray", "w", "z", size_table=table, loose=loose)
+        self.assertEqual(manifest["gaps"], "gaps.json")
+        self.assertLessEqual(len(manifest["notes"]), recipe_export.MAX_NOTES)
+        self.assertIn(loose_note(["wall_mm"]), manifest["notes"])
+        self.assertIn(fixed_note(["pipe_d_mm"]), manifest["notes"])
+
+        parts = [SimpleNamespace(is_recipe=True, gaps=[{}], given=SimpleNamespace(name="Lid")),
+                 SimpleNamespace(is_recipe=False, gaps=[], given=SimpleNamespace(name="Base"))]
+        notes = recipe_export._parts_notes(parts, ["a"], [{"name": "a"}], [{"name": "b"}], None)
+        self.assertLessEqual(len(notes), recipe_export.MAX_NOTES)
+        self.assertIn(loose_note(["a"]), notes)
+        self.assertIn(fixed_note(["b"]), notes)
 
     def test_body_in_a_component_is_a_recipe_at_its_place(self):
         manifest, files, report = self.plan(load_capture("component_moved"))

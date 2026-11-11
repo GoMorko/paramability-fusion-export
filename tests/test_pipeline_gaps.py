@@ -1,5 +1,6 @@
 """An export whose translation leaves steps out: the package with a gaps file, the reach pass and the result window."""
 import contextlib
+import copy
 import json
 import tempfile
 import unittest
@@ -17,9 +18,10 @@ from lib.design_edit.errors import StepExportError
 from lib.dialog_model.result_rows import parts_result_view, result_view
 from lib.export_plan.parts_pipeline import run_parts_pipeline
 from lib.export_plan.pipeline import ExportRequest, run_pipeline
-from lib.export_plan.reach_pass import left_out_indexes
+from lib.export_plan.reach_pass import left_out_indexes, needs_reach
 from lib.fusion_reader.capture import MarkerError
 from lib.fusion_reader.read_gap_reach import read_reach
+from lib.translator import gaps as translator_gaps, translate
 from lib.translator.result import TranslateResult
 from lib.package import gaps_file
 from lib.package.caps import PackageCapError, check_package_caps
@@ -142,6 +144,20 @@ class GapPackageTest(unittest.TestCase):
         self.assertEqual([(g["name"], g["dependsOn"]) for g in result.report["gaps"]],
                          [("Shell1", []), ("Fillet1", ["gap_%d" % SHELL])])
 
+    def test_a_part_over_the_gap_cap_only_because_of_later_picks_is_read_and_translated_again(self):
+        # The cap is one gap: the fillet that may pick the left out shell is the second, until the reach clears it.
+        with mock.patch.object(translator_gaps, "MAX_GAPS", 1):
+            port = ReachPort(tray(), design=tray_design())
+            result = export(port)
+            parts = PartsPort([tray(name=("t2", "Lid"))], {0: {"read": True, "gaps": [SHELL],
+                                                               "makers": {str(FILLET): []}}})
+            with tempfile.TemporaryDirectory() as tmp:
+                parts_result = run_parts_pipeline(parts, request(), tmp)
+        self.assertEqual(port.asked, [([SHELL], False)])
+        self.assertEqual((result.report["outcome"], [g["name"] for g in result.report["gaps"]]), ("recipe", ["Shell1"]))
+        self.assertEqual(parts.asked, [(0, [SHELL])])
+        self.assertEqual([g["name"] for g in parts_result.report["parts"][0]["gaps"]], ["Shell1"])
+
     def test_a_reach_that_could_not_be_read_leaves_out_every_later_step_that_picks(self):
         port = ReachPort(tray(), reach={"read": False, "error": "no"})
         result = export(port)
@@ -208,6 +224,17 @@ class ReachPassTest(unittest.TestCase):
         combine = {"index": 6, "verdict": "translated", "tool_steps": [gap(5, "own"), gap(4, "picks")]}
         result = TranslateResult(recipe={}, items=[gap(2, "own"), gap(3, "picks"), combine])
         self.assertEqual(left_out_indexes(result), [2, 5])
+
+
+    def test_a_tool_body_stopped_at_the_gap_cap_still_names_its_own_gaps(self):
+        capture = load_capture("combine_tool_two_steps")
+        items = capture["items"]
+        items[5]["type"] = "SweepFeature"
+        items[6:] = [dict(copy.deepcopy(items[5]), index=6, name="Extrude4"), dict(items[6], index=7)]
+        with mock.patch.object(translator_gaps, "MAX_GAPS", 1):
+            result = translate(capture)
+        self.assertTrue(needs_reach(result))
+        self.assertEqual(left_out_indexes(result), [5])
 
 
 class ResultWindowTest(unittest.TestCase):

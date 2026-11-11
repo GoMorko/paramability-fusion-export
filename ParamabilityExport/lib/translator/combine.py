@@ -240,9 +240,11 @@ def handle(item, ctx):
     if isinstance(patterns, Refusal):
         return patterns
     patterns, left = patterns
+    # Tools kept where any of them reaches sit inside one more tool step (`_union_tool`), so they are a level deeper.
+    union = combine == "intersect" and model == "any" and len(left) > 1
     found = []
     for number, body in enumerate(left):
-        tool = tool_walk.build(ctx, body, item["index"], ctx.depth + 1, number)
+        tool = tool_walk.build(ctx, body, item["index"], ctx.depth + (2 if union else 1), number)
         if isinstance(tool, Refusal):
             return tool
         moved = tool_move(ctx, item, body) if tool_items.is_foreign_tool(body) else (None, None)
@@ -260,7 +262,7 @@ def handle(item, ctx):
                        "copied exactly.")
     if flat:
         out = _flat(ctx, found, combine)
-    elif combine == "intersect" and model == "any" and len(found) > 1:
+    elif union:
         out = _union_tool(ctx, item, found)
     else:
         out = _tool_steps(found, combine)
