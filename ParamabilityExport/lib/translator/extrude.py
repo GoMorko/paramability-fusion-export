@@ -228,7 +228,8 @@ def _plan(item, data, frame, shift, combine, ctx, plane_q):
     """The sides to extrude, as dicts {extent, sign, distance, taper}; or a Refusal.
 
     `sign` is the travel direction relative to the sketch normal. extent is oneSide, symmetric or through. A distance
-    side that carries `direction` (+1 or -1 along the sketch normal) travels that way instead of the measured end.
+    side that carries `direction` (+1 or -1 along the sketch normal) travels that way instead of the measured end. One
+    that carries `quantity` (a `values.Quantity`) writes that for its distance instead of a parameter's.
     """
     extent_type = data.get("extent_type", "one")
     if extent_type not in ("one", "two", "symmetric"):
@@ -256,7 +257,7 @@ def _plan(item, data, frame, shift, combine, ctx, plane_q):
             if sign is None:
                 sign = _choose_sign(ctx, _sign_of(raw), end, abs(raw), other)
             return {"extent": "oneSide", "sign": sign, "distance": abs(raw), "taper": taper, "taper_q": taper_q,
-                    "q": _distance_quantity(ctx, item, which + ".distance", raw)}
+                    "q": side.get("quantity") or _distance_quantity(ctx, item, which + ".distance", raw)}
         if kind in ("throughAll", "all"):
             if taper:
                 return Refusal("A tapered extrude through all is not copied.")

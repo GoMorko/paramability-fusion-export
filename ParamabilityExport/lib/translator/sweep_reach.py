@@ -46,11 +46,17 @@ def _corners(loop, env):
     return [[cx + c * x - s * y, cy + s * x + c * y] for x in (-half_w, half_w) for y in (-half_h, half_h)]
 
 
-def _reach(loop, env, start):
+def reach_of(loop, env, start, across=None):
     """How far a written loop reaches from `start` (2D, the outline's frame): the loop's farthest point, or for a
-    loop of lines, arcs and splines its farthest end or through point."""
+    loop of lines, arcs and splines its farthest end or through point. With `across` (a 2D unit direction) only the
+    reach along the direction square to it counts: a flat path bends in the plane square to `across`, so the outline
+    reaches toward a bend's centre only that way."""
     def away(point):
-        return math.dist(point, start)
+        d = [point[0] - start[0], point[1] - start[1]]
+        if across is not None:
+            along = d[0] * across[0] + d[1] * across[1]
+            d = [d[0] - along * across[0], d[1] - along * across[1]]
+        return math.hypot(d[0], d[1])
 
     kind = loop["kind"]
     if kind in ("circle", "ellipse"):
@@ -76,7 +82,7 @@ def outgrown_reads(table, loop, start, limit):
         return ()
     try:
         for setting in range_check.corners(table, reads):
-            if _reach(loop, range_check.size_env(table, setting), start) >= limit * REACH_SHARE:
+            if reach_of(loop, range_check.size_env(table, setting), start) >= limit * REACH_SHARE:
                 return reads
     except (ExpressionError, KeyError, TypeError, ValueError, ZeroDivisionError):
         return reads

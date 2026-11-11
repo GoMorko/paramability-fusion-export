@@ -1,9 +1,10 @@
 """What to read from Fusion and which size settings to try. Pure: no Fusion imports.
 
 `scan` finds the sketches whose numbers the probe can follow ("covered" ones): every capture record that names them
-is a profile, a hole point set or a revolve axis line that the reader gave tokens for. Which records a step type
-carries comes from the step kind table (`translator/step_kinds.py`, `sketches`). `refs` finds the measured
-references of other components (a plane, axis, direction or point a step uses) that the probe reads again at every
+is a profile, a hole point set, a revolve axis line or a sweep path of lines and arcs that the reader gave tokens
+for. Which records a step type carries comes from the step kind table (`translator/step_kinds.py`, `sketches`).
+`refs` finds the measured references of other components (a plane, axis, direction or point a step uses) that the
+probe reads again at every
 state. `request` is what the reader reads per state, `kept_sizes` the sizes worth probing, `probe_rows` the size
 settings to try.
 
@@ -30,7 +31,7 @@ from ..params.size_table import DERIVED, FREE
 from ..translator.loops import profile_loops
 from ..translator.result import Refusal
 from ..translator.sizes import probed_sizes
-from ..translator.step_kinds import AXIS, HOLE_POINTS, PROFILES, step_type
+from ..translator.step_kinds import AXIS, HOLE_POINTS, PATH, PROFILES, step_type
 
 MAX_PROBE_ROWS = 64
 # How far from its value a size is first tried, as a share of the value, below and above.
@@ -49,10 +50,12 @@ _SAME = 1e-9
 # Added to the progress line of a row that tries again nearer after a value that did not build.
 RETRY_NOTE = ". The last value did not rebuild, so this one is nearer."
 _CURVES = ("line", "arc", "circle", "ellipse")
+_PATH_CURVES = ("line", "arc", "circle")
 
 
 class Scan:
-    """`targets`: the covered records (dicts with `kind` "profile", "hole" or "axis", `item` and what the fit reads).
+    """`targets`: the covered records (dicts with `kind` "profile", "hole", "axis" or "path", `item` and what the fit
+    reads).
     `covered`: sketch token to name ("" when the record has none). `uncovered`: tokens of sketches that some record
     uses in a way the probe cannot follow. `named`: the name of every sketch a record names, covered or not, by token
     (a sketch no record gives a name for is missing). `native`: tokens of the covered sketches of tool bodies from other
@@ -140,6 +143,29 @@ def _scan_profiles(out, index, data):
                             "reference": profile.get("reference") or {}})
 
 
+def _path_ok(path):
+    """True when every curve of a sweep path is a sketch line, arc or circle of one sketch the probe can read again:
+    a token, the curve in the sketch's own plane (`flat`), and the sketch's frame."""
+    curves = path.get("curves")
+    if (path.get("kind") != "sketch" or path.get("foreign") or path.get("truncated") or not path.get("sketch_token")
+            or not isinstance(path.get("frame"), dict) or not isinstance(curves, list) or not curves):
+        return False
+    return all(isinstance(c, dict) and c.get("kind") in _PATH_CURVES and c.get("entity") and isinstance(
+        c.get("flat"), dict) and c["flat"].get("kind") == c["kind"] for c in curves)
+
+
+def _scan_path(out, index, data):
+    """A sweep path of lines and arcs. A path with a free curve, or of body edges, is not covered and leaves its
+    sketch as it is: the translator writes such a path as measured."""
+    path = data.get("path")
+    if not isinstance(path, dict) or not _path_ok(path):
+        return
+    token = path["sketch_token"]
+    _cover(out, token, path.get("sketch"))
+    out.targets.append({"kind": "path", "item": index, "path": path, "sketch_token": token,
+                        "sketch": path.get("sketch") or "", "reference": path.get("reference") or {}})
+
+
 def _scan_axis(out, index, data):
     axis = data.get("axis")
     if not isinstance(axis, dict) or "entity" not in axis:
@@ -169,7 +195,7 @@ def _scan_hole(out, index, data):
                         "positions": positions, "point_tokens": points})
 
 
-_SCANNERS = {PROFILES: _scan_profiles, AXIS: _scan_axis, HOLE_POINTS: _scan_hole}
+_SCANNERS = {PROFILES: _scan_profiles, AXIS: _scan_axis, HOLE_POINTS: _scan_hole, PATH: _scan_path}
 
 
 # ---- measured references ---------------------------------------------------------------------------------------
@@ -224,8 +250,10 @@ def request(capture, table, covered=None, wanted=None):
     `covered` limits the sketches to these tokens (the ones whose first read matched the capture). `wanted` limits the
     references to these keys.
     `{ "sketches": [token], "points": [token], "lines": [token], "params": [Fusion name], "target": True,
-       "refs": { key: { "token", "type", "path", "shape" } } }`; `refs` is left out when empty. `native` lists the sketches of
-    tool bodies from other components, and is left out when there are none.
+       "curves": { sketch token: [curve token] },
+       "refs": { key: { "token", "type", "path", "shape" } } }`; `curves` lists the sketch curves of sweep paths to read
+       (left out when empty), `refs` is left out when empty. `native` lists the sketches of tool bodies from other
+       components, and is left out when there are none.
     """
     found = scan(capture)
     tokens = [t for t in found.covered if covered is None or t in covered]
@@ -234,7 +262,7 @@ def request(capture, table, covered=None, wanted=None):
                 for r in refs(capture) if r["shape"] and (wanted is None or r["key"] in wanted)}
     if not tokens and not followed:
         return None
-    points, lines = [], []
+    points, lines, curves = [], [], {}
     for target in found.targets:
         if target["sketch_token"] not in tokens:
             continue
@@ -242,10 +270,14 @@ def request(capture, table, covered=None, wanted=None):
             points.extend(target["point_tokens"])
         elif target["kind"] == "axis":
             lines.append(target["entity"])
+        elif target["kind"] == "path":
+            curves.setdefault(target["sketch_token"], []).extend(c["entity"] for c in target["path"]["curves"])
     names = [e.name for e in table.entries if e.state in (FREE, DERIVED)]
     names += [m["name"] for m in _numeric_model(table)]
     out = {"sketches": tokens, "points": list(dict.fromkeys(points)), "lines": list(dict.fromkeys(lines)),
            "params": list(dict.fromkeys(names)), "target": True}
+    if curves:
+        out["curves"] = {t: list(dict.fromkeys(names)) for t, names in curves.items()}
     native = [t for t in tokens if t in found.native]
     if native:
         out["native"] = native

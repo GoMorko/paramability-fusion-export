@@ -22,6 +22,7 @@ UNREAD = "unread"       # an item whose Fusion entity could not be read (type "n
 PROFILES = "profiles"   # data.profiles: sketch outlines
 AXIS = "axis"           # data.axis: a sketch line used as a revolve axis
 HOLE_POINTS = "hole"    # data.positions with point_tokens: hole centres on a sketch
+PATH = "path"           # data.path: the curves of one sketch a sweep follows
 
 # How a pattern or mirror treats a recipe step it repeats.
 SOLID = "solid"         # repeated by the pattern or mirror step itself (`of`)
@@ -38,7 +39,7 @@ class StepType:
     reader: the `lib/fusion_reader` module whose `READERS` dict gives its (before, after) reader pair, or None.
     handler: "module:function" in `lib/translator` that copies it (`handle(item, ctx) -> StepResult | Refusal`),
       or None when the recipe has no step for it.
-    sketches: the sketch records it carries that the size probe follows (PROFILES, AXIS, HOLE_POINTS). A sketch
+    sketches: the sketch records it carries that the size probe follows (PROFILES, AXIS, HOLE_POINTS, PATH). A sketch
       token anywhere else in its data leaves that sketch unfollowed.
     unsupported: for a modeling type without a handler, the plain reason the copy stops at it.
     splits_faces: it cuts faces of a body without changing its solid, so it is skipped when the capture shows the
@@ -105,7 +106,7 @@ STEP_TYPES = (
     StepType("CopyPasteBody", "pasted body", reader="read_paste", handler="paste:handle", makes_bodies=True),
     StepType("MoveFeature", "move", reader="read_move", handler="move:handle", moves_bodies=True),
     StepType("EmbossFeature", "emboss", reader="read_emboss", handler="emboss:handle", sketches=(PROFILES,)),
-    StepType("SweepFeature", "sweep", reader="read_sweep", handler="sweep:handle", sketches=(PROFILES,)),
+    StepType("SweepFeature", "sweep", reader="read_sweep", handler="sweep:handle", sketches=(PROFILES, PATH)),
     StepType("LoftFeature", "loft", reader="read_sweep", handler="loft:handle", sketches=(PROFILES,)),
     StepType("Sketch", "sketch", role=SKETCH),
     StepType("ConstructionPlane", "construction plane", role=SKETCH),

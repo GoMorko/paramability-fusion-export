@@ -89,10 +89,20 @@ def holding_ranges(table, rules, tol):
     no shorter ranges make them hold (they fail at the current values, a range would shrink to its value, or every size
     read has a typed range)."""
     reads = list(dict.fromkeys(r for value, _ in rules for r in value.reads))
+    return holding_ranges_where(table, reads, lambda bounds, only=None: _holds(table, rules, bounds, tol, only))
+
+
+def holding_ranges_where(table, reads, holds, relax=False):
+    """`holding_ranges` for a rule that is a test, not a sized value: `holds(bounds, only=None)` says whether it holds
+    at the settings of `bounds` ({recipe size name: (low, high)}, `range_check.corners` for the settings), or at the
+    one end `only` ((size, 0 for its min or 1 for its max), the other sizes at their value now). `reads` are the
+    Fusion names of the sizes the rule depends on. With `relax`, a size that keeps its whole range while the others
+    stay cut is given it back: the joint cut shortens every size by the same share, also those the rule does not
+    fail for."""
     sized = [(name, table.size_name(name)) for name in reads]
     sized = [(name, s) for name, s in sized if s in table.sizes and "min" in table.sizes[s]]
     bounds = {s: (table.sizes[s]["min"], table.sizes[s]["max"]) for _, s in sized}
-    if _holds(table, rules, bounds, tol):
+    if holds(bounds):
         return {}
     free = [(name, s) for name, s in sized if not table.typed_range(name)]
     if not free:
@@ -107,22 +117,26 @@ def holding_ranges(table, rules, tol):
         return out
 
     names = [s for _, s in free]
-    if not _holds(table, rules, toward(bounds, names, 0.0, 0.0), tol):
+    if not holds(toward(bounds, names, 0.0, 0.0)):
         return None
     # Each size alone first, so a size whose own ends hold keeps them; then all together for the joint settings.
     limits = dict(bounds)
     for s in names:
-        t_high = range_check.largest_share(lambda t: _holds(table, rules, toward(limits, [s], 1.0, t), tol, (s, 1)))
-        t_low = range_check.largest_share(lambda t: _holds(table, rules, toward(limits, [s], t, 1.0), tol, (s, 0)))
+        t_high = range_check.largest_share(lambda t: holds(toward(limits, [s], 1.0, t), (s, 1)))
+        t_low = range_check.largest_share(lambda t: holds(toward(limits, [s], t, 1.0), (s, 0)))
         limits = toward(limits, [s], t_low, t_high)
-    t_high = range_check.largest_share(lambda t: _holds(table, rules, toward(limits, names, 1.0, t), tol))
-    t_low = range_check.largest_share(lambda t: _holds(table, rules, toward(limits, names, t, t_high), tol))
+    t_high = range_check.largest_share(lambda t: holds(toward(limits, names, 1.0, t)))
+    t_low = range_check.largest_share(lambda t: holds(toward(limits, names, t, t_high)))
     exact = toward(limits, names, t_low, t_high)
+    if relax:
+        for s in names:
+            if exact[s] != bounds[s] and holds(dict(exact, **{s: bounds[s]})):
+                exact[s] = bounds[s]
     tidy = dict(exact)
     for _, s in free:
         size, (lo, hi) = table.sizes[s], exact[s]
         tidy[s] = (min(_tidy(size, lo, True), size["value"]), max(_tidy(size, hi, False), size["value"]))
-    chosen = tidy if _holds(table, rules, tidy, tol) else exact
+    chosen = tidy if holds(tidy) else exact
     if any(chosen[s][1] - chosen[s][0] <= 1e-9 for _, s in free):
         return None
     return {name: chosen[s] for name, s in free if chosen[s] != bounds[s]}

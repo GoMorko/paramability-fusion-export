@@ -4,6 +4,7 @@ import copy
 import math
 import types
 import unittest
+import unittest.mock
 
 from tests import context  # noqa: F401
 from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of, stopped, verdict_of
@@ -689,6 +690,207 @@ class ClosedTest(unittest.TestCase):
             for name in (RIM, "sweep_ring"):
                 with self.subTest(name, edit=edit):
                     self.assertEqual(stopped(translate(edited_after(load_capture(name), **edit)))["reason"], reason)
+
+
+K = math.sqrt(0.5)
+
+
+def path_values(item, curves):
+    """The motion values the probe finds for a path: `curves` maps a curve number to `{field: Affine}`."""
+    return {"%d/path/c%d/%s" % (item, n, field): value for n, found in curves.items() for field, value in found.items()}
+
+
+def sketch_motion_of(sketch, values):
+    return {key: Affine(v.const, v.terms, sketch) for key, v in values.items()}
+
+
+def bend_values(sketch="Sketch2"):
+    """The pipe path when `bend_mm` sets the radius of its arc: the arc grows toward +x and +y from its start, and the
+    last line moves with its end; `run_mm` sets the length of that last line."""
+    bend = {"bend_mm": 1.0}
+    return sketch_motion_of(sketch, path_values(PIPE_ITEM, {
+        1: {"mid.0": Affine(20, {"bend_mm": K}), "mid.1": Affine(0, {"bend_mm": 1 - K}), "center.1": Affine(0, bend),
+            "end.0": Affine(20, bend), "end.1": Affine(0, bend), "radius": Affine(0, bend)},
+        2: {"start.0": Affine(20, bend), "start.1": Affine(0, bend), "end.0": Affine(20, bend),
+            "end.1": Affine(0, {"bend_mm": 1.0, "run_mm": 1.0})}}))
+
+
+def followed(values, ticked=("run_mm", "bend_mm"), ranges=None, name=PIPE, outline=None):
+    """The pipe translated with its path measured (`values`) and the outline's own values."""
+    motion = Motion(dict(values, **(outline or {})), curves={"%d/path" % PIPE_ITEM, "%d/p0" % PIPE_ITEM})
+    return sized(load_capture(name), motion, list(ticked), ranges)
+
+
+class PathFollowTest(unittest.TestCase):
+    """A path the probe measured is written as formulas over the sizes."""
+
+    def test_a_size_behind_the_path_length_becomes_a_formula_and_is_not_marked(self):
+        values = sketch_motion_of("Sketch2", path_values(PIPE_ITEM, {2: {"end.1": Affine(10, {"run_mm": 1.0})}}))
+        result = followed(values)
+        segments = only_sweep(self, result)["path"]["segments"]
+        self.assertEqual(segments[2]["to"], [30.0, {"expr": "run_mm + 10"}])
+        self.assertEqual(segments[0], {"kind": "line", "to": [20.0, 0.0]})
+        self.assertEqual((result.loose, result.fixed), ([], []))
+        self.assertIn("run_mm", result.recipe["sizes"])
+
+    def test_every_point_of_a_bend_follows_its_radius(self):
+        result = followed(bend_values())
+        segments = only_sweep(self, result)["path"]["segments"]
+        self.assertEqual(segments[1]["to"], [{"expr": "bend_mm + 20"}, {"expr": "bend_mm"}])
+        self.assertEqual(segments[1]["through"][1], {"expr": "0.292893219 * bend_mm"})
+        self.assertEqual(segments[2]["to"], [{"expr": "bend_mm + 20"}, {"expr": "bend_mm + run_mm"}])
+        self.assertEqual(result.loose, [])
+
+    def test_a_size_the_path_does_not_move_is_not_a_size_of_the_copy(self):
+        values = sketch_motion_of("Sketch2", path_values(PIPE_ITEM, {2: {"end.1": Affine(10, {"run_mm": 1.0})}}))
+        result = followed(values)
+        self.assertEqual([d["name"] for d in result.dropped], ["bend_mm"])
+
+    def test_a_path_without_measured_curves_stays_as_measured_with_its_sizes_marked(self):
+        motion = Motion(sketch_motion_of("Sketch2", bend_values()), curves={"%d/p0" % PIPE_ITEM})
+        result = sized(load_capture(PIPE), motion, ["run_mm", "bend_mm"])
+        self.assertEqual(only_sweep(self, result)["path"]["segments"][1]["to"], [30.0, 10.0])
+        self.assertEqual(sorted(d["name"] for d in result.dropped), ["bend_mm", "run_mm"])
+
+    def test_a_straight_path_gives_the_extrude_its_length_as_a_formula(self):
+        values = {"2/path/c0/end.1": Affine(0, {"length_mm": 1.0}, "Sketch2")}
+        result = sized(load_capture("sweep_straight"), Motion(values, curves={"2/path"}), ["width_mm", "length_mm"])
+        (step,) = steps_of(result.recipe, "extrude")
+        self.assertEqual(step["distance"], {"expr": "length_mm"})
+        self.assertEqual(result.loose, [])
+
+    def test_an_arc_path_turns_about_a_centre_that_follows_its_radius(self):
+        capture = pipe_along([quarter([0, 10, 0], [0, -1, 0], [1, 0, 0], 10)])
+        curve = capture["items"][PIPE_ITEM]["data"]["path"]["curves"][0]
+        curve.update(entity="p0", flat={"kind": "arc", "start": [0, 0], "end": [10, 10], "mid": curve["mid"][:2],
+                                        "center": [0, 10], "radius": 10.0})
+        bend = {"bend_mm": 1.0}
+        values = path_values(PIPE_ITEM, {0: {"center.1": Affine(0, bend), "end.0": Affine(0, bend),
+                                             "end.1": Affine(0, bend), "mid.0": Affine(0, {"bend_mm": K}),
+                                             "mid.1": Affine(0, {"bend_mm": 1 - K}), "radius": Affine(0, bend)}})
+        motion = Motion(sketch_motion_of("Sketch2", values), curves={"2/path"})
+        result = sized(capture, motion, ["bend_mm"])
+        (step,) = steps_of(result.recipe, "revolve")
+        self.assertEqual((step["axis"]["point"], step["angleDeg"]), ([{"expr": "bend_mm"}, 0.0], 90.0))
+        self.assertEqual(result.loose, [])
+
+    def test_a_full_circle_path_stays_as_measured_with_its_sizes_marked(self):
+        result = sized(load_capture("sweep_ring"), Motion({}, curves={"2/path"}), ["ring_mm"])
+        (step,) = steps_of(result.recipe, "revolve")
+        self.assertEqual(step["axis"]["point"], [-20.0, 0.0])
+        self.assertEqual([d["name"] for d in result.dropped], ["ring_mm"])
+
+    def test_a_path_with_a_point_that_is_none_of_the_sketch_curves_points_stays_as_measured(self):
+        capture = edited("sweep_ring", 2, lambda d: d.update(twist_deg=360.0))
+        result = sized(capture, Motion({}, curves={"2/path"}), ["ring_mm"])
+        self.assertEqual([s["kind"] for s in only_sweep(self, result)["path"]["segments"]], ["arc", "arc"])
+        self.assertEqual([d["name"] for d in result.dropped], ["ring_mm"])
+
+    def test_a_path_the_capture_gives_without_its_flat_curves_stays_as_measured(self):
+        capture = pipe_along([line((0, 0, 0), (10, 0, 0)), quarter([10, 5, 0], [0, -1, 0], [1, 0, 0], 5),
+                              line((15, 5, 0), (15, 15, 0))])
+        result = sized(capture, Motion({}, curves={"2/path"}), ["bend_mm"])
+        self.assertEqual(only_sweep(self, result)["path"]["segments"][2]["to"], [15.0, 15.0])
+
+    def test_a_path_sketch_plane_that_moves_with_a_size_moves_the_placement_origin_and_is_not_marked(self):
+        capture = edited(PIPE, PIPE_ITEM, lambda d: d["path"].update(reference={"kind": "constructionPlane",
+                                                                                "token": "tok_plane"}))
+        capture["parameters"]["model"].append(
+            {"name": "d9", "expression": "run_mm / 10", "value": 3.0, "unit": "mm", "kind": "derived", "role": "",
+             "dependency_parameters": ["run_mm"],
+             "created_by": {"kind": "constructionPlane", "token": "tok_plane", "name": "", "sketch": "",
+                            "component": ""}})
+        values = dict(bend_values(), **{"2/path/plane": Affine(-3, {"run_mm": 0.1}, "Sketch2")})
+        result = sized(capture, Motion(values, curves={"2/path"}), ["run_mm", "bend_mm"])
+        self.assertEqual(only_sweep(self, result)["path"]["on"]["origin"], [0.0, 0.0, {"expr": "0.1 * run_mm - 3"}])
+        self.assertEqual(result.loose, [])
+
+    def test_a_closed_rim_cut_inside_a_straight_line_follows_the_size_that_moves_its_far_side(self):
+        result = rim_sized()
+        path = only_sweep(self, result)["path"]
+        self.assertEqual((path["start"], path["segments"][0]["to"]), ([20.0, 0.0], [{"expr": "width_mm - 5"}, 0.0]))
+        self.assertEqual(path["segments"][-1]["to"], [20.0, 0.0])
+        self.assertEqual(result.loose, [])
+
+
+def rim_sized(plane=None):
+    """The rim translated with `width_mm` moving every point of its path right of the outline's plane (x = 20)."""
+    capture = load_capture(RIM)
+    params = load_capture(PIPE)["parameters"]
+    capture["parameters"] = {
+        "user": [dict(params["user"][0], name="width_mm", expression="40 mm", value=4.0, display_value=40)],
+        "model": [dict(params["model"][0], name="d1", expression="width_mm", value=4.0,
+                       created_by=dict(params["model"][0]["created_by"], sketch="Sketch2"))]}
+    values = {}
+    for n, curve in enumerate(capture["items"][RIM_ITEM]["data"]["path"]["curves"]):
+        for field, point in curve["flat"].items():
+            if field in ("start", "end", "mid", "center"):
+                values["2/path/c%d/%s.0" % (n, field)] = (Affine(point[0] - 40.0, {"width_mm": 1.0}, "Sketch2")
+                                                          if point[0] > 20.0 else Affine(point[0], {}, "Sketch2"))
+    values.update(plane or {})
+    return sized(capture, Motion(values, curves={"2/path"}), ["width_mm"])
+
+
+class PathKeptTest(unittest.TestCase):
+    """The app's rules for the path hold over the size ranges: ranges are cut, or the sizes marked where no cut helps."""
+
+    OUTLINE = {"2/p0/l0/radius": Affine(0, {"wire_mm": 0.5}, "Sketch1")}
+
+    def test_an_outline_that_could_reach_past_a_bend_cuts_the_range_of_the_size_behind_it(self):
+        result = followed(bend_values(), ("run_mm", "bend_mm", "wire_mm"), outline=self.OUTLINE)
+        sizes = result.recipe["sizes"]
+        self.assertEqual((sizes["wire_mm"]["min"], sizes["wire_mm"]["max"]), (3.0, 9.99))
+        self.assertEqual((sizes["bend_mm"]["min"], sizes["bend_mm"]["max"]), (5.0, 20.0))
+        self.assertEqual((result.loose, result.fixed), ([], []))
+
+    def test_the_cut_is_where_the_rules_stop_and_the_ranges_that_hold_are_kept(self):
+        result = followed(bend_values(), ("run_mm", "bend_mm", "wire_mm"), outline=self.OUTLINE,
+                          ranges={"wire_mm": (3.0, 9.0)})
+        self.assertEqual(result.recipe["sizes"]["wire_mm"]["max"], 9.0)
+
+    def test_a_rim_whose_cut_line_could_end_before_the_plane_stops_its_width_at_the_plane(self):
+        sizes = rim_sized().recipe["sizes"]
+        self.assertGreater(sizes["width_mm"]["min"], 25.0)
+        self.assertLessEqual(sizes["width_mm"]["min"], 25.01)
+        self.assertEqual(sizes["width_mm"]["max"], 80.0)
+
+    def test_a_rule_that_fails_as_soon_as_a_size_moves_marks_it_instead_of_leaving_a_sliver_of_range(self):
+        values = {"2/path/c0/end.1": Affine(0, {"length_mm": 1.0}, "Sketch2"),
+                  "2/path/c0/end.0": Affine(-20, {"length_mm": 0.5}, "Sketch2")}
+        result = sized(load_capture("sweep_straight"), Motion(values, curves={"2/path"}), ["length_mm"])
+        self.assertEqual([f["name"] for f in result.loose], ["length_mm"])
+        self.assertEqual(result.recipe["sizes"]["length_mm"]["min"], 20.0)
+
+    def test_a_size_whose_typed_range_cannot_be_cut_is_marked(self):
+        result = followed(bend_values(), ("run_mm", "bend_mm", "wire_mm"), outline=self.OUTLINE,
+                          ranges={"wire_mm": (4.0, 12.0), "bend_mm": (6.0, 20.0), "run_mm": (20.0, 60.0)})
+        self.assertEqual(result.recipe["sizes"]["wire_mm"]["max"], 12.0)
+        self.assertEqual(sorted(f["name"] for f in result.loose), ["bend_mm", "run_mm", "wire_mm"])
+
+    def test_a_path_start_that_leaves_the_outline_plane_marks_the_size(self):
+        plane = {"2/p0/plane": Affine(-6, {"wire_mm": 1.0}, "Sketch1")}
+        result = followed(bend_values(), ("run_mm", "bend_mm", "wire_mm"), outline=dict(self.OUTLINE, **plane))
+        self.assertEqual([f["name"] for f in result.loose], ["wire_mm"])
+
+    def test_a_path_start_that_moves_with_the_outline_plane_is_not_marked(self):
+        plane = {"2/p0/plane": Affine(-6, {"wire_mm": 1.0}, "Sketch1")}
+        values = dict(bend_values(), **{"2/path/c0/start.0": Affine(-6, {"wire_mm": 1.0}, "Sketch2")})
+        result = followed(values, ("run_mm", "bend_mm", "wire_mm"), outline=dict(self.OUTLINE, **plane))
+        self.assertEqual(result.loose, [])
+        self.assertEqual(only_sweep(self, result)["path"]["start"], [{"expr": "wire_mm - 6"}, 0.0])
+
+    def test_a_path_that_takes_too_many_settings_to_test_marks_its_sizes_instead_of_cutting(self):
+        with unittest.mock.patch.object(sweep, "MAX_PATH_TESTS", 3):
+            result = followed(bend_values(), ("run_mm", "bend_mm", "wire_mm"), outline=self.OUTLINE)
+        self.assertEqual(sorted(f["name"] for f in result.loose), ["bend_mm", "run_mm", "wire_mm"])
+        self.assertEqual(result.recipe["sizes"]["wire_mm"]["max"], 12.0)
+
+    def test_a_tapered_sweep_keeps_its_path_as_measured(self):
+        capture = with_options(PIPE, PIPE_ITEM, taper_deg=2.0)
+        motion = Motion(sketch_motion_of("Sketch2", bend_values()), curves={"2/path"})
+        result = sized(capture, motion, ["run_mm", "bend_mm"])
+        self.assertEqual(only_sweep(self, result)["path"]["segments"][1]["to"], [30.0, 10.0])
+        self.assertEqual(sorted(d["name"] for d in result.dropped), ["bend_mm", "run_mm"])
 
 
 if __name__ == "__main__":

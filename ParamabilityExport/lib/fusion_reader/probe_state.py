@@ -12,6 +12,7 @@ from . import placement, probe_refs
 from . import read_geometry as geo
 from .read_sketch import into_target, read_profile
 from .read_solid import line_axis
+from .read_sweep import flat_record
 
 MAX_PROFILES = 200
 
@@ -25,6 +26,18 @@ def _read_sketch(sketch, ctx):
     if any(p.get("space") == "ambiguous" for p in profiles):
         return None
     return {"frame": geo.frame_of(sketch.transform), "profiles": profiles}
+
+
+def _read_curves(sketch, wanted):
+    """{ curve token: the curve in the sketch's own plane } for the sketch curves named in `wanted`, as the capture
+    holds them for a sweep path (`flat`); a curve that is missing or cannot be read is left out."""
+    out = {}
+    for curve in geo.collection_items(geo.safe(lambda: sketch.sketchCurves, None)):
+        token = geo.safe(lambda: curve.entityToken, "")
+        found = flat_record(curve) if token in wanted else None
+        if found is not None:
+            out[token] = found
+    return out
 
 
 def _read_borrowed(sketch, ctx, path_name):
@@ -80,13 +93,15 @@ def read_state(design, request, ctx):
     """The state asked for by `request`: { sketches, points, lines, params, box }, plus `refs` and `unread` when needed.
 
     `request` has `sketches`, `points`, `lines` (entity tokens), `params` (Fusion parameter names), `target`
-    (true to read the target body's box) and optionally `borrowed`: { sketch token: { path } } for sketches of other
+    (true to read the target body's box) and optionally `curves`: { sketch token: [curve token] } for the curves of
+    sweep paths to read, and `borrowed`: { sketch token: { path } } for sketches of other
     components, with the occurrence path the capture recorded, `native`: sketch tokens of tool bodies from other
     components, read in their own component's frame like the target's sketches, and `refs`: { reference key: { token,
     path, shape } }.
 
-    `sketches` maps a token to { frame, profiles } (profiles as in the capture, each curve with `entity`); a borrowed
-    one also has `native_frame` and `placement`. `points` maps a token to [x, y, z] mm; `lines` to { point, dir };
+    `sketches` maps a token to { frame, profiles } (profiles as in the capture, each curve with `entity`) and, for a
+    sketch in `curves`, `curves`: { curve token: flat curve }; a borrowed one also has `native_frame` and `placement`.
+    `points` maps a token to [x, y, z] mm; `lines` to { point, dir };
     `params` a name to its value in cm or radians; `box` is the target's { min, max } and absent when it cannot be
     read. `refs` maps a reference key to its place in the target's coordinates, in mm: { point, normal },
     { point, dir }, { dir } or { point }. `unread` gives a reason per borrowed sketch token that could not be read or
@@ -111,15 +126,23 @@ def read_state(design, request, ctx):
             unread[token] = reason
         return record
 
+    wanted = request.get("curves") if isinstance(request.get("curves"), dict) else {}
+
+    def sketch_with_curves(found, token):
+        record = sketch(found, token)
+        if record is not None and token in wanted:
+            record = dict(record, curves=_read_curves(found, set(wanted[token] or ())))
+        return record
+
     state = {
-        "sketches": _each(request.get("sketches"), lambda t: entity(t, lambda e: sketch(e, t))),
+        "sketches": _each(request.get("sketches"), lambda t: entity(t, lambda e: sketch_with_curves(e, t))),
         "points": _each(request.get("points"), lambda t: entity(t, lambda e: geo.point(e.worldGeometry))),
         "lines": _each(request.get("lines"), lambda t: entity(t, lambda e: line_axis(e.worldGeometry))),
         "params": _each(request.get("params"), lambda n: _param_value(design, ctx, n)),
     }
-    wanted = request.get("refs") if isinstance(request.get("refs"), dict) else {}
-    if wanted:
-        state["refs"], missed = probe_refs.read_refs(design, ctx, wanted)
+    followed = request.get("refs") if isinstance(request.get("refs"), dict) else {}
+    if followed:
+        state["refs"], missed = probe_refs.read_refs(design, ctx, followed)
         unread.update(missed)
     if unread:
         state["unread"] = unread

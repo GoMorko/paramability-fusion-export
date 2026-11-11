@@ -1153,6 +1153,26 @@ face), and a measured volume change that is not
   whole turns and is written as a number. The overlap check measures the distance along the path round the loop. A
   new body must have the volume of Pappus: the area times the path length less 2 pi times the offset of the
   outline's centre towards the inside; a twisting outline is checked only when its centre sits on the path.
+- Path sizes (`lib/translator/path_motion.py`). A path of sketch lines and arcs that the probe measured (its
+  `<item>/path` is in `Motion.curves`) follows the sizes. The probe covers such a path when every entity is a line,
+  arc or circle of one sketch with a token and a `flat` record (`probe.plan`, kind `path`, and the request's
+  `curves`); it keeps `<item>/path/c<n>/<field>` per entity in path order as captured (a line's `start.0`, `start.1`,
+  `end.0`, `end.1`; an arc's also `mid.*`, `center.*`, `radius` and `turn`, the degrees it turns; a circle's `center.*`
+  and `radius`) and `<item>/path/plane`. A state where the sketch plane turned, or its origin slid across the plane,
+  is `turns`. The translator writes each written point (the start, every `to` and `through`) from the raw values of the
+  curve point at that place, so a size behind a line length, an arc radius or a corner position becomes a formula:
+  a straight path gives the extrude its distance, an arc path the revolve its axis point (the arc's centre) and its
+  angle, a flat chain its `start`, `to` and `through` points and its placement origin along the sketch's normal. Not
+  followed, so written as measured with the sizes behind the sketch marked: a path with a free curve, a circle, 3D
+  corner points, body edges or a taper, a path with a written point that is none of the sketch's points (a cut
+  inside an arc), and a motion file without the path's prefix. A closed path cut open inside a straight line square
+  to the outline's plane follows that line and the plane. The path start must stay on the outline's plane: a size that
+  moves it away from the plane (the sketches are not tied together) is marked. The app's rules for the path
+  (square start, no sharp corner, no touching itself, the outline clear of the tightest bend, a closed seam, an
+  outline kept in one direction rising) are tested at the corners of the size ranges and inside them
+  (`sweep._keep_path_valid`, `paths.rebuilt_refusal`): the ranges are cut where a rule stops holding
+  (`kept_ranges.holding_ranges_where`), or the sizes are marked when no cut helps or when more than
+  `MAX_PATH_TESTS` settings would have to be tested.
 - `faces_after`: a point and the outward normal of the made start and end faces (`startFaces` and `endFaces` of a
   sweep, `startFace` and `endFace` of a loft), read with the marker after the item. Each side is null when the member
   cannot be read. The key is not a pick.
@@ -1463,7 +1483,8 @@ The export measures the sketches at other size values (probe states, next sectio
 writes as a sum over Fusion parameters, or marks it stuck (`lib/probe/`). That is the motion file, `sketch_values.motion`:
 keys `<item>/p<profile>/l<loop>/<field path>` (loop 0 is the outer one, then the holes; `center.0`, `width`,
 `segments.2.through.1`), `<item>/p<profile>/plane` (the sketch plane along its normal, from the component origin),
-`<item>/positions/<n>/<0|1|2>` (hole points) and `<item>/axis/point/<0|1|2>` (a revolve axis from a sketch line).
+`<item>/positions/<n>/<0|1|2>` (hole points), `<item>/axis/point/<0|1|2>` (a revolve axis from a sketch line) and
+`<item>/path/c<n>/<field>` with `<item>/path/plane` (the curves of a sweep path and its sketch plane; below).
 `lib/sketch_values/keys.py` writes all keys; the probe and the translator both use it.
 
 Measured references of other components (below) have their own keys, `<item>/r/<slot>/...`, and their own list `refs`.
@@ -1707,13 +1728,13 @@ rows, `NOT_LOOKED` for a key not in `refs`).
 
 The size probe sets other size values, recomputes and reads a state with `read_state(design, request, ctx)`.
 `request` is `{ "sketches": [token], "points": [token], "lines": [token], "params": [name], "target": true }`, plus
-`borrowed`, `native` and `refs` below. Every
+`curves`, `borrowed`, `native` and `refs` below. Every
 entity is found with `Design.findEntityByToken` (the match without `assemblyContext`; for a proxy only, its
 `nativeObject`), so values are in component coordinates like the capture. The result, mm and degrees except `params`:
 
 ```json
 {
-  "sketches": { "<sketch token>": { "frame": FRAME, "profiles": [PROFILE, ...] } },
+  "sketches": { "<sketch token>": { "frame": FRAME, "profiles": [PROFILE, ...], "curves": { "<curve token>": CURVE } } },
   "points": { "<sketch point token>": [x, y, z] },
   "lines": { "<sketch line token>": { "point": [x, y, z], "dir": [x, y, z] } },
   "params": { "d12": 2.0 },
@@ -1725,6 +1746,9 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
 - `sketches`: `frame` from `Sketch.transform`; `profiles` are every `Sketch.profiles` item read like a capture
   profile (section 4, each curve with `entity`). A sketch with more than 200 profiles, or a profile whose space is
   `ambiguous`, is left out.
+- `curves` (request): `{ "<sketch token>": ["<curve token>", ...] }`, the sketch curves of sweep paths. The sketch's
+  `curves` then holds each asked curve that reads, by its token, as the `flat` record of a capture path curve (the
+  curve in the sketch's own plane); a curve that is missing, leaves the plane or cannot be read is left out.
 - `points`: `SketchPoint.worldGeometry`; `lines`: `SketchLine.worldGeometry` start point and unit direction.
 - `params`: `value` of each named parameter in Fusion's own units (cm, radians), as in `parameters.*.value`. A name
   is looked up in the user parameters, then in the target component's model parameters.

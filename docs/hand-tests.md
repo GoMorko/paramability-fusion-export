@@ -113,7 +113,7 @@ except U1, L1 to L15, F1 and F2, which are described here.
       copied says what it is: section 9.
 - [ ] Compact export window and result window: section 7.2 ("The export window has no empty gaps", "Early warning",
       "Show in timeline", the result window) and the export pipeline entry under "Fusion calls to watch".
-- [ ] SW1 to SW18 and LF1 to LF5, sweeps and lofts (0.9.2): section 13 (the calls are under "Capture reader calls to watch
+- [ ] SW1 to SW19 and LF1 to LF5, sweeps and lofts (0.9.2): section 13 (the calls are under "Capture reader calls to watch
       (sweep and loft)").
 - [ ] E1 to E6, Emboss on a flat face: section 10.
 - [ ] T1 to T5, thin walled extrudes of one closed outline (T5 is `%` with a negative left side): section "Thin
@@ -852,11 +852,10 @@ surprises.
 
 - [ ] **SW1 Straight sweep.** A rectangle swept along one sketch line, profile at the line start. The recipe holds an
       `extrude`, the part matches, and a size behind the profile resizes it in Paramability. A size behind the length
-      of the line is marked "may give unexpected results" (the path is not followed yet) unless an extrude size
-      reads it too.
+      of the line is the extrude's distance and resizes the part the same way (see SW19).
 - [ ] **SW2 Pipe with bends.** A circle swept along a flat path of lines joined by tangent arcs. The recipe holds a
       `sweep` step with a flat path, the part matches, and `volume_after` minus `volume_before` is the circle area
-      times the path length. Sizes behind the path sketch are marked "may give unexpected results".
+      times the path length. Sizes behind the path sketch follow in the path (see SW19).
 - [ ] **SW3 Ring.** A triangle swept along a full sketch circle. The recipe holds a full turn `revolve` and the part
       matches. `path.closed` is true. With a twist of 360 degrees the same ring becomes a `sweep` step along a closed
       flat path of two half arcs (see SW18).
@@ -914,6 +913,18 @@ surprises.
       in Fusion. Draw the same loop from the other end (or flip its direction) and repeat: the twist must turn the same
       way as Fusion's, so the copy mirrors the first one. A twist of 90 degrees is left out ("not whole turns"). A taper
       on a closed path is left out ("Tapered sweeps along a closed path").
+- [ ] **SW19 Path sizes on the form.** The SW2 pipe with a user parameter behind each of the first line's length, the
+      arc's radius and the last line's length, and the profile's plane tied to the start of the path with a sketch
+      dimension. Tick the three sizes and export. The flat path holds formulas for them (such as `bend_mm + 20`), the
+      sizes are not marked "may give unexpected results", and in Paramability each one moves the pipe the way the same
+      change moves it in Fusion (compare the end point and `volume_after`). Make the circle wider than the smallest
+      arc radius the form allows: the range of the size behind the circle stops before the value where the circle
+      would reach the centre of the bend, and the note says so ("past ..."). Then move the profile plane with a size
+      that does not move the start of the path (a plane on an offset plane): that size is marked "starts its path on
+      the plane of its outline". Repeat on the SW17 rim with a size behind its width: it follows, and its range
+      stops where the long side would end before the profile plane. A path with a spline curve, a full circle, 3D
+      corner points, or a taper keeps its sizes marked, as before. Send `report.json` from a sweep whose path sizes
+      do not follow or whose range stops too early.
 - [ ] **SW14 Round on a sweep end.** After SW2, add a fillet on an edge of the end cap. The fillet is copied as
       measured, and every size written before it is marked "may give unexpected results", since a sweep step has no
       faces that follow sizes yet. After SW1 (the extrude form) the fillet follows sizes like a round on an extrude.

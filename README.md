@@ -328,10 +328,15 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 - A sweep is copied when its outline is one closed sketch outline (holes allowed) and its path starts at the outline,
   square to it, and runs one way. A straight path becomes an extrude, one arc or a full circle becomes a revolve, and
   a chain of lines, arcs and spline curves in one plane, or of lines joined by tangent arcs in 3D, becomes a sweep
-  step. A path of body edges is copied as measured, and such a step cannot be repeated by a pattern. The path is
-  written as measured: a size that moves the sketch of the path (or the plane, face or projected edges it sits on), or
-  the plane of the outline, or that can make the outline reach past the tightest bend, is marked "may give
-  unexpected results". The outline follows sizes like an extrude outline. A twist, a taper, or a parallel orientation on a path that keeps moving away from the
+  step. A path of body edges is copied as measured, and such a step cannot be repeated by a pattern. The outline
+  follows sizes like an extrude outline. So does a path of sketch lines and arcs that the size probe measured: a size
+  behind a line length, an arc radius or a corner position becomes a formula (the extrude's distance, the revolve's axis
+  point and angle, or the points of the flat path), the path's rules are tested over the size ranges, and the ranges
+  are cut where they stop holding (past that value the path would cross itself, bend tighter than the outline, or turn
+  sharply). The path start must stay on the outline's plane: a size that moves one without the other is marked "may
+  give unexpected results". A path that stays as measured, with the sizes behind its sketch (or the plane, face or
+  projected edges it sits on) marked: one with a spline curve, a full circle, 3D corner points, body edges or a taper,
+  and a closed path cut open inside an arc. A twist, a taper, or a parallel orientation on a path that keeps moving away from the
   outline's plane becomes a sweep step too (recipe version 16); a twist or taper is copied with a note to check the
   shape, since Fusion does not document how it measures them. A closed chain of lines, arcs and spline curves in one
   plane becomes a sweep step along a closed flat path (version 16), cut open where the path meets the outline's plane;

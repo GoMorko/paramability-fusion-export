@@ -65,6 +65,7 @@ CLOSED_PARALLEL = "Sweeps that keep their outline in one direction along a close
 BOTH_SIDES = "This sweep runs to both sides of its outline, which is not copied yet."
 OFF_PLANE = "The path of this sweep does not start on the plane of its outline."
 NOT_SQUARE = "The outline is not square to the path at its start."
+TURNED_ROUND = "The path of this sweep would leave its outline the other way round."
 SHARP_CORNER = "The path of this sweep has a sharp corner."
 BENDS_3D = "The path of this sweep bends in 3D in a way that is not copied yet."
 TOO_MANY = "The path of this sweep has too many parts to copy."
@@ -810,11 +811,83 @@ def _reach_refusal(profile_points, start, normal, radius, extra=0.0):
     radius."""
     if not profile_points or radius == math.inf:
         return None
-    reach = _reach(profile_points, start, normal) + extra
-    if reach >= radius * REACH_SHARE:
+    return _bend_refusal(_reach(profile_points, start, normal) + extra, radius)
+
+
+def _bend_refusal(reach, radius):
+    """A Refusal when an outline reaching `reach` from the path reaches the centre of a bend of `radius`."""
+    if radius != math.inf and reach >= radius * REACH_SHARE:
         return Refusal("The outline reaches %.2f mm from the path, but the path bends in a radius of %.2f mm."
                        % (reach, radius))
     return None
+
+
+# ---- a path rebuilt from numbers --------------------------------------------------------------------------------
+
+def flat_curves(recipe):
+    """The curves of a flat path recipe with plain numbers, 3D in the frame of its `on` placement: lines and arcs
+    (`mid` is the written `through` point). Raises ValueError for a segment that is not a line or an arc."""
+    on = recipe["on"]
+    z, x = vec.unit(on["normal"]), vec.unit(on["xDir"])
+    y = vec.cross(z, x)
+
+    def lift(p):
+        return [on["origin"][i] + x[i] * p[0] + y[i] * p[1] for i in range(3)]
+
+    out, at = [], lift(recipe["start"])
+    for segment in recipe["segments"]:
+        end = lift(segment["to"])
+        if segment["kind"] == "line":
+            out.append({"kind": "line", "start": at, "end": end})
+        elif segment["kind"] == "arc":
+            out.append({"kind": "arc", "start": at, "mid": lift(segment["through"]), "end": end})
+        else:
+            raise ValueError("a free curve")
+        at = end
+    return out
+
+
+def turn_degrees(arc):
+    """The angle in degrees an arc turns from its start through its middle to its end."""
+    return math.degrees(_arc_of(arc)[3])
+
+
+def tightest_radius(curves):
+    """The radius of the tightest arc of a chain of lines and arcs (infinity when it has none)."""
+    return min([_arc_of(c)[1] for c in curves if c["kind"] == "arc"] or [math.inf])
+
+
+def rebuilt_refusal(curves, closed, normal, reach, fixed=False, extra=0.0, leaves=None):
+    """A Refusal when a chain of lines and arcs read back from written numbers (the first curve starts on the
+    outline's plane) breaks a rule the app checks: it does not leave the plane square, it has a sharp corner, the
+    outline reaches past its tightest bend, it touches itself, or (for an outline kept in one direction) it stops
+    rising. `reach` is how far the outline reaches across the path's plane, `extra` how far a taper can grow it, and
+    `normal` the unit normal of the outline's plane, `leaves` the direction the path leaves it (when given, the path
+    must leave it that way)."""
+    try:
+        if any(c["kind"] == "line" and _near(c["start"], c["end"]) for c in curves):
+            return Refusal(UNREADABLE)
+        first = _tangents(curves[0])[0]
+        if _off_square(first, normal):
+            return Refusal(NOT_SQUARE)
+        if leaves is not None and vec.dot(first, leaves) <= 0:
+            return Refusal(TURNED_ROUND)
+        ring = list(zip(curves, curves[1:] + curves[:1] if closed else curves[1:]))
+        for number, (a, b) in enumerate(ring):
+            limit = STRAIGHT_DEG if a["kind"] == b["kind"] == "line" else SMOOTH_JOIN_DEG
+            if _turn_deg(_tangents(a)[1], _tangents(b)[0]) > limit:
+                return Refusal(CLOSED_AT_CORNER if closed and number == len(ring) - 1 else SHARP_CORNER)
+        refusal = _bend_refusal(reach + extra, tightest_radius(curves))
+        if refusal:
+            return refusal
+        points = [p for c in curves for p in _polyline(c)]
+        if _self_touch(points, closed):
+            return Refusal(CROSSES)
+        if fixed:
+            return _rise_refusal(curves, normal)
+        return _overlap_refusal(points, reach + extra, closed)
+    except ValueError:
+        return Refusal(UNREADABLE)
 
 
 # ---- 3D chains of lines and tangent arcs -----------------------------------------------------------------------

@@ -6,7 +6,8 @@ bounds the new material for a new body, join or intersect, so its outward normal
 cut it bounds the material that stays, so the normal points along the travel. Two sided revolves are refused: their
 start face is the end of one side, which does not name the side. With the probe's motion file the outline, its plane
 and an axis from a sketch line follow sizes (sketch_motion.py). An axis of another component follows the sizes the
-probe measured it move with (ref_motion.py).
+probe measured it move with (ref_motion.py). A caller that has worked out the axis point's raw values (`axis.raw`) or
+the angle (`extent.quantity`) gives them as they are.
 """
 import math
 
@@ -204,8 +205,11 @@ def _turned_sized(ctx, item, drawn, dir3, point3, degrees, axis=None):
     return out
 
 
-def _angle_value(ctx, item, mode, angle):
-    """The turn as a Quantity. Only a turn that starts at the sketch can follow a size; the others stay numbers."""
+def _angle_value(ctx, item, mode, angle, given=None):
+    """The turn as a Quantity. Only a turn that starts at the sketch can follow a size; the others stay numbers.
+    `given` is a Quantity the caller worked out (a sweep along an arc)."""
+    if given is not None and mode == "part":
+        return given
     if mode == "part":
         return values.quantity(ctx, item, "extent.angle_deg", angle, dim="angle", absolute=True)
     values.pin(ctx, item, "extent.angle_deg", "a %s turn in %s cannot follow it" % (mode, item.get("name", "a step")))
@@ -248,7 +252,7 @@ def handle(item, ctx):
     axis = data.get("axis")
     if not axis or axis.get("kind") == "other" or "point" not in axis or "dir" not in axis:
         return Refusal(_axis_refusal(axis or {}))
-    coords = _foreign_axis(ctx, item, axis) if axis.get("assembly") else None
+    coords = _foreign_axis(ctx, item, axis) if axis.get("assembly") else axis.get("raw")
     angles = _angles(data.get("extent"))
     if isinstance(angles, Refusal):
         return angles
@@ -281,7 +285,7 @@ def handle(item, ctx):
         if isinstance(checked, Refusal):
             return checked
 
-    angle_value = _angle_value(ctx, item, mode, angle)
+    angle_value = _angle_value(ctx, item, mode, angle, (data.get("extent") or {}).get("quantity"))
     steps = []
     for profile, (outer, inners), (point2, dir2, point3, dir3), drawn in built:
         on = placement.from_frame(profile["frame"])

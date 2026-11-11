@@ -227,7 +227,7 @@ class _Sketch:
         envs = [self.leaf_env(o) for o in [{}] + self.overrides]
         unvaried = self._vary_inputs(envs)
         substitute = {n: f.expr for n, f in self.formulas.items() if f.expr is not None and n in solution.leaves}
-        for target in (t for t in self.ctx.run.found.targets if t["sketch_token"] == token):
+        for target in (t for t in self.ctx.run.found.targets if t["sketch_token"] == token and t["kind"] != "path"):
             derivation = dk.derivation(target, drawing, self.ctx.frame_of(token))
             keys, open_ = _keys(target, derivation, envs[0])
             self.open.update(open_)

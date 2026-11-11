@@ -8,9 +8,11 @@ The path decides what is written (`paths.plan` orders it and checks the limits o
 - a twist, a taper, or an outline kept in one direction (parallel) along a path that turns, also makes a `sweep` step
   (a line becomes a path of two points, an arc a flat path), with `twistDeg`, `taperDeg` and `orientation`.
 
-The outline follows sizes as an extrude outline does. The path is written as measured, so the sizes behind its sketch
-are marked: a path that follows sizes needs its own motion values. A new body must have the volume the outline area
-and the path give; along a closed path that is Pappus' volume. Twist together with taper or parallel, tapers along
+The outline follows sizes as an extrude outline does. A straight, arc or flat chain path of sketch lines and arcs
+follows them too when the probe measured it (`path_motion`), and the app's rules for the path are tested over the size
+ranges, which are cut where they stop holding. Any other path (a free curve, corner points, body edges, a tapered
+sweep) is written as measured, so the sizes behind its sketch are marked. A new body must have the volume the outline
+area and the path give; along a closed path that is Pappus' volume. Twist together with taper or parallel, tapers along
 free curves, guide rails, a path that is not square to the outline, closed paths that bend in 3D or that taper or keep
 the outline's direction, a twist along a closed path that is not whole turns, and sweeps along part of a path are
 refused.
@@ -22,7 +24,9 @@ taper marks the sizes behind it and the outline, and adds a note asking the pers
 import copy
 import math
 
-from . import borrowed, extrude, loops, paths, placement, revolve, sketch_motion, sweep_reach, sweep_taper, values, vec
+from ..params.expressions import ExpressionError
+from . import (borrowed, extrude, kept_ranges, loops, path_motion, paths, placement, range_check, revolve,
+               sketch_motion, sweep_reach, sweep_taper, values, vec)
 from .extrude import COMBINE, MAX_TAPER_DEG, keep_angle_within
 from .footprint import is_full, polyline
 from .result import Refusal, StepResult
@@ -290,13 +294,14 @@ def _mark_edges(ctx, name, path):
         ctx.doubt(ctx.written_reads, "%s follows edges of the part, which the copy keeps as measured" % name)
 
 
-def _mark_sketch_place(ctx, name, path):
+def _mark_sketch_place(ctx, name, path, plane_follows=False):
     """A path sketch sits on a plane or face and may hold projected curves: sizes that move those move the path in
-    Fusion, not in the copy."""
+    Fusion, not in the copy. A plane that follows sizes (`plane_follows`) is no reason."""
     reference = path.get("reference")
     kind = reference.get("kind") if isinstance(reference, dict) else None
     if kind == "constructionPlane":
-        names = construction_sizes(ctx.table, "constructionPlane", reference.get("token") or "")
+        names = () if plane_follows else construction_sizes(ctx.table, "constructionPlane",
+                                                            reference.get("token") or "")
         if names:
             ctx.doubt(names, "%s copies its path from a sketch on a construction plane, as measured" % name)
     elif kind in ("face", "other") or path.get("projected") or ("reference" in path and reference is None):
@@ -305,13 +310,18 @@ def _mark_sketch_place(ctx, name, path):
                       % name)
 
 
+def _drawn(ctx, item, profile):
+    """The `sketch_motion.Outline` of the sweep's outline, or None when sketch values do not follow sizes."""
+    outcome = loops.profile_loops(profile)
+    if isinstance(outcome, Refusal):
+        return None
+    return sketch_motion.outline(ctx, item, profile, outcome[0], outcome[1], [(0, profile)])
+
+
 def _keep_path_on_plane(ctx, item, profile):
     """The path is written as numbers and starts on the plane the outline had when it was captured: a size that moves
     that plane is marked, whichever form the sweep is written in."""
-    outcome = loops.profile_loops(profile)
-    if isinstance(outcome, Refusal):
-        return
-    drawn = sketch_motion.outline(ctx, item, profile, outcome[0], outcome[1], [(0, profile)])
+    drawn = _drawn(ctx, item, profile)
     if drawn is None:
         return
     shift = drawn.plane_shift(ctx)
@@ -334,6 +344,95 @@ def _keep_outline_in_bends(ctx, item, profile, found, outer, growth):
                   % item.get("name", "a sweep"))
 
 
+# ---- a path that follows sizes -----------------------------------------------------------------------------------
+
+PATH_BREAKS = "%s would make its path touch itself, bend tighter than its outline, or turn sharply (the app refuses)"
+_FAILURES = (ExpressionError, ValueError, ZeroDivisionError, OverflowError, KeyError)
+MAX_PATH_TESTS = 3000   # size settings tested for one path; past this no cut is looked for and its sizes are marked
+MIN_KEPT_SHARE = 0.1    # a range cut shorter than this share of the range it had marks the size instead
+
+
+def _form(found, twisted, tapered, fixed):
+    """What the sweep is written as: an `extrude`, a `revolve` or a `sweep` step."""
+    if twisted or tapered or (fixed and found.kind != "line"):
+        return "sweep"
+    return {"line": "extrude", "arc": "revolve", "circle": "revolve"}.get(found.kind, "sweep")
+
+
+def _across(profile, followed, options):
+    """The direction in the outline's plane that a flat path's plane is square to (2D, the outline's frame), or None
+    when every direction counts (an outline that twists about the path)."""
+    if options.twisted:
+        return None
+    frame, normal = profile["frame"], vec.unit(followed.written["on"]["normal"])
+    across = [vec.dot(normal, frame["x"]), vec.dot(normal, frame["y"])]
+    size = math.hypot(*across)
+    return [c / size for c in across] if abs(size - 1.0) <= 1e-6 else None
+
+
+def _keep_path_valid(ctx, item, profile, found, followed, drawn, options):
+    """The app's rules for the path (it starts square to the outline, no sharp corner, no touching itself, the
+    outline clear of the tightest bend, a closed seam, an outline kept in one direction rising) must hold at every
+    size setting: the sizes' ranges are cut where they stop holding, or the sizes marked when no cut helps."""
+    outer, _ = drawn.written(ctx)
+    reads = tuple(dict.fromkeys(followed.reads + sweep_reach.written_reads(outer)))
+    if ctx.table is None or not reads:
+        return
+    frame = profile["frame"]
+    normal, across = vec.unit(frame["z"]), _across(profile, followed, options)
+    tested = [0]
+
+    def fails(setting):
+        tested[0] += 1
+        if tested[0] > MAX_PATH_TESTS:
+            return True
+        try:
+            env = range_check.size_env(ctx.table, setting)
+            curves = followed.curves_at(env)
+            if followed.disagrees_at(env, curves):
+                return True
+            offset = vec.sub(curves[0]["start"], frame["origin"])
+            reach = sweep_reach.reach_of(outer, env, [vec.dot(offset, frame["x"]), vec.dot(offset, frame["y"])], across)
+            return paths.rebuilt_refusal(curves, found.closed, normal, reach, options.fixed,
+                                         leaves=found.direction) is not None
+        except _FAILURES:
+            return True
+
+    def holds(bounds, only=None):
+        settings = (range_check.corners(ctx.table, reads, bounds) if only is None
+                    else [{}, {only[0]: bounds[only[0]][only[1]]}])
+        return not any(fails(setting) for setting in settings)
+
+    why = PATH_BREAKS % item.get("name", "a sweep")
+    kept = kept_ranges.holding_ranges_where(ctx.table, reads, holds, relax=True)
+    if kept is None or any(_too_short(ctx.table, name, bounds) for name, bounds in kept.items()):
+        ctx.doubt(reads, "at other values " + why)
+    elif kept:
+        ctx.cut(kept, why)
+
+
+def _too_short(table, name, kept):
+    """True when the range `kept` is a sliver of the size's range: a rule that fails as soon as the size moves."""
+    size = table.sizes[table.size_name(name)]
+    return kept[1] - kept[0] < MIN_KEPT_SHARE * (size["max"] - size["min"])
+
+
+def _follow_path(ctx, item, profile, path, found, form, options):
+    """The path as `path_motion.Followed` when it follows sizes (its rules are kept over the size ranges, and its
+    start on the outline's plane), else None: the caller writes it as measured."""
+    if options.tapered or ctx.table is None:
+        return None
+    drawn = _drawn(ctx, item, profile)
+    followed = path_motion.follow(ctx, item, path, found, form, drawn) if drawn is not None else None
+    if followed is None:
+        return None
+    name = item.get("name", "a sweep")
+    path_motion.keep_on_plane(ctx, followed, profile["frame"], drawn, name)
+    _mark_sketch_place(ctx, name, path, plane_follows=True)
+    _keep_path_valid(ctx, item, profile, found, followed, drawn, options)
+    return followed
+
+
 # ---- what is written -------------------------------------------------------------------------------------------
 
 def _common(data, profile):
@@ -345,23 +444,26 @@ def _common(data, profile):
     }
 
 
-def _as_extrude(item, data, profile, found, ctx):
-    """The sweep along a straight path as the extrude it equals."""
+def _as_extrude(item, data, profile, found, ctx, followed=None):
+    """The sweep along a straight path as the extrude it equals. A path that follows sizes gives its own length."""
     forward = vec.dot(found.direction, vec.unit(profile["frame"]["z"])) > 0
     built = dict(_common(data, profile), start={"kind": "profilePlane"}, extent_type="one", thin=False,
                  side_one={"kind": "distance", "distance": found.length, "taper_deg": 0.0,
-                           "direction": 1 if forward else -1},
+                           "direction": 1 if forward else -1, "quantity": followed.length if followed else None},
                  side_two=None, symmetric=None)
     return extrude.handle(dict(item, data=built), ctx)
 
 
-def _as_revolve(item, data, combine, profile, found, ctx):
+def _as_revolve(item, data, combine, profile, found, ctx, followed=None):
     """The sweep along an arc or a full circle as the revolve it equals. The start face of the turn faces against
-    the travel (along it for a cut), which fixes which way the axis turns."""
+    the travel (along it for a cut), which fixes which way the axis turns. A path that follows sizes gives the axis
+    point and the angle as values."""
     toward = 1.0 if combine == "cut" else -1.0
-    built = dict(_common(data, profile), project_axis=True,
-                 axis={"point": found.axis["point"], "dir": found.axis["dir"], "fixed": True},
-                 extent={"kind": "angle", "angle_deg": found.angle_deg, "symmetric": False},
+    axis = {"point": found.axis["point"], "dir": found.axis["dir"], "fixed": True,
+            "raw": followed.centre if followed else None}
+    built = dict(_common(data, profile), project_axis=True, axis=axis,
+                 extent={"kind": "angle", "angle_deg": found.angle_deg, "symmetric": False,
+                         "quantity": followed.turn if followed else None},
                  start_face_normal=vec.scale(found.direction, toward))
     return revolve.handle(dict(item, data=built), ctx)
 
@@ -376,9 +478,9 @@ def _doubt_angle(ctx, item, what, quantity, outline_reads):
     ctx.note("The %s of %s is copied as Paramability reads it; check the shape." % (what, name))
 
 
-def _as_sweep(item, combine, profile, found, ctx, angles=(), fixed=False, growth=0.0):
+def _as_sweep(item, combine, profile, found, ctx, angles=(), fixed=False, growth=0.0, followed=None):
     """A `sweep` step: the outline on its own placement and the path, with the twist, taper and direction setting.
-    `angles` are `(what, recipe key, Quantity, confirmed)`."""
+    `angles` are `(what, recipe key, Quantity, confirmed)`. A path that follows sizes is written as it gives it."""
     outcome = loops.profile_loops(profile)
     if isinstance(outcome, Refusal):
         return outcome
@@ -388,11 +490,13 @@ def _as_sweep(item, combine, profile, found, ctx, angles=(), fixed=False, growth
     if drawn is not None:
         on["origin"] = drawn.origin(ctx, Quantity(0.0))
         outer, inners = drawn.written(ctx)
-        _keep_outline_in_bends(ctx, item, profile, found, outer, growth)
+        if followed is None:
+            _keep_outline_in_bends(ctx, item, profile, found, outer, growth)
     sketch = {"on": on, "outer": outer}
     if inners:
         sketch["inner"] = inners
-    step = {"kind": "sweep", "sketch": sketch, "path": copy.deepcopy(found.recipe), "combine": combine}
+    path = followed.written if followed is not None else copy.deepcopy(found.recipe)
+    step = {"kind": "sweep", "sketch": sketch, "path": path, "combine": combine}
     for what, key, quantity, confirmed in angles:
         step[key] = quantity.json()
         if not confirmed:
@@ -496,8 +600,11 @@ def handle(item, ctx):
     if refusal is not None:
         return refusal
     _pin_settings(ctx, item, data, found.closed)
-    _mark_path(ctx, item, path)
-    _keep_path_on_plane(ctx, item, profile)
+    form = _form(found, twisted, tapered, fixed)
+    followed = _follow_path(ctx, item, profile, path, found, form, options)
+    if followed is None:
+        _mark_path(ctx, item, path)
+        _keep_path_on_plane(ctx, item, profile)
     if found.kind != "line":
         borrowed.mark_unchecked(ctx, item, profile)
     angles = [(what, key, quantity, confirmed)
@@ -506,14 +613,12 @@ def handle(item, ctx):
                    TWIST_SIGN_CONFIRMED),
                   ("taper", "taperDeg", _angle(ctx, item, "taper_deg", taper, taper_sign), TAPER_MEANING_CONFIRMED))
               if quantity is not None]
-    if twisted or tapered or (fixed and found.kind != "line"):
-        outcome = _as_sweep(item, combine, profile, found, ctx, angles, fixed, options.growth)
-    elif found.kind == "line":
-        outcome = _as_extrude(item, data, profile, found, ctx)
-    elif found.kind in ("arc", "circle"):
-        outcome = _as_revolve(item, data, combine, profile, found, ctx)
+    if form == "extrude":
+        outcome = _as_extrude(item, data, profile, found, ctx, followed)
+    elif form == "revolve":
+        outcome = _as_revolve(item, data, combine, profile, found, ctx, followed)
     else:
-        outcome = _as_sweep(item, combine, profile, found, ctx)
+        outcome = _as_sweep(item, combine, profile, found, ctx, angles, fixed, options.growth, followed)
     if path.get("kind") == "edges" and isinstance(outcome, StepResult):
         for entry in outcome.entries:
             entry.repeatable = False

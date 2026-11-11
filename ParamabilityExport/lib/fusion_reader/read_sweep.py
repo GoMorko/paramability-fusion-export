@@ -100,6 +100,15 @@ def _is_planar(geometry):
     return True
 
 
+def flat_record(curve):
+    """A sketch curve in its sketch's own 2D plane (`read_curve`), or null for a curve off that plane or one that
+    cannot be read."""
+    geometry = geo.safe(lambda: curve.geometry, None)
+    if geometry is None or not _is_planar(geometry):
+        return None
+    return geo.safe(lambda: read_curve(geometry, _SketchPlane), None)
+
+
 def _ends_of(curve):
     """Start and end point of the curve `PathEntity.curve` gives (the check against the read curve), or null."""
     return geo.safe(lambda: {"start": geo.point(curve.startPoint), "end": geo.point(curve.endPoint)}, None)
@@ -125,8 +134,7 @@ def _entity_curve(item, ctx):
         if frame is not None and geometry is not None:
             record = geo.safe(lambda: _curve_record(geometry, _Place(frame)), None)
             if record is not None:
-                record["flat"] = (geo.safe(lambda: read_curve(geometry, _SketchPlane), None)
-                                  if _is_planar(geometry) else None)
+                record["flat"] = flat_record(entity)
         source = ("sketch", sketch)
     record = record or {"kind": "other", "type": name}
     token = geo.safe(lambda: entity.entityToken, "")

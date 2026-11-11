@@ -4,7 +4,7 @@ import unittest.mock
 
 from tests import context  # noqa: F401
 
-from lib.translator import range_check
+from lib.translator import kept_ranges, range_check
 from lib.translator.range_check import MAX_CORNER_SIZES, MAX_SETTINGS, largest_share, sweep
 
 
@@ -113,6 +113,47 @@ class ManySizesTest(unittest.TestCase):
         self.assertIn({"s0": 0, "s1": 10}, settings)
         span = sweep(self.MANY, "s0 - s1", self.NAMES)
         self.assertEqual((span.low, span.high), (-10, 10))
+
+
+class CutTable(Table):
+    """A table that also answers whether a size's range was typed (none was)."""
+
+    def typed_range(self, name):
+        return False
+
+
+class HoldingRangesWhereTest(unittest.TestCase):
+    """`holding_ranges_where` cuts the ranges of the sizes a test reads to where the test holds."""
+
+    TABLE = CutTable(a=(5, 1, 10), b=(5, 1, 10), c=(5, 1, 10))
+
+    def holds(self, rule):
+        """A test over the corners (or one end) of the ranges, as the path check builds it."""
+        def holds(bounds, only=None):
+            settings = (range_check.corners(self.TABLE, ("a", "b", "c"), bounds) if only is None
+                        else [{}, {only[0]: bounds[only[0]][only[1]]}])
+            return all(rule(range_check.size_env(self.TABLE, setting)) for setting in settings)
+        return holds
+
+    def cut(self, rule, relax=False):
+        return kept_ranges.holding_ranges_where(self.TABLE, ("a", "b", "c"), self.holds(rule), relax)
+
+    def test_a_test_that_holds_over_the_ranges_cuts_nothing(self):
+        self.assertEqual(self.cut(lambda env: env["a"] < 11), {})
+
+    def test_a_test_that_fails_at_a_corner_cuts_the_sizes_it_fails_for_and_the_others_with_them(self):
+        found = self.cut(lambda env: env["a"] - env["b"] < 5)
+        self.assertEqual(sorted(found), ["a", "b", "c"])
+        self.assertLess(found["c"][1], 10)
+
+    def test_with_relax_a_size_the_test_does_not_read_keeps_its_whole_range(self):
+        found = self.cut(lambda env: env["a"] - env["b"] < 5, relax=True)
+        self.assertEqual(sorted(found), ["a"])
+        self.assertEqual(found["a"][0], 1)
+        self.assertAlmostEqual(found["a"][1], 6.0, places=6)
+
+    def test_a_test_that_fails_at_the_values_now_has_no_cut_that_helps(self):
+        self.assertIsNone(self.cut(lambda env: env["a"] != 5))
 
 
 class ShareTest(unittest.TestCase):

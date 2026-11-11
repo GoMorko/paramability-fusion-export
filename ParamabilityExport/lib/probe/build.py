@@ -43,7 +43,8 @@ class StateRun:
         self.readable = set()
         if self.base:
             self.readable = match.readable(self.found, self.base)
-            self.targets = [t for t in self.found.targets if t["sketch_token"] in self.readable]
+            self.targets = [t for t in self.found.targets if t["sketch_token"] in self.readable
+                            and (t["kind"] != "path" or match.matches_capture(t, self.base))]
 
     def varied(self, at, current=None):
         """Fusion names of the sizes that state `at` sets to other values than E0 has."""
@@ -93,11 +94,12 @@ class StateRun:
         return values, cause
 
     def outline_right(self, token, read):
-        """True when every followed record of the sketch `token` reads as the captured outline in `read`."""
+        """True when every followed record of the sketch `token` reads as the captured outline in `read`. A sweep
+        path is not an outline."""
         if not isinstance(read, dict):
             return False
         for target in self.targets:
-            if target["sketch_token"] == token:
+            if target["sketch_token"] == token and target["kind"] != "path":
                 values, _ = match.state_values(target, read, self.base)
                 if values is None or values.keys() != match.captured_values(target).keys():
                     return False
@@ -249,7 +251,7 @@ def build(capture, table, states, after=None):
     out.apart = sorted(at - 1 for at in run.apart)
     for target in run.targets:
         _fit_target(out, run, target, shared, models, current)
-    out.curves = {match.prefix(t) for t in run.targets if t["kind"] == "profile"}
+    out.curves = {match.prefix(t) for t in run.targets if t["kind"] in ("profile", "path")}
     for ref in refs.usable:
         ref_fit.fit_ref(out, ref, [s.get("read") for s in run.states], [run.built(at) for at in range(len(run.states))],
                         shared, models, lambda at: run.varied(at, current))

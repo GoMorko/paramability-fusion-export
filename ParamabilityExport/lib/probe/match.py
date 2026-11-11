@@ -9,6 +9,7 @@ a problem with a cause (`motion.SHAPE`, `TURNS`, `UNREAD`), not a number.
 import math
 
 from ..translator.loops import profile_loops
+from ..translator.path_motion import swept_degrees
 from ..translator.result import Refusal
 from ..sketch_values import keys
 from ..sketch_values.motion import SHAPE, TURNS, UNREAD
@@ -250,7 +251,9 @@ def curve_values(loops, like, prefix):
 
 
 def prefix(target):
-    """`<item>/p<profile>` of a profile record."""
+    """`<item>/p<profile>` of a profile record, `<item>/path` of a sweep path."""
+    if target["kind"] == "path":
+        return keys.path(target["item"])
     return keys.profile(target["item"], target["p"])
 
 
@@ -377,6 +380,55 @@ def _hole_values(target, read, e0):
     return out, None
 
 
+_PATH_POINTS = {"line": ("start", "end"), "arc": ("start", "mid", "end", "center"), "circle": ("center",)}
+
+
+def _path_curve_values(prefix, curve):
+    """The keys of one sweep path curve (`sketch_values.keys`): its points in the sketch plane, an arc's or circle's
+    radius, and the angle an arc turns."""
+    out = {}
+    for name in _PATH_POINTS[curve["kind"]]:
+        out.update({"%s%s.%d" % (prefix, name, c): float(curve[name][c]) for c in range(2)})
+    if curve["kind"] != "line":
+        out[prefix + "radius"] = float(curve["radius"])
+    if curve["kind"] == "arc":
+        out[prefix + "turn"] = swept_degrees(curve)
+    return out
+
+
+def _path_state(target, read):
+    """`(frame, curves)` of the sweep path's sketch in a state read, or None and the cause. A state where the sketch
+    plane turned, or its origin slid across the plane, has a cause."""
+    path = target["path"]
+    record = (read.get("sketches") or {}).get(target["sketch_token"])
+    if not isinstance(record, dict) or not isinstance(record.get("frame"), dict) or not isinstance(
+            record.get("curves"), dict):
+        return None, UNREAD
+    frame, ref = record["frame"], path["frame"]
+    if _turned(frame["z"], ref["z"]) or _turned(frame["x"], ref["x"]) or any(
+            abs(_dot(_sub(frame["origin"], ref["origin"]), ref[axis])) > POINT_TOLERANCE for axis in ("x", "y")):
+        return None, TURNS
+    found = [record["curves"].get(curve["entity"]) for curve in path["curves"]]
+    if any(not isinstance(f, dict) or f.get("kind") != c["kind"] for f, c in zip(found, path["curves"])):
+        return None, UNREAD
+    return (frame, found), None
+
+
+def _path_values(target, read):
+    """The keys of a sweep path: each curve of it and the position of its sketch plane along the plane's normal."""
+    path = target["path"]
+    frame, curves = path["frame"], [c["flat"] for c in path["curves"]]
+    if read is not None:
+        state, cause = _path_state(target, read)
+        if state is None:
+            return None, cause
+        frame, curves = state
+    out = {keys.path_plane(target["item"]): _dot(frame["origin"], path["frame"]["z"])}
+    for number, curve in enumerate(curves):
+        out.update(_path_curve_values(keys.path_curve(target["item"], number), curve))
+    return out, None
+
+
 def _axis_values(target, read):
     item = target["item"]
     if read is None:
@@ -395,6 +447,8 @@ def captured_values(target):
         return _capture_profile_values(target)
     if target["kind"] == "hole":
         return _hole_values(target, None, None)[0]
+    if target["kind"] == "path":
+        return _path_values(target, None)[0]
     return _axis_values(target, None)[0]
 
 
@@ -404,19 +458,25 @@ def state_values(target, read, e0=None):
         return _state_profile_values(target, read, e0)
     if target["kind"] == "hole":
         return _hole_values(target, read, e0)
+    if target["kind"] == "path":
+        return _path_values(target, read)
     return _axis_values(target, read)
+
+
+def matches_capture(target, e0):
+    """True when the first read `e0` gives back every value of the record `target` as the capture has it (within
+    1e-4 mm)."""
+    values, _ = state_values(target, e0 or {}, e0)
+    want = captured_values(target)
+    return values is not None and values.keys() == want.keys() and all(
+        abs(values[k] - v) <= POINT_TOLERANCE for k, v in want.items())
 
 
 def readable(found, e0):
     """Tokens of the covered sketches whose every record the first read gives back as the capture has it
-    (within 1e-4 mm). A sketch that fails is not followed: the sizes that change it are loose."""
-    bad = set()
-    for target in found.targets:
-        values, _ = state_values(target, e0 or {}, e0)
-        want = captured_values(target)
-        if values is None or values.keys() != want.keys() or any(
-                abs(values[k] - v) > POINT_TOLERANCE for k, v in want.items()):
-            bad.add(target["sketch_token"])
+    (within 1e-4 mm). A sketch that fails is not followed: the sizes that change it are loose. A sweep path that fails
+    does not count: only the path is left unfollowed (`matches_capture`), not the outlines drawn in its sketch."""
+    bad = {t["sketch_token"] for t in found.targets if t["kind"] != "path" and not matches_capture(t, e0)}
     return {t for t in found.covered if t not in bad}
 
 

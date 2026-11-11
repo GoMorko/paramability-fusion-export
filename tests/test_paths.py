@@ -525,6 +525,77 @@ class RefusalTest(unittest.TestCase):
         found = plan([ring], points=[[10, 0, 0], [0, 0, 0]], outline={"origin": [0, 0, 0], "z": [0, 1, 0]})
         self.assertIn("reaches 10.00 mm", found.reason)
 
+class RebuiltTest(unittest.TestCase):
+    """A flat path read back from written numbers is tested against the app's rules (`rebuilt_refusal`)."""
+
+    ON = {"origin": [0, 0, 0], "normal": [0, 0, 1], "xDir": [1, 0, 0]}
+    NORMAL = [1.0, 0.0, 0.0]
+
+    def recipe(self, *segments, start=(0, 0), **extra):
+        return dict({"kind": "flat", "on": self.ON, "start": list(start), "segments": list(segments)}, **extra)
+
+    def refusal(self, recipe, reach=1.0, **options):
+        return paths.rebuilt_refusal(paths.flat_curves(recipe), recipe.get("closed", False), self.NORMAL, reach,
+                                     **options)
+
+    def pipe(self, run=20.0, radius=10.0):
+        """Along x, a quarter arc turning to +y, along y."""
+        return self.recipe({"kind": "line", "to": [run, 0]},
+                           {"kind": "arc", "through": [run + radius * S2, radius * (1 - S2)],
+                            "to": [run + radius, radius]},
+                           {"kind": "line", "to": [run + radius, radius + 20]})
+
+    def test_a_path_that_keeps_every_rule_is_not_refused(self):
+        self.assertIsNone(self.refusal(self.pipe()))
+
+    def test_the_curves_are_the_written_points_in_the_placements_frame(self):
+        first, bend, last = paths.flat_curves(self.pipe())
+        self.assertEqual((first["end"], bend["kind"], last["end"]), ([20.0, 0.0, 0.0], "arc", [30.0, 30.0, 0.0]))
+
+    def test_an_outline_that_reaches_the_bend_centre_is_refused(self):
+        self.assertIn("bends in a radius", self.refusal(self.pipe(radius=3.0), reach=3.0).reason)
+        self.assertIsNone(self.refusal(self.pipe(radius=3.0), reach=2.9))
+
+    def test_a_path_that_does_not_leave_the_outline_square_is_refused(self):
+        slanted = self.recipe({"kind": "line", "to": [20, 5]})
+        self.assertEqual(self.refusal(slanted).reason, paths.NOT_SQUARE)
+
+    def test_a_path_that_leaves_the_outline_the_other_way_is_refused_when_the_way_is_given(self):
+        back = self.recipe({"kind": "line", "to": [-20, 0]})
+        self.assertIsNone(self.refusal(back, leaves=None))
+        self.assertEqual(self.refusal(back, leaves=[1.0, 0.0, 0.0]).reason, paths.TURNED_ROUND)
+
+    def test_a_corner_between_two_lines_is_refused(self):
+        corner = self.recipe({"kind": "line", "to": [20, 0]}, {"kind": "line", "to": [20, 20]})
+        self.assertEqual(self.refusal(corner).reason, paths.SHARP_CORNER)
+
+    def test_a_path_that_crosses_itself_is_refused(self):
+        """Along x, three quarters of a turn about (20, 10), then back down across the first leg."""
+        loop = self.recipe({"kind": "line", "to": [20, 0]},
+                           {"kind": "arc", "through": [20 + 10 * S2, 10 + 10 * S2], "to": [10, 10]},
+                           {"kind": "line", "to": [10, -5]})
+        self.assertEqual(self.refusal(loop, reach=0.1).reason, paths.CROSSES)
+
+    def test_a_closed_path_of_smooth_parts_is_not_refused(self):
+        stadium = self.recipe({"kind": "line", "to": [20, 0]}, {"kind": "arc", "through": [25, 5], "to": [20, 10]},
+                              {"kind": "line", "to": [0, 10]}, {"kind": "arc", "through": [-5, 5], "to": [0, 0]},
+                              closed=True)
+        self.assertIsNone(self.refusal(stadium, reach=1.0))
+
+    def test_an_outline_kept_in_one_direction_needs_the_path_to_keep_rising(self):
+        self.assertEqual(self.refusal(self.pipe(), fixed=True).reason, paths.TURNS_BACK)
+        sixty = self.recipe({"kind": "line", "to": [20, 0]},
+                            {"kind": "arc", "through": [25, 10 - 10 * math.sin(math.radians(60))],
+                             "to": [20 + 10 * math.cos(math.radians(30)), 5]})
+        self.assertIsNone(self.refusal(sixty, fixed=True))
+
+    def test_a_segment_that_is_a_free_curve_cannot_be_rebuilt(self):
+        with self.assertRaises(ValueError):
+            paths.flat_curves(self.recipe({"kind": "spline", "through": [[5, 1]], "to": [10, 0]}))
+
+    def test_a_line_without_length_cannot_be_read(self):
+        self.assertEqual(self.refusal(self.recipe({"kind": "line", "to": [0, 0]})).reason, paths.UNREADABLE)
+
 
 if __name__ == "__main__":
     unittest.main()

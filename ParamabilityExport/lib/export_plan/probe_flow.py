@@ -421,7 +421,8 @@ class SizeProbe:
         return list(dict.fromkeys(changed)), list(dict.fromkeys(n for n in unread if n not in changed))
 
     def _followed_targets(self):
-        return [t for t in plan.scan(self.capture).targets if t["sketch_token"] in self.request["sketches"]]
+        return [t for t in plan.scan(self.capture).targets if t["sketch_token"] in self.request["sketches"]
+                and (t["kind"] != "path" or match.matches_capture(t, self.e0))]
 
     def _followed_moved(self, targets, read):
         """True when a sketch or a measured reference the probe follows reads differently in `read` than at E0."""
@@ -546,7 +547,8 @@ class SizeProbe:
             if before is not None and now is not None:
                 gap = max([gap] + [abs(now[k] - v) for k, v in before.items()])
         for target in found.targets:
-            if target["sketch_token"] not in self.request["sketches"]:
+            if target["sketch_token"] not in self.request["sketches"] or (
+                    target["kind"] == "path" and not match.matches_capture(target, self.e0)):
                 continue
             before, _ = match.state_values(target, self.e0, self.e0)
             now, cause = match.state_values(target, after, self.e0)

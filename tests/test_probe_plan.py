@@ -67,6 +67,47 @@ class ScanTests(unittest.TestCase):
         self.assertEqual(plan.scan(capture(item, hidden)).covered, {})
 
 
+def sweep(index, path, *profiles):
+    return {"index": index, "name": "Sweep%d" % index, "type": "SweepFeature",
+            "data": {"profiles": list(profiles), "path": path}}
+
+
+def path_of(*curves, token="skP", name="Path", **extra):
+    out = {"closed": False, "kind": "sketch", "sketch": name, "sketch_token": token, "frame": IDENT_FRAME,
+           "curves": list(curves), "edges": []}
+    out.update(extra)
+    return out
+
+
+def flat_line(entity, a, b):
+    return {"kind": "line", "start": [*a, 0], "end": [*b, 0], "entity": entity, "flat": {"kind": "line", "start": a,
+                                                                                         "end": b}}
+
+
+IDENT_FRAME = {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
+
+
+class PathScanTests(unittest.TestCase):
+    def test_a_sweep_path_of_sketch_lines_is_covered_beside_its_outline(self):
+        item = sweep(3, path_of(flat_line("l0", [0, 0], [0, 20]), flat_line("l1", [0, 20], [10, 20])), square())
+        found = plan.scan(capture(item))
+        self.assertEqual(found.covered, {"sk1": "Sketch1", "skP": "Path"})
+        self.assertEqual([t["kind"] for t in found.targets], ["profile", "path"])
+        asked = plan.request(capture(item), table(PARAMS, ["count"], MODEL))
+        self.assertEqual(asked["curves"], {"skP": ["l0", "l1"]})
+
+    def test_a_path_with_a_free_curve_or_edges_is_left_as_measured_and_leaves_its_sketch_alone(self):
+        free = dict(flat_line("l1", [0, 20], [10, 20]), kind="other")
+        for label, found_path in (("free curve", path_of(flat_line("l0", [0, 0], [0, 20]), free)),
+                                  ("edges", path_of(kind="edges")),
+                                  ("foreign", path_of(flat_line("l0", [0, 0], [0, 20]), foreign=True))):
+            with self.subTest(label):
+                found = plan.scan(capture(sweep(3, found_path, square())))
+                self.assertEqual((found.covered, found.uncovered), ({"sk1": "Sketch1"}, set()))
+                self.assertNotIn("curves", plan.request(capture(sweep(3, found_path, square())),
+                                                        table(PARAMS, ["count"], MODEL)))
+
+
 class RequestTests(unittest.TestCase):
     def test_request_lists_tokens_and_parameters(self):
         tbl = table(PARAMS, ["count", "cube"], MODEL)

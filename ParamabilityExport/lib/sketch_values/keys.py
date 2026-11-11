@@ -6,6 +6,13 @@
     <prefix>/plane                        the position of the sketch plane along its normal
     <prefix>/c<loop>.<curve>/<field>      a sketch curve of the profile (a line's `offset` and `turn`, an arc's
                                           `center.0`, `center.1` and `radius`)
+    <item>/path                           a sweep path record: the prefix of the keys below
+    <item>/path/c<n>/<field>              a curve of the sweep path (`n` counts the path entities as captured): a
+                                          line's `start.0`, `start.1`, `end.0`, `end.1`; an arc's also `mid.0`,
+                                          `mid.1`, `center.0`, `center.1`, `radius` and `turn` (degrees swept); a
+                                          circle's `center.0`, `center.1` and `radius`. Coordinates are in the path
+                                          sketch's own plane.
+    <item>/path/plane                     the position of the path sketch plane along its normal
     <item>/positions/<n>/<0|1|2>          a coordinate of a hole point
     <item>/axis/point/<0|1|2>             a coordinate of a revolve axis point
     <item>/r/<slot>/offset                how far a measured reference plane moved along its captured normal
@@ -35,6 +42,20 @@ def plane(prefix):
 def curve(prefix, loop, number):
     """The prefix of a sketch curve's keys, ending in a slash: add the field name."""
     return "%s/c%d.%d/" % (prefix, loop, number)
+
+
+def path(item):
+    """The prefix of the keys of the sweep path of timeline item `item`."""
+    return "%s/path" % item
+
+
+def path_curve(item, number):
+    """The prefix of path entity `number`'s keys, ending in a slash: add the field name."""
+    return "%s/c%d/" % (path(item), number)
+
+
+def path_plane(item):
+    return path(item) + "/plane"
 
 
 def positions(item):
