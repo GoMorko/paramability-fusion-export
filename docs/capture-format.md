@@ -1171,8 +1171,8 @@ face), and a measured volume change that is not
   moves it away from the plane (the sketches are not tied together) is marked. The app's rules for the path
   (square start, no sharp corner, no touching itself, the outline clear of the tightest bend, a closed seam, an
   outline kept in one direction rising) are tested at the current values, at the ends of the size ranges (every corner
-  for up to six sizes, else a fixed sample of them) and at the middles of the ranges (`sweep._keep_path_valid`,
-  `paths.rebuilt_refusal`, `range_check.middles`). A rule that fails only between those settings is not seen. The
+  for up to six sizes, else a fixed sample of them) and at the middles of the ranges (`sweep_rules._keep_path_valid`,
+  `path_rebuilt.rebuilt_refusal`, `range_check.middles`). A rule that fails only between those settings is not seen. The
   ranges are cut where a rule stops holding (`kept_ranges.holding_ranges_where`); a size whose own cut would leave
   under a tenth of its range is marked, and the others are checked again without it. A size that another part of the
   copy already marked is held at its value in the check. When more than `MAX_PATH_TESTS` distinct settings or
