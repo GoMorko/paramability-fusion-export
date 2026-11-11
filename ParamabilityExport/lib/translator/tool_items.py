@@ -135,6 +135,10 @@ def plan(items, target=None, max_items=MAX_ITEMS, max_tools=MAX_TOOLS, max_depth
     Bodies past `max_tools`, deeper than `max_depth`, and items past `max_items` give no step to read."""
     result = Plan()
     queue = [(tool, combine, n, 1) for combine, tool, n in combine_tools(items, target)]
+    if target is not None:
+        # An exported body that is itself a copy is built from the steps of its source.
+        queue += [(source, item, n, 1) for item in items if _readable(item) and _is_copy(item, target)
+                  for source, n in source_records(item)]
     visited, built, found, why = [], 0, {}, {}
     while queue:
         record, anchor, number, depth = queue.pop(0)

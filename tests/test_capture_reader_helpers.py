@@ -210,6 +210,10 @@ class PlanTest(unittest.TestCase):
                     "data": {"tools": [tool]}})
         return out
 
+    def test_an_exported_body_that_is_a_copy_follows_its_source(self):
+        items = [step(0, ["s"]), paste(1, "t", "s")]
+        self.assertEqual(indices(tool_items.plan(items, ref("t")).wanted), [0])
+
     def test_the_steps_before_the_combine_that_touch_the_tool_are_planned_in_order(self):
         plan = tool_items.plan(self.items(3))
         self.assertEqual((indices(plan.wanted), plan.left), ([0, 1, 2], []))

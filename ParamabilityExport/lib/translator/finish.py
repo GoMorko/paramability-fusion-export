@@ -152,7 +152,7 @@ def _repeated_without(ctx, item, source_index):
             continue
         sources = (other.get("data") or {}).get("sources") or []
         spec = step_kinds.step_type(other.get("type"))
-        repeats = spec is not None and (spec.handler or "").startswith("repeat:")
+        repeats = spec is not None and (spec.handler or "").startswith("body_copies:")
         if later and repeats and source_index in sources and item.get("index") not in sources:
             return True
     return False

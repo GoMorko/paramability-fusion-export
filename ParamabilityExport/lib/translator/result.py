@@ -44,14 +44,16 @@ class Entry:
     repeatable: False when Fusion recomputes the step's length per copy (it reaches to a face or through the part),
       so patterns and mirrors refuse it as a source.
     label: the step's label when it is not the name of its item (a tool step is named after its tool).
+    step_id: the step's id when it must not get a new one (a pattern already names it, or it is written again).
     """
 
-    def __init__(self, step, placers=(), picks=None, repeatable=True, label=None):
+    def __init__(self, step, placers=(), picks=None, repeatable=True, label=None, step_id=None):
         self.step = step
         self.placers = list(placers)
         self.picks = picks
         self.repeatable = repeatable
         self.label = label
+        self.step_id = step_id
 
 
 class StepResult:
@@ -62,7 +64,9 @@ class StepResult:
     recorded on the context. `items` are capture items of other bodies whose steps these steps carry (the tool body of
     a Combine); they count as copied once these steps are written. `asked` is the set of `(item index, params path)`
     the handlers dealt with (`values.quantity`, `values.pin`, `values.handled`); the audit compares it with each
-    item's `data.params`. `tool_steps` are the verdicts of the items inside the tool steps written here.
+    item's `data.params`. `tool_steps` are the verdicts of the items inside the tool steps written here. `wraps_body`,
+    when set, is a function of the context that gathers everything written so far into one tool step and gives its
+    `Entry`: the walk writes it first (a pattern can then repeat the finished body).
     """
 
     def __init__(self, entries=()):
@@ -72,6 +76,7 @@ class StepResult:
         self.items = []
         self.asked = set()
         self.tool_steps = []
+        self.wraps_body = None
 
     @classmethod
     def of(cls, steps):
@@ -82,9 +87,9 @@ class StepResult:
     def steps(self):
         return [entry.step for entry in self.entries]
 
-    def add(self, step, placers=(), picks=None, repeatable=True, label=None):
+    def add(self, step, placers=(), picks=None, repeatable=True, label=None, step_id=None):
         """Write `step`; returns it."""
-        self.entries.append(Entry(step, placers, picks, repeatable, label))
+        self.entries.append(Entry(step, placers, picks, repeatable, label, step_id))
         return step
 
     def extend(self, entries):
@@ -92,10 +97,13 @@ class StepResult:
         return self
 
     def join(self, other):
-        """Take on the doubts and items of `other`, the result of another body whose steps these steps carry."""
+        """Take on the doubts, items, notes and verdicts of `other`, the result of another body whose steps these steps
+        carry."""
         self.doubts.extend(other.doubts)
         self.items.extend(other.items)
         self.asked |= other.asked
+        self.notes.extend(other.notes)
+        self.tool_steps.extend(other.tool_steps)
 
 
 VERDICTS = ("translated", "translatedWithNote", "skipped", "unsupported")

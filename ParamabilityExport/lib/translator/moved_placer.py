@@ -12,6 +12,13 @@ from .slabs import Motion, Slab
 from .values import Quantity
 
 
+def carried(placer, owner, motion):
+    """`placer` as seen after `motion`, made by the step `owner`."""
+    if hasattr(placer, "copied"):
+        return placer.copied(owner, motion)
+    return placer if motion.is_identity else MovedPlacer(placer, motion)
+
+
 def motion_of(move, shift=None):
     """The `Motion` of a `place.Move`. `shift` is three Quantities added to the offset: a move that follows sizes."""
     offsets = [Quantity(o) if shift is None else shift[i].plus(o) for i, o in enumerate(move.offset)]
@@ -51,6 +58,19 @@ class MovedMaker:
                 ctx.add_slab(placer.copied(step_id, self.motion))
             else:
                 ctx.add_placer(MovedPlacer(placer, self.motion))
+
+
+class MoveMaker:
+    """The placer maker of a `move` step: everything written before it now stands where `motion` put it."""
+
+    def __init__(self, motion):
+        self.motion = motion
+
+    def make(self, ctx, step_id, step):
+        ctx.placers = [carried(placer, step_id, self.motion) for placer in ctx.placers]
+        for order, placer in enumerate(ctx.placers):
+            placer.order = order
+        ctx.slabs = [placer for placer in ctx.placers if isinstance(placer, Slab)]
 
 
 class _Collector:

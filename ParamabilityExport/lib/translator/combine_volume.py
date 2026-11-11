@@ -117,12 +117,12 @@ def _over(value, limit):
 
 def exceeds_tools(combine, data):
     """True when the part after the Combine cannot come from its measured tool bodies: a cut or a join changes the
-    part by at most the sum of the tools, and an intersect ends at most as big as the smallest tool. False when a
-    volume it needs was not measured."""
+    part by at most the sum of the tools, and an intersect ends at most as big as the smallest tool (the sum of them
+    when it keeps what any tool holds). False when a volume it needs was not measured."""
     before, after = data.get("volume_before"), data.get("volume_after")
     volumes = [tool.get("volume") for tool in data.get("tools") or []]
     if after is None or not volumes or None in volumes:
         return False
     if combine == "intersect":
-        return _over(after, min(volumes))
+        return _over(after, sum(volumes) if data.get("intersect_model") == "any" else min(volumes))
     return before is not None and _over(abs(after - before), sum(volumes))

@@ -169,17 +169,17 @@ class CopyLimitTest(unittest.TestCase):
         self.assertEqual((result.refusal, result.fixed, result.loose), (None, [], []))
 
     def test_a_count_that_passes_the_limit_inside_its_size_range_marks_its_size(self):
-        # holes_count runs from 1 to 6: 36 copies now, 72 at the top.
-        result = translated(pattern_of("holes_count * 12", 36))
+        # holes_count runs from 1 to 6: 150 copies now, 300 at the top.
+        result = translated(pattern_of("holes_count * 50", 150))
         self.assertIsNone(result.refusal)
         self.assertEqual([f["name"] for f in result.loose], ["holes_count"])
-        self.assertIn("more than 64 copies", result.loose[0]["reason"])
+        self.assertIn("more than 256 copies", result.loose[0]["reason"])
         self.assertIn("holes_count", result.recipe["sizes"])
 
     def test_a_count_over_the_limit_at_its_current_value_stops_the_copy(self):
-        result = translated(pattern_of("holes_count * 30", 90))
+        result = translated(pattern_of("holes_count * 100", 300))
         self.assertIsNone(result.recipe)
-        self.assertIn("more than 64 copies", result.refusal["reason"])
+        self.assertIn("more than 256 copies", result.refusal["reason"])
 
 
 if __name__ == "__main__":

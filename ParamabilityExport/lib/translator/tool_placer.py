@@ -5,17 +5,11 @@ the placers of the tool's walk, and the material it leaves comes from the tool's
 copies owned by the tool step, so a selector outside the tool never names a step inside it.
 """
 from . import follow
-from .moved_placer import MovedPlacer
+from .moved_placer import carried
 from .placer import ADD, CUT, Placer
+from .result import Entry
 from .slabs import Motion
 from .values import reads_in
-
-
-def _carried(placer, owner, motion):
-    """`placer` as the list that holds the tool sees it: carried by `motion`, owned by the step `owner`."""
-    if hasattr(placer, "copied"):
-        return placer.copied(owner, motion)
-    return placer if motion.is_identity else MovedPlacer(placer, motion)
 
 
 class ToolPlacer(Placer):
@@ -28,7 +22,7 @@ class ToolPlacer(Placer):
 
     def copied(self, owner, motion):
         """This tool carried on by `motion`, made by step `owner`."""
-        return ToolPlacer(owner, [_carried(p, owner, motion) for p in self.placers], self.combine, self.unrelated)
+        return ToolPlacer(owner, [carried(p, owner, motion) for p in self.placers], self.combine, self.unrelated)
 
     def place(self, p, edge):
         for placer in reversed(self.placers):
@@ -74,6 +68,36 @@ class ToolMaker:
 
     def make(self, ctx, step_id, step):
         unrelated = set(ctx.written_reads) - set(reads_in(step))
-        placers = [_carried(placer, step_id, self.motion) for placer in self.walk.placers]
+        placers = [carried(placer, step_id, self.motion) for placer in self.walk.placers]
         ctx.add_placer(ToolPlacer(step_id, placers, step["combine"], unrelated))
         ctx.join_walk(self.walk)
+
+
+class JoinedWalk:
+    """Steps of the walk `walk` are written in this list as they are: the ids of its steps count for the items that
+    made them."""
+
+    def __init__(self, walk):
+        self.walk = walk
+
+    def make(self, ctx, step_id, step):
+        ctx.join_walk(self.walk)
+
+
+class WrittenFor:
+    """The step carries the values of the timeline item at `index`, which another item writes."""
+
+    def __init__(self, index):
+        self.index = index
+
+    def make(self, ctx, step_id, step):
+        ctx.credit(self.index, step_id)
+
+
+def wrap_body(step_id, label):
+    """For `StepResult.wraps_body`: gathers everything written so far into one tool step that starts the body."""
+    def wrap(ctx):
+        held = ctx.set_aside()
+        step = {"kind": "toolBody", "combine": "new", "features": held.steps}
+        return Entry(step, [ToolMaker(held)], label=label, step_id=step_id)
+    return wrap

@@ -97,7 +97,7 @@ class Context:
     def enter(self, item):
         """The walk reaches `item`: remember what is written so far, for `as_of`."""
         self.current = item
-        self._written_at.append((item.get("index"), len(self.placers), len(self.slabs), self.written_reads))
+        self._written_at.append((item.get("index"), self.placers[:], self.slabs[:], self.written_reads))
 
     @contextmanager
     def as_of(self, item):
@@ -105,9 +105,8 @@ class Context:
         the walk reached it."""
         saved = self.current, self.placers, self.slabs, self.written_reads
         placers, slabs, reads = next(((p, s, r) for index, p, s, r in self._written_at if index >= item["index"]),
-                                     (len(self.placers), len(self.slabs), self.written_reads))
-        self.current, self.placers, self.slabs, self.written_reads = (
-            item, self.placers[:placers], self.slabs[:slabs], reads)
+                                     (self.placers, self.slabs, self.written_reads))
+        self.current, self.placers, self.slabs, self.written_reads = item, placers[:], slabs[:], reads
         try:
             yield
         finally:
@@ -195,6 +194,27 @@ class Context:
         """Step ids written for the timeline item at `index` at any depth, also inside tool steps."""
         return self.steps_of(index) + self._tool_ids_by_index.get(index, [])
 
+    def wrote_after(self, index):
+        """True when a timeline item after `index` wrote steps in this walk."""
+        return any(at > index and ids for at, ids in self._ids_by_index.items())
+
+    def credit(self, index, step_id):
+        """The step `step_id` carries the values of the timeline item at `index`, though another item wrote it."""
+        self._tool_ids_by_index.setdefault(index, []).append(step_id)
+
+    def set_aside(self):
+        """A child walk that takes over everything written so far; this walk starts again with nothing written."""
+        held = self.child(self.target, self.id_prefix, depth=self.depth + 1)
+        held.steps, self.steps = self.steps, []
+        held.placers, self.placers = self.placers, []
+        held.slabs, self.slabs = self.slabs, []
+        held.plain_picks, self.plain_picks = self.plain_picks, {}
+        held.not_repeatable, self.not_repeatable = self.not_repeatable, set()
+        held.entries_by_index, self.entries_by_index = self.entries_by_index, {}
+        held._ids_by_index, self._ids_by_index = self._ids_by_index, {}
+        held._tool_ids_by_index, self._tool_ids_by_index = self._tool_ids_by_index, {}
+        return held
+
     def join_walk(self, child):
         """A tool step of the walk `child` is written: the ids of its steps count for the items that made them."""
         for index in set(child._ids_by_index) | set(child._tool_ids_by_index):
@@ -219,8 +239,12 @@ class Context:
         """Write the steps of a StepResult: give each step its id and label, append it to the recipe, make its
         placers, and return the ids.
 
-        Ids: `<kind>_<index>`, then `<kind>_<index>_<n>` for the second and later steps of one item.
+        Ids: `<kind>_<index>`, then `<kind>_<index>_<n>` for the second and later steps of one item. An `Entry` with an
+        id keeps it: other steps may name it already. A written entry keeps its id and label when it is written again.
         """
+        if result.wraps_body is not None:
+            result.entries.insert(0, result.wraps_body(self))
+            result.wraps_body = None
         ids = []
         name = str(item.get("name", ""))
         made = self._ids_by_index.setdefault(item["index"], [])
@@ -228,13 +252,14 @@ class Context:
         for n, entry in enumerate(result.entries, start=len(made) + 1):
             step = entry.step
             base = "%s%s_%s" % (self.id_prefix, step["kind"], item["index"])
-            step_id = base if n == 1 else "%s_%d" % (base, n)
+            step_id = entry.step_id or (base if n == 1 else "%s_%d" % (base, n))
             if len(step_id) > MAX_ID:
                 step_id = step_id[-MAX_ID:]
             if not entry.repeatable:
                 self.not_repeatable.add(step_id)
             step["id"] = step_id
             step["label"] = (entry.label or name)[:MAX_LABEL]
+            entry.step_id, entry.label = step_id, step["label"]
             for maker in entry.placers:
                 maker.make(self, step_id, step)
             if entry.picks is not None:

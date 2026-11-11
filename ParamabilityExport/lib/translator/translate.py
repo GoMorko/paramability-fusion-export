@@ -1,7 +1,7 @@
 """The driver: walks a capture's items, calls one handler per feature type, builds the recipe."""
 import importlib
 
-from . import range_check, step_kinds
+from . import range_check, repeat, step_kinds
 from .audit import audit
 from .sizes import joint_reasons, probed_sizes, text_reasons, untried_reasons, used_sizes
 from . import notes as wording, place
@@ -12,7 +12,8 @@ from .notes import (
 from .capture import validate_capture
 from .context import Context
 from .result import TranslateResult
-from .step_walk import all_steps
+from .step_walk import all_steps, nesting
+from .tool_walk import MAX_DEPTH as MAX_TOOL_DEPTH
 from ..params import geometry_links
 from ..params.expressions import MAX_FORMULA_LENGTH
 from .values import Sized, number
@@ -24,7 +25,7 @@ RECIPE_VERSION = 12
 # Edge selector keys newer than RECIPE_VERSION, the same way.
 SELECTOR_VERSIONS = {"chain": 14, "faceEdges": 14}
 MAX_FEATURES = 400
-MAX_PATTERN_COPIES = 64
+MAX_PATTERN_COPIES = 256
 MAX_PASSES = 70
 
 
@@ -74,6 +75,10 @@ def _over_caps(recipe, ctx):
     features = all_steps(recipe["features"])
     if len(features) > MAX_FEATURES:
         return "The part has more than %d steps." % MAX_FEATURES
+    if nesting(recipe["features"]) > MAX_TOOL_DEPTH:
+        return "The part is built from tools nested too deep to copy."
+    if repeat.copied_bodies(features) > repeat.MAX_COPIED_BODIES:
+        return "The patterns of this part make more than %d copies in all." % repeat.MAX_COPIED_BODIES
 
     def walk(node):
         if isinstance(node, dict):

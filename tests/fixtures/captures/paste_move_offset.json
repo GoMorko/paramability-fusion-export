@@ -1,0 +1,1422 @@
+{
+  "_comment": "A pasted peg moved three times, pressed longer, repeated round the z axis and cut from a plate.",
+  "capture": 3,
+  "fusion": "2.0.0",
+  "design": "Test",
+  "up_axis": "z",
+  "design_units": "mm",
+  "target": {
+    "token": "t1",
+    "name": "Body1",
+    "box": {
+      "min": [
+        -40.0,
+        -40.0,
+        0.0
+      ],
+      "max": [
+        40.0,
+        40.0,
+        10.0
+      ]
+    },
+    "volume_mm3": 63280.0
+  },
+  "items": [
+    {
+      "index": 0,
+      "name": "Sketch1",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 1,
+      "name": "Extrude1",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "operation": "newBody",
+        "profiles": [
+          {
+            "sketch": "Sketch1",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      -40,
+                      -40
+                    ],
+                    "end": [
+                      40,
+                      -40
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      40,
+                      -40
+                    ],
+                    "end": [
+                      40,
+                      40
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      40,
+                      40
+                    ],
+                    "end": [
+                      -40,
+                      40
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      -40,
+                      40
+                    ],
+                    "end": [
+                      -40,
+                      -40
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 10.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [
+          {
+            "token": "t1",
+            "name": "Body1"
+          }
+        ],
+        "target_box_before": null,
+        "end_offset": 10.0,
+        "params": {}
+      }
+    },
+    {
+      "index": 2,
+      "name": "Sketch2",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 3,
+      "name": "Extrude2",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t2",
+          "name": "Body2"
+        }
+      ],
+      "data": {
+        "operation": "newBody",
+        "profiles": [
+          {
+            "sketch": "Sketch2",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                20
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      -3,
+                      -3
+                    ],
+                    "end": [
+                      3,
+                      -3
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      3,
+                      -3
+                    ],
+                    "end": [
+                      3,
+                      3
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      3,
+                      3
+                    ],
+                    "end": [
+                      -3,
+                      3
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      -3,
+                      3
+                    ],
+                    "end": [
+                      -3,
+                      -3
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 4.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [
+          {
+            "token": "t2",
+            "name": "Body2"
+          }
+        ],
+        "target_box_before": null,
+        "end_offset": 4.0,
+        "params": {
+          "side_one.distance": {
+            "name": "d3",
+            "expression": "peg_len_mm",
+            "value": 4.0
+          }
+        }
+      }
+    },
+    {
+      "index": 4,
+      "name": "CopyPaste1",
+      "type": "CopyPasteBody",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t3",
+          "name": "Body3"
+        }
+      ],
+      "data": {
+        "sources": [
+          {
+            "token": "t2",
+            "name": "Body2",
+            "points": [
+              [
+                -3,
+                -3,
+                20
+              ],
+              [
+                3,
+                -3,
+                20
+              ],
+              [
+                -3,
+                3,
+                20
+              ],
+              [
+                3,
+                3,
+                20
+              ],
+              [
+                -3,
+                -3,
+                24
+              ],
+              [
+                3,
+                -3,
+                24
+              ],
+              [
+                -3,
+                3,
+                24
+              ],
+              [
+                3,
+                3,
+                24
+              ]
+            ]
+          }
+        ],
+        "result_bodies": [
+          {
+            "token": "t3",
+            "name": "Body3",
+            "points": [
+              [
+                -3,
+                -3,
+                20
+              ],
+              [
+                3,
+                -3,
+                20
+              ],
+              [
+                -3,
+                3,
+                20
+              ],
+              [
+                3,
+                3,
+                20
+              ],
+              [
+                -3,
+                -3,
+                24
+              ],
+              [
+                3,
+                -3,
+                24
+              ],
+              [
+                -3,
+                3,
+                24
+              ],
+              [
+                3,
+                3,
+                24
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "index": 5,
+      "name": "Move1",
+      "type": "MoveFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t3",
+          "name": "Body3"
+        }
+      ],
+      "data": {
+        "input_kind": "bodies",
+        "bodies": [
+          {
+            "token": "t3",
+            "name": "Body3"
+          }
+        ],
+        "move_type": "translateXYZ",
+        "points_before": [
+          [
+            [
+              -3,
+              -3,
+              20
+            ],
+            [
+              3,
+              -3,
+              20
+            ],
+            [
+              -3,
+              3,
+              20
+            ],
+            [
+              3,
+              3,
+              20
+            ],
+            [
+              -3,
+              -3,
+              24
+            ],
+            [
+              3,
+              -3,
+              24
+            ],
+            [
+              -3,
+              3,
+              24
+            ],
+            [
+              3,
+              3,
+              24
+            ]
+          ]
+        ],
+        "points_after": [
+          [
+            [
+              22,
+              -3,
+              20
+            ],
+            [
+              28,
+              -3,
+              20
+            ],
+            [
+              22,
+              3,
+              20
+            ],
+            [
+              28,
+              3,
+              20
+            ],
+            [
+              22,
+              -3,
+              24
+            ],
+            [
+              28,
+              -3,
+              24
+            ],
+            [
+              22,
+              3,
+              24
+            ],
+            [
+              28,
+              3,
+              24
+            ]
+          ]
+        ],
+        "translate": [
+          25.0,
+          0.0,
+          0.0
+        ],
+        "is_design_space": false,
+        "params": {
+          "translate.0": {
+            "name": "d5",
+            "expression": "gap_mm",
+            "value": 25.0
+          }
+        }
+      }
+    },
+    {
+      "index": 6,
+      "name": "Move2",
+      "type": "MoveFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t3",
+          "name": "Body3"
+        }
+      ],
+      "data": {
+        "input_kind": "bodies",
+        "bodies": [
+          {
+            "token": "t3",
+            "name": "Body3"
+          }
+        ],
+        "move_type": "translateXYZ",
+        "points_before": [
+          [
+            [
+              22,
+              -3,
+              20
+            ],
+            [
+              28,
+              -3,
+              20
+            ],
+            [
+              22,
+              3,
+              20
+            ],
+            [
+              28,
+              3,
+              20
+            ],
+            [
+              22,
+              -3,
+              24
+            ],
+            [
+              28,
+              -3,
+              24
+            ],
+            [
+              22,
+              3,
+              24
+            ],
+            [
+              28,
+              3,
+              24
+            ]
+          ]
+        ],
+        "points_after": [
+          [
+            [
+              22,
+              -3,
+              3
+            ],
+            [
+              28,
+              -3,
+              3
+            ],
+            [
+              22,
+              3,
+              3
+            ],
+            [
+              28,
+              3,
+              3
+            ],
+            [
+              22,
+              -3,
+              7
+            ],
+            [
+              28,
+              -3,
+              7
+            ],
+            [
+              22,
+              3,
+              7
+            ],
+            [
+              28,
+              3,
+              7
+            ]
+          ]
+        ],
+        "translate": [
+          0.0,
+          0.0,
+          -17.0
+        ],
+        "is_design_space": false,
+        "params": {}
+      }
+    },
+    {
+      "index": 7,
+      "name": "Move3",
+      "type": "MoveFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t3",
+          "name": "Body3"
+        }
+      ],
+      "data": {
+        "input_kind": "bodies",
+        "bodies": [
+          {
+            "token": "t3",
+            "name": "Body3"
+          }
+        ],
+        "move_type": "rotate",
+        "points_before": [
+          [
+            [
+              22,
+              -3,
+              3
+            ],
+            [
+              28,
+              -3,
+              3
+            ],
+            [
+              22,
+              3,
+              3
+            ],
+            [
+              28,
+              3,
+              3
+            ],
+            [
+              22,
+              -3,
+              7
+            ],
+            [
+              28,
+              -3,
+              7
+            ],
+            [
+              22,
+              3,
+              7
+            ],
+            [
+              28,
+              3,
+              7
+            ]
+          ]
+        ],
+        "points_after": [
+          [
+            [
+              3.0,
+              22.0,
+              3
+            ],
+            [
+              3.0,
+              28.0,
+              3
+            ],
+            [
+              -3.0,
+              22.0,
+              3
+            ],
+            [
+              -3.0,
+              28.0,
+              3
+            ],
+            [
+              3.0,
+              22.0,
+              7
+            ],
+            [
+              3.0,
+              28.0,
+              7
+            ],
+            [
+              -3.0,
+              22.0,
+              7
+            ],
+            [
+              -3.0,
+              28.0,
+              7
+            ]
+          ]
+        ],
+        "angle_deg": 90.0,
+        "axis": {
+          "point": [
+            0,
+            0,
+            0
+          ],
+          "dir": [
+            0,
+            0,
+            1
+          ],
+          "origin": true
+        },
+        "params": {}
+      }
+    },
+    {
+      "index": 8,
+      "name": "OffsetFaces1",
+      "type": "OffsetFacesFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t3",
+          "name": "Body3"
+        }
+      ],
+      "data": {
+        "distance": 1.0,
+        "faces": [
+          {
+            "token": "f1",
+            "frame": {
+              "origin": [
+                0,
+                25,
+                7
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "space": "sketch",
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      -3,
+                      -3
+                    ],
+                    "end": [
+                      3,
+                      -3
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      3,
+                      -3
+                    ],
+                    "end": [
+                      3,
+                      3
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      3,
+                      3
+                    ],
+                    "end": [
+                      -3,
+                      3
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      -3,
+                      3
+                    ],
+                    "end": [
+                      -3,
+                      -3
+                    ]
+                  }
+                ]
+              }
+            ],
+            "sides": "square",
+            "meets_offset": false
+          }
+        ],
+        "faces_after": [
+          {
+            "point": [
+              0,
+              25,
+              8
+            ],
+            "normal": [
+              0,
+              0,
+              1
+            ]
+          }
+        ],
+        "params": {
+          "distance": {
+            "name": "d8",
+            "expression": "press_mm",
+            "value": 1.0
+          }
+        }
+      }
+    },
+    {
+      "index": 9,
+      "name": "CircularPattern1",
+      "type": "CircularPatternFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t4",
+          "name": "Body4"
+        },
+        {
+          "token": "t5",
+          "name": "Body5"
+        },
+        {
+          "token": "t6",
+          "name": "Body6"
+        }
+      ],
+      "data": {
+        "entity_type": "bodies",
+        "sources": [],
+        "source_bodies": [
+          {
+            "token": "t3",
+            "name": "Body3",
+            "points": [
+              [
+                3.0,
+                22.0,
+                3
+              ],
+              [
+                3.0,
+                28.0,
+                3
+              ],
+              [
+                -3.0,
+                22.0,
+                3
+              ],
+              [
+                -3.0,
+                28.0,
+                3
+              ],
+              [
+                3.0,
+                22.0,
+                8
+              ],
+              [
+                3.0,
+                28.0,
+                8
+              ],
+              [
+                -3.0,
+                22.0,
+                8
+              ],
+              [
+                -3.0,
+                28.0,
+                8
+              ]
+            ]
+          }
+        ],
+        "result_bodies": [
+          {
+            "token": "t4",
+            "name": "Body4",
+            "points": [
+              [
+                -22.0,
+                3.0,
+                3
+              ],
+              [
+                -28.0,
+                3.0,
+                3
+              ],
+              [
+                -22.0,
+                -3.0,
+                3
+              ],
+              [
+                -28.0,
+                -3.0,
+                3
+              ],
+              [
+                -22.0,
+                3.0,
+                8
+              ],
+              [
+                -28.0,
+                3.0,
+                8
+              ],
+              [
+                -22.0,
+                -3.0,
+                8
+              ],
+              [
+                -28.0,
+                -3.0,
+                8
+              ]
+            ]
+          },
+          {
+            "token": "t5",
+            "name": "Body5",
+            "points": [
+              [
+                -3.0,
+                -22.0,
+                3
+              ],
+              [
+                -3.0,
+                -28.0,
+                3
+              ],
+              [
+                3.0,
+                -22.0,
+                3
+              ],
+              [
+                3.0,
+                -28.0,
+                3
+              ],
+              [
+                -3.0,
+                -22.0,
+                8
+              ],
+              [
+                -3.0,
+                -28.0,
+                8
+              ],
+              [
+                3.0,
+                -22.0,
+                8
+              ],
+              [
+                3.0,
+                -28.0,
+                8
+              ]
+            ]
+          },
+          {
+            "token": "t6",
+            "name": "Body6",
+            "points": [
+              [
+                22.0,
+                -3.0,
+                3
+              ],
+              [
+                28.0,
+                -3.0,
+                3
+              ],
+              [
+                22.0,
+                3.0,
+                3
+              ],
+              [
+                28.0,
+                3.0,
+                3
+              ],
+              [
+                22.0,
+                -3.0,
+                8
+              ],
+              [
+                28.0,
+                -3.0,
+                8
+              ],
+              [
+                22.0,
+                3.0,
+                8
+              ],
+              [
+                28.0,
+                3.0,
+                8
+              ]
+            ]
+          }
+        ],
+        "axis": {
+          "point": [
+            0,
+            0,
+            0
+          ],
+          "dir": [
+            0,
+            0,
+            1
+          ],
+          "origin": true
+        },
+        "quantity": 4,
+        "total_angle_deg": 360.0,
+        "symmetric": false,
+        "elements": [
+          {
+            "id": 1,
+            "suppressed": false,
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            }
+          },
+          {
+            "id": 2,
+            "suppressed": false,
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                0.0,
+                1.0,
+                0
+              ],
+              "y": [
+                -1.0,
+                0.0,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            }
+          },
+          {
+            "id": 3,
+            "suppressed": false,
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                -1.0,
+                0.0,
+                0
+              ],
+              "y": [
+                -0.0,
+                -1.0,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            }
+          },
+          {
+            "id": 4,
+            "suppressed": false,
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                -0.0,
+                -1.0,
+                0
+              ],
+              "y": [
+                1.0,
+                -0.0,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            }
+          }
+        ],
+        "suppressed_ids": [],
+        "params": {
+          "quantity": {
+            "name": "d9",
+            "expression": "ring_n",
+            "value": 4.0
+          }
+        }
+      }
+    },
+    {
+      "index": 10,
+      "name": "Combine1",
+      "type": "CombineFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "target": {
+          "token": "t1",
+          "name": "Body1"
+        },
+        "tools": [
+          {
+            "token": "t3",
+            "name": "Body3",
+            "volume": 180.0
+          },
+          {
+            "token": "t4",
+            "name": "Body4",
+            "volume": 180.0
+          },
+          {
+            "token": "t5",
+            "name": "Body5",
+            "volume": 180.0
+          },
+          {
+            "token": "t6",
+            "name": "Body6",
+            "volume": 180.0
+          }
+        ],
+        "operation": "cut",
+        "keep_tools": false,
+        "volume_before": 64000.0,
+        "volume_after": 63280.0
+      }
+    }
+  ],
+  "parameters": {
+    "user": [
+      {
+        "name": "peg_len_mm",
+        "expression": "4 mm",
+        "value": 0.4,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 4.0
+      },
+      {
+        "name": "gap_mm",
+        "expression": "25 mm",
+        "value": 2.5,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 25.0
+      },
+      {
+        "name": "press_mm",
+        "expression": "1 mm",
+        "value": 0.1,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 1.0
+      },
+      {
+        "name": "ring_n",
+        "expression": "4",
+        "value": 4,
+        "unit": "",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "count",
+        "display_value": 4
+      }
+    ],
+    "model": [
+      {
+        "name": "d3",
+        "expression": "peg_len_mm",
+        "value": 0.4,
+        "unit": "mm",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [
+          "peg_len_mm"
+        ],
+        "role": "Distance",
+        "kind": "derived",
+        "display_value": 4.0,
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d3",
+          "name": ""
+        }
+      },
+      {
+        "name": "d5",
+        "expression": "gap_mm",
+        "value": 2.5,
+        "unit": "mm",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [
+          "gap_mm"
+        ],
+        "role": "Distance",
+        "kind": "derived",
+        "display_value": 25.0,
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d5",
+          "name": ""
+        }
+      },
+      {
+        "name": "d8",
+        "expression": "press_mm",
+        "value": 0.1,
+        "unit": "mm",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [
+          "press_mm"
+        ],
+        "role": "Distance",
+        "kind": "derived",
+        "display_value": 1.0,
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d8",
+          "name": ""
+        }
+      },
+      {
+        "name": "d9",
+        "expression": "ring_n",
+        "value": 4,
+        "unit": "",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [
+          "ring_n"
+        ],
+        "role": "Quantity",
+        "kind": "derived",
+        "display_value": 4,
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d9",
+          "name": ""
+        }
+      }
+    ]
+  }
+}

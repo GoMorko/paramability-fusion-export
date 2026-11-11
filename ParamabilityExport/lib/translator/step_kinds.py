@@ -43,6 +43,9 @@ class StepType:
     unsupported: for a modeling type without a handler, the plain reason the copy stops at it.
     splits_faces: it cuts faces of a body without changing its solid, so it is skipped when the capture shows the
       body unchanged.
+    makes_bodies: it can make bodies that copy others (a Paste, a pattern or mirror of bodies). Its other results are
+      expected, so the walk of one body does not refuse them.
+    moves_bodies: it carries the bodies its data names to another place.
     """
 
     name: str
@@ -53,6 +56,8 @@ class StepType:
     sketches: tuple = ()
     unsupported: str = None
     splits_faces: bool = False
+    makes_bodies: bool = False
+    moves_bodies: bool = False
 
 
 @dataclass(frozen=True)
@@ -91,14 +96,14 @@ STEP_TYPES = (
     StepType("ChamferFeature", "chamfer", reader="read_finish", handler="finish:chamfer"),
     StepType("ShellFeature", "shell", reader="read_finish", handler="finish:shell"),
     StepType("OffsetFacesFeature", "offset faces", reader="read_offset", handler="offset:handle"),
-    StepType("RectangularPatternFeature", "rectangular pattern", reader="read_repeat", handler="repeat:rectangular"),
-    StepType("CircularPatternFeature", "circular pattern", reader="read_repeat", handler="repeat:circular"),
-    StepType("MirrorFeature", "mirror", reader="read_repeat", handler="repeat:mirror"),
+    StepType("RectangularPatternFeature", "rectangular pattern", reader="read_repeat",
+             handler="body_copies:rectangular", makes_bodies=True),
+    StepType("CircularPatternFeature", "circular pattern", reader="read_repeat", handler="body_copies:circular",
+             makes_bodies=True),
+    StepType("MirrorFeature", "mirror", reader="read_repeat", handler="body_copies:mirror", makes_bodies=True),
     StepType("SplitFaceFeature", "split face", splits_faces=True),
-    StepType("CopyPasteBody", "pasted body", reader="read_paste",
-             unsupported="A pasted body is not copied yet: the copy would need the steps of the body it comes from."),
-    StepType("MoveFeature", "move", reader="read_move",
-             unsupported="A Move is not copied yet: the copy cannot tell how far it moves the body."),
+    StepType("CopyPasteBody", "pasted body", reader="read_paste", handler="paste:handle", makes_bodies=True),
+    StepType("MoveFeature", "move", reader="read_move", handler="move:handle", moves_bodies=True),
     StepType("EmbossFeature", "emboss", reader="read_emboss", handler="emboss:handle", sketches=(PROFILES,)),
     StepType("Sketch", "sketch", role=SKETCH),
     StepType("ConstructionPlane", "construction plane", role=SKETCH),
@@ -136,7 +141,7 @@ RECIPE_KINDS = (
     RecipeKind("mirror", positions=(("plane", "origin"),), directions=(("plane", "normal"),), repeat=SOLID,
                repeats=True),
     RecipeKind("toolBody", version=15, repeat=SOLID),
-    RecipeKind("move", version=15, written=False),
+    RecipeKind("move", version=15, positions=(("turn", "axisPoint"),), directions=(("translate",), ("turn", "axis"))),
     RecipeKind("loft", written=False),
     RecipeKind("sweep", written=False),
     RecipeKind("thread", written=False),

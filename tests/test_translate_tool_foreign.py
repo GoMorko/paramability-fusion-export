@@ -177,12 +177,10 @@ class RefusedToolTest(unittest.TestCase):
         self.assertIn("Fillet1", refusal["reason"])
         self.assertIn("Rod", refusal["reason"])
 
-    def test_a_pasted_tool_and_a_moved_tool_stop_the_copy_with_their_own_reason(self):
-        for kind, said in (("CopyPasteBody", "pasted body is not copied"), ("MoveFeature", "move is not copied")):
+    def test_a_pasted_tool_and_a_moved_tool_that_were_not_read_stop_the_copy_and_name_the_step(self):
+        for kind in ("CopyPasteBody", "MoveFeature"):
             with self.subTest(kind):
-                reason = self.refusal(self.step_before_combine(kind, "Step1"))["reason"]
-                self.assertIn("Step1", reason)
-                self.assertIn(said, reason.lower())
+                self.assertIn("Step1", self.refusal(self.step_before_combine(kind, "Step1"))["reason"])
 
     def test_a_step_that_was_not_read_stops_the_copy_and_says_why(self):
         capture = self.step_before_combine("ExtrudeFeature", "Extrude9", {})

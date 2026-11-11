@@ -31,6 +31,7 @@ from .picks import MAX_NEAR_POINTS
 from .values import Quantity, Sized, number, numbers_of, reads_in
 from .placer_makers import CopiesMaker
 from .result import Refusal, StepResult
+from .step_walk import moved_later
 
 MAX_REFERENCES = 64
 MAX_COPIED_BODIES = 256
@@ -69,6 +70,8 @@ def _sources(data, ctx, what):
             continue
         if not ids:
             return Refusal("A step this %s copies is not part of the exported body." % what)
+        if any(moved_later(ctx.steps, step_id) for step_id in ids):
+            return Refusal("A step this %s copies was moved by a later Move, which is not copied yet." % what)
         if any(step_id in ctx.not_repeatable for step_id in ids):
             return Refusal("A step that reaches to the part or to a face grows with the part, so its copies are not "
                            "copied yet.")
@@ -157,7 +160,7 @@ def _kept_copy_count(step):
     return max(0, grid + turned - len(set(step.get("skip", ()))))
 
 
-def _copied_bodies(steps):
+def copied_bodies(steps):
     """Tool bodies the pattern and mirror steps add, counted as the app counts them.
 
     A step named in `of` counts once; a repeat among them counts all the bodies it makes, original included.
@@ -182,7 +185,7 @@ def _build(ctx, item, solids, finishes, repeat_steps, what):
         for repeat_step, owned in repeat_steps:
             repeat_step["of"] = solids
             out.add(repeat_step, [CopiesMaker(owned)])
-        if _copied_bodies(list(ctx.steps) + out.steps) > MAX_COPIED_BODIES:
+        if copied_bodies(list(ctx.steps) + out.steps) > MAX_COPIED_BODIES:
             return Refusal("This %s makes more than %d copies in all." % (what, MAX_COPIED_BODIES))
     motions = [motion for _, owned in repeat_steps for motion in owned]
     out.extend(StepResult.of(_finish_copies(ctx, item, finishes, motions)).entries)
@@ -199,11 +202,11 @@ def _is_identity_rotation(frame):
             and vec.close(frame["z"], [0, 0, 1], ROTATION_TOL))
 
 
-def _is_identity(frame):
+def is_identity(frame):
     return _is_identity_rotation(frame) and vec.length(frame["origin"]) <= FIT_TOL_MM
 
 
-def _kept_elements(data):
+def kept_elements(data):
     """Elements that are present and not suppressed, or None when the list was not read."""
     elements = data.get("elements") or []
     if not elements:
@@ -305,7 +308,7 @@ def _distance_kind(data):
     kind = data.get("distance_type")
     if kind in ("spacing", "extent"):
         return kind
-    kept = _kept_elements(data)
+    kept = kept_elements(data)
     if not kept:
         return None
     for guess in ("spacing", "extent"):
@@ -502,22 +505,23 @@ def _symmetric_reach(axes, data):
     return None
 
 
-def rectangular(item, ctx):
+def rectangular(item, ctx, sources=None):
+    """`sources` is `(solid step ids, finish steps)` when the caller wrote what the pattern repeats."""
     data = item.get("data") or {}
-    sources = _sources(data, ctx, "pattern")
+    sources = _sources(data, ctx, "pattern") if sources is None else sources
     if isinstance(sources, Refusal):
         return sources
     solids, finishes = sources
     axes = _lattice_axes(item, ctx)
     if isinstance(axes, Refusal):
         return axes
-    kept = _kept_elements(data)
+    kept = kept_elements(data)
     if kept is None:
         return Refusal("The copies of this pattern could not be read.")
 
     # Element transforms are relative to the original, so offsets are measured from the origin, and the original
     # itself must be among the elements or the lattice could be off by one place.
-    if not any(_is_identity(e["frame"]) for e in data["elements"]):
+    if not any(is_identity(e["frame"]) for e in data["elements"]):
         if any(axis["symmetric"] for axis in axes):
             return Refusal("The original sits between two copies of this pattern, which is not copied yet.")
         return Refusal("The original copy was not found among the copies of this pattern.")
@@ -618,7 +622,7 @@ def _copy_number(angle, delta, sign, count, full):
 UNIT_DIRECTIONS = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0])
 
 
-def _axis_shift(ctx, item, axis, direction):
+def axis_shift(ctx, item, axis, direction):
     """How the axis point moves with sizes, as three Quantities (zero where it stays). An axis on a face or edge that
     sizes move takes the move; the part of it along the axis is left out, it changes nothing. An axis that cannot be
     followed stays where it is. An axis of another component moves as the probe measured it (`ref_motion`)."""
@@ -634,7 +638,7 @@ def _axis_shift(ctx, item, axis, direction):
     return [shift if shift.sized and abs(abs(d) - 1) >= 1e-9 else Quantity(0.0) for shift, d in zip(shifts, direction)]
 
 
-def _turn_motion(point, moved, direction, angle, needs, by):
+def turn_motion(point, moved, direction, angle, needs, by):
     """The turn about the axis through `point`, with the shift that follows `moved` (how the axis point moves)."""
     base = Motion.turn(point, direction, angle, needs, by)
     if not any(q.sized for q in moved):
@@ -684,11 +688,11 @@ def _symmetric_circular(item, ctx, setup):
     count_q, angle_q = setup["count_q"], setup["angle_q"]
     symmetric.check_even_unseen(ctx, item, count_q, count)
     back_q, forward_q = symmetric.part_counts(count_q, back, forward)
-    moved = _axis_shift(ctx, item, setup["axis"], direction)
+    moved = axis_shift(ctx, item, setup["axis"], direction)
     present = {k for _, k in steps}
     needs = count_q.reads + angle_q.reads
     name = item.get("name", "")
-    motions = {k: _turn_motion(point, moved, direction, k * delta, needs, name) for k in sorted(present) if k}
+    motions = {k: turn_motion(point, moved, direction, k * delta, needs, name) for k in sorted(present) if k}
     parts = []
     for sign, part_count, part_q in ((1, forward + 1, forward_q), (-1, back + 1, back_q)):
         skip = [n for n in range(1, part_count) if sign * n not in present]
@@ -718,9 +722,10 @@ def _symmetric_circular(item, ctx, setup):
     return result
 
 
-def circular(item, ctx):
+def circular(item, ctx, sources=None):
+    """`sources` is `(solid step ids, finish steps)` when the caller wrote what the pattern repeats."""
     data = item.get("data") or {}
-    sources = _sources(data, ctx, "pattern")
+    sources = _sources(data, ctx, "pattern") if sources is None else sources
     if isinstance(sources, Refusal):
         return sources
     solids, finishes = sources
@@ -736,7 +741,7 @@ def circular(item, ctx):
     if not full and not 0 < total_deg < FULL_TURN_DEG:
         return Refusal("The angle of this pattern could not be read.")
     delta = FULL_TURN_DEG / count if full else total_deg / (count - 1)
-    kept = _kept_elements(data)
+    kept = kept_elements(data)
     if kept is None:
         return Refusal("The copies of this pattern could not be read.")
 
@@ -767,7 +772,7 @@ def circular(item, ctx):
     by_place = {_copy_number(t, delta, sign, count, full): element for element, t in turns}
     skip = _skip_places(by_place, count)
 
-    moved = _axis_shift(ctx, item, axis, direction)
+    moved = axis_shift(ctx, item, axis, direction)
     polar = {"axisPoint": _vec(point), "axis": _vec(direction), "count": count}
     if not full:
         polar["angleDeg"] = round9((count - 1) * delta)
@@ -783,7 +788,7 @@ def circular(item, ctx):
         angle_q = values.quantity(ctx, item, "total_angle_deg", total_deg, dim="angle",
                                   sign=-1 if raw_total < 0 else 1, absolute=True)
     needs = count_q.reads + (angle_q.reads if angle_q is not None else ())
-    motions = [_turn_motion(point, moved, direction, n * delta, needs, item.get("name", ""))
+    motions = [turn_motion(point, moved, direction, n * delta, needs, item.get("name", ""))
                for n in sorted(by_place) if n > 0]
     steps = _build(ctx, item, solids, finishes, [(pattern, motions)], "pattern")
     if isinstance(steps, Refusal):
@@ -800,7 +805,7 @@ def circular(item, ctx):
 # ---------------------------------------------------------------- mirror
 
 
-def _mirror_plane(data):
+def mirror_plane(data):
     plane = data.get("plane")
     if not plane or "point" not in plane or "normal" not in plane or vec.length(plane["normal"]) < 1e-9:
         return None
@@ -886,6 +891,8 @@ def _cut_reach(step, as_numbers=numbers_of):
         end = vec.add(step["origin"], vec.scale(axis, number(step["depth"])))
         return [step["origin"], end], radius
     sketch = step.get("sketch") or {}
+    if "on" not in sketch:
+        return None
     on = {k: (vec.unit(v) if k != "origin" else [number(c) for c in v]) for k, v in sketch["on"].items()}
     outline = _loop_points(sketch["outer"])
     if outline is None:
@@ -1043,19 +1050,22 @@ def _keep_one_side(ctx, item, plane, steps, side):
             ctx.doubt([names[n] for n in setting if n in names], why)
 
 
-def mirror(item, ctx):
+def mirror(item, ctx, sources=None):
+    """`sources` is `(solid step ids, finish steps)` when the caller wrote what the mirror repeats."""
     data = item.get("data") or {}
-    plane = _mirror_plane(data)
+    plane = mirror_plane(data)
     if plane is None:
         return Refusal("The mirror plane could not be read as a flat plane.")
     shift = follow.place_plane(ctx, item, data["plane"], plane["normal"], "mirrors across")
     written, moved = _mirror_plane_at(plane, shift if shift is not None else Quantity(0.0))
     entity = data.get("entity_type")
-    if entity == "bodies":
+    if sources is not None:
+        solids, finishes = sources
+    elif entity == "bodies":
         if not data.get("combine"):
             return Refusal("A mirrored body is only copied when it is joined to the part.")
         if any(recipe_kind(step["kind"]).repeat != SOLID for step in ctx.steps):
-            return Refusal("A mirror of the whole body after a round, chamfer or shell is not copied yet.")
+            return Refusal("A mirror of the whole body after a round, chamfer, shell or Move is not copied yet.")
         problem = _body_mirror_problem(data, plane, ctx.steps)
         if problem:
             return Refusal(problem)

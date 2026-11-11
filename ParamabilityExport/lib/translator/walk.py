@@ -22,13 +22,17 @@ def _label(item):
     return wording.step_label(item.get("name"), item.get("type")) or "A step"
 
 
+# Lists of the bodies a step takes or makes. A body of another component in one of them has its own rules.
+_BODY_LISTS = ("participants", "tools", "sources", "source_bodies", "result_bodies", "bodies")
+
+
 def is_foreign(node):
-    """A record of the step's data marked `foreign` by the reader: it belongs to another component. Other bodies a
-    step lists (participants) and the tool bodies a combine lists are left to their own rules."""
+    """A record of the step's data marked `foreign` by the reader: it belongs to another component. The bodies a step
+    lists are left to their own rules."""
     if isinstance(node, dict):
         if node.get("foreign") is True:
             return True
-        return any(is_foreign(v) for k, v in node.items() if k not in ("participants", "tools"))
+        return any(is_foreign(v) for k, v in node.items() if k not in _BODY_LISTS)
     if isinstance(node, list):
         return any(is_foreign(v) for v in node)
     return False
@@ -44,7 +48,7 @@ def _touches_target(item, ctx):
     if any(ctx.is_target(b) for b in item.get("bodies_after") or []):
         return True
     data = _data(item)
-    if ctx.is_target(data.get("target")):
+    if ctx.is_target(data.get("target")) or any(ctx.is_target(b) for b in data.get("bodies") or []):
         return True
     if data.get("operation") != "newBody":
         return any(ctx.is_target(b) for b in data.get("participants") or [])
@@ -57,7 +61,7 @@ def _existing_bodies(item):
     if isinstance(before, list):
         return before
     data = _data(item)
-    named = list(data.get("participants") or []) + list(data.get("tools") or [])
+    named = list(data.get("participants") or []) + list(data.get("tools") or []) + list(data.get("bodies") or [])
     if data.get("target"):
         named.append(data["target"])
     return named
@@ -70,6 +74,18 @@ def _new_bodies(item, ctx):
         b for b in item.get("bodies_after") or []
         if not ctx.is_target(b) and not any(same_body(b, e) for e in existing)
     ]
+
+
+def copies_bodies(item):
+    """The item makes bodies that copy others: a Paste, or a pattern or mirror of bodies."""
+    spec = step_kinds.step_type(item.get("type"))
+    return spec is not None and spec.makes_bodies and _data(item).get("entity_type", "bodies") == "bodies"
+
+
+def _changes_named_bodies(item):
+    """The item copies or moves bodies, so one that lists no body may still have changed the part."""
+    spec = step_kinds.step_type(item.get("type"))
+    return copies_bodies(item) or (spec is not None and spec.moves_bodies)
 
 
 def _lost_target(item, ctx):
@@ -170,10 +186,12 @@ def walk_items(ctx, result):
             return refuse(item, "This step does not build in Fusion.")
 
         handler = ctx.handlers.get(item.get("type"))
-        if not touches and handler is None and not item["bodies_after"]:
+        if not touches and not item["bodies_after"] and (handler is None or _changes_named_bodies(item)):
             if item.get("target_changed") is False:
                 result.items.append(make_verdict(item, "skipped", note="Does not change the exported body."))
                 continue
+            if handler is not None:
+                return refuse(item, "The bodies this %s changes could not be read." % type_words(item["type"]))
             return refuse(item, "Steps of type %s are not copied yet." % type_words(item["type"]))
         if not touches:
             result.items.append(make_verdict(item, "skipped", note="Helper geometry, not part of the exported body."))
@@ -199,7 +217,7 @@ def walk_items(ctx, result):
                           wording.reaches_component_note(_label(item)))
         made_in_component = True
         fix_construction(ctx, item)
-        if _new_bodies(item, ctx):
+        if _new_bodies(item, ctx) and not copies_bodies(item):
             return refuse(item, "This step splits the part or makes another body, which is not copied yet.")
         outcome = run_handler(handler, item, ctx)
         if isinstance(outcome, Refusal):

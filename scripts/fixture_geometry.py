@@ -5,7 +5,7 @@ Run from the add-in root (needs numpy; the add-in and its tests do not):
     python3 scripts/fixture_geometry.py --write    write the computed values into the fixtures
     python3 scripts/fixture_geometry.py name ...   limit to the named fixtures
 
-The model is a voxel count of extrudes (thin walls with round corners included), embosses on flat faces, revolves, holes, combines, patterns and mirrors, read straight from the
+The model is a voxel count of extrudes (thin walls with round corners included), embosses on flat faces, revolves, holes, combines, patterns and mirrors, pastes, moves and offsets of flat faces with square sides, read straight from the
 capture data (not from the translated recipe). Boxes are exact to half a voxel (0.1 mm), volumes within about
 0.5 percent. Fillets, chamfers, shells, modeled threads, tapers, face profiles and unreadable fields
 are not modelled: the box stays, `volume_mm3` becomes null. The same box rule fills each item's
@@ -499,6 +499,68 @@ def apply_op(body, op, shape):
     raise Unmodelled("operation " + str(op))
 
 
+def offset_shape(data):
+    """The prism between each moved face before and after an offset."""
+    low, high = sorted((0.0, float(data["distance"])))
+    pieces = []
+    for face in data["faces"]:
+        if face.get("sides") == "other":
+            raise Unmodelled("leaning sides")
+        test2d, pts2d = profile_test(face)
+        origin, rot = frame_of(face["frame"])
+
+        def test(p, test2d=test2d, origin=origin, rot=rot):
+            local = (p - origin) @ rot
+            hit = (local[:, 2] >= low) & (local[:, 2] <= high)
+            out = np.zeros(len(p), bool)
+            idx = np.nonzero(hit)[0]
+            if len(idx):
+                out[idx] = test2d(local[idx, 0], local[idx, 1])
+            return out
+
+        corners = np.array([[x, y, w] for x in (pts2d[:, 0].min(), pts2d[:, 0].max())
+                            for y in (pts2d[:, 1].min(), pts2d[:, 1].max()) for w in (low, high)])
+        world = corners @ rot.T + origin
+        pieces.append(Shape(test, world.min(axis=0), world.max(axis=0)))
+    shape = pieces[0]
+    for other in pieces[1:]:
+        shape = shape.union(other)
+    return shape
+
+
+def rigid_fit(before, after):
+    """(rot, shift) that carries the points `before` onto `after`."""
+    a, b = np.asarray(before, float), np.asarray(after, float)
+    if len(a) < 3 or len(a) != len(b):
+        raise Unmodelled("too few points")
+    ca, cb = a.mean(axis=0), b.mean(axis=0)
+    u, _, vt = np.linalg.svd((a - ca).T @ (b - cb))
+    flip = np.diag([1.0, 1.0, np.sign(np.linalg.det(vt.T @ u.T))])
+    rot = vt.T @ flip @ u.T
+    return rot, cb - rot @ ca
+
+
+def lands_on(points, rot, shift, result):
+    moved = np.asarray(points, float) @ rot.T + shift
+    other = np.asarray(result, float)
+    return len(moved) == len(other) and all(np.abs(other - p).sum(axis=1).min() < 1e-2 for p in moved)
+
+
+def copied_bodies(data, bodies, key_of):
+    """Fill `bodies` with each copy a pattern of bodies made, matched to its source and element by the points."""
+    skipped = set(data.get("suppressed_ids") or [])
+    elements = [e for e in data["elements"] if not e.get("suppressed") and e["id"] not in skipped]
+    for result in data["result_bodies"]:
+        for source in data["source_bodies"]:
+            moves = [frame_move(e["frame"]) for e in elements]
+            found = next(((r, t) for r, t in moves if lands_on(source["points"], r, t, result["points"])), None)
+            if found is not None:
+                bodies[key_of(result)] = bodies[key_of(source)].moved(*found)
+                break
+        else:
+            raise Unmodelled("copy without a source")
+
+
 def body_key(item, data, target):
     bodies = item.get("bodies_after") or data.get("participants") or []
     if bodies:
@@ -556,12 +618,29 @@ def evaluate(capture):
                 features[item["index"]] = (key, "cut", shape)
             elif kind == "CombineFeature":
                 tkey = key_of(data["target"])
-                for tool in data["tools"]:
-                    shape = bodies.get(key_of(tool))
+                shapes = [bodies.get(key_of(tool)) for tool in data["tools"]]
+                if data.get("intersect_model") == "any":
+                    union = shapes[0]
+                    for other in shapes[1:]:
+                        union = union.union(other)
+                    shapes = [union]
+                for shape in shapes:
                     if shape is not None and bodies.get(tkey) is not None:
                         bodies[tkey] = apply_op(bodies[tkey], {"join": "join", "cut": "cut", "intersect": "intersect"}[data["operation"]], shape)
+                for tool in data["tools"]:
                     if not data.get("keep_tools"):
                         bodies.pop(key_of(tool), None)
+            elif kind == "CopyPasteBody":
+                source, result = data["sources"][0], data["result_bodies"][0]
+                bodies[key_of(result)] = bodies[key_of(source)].moved(*rigid_fit(source["points"], result["points"]))
+            elif kind == "MoveFeature":
+                for body, before_points, after_points in zip(data["bodies"], data["points_before"], data["points_after"]):
+                    bodies[key_of(body)] = bodies[key_of(body)].moved(*rigid_fit(before_points, after_points))
+            elif kind == "OffsetFacesFeature":
+                key = body_key(item, data, target)
+                bodies[key] = apply_op(bodies[key], "join" if data["distance"] > 0 else "cut", offset_shape(data))
+            elif kind in ("RectangularPatternFeature", "CircularPatternFeature") and data.get("entity_type") == "bodies":
+                copied_bodies(data, bodies, key_of)
             elif kind in ("RectangularPatternFeature", "CircularPatternFeature"):
                 if data.get("entity_type") != "features" or data.get("symmetric") or data.get("symmetric_one"):
                     raise Unmodelled("pattern kind")

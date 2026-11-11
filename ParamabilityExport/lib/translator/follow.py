@@ -205,12 +205,12 @@ def _held_by_a_walk(ctx, body):
     return False
 
 
-def _reads_with_outer(ctx, item):
+def reads_with_outer(ctx, item):
     """The sizes read before `item` by this walk and the walks that hold it."""
     if ctx.outer is None:
         return ctx.written_reads
     with ctx.outer.as_of(item):
-        return tuple(dict.fromkeys(ctx.written_reads + _reads_with_outer(ctx.outer, item)))
+        return tuple(dict.fromkeys(ctx.written_reads + reads_with_outer(ctx.outer, item)))
 
 
 def _beyond_tool(ctx, item, ref, points, what, ask, edge=False):
@@ -349,7 +349,7 @@ def _built_shift(ctx, item, ref, direction, what):
             return None if None in shifts else shifts[0].plus(shifts[1]).scaled(0.5)
     elif len(parts) == 1 and parts[0].get("entity_type") in ("BRepEdge", "BRepFace"):
         return place_plane(ctx, item, dict(parts[0], dir=ref.get("dir")), direction, what)
-    ctx.doubt(_reads_with_outer(ctx, item), "%s %s a %s built on part geometry that may move with it, and the copy "
+    ctx.doubt(reads_with_outer(ctx, item), "%s %s a %s built on part geometry that may move with it, and the copy "
               "cannot follow that" % (_name(item), what, "plane" if ref.get("entity_type") == "ConstructionPlane" else "axis"))
     return None
 

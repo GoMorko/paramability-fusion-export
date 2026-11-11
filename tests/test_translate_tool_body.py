@@ -19,6 +19,7 @@ from lib.translator.placer import ADD, CUT, Placer
 from lib.translator.slabs import Motion as CopyMotion, Slab
 from lib.translator.step_walk import all_steps
 from lib.translator.tool_placer import ToolPlacer
+from lib.translator.translate import _over_caps as over_caps
 from lib.translator.values import Quantity
 
 PLATE = {"token": "t1", "name": "Body1"}
@@ -128,12 +129,33 @@ class WrittenToolTest(unittest.TestCase):
         self.assertEqual(moved["features"][0]["features"][0]["origin"], [6.0, 0.0, 0.0])
 
 
+class IntersectOfSeveralToolsTest(unittest.TestCase):
+    def test_a_part_kept_where_every_tool_reaches_is_a_tool_step_per_tool(self):
+        result = sized(load_capture("intersect_every"))
+        self.assertEqual([(s["kind"], s.get("combine")) for s in result.recipe["features"][1:]],
+                         [("toolBody", "intersect"), ("toolBody", "intersect")])
+        self.assertEqual(marked(result), [])
+        self.assertEqual(check_recipe(result.recipe), [])
+
+    def test_a_part_kept_where_any_tool_reaches_is_one_tool_step_that_holds_the_tools(self):
+        result = sized(load_capture("intersect_any"))
+        (outer,) = steps_of(result.recipe, "toolBody")
+        self.assertEqual(outer["combine"], "intersect")
+        self.assertEqual([(s["kind"], s["combine"]) for s in outer["features"]], [("toolBody", "new"), ("toolBody", "add")])
+        self.assertEqual(marked(result), [])
+        ids = [s["id"] for s in all_steps(result.recipe["features"])]
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertEqual(check_recipe(result.recipe), [])
+
+    def test_a_model_that_is_unknown_or_missing_refuses(self):
+        for model in ("unknown", None):
+            with self.subTest(model):
+                capture = load_capture("intersect_every")
+                capture["items"][-1]["data"]["intersect_model"] = model
+                self.assertEqual(translate(capture).refusal["name"], "Combine1")
+
+
 class RefusedToolTest(unittest.TestCase):
-    def test_intersect_of_several_tools_refuses(self):
-        capture = load_capture("combine_intersect")
-        data = capture["items"][-1]["data"]
-        data["tools"] = data["tools"] + [{"token": "t9", "name": "Body9"}]
-        self.assertIsNone(translate(capture).recipe)
 
     def test_a_change_bigger_than_the_tools_refuses(self):
         capture = load_capture("combine_tool_chamfer")
@@ -148,6 +170,10 @@ class RefusedToolTest(unittest.TestCase):
             with self.subTest((combine, after)):
                 self.assertEqual(exceeds_tools(combine, {"volume_before": before, "volume_after": after, "tools": tools}),
                                  expected)
+
+    def test_an_intersect_that_keeps_what_any_tool_holds_ends_below_their_sum(self):
+        data = {"volume_after": 120.0, "intersect_model": "any", "tools": [{"volume": 100.0}, {"volume": 50.0}]}
+        self.assertFalse(exceeds_tools("intersect", data))
 
     def test_tool_volumes_that_were_not_read_skip_the_check(self):
         self.assertFalse(exceeds_tools("cut", {"volume_before": 9.0, "volume_after": 1.0, "tools": [{"volume": None}]}))
@@ -316,6 +342,15 @@ class AfterTheToolTest(unittest.TestCase):
         ctx.written_reads = ("plate", "peg")
         follow.follow_points(ctx, {"name": "Fillet1"}, [[1, 1, 2]], False)
         self.assertEqual(ctx.doubts[0].names, ("plate", "peg"))
+
+
+class NestingCapTest(unittest.TestCase):
+    def test_tools_nested_past_the_limit_refuse(self):
+        def nested(depth):
+            return {"kind": "toolBody", "features": [nested(depth - 1)] if depth > 1 else [{"kind": "extrude"}]}
+        ctx = Context({"target": PLATE, "items": []})
+        self.assertIsNone(over_caps({"features": [nested(3)]}, ctx))
+        self.assertIsNotNone(over_caps({"features": [nested(4)]}, ctx))
 
 
 class KeptToolTest(unittest.TestCase):

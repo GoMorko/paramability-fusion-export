@@ -53,6 +53,14 @@ class ToolBuild:
     def entries(self):
         return [entry for item in self.chain for entry in self.entries_of(item)]
 
+    def hand_over(self, out):
+        """The steps of this tool are written in `out`: what the walk recorded counts from now on."""
+        out.doubts.extend(self.doubts)
+        out.items.extend(self.items)
+        out.asked |= self.asked
+        out.notes.extend(self.notes)
+        out.tool_steps.extend(self.verdicts)
+
 
 def name_of(body):
     """The tool in plain words, with its component when it lives in another one."""
@@ -67,7 +75,7 @@ def cannot_copy(body, item, why):
     return Refusal("The tool body %s cannot be copied: %s (%s): %s" % (name_of(body), item.get("name"), kind, why))
 
 
-def _chain(ctx, body, before):
+def chain_of(ctx, body, before):
     """The items before `before` that made or changed `body`, in the component that holds it."""
     owner = tool_items.component_token(body) if tool_items.is_foreign_tool(body) else ctx.component
     found = tool_items.chain(ctx.timeline, body, before, owner or "")
@@ -91,18 +99,20 @@ def build(ctx, body, before, depth, place=0):
     of its Combine, which keeps the ids of its steps apart from those of the other tools."""
     if depth > MAX_DEPTH:
         return Refusal("The tool body %s is built from tools nested too deep to copy." % name_of(body))
-    chain = [_seen_from_tool(item, body) for item in _chain(ctx, body, before)]
+    chain = [_seen_from_tool(item, body) for item in chain_of(ctx, body, before)]
     if not chain:
         return Refusal("The tool body %s is built in a way that cannot be copied." % name_of(body))
     for item in chain:
         if item.get("helper_unread"):
             return Refusal("The tool body %s cannot be copied: %s could not be read: %s"
                            % (name_of(body), item.get("name"), item["helper_unread"]))
-    child = ctx.child(body, "%st%s_%d_" % (ctx.id_prefix, before, place), chain, depth)
+    child = ctx.child(body, "%st%s_%s_" % (ctx.id_prefix, before, place), chain, depth)
     walked = TranslateResult()
     if not walk.walk_items(child, walked):
         stopped = next(item for item in chain if item["index"] == walked.refusal["index"])
         return cannot_copy(body, stopped, walked.refusal["reason"])
+    if not child.steps:
+        return Refusal("The tool body %s is built in a way that cannot be copied." % name_of(body))
     return ToolBuild(body, chain, child, walked.items, walked.notes)
 
 

@@ -202,8 +202,8 @@ class SymmetricSizedTest(unittest.TestCase):
 
     def test_a_count_that_can_pass_the_copy_cap_marks_its_size(self):
         count = {"quantity_one": param("d22", "ceil(%s / 5)" % CUBE, 4.0)}
-        result, _ = sized(centred(row(3, [2], 4, 24.0, params=dict(PITCH, **count))), ranges={CUBE: (10.0, 700.0)})
-        self.assertIn("more than 64 copies", {f["name"]: f["reason"] for f in result.loose}[CUBE])
+        result, _ = sized(centred(row(3, [2], 4, 24.0, params=dict(PITCH, **count))), ranges={CUBE: (10.0, 3000.0)})
+        self.assertIn("more than 256 copies", {f["name"]: f["reason"] for f in result.loose}[CUBE])
 
 
 def circular(index, count, total, degrees, symmetric=True, params=None):
