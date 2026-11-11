@@ -55,6 +55,9 @@ def _target(definition, ctx, slot):
     found.update(construction_token(entity))
     if found["entity_type"] == "BRepFace":
         found["face_point"] = geo.safe(lambda: geo.point(entity.pointOnFace), None)
+        body = geo.owner_body(entity, ctx)
+        if body:
+            found["body"] = body
     geo.mark_foreign(found, entity, ctx)
     if found.get("foreign"):
         foreign_target_ref(found, entity, ctx, slot)

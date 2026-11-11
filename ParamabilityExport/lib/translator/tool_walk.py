@@ -22,11 +22,12 @@ class ToolBuild:
     """A tool body walked on its own.
 
     body: the tool's record in the Combine. chain: the items that made it, as the walk saw them. ctx: the child
-    context, with the tool's steps, placers and doubts. verdicts: the verdict of each item of the chain.
+    context, with the tool's steps, placers and doubts. verdicts: the verdict of each item of the chain. notes: the
+    plain remarks of the walk.
     """
 
-    def __init__(self, body, chain, ctx, verdicts):
-        self.body, self.chain, self.ctx, self.verdicts = body, chain, ctx, verdicts
+    def __init__(self, body, chain, ctx, verdicts, notes=()):
+        self.body, self.chain, self.ctx, self.verdicts, self.notes = body, chain, ctx, verdicts, list(notes)
 
     @property
     def steps(self):
@@ -102,7 +103,7 @@ def build(ctx, body, before, depth, place=0):
     if not walk.walk_items(child, walked):
         stopped = next(item for item in chain if item["index"] == walked.refusal["index"])
         return cannot_copy(body, stopped, walked.refusal["reason"])
-    return ToolBuild(body, chain, child, walked.items)
+    return ToolBuild(body, chain, child, walked.items, walked.notes)
 
 
 def on_part(ctx, tool):

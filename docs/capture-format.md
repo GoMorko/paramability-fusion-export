@@ -506,8 +506,9 @@ The translator fits the app's spline through points chosen from the samples (`li
   null, "offset": mm, "entity_type": "...", "face_point": [..] }` (TARGET below), `{ "kind": "other", "type": "..." }`.
 - TARGET (the face or plane of a from or to entity): `plane` from the entity's `geometry` (its origin need not lie on
   the face), `entity_type` the entity's type name (`BRepFace`, `ConstructionPlane`, or null), and for a face
-  `face_point` (`BRepFace.pointOnFace`). Both keys are optional; without `face_point` the translator cannot tell
-  whether the face moves with sizes. For a `ConstructionPlane` or `ConstructionAxis` the record also has `token`
+  `face_point` (`BRepFace.pointOnFace`) and `body` (`{ token, name }`, the body it lies on). These keys are optional;
+  without `face_point` the translator cannot tell whether the face moves with sizes, and without `body` a step of a tool
+  body cannot tell a face of the tool from a face of the part at the same place. For a `ConstructionPlane` or `ConstructionAxis` the record also has `token`
   (`entityToken`), which names the model parameters behind it (`created_by.token`).
 - `symmetric`: `{ "distance": mm, "full_length": bool, "taper_deg": d }`
   (`SymmetricExtentDefinition.distance`, `isFullLength`, `taperAngle`).
@@ -744,7 +745,8 @@ them (`lib/fusion_reader/read_reference.py`). All keys below are optional and ar
 
 - `origin`: true for an origin plane or axis of the component. Nothing else is read then; it never moves.
 - `entity_type`: the type name of the picked entity (`BRepFace`, `BRepEdge`, `ConstructionPlane`, `ConstructionAxis`).
-- `face_point` and `surface` (`Plane`, `Cylinder`, ...) of a face; `edge_points` of an edge.
+- `face_point` and `surface` (`Plane`, `Cylinder`, ...) of a face; `edge_points` of an edge; `body` (`{ token, name }`),
+  the body either lies on, left out when Fusion does not give it.
 - Construction geometry also has `token`, `made_by` (the timeline index of the feature that made it), `definition` (the
   type name of how it is defined) and `built_on`, a list of the same descriptions for the entities that definition
   names (own component only, up to three levels deep).
@@ -832,12 +834,13 @@ tool limit has `place: { "error": reason }`. An item whose body or place could n
 with `n` its place in that item's list). The model parameters of the tool component and the components above it are
 added to `parameters.model` (names already listed win).
 
-The translator keeps the steps of a `helper_of` item in `Context.pending_tools` like those of another body of the
-target's component. The Combine moves them by the tool's frame and the inverse of the exported body's own
+The translator walks the steps of a `helper_of` item when a Combine takes its tool (`tool_walk.build`), like those of
+another body of the target's component. The Combine moves them by the tool's frame and the inverse of the exported body's own
 (`combine.tool_move`), plus a move that follows sizes: the offsets of the three origin planes along their normals
 (`ref_motion.moves`, formulas of the sizes, or sizes marked loose where the probe could not follow, as for any
-reference). A frame that is scaled or mirrored refuses the Combine, naming the component. The placers of the moved steps
-(`moved_placer.py`) answer `material_at` for the moved points and cannot place a pick on their faces.
+reference). A frame that is scaled or mirrored refuses the Combine, naming the component. Slabs of the moved steps are
+copied with that move, so picks on them follow sizes; other placers (`moved_placer.py`) answer `material_at` for the
+moved points and cannot place a pick on their faces.
 
 **CopyPasteBody** (`sourceBody` with the marker before the item, `bodies` after it):
 
@@ -1160,9 +1163,9 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
 - `TranslateResult.dropped` is `[{ name, reason, used }]`, one per ticked size the recipe does not hold: `used` is
   true when a step reads it and the copy could not follow it (the reason says why), false when no copied step reads it
   ("not used by any copied step") or a measured sketch does not move with it.
-- Only steps whose result reaches the exported body count. The steps of another body wait in `Context.pending_tools`
-  with the doubts of their handlers: the sizes they cannot follow join the walk only when a Combine takes that body
-  (`StepResult.join`), and only then do its items count for the audit.
+- Only steps whose result reaches the exported body count. The steps of another body are walked on their own when a
+  Combine takes that body (`tool_walk.build`): the sizes they cannot follow join the walk only when the Combine writes
+  them, and only then do its items count for the audit.
 - A step with no handler stops the copy, with two exceptions that the capture proves harmless: a step that lists no
   body and whose `target_changed` is false (a Remove of another body) is skipped, and so is a Split Face of the exported
   body with `target_changed` false, with the note that picks on its faces may not follow. A step of another body that
@@ -1454,7 +1457,8 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
 ## 6. Report and capture file
 
 The export writes `report.json` into the package: `{ "writer", "outcome": "recipe" | "stepOnly", "items": [ITEM
-VERDICT, ...], "capture": CAPTURE }` (verdicts: see the translator, `lib/translator/result.py`). The app never reads it. A report saved from a real
+VERDICT, ...], "capture": CAPTURE }` (verdicts: see the translator, `lib/translator/result.py`; a Combine written as tool
+steps has `tool_steps`, the verdicts of the items that built its tools). The app never reads it. A report saved from a real
 design gives a fixture: its `capture` is copied as is.
 
 `also_changes` (only when not empty) names the unticked parameters that a discovery try showed changing the part.

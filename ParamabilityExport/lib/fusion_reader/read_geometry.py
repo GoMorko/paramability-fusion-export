@@ -224,6 +224,15 @@ def collection_items(collection):
         return []
 
 
+def owner_body(entity, ctx):
+    """{ token, name } of the body a face or edge lies on, or None when Fusion does not give it."""
+    body = safe(lambda: entity.body, None)
+    found = safe(lambda: body_ref(body, ctx), None) if body is not None else None
+    if not found or not (found.get("token") or found.get("name")):
+        return None
+    return {"token": found.get("token"), "name": found.get("name")}
+
+
 def body_refs(collection, ctx=None):
     return [body_ref(b, ctx) for b in collection_items(collection)]
 

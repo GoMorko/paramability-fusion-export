@@ -27,6 +27,8 @@ class Context:
     component: the token of the component a child's body lives in, when a tool from another component led to it; None
       while the walk is in the exported body's component.
     depth: how many tools deep this walk is, 0 for the exported body.
+    outer: the context of the walk that holds this tool, None for the exported body. A tool step can reach to a face
+      only that walk knows.
     id_prefix: starts the id of every step of this walk.
     used_tools: keys (`tool_key`) of the tool bodies an earlier Combine used up. Fusion removes such a body.
     entries_by_index: timeline index -> the `Entry` records written for that item.
@@ -55,6 +57,7 @@ class Context:
         self.handlers = handlers or {}
         self.component = None
         self.depth = 0
+        self.outer = None
         self.id_prefix = ""
         self.cache = {} if cache is None else cache
         self.table = table
@@ -75,6 +78,7 @@ class Context:
         # item index of a round drawn into an earlier extrude's outline (`finish._slot_outline`) -> that step's id
         self.folded = {}
         self._ids_by_index = {}
+        self._tool_ids_by_index = {}
         self._written_at = []
         self.current = None
 
@@ -84,6 +88,7 @@ class Context:
         found = Context(dict(self.capture, target=body, items=list(items)), self.table, self.motion, self.cache,
                         self.handlers)
         found.timeline = self.timeline
+        found.outer = self
         found.id_prefix = id_prefix
         found.depth = self.depth + 1 if depth is None else depth
         found.component = tool_items.component_token(body) if tool_items.is_foreign_tool(body) else self.component
@@ -99,8 +104,8 @@ class Context:
         """Inside the block, `item` is the current item and the placers, slabs and sizes read are those written before
         the walk reached it."""
         saved = self.current, self.placers, self.slabs, self.written_reads
-        placers, slabs, reads = next(((p, s, r) for index, p, s, r in reversed(self._written_at)
-                                      if index <= item["index"]), (0, 0, ()))
+        placers, slabs, reads = next(((p, s, r) for index, p, s, r in self._written_at if index >= item["index"]),
+                                     (len(self.placers), len(self.slabs), self.written_reads))
         self.current, self.placers, self.slabs, self.written_reads = (
             item, self.placers[:placers], self.slabs[:slabs], reads)
         try:
@@ -186,18 +191,28 @@ class Context:
         """Step ids written for the timeline item at `index` (empty when it made none)."""
         return list(self._ids_by_index.get(index, ()))
 
-    def slabs_of(self, step_id):
-        """The slabs of the bodies a step makes: an extrude's own, or a repeat's originals and copies."""
+    def written_for(self, index):
+        """Step ids written for the timeline item at `index` at any depth, also inside tool steps."""
+        return self.steps_of(index) + self._tool_ids_by_index.get(index, [])
+
+    def join_walk(self, child):
+        """A tool step of the walk `child` is written: the ids of its steps count for the items that made them."""
+        for index in set(child._ids_by_index) | set(child._tool_ids_by_index):
+            self._tool_ids_by_index.setdefault(index, []).extend(child.written_for(index))
+
+    def placers_of(self, step_id):
+        """The placers of the bodies a step makes: an extrude's slab, a tool's placer, or a repeat's originals and
+        copies."""
         step = next((s for s in self.steps if s.get("id") == step_id), None)
         found = []
         if step is not None and recipe_kind(step.get("kind")).repeats:
             for of in step.get("of") or []:
-                found.extend(self.slabs_of(of))
-        found.extend(s for s in self.slabs if s.owner == step_id)
+                found.extend(self.placers_of(of))
+        found.extend(p for p in self.placers if getattr(p, "owner", None) == step_id)
         unique = []
-        for slab in found:
-            if all(slab is not other for other in unique):
-                unique.append(slab)
+        for placer in found:
+            if all(placer is not other for other in unique):
+                unique.append(placer)
         return unique
 
     def add_steps(self, item, result):
@@ -207,7 +222,7 @@ class Context:
         Ids: `<kind>_<index>`, then `<kind>_<index>_<n>` for the second and later steps of one item.
         """
         ids = []
-        label = str(item.get("name", ""))[:MAX_LABEL]
+        name = str(item.get("name", ""))
         made = self._ids_by_index.setdefault(item["index"], [])
         self.entries_by_index.setdefault(item["index"], []).extend(result.entries)
         for n, entry in enumerate(result.entries, start=len(made) + 1):
@@ -219,7 +234,7 @@ class Context:
             if not entry.repeatable:
                 self.not_repeatable.add(step_id)
             step["id"] = step_id
-            step["label"] = label
+            step["label"] = (entry.label or name)[:MAX_LABEL]
             for maker in entry.placers:
                 maker.make(self, step_id, step)
             if entry.picks is not None:

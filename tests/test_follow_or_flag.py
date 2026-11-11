@@ -198,6 +198,16 @@ def _plane_stays_put(capture, recipe):
     return out
 
 
+def _copied_indexes(verdicts):
+    """Indexes of the items copied, with those inside tool steps."""
+    found = set()
+    for verdict in verdicts:
+        if verdict["verdict"] in ("translated", "translatedWithNote"):
+            found.add(verdict["index"])
+        found |= _copied_indexes(verdict.get("tool_steps") or [])
+    return found
+
+
 def offending_sizes(capture, motion=None):
     """[(parameter, step, what is wrong)] for every parameter the rule is broken for, with every user parameter
     ticked as a size."""
@@ -210,7 +220,7 @@ def offending_sizes(capture, motion=None):
         return []
     marked = {m["name"] for m in result.fixed + result.loose if m.get("reason")}
     dropped = {d["name"]: d["reason"] for d in result.dropped if d.get("reason")}
-    copied = {v["index"] for v in result.items if v["verdict"] in ("translated", "translatedWithNote")}
+    copied = _copied_indexes(result.items)
     reads = reads_by_step(capture, copied)
     reached = _recipe_names(result.recipe)
     by_size = {e.size_name or e.name: e.name for e in table.entries}

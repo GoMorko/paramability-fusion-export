@@ -30,6 +30,11 @@ class Placer:
         `offsets`), for meets_part.py."""
         return []
 
+    def not_moved_by(self, p):
+        """The sizes that cannot move a point at `p` of this step's own faces. Only a tool step knows any: it is built
+        on its own, so the sizes of the steps before it do not reach its faces."""
+        return ()
+
     @property
     def wall_offsets(self):
         """How far this step moves the faces of the steps before it, both ways (a shell's thickness), for

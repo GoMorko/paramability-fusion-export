@@ -18,6 +18,7 @@ from ..sketch_values.motion import Motion
 from . import ref_motion
 from .notes import step_label, untried_link_reason
 from .sizes import construction_fixes, linked_sizes, sketch_answer, sketch_params, sketch_sizes, used_sizes
+from .step_walk import all_steps
 from .values import reads_in
 
 
@@ -113,10 +114,11 @@ def audit(capture, ctx, table, named, motion):
     free = set(table.ticked)
     reached = {name for name in free if table.size_name(name) in used_sizes(ctx.steps, table.sizes)}
     measured = isinstance(motion, Motion) and not motion.optimistic
+    written = all_steps(ctx.steps)
     for item in ctx.copied_items:
         label = _label(item)
-        ids = set(ctx.steps_of(item["index"]))
-        own = set(reads_in([s for s in ctx.steps if s["id"] in ids])) if ids else reached
+        ids = set(ctx.written_for(item["index"]))
+        own = set(reads_in([s for s in written if s["id"] in ids])) if ids else reached
         unasked = _param_sizes(table, item, lambda path: (item.get("index"), path) not in ctx.asked)
         for name in sorted(_param_sizes(table, item) & free):
             if name not in named and (name not in own or name in unasked):

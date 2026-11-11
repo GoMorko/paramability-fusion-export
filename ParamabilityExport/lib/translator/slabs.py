@@ -75,6 +75,10 @@ class Motion:
     def moves(self):
         return any(q.sized for q in self.shift)
 
+    @property
+    def is_identity(self):
+        return self.rows == IDENTITY_ROWS and not self.moves and not any(q.n for q in self.shift)
+
     def turn_vector(self, d):
         return [sum(self.rows[i][j] * d[j] for j in range(3)) for i in range(3)]
 

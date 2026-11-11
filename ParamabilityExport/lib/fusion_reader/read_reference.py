@@ -5,7 +5,8 @@ construction geometry built on any of those. `reference_of` describes one such e
 
 - `origin`: true for an origin plane or axis of the component; nothing else is read then, it never moves.
 - `entity_type`: the type name (`BRepFace`, `BRepEdge`, `ConstructionPlane`, ...).
-- `face_point` and `surface` (`Plane`, `Cylinder`, ...) of a face; `edge_points` of an edge.
+- `face_point` and `surface` (`Plane`, `Cylinder`, ...) of a face; `edge_points` of an edge; `body`, the body either
+  lies on.
 - construction geometry also gets `token`, its plane (`point`, `normal`) or axis (`point`, `dir`), `made_by` (the
   timeline index of the feature that made it), `definition` (the type name of how it is defined) and `built_on`, the
   descriptions of the entities that definition names.
@@ -91,6 +92,10 @@ def reference_of(entity, ctx, depth=_DEPTH):
             out["edge_points"] = points
     elif name in ORIGIN_MEMBERS:
         out.update(_construction(entity, name, ctx, depth))
+    if name in ("BRepFace", "BRepEdge"):
+        body = geo.owner_body(entity, ctx)
+        if body:
+            out["body"] = body
     return out
 
 

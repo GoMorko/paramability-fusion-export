@@ -16,7 +16,7 @@ from lib.params.expressions import evaluate
 from lib.sketch_values.motion import Motion
 from lib.translator import translate
 from lib.translator.moved_placer import MovedPlacer
-from lib.translator.place import Move
+from lib.translator.slabs import Motion as CopyMotion
 
 NAME = "component_tool_foreign"
 SIZES = ["box_h", "tool_len", "rod_x"]
@@ -177,13 +177,6 @@ class RefusedToolTest(unittest.TestCase):
         self.assertIn("Fillet1", refusal["reason"])
         self.assertIn("Rod", refusal["reason"])
 
-    def test_a_cut_into_the_tool_stops_the_copy(self):
-        capture = self.step_before_combine("ExtrudeFeature", "Cut1", copy.deepcopy(load_capture(NAME)["items"][6]["data"]))
-        capture["items"][7]["data"]["operation"] = "cut"
-        reason = self.refusal(capture)["reason"]
-        self.assertIn("Cut1", reason)
-        self.assertIn("Rod", reason)
-
     def test_a_pasted_tool_and_a_moved_tool_stop_the_copy_with_their_own_reason(self):
         for kind, said in (("CopyPasteBody", "pasted body is not copied"), ("MoveFeature", "move is not copied")):
             with self.subTest(kind):
@@ -253,8 +246,7 @@ class MovedPlacerTest(unittest.TestCase):
             return "add" if all(0 <= c <= 1 for c in p) else None
 
     def test_material_is_asked_about_the_point_carried_back(self):
-        move = Move(((1, 0, 0), (0, 1, 0), (0, 0, 1)), (10, 0, 0))
-        placer = MovedPlacer(self.Inner(), move)
+        placer = MovedPlacer(self.Inner(), CopyMotion(shift=(10, 0, 0)))
         self.assertEqual((placer.material_at([10.5, 0.5, 0.5]), placer.material_at([0.5, 0.5, 0.5])), ("add", None))
         self.assertIsNone(placer.place([10.5, 0.5, 0.5], False))
 

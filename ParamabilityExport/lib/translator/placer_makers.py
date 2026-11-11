@@ -70,14 +70,15 @@ class MovedFacesMaker:
 
 
 class CopiesMaker:
-    """A pattern or mirror: `motions` carry the steps it repeats (`of`) to each copy, and the slabs of those steps
-    are copied with them."""
+    """A pattern or mirror: `motions` carry the steps it repeats (`of`) to each copy, and the slabs and tools of those
+    steps are copied with them."""
 
     def __init__(self, motions):
         self.motions = motions
 
     def make(self, ctx, step_id, step):
-        sources = [s for of in step.get("of") or [] for s in ctx.slabs_of(of)]
+        sources = [s for of in step.get("of") or [] for s in ctx.placers_of(of)]
         for motion in self.motions:
-            for slab in sources:
-                ctx.add_slab(slab.copied(step_id, motion))
+            for source in sources:
+                made = source.copied(step_id, motion)
+                (ctx.add_slab if isinstance(made, Slab) else ctx.add_placer)(made)

@@ -42,11 +42,13 @@ class CombineTest(unittest.TestCase):
         self.assertEqual(verdict_of(result, 6)["steps"], ["extrude_6", "extrude_6_2"])
         self.assertEqual([s["combine"] for s in steps_of(result.recipe, "extrude")], ["new", "cut", "cut"])
 
-    def test_a_tool_with_a_fillet_refuses_and_names_the_fillet(self):
-        result = translate_fixture("combine_tool_filleted")
+    def test_a_tool_step_that_cannot_be_copied_refuses_and_names_it(self):
+        def edit(capture):
+            capture["items"][4]["type"] = "SweepFeature"
+        result = edited("combine_tool_filleted", edit)
         self.assertIsNone(result.recipe)
         self.assertEqual(result.refusal["type"], "CombineFeature")
-        self.assertIn("Fillet1 (fillet)", result.refusal["reason"])
+        self.assertIn("Fillet1", result.refusal["reason"])
 
     def test_other_refusals(self):
         def other_target(capture):
@@ -84,18 +86,7 @@ class MoreThanOneToolStepTest(unittest.TestCase):
                 self.assertEqual([verdict_of(result, n)["verdict"] for n in (3, 5)], ["skipped", "skipped"])
                 assert_schema_ok(self, result.recipe)
 
-    def test_a_tool_step_that_cuts_the_tool_refuses_and_names_the_cut(self):
-        result = edited("combine_tool_two_steps", tool_steps_of("cut", "cut"))
-        self.assertIsNone(result.recipe)
-        self.assertEqual(result.refusal["index"], 6)
-        self.assertIn("Extrude3 (cut)", result.refusal["reason"])
-
-    def test_an_intersect_takes_a_tool_of_one_step_only(self):
-        result = edited("combine_tool_two_steps", tool_steps_of("intersect"))
-        self.assertIsNone(result.recipe)
-        self.assertEqual(result.refusal["index"], 6)
-
-    def test_a_second_tool_step_that_reaches_to_a_face_refuses(self):
+    def test_a_tool_step_that_reaches_to_a_curved_face_refuses(self):
         def edit(capture):
             tool_steps_of("cut")(capture)
             capture["items"][5]["data"]["side_one"] = {"kind": "toEntity", "plane": None, "offset": 0.0,

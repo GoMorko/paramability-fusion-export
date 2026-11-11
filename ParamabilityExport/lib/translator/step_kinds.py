@@ -135,6 +135,8 @@ RECIPE_KINDS = (
                directions=(("linear", "dir"), ("linear2", "dir"), ("polar", "axis")), repeat=SOLID, repeats=True),
     RecipeKind("mirror", positions=(("plane", "origin"),), directions=(("plane", "normal"),), repeat=SOLID,
                repeats=True),
+    RecipeKind("toolBody", version=15, repeat=SOLID),
+    RecipeKind("move", version=15, written=False),
     RecipeKind("loft", written=False),
     RecipeKind("sweep", written=False),
     RecipeKind("thread", written=False),

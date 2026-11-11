@@ -1,0 +1,781 @@
+{
+ "_comment": "A box in the root cut by a rounded tool made in the component Rod, which sits at (30, 10, 0) turned a quarter about z. round_mm is read by the fillet.",
+ "capture": 3,
+ "fusion": "2.0.0",
+ "design": "Tool in Rod",
+ "up_axis": "z",
+ "design_units": "mm",
+ "target": {
+  "token": "t1",
+  "name": "Body1",
+  "box": {
+   "min": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "max": [
+    60.0,
+    40.0,
+    10.0
+   ]
+  },
+  "volume_mm3": 23214.602,
+  "component": {
+   "token": "cRoot",
+   "name": "Root",
+   "root": true
+  },
+  "placement": null
+ },
+ "parameters": {
+  "user": [
+   {
+    "name": "box_h",
+    "expression": "10 mm",
+    "value": 1.0,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "length",
+    "display_value": 10.0,
+    "dependents": [
+     {
+      "name": "d1",
+      "kind": "other",
+      "component": "cRoot",
+      "feature": "Extrude1"
+     }
+    ]
+   },
+   {
+    "name": "tool_len",
+    "expression": "20 mm",
+    "value": 2.0,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "length",
+    "display_value": 20.0,
+    "dependents": [
+     {
+      "name": "d2",
+      "kind": "other",
+      "component": "cRod",
+      "feature": "Extrude1"
+     },
+     {
+      "name": "d3",
+      "kind": "other",
+      "component": "cRod",
+      "feature": "Extrude2"
+     }
+    ]
+   },
+   {
+    "name": "rod_x",
+    "expression": "30 mm",
+    "value": 3.0,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "length",
+    "display_value": 30.0,
+    "dependents": [
+     {
+      "name": "d9",
+      "kind": "other",
+      "component": "cRod",
+      "feature": "Move1"
+     }
+    ]
+   },
+   {
+    "name": "round_mm",
+    "expression": "1 mm",
+    "value": 0.1,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "length",
+    "display_value": 1.0,
+    "dependents": [
+     {
+      "name": "d8",
+      "kind": "other",
+      "component": "cRod",
+      "feature": "Fillet1"
+     }
+    ]
+   }
+  ],
+  "model": [
+   {
+    "name": "d1",
+    "expression": "box_h",
+    "value": 1.0,
+    "unit": "mm",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "box_h"
+    ],
+    "role": "Distance",
+    "kind": "derived",
+    "display_value": 10.0,
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d1",
+     "name": "Extrude1",
+     "sketch": "",
+     "component": "cRoot"
+    }
+   },
+   {
+    "name": "d2",
+    "expression": "tool_len",
+    "value": 2.0,
+    "unit": "mm",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "tool_len"
+    ],
+    "role": "Distance",
+    "kind": "derived",
+    "display_value": 20.0,
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d2",
+     "name": "Extrude1",
+     "sketch": "",
+     "component": "cRod"
+    }
+   },
+   {
+    "name": "d3",
+    "expression": "tool_len",
+    "value": 2.0,
+    "unit": "mm",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "tool_len"
+    ],
+    "role": "Distance",
+    "kind": "derived",
+    "display_value": 20.0,
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d3",
+     "name": "Extrude2",
+     "sketch": "",
+     "component": "cRod"
+    }
+   },
+   {
+    "name": "d8",
+    "expression": "round_mm",
+    "value": 0.1,
+    "unit": "mm",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "round_mm"
+    ],
+    "role": "Distance",
+    "kind": "derived",
+    "display_value": 1.0,
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d8",
+     "name": "Fillet1",
+     "sketch": "",
+     "component": "cRod"
+    }
+   }
+  ]
+ },
+ "items": [
+  {
+   "index": 0,
+   "name": "Sketch1",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "cRoot",
+   "in_target_component": true,
+   "bodies_after": [],
+   "target_changed": null,
+   "data": {}
+  },
+  {
+   "index": 1,
+   "name": "Extrude1",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "cRoot",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Body1"
+    }
+   ],
+   "target_changed": true,
+   "data": {
+    "operation": "newBody",
+    "profiles": [
+     {
+      "sketch": "Sketch1",
+      "sketch_token": "sk_Sketch1",
+      "frame": {
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "x": [
+        1,
+        0,
+        0
+       ],
+       "y": [
+        0,
+        1,
+        0
+       ],
+       "z": [
+        0,
+        0,
+        1
+       ]
+      },
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "line",
+          "start": [
+           0,
+           0
+          ],
+          "end": [
+           60,
+           0
+          ],
+          "entity": "l1"
+         },
+         {
+          "kind": "line",
+          "start": [
+           60,
+           0
+          ],
+          "end": [
+           60,
+           40
+          ],
+          "entity": "l2"
+         },
+         {
+          "kind": "line",
+          "start": [
+           60,
+           40
+          ],
+          "end": [
+           0,
+           40
+          ],
+          "entity": "l3"
+         },
+         {
+          "kind": "line",
+          "start": [
+           0,
+           40
+          ],
+          "end": [
+           0,
+           0
+          ],
+          "entity": "l4"
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "distance",
+     "distance": 10.0,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": false,
+    "participants": [],
+    "target_box_before": null,
+    "end_offset": 10.0,
+    "params": {
+     "side_one.distance": {
+      "name": "d1",
+      "expression": "box_h",
+      "value": 10.0
+     }
+    }
+   }
+  },
+  {
+   "index": 2,
+   "name": "Rod:1",
+   "type": "Occurrence",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "cRoot",
+   "in_target_component": true,
+   "bodies_after": [],
+   "target_changed": null,
+   "data": {}
+  },
+  {
+   "index": 3,
+   "name": "Sketch1",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "cRod",
+   "in_target_component": false,
+   "bodies_after": [],
+   "target_changed": null,
+   "data": {}
+  },
+  {
+   "index": 4,
+   "name": "Extrude1",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "cRod",
+   "in_target_component": false,
+   "bodies_after": [
+    {
+     "token": "t2",
+     "name": "Body2"
+    }
+   ],
+   "target_changed": false,
+   "data": {
+    "operation": "newBody",
+    "profiles": [
+     {
+      "sketch": "Sketch1",
+      "frame": {
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "x": [
+        1,
+        0,
+        0
+       ],
+       "y": [
+        0,
+        1,
+        0
+       ],
+       "z": [
+        0,
+        0,
+        1
+       ]
+      },
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "circle",
+          "center": [
+           0,
+           0
+          ],
+          "radius": 4,
+          "entity": "ent_c_0_4"
+         }
+        ]
+       }
+      ],
+      "sketch_token": "sk_rod1"
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "distance",
+     "distance": 20.0,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": false,
+    "participants": [],
+    "target_box_before": null,
+    "end_offset": 20.0,
+    "params": {
+     "side_one.distance": {
+      "name": "d2",
+      "expression": "tool_len",
+      "value": 20.0
+     }
+    }
+   },
+   "helper_of": "t2"
+  },
+  {
+   "index": 5,
+   "name": "Sketch2",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "cRod",
+   "in_target_component": false,
+   "bodies_after": [],
+   "target_changed": null,
+   "data": {}
+  },
+  {
+   "index": 6,
+   "name": "Extrude2",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "cRod",
+   "in_target_component": false,
+   "bodies_after": [
+    {
+     "token": "t2",
+     "name": "Body2"
+    }
+   ],
+   "target_changed": false,
+   "data": {
+    "operation": "join",
+    "profiles": [
+     {
+      "sketch": "Sketch2",
+      "frame": {
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "x": [
+        1,
+        0,
+        0
+       ],
+       "y": [
+        0,
+        1,
+        0
+       ],
+       "z": [
+        0,
+        0,
+        1
+       ]
+      },
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "circle",
+          "center": [
+           0,
+           10
+          ],
+          "radius": 3,
+          "entity": "ent_c_10_3"
+         }
+        ]
+       }
+      ],
+      "sketch_token": "sk_rod2"
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "distance",
+     "distance": 20.0,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": false,
+    "participants": [
+     {
+      "token": "t2",
+      "name": "Body2"
+     }
+    ],
+    "target_box_before": null,
+    "end_offset": 20.0,
+    "params": {
+     "side_one.distance": {
+      "name": "d3",
+      "expression": "tool_len",
+      "value": 20.0
+     }
+    }
+   },
+   "helper_of": "t2"
+  },
+  {
+   "index": 7,
+   "name": "Fillet1",
+   "type": "FilletFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "in_target_component": false,
+   "bodies_after": [
+    {
+     "token": "t2",
+     "name": "Body2"
+    }
+   ],
+   "data": {
+    "rolling_ball": true,
+    "sets": [
+     {
+      "kind": "constant",
+      "radius": 1.0,
+      "continuity": "tangent",
+      "input_kinds": [
+       "edge"
+      ],
+      "edges": [
+       {
+        "token": "e0",
+        "closed": true,
+        "points": [
+         [
+          4,
+          0,
+          20
+         ]
+        ]
+       }
+      ]
+     }
+    ],
+    "params": {
+     "sets.0.radius": {
+      "name": "d8",
+      "expression": "round_mm",
+      "value": 1.0
+     }
+    }
+   },
+   "component": "cRod",
+   "target_changed": false,
+   "helper_of": "t2"
+  },
+  {
+   "index": 8,
+   "name": "Combine1",
+   "type": "CombineFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "cRoot",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Body1"
+    }
+   ],
+   "target_changed": true,
+   "data": {
+    "operation": "cut",
+    "target": {
+     "token": "t1",
+     "name": "Body1"
+    },
+    "tools": [
+     {
+      "token": "t2",
+      "name": "Body2",
+      "foreign": true,
+      "component": {
+       "token": "cRod",
+       "name": "Rod"
+      },
+      "path": "Rod:1",
+      "place": {
+       "path": "Rod:1",
+       "frame": {
+        "origin": [
+         30,
+         10,
+         0
+        ],
+        "x": [
+         0,
+         1,
+         0
+        ],
+        "y": [
+         -1,
+         0,
+         0
+        ],
+        "z": [
+         0,
+         0,
+         1
+        ]
+       },
+       "source": "transform2",
+       "checked_points": 3,
+       "target_frame": null,
+       "xy": {
+        "ref": {
+         "slot": "tool0.xy",
+         "type": "ConstructionPlane",
+         "token": "pl_tool0.xy",
+         "component": {
+          "token": "cRod",
+          "name": "Rod"
+         },
+         "path": "Rod:1",
+         "origin": true,
+         "point": [
+          30,
+          10,
+          0
+         ],
+         "normal": [
+          0,
+          0,
+          1
+         ]
+        }
+       },
+       "xz": {
+        "ref": {
+         "slot": "tool0.xz",
+         "type": "ConstructionPlane",
+         "token": "pl_tool0.xz",
+         "component": {
+          "token": "cRod",
+          "name": "Rod"
+         },
+         "path": "Rod:1",
+         "origin": true,
+         "point": [
+          30,
+          10,
+          0
+         ],
+         "normal": [
+          -1,
+          0,
+          0
+         ]
+        }
+       },
+       "yz": {
+        "ref": {
+         "slot": "tool0.yz",
+         "type": "ConstructionPlane",
+         "token": "pl_tool0.yz",
+         "component": {
+          "token": "cRod",
+          "name": "Rod"
+         },
+         "path": "Rod:1",
+         "origin": true,
+         "point": [
+          30,
+          10,
+          0
+         ],
+         "normal": [
+          0,
+          1,
+          0
+         ]
+        }
+       }
+      }
+     }
+    ],
+    "keep_tools": false,
+    "volume_before": null,
+    "volume_after": null
+   }
+  }
+ ],
+ "targets": [
+  {
+   "token": "t1",
+   "name": "Body1",
+   "box": {
+    "min": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "max": [
+     60.0,
+     40.0,
+     10.0
+    ]
+   },
+   "volume_mm3": 23214.602,
+   "component": {
+    "token": "cRoot",
+    "name": "Root",
+    "root": true
+   },
+   "placement": null
+  }
+ ]
+}

@@ -43,13 +43,15 @@ class Entry:
       follows and the written points (None when the pick names a step). Patterns and mirrors copy these points.
     repeatable: False when Fusion recomputes the step's length per copy (it reaches to a face or through the part),
       so patterns and mirrors refuse it as a source.
+    label: the step's label when it is not the name of its item (a tool step is named after its tool).
     """
 
-    def __init__(self, step, placers=(), picks=None, repeatable=True):
+    def __init__(self, step, placers=(), picks=None, repeatable=True, label=None):
         self.step = step
         self.placers = list(placers)
         self.picks = picks
         self.repeatable = repeatable
+        self.label = label
 
 
 class StepResult:
@@ -60,7 +62,7 @@ class StepResult:
     recorded on the context. `items` are capture items of other bodies whose steps these steps carry (the tool body of
     a Combine); they count as copied once these steps are written. `asked` is the set of `(item index, params path)`
     the handlers dealt with (`values.quantity`, `values.pin`, `values.handled`); the audit compares it with each
-    item's `data.params`.
+    item's `data.params`. `tool_steps` are the verdicts of the items inside the tool steps written here.
     """
 
     def __init__(self, entries=()):
@@ -69,6 +71,7 @@ class StepResult:
         self.notes = []
         self.items = []
         self.asked = set()
+        self.tool_steps = []
 
     @classmethod
     def of(cls, steps):
@@ -79,9 +82,9 @@ class StepResult:
     def steps(self):
         return [entry.step for entry in self.entries]
 
-    def add(self, step, placers=(), picks=None, repeatable=True):
+    def add(self, step, placers=(), picks=None, repeatable=True, label=None):
         """Write `step`; returns it."""
-        self.entries.append(Entry(step, placers, picks, repeatable))
+        self.entries.append(Entry(step, placers, picks, repeatable, label))
         return step
 
     def extend(self, entries):

@@ -1,0 +1,603 @@
+{
+ "_comment": "A tool that was itself cut by a rounded tool before it cuts the plate.",
+ "capture": 3,
+ "fusion": "2.0.0",
+ "design": "Test",
+ "up_axis": "z",
+ "design_units": "mm",
+ "target": {
+  "token": "t1",
+  "name": "Body1",
+  "box": {
+   "min": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "max": [
+    40.0,
+    20.0,
+    10.0
+   ]
+  },
+  "volume_mm3": null
+ },
+ "items": [
+  {
+   "index": 0,
+   "name": "Sketch1",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "in_target_component": true,
+   "bodies_after": [],
+   "data": {}
+  },
+  {
+   "index": 1,
+   "name": "Extrude1",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Body1"
+    }
+   ],
+   "data": {
+    "operation": "newBody",
+    "profiles": [
+     {
+      "sketch": "Sketch1",
+      "frame": {
+       "origin": [
+        0,
+        0,
+        0
+       ],
+       "x": [
+        1,
+        0,
+        0
+       ],
+       "y": [
+        0,
+        1,
+        0
+       ],
+       "z": [
+        0,
+        0,
+        1
+       ]
+      },
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "line",
+          "start": [
+           0,
+           0
+          ],
+          "end": [
+           40,
+           0
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           40,
+           0
+          ],
+          "end": [
+           40,
+           20
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           40,
+           20
+          ],
+          "end": [
+           0,
+           20
+          ]
+         },
+         {
+          "kind": "line",
+          "start": [
+           0,
+           20
+          ],
+          "end": [
+           0,
+           0
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "distance",
+     "distance": 10.0,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": false,
+    "participants": [
+     {
+      "token": "t1",
+      "name": "Body1"
+     }
+    ],
+    "target_box_before": null,
+    "end_offset": 10.0,
+    "params": {
+     "side_one.distance": {
+      "name": "d1",
+      "expression": "plate_h_mm",
+      "value": 10.0
+     }
+    }
+   }
+  },
+  {
+   "index": 2,
+   "name": "Sketch3",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "in_target_component": true,
+   "bodies_after": [],
+   "data": {}
+  },
+  {
+   "index": 3,
+   "name": "Extrude3",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "t2",
+     "name": "Body2"
+    }
+   ],
+   "data": {
+    "operation": "newBody",
+    "profiles": [
+     {
+      "sketch": "Sketch3",
+      "frame": {
+       "origin": [
+        0,
+        0,
+        3
+       ],
+       "x": [
+        1,
+        0,
+        0
+       ],
+       "y": [
+        0,
+        1,
+        0
+       ],
+       "z": [
+        0,
+        0,
+        1
+       ]
+      },
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "circle",
+          "center": [
+           20,
+           10
+          ],
+          "radius": 5
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "distance",
+     "distance": 4.0,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": false,
+    "participants": [
+     {
+      "token": "t2",
+      "name": "Body2"
+     }
+    ],
+    "target_box_before": null,
+    "end_offset": 4.0,
+    "params": {
+     "side_one.distance": {
+      "name": "d3",
+      "expression": "peg_len_mm",
+      "value": 4.0
+     }
+    }
+   }
+  },
+  {
+   "index": 4,
+   "name": "Sketch5",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "in_target_component": true,
+   "bodies_after": [],
+   "data": {}
+  },
+  {
+   "index": 5,
+   "name": "Extrude5",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "t3",
+     "name": "Body3"
+    }
+   ],
+   "data": {
+    "operation": "newBody",
+    "profiles": [
+     {
+      "sketch": "Sketch5",
+      "frame": {
+       "origin": [
+        0,
+        0,
+        5
+       ],
+       "x": [
+        1,
+        0,
+        0
+       ],
+       "y": [
+        0,
+        1,
+        0
+       ],
+       "z": [
+        0,
+        0,
+        1
+       ]
+      },
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "circle",
+          "center": [
+           20,
+           10
+          ],
+          "radius": 2
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "distance",
+     "distance": 4.0,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": false,
+    "participants": [
+     {
+      "token": "t3",
+      "name": "Body3"
+     }
+    ],
+    "target_box_before": null,
+    "end_offset": 4.0,
+    "params": {
+     "side_one.distance": {
+      "name": "d5",
+      "expression": "core_mm",
+      "value": 4.0
+     }
+    }
+   }
+  },
+  {
+   "index": 6,
+   "name": "Fillet1",
+   "type": "FilletFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "t3",
+     "name": "Body3"
+    }
+   ],
+   "data": {
+    "rolling_ball": true,
+    "sets": [
+     {
+      "kind": "constant",
+      "radius": 0.5,
+      "continuity": "tangent",
+      "input_kinds": [
+       "edge"
+      ],
+      "edges": [
+       {
+        "token": "e0",
+        "closed": true,
+        "points": [
+         [
+          22,
+          10,
+          9
+         ]
+        ]
+       }
+      ]
+     }
+    ],
+    "params": {
+     "sets.0.radius": {
+      "name": "d6",
+      "expression": "round_mm",
+      "value": 0.5
+     }
+    }
+   }
+  },
+  {
+   "index": 7,
+   "name": "Combine1",
+   "type": "CombineFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "t2",
+     "name": "Body2"
+    }
+   ],
+   "data": {
+    "target": {
+     "token": "t2",
+     "name": "Body2"
+    },
+    "tools": [
+     {
+      "token": "t3",
+      "name": "Body3",
+      "volume": 50.0
+     }
+    ],
+    "operation": "cut",
+    "keep_tools": false,
+    "volume_before": null,
+    "volume_after": null
+   }
+  },
+  {
+   "index": 8,
+   "name": "Combine2",
+   "type": "CombineFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "t1",
+     "name": "Body1"
+    }
+   ],
+   "data": {
+    "target": {
+     "token": "t1",
+     "name": "Body1"
+    },
+    "tools": [
+     {
+      "token": "t2",
+      "name": "Body2",
+      "volume": 290.0
+     }
+    ],
+    "operation": "cut",
+    "keep_tools": false,
+    "volume_before": null,
+    "volume_after": null
+   }
+  }
+ ],
+ "parameters": {
+  "user": [
+   {
+    "name": "plate_h_mm",
+    "expression": "10 mm",
+    "value": 1.0,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "length",
+    "display_value": 10.0
+   },
+   {
+    "name": "peg_len_mm",
+    "expression": "4 mm",
+    "value": 0.4,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "length",
+    "display_value": 4.0
+   },
+   {
+    "name": "core_mm",
+    "expression": "4 mm",
+    "value": 0.4,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "length",
+    "display_value": 4.0
+   },
+   {
+    "name": "round_mm",
+    "expression": "0.5 mm",
+    "value": 0.05,
+    "unit": "mm",
+    "comment": "",
+    "is_favorite": true,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "dependent_parameters": [],
+    "kind": "length",
+    "display_value": 0.5
+   }
+  ],
+  "model": [
+   {
+    "name": "d1",
+    "expression": "plate_h_mm",
+    "value": 1.0,
+    "unit": "mm",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "plate_h_mm"
+    ],
+    "role": "Distance",
+    "kind": "derived",
+    "display_value": 10.0,
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d1",
+     "name": ""
+    }
+   },
+   {
+    "name": "d3",
+    "expression": "peg_len_mm",
+    "value": 0.4,
+    "unit": "mm",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "peg_len_mm"
+    ],
+    "role": "Distance",
+    "kind": "derived",
+    "display_value": 4.0,
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d3",
+     "name": ""
+    }
+   },
+   {
+    "name": "d5",
+    "expression": "core_mm",
+    "value": 0.4,
+    "unit": "mm",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "core_mm"
+    ],
+    "role": "Distance",
+    "kind": "derived",
+    "display_value": 4.0,
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d5",
+     "name": ""
+    }
+   },
+   {
+    "name": "d6",
+    "expression": "round_mm",
+    "value": 0.05,
+    "unit": "mm",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "round_mm"
+    ],
+    "role": "Distance",
+    "kind": "derived",
+    "display_value": 0.5,
+    "created_by": {
+     "kind": "feature",
+     "token": "tok_d6",
+     "name": ""
+    }
+   }
+  ]
+ }
+}

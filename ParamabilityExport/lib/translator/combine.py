@@ -1,14 +1,16 @@
 """Combine feature handler (CombineFeature).
 
-A tool body that Fusion builds on its own and then joins, cuts or intersects with the exported body is written at
-the Combine's place. Each tool is walked on its own (`tool_walk.build`). Steps that only add material to the tool (a
-first step that makes the body and later steps that join to it) are written one after the other with the Combine's
-operation, which gives what the Combine gives: cutting A and then B removes the union of A and B, and joining them
-adds it. A tool body with any other history (a cut, a round, a hole, a shell, a step that cannot be copied) cannot be
-replayed that way, so the Combine refuses and names the step.
+A tool body that Fusion builds on its own and then joins, cuts or intersects with the exported body is written at the
+Combine's place. Each tool is walked on its own (`tool_walk.build`).
 
-An intersect keeps only the shared part of the tool, which is not a sequence of intersects with its steps, so it
-takes a tool of one step. A tool the Combine keeps can be used again by a later Combine.
+Steps that only add material to the tool (a first step that makes the body and later steps that join to it) are written
+one after the other with the Combine's operation, which gives what the Combine gives: cutting A and then B removes the
+union of A and B, and joining them adds it. An intersect keeps only the shared part of the tool, so this holds for a
+tool of one step. Such recipes open in older versions of the app.
+
+Any other tool (with a cut, a round, a hole, a shell, or a Combine of its own) becomes one `toolBody` step that holds
+the tool's steps. A step that cannot be copied at all stops the copy, and the reason names it. A tool the Combine keeps
+can be used again by a later Combine.
 
 A tool body made in another component (`foreign`) is handled the same way. Its steps were read in that component's
 frame (`helper_of` items); the Combine carries them into the exported body's frame with the tool's place in the
@@ -18,9 +20,10 @@ them.
 import copy
 
 from . import place, ref_motion, step_kinds, tool_items, tool_walk
-from .combine_volume import exceeds
-from .moved_placer import MovedMaker
+from .combine_volume import exceeds, exceeds_tools
+from .moved_placer import MovedMaker, motion_of
 from .result import Refusal, StepResult
+from .tool_placer import ToolMaker
 from .values import Quantity
 from .walk import is_foreign
 
@@ -65,29 +68,23 @@ def _reaches_face(item):
     return "fromEntity" in kinds or "toEntity" in kinds
 
 
-def _flat_problem(tool):
-    """A Refusal when the steps of a walked tool cannot be written one by one onto the part, else None."""
+def _writes_flat(tool):
+    """True when the steps of a walked tool can be written one by one onto the part."""
     joining = False
     for item in tool.chain:
         data = item.get("data") or {}
         if (data.get("tools") or len(item.get("bodies_after") or []) != 1 or is_foreign(data)
                 or not adds_only(tool.entries_of(item), joining)):
-            return tool_walk.cannot_copy(tool.body, item, "A tool is copied only when every step on it adds material.")
+            return False
         joining = True
-    if len(tool.entries) > 1 and any(_reaches_face(item) for item in tool.chain):
-        return Refusal("The tool body %s has a step that starts from or reaches to a face, and a tool of more than "
-                       "one step cannot tell its faces apart." % tool_walk.name_of(tool.body))
-    return None
+    return len(tool.entries) == 1 or not any(_reaches_face(item) for item in tool.chain)
 
 
 def _walk_tool(ctx, item, body, place_in_list):
-    """A `ToolBuild` of `body` that can be written onto the part, or a Refusal that says why not."""
+    """A `ToolBuild` of `body`, or a Refusal that says why it cannot be copied."""
     if tool_key(body) in ctx.used_tools:
         return Refusal("The tool body %s was used up by an earlier combine." % tool_walk.name_of(body))
-    tool = tool_walk.build(ctx, body, item["index"], ctx.depth + 1, place_in_list)
-    if isinstance(tool, Refusal):
-        return tool
-    return _flat_problem(tool) or tool
+    return tool_walk.build(ctx, body, item["index"], ctx.depth + 1, place_in_list)
 
 
 def _frame_refusal(name, problem):
@@ -139,16 +136,56 @@ def _follow_place(ctx, item, tool, found):
     return shift if any(q.sized for q in shift) else None
 
 
+def _flat(ctx, found, combine):
+    """The steps of every tool, written one by one with the Combine's operation, or a Refusal."""
+    out = StepResult()
+    for tool, (move, shift) in found:
+        held = tool_walk.on_part(ctx, tool)
+        if isinstance(held, Refusal):
+            return held
+        for entry in held.entries:
+            placed = copy.deepcopy(entry.step)
+            placers = entry.placers
+            if move is not None:
+                placed = place.place({"features": [placed]}, move, shift)["features"][0]
+                placers = [MovedMaker(entry.placers, motion_of(move, shift))]
+            placed["combine"] = combine
+            out.add(placed, placers, entry.picks, entry.repeatable)
+        out.join(held)
+    return out
+
+
+def _tool_steps(found, combine):
+    """One step per tool that holds the tool's own steps."""
+    out = StepResult()
+    for tool, (move, shift) in found:
+        step = {"kind": "toolBody", "combine": combine, "features": tool.steps}
+        if move is not None:
+            step = place.place({"features": [step]}, move, shift)["features"][0]
+        out.add(step, [ToolMaker(tool.ctx, motion_of(move, shift) if move is not None else None)],
+                label=tool.body.get("name"))
+        out.doubts.extend(tool.doubts)
+        out.items.extend(tool.items)
+        out.asked |= tool.asked
+        out.notes.extend(tool.notes)
+        out.tool_steps.extend(tool.verdicts)
+    return out
+
+
 def handle(item, ctx):
     data = item.get("data") or {}
     combine = COMBINE.get(data.get("operation"))
     if combine is None:
         return Refusal("This combine works in a way that is not copied yet.")
-    if not ctx.is_target(data.get("target")):
-        return Refusal("This combine changes a body other than the exported one.")
     tools = data.get("tools") or []
+    if not ctx.is_target(data.get("target")):
+        if data.get("keep_tools") and item.get("target_changed") is not True and any(ctx.is_target(t) for t in tools):
+            return StepResult()  # This body is only a tool here, and the Combine keeps it as it is.
+        return Refusal("This combine changes a body other than the exported one.")
     if not tools:
         return Refusal("This combine has no tool bodies.")
+    if combine == "intersect" and len(tools) > 1:
+        return Refusal("A combine that keeps the shared part of several tool bodies is not copied yet.")
 
     found = []
     for number, body in enumerate(tools):
@@ -164,28 +201,20 @@ def handle(item, ctx):
         found.append((tool, moved))
     if len({tool_key(tool.body) for tool, _ in found}) != len(found):
         return Refusal("This combine lists the same tool body twice.")
-    if combine == "intersect" and any(len(tool.entries) > 1 for tool, _ in found):
-        return Refusal("A combine that keeps only the shared part is copied only for a tool of one step.")
-    if combine != "intersect" and exceeds(data, [other for tool, _ in found for other in tool.chain]):
+
+    flat = all(_writes_flat(tool) for tool, _ in found) and (
+        combine != "intersect" or len(found[0][0].entries) == 1)
+    if flat and combine != "intersect" and exceeds(data, [other for tool, _ in found for other in tool.chain]):
         return Refusal("This combine changes the part by more than the steps of its tool body fill, so the tool "
                        "cannot be copied exactly.")
-
-    out = StepResult()
-    for tool, (move, shift) in found:
-        held = tool_walk.on_part(ctx, tool)
-        if isinstance(held, Refusal):
-            return held
-        for entry in held.entries:
-            placed = copy.deepcopy(entry.step)
-            placers = entry.placers
-            if move is not None:
-                placed = place.place({"features": [placed]}, move, shift)["features"][0]
-                placers = [MovedMaker(entry.placers, move)]
-            placed["combine"] = combine
-            out.add(placed, placers, entry.picks, entry.repeatable)
-        out.join(held)
-        if not data.get("keep_tools"):
-            ctx.used_tools.add(tool_key(tool.body))
+    if not flat and exceeds_tools(combine, data):
+        return Refusal("This combine changes the part by more than its tool bodies hold, so the tools cannot be "
+                       "copied exactly.")
+    out = _flat(ctx, found, combine) if flat else _tool_steps(found, combine)
+    if isinstance(out, Refusal):
+        return out
     if data.get("keep_tools"):
         ctx.note("Fusion kept the tool bodies next to the part. Only the part is copied.")
+    else:
+        ctx.used_tools.update(tool_key(tool.body) for tool, _ in found)
     return out

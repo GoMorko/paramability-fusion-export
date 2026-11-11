@@ -1,11 +1,14 @@
-"""Volume check for a Combine whose tool steps are written one by one.
+"""Volume checks for a Combine.
 
-The capture can hold the volume of the exported body before and after the Combine (`volume_before`,
+For tool steps written one by one, the capture can hold the volume of the exported body before and after the Combine (`volume_before`,
 `volume_after`). A cut can remove, and a join can add, at most what the written tool steps fill together, so a
 change bigger than the sum of the step volumes shows a tool the steps do not reproduce. The sum is an upper bound
 (overlapping steps count twice), so this catches a missing or too small tool, never a too big one. A tool whose
 volume cannot be worked out exactly (revolve, taper, thin wall, curves other than lines, arcs and circles) skips the
 check.
+
+For a tool built in a step of its own, the reader measured each tool body (`volume`), so the change is compared with
+those volumes (`exceeds_tools`).
 """
 import math
 
@@ -106,3 +109,20 @@ def exceeds(data, items):
         return False
     change = abs(after - before)
     return change > filled + max(ABS_TOL_MM3, REL_TOL * max(filled, change))
+
+
+def _over(value, limit):
+    return value > limit + max(ABS_TOL_MM3, REL_TOL * max(limit, value))
+
+
+def exceeds_tools(combine, data):
+    """True when the part after the Combine cannot come from its measured tool bodies: a cut or a join changes the
+    part by at most the sum of the tools, and an intersect ends at most as big as the smallest tool. False when a
+    volume it needs was not measured."""
+    before, after = data.get("volume_before"), data.get("volume_after")
+    volumes = [tool.get("volume") for tool in data.get("tools") or []]
+    if after is None or not volumes or None in volumes:
+        return False
+    if combine == "intersect":
+        return _over(after, min(volumes))
+    return before is not None and _over(abs(after - before), sum(volumes))

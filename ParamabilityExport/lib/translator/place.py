@@ -12,6 +12,7 @@ import copy
 import math
 
 from .step_kinds import RECIPE_KINDS
+from .step_walk import all_steps
 from .values import Quantity, Sized
 
 # Step kind -> paths to positions, and to directions (turned, not moved), from the step kind table.
@@ -159,7 +160,7 @@ def place(recipe, move, shift=None):
         shift = None
     if move.is_identity and shift is None:
         return out
-    for step in out.get("features", []):
+    for step in all_steps(out.get("features", [])):
         kind = step.get("kind")
         for path in POSITIONS.get(kind, ()):
             _apply(step, path, lambda t: _mapped(t, move, True, shift))

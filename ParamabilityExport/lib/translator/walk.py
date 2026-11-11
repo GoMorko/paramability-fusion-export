@@ -217,11 +217,11 @@ def walk_items(ctx, result):
         ctx.copied_items.append(item)
         if item.get("health") == "warning":
             notes.append(wording.health_warning_note(_label(item), item.get("message")))
-        if notes:
-            result.items.append(make_verdict(item, "translatedWithNote", ids, " ".join(notes)))
-            result.notes.extend(notes)
-        else:
-            result.items.append(make_verdict(item, "translated", ids))
+        verdict = make_verdict(item, "translatedWithNote" if notes else "translated", ids, " ".join(notes))
+        if outcome.tool_steps:
+            verdict["tool_steps"] = outcome.tool_steps
+        result.items.append(verdict)
+        result.notes.extend(notes)
 
     ctx.current = None
     return True
