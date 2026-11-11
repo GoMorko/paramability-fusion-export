@@ -1,4 +1,4 @@
-"""Where the outline of a sweep stands along its path, for picks on the sweep's faces (end_caps.py). Pure geometry.
+"""Where the outline of a sweep stands along its path, for picks on the sweep's faces. Pure geometry.
 
 The outline is square to the path where it starts. Along a path in one plane it turns with the path, about the
 plane's normal; an outline kept in one direction (`fixed`) does not turn. Both ways the outline at the path's end is

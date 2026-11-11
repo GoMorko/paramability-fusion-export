@@ -1,4 +1,4 @@
-"""The end faces (and side walls) of a sweep or loft, for picks that follow sizes (see follow.py).
+"""The end faces (and side walls) of a sweep or loft, for picks that follow sizes.
 
 A sweep or loft has a start face and an end face, each the outline of one section. The recipe names them
 (`featureFace`, `featureEdges` with `which` start or end), so a pick on a whole face or on all edges of one follows
@@ -34,7 +34,7 @@ class Cap:
 
 class CapPlace:
     """Where a point sits on a sweep or loft: `which` is start, end or side. `curve` is the outline curve it lies on
-    (None inside a face), `corner` the outline corner of a side edge. `slab` is the placer (follow.py reads its `id`
+    (None inside a face), `corner` the outline corner of a side edge. `slab` is the placer (read for its `id`
     and `is_copy`)."""
 
     factor = 0.0
