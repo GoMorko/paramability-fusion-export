@@ -8,8 +8,11 @@ any setting reaches too far.
 import math
 
 from ..params.expressions import ExpressionError, evaluate
-from . import range_check
+from . import range_check, spline_fit
 from .paths import REACH_SHARE
+
+ARC_STEPS = 16      # points per arc, as the app samples an arc of an outline
+SPLINE_STEPS = 16   # readings of a fitted spline between two of its points
 
 
 def _value(node, env):
@@ -46,9 +49,37 @@ def _corners(loop, env):
     return [[cx + c * x - s * y, cy + s * x + c * y] for x in (-half_w, half_w) for y in (-half_h, half_h)]
 
 
+def _arc_points(a, b, c):
+    """Points along the arc from `a` through `b` to `c`, both ends included, as the app samples it; the chord when the
+    three are in a line."""
+    d = 2.0 * (a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1]))
+    if abs(d) < 1e-12:
+        return [a, c]
+    a2, b2, c2 = (p[0] * p[0] + p[1] * p[1] for p in (a, b, c))
+    centre = [(a2 * (b[1] - c[1]) + b2 * (c[1] - a[1]) + c2 * (a[1] - b[1])) / d,
+              (a2 * (c[0] - b[0]) + b2 * (a[0] - c[0]) + c2 * (b[0] - a[0])) / d]
+    radius = math.hypot(a[0] - centre[0], a[1] - centre[1])
+    start = math.atan2(a[1] - centre[1], a[0] - centre[0])
+    end = math.atan2(c[1] - centre[1], c[0] - centre[0])
+    counter = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]) > 0
+    full = 2.0 * math.pi
+    sweep = (end - start) % full if counter else -((start - end) % full)
+    return [a] + [[centre[0] + radius * math.cos(start + sweep * i / ARC_STEPS),
+                   centre[1] + radius * math.sin(start + sweep * i / ARC_STEPS)] for i in range(1, ARC_STEPS)] + [c]
+
+
+def _spline_points(points):
+    """Points along the app's curve through `points` (the chords when it cannot be fitted)."""
+    curve = spline_fit.interpolate(points)
+    if curve is None:
+        return points
+    steps = SPLINE_STEPS * (len(points) - 1)
+    return [curve.at(i / steps) for i in range(steps + 1)]
+
+
 def reach_of(loop, env, start, across=None):
     """How far a written loop reaches from `start` (2D, the outline's frame): the loop's farthest point, or for a
-    loop of lines, arcs and splines its farthest end or through point. With `across` (a 2D unit direction) only the
+    loop of lines, arcs and splines its farthest point, with the arcs and splines sampled as the app does. With `across` (a 2D unit direction) only the
     reach along the direction square to it counts: a flat path bends in the plane square to `across`, so the outline
     reaches toward a bend's centre only that way."""
     def away(point):
@@ -69,7 +100,14 @@ def reach_of(loop, env, start, across=None):
         return max(away(_point(p, env)) for p in loop["points"])
     points = [_point(loop["start"], env)]
     for segment in loop["segments"]:
-        points += [_point(p, env) for p in segment.get("through") or []] + [_point(segment["to"], env)]
+        to = _point(segment["to"], env)
+        if segment["kind"] == "arc":
+            points += _arc_points(points[-1], _point(segment["through"], env), to)[1:]
+        elif segment["kind"] == "spline":
+            through = [_point(p, env) for p in segment.get("through") or []]
+            points += _spline_points([points[-1]] + through + [to])[1:]
+        else:
+            points.append(to)
     return max(away(p) for p in points)
 
 

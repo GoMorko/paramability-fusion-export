@@ -28,6 +28,23 @@ class PiecesOfOneLineTest(unittest.TestCase):
         self.assertEqual({v for k, v in moved.items() if k.endswith(".1")}, {0.0})
 
 
+class PathOnlySketchTest(unittest.TestCase):
+    """A sketch that holds only a sweep path has no outline curves: its path curves still count as a change."""
+
+    @staticmethod
+    def sketch(end):
+        return {"frame": {"origin": [0, 0, 0]}, "profiles": [],
+                "curves": {"t1": {"kind": "line", "start": [0, 0], "end": [end, 0]}}}
+
+    def test_a_moved_path_curve_is_another_read(self):
+        self.assertFalse(match.same_read(self.sketch(10.0), self.sketch(12.0)))
+
+    def test_the_same_path_under_a_new_curve_token_is_the_same_read(self):
+        again = self.sketch(10.0)
+        again["curves"] = {"t9": again["curves"]["t1"]}
+        self.assertTrue(match.same_read(self.sketch(10.0), again))
+
+
 class CurveMadeAgainTest(unittest.TestCase):
     """Fusion may give a projected or intersection curve a new token when it recomputes the sketch."""
 

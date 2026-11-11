@@ -10,7 +10,7 @@ from tests import context  # noqa: F401
 from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of, stopped, verdict_of
 
 from lib.params import size_table
-from lib.sketch_values.motion import Affine, Motion
+from lib.sketch_values.motion import Affine, Motion, Stuck, Terms
 from lib.translator import paths, sweep, translate
 from lib.translator.translate import _sweep_version
 
@@ -831,6 +831,35 @@ def rim_sized(plane=None):
     return sized(capture, Motion(values, curves={"2/path"}), ["width_mm"])
 
 
+def d_outline(capture):
+    """The pipe capture with a D shaped outline (an arc and its chord) instead of the circle."""
+    r = 3.0
+    capture["items"][PIPE_ITEM]["data"]["profiles"][0]["loops"][0]["curves"] = [
+        {"kind": "arc", "start": [0, -r], "mid": [r, 0], "end": [0, r], "center": [0, 0], "radius": r, "entity": "a0"},
+        {"kind": "line", "start": [0, r], "end": [0, -r], "entity": "l0"}]
+    capture["items"][PIPE_ITEM]["target_after"]["volume_mm3"] = None
+    return capture
+
+
+D_OUTLINE = {"2/p0/l0/start.1": Affine(0, {"wire_mm": -0.5}, "Sketch1"),
+             "2/p0/l0/segments.0.through.0": Affine(0, {"wire_mm": 0.5}, "Sketch1"),
+             "2/p0/l0/segments.0.to.1": Affine(0, {"wire_mm": 0.5}, "Sketch1"),
+             "2/p0/l0/segments.1.to.1": Affine(0, {"wire_mm": -0.5}, "Sketch1")}
+
+MORE = ("a_mm", "b_mm", "c_mm", "d_mm")
+
+
+def many_sizes():
+    """The pipe with four more sizes that move the last point a little: seven sizes in the path rule check."""
+    capture = load_capture(PIPE)
+    capture["parameters"]["user"] += [dict(capture["parameters"]["user"][1], name=n) for n in MORE]
+    values = bend_values()
+    values["2/path/c2/end.1"] = Affine(-0.4, dict({"bend_mm": 1.0, "run_mm": 1.0}, **{n: 0.01 for n in MORE}),
+                                       "Sketch2")
+    motion = Motion(dict(values, **PathKeptTest.OUTLINE), curves={"2/path", "2/p0"})
+    return capture, motion, ["run_mm", "bend_mm", "wire_mm", *MORE]
+
+
 class PathKeptTest(unittest.TestCase):
     """The app's rules for the path hold over the size ranges: ranges are cut, or the sizes marked where no cut helps."""
 
@@ -884,6 +913,59 @@ class PathKeptTest(unittest.TestCase):
             result = followed(bend_values(), ("run_mm", "bend_mm", "wire_mm"), outline=self.OUTLINE)
         self.assertEqual(sorted(f["name"] for f in result.loose), ["bend_mm", "run_mm", "wire_mm"])
         self.assertEqual(result.recipe["sizes"]["wire_mm"]["max"], 12.0)
+
+    def test_an_outline_with_an_arc_cuts_the_range_where_the_arc_reaches_the_bend(self):
+        motion = Motion(dict(bend_values(), **D_OUTLINE), curves={"2/path", "2/p0"})
+        result = sized(d_outline(load_capture(PIPE)), motion, ["run_mm", "bend_mm", "wire_mm"])
+        self.assertEqual((result.recipe["sizes"]["wire_mm"]["max"], result.loose), (9.99, []))
+
+    def test_seven_sizes_cut_only_the_range_that_needs_it_with_the_whole_budget(self):
+        capture, motion, ticked = many_sizes()
+        sizes = sized(capture, motion, ticked).recipe["sizes"]
+        self.assertEqual((sizes["wire_mm"]["min"], sizes["wire_mm"]["max"]), (3.0, 9.99))
+        for name in ("run_mm", "bend_mm", *MORE):
+            self.assertEqual((sizes[name]["min"], sizes[name]["max"]),
+                             (sizes[name]["value"] / 2, sizes[name]["value"] * 2), name)
+
+    def test_a_check_that_runs_out_of_settings_or_time_marks_the_sizes_and_cuts_nothing(self):
+        for limit in ({"MAX_PATH_TESTS": 40}, {"MAX_PATH_SECONDS": -1.0}):
+            capture, motion, ticked = many_sizes()
+            with self.subTest(limit), unittest.mock.patch.multiple(sweep, **limit):
+                result = sized(capture, motion, ticked)
+            self.assertEqual(sorted(f["name"] for f in result.loose), sorted(ticked))
+            self.assertIn("too many settings", result.loose[0]["reason"])
+            self.assertEqual(result.recipe["sizes"]["wire_mm"]["max"], 12.0)
+
+    def test_a_rule_that_fails_only_between_the_ends_of_a_range_is_found(self):
+        radius = Terms(-15.75, [(4.0625, [("", "wire_mm", 1.0)]),
+                                (-0.15625, [("", "wire_mm", 1.0), ("", "wire_mm", 1.0)])], "Sketch1")
+        result = followed(bend_values(), ("wire_mm",), ranges={"wire_mm": (6.0, 20.0)},
+                          outline={"2/p0/l0/radius": radius})
+        self.assertEqual([f["name"] for f in result.loose], ["wire_mm"])
+
+    def test_a_point_stuck_for_one_size_marks_only_the_sizes_that_move_it(self):
+        values = dict(bend_values(), **{"2/path/c1/mid.0": Stuck(["bend_mm"], "curve", "Sketch2")})
+        result = followed(values)
+        self.assertEqual([f["name"] for f in result.loose], ["bend_mm"])
+        self.assertIn("curve", result.loose[0]["reason"])
+        self.assertEqual(result.recipe["sizes"]["run_mm"]["max"], 60.0)
+
+    def test_a_size_whose_rule_fails_at_once_is_marked_and_the_others_are_checked_again(self):
+        values = {"2/path/c0/end.1": Affine(0, {"length_mm": 1.0}, "Sketch2"),
+                  "2/path/c0/end.0": Affine(-20, {"length_mm": 0.5}, "Sketch2"),
+                  "2/p0/l0/width": Affine(0, {"width_mm": 1.0}, "Sketch1")}
+        motion = Motion(values, curves={"2/path", "2/p0"})
+        result = sized(load_capture("sweep_straight"), motion, ["length_mm", "width_mm"])
+        self.assertEqual([f["name"] for f in result.loose], ["length_mm"])
+
+    def test_a_straight_path_that_twists_follows_its_length_like_an_untwisted_one(self):
+        capture = edited("sweep_straight", 2, lambda data: data.update(twist_deg=90.0))
+        values = {"2/path/c0/end.1": Affine(0, {"length_mm": 1.0}, "Sketch2")}
+        result = sized(capture, Motion(values, curves={"2/path"}), ["width_mm", "length_mm"])
+        step = only_sweep(self, result)
+        self.assertEqual(step["path"]["points"], [[0.0, 0.0, 0.0], [0.0, 0.0, {"expr": "length_mm"}]])
+        self.assertEqual(result.loose, [])
+        self.assertEqual(result.recipe["sizes"]["length_mm"]["max"], 80.0)
 
     def test_a_tapered_sweep_keeps_its_path_as_measured(self):
         capture = with_options(PIPE, PIPE_ITEM, taper_deg=2.0)

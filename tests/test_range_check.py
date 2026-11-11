@@ -21,6 +21,19 @@ class Table:
 BOX = Table(width=(40, 20, 80), wall=(5, 2.5, 10))
 
 
+class MiddlesTest(unittest.TestCase):
+    def test_each_size_is_tried_at_its_middle_alone_and_with_the_others_at_their_ends(self):
+        found = range_check.middles(BOX, ("width", "wall"))
+        self.assertIn({"width": 50.0, "wall": 6.25}, found)
+        self.assertIn({"width": 50.0}, found)
+        self.assertIn({"width": 50.0, "wall": 2.5}, found)
+        self.assertIn({"width": 20, "wall": 6.25}, found)
+        self.assertEqual(len(found), 7)
+
+    def test_a_size_without_a_range_gives_nothing(self):
+        self.assertEqual(range_check.middles(BOX, ("depth",)), [])
+
+
 class SweepTest(unittest.TestCase):
     def test_a_mixed_corner_is_found_where_each_size_alone_stays_positive(self):
         span = sweep(BOX, "width - 2 * wall", ("width", "wall"))

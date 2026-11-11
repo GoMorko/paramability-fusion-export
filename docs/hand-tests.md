@@ -113,7 +113,7 @@ except U1, L1 to L15, F1 and F2, which are described here.
       copied says what it is: section 9.
 - [ ] Compact export window and result window: section 7.2 ("The export window has no empty gaps", "Early warning",
       "Show in timeline", the result window) and the export pipeline entry under "Fusion calls to watch".
-- [ ] SW1 to SW19 and LF1 to LF5, sweeps and lofts (0.9.2): section 13 (the calls are under "Capture reader calls to watch
+- [ ] SW1 to SW20 and LF1 to LF6, sweeps and lofts (0.9.2): section 13 (the calls are under "Capture reader calls to watch
       (sweep and loft)").
 - [ ] E1 to E6, Emboss on a flat face: section 10.
 - [ ] T1 to T5, thin walled extrudes of one closed outline (T5 is `%` with a negative left side): section "Thin
@@ -928,8 +928,13 @@ surprises.
       that does not move the start of the path (a plane on an offset plane): that size is marked "starts its path on
       the plane of its outline". Repeat on the SW17 rim with a size behind its width: it follows, and its range
       stops where the long side would end before the profile plane. A path with a spline curve, a full circle, 3D
-      corner points, or a taper keeps its sizes marked, as before. Send `report.json` from a sweep whose path sizes
-      do not follow or whose range stops too early.
+      corner points, or a taper keeps its sizes marked, as before. Give the profile a rounded corner or a slot shape
+      (arcs): the range of the size behind it stops where the arc, not only its corners, would reach the centre of
+      the bend. Add a twist to a straight path with a size behind its length: the path follows the size like the
+      untwisted one. A sweep with many sizes behind its path (seven or more) and a long path may not be checked at every
+      value: then its sizes are marked ("too many settings to check them all in a reasonable time") and no range is
+      cut; the export must not stay busy for more than about twenty seconds on it. Send `report.json` from a sweep
+      whose path sizes do not follow or whose range stops too early.
 - [ ] **SW14 Round on a sweep end.** After SW2 (a circle of a user parameter `wire_mm` swept along a bent path), add
       a fillet on the whole edge of the end cap and tick `wire_mm`. The `round` step picks `featureEdges` of the sweep
       with `which: "end"`, `wire_mm` is not marked "may give unexpected results", and in Paramability the round

@@ -11,7 +11,8 @@ What follows depends on how the sweep is written:
 - a straight path is an extrude: its distance follows the line's length;
 - one arc is a revolve: its axis point follows the arc's centre and its angle the angle the arc turns;
 - a chain of lines and arcs in the sketch's own plane is a flat path: its start and every `to` and `through` point
-  follow, and its placement follows the sketch plane.
+  follow, and its placement follows the sketch plane;
+- a straight path that twists is a path of two corner points: both points follow.
 
 `Followed.curves_at` gives the path as plain numbers at any size setting, so the caller can test the app's rules over
 the size ranges (`paths.rebuilt_refusal`).
@@ -71,8 +72,9 @@ def _numbers(node, env):
 class Followed:
     """A sweep path that follows sizes.
 
-    written: the flat path as it is written (formulas where it follows sizes); for a straight or arc path, the same
-      path as it would be written flat, kept to test the rules.
+    written: the path as it is written (formulas where it follows sizes); for a straight or arc path written as an
+      extrude or a revolve, the same path as it would be written flat, kept to test the rules.
+    flat: for a straight path written as corner points, the same path written flat, to test the rules (else None).
     length: for a straight path, the line's length as a Quantity.
     centre, turn: for an arc path, the raw 3D centre and the Quantity of the angle in degrees.
     on_plane: the raw 3D points that must stay on the outline's plane (the path start, an arc's centre).
@@ -87,11 +89,12 @@ class Followed:
     centre: Optional[list] = None
     turn: Optional[Quantity] = None
     pairs: list = field(default_factory=list)
+    flat: Optional[dict] = None
 
     def curves_at(self, env):
         """The path as lines and arcs with numbers at the size values `env` (raises ValueError, ExpressionError,
         ZeroDivisionError when it cannot be worked out)."""
-        return paths.flat_curves(_numbers(self.written, env))
+        return paths.flat_curves(_numbers(self.flat or self.written, env))
 
     def disagrees_at(self, env, curves):
         """True when a formula does not give what the path measures at the size values `env`."""
@@ -235,13 +238,13 @@ def _as_flat(raw, found):
 
 def follow(ctx, item, path, found, form, drawn):
     """The `Followed` path for a path the planner found (`found`, a `paths.PathPlan`) that is written as `form`
-    (`extrude` for a line, `revolve` for an arc, `sweep` for a flat chain), or None when it is not followed: no motion
+    (`extrude` for a line, `revolve` for an arc, `sweep` for a flat chain or for a line that twists), or None when it is not followed: no motion
     values for it, a form that cannot follow, or a point that is none of the sketch's. `drawn` is the outline's
     `sketch_motion.Outline`."""
     index = item.get("index")
     if not sketch_motion.active(ctx) or keys.path(index) not in ctx.motion.curves:
         return None
-    if (form, found.kind) not in (("extrude", "line"), ("revolve", "arc"), ("sweep", "flat")):
+    if (form, found.kind) not in (("extrude", "line"), ("revolve", "arc"), ("sweep", "flat"), ("sweep", "line")):
         return None
     if not all(isinstance(c.get("flat"), dict) and isinstance(c.get("entity"), str) for c in path["curves"]):
         return None
@@ -268,7 +271,13 @@ def follow(ctx, item, path, found, form, drawn):
         followed.on_plane.append(followed.centre)
         followed.turn = sketch_motion.quantity(ctx, raw.fields[0]["turn"], found.angle_deg, positive=True)
         followed.pairs.append((followed.turn, lambda curves: paths.turn_degrees(curves[0])))
-    followed.reads = tuple(dict.fromkeys(reads_in(written) + (followed.length.reads if followed.length else ())
+    elif found.kind == "line":
+        followed.flat = written
+        followed.written = dict(found.recipe, points=[
+            [sketch_motion.quantity(ctx, space[c], number).json() for c, number in enumerate(point)]
+            for space, point in ((start, found.recipe["points"][0]),
+                                 (raw.in_space(raw.at(flat["segments"][0]["to"])), found.recipe["points"][1]))])
+    followed.reads = tuple(dict.fromkeys(reads_in(written) + reads_in(followed.written) + (followed.length.reads if followed.length else ())
                                          + (followed.turn.reads if followed.turn else ())))
     return followed
 

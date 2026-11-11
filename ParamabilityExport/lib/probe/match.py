@@ -492,7 +492,8 @@ def _all_numbers(node, out):
 
 
 def _read_signature(record):
-    """(frame numbers, curves sorted by their sketch curve token) of a sketch read."""
+    """(frame numbers, outline curves sorted by their sketch curve token, path curves sorted by kind and numbers) of
+    a sketch read."""
     frame = []
     _all_numbers(record.get("frame"), frame)
     curves = []
@@ -502,7 +503,14 @@ def _read_signature(record):
                 numbers = []
                 _all_numbers({k: v for k, v in curve.items() if k not in ("entity", "kind", "type")}, numbers)
                 curves.append((str(curve.get("entity") or ""), str(curve.get("kind") or ""), numbers))
-    return frame, sorted(curves)
+    path = []
+    for curve in (record.get("curves") or {}).values():
+        if not isinstance(curve, dict):
+            continue
+        numbers = []
+        _all_numbers({k: v for k, v in curve.items() if k not in ("entity", "kind", "type")}, numbers)
+        path.append((str(curve.get("kind") or ""), numbers))
+    return frame, sorted(curves), sorted(path)
 
 
 def _close(a, b):
@@ -510,9 +518,11 @@ def _close(a, b):
 
 
 def same_read(before, now):
-    """True when two reads of one sketch (`{ frame, profiles }`) have the same frame and curves, within 1e-4 mm. A curve
-    Fusion made again under a new token counts as the same curve (`renamed`)."""
-    frame_a, curves_a = _read_signature(before)
-    frame_b, curves_b = _read_signature(renamed(now, before))
-    return _close(frame_a, frame_b) and len(curves_a) == len(curves_b) and all(
+    """True when two reads of one sketch (`{ frame, profiles, curves }`) have the same frame and curves, within 1e-4 mm.
+    An outline curve Fusion made again under a new token counts as the same curve (`renamed`); path curves are
+    compared by their numbers."""
+    frame_a, curves_a, path_a = _read_signature(before)
+    frame_b, curves_b, path_b = _read_signature(renamed(now, before))
+    return (_close(frame_a, frame_b) and len(curves_a) == len(curves_b) and all(
         a[:2] == b[:2] and _close(a[2], b[2]) for a, b in zip(curves_a, curves_b))
+        and len(path_a) == len(path_b) and all(a[0] == b[0] and _close(a[1], b[1]) for a, b in zip(path_a, path_b)))

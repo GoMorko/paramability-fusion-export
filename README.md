@@ -336,7 +336,7 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   step. A path of body edges is copied as measured, and such a step cannot be repeated by a pattern. The outline
   follows sizes like an extrude outline. So does a path of sketch lines and arcs that the size probe measured: a size
   behind a line length, an arc radius or a corner position becomes a formula (the extrude's distance, the revolve's axis
-  point and angle, or the points of the flat path), the path's rules are tested over the size ranges, and the ranges
+  point and angle, or the points of the flat path, or both corner points of a straight path that twists), the path's rules are tested over the size ranges, and the ranges
   are cut where they stop holding (past that value the path would cross itself, bend tighter than the outline, or turn
   sharply). The path start must stay on the outline's plane: a size that moves one without the other is marked "may
   give unexpected results". A path that stays as measured, with the sizes behind its sketch (or the plane, face or

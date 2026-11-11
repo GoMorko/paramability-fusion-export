@@ -1162,17 +1162,21 @@ face), and a measured volume change that is not
   is `turns`. The translator writes each written point (the start, every `to` and `through`) from the raw values of the
   curve point at that place, so a size behind a line length, an arc radius or a corner position becomes a formula:
   a straight path gives the extrude its distance, an arc path the revolve its axis point (the arc's centre) and its
-  angle, a flat chain its `start`, `to` and `through` points and its placement origin along the sketch's normal. Not
+  angle, a flat chain its `start`, `to` and `through` points and its placement origin along the sketch's normal, and a
+  straight path that twists (a `sweep` step along two corner points) both points. Not
   followed, so written as measured with the sizes behind the sketch marked: a path with a free curve, a circle, 3D
   corner points, body edges or a taper, a path with a written point that is none of the sketch's points (a cut
   inside an arc), and a motion file without the path's prefix. A closed path cut open inside a straight line square
   to the outline's plane follows that line and the plane. The path start must stay on the outline's plane: a size that
   moves it away from the plane (the sketches are not tied together) is marked. The app's rules for the path
   (square start, no sharp corner, no touching itself, the outline clear of the tightest bend, a closed seam, an
-  outline kept in one direction rising) are tested at the corners of the size ranges and inside them
-  (`sweep._keep_path_valid`, `paths.rebuilt_refusal`): the ranges are cut where a rule stops holding
-  (`kept_ranges.holding_ranges_where`), or the sizes are marked when no cut helps or when more than
-  `MAX_PATH_TESTS` settings would have to be tested.
+  outline kept in one direction rising) are tested at the current values, at the ends of the size ranges (every corner
+  for up to six sizes, else a fixed sample of them) and at the middles of the ranges (`sweep._keep_path_valid`,
+  `paths.rebuilt_refusal`, `range_check.middles`). A rule that fails only between those settings is not seen. The
+  ranges are cut where a rule stops holding (`kept_ranges.holding_ranges_where`); a size whose own cut would leave
+  under a tenth of its range is marked, and the others are checked again without it. A size that another part of the
+  copy already marked is held at its value in the check. When more than `MAX_PATH_TESTS` distinct settings or
+  `MAX_PATH_SECONDS` seconds are needed, nothing is cut and the sizes are marked.
 - `faces_after`: a point and the outward normal of the made start and end faces (`startFaces` and `endFaces` of a
   sweep, `startFace` and `endFace` of a loft), read with the marker after the item. Each side is null when the member
   cannot be read. The key is not a pick.

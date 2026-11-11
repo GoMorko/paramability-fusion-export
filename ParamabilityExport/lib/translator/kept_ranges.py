@@ -111,13 +111,13 @@ def holding_ranges(table, rules, tol):
     return holding_ranges_where(table, reads, lambda bounds, only=None: _holds(table, rules, bounds, tol, only))
 
 
-def holding_ranges_where(table, reads, holds, relax=False):
+def holding_ranges_where(table, reads, holds, relax=False, steps=range_check.STEPS):
     """`holding_ranges` for a rule that is a test, not a sized value: `holds(bounds, only=None)` says whether it holds
     at the settings of `bounds` ({recipe size name: (low, high)}, `range_check.corners` for the settings), or at the
     one end `only` ((size, 0 for its min or 1 for its max), the other sizes at their value now). `reads` are the
     Fusion names of the sizes the rule depends on. With `relax`, a size that keeps its whole range while the others
     stay cut is given it back: the joint cut shortens every size by the same share, also those the rule does not
-    fail for."""
+    fail for. `steps` is how many halvings find each end of a range."""
     sized = [(name, table.size_name(name)) for name in reads]
     sized = [(name, s) for name, s in sized if s in table.sizes and "min" in table.sizes[s]]
     bounds = {s: (table.sizes[s]["min"], table.sizes[s]["max"]) for _, s in sized}
@@ -141,11 +141,11 @@ def holding_ranges_where(table, reads, holds, relax=False):
     # Each size alone first, so a size whose own ends hold keeps them; then all together for the joint settings.
     limits = dict(bounds)
     for s in names:
-        t_high = range_check.largest_share(lambda t: holds(toward(limits, [s], 1.0, t), (s, 1)))
-        t_low = range_check.largest_share(lambda t: holds(toward(limits, [s], t, 1.0), (s, 0)))
+        t_high = range_check.largest_share(lambda t: holds(toward(limits, [s], 1.0, t), (s, 1)), steps)
+        t_low = range_check.largest_share(lambda t: holds(toward(limits, [s], t, 1.0), (s, 0)), steps)
         limits = toward(limits, [s], t_low, t_high)
-    t_high = range_check.largest_share(lambda t: holds(toward(limits, names, 1.0, t)))
-    t_low = range_check.largest_share(lambda t: holds(toward(limits, names, t, t_high)))
+    t_high = range_check.largest_share(lambda t: holds(toward(limits, names, 1.0, t)), steps)
+    t_low = range_check.largest_share(lambda t: holds(toward(limits, names, t, t_high)), steps)
     exact = toward(limits, names, t_low, t_high)
     if relax:
         for s in names:

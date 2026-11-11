@@ -126,6 +126,11 @@ class Context:
         record = Doubt(names, why, self.current.get("index") if self.current else None, fixed, cut)
         (self._recordings[-1] if self._recordings else self).doubts.append(record)
 
+    def doubted(self):
+        """Fusion names of the sizes marked so far (a doubt without a cut), in this handler and in the walk."""
+        records = self.doubts + (self._recordings[-1].doubts if self._recordings else [])
+        return {name for record in records if not record.cut for name in record.names}
+
     def cut(self, ranges, why):
         """Record that a value works only while the sizes stay inside `ranges` ({Fusion name: (min, max)}): the driver
         cuts their ranges to those values (`cuts`). Recorded like `doubt`."""
