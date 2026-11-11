@@ -13,7 +13,9 @@ from tests.translator_helpers import load_capture, steps_of, stopped
 
 from lib.translator import CaptureError, Refusal, gaps as gaps_module, translate
 from lib.translator.translate import _gap_sizes
-from lib.translator.gaps import MAX_DATA_BYTES, MAX_DATA_DEPTH, MAX_GAPS, MAX_SIZES, pick_records
+from lib.translator.gap_file import MAX_DATA_BYTES, MAX_DATA_DEPTH, MAX_SIZES
+from lib.translator.gap_picks import pick_records
+from lib.translator.gaps import MAX_GAPS
 
 TRAY = "filter_tray_sized"  # Extrude1, Shell1, Fillet1 (picks edges), Hole1, a pattern of Hole1
 SHELL, FILLET, HOLE, PATTERN = 2, 3, 5, 6

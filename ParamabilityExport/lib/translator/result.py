@@ -148,7 +148,7 @@ class TranslateResult:
     # [{ name, reason, used }]: ticked parameters that are not sizes of the recipe, with the plain reason. `used` is
     # True when a copied step reads the parameter and the copy cannot follow it, False when nothing copied depends on it.
     dropped: list = field(default_factory=list)
-    # The steps left out of the recipe (gaps.py, `gaps.record`), in timeline order; empty when the copy stops.
+    # The steps left out of the recipe (gaps.py, `gap_file.record`), in timeline order; empty when the copy stops.
     gaps: list = field(default_factory=list)
     # The 12 numbers that map the capture's coordinates to the recipe's (`gaps.to_recipe`), when there are gaps.
     to_recipe: Optional[list] = None

@@ -20,7 +20,7 @@ side for the translator.
 """
 from ..design_edit.marker import read_marker
 from ..translator import step_kinds, tool_items
-from ..translator.gaps import pick_records
+from ..translator.gap_picks import pick_records
 from . import read_geometry as geo
 from .capture import MarkerError, restore_marker
 

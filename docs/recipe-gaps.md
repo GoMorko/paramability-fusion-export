@@ -5,7 +5,7 @@ add-in writes next to the recipe. The format is published by the Paramability ap
 version 1 (`schemas/paramability.recipeGaps.v1.schema.json` in the app repository; a copy is in `tests/schema/`). That
 schema is the contract: it holds every limit. This page says what the add-in puts in each field and why.
 
-Code: `lib/translator/gaps.py` (the records and where a gap belongs), `lib/translator/walk.py` (what becomes a gap),
+Code: `lib/translator/gap*.py` (the records, the picked gaps, where a gap belongs, the file data), `lib/translator/walk.py` (what becomes a gap),
 `lib/export_plan/reach_pass.py` and `lib/fusion_reader/read_gap_reach.py` (later steps that pick faces of a gap),
 `lib/package/gaps_file.py` (the file), `lib/package/manifest.py` (the package version).
 

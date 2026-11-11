@@ -1,7 +1,7 @@
 """The driver: walks a capture's items, calls one handler per feature type, builds the recipe."""
 import importlib
 
-from . import gaps, kept_ranges, range_check, repeat, step_kinds
+from . import gap_file, gap_measures, gap_place, gaps, kept_ranges, range_check, repeat, step_kinds
 from .audit import audit
 from .sizes import joint_reasons, probed_sizes, text_reasons, untried_reasons, used_sizes
 from . import notes as wording, place
@@ -315,7 +315,7 @@ def _gap_sizes(ctx, result, table, sizes, doubts, reads):
     out = {name: spec for name, spec in table.sizes.items() if name in sizes or name in kept}
     for gap, written in zip(ctx.gaps, result.gaps):
         names = {table.size_name(name) for name in reads.get(gap.id, ())}
-        written["sizes"] = [name for name in out if name in names][:gaps.MAX_SIZES]
+        written["sizes"] = [name for name in out if name in names][:gap_file.MAX_SIZES]
         written["looseSizes"] = [name for name in written["sizes"] if name in loose.get(gap.id, ())]
     return out
 
@@ -434,12 +434,12 @@ def _walk(capture, table, size_table, motion=None, cache=None):
     if ctx.gaps:
         result.over_gap_cap = len(ctx.gaps) > gaps.MAX_GAPS
         problem = (wording.too_many_gaps_reason(gaps.MAX_GAPS) if result.over_gap_cap
-                   else gaps.place_all(ctx.gaps, recipe["features"]))
+                   else gap_place.place_all(ctx.gaps, recipe["features"]))
         if problem:
             result.refusal = {"index": None, "name": "", "type": "", "reason": problem}
             return result, ctx
-        result.gaps = [gaps.record(gap, size_table, move) for gap in ctx.gaps]
-        result.to_recipe = gaps.to_recipe(move)
+        result.gaps = [gap_file.record(gap, size_table, move) for gap in ctx.gaps]
+        result.to_recipe = gap_measures.to_recipe(move)
         result.notes.append(wording.left_out_note([gap.name for gap in ctx.gaps]))
     result.recipe = recipe
     return result, ctx

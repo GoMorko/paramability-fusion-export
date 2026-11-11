@@ -386,7 +386,7 @@ or `{ "read": false, "error": "<reason>" }` when the read failed.
   reported under the index of that step of `gaps`), and every later step that picks geometry, without items that make
   no body (sketches, construction geometry). Only steps after the first
   step of `gaps` are tested, and a step of `gaps` is not tested.
-- Which items pick geometry is decided by `translator.gaps.pick_records(item)`: the edge records of rounds and
+- Which items pick geometry is decided by `translator.gap_picks.pick_records(item)`: the edge records of rounds and
   bevels, and face records with a token, a point or loops (shell and offset faces, the face inputs of a round). These
   are the picks the copy writes as measured points. A face given only by a `face_point` (an emboss face, a face an
   extrude starts from or reaches to) and a face used as an outline are not picks: the copy writes them as numbers or
@@ -401,7 +401,7 @@ or `{ "read": false, "error": "<reason>" }` when the read failed.
   or cannot be read; so does every candidate when a pick cannot be found. More than 100 tested steps or 200 candidates
   give `read: false`, and so does any other failure of the read. The marker goes back to where it was at the end, with the same check as `read_capture`
   (`MarkerError` when it does not read there).
-- The translator (`gaps.picked_gaps`): a later step that picks faces of a left out step is left out too, with the gap
+- The translator (`gap_picks.picked_gaps`): a later step that picks faces of a left out step is left out too, with the gap
   in its `dependsOn`. A left out step that the read did not cover (not in `gaps` and not a tested step, for example
   one that only the final translation leaves out) counts as "may pick". Without `reach`, without `gaps`, or with
   `read: false`, every later step that picks geometry is left out ("It may pick faces of Extrude5, which is missing
