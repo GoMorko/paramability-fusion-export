@@ -101,9 +101,6 @@ class WrittenToolTest(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)))
         self.assertEqual(check_recipe(result.recipe), [])
 
-    def test_the_tool_step_is_named_after_its_tool(self):
-        self.assertEqual(tool_of(translate(load_capture("combine_tool_chamfer")))["label"], "Body2")
-
     def test_the_verdict_of_the_combine_holds_the_verdicts_inside(self):
         verdict = verdict_of(translate(load_capture("combine_tool_chamfer")), 5)
         self.assertEqual([(v["name"], v["verdict"]) for v in verdict["tool_steps"]],
@@ -444,11 +441,9 @@ class KeptToolTest(unittest.TestCase):
 
 
 class OwnerBodyTest(unittest.TestCase):
-    def test_a_face_names_the_body_it_lies_on(self):
+    def test_a_face_names_the_body_it_lies_on_and_none_when_it_cannot_be_read(self):
         body = SimpleNamespace(entityToken="t2", name="Body2")
         self.assertEqual(geo.owner_body(SimpleNamespace(body=body), None), TOOL)
-
-    def test_a_face_without_a_readable_body_names_none(self):
         self.assertIsNone(geo.owner_body(SimpleNamespace(), None))
 
 

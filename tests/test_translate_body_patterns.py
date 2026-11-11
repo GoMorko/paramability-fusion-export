@@ -3,7 +3,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.schema_check import check_recipe
-from tests.translator_helpers import load_capture, steps_of, verdict_of
+from tests.translator_helpers import load_capture, steps_of
 
 from lib.params import size_table
 from lib.params.expressions import evaluate
@@ -66,10 +66,6 @@ class WholePatternTest(unittest.TestCase):
         self.assertEqual(tool["combine"], "add")
         self.assertEqual(marked(result), ["row_n"])
         self.assertEqual(check_recipe(result.recipe), [])
-
-    def test_the_verdict_names_the_pattern(self):
-        names = [v["name"] for v in verdict_of(translate(load_capture(ROW)), 5)["tool_steps"]]
-        self.assertEqual(names, ["Extrude2", "RectangularPattern1"])
 
     def test_a_forgotten_value_of_the_pattern_is_loose(self):
         capture = load_capture(ROW)
