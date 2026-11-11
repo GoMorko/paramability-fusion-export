@@ -100,15 +100,17 @@ class SizedLimitsTest(unittest.TestCase):
         result = translate(capture, size_table=table)
         return {f["name"]: f["reason"] for f in result.loose}.get("turn_deg", ""), result
 
-    def test_a_taper_that_follows_a_size_marks_the_size_past_the_steep_values(self):
-        reason, result = self.sized_sweep("taper_deg", "turn_deg - 88", 2.0, taper_deg=2.0)
-        self.assertIn("lean its walls 45 degrees or more", reason)
+    def test_a_taper_that_follows_a_size_stops_the_range_before_45_degrees(self):
+        _, result = self.sized_sweep("taper_deg", "turn_deg - 88", 2.0, taper_deg=2.0)
         self.assertIsNone(result.refusal)
+        turn = result.recipe["sizes"]["turn_deg"]
+        self.assertTrue(90.0 <= turn["max"] < 133.0, turn)
 
-    def test_a_twist_that_follows_a_size_marks_the_size_past_the_long_values(self):
-        reason, result = self.sized_sweep("twist_deg", "turn_deg * 30", 2700.0, twist_deg=2700.0)
-        self.assertIn("twist more than 3600 degrees", reason)
+    def test_a_twist_that_follows_a_size_stops_the_range_before_3600_degrees(self):
+        _, result = self.sized_sweep("twist_deg", "turn_deg * 30", 2700.0, twist_deg=2700.0)
         self.assertIsNone(result.refusal)
+        turn = result.recipe["sizes"]["turn_deg"]
+        self.assertTrue(90.0 <= turn["max"] <= 120.0, turn)
 
 
 class ClosedTravelTest(unittest.TestCase):

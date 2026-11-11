@@ -656,8 +656,9 @@ the sizes on the form and compare the part with Fusion at the same values.
       "(min, nearer)" and "(max, nearer)" after the first ones. `report.json`: `probe.states` has `failed` with the
       step on each state that did not build, and `probe.motion.spans` gives, for that size, `low` and `high` (the
       values that built) and `failed` (the values that did not, with the step). When a nearer try built, the size is a
-      size (or "not used") and its reason says "between A and B"; in Paramability it matches Fusion between those
-      values. When no try built, the result window shows it as not followed, and the reason names the nearest values
+      size (or "not used"), its range in `recipe.json` stops at the values that built on the sides that failed (a
+      range typed in the dialog keeps its ends), and it is not marked for those sides; in Paramability it matches
+      Fusion over that range. When no try built, the result window shows it as not followed, and the reason names the nearest values
       tried and the step that failed there; it never says "changes nothing". Note how many extra tries ran (at most 24)
       and the export time.
 - [ ] **K13 Only the curved size is marked.** A bracket with two legs at an angle parameter, a wall thickness and leg

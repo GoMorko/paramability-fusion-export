@@ -4,13 +4,21 @@ A rule is `(value, sign)`: a sized Quantity that must stay above `tol` (sign 1),
 `tol` of zero (sign 0) at every size setting of the range (`range_check.corners`: every mix of the ends of the sizes
 it reads). `holding_ranges` looks for the values the ends of the sizes it reads can go to while the rules still hold: each size
 at its own ends first, then all of them by the same share of what is left for the settings that change several sizes
-at once. The ranges themselves are not changed; the values found tell the person past which value a size may give
-unexpected results. A size whose range the person typed gets no value: the rules cannot be kept for it.
+at once. It does not change the ranges itself: the caller marks the sizes past the values found (`past_reasons`), so
+the person knows past which value a size may give unexpected results, or cuts the ranges to them (`Context.cut`). A
+size whose range the person typed gets no value: the rules cannot be kept for it.
+
+`built_ranges` does change ranges: where Fusion itself did not rebuild the design at a value the size probe tried, the
+range stops at the farthest value that built on that side, since the form should not offer a value the design cannot
+take.
 """
 import math
 
 from . import range_check
 from .notes import Past, number_text as _number
+from ..sketch_values import coverage
+
+_SAME = 1e-9
 
 
 def past_reasons(table, found, why):
@@ -23,6 +31,29 @@ def past_reasons(table, found, why):
         where = ("outside %s to %s" % (_number(lo), _number(hi)) if below and past
                  else "below %s" % _number(lo) if below else "past %s" % _number(hi))
         out[name] = Past(where, why)
+    return out
+
+
+def built_ranges(table, motion):
+    """`{Fusion name: (min, max)}` of the free sizes whose range goes past a value at which Fusion did not rebuild the
+    design (`Motion.spans`: a value tried with only that size changed). On that side the range stops at the farthest
+    value that built. An end the person typed is kept, and a range that would shrink to the value now is left as it
+    is (the size could not be measured)."""
+    out = {}
+    for e in table.entries:
+        span = coverage.span(motion, e.name)
+        size = table.sizes.get(e.size_name) if e.size_name else None
+        if not span or not size or "min" not in size:
+            continue
+        failed = [value for value, _ in span.get("failed") or ()]
+        typed_low, typed_high = table.typed_ends(e.name)
+        low, high = size["min"], size["max"]
+        if not typed_low and any(value < span["low"] - _SAME for value in failed):
+            low = max(low, span["low"])
+        if not typed_high and any(value > span["high"] + _SAME for value in failed):
+            high = min(high, span["high"])
+        if (low, high) != (size["min"], size["max"]) and high - low > _SAME:
+            out[e.name] = (low, high)
     return out
 
 

@@ -103,13 +103,15 @@ def _taper_quantity(ctx, item, path, taper):
 
 
 def _keep_taper_under_limit(ctx, item, q):
-    """A taper that follows sizes should stay under MAX_TAPER_DEG either way."""
+    """A taper that follows sizes should stay under MAX_TAPER_DEG either way, since Paramability refuses a steeper
+    one."""
     keep_angle_within(ctx, item, q, MAX_TAPER_DEG, "lean its walls %d degrees or more" % MAX_TAPER_DEG)
 
 
 def keep_angle_within(ctx, item, q, limit_deg, effect):
-    """An angle that follows sizes should stay within `limit_deg` either way: the sizes it reads are marked past the
-    values where it does not. `effect` says what the step would do beyond the limit."""
+    """An angle that follows sizes should stay within `limit_deg` either way: the ranges of the sizes it reads are cut
+    where it does not, or the sizes are marked when no cut keeps it. `effect` says what the step would do beyond the
+    limit."""
     limit = Quantity(limit_deg)
     rules = [(limit.plus(q.scaled(-1.0)), 1), (limit.plus(q), 1)]
     found = kept_ranges.holding_ranges(ctx.table, rules, TAPER_MARGIN_DEG)
@@ -117,8 +119,7 @@ def keep_angle_within(ctx, item, q, limit_deg, effect):
     if found is None:
         ctx.doubt(q.reads, "at other values " + why)
     elif found:
-        for name, reason in kept_ranges.past_reasons(ctx.table, found, why).items():
-            ctx.doubt([name], reason)
+        ctx.cut(found, why)
 
 
 def _distance_quantity(ctx, item, path, raw):

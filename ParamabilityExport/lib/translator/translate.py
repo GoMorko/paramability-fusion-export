@@ -1,7 +1,7 @@
 """The driver: walks a capture's items, calls one handler per feature type, builds the recipe."""
 import importlib
 
-from . import gaps, range_check, repeat, step_kinds
+from . import gaps, kept_ranges, range_check, repeat, step_kinds
 from .audit import audit
 from .sizes import joint_reasons, probed_sizes, text_reasons, untried_reasons, used_sizes
 from . import notes as wording, place
@@ -147,8 +147,9 @@ def translate(capture, handlers=None, size_table=None, motion=None):
     sizes is written as its number, and the sizes it reads stay free: the shape at the current values is the same and
     the other values still follow them. `result.loose` lists those sizes with the reason; one that no formula reads is
     not a size and is listed in `result.dropped` with the reason (as is every ticked size no step reads). After the walk
-    an audit (`audit.py`) marks the sizes a copied step reads that no handler named. The ranges are the table's. A formula too long to copy fixes its sizes (`result.fixed`, as
-    `{ name, reason }`).
+    an audit (`audit.py`) marks the sizes a copied step reads that no handler named. The ranges are the table's, cut
+    where the size probe saw Fusion fail to rebuild (`kept_ranges.built_ranges`) and where a written value would be
+    refused (`Context.cut`). A formula too long to copy fixes its sizes (`result.fixed`, as `{ name, reason }`).
 
     The walk runs twice when some value cannot follow. The first walk fixes every size such a value reads, to learn
     which sizes and reasons there are. The second keeps them free.
@@ -177,6 +178,7 @@ def translate(capture, handlers=None, size_table=None, motion=None):
         return _walk(capture, table, None, cache=cache)[0]
     if not size_table.links:
         size_table = size_table.with_links(geometry_links.reach(capture))
+    size_table = size_table.with_narrowed(kept_ranges.built_ranges(size_table, motion))
     upfront = joint_reasons(size_table) if motion is not None else untried_reasons(size_table)
     for name, why in text_reasons(size_table, capture).items():
         upfront.setdefault(name, why)
@@ -273,10 +275,12 @@ def _finish(settled, doubts, capture, motion):
     sizes = used_sizes(result.recipe["features"], table.sizes)
     if result.gaps:
         sizes = _gap_sizes(settled.ctx, result, table, sizes, doubts, checked.gap_reads)
+    sizes = _with_cuts(table, sizes, settled.ctx.cuts)
     spans = _narrow_spans(table, motion)
-    for name, (span, low, high) in spans.items():
-        if table.size_name(name) in sizes:
-            doubts[name] = wording.with_span(doubts.get(name), span, low, high)
+    for name, (span, _, _) in spans.items():
+        size = sizes.get(table.size_name(name))
+        if size and wording.narrow_span(span, size["min"], size["max"]):
+            doubts[name] = wording.with_span(doubts.get(name), span, size["min"], size["max"])
     result.loose = [{"name": name, "reason": loose_reason(name, why)} for name, why in doubts.items()
                     if table.size_name(name) in sizes]
     result.dropped = _dropped(table, sizes, doubts, checked.unmoved, checked.unmoved_links, _tried(motion),
@@ -313,15 +317,26 @@ def _gap_sizes(ctx, result, table, sizes, doubts, reads):
     return out
 
 
+def _with_cuts(table, sizes, cuts):
+    """`sizes` with the ranges cut where a written value stops working (`Context.cut`)."""
+    out = dict(sizes)
+    for name, (low, high) in cuts.items():
+        size = out.get(table.size_name(name))
+        if size and "min" in size:
+            out[table.size_name(name)] = dict(size, min=max(size["min"], low), max=min(size["max"], high))
+    return out
+
+
 def _narrow_spans(table, motion):
     """`{ Fusion name: (span, min, max) }` of the probed sizes that the probe measured over less than their range
-    (`Motion.spans`): the copy follows them only between the values measured."""
+    before it was cut (`Motion.spans`, `SizeTable.uncut_range`): the copy follows them only between the values
+    measured."""
     out = {}
     for name in probed_sizes(table):
         span = coverage.span(motion, name)
-        size = table.sizes.get(table.size_name(name)) or {}
-        if span and "min" in size and wording.narrow_span(span, size["min"], size["max"]):
-            out[name] = (span, size["min"], size["max"])
+        uncut = table.uncut_range(name)
+        if span and uncut and wording.narrow_span(span, *uncut):
+            out[name] = (span,) + uncut
     return out
 
 

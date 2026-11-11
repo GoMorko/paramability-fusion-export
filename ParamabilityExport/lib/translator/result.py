@@ -26,14 +26,16 @@ class Doubt:
     names: the Fusion names of the sizes. why: the end of the reason (a `notes.Past` when it holds past some values).
     step: the timeline index of the item being copied, or None for a check on the whole recipe. fixed: the value would
     make the recipe unusable while the sizes stay free, so they become fixed numbers; otherwise they stay free with a
-    warning (loose).
+    warning (loose). cut: {Fusion name: (min, max)} inside which the value works; the driver cuts the ranges of the
+    sizes to these values instead of marking them.
     """
 
-    def __init__(self, names, why, step=None, fixed=False):
+    def __init__(self, names, why, step=None, fixed=False, cut=None):
         self.names = tuple(names)
         self.why = why
         self.step = step
         self.fixed = fixed
+        self.cut = dict(cut) if cut else None
 
     def __repr__(self):
         return "Doubt(%r, %r)" % (self.names, str(self.why))

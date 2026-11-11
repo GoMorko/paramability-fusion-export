@@ -154,7 +154,7 @@ class TranslateTest(unittest.TestCase):
 class MeasuredSpanTest(unittest.TestCase):
     """pipe_d_mm is 12, with the range 6 to 24; the probe tried it alone at the values in `failed` and `built`."""
 
-    def run_with(self, failed, built=(), moved=False):
+    def run_with(self, failed, built=(), moved=False, ranges=None):
         def edit(values):
             if not moved:
                 for key in [k for k in values if k.startswith("5/")]:
@@ -163,7 +163,8 @@ class MeasuredSpanTest(unittest.TestCase):
         motion = motion_of(NAME, edit)
         low, high = min((12.0,) + tuple(built)), max((12.0,) + tuple(built))
         motion.spans = {"pipe_d_mm": {"low": low, "high": high, "failed": [list(f) for f in failed]}}
-        return run(CAPTURE, motion)
+        table = size_table.build(CAPTURE["parameters"]["user"], ALL, CAPTURE["parameters"]["model"], ranges=ranges)
+        return translate(CAPTURE, size_table=table, motion=motion)
 
     def test_a_size_whose_rows_never_built_was_not_measured_and_is_not_called_unchanging(self):
         found = dropped(self.run_with([(6.0, "Fillet16"), (24.0, "Chamfer3")]))["pipe_d_mm"]
@@ -179,11 +180,23 @@ class MeasuredSpanTest(unittest.TestCase):
         self.assertNotEqual(part["reason"], whole["reason"])
         self.assertIn("between 12 and 24", part["reason"])
 
-    def test_a_size_followed_over_part_of_its_range_stays_a_size_with_the_values_it_was_followed_between(self):
-        result = self.run_with([(6.0, "Fillet16")], built=[24.0], moved=True)
-        self.assertIn("pipe_d_mm", result.recipe["sizes"])
+    def test_a_size_tried_over_part_of_its_range_stays_a_size_with_the_values_it_was_followed_between(self):
+        result = self.run_with([], built=[24.0], moved=True)
+        self.assertEqual((result.recipe["sizes"]["pipe_d_mm"]["min"], result.recipe["sizes"]["pipe_d_mm"]["max"]),
+                         (6.0, 24.0))
         loose = {f["name"]: f["reason"] for f in result.loose}
         self.assertIn("between 12 and 24", loose["pipe_d_mm"])
+
+    def test_the_range_stops_at_the_last_value_that_rebuilt_where_fusion_did_not_rebuild(self):
+        result = self.run_with([(6.0, "Fillet16")], built=[24.0], moved=True)
+        size = result.recipe["sizes"]["pipe_d_mm"]
+        self.assertEqual((size["min"], size["max"]), (12.0, 24.0))
+        self.assertNotIn("pipe_d_mm", [f["name"] for f in result.loose])
+
+    def test_a_typed_range_end_is_kept_where_fusion_did_not_rebuild(self):
+        result = self.run_with([(8.0, "Fillet16")], built=[24.0], moved=True, ranges={"pipe_d_mm": (8.0, 24.0)})
+        size = result.recipe["sizes"]["pipe_d_mm"]
+        self.assertEqual((size["min"], size["max"]), (8.0, 24.0))
 
 
 # ---- the whole export against a simulated Fusion ---------------------------------------------------------------

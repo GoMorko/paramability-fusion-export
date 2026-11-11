@@ -117,14 +117,19 @@ class Context:
     def is_target(self, body):
         return same_body(body, self.target)
 
-    def doubt(self, names, why, fixed=False):
+    def doubt(self, names, why, fixed=False, cut=None):
         """Record that a value cannot follow the sizes `names` (Fusion names), so it is written as its number. `why`
         ends the reason. The driver keeps these sizes free with a warning (`translate`); with `fixed` the value would
         make the recipe unusable while they stay free, so they become fixed numbers.
 
         While a handler runs, the doubt goes to its StepResult (`recording`); otherwise it counts for the walk."""
-        record = Doubt(names, why, self.current.get("index") if self.current else None, fixed)
+        record = Doubt(names, why, self.current.get("index") if self.current else None, fixed, cut)
         (self._recordings[-1] if self._recordings else self).doubts.append(record)
+
+    def cut(self, ranges, why):
+        """Record that a value works only while the sizes stay inside `ranges` ({Fusion name: (min, max)}): the driver
+        cuts their ranges to those values (`cuts`). Recorded like `doubt`."""
+        self.doubt(list(ranges), why, cut=ranges)
 
     def _key(self, item, path):
         index = item.get("index") if isinstance(item, dict) else None
@@ -185,10 +190,20 @@ class Context:
         """The same for the sizes that must become fixed numbers."""
         return self._reasons(True)
 
+    @property
+    def cuts(self):
+        """Fusion name of a size -> (min, max) its range is cut to (`cut`), the narrowest of all records."""
+        found = {}
+        for record in self.doubts:
+            for name, (low, high) in (record.cut or {}).items():
+                was = found.get(name, (low, high))
+                found[name] = (max(low, was[0]), min(high, was[1]))
+        return found
+
     def _reasons(self, fixed):
         found = {}
         for record in self.doubts:
-            if record.fixed == fixed:
+            if record.fixed == fixed and not record.cut:
                 for name in record.names:
                     found.setdefault(name, record.why)
         return found

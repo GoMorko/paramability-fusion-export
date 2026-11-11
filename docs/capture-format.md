@@ -1418,9 +1418,12 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   walk a stuck sketch value follows its `rest` (the sizes that still move it), as it does once its own sizes are
   fixed. `TranslateResult.loose` lists the sizes as `{ name, reason }` ("... may give unexpected results: ..."). A
   size that no formula reads after that is not a size: it is left out and listed in `TranslateResult.dropped` with its
-  reason. The ranges are always the table's. A rule that can fail inside a range
-  (a count that a pick needs, a taper, a step that must keep meeting the part) marks the sizes it reads, with the
-  value past which it fails where `kept_ranges` gives one. Only `TranslateResult.fixed` holds sizes that became
+  reason. The ranges are the table's, with two cuts. First, on a side where the probe saw Fusion fail to rebuild
+  the design with only that size changed, an untyped range stops at the farthest value that built
+  (`kept_ranges.built_ranges`, before the walk). Second, a value that Paramability refuses past some size value
+  (a taper of 45 degrees or more) cuts the ranges of the untyped sizes it reads (`Context.cut`). A rule that may give
+  a wrong shape inside a range (a count that a pick needs, a step that must keep meeting the part) marks the sizes it
+  reads, with the value past which it fails where `kept_ranges` gives one. Only `TranslateResult.fixed` holds sizes that became
   numbers: a formula too long to copy (`Context.doubt` with `fixed`). Without a motion (`motion=None`) every size behind
   a sketch dimension, construction plane or axis, or a joint, is marked with a reason, and the ones no formula reads
   are dropped with that reason.
@@ -1530,7 +1533,8 @@ or a measured place (`translator.sizes.probed_sizes`) and whose rows all failed 
 doubted up front with "the design does not rebuild in Fusion at A (step) or B (step), the nearest values tried, so it
 could not be measured" (loose when a formula reads it, else dropped with `used` true), never called unchanging. A
 free size measured over less than its range is loose with "it was followed between A and B; beyond that it could not
-be tried" (added to its other reason when there is one and it fits the note). Every state also
+be tried" (added to its other reason when there is one and it fits the note), unless the range was cut to the values
+that built on every side the probe did not cover. Every state also
 reads the body's box (and volume when the state has it): a size whose state alone changed the box but moved no
 followed sketch or reference is kept in `Motion.body_moved` (`SizeProbe.finish`). The translator treats it as doubtful
 with "it changes this part in a way the copy does not follow": loose when a formula reads it, else dropped with
@@ -1661,8 +1665,9 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   the size range (count formulas such as `ceil(width_count) * 2` are evaluated at the range ends, `lib/translator/
   copy_counts.py`). When the count can drop below that, the sizes it reads are marked ("a smaller value would leave
   that copy out"); the range stays. Copies of a circular pattern keep their count and angle.
-- A taper that follows sizes should stay under 45 degrees either way: the sizes it reads are marked past the value
-  where it reaches 45.
+- A taper that follows sizes should stay under 45 degrees either way, since Paramability refuses a steeper one: the
+  ranges of the untyped sizes it reads are cut where it reaches 45 (`Context.cut`, `kept_ranges.holding_ranges`).
+  When no cut keeps it under 45 (every size it reads has a typed range), those sizes are marked instead.
 - A through cut clears the part at the largest sizes tried (`box_max` of the motion file). A cut through all to one
   side without a measured end face cuts toward the side where its outline meets the part built so far (sampled on a
   grid over the outline); Fusion's stored direction is kept when both sides, or neither, hold material, and turned with
