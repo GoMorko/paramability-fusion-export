@@ -12,7 +12,9 @@ translated again with the answer.
 Fusion is reached only through the port the caller hands in (see `ExportPort`), so tests run the whole sequence with
 fakes. Parameters are changed by the probe and put back on every way out: when a step fails, when the person
 cancels, and before the probe's last read. What is left over (a parameter that would not go back, sketches that did
-not return to their start, a probe that could not measure) goes into the `health` record of the result.
+not return to their start, a probe that could not measure) goes into the `health` record of the result. Timeline items
+suppressed for the tries (`timeline_trim`, only when the person asks for it) are turned back on in the same places,
+before the timeline marker goes back.
 """
 import os
 from dataclasses import dataclass, field
@@ -25,13 +27,13 @@ from ..sketch_values.motion import OPTIMISTIC
 from . import health as health_module
 from . import messages
 from .body_scope import body_links, scope_inputs
-from .marker_roll import MarkerRoll
 from .reach_pass import needs_reach, with_reach
 from .probe_flow import SizeProbe, covers_a_sketch, extra_size_params, kept_size_names, shadow_of
 from .recipe_export import free_sizes, plan_single_export, translate_capture
 from ..design_edit.restore import restore_parameters
 from ..design_edit.runner import ExportCancelled, RowExport
 from .size_offers import discovery_sizes, labels, probe_sizes
+from .timeline_trim import TryTimeline
 
 
 def plan_rows_left(rows):
@@ -53,6 +55,8 @@ class ExportPort(Protocol):
     progress(verb): a context manager whose value has `step(index, total, name)`; the step returns False when the
       person cancelled.
     warn_unrestored(names): tell the person that these parameters could not be put back, when the export stops.
+    warn_left_off(names): optional; tell the person that these timeline steps, turned off for the tries
+      (`timeline_trim`), could not be turned back on.
     log(text): a line for the log.
     """
 
@@ -87,6 +91,7 @@ class ExportRequest:
     ticked: list
     ranges: dict
     marker: Optional[dict] = None
+    faster_tries: bool = False  # suppress the timeline items the tries do not use (`timeline_trim`)
 
 
 @dataclass
@@ -106,6 +111,14 @@ def run_pipeline(port, request, tmp):
     Raises what a failing step raises (`RowBuildError`, `StepExportError`, `PackageCapError`, `ExportCancelled`,
     `MarkerError`); the parameters are back by then and `port.warn_unrestored` has named any that are not."""
     return _Pipeline(port, request, tmp).run()
+
+
+def warn_left_off(port, timeline):
+    """Tell the person about timeline items that would not turn back on after the tries (`TryTimeline.left_off`)."""
+    names = timeline.left_off if timeline is not None else []
+    warn = getattr(port, "warn_left_off", None)
+    if names and warn is not None:
+        warn(names)
 
 
 class MarkerNotHeld(Exception):
@@ -264,9 +277,16 @@ class _Pipeline:
             self._end_roll()
             if not done and failed:
                 self.port.warn_unrestored(failed)
+            warn_left_off(self.port, self.roll)
+
+    def _end_trim(self):
+        """Turn back on the timeline items suppressed for the tries (a no-op when none were)."""
+        if self.roll is not None:
+            self.roll.end_trim()
 
     def _end_roll(self):
-        """Put the timeline marker back where the export found it (a no-op when it was not moved)."""
+        """Turn the suppressed items back on and put the timeline marker back where the export found it (a no-op
+        when nothing was changed)."""
         if self.roll is not None:
             self.roll.end()
 
@@ -291,6 +311,7 @@ class _Pipeline:
         final = self._translate_and_measure(capture) if isinstance(capture, dict) else None
 
         self._restore()
+        self._end_trim()
         gap = self._restore_gap()
         self._end_roll()
         probe_report = self._close_probe()
@@ -330,7 +351,7 @@ class _Pipeline:
 
         self.probe = self._start_probe(capture)
         if self.probe is not None:
-            self.roll = MarkerRoll(self.port.store, self.port.log)
+            self.roll = TryTimeline(self.port.store, self.port.log, self.request.faster_tries)
             probe = self.probe
             self.roll.begin([capture], lambda: probe.matches_start(probe.read_now()))
             tries = discovery_sizes(self.table, self.request.parameters, capture)
@@ -388,12 +409,16 @@ class _Pipeline:
         in `tries` once each (`size_offers.discovery_sizes`); they only find which of them also change the part
         (`self.also`) and are not used for the motion. A failure other than a cancel
         leaves the translation without a motion (no size behind a sketch is then followed, by the translator's own
-        rule) and is noted for the person. The parameters are put back before the last read."""
+        rule) and is noted for the person. The parameters are put back, and the suppressed items turned back on,
+        before the last read."""
         probe = self.probe
         try:
             run.measure(probe.probe_rows(sizes, extra), sizes)
             self.also = run.discover(tries)
+            if self.roll is not None:
+                self.roll.tries_done()
             self._restore()
+            self._end_trim()
             found = probe.finish(probe.read_now(), labels(self.table))
         except ExportCancelled:
             raise

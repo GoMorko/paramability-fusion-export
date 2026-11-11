@@ -50,7 +50,7 @@ def unchanged_note(names):
 
 def also_changes_line(names):
     """The line for unticked parameters that the export saw changing this part."""
-    return ("These parameters also change this part: %s. Tick them and export again to get them as sizes."
+    return ("These parameters also change this part: %s. Tick them and export again to make them sizes."
             % ", ".join(names))
 
 
@@ -58,7 +58,7 @@ def also_changes_parts_line(changes):
     """The line for unticked parameters that the export saw changing parts of a parts file: `changes` is
     `[(parameter, [part names])]`, so the person sees which part each one changed."""
     shown = ["%s (%s)" % (name, parts_label(parts)) if parts else name for name, parts in changes]
-    return "These parameters also change parts of this file: %s. Tick them and export again to get them as sizes." % (
+    return "These parameters also change parts of this file: %s. Tick them and export again to make them sizes." % (
         ", ".join(shown))
 
 
@@ -67,19 +67,14 @@ def not_tried_line(count, several_parts=False):
     the part. Ticking one makes the export try it."""
     where = "these parts" if several_parts else "this part"
     if count == 1:
-        return ("1 more parameter of other components was not tried, so it may change %s without showing here. "
-                "Tick it and export again to try it." % where)
-    return ("%d more parameters of other components were not tried, so some may change %s without showing here. "
-            "Tick one and export again to try it." % (count, where))
+        return ("1 more parameter of another component was not tried. Tick it and export again to see if it "
+                "changes %s." % where)
+    return ("%d more parameters of other components were not tried. Tick them and export again to see if they "
+            "change %s." % (count, where))
 
 
 ORIGINAL_KEPT_NOTE = "The part opens with the original shape and an unfinished copy of its steps."
 ORIGINAL_KEPT_PARTS_NOTE = "These parts open with the original shape and an unfinished copy of their steps."
-
-
-def left_out_title(count):
-    """'2 steps left out': the heading of the left out list in the result window."""
-    return "%d %s left out" % (count, "step" if count == 1 else "steps")
 
 
 def part_left_out_note(count):

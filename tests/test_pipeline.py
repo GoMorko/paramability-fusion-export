@@ -13,7 +13,7 @@ from tests.translator_helpers import load_capture
 from lib.design_edit.errors import StepExportError
 from lib.export_plan import recipe_export
 from lib.export_plan.pipeline import ExportRequest, run_pipeline
-from lib.dialog_model.result_rows import NOT_FOLLOWED, NOT_MEASURED, result_view
+from lib.dialog_model.result_rows import NOT_FOLLOWED, NOT_MEASURED, result_view, section, section_lines
 from lib.design_edit.runner import ExportCancelled
 
 CAPTURE = load_capture("sketch_rect_centred")
@@ -140,7 +140,7 @@ class ExportTest(unittest.TestCase):
         self.assertGreater(port.reads, 2)
         self.assertIsNotNone(result.report["probe"])
         self.assertEqual(result.health["probe"], "measured")
-        self.assertEqual(view(result)["warnings"], [])
+        self.assertEqual(section_lines(view(result), "check"), [])
         self.assertEqual(port.store.exprs, START)
 
     def test_a_part_whose_steps_could_not_be_read_is_saved_as_a_fixed_shape(self):
@@ -214,14 +214,14 @@ class ProbeFailureTest(unittest.TestCase):
         self.assertEqual(result.manifest["kind"], "recipe")
         self.assertEqual(result.health["probe"], "failed")
         shown = view(result)
-        self.assertIn(NOT_MEASURED, [r["check"] for r in shown["rows"]])
-        self.assertTrue(any("could not be measured" in line for line in shown["warnings"]))
+        self.assertIn(NOT_MEASURED, [r["check"] for r in section(shown, "sizes")["rows"]])
+        self.assertTrue(any("could not be measured" in line for line in section_lines(shown, "check")))
         self.assertIsNone(result.report.get("probe"))
         self.assertEqual(port.store.exprs, START)
 
     def test_sizes_that_move_a_sketch_are_not_called_unused_when_the_sketches_were_not_measured(self):
         result = export(FakePort(fail_read_from=1))
-        left_out = {r["name"]: r["check"] for r in view(result)["rows"]}
+        left_out = {r["name"]: r["check"] for r in section(view(result), "sizes")["rows"]}
         self.assertEqual(left_out["depth_mm"], NOT_FOLLOWED)
         self.assertFalse(any("Not used by any copied step" in n and "depth_mm" in n for n in result.manifest["notes"]))
 
@@ -230,7 +230,7 @@ class ProbeFailureTest(unittest.TestCase):
         result = export(port)
         self.assertEqual(result.manifest["kind"], "recipe")
         self.assertEqual(result.health["probe"], "failed")
-        self.assertTrue(view(result)["warnings"])
+        self.assertTrue(section_lines(view(result), "check"))
         self.assertEqual(port.store.exprs, START)
 
 
@@ -239,7 +239,7 @@ class RestoreTest(unittest.TestCase):
         port = FakePort(store=StuckStore(START, stuck=["height_mm"]))
         result = export(port)
         self.assertEqual(result.health["unrestored"], ["height_mm"])
-        lines = view(result)["warnings"]
+        lines = section_lines(view(result), "check")
         self.assertIn("height_mm", lines[0])
         self.assertIn("Undo", lines[0])
         self.assertTrue(any("measured" in n for n in result.manifest["notes"]))
@@ -250,7 +250,7 @@ class RestoreTest(unittest.TestCase):
         result = export(port)
         self.assertTrue(result.health["sketch_drift"])
         self.assertGreater(result.health["sketch_gap_mm"], 0.1)
-        lines = view(result)["warnings"]
+        lines = section_lines(view(result), "check")
         self.assertTrue(any("did not come back" in line and "Undo" in line for line in lines))
         self.assertTrue(any("measured" in n for n in result.manifest["notes"]))
         self.assertEqual(json.loads(json.dumps(result.report["health"]))["sketch_drift"], True)

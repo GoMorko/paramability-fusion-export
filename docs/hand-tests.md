@@ -6,8 +6,20 @@ note the Fusion version and system.
 ## Check first in this version
 
 What 0.6.0 to 0.8.0 added, and what this version adds, in this order. Each id is described in the section named,
-except L1 to L15, F1 and F2, which are described here.
+except U1, L1 to L15, F1 and F2, which are described here.
 
+- [ ] U1, faster tries (0.9.1, experimental). Use a design with a body in one component and two or more other
+      components the body does not use (no joints), with a ticked size that moves a sketch. Suppress one step of an
+      unused component by hand first. Export for Paramability twice, once with "Faster tries" off and once with it
+      on, to two files. Expect: the two files hold the same recipe and sizes (compare `recipe.json` and `manifest.json`);
+      with the box on, the steps of the unused components show as suppressed in the timeline while the tries run, and
+      `report.json` has `probe.timeline.suppressed` with `on: true` and the number of steps; with it off, `on: false`
+      and `asked: false`. Compare `try_seconds` of the two files. After each export the timeline looks as before: the
+      same steps in the same order, none suppressed that were not before, the step you suppressed by hand still
+      suppressed, the marker where it was, parameters back. Export again with the box on and press Cancel during the
+      tries: every step is back on (the hand suppressed one still off), the marker and parameters are back. Note
+      whether Undo or the "unsaved changes" mark show anything new. A design with a joint gives `on: false` with a
+      reason and suppresses nothing.
 - [ ] L1, a step in the middle of the timeline that cannot be copied. In a part, add a sweep or a loft in the middle
       of the timeline (a join, between two extrudes). Export for Paramability. Expect: the export finishes with a
       recipe; the result window has a "Left out" list with the sweep or loft and a reason, and a line that says
@@ -406,11 +418,11 @@ Use the filter box design (names such as `FilterBox_$_depth__contains_CeramicMed
       at Sweep1 (sweep)." then the reason and "The part is saved as a fixed shape." After you close the box, the
       lower-right corner of the Fusion window shows "Paramability: saved as a fixed shape. Copy stopped at ...". Note
       whether the line stays or Fusion replaces it at once (its lifetime is not fixed by the API).
-- [ ] Click OK: the progress window shows as before, then the result window "Saved for Paramability" opens with the
-      saved line, a table of sizes (name, range, and under "In Paramability": "size", "may be unexpected", "kept fixed",
-      "not followed" or "not used"), a "Stays fixed" group, a "May give unexpected results" group and a "Not followed"
-      group with each reason (a group with nothing in it is left out),
-      and the line "All N parameters come along as variables ...". Only a Close button shows.
+- [ ] Click OK: the progress window shows as before, then the result window "Saved for Paramability" opens with
+      sections that start with a "# Title" line: "# Result" (the file, what to do next, the kind of copy, the variables
+      count), "# Sizes" (one line per size: name, range, "may be unexpected", "kept fixed", "not followed" or "not used" and the reason in brackets),
+      and "# Left out", "# More sizes" or "# Check your design" when
+      they apply (a section with nothing in it is left out). Only a Close button shows.
 - [ ] The result window opens right after the export ends, not while the progress window is still up. If it does not
       open, the same text shows in a message box. Note which: the log line "result dialog failed" gives the reason.
 
@@ -1137,6 +1149,10 @@ D5 to D13). Every read is guarded: a member that raises is listed in the record'
   read of sketches, points, lines, references and the body box at that marker equals the read at the full marker (the
   export checks this once and does not roll when it differs); moving the marker forward again and calling
   `computeAll` builds the later items with the restored parameter values and leaves no entry in Undo.
+- Faster tries (`fusion_reader/rows.py` `suppress_items`, `unsuppress_items`; `export_plan/timeline_trim.py`, hand
+  test U1): `Timeline.item(index)`, `TimelineObject.name`, `isGroup`, and `isSuppressed` get and set on items before
+  the rolled marker; `computeAll` then rebuilds without them and leaves the marker in place; setting `isSuppressed`
+  back to false restores the items exactly.
 - Progress window (`fusion_ui/progress.py`): `ProgressDialog.message` with a line break (`\n`) shows two lines, and
   `show` with the text "Try %v of %m" accepts the placeholders as "Size %v of %m" did. If it shows one line only, move
   the explanation (`export_plan/messages.TRY_INTRO`) to the title passed to `show`.

@@ -23,13 +23,13 @@ from ..design_edit.restore import restore_parameters
 from ..design_edit.runner import ExportCancelled
 from . import health as health_module
 from .body_scope import body_links, scope_inputs
-from .marker_roll import MarkerRoll
 from .part_names import tagged, unique_names
-from .pipeline import ProbeRun
+from .pipeline import ProbeRun, warn_left_off
 from .reach_pass import needs_reach, with_reach
 from .probe_flow import ProbeGroup, SizeProbe, covers_a_sketch, extra_size_params, kept_size_names
 from .recipe_export import PartInput, free_sizes, plan_parts_export, translate_capture
 from .size_offers import discovery_sizes, labels, probe_sizes
+from .timeline_trim import TryTimeline
 
 # How many times the bodies are translated again because one more size had to be fixed for all.
 MAX_SHARE_ROUNDS = 3
@@ -118,9 +118,16 @@ class _PartsPipeline:
             self._end_roll()
             if not done and failed:
                 self.port.warn_unrestored(failed)
+            warn_left_off(self.port, self.roll)
+
+    def _end_trim(self):
+        """Turn back on the timeline items suppressed for the tries (a no-op when none were)."""
+        if self.roll is not None:
+            self.roll.end_trim()
 
     def _end_roll(self):
-        """Put the timeline marker back where the export found it (a no-op when it was not moved)."""
+        """Turn the suppressed items back on and put the timeline marker back where the export found it (a no-op
+        when nothing was changed)."""
         if self.roll is not None:
             self.roll.end()
 
@@ -144,6 +151,7 @@ class _PartsPipeline:
         finals = self._translate_and_measure()
 
         self._restore()
+        self._end_trim()
         gap = self._restore_gap()
         self._end_roll()
         reports = self.group.reports() if self.group is not None and self._measured() else []
@@ -306,16 +314,18 @@ class _PartsPipeline:
 
         The rows are the ones of `SizeProbe.probe_rows` for all sizes of all parts together, so the row limit is for
         the whole export. A failure other than a cancel leaves every part without a motion and is noted for the person.
-        The parameters are put back before the last read."""
+        The parameters are put back, and the suppressed items turned back on, before the last read."""
         group = self.group
-        self.roll = MarkerRoll(self.port.store, self.port.log)
+        self.roll = TryTimeline(self.port.store, self.port.log, self.request.faster_tries)
         self.roll.begin([self.captures[i] for i in self.probed], lambda: group.matches_start(group.read_now()))
         run = ProbeRun(self.port, self.tmp, group)
         tries = self._tries()
         try:
             run.measure(group.probe_rows(sizes, extra), sizes)
             self.also = run.discover(tries)
+            self.roll.tries_done()
             self._restore()
+            self._end_trim()
             found = group.finish(group.read_now(), labels(self.table))
         except ExportCancelled:
             raise

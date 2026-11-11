@@ -15,7 +15,7 @@ from tests.translator_helpers import load_capture
 
 from lib.design_edit.errors import StepExportError
 from lib.design_edit.runner import ExportCancelled
-from lib.dialog_model.result_rows import also_lines, not_tried_lines, parts_result_view
+from lib.dialog_model.result_rows import also_lines, not_tried_lines, parts_result_view, section, section_lines
 from lib.export_plan import recipe_export
 from lib.export_plan.parts_pipeline import run_parts_pipeline
 from lib.export_plan.probe_flow import ProbeGroup
@@ -242,11 +242,11 @@ class DiscoveryLinesTest(unittest.TestCase):
             {"param": "wall_mm", "moved": p["name"] == "Body2"},
             {"param": "u1", "moved": None, "tried": False, "reason": "x"}]}) for p in report["parts"]]
         view = parts_result_view("box.paramability", result.manifest, report, result.table, TICKED)
-        self.assertIn("parts", view["also_title"])
-        self.assertIn("Body2", view["also"][0])
-        self.assertNotIn("Body1", view["also"][0])
-        self.assertIn("1 more", view["untried"][0])
-        self.assertIn(view["untried"][0], view["message"])
+        also, untried = section_lines(view, "more")
+        self.assertIn("Body2", also)
+        self.assertNotIn("Body1", also)
+        self.assertIn("1 more", untried)
+        self.assertIn(untried, view["message"])
 
 
 class FixedShapeTest(unittest.TestCase):
@@ -372,11 +372,12 @@ class ResultViewTest(unittest.TestCase):
     def test_the_view_lists_each_size_once_and_a_line_per_part(self):
         result = export(FakePartsPort([BASE, stuck_body()]))
         view = parts_result_view("box.paramability", result.manifest, result.report, result.table, TICKED)
-        names = [row["name"] for row in view["rows"]]
+        names = [row["name"] for row in section(view, "sizes")["rows"]]
         self.assertEqual(names.count("wall_mm"), 1)
-        self.assertEqual(len(view["parts"]), 2)
-        self.assertTrue(view["parts"][0].startswith("Body1: editable"))
-        self.assertIn("fixed shape", view["parts"][1])
+        part_lines = [line for line in section_lines(view, "result") if line.startswith("Body")]
+        self.assertEqual(len(part_lines), 2)
+        self.assertTrue(part_lines[0].startswith("Body1: editable"))
+        self.assertIn("fixed shape", part_lines[1])
         self.assertIn("Saved box.paramability", view["message"])
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ from tests.test_pipeline import FakePort
 from tests.test_translate_sketch_motion import motion_of
 from tests.translator_helpers import load_capture, steps_of
 
-from lib.dialog_model.result_rows import NOT_USED, result_view
+from lib.dialog_model.result_rows import NOT_USED, result_view, section, section_lines
 from lib.export_plan.pipeline import ExportRequest, run_pipeline
 from lib.export_plan.size_offers import offers, table_for_body
 from lib.params import geometry_links, size_table
@@ -256,7 +256,7 @@ class ExportTest(unittest.TestCase):
         [link] = result.report["links"]
         self.assertEqual(link["outcome"], "dropped")
         view = result_view("Box.paramability", result.manifest, result.report, result.table, ALL)
-        rows = {r["name"]: r["check"] for r in view["rows"]}
+        rows = {r["name"]: r["check"] for r in section(view, "sizes")["rows"]}
         self.assertEqual((rows["pipe_d_mm"], rows["spare_mm"]), (NOT_USED, NOT_USED))
         spare = next(d for d in result.report["sizes"]["dropped"] if d["name"] == "spare_mm")
         self.assertEqual((spare["used"], spare.get("tried")), (False, True))
@@ -269,7 +269,7 @@ class ExportTest(unittest.TestCase):
         self.assertEqual(result.report["also_changes"], ["pipe_d_mm"])
         self.assertNotIn("pipe_d_mm", result.report["sizes"]["free"])
         view = result_view("Box.paramability", result.manifest, result.report, result.table, ticked)
-        self.assertEqual(len(view["also"]), 1)
+        self.assertEqual(len(section_lines(view, "more")), 1)
 
 
 if __name__ == "__main__":

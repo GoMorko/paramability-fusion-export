@@ -74,7 +74,7 @@ def _used_sketches(capture):
     return found
 
 
-def _linked_components(capture):
+def linked_components(capture):
     """(tokens, all_other): the component tokens that links and references depend on, and whether some of them could
     not be named so that every other component counts."""
     tokens, unknown = set(), False
@@ -104,13 +104,14 @@ def _named(item, named):
                for name, owner in named)
 
 
-def _capture_position(capture):
-    """`(position, reason)`: how many timeline items one capture needs (see the module docstring), or None and why not."""
+def needed_items(capture):
+    """`(items, reason)`: the timeline items of one capture that the tries read directly (see the module docstring),
+    in timeline order, or `(None, key of NO_ROLL_WHY)` when the evidence cannot be matched."""
     marker = capture.get("marker")
     if not isinstance(marker, dict) or not isinstance(marker.get("position"), int):
         return None, "no_marker"
     items = [i for i in capture.get("items") or [] if _is_item(i)]
-    needed = 0
+    found = []
     named, unnamed = set(), False
     own = ((capture.get("target") or {}).get("component") or {}).get("token")
     for token, name, owner in _used_sketches(capture):
@@ -120,7 +121,7 @@ def _capture_position(capture):
             unnamed = True
     if unnamed or (own is None and any(owner == OWN for _, owner in named)):
         return None, "unnamed_sketch"
-    components, all_other = _linked_components(capture)
+    components, all_other = linked_components(capture)
     for item in items:
         if item.get("suppressed"):
             continue
@@ -133,8 +134,16 @@ def _capture_position(capture):
                  or bool(item.get("helper_of"))
                  or (outside and (all_other or item.get("component") in components)))
         if needs:
-            needed = max(needed, item["index"] + 1)
-    return needed, ""
+            found.append(item)
+    return found, ""
+
+
+def _capture_position(capture):
+    """`(position, reason)`: how many timeline items one capture needs (see the module docstring), or None and why not."""
+    items, why = needed_items(capture)
+    if items is None:
+        return None, why
+    return max((item["index"] + 1 for item in items), default=0), ""
 
 
 def needed_position(captures):

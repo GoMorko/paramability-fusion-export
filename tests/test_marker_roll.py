@@ -227,7 +227,8 @@ class PipelineRollTest(unittest.TestCase):
     def test_the_tries_run_with_the_marker_held_early_and_it_goes_back_after_the_last_read(self):
         port = self.port()
         result = export(port)
-        self.assertEqual(result.report["probe"]["timeline"], {"rolled": True, "items": 6, "of": 9})
+        timeline = result.report["probe"]["timeline"]
+        self.assertEqual((timeline["rolled"], timeline["items"], timeline["of"]), (True, 6, 9))
         self.assertEqual(port.store.events, [("roll", 6), ("unroll", 6)])
         self.assertIsNone(port.store.rolled)
         rolled = [at for at in port.store.at if at == 6]
@@ -308,7 +309,8 @@ class PartsRollTest(unittest.TestCase):
         parts = [p for p in result.report["parts"] if "probe" in p]
         self.assertTrue(parts)
         for part in parts:
-            self.assertEqual(part["probe"]["timeline"], {"rolled": True, "items": 6, "of": 9})
+            timeline = part["probe"]["timeline"]
+            self.assertEqual((timeline["rolled"], timeline["items"], timeline["of"]), (True, 6, 9))
 
     def test_a_cancel_in_the_parts_tries_puts_the_marker_back(self):
         port = FakePartsPort([box_capture(), box_capture()], store=RollingStore(START), cancel_at=3)

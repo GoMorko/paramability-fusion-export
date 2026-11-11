@@ -1370,9 +1370,25 @@ use (matched by name and component), the last item of every other component a sk
 depends on, the steps of tool bodies of other components, and joints, rigid groups and items of unknown types. sketch record without a name gives no roll; a reference without a component, or a link with an unsourced reference,
 keeps every other component. The marker is moved only after the first read (E0), and only stays when a read
 at the rolled marker gives the same sketches, points, lines, references and body box as E0. `report.json` keeps
-`probe.timeline`: `{ rolled, items, of, reason? }`, the items each try rebuilt out of the items before the person's
-marker, and why it did not move. A read while the marker sits before the rolled position counts as not read: the probe
-is not used. The marker and the later items are put back and rebuilt once when the tries end, also on cancel and error.
+`probe.timeline`: `{ rolled, items, of, reason?, suppressed, try_seconds }`, the items each try rebuilt out of the
+items before the person's marker, why it did not move, the suppression record below, and the seconds from the start of
+the tries to the end of the last one. A read while the marker sits before the rolled position counts as not read: the
+probe is not used. The marker and the later items are put back and rebuilt once when the tries end, also on cancel and
+error.
+
+When the person ticks "Faster tries" in the dialog (off by default), the items before the stop point (the items each
+try rebuilds) that the tries do not use are also suppressed while the rows run (`lib/export_plan/timeline_trim.py`).
+The evidence is the one above, with a component as the unit: an item is suppressed only when it is not suppressed
+already, belongs to a named component other than the ones of the picked bodies, no item of that component is needed,
+and it is not an assembly item. Nothing is suppressed when the roll's evidence cannot be matched, when a link or
+reference leaves its component unnamed, when a needed item has no component, when an item before the stop point has a
+type the step kind table does not know, or when an assembly item other than an occurrence (a joint, a rigid group) comes
+before the stop point. The store checks that each item still has the name the capture saw at its index before it
+touches any. With the items suppressed, a read must give the same state as E0 and no step may show a new error;
+otherwise every item is turned back on and the tries run as without the option. The items are turned back on after the
+parameters are put back and before the last read, the restore check and the marker unroll, on every way out.
+`suppressed`: `{ asked, on, items, reason?, left_off? }`: whether the box was ticked, whether the tries ran with items
+suppressed, how many, why not, and the names of items that would not turn back on (the person is told about those).
 
 A row that Fusion cannot build is tried again nearer to the value now (`plan.nearer_rows`, `NEARER_STEPS`): half way
 to that range end, then a quarter, then a tenth, one step per batch and per side, until a row on that side builds.
@@ -1412,7 +1428,7 @@ the two reads lacked; `moved` is true when something changed, false when the res
 nothing could be compared. A row that did not build (`failed` names the step) or gave no read has `moved: null`,
 `tried: false` and a `reason`, so it is never a move. They never become sizes in this
 export. `probe.discovery` in `report.json` lists `{ param, value, built, moved, changed, unread }` (see below); a candidate the cap or the row room left without a row is listed as `{ param, moved: null, tried: false,
-reason }`, and the result window counts those in a "Not tried" group (ticking one makes the export try it).
+reason }`, and the result window counts those in its "More sizes" section (ticking one makes the export try it).
 `also_changes` lists the parameters that moved the part; the result window says "These parameters also change this
 part: ... Tick them and export again to get them as sizes." For a parts file the group is "Also change these parts" and
 each parameter names the parts it changed (read from each part's `probe.discovery`).
@@ -1824,3 +1840,4 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | Face outlines, to confirm by hand: `ExtrudeFeature.profile` gives the `BRepFace` with the marker before the step; `BRepFace.loops`, `BRepLoop.isOuter`, `BRepLoop.edges` and `BRepEdge.geometry` give the edges in the component's coordinates; `BRepEdge.evaluator` covers only the edge; `Plane.uDirection` lies in the face; `BRepFace.evaluator.getNormalAtPoint` points out of the body; `BRepFace.area`; `Component.features.extrudeFeatures` lists the earlier extrudes and `Feature.timelineObject.index` their places; `startFaces`, `endFaces` and `sideFaces` of an earlier extrude, read with the marker before the step, hold the face the step uses (the same entity or `entityToken`); a positive distance goes along the outward normal | a face that cannot be read refuses the step; a face no extrude lists is copied as measured with its sizes marked; `end_offset` and `side_leans` check the direction and taper; hand test F1 in `docs/hand-tests.md` |
 | Reach, to confirm by hand: `Feature.faces` of the entity of a timeline item, read with the marker right after the step, lists every face that step created, and read with the marker just before a later step it still gives the same faces (the same entity or `entityToken`) as the ones a later pick finds through `BRepEdge.faces`, `findEntityByToken` or `findBRepUsingPoint`, for each feature type that can be a candidate (extrude, revolve, sweep, loft, round, chamfer, shell, pattern, combine, move); whether the list of a Move, a Combine join and a draft is empty; whether a face a later step trimmed or split drops out of the list; `Component.findBRepUsingPoint` with `BRepFaceEntityType` finds a face from a recorded point | a list that is empty, shorter than right after the step or unreadable counts as reached by every pick, a pick that cannot be found counts as reached, and the translator then leaves the later step out (safe side); hand tests L2, L3, L5 and L14 in "Check first in this version" of `docs/hand-tests.md` |
 | An intersect with several tools keeps the part and every tool, or the part and any tool | measured per export from the volumes and written as `intersect_model`; B7 |
+| Faster tries, to confirm by hand (checked against the installed stubs, never run): `Timeline.item(index)` gives the item the capture saw at that index; `TimelineObject.name`, `TimelineObject.isGroup`, and `TimelineObject.isSuppressed` get and set on an item before a rolled back marker; `Design.computeAll` after a change of `isSuppressed` rebuilds with the item off and leaves the marker in place; turning the item back on restores the design exactly, adds no item and keeps the order; whether the changes add entries to Undo or mark the document changed | the store touches nothing when a name does not match, counts only items that read suppressed, and names items that read suppressed after the restore; a read with the items off must equal E0 and show no new error; hand test U1 in "Check first in this version" of `docs/hand-tests.md` |

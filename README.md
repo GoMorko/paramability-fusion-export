@@ -44,11 +44,20 @@ Nothing is typed in Fusion.
    note" lists steps that were copied with a remark. A step that is only left out of the copy is not in this warning:
    the result window names it after the export.
 5. Pick the design up direction, click OK and choose where to save the file.
-6. A window then lists each size with its range and what it becomes in Paramability ("size", "may be unexpected",
-   "kept fixed", "not followed" or "not used"), what stays fixed and why, which sizes may give unexpected results
-   (loose sizes) and why, how many parameters come along as variables, and, when the add-in left steps out of the
-   copy, a "Left out" list with the step and the reason. If this window cannot open, the same text is shown in a
-   message box.
+6. A window then shows short sections, each starting with a `# Title` line. Sections with nothing to say are left out:
+   - `# Result`: the file, what to do next, whether it is an editable copy (or one with steps left out) and how many
+     parameters come along as variables. A file with several bodies has one line per body.
+   - `# Sizes`: one line per size, with its range, then "may be unexpected" (and from where) or "kept fixed" or "not
+     followed" or "not used" when that applies, and the short reason in brackets. Sizes that follow come first, then
+     the marked ones, then the fixed ones.
+   - `# Left out`: each step the copy left out, with the reason.
+   - `# More sizes`: parameters you did not tick that also change the part, or that could not be tried. Tick them and
+     export again to get them as sizes.
+   - `# Check your design`: shown first, and only when something is wrong: a parameter that did not go back, sketches
+     that did not come back to their first shape, or sketches that could not be measured.
+
+   Fuller detail for debugging is in `report.json`. If this window cannot open, the same text is shown in a message
+   box.
 7. Open the file in Paramability. The sizes land on the form as variables, ready to configure.
 
 ### What the export does
@@ -111,6 +120,14 @@ way, then a quarter, then a tenth of the way to the end of its range; at most 24
 try builds, the size follows between the values that built, and the size says "it was followed between A and B". A
 size that did not rebuild at any value tried is not a size, and the reason names the values and the step Fusion
 stopped at.
+
+The box "Faster tries" under the body picker is off to start with. When you tick it, the tries also turn off the
+timeline steps of other components that the body does not use, so each try rebuilds less. Every step is turned back
+on when the tries end, also on cancel or an error, and steps you had turned off yourself stay off. Before the tries,
+the add-in checks that the body reads the same with those steps off; if not, or if it is not sure which steps the body
+uses (for example when the design has joints), it turns nothing off. This is an experiment: `report.json` says what
+happened and how long the tries took (`probe.timeline.suppressed`, `try_seconds`), so you can compare an export with
+the box on and off.
 
 A point can also move along a curve: the end of a leg that turns with an angle, or a corner set back by a wall along
 half the angle. The add-in then looks for a formula with the angle's sine, cosine, tangent or cotangent (of the angle
@@ -391,7 +408,7 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 - Paramability opens up to 256 MB per size and 1 GB per file. The export stops with a message above that.
 - The design needs history (a parametric design).
 - Made for the current Fusion release.
-- This is version 0.9.0. The Fusion side has not been run by a tool: see `docs/hand-tests.md`.
+- This is version 0.9.1. The Fusion side has not been run by a tool: see `docs/hand-tests.md`.
 
 ## Code layout
 

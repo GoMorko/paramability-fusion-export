@@ -15,7 +15,7 @@ from tests.test_parts_pipeline import FakePartsPort, renamed
 from tests.translator_helpers import load_capture
 
 from lib.design_edit.errors import StepExportError
-from lib.dialog_model.result_rows import parts_result_view, result_view
+from lib.dialog_model.result_rows import parts_result_view, result_view, section_lines
 from lib.export_plan.parts_pipeline import run_parts_pipeline
 from lib.export_plan.pipeline import ExportRequest, run_pipeline
 from lib.export_plan.reach_pass import left_out_indexes, needs_reach
@@ -242,23 +242,21 @@ class ResultWindowTest(unittest.TestCase):
         result = export(ReachPort(tray(), reach=reach))
         return result_view("tray.paramability", result.manifest, result.report, result.table, TICKED)
 
-    def test_the_view_lists_each_left_out_step_and_the_dialog_shows_the_group(self):
+    def test_the_view_lists_each_left_out_step_and_the_dialog_shows_the_section(self):
         view = self.view({"read": False, "error": "no"})
-        self.assertEqual(len(view["left_out"]), 2)
-        self.assertTrue(view["left_out_title"].startswith("2 "))
-        self.assertTrue(view["left_out_note"])
+        lines = section_lines(view, "left_out")
+        self.assertEqual(len(lines), 3)
         command = fakes.FakeCommand()
         result_dialog.build(command, view)
         self.assertIsNotNone(command.commandInputs.itemById("pm_result_left_out"))
-        self.assertIsNotNone(command.commandInputs.itemById("pm_result_left_out_note"))
-        self.assertIn(view["left_out"][0].split(":")[0], view["message"])
+        self.assertIn(lines[0].split(":")[0], view["message"])
 
     def test_a_list_longer_than_the_window_shows_is_cut_and_points_to_the_report(self):
         gaps = [{"name": "Step%d" % n, "reason": "No."} for n in range(8)]
         view = result_view("tray.paramability", {"kind": "recipe", "notes": []}, {"sizes": {"free": []}, "gaps": gaps},
                            export(ReachPort(tray(leave_out=False))).table, [])
-        self.assertEqual(len(view["left_out"]), 6)
-        self.assertIn("report.json", view["left_out"][-1])
+        lines = section_lines(view, "left_out")
+        self.assertIn("report.json", lines[-2])
 
     def test_nothing_about_left_out_steps_shows_when_none_were_left_out(self):
         result = export(ReachPort(tray(leave_out=False)))
@@ -320,9 +318,9 @@ class PartsGapsTest(unittest.TestCase):
         captures[0]["target"]["name"] = "Lid"
         port, result = self.run_parts(captures, {0: {"read": False, "error": "no"}})
         view = parts_result_view("two.paramability", result.manifest, result.report, result.table, TICKED)
-        self.assertEqual(len(view["left_out"]), 2)
-        self.assertTrue(all(line.startswith("Lid, ") for line in view["left_out"]))
-        self.assertTrue(view["left_out_note"])
+        lines = section_lines(view, "left_out")
+        self.assertEqual(len(lines), 3)
+        self.assertTrue(all(line.startswith("Lid, ") for line in lines[:2]))
 
     def test_a_part_that_fails_its_step_file_still_restores_the_parameters(self):
         port = PartsPort([tray(name=("t2", "Lid"))], {0: {"read": False, "error": "no"}})

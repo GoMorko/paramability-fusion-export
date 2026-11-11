@@ -132,7 +132,15 @@ class DoubtfulTest(unittest.TestCase):
         self.assertEqual(row(inputs, "status", 0).formattedText, "size, may be unexpected")
         self.assertEqual(row(inputs, "status", 1).formattedText, "size")
         self.assertEqual(set(recipe_dialog.read_form(inputs, offers)),
-                         {"bodies", "body", "ticked", "ranges", "range_problem", "up_axis"})
+                         {"bodies", "body", "ticked", "ranges", "range_problem", "up_axis", "faster_tries"})
+
+
+class FasterTriesTest(unittest.TestCase):
+    def test_the_faster_tries_box_starts_off_and_the_form_reads_it(self):
+        _, inputs = make_dialog([offer("wall")])
+        self.assertFalse(recipe_dialog.read_form(inputs, [offer("wall")])["faster_tries"])
+        inputs.itemById(recipe_dialog.FASTER_ID).value = True
+        self.assertTrue(recipe_dialog.read_form(inputs, [offer("wall")])["faster_tries"])
 
 
 class SeveralBodiesTest(unittest.TestCase):

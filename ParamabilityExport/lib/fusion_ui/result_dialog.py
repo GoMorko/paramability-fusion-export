@@ -1,5 +1,5 @@
-"""The dialog shown after a recipe is saved: each size with what it becomes in Paramability, what stays fixed, what
-may give unexpected results, the ticked parameters the copy could not follow, the variables.
+"""The dialog shown after a recipe is saved: the sections of `dialog_model.result_rows` (result, sizes, steps left
+out, what to check), each as a `# Title` line followed by its lines. Each size is one line in the sizes section.
 
 It is a small command of its own. Fusion does not allow starting a command from inside another command's events,
 so `show` fires a custom event; its handler starts the dialog after the export command has ended. When the event or
@@ -7,17 +7,14 @@ the dialog cannot start, the same story goes to a message box.
 """
 import adsk.core
 
-from ..dialog_model.dialog_rows import escape, name_cell, text_rows
+from ..dialog_model.dialog_rows import escape, text_rows
 from .handlers import HandlerList, on_command_created, on_custom_event
 from .log import log, message_box
 
 COMMAND_ID = "ParamabilityExportResultCommand"
 COMMAND_NAME = "Saved for Paramability"
 EVENT_ID = "ParamabilityExportResultEvent"
-_COLUMNS = ("name", "range", "check")
-_HEADERS = {"name": "Parameter", "range": "Range", "check": "In Paramability"}
-_RATIO = "8:3:3"
-_MAX_FIXED_ROWS = 6
+_MAX_ROWS = 12
 
 _handlers = HandlerList()
 _event_handlers = HandlerList()
@@ -109,55 +106,13 @@ def build(command, view):
         command.cancelButtonText = "Close"
     except Exception as error:
         log("close button text failed: %s" % error)
-    inputs = command.commandInputs
-    inputs.addTextBoxCommandInput("pm_result_saved", "", escape(view["saved"]), text_rows(view["saved"].split("\n")), True)
-    _add_lines(inputs, "pm_result_warnings", "Check your design", view.get("warnings"))
-    _add_lines(inputs, "pm_result_parts", "Parts", view.get("parts"))
-
-    sizes = inputs.addGroupCommandInput("pm_result_sizes", view["size_title"])
-    sizes.isExpanded = True
-    if view["rows"]:
-        _build_table(sizes.children, view["rows"], view.get("check_header"))
-    else:
-        sizes.children.addTextBoxCommandInput("pm_result_none", "", "No parameter became a size.", 1, True)
-
-    _add_lines(inputs, "pm_result_left_out", view.get("left_out_title") or "Left out", view.get("left_out"))
-    if view.get("left_out_note"):
-        inputs.addTextBoxCommandInput("pm_result_left_out_note", "", escape(view["left_out_note"]),
-                                      text_rows([view["left_out_note"]]), True)
-    _add_lines(inputs, "pm_result_fixed", "Stays fixed", view["fixed"])
-    _add_lines(inputs, "pm_result_loose", "May give unexpected results", view.get("loose"))
-    _add_lines(inputs, "pm_result_dropped", "Not followed", view.get("dropped"))
-    _add_lines(inputs, "pm_result_also", view.get("also_title") or "Also change this part", view.get("also"))
-    _add_lines(inputs, "pm_result_untried", "Not tried", view.get("untried"))
-    if view["variables"]:
-        inputs.addTextBoxCommandInput("pm_result_variables", "", escape(view["variables"]), text_rows([view["variables"]]), True)
+    for section in view["sections"]:
+        _add_text(command.commandInputs, "pm_result_" + section["key"], section["title"], section["lines"])
 
 
-def _add_lines(inputs, group_id, title, lines):
-    """An open group with one text box of `lines`; nothing when there are none."""
-    if not lines:
-        return
-    group = inputs.addGroupCommandInput(group_id, title)
-    group.isExpanded = True
-    group.children.addTextBoxCommandInput(
-        group_id + "_text", "", "<br>".join(escape(line) for line in lines),
-        text_rows(lines, cap=_MAX_FIXED_ROWS), True)
-
-
-def _build_table(children, rows, check_header=None):
-    table = children.addTableCommandInput("pm_result_table", "", len(_COLUMNS), _RATIO)
-    headers = dict(_HEADERS, check=check_header or _HEADERS["check"])
-    for col, key in enumerate(_COLUMNS):
-        table.addCommandInput(children.addTextBoxCommandInput("pm_result_head_" + key, "", headers[key], 1, True),
-                              0, col)
-    for index, row in enumerate(rows):
-        for col, key in enumerate(_COLUMNS):
-            text, lines = name_cell(row[key]) if key == "name" else (escape(row[key]), 1)
-            cell = children.addTextBoxCommandInput("pm_result_%s_%d" % (key, index), "", text, lines, True)
-            if key == "name":
-                try:
-                    cell.tooltipDescription = row[key]
-                except Exception as error:
-                    log("name tooltip failed: %s" % error)
-            table.addCommandInput(cell, index + 1, col)
+def _add_text(inputs, input_id, title, lines):
+    """A read only text box: a bold `# title` line (when there is a title) and the lines under it."""
+    shown = ["<b>%s</b>" % escape("# " + title)] if title else []
+    shown += [escape(line) for line in lines]
+    count = text_rows(([("# " + title)] if title else []) + lines, cap=_MAX_ROWS)
+    inputs.addTextBoxCommandInput(input_id, "", "<br>".join(shown), count, True)
