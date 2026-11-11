@@ -26,6 +26,7 @@ from .body_scope import body_links, scope_inputs
 from .marker_roll import MarkerRoll
 from .part_names import tagged, unique_names
 from .pipeline import ProbeRun
+from .reach_pass import with_reach
 from .probe_flow import ProbeGroup, SizeProbe, covers_a_sketch, extra_size_params, kept_size_names
 from .recipe_export import PartInput, free_sizes, plan_parts_export, translate_capture
 from .size_offers import discovery_sizes, labels, probe_sizes
@@ -42,6 +43,8 @@ class PartsPort(Protocol):
     body_names(): a name per body, for the file.
     export_step(index, path): write the STEP of body `index` as the design is now.
     read_capture(index): the capture dict of body `index`, or the exception that stopped the read.
+    read_reach(index, capture, gaps): the `reach` of body `index` when the steps at the timeline indexes `gaps` are
+      left out of its copy (`pipeline.ExportPort.read_reach`).
     probe_reader(index): a callable `read(request)` giving one probe state of body `index`, or raising.
     """
 
@@ -54,6 +57,8 @@ class PartsPort(Protocol):
     def export_step(self, index, path): ...
 
     def read_capture(self, index): ...
+
+    def read_reach(self, index, capture, gaps): ...
 
     def probe_reader(self, index): ...
 
@@ -184,6 +189,8 @@ class _PartsPipeline:
                 continue
             motion = OPTIMISTIC if covers_a_sketch(capture) else None
             first = self._translation(index, motion)
+            if first is not None and first.gaps:
+                first = self._with_reach(index, first, motion)
             if first is None:
                 continue
             if first.recipe is None:
@@ -222,6 +229,15 @@ class _PartsPipeline:
         except Exception as exc:
             self.port.log("translation of %s failed: %r" % (self.names[index], exc))
             return None
+
+    def _with_reach(self, index, first, motion):
+        """The translation of part `index` again with the `reach` of the steps `first` left out. The capture of the
+        part keeps the answer for the rest of the export."""
+        def read(capture, gaps):
+            return self.port.read_reach(index, capture, gaps)
+
+        self.captures[index] = with_reach(read, self.captures[index], first, self.port.log)
+        return self._translation(index, motion)
 
     def _share_fixed(self, finals):
         """Translate the parts again with the sizes that one part had to fix fixed in all, until no part asks for more

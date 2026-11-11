@@ -1,0 +1,654 @@
+{
+  "anyOf": [
+    {
+      "properties": {
+        "choiceName": {
+          "description": "Label of the dropdown (default \"Size\").",
+          "maxLength": 60,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "valueRows"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "type": "string"
+        },
+        "notes": {
+          "description": "Short plain sentences for the person. The app shows the first one when the file opens.",
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 5,
+          "type": "array"
+        },
+        "parameters": {
+          "items": {
+            "properties": {
+              "label": {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "unit": {
+                "description": "Millimetres, degrees or \"\" for a count (default \"\").",
+                "enum": [
+                  "mm",
+                  "deg",
+                  ""
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "type": "object"
+          },
+          "maxItems": 32,
+          "type": "array"
+        },
+        "rows": {
+          "items": {
+            "properties": {
+              "default": {
+                "type": "boolean"
+              },
+              "name": {
+                "maxLength": 60,
+                "minLength": 1,
+                "type": "string"
+              },
+              "step": {
+                "description": "Relative path inside the zip: segments of letters, digits, _ . - joined by /, no \"..\". STEP files end in .step or .stp, the recipe in .json. Every path is unique.",
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "values": {
+                "additionalProperties": {
+                  "maximum": 1000000,
+                  "minimum": -1000000,
+                  "type": "number"
+                },
+                "description": "Numbers in mm or degrees keyed by the names in `parameters`.",
+                "type": "object"
+              }
+            },
+            "required": [
+              "name",
+              "values",
+              "step"
+            ],
+            "type": "object"
+          },
+          "maxItems": 32,
+          "minItems": 2,
+          "type": "array"
+        },
+        "schema": {
+          "const": "paramability.recipePackage"
+        },
+        "upAxis": {
+          "description": "Which axis points up in the STEP files (default \"z\"). A recipe is always written Z up.",
+          "enum": [
+            "z",
+            "y"
+          ],
+          "type": "string"
+        },
+        "version": {
+          "const": 2
+        },
+        "writer": {
+          "maxLength": 200,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "schema",
+        "version",
+        "name",
+        "rows"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "checks": {
+          "items": {
+            "properties": {
+              "step": {
+                "description": "Relative path inside the zip: segments of letters, digits, _ . - joined by /, no \"..\". STEP files end in .step or .stp, the recipe in .json. Every path is unique.",
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "values": {
+                "additionalProperties": {
+                  "maximum": 1000000,
+                  "minimum": -1000000,
+                  "type": "number"
+                },
+                "description": "Size values (mm), at least one, this check file was exported at, keyed by the recipe size names.",
+                "type": "object"
+              }
+            },
+            "required": [
+              "values",
+              "step"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "fixed": {
+          "description": "Parameters of the source design that are baked into the shape and not offered as sizes, each with the reason. The app lists them for the person.",
+          "items": {
+            "properties": {
+              "name": {
+                "description": "Name of the recipe size the writer baked into the shape instead of offering it. The reason may name the source parameter.",
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "reason": {
+                "description": "Short plain sentence on why it stays fixed in the shape.",
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "reason"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "gaps": {
+          "description": "The `paramability.recipeGaps` file of this recipe: the steps of the source design the writer could not copy, so the recipe is unfinished. Ends in .json. When present it must be valid, or the package is refused.",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "recipe"
+        },
+        "loose": {
+          "description": "Sizes the writer could not follow fully. They stay free sizes and the app marks each with its reason as a warning.",
+          "items": {
+            "properties": {
+              "name": {
+                "description": "Name of a recipe size that is a free size. The writer could not follow it fully, so the app marks it.",
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "reason": {
+                "description": "Short plain sentence on why the size may give unexpected results.",
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "reason"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "type": "string"
+        },
+        "notes": {
+          "description": "Short plain sentences for the person. The app shows the first one when the file opens.",
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 5,
+          "type": "array"
+        },
+        "parameters": {
+          "description": "The user parameters of the source design, in the source order. The app adds each as a variable when the design lands as a fixed shape.",
+          "items": {
+            "properties": {
+              "comment": {
+                "maxLength": 200,
+                "type": "string"
+              },
+              "expr": {
+                "description": "A formula over the `name` of other entries, in the recipe formula grammar. The app uses it when it reads; else it keeps `value`.",
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string"
+              },
+              "label": {
+                "description": "The parameter name as the source program shows it (default: `name`).",
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "description": "Unique. The name a recipe size of this parameter has: letters, digits and underscores.",
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "unit": {
+                "description": "Millimetres, degrees or \"\" for a plain number (default \"\").",
+                "enum": [
+                  "mm",
+                  "deg",
+                  ""
+                ],
+                "type": "string"
+              },
+              "value": {
+                "description": "In millimetres, degrees or a plain number, as `unit` says.",
+                "maximum": 1000000000,
+                "minimum": -1000000000,
+                "type": "number"
+              }
+            },
+            "required": [
+              "name",
+              "value"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "part": {
+          "description": "Relative path inside the zip: segments of letters, digits, _ . - joined by /, no \"..\". STEP files end in .step or .stp, the recipe in .json. Every path is unique.",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "recipe": {
+          "description": "Relative path inside the zip: segments of letters, digits, _ . - joined by /, no \"..\". STEP files end in .step or .stp, the recipe in .json. Every path is unique.",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "schema": {
+          "const": "paramability.recipePackage"
+        },
+        "upAxis": {
+          "description": "Which axis points up in the STEP files (default \"z\"). A recipe is always written Z up.",
+          "enum": [
+            "z",
+            "y"
+          ],
+          "type": "string"
+        },
+        "version": {
+          "const": 2
+        },
+        "writer": {
+          "maxLength": 200,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "schema",
+        "version",
+        "name",
+        "part",
+        "recipe"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "stepOnly"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "type": "string"
+        },
+        "notes": {
+          "description": "Short plain sentences for the person. The app shows the first one when the file opens.",
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 5,
+          "type": "array"
+        },
+        "parameters": {
+          "description": "The user parameters of the source design, in the source order. The app adds each as a variable when the design lands as a fixed shape.",
+          "items": {
+            "properties": {
+              "comment": {
+                "maxLength": 200,
+                "type": "string"
+              },
+              "expr": {
+                "description": "A formula over the `name` of other entries, in the recipe formula grammar. The app uses it when it reads; else it keeps `value`.",
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string"
+              },
+              "label": {
+                "description": "The parameter name as the source program shows it (default: `name`).",
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "description": "Unique. The name a recipe size of this parameter has: letters, digits and underscores.",
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "unit": {
+                "description": "Millimetres, degrees or \"\" for a plain number (default \"\").",
+                "enum": [
+                  "mm",
+                  "deg",
+                  ""
+                ],
+                "type": "string"
+              },
+              "value": {
+                "description": "In millimetres, degrees or a plain number, as `unit` says.",
+                "maximum": 1000000000,
+                "minimum": -1000000000,
+                "type": "number"
+              }
+            },
+            "required": [
+              "name",
+              "value"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "part": {
+          "description": "Relative path inside the zip: segments of letters, digits, _ . - joined by /, no \"..\". STEP files end in .step or .stp, the recipe in .json. Every path is unique.",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "schema": {
+          "const": "paramability.recipePackage"
+        },
+        "upAxis": {
+          "description": "Which axis points up in the STEP files (default \"z\"). A recipe is always written Z up.",
+          "enum": [
+            "z",
+            "y"
+          ],
+          "type": "string"
+        },
+        "version": {
+          "const": 2
+        },
+        "writer": {
+          "maxLength": 200,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "schema",
+        "version",
+        "name",
+        "part"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "fixed": {
+          "description": "Parameters baked into the shape of every part, each with the reason. The app lists them for the person.",
+          "items": {
+            "properties": {
+              "name": {
+                "description": "Name of the recipe size the writer baked into the shape instead of offering it. The reason may name the source parameter.",
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "reason": {
+                "description": "Short plain sentence on why it stays fixed in the shape.",
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "reason"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "kind": {
+          "const": "parts"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "type": "string"
+        },
+        "notes": {
+          "description": "Short plain sentences for the person. The app shows the first one when the file opens.",
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 5,
+          "type": "array"
+        },
+        "parameters": {
+          "description": "The user parameters of the source design, in the source order. The app adds each as a variable when the design lands as a fixed shape.",
+          "items": {
+            "properties": {
+              "comment": {
+                "maxLength": 200,
+                "type": "string"
+              },
+              "expr": {
+                "description": "A formula over the `name` of other entries, in the recipe formula grammar. The app uses it when it reads; else it keeps `value`.",
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string"
+              },
+              "label": {
+                "description": "The parameter name as the source program shows it (default: `name`).",
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "description": "Unique. The name a recipe size of this parameter has: letters, digits and underscores.",
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "unit": {
+                "description": "Millimetres, degrees or \"\" for a plain number (default \"\").",
+                "enum": [
+                  "mm",
+                  "deg",
+                  ""
+                ],
+                "type": "string"
+              },
+              "value": {
+                "description": "In millimetres, degrees or a plain number, as `unit` says.",
+                "maximum": 1000000000,
+                "minimum": -1000000000,
+                "type": "number"
+              }
+            },
+            "required": [
+              "name",
+              "value"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "parts": {
+          "description": "The parts of one design, each standing where its coordinates put it. Sizes with the same name are one size for every part.",
+          "items": {
+            "properties": {
+              "checks": {
+                "items": {
+                  "properties": {
+                    "step": {
+                      "description": "Relative path inside the zip: segments of letters, digits, _ . - joined by /, no \"..\". STEP files end in .step or .stp, the recipe in .json. Every path is unique.",
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "values": {
+                      "additionalProperties": {
+                        "maximum": 1000000,
+                        "minimum": -1000000,
+                        "type": "number"
+                      },
+                      "description": "Size values (mm), at least one, this check file was exported at, keyed by the recipe size names.",
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "values",
+                    "step"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 16,
+                "type": "array"
+              },
+              "gaps": {
+                "description": "The `paramability.recipeGaps` file of this recipe: the steps of the source design the writer could not copy, so the recipe is unfinished. Ends in .json. When present it must be valid, or the package is refused.",
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "loose": {
+                "description": "Sizes of this part the writer could not follow fully. A reason may name the part.",
+                "items": {
+                  "properties": {
+                    "name": {
+                      "description": "Name of a recipe size that is a free size. The writer could not follow it fully, so the app marks it.",
+                      "maxLength": 64,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "reason": {
+                      "description": "Short plain sentence on why the size may give unexpected results.",
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "reason"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 64,
+                "type": "array"
+              },
+              "name": {
+                "description": "Unique ignoring case. Becomes the name of the object.",
+                "maxLength": 60,
+                "minLength": 1,
+                "type": "string"
+              },
+              "note": {
+                "description": "Why the part has no recipe, shown when it lands as a fixed shape.",
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "recipe": {
+                "description": "The part's recipe. A part without one lands as a fixed shape.",
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "step": {
+                "description": "Relative path inside the zip: segments of letters, digits, _ . - joined by /, no \"..\". STEP files end in .step or .stp, the recipe in .json. Every path is unique.",
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "step"
+            ],
+            "type": "object"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "type": "array"
+        },
+        "schema": {
+          "const": "paramability.recipePackage"
+        },
+        "upAxis": {
+          "description": "Which axis points up in the STEP files (default \"z\"). A recipe is always written Z up.",
+          "enum": [
+            "z",
+            "y"
+          ],
+          "type": "string"
+        },
+        "version": {
+          "const": 2
+        },
+        "writer": {
+          "maxLength": 200,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "schema",
+        "version",
+        "name",
+        "parts"
+      ],
+      "type": "object"
+    }
+  ]
+}

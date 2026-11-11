@@ -121,6 +121,10 @@ def build(command, view):
     else:
         sizes.children.addTextBoxCommandInput("pm_result_none", "", "No parameter became a size.", 1, True)
 
+    _add_lines(inputs, "pm_result_left_out", view.get("left_out_title") or "Left out", view.get("left_out"))
+    if view.get("left_out_note"):
+        inputs.addTextBoxCommandInput("pm_result_left_out_note", "", escape(view["left_out_note"]),
+                                      text_rows([view["left_out_note"]]), True)
     _add_lines(inputs, "pm_result_fixed", "Stays fixed", view["fixed"])
     _add_lines(inputs, "pm_result_loose", "May give unexpected results", view.get("loose"))
     _add_lines(inputs, "pm_result_dropped", "Not followed", view.get("dropped"))

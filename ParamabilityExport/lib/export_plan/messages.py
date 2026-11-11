@@ -73,6 +73,40 @@ def not_tried_line(count, several_parts=False):
             "Tick one and export again to try it." % (count, where))
 
 
+ORIGINAL_KEPT_NOTE = "The part opens with the original shape and an unfinished copy of its steps."
+ORIGINAL_KEPT_PARTS_NOTE = "These parts open with the original shape and an unfinished copy of their steps."
+
+
+def left_out_title(count):
+    """'2 steps left out': the heading of the left out list in the result window."""
+    return "%d %s left out" % (count, "step" if count == 1 else "steps")
+
+
+def part_left_out_note(count):
+    """The sentence for one part of a parts file: how many steps were left out (the names are in the result window)."""
+    return "%d %s left out." % (count, "step was" if count == 1 else "steps were")
+
+
+def left_out_parts_note(counts):
+    """One note for a parts file: how many steps were left out and of which parts. `counts` is `[(part name, count)]`."""
+    total = sum(count for _, count in counts)
+    names = [name for name, _ in counts]
+    return clip("%d %s left out of %s." % (total, "step was" if total == 1 else "steps were", parts_label(names)),
+                MAX_NOTE)
+
+
+def left_out_lines(entries):
+    """"Extrude5: the reason" for each `(part name or None, gap record)`. A parts file puts the part first. A long
+    list is cut and points to the report."""
+    lines = []
+    for part, gap in entries[:MAX_LISTED_FIXED]:
+        text = "%s: %s" % (gap["name"], gap["reason"])
+        lines.append("%s, %s" % (part, text) if part else text)
+    if len(entries) > MAX_LISTED_FIXED:
+        lines.append("and %d more (see report.json)." % (len(entries) - MAX_LISTED_FIXED))
+    return lines
+
+
 def recipe_saved_message(manifest, file_name):
     """What the person reads after the file is written: the notes, why each fixed number stays fixed, then why each
     loose size may give unexpected results."""

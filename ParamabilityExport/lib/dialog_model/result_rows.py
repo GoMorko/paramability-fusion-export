@@ -5,7 +5,8 @@ The view is built from the manifest and report that plan_single_export returned,
 from .dialog_rows import range_text
 from ..export_plan.health import FAILED, health_lines, with_lines
 from ..export_plan.messages import (
-    MAX_LISTED_FIXED, also_changes_line, also_changes_parts_line, listed_lines, not_tried_line, recipe_saved_message)
+    MAX_LISTED_FIXED, ORIGINAL_KEPT_NOTE, ORIGINAL_KEPT_PARTS_NOTE, also_changes_line, also_changes_parts_line,
+    left_out_lines, left_out_title, listed_lines, not_tried_line, recipe_saved_message)
 
 KEPT_FIXED, NOT_USED = "kept fixed", "not used"
 NOT_FOLLOWED = "not followed"
@@ -109,12 +110,37 @@ def not_tried_lines(report):
     return [not_tried_line(len(left), "parts" in report)] if left else []
 
 
+def left_out_view(report):
+    """`(title, lines, closing line)` of the steps left out of the copy, or None when none were. A parts report holds
+    the gaps of each part in its record."""
+    if "parts" in report:
+        entries = [(part.get("name") or "", gap) for part in report["parts"] for gap in part.get("gaps") or []]
+        closing = ORIGINAL_KEPT_PARTS_NOTE
+    else:
+        entries = [(None, gap) for gap in report.get("gaps") or []]
+        closing = ORIGINAL_KEPT_NOTE
+    if not entries:
+        return None
+    return left_out_title(len(entries)), left_out_lines(entries), closing
+
+
 def variables_line(manifest):
     count = len(manifest.get("parameters") or [])
     if not count:
         return ""
     noun = "parameter comes" if count == 1 else "parameters come"
     return "All %d %s along as variables, with their formulas and comments." % (count, noun)
+
+
+def _with_left_out(story, report):
+    """`(story with the left out steps added, view keys)`. The keys `left_out_title`, `left_out` (lines) and
+    `left_out_note` are there only when steps were left out."""
+    found = left_out_view(report)
+    if found is None:
+        return story, {}
+    title, lines, closing = found
+    story += "\n\n%s:\n%s\n%s" % (title, "\n".join("- " + line for line in lines), closing)
+    return story, {"left_out_title": title, "left_out": lines, "left_out_note": closing}
 
 
 def result_view(file_name, manifest, report, table, ticked):
@@ -124,7 +150,8 @@ def result_view(file_name, manifest, report, table, ticked):
     check}), fixed (lines), loose (lines: sizes that stay free but may not follow every step, with why), dropped
     (lines: ticked parameters that a step reads but the copy could not follow, or tried and changed nothing, with
     why), also (a line naming unticked parameters that also change this part) with its title `also_title`,
-    untried (a line counting the parameters of other components the export did not try), variables,
+    untried (a line counting the parameters of other components the export did not try), left_out_title,
+    left_out (lines) and left_out_note (a sentence) when steps were left out of the copy, variables,
     warnings (what is wrong with the design or the sketch measuring, and what to do: empty when all is well),
     message (the whole story as plain text, for a message box, with the warnings below it).
     """
@@ -140,7 +167,9 @@ def result_view(file_name, manifest, report, table, ticked):
     also, untried = also_lines(report), not_tried_lines(report)
     for line in also + untried:
         story += "\n\n" + line
+    story, left_out = _with_left_out(story, report)
     return {
+        **left_out,
         "saved": ("Saved %s. %s" % (file_name, notes[0] if notes else "")).strip(),
         "size_title": "%d %s ready for the form" % (count, "size" if count == 1 else "sizes"),
         "check_header": STATUS_HEADER,
@@ -203,7 +232,9 @@ def parts_result_view(file_name, manifest, report, table, ticked):
     also, untried = also_lines(report), not_tried_lines(report)
     for line in also + untried:
         story += "\n\n" + line
+    story, left_out = _with_left_out(story, report)
     return {
+        **left_out,
         "saved": ("Saved %s. %s" % (file_name, notes[0] if notes else "")).strip(),
         "size_title": "%d %s ready for the form" % (len(rows), "size" if len(rows) == 1 else "sizes"),
         "check_header": STATUS_HEADER,

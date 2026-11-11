@@ -7,22 +7,27 @@ import json
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from ..package.gaps_file import gaps_file_bytes
 from ..package.manifest import (
-    MAX_FIXED, MAX_PART_NOTE, build_parts_manifest, build_recipe_manifest, build_step_only_manifest, part_recipe_path,
-    part_step_path, validate_manifest)
+    GAPS_ENTRY, MAX_FIXED, MAX_PART_NOTE, build_parts_manifest, build_recipe_manifest, build_step_only_manifest,
+    part_gaps_path, part_recipe_path, part_step_path, validate_manifest)
 from ..package.text import clip
 from ..params.size_table import CONSTANT, DERIVED
 from ..translator import CaptureError, translate
 from ..translator.notes import (
-    recipe_note, reader_failure_note, step_only_note, translate_failure_note, used_several_times_note)
+    left_out_note, recipe_note, reader_failure_note, step_only_note, translate_failure_note, used_several_times_note)
 from .health import measuring_note
-from .messages import MAX_NOTE, dropped_note, fixed_note, loose_note, sizes_note, unchanged_note
+from .messages import (
+    MAX_NOTE, ORIGINAL_KEPT_NOTE, ORIGINAL_KEPT_PARTS_NOTE, dropped_note, fixed_note, left_out_parts_note, loose_note,
+    part_left_out_note, sizes_note, unchanged_note)
 from .part_names import tagged
 
 MAX_RECIPE_BYTES = 8 * 1024 * 1024
 MAX_NOTES = 5  # the manifest limit; the last notes (not followed, not used) give way
 _TOO_LARGE = {"index": None, "name": "", "type": "", "reason": "The recipe is too large to open."}
 _NOT_WRITTEN = {"index": None, "name": "", "type": "", "reason": "The steps could not be written."}
+_GAPS_NOT_WRITTEN = {"index": None, "name": "", "type": "",
+                     "reason": "The list of steps left out could not be written."}
 
 
 def _json_bytes(value, **options):
@@ -46,6 +51,23 @@ def _recipe_bytes(recipe):
     if len(data) > MAX_RECIPE_BYTES:
         return None, _TOO_LARGE
     return data, None
+
+
+def _recipe_and_gaps(result):
+    """`(recipe bytes, gaps bytes, refusal)` of a translation that has a recipe. A recipe that leaves steps out needs
+    its gaps file: when that cannot be written the part is not a recipe at all."""
+    data, refusal = _recipe_bytes(result.recipe)
+    if data is None or not result.gaps:
+        return data, None, refusal
+    gaps = gaps_file_bytes(result.gaps, result.to_recipe)
+    if gaps is None:
+        return None, None, _GAPS_NOT_WRITTEN
+    return data, gaps, None
+
+
+def _gap_notes(gaps):
+    """The two notes of a recipe that leaves steps out: how many and which, and what the part opens with."""
+    return [left_out_note([gap["name"] for gap in gaps]), ORIGINAL_KEPT_NOTE]
 
 
 def _with_up_axis(capture, up_axis):
@@ -195,9 +217,9 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         except Exception as exc:
             error, note = exc, translate_failure_note()
 
-    recipe_data = None
+    recipe_data = gaps_data = None
     if result is not None and result.recipe is not None:
-        recipe_data, refusal = _recipe_bytes(result.recipe)
+        recipe_data, gaps_data, refusal = _recipe_and_gaps(result)
     elif result is not None:
         refusal = result.refusal
 
@@ -234,6 +256,10 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         report["parameters"] = listing.report()
     if recipe_data is not None:
         report["sizes"] = {"free": free, "fixed": all_fixed, "loose": all_loose, "dropped": dropped}
+    if gaps_data is not None:
+        report["gaps"] = list(result.gaps)
+        if capture.get("reach") is not None:
+            report["reach"] = capture["reach"]
     if size_table is not None and size_table.links:
         report["links"] = link_outcomes(size_table, report.get("sizes"))
     if also:
@@ -245,7 +271,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         first = recipe_note(len(result.recipe["features"]))
         if _uses(capture) > 1:
             first += " " + used_several_times_note(_uses(capture))
-        notes = [first]
+        notes = [first] + (_gap_notes(result.gaps) if gaps_data is not None else [])
         doubt = measuring_note(health)
         if doubt:
             notes.append(doubt)
@@ -266,8 +292,11 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
             notes.append(dropped_note(unused))
         del notes[MAX_NOTES:]
         manifest = build_recipe_manifest(
-            title, writer, up_axis=up_axis, notes=notes, fixed=all_fixed, parameters=listed, loose=all_loose)
+            title, writer, up_axis=up_axis, notes=notes, fixed=all_fixed, parameters=listed, loose=all_loose,
+            gaps=GAPS_ENTRY if gaps_data is not None else None)
         files["recipe.json"] = recipe_data
+        if gaps_data is not None:
+            files[GAPS_ENTRY] = gaps_data
     else:
         notes = [note or step_only_note(refusal)]
         manifest = build_step_only_manifest(title, writer, up_axis=up_axis, notes=notes, parameters=listed)
@@ -303,7 +332,7 @@ class _Part:
 
     def __init__(self, given, up_axis, size_table):
         self.given = given
-        self.result = self.refusal = self.note = self.error = self.recipe_data = None
+        self.result = self.refusal = self.note = self.error = self.recipe_data = self.gaps_data = None
         self.capture = given.capture if isinstance(given.capture, dict) else None
         if self.capture is None:
             self.error, self.note = given.capture, reader_failure_note()
@@ -316,7 +345,7 @@ class _Part:
             except Exception as exc:
                 self.error, self.note = exc, translate_failure_note()
         if self.result is not None and self.result.recipe is not None:
-            self.recipe_data, self.refusal = _recipe_bytes(self.result.recipe)
+            self.recipe_data, self.gaps_data, self.refusal = _recipe_and_gaps(self.result)
         elif self.result is not None:
             self.refusal = self.result.refusal
         self.free = free_sizes(self.result.recipe) if self.recipe_data is not None else []
@@ -324,6 +353,11 @@ class _Part:
     @property
     def is_recipe(self):
         return self.recipe_data is not None
+
+    @property
+    def gaps(self):
+        """The gap records of this part's recipe, or [] when it leaves nothing out."""
+        return list(self.result.gaps) if self.gaps_data is not None else []
 
     def fixed_note(self):
         return self.note or step_only_note(self.refusal)
@@ -358,6 +392,9 @@ def _parts_notes(parts, free, loose, fixed, health):
     recipes = sum(1 for p in parts if p.is_recipe)
     notes = ["%d %s, %d %s." % (len(parts), "part" if len(parts) == 1 else "parts", len(free),
                                 "size" if len(free) == 1 else "sizes")]
+    left_out = [(p.given.name, len(p.gaps)) for p in parts if p.gaps]
+    if left_out:
+        notes += [left_out_parts_note(left_out), ORIGINAL_KEPT_PARTS_NOTE]
     if recipes < len(parts):
         names = [p.given.name for p in parts if not p.is_recipe]
         notes.append(clip("Added as fixed shapes: %s." % ", ".join(names), MAX_NOTE))
@@ -392,6 +429,10 @@ def _part_record(part, loose):
         record["derived"] = part.given.derived
     if part.is_recipe:
         record["sizes"] = {"free": part.free, "loose": [e["name"] for e in loose]}
+    if part.gaps:
+        record["gaps"] = part.gaps
+        if part.capture.get("reach") is not None:
+            record["reach"] = part.capture["reach"]
     return record
 
 
@@ -447,8 +488,15 @@ def plan_parts_export(inputs, title, writer, up_axis, size_table=None, listing=N
             entry["recipe"] = part_recipe_path(number)
             files[entry["recipe"]] = part.recipe_data
             entry["loose"] = mine
+            sentences = []
+            if part.gaps:
+                entry["gaps"] = part_gaps_path(number)
+                files[entry["gaps"]] = part.gaps_data
+                sentences += [part_left_out_note(len(part.gaps)), ORIGINAL_KEPT_NOTE]
             if _uses(part.capture) > 1:
-                entry["note"] = clip(used_several_times_note(_uses(part.capture)), MAX_PART_NOTE)
+                sentences.append(used_several_times_note(_uses(part.capture)))
+            if sentences:
+                entry["note"] = clip(" ".join(sentences), MAX_PART_NOTE)
         else:
             entry["note"] = clip(part.fixed_note(), MAX_PART_NOTE)
         entries.append(entry)

@@ -5,7 +5,8 @@ cannot follow is left free with a warning, and the ranges are the ones in the di
 
 Steps, in order: read the capture, translate once to learn which sizes the recipe keeps, run the sketch probe (it
 only recomputes), translate again with the motion it found, and assemble the package. The probe runs whenever a
-sketch can be followed.
+sketch can be followed. When the first translation leaves steps out, Fusion is asked which step made the faces each
+later step picks (`reach_pass`) before anything else, and the part is translated again with the answer.
 
 Fusion is reached only through the port the caller hands in (see `ExportPort`), so tests run the whole sequence with
 fakes. Parameters are changed by the probe and put back on every way out: when a step fails, when the person
@@ -24,6 +25,7 @@ from . import health as health_module
 from . import messages
 from .body_scope import body_links, scope_inputs
 from .marker_roll import MarkerRoll
+from .reach_pass import with_reach
 from .probe_flow import SizeProbe, covers_a_sketch, extra_size_params, kept_size_names, shadow_of
 from .recipe_export import free_sizes, plan_single_export, translate_capture
 from ..design_edit.restore import restore_parameters
@@ -44,6 +46,8 @@ class ExportPort(Protocol):
     units: {parameter name: Fusion unit string}.
     export_step(path): write the STEP of the picked body as the design is now.
     read_capture(): the capture dict of the picked body, or the exception that stopped the read.
+    read_reach(capture, gaps): the `reach` of the capture when the steps at the timeline indexes `gaps` are left out
+      of the copy (`read_gap_reach.read_reach`); raises `MarkerError` when the timeline marker cannot go back.
     probe_reader(): a callable `read(request)` giving one probe state, or raising.
     progress(verb): a context manager whose value has `step(index, total, name)`; the step returns False when the
       person cancelled.
@@ -57,6 +61,8 @@ class ExportPort(Protocol):
     def export_step(self, path): ...
 
     def read_capture(self): ...
+
+    def read_reach(self, capture, gaps): ...
 
     def probe_reader(self): ...
 
@@ -236,6 +242,7 @@ class _Pipeline:
         self.saved = None
         self.unrestored = []
         self.table = None
+        self.capture = None  # the capture the translations used, with `reach` when steps were left out
         self.probe = None
         self.roll = None
         self.probe_status = health_module.NOT_NEEDED
@@ -289,6 +296,7 @@ class _Pipeline:
         shadow = shadow_of(self.probe, port.log) if self.probe is not None else None
         health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error,
                                            self._unchecked(), self.motion.flipped if self.motion is not None else ())
+        capture = self.capture if self.capture is not None else capture
         manifest, files, report = plan_single_export(
             capture if capture is not None else RuntimeError("The steps were not read."),
             part_step, request.title, request.writer, request.up_axis,
@@ -300,10 +308,16 @@ class _Pipeline:
     def _translate_and_measure(self, capture):
         """The stages that need a capture: the first translation, the sketch probe and the translation with the
         motion it found. Returns the final translation (a refusal included), or None when it failed."""
+        self.capture = capture
         first_motion = OPTIMISTIC if covers_a_sketch(capture) else None
         first = self._translation(capture, first_motion)
         if first is None:
             return None
+        if first.gaps:
+            capture = self.capture = with_reach(self.port.read_reach, capture, first, self.port.log)
+            first = self._translation(capture, first_motion)
+            if first is None:
+                return None
         if first.recipe is None:
             # The plan translates without a motion at this point, so the first look's refusal is its result only
             # when the first look had none either.

@@ -78,7 +78,10 @@ class ManifestTest(unittest.TestCase):
             self.assertEqual(mf.validate_manifest(json.load(f)), [])
 
 
-PACKAGE_SCHEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema", "paramability.recipePackage.v1.schema.json")
+SCHEMA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema")
+PACKAGE_SCHEMA = os.path.join(SCHEMA_DIR, "paramability.recipePackage.v1.schema.json")
+PACKAGE_SCHEMA_V2 = os.path.join(SCHEMA_DIR, "paramability.recipePackage.v2.schema.json")
+GAPS_SCHEMA = os.path.join(SCHEMA_DIR, "paramability.recipeGaps.v1.schema.json")
 LISTED = [{"name": "wall", "label": "wall", "value": 2, "unit": "mm", "comment": "Wall [1..6]"},
           {"name": "outer", "label": "outer", "value": 84, "unit": "mm", "expr": "wall * 2"}]
 
@@ -124,6 +127,53 @@ class PartsManifestTest(unittest.TestCase):
         manifest = parts_manifest()
         manifest["parts"][1]["step"] = manifest["parts"][0]["step"]
         self.assertTrue(mf.validate_manifest(manifest))
+
+
+class GapsManifestTest(unittest.TestCase):
+    def recipe(self, **options):
+        return mf.build_recipe_manifest("Part", "w", notes=["1 step copied."], **options)
+
+    def test_a_recipe_that_names_a_gaps_file_is_version_2_and_one_without_stays_version_1(self):
+        with_gaps, without = self.recipe(gaps="gaps.json"), self.recipe()
+        self.assertEqual((with_gaps["version"], with_gaps["gaps"]), (2, "gaps.json"))
+        self.assertEqual((without["version"], "gaps" in without), (1, False))
+        for manifest, schema in ((with_gaps, PACKAGE_SCHEMA_V2), (without, PACKAGE_SCHEMA)):
+            self.assertEqual(mf.validate_manifest(manifest), [])
+            self.assertEqual(validate(manifest, load_schema(schema)), [])
+
+    def test_a_version_that_does_not_match_the_gaps_is_refused(self):
+        for what, edit in (("gaps in version 1", lambda m: m.update(version=1)),
+                           ("version 2 without gaps", lambda m: m.pop("gaps"))):
+            manifest = self.recipe(gaps="gaps.json")
+            edit(manifest)
+            with self.subTest(what):
+                self.assertTrue(mf.validate_manifest(manifest))
+
+    def test_gaps_need_a_safe_unique_json_path_in_a_recipe(self):
+        for path in ("../gaps.json", "gaps.txt", "recipe.json", "part.step"):
+            with self.subTest(path):
+                self.assertTrue(mf.validate_manifest(self.recipe(gaps=path)))
+
+    def test_gaps_on_a_package_that_has_no_recipe_are_refused(self):
+        step_only = mf.build_step_only_manifest("Part", "w")
+        step_only.update(gaps="gaps.json", version=2)
+        self.assertTrue(mf.validate_manifest(step_only))
+        rows = good()
+        rows["gaps"] = "gaps.json"
+        self.assertTrue(mf.validate_manifest(rows))
+
+    def test_a_parts_package_names_the_gaps_file_of_each_part_and_only_for_a_part_with_a_recipe(self):
+        parts = [{"name": "Tray", "step": mf.part_step_path(1), "recipe": mf.part_recipe_path(1),
+                  "gaps": mf.part_gaps_path(1)},
+                 {"name": "Cover", "step": mf.part_step_path(2), "recipe": mf.part_recipe_path(2)}]
+        manifest = mf.build_parts_manifest("Planter", "w", parts, notes=["2 parts."])
+        self.assertEqual((manifest["version"], manifest["parts"][0]["gaps"]), (2, "parts/01/gaps.json"))
+        self.assertEqual(mf.validate_manifest(manifest), [])
+        self.assertEqual(validate(manifest, load_schema(PACKAGE_SCHEMA_V2)), [])
+        broken = {**manifest, "parts": [dict(parts[0], recipe=None), manifest["parts"][1]]}
+        self.assertTrue(mf.validate_manifest(broken))
+        self.assertTrue(mf.validate_manifest({**manifest, "gaps": "gaps.json"}))
+        self.assertTrue(mf.validate_manifest({**manifest, "version": 1}))
 
 
 class SchemaCopyTest(unittest.TestCase):
