@@ -440,7 +440,7 @@ def _foreign_place(feature, ctx):
         value = geo.safe(lambda: getattr(definition, member), None)
         if value is None:
             continue
-        placed += geo.collection_items(value) if geo.safe(lambda: value.count, None) is not None else [value]
+        placed += geo.collection_items(value) if geo.is_sequence(value) else [value]
     outside = [geo.native_input(e, ctx) for e in placed]
     outside = [e for e in outside if geo.foreign(e, ctx)]
     if not outside:

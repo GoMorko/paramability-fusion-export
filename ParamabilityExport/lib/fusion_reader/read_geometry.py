@@ -214,12 +214,31 @@ def body_ref(body, ctx=None):
     return mark_foreign({"token": safe(lambda: body.entityToken, ""), "name": safe(lambda: body.name, "")}, body, ctx)
 
 
+def is_sequence(value):
+    """Whether `value` holds a run of entities: a list or tuple, a Fusion collection (count and item(i)), or a Fusion
+    vector such as BRepFaceVector, which some members return instead of a collection and which has only len and indexing."""
+    if isinstance(value, (list, tuple)):
+        return True
+    if value is None or isinstance(value, (str, bytes, dict)):
+        return False
+    return (hasattr(value, "count") and hasattr(value, "item")) or (hasattr(value, "__len__") and hasattr(value, "__getitem__"))
+
+
+def sequence_items(value):
+    """Items of a list, a Fusion collection or a Fusion vector (see is_sequence); raises when there are none to read."""
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    if hasattr(value, "count") and hasattr(value, "item"):
+        return [value.item(i) for i in range(value.count)]
+    return [value[i] for i in range(len(value))]
+
+
 def collection_items(collection):
-    """Items of a Fusion collection (count and item(i)); empty for None or a collection that cannot be read."""
+    """Items of a Fusion collection or vector (see sequence_items); empty for None or one that cannot be read."""
     if collection is None:
         return []
     try:
-        return [collection.item(i) for i in range(collection.count)]
+        return sequence_items(collection)
     except Exception:
         return []
 

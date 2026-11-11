@@ -49,6 +49,19 @@ def parameter(value, name="d5", expression="1 mm"):
     return Obj(value=value, name=name, expression=expression)
 
 
+class FaceVector:
+    """A Fusion vector such as BRepFaceVector: len and indexing only, no count or item."""
+
+    def __init__(self, items):
+        self._items = list(items)
+
+    def __len__(self):
+        return len(self._items)
+
+    def __getitem__(self, i):
+        return self._items[i]
+
+
 class EmbossFeatureStub(Obj):
     """An emboss whose horizontal distance cannot be read."""
 
@@ -58,7 +71,7 @@ class EmbossFeatureStub(Obj):
 
 
 def read(depth_cm=0.1, after=8304.0, made_z=11, face_z=10, surface="Plane", text=False, broken=False, tangent=None,
-         made_extra=()):
+         made_extra=(), faces_as=Coll):
     target = lid(after)
     sketch = Obj("fusion::Sketch", name="Sketch1", transform=identity(), entityToken="sk1")
     outlines = [ring_profile(sketch)]
@@ -70,7 +83,7 @@ def read(depth_cm=0.1, after=8304.0, made_z=11, face_z=10, surface="Plane", text
     if tangent is not None:
         input_face.tangentiallyConnectedFaces = Coll(tangent)
     emboss = kind("fusion::EmbossFeature", parentComponent=Obj(entityToken="root"), bodies=Coll([target]),
-                  profiles=Coll(outlines), inputFaces=Coll([input_face]), faces=Coll([made, *made_extra]),
+                  profiles=Coll(outlines), inputFaces=faces_as([input_face]), faces=Coll([made, *made_extra]),
                   isTangentChain=True, depth=parameter(depth_cm), horizontalDistance=parameter(0, "d6", "0 mm"),
                   verticalDistance=parameter(0, "d7", "0 mm"), rotationAngle=parameter(0, "d8", "0 deg"))
     design = FakeDesign([entry((emboss, "Emboss1"))], target, appears_at=0)
@@ -91,6 +104,12 @@ class EmbossReaderTest(unittest.TestCase):
         self.assertEqual(data["participants"], [{"token": "b1", "name": "Body1"}])
         self.assertEqual((data["volume_before"], data["volume_after"]), (8000.0, 8304.0))
         self.assertEqual((data["end_offset"], data["end_area"]), (11.0, 304.0))
+
+    def test_input_faces_given_as_a_fusion_vector_are_read(self):
+        data = read(faces_as=FaceVector)
+        self.assertNotIn("read_error", data)
+        self.assertEqual(data["faces"][0]["plane"], {"point": [0, 0, 10], "normal": [0, 0, 1]})
+        self.assertEqual(data["end_offset"], 11.0)
 
     def test_a_sunk_outline_has_a_negative_depth_and_its_floor_below_the_face(self):
         # The sketch plane is z = 0, the face z = 10 and the floor z = 9: end_offset runs from the sketch plane.

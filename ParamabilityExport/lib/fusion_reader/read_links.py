@@ -168,12 +168,10 @@ def _sketch_of(entity):
 
 
 def _each(value):
-    """The entries of an ObjectCollection or a Path, or the value itself."""
+    """The entries of an ObjectCollection, a Path or a vector, or the value itself."""
     if value is None:
         return []
-    if geo.safe(lambda: value.count, None) is not None:
-        return geo.collection_items(value)
-    return [value]
+    return geo.collection_items(value) if geo.is_sequence(value) else [value]
 
 
 def sketch_inputs(entity):
