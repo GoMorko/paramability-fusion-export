@@ -59,7 +59,7 @@ def _is_index(value):
 def _check_reach(reach):
     """`reach` (optional) says which earlier steps made the faces each step picks: `{ read: true, gaps: [indexes],
     makers: { "<index>": [indexes] } }`, or `{ read: false, error }` when that could not be read. `gaps` are the
-    left out steps the read was asked about; without it no answer is trusted (gaps.picked_gaps)."""
+    left out steps the read was asked about; without it no answer is trusted (gap_picks.picked_gaps)."""
     if reach is None:
         return
     if not isinstance(reach, dict) or not isinstance(reach.get("read"), bool):

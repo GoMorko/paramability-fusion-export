@@ -386,7 +386,7 @@ or `{ "read": false, "error": "<reason>" }` when the read failed.
   reported under the index of that step of `gaps`), and every later step that picks geometry, without items that make
   no body (sketches, construction geometry). Only steps after the first
   step of `gaps` are tested, and a step of `gaps` is not tested.
-- Which items pick geometry is decided by `translator.gaps.pick_records(item)`: the edge records of rounds and
+- Which items pick geometry is decided by `translator.gap_picks.pick_records(item)`: the edge records of rounds and
   bevels, and face records with a token, a point or loops (shell and offset faces, the face inputs of a round). These
   are the picks the copy writes as measured points. A face given only by a `face_point` (an emboss face, a face an
   extrude starts from or reaches to) and a face used as an outline are not picks: the copy writes them as numbers or
@@ -401,7 +401,7 @@ or `{ "read": false, "error": "<reason>" }` when the read failed.
   or cannot be read; so does every candidate when a pick cannot be found. More than 100 tested steps or 200 candidates
   give `read: false`, and so does any other failure of the read. The marker goes back to where it was at the end, with the same check as `read_capture`
   (`MarkerError` when it does not read there).
-- The translator (`gaps.picked_gaps`): a later step that picks faces of a left out step is left out too, with the gap
+- The translator (`gap_picks.picked_gaps`): a later step that picks faces of a left out step is left out too, with the gap
   in its `dependsOn`. A left out step that the read did not cover (not in `gaps` and not a tested step, for example
   one that only the final translation leaves out) counts as "may pick". Without `reach`, without `gaps`, or with
   `read: false`, every later step that picks geometry is left out ("It may pick faces of Extrude5, which is missing
@@ -1642,7 +1642,9 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   half angle. The translator writes it as a formula with `sin`, `cos` and `tan` in degrees (`cot` as `cos / sin`),
   checked over the size ranges like any formula (a value that would reach zero, or a divisor that would cross zero,
   marks its sizes; a formula past the length cap fixes them). A `Terms` value holds the sizes that a stuck value of the
-  motion names at their value now, so all values of one outline follow the same sizes. A sketch can
+  same item names at their value now, so all values of the step's outlines follow the same sizes; values of other
+  items still follow them. A stuck curve key (`<prefix>/c<loop>.<curve>/...`, such as a line's `turn`) holds nothing:
+  a line's direction can turn along a curve while both its ends follow. A sketch can
   have more than one solution, and Fusion may land on another one after the rows run before (a row that did not build
   often leaves it there). A different outline blames a size only in that size's own row (the row that changes it
   alone), when the row started on the captured outline and the outline came back once the parameters were put back
@@ -1810,8 +1812,9 @@ package notes say how many steps were left out and which ("2 steps were left out
 has `gaps` and `reach` in the record of each part.
 
 `sizes` holds `free` (recipe size names), `fixed` and `loose` (`{ name, reason }` by recipe size name; `loose` here is
-the doubts only, while the manifest `loose` also lists the cut sizes with their cut reason, which the app shows with
-its warning mark), `cut` (only when a range was cut: `{ name, reason, words, why, min, max, shared }` by recipe size
+the doubts only, and the manifest `loose` the same; the cut sizes go in the manifest `cuts` list, `{ name, reason }`,
+which the app shows as a quiet note, not a warning; `cuts` is an optional field of manifest version 1 and 2, so an
+older app ignores it), `cut` (only when a range was cut: `{ name, reason, words, why, min, max, shared }` by recipe size
 name, `min` and `max` the range left, `shared` true when several bodies of a parts file read the size), and `dropped` (`{ name, reason, used }` by Fusion name, plus `tried: true` for a size the probe set to
 other values that changed nothing: the ticked parameters that are not sizes, from
 `TranslateResult.dropped`; `used` is true when a step reads the parameter and the copy could not follow it). `loose` comes

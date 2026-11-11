@@ -661,7 +661,7 @@ the sizes on the form and compare the part with Fusion at the same values.
       Fusion over that range. Where a near value built and the range end did not, extra tries "(max, nearer)" split
       the gap (up to four per side), so the range stops close to the real limit. The result window has a "range cut"
       line for the size with the value and step where Fusion did not rebuild, `report.json` has `sizes.cut`, and
-      Paramability shows the same reason with a warning mark next to the size. A failure in a step of another
+      Paramability shows the same reason as a quiet info mark next to the size (the file's `cuts` list), not a warning. A failure in a step of another
       component leaves the range alone. Export two bodies that read that size in one file: both recipes have the same
       range and the reason says it holds in every part that uses the size. When no try built, the result window shows it as not followed, and the reason names the nearest values
       tried and the step that failed there; it never says "changes nothing". Note how many extra tries ran (at most 24)
@@ -710,6 +710,11 @@ the sizes on the form and compare the part with Fusion at the same values.
       each with a `when` that reads the count. In Paramability set the count lower and higher: each groove copy keeps
       its round and chamfer and no step picks an edge where no copy is. Note copies where Paramability leaves a round
       out (the step list says so).
+- [ ] **K22 A curved point holds only its own step.** A box with ribs whose corners a wall thickness moves along a
+      curve (marked "along a curve"), and a lid rail in another sketch that sits on the walls and follows the wall
+      thickness and the box width (a count times a cube width). Export, then in Paramability set the wall thickness
+      and the cube width to their ends: the rail still meets the wall and the part matches Fusion; only the ribs may
+      differ.
 
 ## 10. Emboss
 

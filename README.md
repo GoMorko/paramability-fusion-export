@@ -122,7 +122,7 @@ side where Fusion did not rebuild, the range on the form stops at the last value
 in the dialog or the failing step belongs to another component than the part; on a side the tries did not reach, the
 size says "it was followed between A and B". Each cut range has one line in the result window ("range cut" with the
 value and the step where Fusion did not rebuild), a reason in `report.json` (`sizes.cut`) and the same reason in the
-file, where Paramability shows it next to the size. In a file with several bodies a size that more than one body
+file's `cuts` list, where Paramability shows it as a quiet note next to the size, not as a warning. In a file with several bodies a size that more than one body
 reads has the narrowest cut over the bodies that were probed, and its reason says so. A size that did not rebuild at
 any value tried is not a size, and the reason names the values and the step Fusion stopped at. A taper that follows
 sizes gets the same kind of range: it stops before the taper reaches 45 degrees, the steepest Paramability builds.
@@ -142,6 +142,9 @@ check it: every try must follow from the others. To have enough tries, the add-i
 ends and together with each other size of the same sketch (about 2 tries per curved size, plus 2 per other size it
 shares a sketch with, inside the 64 tries). When no such formula fits, only that size is marked; the other sizes of
 the sketch still follow, and two more tries check them together. A size the readings still cannot follow is loose.
+In the step with the point that cannot follow, the formulas with sines or products leave that size out, so the
+outline keeps its shape; every other step still follows it. A line whose direction turns while both its ends follow
+leaves out nothing.
 
 These cases cannot be copied in a sketch even with the tries: a point that moves along a curve no such formula
 follows, an outline that changes shape (a line that only crosses the outline above some width, a sketch
@@ -226,7 +229,7 @@ unchanged.
 - Places are fixed: each body lands where Fusion shows it now. A size that moves a body in the assembly (a joint) is
   marked, as for one body. A component used several times is not expanded: one body is saved once per pick.
 - The result window lists the sizes once and has a short line per body.
-- The file is a package of kind `parts`: `manifest.json` (`parts`: name, step, optional recipe, note and loose sizes per
+- The file is a package of kind `parts`: `manifest.json` (`parts`: name, step, optional recipe, note, loose sizes and cut sizes per
   part; shared `parameters`, `fixed` and `notes`), `parts/NN/part.step`, `parts/NN/recipe.json` and one `report.json`
   with a record per body (its capture, steps, sizes and probe).
 

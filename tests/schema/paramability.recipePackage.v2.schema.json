@@ -153,6 +153,32 @@
           "maxItems": 64,
           "type": "array"
         },
+        "cuts": {
+          "description": "Sizes whose range the writer shortened to the values where the design still builds. They stay free sizes; the app marks each with its reason as a quiet note, not a warning. A size may be in `loose` and here.",
+          "items": {
+            "properties": {
+              "name": {
+                "description": "Name of a recipe size whose range the writer shortened to the values where the design still builds.",
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "reason": {
+                "description": "Short plain sentence on where the range stops and why. The app shows it on hover as a quiet note, not as a warning.",
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "reason"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
         "fixed": {
           "description": "Parameters of the source design that are baked into the shape and not offered as sizes, each with the reason. The app lists them for the person.",
           "items": {
@@ -553,6 +579,32 @@
                   "type": "object"
                 },
                 "maxItems": 16,
+                "type": "array"
+              },
+              "cuts": {
+                "description": "Sizes of this part whose range the writer shortened. A reason may name the part.",
+                "items": {
+                  "properties": {
+                    "name": {
+                      "description": "Name of a recipe size whose range the writer shortened to the values where the design still builds.",
+                      "maxLength": 64,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "reason": {
+                      "description": "Short plain sentence on where the range stops and why. The app shows it on hover as a quiet note, not as a warning.",
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "reason"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 64,
                 "type": "array"
               },
               "gaps": {

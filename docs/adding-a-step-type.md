@@ -220,9 +220,9 @@ added later (by hand or by an AI assistant connected to Paramability) from the g
 - Sketches by token where the step uses them (`sketches=` in the table entry), so the sizes behind those sketches are
   found.
 - Picks as records the capture already uses (`edges` lists with `token` or `points`, `faces` lists with `token`,
-  `point` or `loops`), so `gaps.pick_records` sees them: a later round or shell that picks faces of a gap is then left
+  `point` or `loops`), so `gap_picks.pick_records` sees them: a later round or shell that picks faces of a gap is then left
   out too, instead of landing on another edge of the copy. A face given only by a `face_point` is not a pick. A list of faces the step made, or of bodies, goes under one of the names
-  `gaps.pick_records` skips (the `_NOT_PICKS` list in `lib/translator/gaps.py`); add a new name there so it is not
+  `gap_picks.pick_records` skips (the `_NOT_PICKS` list in `lib/translator/gap_picks.py`); add a new name there so it is not
   taken for a pick.
 - Marked `foreign` records for inputs of another component, as for a copied step. A step with such an input is left
   out as a gap, with the reason of `ref_motion.why_foreign` when there is one.

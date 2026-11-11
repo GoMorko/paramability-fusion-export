@@ -176,6 +176,30 @@ class GapsManifestTest(unittest.TestCase):
         self.assertTrue(mf.validate_manifest({**manifest, "version": 1}))
 
 
+class CutsManifestTest(unittest.TestCase):
+    CUTS = [{"name": "slope", "reason": "Slope: the range stops at 0.5, since Fusion did not rebuild the design at 5 (Chamfer3)."}]
+
+    def test_a_recipe_lists_its_cut_sizes_apart_from_the_loose_ones_and_follows_the_schema_copy(self):
+        manifest = mf.build_recipe_manifest("Part", "w", notes=["1 step copied."], cuts=self.CUTS)
+        self.assertEqual((manifest["version"], manifest["cuts"], "loose" in manifest), (1, self.CUTS, False))
+        self.assertEqual(mf.validate_manifest(manifest), [])
+        self.assertEqual(validate(manifest, load_schema(PACKAGE_SCHEMA)), [])
+        self.assertEqual(validate({**manifest, "version": 2}, load_schema(PACKAGE_SCHEMA_V2)), [])
+        self.assertNotIn("cuts", mf.build_recipe_manifest("Part", "w", notes=["1 step copied."]))
+
+    def test_a_part_lists_its_cut_sizes(self):
+        parts = [{"name": "Tray", "step": mf.part_step_path(1), "recipe": mf.part_recipe_path(1), "cuts": self.CUTS}]
+        manifest = mf.build_parts_manifest("Planter", "w", parts, notes=["1 part."])
+        self.assertEqual(manifest["parts"][0]["cuts"], self.CUTS)
+        self.assertEqual(mf.validate_manifest(manifest), [])
+        self.assertEqual(validate({**manifest, "version": 2}, load_schema(PACKAGE_SCHEMA_V2)), [])
+
+    def test_a_long_cut_reason_is_refused_by_both(self):
+        manifest = mf.build_recipe_manifest("Part", "w", cuts=[{"name": "slope", "reason": "x" * 201}])
+        self.assertTrue(mf.validate_manifest(manifest))
+        self.assertTrue(validate({**manifest, "version": 2}, load_schema(PACKAGE_SCHEMA_V2)))
+
+
 class SchemaCopyTest(unittest.TestCase):
     """The writers' manifests fit the app's schema copy, so a cap that drifts from the app is noticed here."""
 

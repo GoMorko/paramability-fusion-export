@@ -71,12 +71,13 @@ def build_step_only_manifest(name, writer, up_axis="z", notes=None, parameters=N
 
 
 def build_recipe_manifest(name, writer, up_axis="z", notes=None, checks=None, fixed=None, parameters=None,
-                          loose=None, gaps=None):
+                          loose=None, gaps=None, cuts=None):
     """A translated part: the STEP files plus recipe.json.
 
     checks: [{'values': {size name: number}, 'step': 'checks/01.step'}], one size changed per check.
     fixed: [{'name', 'reason'}] for Fusion parameters that stay fixed numbers in the shape. Left out when empty.
     loose: [{'name', 'reason'}] for recipe sizes that stay free but may not follow every step. Left out when empty.
+    cuts: [{'name', 'reason'}] for recipe sizes whose range was shortened to the values that build. Left out when empty.
     parameters: the design's user parameter entries. Left out when empty.
     gaps: the path of the gaps file when steps were left out of the recipe. The manifest is then version 2.
     """
@@ -96,6 +97,8 @@ def build_recipe_manifest(name, writer, up_axis="z", notes=None, checks=None, fi
         manifest["fixed"] = [dict(f) for f in fixed]
     if loose:
         manifest["loose"] = [dict(f) for f in loose]
+    if cuts:
+        manifest["cuts"] = [dict(f) for f in cuts]
     if gaps:
         manifest["gaps"] = gaps
     _add_parameters(manifest, parameters)
@@ -105,10 +108,11 @@ def build_recipe_manifest(name, writer, up_axis="z", notes=None, checks=None, fi
 def build_parts_manifest(name, writer, parts, up_axis="z", notes=None, fixed=None, parameters=None):
     """Several bodies of one design in one file: shared sizes, one object per part.
 
-    parts: [{'name', 'step', 'recipe', 'gaps', 'note', 'loose', 'checks'}] in order. `step` is a path in the zip. A
+    parts: [{'name', 'step', 'recipe', 'gaps', 'note', 'loose', 'cuts', 'checks'}] in order. `step` is a path in the zip. A
       part without `recipe` is a fixed shape (`note` says why). `gaps` is the path of the gaps file of a recipe that
       leaves steps out; the manifest is then version 2. `loose` ([{'name', 'reason'}]) lists the sizes of that
-      part's recipe that may not follow every step. `note` and `checks` are left out when empty.
+      part's recipe that may not follow every step; `cuts` ([{'name', 'reason'}]) lists the ones whose range was
+      shortened. `note`, `cuts` and `checks` are left out when empty.
     fixed: [{'name', 'reason'}] for sizes that stay fixed numbers in every part. Left out when empty.
     parameters: the design's user parameter entries, shared by all parts. Left out when empty.
     """
@@ -123,6 +127,8 @@ def build_parts_manifest(name, writer, parts, up_axis="z", notes=None, fixed=Non
             entry["note"] = part["note"]
         if part.get("loose"):
             entry["loose"] = [dict(f) for f in part["loose"]]
+        if part.get("cuts"):
+            entry["cuts"] = [dict(f) for f in part["cuts"]]
         if part.get("checks"):
             entry["checks"] = [dict(c) for c in part["checks"]]
         out_parts.append(entry)
@@ -251,6 +257,7 @@ def validate_manifest(m):
                 check_path(c.get("step") if isinstance(c, dict) else None, label, step_suffixes)
         _validate_fixed(m.get("fixed"), problems)
         _validate_fixed(m.get("loose"), problems, "loose")
+        _validate_fixed(m.get("cuts"), problems, "cuts")
         if m.get("gaps") is not None:
             check_path(m["gaps"], "gaps", (".json",))
     elif kind == "parts":
@@ -317,6 +324,7 @@ def _validate_parts(m, problems, check_path, step_suffixes):
         if note is not None and (not isinstance(note, str) or len(note) > MAX_PART_NOTE):
             problems.append(f"{label}: note must be text of at most {MAX_PART_NOTE} characters.")
         _validate_fixed(part.get("loose"), problems, f"{label} loose")
+        _validate_fixed(part.get("cuts"), problems, f"{label} cuts")
         if part.get("checks") is not None:
             checks += _validate_checks(part["checks"], label, problems, check_path, step_suffixes, MAX_PART_CHECKS)
     if checks > MAX_PARTS_CHECKS:
@@ -324,7 +332,7 @@ def _validate_parts(m, problems, check_path, step_suffixes):
 
 
 def _validate_fixed(fixed, problems, key="fixed"):
-    """The `fixed` or `loose` list: { name, reason } entries."""
+    """The `fixed`, `loose` or `cuts` list: { name, reason } entries."""
     if fixed is None:
         return
     if not isinstance(fixed, list) or len(fixed) > MAX_FIXED:

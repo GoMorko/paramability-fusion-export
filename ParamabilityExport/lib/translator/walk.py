@@ -8,7 +8,7 @@ still reads right, is left out as a gap (gaps.py). A gap is a step type with no 
 that reaches into another component, and a step that picks faces a gap made. What a left out item would have recorded
 (doubts, notes) is dropped with it. Anything that leaves the body unknown still stops the copy.
 """
-from . import borrowed, gaps, notes as wording, ref_motion, step_kinds
+from . import borrowed, gap_picks, gaps, notes as wording, ref_motion, step_kinds
 from .capture import outside_component, renamed_target, same_body
 from .result import Refusal, StepResult, make_verdict
 from .sizes import construction_fixes
@@ -139,7 +139,7 @@ def run_handler(handler, item, ctx):
 
 def _gap_ids(ctx, item):
     """Ids of the gaps whose faces `item` picks, or may pick."""
-    return [gap.id for gap in gaps.picked_gaps(ctx, item)[0]]
+    return [gap.id for gap in gap_picks.picked_gaps(ctx, item)[0]]
 
 
 def walk_items(ctx, result):
@@ -244,7 +244,7 @@ def walk_items(ctx, result):
                 return False
             made_in_component = True
             continue
-        picked, sure = gaps.picked_gaps(ctx, item)
+        picked, sure = gap_picks.picked_gaps(ctx, item)
         with ctx.recording() as brought:
             item = ctx.current = ref_motion.bring_in(borrowed.bring_in(item, ctx))
         if is_foreign(_data(item)):
