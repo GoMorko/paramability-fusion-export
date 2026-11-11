@@ -16,14 +16,14 @@ the outline's direction, a twist along a closed path that is not whole turns, an
 refused.
 
 Fusion does not document how it measures the sweep taper (an offset of the outline or a scale) or which way a twist
-turns. Until a hand test settles both, every written twist or taper marks the sizes behind it and the outline, and
-adds a note asking the person to check the shape.
+turns, and no export has confirmed either (`TAPER_MEANING_CONFIRMED`, `TWIST_SIGN_CONFIRMED`). Every written twist or
+taper marks the sizes behind it and the outline, and adds a note asking the person to check the shape.
 """
 import copy
 import math
 
 from . import borrowed, extrude, loops, paths, placement, revolve, sketch_motion, sweep_reach, sweep_taper, values, vec
-from .extrude import COMBINE
+from .extrude import COMBINE, MAX_TAPER_DEG, keep_angle_within
 from .footprint import is_full, polyline
 from .result import Refusal, StepResult
 from .sizes import construction_sizes, sketch_sizes
@@ -34,13 +34,12 @@ VOLUME_RELATIVE_TOL = 0.01
 VOLUME_ABSOLUTE_TOL = 1e-3
 CENTROID_ON_PATH_TOL = 0.01   # the path runs through the outline's centroid when it starts this close to it (mm)
 WHOLE_TURN_TOL = 1e-6 / 360.0  # a twist along a closed path is whole turns within this share of a turn, as in the app
-MAX_TAPER_DEG = 45.0          # the recipe takes a taper under this either way
 MAX_TWIST_DEG = 3600.0        # the recipe takes a twist up to this either way
 MAX_TAPER_STATIONS = 65       # the recipe builds a taper through at most this many places along the path
-TAPER_MEANING_CONFIRMED = False   # set once a hand test shows how Fusion measures the sweep taper
-TWIST_SIGN_CONFIRMED = False      # set once a hand test shows which way Fusion's twist turns
+TAPER_MEANING_CONFIRMED = False   # true once an export shows how Fusion measures the sweep taper
+TWIST_SIGN_CONFIRMED = False      # true once an export shows which way Fusion's twist turns
 # Signs between Fusion's angles and the recipe's: Fusion's extrude taper widens the walls where the recipe narrows
-# them, and the sweep is taken the same way. A twist turns the same way in both. Not yet confirmed on a real export.
+# them, and the sweep is taken the same way. A twist turns the same way in both. Fusion does not document this.
 TAPER_SIGN = -1
 TWIST_SIGN = 1
 
@@ -53,6 +52,7 @@ TWIST_AND_TAPER = "Sweeps that both twist and taper are not copied yet."
 TAPER_CURVES = "Tapered sweeps along curves are not copied yet."
 TAPER_STATIONS = "Tapered sweeps along a path with so many parts are not copied."
 TWIST_CLOSED = "The twist of this sweep along a closed path is not whole turns, which is not copied."
+TAPER_CLOSES = "The taper of this sweep would close part of its outline, which is not copied."
 TAPER_STEEP = "The taper of this sweep is too steep to copy."
 TWIST_LONG = "The twist of this sweep is more than ten turns, which is not copied."
 SCALED_OUTLINE = "This sweep scales its outline along the path, which is not copied yet."
@@ -181,7 +181,12 @@ def _angle(ctx, item, path, fusion_deg, sign, follows=True):
         return None
     if not follows:
         return Quantity(sign * fusion_deg)
-    return values.quantity(ctx, item, path, sign * fusion_deg, dim="angle", sign=sign)
+    q = values.quantity(ctx, item, path, sign * fusion_deg, dim="angle", sign=sign)
+    if q.sized:
+        limit, effect = ((MAX_TAPER_DEG, "lean its walls %d degrees or more" % MAX_TAPER_DEG) if path == "taper_deg"
+                         else (MAX_TWIST_DEG, "twist more than %d degrees" % MAX_TWIST_DEG))
+        keep_angle_within(ctx, item, q, limit, effect)
+    return q
 
 
 # ---- the volume ------------------------------------------------------------------------------------------------
@@ -229,16 +234,28 @@ def _expected_volume(profile, area, found, twisted):
     return None
 
 
+def _rise(profile, found):
+    """How far the path moves along the outline's normal, taken in the direction the path leaves it."""
+    normal = vec.unit(profile["frame"]["z"])
+    facing = normal if vec.dot(normal, found.direction) >= 0 else vec.scale(normal, -1.0)
+    return vec.dot(vec.sub(found.end, found.start), facing)
+
+
 def _volume_refusal(item, data, combine, profile, found):
     """A Refusal when a new body does not have the volume the outline and the path give; None when it does, or when
-    it cannot be told. A taper or an outline kept in one direction changes the volume, so those are not told here."""
+    it cannot be told. A taper changes the volume, so it is not told here. An outline kept in one direction moves along
+    its normal, so the volume is its area times the rise of the path along that normal."""
     areas = data.get("areas")
-    if abs(data["taper_deg"]) > ZERO_TOL or data["orientation"] == "parallel" or combine != "new":
+    parallel = data["orientation"] == "parallel"
+    if abs(data["taper_deg"]) > ZERO_TOL or combine != "new":
         return None
     if not isinstance(areas, list) or len(areas) != 1 or not _number(areas[0]) or areas[0] <= 0:
         return None
     made = _made_volume(item, data)
-    expected = _expected_volume(profile, areas[0], found, abs(data["twist_deg"]) > ZERO_TOL)
+    if parallel:
+        expected = areas[0] * _rise(profile, found)
+    else:
+        expected = _expected_volume(profile, areas[0], found, abs(data["twist_deg"]) > ZERO_TOL)
     if made is None or expected is None:
         return None
     if abs(made - expected) > VOLUME_RELATIVE_TOL * expected + VOLUME_ABSOLUTE_TOL:
@@ -406,18 +423,24 @@ def _taper_path_refusal(found):
     return Refusal(TAPER_STATIONS) if len(parts) + 1 > MAX_TAPER_STATIONS else None
 
 
-def _taper_lean(item, profile, data, combine, found, slope):
-    """The taper's meaning read from the volume of a new body along a straight path: `OFFSET`, `FLIPPED` (it leans the
-    other way), `SCALED`, or None when it cannot be told."""
-    areas, made = data.get("areas"), _made_volume(item, data)
-    if found.kind != "line" or combine != "new" or made is None or not isinstance(areas, list) or len(areas) != 1:
-        return None
+def _outline_shapes(profile):
+    """The loops of the outline as `(2D points, outer)`, or None when one does not close."""
     shapes = []
     for loop in profile.get("loops") or []:
         points = _loop_polygon(loop.get("curves") or [])
         if not points or len(points) < 3:
             return None
         shapes.append((points, bool(loop.get("outer"))))
+    return shapes
+
+
+def _taper_lean(item, shapes, data, combine, found, slope):
+    """The taper's meaning read from the volume of a new body along a straight path: `OFFSET`, `FLIPPED` (it leans the
+    other way), `SCALED`, `NO_FIT` (no model gives the volume), or None when it cannot be told."""
+    areas, made = data.get("areas"), _made_volume(item, data)
+    if (shapes is None or found.kind != "line" or combine != "new" or made is None or not isinstance(areas, list)
+            or len(areas) != 1):
+        return None
     return sweep_taper.meaning(shapes, found.length, made, slope)
 
 
@@ -458,11 +481,17 @@ def handle(item, ctx):
         refusal = _taper_path_refusal(found)
         if refusal is not None:
             return refusal
-        lean = _taper_lean(item, profile, data, combine, found, math.tan(math.radians(TAPER_SIGN * taper)))
+        shapes = _outline_shapes(profile)
+        slope = math.tan(math.radians(TAPER_SIGN * taper))
+        lean = _taper_lean(item, shapes, data, combine, found, slope)
         if lean == sweep_taper.SCALED:
             return Refusal(SCALED_OUTLINE)
+        if lean == sweep_taper.NO_FIT:
+            return Refusal(NOT_MATCHING)
         if lean == sweep_taper.FLIPPED:
             taper_sign = -TAPER_SIGN
+        elif lean is None and shapes is not None and sweep_taper.closes(shapes, found.length, slope):
+            return Refusal(TAPER_CLOSES)
     refusal = _volume_refusal(item, data, combine, profile, found)
     if refusal is not None:
         return refusal

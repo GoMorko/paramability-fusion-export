@@ -316,6 +316,8 @@ def _plan(path, profile_frame, profile_points, options):
         return Refusal(UNREADABLE)
     ring = _circle_of(curves)
     if ring is not None:
+        if options.twisted and curves[0].get("opposed") is True:
+            ring = (ring[0], ring[1], vec.scale(ring[2], -1.0))
         found_ring = _circle_plan(ring, curves, profile_frame, profile_points)
         if isinstance(found_ring, Refusal) or not (options.twisted or options.tapered or options.fixed):
             return found_ring
@@ -327,6 +329,8 @@ def _plan(path, profile_frame, profile_points, options):
         return Refusal(NOT_ONE_CHAIN)
     ordered, closed = found
     if closed:
+        if options.twisted:
+            ordered = chain([_flip(c) if c.get("opposed") is True else c for c in curves])[0]
         return _closed_plan(path, ordered, profile_frame, profile_points, options)
     if path.get("closed"):
         return Refusal(CLOSED)
@@ -490,16 +494,28 @@ def _two_points(start, end):
     return {"kind": "corners", "points": [_round(start), _round(end)], "bendRadius": LINE_BEND_RADIUS}
 
 
+def _directions(curve):
+    """Unit directions of travel along a curve: the tangent at the ends and at every arc sample, and between the samples
+    of a free curve (its end tangents replace the first and last)."""
+    kind = curve["kind"]
+    if kind == "arc":
+        centre, _, normal, _ = _arc_of(curve)
+        return [vec.unit(vec.cross(normal, vec.sub(p, centre))) for p in _polyline(curve)]
+    first, last = _tangents(curve)
+    if kind == "line":
+        return [first, last]
+    points = _polyline(curve)
+    steps = [vec.unit(vec.sub(b, a)) for a, b in zip(points, points[1:]) if vec.length(vec.sub(b, a)) > 1e-12]
+    return [first] + steps + [last]
+
+
 def _rise_refusal(ordered, normal):
     """A Refusal when the path stops moving along the outline's normal (facing the way the path leaves), which an
-    outline kept in one direction needs it to do at every point."""
-    points = [p for c in ordered for p in _polyline(c)]
+    outline kept in one direction needs it to do at every point. The tangent is tested, as the app does."""
     first = _tangents(ordered[0])[0]
     facing = normal if vec.dot(normal, first) >= 0 else vec.scale(normal, -1.0)
-    for a, b in zip(points, points[1:]):
-        step = vec.sub(b, a)
-        size = vec.length(step)
-        if size > 1e-12 and vec.dot(step, facing) / size < MIN_RISE:
+    for curve in ordered:
+        if any(vec.dot(d, facing) < MIN_RISE for d in _directions(curve)):
             return Refusal(TURNS_BACK)
     return None
 

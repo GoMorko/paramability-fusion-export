@@ -872,12 +872,13 @@ surprises.
       shape"; the sizes behind the angle and the outline are marked. Note `taper_deg` and `twist_deg` in degrees with
       the dialog's sign; whether the far end of the rectangle is offset (both sides shrink by the same mm) or scaled
       (both shrink by the same share, then the taper is left out as "scales its outline"); which way the taper leans
-      for a positive angle; and which way the twist turns, seen along the path. Then set `TAPER_MEANING_CONFIRMED`,
+      for a positive angle; and which way the twist turns, seen along the path. A taper steep enough to close the
+      rectangle (more than 5.7 degrees on 20 mm) is left out. Then set `TAPER_MEANING_CONFIRMED`,
       `TWIST_SIGN_CONFIRMED` and the two signs in `lib/translator/sweep.py` and drop the note.
 - [ ] **SW8 Parallel orientation.** The SW2 path with orientation parallel is left out ("The outline keeps one
       direction along a path that turns back past its plane"). Along a path that keeps moving away from the outline's
       plane (one arc of 60 degrees) it is copied as a `sweep` step with `orientation: "fixed"`, and the part matches.
-      On a straight path it is copied as an extrude. A twist or taper together with parallel is left out, and so is
+      On a straight path it is copied as an extrude. An arc turning 88 degrees is left out (the path must keep rising). A twist or taper together with parallel is left out, and so is
       parallel along a closed path ("along a closed path").
 - [ ] **SW9 Guide rail.** A sweep with a guide rail is left out ("Sweeps with a guide rail"). `rail` holds the rail
       curves and `scaling` holds the dialog's choice. If a build cannot read the rail, `rail` is `{ "kind": "unread" }`
@@ -909,8 +910,9 @@ surprises.
       the recipe.
 - [ ] **SW18 Twist along a closed path.** The SW17 path with a bar centred on it and a twist of 360 degrees. Copied
       with the note; whether the end of the part meets its start, and the handedness of the twist, are the same as
-      in Fusion. A twist of 90 degrees is left out ("not whole turns"). A taper on a closed path is left out
-      ("Tapered sweeps along a closed path").
+      in Fusion. Draw the same loop from the other end (or flip its direction) and repeat: the twist must turn the same
+      way as Fusion's, so the copy mirrors the first one. A twist of 90 degrees is left out ("not whole turns"). A taper
+      on a closed path is left out ("Tapered sweeps along a closed path").
 - [ ] **SW14 Round on a sweep end.** After SW2, add a fillet on an edge of the end cap. The fillet is copied as
       measured, and every size written before it is marked "may give unexpected results", since a sweep step has no
       faces that follow sizes yet. After SW1 (the extrude form) the fillet follows sizes like a round on an extrude.

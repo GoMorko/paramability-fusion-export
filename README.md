@@ -336,14 +336,18 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   plane becomes a sweep step along a closed flat path (version 16), cut open where the path meets the outline's plane;
   a full circle stays a revolve unless a twist needs the sweep step. A twist along a closed path must be whole turns
   and is copied as a number, not as a size. These sweeps are left out of the copy: a twist together
-  with a taper or parallel orientation, a taper along spline curves or along a scaled outline, a taper of 45 degrees
-  or more, a twist over 3600 degrees, a guide rail, parallel orientation on a path that turns back, several outlines at once, an outline that is a face of the part, a path of
+  with a taper or parallel orientation, a taper along spline curves or along a scaled outline, a taper that would close part of the outline
+  or a hole, a taper of 45 degrees
+  or more, a twist over 3600 degrees, a guide rail, parallel orientation on a path that turns back (the path's direction
+  must keep a rise of 0.05 along the outline's normal at every point, ends and arc points included), several outlines at once, an outline that is a face of the part, a path of
   sketch curves mixed with edges, a closed path that bends in 3D, that is cut at a sharp corner, or that tapers or keeps
   the outline in one direction, a twist along a closed path that is not whole turns, a sharp corner in the path, a path that
   crosses itself or bends tighter than the outline allows, a path in 3D with splines or arcs that are not tangent, an
   outline in the middle of the path or not square to it, a sweep along only part of the path, a surface sweep and a
-  sweep that makes a new component. A new body must have the volume the outline and path give, or the sweep is left
-  out.
+  sweep that makes a new component. A new body must have the volume the outline and path give (a parallel outline: its area times the rise of the
+  path), or the sweep is left out; so is a tapered one whose volume fits neither an offset nor a scaled outline. A
+  twist or taper that follows a size marks the size past the values where it would reach the limits. A twist along a
+  closed path turns as Fusion walks the path.
 - A loft is copied when it joins two closed sketch outlines with free ends and no rails or centre line. It is written
   with straight faces between the outlines. Both outlines need the same number of holes, and their planes must not
   cross. Outlines of different shapes are copied with a note, since Fusion may pair the corners differently. These
