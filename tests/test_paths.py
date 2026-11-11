@@ -227,6 +227,47 @@ class OrderTest(unittest.TestCase):
         self.assertTrue(close(flipped["mid"], [5 * S2, 5 - 5 * S2, 0]))
 
 
+class OptionsTest(unittest.TestCase):
+    """Paths asked for a sweep step (twist, taper, parallel): a line and an arc get a recipe path too."""
+
+    def planned(self, curves, **options):
+        return paths.plan(path_of(curves), FRAME, SQUARE, paths.PathOptions(**options))
+
+    def test_a_line_becomes_a_corners_path_of_its_two_ends(self):
+        found = self.planned([line((0, 0, 0), (30, 0, 0))], as_step=True)
+        self.assertEqual((found.kind, found.recipe["points"]), ("line", [[0, 0, 0], [30, 0, 0]]))
+        self.assertIsNone(self.planned([line((0, 0, 0), (30, 0, 0))]).recipe)
+
+    def test_an_arc_becomes_a_flat_path(self):
+        found = self.planned([quarter([0, 5, 0], [0, -1, 0], [1, 0, 0], 5)], as_step=True)
+        self.assertEqual((found.kind, [s["kind"] for s in found.recipe["segments"]]), ("flat", ["arc"]))
+
+    def test_a_circle_stays_a_closed_path_for_any_option(self):
+        ring = {"kind": "circle", "center": [0, 5, 0], "normal": [0, 0, 1], "radius": 5}
+        for option in ("as_step", "twisted", "fixed"):
+            with self.subTest(option):
+                self.assertEqual(self.planned([ring], **{option: True}).reason, paths.CLOSED)
+
+    def test_a_kept_direction_needs_the_path_to_keep_moving_away_from_the_outline_plane(self):
+        self.assertEqual(self.planned(pipe_with_bend(), fixed=True, as_step=True).reason, paths.TURNS_BACK)
+        eased = [line((0, 0, 0), (10, 0, 0)), quarter([10, 10, 0], [0, -1, 0], [0.5, -S2 * 1.2247, 0], 10)]
+        self.assertIsNone(getattr(self.planned(eased, fixed=True, as_step=True), "reason", None))
+
+    def test_a_kept_direction_skips_the_bend_checks(self):
+        eased = [line((0, 0, 0), (10, 0, 0)), quarter([10, 10, 0], [0, -1, 0], [0.5, -S2 * 1.2247, 0], 10)]
+        wide = [[0, y, 0] for y in (-14, 14)]
+        self.assertIsInstance(paths.plan(path_of(eased), FRAME, wide, paths.PathOptions(as_step=True)), Refusal)
+        kept = paths.plan(path_of(eased), FRAME, wide, paths.PathOptions(as_step=True, fixed=True))
+        self.assertNotIsInstance(kept, Refusal)
+
+    def test_a_twist_counts_the_outline_across_the_path_plane_at_a_bend(self):
+        tall = [[0, 0, z] for z in (-9, 9)]
+        flat_only = paths.plan(path_of(pipe_with_bend()), FRAME, tall, paths.PathOptions())
+        self.assertNotIsInstance(flat_only, Refusal)
+        twisted = paths.plan(path_of(pipe_with_bend()), FRAME, tall, paths.PathOptions(as_step=True, twisted=True))
+        self.assertIsInstance(twisted, Refusal)
+
+
 class RefusalTest(unittest.TestCase):
     def refused(self, curves, reason, **kwargs):
         found = plan(curves, **kwargs)

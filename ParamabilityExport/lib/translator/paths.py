@@ -9,10 +9,12 @@ is swept, and returns a `PathPlan` or a `Refusal`. It
 - writes the flat and corners forms the recipe's sweep step takes (`PathPlan.recipe`), with free curves fitted by
   `spline_fit`;
 - checks what the app refuses to build: a closed path, a path that crosses itself, a sharp corner, an outline that
-  reaches past the tightest bend, a path that does not start square on the outline.
+  reaches past the tightest bend, a path that does not start square on the outline, and for an outline kept in one
+  direction a path that turns back past the outline's plane.
 
 A line, an arc and a circle carry the numbers that an extrude or a revolve needs instead (`direction`, `axis`,
-`angle_deg`); they have no `recipe` path. Coordinates stay in the capture's frame: a flat path is written as its own
+`angle_deg`); they have no `recipe` path unless `PathOptions.as_step` asks for one (a line then becomes a two point
+corners path, an arc a flat path). Coordinates stay in the capture's frame: a flat path is written as its own
 placement and 2D points, a corners path as 3D points that the caller moves into the recipe frame.
 """
 import math
@@ -42,7 +44,10 @@ OVERLAP_MAX_CORNER_DEG = 160.0
 OVERLAP_CLEAR_SHARE = 0.95   # parts closer than this share of twice the reach overlap
 CURVATURE_SAMPLES = 129   # readings along a fitted spline when its tightest bend is looked for
 REACH_SHARE = 1 - 1e-6    # an outline reaching this share of a bend's radius reaches its centre
+MIN_RISE = 0.05           # an outline kept in one direction needs the path to move along its normal at least this much
+LINE_BEND_RADIUS = 1.0    # the (unused) bend radius written for a corners path of two points
 
+TURNS_BACK = "The outline keeps one direction along a path that turns back past its plane, which cannot be built."
 UNREADABLE = "A curve of the path of this sweep could not be read closely enough to copy."
 UNKNOWN_CURVE = "The path of this sweep uses a kind of curve that is not copied yet."
 NOT_ONE_CHAIN = "The curves of the path of this sweep do not join end to end into one line."
@@ -58,6 +63,23 @@ OVERLAP = ("Two parts of the path pass %.2f mm apart, but the outline reaches %.
            "so the sweep would run into itself.")
 TOO_COMPLEX = "The path of this sweep has a curve that is too complex to copy closely enough."
 NOT_SKETCH = "The path of this sweep is not made of sketch lines or edges."
+
+
+@dataclass
+class PathOptions:
+    """What the sweep's options ask of the path.
+
+    as_step: a line or an arc is written as a `sweep` step path, not left to an extrude or a revolve.
+    twisted: the outline turns about the path, so all of its reach counts at a bend.
+    growth: the most the outline's walls can lean out, per mm of path (tangent of the taper angle times the outline's
+      corner factor; 0 without a taper).
+    fixed: the outline keeps its direction; the path must keep moving along its normal (no bend or overlap checks).
+    """
+
+    as_step: bool = False
+    twisted: bool = False
+    growth: float = 0.0
+    fixed: bool = False
 
 
 @dataclass
@@ -254,19 +276,19 @@ def turned_round(curves):
 
 # ---- the plan ---------------------------------------------------------------------------------------------------
 
-def plan(path, profile_frame, profile_points):
+def plan(path, profile_frame, profile_points, options=None):
     """The `PathPlan` of a capture path record, or a `Refusal`.
 
     `profile_frame` is the outline's frame (`origin` and `z`, the plane it lies in); `profile_points` are points of
     the outline in the same coordinates (3D), used to measure how far the outline reaches from the path.
     """
     try:
-        return _plan(path, profile_frame, profile_points)
+        return _plan(path, profile_frame, profile_points, options or PathOptions())
     except ValueError:
         return Refusal(UNREADABLE)
 
 
-def _plan(path, profile_frame, profile_points):
+def _plan(path, profile_frame, profile_points, options):
     if path.get("kind") == "other":
         return Refusal(NOT_SKETCH)
     curves = path.get("curves")
@@ -278,7 +300,9 @@ def _plan(path, profile_frame, profile_points):
         return Refusal(UNREADABLE)
     ring = _circle_of(curves)
     if ring is not None:
-        return _circle_plan(ring, curves, profile_frame, profile_points)
+        found_ring = _circle_plan(ring, curves, profile_frame, profile_points)
+        closed_option = options.as_step or options.twisted or options.fixed
+        return Refusal(CLOSED) if closed_option and not isinstance(found_ring, Refusal) else found_ring
     if any(c["kind"] == "circle" for c in curves):
         return Refusal(NOT_ONE_CHAIN)
     found = chain(curves)
@@ -301,11 +325,16 @@ def _plan(path, profile_frame, profile_points):
     base = dict(curves=ordered, start=[round9(x) for x in start], end=[round9(x) for x in end],
                 direction=[round9(x) for x in direction], length=round9(sum(_length(c) for c in ordered)),
                 reversed=reversed_)
+    if options.fixed and kind != "line":
+        refusal = _rise_refusal(ordered, normal)
+        if refusal:
+            return refusal
     if kind == "line":
-        return PathPlan(kind="line", **base)
-    if kind == "arc":
+        recipe = _two_points(start, end) if options.as_step else None
+        return PathPlan(kind="line", recipe=recipe, **base)
+    if kind == "arc" and not options.as_step:
         return _arc_plan(base, ordered[0], profile_points)
-    return _chain_plan(base, ordered, path, profile_points)
+    return _chain_plan(base, ordered, path, profile_points, options)
 
 
 def _off_square(direction, normal):
@@ -437,17 +466,36 @@ def _round(p):
     return [round9(x) for x in p]
 
 
+def _two_points(start, end):
+    """A straight path as the corners path of its two ends."""
+    return {"kind": "corners", "points": [_round(start), _round(end)], "bendRadius": LINE_BEND_RADIUS}
+
+
+def _rise_refusal(ordered, normal):
+    """A Refusal when the path stops moving along the outline's normal (facing the way the path leaves), which an
+    outline kept in one direction needs it to do at every point."""
+    points = [p for c in ordered for p in _polyline(c)]
+    first = _tangents(ordered[0])[0]
+    facing = normal if vec.dot(normal, first) >= 0 else vec.scale(normal, -1.0)
+    for a, b in zip(points, points[1:]):
+        step = vec.sub(b, a)
+        size = vec.length(step)
+        if size > 1e-12 and vec.dot(step, facing) / size < MIN_RISE:
+            return Refusal(TURNS_BACK)
+    return None
+
+
 # ---- chains of several curves ----------------------------------------------------------------------------------
 
-def _chain_plan(base, ordered, path, profile_points):
+def _chain_plan(base, ordered, path, profile_points, options):
     junctions = [(_turn_deg(_tangents(a)[1], _tangents(b)[0]), a["kind"] == b["kind"] == "line")
                  for a, b in zip(ordered, ordered[1:])]
     frame = _flat_frame(path.get("frame"), ordered)
     if frame is None:
-        return _corners_plan(base, ordered, junctions, profile_points)
+        return _corners_plan(base, ordered, junctions, profile_points, options)
     if any(turn > (STRAIGHT_DEG if both_lines else SMOOTH_JOIN_DEG) for turn, both_lines in junctions):
         return Refusal(SHARP_CORNER)
-    return _flat_plan(base, ordered, frame, profile_points)
+    return _flat_plan(base, ordered, frame, profile_points, options)
 
 
 def _flat_frame(given, ordered):
@@ -478,7 +526,7 @@ def _flat_frame(given, ordered):
     return {"origin": list(a), "x": x, "y": vec.cross(z, x), "z": z}
 
 
-def _flat_plan(base, ordered, frame, profile_points):
+def _flat_plan(base, ordered, frame, profile_points, options):
     def local(p):
         d = vec.sub(p, frame["origin"])
         return [vec.dot(d, frame["x"]), vec.dot(d, frame["y"])]
@@ -503,13 +551,17 @@ def _flat_plan(base, ordered, frame, profile_points):
         return Refusal(TOO_MANY)
     if _self_touch([p for c in ordered for p in _polyline(c)]):
         return Refusal(CROSSES)
-    refusal = _reach_refusal(profile_points, ordered[0]["start"], frame["z"], tightest)
-    if refusal:
-        return refusal
-    refusal = _overlap_refusal([p for c in ordered for p in _polyline(c)],
-                               _reach(profile_points, ordered[0]["start"], frame["z"]))
-    if refusal:
-        return refusal
+    if not options.fixed:
+        start = ordered[0]["start"]
+        across = [0.0, 0.0, 0.0] if options.twisted else frame["z"]
+        extra = options.growth * base["length"]
+        refusal = _reach_refusal(profile_points, start, across, tightest, extra)
+        if refusal:
+            return refusal
+        refusal = _overlap_refusal([p for c in ordered for p in _polyline(c)],
+                                   _reach(profile_points, start, across) + extra)
+        if refusal:
+            return refusal
     recipe = {
         "kind": "flat",
         "on": {"origin": _round(frame["origin"]), "normal": _round(frame["z"]), "xDir": _round(frame["x"])},
@@ -558,11 +610,12 @@ def _reach(profile_points, start, normal):
     return reach
 
 
-def _reach_refusal(profile_points, start, normal, radius):
-    """A Refusal when the outline reaches across the path's plane as far as the tightest bend's radius."""
+def _reach_refusal(profile_points, start, normal, radius, extra=0.0):
+    """A Refusal when the outline (grown by `extra`) reaches across the path's plane as far as the tightest bend's
+    radius."""
     if not profile_points or radius == math.inf:
         return None
-    reach = _reach(profile_points, start, normal)
+    reach = _reach(profile_points, start, normal) + extra
     if reach >= radius * REACH_SHARE:
         return Refusal("The outline reaches %.2f mm from the path, but the path bends in a radius of %.2f mm."
                        % (reach, radius))
@@ -571,7 +624,7 @@ def _reach_refusal(profile_points, start, normal, radius):
 
 # ---- 3D chains of lines and tangent arcs -----------------------------------------------------------------------
 
-def _corners_plan(base, ordered, junctions, profile_points):
+def _corners_plan(base, ordered, junctions, profile_points, options):
     """Lines joined by tangent arcs, written as corner points: each line extended to where its neighbours cross it."""
     if any(turn > STRAIGHT_DEG and both_lines for turn, both_lines in junctions):
         return Refusal(SHARP_CORNER)
@@ -599,14 +652,17 @@ def _corners_plan(base, ordered, junctions, profile_points):
         return Refusal(TOO_MANY)
     if _self_touch([p for c in ordered for p in _polyline(c)]):
         return Refusal(CROSSES)
-    refusal = _carried_reach_refusal(profile_points, ordered[0]["start"], radii, turns)
-    if refusal:
-        return refusal
     start = ordered[0]["start"]
-    refusal = _overlap_refusal([p for c in ordered for p in _polyline(c)],
-                               max((vec.length(vec.sub(p, start)) for p in profile_points or ()), default=0.0))
-    if refusal:
-        return refusal
+    if not options.fixed:
+        extra = options.growth * base["length"]
+        refusal = _carried_reach_refusal(profile_points, start, radii, turns, options.twisted, extra)
+        if refusal:
+            return refusal
+        refusal = _overlap_refusal([p for c in ordered for p in _polyline(c)],
+                                   max((vec.length(vec.sub(p, start)) for p in profile_points or ()), default=0.0)
+                                   + extra)
+        if refusal:
+            return refusal
     recipe = {
         "kind": "corners",
         "points": [_round(p) for p in points],
@@ -615,14 +671,15 @@ def _corners_plan(base, ordered, junctions, profile_points):
     return PathPlan(kind="corners", recipe=recipe, tightest=min(radii), **base)
 
 
-def _carried_reach_refusal(profile_points, start, radii, turns):
+def _carried_reach_refusal(profile_points, start, radii, turns, twisted=False, extra=0.0):
     """The outline is carried along the bends, turning with each; at a bend only the part of a point's offset in
-    that bend's plane counts against its radius."""
+    that bend's plane counts against its radius. A twisting outline counts with its whole radius."""
     if not profile_points:
         return None
     carried = [vec.sub(p, start) for p in profile_points]
     for radius, (axis, turn) in zip(radii, turns):
-        reach = max(vec.length(vec.sub(o, vec.scale(axis, vec.dot(o, axis)))) for o in carried)
+        reach = max(vec.length(o if twisted else vec.sub(o, vec.scale(axis, vec.dot(o, axis)))) for o in carried)
+        reach += extra
         if reach >= radius * REACH_SHARE:
             return Refusal("The outline reaches %.2f mm from the path, but the path bends in a radius of %.2f mm."
                            % (reach, radius))

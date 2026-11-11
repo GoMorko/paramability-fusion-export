@@ -32,6 +32,11 @@ def _reads(node, found):
     return tuple(dict.fromkeys(found))
 
 
+def written_reads(*loops):
+    """The Fusion names of every size the written `loops` read."""
+    return _reads(list(loops), [])
+
+
 def _corners(loop, env):
     """The four corners of a rect loop, turned by its angle."""
     cx, cy = _point(loop["center"], env)

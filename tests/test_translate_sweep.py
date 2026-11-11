@@ -2,14 +2,16 @@
 out with its own reason."""
 import copy
 import math
+import types
 import unittest
 
 from tests import context  # noqa: F401
-from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of, stopped
+from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of, stopped, verdict_of
 
 from lib.params import size_table
 from lib.sketch_values.motion import Affine, Motion
 from lib.translator import paths, sweep, translate
+from lib.translator.translate import _sweep_version
 
 PIPE = "sweep_pipe"
 PLATE = "sweep_edges"
@@ -367,10 +369,8 @@ class RefusalTest(unittest.TestCase):
             ("unread", lambda d: d.update(profiles=None), sweep.UNREADABLE),
         ])
 
-    def test_twist_taper_rails_and_other_kinds(self):
+    def test_rails_and_other_kinds(self):
         self.reasons([
-            ("twist", lambda d: d.update(twist_deg=5.0), sweep.TWISTED),
-            ("taper", lambda d: d.update(taper_deg=2.0), sweep.TAPERED),
             ("rail", lambda d: d.update(rail=copy.deepcopy(d["path"])), sweep.RAIL),
             ("rail unread", lambda d: d.update(rail={"kind": "unread"}), sweep.RAIL_UNREADABLE),
             ("other orientation", lambda d: d.update(orientation="other"), sweep.OTHER_KIND),
@@ -402,7 +402,7 @@ class RefusalTest(unittest.TestCase):
         self.assertIn("another component", gap_reason(result))
 
     def test_the_gap_keeps_the_plate_and_its_settings(self):
-        result = on_plate(lambda d: d.update(twist_deg=5.0))
+        result = on_plate(lambda d: d.update(rail=copy.deepcopy(d["path"])))
         self.assertEqual(len(steps_of(result.recipe, "extrude")), 1)
         self.assertEqual(steps_of(result.recipe, "sweep"), [])
 
@@ -423,6 +423,209 @@ class PathShapeTest(unittest.TestCase):
     def test_an_outline_wider_than_the_bend_is_refused(self):
         capture = edited(PIPE, PIPE_ITEM, lambda d: d["profiles"][0]["loops"][0]["curves"][0].update(radius=12.0))
         self.assertIn("bends in a radius", stopped(translate(capture))["reason"])
+
+
+def arc_xy(centre, radius, from_deg, to_deg):
+    """An arc in the xy plane turning counter clockwise from one angle about `centre` to another."""
+    def at(deg):
+        return [centre[0] + radius * math.cos(math.radians(deg)), centre[1] + radius * math.sin(math.radians(deg)), 0.0]
+    return {"kind": "arc", "start": at(from_deg), "end": at(to_deg), "mid": at((from_deg + to_deg) / 2),
+            "center": list(centre) + [0.0], "normal": [0, 0, 1], "radius": radius, "opposed": False}
+
+
+def with_options(name, index, **settings):
+    capture = edited(name, index, lambda data: data.update(**settings))
+    capture["items"][index]["target_after"]["volume_mm3"] = None
+    return capture
+
+
+def only_sweep(testcase, result):
+    testcase.assertIsNone(result.refusal)
+    assert_schema_ok(testcase, result.recipe)
+    (step,) = steps_of(result.recipe, "sweep")
+    return step
+
+
+class TwistTest(unittest.TestCase):
+    def test_a_twist_on_a_straight_path_is_a_sweep_along_its_two_ends(self):
+        capture = edited("sweep_straight", 2, lambda d: d.update(twist_deg=90.0))
+        result = translate(capture)
+        step = only_sweep(self, result)
+        self.assertEqual(step["twistDeg"], 90.0)
+        self.assertEqual(step["path"], {"kind": "corners", "points": [[0.0, 0.0, 0.0], [0.0, 0.0, 40.0]],
+                                        "bendRadius": 1.0})
+        self.assertEqual(result.recipe["version"], 16)
+
+    def test_a_twist_is_copied_with_a_note_to_check_the_shape(self):
+        result = translate(edited("sweep_straight", 2, lambda d: d.update(twist_deg=90.0)))
+        self.assertEqual(verdict_of(result, 2)["verdict"], "translatedWithNote")
+        self.assertIn("check the shape", verdict_of(result, 2)["note"])
+
+    def test_a_twist_on_a_bent_flat_path_keeps_the_flat_path(self):
+        step = only_sweep(self, translate(edited(PIPE, PIPE_ITEM, lambda d: d.update(twist_deg=-45.0))))
+        self.assertEqual((step["twistDeg"], step["path"]["kind"]), (-45.0, "flat"))
+
+    def test_a_twist_on_one_arc_is_a_sweep_and_not_a_revolve(self):
+        capture = pipe_along([arc_xy((0, 10), 10, -90, 0)])
+        step = only_sweep(self, translate(edited_after(capture, twist_deg=30.0)))
+        self.assertEqual([s["kind"] for s in step["path"]["segments"]], ["arc"])
+
+    def test_a_twist_on_a_corners_path(self):
+        curves = [line((0, 0, 0), (10, 0, 0)), quarter([10, 5, 0], [0, -1, 0], [1, 0, 0], 5),
+                  line((15, 5, 0), (15, 15, 0)), quarter([15, 15, 5], [0, 0, -1], [0, 1, 0], 5),
+                  line((15, 20, 5), (15, 20, 20))]
+        step = only_sweep(self, translate(edited_after(pipe_along(curves), twist_deg=30.0)))
+        self.assertEqual((step["path"]["kind"], step["twistDeg"]), ("corners", 30.0))
+
+    def test_a_twisting_outline_counts_with_its_whole_radius_at_a_bend(self):
+        def lifted(data):
+            data["profiles"][0]["loops"][0]["curves"][0].update(center=[0.0, 9.0], radius=2.0)
+        plain = with_options(PIPE, PIPE_ITEM)
+        lifted(sweep_of(plain, PIPE_ITEM))
+        self.assertIsNone(translate(plain).refusal)
+        twisted = edited_after(plain, twist_deg=10.0)
+        self.assertIn("bends in a radius", stopped(translate(twisted))["reason"])
+
+    def test_a_twist_on_a_full_circle_is_left_for_the_closed_paths(self):
+        result = translate(edited("sweep_ring", 2, lambda d: d.update(twist_deg=90.0)))
+        self.assertEqual(stopped(result)["reason"], paths.CLOSED)
+
+    def test_a_twist_that_follows_a_size_marks_the_outline_sizes(self):
+        outline = Motion({"2/p0/l0/radius": Affine(0, {"wire_mm": 0.5}, "Sketch1")})
+        capture = edited(PIPE, PIPE_ITEM, lambda d: d.update(twist_deg=45.0))
+        capture["items"][PIPE_ITEM]["target_after"]["volume_mm3"] = None
+        result = sized(capture, outline)
+        self.assertEqual([f["name"] for f in result.loose], ["wire_mm"])
+        self.assertEqual(steps_of(result.recipe, "sweep")[0]["sketch"]["outer"]["radius"], {"expr": "0.5 * wire_mm"})
+
+    def test_a_plain_sweep_keeps_its_older_version(self):
+        self.assertEqual(translate(load_capture(PIPE)).recipe["version"], 12)
+
+    def test_the_version_of_a_sweep_step(self):
+        self.assertEqual(_sweep_version({"kind": "sweep", "path": {"kind": "flat", "closed": True}}), 16)
+        self.assertEqual(_sweep_version({"kind": "sweep", "orientation": "fixed", "path": {}}), 16)
+        self.assertEqual(_sweep_version({"kind": "sweep", "path": {"kind": "flat"}}), 0)
+        self.assertEqual(_sweep_version({"kind": "extrude", "twistDeg": 1}), 0)
+
+    def test_a_twist_over_ten_turns_or_with_a_taper_or_a_parallel_outline_is_left_out(self):
+        for label, edit, reason in (
+                ("long", dict(twist_deg=3700.0), sweep.TWIST_LONG),
+                ("and taper", dict(twist_deg=10.0, taper_deg=1.0), sweep.TWIST_AND_TAPER),
+                ("and parallel", dict(twist_deg=10.0, orientation="parallel"), sweep.PARALLEL_AND_SHAPE)):
+            with self.subTest(label):
+                self.assertEqual(gap_reason(on_plate(lambda d, edit=edit: d.update(**edit))), reason)
+
+
+def edited_after(capture, **settings):
+    """The capture with settings on its sweep (timeline index 2) and its measured volume dropped."""
+    sweep_of(capture, 2).update(**settings)
+    capture["items"][2]["target_after"]["volume_mm3"] = None
+    return capture
+
+
+class TaperTest(unittest.TestCase):
+    """A 20 by 4 rectangle swept 20 mm straight: a recipe taper of 5 degrees narrows each wall by 0.0875 mm per mm."""
+    A, B, LENGTH, SLOPE = 20.0, 4.0, 20.0, math.tan(math.radians(5.0))
+
+    def offset(self, slope):
+        a, b, n = self.A, self.B, self.LENGTH
+        return a * b * n - (a + b) * slope * n ** 2 + 4 * slope ** 2 * n ** 3 / 3
+
+    def scaled(self, slope):
+        a, b, n = self.A, self.B, self.LENGTH
+        rate = slope * (a + b) / (a * b)
+        return a * b * (n - rate * n ** 2 + rate ** 2 * n ** 3 / 3)
+
+    def straight(self, volume, fusion_deg=-5.0):
+        """The straight sweep as a 20 by 4 rectangle 20 mm long made with the taper and the volume."""
+        def edit(data):
+            curve = data["profiles"][0]["loops"][0]["curves"]
+            for piece, (start, end) in zip(curve, [((-10, -2), (10, -2)), ((10, -2), (10, 2)), ((10, 2), (-10, 2)),
+                                                    ((-10, 2), (-10, -2))]):
+                piece.update(start=list(start), end=list(end))
+            data["areas"] = [80.0]
+            data["path"]["curves"][0].update(end=[0, 0, 20], check={"start": [0, 0, 0], "end": [0, 0, 20]})
+            data["taper_deg"] = fusion_deg
+        capture = edited("sweep_straight", 2, edit)
+        capture["items"][2]["target_after"]["volume_mm3"] = volume
+        return capture
+
+    def test_a_taper_whose_volume_fits_the_offset_is_written_with_the_extrude_sign(self):
+        result = translate(self.straight(self.offset(self.SLOPE)))
+        step = only_sweep(self, result)
+        self.assertAlmostEqual(step["taperDeg"], 5.0)
+        self.assertEqual(result.recipe["version"], 16)
+        self.assertIn("check the shape", verdict_of(result, 2)["note"])
+
+    def test_a_taper_whose_volume_fits_the_opposite_lean_is_written_the_other_way(self):
+        step = only_sweep(self, translate(self.straight(self.offset(-self.SLOPE))))
+        self.assertAlmostEqual(step["taperDeg"], -5.0)
+
+    def test_a_taper_that_scales_the_outline_is_left_out(self):
+        result = translate(self.straight(self.scaled(self.SLOPE)))
+        self.assertEqual(stopped(result)["reason"], sweep.SCALED_OUTLINE)
+
+    def test_a_taper_without_a_measured_volume_is_written_as_read(self):
+        step = only_sweep(self, translate(self.straight(None)))
+        self.assertAlmostEqual(step["taperDeg"], 5.0)
+
+    def test_a_taper_on_a_bent_path_is_a_sweep_step(self):
+        step = only_sweep(self, translate(with_options(PIPE, PIPE_ITEM, taper_deg=2.0)))
+        self.assertAlmostEqual(step["taperDeg"], -2.0)
+        self.assertEqual(step["path"]["kind"], "flat")
+
+    def test_a_taper_on_one_arc_is_a_sweep_and_not_a_revolve(self):
+        capture = edited_after(pipe_along([arc_xy((0, 10), 10, -90, 0)]), taper_deg=2.0)
+        self.assertEqual([s["kind"] for s in only_sweep(self, translate(capture))["path"]["segments"]], ["arc"])
+
+    def test_an_outline_that_can_grow_past_the_bend_is_refused_for_either_lean(self):
+        self.assertIn("bends in a radius", stopped(translate(with_options(PIPE, PIPE_ITEM, taper_deg=10.0)))["reason"])
+
+    def test_a_taper_along_a_free_curve_is_left_out(self):
+        samples = [[10 + k, 0.01 * k * k, 0.0] for k in range(21)]
+        spline = {"kind": "other", "start": samples[0], "end": samples[-1], "samples": samples, "opposed": False}
+        capture = edited_after(pipe_along([line((0, 0, 0), (10, 0, 0)), spline]), taper_deg=2.0)
+        self.assertEqual(stopped(translate(capture))["reason"], sweep.TAPER_CURVES)
+
+    def test_a_taper_through_too_many_path_parts_is_left_out(self):
+        parts = types.SimpleNamespace(recipe={"kind": "corners"}, curves=[None] * sweep.MAX_TAPER_STATIONS)
+        self.assertEqual(sweep._taper_path_refusal(parts).reason, sweep.TAPER_STATIONS)
+        parts.curves = parts.curves[:-1]
+        self.assertIsNone(sweep._taper_path_refusal(parts))
+
+    def test_a_steep_taper_or_one_with_a_parallel_outline_is_left_out(self):
+        for label, edit, reason in (("steep", dict(taper_deg=-50.0), sweep.TAPER_STEEP),
+                                    ("parallel", dict(taper_deg=2.0, orientation="parallel"),
+                                     sweep.PARALLEL_AND_SHAPE)):
+            with self.subTest(label):
+                self.assertEqual(gap_reason(on_plate(lambda d, edit=edit: d.update(**edit))), reason)
+
+
+class ParallelTest(unittest.TestCase):
+    def test_a_parallel_outline_along_a_path_that_keeps_rising_is_a_fixed_sweep(self):
+        capture = edited_after(pipe_along([arc_xy((0, 10), 10, -90, -30)]), orientation="parallel")
+        result = translate(capture)
+        step = only_sweep(self, result)
+        self.assertEqual(step["orientation"], "fixed")
+        self.assertNotIn("twistDeg", step)
+        self.assertEqual(result.recipe["version"], 16)
+        self.assertNotIn("check the shape", verdict_of(result, 2)["note"] or "")
+
+    def test_a_parallel_outline_along_a_flat_chain_is_a_fixed_sweep(self):
+        curves = [line((0, 0, 0), (10, 0, 0)), arc_xy((10, 10), 10, -90, -45), line((17.071068, 2.928932, 0), (30, 15.857864, 0))]
+        step = only_sweep(self, translate(edited_after(pipe_along(curves), orientation="parallel")))
+        self.assertEqual((step["orientation"], step["path"]["kind"]), ("fixed", "flat"))
+
+    def test_a_parallel_outline_along_a_path_that_turns_back_is_left_out(self):
+        for curves in ([arc_xy((0, 10), 10, -90, 30)], None):
+            capture = edited_after(pipe_along(curves), orientation="parallel") if curves else with_options(
+                PIPE, PIPE_ITEM, orientation="parallel")
+            with self.subTest(len(curves or [])):
+                self.assertEqual(stopped(translate(capture))["reason"], sweep.KEEPS_DIRECTION)
+
+    def test_a_parallel_outline_on_a_full_circle_is_left_for_the_closed_paths(self):
+        result = translate(edited("sweep_ring", 2, lambda d: d.update(orientation="parallel")))
+        self.assertEqual(stopped(result)["reason"], paths.CLOSED)
 
 
 if __name__ == "__main__":

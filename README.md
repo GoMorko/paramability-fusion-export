@@ -155,7 +155,7 @@ for the sketches, and its `health` record says whether the design came back to i
 
 ### When a step cannot be copied
 
-Some steps cannot be copied yet: a coil, a twisted sweep, an extrude with a taper on a face, and others (the limits
+Some steps cannot be copied yet: a coil, a sweep that twists and tapers, an extrude with a taper on a face, and others (the limits
 below say which). What the add-in does then depends on the step.
 
 Most of the time the step is left out. The add-in goes on with the steps after it, writes the copy without the
@@ -330,8 +330,11 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   step. A path of body edges is copied as measured, and such a step cannot be repeated by a pattern. The path is
   written as measured: a size that moves the sketch of the path (or the plane, face or projected edges it sits on), or
   the plane of the outline, or that can make the outline reach past the tightest bend, is marked "may give
-  unexpected results". The outline follows sizes like an extrude outline. These sweeps are left out of the copy: twist or taper, a guide rail,
-  parallel orientation on a bent path, several outlines at once, an outline that is a face of the part, a path of
+  unexpected results". The outline follows sizes like an extrude outline. A twist, a taper, or a parallel orientation on a path that keeps moving away from the
+  outline's plane becomes a sweep step too (recipe version 16); a twist or taper is copied with a note to check the
+  shape, since Fusion does not document how it measures them. These sweeps are left out of the copy: a twist together
+  with a taper or parallel orientation, a taper along spline curves or along a scaled outline, a taper of 45 degrees
+  or more, a twist over 3600 degrees, a guide rail, parallel orientation on a path that turns back, several outlines at once, an outline that is a face of the part, a path of
   sketch curves mixed with edges, a closed path other than one circle, a sharp corner in the path, a path that
   crosses itself or bends tighter than the outline allows, a path in 3D with splines or arcs that are not tangent, an
   outline in the middle of the path or not square to it, a sweep along only part of the path, a surface sweep and a

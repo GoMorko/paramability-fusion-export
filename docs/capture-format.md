@@ -1133,6 +1133,17 @@ face), and a measured volume change that is not
   `extent` is the `extent` setting as text. Every one of these is null when the member cannot be read or does not
   exist in the running Fusion build, which holds for `extent` in particular. `params` follows the usual rules (the
   scalar ones have kind `scalar`).
+- Twist and taper (`lib/translator/sweep.py`): a twist, a taper or `parallel` along a path that turns makes a `sweep`
+  step with `twistDeg`, `taperDeg` and `orientation: "fixed"` (a line becomes a corners path of its two points, an
+  arc a flat path). `taperDeg` is Fusion's angle times `TAPER_SIGN` (-1, as for the extrude); `twistDeg` is Fusion's
+  angle times `TWIST_SIGN` (1). Fusion does not document either convention, so while `TAPER_MEANING_CONFIRMED` and
+  `TWIST_SIGN_CONFIRMED` are false every written twist or taper marks the sizes behind the angle and the outline and
+  adds a note. For a new body along a straight path the made volume is compared with the offset and the scaled
+  models (`translator/sweep_taper.py`): a match with the opposite lean flips the sign, a match with the scaled model
+  only leaves the step out. Left out: a twist with a taper or `parallel`, a taper with `parallel`, a taper along
+  free curves or more than 64 parts, a taper of 45 degrees or more, a twist over 3600 degrees, and a parallel
+  outline along a path that turns back past its plane (every tangent must rise at least 0.05 along the outline's
+  normal).
 - `faces_after`: a point and the outward normal of the made start and end faces (`startFaces` and `endFaces` of a
   sweep, `startFace` and `endFace` of a loft), read with the marker after the item. Each side is null when the member
   cannot be read. The key is not a pick.
@@ -1430,7 +1441,7 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   count that can pass its limit inside the size ranges (`range_check.sweep`) marks the sizes it reads.
 - The recipe is version 12, or the lowest version that holds its steps and selectors (13 with an `offsetFaces` step, 14
   with a `chain` or `faceEdges` pick, 15 with a tool step, a `move` step, or a pattern whose copy count passes 64: a
-  polar count or the two linear counts together, at the current values or anywhere in the size ranges). With a size table it carries `sizesAsWritten: true` and `sizes`: the sizes that a written
+  polar count or the two linear counts together, at the current values or anywhere in the size ranges; 16 with a `sweep` step that has `twistDeg`, `taperDeg` or `orientation`: `SWEEP_VERSIONS` in `translator/translate.py`). With a size table it carries `sizesAsWritten: true` and `sizes`: the sizes that a written
   formula reads, plus the sizes those formulas read. A ticked size that nothing reads is left out (see `dropped`).
   Without a table the recipe has no `sizes`, and no marker.
 

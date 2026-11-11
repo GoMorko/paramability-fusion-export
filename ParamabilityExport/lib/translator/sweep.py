@@ -3,17 +3,23 @@
 The path decides what is written (`paths.plan` orders it and checks the limits of the recipe's sweep step):
 - a straight path is an extrude of the outline (`extrude.handle`);
 - one arc or a full circle is a revolve of the outline about the arc's axis (`revolve.handle`);
-- a chain of lines, arcs and free curves in one plane, or of lines and tangent arcs in 3D, is a `sweep` step.
+- a chain of lines, arcs and free curves in one plane, or of lines and tangent arcs in 3D, is a `sweep` step;
+- a twist, a taper, or an outline kept in one direction (parallel) along a path that turns, also makes a `sweep` step
+  (a line becomes a path of two points, an arc a flat path), with `twistDeg`, `taperDeg` and `orientation`.
 
 The outline follows sizes as an extrude outline does. The path is written as measured, so the sizes behind its sketch
 are marked: a path that follows sizes needs its own motion values. A new body must have the volume the outline area
-and the path give. Twist, taper, guide rails, a path that is not square to the outline, closed paths other than a
-circle and sweeps along part of a path are refused.
+and the path give. Twist together with taper or parallel, tapers along free curves, guide rails, a path that is not
+square to the outline, closed paths and sweeps along part of a path are refused.
+
+Fusion does not document how it measures the sweep taper (an offset of the outline or a scale) or which way a twist
+turns. Until a hand test settles both, every written twist or taper marks the sizes behind it and the outline, and
+adds a note asking the person to check the shape.
 """
 import copy
 import math
 
-from . import borrowed, extrude, loops, paths, placement, revolve, sketch_motion, sweep_reach, values, vec
+from . import borrowed, extrude, loops, paths, placement, revolve, sketch_motion, sweep_reach, sweep_taper, values, vec
 from .extrude import COMBINE
 from .footprint import is_full, polyline
 from .result import Refusal, StepResult
@@ -24,19 +30,33 @@ ZERO_TOL = 1e-6
 VOLUME_RELATIVE_TOL = 0.01
 VOLUME_ABSOLUTE_TOL = 1e-3
 CENTROID_ON_PATH_TOL = 0.01   # the path runs through the outline's centroid when it starts this close to it (mm)
+MAX_TAPER_DEG = 45.0          # the recipe takes a taper under this either way
+MAX_TWIST_DEG = 3600.0        # the recipe takes a twist up to this either way
+MAX_TAPER_STATIONS = 65       # the recipe builds a taper through at most this many places along the path
+TAPER_MEANING_CONFIRMED = False   # set once a hand test shows how Fusion measures the sweep taper
+TWIST_SIGN_CONFIRMED = False      # set once a hand test shows which way Fusion's twist turns
+# Signs between Fusion's angles and the recipe's: Fusion's extrude taper widens the walls where the recipe narrows
+# them, and the sweep is taken the same way. A twist turns the same way in both. Not yet confirmed on a real export.
+TAPER_SIGN = -1
+TWIST_SIGN = 1
 
 UNREADABLE = "A setting of this sweep could not be read from Fusion."
 PATH_UNREADABLE = "The path of this sweep could not be read from Fusion."
 MIXED_PATH = "The path of this sweep mixes sketch curves and body edges, which is not copied yet."
 SEVERAL_OUTLINES = "Sweeps of several outlines at once are not copied yet."
 FACE_OUTLINE = "The outline of this sweep is a face of the part."
-TWISTED = "Twisted sweeps are not copied yet."
-TAPERED = "Tapered sweeps are not copied yet."
+TWIST_AND_TAPER = "Sweeps that both twist and taper are not copied yet."
+TAPER_CURVES = "Tapered sweeps along curves are not copied yet."
+TAPER_STATIONS = "Tapered sweeps along a path with so many parts are not copied."
+TAPER_STEEP = "The taper of this sweep is too steep to copy."
+TWIST_LONG = "The twist of this sweep is more than ten turns, which is not copied."
+SCALED_OUTLINE = "This sweep scales its outline along the path, which is not copied yet."
+PARALLEL_AND_SHAPE = "Sweeps that keep their outline in one direction and also twist or taper are not copied."
 RAIL = "Sweeps with a guide rail are not copied yet."
 RAIL_UNREADABLE = "The guide rail of this sweep could not be read from Fusion."
 PATH_TOO_LONG = "The path of this sweep has more parts than can be read, so it is not copied."
 OTHER_KIND = "This kind of sweep is not copied yet."
-KEEPS_DIRECTION = "The outline keeps one direction along a bent path, which is not copied yet."
+KEEPS_DIRECTION = paths.TURNS_BACK
 PART_OF_PATH = "This sweep covers only part of its path, which is not copied yet."
 NOT_MATCHING = "The result of this sweep does not match its outline and path, so it is not copied yet."
 
@@ -110,7 +130,8 @@ def _number(value):
 
 
 def _settings_refusal(data):
-    """A Refusal for a setting the copy does not follow (twist, taper, guide rail, other kinds, part of the path)."""
+    """A Refusal for a setting the copy does not follow (a twist with a taper or a fixed direction, a taper that is
+    too steep, guide rail, other kinds, part of the path)."""
     rail = data.get("rail")
     if isinstance(rail, dict) and rail.get("kind") == "unread":
         return Refusal(RAIL_UNREADABLE)
@@ -120,23 +141,37 @@ def _settings_refusal(data):
     one, two = data.get("distance_one"), data.get("distance_two")
     if not (_number(twist) and _number(taper) and _number(one)) or data.get("orientation") is None:
         return Refusal(UNREADABLE)
-    if abs(twist) > ZERO_TOL:
-        return Refusal(TWISTED)
-    if abs(taper) > ZERO_TOL:
-        return Refusal(TAPERED)
     if data["orientation"] not in ("perpendicular", "parallel"):
         return Refusal(OTHER_KIND)
+    if abs(twist) > ZERO_TOL and abs(taper) > ZERO_TOL:
+        return Refusal(TWIST_AND_TAPER)
+    if data["orientation"] == "parallel" and (abs(twist) > ZERO_TOL or abs(taper) > ZERO_TOL):
+        return Refusal(PARALLEL_AND_SHAPE)
+    if abs(taper) >= MAX_TAPER_DEG:
+        return Refusal(TAPER_STEEP)
+    if abs(twist) > MAX_TWIST_DEG:
+        return Refusal(TWIST_LONG)
     if abs(one - 1.0) > ZERO_TOL or (_number(two) and abs(two) > ZERO_TOL):
         return Refusal(PART_OF_PATH)
     return None
 
 
-def _pin_settings(ctx, item):
-    """Values the copy writes as fixed settings: a size that moves one is marked."""
+def _pin_settings(ctx, item, data):
+    """Values the copy writes as fixed settings: a size that moves one is marked. A twist or taper that is set is
+    written as a value that can follow sizes instead (`_angle`)."""
     name = item.get("name", "a sweep")
     for path, what in (("twist_deg", "twist"), ("taper_deg", "taper"), ("distance_one", "length along its path"),
                        ("distance_two", "length along its path")):
+        if path in ("twist_deg", "taper_deg") and abs(data.get(path) or 0.0) > ZERO_TOL:
+            continue
         values.pin(ctx, item, path, "it sets the %s of %s, which the copy keeps as it is now" % (what, name))
+
+
+def _angle(ctx, item, path, fusion_deg, sign):
+    """The twist or taper as the recipe writes it, a Quantity that follows sizes when its parameter does."""
+    if abs(fusion_deg) <= ZERO_TOL:
+        return None
+    return values.quantity(ctx, item, path, sign * fusion_deg, dim="angle", sign=sign)
 
 
 # ---- the volume ------------------------------------------------------------------------------------------------
@@ -173,9 +208,11 @@ def _expected_volume(profile, area, found):
 
 def _volume_refusal(item, data, combine, profile, found):
     """A Refusal when a new body does not have the volume the outline and the path give; None when it does, or when
-    it cannot be told."""
+    it cannot be told. A taper or an outline kept in one direction changes the volume, so those are not told here."""
     areas = data.get("areas")
-    if combine != "new" or not isinstance(areas, list) or len(areas) != 1 or not _number(areas[0]) or areas[0] <= 0:
+    if abs(data["taper_deg"]) > ZERO_TOL or data["orientation"] == "parallel" or combine != "new":
+        return None
+    if not isinstance(areas, list) or len(areas) != 1 or not _number(areas[0]) or areas[0] <= 0:
         return None
     made = _made_volume(item, data)
     expected = _expected_volume(profile, areas[0], found)
@@ -243,15 +280,15 @@ def _keep_path_on_plane(ctx, item, profile):
                   % item.get("name", "a sweep"))
 
 
-def _keep_outline_in_bends(ctx, item, profile, found, outer):
+def _keep_outline_in_bends(ctx, item, profile, found, outer, growth):
     """A larger outline can reach past the tightest bend of the path, which the app refuses: mark the sizes behind
-    the outline that can do so."""
+    the outline that can do so. `growth` is how far a taper can lean the walls out by the path's end."""
     if ctx.table is None or found.tightest == math.inf:
         return
     frame = profile["frame"]
     offset = vec.sub(found.start, frame["origin"])
     names = sweep_reach.outgrown_reads(ctx.table, outer, [vec.dot(offset, frame["x"]), vec.dot(offset, frame["y"])],
-                                       found.tightest)
+                                       found.tightest - growth * found.length)
     if names:
         ctx.doubt(names, "it can make the outline of %s reach past the tightest bend of its path"
                   % item.get("name", "a sweep"))
@@ -289,8 +326,19 @@ def _as_revolve(item, data, combine, profile, found, ctx):
     return revolve.handle(dict(item, data=built), ctx)
 
 
-def _as_sweep(item, combine, profile, found, ctx):
-    """A `sweep` step: the outline on its own placement and the flat or corners path."""
+def _doubt_angle(ctx, item, what, quantity, outline_reads):
+    """Until the way Fusion measures a twist or taper is confirmed: mark the sizes behind the angle and the outline,
+    and ask for a look at the shape."""
+    name = item.get("name", "a sweep")
+    reads = tuple(dict.fromkeys(tuple(quantity.reads) + tuple(outline_reads)))
+    if reads:
+        ctx.doubt(reads, "Fusion may measure the %s of %s another way than the copy reads it" % (what, name))
+    ctx.note("The %s of %s is copied as Paramability reads it; check the shape." % (what, name))
+
+
+def _as_sweep(item, combine, profile, found, ctx, angles=(), fixed=False, growth=0.0):
+    """A `sweep` step: the outline on its own placement and the path, with the twist, taper and direction setting.
+    `angles` are `(what, recipe key, Quantity, confirmed)`."""
     outcome = loops.profile_loops(profile)
     if isinstance(outcome, Refusal):
         return outcome
@@ -300,13 +348,54 @@ def _as_sweep(item, combine, profile, found, ctx):
     if drawn is not None:
         on["origin"] = drawn.origin(ctx, Quantity(0.0))
         outer, inners = drawn.written(ctx)
-        _keep_outline_in_bends(ctx, item, profile, found, outer)
+        _keep_outline_in_bends(ctx, item, profile, found, outer, growth)
     sketch = {"on": on, "outer": outer}
     if inners:
         sketch["inner"] = inners
+    step = {"kind": "sweep", "sketch": sketch, "path": copy.deepcopy(found.recipe), "combine": combine}
+    for what, key, quantity, confirmed in angles:
+        step[key] = quantity.json()
+        if not confirmed:
+            _doubt_angle(ctx, item, what, quantity, sweep_reach.written_reads(outer, *inners))
+    if fixed:
+        step["orientation"] = "fixed"
     out = StepResult()
-    out.add({"kind": "sweep", "sketch": sketch, "path": copy.deepcopy(found.recipe), "combine": combine})
+    out.add(step)
     return out
+
+
+def _taper_growth(profile, taper_deg):
+    """How far the walls can lean out per mm of path for a taper of `taper_deg` either way, corners of the outline
+    included."""
+    if abs(taper_deg) <= ZERO_TOL:
+        return 0.0
+    outer = next((loop for loop in profile.get("loops") or [] if loop.get("outer")), None)
+    ring = _loop_polygon(outer.get("curves") or []) if outer else None
+    factor = sweep_taper.corner_factor(ring) if ring else 1.0
+    return math.tan(math.radians(abs(taper_deg))) * factor
+
+
+def _taper_path_refusal(found):
+    """A Refusal when the path cannot carry a taper: free curves, or more parts than the recipe builds through."""
+    parts = found.recipe["segments"] if found.recipe["kind"] == "flat" else found.curves
+    if found.recipe["kind"] == "flat" and any(segment["kind"] == "spline" for segment in parts):
+        return Refusal(TAPER_CURVES)
+    return Refusal(TAPER_STATIONS) if len(parts) + 1 > MAX_TAPER_STATIONS else None
+
+
+def _taper_lean(item, profile, data, combine, found, slope):
+    """The taper's meaning read from the volume of a new body along a straight path: `OFFSET`, `FLIPPED` (it leans the
+    other way), `SCALED`, or None when it cannot be told."""
+    areas, made = data.get("areas"), _made_volume(item, data)
+    if found.kind != "line" or combine != "new" or made is None or not isinstance(areas, list) or len(areas) != 1:
+        return None
+    shapes = []
+    for loop in profile.get("loops") or []:
+        points = _loop_polygon(loop.get("curves") or [])
+        if not points or len(points) < 3:
+            return None
+        shapes.append((points, bool(loop.get("outer"))))
+    return sweep_taper.meaning(shapes, found.length, made, slope)
 
 
 def handle(item, ctx):
@@ -332,20 +421,39 @@ def handle(item, ctx):
         return Refusal(MIXED_PATH)
     if path.get("truncated"):
         return Refusal(PATH_TOO_LONG)
-    found = paths.plan(path, profile["frame"], _profile_points(profile))
+    twist, taper = data["twist_deg"], data["taper_deg"]
+    twisted, tapered, fixed = abs(twist) > ZERO_TOL, abs(taper) > ZERO_TOL, data["orientation"] == "parallel"
+    options = paths.PathOptions(as_step=twisted or tapered or fixed, twisted=twisted,
+                                growth=_taper_growth(profile, taper), fixed=fixed)
+    found = paths.plan(path, profile["frame"], _profile_points(profile), options)
     if isinstance(found, Refusal):
         return found
-    if data["orientation"] == "parallel" and found.kind != "line":
-        return Refusal(KEEPS_DIRECTION)
+    taper_sign = TAPER_SIGN
+    if tapered:
+        refusal = _taper_path_refusal(found)
+        if refusal is not None:
+            return refusal
+        lean = _taper_lean(item, profile, data, combine, found, math.tan(math.radians(TAPER_SIGN * taper)))
+        if lean == sweep_taper.SCALED:
+            return Refusal(SCALED_OUTLINE)
+        if lean == sweep_taper.FLIPPED:
+            taper_sign = -TAPER_SIGN
     refusal = _volume_refusal(item, data, combine, profile, found)
     if refusal is not None:
         return refusal
-    _pin_settings(ctx, item)
+    _pin_settings(ctx, item, data)
     _mark_path(ctx, item, path)
     _keep_path_on_plane(ctx, item, profile)
     if found.kind != "line":
         borrowed.mark_unchecked(ctx, item, profile)
-    if found.kind == "line":
+    angles = [(what, key, quantity, confirmed)
+              for what, key, quantity, confirmed in (
+                  ("twist", "twistDeg", _angle(ctx, item, "twist_deg", twist, TWIST_SIGN), TWIST_SIGN_CONFIRMED),
+                  ("taper", "taperDeg", _angle(ctx, item, "taper_deg", taper, taper_sign), TAPER_MEANING_CONFIRMED))
+              if quantity is not None]
+    if twisted or tapered or (fixed and found.kind != "line"):
+        outcome = _as_sweep(item, combine, profile, found, ctx, angles, fixed, options.growth)
+    elif found.kind == "line":
         outcome = _as_extrude(item, data, profile, found, ctx)
     elif found.kind in ("arc", "circle"):
         outcome = _as_revolve(item, data, combine, profile, found, ctx)

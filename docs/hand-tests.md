@@ -113,7 +113,7 @@ except U1, L1 to L15, F1 and F2, which are described here.
       copied says what it is: section 9.
 - [ ] Compact export window and result window: section 7.2 ("The export window has no empty gaps", "Early warning",
       "Show in timeline", the result window) and the export pipeline entry under "Fusion calls to watch".
-- [ ] SW1 to SW14 and LF1 to LF5, sweeps and lofts (0.9.2): section 13 (the calls are under "Capture reader calls to watch
+- [ ] SW1 to SW16 and LF1 to LF5, sweeps and lofts (0.9.2): section 13 (the calls are under "Capture reader calls to watch
       (sweep and loft)").
 - [ ] E1 to E6, Emboss on a flat face: section 10.
 - [ ] T1 to T5, thin walled extrudes of one closed outline (T5 is `%` with a negative left side): section "Thin
@@ -867,11 +867,16 @@ surprises.
       of this sweep has a sharp corner". Note what Fusion builds (a mitre, a rounded corner or an error) and measure
       the outer corner, so a later version can copy it.
 - [ ] **SW7 Taper and twist.** On a straight path, a 20 by 10 mm rectangle with taper 5 degrees, then with twist 90
-      degrees. Each is left out with its reason. Note `taper_deg` and `twist_deg` in degrees with the dialog's sign;
-      whether the far end of the rectangle is offset (both sides shrink by the same mm) or scaled (both shrink by the
-      same share); and which way the twist turns, seen along the path.
+      degrees. Each is copied as a `sweep` step with `taperDeg` or `twistDeg` (recipe version 16) and a note "check the
+      shape"; the sizes behind the angle and the outline are marked. Note `taper_deg` and `twist_deg` in degrees with
+      the dialog's sign; whether the far end of the rectangle is offset (both sides shrink by the same mm) or scaled
+      (both shrink by the same share, then the taper is left out as "scales its outline"); which way the taper leans
+      for a positive angle; and which way the twist turns, seen along the path. Then set `TAPER_MEANING_CONFIRMED`,
+      `TWIST_SIGN_CONFIRMED` and the two signs in `lib/translator/sweep.py` and drop the note.
 - [ ] **SW8 Parallel orientation.** The SW2 path with orientation parallel is left out ("The outline keeps one
-      direction along a bent path"). On a straight path it is copied.
+      direction along a path that turns back past its plane"). Along a path that keeps moving away from the outline's
+      plane (one arc of 60 degrees) it is copied as a `sweep` step with `orientation: "fixed"`, and the part matches.
+      On a straight path it is copied as an extrude. A twist or taper together with parallel is left out.
 - [ ] **SW9 Guide rail.** A sweep with a guide rail is left out ("Sweeps with a guide rail"). `rail` holds the rail
       curves and `scaling` holds the dialog's choice. If a build cannot read the rail, `rail` is `{ "kind": "unread" }`
       and the reason says the rail could not be read.
@@ -887,6 +892,11 @@ surprises.
       neighbours the sweep is left out ("bends in 3D in a way that is not copied yet").
 - [ ] **SW13 Space of the path curves.** In a design where the sweep's component is moved in the assembly, check that
       `path.curves` and `check` (read from `PathEntity.curve`) agree in the component's frame, not the root frame.
+- [ ] **SW15 Twist on a bent path.** The SW2 path with twist 90 degrees. Copied as a `sweep` step with `twistDeg`
+      and a note; the end of the part is turned the same way as in Fusion. With a taper too it is left out
+      ("both twist and taper").
+- [ ] **SW16 Taper on an arc.** A rectangle along one arc with taper 3 degrees. Copied with the note. Compare the sizes
+      at the far end with Fusion. A taper along a path with a spline curve is left out ("along curves").
 - [ ] **SW14 Round on a sweep end.** After SW2, add a fillet on an edge of the end cap. The fillet is copied as
       measured, and every size written before it is marked "may give unexpected results", since a sweep step has no
       faces that follow sizes yet. After SW1 (the extrude form) the fillet follows sizes like a round on an extrude.

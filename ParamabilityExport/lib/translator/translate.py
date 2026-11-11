@@ -24,6 +24,9 @@ from .walk import walk_items
 RECIPE_VERSION = 12
 # Edge selector keys newer than RECIPE_VERSION, the same way.
 SELECTOR_VERSIONS = {"chain": 14, "faceEdges": 14}
+# Sweep step fields (and the flat path's `closed`) newer than RECIPE_VERSION, the same way.
+SWEEP_VERSIONS = {"twistDeg": 16, "taperDeg": 16, "orientation": 16}
+SWEEP_PATH_VERSIONS = {"closed": 16}
 MAX_FEATURES = 400
 MAX_PATTERN_COPIES = 256
 # Recipes before version 15 take at most 64 copies per pattern count (both linear counts together for a grid).
@@ -359,6 +362,15 @@ def _dropped(table, sizes, doubts, unmoved, unmoved_links=None, tried=(), spans=
     return out
 
 
+def _sweep_version(step):
+    """The recipe version a sweep step's newer fields need, 0 for any other step or a sweep without them."""
+    if step.get("kind") != "sweep":
+        return 0
+    fields = [SWEEP_VERSIONS[key] for key in step if key in SWEEP_VERSIONS]
+    fields += [SWEEP_PATH_VERSIONS[key] for key in step.get("path") or {} if key in SWEEP_PATH_VERSIONS]
+    return max(fields, default=0)
+
+
 def _walk(capture, table, size_table, motion=None, cache=None):
     """One walk over the items: (TranslateResult, Context). `cache` is shared by the walks of one translation."""
     ctx = Context(capture, size_table, motion, cache, table)
@@ -372,7 +384,8 @@ def _walk(capture, table, size_table, motion=None, cache=None):
     written = all_steps(ctx.steps)
     version = max([RECIPE_VERSION] + [step_kinds.recipe_kind(step["kind"]).version for step in written]
                   + [SELECTOR_VERSIONS.get(key, 0) for step in written for key in (step.get("edges") or {})]
-                  + [_counts_version(step, ctx.table) for step in written])
+                  + [_counts_version(step, ctx.table) for step in written]
+                  + [_sweep_version(step) for step in written])
     recipe = {"schema": "paramability.recipe", "version": version, "features": ctx.steps}
     over = _over_caps(recipe, ctx)
     if over:
