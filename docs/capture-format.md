@@ -778,13 +778,28 @@ manager was available, or a tool is of another component, whose coordinates diff
 `volume_after`: `intersect_model` is `every`, `any` or `unknown` (no match, a volume missing, or `intersect_volumes`
 null). Volumes match within 1e-3 mm3 or 1e-6 of the larger. When the two candidates are equal the model is `every`.
 
-The translator copies a Combine when every tool body is built by steps that only add material to it
-(`combine.adds_only`): `ExtrudeFeature` and `RevolveFeature` items whose recipe steps are `new` for the
-first and `add` for the rest. Each such step is written at the Combine's place with the Combine's operation. An
-intersect takes a tool of one step. A tool step that starts from or reaches to a face (`fromEntity`, `toEntity`) is
-refused when the tool has more than one step. Any other item that touches the tool body before the Combine (a cut, a
-round, a chamfer, a hole, a pattern, a step the walk could not copy) refuses the Combine, naming that item. A Copy Paste
-Body or a Move on the tool body refuses it the same way, with the reason of their rows in the step kind table.
+The translator walks each tool body on its own (`tool_walk.build`): the items that made it run through the normal item
+loop in a child context whose target is the tool, so every handler sees the tool as its body. A step that cannot be
+copied stops that walk, and the Combine is refused with the reason naming the tool, the step and what stops it.
+
+- A tool whose steps only add material (`combine.adds_only`: `ExtrudeFeature` and `RevolveFeature` items whose recipe
+  steps are `new` for the first and `add` for the rest) is written step by step at the Combine's place with the
+  Combine's operation, as long as no tool step reaches to a face when the tool has more than one step. An intersect
+  does this only for one tool of one step. The recipe stays at the version it had before tool steps existed.
+- Any other tool is written as one `toolBody` step per tool, whose `features` are the tool's steps and whose `combine`
+  is the Combine's operation. Its steps are those of rounds, chamfers, cuts, holes, shells, a Combine of the tool
+  itself, `move` steps, and a pasted or patterned body (the steps of the source written again).
+- Tool bodies nest 3 levels deep (`tool_walk.MAX_DEPTH`); deeper refuses.
+- An intersect with several tools has the model `every` (one `toolBody` per tool, each `intersect`) or `any` (one
+  `intersect` step that holds the tools as inner steps, the first `new` and the rest `add`); `unknown` refuses.
+- A pattern or mirror of bodies that the Combine takes whole is written as a `pattern` or `mirror` step over the tool
+  steps (`body_copies.groups`, `write`); a subset of the copies, or a layout `repeat.py` refuses, is one tool per copy
+  with a `move`. An intersect never uses the pattern form.
+- A Combine whose result differs from the tools' own volumes by more than they can give (`combine_volume.exceeds_tools`
+  for tool steps, `exceeds` for steps written one by one) is refused.
+- A tool the Combine keeps (`keep_tools`) stays usable: a later Combine walks it again up to its own index. A tool
+  the Combine does not keep is used up, and a second Combine that lists it is refused. A Combine that keeps the
+  exported body as a tool and changes another body is skipped.
 
 A tool body of another component is `foreign` and names where to find it:
 
@@ -851,6 +866,12 @@ moved points and cannot place a pick on their faces.
 `sources` holds the one body that was copied, empty when `sourceBody` is gone or cannot be read. A source of another
 component is `foreign` and has the identity keys of a foreign tool. `result_bodies` is null when `bodies` cannot be read.
 
+The handler (`translator/paste.py`) walks the source up to the paste (`tool_walk.build`) and writes its steps again,
+with ids of their own, in the list of the pasted body. It needs one source, a result among `result_bodies`, and a pasted
+body that has no steps yet. The first vertices of source and result must be the same points (a paste in place) or one
+rigid move apart (`move.fit`); then a `move` step in plain numbers follows, and the sizes that could change that place
+are marked.
+
 **MoveFeature** (`inputEntities`, `definition`, with the marker before the item and again after it):
 
 ```json
@@ -872,6 +893,12 @@ component is `foreign` and has the identity keys of a foreign tool. `result_bodi
   axis comes from `axisEntity`, `{ "kind": "other" }` when unreadable). Params path: `angle_deg`.
 - `free`: `transform` as a frame from `MoveFeature.transform` (null when it is retired or cannot be read).
 - The other types carry only the points.
+
+The handler (`translator/move.py`) writes a `move` step in the walk of the body it moves, and refuses a Move of faces
+and one that does not map the measured points rigidly (a mirror or a scale). `translateXYZ`, `rotate` and `free` must
+agree with the measured points, and `translateXYZ` and `rotate` write their distances and angle through the sizes. The
+other types are written as the numbers of the fit, and the sizes written so far are marked. After the step the walk's
+placers are carried by the move, so later picks follow sizes.
 
 Body records (`lib/fusion_reader/read_bodies.py`): `{ "token", "name" }`, `foreign` and the identity keys of a foreign
 tool for a body of another component, and `points`: up to 8 vertices in mm of the native body, in the body's vertex

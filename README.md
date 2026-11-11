@@ -255,28 +255,50 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   have a taper, face outlines, a text or spline outline that is too big or too complex (see below), extrudes that start or end on
   a tilted or curved surface, an emboss on a curved face, an emboss that is moved or turned on its face, drawn on a
   plane tilted to its face or set to follow tangent faces that are rounded, extrudes that make a new component, modeled threads, rounds with variable or chord length
-  sizes or curvature continuity, shells that grow outward, close the body or round their corners, patterns of faces or bodies, patterns
+  sizes or curvature continuity, shells that grow outward, close the body or round their corners, patterns of faces, patterns
   that spread to both sides of the start when the original sits between two copies or the copies do not follow the
   usual places, mirrors of faces, a chamfer with two different sizes whose sides could not be
   measured, a press pull (offset
-  faces) of a curved face, of a face with a leaning or rounded side, or of two faces that meet, a combine whose
-  tool body has any step that does not add material (a cut, a round, a chamfer, a shell, a hole, a pattern or mirror,
-  a pasted body, a Move), a keep-only-the-shared-part combine whose tool has more than one step, and every
-  step type not listed above (sweep, loft, coil, move, draft).
+  faces) of a curved face, of a face with a leaning or rounded side, or of two faces that meet, and every
+  step type not listed above (sweep, loft, coil, draft). A step of that kind in a tool body stops the copy of the tool.
   A Remove of another body, a Split Face (the solid stays the same, so picks on its faces may not follow) and steps of
   other bodies that are never joined to the picked body do not stop the copy.
-- A Combine is copied when its tool body is made by steps that only add material (a new body, then extrudes or
-  revolves that join it). Each tool step is written with the Combine's operation: a cut removes the tool steps one
-  after the other, a join adds them. A step of the tool that starts from or reaches to a face is refused when the tool
-  has more than one step. A tool the Combine keeps can serve a second Combine. The message after the export names
-  the step of the tool that stops it (for example "Fillet1 (fillet)"), so you know what to change in Fusion.
+- A Combine (join, cut or keep only the shared part) is copied with its tool bodies. A tool made only by steps that add
+  material (a new body, then extrudes or revolves that join it) is written step by step, each with the Combine's
+  operation. Any other tool becomes one tool step that holds all the steps that made the tool: its cuts, rounds,
+  chamfers, holes, shells, a Combine of its own, a pasted body, a Move and a pattern of bodies. Sizes and sketches of
+  those steps are sizes of the part like any other, and a later round or chamfer on the result follows them. A tool the
+  Combine keeps can serve a later Combine, which gets the tool with the steps added since. Tools made from tools are
+  followed 3 levels deep. The export reads up to 120 steps and 32 tool bodies in all (a pattern of many copies counts
+  as one body). The message after the export names the step that stops a tool (for example "Sweep1 (sweep)" or "the
+  tool body Body3 cannot be copied"), so you know what to change in Fusion. A tool step that starts from or reaches to a
+  face of the part follows that face where the add-in can place it, and marks the sizes it cannot follow.
+- Copy Paste Body is copied by writing the steps of the source again, as the source stood at the paste. The pasted
+  body must be a new body: a paste that lands on a body that already has steps stops the copy. A copy that sits where
+  its source sits keeps the sizes; a copy that sits elsewhere gets a plain-number Move, and the sizes that could change
+  its place are marked "may give unexpected results".
+- Move of bodies is copied when the body moves as one solid. A Move along X, Y and Z, a Rotate and a free Move follow
+  their distances and angles as sizes. The other kinds (point to point, to a position, along an entity) are written
+  as the numbers Fusion measured, and the sizes written so far are marked. A Move of faces, and a Move that mirrors or
+  scales, stop the copy.
+- A rectangular, circular or mirror pattern of bodies is copied when a Combine takes the copies. When the Combine takes
+  the whole pattern (the original and every copy), the pattern is written as a pattern, so its count and spacing follow
+  sizes. For a join the original may be the part itself. When the Combine takes only some of the copies, or the layout
+  is uneven, or it keeps only the shared part, each copy is written as a tool with its place as numbers, and the sizes
+  behind the layout are marked. A count that follows a size is written as if the Combine also takes the new copies;
+  whether Fusion does this is checked by hand (hand test B6). A mirror of bodies is copied only in a Combine, together
+  with its source. A body that is a copy in a pattern is copied by writing its source's steps and a Move.
+- Fusion does not say what a keep-only-the-shared-part Combine with several tools keeps (the part and every tool, or
+  the part and any tool). The export tries it on temporary copies, which are never added to your design, compares
+  the volumes with the result Fusion made, and copies it that way. When the volumes fit neither way, or a tool lives
+  in another component, the Combine stops with "This combine keeps a shared part that the copy could not work out".
+  A Combine whose result is more than its tool bodies can give (a cut that removes more than the tools hold) stops too.
 - The tool body may be made in another component. The add-in then reads the steps that made it in that component
-  (up to 40 steps in all), and writes them where the tool component sits in the assembly, turned and moved as
+  (they count in the 120), and writes them where the tool component sits in the assembly, turned and moved as
   Fusion shows it. The sizes of those steps, including sketch dimensions of the tool, are sizes of the part like any
   other. A size that moves the tool's component is followed when the tries can measure it; one they cannot follow
   ("puts its tool at the place of Rod that turns with it") may give unexpected results. The message after the export
-  names the step and the component of a tool that stops the copy. A tool made by Copy Paste Body, or moved with
-  Move, is not copied yet and stops the copy, naming the step.
+  names the step and the component of a tool that stops the copy.
 - Sketch outlines with a spline edge, an elliptical arc or another free curve are copied as spline segments. The add-in
   reads the Fusion curve as a fine chain of points and picks points for the app's own smooth curve so that it stays
   within 0.005 mm of that chain, also between its points (a long or tight curve is split into several segments). A size that moves a sketch
@@ -309,7 +331,7 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 - Paramability opens up to 256 MB per size and 1 GB per file. The export stops with a message above that.
 - The design needs history (a parametric design).
 - Made for the current Fusion release.
-- This is version 0.7.7. The Fusion side has not been run by a tool: see `docs/hand-tests.md`.
+- This is version 0.8.0. The Fusion side has not been run by a tool: see `docs/hand-tests.md`.
 
 ## Code layout
 

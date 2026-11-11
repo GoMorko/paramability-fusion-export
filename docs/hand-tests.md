@@ -7,6 +7,9 @@ note the Fusion version and system.
 
 What 0.6.0 to 0.7.2 added, and what this version adds, in this order. Each id is described in the section named.
 
+- [ ] B1 to B12, tool bodies: a Combine whose tool has rounds, chamfers or cuts, Copy Paste Body, Move, patterns and
+      mirrors of bodies, and an intersect of several tools: section "Tool bodies". B6 (does the Combine take the new
+      copies when a count changes) and B7 (what an intersect of several tools keeps) answer questions only Fusion can.
 - [ ] Export the bracket and the box once with this version and send the two `.paramability` files. Nothing needs
       checking by eye: each file holds a `derived` record in its `report.json` that says how well reading the sketch
       dimensions agrees with what the tries measured ("Derived values" in `docs/capture-format.md`, section 6).
@@ -159,8 +162,8 @@ builds agrees with the Fusion part.
 - [ ] **Combine with a tool of several steps**: a separate body made by an extrude (new body) and two more extrudes
       that join it (overlapping cylinders). Combine it as a cut from the main body, then undo and join it instead.
       Both match. Make one of the joined steps read a user parameter that nothing else reads: it shows as a size.
-      Then add a fillet to the tool body: the part saves as a fixed shape and the message says the tool has a
-      rounded edge. Try a join whose first tool step lies apart from the main body and is bridged by a later step:
+      Then add a fillet to the tool body: the Combine is written as a tool step and the fillet follows the tool's
+      sizes ("Tool bodies", B1). Try a join whose first tool step lies apart from the main body and is bridged by a later step:
       if Paramability refuses the step "does not touch the part built so far", note it.
 - [ ] **Marker and document**: after each export the timeline marker is where it was (at the end, or the step it was
       rolled back to), the design is unchanged, and
@@ -480,8 +483,8 @@ that made the tool a second time (in the tool component's own frame), carries th
 tool component's place in the assembly, and writes them with the Combine's operation. Look in `report.json` at the
 Combine's `data.tools[]` (`component`, `path`, `place` with `frame`, `target_frame` and the three plane `ref`s) and at
 the items of the tool component (`helper_of`, `data`). A tool step that cannot be copied stops the copy, and the
-reason names the step and the component. Copy Paste Body and Move are not copied: they stop the copy with their own
-reason (G3, G4).
+reason names the step and the component. The tool is written as a tool step, like a tool of the same component
+("Tool bodies").
 
 - [ ] **G1 Cut with a tool from another component.** Component `Rod` holds a body made by two join extrudes (two
       cylinders, one sketch each). `Rod` is moved by (30, 10, 0) and turned 90 degrees about Z. In the root (or in
@@ -495,15 +498,16 @@ reason (G3, G4).
       and changing it in Paramability changes the cut. The probe request lists the `Rod` sketches under `native`, and
       `probe.motion.values` has keys for the extrude items of `Rod`. A size that acts on `Rod` without moving
       anything (a joint it is not part of) is dropped as "tried, changes nothing".
-- [ ] **G3 Pasted body.** A body in `Rod` made by Copy Paste Body of another body, used as the tool. The copy stops
-      ("A pasted body is not copied yet") and the reason names the paste step and `Rod`. Nothing is guessed.
-- [ ] **G4 Moved tool.** A body in `Rod` moved by Move/Copy (free move) before the Combine: the copy stops ("A Move is
-      not copied yet") and names the Move. A Move of the exported body itself stops the copy the same way.
+- [ ] **G3 Pasted body.** A body in `Rod` made by Copy Paste Body of another body of `Rod`, used as the tool. The
+      Combine is copied: the tool step holds the steps of the source, at the place of `Rod`. Same check as B8, with
+      the paste inside the other component.
+- [ ] **G4 Moved tool.** A body in `Rod` moved by Move/Copy (free move) before the Combine: the tool step holds the
+      steps and a `move` for it, and the cut sits where Fusion shows it.
 - [ ] **G5 Time.** Export a body whose tool chain has about 20 steps in other components; note the export time with
       and without the tool (the second pass moves the marker at most twice per tool step, and not for other steps).
-      More than 40 tool steps stop the copy ("reads at most 40 steps").
-- [ ] **G6 Tool with a fillet.** Round the edges of the `Rod` body before the Combine: the copy stops and the reason
-      names the fillet step and `Rod` ("has Fillet1 (fillet)"). A cut inside the tool stops it the same way.
+      More than 120 tool steps stop the copy ("reads at most 120 steps").
+- [ ] **G6 Tool with a fillet.** Round the edges of the `Rod` body before the Combine: the tool step holds the round
+      and it follows the sizes of `Rod`. A tool with a sweep stops the copy and the reason names the sweep and `Rod`.
 - [ ] **G7 Tool component moved by a size.** Move `Rod` with a ticked parameter (an offset on a joint or a move
       driven by `rod_x`). The probe request lists three `refs` per tool (`<Combine index>.tool0.xy|xz|yz`) and
       `probe.motion.refs` marks them measured. The cut follows the move in Paramability (the recipe positions are
@@ -779,6 +783,72 @@ calls to watch (thin extrude)".
       side can go negative (for example `(width - 120 mm) % 7 mm` with width from 65 to 260), the sizes it reads are
       loose with the reason. Also note what Fusion shows for a negative left side, such as `-20 mm % 7 mm`: the app
       gives 1 (the result takes the sign of the right side). If Fusion gives 1 as well, the check can be dropped.
+
+## Tool bodies
+
+A Combine takes its tool bodies as they stand at the Combine. A tool made only by steps that add material is written
+step by step. Any other tool is written as one tool step that holds the steps that made it (cuts, rounds, chamfers,
+holes, shells, a Combine of its own, Copy Paste Body, Move, patterns and mirrors of bodies). Look in `report.json` at
+the Combine's verdict: `tool_steps` holds the verdicts of the items inside the tools, and the recipe shows a `toolBody`
+step with its own `features`. A step that cannot be copied stops the copy and the reason names it, for example "The
+tool body Body3 cannot be copied: Sweep1 (sweep)". The calls behind these tests are listed under "Capture reader calls
+to watch (tool bodies)". Use a design with a user parameter behind a tool's size, and check each result in
+Paramability against the STEP, at the current sizes and at one other size.
+
+- [ ] **B1 Tool with a chamfer.** A separate body (an extrude with a chamfer on one edge), cut from the main body with
+      Combine. Export: the Combine is one tool step that holds the extrude and the chamfer, and the pocket has the
+      chamfer. Change the tool's size (a parameter behind the extrude or the chamfer) in Paramability: the pocket
+      follows. Do the same with a cut and a hole made in the tool before the Combine.
+- [ ] **B2 Copy Paste Body.** Paste a copy of a body (a bracket) and Combine it into another body. Export: copied.
+      The capture item has `data.sources` (the source body, with `points`) and `data.result_bodies`; the tool step
+      holds the steps of the source, written again with their own ids, and the verdict is "translated". A paste that
+      sits on its source has no `move`; a paste moved afterwards has one. Change a size of the source: both the
+      source and the pasted tool follow. A paste onto a body that already has steps stops with "lands on a body that
+      already has steps".
+- [ ] **B3 Free Move.** Move a tool body by hand (Move/Copy, Free Move, a turn and a shift) before the Combine. The cut
+      sits where Fusion shows it. The capture item has `data.move_type` `free`, `points_before` and `points_after`
+      (up to 8 corner points of the body each); the recipe has a `move` step with numbers. Also try Point to Point,
+      Point to Position and Translate Along Entity: the same result, and the sizes written before are marked "may give
+      unexpected results" ("follows a point that may move with it"). A Move of faces stops with "moves faces of the
+      body".
+- [ ] **B4 Move by X, Y, Z.** Move a tool by distances that read user parameters, in a component that is not at the
+      origin and is turned. Do it once with the Move in component space and once in design space (the option in the
+      Move dialog). The `move` step reads the sizes: change one, and the tool moves in Paramability the way it moves
+      in Fusion. Note any sign or space that comes out wrong (`data.is_design_space`).
+- [ ] **B5 Move by Rotate.** Rotate a tool about a sketch line with an angle parameter. The tool turns the same way as
+      in Fusion, and follows the angle. Rotate about a construction axis and an edge too. If the corners of the body
+      cannot tell the turn from its opposite, the angle stays a fixed number with the reason "the corners of the body
+      do not tell which way ... turns"; note which axis kind gave that.
+- [ ] **B6 Pattern of bodies.** Make a circular pattern of bodies (a tool with a count parameter), then Combine join
+      all copies with the part. Export: one `pattern` step that repeats the tool steps, not one tool per copy, and the
+      verdict of the pattern item is "translated". Change the count in Paramability. Then answer this in Fusion:
+      change the count there and edit the Combine. Does the Combine take the new copies? The export writes it as if it
+      does. If Fusion leaves them out, say so: the app and Fusion then differ for a changed count. Also try a
+      rectangular pattern, a mirror of bodies (with "Combine" off), a Combine that takes only some of the copies (each
+      copy becomes a tool with its place in numbers, and the sizes behind the layout are marked), and a cut instead of
+      a join.
+- [ ] **B7 Intersect of several tools.** Two tool bodies that overlap each other only partly and both overlap the part,
+      then Combine intersect with both. In the capture item read `data.intersect_volumes` (`every` and `any`, mm3) and
+      `data.intersect_model`. Compare with the shape Fusion made: `every` means the part keeps only what lies in the
+      part and in all tools; `any` means what lies in the part and in at least one tool. Write down which one Fusion
+      made, and whether `intersect_model` says the same. With `every` the recipe has one tool step per tool, each
+      with `combine` intersect. With `any` it has one intersect step that holds the tools. An intersect of one tool
+      with several steps is a tool step too. An intersect with a tool from another component, or where the two
+      volumes fit neither way, stops with "keeps a shared part that the copy could not work out".
+- [ ] **B8 The whole chain.** In component `Rod`, paste a body from another component, Move it, Offset Faces on it,
+      make a pattern of it, then Combine the copies into the part. Export: copied, the cut sits where Fusion shows it,
+      and a size of the source follows through every step.
+- [ ] **B9 Kept tool.** A Combine with "Keep tools" on, then a fillet and two extrudes on the kept tool, then a second
+      Combine that uses it. Export the part: the second Combine gets the tool with the later steps, and a note says
+      Fusion kept the first tool. A tool the first Combine used up (no "Keep tools") cannot serve a second one: it
+      stops with "was used up by an earlier combine".
+- [ ] **B10 Export the kept tool.** Export the kept tool body itself. The Combine that kept it is skipped (its target
+      is another body) and the tool is copied with its own steps.
+- [ ] **B11 Sweep in a tool.** A tool made by a sweep (or a loft). The copy stops, naming the sweep and the tool body.
+      Nothing is guessed.
+- [ ] **B12 Time and a real design.** A design with about 20 tool steps: note the export time with and without the
+      tools (a tool is walked once per pass of the sizes). Then export the body of the real design that has Combines
+      and send `report.json`: it is the first real input for all of the above.
 
 ## Fusion calls to watch
 
@@ -1160,6 +1230,29 @@ Written from the API reference and the owner's 0.7.2 export, never run on the ne
 - [ ] Members read: `RectangularPatternFeature.isSymmetricInDirectionOne` and `isSymmetricInDirectionTwo`,
       `CircularPatternFeature.isSymmetric` (a flag that fails reads as not symmetric, then the measured copies are
       refused). Which element is the identity (not always the first).
+
+## Capture reader calls to watch (tool bodies)
+
+These members were written from the API reference and never run. A member that cannot be read gives `null` or `other`,
+and the translator refuses the item, so a wrong guess shows up in `report.json` as a refusal. Run B1 to B12.
+
+- `CopyPasteBody.sourceBody` with the marker before the item (empty when the source was consumed), `CopyPasteBody.bodies`
+  after it, also for a source in another component (`read_paste.py`).
+- `MoveFeature.inputEntities` (bodies, or faces: a mix is `other`), `MoveFeature.definition` and the class it names
+  (`TranslateXYZ`, `Rotate`, `FreeMove`, `PointToPoint`, `PointToPosition`, `TranslateAlongEntity`),
+  `xDistance`, `yDistance`, `zDistance`, `isDesignSpace`, `angle`, `axisEntity` and `MoveFeature.transform` (retired in
+  the reference; read for a free move only, and the fit against the points decides alone) (`read_move.py`).
+- The first 8 vertices of a body (`BRepBody.vertices`, `BRepVertex.geometry`) in a stable order: with the marker before
+  a Paste, a Move or a pattern, and again after it for the same body found by its token. A gap in the list gives an
+  empty list, which refuses the fit.
+- `inputEntities` of a rectangular, circular or mirror pattern of bodies (`entity_type` `bodies`) with the marker before
+  the item, and `bodies` after it: all the copies, not the sources. `PatternElement` has no bodies, so copies are matched
+  to elements by their corner points (`body_copies.match`).
+- `BRepBody.volume` of each tool with the marker before the Combine, and of the bodies the second pass finds by token
+  (`body_states`).
+- `TemporaryBRepManager.get()`, `copy`, `booleanOperation` and `BooleanTypes` (`IntersectionBooleanType`,
+  `UnionBooleanType`), and the `volume` of a temporary body, for an intersect of several tools
+  (`read_intersect.py`). Nothing is added to the design: check that the timeline and the bodies are the same after.
 
 ## Capture reader calls to watch (emboss)
 

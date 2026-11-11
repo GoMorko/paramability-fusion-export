@@ -135,6 +135,44 @@ later Combine, counts only once the Combine joins it.
 The walk runs a handler many times per export (once per pass, with other size tables), so a handler must not keep
 state outside `ctx`. Work that depends on the capture alone can be kept in `ctx.cache` under the module name.
 
+### Inside a tool body
+
+A Combine takes tool bodies, and a tool that is more than steps that add material is written as one `toolBody` step
+that holds the steps that made the tool (`features`). A handler does not need to know about this: the tool is walked
+on its own (`lib/translator/tool_walk.py`) by the same item loop, in a child context (`Context.child`) whose
+`target` is the tool body. So a handler that tests `ctx.is_target(body)`, reads `data["target_box_before"]` and
+`data["volume_before"]`, and writes steps with `out.add(...)` works unchanged for a tool.
+
+- Which handlers see the tool as their target: all of them. The walk of a tool starts with the items that made the tool
+  (`tool_walk.chain_of`), in the component that holds it. The reader gave the items of the target's component their
+  data; for another component's items (`helper_of`) the second pass in `lib/fusion_reader/helper_pass.py` read them in
+  that component's frame. For the numbers measured on the body itself (box and volume before and after), a walk takes
+  `item["body_states"][token]` (`tool_walk._seen_from_tool`), not the exported body's fields.
+- What a handler may not assume: that the part is its target's whole world. A child walk cannot see the part. A step
+  that reaches to a face of the part has no place for it in the child; `tool_walk.on_part` works such steps out again
+  against the part when a Combine writes them one by one, and a tool step that holds them marks the sizes it cannot
+  follow. Put every pick, plane and axis through `follow.py`, as for any step, and the audit says when one is missed.
+- `combine_tool` on the `RecipeKind`: the step can be one of the steps that a tool made only of such steps is written
+  with, one by one, onto the part (`combine.adds_only`). Set it only for a kind that adds material and nothing else
+  (extrude and revolve do). A kind without it is still copied inside a `toolBody`; it just stops the flat form.
+- `RecipeKind.repeat`: `toolBody` is `SOLID`, so a pattern repeats a tool. A step inside a tool is a `features` entry:
+  walk steps with `step_walk.all_steps`, never `ctx.steps` alone, when code must see every step (the version, the
+  `place.place` of a body into the assembly, the audit and the copy limits do). A new `RecipeKind` with `positions` and
+  `directions` is moved inside a tool by `place.place` the same way.
+- Ids: a step in a tool keeps the id the child gave it, built from the Combine's index and the tool's place in the
+  list, so one item written twice (a paste, or a tool that two Combines use) has distinct ids. `Context.add_steps`
+  keeps an id a handler set. A step that Fusion made twice from one item, such as a paste, has its steps in
+  `ctx.steps_of(index)`, and the audit reads all of them through `written_for`.
+- Placers: a tool step is one placer (`tool_placer.ToolPlacer`) for the steps after it. Its slabs are copies owned by
+  the tool step, so `follow` never names a step inside it. A kind whose faces a later pick must follow needs a placer
+  maker, as for any step; a tool made of such steps hands them over through `ToolMaker`.
+- The reader's limits: `tool_items.MAX_ITEMS` steps, `MAX_TOOLS` tool bodies and `MAX_DEPTH` levels for the second
+  pass, and `tool_walk.MAX_DEPTH` for nesting in the translator. A step type that makes bodies (a paste, a pattern of
+  bodies: `makes_bodies` on the step type) or moves them (`moves_bodies`) must say so, or the walk skips it when it
+  names no body of its target.
+- A step type that cannot be copied inside a tool gives `unsupported` as usual, and the Combine's reason names it: "The
+  tool body Body3 cannot be copied: Sweep1 (sweep): ...".
+
 ## 4. What protects a new handler
 
 - The end of walk audit (`lib/translator/audit.py`) runs after every translation. Every free size that a copied step
