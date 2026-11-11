@@ -143,7 +143,7 @@ class RefusedPasteTest(unittest.TestCase):
 
     def test_a_source_that_cannot_be_copied_names_its_step(self):
         capture = short_chain()
-        capture["items"][3]["type"] = "SweepFeature"
+        capture["items"][3]["type"] = "CoilFeature"
         self.assertIn("Extrude2", left_out(translate(capture))["reason"])
 
     def test_a_paste_chain_past_the_depth_limit_refuses(self):

@@ -12,10 +12,10 @@ def read(design, target):
 
 
 def design_with_growing_target():
-    """Sketch, extrude (the target appears after it), then a loft that makes the target taller and heavier."""
+    """Sketch, extrude (the target appears after it), then a coil that makes the target taller and heavier."""
     target = body(volume=8.0)
     design = FakeDesign([sketch_entry(), extrude(rect_profile(), target=target),
-                         entry(feature("LoftFeature", "Loft1"))], target, appears_at=2)
+                         entry(feature("CoilFeature", "Coil1"))], target, appears_at=2)
     original = design.findEntityByToken
 
     def find(token):

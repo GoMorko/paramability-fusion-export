@@ -126,7 +126,7 @@ class ComponentItemsTest(unittest.TestCase):
     def test_target_changed_follows_the_box_and_volume_at_each_position(self):
         tray = Tray()
         design = tray.design([tray.feature("Sketch", "S"), tray.extrude(),
-                              tray.feature("Sketch", "S2"), tray.feature("LoftFeature", "Cut")])
+                              tray.feature("Sketch", "S2"), tray.feature("CoilFeature", "Cut")])
         timeline = design.timeline
         # The body exists from marker 2 on and loses volume from marker 4 on.
         tray.component.bRepBodies = BodiesWhen(lambda: [tray.native] if timeline.markerPosition >= 2 else [])

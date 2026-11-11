@@ -20,35 +20,35 @@ except U1, L1 to L15, F1 and F2, which are described here.
       tries: every step is back on (the hand suppressed one still off), the marker and parameters are back. Note
       whether Undo or the "unsaved changes" mark show anything new. A design with a joint gives `on: false` with a
       reason and suppresses nothing.
-- [ ] L1, a step in the middle of the timeline that cannot be copied. In a part, add a sweep or a loft in the middle
+- [ ] L1, a step in the middle of the timeline that cannot be copied. In a part, add a coil in the middle
       of the timeline (a join, between two extrudes). Export for Paramability. Expect: the export finishes with a
-      recipe; the result window has a "Left out" list with the sweep or loft and a reason, and a line that says
+      recipe; the result window has a "Left out" list with the coil and a reason, and a line that says
       Paramability keeps the original shape and an unfinished copy; the package holds `gaps.json` and a
       `manifest.json` of `version` 2 with `gaps`; `report.json` has `gaps`, and the item has the verdict `leftOut`
       with `gap` (the gap id). In `gaps.json` the gap has `after` (the step written before it), `before`, `list`
       null, `bodyBefore` and `bodyAfter` (the box and volume of the part around the step, in the coordinates of the
       recipe: compare the box with the part in Paramability), a `data` record with the step's Fusion data (empty
-      for a sweep or loft: the reader has none) and `toRecipe` (the identity, or the move of the part in the
-      assembly). The same design without the sweep gives a `manifest.json` of `version` 1 and no `gaps.json`.
-- [ ] L2, a round on the edges of the left out step. After the sweep of L1, add a fillet on edges that the sweep
-      made. Export. Expect: the fillet is left out too, its reason names the sweep ("It picks faces of Sweep1, which
-      is missing from the copy."), its gap has `dependsOn` with the sweep's gap id, and `report.json` has `reach` with
-      `read: true`, the sweep's index in `gaps` (the fillet's is not there) and the fillet's index in `makers` with the
-      sweep's index in its list.
-- [ ] L3, a round on other edges after the left out step. After the sweep of L1, add a fillet on edges of an earlier
-      extrude that the sweep did not touch. Export. Expect: the fillet is copied (not left out), `reach.makers` lists
+      for a coil: the reader has none) and `toRecipe` (the identity, or the move of the part in the
+      assembly). The same design without the coil gives a `manifest.json` of `version` 1 and no `gaps.json`.
+- [ ] L2, a round on the edges of the left out step. After the coil of L1, add a fillet on edges that the coil
+      made. Export. Expect: the fillet is left out too, its reason names the coil ("It picks faces of Coil1, which
+      is missing from the copy."), its gap has `dependsOn` with the coil's gap id, and `report.json` has `reach` with
+      `read: true`, the coil's index in `gaps` (the fillet's is not there) and the fillet's index in `makers` with the
+      coil's index in its list.
+- [ ] L3, a round on other edges after the left out step. After the coil of L1, add a fillet on edges of an earlier
+      extrude that the coil did not touch. Export. Expect: the fillet is copied (not left out), `reach.makers` lists
       only the extrude for it, and in Paramability the copy has the round on the same edges. This test and
       L2 decide whether `Feature.faces` gives the faces a step made for each feature type ("Reach" in the not
       verified table of `docs/capture-format.md`). Where `reach.read` is false, `reach.error` says why; every later step that picks edges or faces is then left out.
 - [ ] L4, a first body that cannot be copied. Make a part whose first body comes from a step the add-in cannot copy
-      (a sweep as the first step, or a loft). Export. Expect: the export stops as before: a fixed shape, the message
+      (a coil as the first step). Export. Expect: the export stops as before: a fixed shape, the message
       names the step, no `gaps.json`, a `manifest.json` of `version` 1.
-- [ ] L5, a Combine whose tool has a sweep. Make a Combine (cut) whose tool body was made with a sweep. Export.
-      Expect: the Combine is one left out step ("The tool body Body2 cannot be copied: Sweep1 (sweep) ..."), the rest
+- [ ] L5, a Combine whose tool has a coil. Make a Combine (cut) whose tool body was made with a coil. Export.
+      Expect: the Combine is one left out step ("The tool body Body2 cannot be copied: Coil1 (coil) ..."), the rest
       of the part is copied, and the gap's `after` and `before` are the steps around the Combine. Then add a fillet
       on an edge the cut made (an edge of a face of the tool) and export again: the fillet is left out too and
       `reach.makers` lists the Combine's index for it.
-- [ ] L6, a size used only by the left out step. Give the sweep or loft of L1 a size from a user parameter that no
+- [ ] L6, a size used only by the left out step. Give the coil of L1 a size from a user parameter that no
       other step reads, tick it and export. Expect: the result window lists it as "may give unexpected results" with a
       reason that says Fusion uses it only in that step and it changes nothing in the copy yet; the gap lists it in
       `sizes` and `looseSizes`. A parameter that an extrude reads too stays a plain size and is in `sizes` of the gap
@@ -255,7 +255,7 @@ builds agrees with the Fusion part.
       Fusion's undo list and "unsaved changes" mark are as before (or, if moving the marker marks the document
       changed, note it). Cancel, and a forced error during the read, leave the marker where it was and the parameters
       as they were.
-- [ ] **Fixed shape**: a part with a sweep, and one with a variable radius fillet. Each saves as a fixed shape
+- [ ] **Fixed shape**: a part with a coil, and one with a variable radius fillet. Each saves as a fixed shape
       (plain CAD part) and the message after the export names that feature.
 - [ ] **Y up**: a design made with the Y up preference, exported with "Y up". The plain part stands upright in
       Paramability, and the positions in `recipe.json` are Z up (a plate drawn on the ground plane has its sketch
@@ -403,8 +403,7 @@ Use the filter box design (names such as `FilterBox_$_depth__contains_CeramicMed
         changes a sketch") is not cut off. About ten rows show before the table scrolls; the table spans the width.
       - The Saved window (result dialog) has no blank lines under its notes and fixed lists either.
       If a box is still too tall or too short, note the text it holds and the dialog width.
-- [ ] **Early warning.** Pick a body whose steps hold one the add-in cannot copy (for example a sweep, a loft or a
-      coil). Right under the body picker a box shows "Copy stops at Sweep1 (sweep)." in bold, the reason in short,
+- [ ] **Early warning.** Pick a body whose steps hold one the add-in cannot copy (for example a coil). Right under the body picker a box shows "Copy stops at Coil1 (coil)." in bold, the reason in short,
       and "The part will be saved as a fixed shape; your parameters still come along as variables." Hover the box:
       the tooltip holds the full reason. If no tooltip shows, note it (the reason is then only in the box when short,
       and in the message after the export). Pick a body that copies fully: the box and the button go away. A step
@@ -415,7 +414,7 @@ Use the filter box design (names such as `FilterBox_$_depth__contains_CeramicMed
       body. If Fusion refuses the selection a message says so. Note whether the step also shows as selected in the
       timeline bar. No button shows when the stop has no step (a linked part, an unreadable place, a read that failed).
 - [ ] **Message and status line.** Click OK on such a body. The message box starts with "Saved <file>. Copy stopped
-      at Sweep1 (sweep)." then the reason and "The part is saved as a fixed shape." After you close the box, the
+      at Coil1 (coil)." then the reason and "The part is saved as a fixed shape." After you close the box, the
       lower-right corner of the Fusion window shows "Paramability: saved as a fixed shape. Copy stopped at ...". Note
       whether the line stays or Fusion replaces it at once (its lifetime is not fixed by the API).
 - [ ] Click OK: the progress window shows as before, then the result window "Saved for Paramability" opens with
@@ -553,7 +552,7 @@ Pick two or more bodies in the body picker of Export for Paramability. Open the 
 - [ ] **P2 Time.** Export 2, 4 and 8 bodies of a real design with sketches. Note the time and the number of probe
       rows in `report.json` (`parts[].probe.states`). The export reads each body's steps once (N captures) and tries
       the sketches over one set of rows of at most 64.
-- [ ] **P3 Fixed shape.** One picked body starts with a Sweep (a step before the first copied one stops the copy), the other copies. The
+- [ ] **P3 Fixed shape.** One picked body starts with a Coil (a step before the first copied one stops the copy), the other copies. The
       warning under the picker names the first body. The file holds an editable part and a fixed shape with a note;
       the editable part keeps its sizes.
 - [ ] **P4 Moves in the assembly.** A size that drives a joint offset moving one of the bodies. Tick it: it is marked
@@ -592,7 +591,7 @@ reason names the step and the component. The tool is written as a tool step, lik
       and without the tool (the second pass moves the marker at most twice per tool step, and not for other steps).
       More than 120 tool steps stop the copy ("reads at most 120 steps").
 - [ ] **G6 Tool with a fillet.** Round the edges of the `Rod` body before the Combine: the tool step holds the round
-      and it follows the sizes of `Rod`. A tool with a sweep leaves the Combine out and the reason names the sweep and `Rod`.
+      and it follows the sizes of `Rod`. A tool with a coil leaves the Combine out and the reason names the coil and `Rod`.
 - [ ] **G7 Tool component moved by a size.** Move `Rod` with a ticked parameter (an offset on a joint or a move
       driven by `rod_x`). The probe request lists three `refs` per tool (`<Combine index>.tool0.xy|xz|yz`) and
       `probe.motion.refs` marks them measured. The cut follows the move in Paramability (the recipe positions are
@@ -876,7 +875,7 @@ step by step. Any other tool is written as one tool step that holds the steps th
 holes, shells, a Combine of its own, Copy Paste Body, Move, patterns and mirrors of bodies). Look in `report.json` at
 the Combine's verdict: `tool_steps` holds the verdicts of the items inside the tools, and the recipe shows a `toolBody`
 step with its own `features`. A step that cannot be copied is left out as a gap (inside the tool, or the whole Combine when the tool cannot be built) and the reason names it, for example "The
-tool body Body3 cannot be copied: Sweep1 (sweep)". The calls behind these tests are listed under "Capture reader calls
+tool body Body3 cannot be copied: Coil1 (coil)". The calls behind these tests are listed under "Capture reader calls
 to watch (tool bodies)". Use a design with a user parameter behind a tool's size, and check each result in
 Paramability against the STEP, at the current sizes and at one other size.
 
@@ -937,7 +936,7 @@ Paramability against the STEP, at the current sizes and at one other size.
       stops with "was used up by an earlier combine".
 - [ ] **B10 Export the kept tool.** Export the kept tool body itself. The Combine that kept it is skipped (its target
       is another body) and the tool is copied with its own steps.
-- [ ] **B11 Sweep in a tool.** A tool made by a sweep (or a loft). The Combine is left out as a gap, naming the sweep and the tool body.
+- [ ] **B11 Coil in a tool.** A tool made by a coil. The Combine is left out as a gap, naming the coil and the tool body.
       Nothing is guessed.
 - [ ] **B12 Time and a real design.** A design with about 20 tool steps: note the export time with and without the
       tools (a tool is walked once per pass of the sizes). Then export the body of the real design that has Combines

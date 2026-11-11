@@ -3,7 +3,7 @@ import unittest
 from tests import context  # noqa: F401
 from tests import fakes
 from tests.test_recipe_dialog import make_dialog, offer
-from tests.test_recipe_export import loft_then_plate
+from tests.test_recipe_export import coil_then_plate
 
 core = fakes.install_adsk_core()
 from lib.dialog_model.stop_warning import summarize  # noqa: E402
@@ -13,11 +13,11 @@ from lib.fusion_ui import recipe_dialog, timeline_select  # noqa: E402
 class WarningBoxTest(unittest.TestCase):
     def test_a_stop_shows_the_step_the_reason_in_a_tooltip_and_the_timeline_button(self):
         _, inputs = make_dialog([offer("wall")])
-        recipe_dialog.show_stop(inputs, summarize(loft_then_plate()))
+        recipe_dialog.show_stop(inputs, summarize(coil_then_plate()))
         box = inputs.itemById(recipe_dialog.WARN_ID)
         self.assertTrue(box.isVisible)
-        self.assertIn("Loft1", box.formattedText)
-        self.assertIn("Steps of type loft", box.tooltipDescription)
+        self.assertIn("Coil1", box.formattedText)
+        self.assertIn("Steps of type coil", box.tooltipDescription)
         self.assertTrue(inputs.itemById(recipe_dialog.SHOW_ID).isVisible)
 
     def test_a_stop_without_a_step_has_no_timeline_button(self):
@@ -28,7 +28,7 @@ class WarningBoxTest(unittest.TestCase):
 
     def test_picking_a_clean_body_hides_the_warning(self):
         _, inputs = make_dialog([offer("wall")])
-        recipe_dialog.show_stop(inputs, summarize(loft_then_plate()))
+        recipe_dialog.show_stop(inputs, summarize(coil_then_plate()))
         recipe_dialog.show_stop(inputs, None)
         self.assertFalse(inputs.itemById(recipe_dialog.WARN_ID).isVisible)
         self.assertFalse(inputs.itemById(recipe_dialog.SHOW_ID).isVisible)

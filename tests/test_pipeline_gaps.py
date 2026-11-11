@@ -41,7 +41,7 @@ TICKED = ["wall_mm", "pipe_d_mm", "holes_count"]
 def tray(leave_out=True, name=None):
     capture = load_capture(TRAY)
     if leave_out:
-        capture["items"][SHELL]["type"] = "SweepFeature"
+        capture["items"][SHELL]["type"] = "CoilFeature"
     return renamed(capture, ("t1", "Body1"), (name[0], name[1])) if name else capture
 
 
@@ -229,7 +229,7 @@ class ReachPassTest(unittest.TestCase):
     def test_a_tool_body_stopped_at_the_gap_cap_still_names_its_own_gaps(self):
         capture = load_capture("combine_tool_two_steps")
         items = capture["items"]
-        items[5]["type"] = "SweepFeature"
+        items[5]["type"] = "CoilFeature"
         items[6:] = [dict(copy.deepcopy(items[5]), index=6, name="Extrude4"), dict(items[6], index=7)]
         with mock.patch.object(translator_gaps, "MAX_GAPS", 1):
             result = translate(capture)

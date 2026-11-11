@@ -15,12 +15,12 @@ from lib.params import size_table
 from lib.package.manifest import validate_manifest
 
 
-def loft_then_plate():
-    """A loft that starts the body: nothing is copied before it, so the copy stops there."""
+def coil_then_plate():
+    """A coil that starts the body: nothing is copied before it, so the copy stops there."""
     capture = load_capture("extrude_plate")
     body = capture["items"][1]["bodies_after"]
     capture["items"][1]["index"] = 3
-    capture["items"].insert(1, {"index": 2, "name": "Loft1", "type": "LoftFeature", "suppressed": False,
+    capture["items"].insert(1, {"index": 2, "name": "Coil1", "type": "CoilFeature", "suppressed": False,
                                 "health": "ok", "message": "", "in_target_component": True, "bodies_after": body,
                                 "data": {}})
     return capture
@@ -76,7 +76,7 @@ class PlanTest(unittest.TestCase):
 
     def test_with_steps_left_out_the_loose_and_fixed_size_notes_stay_within_the_note_cap(self):
         capture = load_capture("filter_tray_sized")
-        capture["items"][2]["type"] = "SweepFeature"
+        capture["items"][2]["type"] = "CoilFeature"
         params = capture["parameters"]
         table = size_table.build(params["user"], ["wall_mm", "pipe_d_mm", "holes_count"], params["model"], "mm",
                                  fixed={"pipe_d_mm": "it cannot follow"})
@@ -148,13 +148,13 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(json.loads(files["report.json"])["capture"]["design"], "Test")
 
     def test_unsupported_feature_gives_step_only_naming_it(self):
-        manifest, files, report = self.plan(loft_then_plate())
+        manifest, files, report = self.plan(coil_then_plate())
         self.assertEqual(manifest["kind"], "stepOnly")
         self.assertNotIn("recipe", manifest)
         self.assertEqual(sorted(files), ["part.step", "report.json"])
-        self.assertIn("loft", manifest["notes"][0].lower())
+        self.assertIn("coil", manifest["notes"][0].lower())
         self.assertEqual(validate_manifest(manifest), [])
-        self.assertEqual(report["refusal"]["type"], "LoftFeature")
+        self.assertEqual(report["refusal"]["type"], "CoilFeature")
         self.assertEqual(report["outcome"], "stepOnly")
 
     def test_a_capture_that_cannot_be_read_gives_a_fixed_shape(self):
@@ -225,7 +225,7 @@ class MotionHandoverTest(unittest.TestCase):
         self.assertEqual(report["probe"], {"restore_gap_mm": 0.0})
 
     def test_a_translation_that_refused_is_used_as_given_and_nothing_translates_again(self):
-        capture = loft_then_plate()
+        capture = coil_then_plate()
         refused = recipe_export.translate(capture)
         self.assertIsNone(refused.recipe)
         self.seen.clear()

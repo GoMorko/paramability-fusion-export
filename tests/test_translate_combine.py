@@ -45,7 +45,7 @@ class CombineTest(unittest.TestCase):
 
     def test_a_tool_step_that_cannot_be_copied_is_left_out_of_the_tool(self):
         def edit(capture):
-            capture["items"][4]["type"] = "SweepFeature"
+            capture["items"][4]["type"] = "CoilFeature"
         result = edited("combine_tool_filleted", edit)
         self.assertEqual(left_out(result)["name"], "Fillet1")
         self.assertEqual(result.gaps[0]["list"], steps_of(result.recipe, "toolBody")[0]["id"])

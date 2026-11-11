@@ -1,7 +1,7 @@
 import unittest
 
 from tests import context  # noqa: F401
-from tests.test_recipe_export import loft_then_plate
+from tests.test_recipe_export import coil_then_plate
 from tests.translator_helpers import load_capture
 
 from lib.dialog_model.stop_warning import saved_message, status_text, summarize, summarize_many
@@ -9,11 +9,11 @@ from lib.dialog_model.stop_warning import saved_message, status_text, summarize,
 
 class SummarizeManyTest(unittest.TestCase):
     def test_only_the_bodies_that_stop_are_named_and_one_line_says_what_happens_to_them(self):
-        summary = summarize_many([("Tray", load_capture("extrude_plate")), ("Cover", loft_then_plate())])
+        summary = summarize_many([("Tray", load_capture("extrude_plate")), ("Cover", coil_then_plate())])
         self.assertTrue(summary["stops"])
         self.assertEqual(summary["index"], 2)
         self.assertTrue(summary["lines"][0].startswith("Cover: "))
-        self.assertIn("Loft1", summary["lines"][0])
+        self.assertIn("Coil1", summary["lines"][0])
         self.assertFalse(any(line.startswith("Tray") for line in summary["lines"]))
         self.assertIn("fixed shapes", summary["lines"][-1])
         self.assertIn("Cover: ", summary["tooltip"])
@@ -35,14 +35,14 @@ class SummarizeTest(unittest.TestCase):
         self.assertIsNone(summarize(None))
 
     def test_the_stopping_step_is_named_and_the_variables_promise_follows_the_parameters(self):
-        summary = summarize(loft_then_plate())
+        summary = summarize(coil_then_plate())
         self.assertTrue(summary["stops"])
-        self.assertEqual(summary["label"], "Loft1 (loft)")
+        self.assertEqual(summary["label"], "Coil1 (coil)")
         self.assertEqual(summary["index"], 2)
-        self.assertIn("Loft1", summary["lines"][0])
+        self.assertIn("Coil1", summary["lines"][0])
         self.assertIn("variables", summary["lines"][-1])
-        self.assertIn("Steps of type loft", summary["tooltip"])
-        self.assertNotIn("variables", summarize(loft_then_plate(), has_parameters=False)["lines"][-1])
+        self.assertIn("Steps of type coil", summary["tooltip"])
+        self.assertNotIn("variables", summarize(coil_then_plate(), has_parameters=False)["lines"][-1])
 
     def test_a_stop_without_a_step_has_nothing_to_point_at(self):
         linked = load_capture("component_moved")
@@ -62,11 +62,11 @@ class SummarizeTest(unittest.TestCase):
 
     def test_notes_are_listed_after_a_stop_too(self):
         capture = load_capture("fillet_setback")
-        capture["items"].append({"index": 99, "name": "Loft1", "type": "LoftFeature", "suppressed": False,
+        capture["items"].append({"index": 99, "name": "Coil1", "type": "CoilFeature", "suppressed": False,
                                  "health": "error", "message": "", "in_target_component": True,
                                  "bodies_after": capture["items"][-1]["bodies_after"], "data": {}})
         lines = summarize(capture)["lines"]
-        self.assertIn("Loft1", lines[0])
+        self.assertIn("Coil1", lines[0])
         self.assertTrue(lines[-1].startswith("Copied with a note: "))
 
 
