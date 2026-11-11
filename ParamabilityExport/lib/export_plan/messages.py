@@ -36,6 +36,13 @@ def loose_note(names):
     return clip(text, MAX_NOTE)
 
 
+def cut_note(names):
+    """One note naming the sizes whose range was cut to the values that build, cut to the note limit."""
+    text = "The range of %s was cut to values that build: %s." % (
+        _count(len(names), "size", "sizes"), ", ".join(names))
+    return clip(text, MAX_NOTE)
+
+
 def dropped_note(names):
     """One note naming ticked parameters that no copied step uses, so they are not sizes. Cut to the note limit."""
     text = "Not used by any copied step, so not sizes: %s." % ", ".join(names)

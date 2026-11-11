@@ -178,7 +178,7 @@ def translate(capture, handlers=None, size_table=None, motion=None):
         return _walk(capture, table, None, cache=cache)[0]
     if not size_table.links:
         size_table = size_table.with_links(geometry_links.reach(capture))
-    size_table = size_table.with_narrowed(kept_ranges.built_ranges(size_table, motion))
+    size_table = size_table.with_narrowed(kept_ranges.built_ranges(size_table, motion, capture))
     upfront = joint_reasons(size_table) if motion is not None else untried_reasons(size_table)
     for name, why in text_reasons(size_table, capture).items():
         upfront.setdefault(name, why)
@@ -276,6 +276,7 @@ def _finish(settled, doubts, capture, motion):
     if result.gaps:
         sizes = _gap_sizes(settled.ctx, result, table, sizes, doubts, checked.gap_reads)
     sizes = _with_cuts(table, sizes, settled.ctx.cuts)
+    result.cuts = _cut_notes(table, sizes, settled.ctx)
     spans = _narrow_spans(table, motion)
     for name, (span, _, _) in spans.items():
         size = sizes.get(table.size_name(name))
@@ -324,6 +325,35 @@ def _with_cuts(table, sizes, cuts):
         size = out.get(table.size_name(name))
         if size and "min" in size:
             out[table.size_name(name)] = dict(size, min=max(size["min"], low), max=min(size["max"], high))
+    return out
+
+
+def _cut_notes(table, sizes, ctx):
+    """`[{ name, reason, words, why, min, max }]` for each recipe size whose range is shorter than the one typed or default
+    (`SizeTable.uncut_range`): where it stops and what was seen there (`notes.cut_reason`)."""
+    out = []
+    made = ctx.cut_causes
+    for e in table.entries:
+        size, uncut = sizes.get(e.size_name) if e.size_name else None, table.uncut_range(e.name)
+        if not size or not uncut or "min" not in size:
+            continue
+        low, high = size["min"], size["max"]
+        cut_low, cut_high = low > uncut[0] + 1e-9, high < uncut[1] - 1e-9
+        if not (cut_low or cut_high):
+            continue
+        causes = []
+        seen = table.cut_of(e.name)
+        failures = [seen.failed[side] for side, at, hit in (("low", low, cut_low), ("high", high, cut_high))
+                    if seen and hit and side in seen.failed and abs(seen[0 if side == "low" else 1] - at) < 1e-9]
+        if failures:
+            causes.append(wording.not_rebuilt_why(failures))
+        causes += [why for ends, why in made.get(e.name, {}).items()
+                   if (cut_low and abs(ends[0] - low) < 1e-9) or (cut_high and abs(ends[1] - high) < 1e-9)]
+        if not causes:
+            continue
+        words, why = wording.cut_words(cut_low, cut_high, low, high), "; ".join(dict.fromkeys(causes))
+        out.append({"name": e.name, "reason": wording.cut_reason(e.name, words, why), "words": words, "why": why,
+                    "min": low, "max": high})
     return out
 
 

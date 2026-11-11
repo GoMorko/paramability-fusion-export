@@ -11,18 +11,21 @@ from tests.fakes import FakeStore
 from tests.schema_check import load_schema, validate
 from tests.test_manifest import PACKAGE_SCHEMA
 from tests.test_pipeline import MODEL, START, TICKED, USER, StuckStore
+from tests.test_translate_sketch_motion import motion_of
 from tests.translator_helpers import load_capture
 
 from lib.design_edit.errors import StepExportError
 from lib.design_edit.runner import ExportCancelled
 from lib.dialog_model.result_rows import also_lines, not_tried_lines, parts_result_view, section, section_lines
 from lib.export_plan import recipe_export
-from lib.export_plan.parts_pipeline import run_parts_pipeline
+from lib.export_plan.recipe_export import PartInput, translate_capture
+from lib.export_plan.parts_pipeline import _PartsPipeline, run_parts_pipeline
 from lib.export_plan.probe_flow import ProbeGroup
 from lib.export_plan.part_names import unique_names
 from lib.export_plan.pipeline import ExportRequest
 from lib.export_plan.size_offers import table_for_bodies, table_for_body
 from lib.package.manifest import validate_manifest
+from lib.params import size_table as size_tables
 
 BASE = load_capture("sketch_rect_centred")
 
@@ -181,6 +184,39 @@ class LooseAndFixedTest(unittest.TestCase):
         self.assertTrue(result.manifest["fixed"][0]["reason"].startswith("Body2: "))
         self.assertNotIn("wall_mm", result.report["sizes"]["free"])
         self.assertIn("height_mm", result.report["sizes"]["free"])
+
+
+class SharedCutTest(unittest.TestCase):
+    """The part that was probed saw Fusion fail at 40 for height_mm (20 now, range 10 to 40); the other part has no
+    sketch to follow, so it has no motion."""
+
+    def setUp(self):
+        capture = load_capture("linked_pipe_hole")
+        self.capture, params = capture, capture["parameters"]
+        self.table = size_tables.build(params["user"], ["height_mm"], params["model"])
+        motion = motion_of("linked_pipe_hole", lambda values: None)
+        motion.spans = {"height_mm": {"low": 20.0, "high": 30.0, "failed": [[40.0, "Extrude2"]]}}
+        with tempfile.TemporaryDirectory() as tmp:
+            pipeline = _PartsPipeline(FakePartsPort([capture, capture]), request(["height_mm"]), tmp)
+        pipeline.captures, pipeline.part_links, pipeline.table = [capture, capture], [[], []], self.table
+        pipeline.motions = {0: motion}
+        pipeline._share_cuts()
+        self.pipeline = pipeline
+
+    def test_a_part_with_no_probe_gets_the_range_the_probed_part_was_cut_to(self):
+        result = translate_capture(self.capture, "z", self.pipeline._part_table(1), None)
+        self.assertEqual((result.recipe["sizes"]["height_mm"]["min"], result.recipe["sizes"]["height_mm"]["max"]),
+                         (10.0, 30.0))
+
+    def test_the_file_says_the_range_is_the_same_in_every_part_that_uses_the_size(self):
+        table = self.pipeline.table
+        inputs = [PartInput(name, "part.step", self.capture, translate_capture(self.capture, "z", table, motion), motion)
+                  for name, motion in (("Lid", self.pipeline.motions[0]), ("Base", None))]
+        manifest, _, report = recipe_export.plan_parts_export(inputs, "Box", "test", "z", size_table=table)
+        [cut] = report["sizes"]["cut"]
+        self.assertTrue(cut["shared"] and cut["reason"].startswith("height_mm: the range stops at 30 in every part"))
+        for part in manifest["parts"]:
+            self.assertIn(cut["reason"], [e["reason"] for e in part["loose"]])
 
 
 class StubProbe:

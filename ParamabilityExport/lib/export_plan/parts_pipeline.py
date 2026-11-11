@@ -19,6 +19,7 @@ from typing import Protocol
 from ..params import size_table as size_tables
 from ..params.listing import list_parameters
 from ..sketch_values.motion import OPTIMISTIC
+from ..translator.kept_ranges import built_ranges
 from ..design_edit.restore import restore_parameters
 from ..design_edit.runner import ExportCancelled
 from . import health as health_module
@@ -216,6 +217,7 @@ class _PartsPipeline:
         self._start_probes(list(firsts))
         if self.group is not None:
             self._measure(sizes, extra)
+            self._share_cuts()
         for index in firsts:
             result = self._translation(index, self.motions.get(index))
             if result is not None:
@@ -246,6 +248,15 @@ class _PartsPipeline:
 
         self.captures[index] = with_reach(read, self.captures[index], first, self.port.log)
         return self._translation(index, motion)
+
+    def _share_cuts(self):
+        """Cut the ranges of a size that several parts read to the narrowest cut over the parts that were probed, so
+        every part writes the same range: the form takes one range for a size, from the first part that has it."""
+        shared = {}
+        for index, motion in self.motions.items():
+            for name, cut in built_ranges(self._part_table(index), motion, self.captures[index]).items():
+                shared[name] = shared[name].meet(cut) if name in shared else cut
+        self.table = self.table.with_narrowed(shared)
 
     def _share_fixed(self, finals):
         """Translate the parts again with the sizes that one part had to fix fixed in all, until no part asks for more

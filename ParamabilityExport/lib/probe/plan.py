@@ -19,7 +19,9 @@ Row order, each step only while rows are left under `MAX_PROBE_ROWS` (64), steps
    from the near values, so the measured span grows.
 4. When two or more sizes are tried, all sizes at their minimum, then all at their maximum.
 A row that does not build is tried again nearer (`nearer_rows`, `NEARER_STEPS`: 50, 25 and 10 percent of the way to
-the range end, the first one nearer than the value tried). A size that only feeds step values is exact from its
+the range end, the first one nearer than the value tried). On a side where some value built and a farther one did
+not, the values between them are halved (`BISECT_STEPS` times at most) so the last value that builds is found closely.
+A size that only feeds step values is exact from its
 formula and gets no row: rows go to the sizes that move a sketch or a measured reference (`moved`) and to the
 guessed ones, and only a size left without a near row because of the limit is reported as untried.
 """
@@ -46,6 +48,10 @@ MAX_DISCOVERY = 12
 NEARER_STEPS = (0.5, 0.25, 0.1)
 # Rows the export adds for those tries in all, inside `MAX_PROBE_ROWS`: discovery rows get what is left.
 MAX_NEARER_ROWS = 24
+# A side with a value that built and a farther one that did not is halved between them until the two are within this
+# share of the way from the value now to the range end, so at most `BISECT_STEPS` more tries per side.
+BISECT_GAP = 0.1
+BISECT_STEPS = 4
 _SAME = 1e-9
 # Added to the progress line of a row that tries again nearer after a value that did not build.
 RETRY_NOTE = ". The last value did not rebuild, so this one is nearer."
@@ -465,6 +471,25 @@ def _next_nearer(size, end, tried):
     return None
 
 
+def _between(size, end, tried):
+    """The value half way between the farthest value tried alone toward `end` that built and the nearest one past it
+    that did not, or None when no value failed past the last that built, or the two are already close
+    (`BISECT_GAP`)."""
+    now, span = size["value"], end - size["value"]
+    if abs(span) <= _SAME:
+        return None
+    side = [((v - now) / span, ok) for v, ok in tried if (v - now) / span > _SAME]
+    built = max((share for share, ok in side if ok), default=None)
+    failed = [share for share, ok in side if not ok and built is not None and share > built + _SAME]
+    if not failed or min(failed) - built <= BISECT_GAP + _SAME:
+        return None
+    value = _toward(size, end, (built + min(failed)) / 2)
+    shares = [share for share, _ in side]
+    if abs(value - now) <= _SAME or any(abs((value - now) / span - share) <= _SAME for share in shares):
+        return None
+    return value
+
+
 def _nearer_for(size, states, moved):
     """`[(label, value)]`: the rows that try `size` nearer to its value after rows that did not build."""
     tried = _tried_alone(states, size["param"], size["value"])
@@ -473,8 +498,10 @@ def _nearer_for(size, states, moved):
         side = [(v, ok) for v, ok in tried if (v - size["value"]) * (end - size["value"]) > 0]
         if side and not any(ok for _, ok in side):
             value = _next_nearer(size, end, [v for v, _ in side])
-            if value is not None:
-                out.append((label, value))
+        else:
+            value = _between(size, end, tried)
+        if value is not None:
+            out.append((label, value))
     built = [v for v, ok in tried if ok]
     if not out and size["param"] in moved and len(built) == 1:
         value = _toward(size, built[0], 0.5)
@@ -488,7 +515,8 @@ def nearer_rows(sizes, states, moved=(), limit=MAX_NEARER_ROWS):
 
     `states` are the probe states so far (`values` and `built`). For each size and each side of its value whose rows
     all failed to build: one row `NEARER_STEPS` of the way toward that range end, the first step nearer than the
-    nearest value tried there. A size in `moved` (it moved a sketch or a measured place) with only one row that built
+    nearest value tried there. On a side where a value built and a farther one did not: one row half way between
+    them (`_between`). A size in `moved` (it moved a sketch or a measured place) with only one row that built
     and nothing left to try gets one more row half way to that value, so the fit has two readings to tell a straight
     line from a curve. Sizes that no row built come first. At most `limit` rows; the export calls this again after
     each batch, so each call gives one step per side."""

@@ -14,6 +14,7 @@ from ..export_plan.messages import (
 
 KEPT_FIXED, NOT_USED = "kept fixed", "not used"
 NOT_FOLLOWED = "not followed"
+CUT = "range cut"
 NOT_MEASURED = "not measured"
 SKETCHES = "Sketches"
 DOUBTFUL = "may be unexpected"
@@ -66,6 +67,11 @@ def _reasons(entries, names):
     return out
 
 
+def _cut_text(entry):
+    """What was seen where a range was cut, and that every part of a file has the same range when it is shared."""
+    return entry["why"] + (", the same in every part that uses it" if entry.get("shared") else "")
+
+
 def _row(name, rng, check, found=()):
     """A size row: `condition` and `why` come from the reasons found for it (joined when there are several)."""
     return {"name": name, "range": rng, "check": check,
@@ -81,13 +87,21 @@ def _size_rows(table, report, ticked):
     names = set(shown) | set(shown.values()) | set(ticked)
     loose = _reasons(sizes.get("loose") or [], names)
     fixed = _reasons(sizes.get("fixed") or [], names)
+    cut = {entry["name"]: entry for entry in sizes.get("cut") or []}
     followed, doubtful, kept, dropped = [], [], [], []
     for size_name in sizes.get("free") or []:
         size = table.sizes.get(size_name) or {}
+        if size_name in cut:
+            size = dict(size, min=cut[size_name]["min"], max=cut[size_name]["max"])
         rng = range_text(size, size.get("min"), size.get("max")) if "min" in size else ""
         name = shown.get(size_name, size_name)
         if size_name in loose:
-            doubtful.append(_row(name, rng, DOUBTFUL, loose[size_name]))
+            row = _row(name, rng, DOUBTFUL, loose[size_name])
+            if size_name in cut:
+                row["why"] = "; ".join(x for x in (row["why"], "%s: %s" % (CUT, _cut_text(cut[size_name]))) if x)
+            doubtful.append(row)
+        elif size_name in cut:
+            followed.append(_row(name, rng, CUT, [("", _cut_text(cut[size_name]))]))
         else:
             followed.append(_row(name, rng, FREE))
     for size_name, found in fixed.items():
@@ -234,8 +248,9 @@ def result_view(file_name, manifest, report, table, ticked):
     Keys: `sections` and `message` (the same text for a message box). Each section is `{key, title, lines, rows}`;
     the keys, in this order, are `check` (what is wrong with the design or the sketch measuring, and what to do),
     `result` (open the file, kind of copy, variables), `sizes` (one line per size or parameter that is not a size,
-    with its range or state and its reason; `rows` holds the same as data), `left_out` (steps with reasons) and `more`
-    (unticked parameters that also change the part, and parameters not tried). A section without content is absent.
+    with its range or state and its reason, a cut range as "range cut" with what was seen at the cut; `rows` holds the
+    same as data), `left_out` (steps with reasons) and `more` (unticked parameters that also change the part, and
+    parameters not tried). A section without content is absent.
     """
     if manifest.get("kind") != "recipe" or "sizes" not in report:
         return None

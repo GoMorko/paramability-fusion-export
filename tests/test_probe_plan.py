@@ -258,9 +258,28 @@ class NearerRowsTests(unittest.TestCase):
         steps = [tried("d", (8.0, False), (32.0, False)),
                  tried("d", (8.0, False), (32.0, False), (12.0, False), (24.0, False)),
                  tried("d", (8.0, False), (32.0, False), (12.0, False), (24.0, False), (14.0, False), (20.0, True))]
-        self.assertEqual([self.values(plan.nearer_rows([d], s)) for s in steps], [[12.0, 24.0], [14.0, 20.0], [15.2]])
-        done = steps[2] + tried("d", (15.2, False))
+        self.assertEqual([self.values(plan.nearer_rows([d], s)) for s in steps], [[12.0, 24.0], [14.0, 20.0], [15.2, 22.0]])
+        done = steps[2] + tried("d", (15.2, False), (22.0, False), (21.0, False))
         self.assertEqual(plan.nearer_rows([d], done), [])
+
+    def test_a_side_with_a_value_that_built_and_a_farther_one_that_did_not_is_halved_between_them(self):
+        d = size_dict("d", 10.0, 5.0, 20.0)
+        built_then_failed = tried("d", (7.5, True), (12.5, True), (5.0, True), (20.0, False))
+        self.assertEqual(self.values(plan.nearer_rows([d], built_then_failed)), [16.25])
+        closer = built_then_failed + tried("d", (16.25, True), (18.125, False))
+        self.assertEqual(self.values(plan.nearer_rows([d], closer)), [17.1875])
+        close_enough = closer + tried("d", (17.1875, True))
+        self.assertEqual(plan.nearer_rows([d], close_enough), [])
+
+    def test_a_count_is_halved_to_a_whole_number_and_stops_when_none_is_left(self):
+        n = size_dict("n", 2.0, 1.0, 10.0, kind="count")
+        self.assertEqual(self.values(plan.nearer_rows([n], tried("n", (3.0, True), (10.0, False)))), [6.0])
+        self.assertEqual(plan.nearer_rows([n], tried("n", (3.0, True), (4.0, False), (1.0, True))), [])
+
+    def test_a_side_whose_nearest_try_did_not_build_is_not_halved(self):
+        d = size_dict("d", 10.0, 5.0, 20.0)
+        states = tried("d", (12.5, False), (20.0, True))
+        self.assertEqual(plan.nearer_rows([d], states), [])
 
     def test_a_size_that_moved_with_one_reading_gets_a_second_one_half_way(self):
         d = size_dict("d", 16.0, 16.0, 32.0)

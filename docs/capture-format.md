@@ -1440,8 +1440,15 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   size that no formula reads after that is not a size: it is left out and listed in `TranslateResult.dropped` with its
   reason. The ranges are the table's, with two cuts. First, on a side where the probe saw Fusion fail to rebuild
   the design with only that size changed, an untyped range stops at the farthest value that built
-  (`kept_ranges.built_ranges`, before the walk). Second, a value that Paramability refuses past some size value
-  (a taper of 45 degrees or more) cuts the ranges of the untyped sizes it reads (`Context.cut`). A rule that may give
+  (`kept_ranges.built_ranges`, before the walk; a `size_table.Cut`, which keeps the nearest failure behind each cut
+  end). A failure counts only when its step is one the part is built from: an item of the target's component or a
+  step that made a Combine tool body, or a failure with no step name; a step of another component, or a name no
+  capture item has, cuts nothing and the size keeps the "followed between A and B" mark. Second, a value that
+  Paramability refuses past some size value (a taper of 45 degrees or more) cuts the ranges of the untyped sizes it
+  reads (`Context.cut`). `TranslateResult.cuts` lists each cut size as `{ name, reason, words, why, min, max }`
+  (`translate._cut_notes`, `notes.cut_reason`: "Slope: the range stops at 0.5, since Fusion did not rebuild the
+  design at 5 (Chamfer3)."). In a file with several bodies the table is cut once for all of them, to the narrowest
+  cut over the probed bodies (`parts_pipeline._share_cuts`), so every body writes the same range. A rule that may give
   a wrong shape inside a range (a count that a pick needs, a step that must keep meeting the part) marks the sizes it
   reads, with the value past which it fails where `kept_ranges` gives one. Only `TranslateResult.fixed` holds sizes that became
   numbers: a formula too long to copy (`Context.doubt` with `fixed`). Without a motion (`motion=None`) every size behind
@@ -1537,6 +1544,9 @@ suppressed, how many, why not, and the names of items that would not turn back o
 
 A row that Fusion cannot build is tried again nearer to the value now (`plan.nearer_rows`, `NEARER_STEPS`): half way
 to that range end, then a quarter, then a tenth, one step per batch and per side, until a row on that side builds.
+On a side with a value that built and a farther one that did not, rows half way between them follow (`plan.
+_between`), until the two are within `BISECT_GAP` (a tenth) of the way from the value to the range end, at most
+`BISECT_STEPS` times; the range then stops at the farthest value that built.
 Sizes that no row built go first. A size that moved a sketch or a measured place with only one row that built, and
 nothing left to try, gets one more row half way to that value, so the fit has two readings. These rows are at most
 24 per export (`MAX_NEARER_ROWS`, each is a Fusion recompute) and stay inside the 64 row cap; the discovery rows get
@@ -1795,8 +1805,10 @@ step left out only because it picks, or may pick, faces of a gap, `own` otherwis
 package notes say how many steps were left out and which ("2 steps were left out: Extrude5, Fillet3."). A parts file
 has `gaps` and `reach` in the record of each part.
 
-`sizes` holds `free` (recipe size names), `fixed` and `loose` (`{ name, reason }` by recipe size name, as in the
-manifest), and `dropped` (`{ name, reason, used }` by Fusion name, plus `tried: true` for a size the probe set to
+`sizes` holds `free` (recipe size names), `fixed` and `loose` (`{ name, reason }` by recipe size name; `loose` here is
+the doubts only, while the manifest `loose` also lists the cut sizes with their cut reason, which the app shows with
+its warning mark), `cut` (only when a range was cut: `{ name, reason, words, why, min, max, shared }` by recipe size
+name, `min` and `max` the range left, `shared` true when several bodies of a parts file read the size), and `dropped` (`{ name, reason, used }` by Fusion name, plus `tried: true` for a size the probe set to
 other values that changed nothing: the ticked parameters that are not sizes, from
 `TranslateResult.dropped`; `used` is true when a step reads the parameter and the copy could not follow it). `loose` comes
 from the translator and from the probe. `checks` in the manifest is

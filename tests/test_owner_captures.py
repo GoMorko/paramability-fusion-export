@@ -134,7 +134,9 @@ class OwnerCaptureTest(unittest.TestCase):
         self.assertEqual(motion.apart, [6, 10, 12, 19])
         result = translate(capture, size_table=table, motion=motion)
         self.assertEqual(result.fixed, [])
-        # The ranges stop where Fusion did not rebuild; the lid slot of Extrude5 may stop meeting the part past these.
+        # The ranges stop at the farthest value of the recorded tries that built, and each cut is told. A new export
+        # tries the values between that one and the failure, so its ranges reach further. The lid slot of Extrude5
+        # may stop meeting the part past these.
         marked = {f["name"]: f["reason"] for f in result.loose}
         self.assertEqual(sorted(marked), sorted([PROBE_TICKED[0], PROBE_TICKED[3], "_Filter__Wall_thickness_mm"]))
         for name, where in ((PROBE_TICKED[0], "past 1.8"), (PROBE_TICKED[3], "past 18"),
@@ -153,6 +155,8 @@ class OwnerCaptureTest(unittest.TestCase):
             "FilterBox__PipeTop_offsetFromCenter_mm": (0.025, 0.1),
             "_Pipe__Slope_deg": (0.0, 0.5),
             "_Filter__Wall_thickness_mm": (0.625, 1.25)})
+        cuts = {c["name"]: c["words"] for c in result.cuts}
+        self.assertEqual(cuts["_Pipe__Slope_deg"], "the range stops at 0.5")
         self.assertEqual(check_recipe(result.recipe), [])
 
     def test_the_rim_chamfer_picked_by_the_top_face_follows_the_box(self):
