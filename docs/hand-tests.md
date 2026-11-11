@@ -6,7 +6,51 @@ note the Fusion version and system.
 ## Check first in this version
 
 What 0.6.0 to 0.8.0 added, and what this version adds, in this order. Each id is described in the section named,
-except F1 and F2, which are described here.
+except L1 to L13, F1 and F2, which are described here.
+
+- [ ] L1, a step in the middle of the timeline that cannot be copied. In a part, add a sweep or a loft in the middle
+      of the timeline (a join, between two extrudes). Export for Paramability. Expect: the export finishes with a
+      recipe; the result window has a "Left out" list with the sweep or loft and a reason, and a line that says
+      Paramability keeps the original shape and an unfinished copy; the package holds `gaps.json` and a
+      `manifest.json` of `version` 2 with `gaps`; `report.json` has `gaps`, and the item has the verdict `leftOut`
+      with `gap` (the gap id). In `gaps.json` the gap has `after` (the step written before it), `before`, `list`
+      null, `bodyBefore` and `bodyAfter` (the box and volume of the part around the step, in the coordinates of the
+      recipe: compare the box with the part in Paramability), a `data` record with the step's Fusion data (empty
+      for a sweep or loft: the reader has none) and `toRecipe` (the identity, or the move of the part in the
+      assembly). The same design without the sweep gives a `manifest.json` of `version` 1 and no `gaps.json`.
+- [ ] L2, a round on the edges of the left out step. After the sweep of L1, add a fillet on edges that the sweep
+      made. Export. Expect: the fillet is left out too, its reason names the sweep ("It picks faces of Sweep1, which
+      is missing from the copy."), its gap has `dependsOn` with the sweep's gap id, and `report.json` has `reach` with
+      `read: true` and the fillet's index in `makers` with the sweep's index in its list.
+- [ ] L3, a round on other edges after the left out step. After the sweep of L1, add a fillet on edges of an earlier
+      extrude that the sweep did not touch. Export. Expect: the fillet is copied (not left out), `reach.makers` lists
+      only the extrude for it, and in Paramability the copy has the round on the same edges. This test and
+      L2 decide whether `Feature.faces` gives the faces a step made for each feature type ("Reach" in the not
+      verified table of `docs/capture-format.md`). Where `reach.read` is false, `reach.error` says why; every later step that picks edges or faces is then left out.
+- [ ] L4, a first body that cannot be copied. Make a part whose first body comes from a step the add-in cannot copy
+      (a sweep as the first step, or a loft). Export. Expect: the export stops as before: a fixed shape, the message
+      names the step, no `gaps.json`, a `manifest.json` of `version` 1.
+- [ ] L5, a Combine whose tool has a sweep. Make a Combine (cut) whose tool body was made with a sweep. Export.
+      Expect: the Combine is one left out step ("The tool body Body2 cannot be copied: Sweep1 (sweep) ..."), the rest
+      of the part is copied, and the gap's `after` and `before` are the steps around the Combine.
+- [ ] L6, a size used only by the left out step. Give the sweep or loft of L1 a size from a user parameter that no
+      other step reads, tick it and export. Expect: the result window lists it as "may give unexpected results" with a
+      reason that says Fusion uses it only in that step and it changes nothing in the copy yet; the gap lists it in
+      `sizes` and `looseSizes`. A parameter that an extrude reads too stays a plain size and is in `sizes` of the gap
+      only. In Paramability, change that size on the form: the copy does not change.
+- [ ] L7, a file with several bodies, one of them with a left out step. Export two bodies, one as in L1. Expect: a
+      `manifest.json` of `version` 2 where only that part has `gaps` (`parts/01/gaps.json`), the other part is as
+      before, and the result window lists the left out step with the part name first.
+- [ ] L8, more than 16 steps left out. A design with 17 steps of a type that cannot be copied after its first body
+      stops the copy with the reason "More than 16 steps of this part cannot be copied."
+- [ ] L9 to L13, in Paramability (a build that reads version 2 packages), with the files of L1, L2 and L5. L9: the
+      original shape shows, the card says how many steps are missing, the tip names the steps and reasons, and
+      Editable copy shows the unfinished copy. L10: with assistant mode off there is no assistant text in the
+      message or the card; with it on, a second message says an AI assistant can add the missing steps. L11: ask the
+      assistant to fill the gaps: it reads them, adds the steps, the line goes away when the copy matches, then
+      switch to Editable copy and change a size on the form. L12: Undo the assistant's last edit and the old copy and
+      line come back; save, close and reopen and the line, the tip and the assistant's read still work. L13: open the
+      file in a build without version 2 support: it says the file needs a newer Paramability.
 
 - [ ] F1, an extrude of a flat face. Sketch a circle of 10 mm on the XY plane and extrude it 20 mm as a new body, with
       the distance set by a user parameter `post_mm`. Extrude its top face 2 mm (join) with a taper of -25 degrees,
@@ -1365,3 +1409,22 @@ as a marker, which the translator refuses, so a wrong guess shows up as a refusa
   `created_by.kind` should read `sketchText` with the sketch name in the report. When the name cannot be read the
   record says `text_params_unknown` and every size that reaches a parameter with an unknown maker is treated as
   reaching the text.
+
+## Capture reader calls to watch (reach)
+
+Written from the API reference and never run (`lib/fusion_reader/read_gap_reach.py`, used only when the first
+translation left steps out). A read that fails gives `reach: { read: false, error }` and the translator leaves out
+every later step that picks geometry, so a wrong guess shows up as too many left out steps and not as a wrong part
+(L2, L3).
+
+- `Timeline.item(index).entity.faces` (`Feature.faces`) with the marker just before a later step: the faces that step
+  created, as `BRepFace` objects. A feature type that has no `faces`, or whose faces cannot be read, counts as a
+  maker of every pick. Check it for an extrude, a revolve, a sweep, a loft, a fillet, a chamfer, a shell, a pattern,
+  a combine and a move, and that the faces of an earlier feature that a later round cut into are still found.
+- `BRepEdge.faces`: the faces an edge joins (a picked edge is traced to the faces it touches).
+- `Design.findEntityByToken(token)` for a picked edge or face: a list of entities (a split face gives several); the
+  reader takes the native object of each. A face is also found with `Component.findBRepUsingPoint(point,
+  BRepEntityTypes.BRepFaceEntityType)` at the recorded point.
+- Two entities are the same face when `entityToken` matches or `geo.same_entity` says so.
+- `Timeline.markerPosition = index` for each tested step, and back to the start marker at the end: after a read the
+  marker must be where it was (`MarkerError` stops the export otherwise).

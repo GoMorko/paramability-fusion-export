@@ -31,8 +31,8 @@ StepType("EmbossFeature", "emboss", reader="read_emboss", handler="emboss:handle
   assembly items have their own roles and are never copied.
 - `reader`: the name of the `lib/fusion_reader` module that reads it.
 - `handler`: `"module:function"` in `lib/translator`. Leave it out while the step cannot be copied; then give
-  `unsupported`, the plain reason the copy stops at it. Once a handler exists, drop `unsupported`: the handler gives
-  its own reasons.
+  `unsupported`, the plain reason the step is left out of the copy (it becomes the gap's reason). Once a handler
+  exists, drop `unsupported`: the handler gives its own reasons.
 - `sketches`: the sketch records in the step data that the size probe can follow (`PROFILES`, `AXIS`, `HOLE_POINTS`).
   The probe (`lib/probe/plan.py`) tries other size values only for sketches it can follow. A sketch token anywhere
   else in the data leaves that sketch unfollowed for every step that uses it, so its sizes end up loose. Name a
@@ -99,8 +99,13 @@ A handler is `handle(item, ctx) -> StepResult | Refusal` (`lib/translator/result
 - `picks`: for a round or bevel, the measured edge points, so a later pattern or mirror can copy them.
 - `repeatable=False`: Fusion recomputes the step for each copy of a pattern (it reaches to a face or through the
   part), so patterns and mirrors refuse it as a source.
-- `Refusal(reason)`: the item cannot be copied. The reason is one plain sentence for a hobbyist. The walk stops there
-  and the part is saved as a fixed shape.
+- `Refusal(reason)`: the item cannot be copied. The reason is one plain sentence for a hobbyist, at most 200
+  characters, since it is the reason of the gap and the app shows it. The walk leaves the item out and goes on (a gap,
+  `docs/recipe-gaps.md`); only a refusal before the copy has written a first step, or in a walk of another
+  component's body, stops the copy and leaves the part a fixed shape. A refusal that comes from earlier gaps (a step
+  that repeats or picks what a gap made) is `Refusal(reason, depends_on=[gap ids])`; `ctx.gap_of(index)` gives the gap
+  of an earlier item. Doubts and notes a handler recorded before it refused are dropped with the
+  item, so a step that is not written fixes no size.
 
 A step whose result is another step in other words can hand its item to that step's handler. Emboss on a flat face is
 an extrude that starts on the face, so `emboss.handle` checks what the copy relies on, builds the data of an extrude
@@ -171,8 +176,37 @@ on its own (`lib/translator/tool_walk.py`) by the same item loop, in a child con
   pass, and `tool_walk.MAX_DEPTH` for nesting in the translator. A step type that makes bodies (a paste, a pattern of
   bodies: `makes_bodies` on the step type) or moves them (`moves_bodies`) must say so, or the walk skips it when it
   names no body of its target.
-- A step type that cannot be copied inside a tool gives `unsupported` as usual, and the Combine's reason names it: "The
-  tool body Body3 cannot be copied: Sweep1 (sweep): ...".
+- A step type that cannot be copied inside a tool gives `unsupported` as usual, and the Combine becomes one gap whose
+  reason names it: "The tool body Body3 cannot be copied: Sweep1 (sweep): ...". The gaps inside the tool are dropped
+  with the failed tool. A tool that is written but has a gap is always a `toolBody` step, never written one by one
+  onto the part (`combine._writes_flat`).
+
+### What a gap needs from a step type
+
+A step that cannot be copied is kept as a gap, with the data the reader has for it, so that the missing step can be
+added later (by hand or by an AI assistant connected to Paramability) from the gap alone. What makes a gap useful:
+
+- A reader, even a small one. A type with no reader gives `"data": {}`, and the gap then has only the name, the
+  reason and the measured box and volume of the part around the step (`target_before` and `target_after`, written for
+  every item). Read the member values a person would need to redo the step: extents, distances, angles, operation, the
+  inputs.
+- `data.params` for every value that a user parameter can drive (see "Parameters behind values" in
+  `docs/capture-format.md`). The gap lists them as `values` with the Fusion expression and the formula of the recipe,
+  and the audit finds the sizes the step reads (`sizes`, `looseSizes` of the gap). A size that only this step reads
+  is kept as a size and marked, so the missing step can use it.
+- Sketches by token where the step uses them (`sketches=` in the table entry), so the sizes behind those sketches are
+  found.
+- Picks as records the capture already uses (`edges`, `faces` lists with `token` or `points`, or a `face_point`), so
+  `gaps.pick_records` sees them: a later round or shell that picks faces of a gap is then left out too, instead of
+  landing on another edge of the copy. A list of faces the step made, or of bodies, goes under one of the names
+  `gaps.pick_records` skips (the `_NOT_PICKS` list in `lib/translator/gaps.py`); add a new name there so it is not
+  taken for a pick.
+- Marked `foreign` records for inputs of another component, as for a copied step. A step with such an input is left
+  out as a gap, with the reason of `ref_motion.why_foreign` when there is one.
+- Plain data in millimetres and degrees, in the component's coordinates (the gap file gives `toRecipe` to turn them).
+  The file keeps at most 48 KiB of `data` per gap: free curve `samples` and extra loops are cut first, so avoid
+  writing more than the step needs.
+- `makes_bodies` and `moves_bodies` on the table entry when the type makes or moves bodies, as for a copied step.
 
 ## 4. What protects a new handler
 
@@ -203,8 +237,11 @@ on its own (`lib/translator/tool_walk.py`) by the same item loop, in a child con
   (`assert_schema_ok`); one test per refusal branch; one test with a size table that shows the values follow the
   sizes, and one that shows a value that cannot follow marks its size with a reason. Assert outcomes (recipe values,
   verdicts, loose and dropped names), not wording.
-- A step type that was listed as unsupported can be the example of a stopping step in older tests (the stop dialog,
-  the stop warning, the capture reader walk). When it becomes copyable those tests need another example type.
+- A step type that was listed as unsupported can be the example of a left out step in older tests (the gap tests,
+  the result window, the capture reader walk). When it becomes copyable those tests need another example type.
+- A new refusal branch is a gap: a test that the walk leaves the item out, with its `after` and `before`, and that the
+  later steps are copied. A step that picks faces of the new step is covered by the reach tests in
+  `tests/test_translate_gaps.py`.
 - Reader tests in `tests/test_capture_reader*.py` with the fakes, for each member the reader reads and for an
   unreadable one.
 

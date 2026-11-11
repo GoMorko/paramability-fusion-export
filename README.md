@@ -37,16 +37,18 @@ Nothing is typed in Fusion.
    says so. A parameter that drives a joint is not ticked to start with: the part does not follow it in the assembly.
    You can still tick it; its row then says "size, may be unexpected". Click a row to read its comment, its formula
    or the full reason in the box under the table. You can tick up to 64 sizes.
-4. If a step of the body cannot be copied, a warning shows under the body picker as soon as you pick it: which
-   step stops the copy (for example "Extrude9 (extrude)"), and that the part will be saved as a fixed shape while your
-   parameters still come along as variables. Hover the warning for the full reason. "Show in timeline" selects that
-   step in Fusion; the timeline marker does not move. A line "Copied with a note" lists steps that were copied with a
-   remark.
+4. If a step of the body stops the copy altogether (see "When a step cannot be copied"), a warning shows under the
+   body picker as soon as you pick it: which step stops the copy (for example "Extrude9 (extrude)"), and that the part
+   will be saved as a fixed shape while your parameters still come along as variables. Hover the warning for the full
+   reason. "Show in timeline" selects that step in Fusion; the timeline marker does not move. A line "Copied with a
+   note" lists steps that were copied with a remark. A step that is only left out of the copy is not in this warning:
+   the result window names it after the export.
 5. Pick the design up direction, click OK and choose where to save the file.
 6. A window then lists each size with its range and what it becomes in Paramability ("size", "may be unexpected",
    "kept fixed", "not followed" or "not used"), what stays fixed and why, which sizes may give unexpected results
-   (loose sizes) and why, and how many parameters come along as variables. If this window cannot open, the same text
-   is shown in a message box.
+   (loose sizes) and why, how many parameters come along as variables, and, when the add-in left steps out of the
+   copy, a "Left out" list with the step and the reason. If this window cannot open, the same text is shown in a
+   message box.
 7. Open the file in Paramability. The sizes land on the form as variables, ready to configure.
 
 ### What the export does
@@ -131,10 +133,47 @@ many copies a pattern makes is a whole number.
 A size is labelled with the name of its Fusion parameter; the Fusion comment goes into the variable list as the
 description of the variable.
 
-When a step cannot be copied, the file holds the plain part only. The message after the export starts with the
-first step that stopped it, and the lower-right corner of the Fusion window shows a short line with the same step
-(Fusion decides how long it stays). A copy of what the add-in read is saved inside the file as `report.json`; its `probe` record holds the tries
+A copy of what the add-in read is saved inside the file as `report.json`; its `probe` record holds the tries
 for the sketches, and its `health` record says whether the design came back to its start.
+
+### When a step cannot be copied
+
+Some steps cannot be copied yet: a sweep, a loft, an extrude with a taper on a face, and others (the limits below
+say which). What the add-in does then depends on the step.
+
+Most of the time the step is left out. The add-in goes on with the steps after it, writes the copy without the
+missing step, and keeps what it knew about that step in the file: its name and type, why it was left out, where it
+belongs in the list of steps, how it changed the size of the part and the numbers Fusion stores for it. Paramability
+opens such a part with the original shape (the STEP shape Fusion made) and an unfinished copy of its steps beside it,
+and lists what is missing. You can switch between the original shape and the copy. The copy is not the part until
+the missing steps are added. If you connect an AI assistant to Paramability, it can add the missing steps for you.
+The add-in itself has no AI in it.
+
+A step that picks edges or faces of a left out step is left out too, since in the copy those faces do not exist (a
+round on the edges of a sweep, for example). The add-in asks Fusion which step made the faces each later round,
+chamfer or shell picks, and leaves out only the ones that pick faces of a missing step. When Fusion does not
+answer, every later step that picks edges or faces is left out. A pattern or mirror of a left out step is left out
+too, and so is a Combine whose tool body cannot be copied (the Combine is one missing step; the rest of the part is
+copied). The result window lists every step left out with its reason. In `report.json` each of them has the verdict
+`leftOut`.
+
+A size that only a left out step reads is still offered as a size, marked "may give unexpected results" with a reason
+that says so: it changes nothing in the copy until the step is added. Sizes that other steps read too stay plain
+sizes.
+
+A part is saved as a fixed shape only in these cases. Your parameters still come along as variables, the message
+after the export starts with the first step that stopped the copy, and the lower-right corner of the Fusion window
+shows a short line with the same step (Fusion decides how long it stays):
+
+- a step that cannot be copied comes before the first step the copy writes (the copy needs a body to add to), or the
+  body starts in a way that cannot be copied;
+- more than 16 steps would be left out of one part;
+- the place of the part in the assembly cannot be used, or a step of another component or an assembly step changes
+  the part;
+- the body cannot be followed through the timeline, or a step cannot be read from Fusion;
+- a step that Fusion shows as an error;
+- a step that splits the part or makes another body;
+- a recipe that is too large to open, or a list of left out steps that cannot be written.
 
 Every plain part or recipe the add-in writes (also the one size case of Export size choices) also lists the design's
 user parameters (up to 64, in Fusion order) with their current values, units and comments. A parameter worked out by a formula keeps
@@ -153,7 +192,9 @@ unchanged.
 - The table ticks every parameter that any picked body uses. The warning under the picker names each body that stops
   the copy.
 - A body that cannot be copied (or whose steps cannot be read) is saved as a fixed shape next to the editable bodies,
-  with its own note. The other bodies keep their recipes and sizes.
+  with its own note. The other bodies keep their recipes and sizes. A body with left out steps keeps its recipe and
+  opens with the original shape and an unfinished copy, as for one body; the result window lists the left out steps
+  of each part.
 - The sketches of all bodies are tried together over one set of rows (at most 64 in all, not per body), so the export
   takes about as long as for the body with the most sketches plus one read per body per row. A size left without a row
   is marked "may give unexpected results".
@@ -200,6 +241,8 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 
 ## Limits
 
+- A part with left out steps is exported the same way as any other, so it takes as long as a full export. At most 16
+  steps can be left out of one part; a longer list stops the copy.
 - Every size row and sketch try starts from the saved values: before each one after the first the add-in puts the
   parameters back and recomputes. A sketch with two solutions can still land on its other one after a try that did
   not rebuild, and stay there. After such a try the add-in reads the design again before the next one. A size is
@@ -222,14 +265,14 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 - A round or chamfer that picks an edge inside one flat side wall of an extrude (where a round meets the wall) follows
   that wall.
 - A revolve axis the copy cannot use (an edge that is not straight, a face that is not round, an axis that cannot be
-  read) stops the copy; the reason says which of these it is.
+  read) leaves the revolve out of the copy; the reason says which of these it is.
 - One solid body per part. Several bodies go in one file as parts (see "Several bodies in one file").
 - A body inside a component (at any depth) exports as a recipe with sizes, like a root body, and lands where Fusion
   shows it. If the part was moved by hand, capture its position first (Position, Capture Position); the export asks
   for it. A component used several times exports the copy you picked.
 - These stay a fixed shape with a note: a part from a linked design, a place in the assembly that cannot be read, a
-  step of another component that changes the body, a body made in another component and moved in, and a step that
-  reaches into another component's edges, bodies or curved faces. A step that uses a sketch of another component is copied
+  step of another component that changes the body, and a body made in another component and moved in. A step of the
+  body that reaches into another component's edges, bodies or curved faces is left out of the copy. A step that uses a sketch of another component is copied
   where Fusion shows it and follows the sizes the probe saw move it; where it could stop meeting the part (a slot that
   no longer reaches its wall, a rail that comes off), the size may give unexpected results, with the reason and the
   value past which it starts.
@@ -241,7 +284,8 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   points or on a flat face of another component, and a pattern direction taken from one, are copied and follow the
   sizes the tries measured (see above). Where the tries could not measure the place, or it turns, the size that may move
   it is marked "may give unexpected results" with the step named. An origin plane or axis of another component is treated the same way, since it moves with that component. A hole placed
-  on an edge of another component, and an extrude that starts from or reaches to a curved face of one, stop the copy.
+  on an edge of another component, and an extrude that starts from or reaches to a curved face of one, are left out of
+  the copy.
 - A link to another component is found only through the sketch itself: a projected curve or point, a constraint to
   one, or a sketch drawn on that component's face. A sketch that follows another component in another way (through
   a construction plane or axis built on it, or a pattern reaching into it) is not linked; the tries of unticked
@@ -250,7 +294,7 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   add-in can match them by name; construction planes, axes and joints are read for the component and the ones above
   it. A size that turns a sketch plane, moves a point along a curve, or changes the shape of an outline may give
   unexpected results.
-  These stop the copy and leave a plain part:
+  These steps are left out of the copy (see "When a step cannot be copied"):
   thin extrudes of an open line, of several outlines, of an outline with holes, that go two ways, reach to a face or
   have a taper, an extrude of a curved face, of several faces or of a face together with sketch outlines, a text or spline outline that is too big or too complex (see below), extrudes that start or end on
   a tilted or curved surface, an emboss on a curved face, an emboss that is moved or turned on its face, drawn on a
@@ -260,8 +304,8 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   usual places, mirrors of faces, a chamfer with two different sizes whose sides could not be
   measured, a press pull (offset
   faces) of a curved face, of a face with a leaning or rounded side, or of two faces that meet, and every
-  step type not listed above (sweep, loft, coil, draft). A step of that kind in a tool body stops the copy of the tool.
-  A Remove of another body, a Split Face (the solid stays the same, so picks on its faces may not follow) and steps of
+  step type not listed above (sweep, loft, coil, draft). A step of that kind in a tool body leaves the Combine that
+  takes the tool out of the copy, as one missing step. A Remove of another body, a Split Face (the solid stays the same, so picks on its faces may not follow) and steps of
   other bodies that are never joined to the picked body do not stop the copy.
 - A Combine (join, cut or keep only the shared part) is copied with its tool bodies. A tool made only by steps that add
   material (a new body, then extrudes or revolves that join it) is written step by step, each with the Combine's
@@ -274,7 +318,7 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   tool body Body3 cannot be copied"), so you know what to change in Fusion. A tool step that starts from or reaches to a
   face of the part follows that face where the add-in can place it, and marks the sizes it cannot follow.
 - Copy Paste Body is copied by writing the steps of the source again, as the source stood at the paste. The pasted
-  body must be a new body: a paste that lands on a body that already has steps stops the copy. A copy that sits where
+  body must be a new body: a paste that lands on a body that already has steps is left out of the copy. A copy that sits where
   its source sits keeps the sizes; a copy that sits elsewhere gets a plain-number Move, and the sizes that could change
   its place are marked "may give unexpected results". A paste of several bodies is copied when each pasted body can
   be matched to its source by its corners.
@@ -282,7 +326,7 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   their distances and angles as sizes. The other kinds (point to point, to a position, along an entity) are written
   as the numbers Fusion measured. What they follow can move with any size, so every ticked size is marked or left
   out with the reason. A Move of faces, and a Move that mirrors or
-  scales, stop the copy.
+  scales, are left out of the copy.
 - A rectangular, circular or mirror pattern of bodies is copied when a Combine takes the copies. When the Combine takes
   the whole pattern (the original and every copy), the pattern is written as a pattern, so its count and spacing follow
   sizes. For a join the original may be the part itself. When the Combine takes only some of the copies, or the layout
@@ -293,21 +337,21 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 - A pattern or mirror of features whose sources hold a Combine of the part, together with every step that built its tool
   bodies, repeats the Combine as it was copied, so its count, spacing and skipped copies follow sizes as for any
   pattern. A pattern that holds only some of those steps, the steps of a tool without its Combine, or a Combine that
-  keeps only the shared part stops the copy.
+  keeps only the shared part is left out of the copy.
 - Fusion does not say what a keep-only-the-shared-part Combine with several tools keeps (the part and every tool, or
   the part and any tool). The export tries it on temporary copies, which are never added to your design, compares
   the volumes with the result Fusion made, and copies it that way. When the volumes fit neither way, or a tool lives
-  in another component, the Combine stops with "This combine keeps a shared part that the copy could not work out".
+  in another component, the Combine is left out with "This combine keeps a shared part that the copy could not work out".
   When both ways give the same volume, the export cannot tell which one Fusion used, so the sizes of the tools are
   marked "may give unexpected results".
-  A Combine whose result is more than its tool bodies can give (a cut that removes more than the tools hold) stops too.
+  A Combine whose result is more than its tool bodies can give (a cut that removes more than the tools hold) is left out too.
 - The tool body may be made in another component. The add-in then reads the steps that made it in that component
   (they count in the 120), and writes them where the tool component sits in the assembly, turned and moved as
   Fusion shows it. The sizes of those steps, including sketch dimensions of the tool, are sizes of the part like any
   other. A size that moves the tool's component is followed when the tries can measure it; one they cannot follow
   ("puts its tool at the place of Rod that turns with it") may give unexpected results. The message after the export
-  names the step and the component of a tool that stops the copy. A tool from another component that reaches to a
-  face becomes a tool step. A Combine inside such a tool that takes a body from yet another component stops the copy.
+  names the step and the component of a tool that cannot be copied. A tool from another component that reaches to a
+  face becomes a tool step. A Combine inside such a tool that takes a body from yet another component makes the Combine that takes the tool a left out step.
 - Sketch outlines with a spline edge, an elliptical arc or another free curve are copied as spline segments. The add-in
   reads the Fusion curve as a fine chain of points and picks points for the app's own smooth curve so that it stays
   within 0.005 mm of that chain, also between its points (a long or tight curve is split into several segments). A size that moves a sketch
@@ -347,7 +391,7 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 - Paramability opens up to 256 MB per size and 1 GB per file. The export stops with a message above that.
 - The design needs history (a parametric design).
 - Made for the current Fusion release.
-- This is version 0.8.2. The Fusion side has not been run by a tool: see `docs/hand-tests.md`.
+- This is version 0.9.0. The Fusion side has not been run by a tool: see `docs/hand-tests.md`.
 
 ## Code layout
 
@@ -380,3 +424,4 @@ python3 -m unittest discover -s tests -t .
 Python 3.10 or newer, standard library only.
 
 To make the export copy one more kind of Fusion step, follow `docs/adding-a-step-type.md`.
+The file that lists the steps left out of a copy is described in `docs/recipe-gaps.md`.
