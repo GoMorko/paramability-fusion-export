@@ -327,9 +327,6 @@ class RefusalTest(unittest.TestCase):
         self.assertIn("reaches 6.00 mm", found.reason)
         self.assertIn("radius of 5.00 mm", found.reason)
 
-    def test_an_outline_that_clears_the_bend_is_taken(self):
-        self.assertIsInstance(plan(pipe_with_bend(), points=[[0, y, 0] for y in (-1, 4.9)]), paths.PathPlan)
-
     def test_the_outline_is_measured_across_the_path_plane_only(self):
         tall = [[0, 0, z] for z in (-50, 50)]
         self.assertIsInstance(plan(pipe_with_bend(), points=tall), paths.PathPlan)

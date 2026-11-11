@@ -1,4 +1,4 @@
-"""Sweep and loft features (adsk.fusion.SweepFeature, LoftFeature) as plain dicts (docs/capture-format.md).
+"""Sweep and loft features (adsk.fusion.SweepFeature, LoftFeature) as plain dicts.
 
 Before the item: the outlines, the path (or rails, or centre line) as curves in the target component's coordinates,
 and the settings that shape the result (orientation, distances, taper, twist, section end conditions, closed). After

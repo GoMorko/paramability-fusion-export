@@ -410,25 +410,15 @@ class RefusalTest(unittest.TestCase):
 class PathShapeTest(unittest.TestCase):
     """Paths the recipe cannot hold leave the sweep out as a gap after the block."""
 
-    def check(self, name, reason):
-        result = translate(load_capture(name))
-        self.assertEqual(left_out(result, 4)["reason"], reason)
-        self.assertEqual(len(steps_of(result.recipe, "extrude")), 1)
-
-    def test_a_closed_path_that_is_not_a_circle(self):
-        self.check("sweep_closed_outline", paths.CLOSED)
-
-    def test_a_sharp_corner(self):
-        self.check("sweep_sharp_corner", paths.SHARP_CORNER)
-
-    def test_an_outline_in_the_middle_of_the_path(self):
-        self.check("sweep_middle_outline", paths.BOTH_SIDES)
-
-    def test_an_outline_that_is_not_square_to_the_path(self):
-        self.check("sweep_tilted_outline", paths.NOT_SQUARE)
-
-    def test_a_path_that_bends_in_3d_with_a_free_curve(self):
-        self.check("sweep_bend_3d", paths.BENDS_3D)
+    def test_each_path_the_recipe_cannot_hold_leaves_the_sweep_out_with_its_reason(self):
+        cases = (("sweep_closed_outline", paths.CLOSED), ("sweep_sharp_corner", paths.SHARP_CORNER),
+                 ("sweep_middle_outline", paths.BOTH_SIDES), ("sweep_tilted_outline", paths.NOT_SQUARE),
+                 ("sweep_bend_3d", paths.BENDS_3D))
+        for name, reason in cases:
+            with self.subTest(name):
+                result = translate(load_capture(name))
+                self.assertEqual(left_out(result, 4)["reason"], reason)
+                self.assertEqual(len(steps_of(result.recipe, "extrude")), 1)
 
     def test_an_outline_wider_than_the_bend_is_refused(self):
         capture = edited(PIPE, PIPE_ITEM, lambda d: d["profiles"][0]["loops"][0]["curves"][0].update(radius=12.0))
