@@ -239,6 +239,16 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(tool_items.plan(items, ref("t")).sources, [])
         self.assertEqual(indices(tool_items.plan(items).wanted), [0])
 
+    def test_combines_of_the_body_the_exported_body_was_split_from_give_tools_up_to_the_split(self):
+        split = step(3, ["p", "t"], type_="SplitBodyFeature", bodies_before=[ref("p")],
+                     data={"bodies": [ref("p")], "pieces": [ref("p"), ref("t")]})
+        items = [step(0, ["p"]), step(1, ["b2"]), combine(2, ["b2"], target="p"), split,
+                 step(4, ["b3"]), combine(5, ["b3"], target="p")]
+        for item in items:
+            item.setdefault("bodies_before", [])
+        plan = tool_items.plan(items, ref("t"))
+        self.assertEqual(([s.record["token"] for s in plan.sources], indices(plan.wanted)), (["b2"], [1]))
+
     def test_the_source_of_a_paste_is_followed_with_its_depth(self):
         items = [step(0, ["b2"]), step(1, ["b2"]), paste(2, "b3", "b2"), combine(3, ["b3"])]
         plan = tool_items.plan(items, ref("t"))

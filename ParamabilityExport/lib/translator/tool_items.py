@@ -1,4 +1,5 @@
-"""Which timeline items build the tool bodies of the exported body's Combines. Pure: capture dicts only.
+"""Which timeline items build the tool bodies of the exported body's Combines, and of the Combines of the bodies it
+was split from. Pure: capture dicts only.
 
 A Combine of the exported body takes tool bodies, from its own component or another. To copy a tool, the steps that
 made it are needed, and so are the steps behind it: the bodies a Paste or a body pattern copies (`sources`,
@@ -13,7 +14,7 @@ is followed up to the latest of them, so steps added between those items are rea
 """
 from dataclasses import dataclass, field
 
-from . import step_kinds
+from . import lineage, step_kinds
 from .capture import same_body
 
 MAX_TOOLS = 32
@@ -155,21 +156,28 @@ def built_by(items, record, anchor, max_depth=MAX_DEPTH):
 
 def plan(items, target=None, max_items=MAX_ITEMS, max_tools=MAX_TOOLS, max_depth=MAX_DEPTH):
     """The `Plan` for the tool bodies of `items`. `target` is the exported body's ref: it is never followed, its
-    steps are read already.
+    steps are read already. The Combines of the bodies it was split from (`lineage.py`), before each split, count
+    like its own.
 
     Bodies are followed breadth first from the tools of the Combines. Copies made by a Paste or a body pattern do not
     count against `max_tools`, since their steps are those of their source: the limit counts distinct source bodies.
     Bodies past `max_tools`, deeper than `max_depth`, and items past `max_items` give no step to read."""
     result = Plan()
     queue = [(tool, combine, n, 1) for combine, tool, n in combine_tools(items, target)]
+    own = [target] if target is not None else []
     if target is not None:
         # An exported body that is itself a copy is built from the steps of its source.
         queue += [(source, item, n, 1) for item in items if _readable(item) and _is_copy(item, target)
                   for source, n in source_records(item)]
+        # A body the exported body was split from is built like it up to the split, Combines included.
+        for at, parent in lineage.of({"target": target, "items": items}):
+            own.append(parent)
+            queue += [(tool, combine, n, 1) for combine, tool, n in combine_tools(items, parent)
+                      if combine["index"] < at]
     visited, built, found, why = [], 0, {}, {}  # visited: (record, indices of the items that serve it)
     while queue:
         record, anchor, number, depth = queue.pop(0)
-        if target is not None and same_body(record, target):
+        if any(same_body(record, body) for body in own):
             continue
         steps = makers(items, record, anchor)
         served = next((indices for other, indices in visited if same_body(record, other)), None)

@@ -154,8 +154,9 @@ ITEM:
   `lib/translator/step_kinds.py`). Feature readers run only for items in the target's component, plus the second pass
   below for the steps of a Combine's tool bodies from other components; the other items keep `"data": {}` with their
   `bodies_after`, health and message.
-- `helper_of`, `helper_unread`, `body_states`: only on items that made a body a Combine of the target takes as a tool,
-  or a body such a tool is copied from (see CombineFeature in section 5). `body_states` is also on the steps that built
+- `helper_of`, `helper_unread`, `body_states`: only on items that made a body a Combine of the target (or of a body
+  the target was split from, before that split) takes as a tool, or a body such a tool is copied from (see
+  CombineFeature in section 5). `body_states` is also on the steps that built
   a body the target was split from, up to that split (SplitBodyFeature in section 5): the translator reads those
   steps with these measures, as steps of the target, so a draft or a Split Face before the split is checked. `helper_of` (items of another component):
   the body's token; the item's `data` was read in a second pass in that component's frame. `body_states` (any such
@@ -1027,7 +1028,8 @@ planes and faces are not `foreign` and every value is in that component's coordi
 `translator/tool_items.py` picks are rolled to: the modeling steps before the Combine whose `bodies_after` list the tool
 and that sit in the tool's component (the component a foreign body names, else the one of the item that holds the
 body). Tools of the target's own component are planned the same way: their items are
-already read, and only `body_states` is added. The plan follows the bodies behind a tool: the source of a Paste
+already read, and only `body_states` is added. The Combines of a body the target was split from count like the
+target's own, up to the split that made the next body of the chain (`lineage.py`). The plan follows the bodies behind a tool: the source of a Paste
 (`sources`), the source bodies of a pattern or mirror of bodies (`source_bodies`) and the tools of a Combine that
 changed the tool. A body held by several items is followed up to the latest of them, so steps added to a kept tool
 between two Combines are read. Limits: `MAX_ITEMS` 120 steps for the whole capture, `MAX_TOOLS` 32 bodies counted by distinct
