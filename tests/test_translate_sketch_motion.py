@@ -304,7 +304,7 @@ class OwnerFilterBoxTest(unittest.TestCase):
         self.assertEqual(result.fixed, [])
         reasons = {f["name"]: f["reason"] for f in result.loose}
         self.assertEqual(sorted(reasons), sorted([self.TICKED[0], self.TICKED[2], self.TICKED[3], self.TICKED[4]]))
-        self.assertIn("may give unexpected results past 1.8:", reasons[self.TICKED[0]])
+        self.assertIn("may give unexpected results past 1.97:", reasons[self.TICKED[0]])
         self.assertIn("LidAndRail of BoxLid", reasons[self.TICKED[2]])
         sizes = result.recipe["sizes"]
         width = sizes["FilterBox___width__contains_CeramicMedium"]

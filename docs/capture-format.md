@@ -1435,8 +1435,8 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
     (`lib/translator/reach_motion.py`, "Measured references in the motion file"): its move is written as a formula, a
     size that does not move it is not marked, and only a size it cannot follow is marked;
   - a start offset that follows sizes, or a "from entity" start on a moving end face, moves the sketch placement
-    along its normal (`sketch.on.origin` as formulas), and the picks on that extrude follow it too. Such a moving
-    start with a side that reaches "to" a face is fixed.
+    along its normal (`sketch.on.origin` as formulas), and the picks on that extrude follow it too. A side that
+    reaches "to" a face from such a start keeps its end on the face: its length is the face's move less the start's.
   - a copy made by a pattern or mirror of an extrude is placed like the extrude and moved by the copy's motion: a
     linear spacing that follows sizes moves the point with it, a turn or a mirror moves it by numbers. A pick on a
     copy fixes the sizes behind that pattern's count (and a circular angle), since the list of points cannot grow.
@@ -1773,10 +1773,12 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   that copy out"); the range stays. Copies of a circular pattern keep their count and angle.
 - A taper that follows sizes should stay under 45 degrees either way, since Paramability refuses a steeper one: the
   ranges of the untyped sizes it reads are cut where it reaches 45 (`Context.cut`, `kept_ranges.holding_ranges`).
-  When no cut keeps it under 45 (every size it reads has a typed range), those sizes are marked instead.
+  When no cut keeps it under 45 (every size it reads has a typed range), those sizes are marked instead. The cut
+  moves both ends of every size it reads by one share, then gives back each end the rule holds at, so a size that
+  only helps one way, or cancels out, keeps that end.
 - A "to entity" length that follows a moving face or plane would pass its own start at some sizes: the ranges of the
-  untyped sizes it reads are cut where it stays positive ("would reach past the face it starts from"), the same way;
-  only when no cut keeps it are they marked.
+  untyped sizes it reads are cut where it stays positive ("would reach past the face it starts from"), the same way,
+  with both sides of a two sided extrude in one cut; only when no cut keeps it are they marked.
 - A through cut clears the part at the largest sizes tried (`box_max` of the motion file). A cut through all to one
   side without a measured end face cuts toward the side where its outline meets the part built so far (sampled on a
   grid over the outline); Fusion's stored direction is kept when both sides, or neither, hold material, and turned with

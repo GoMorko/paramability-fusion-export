@@ -163,17 +163,6 @@ def _start_shift(start, frame, ctx, item, plane_q):
     return Refusal("This extrude starts in a way that is not copied yet.")
 
 
-def _keep_start_with_reach(ctx, item, data, shift_q):
-    """A side that reaches to a face is measured from a start that stays: a moving start is fixed then."""
-    if not shift_q.sized:
-        return shift_q
-    if any((data.get(key) or {}).get("kind") == "toEntity" for key in ("side_one", "side_two")):
-        ctx.doubt(shift_q.reads, "%s starts at a place that moves and reaches to a face, which the copy cannot follow"
-                  % item.get("name", "a step"))
-        return Quantity(shift_q.n)
-    return shift_q
-
-
 def _origin(frame, shift_q):
     """The sketch origin moved along its normal by the start shift: a position that may follow sizes."""
     z = vec.unit(frame["z"])
@@ -186,29 +175,38 @@ def _origin(frame, shift_q):
     return out
 
 
-def _reach_quantity(ctx, item, which, side, z, reach, offset, plane_q):
+def _reach_quantity(ctx, item, which, side, z, reach, offset, plane_q, shift_q):
     """The length of the side `which` that reaches to a face, as a Quantity that follows the face when it moves with
-    sizes: the face's move less the sketch plane's move (`plane_q`, along the sketch normal). Where the length would
-    pass zero at a range end, the ranges are cut to where it stays positive; its sizes are marked only when no cut
-    keeps it."""
+    sizes: the face's move less the moves of the sketch plane (`plane_q`, along the sketch normal) and of the start
+    (`shift_q`, from the sketch plane). A face the copy cannot follow counts as staying (its sizes are marked)."""
     plain = Quantity(abs(reach) + float(offset))
-    moved = reach_motion.target_shift(ctx, item, which, side, z)
-    if moved is None:
-        return plain
-    if plane_q.sized:
-        moved = moved.plus(plane_q.scaled(-1))
+    moved = reach_motion.target_shift(ctx, item, which, side, z) or Quantity(0.0)
+    for part in (plane_q, shift_q):
+        if part.sized and moved.sized and moved.core == part.core:
+            moved = Quantity(moved.n - part.n)
+        elif part.sized:
+            moved = moved.plus(part.scaled(-1))
     if not moved.sized:
         return plain
-    length = moved.plus(reach - moved.n).scaled(_sign_of(reach)).plus(float(offset))
-    if values.stays_positive(ctx.table, length):
-        return length
+    return moved.plus(reach - moved.n).scaled(_sign_of(reach)).plus(float(offset))
+
+
+def _keep_reaches_positive(ctx, item, sides):
+    """The lengths of the `sides` that follow a moving face must stay above zero. Where one would pass zero, the ranges
+    are cut to where all of them stay positive, in one search, so the cut for one side does not shorten a range only
+    the other side would need; their sizes are marked only when no cut keeps them."""
+    reaching = [s for s in sides if s.get("reaches") and s["q"].sized]
+    if all(values.stays_positive(ctx.table, s["q"]) for s in reaching):
+        return
     why = "%s would reach past the face it starts from" % item.get("name", "a step")
-    found = kept_ranges.holding_ranges(ctx.table, [(length, 1)], LENGTH_TOL)
-    if not found:
-        ctx.doubt(length.reads, why)
-        return plain
-    ctx.cut(found, why)
-    return length
+    found = kept_ranges.holding_ranges(ctx.table, [(s["q"], 1) for s in reaching], LENGTH_TOL)
+    if found:
+        ctx.cut(found, why)
+        return
+    for side in reaching:
+        if not values.stays_positive(ctx.table, side["q"]):
+            ctx.doubt(side["q"].reads, why)
+            side["q"] = Quantity(side["distance"])
 
 
 def _reach_through(box, origin, direction):
@@ -234,7 +232,7 @@ def _is_through(side):
     return side is not None and side.get("kind") in ("throughAll", "all")
 
 
-def _plan(item, data, frame, shift, combine, ctx, plane_q):
+def _plan(item, data, frame, shift_q, combine, ctx, plane_q):
     """The sides to extrude, as dicts {extent, sign, distance, taper}; or a Refusal.
 
     `sign` is the travel direction relative to the sketch normal. extent is oneSide, symmetric or through. A distance
@@ -244,6 +242,7 @@ def _plan(item, data, frame, shift, combine, ctx, plane_q):
     extent_type = data.get("extent_type", "one")
     if extent_type not in ("one", "two", "symmetric"):
         return Refusal("This extrude sets its length in a way that is not copied yet.")
+    shift = shift_q.n
     rel_end = data.get("end_offset")
     if rel_end is not None:
         rel_end = rel_end - shift
@@ -297,8 +296,8 @@ def _plan(item, data, frame, shift, combine, ctx, plane_q):
             if not distance > 0:
                 return Refusal("This extrude has no length.")
             return {"extent": "oneSide", "sign": sign, "distance": distance, "taper": taper,
-                    "taper_q": taper_q, "adjusts": True,
-                    "q": _reach_quantity(ctx, item, which, side, z, reach, offset, plane_q)}
+                    "taper_q": taper_q, "adjusts": True, "reaches": True,
+                    "q": _reach_quantity(ctx, item, which, side, z, reach, offset, plane_q, shift_q)}
         return Refusal("This way of setting the extrude length is not copied yet.")
 
     if extent_type == "symmetric":
@@ -337,11 +336,13 @@ def _plan(item, data, frame, shift, combine, ctx, plane_q):
         second = one_side(two, "side_two", forced_sign=-first["sign"], measured=False)
         if isinstance(second, Refusal):
             return second
+        _keep_reaches_positive(ctx, item, [first, second])
         return [first, second]
 
     side = one_side(data.get("side_one"), "side_one")
     if isinstance(side, Refusal):
         return side
+    _keep_reaches_positive(ctx, item, [side])
     return [side]
 
 
@@ -806,9 +807,8 @@ def handle(item, ctx):
     shift_q = _start_shift(data.get("start", {"kind": "profilePlane"}), first_frame, ctx, item, plane_q)
     if isinstance(shift_q, Refusal):
         return shift_q
-    shift_q = _keep_start_with_reach(ctx, item, data, shift_q)
     shift = shift_q.n
-    plan = _plan(item, data, first_frame, shift, combine, ctx, plane_q)
+    plan = _plan(item, data, first_frame, shift_q, combine, ctx, plane_q)
     if isinstance(plan, Refusal):
         return plan
     z0 = vec.unit(first_frame["z"])

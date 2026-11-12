@@ -181,13 +181,15 @@ class ReachTest(unittest.TestCase):
         self.assertEqual(steps_of(result.recipe, "extrude")[1]["sketch"]["on"]["origin"],
                          [0, 0, {"expr": "wall_mm * 2"}])
 
-    def test_a_moving_start_that_reaches_to_a_face_leaves_its_size_out(self):
+    def test_a_moving_start_that_reaches_to_a_face_keeps_its_end_on_the_face(self):
         def edit(capture):
             capture["items"].append(tab(start={"kind": "offset", "offset": 4.0}))
             capture["items"][-1]["data"]["params"] = {"start.offset": param("d30", "wall_mm * 2", 4.0)}
         result, _ = run(tray(edit, keep=[0, 1]))
         self.assertEqual((result.fixed, result.loose), ([], []))
-        self.assertNotIn("wall_mm", result.recipe["sizes"])
+        tab_step = steps_of(result.recipe, "extrude")[1]
+        self.assertEqual(tab_step["sketch"]["on"]["origin"], [0, 0, {"expr": "wall_mm * 2"}])
+        self.assertEqual(tab_step["distance"], {"expr": HEIGHT + " - (wall_mm * 2)"})
 
 
 class CapsTest(unittest.TestCase):

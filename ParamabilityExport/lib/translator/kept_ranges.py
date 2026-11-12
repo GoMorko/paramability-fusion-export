@@ -2,11 +2,13 @@
 
 A rule is `(value, sign)`: a sized Quantity that must stay above `tol` (sign 1), below `-tol` (sign -1) or within
 `tol` of zero (sign 0) at every size setting of the range (`range_check.corners`: every mix of the ends of the sizes
-it reads). `holding_ranges` looks for the values the ends of the sizes it reads can go to while the rules still hold: each size
-at its own ends first, then all of them by the same share of what is left for the settings that change several sizes
-at once. It does not change the ranges itself: the caller marks the sizes past the values found (`past_reasons`), so
-the person knows past which value a size may give unexpected results, or cuts the ranges to them (`Context.cut`). A
-size whose range the person typed gets no value: the rules cannot be kept for it.
+it reads). `holding_ranges` looks for the values the ends of the sizes it reads can go to while the rules still hold:
+each size at its own ends first, then both ends of all of them by the same share of what is left for the settings that
+change several sizes at once, so no one size gives up all of its room, and an end the rules do not need cut gets its
+whole range back (a test costly to run moves the far ends first, `holding_ranges_where` without `balanced`). It does
+not change the ranges itself: the caller marks the sizes past the values found (`past_reasons`), so the person knows
+past which value a size may give unexpected results, or cuts the ranges to them (`Context.cut`). A size whose range
+the person typed gets no value: the rules cannot be kept for it.
 
 `built_ranges` does change ranges: where Fusion itself did not rebuild the design at a value the size probe tried, the
 range stops at the farthest value that built on that side, since the form should not offer a value the design cannot
@@ -147,13 +149,14 @@ def holding_ranges(table, rules, tol):
     return holding_ranges_where(table, reads, lambda bounds, only=None: _holds(table, rules, bounds, tol, only))
 
 
-def holding_ranges_where(table, reads, holds, relax=False, steps=range_check.STEPS):
+def holding_ranges_where(table, reads, holds, steps=range_check.STEPS, balanced=True):
     """`holding_ranges` for a rule that is a test, not a sized value: `holds(bounds, only=None)` says whether it holds
     at the settings of `bounds` ({recipe size name: (low, high)}, `range_check.corners` for the settings), or at the
     one end `only` ((size, 0 for its min or 1 for its max), the other sizes at their value now). `reads` are the
-    Fusion names of the sizes the rule depends on. With `relax`, a size that keeps its whole range while the others
-    stay cut is given it back: the joint cut shortens every size by the same share, also those the rule does not
-    fail for. `steps` is how many halvings find each end of a range."""
+    Fusion names of the sizes the rule depends on. `steps` is how many halvings find each end of a range.
+
+    Without `balanced` (for a test that is costly to run), the joint cut moves the far ends first and the near ends
+    after, which tests fewer settings, and gives back only a whole range that holds."""
     sized = [(name, table.size_name(name)) for name in reads]
     sized = [(name, s) for name, s in sized if s in table.sizes and "min" in table.sizes[s]]
     bounds = {s: (table.sizes[s]["min"], table.sizes[s]["max"]) for _, s in sized}
@@ -180,13 +183,21 @@ def holding_ranges_where(table, reads, holds, relax=False, steps=range_check.STE
         t_high = range_check.largest_share(lambda t: holds(toward(limits, [s], 1.0, t), (s, 1)), steps)
         t_low = range_check.largest_share(lambda t: holds(toward(limits, [s], t, 1.0), (s, 0)), steps)
         limits = toward(limits, [s], t_low, t_high)
-    t_high = range_check.largest_share(lambda t: holds(toward(limits, names, 1.0, t)), steps)
-    t_low = range_check.largest_share(lambda t: holds(toward(limits, names, t, t_high)), steps)
-    exact = toward(limits, names, t_low, t_high)
-    if relax:
-        for s in names:
-            if exact[s] != bounds[s] and holds(dict(exact, **{s: bounds[s]})):
-                exact[s] = bounds[s]
+    if balanced:
+        # Both ends by one share, so no size gives up all of its room for the others.
+        both = range_check.largest_share(lambda t: holds(toward(limits, names, t, t)), steps)
+        exact = toward(limits, names, both, both)
+        ends = [(s, (end,)) for s in names for end in (0, 1)]
+    else:
+        t_high = range_check.largest_share(lambda t: holds(toward(limits, names, 1.0, t)), steps)
+        t_low = range_check.largest_share(lambda t: holds(toward(limits, names, t, t_high)), steps)
+        exact = toward(limits, names, t_low, t_high)
+        ends = [(s, (0, 1)) for s in names]
+    # The share also shortens ends the rules hold at (a size that only helps one way, or cancels out): give them back.
+    for s, back in ends:
+        trial = dict(exact, **{s: tuple(bounds[s][k] if k in back else exact[s][k] for k in (0, 1))})
+        if trial[s] != exact[s] and holds(trial):
+            exact = trial
     tidy = dict(exact)
     for _, s in free:
         size, (lo, hi) = table.sizes[s], exact[s]

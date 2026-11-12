@@ -92,7 +92,7 @@ def _keep_path_valid(ctx, item, profile, found, followed, drawn, options, form):
 
     try:
         while live:
-            kept = kept_ranges.holding_ranges_where(ctx.table, live, holds, relax=True, steps=PATH_STEPS)
+            kept = kept_ranges.holding_ranges_where(ctx.table, live, holds, steps=PATH_STEPS, balanced=False)
             if kept is None:
                 ctx.doubt(live, "at other values " + PATH_BREAKS % name)
                 return

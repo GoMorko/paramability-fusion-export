@@ -148,19 +148,21 @@ class HoldingRangesWhereTest(unittest.TestCase):
             return all(rule(range_check.size_env(self.TABLE, setting)) for setting in settings)
         return holds
 
-    def cut(self, rule, relax=False):
-        return kept_ranges.holding_ranges_where(self.TABLE, ("a", "b", "c"), self.holds(rule), relax)
+    def cut(self, rule, balanced=True):
+        return kept_ranges.holding_ranges_where(self.TABLE, ("a", "b", "c"), self.holds(rule), balanced=balanced)
 
     def test_a_test_that_holds_over_the_ranges_cuts_nothing(self):
         self.assertEqual(self.cut(lambda env: env["a"] < 11), {})
 
-    def test_a_test_that_fails_at_a_corner_cuts_the_sizes_it_fails_for_and_the_others_with_them(self):
+    def test_the_sizes_a_test_fails_for_share_the_cut_and_the_others_keep_their_ranges(self):
         found = self.cut(lambda env: env["a"] - env["b"] < 5)
-        self.assertEqual(sorted(found), ["a", "b", "c"])
-        self.assertLess(found["c"][1], 10)
+        self.assertEqual(sorted(found), ["a", "b"])
+        self.assertEqual((found["a"][0], found["b"][1]), (1, 10))
+        self.assertLess(found["a"][1] - found["b"][0], 5)
+        self.assertGreater(found["a"][1], 6.5)
 
-    def test_with_relax_a_size_the_test_does_not_read_keeps_its_whole_range(self):
-        found = self.cut(lambda env: env["a"] - env["b"] < 5, relax=True)
+    def test_unbalanced_the_far_ends_take_the_cut(self):
+        found = self.cut(lambda env: env["a"] - env["b"] < 5, balanced=False)
         self.assertEqual(sorted(found), ["a"])
         self.assertEqual(found["a"][0], 1)
         self.assertAlmostEqual(found["a"][1], 6.0, places=6)

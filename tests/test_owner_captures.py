@@ -139,8 +139,8 @@ class OwnerCaptureTest(unittest.TestCase):
         # may stop meeting the part past these.
         marked = {f["name"]: f["reason"] for f in result.loose}
         self.assertEqual(sorted(marked), sorted([PROBE_TICKED[0], PROBE_TICKED[3], "_Filter__Wall_thickness_mm"]))
-        for name, where in ((PROBE_TICKED[0], "past 1.8"), (PROBE_TICKED[3], "past 18"),
-                            ("_Filter__Wall_thickness_mm", "below 0.98")):
+        for name, where in ((PROBE_TICKED[0], "past 1.97"), (PROBE_TICKED[3], "past 19.74"),
+                            ("_Filter__Wall_thickness_mm", "below 1.17")):
             self.assertIn("may give unexpected results %s:" % where, marked[name])
         self.assertIn("Extrude5", marked[PROBE_TICKED[3]])
         verdicts = {v["index"]: v for v in result.items}

@@ -117,6 +117,53 @@ class PlaneOnAFaceTest(unittest.TestCase):
         self.assertEqual(reasons(result), {})
 
 
+def plane_on_hidden_face():
+    return {"entity_type": "ConstructionPlane", "token": "cp9", "definition": OFFSET, "made_by": 4,
+            "built_on": [face_at(HIDDEN)]}
+
+
+class StartAndReachBothMoveTest(unittest.TestCase):
+    """The post's sketch plane and the plane it reaches to both move: only what the length really does counts."""
+
+    def two_sided(self):
+        """Two sides: up to a plane on the hidden face (at 8), down to a plane that stays (at -20)."""
+        capture = load_capture("sketch_offset_plane")
+        capture["parameters"]["user"].append(dict(capture["parameters"]["user"][1], name="slot_mm"))
+        data = reaching(capture, 5, plane_on_hidden_face(), 8)["items"][5]["data"]
+        data["extent_type"] = "two"
+        data["side_two"] = {"kind": "toEntity", "offset": 0.0, "plane": {"point": [0, 0, -20], "normal": [0, 0, 1]},
+                            "entity_type": "ConstructionPlane", "token": "cp8", "definition": OFFSET,
+                            "built_on": [{"origin": True}]}
+        return capture
+
+    def test_a_cut_keeps_the_ends_that_only_lengthen_the_reach_or_move_both_planes_alike(self):
+        # The sketch plane moves with half the plate, the reach plane with the whole plate less the slot; lift_mm
+        # moves both alike. Side one is 0.5 * plate_mm - slot_mm + 13 long: a short plate with a tall slot passes it.
+        values = dict(LIFTED, **{"5/p0/plane": {"const": -13, "terms": {"plate_mm": 0.5, "lift_mm": 1}},
+                                 "5/r/side_one/offset": {"const": -8, "terms": {"plate_mm": 1, "slot_mm": -1,
+                                                                                "lift_mm": 1}}})
+        result = run(self.two_sided(), ["plate_mm", "lift_mm", "slot_mm"],
+                     Motion.from_json({"values": values, "refs": {"5.side_one": ""}}))
+        self.assertEqual(reasons(result), {})
+        sizes = result.recipe["sizes"]
+        self.assertEqual((sizes["lift_mm"]["min"], sizes["lift_mm"]["max"]), (4.0, 16.0))
+        self.assertEqual(sizes["plate_mm"]["max"], 20.0)
+        self.assertGreater(sizes["slot_mm"]["max"], 12.0)
+        self.assertGreater(sizes["plate_mm"]["min"], 5.0)
+        self.assertGreater(0.5 * sizes["plate_mm"]["min"] - sizes["slot_mm"]["max"] + 13, 0)
+
+    def test_a_start_on_a_moving_face_reaching_to_a_plane_that_moves_alike_keeps_its_length(self):
+        capture = reaching(load_capture("sketch_offset_plane"), 5, plane_on_hidden_face(), 8)
+        capture["items"][5]["data"]["start"] = dict(face_at([30, 15, 2], token="f8"), kind="fromEntity",
+                                                    plane={"point": [0, 0, 2], "normal": [0, 0, 1]})
+        moves = {"5/r/side_one/offset": FOLLOWS_PLATE, "5/r/start/offset": FOLLOWS_PLATE}
+        motion = Motion.from_json({"values": dict(LIFTED, **moves), "refs": {"5.side_one": "", "5.start": ""}})
+        result = run(capture, ["plate_mm", "lift_mm"], motion)
+        post = steps_of(result.recipe, "extrude")[2]
+        self.assertEqual((post["distance"], post["sketch"]["on"]["origin"][2]), (6.0, {"expr": "plate_mm - 8"}))
+        self.assertEqual((reasons(result), result.cuts), ({}, []))
+
+
 class FaceOfTheBodyFromAToolTest(unittest.TestCase):
     """The tool body of combine_cut_tool_two_steps_sized starts at z = 3 and reaches to a face of the plate."""
 
