@@ -93,6 +93,18 @@ class CopyTest(unittest.TestCase):
         self.assertEqual(far["path"], near["path"])
         self.assertEqual(far["sketch"], near["sketch"])
 
+    def test_several_outlines_are_one_sweep_each_joined_to_the_first(self):
+        def two(data):
+            second = copy.deepcopy(data["profiles"][0])
+            second["loops"][0]["curves"][0]["center"] = [0.0, 8.0]
+            data["profiles"].append(second)
+            data["areas"] = data["areas"] * 2
+        result = translate(edited(PIPE, PIPE_ITEM, two))
+        steps = steps_of(result.recipe, "sweep")
+        self.assertEqual([(s["combine"], s["sketch"]["outer"]["center"]) for s in steps],
+                         [("new", [0.0, 0.0]), ("add", [0.0, 8.0])])
+        self.assertEqual(steps[0]["path"], steps[1]["path"])
+
     def test_a_flat_chain_of_lines_and_an_arc_is_a_sweep_step(self):
         result = translate(load_capture(PIPE))
         assert_schema_ok(self, result.recipe)
@@ -422,7 +434,8 @@ class RefusalTest(unittest.TestCase):
     def test_outlines_that_are_not_one_sketch_outline(self):
         self.reasons([
             ("none", lambda d: d.update(profiles=[]), "This sweep has no sketch outline."),
-            ("several", lambda d: d["profiles"].append(copy.deepcopy(d["profiles"][0])), sweep_limits.SEVERAL_OUTLINES),
+            ("several in an intersect", lambda d: (d["profiles"].append(copy.deepcopy(d["profiles"][0])),
+                                                   d.update(operation="intersect")), sweep_limits.SEVERAL_OUTLINES),
             ("a face", lambda d: d["profiles"][0].update(face=True), sweep_limits.FACE_OUTLINE),
             ("unread", lambda d: d.update(profiles=None), sweep_limits.UNREADABLE),
         ])

@@ -1202,7 +1202,9 @@ Tangent Chain is on, and edges the copy can write; otherwise the refusal says wh
 
 - Sweep: `profiles` and `areas` are `SweepFeature.profile` read like an extrude's outline (section 4, a flat face
   included). `path` is `SweepFeature.path`; `rail` is `guideRail` read the same way, null when there is none and
-  `{ "kind": "unread" }` when the member raised (the sweep is then left out).
+  `{ "kind": "unread" }` when the member raised (the sweep is then left out). Several `profiles` are copied as one
+  sweep each along the same path (the first with the sweep's operation, the rest joined to it for a new body), each
+  checked on its own without the new body's volume, which Fusion measures for all of them; an intersect refuses.
   `orientation` is `perpendicular`, `parallel` or `other`. `distance_one` and `distance_two` are the unitless
   `distanceOne` and `distanceTwo` (the share of the path the sweep covers; the translator takes 1 and 0 or null as the whole path), `taper_deg` and `twist_deg` are
   `taperAngle` and `twistAngle` in degrees. `scaling` (`profileScaling`) is `scale`, `stretch`, `none` or `other`.

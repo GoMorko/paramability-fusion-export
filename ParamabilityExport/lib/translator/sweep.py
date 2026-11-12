@@ -18,6 +18,11 @@ free curves, guide rails, a path that is not square to the outline, closed paths
 the outline's direction, a twist along a closed path that is not whole turns, and sweeps along part of a path are
 refused.
 
+A sweep of several outlines along one path is one sweep per outline (`_each_outline`): for a join, a cut or a new body
+they make the same shape together, since the outlines move along the path as one. Each outline is checked on its own,
+except the volume of a new body, which Fusion measures for all of them together. An intersect of several outlines is
+refused.
+
 A sweep step gets the placer of `end_caps` (the start face, the end face where the path leaves it known, the side walls
 along a path of lines and arcs), so a later round or chamfer on a whole end face names the step.
 
@@ -34,8 +39,8 @@ import math
 from . import borrowed, path_model, paths, sweep_taper
 from .extrude import COMBINE
 from .result import Refusal, StepResult
-from .sweep_limits import (MIXED_PATH, NOT_MATCHING, PATH_TOO_LONG, PATH_UNREADABLE, SCALED_OUTLINE, TAPER_CLOSES,
-                           TWIST_CLOSED, UNREADABLE, WHOLE_TURN_TOL, ZERO_TOL)
+from .sweep_limits import (MIXED_PATH, NOT_MATCHING, PATH_TOO_LONG, PATH_UNREADABLE, SCALED_OUTLINE,
+                           SEVERAL_OUTLINES, TAPER_CLOSES, TWIST_CLOSED, UNREADABLE, WHOLE_TURN_TOL, ZERO_TOL)
 from .sweep_ends import end_check
 from .sweep_marks import keep_path_on_plane, mark_path
 from .sweep_outline import outline_of, outline_shapes, profile_points
@@ -52,6 +57,21 @@ TAPER_SIGN = -1
 TWIST_SIGN = 1
 
 
+def _each_outline(item, ctx, data, profiles):
+    """One sweep per outline, the first with the sweep's own operation and the rest joined to it for a new body."""
+    if COMBINE[data["operation"]] == "intersect":
+        return Refusal(SEVERAL_OUTLINES)
+    out = StepResult()
+    for n, profile in enumerate(profiles):
+        operation = "join" if n and COMBINE[data["operation"]] == "new" else data["operation"]
+        found = handle(dict(item, data=dict(data, profiles=[profile], areas=None, operation=operation)), ctx)
+        if isinstance(found, Refusal):
+            return found
+        out.extend(found.entries)
+        out.join(found)
+    return out
+
+
 def handle(item, ctx):
     data = item.get("data") or {}
     operation = data.get("operation")
@@ -61,6 +81,9 @@ def handle(item, ctx):
         return Refusal("This sweep combines with the part in a way that is not copied yet.")
     if data.get("solid") is not True:
         return Refusal("Surface sweeps are not copied." if data.get("solid") is False else UNREADABLE)
+    profiles = data.get("profiles")
+    if isinstance(profiles, list) and len(profiles) > 1:
+        return _each_outline(item, ctx, data, profiles)
     combine = COMBINE[operation]
     profile = outline_of(data)
     if isinstance(profile, Refusal):
