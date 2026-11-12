@@ -47,8 +47,9 @@ def construction_token(entity):
 
 
 def _target(definition, ctx, slot):
-    """The face or plane an extrude starts from or reaches to: its plane, its type, and a point on a face. One of
-    another component is marked foreign and carries its measured reference (`ref`, see `placement.ref_record`)."""
+    """The face or plane an extrude starts from or reaches to: its plane, its type, its token, and a point on a face.
+    One of another component is marked foreign and carries its measured reference (`ref`, see
+    `placement.ref_record`)."""
     entity = geo.native_input(geo.safe(lambda: definition.entity, None), ctx)
     found = {"plane": geo.safe(lambda: geo.plane_of(entity), None),
              "entity_type": geo.safe(lambda: geo.type_name(entity), None)}
@@ -65,6 +66,11 @@ def _target(definition, ctx, slot):
         from .read_reference import describe_plane  # read_reference imports this module
 
         describe_plane(found, entity, ctx)
+        if found["entity_type"] == "BRepFace":
+            # The size probe finds the face again by its token and measures how it moves.
+            token = geo.safe(lambda: entity.entityToken, "")
+            if token:
+                found["token"] = token
     return found
 
 

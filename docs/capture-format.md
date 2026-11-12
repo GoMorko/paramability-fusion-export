@@ -616,7 +616,8 @@ The translator fits the app's spline through points chosen from the samples (`li
   without `face_point` the translator cannot tell whether the face moves with sizes, and without `body` a step of a tool
   body cannot tell a face of the tool from a face of the part at the same place. For a `ConstructionPlane` or `ConstructionAxis` the record also has `token`
   (`entityToken`), which names the model parameters behind it (`created_by.token`). A construction plane of the body's
-  component also has `origin`, or `made_by`, `definition` and `built_on` (`read_reference.describe_plane`).
+  component also has `origin`, or `made_by`, `definition` and `built_on` (`read_reference.describe_plane`). A face of
+  the body's component has `token` too, so the size probe can read it again at every try (older exports leave it out).
 - `symmetric`: `{ "distance": mm, "full_length": bool, "taper_deg": d }`
   (`SymmetricExtentDefinition.distance`, `isFullLength`, `taperAngle`).
 - `target_box_before`: the target body's box with the marker before the item, or null when it does not exist yet.
@@ -1428,7 +1429,11 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
     built on (`follow._plane_shift`): an offset plane its base plus its own distance when that is the only parameter
     it made (`sizes.offset_param`), a midplane its two bases, through chains of planes. An origin plane, or one made
     from parameters alone, stays. Any other plane built on the part (at an angle, through an edge, tangent, along a
-    path) marks the sizes read before the step, and so does a plane the capture does not describe (an older add-in);
+    path) marks the sizes read before the step, and so does a plane the capture does not describe (an older add-in).
+    When the steps cannot place the face or plane (a side wall whose sketch line moves, a face of a step the copy
+    does not model, a plane built on such a face), the probe's measure of it decides instead
+    (`lib/translator/reach_motion.py`, "Measured references in the motion file"): its move is written as a formula, a
+    size that does not move it is not marked, and only a size it cannot follow is marked;
   - a start offset that follows sizes, or a "from entity" start on a moving end face, moves the sketch placement
     along its normal (`sketch.on.origin` as formulas), and the picks on that extrude follow it too. Such a moving
     start with a side that reaches "to" a face is fixed.
@@ -1779,7 +1784,16 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
 
 The probe reads every measured reference (`ref`, section 4) that has a place in the target's coordinates and fits how
 far it moves from the captured place. A size that acts on the reference's component is probed like a size behind a
-sketch (`reference` links, section 2). The values are moves, zero at the sizes the capture was read at:
+sketch (`reference` links, section 2). The values are moves, zero at the sizes the capture was read at.
+
+A flat face or construction plane of the body's own component that an extrude starts from or reaches to is measured
+the same way when it may move with the part (a face, or a plane built on the part) and has a `token`
+(`sizes.moving_reaches`, `plan.own_reaches`). Its request carries `"own": true`, and the reader reads it natively, in
+the part's coordinates like the capture. The sizes tried for it are every size an item of the body's component reads
+before the step (for a plane, before the plane was made) and the sizes behind the planes of a chain
+(`sizes.reach_sizes`, part of `plane_sizes.plane_driven`). The translator uses the measure only when the steps written
+before cannot place the face without a doubt (`reach_motion.target_shift`); then those same sizes get the three
+answers below, and the formula keeps its constant apart so the extrude length folds into one number.
 
 | Reference | Keys | Meaning |
 |---|---|---|

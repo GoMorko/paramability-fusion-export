@@ -358,12 +358,19 @@ def placement_sizes(table, timeline, profile, before):
         bound = before if bound is None else bound
         if isinstance(reference.get("made_by"), int):
             bound = min(bound, reference["made_by"]) if bound is not None else reference["made_by"]
-        for item in timeline:
-            index = item.get("index")
-            if (isinstance(index, int) and bound is not None and index < bound and not item.get("suppressed")
-                    and (item.get("in_target_component") is not False or item.get("helper_of"))):
-                names |= _item_reads(table, item)
+        names |= _reads_before(table, timeline, bound)
     return [name for name in table.ticked if name in names]
+
+
+def _reads_before(table, timeline, bound):
+    """Fusion names of the sizes the items of the body's component read before timeline index `bound`."""
+    names = set()
+    for item in timeline:
+        index = item.get("index")
+        if (isinstance(index, int) and bound is not None and index < bound and not item.get("suppressed")
+                and (item.get("in_target_component") is not False or item.get("helper_of"))):
+            names |= _item_reads(table, item)
+    return names
 
 
 def placement_driven(capture, table, profiles):
@@ -373,6 +380,78 @@ def placement_driven(capture, table, profiles):
     found = set()
     for index, profile in profiles:
         found |= set(placement_sizes(table, timeline, profile, index))
+    return [name for name in table.ticked if name in found]
+
+
+# ---- sizes that may move a face or plane an extrude starts from or reaches to -------------------------------------
+
+REACH_SLOTS = ("start", "side_one", "side_two")
+
+
+def _vector(value):
+    return isinstance(value, (list, tuple)) and len(value) == 3 and all(
+        isinstance(v, (int, float)) and not isinstance(v, bool) for v in value)
+
+
+def _may_move(record):
+    """True for a face, or a construction plane built on the part (or one an older capture does not describe)."""
+    if record.get("entity_type") == "BRepFace":
+        return True
+    if record.get("entity_type") != "ConstructionPlane" or record.get("origin"):
+        return False
+    return on_part(record) if "definition" in record or "built_on" in record else True
+
+
+def moving_reaches(item):
+    """`(slot, record)` for each flat face or construction plane of the body's component that the step `item` starts
+    from or reaches to and that may move with the part, when the probe can find it again (it has a token and a flat
+    place). A face or plane of another component has its own measured reference (`ref`) instead."""
+    data = item.get("data")
+    if (item.get("suppressed") or item.get("in_target_component") is False or not isinstance(data, dict)
+            or "read_error" in data):
+        return []
+    out = []
+    for slot in REACH_SLOTS:
+        record = data.get(slot)
+        if not isinstance(record, dict) or record.get("kind") not in ("fromEntity", "toEntity"):
+            continue
+        plane = record.get("plane")
+        if (record.get("foreign") or record.get("assembly") or not record.get("token") or not isinstance(plane, dict)
+                or not _vector(plane.get("point")) or not _vector(plane.get("normal"))):
+            continue
+        if _may_move(record):
+            out.append((slot, record))
+    return out
+
+
+def reach_sizes(table, timeline, item, record):
+    """Fusion names of the ticked sizes that may move the face or construction plane `record` that the step `item`
+    starts from or reaches to, in table order: every size an item of the body's component reads before the step (for
+    a plane, before the plane was made), and the sizes behind the planes of a chain."""
+    if table is None:
+        return []
+    bound = item.get("index")
+    if record.get("entity_type") == "ConstructionPlane" and isinstance(record.get("made_by"), int):
+        bound = record["made_by"] if bound is None else min(bound, record["made_by"])
+    names = _reads_before(table, timeline, bound)
+    pending = [record]
+    while pending:
+        entry = pending.pop()
+        if isinstance(entry, dict) and entry.get("entity_type") == "ConstructionPlane":
+            if entry.get("token"):
+                names |= set(construction_sizes(table, "constructionPlane", entry["token"]))
+            pending.extend(entry.get("built_on") or ())
+    return [name for name in table.ticked if name in names]
+
+
+def reach_driven(capture, table):
+    """Fusion names of the ticked sizes that may move a face or plane an extrude starts from or reaches to
+    (`moving_reaches`), in table order: the sizes the probe must try so that face or plane is measured."""
+    timeline = capture.get("items") or []
+    found = set()
+    for item in timeline:
+        for _, record in moving_reaches(item):
+            found |= set(reach_sizes(table, timeline, item, record))
     return [name for name in table.ticked if name in found]
 
 

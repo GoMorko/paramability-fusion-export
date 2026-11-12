@@ -3,8 +3,9 @@
 Profiles that share a curve are merged into one outline (outlines.py); each outline becomes one recipe `extrude` step
 per side. Fusion's sign conventions are checked against the measured
 `end_offset` (where the end face landed), which wins when the two disagree. With the probe's motion file the outline
-and its sketch plane follow sizes (sketch_motion.py). A start or reach on a flat face or plane of another component
-moves with the offset the probe measured for it (follow.target_shift, ref_motion.py).
+and its sketch plane follow sizes (sketch_motion.py). A start or reach on a flat face or plane follows the earlier
+step that made it (follow.target_shift), else the offset the probe measured for it (reach_motion.py, and ref_motion.py
+for one of another component).
 
 A thin extrude of one closed outline without holes is written with the recipe's `thin` wall (thin_wall.py): the wall
 thickness follows its parameter, and the side of the outline comes from the measured area of the end face. Open lines,
@@ -21,8 +22,8 @@ import math
 
 from ..package.numbers import round9
 
-from . import (face_outline, follow, kept_ranges, loops, notes, outlines, placement, sketch_motion, thin_wall, values,
-               vec)
+from . import (face_outline, follow, kept_ranges, loops, notes, outlines, placement, reach_motion, sketch_motion,
+               thin_wall, values, vec)
 from .footprint import Footprint, polyline
 from .placer_makers import SlabMaker, ThinWallMaker
 from .result import Refusal, StepResult
@@ -152,7 +153,7 @@ def _start_shift(start, frame, ctx, item, plane_q):
         if not _parallel(plane["normal"], frame["z"]):
             return Refusal("This extrude starts from a tilted surface, which is not copied yet.")
         shift = vec.dot(vec.sub(plane["point"], frame["origin"]), vec.unit(frame["z"]))
-        moved = follow.target_shift(ctx, item, start, vec.unit(frame["z"]), "starts from")
+        moved = reach_motion.target_shift(ctx, item, "start", start, vec.unit(frame["z"]), "starts from")
         face = Quantity(shift) if moved is None or not moved.sized else moved.plus(shift - moved.n)
         if not plane_q.sized:
             return face
@@ -185,11 +186,11 @@ def _origin(frame, shift_q):
     return out
 
 
-def _reach_quantity(ctx, item, side, z, reach, offset, plane_q):
-    """The length of a side that reaches to a face, as a Quantity that follows the face when it moves with sizes:
-    the face's move less the sketch plane's move (`plane_q`, along the sketch normal)."""
+def _reach_quantity(ctx, item, which, side, z, reach, offset, plane_q):
+    """The length of the side `which` that reaches to a face, as a Quantity that follows the face when it moves with
+    sizes: the face's move less the sketch plane's move (`plane_q`, along the sketch normal)."""
     plain = Quantity(abs(reach) + float(offset))
-    moved = follow.target_shift(ctx, item, side, z)
+    moved = reach_motion.target_shift(ctx, item, which, side, z)
     if moved is None:
         return plain
     if plane_q.sized:
@@ -290,7 +291,7 @@ def _plan(item, data, frame, shift, combine, ctx, plane_q):
                 return Refusal("This extrude has no length.")
             return {"extent": "oneSide", "sign": sign, "distance": distance, "taper": taper,
                     "taper_q": taper_q, "adjusts": True,
-                    "q": _reach_quantity(ctx, item, side, z, reach, offset, plane_q)}
+                    "q": _reach_quantity(ctx, item, which, side, z, reach, offset, plane_q)}
         return Refusal("This way of setting the extrude length is not copied yet.")
 
     if extent_type == "symmetric":

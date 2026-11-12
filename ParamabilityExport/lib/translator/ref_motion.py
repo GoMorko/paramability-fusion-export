@@ -13,6 +13,8 @@ formulas of the sizes, or a doubt that names the step and the other component:
 
 The first translation of an export (`OPTIMISTIC`) writes the measured place and marks nothing.
 
+`reach_motion` reads a face or plane of the part itself the same way (`own` records, with the sizes it names).
+
 `bring_in` turns the face or plane of another component that an extrude starts from or reaches to, and the flat face
 a hole is placed on, into records the handlers read like their own (`assembly: true`, geometry in the part's
 coordinates). Anything it cannot bring in stays `foreign`, and `why_foreign` says why.
@@ -21,6 +23,7 @@ from ..params import geometry_links
 from ..sketch_values import coverage, keys
 from ..sketch_values.motion import Affine, Stuck
 from . import sketch_motion, vec
+from .curved import Curved, Poly
 from .values import Quantity
 
 PLANE, AXIS, POINT, DIRECTION = "plane", "axis", "point", "direction"
@@ -82,8 +85,11 @@ def reaching(ctx, item):
 
 
 def _phrase(item, ref, what):
+    noun = _NOUNS.get(ref.get("type"), "geometry")
+    if ref.get("own"):
+        return "%s %s %s" % (_name(item), what, noun)
     owner = (ref.get("component") or {}).get("name") or "another component"
-    return "%s %s %s of %s" % (_name(item), what, _NOUNS.get(ref.get("type"), "geometry"), owner)
+    return "%s %s %s of %s" % (_name(item), what, noun, owner)
 
 
 def mark_all(ctx, item, ref, what):
@@ -130,15 +136,16 @@ def _unmeasured_reason(item, ref, what, why):
     return "%s that may move with it, and it could not be measured (%s)" % (phrase, why)
 
 
-def raw_moves(ctx, item, ref, shape, what):
+def raw_moves(ctx, item, ref, shape, what, names=None):
     """How far the reference moves from where the capture has it, one raw value per motion key of its `shape`: an
     `Affine` of the sizes (zero at the current sizes), or a constant zero. Sizes the move cannot follow are doubted
-    here, naming the step and the other component, and their key is a constant zero."""
+    here, naming the step and the other component, and their key is a constant zero. `names` are the sizes that may
+    move it; by default those that act on the component that owns it."""
     zero = [Affine(0.0) for _ in range(_KEYS[shape])]
     motion = ctx.motion
     if ctx.table is None or (motion is not None and motion.optimistic):
         return zero
-    names, known = acting_sizes(ctx, ref)
+    names, known = acting_sizes(ctx, ref) if names is None else (names, True)
     if not known or motion is None:
         mark_all(ctx, item, ref, what)
         return zero
@@ -165,17 +172,28 @@ def raw_moves(ctx, item, ref, shape, what):
     return out
 
 
-def moves(ctx, item, ref, shape, what):
+def _constant_apart(value):
+    """`(value less its constant, the constant)` of an Affine or Curved raw value."""
+    if isinstance(value, Affine):
+        return Affine(0.0, value.terms, value.sketch), value.const
+    if isinstance(value, Curved):
+        rest = Poly({m: c for m, c in value.poly.terms.items() if m})
+        return Curved(rest, value.nodes, value.sketch), value.poly.terms.get((), 0.0)
+    return value, 0.0
+
+
+def moves(ctx, item, ref, shape, what, names=None):
     """`raw_moves` as Quantities: formulas of the sizes whose number is zero, or a plain zero for a reference that
-    stays."""
+    stays. The constant of a formula is kept apart, so a number a step adds later folds into it."""
     out = []
-    for value in raw_moves(ctx, item, ref, shape, what):
-        written = sketch_motion.rendered(ctx.table, value, 0.0) if ctx.table is not None else Quantity(0.0)
+    for value in raw_moves(ctx, item, ref, shape, what, names):
+        rest, const = _constant_apart(value)
+        written = sketch_motion.rendered(ctx.table, rest, -const) if ctx.table is not None else Quantity(0.0)
         if isinstance(written, Stuck):
             ctx.doubt(sketch_motion.movers(ctx.table, written) or written.movers,
                       _stuck_reason(item, ref, what, written.cause))
             written = Quantity(0.0)
-        out.append(written)
+        out.append(written.plus(const) if written.sized else Quantity(0.0))
     return out
 
 

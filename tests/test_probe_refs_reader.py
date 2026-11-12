@@ -140,6 +140,12 @@ class ReadRefsTest(unittest.TestCase):
         # The tray is turned 90 degrees at (100, 50, 0): the root's origin is at (-50, 100) in the tray's frame.
         self.assertEqual(found["1.plane"], {"point": [-50.0, 100.0, 7.0], "normal": [0.0, 0.0, 1.0]})
 
+    def test_a_face_of_the_part_itself_is_read_in_the_part_s_own_coordinates(self):
+        face = Obj("fusion::BRepFace", entityToken="f1", geometry=plane_geometry((5, 5, 10), (0, 0, 1)))
+        self.a.entities["f1"] = [face]
+        found, _ = read(self.a, {"2.side_one": dict(hint("f1", "plane", path=""), own=True)})
+        self.assertEqual(found["2.side_one"], {"point": [5.0, 5.0, 10.0], "normal": [0.0, 0.0, 1.0]})
+
     def test_an_axis_a_direction_and_a_point_are_read_by_their_shape(self):
         self.a.add_axis()
         self.a.add_point()

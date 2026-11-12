@@ -3,10 +3,10 @@
 `scan` finds the sketches whose numbers the probe can follow ("covered" ones): every capture record that names them
 is a profile, a hole point set, a revolve axis line or a sweep path of lines and arcs that the reader gave tokens
 for. Which records a step type carries comes from the step kind table (`translator/step_kinds.py`, `sketches`).
-`refs` finds the measured references of other components (a plane, axis, direction or point a step uses) that the
-probe reads again at every
-state. `request` is what the reader reads per state, `kept_sizes` the sizes worth probing, `probe_rows` the size
-settings to try.
+`refs` finds the measured references (a plane, axis, direction or point of another component that a step uses, and
+a face or plane of the part that an extrude starts from or reaches to) that the probe reads again at every state.
+`request` is what the reader reads per state, `kept_sizes` the sizes worth probing, `probe_rows` the size settings to
+try.
 
 Sizes are dicts as in `export_plan.size_offers.probe_sizes`: param (Fusion name), size (recipe name), unit, value,
 min, max (manifest numbers).
@@ -34,7 +34,7 @@ from ..params import defaults, geometry_links
 from ..params.size_table import DERIVED, FREE
 from ..translator.loops import profile_loops
 from ..translator.result import Refusal
-from ..translator.sizes import probed_sizes
+from ..translator.sizes import moving_reaches, probed_sizes
 from ..translator.step_kinds import AXIS, HOLE_POINTS, PATH, PROFILES, step_type
 
 MAX_PROBE_ROWS = 64
@@ -232,11 +232,27 @@ def _shape(ref):
     return SHAPE_POINT if point and ref.get("type") in _POINT_TYPES else None
 
 
-def refs(capture, items=None):
-    """The measured references of the capture's steps (`params.geometry_links.item_refs`), each with its `shape` and,
-    when the probe cannot follow it, a `reason` (else empty)."""
+def own_reaches(item):
+    """The faces and planes of the part that the step `item` starts from or reaches to and that may move with it
+    (`translator.sizes.moving_reaches`), as measured references with `own: true`: the reader reads them in the part's
+    own coordinates."""
     out = []
-    for entry in geometry_links.capture_refs(capture, items):
+    for slot, record in moving_reaches(item):
+        plane = record["plane"]
+        ref = {"slot": slot, "type": record.get("entity_type") or "", "token": record["token"],
+               "point": list(plane["point"]), "normal": list(plane["normal"]), "own": True}
+        out.append({"key": geometry_links.ref_key(item.get("index"), slot), "item": item.get("index"), "slot": slot,
+                    "name": item.get("name") or "", "ref": ref})
+    return out
+
+
+def refs(capture, items=None):
+    """The measured references of the capture's steps (`params.geometry_links.item_refs`, then `own_reaches`), each
+    with its `shape` and, when the probe cannot follow it, a `reason` (else empty)."""
+    out, entries = [], []
+    for item in (capture.get("items") or []) if items is None else items:
+        entries += geometry_links.item_refs(item) + own_reaches(item)
+    for entry in entries:
         ref = entry["ref"]
         shape = _shape(ref)
         reason = "" if shape else NO_PLACE
@@ -260,13 +276,14 @@ def request(capture, table, covered=None, wanted=None):
     `{ "sketches": [token], "points": [token], "lines": [token], "params": [Fusion name], "target": True,
        "curves": { sketch token: [curve token] },
        "refs": { key: { "token", "type", "path", "shape" } } }`; `curves` lists the sketch curves of sweep paths to read
-       (left out when empty), `refs` is left out when empty. `native` lists the sketches of tool bodies from other
-       components, and is left out when there are none.
+       (left out when empty), `refs` is left out when empty (a face or plane of the part adds `"own": true`). `native`
+       lists the sketches of tool bodies from other components, and is left out when there are none.
     """
     found = scan(capture)
     tokens = [t for t in found.covered if covered is None or t in covered]
-    followed = {r["key"]: {"token": r["ref"]["token"], "type": r["ref"].get("type") or "",
-                           "path": r["ref"].get("path") or "", "shape": r["shape"]}
+    followed = {r["key"]: dict({"token": r["ref"]["token"], "type": r["ref"].get("type") or "",
+                                "path": r["ref"].get("path") or "", "shape": r["shape"]},
+                               **({"own": True} if r["ref"].get("own") else {}))
                 for r in refs(capture) if r["shape"] and (wanted is None or r["key"] in wanted)}
     if not tokens and not followed:
         return None

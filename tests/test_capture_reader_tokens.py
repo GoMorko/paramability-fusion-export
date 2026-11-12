@@ -113,12 +113,12 @@ class FeatureTokensTest(unittest.TestCase):
         self.assertEqual((found["kind"], found["type"]), ("other", "ConstructionAxis"))
         self.assertTrue(found["error"])
 
-    def test_extrude_target_token_only_for_construction_planes(self):
+    def test_extrude_target_token_for_construction_planes_and_faces(self):
         plane = Obj("fusion::ConstructionPlane", entityToken="cp1",
                     geometry=Obj("core::Plane", origin=P(0, 0, 5), normal=Obj(x=0.0, y=0.0, z=1.0)))
         face = Obj("fusion::BRepFace", entityToken="f1", pointOnFace=P(1, 1, 5),
                    geometry=Obj("core::Plane", origin=P(0, 0, 5), normal=Obj(x=0.0, y=0.0, z=1.0)))
-        for entity, token in ((plane, "cp1"), (face, None)):
+        for entity, token in ((plane, "cp1"), (face, "f1")):
             data = read_item(feature("ExtrudeFeature", "E", operation="NewBodyFeatureOperation",
                                      extentType="OneSideFeatureExtentType", profile=profile(sketch(), SQUARE),
                                      startExtent=Obj("fusion::FromEntityStartDefinition", entity=entity),

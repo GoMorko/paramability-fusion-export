@@ -165,6 +165,16 @@ class Context:
         finally:
             self._recordings.pop()
 
+    def replay(self, recorded, doubts=True):
+        """Record again what a `recording` block kept apart: the values it dealt with and, with `doubts`, its doubts
+        and notes. A handler tries one way to follow a value this way and keeps it only when it worked."""
+        here = self._recordings[-1] if self._recordings else self
+        here.asked |= recorded.asked
+        if doubts:
+            here.doubts.extend(recorded.doubts)
+            if self._recordings:
+                here.notes.extend(recorded.notes)
+
     def commit(self, result):
         """The steps of `result` are part of the recipe: its doubts and the items of other bodies it carries count."""
         self.doubts.extend(result.doubts)

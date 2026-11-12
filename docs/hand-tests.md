@@ -101,6 +101,8 @@ except U1, L1 to L15, F1 and F2, which are described here.
 - [ ] D1 and D5 to D13, the sketch graph in the capture, the marker held early during the tries, the new first tries
       near the value, the progress window text and sketch dimensions in `dependents`: section 12 (the calls are under
       "Sketch graph, marker roll and progress window" in "Fusion calls to watch").
+- [ ] K25, an extrude that reaches to a face or plane no earlier extrude places (a cut's side wall, a plane on it):
+      section 9.
 - [ ] K24, sketches and extrude reaches on construction planes built on the part (offset from a face, a chain of
       planes, an offset that is a size): section 9.
 - [ ] K23, a size whose own try changes a sketch outline keeps the range below that value: section 9.
@@ -756,6 +758,16 @@ the sizes on the form and compare the part with Fusion at the same values.
       1 mm under it, as in Fusion. Then set Plane1's offset to a user parameter `gap_mm`, tick it and export again:
       both follow `gap_mm` too. Then replace Plane1 by a plane at an angle to the top face: the pocket follows (or is
       marked "turns" when the angle is a size), and the post's reach is marked with "a plane built on part geometry".
+- [ ] **K25 Reach to a face the steps cannot place.** A plate 40 x 20 with its thickness `plate_mm` and a second
+      size `width_mm` (the plate's width in the base sketch). Draw a rectangle on a side sketch and cut a slot into
+      the plate whose top wall sits `slot_mm` under the top face (a sketch dimension). Add a plane offset 1 mm from
+      the slot's top wall, then extrude a peg from the base sketch "to" that plane, as a new body that a Combine cuts
+      from the plate. Tick all three sizes and export. Expect: `report.json` has `token` on the face under the plane,
+      `probe.request.refs` holds the peg's `side_one` with `"own": true`, and `probe.motion.refs` gives it `""`;
+      `recipe.json` writes the peg's distance as a formula of `plate_mm` and `slot_mm`, and `width_mm` is not marked.
+      In Paramability change `plate_mm` and `slot_mm`: the peg still ends 1 mm under the slot's top wall. Then reach
+      "to" the slot's top wall itself instead of the plane: the same holds (Fusion finds the face again by its token
+      at every try; when it does not, `motion.refs` names why and the sizes stay marked as before).
 
 ## 10. Emboss
 
