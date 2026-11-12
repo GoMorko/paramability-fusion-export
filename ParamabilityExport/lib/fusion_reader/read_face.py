@@ -9,7 +9,7 @@ is read with the timeline marker moved before its step, and the marker goes back
 """
 import math
 
-from ..design_edit.marker import put_back, read_marker
+from ..design_edit.marker import MARKER_LOST, put_back, read_marker
 from . import read_geometry as geo
 from .read_finish import strict_items
 from .read_sketch import read_curve
@@ -116,13 +116,15 @@ def face_loops(face, ctx=None):
 
 FACE_NOT_FOUND = "The face was not found before its step."
 NO_MARKER = "The timeline marker could not be moved before the step."
+NOT_BACK = "The timeline marker did not go back after the face was read."
 
 
 def read_faces(design, ctx, wanted):
     """`(found, unread)` for `wanted` ({ key: { token, before } }): `found` maps a key to the face's `face_loops` read
     with the timeline marker at `before` (the step that uses it not built yet, as when it was captured), `unread` a key
     to why it was left out. A position after the marker now is not read. The marker goes back to where it was, which
-    rebuilds the steps after the earliest position read. Never raises."""
+    rebuilds the steps after the earliest position read; when it does not, no face counts and `unread` also holds
+    `MARKER_LOST`, so the caller stops reading. Never raises."""
     found, unread = {}, {}
     timeline = geo.safe(lambda: design.timeline, None)
     home = read_marker(timeline) if timeline is not None else None
@@ -148,7 +150,9 @@ def read_faces(design, ctx, wanted):
                 else:
                     found[key] = record
     finally:
-        put_back(timeline, home)
+        back = put_back(timeline, home)
+    if not back:
+        return {}, dict({key: NOT_BACK for key in wanted}, **{MARKER_LOST: NOT_BACK})
     return found, unread
 
 

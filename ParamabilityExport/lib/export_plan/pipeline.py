@@ -30,6 +30,7 @@ from .body_scope import body_links, scope_inputs
 from .reach_pass import needs_reach, with_reach
 from .probe_flow import SizeProbe, covers_a_sketch, extra_size_params, kept_size_names, shadow_of
 from .recipe_export import free_sizes, plan_single_export, translate_capture
+from ..design_edit.marker import MARKER_LOST
 from ..design_edit.restore import restore_parameters
 from ..design_edit.runner import ExportCancelled, RowExport
 from .size_offers import discovery_sizes, labels, probe_sizes
@@ -124,7 +125,20 @@ def warn_left_off(port, timeline):
 
 
 class MarkerNotHeld(Exception):
-    """A probe read was asked for while the timeline marker sat before the position the tries need."""
+    """A probe read was asked for while the timeline marker sat before the position the tries need, or a read moved
+    the marker and could not put it back."""
+
+
+def _marker_lost(read):
+    """True when a probe read (one state, or one per part) says it could not put the timeline marker back."""
+    reads = read if isinstance(read, list) else [read]
+    return any(isinstance(r, dict) and MARKER_LOST in (r.get("unread") or {}) for r in reads)
+
+
+def _row_values(row):
+    """The sizes a row sets to other values, by Fusion name."""
+    state = row.get("state") or {}
+    return {param: state[param] for param in row.get("varied") or [] if param in state}
 
 
 class ProbeRun:
@@ -150,6 +164,7 @@ class ProbeRun:
     def __init__(self, port, tmp, probe):
         self.port, self.tmp, self.probe = port, tmp, probe
         self.reads, self.rows, self.starts, self.backs = {}, [], {}, {}
+        self._values = {}  # key of a row to the sizes it sets (`_row_values`)
         self.read_failure = None
         self.put_backs = 0  # design rebuilds made to put a sketch back
         self.redone = []  # keys of the rows run a second time
@@ -170,13 +185,17 @@ class ProbeRun:
             self.port.log(f"keeping the sketches failed: {exc!r}")
             return None
 
-    def _read_now(self):
-        """The probe state of the design now. Raises when the timeline marker is not where the tries keep it: a read
-        before it would miss items the sketches need, so the row counts as not read."""
+    def _read_now(self, values=None):
+        """The probe state of the design now, with `values` the sizes set to other values (`SizeProbe.read_now`).
+        Raises when the timeline marker is not where the tries keep it, before or after the read: a read before it
+        would miss items the sketches need, so the row counts as not read and the probe stops."""
         holds = getattr(self.port.store, "marker_holds", None)
         if holds is not None and not holds():
             raise MarkerNotHeld("The timeline marker was not where the tries keep it.")
-        return self.probe.read_now()
+        read = self.probe.read_now(values)
+        if _marker_lost(read):
+            raise MarkerNotHeld("The timeline marker did not go back after an outline face was read.")
+        return read
 
     def _before_row(self, row):
         """`RowExport`'s hook once the parameters are back: read the design when the row before did not build or
@@ -197,9 +216,9 @@ class ProbeRun:
             self._put_back(key)
 
     def _try_read(self):
-        """`_read_now`, or None with `read_failure` set when the read failed."""
+        """`_read_now` with every value back, or None with `read_failure` set when the read failed."""
         try:
-            return self._read_now()
+            return self._read_now({})
         except ExportCancelled:
             raise
         except Exception as exc:
@@ -235,7 +254,7 @@ class ProbeRun:
         key = self.job.current_key
         if self.read_failure is None:
             try:
-                self.reads[key] = self._read_now()
+                self.reads[key] = self._read_now(self._values.get(key))
             except ExportCancelled:
                 raise
             except Exception as exc:
@@ -245,6 +264,7 @@ class ProbeRun:
     def try_rows(self, rows):
         """Run the probe's rows. Returns their results."""
         done = len(self.rows)
+        self._values.update((row.get("key", row["name"]), _row_values(row)) for row in rows)
         with self.port.progress(messages.TRY_VERB) as progress:
             def step(index, total, label):
                 # The window counts the tries of the whole export, not of this batch.
@@ -259,13 +279,11 @@ class ProbeRun:
         a row run again replaces its first run."""
         out = []
         for row, result in self.rows[since:]:
-            state = row.get("state") or {}
-            values = {param: state[param] for param in row.get("varied") or [] if param in state}
             key = row.get("key", row["name"])
             if key in self.redone:
                 continue
             more = {"put_back": self.backs.get(key), "again": bool(row.get("again"))}
-            out.append((values, result, self.reads.get(key), self.starts.get(key), more))
+            out.append((_row_values(row), result, self.reads.get(key), self.starts.get(key), more))
         return out
 
     def _check_reads(self):
@@ -317,7 +335,7 @@ class ProbeRun:
         """Put the followed sketches back when they read otherwise than at E0 now, with the values back, so the design
         is left on the solution it had. Never raises."""
         try:
-            if self.probe.left_start(self._read_now()):
+            if self.probe.left_start(self._read_now({})):
                 self._put_back(last=True)
         except Exception as exc:
             self.port.log(f"putting a sketch back after the tries failed: {exc!r}")
@@ -350,7 +368,7 @@ class ProbeRun:
     def discover(self, tries):
         """Read the design once the parameters are back, then run the discovery rows in the room the other rows left
         and keep what they found. Returns the parameters that changed the part."""
-        base = self._read_now()
+        base = self._read_now({})
         back = self._put_back() if self.probe.left_start(base) else None
         self.probe.set_discovery_base(base, back)
         found = self.probe.discovery_rows(list(tries), plan_rows_left(self.rows))

@@ -10,6 +10,7 @@ from tests.test_parts_pipeline import export as export_parts
 from tests.test_pipeline import CAPTURE, START, FakePort, export, shifted
 from tests.test_timeline_marker import Item, Timeline
 
+from lib.design_edit.marker import MARKER_LOST
 from lib.design_edit.runner import ExportCancelled
 from lib.export_plan.marker_roll import MarkerRoll, needed_position
 from lib.fusion_reader.rows import DesignParameterStore
@@ -283,6 +284,26 @@ class PipelineRollTest(unittest.TestCase):
         self.assertEqual(result.health["probe"], "failed")
         self.assertIsNone(result.report.get("probe"))
         self.assertEqual(port.store.events[-1][0], "unroll")
+
+    def test_a_read_that_could_not_put_the_marker_back_stops_the_probe(self):
+        port = self.port()
+        reader = port.probe_reader
+
+        def probe_reader():
+            read = reader()
+
+            def lost(request):
+                state = read(request)
+                if port.reads >= 6:
+                    state = dict(state, unread={MARKER_LOST: "not back"})
+                return state
+
+            return lost
+
+        port.probe_reader = probe_reader
+        result = export(port)
+        self.assertEqual(result.health["probe"], "failed")
+        self.assertIsNone(result.report.get("probe"))
 
     def test_a_design_without_marker_support_or_a_marker_that_will_not_move_runs_as_before(self):
         plain = FakePort(capture=box_capture())

@@ -5,6 +5,11 @@ the timeline is any object with `markerPosition` (get and set), `count` and opti
 """
 
 
+# The `unread` key of a probe state whose read moved the marker and could not put it back: every later read would
+# happen at another timeline position, so the probe stops.
+MARKER_LOST = "marker"
+
+
 def read_marker(timeline):
     """{ position, count } of the marker now, or None when the design has no readable timeline."""
     try:

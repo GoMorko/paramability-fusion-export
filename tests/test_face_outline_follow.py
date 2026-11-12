@@ -15,6 +15,7 @@ from tests.test_translate_follow import at, loose_names, tray
 from tests.test_translate_sized import CUBE, H, TICKED, table_of
 from tests.translator_helpers import load_capture, steps_of
 
+from lib.design_edit.marker import MARKER_LOST
 from lib.export_plan.probe_flow import SizeProbe
 from lib.fusion_reader.read_face import read_faces
 from lib.params import size_table
@@ -126,6 +127,20 @@ class ProbeTest(unittest.TestCase):
         top = steps_of(result.recipe, "extrude")[1]
         self.assertEqual(at(result.recipe, table, top["sketch"]["on"]["origin"][2], TALLER), 77.0)
 
+    def test_a_face_is_read_again_only_while_a_size_that_may_change_it_is_set(self):
+        capture = tray_face()
+        table = table_of(capture, [H, CUBE, "wall_mm"])
+        asked = []
+
+        def read(request):
+            asked.append(set(request.get("faces") or ()))
+            return tray_read({})
+        probe = SizeProbe.start(capture, table, read)
+        for values, faces in (({H: 2.0}, {"2/face"}), ({"wall_mm": 3.0}, set()), ({}, set())):
+            with self.subTest(values):
+                state = probe.read_now(values)
+                self.assertEqual((asked[-1], state["faces"]), (faces, tray_read({})["faces"]))
+
     def test_a_face_that_takes_another_outline_cuts_the_range_there(self):
         capture = tray_face()
         table = table_of(capture, [H, CUBE])
@@ -150,6 +165,13 @@ class ReadFacesTest(unittest.TestCase):
         self.assertEqual(len(found["2/face"]["loops"][0]["curves"]), 4)
         self.assertEqual(list(unread), ["4/face"])
         self.assertEqual((timeline.markerPosition, timeline.visited), (3, [2, 3]))
+
+    def test_a_marker_that_does_not_go_back_leaves_every_face_unread_and_says_so(self):
+        timeline = FakeMarkerTimeline([Obj() for _ in range(4)], marker=3, moves_allowed=1)
+        top = with_outline(plane_face(10), [side((0, -1, 0)), side((1, 0, 0)), side((0, 1, 0)), side((-1, 0, 0))])
+        design = Obj(timeline=timeline, findEntityByToken=lambda token: [top])
+        found, unread = read_faces(design, None, {"2/face": {"token": "top", "before": 2}})
+        self.assertEqual((found, sorted(unread)), ({}, ["2/face", MARKER_LOST]))
 
 
 if __name__ == "__main__":

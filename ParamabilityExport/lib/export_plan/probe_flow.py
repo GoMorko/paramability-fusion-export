@@ -15,6 +15,7 @@ changes it, or leaves it unreadable, is loose. A reference that did not read bac
 motion file says so (`Motion.refs`).
 """
 from ..package.manifest import MAX_FIXED_REASON
+from ..design_edit.marker import MARKER_LOST
 from ..package.text import clip
 from ..params.expressions import format_number
 from ..probe import build, derived, fit, match, plan, plane_sizes, ref_fit
@@ -207,6 +208,7 @@ class SizeProbe:
         self.after_rows = None  # what read differently from E0 once the parameters were put back after the rows
         self.restore_unchecked = []  # "<sketch>: <why>" for each sketch the restore check could not compare
         self.recovery = None  # what was done when a sketch stayed on another solution (`note_recovery`)
+        self.face_sizes = plane_sizes.face_sizes(self.capture, table)  # face key to the sizes that may change it
 
     @classmethod
     def start(cls, capture, table, read):
@@ -218,8 +220,8 @@ class SizeProbe:
         if wide is None:
             return None
         e0 = read(_with_borrowed(wide, hints, hints))
-        if not isinstance(e0, dict) or not (e0.get("sketches") or e0.get("points") or e0.get("lines")
-                                            or e0.get("refs") or e0.get("faces")):
+        if not isinstance(e0, dict) or MARKER_LOST in (e0.get("unread") or {}) or not (
+                e0.get("sketches") or e0.get("points") or e0.get("lines") or e0.get("refs") or e0.get("faces")):
             return None
         readable = match.readable(plan.scan(view), e0)
         watch = {t: h for t, h in hints.items() if t not in readable}
@@ -232,9 +234,22 @@ class SizeProbe:
 
     # ---- states -----------------------------------------------------------------------------------------------
 
-    def read_now(self):
-        """The probe state of the design as it is now."""
-        return self.read(self.request)
+    def read_now(self, values=None):
+        """The probe state of the design as it is now. `values` are the sizes set to other values now ({} with every
+        value back): a face a step uses as its outline is read only when one of them may change it, since each face
+        read rolls the timeline back and forth; the others take their E0 read. None reads every face."""
+        faces = self.request.get("faces") or {}
+        moved = set(values or ())
+        wanted = {k: v for k, v in faces.items() if values is None or self.face_sizes.get(k, set()) & moved}
+        if len(wanted) == len(faces):
+            return self.read(self.request)
+        request = dict(self.request, faces=wanted) if wanted else {k: v for k, v in self.request.items()
+                                                                   if k != "faces"}
+        read = self.read(request)
+        if isinstance(read, dict):
+            same = {k: v for k, v in (self.e0.get("faces") or {}).items() if k in faces and k not in wanted}
+            read["faces"] = dict(same, **(read.get("faces") or {}))
+        return read
 
     def add_states(self, entries):
         """Add one state per `(values, result, read)`, `(values, result, read, start)` or `(values, result, read,
@@ -663,9 +678,9 @@ class ProbeGroup:
         self.names = list(names)
         self.table = self.probes[0].table
 
-    def read_now(self):
-        """The probe state of each part as the design is now."""
-        return [probe.read_now() for probe in self.probes]
+    def read_now(self, values=None):
+        """The probe state of each part as the design is now (`SizeProbe.read_now`)."""
+        return [probe.read_now(values) for probe in self.probes]
 
     def probe_rows(self, sizes, extra=()):
         """The extra rows. Every probe plans them (that sets what it leaves untried); they are the same for all."""

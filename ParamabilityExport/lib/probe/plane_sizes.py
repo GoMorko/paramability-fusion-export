@@ -20,7 +20,14 @@ def plane_driven(capture, table):
     targets = scan(capture).targets
     records = [(t["item"], t.get("profile") or t.get("path")) for t in targets if t["kind"] in ("profile", "path")]
     found = set(placement_driven(capture, table, records)) | set(reach_driven(capture, table))
-    timeline = capture.get("items") or []
-    for target in (t for t in targets if t["kind"] == FACE):
-        found |= set(reach_sizes(table, timeline, {"index": target["item"]}, target["profile"]))
+    for names in face_sizes(capture, table).values():
+        found |= names
     return [name for name in table.ticked if name in found]
+
+
+def face_sizes(capture, table):
+    """`{face key: Fusion names}` of the ticked sizes that may change each face a step uses as its outline: every size
+    an item reads before that step (`translator.sizes.reach_sizes`)."""
+    timeline = capture.get("items") or []
+    return {t["sketch_token"]: set(reach_sizes(table, timeline, {"index": t["item"]}, t["profile"]))
+            for t in scan(capture).targets if t["kind"] == FACE}
