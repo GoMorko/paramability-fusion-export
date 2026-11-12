@@ -363,7 +363,7 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   with a taper or parallel orientation, a taper along spline curves or along a scaled outline, a taper that would close part of the outline
   or a hole, a taper of 45 degrees
   or more, a twist over 3600 degrees, a guide rail, parallel orientation on a path that turns back (the path's direction
-  must keep a rise of 0.05 along the outline's normal at every point, ends and arc points included), several outlines at once that intersect the part, an outline that is a face of the part, a path of
+  must keep a rise of 0.05 along the outline's normal at every point, ends and arc points included), several outlines at once that intersect the part or taper, an outline that is a face of the part, a path of
   sketch curves mixed with edges, a closed path that bends in 3D, that is cut at a sharp corner, or that tapers or keeps
   the outline in one direction, a twist along a closed path that is not whole turns, a sharp corner in the path, a path that
   crosses itself or bends tighter than the outline allows, a path in 3D with splines or arcs that are not tangent, an

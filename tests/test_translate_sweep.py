@@ -436,6 +436,8 @@ class RefusalTest(unittest.TestCase):
             ("none", lambda d: d.update(profiles=[]), "This sweep has no sketch outline."),
             ("several in an intersect", lambda d: (d["profiles"].append(copy.deepcopy(d["profiles"][0])),
                                                    d.update(operation="intersect")), sweep_limits.SEVERAL_OUTLINES),
+            ("several tapered", lambda d: (d["profiles"].append(copy.deepcopy(d["profiles"][0])),
+                                           d.update(taper_deg=2.0)), sweep_limits.SEVERAL_TAPERED),
             ("a face", lambda d: d["profiles"][0].update(face=True), sweep_limits.FACE_OUTLINE),
             ("unread", lambda d: d.update(profiles=None), sweep_limits.UNREADABLE),
         ])

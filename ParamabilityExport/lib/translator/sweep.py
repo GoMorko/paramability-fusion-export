@@ -21,7 +21,8 @@ refused.
 A sweep of several outlines along one path is one sweep per outline (`_each_outline`): for a join, a cut or a new body
 they make the same shape together, since the outlines move along the path as one. Each outline is checked on its own,
 except the volume of a new body, which Fusion measures for all of them together. An intersect of several outlines is
-refused.
+refused, and so is a taper: without the volume check the copy cannot tell whether Fusion tapers each outline or the
+set as a whole.
 
 A sweep step gets the placer of `end_caps` (the start face, the end face where the path leaves it known, the side walls
 along a path of lines and arcs), so a later round or chamfer on a whole end face names the step.
@@ -40,7 +41,8 @@ from . import borrowed, path_model, paths, sweep_taper
 from .extrude import COMBINE
 from .result import Refusal, StepResult
 from .sweep_limits import (MIXED_PATH, NOT_MATCHING, PATH_TOO_LONG, PATH_UNREADABLE, SCALED_OUTLINE,
-                           SEVERAL_OUTLINES, TAPER_CLOSES, TWIST_CLOSED, UNREADABLE, WHOLE_TURN_TOL, ZERO_TOL)
+                           SEVERAL_OUTLINES, SEVERAL_TAPERED, TAPER_CLOSES, TWIST_CLOSED, UNREADABLE,
+                           WHOLE_TURN_TOL, ZERO_TOL)
 from .sweep_ends import end_check
 from .sweep_marks import keep_path_on_plane, mark_path
 from .sweep_outline import outline_of, outline_shapes, profile_points
@@ -61,6 +63,8 @@ def _each_outline(item, ctx, data, profiles):
     """One sweep per outline, the first with the sweep's own operation and the rest joined to it for a new body."""
     if COMBINE[data["operation"]] == "intersect":
         return Refusal(SEVERAL_OUTLINES)
+    if isinstance(data.get("taper_deg"), (int, float)) and abs(data["taper_deg"]) > ZERO_TOL:
+        return Refusal(SEVERAL_TAPERED)
     out = StepResult()
     for n, profile in enumerate(profiles):
         operation = "join" if n and COMBINE[data["operation"]] == "new" else data["operation"]
