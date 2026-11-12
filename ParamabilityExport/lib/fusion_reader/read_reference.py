@@ -99,6 +99,21 @@ def reference_of(entity, ctx, depth=_DEPTH):
     return out
 
 
+# What `describe_plane` keeps of a description: enough to tell whether sizes may move the plane.
+_PLANE_KEYS = ("origin", "made_by", "definition", "built_on")
+
+
+def describe_plane(record, entity, ctx):
+    """Adds to `record` what the construction plane `entity` is: `origin`, or `made_by`, `definition` and `built_on`
+    (see the module text). Anything that is not a construction plane of the target's component adds nothing."""
+    if isinstance(record, dict) and geo.type_name(entity) == "ConstructionPlane" and not geo.foreign(entity, ctx):
+        found = geo.safe(lambda: reference_of(entity, ctx), {})
+        for key in _PLANE_KEYS:
+            if key in found:
+                record.setdefault(key, found[key])
+    return record
+
+
 def add_reference(record, entity, ctx):
     """Adds the description of `entity` to a plane or axis `record` (keys the record already has are kept). A record
     of another component is left as it is."""

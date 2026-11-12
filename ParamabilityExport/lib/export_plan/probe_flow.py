@@ -16,7 +16,7 @@ motion file says so (`Motion.refs`).
 from ..package.manifest import MAX_FIXED_REASON
 from ..package.text import clip
 from ..params.expressions import format_number
-from ..probe import build, derived, fit, match, plan, ref_fit
+from ..probe import build, derived, fit, match, plan, plane_sizes, ref_fit
 from ..sketch_values.motion import CURVE, SHAPE, TURNS, UNREAD, Stuck, Terms
 from ..translator import borrowed
 from ..translator.notes import loose_reason
@@ -267,12 +267,12 @@ class SizeProbe:
 
     def probe_rows(self, sizes, extra=()):
         """The first extra rows, near the value of each size that moves a sketch: the sizes the states already show
-        moving one, and every size that reaches a sketch. Then the sizes in `extra` (Fusion names tried on a guess,
-        `extra_size_params`) while rows are left. A size that only feeds step values has no row. The far range
-        ends come later (`far_rows`)."""
+        moving one, every size that reaches a sketch, and every size that may move the plane a sketch sits on
+        (`plane_sizes`). Then the sizes in `extra` (Fusion names tried on a guess, `extra_size_params`) while rows are
+        left. Any other size that only feeds step values has no row. The far range ends come later (`far_rows`)."""
         current = {e.name: e.value for e in self.table.entries}
         self.moved = build.moved_sizes(self.capture, self.states, current)
-        reach = set(plan.sketch_driven(self.table))
+        reach = set(plan.sketch_driven(self.table)) | set(plane_sizes.plane_driven(self.capture, self.table))
         moved = set(self.moved) | {s["param"] for s in sizes if s["param"] in reach}
         rows, self.untried = plan.probe_rows(sizes, moved, extra=set(extra))
         self._far = (moved, set(extra))
@@ -458,7 +458,9 @@ class SizeProbe:
                 followed.add(varied[0])
             elif body_changed(self.e0, read) and varied[0] not in body:
                 body.append(varied[0])
-        return [n for n in body if n not in followed and n not in skip]
+        # A size tried only for a sketch plane feeds step values: those follow it, so its body change is explained.
+        placed = set(plane_sizes.plane_driven(self.capture, self.table)) - set(plan.sketch_driven(self.table))
+        return [n for n in body if n not in followed and n not in skip and n not in placed]
 
     def _target_moved(self, target, read):
         before, _ = match.state_values(target, self.e0, self.e0)

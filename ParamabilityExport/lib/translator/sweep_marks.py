@@ -4,7 +4,7 @@ import math
 
 from . import loops, sketch_motion, sweep_reach, vec
 from .result import Refusal
-from .sizes import construction_sizes, sketch_sizes
+from .sizes import construction_sizes, placement_sizes, sketch_sizes
 
 
 def mark_path(ctx, item, path):
@@ -34,12 +34,16 @@ def _mark_edges(ctx, name, path):
 
 def mark_sketch_place(ctx, name, path, plane_follows=False):
     """A path sketch sits on a plane or face and may hold projected curves: sizes that move those move the path in
-    Fusion, not in the copy. A plane that follows sizes (`plane_follows`) is no reason."""
+    Fusion, not in the copy. A plane that follows sizes (`plane_follows`) is no reason, except for the sizes that may
+    move it and were not tried (`sketch_motion.placement_doubts`)."""
     reference = path.get("reference")
     kind = reference.get("kind") if isinstance(reference, dict) else None
-    if kind == "constructionPlane":
-        names = () if plane_follows else construction_sizes(ctx.table, "constructionPlane",
-                                                            reference.get("token") or "")
+    item = ctx.current or {}
+    if kind == "constructionPlane" and plane_follows:
+        sketch_motion.placement_doubts(ctx, item, path)
+    elif kind == "constructionPlane":
+        names = list(construction_sizes(ctx.table, "constructionPlane", reference.get("token") or ""))
+        names += [n for n in placement_sizes(ctx.table, ctx.timeline, path, item.get("index")) if n not in names]
         if names:
             ctx.doubt(names, "%s copies its path from a sketch on a construction plane, as measured" % name)
     elif kind in ("face", "other") or path.get("projected") or ("reference" in path and reference is None):

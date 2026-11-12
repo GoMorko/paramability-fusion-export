@@ -61,6 +61,10 @@ def _target(definition, ctx, slot):
     geo.mark_foreign(found, entity, ctx)
     if found.get("foreign"):
         foreign_target_ref(found, entity, ctx, slot)
+    else:
+        from .read_reference import describe_plane  # read_reference imports this module
+
+        describe_plane(found, entity, ctx)
     return found
 
 

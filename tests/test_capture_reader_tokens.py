@@ -32,6 +32,18 @@ class ProfileTokensTest(unittest.TestCase):
         self.assertEqual(record["reference"], {"kind": "constructionPlane", "token": "cp1"})
         self.assertEqual([c["entity"] for c in record["loops"][0]["curves"]], ["c1", "c2", "c3", "c4"])
 
+    def test_a_construction_plane_says_what_it_is_built_on(self):
+        from tests.test_capture_reader_finish import face, plane_geometry
+        base = face("f1", geometry=plane_geometry((0, 0, 10), (0, 0, 1)))
+        plane = Obj("fusion::ConstructionPlane", entityToken="cp1", timelineObject=Obj(index=2),
+                    geometry=plane_geometry((0, 0, 8), (0, 0, 1)),
+                    definition=Obj("fusion::ConstructionPlaneOffsetDefinition", planarEntity=base))
+        reference = read_sketch.read_profile(profile(sketch(reference=plane), SQUARE))["reference"]
+        self.assertEqual((reference["token"], reference["made_by"], reference["definition"]),
+                         ("cp1", 2, "ConstructionPlaneOffsetDefinition"))
+        self.assertEqual(reference["built_on"], [{"entity_type": "BRepFace", "face_point": [0, 1, 2],
+                                                  "surface": "Plane"}])
+
     def test_reference_kinds(self):
         kinds = {"BRepFace": "face", "Plane": "plane", "Vertex": "other"}
         for name, kind in kinds.items():

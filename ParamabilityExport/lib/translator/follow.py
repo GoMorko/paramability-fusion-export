@@ -22,8 +22,9 @@ A point on the inner wall of a shell is placed through the outer wall it was mov
 a face that an offsetFaces step moved through the face before the move (offset_faces.py). An edge where the walls of
 two steps cross is placed on both walls (crossings.py).
 """
-from . import crossings, notes, picks, ref_motion, shells, sketch_motion, vec
+from . import crossings, notes, picks, ref_motion, shells, sketch_motion, values, vec
 from .copy_counts import stays_at_least
+from .sizes import offset_param, on_part
 from .placer import ADD
 from .slabs import (AXIAL_TOL, CONSTANT_TOL, FACTOR_DIGITS, IDENTITY_ROWS, LATERAL_TOL, Motion, Place, Slab,
                     as_quantity, cleaned_all)
@@ -254,14 +255,13 @@ def target_shift(ctx, item, target, direction, what="reaches to"):
     the face's offset and whose number is that offset at the measured sizes (plain zero when it does not move); None
     when it cannot follow (its sizes are then fixed). `what` words the reason.
 
-    A construction plane stays where it is (a size that moves it is fixed with the sketches). A face is placed by
-    its `face_point`.
+    A construction plane follows what it is built on (`_plane_shift`). A face is placed by its `face_point`.
     """
     zero = Quantity(0.0)
     if target.get("assembly"):
         return ref_motion.plane_shift(ctx, item, target, direction, what)
     if target.get("entity_type") == "ConstructionPlane":
-        return zero
+        return _plane_shift(ctx, item, target, direction, what)
     point = target.get("face_point")
     beyond = _beyond_tool(ctx, item, target, [point] if point else [], what,
                           lambda outer: target_shift(outer, item, target, direction, what))
@@ -290,15 +290,23 @@ def target_shift(ctx, item, target, direction, what="reaches to"):
     return shift
 
 
-def _on_part(ref):
-    """True when a plane or axis description sits on geometry of the part (a face, an edge, a sketch) or on
-    construction geometry built on such. Origin planes and axes, and construction geometry made from parameters
-    alone, do not."""
-    if ref.get("origin") or ref.get("foreign"):
-        return False
-    if ref.get("entity_type") in ("ConstructionPlane", "ConstructionAxis"):
-        return any(_on_part(entry) for entry in ref.get("built_on") or ())
-    return True
+def _plane_shift(ctx, item, target, direction, what):
+    """How a construction plane an extrude starts from or reaches to moves along unit `direction`. An origin plane,
+    or one made from parameters alone, stays: a size behind its own parameters is marked (`sizes.construction_fixes`).
+    One built on the part follows what it is built on (`_built_shift`), through a chain of planes. A record that does
+    not say what the plane is built on (an older capture) marks the sizes read before the step."""
+    if target.get("origin"):
+        return Quantity(0.0)
+    if "definition" in target or "built_on" in target:
+        if on_part(target) or offset_param(ctx.table, target) is not None:
+            return _built_shift(ctx, item, target, direction, what)
+        return Quantity(0.0)
+    reads = reads_with_outer(ctx, item)
+    if not reads:
+        return Quantity(0.0)
+    ctx.doubt(reads, "%s %s a construction plane that may move with it, and this export does not say what the plane "
+              "is built on" % (_name(item), what))
+    return None
 
 
 def _is_plane(ref):
@@ -344,10 +352,11 @@ def _built_shift(ctx, item, ref, direction, what):
     """The shift of construction geometry built on part geometry: an offset plane moves with its base, a midplane
     with the mean of its two bases, an axis on an edge or round face with that edge or face. Anything else cannot be
     followed."""
-    parts, definition = ref["built_on"], (ref.get("definition") or "").lower()
+    parts, definition = ref.get("built_on") or [], (ref.get("definition") or "").lower()
     if ref.get("entity_type") == "ConstructionPlane":
         if "offset" in definition and len(parts) == 1 and _is_plane(parts[0]):
-            return place_plane(ctx, item, parts[0], direction, what)
+            base = place_plane(ctx, item, parts[0], direction, what)
+            return base if base is None else _own_offset(ctx, item, ref, base, direction, what)
         if "midplane" in definition and len(parts) == 2 and all(_is_plane(p) for p in parts):
             shifts = [place_plane(ctx, item, p, direction, what) for p in parts]
             return None if None in shifts else shifts[0].plus(shifts[1]).scaled(0.5)
@@ -356,6 +365,44 @@ def _built_shift(ctx, item, ref, direction, what):
     ctx.doubt(reads_with_outer(ctx, item), "%s %s a %s built on part geometry that may move with it, and the copy "
               "cannot follow that" % (_name(item), what, "plane" if ref.get("entity_type") == "ConstructionPlane" else "axis"))
     return None
+
+
+def _base_point(ref):
+    """A point of the plane or face an offset plane is built on: the origin for an origin plane."""
+    if ref.get("origin"):
+        return [0.0, 0.0, 0.0]
+    return ref.get("point") or ref.get("face_point")
+
+
+def _own_offset(ctx, item, ref, shift, direction, what):
+    """`shift` (the move of the plane an offset plane is built on) plus the change of the plane's own distance when
+    a size sets it (`sizes.offset_param`). The measured distance from the base tells which way a positive distance
+    goes; when it does not, the sizes behind the distance are marked and only the base move is followed."""
+    param = offset_param(ctx.table, ref)
+    if param is None:
+        return shift
+    plane = ref.get("plane") if isinstance(ref.get("plane"), dict) else ref
+    point, normal, base = plane.get("point"), plane.get("normal"), _base_point(ref["built_on"][0])
+    distance = param["value"] * 10.0
+    measured = vec.dot(vec.sub(point, base), normal) if point and normal and base else None
+    sign = None
+    if measured is not None and abs(distance) > 1e-9:
+        sign = 1.0 if abs(measured - distance) <= 1e-6 else -1.0 if abs(measured + distance) <= 1e-6 else None
+    names = [n for n in ctx.table.depends(param["name"]) if n in ctx.table.ticked]
+    if sign is None:
+        ctx.doubt(names, "%s %s a plane whose distance from its base cannot be read, and the copy cannot follow it"
+                  % (_name(item), what))
+        return shift
+    own = {"index": item.get("index"), "name": item.get("name"),
+           "data": {"params": {"plane.offset": {"name": param["name"], "expression": param["expression"],
+                                                "value": distance}}}}
+    q = values.quantity(ctx, own, "plane.offset", distance)
+    if not q.sized:
+        return shift
+    k = sign * vec.dot(vec.unit(normal), direction)
+    # The numbers of both moves go last, so they fold into one.
+    core = Quantity(shift.n - shift.const, shift.core, shift.reads) if shift.sized else Quantity(shift.n)
+    return core.plus(q.scaled(k)).plus(shift.const - distance * k)
 
 
 def place_plane(ctx, item, ref, direction, what="mirrors across"):
@@ -380,7 +427,9 @@ def place_plane(ctx, item, ref, direction, what="mirrors across"):
                               lambda outer: place_plane(outer, item, ref, direction, what), not on_face)
         if beyond is not _ON_THIS_BODY:
             return beyond
-    if ctx.outer is not None and kind in ("ConstructionPlane", "ConstructionAxis") and _on_part(ref):
+    if ctx.outer is not None and kind in ("ConstructionPlane", "ConstructionAxis") and on_part(ref):
+        return _built_shift(ctx, item, ref, direction, what)
+    if offset_param(ctx.table, ref) is not None:
         return _built_shift(ctx, item, ref, direction, what)
     if not ctx.written_reads:
         return zero
@@ -398,6 +447,6 @@ def place_plane(ctx, item, ref, direction, what="mirrors across"):
                       % (_name(item), what))
             return None
         return _edge_shift(ctx, item, ref["edge_points"], direction, what)
-    if kind in ("ConstructionPlane", "ConstructionAxis") and _on_part(ref):
+    if kind in ("ConstructionPlane", "ConstructionAxis") and on_part(ref):
         return _built_shift(ctx, item, ref, direction, what)
     return zero

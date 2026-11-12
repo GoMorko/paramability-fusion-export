@@ -101,6 +101,8 @@ except U1, L1 to L15, F1 and F2, which are described here.
 - [ ] D1 and D5 to D13, the sketch graph in the capture, the marker held early during the tries, the new first tries
       near the value, the progress window text and sketch dimensions in `dependents`: section 12 (the calls are under
       "Sketch graph, marker roll and progress window" in "Fusion calls to watch").
+- [ ] K24, sketches and extrude reaches on construction planes built on the part (offset from a face, a chain of
+      planes, an offset that is a size): section 9.
 - [ ] K23, a size whose own try changes a sketch outline keeps the range below that value: section 9.
 - [ ] K18 to K21, a sketch left on its other solution after a try that does not rebuild, a projected curve that
       Fusion names again, slot ends rounded by half the slot width, and rounds and chamfers on pattern copies that
@@ -634,8 +636,8 @@ the sizes on the form and compare the part with Fusion at the same values.
       dimension, cut through. Then a hole feature on a sketch point at `pipe_offset_mm`. Both follow both sizes and
       the box width.
 - [ ] **K3 Offset plane.** A sketch on a construction plane offset by `FilterBox_height_mm`, a boss extruded from it.
-      The boss moves with the height. Then make an extrude reach "to" that plane: the height may give unexpected
-      results, with the construction plane reason.
+      The boss moves with the height. Then make an extrude reach "to" that plane: its length follows the height
+      (`recipe.json` writes the distance as a formula) and nothing is marked.
 - [ ] **K4 Sketch on a face.** A sketch on the top face of the base, a lid lip extruded from it with projected edges.
       The lip follows the height and the width.
 - [ ] **K5 What may give unexpected results.** A point placed by an angle parameter on a circle (reason: along a curve); a line that
@@ -744,6 +746,16 @@ the sizes on the form and compare the part with Fusion at the same values.
       the lid matches Fusion. A size that changes the outline on both sides is "not a size" with "no value other
       than ... could be copied" and names the nearest failure or outline on each side. Note the number of tries and
       the export time.
+- [ ] **K24 Plane offset from a face.** A plate whose thickness `plate_mm` is the extrude distance (not a sketch
+      dimension). Add Plane1 offset 2 mm below its top face and Plane2 offset 1 mm from Plane1. Draw a circle on Plane1
+      and cut it 4 mm down; extrude a post from the base sketch "to" Plane2. Tick only `plate_mm` and export. Expect:
+      the progress window tries `plate_mm`; in `report.json` the pocket profile's `reference` has `definition` and
+      `built_on` (the top face), and the post's `side_one` has the chain (Plane2 built on Plane1 built on the face);
+      `recipe.json` writes the pocket's `sketch.on.origin` and the post's distance as formulas of `plate_mm`, and
+      nothing is marked. In Paramability change `plate_mm`: the pocket stays 2 mm under the top face and the post ends
+      1 mm under it, as in Fusion. Then set Plane1's offset to a user parameter `gap_mm`, tick it and export again:
+      both follow `gap_mm` too. Then replace Plane1 by a plane at an angle to the top face: the pocket follows (or is
+      marked "turns" when the angle is a size), and the post's reach is marked with "a plane built on part geometry".
 
 ## 10. Emboss
 

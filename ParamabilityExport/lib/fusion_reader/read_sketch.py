@@ -371,13 +371,17 @@ _REFERENCE_KINDS = {"ConstructionPlane": "constructionPlane", "BRepFace": "face"
 
 
 def sketch_reference(sketch, ctx):
-    """{ kind, token } of what the sketch sits on (`Sketch.referencePlane`), or None when it cannot be read."""
+    """{ kind, token } of what the sketch sits on (`Sketch.referencePlane`), or None when it cannot be read. A
+    construction plane also says what it is built on (`read_reference.describe_plane`)."""
+    from .read_reference import describe_plane  # read_reference reads axes through read_solid, which imports this
+
     entity = geo.safe(lambda: sketch.referencePlane, None)
     if entity is None:
         return None
     entity = geo.native_input(entity, ctx)
-    return {"kind": _REFERENCE_KINDS.get(geo.type_name(entity), "other"),
-            "token": geo.safe(lambda: entity.entityToken, "") or ""}
+    record = {"kind": _REFERENCE_KINDS.get(geo.type_name(entity), "other"),
+              "token": geo.safe(lambda: entity.entityToken, "") or ""}
+    return describe_plane(record, entity, ctx)
 
 
 def _curve_record(profile_curve, space):

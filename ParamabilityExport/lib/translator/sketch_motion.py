@@ -18,7 +18,7 @@ from .curved import Curved, combine, from_terms, names_of, render
 from .footprint import nearest_point
 from .loops import profile_loops
 from .result import Refusal
-from .sizes import unmeasured_sizes
+from .sizes import placement_sizes, unmeasured_sizes
 from .sketch_crossings import Sources, keeps_order
 from .values import Quantity, stays_positive
 
@@ -459,6 +459,7 @@ def outline(ctx, item, profile, outer, inners, parts):
     is, several for an outline merged from touching profiles (its values are taken from theirs). A corner that the
     probe could not fit is rebuilt from the sketch curves that cross there (sketch_crossings.py)."""
     if not active(ctx):
+        placement_doubts(ctx, item, profile)
         return None
     sketch = profile.get("sketch") or ""
     loops = [outer] + list(inners)
@@ -480,7 +481,39 @@ def outline(ctx, item, profile, outer, inners, parts):
         raw_loops = _stuck_curves(raw_loops, sketch)
     # Merged parts share one frame, so the first part's plane stands for all of them.
     plane = raw(ctx, keys.plane(prefix), _dot(profile["frame"]["origin"], profile["frame"]["z"]), sketch)
+    placement_doubts(ctx, item, profile, plane)
     return Outline(ctx, profile["frame"], loops, raw_loops, plane, sketch)
+
+
+def _tried(motion, sketch, name):
+    """True when the probe measured the sketch named `sketch` with the size `name` at another value. A motion file
+    with no states and no spans (written by hand) says nothing about tries and counts as measured."""
+    if getattr(motion, "unmeasured", {}).get(sketch) or name in getattr(motion, "untried", ()):
+        return False
+    states, spans = getattr(motion, "states", None) or [], getattr(motion, "spans", None) or {}
+    if not states and not spans:
+        return True
+    if name in spans:
+        found = spans[name]
+        return abs(found.get("high", 0.0) - found.get("low", 0.0)) > 1e-9
+    return any(name in (s.get("values") or {}) and s.get("built", True) for s in states)
+
+
+def placement_doubts(ctx, item, profile, plane=None):
+    """Mark the sizes that may move the plane the sketch of `profile` sits on (`sizes.placement_sizes`: a face, or a
+    construction plane built on the part) when the probe did not measure that: there is no motion file, the sketch
+    was not measured, or the size was not tried. The plane then stays where the capture has it. A size the measured
+    plane (`plane`, the raw value) moves with is followed and not marked."""
+    motion = getattr(ctx, "motion", None)
+    if ctx.table is None or getattr(motion, "optimistic", False):
+        return
+    names = placement_sizes(ctx.table, ctx.timeline, profile, item.get("index"))
+    sketch = profile.get("sketch") or "a sketch"
+    if motion is not None:
+        moved = set(movers(ctx.table, plane)) if plane is not None else set()
+        names = [n for n in names if n not in moved and not _tried(motion, sketch, n)]
+    if names:
+        ctx.doubt(names, "it may move the plane %s sits on, and that could not be tried at other values" % sketch)
 
 
 def _same_plane(a, b):

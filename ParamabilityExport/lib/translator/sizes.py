@@ -200,7 +200,8 @@ def _construction_records(node, found):
         if kind is not None:
             found.append((kind, node.get("token") or ""))
         for key, value in node.items():
-            if key not in ("participants", "tools", "bodies_after", "bodies_before", "target", "profiles", "ref"):
+            if key not in ("participants", "tools", "bodies_after", "bodies_before", "target", "profiles", "ref",
+                           "reference"):
                 _construction_records(value, found)
     elif isinstance(node, list):
         for value in node:
@@ -219,18 +220,160 @@ def construction_sizes(table, kind, token=""):
     return tuple(dict.fromkeys(names))
 
 
+def offset_param(table, ref):
+    """The model parameter that sets how far an offset construction plane of the body's component lies from the one
+    plane or face it is built on, when it is the only parameter the plane made and it reads a ticked size; else
+    None. An extrude that starts from or reaches to such a plane writes that distance as a formula
+    (`follow._plane_shift`)."""
+    if (table is None or not isinstance(ref, dict) or ref.get("entity_type") != "ConstructionPlane"
+            or "offset" not in (ref.get("definition") or "").lower() or len(ref.get("built_on") or ()) != 1
+            or not ref.get("token")):
+        return None
+    made = [p for p in table.model_params.values()
+            if _kind(p) == "constructionPlane" and (p.get("created_by") or {}).get("token") == ref["token"]]
+    if len(made) != 1 or not table.depends(made[0]["name"]) & set(table.ticked):
+        return None
+    return made[0]
+
+
+def _followed_planes(table, ref, found):
+    """Tokens of the offset planes in a chain (`ref` and what it is built on) whose own distance an extrude reach
+    follows (`offset_param`)."""
+    if isinstance(ref, dict) and ref.get("entity_type") == "ConstructionPlane":
+        if offset_param(table, ref) is not None:
+            found.add(ref["token"])
+        for entry in ref.get("built_on") or ():
+            _followed_planes(table, entry, found)
+    return found
+
+
 def construction_fixes(table, item):
     """[(Fusion names, reason)] for the ticked sizes behind each construction plane or axis that the step uses itself
     (to start from, reach to, turn about or mirror across). A record without a token stands for every one of its kind.
+    An offset plane an extrude starts from or reaches to follows its own distance (`offset_param`) and is left out.
     The reason follows "<name> stays fixed: "."""
     out = []
     data = item.get("data") if isinstance(item.get("data"), dict) else {}
+    followed = set()
+    for key in ("start", "side_one", "side_two"):
+        _followed_planes(table, data.get(key), followed)
     for kind, token in _construction_records(data, []):
+        if token and token in followed:
+            continue
         names = construction_sizes(table, kind, token)
         if names:
             out.append((names, "it moves the %s that %s uses" % (
                 _CONSTRUCTION_WORDS[kind], item.get("name") or "a step")))
     return out
+
+
+# ---- sizes that may move the plane a sketch sits on -----------------------------------------------------------
+
+def on_part(ref):
+    """True when a plane or axis description sits on geometry of the part (a face, an edge, a sketch) or on
+    construction geometry built on such, at any depth. Origin planes and axes, geometry of another component, and
+    construction geometry made from parameters alone do not."""
+    if ref.get("origin") or ref.get("foreign"):
+        return False
+    if ref.get("entity_type") in _CONSTRUCTION:
+        return any(on_part(entry) for entry in ref.get("built_on") or ())
+    return True
+
+
+def _looks_like_origin(frame):
+    """True when a sketch frame lies on an origin plane: through the origin, its normal along an axis. Used for a
+    sketch reference that does not say what its plane is built on (an older capture)."""
+    if not isinstance(frame, dict) or not all(isinstance(frame.get(k), list) for k in ("origin", "z")):
+        return False
+    z, origin = frame["z"], frame["origin"]
+    return abs(sum(a * b for a, b in zip(origin, z))) <= 1e-6 and sorted(abs(c) for c in z)[-2] <= 1e-9
+
+
+def _plane_on_part(reference, frame):
+    """True when the plane of a sketch reference may move with the part's geometry: a face, or a construction plane
+    built on the part. A construction plane described by an older capture (a token only) counts as built on the part
+    unless its sketch frame lies on an origin plane."""
+    kind = reference.get("kind")
+    if kind != "constructionPlane":
+        return kind in ("face", "other")
+    if reference.get("origin"):
+        return False
+    if "definition" in reference or "built_on" in reference:
+        return any(on_part(entry) for entry in reference.get("built_on") or ())
+    return not _looks_like_origin(frame)
+
+
+def _maker_sizes(table, item):
+    """Fusion names of the ticked sizes behind the model parameters a construction item made (by name)."""
+    kind = _CONSTRUCTION.get(item.get("type"))
+    names = set()
+    for param in table.model_params.values() if kind else ():
+        made = param.get("created_by") or {}
+        if made.get("kind") == kind and made.get("name") == item.get("name"):
+            names |= table.depends(param["name"])
+    return names
+
+
+def _item_reads(table, item):
+    """Fusion names of the free sizes a timeline item reads: the values in its `data.params`, a sketch's
+    dimensions, the parameters a construction plane or axis made."""
+    found = set()
+    params = (item.get("data") or {}).get("params")
+    for ref in (params.values() if isinstance(params, dict) else ()):
+        if isinstance(ref, dict) and ref.get("expression"):
+            tr = table.translate(ref["expression"])
+            found |= set(tr.reads)
+            if not tr.ok and not tr.reads:
+                found |= table.depends(ref.get("name") or "")
+    if item.get("type") == "Sketch":
+        found |= set(sketch_sizes(table, item.get("name") or ""))
+    return found | _maker_sizes(table, item)
+
+
+def _sketch_item(timeline, sketch, before):
+    """Timeline index of the sketch item named `sketch` before index `before`, the last one when several match."""
+    found = None
+    for item in timeline:
+        index = item.get("index")
+        if (item.get("type") == "Sketch" and item.get("name") == sketch and isinstance(index, int)
+                and (before is None or index < before)):
+            found = index
+    return found
+
+
+def placement_sizes(table, timeline, profile, before):
+    """Fusion names of the ticked sizes that may move the plane the sketch of `profile` sits on, in table order: the
+    sizes behind the construction plane itself and, for a plane on a face or on construction geometry built on the
+    part (a chain of planes included), every size an item of the body's component reads before the plane was made.
+    `before` is the timeline index of the step that uses the sketch. Empty for an origin plane, a sketch of another
+    component (its links say what moves it) or a profile that does not say what its sketch sits on."""
+    reference = profile.get("reference") if isinstance(profile, dict) else None
+    if table is None or not isinstance(reference, dict) or profile.get("foreign") or profile.get("face"):
+        return []
+    names = set()
+    if reference.get("kind") == "constructionPlane" and reference.get("token"):
+        names |= set(construction_sizes(table, "constructionPlane", reference["token"]))
+    if _plane_on_part(reference, profile.get("frame")):
+        bound = _sketch_item(timeline, profile.get("sketch"), before)
+        bound = before if bound is None else bound
+        if isinstance(reference.get("made_by"), int):
+            bound = min(bound, reference["made_by"]) if bound is not None else reference["made_by"]
+        for item in timeline:
+            index = item.get("index")
+            if (isinstance(index, int) and bound is not None and index < bound and not item.get("suppressed")
+                    and (item.get("in_target_component") is not False or item.get("helper_of"))):
+                names |= _item_reads(table, item)
+    return [name for name in table.ticked if name in names]
+
+
+def placement_driven(capture, table, profiles):
+    """Fusion names of the ticked sizes that may move the plane of any of `profiles` (`(item index, profile)`
+    pairs), in table order: the sizes the probe must try so the sketch plane is measured."""
+    timeline = capture.get("items") or []
+    found = set()
+    for index, profile in profiles:
+        found |= set(placement_sizes(table, timeline, profile, index))
+    return [name for name in table.ticked if name in found]
 
 
 def _identifiers(node, found):

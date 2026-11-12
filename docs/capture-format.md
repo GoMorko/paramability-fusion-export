@@ -462,7 +462,9 @@ Reading inputs at the position before the item covers the getters that the refer
 
 Optional keys that let the size probe find the sketch again (section 5, "Probe states"): `sketch_token`
 (`Sketch.entityToken`) and `reference` (`{ "kind": "constructionPlane" | "face" | "plane" | "other", "token" }` from
-`Sketch.referencePlane`; `token` is empty for a plane without one). Each curve also gets `entity`, the token of its
+`Sketch.referencePlane`; `token` is empty for a plane without one). A construction plane of the body's component
+also says what it is: `origin`, or `made_by`, `definition` and `built_on` as in a mirror plane record
+(`read_reference.describe_plane`). Each curve also gets `entity`, the token of its
 sketch curve (`ProfileCurve.sketchEntity.entityToken`). A key is left out when Fusion does not give it.
 
 From `Profile.parentSketch.transform`, `Profile.profileLoops`, `ProfileLoop.isOuter`, `ProfileLoop.profileCurves`,
@@ -613,7 +615,8 @@ The translator fits the app's spline through points chosen from the samples (`li
   `face_point` (`BRepFace.pointOnFace`) and `body` (`{ token, name }`, the body it lies on). These keys are optional;
   without `face_point` the translator cannot tell whether the face moves with sizes, and without `body` a step of a tool
   body cannot tell a face of the tool from a face of the part at the same place. For a `ConstructionPlane` or `ConstructionAxis` the record also has `token`
-  (`entityToken`), which names the model parameters behind it (`created_by.token`).
+  (`entityToken`), which names the model parameters behind it (`created_by.token`). A construction plane of the body's
+  component also has `origin`, or `made_by`, `definition` and `built_on` (`read_reference.describe_plane`).
 - `symmetric`: `{ "distance": mm, "full_length": bool, "taper_deg": d }`
   (`SymmetricExtentDefinition.distance`, `isFullLength`, `taperAngle`).
 - `target_box_before`: the target body's box with the marker before the item, or null when it does not exist yet.
@@ -858,7 +861,9 @@ them (`lib/fusion_reader/read_reference.py`). All keys below are optional and ar
   type name of how it is defined) and `built_on`, a list of the same descriptions for the entities that definition
   names (own component only, up to three levels deep).
 
-A reader that cannot read one of these leaves it out, and the plane or axis then stays where it was measured.
+A reader that cannot read one of these leaves it out, and the plane or axis then stays where it was measured. The same
+keys describe a construction plane a sketch sits on and one an extrude starts from or reaches to (section 4 and TARGET);
+there a plane without them (an older capture) marks the sizes that may move it.
 
 `target_box_before`: the target body's box with the marker before the item, or null when it does not exist yet (as
 for extrudes).
@@ -1395,8 +1400,8 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
 - Pattern counts that follow sizes must give whole numbers at every size value: the formula is rounded as a whole
   (`round`, `floor`, `ceil`), or it adds, subtracts and multiplies whole numbers and count sizes. Otherwise the sizes
   are fixed. An extent spacing divides by `max((count) - 1, 1)`, so a count of 1 never divides by zero.
-- Values that stay numbers while a size reaches them: construction geometry that a step uses itself, the "up
-  to" offset, a tip angle, a countersink angle, a full circular turn, a revolve that is not a plain
+- Values that stay numbers while a size reaches them: construction geometry that a step uses itself (except the
+  distance of an offset plane an extrude starts from or reaches to), the "up to" offset, a tip angle, a countersink angle, a full circular turn, a revolve that is not a plain
   part turn, and a pattern whose copies are left out by number or are rounds copied one by one. The sizes behind
   them are fixed.
 - Picks and reaches that follow sizes (`lib/translator/follow.py`). Every extrude step is kept with its placement,
@@ -1413,7 +1418,11 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
     one, which one point per edge cannot. A step with part of a set, mixed inputs or sizes per edge keeps a point
     per edge;
   - other points write the coordinate along the extrude as a formula (`0.5 * height` for a side point half way up);
-  - a "to entity" reach to a moving end face writes its length as a formula; a construction plane stays where it is;
+  - a "to entity" reach to a moving end face writes its length as a formula. A construction plane follows what it is
+    built on (`follow._plane_shift`): an offset plane its base plus its own distance when that is the only parameter
+    it made (`sizes.offset_param`), a midplane its two bases, through chains of planes. An origin plane, or one made
+    from parameters alone, stays. Any other plane built on the part (at an angle, through an edge, tangent, along a
+    path) marks the sizes read before the step, and so does a plane the capture does not describe (an older add-in);
   - a start offset that follows sizes, or a "from entity" start on a moving end face, moves the sketch placement
     along its normal (`sketch.on.origin` as formulas), and the picks on that extrude follow it too. Such a moving
     start with a side that reaches "to" a face is fixed.
@@ -1525,7 +1534,8 @@ Measured references of other components (below) have their own keys, `<item>/r/<
 The probe tries (`lib/probe/plan.py`, at most 64 rows), in this order:
 
 1. Near rows (`plan.probe_rows`): each ticked size that moves a covered sketch value or reaches a sketch dimension, a
-   construction plane or, through another component, a sketch ("Geometry links" in section 2), at 25 percent of its
+   construction plane or, through another component, a sketch ("Geometry links" in section 2), or that may move the
+   plane a covered sketch sits on (`probe/plane_sizes.py`), at 25 percent of its
    value below and above (`NEAR_SHARE`), inside its range; a count moves by whole numbers, a value of zero by that
    share of the way to the range ends. Then up to 8 ticked sizes that nothing ties to a sketch (`MAX_EXTRA_SIZES`, in
    table order) while rows are left: the person ticked them, so a sketch may follow them in a way the capture cannot
@@ -1593,7 +1603,8 @@ free size measured over less than its range is loose with "it was followed betwe
 be tried" (added to its other reason when there is one and it fits the note), unless the range was cut to the values
 that built on every side the probe did not cover. Every state also
 reads the body's box (and volume when the state has it): a size whose state alone changed the box but moved no
-followed sketch or reference is kept in `Motion.body_moved` (`SizeProbe.finish`). The translator treats it as doubtful
+followed sketch or reference is kept in `Motion.body_moved` (`SizeProbe.finish`), unless it was tried only for a
+sketch plane: it feeds step values, which follow it. The translator treats it as doubtful
 with "it changes this part in a way the copy does not follow": loose when a formula reads it, else dropped with
 `used` true. It is never reported as changing nothing.
 
@@ -1636,8 +1647,8 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
 - A value of an unmeasured sketch is stuck with cause `untried` for every size the sketch reads (`sizes.sketch_sizes`:
   the sizes behind that sketch's dimensions, and the sizes that may reach it through the geometry of another
   component, "Geometry links" in section 2). The size is loose, with "it changes <sketch> and could not be tried at
-  other values". A size the sketch does not read is not touched: a size that moves the sketch only through its
-  construction plane is not named here.
+  other values". A size that moves the sketch only through the plane it sits on is marked by the placement rule
+  below.
 - A size that may reach a sketch only through another component follows the measured motion like any other: when the
   probe saw the sketch move with it and the fit holds, the outline is written as formulas of it (two arcs of radius
   `pipe_d_mm / 2` give points such as `0.5 * pipe_d_mm`; a circle writes its `radius`). When the fit fails or the
@@ -1709,6 +1720,13 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   line that turns cannot carry its crossings.
 - A sketch plane that moves writes the placement origin along its normal (`sketch.on.origin`); a "to entity" reach is
   the face's move less the plane's move. Outlines of one step whose planes move differently fix those sizes.
+- A sketch on a face, or on a construction plane built on the part (also a chain of planes), may move with every size
+  an item of the body's component reads before the plane was made, and with the plane's own parameters
+  (`sizes.placement_sizes`; for a plane described only by its token, every such size unless the sketch frame lies on an
+  origin plane). The probe tries those sizes (`probe/plane_sizes.py`), so the plane's move is measured whatever the
+  plane's kind; a plane that turns is stuck with cause `turns`. Such a size that was not measured for the sketch (no
+  probe, the sketch not measured, the size not tried) is marked: "it may move the plane <sketch> sits on, and that could
+  not be tried at other values" (`sketch_motion.placement_doubts`).
 - A reversed placement negates the y formulas of its loops.
 - Hole points write `origin` as formulas (the drill tip revolve too); a revolve axis from a sketch line writes
   `axis.point` in the sketch plane. A symmetric revolve turns its moving origin about the axis.
@@ -1744,8 +1762,9 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   grid over the outline); Fusion's stored direction is kept when both sides, or neither, hold material, and turned with
   a note otherwise.
 - A construction plane or axis that a step uses itself (start from, reach to, turn about, mirror across, with `token`)
-  fixes the sizes of the model parameters it made (`created_by.token`); without a token, of every construction plane
-  or axis.
+  marks the sizes of the model parameters it made (`created_by.token`); without a token, of every construction plane
+  or axis. An offset plane an extrude starts from or reaches to, whose distance `sizes.offset_param` names, follows that
+  distance instead.
 
 ### Measured references in the motion file (`lib/probe/ref_fit.py`)
 
