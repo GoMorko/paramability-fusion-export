@@ -47,9 +47,9 @@ class ReachTest(unittest.TestCase):
 
     def test_a_pick_on_a_face_of_a_left_out_step_is_reported_and_another_is_not(self):
         design, reach = self.read([item(1), item(2), item(3, "FilletFeature", edge_pick("top_wall"))])
-        self.assertEqual(reach, {"read": True, "gaps": [1], "makers": {"3": [1]}})
+        self.assertEqual((reach["gaps"], reach["makers"]), ([1], {"3": [1]}))
         _, reach = self.read([item(1), item(2), item(3, "FilletFeature", edge_pick("floor_rim"))])
-        self.assertEqual(reach, {"read": True, "gaps": [1], "makers": {"3": []}})
+        self.assertEqual((reach["gaps"], reach["makers"]), ([1], {"3": []}))
 
     def test_a_face_pick_is_tested_by_the_face_itself(self):
         _, reach = self.read([item(1), item(3, "ShellFeature", face_pick("wall"))])
@@ -133,7 +133,7 @@ class ReachTest(unittest.TestCase):
 
     def test_without_gaps_nothing_is_read_and_the_marker_does_not_move(self):
         design, reach = self.read([item(3, "FilletFeature", edge_pick("top_wall"))], gaps=())
-        self.assertEqual((reach, design.timeline.visited), ({"read": True, "gaps": [], "makers": {}}, []))
+        self.assertEqual((reach, design.timeline.visited), ({"read": True, "gaps": [], "makers": {}, "moves": 0}, []))
 
 
 class MarkerTest(unittest.TestCase):
@@ -145,8 +145,26 @@ class MarkerTest(unittest.TestCase):
     def test_the_marker_is_after_each_candidate_then_before_each_picking_step_and_back_where_it_was_after(self):
         design = self.world.design(marker=2)
         read_reach(design, {"items": self.items}, {1})
-        self.assertEqual(design.timeline.visited, [2, 3, 4, 2, 3, 2])
+        self.assertEqual(design.timeline.visited, [2, 3, 2])
         self.assertEqual(design.timeline.markerPosition, 2)
+
+    def test_the_marker_visits_each_position_once_and_the_answer_counts_the_moves(self):
+        # Step 1 is left out and steps 2 to 5 round its edges one after the other. Reading a list right after each
+        # candidate, then moving before each picking step, took 9 moves, 10 with the move back; each position is now visited once.
+        world = World()
+        world.features += [FakeMadeFeature([]) for _ in range(2)]
+        items = [item(1)] + [item(n, "FilletFeature", edge_pick("top_wall" if n % 2 else "floor_rim")) for n in range(2, 6)]
+        design = world.design(marker=3)
+        reach = read_reach(design, {"items": items}, {1})
+        self.assertEqual(design.timeline.visited, [2, 3, 4, 5, 3])
+        self.assertEqual(reach["moves"], 4)
+        self.assertEqual(reach["makers"], {"2": [], "3": [1], "4": [2, 3], "5": [1, 3, 4]})
+
+    def test_a_candidate_that_no_picking_step_follows_is_not_read(self):
+        design = self.world.design(marker=2)
+        reach = read_reach(design, {"items": self.items[:2]}, {1})
+        self.assertEqual((reach["makers"], reach["moves"]), ({"2": [1]}, 1))
+        self.assertEqual(design.timeline.visited, [2])
 
     def test_a_marker_at_the_end_goes_to_the_end(self):
         design = self.world.design()

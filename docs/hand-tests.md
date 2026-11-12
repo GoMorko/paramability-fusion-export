@@ -1572,4 +1572,8 @@ every later step that picks geometry, so a wrong guess shows up as too many left
   BRepEntityTypes.BRepFaceEntityType)` at the recorded point.
 - Two entities are the same face when `entityToken` matches or `geo.same_entity` says so.
 - `Timeline.markerPosition = index` for each tested step, and back to the start marker at the end: after a read the
-  marker must be where it was (`MarkerError` stops the export otherwise).
+  marker must be where it was (`MarkerError` stops the export otherwise). The marker visits each position once, so
+  the read moves it about once per tested step. Measure it on L2 and on a part with a run of rounds after the coil:
+  `reach.moves` in `report.json` is the number of moves (the move back is not counted); note it with the
+  seconds the export waits before the result window. A move that takes long in Fusion (a design that rebuilds
+  slowly) is the number to report.

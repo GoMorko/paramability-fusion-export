@@ -371,7 +371,7 @@ or stopped because the part holds more gaps than it may (`lib/export_plan/reach_
 translated again with it, and the gap cap applies to that translation):
 
 ```json
-"reach": { "read": true, "gaps": [12], "makers": { "17": [12], "19": [12, 17] } }
+"reach": { "read": true, "gaps": [12], "makers": { "17": [12], "19": [12, 17] }, "moves": 3 }
 ```
 
 or `{ "read": false, "error": "<reason>" }` when the read failed.
@@ -393,14 +393,18 @@ or `{ "read": false, "error": "<reason>" }` when the read failed.
   shifts and marks the sizes it cannot follow. Lists of bodies and of the faces a step made (`faces_after`,
   `tangent_faces`, `end_points` and the like) are not picks either.
 - `Feature.faces` lists the faces a step made, but only all of them with the marker right after the step: the API
-  says a later change to the body can take faces out of the list. So the reader first reads each candidate's list
-  with the marker right after it. Then it moves the marker to just before each tested step and compares each picked
+  says a later change to the body can take faces out of the list. So the reader reads each candidate's list with the
+  marker right after it, and moves the marker to just before each tested step to compare each picked
   face (for an edge: each face it joins, found by `BRepEdge.faces`) with the candidate's list at that point. A face is
   found by its entity token, or by `Component.findBRepUsingPoint` at the recorded point. A candidate counts as reached
   by every pick when its list is empty (a Move, a Combine, a draft may list none), shorter than right after the step,
   or cannot be read; so does every candidate when a pick cannot be found. More than 100 tested steps or 200 candidates
   give `read: false`, and so does any other failure of the read. The marker goes back to where it was at the end, with the same check as `read_capture`
   (`MarkerError` when it does not read there).
+- `moves` is how many times the read moved the marker, not counting the move back. The marker goes forward once over
+  the positions it needs: right after each candidate that a later tested step may compare, and right before each
+  tested step; a position that is both is visited once. A face's token is read once per position, not once per pair
+  of faces. `report.json` keeps it in `reach`.
 - The translator (`gap_picks.picked_gaps`): a later step that picks faces of a left out step is left out too, with the gap
   in its `dependsOn`. A left out step that the read did not cover (not in `gaps` and not a tested step, for example
   one that only the final translation leaves out) counts as "may pick". Without `reach`, without `gaps`, or with

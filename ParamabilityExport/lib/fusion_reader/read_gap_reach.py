@@ -12,8 +12,13 @@ step that trims, splits, moves or replaces those faces can take them out of the 
 read once with the marker right after it. A candidate whose list is empty, or shorter than it was right after the step,
 counts as reached by every later pick, since a picked face may be one that dropped out.
 
-The answer is `{ read: true, gaps, makers: { "<item index>": [indexes of the candidates that made a picked face] } }`,
-with `gaps` the left out steps the read was asked about and an entry for every picking step that was tested, or
+The marker visits each position it needs once, from the start of the timeline to its end: right after each candidate
+that a later picking step may compare, and right before each picking step. The tokens of a picked face and of a
+candidate's faces are read once per position.
+
+The answer is `{ read: true, gaps, makers: { "<item index>": [indexes of the candidates that made a picked face] },
+moves }`, with `gaps` the left out steps the read was asked about, an entry for every picking step that was tested and
+`moves` the number of marker moves the read made (not counting the move back), or
 `{ read: false, error }` when the read failed. A step that built a body a left out step takes is reported under the
 index of that left out step. A pick that cannot be found, or a candidate whose faces cannot be read, counts as reached: the safe
 side for the translator.
@@ -44,11 +49,16 @@ def _resolve(design, token):
     return _natives(geo.safe(lambda: design.findEntityByToken(token), None)) if token else []
 
 
-def _same(a, b):
-    if geo.same_entity(a, b):
+def _token(entity):
+    return geo.safe(lambda: entity.entityToken, None) or None
+
+
+def _touches(touched, tokens, faces):
+    """True when a face of `faces` is one of `touched`: by token (`tokens` are the touched tokens), else by Fusion's
+    own comparison of the two objects."""
+    if tokens and any(_token(face) in tokens for face in faces):
         return True
-    token = geo.safe(lambda: a.entityToken, None)
-    return bool(token) and token == geo.safe(lambda: b.entityToken, None)
+    return any(geo.same_entity(a, b) for a in touched for b in faces)
 
 
 def _face_type():
@@ -84,17 +94,32 @@ def _pick_faces(design, pick, home):
     return faces or None
 
 
-def _maker_faces(timeline, index):
-    """The faces the timeline item `index` created that Fusion still lists, or None when they cannot be read."""
-    entity = geo.safe(lambda: geo.native_object(timeline.item(index).entity), None)
-    faces = geo.safe(lambda: entity.faces, None) if entity is not None else None
-    return _natives(geo.collection_items(faces)) if faces is not None else None
+class _Marker:
+    """The timeline marker, moved only when it must. `moves` counts the moves made. The faces a step lists are read
+    once per marker position."""
 
+    def __init__(self, timeline):
+        self.timeline = timeline
+        self.moves = 0
+        self._at = None
+        self._faces = {}
 
-def _move(timeline, position):
-    geo.safe(lambda: setattr(timeline, "markerPosition", position), None)
-    if geo.safe(lambda: timeline.markerPosition, None) != position:
-        raise ReachReadError("The timeline marker could not be moved.")
+    def move(self, position):
+        if self._at == position:
+            return
+        self.moves += 1
+        geo.safe(lambda: setattr(self.timeline, "markerPosition", position), None)
+        if geo.safe(lambda: self.timeline.markerPosition, None) != position:
+            raise ReachReadError("The timeline marker could not be moved.")
+        self._at, self._faces = position, {}
+
+    def faces(self, index):
+        """The faces the timeline item `index` created that Fusion still lists, or None when they cannot be read."""
+        if index not in self._faces:
+            entity = geo.safe(lambda: geo.native_object(self.timeline.item(index).entity), None)
+            found = geo.safe(lambda: entity.faces, None) if entity is not None else None
+            self._faces[index] = _natives(geo.collection_items(found)) if found is not None else None
+        return self._faces[index]
 
 
 def _tool_makers(items, gaps):
@@ -133,34 +158,28 @@ def _picking_items(items, gaps):
     return found
 
 
-def _complete_counts(timeline, candidates):
-    """{ index: how many faces the step lists with the marker right after it, or None when unreadable }."""
-    counts = {}
-    for index in candidates:
-        _move(timeline, index + 1)
-        faces = _maker_faces(timeline, index)
-        counts[index] = len(faces) if faces is not None else None
-    return counts
-
-
 def _maybe_dropped(faces, complete):
     """True when the step's list may miss a face it made: unreadable, empty, or shorter than right after the step."""
     return faces is None or not faces or complete is None or len(faces) < complete
 
 
-def _reached(design, timeline, index, picks, candidates, complete, home):
+def _reached(design, marker, index, picks, candidates, complete, home):
     """The candidates before `index` that made, or may have made, a face the picks touch (the marker is before
     `index`)."""
     earlier = [m for m in candidates if m < index]
-    faces = {m: _maker_faces(timeline, m) for m in earlier}
     touched = []
     for pick in picks:
         found = _pick_faces(design, pick, home)
         if found is None:
             return earlier
         touched.extend(found)
-    return [m for m in earlier if _maybe_dropped(faces[m], complete.get(m))
-            or any(_same(a, b) for a in touched for b in faces[m])]
+    tokens = {t for t in map(_token, touched) if t}
+    reached = []
+    for m in earlier:
+        faces = marker.faces(m) if complete.get(m) is not None else None
+        if _maybe_dropped(faces, complete.get(m)) or _touches(touched, tokens, faces):
+            reached.append(m)
+    return reached
 
 
 def _read(design, capture, gaps):
@@ -174,17 +193,23 @@ def _read(design, capture, gaps):
     if len(candidates) > MAX_CANDIDATES:
         raise ReachReadError("More than %d steps may have made the faces later steps pick." % MAX_CANDIDATES)
     home = (capture.get("target") or {}).get("token") or ""
-    timeline = design.timeline
-    complete = _complete_counts(timeline, candidates)
-    makers = {}
-    for index in sorted(picking):
-        _move(timeline, index)
-        reached = _reached(design, timeline, index, picking[index], candidates, complete, home)
-        found = list(reached)
-        for m in reached:
-            found.extend(c for c in tools.get(m, ()) if c < index)
-        makers[str(index)] = sorted(set(found))
-    return makers
+    marker = _Marker(design.timeline)
+    last = max(picking, default=-1)
+    useful = [m for m in candidates if m < last]
+    positions = sorted({m + 1 for m in useful} | set(picking))
+    complete, makers = {}, {}
+    for position in positions:
+        marker.move(position)
+        if position - 1 in useful:
+            faces = marker.faces(position - 1)
+            complete[position - 1] = len(faces) if faces is not None else None
+        if position in picking:
+            reached = _reached(design, marker, position, picking[position], useful, complete, home)
+            found = list(reached)
+            for m in reached:
+                found.extend(c for c in tools.get(m, ()) if c < position)
+            makers[str(position)] = sorted(set(found))
+    return makers, marker.moves
 
 
 def read_reach(design, capture, gaps):
@@ -192,14 +217,15 @@ def read_reach(design, capture, gaps):
     own reason (`reach_pass.left_out_indexes`); with none, nothing is read. Any failure gives `{ read: false, error }`.
     The timeline marker goes back to where it was; only a marker that cannot go back raises (MarkerError)."""
     if not gaps:
-        return {"read": True, "gaps": [], "makers": {}}
+        return {"read": True, "gaps": [], "makers": {}, "moves": 0}
     timeline = marker = None
     try:
         timeline = design.timeline
         marker = read_marker(timeline)
         if marker is None:
             return {"read": False, "error": "The design has no readable timeline."}
-        return {"read": True, "gaps": sorted(set(gaps)), "makers": _read(design, capture, set(gaps))}
+        makers, moves = _read(design, capture, set(gaps))
+        return {"read": True, "gaps": sorted(set(gaps)), "makers": makers, "moves": moves}
     except MarkerError:
         raise
     except Exception as exc:
