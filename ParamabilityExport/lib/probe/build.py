@@ -16,12 +16,20 @@ listed in `Motion.apart`. A sketch known to have stayed on its other outline acr
 or it reads as the same other outline in rows of unrelated sizes) is named in `Motion.flipped`.
 When a sketch reads as the same different outline in states that change different sizes, none of those sizes made it
 either.
+
+A different outline that a size makes on its own is a limit of its range, not a reason to drop it (`outline_windows`):
+on that side the range keeps the farthest value tried alone that built and kept every outline, nearer than the nearest
+value that changed one. The states that set a size past such a limit are left out of the fit, and `Motion.spans`
+records the limits (`kept`) and the values that changed an outline (`changed`), so the translator cuts the range there
+(`translator.kept_ranges.built_ranges`). When no value but the value now remains, nothing is left out: the size stays
+stuck, and `kept` is the value now at both ends.
 """
 from . import columns as cols
 from . import match, plan, ref_fit
 from .series import fit_series, moved as _moved
 from ..sketch_values import coverage
 from ..sketch_values.motion import SHAPE, UNREAD, Motion
+from ..translator import kept_ranges
 
 _SAME = 1e-9
 
@@ -39,6 +47,7 @@ class StateRun:
         self.targets = []
         self.apart = set()
         self.apart_tokens = set()  # sketches that read as the same other outline in rows of unrelated sizes
+        self.outside = set()  # states that set a size past the values where its outlines hold (`outline_windows`)
         self._values = {}
         self.readable = set()
         if self.base:
@@ -85,7 +94,7 @@ class StateRun:
         return self._values[key]
 
     def _read_values(self, target, at):
-        if not self.built(at) or self.mislabelled(at):
+        if not self.built(at) or self.mislabelled(at) or at in self.outside:
             return None, None
         read = self.states[at].get("read")
         values, cause = match.state_values(target, read, self.base) if read else (None, UNREAD)
@@ -115,21 +124,33 @@ class StateRun:
             return True
         return self.built(before) and self.outline_right(token, self.states[before].get("read"))
 
-    def came_back(self, token, at):
-        """True when the sketch is known to read as captured again once the values of state `at` were put back."""
+    def came_back(self, token, at, open_end=False):
+        """True when the sketch is known to read as captured again once the values of state `at` were put back. With
+        `open_end`, the last state counts as come back while nothing was read after it."""
         after = at + 1
         if after >= len(self.states):
-            return self.after is not None and self.outline_right(token, self.after)
+            return open_end if self.after is None else self.outline_right(token, self.after)
         start = self.states[after].get("start")
         if isinstance(start, dict):
             return self.outline_right(token, start)
         return self.built(after) and self.outline_right(token, self.states[after].get("read"))
 
-    def shape_blames(self, token, at):
+    def shape_blames(self, token, at, open_end=False):
         """True when the different outline of the sketch in state `at` blames the size of that row: its own row,
-        started on the right outline, and the outline came back after it."""
+        started on the right outline, and the outline came back after it (`came_back`, `open_end`)."""
         return (len(self.varied(at, self.current)) == 1 and self.started_right(token, at)
-                and self.came_back(token, at))
+                and self.came_back(token, at, open_end))
+
+    def changed(self, at, open_end=False):
+        """The name of a followed sketch whose outline the size of state `at` changed on its own (`shape_blames`), or
+        an empty text."""
+        if not self.built(at) or self.mislabelled(at) or at in self.apart:
+            return ""
+        for target in self.targets:
+            if (self.values_at(target, at)[1] == SHAPE
+                    and self.shape_blames(target["sketch_token"], at, open_end)):
+                return target["sketch"]
+        return ""
 
     def find_flips(self):
         """Adds to `apart` the states whose different outline blames no size, and returns the names of the sketches
@@ -166,6 +187,20 @@ class StateRun:
                         self.apart.update((a, b))
                         self.apart_tokens.add(token)
 
+    def leave_out(self, windows):
+        """Leave out of the fit every state that sets a size past an end of its `outline_windows` range; a range that
+        shrank to the value now leaves nothing out."""
+        for at in range(1, len(self.states)):
+            values = self.states[at].get("values") or {}
+            for name, window in windows.items():
+                low, high = window["kept"]
+                if name not in values or (low is not None and high is not None and high - low <= _SAME):
+                    continue
+                below = low is not None and values[name] < low - _SAME
+                if below or (high is not None and values[name] > high + _SAME):
+                    self.outside.add(at)
+        self._values = {}
+
     def _unrelated(self, a, b, current):
         """True when states `a` and `b` change no size to the same value: other sizes, or the same ones elsewhere."""
         sizes_a, sizes_b = self.varied(a, current), self.varied(b, current)
@@ -173,6 +208,63 @@ class StateRun:
             return False
         values_a, values_b = self.states[a].get("values") or {}, self.states[b].get("values") or {}
         return all(abs(values_a[n] - values_b[n]) > _SAME for n in sizes_a & sizes_b)
+
+
+def outline_changes(capture, states, current=None):
+    """Numbers in `states` (E0 first) of the rows whose own size changed a followed outline (`StateRun.changed`), the
+    last row counted as come back: the probe plans its next tries toward the value now from them."""
+    run = StateRun(capture, states, current)
+    return {at for at in range(1, len(run.states)) if run.changed(at, open_end=True)}
+
+
+def _alone_tries(run):
+    """`{Fusion name: [(value, sketch)]}` of the states that set one size alone, built and read as their row; `sketch`
+    names the outline the size changed there, else it is empty."""
+    out = {}
+    for at in range(1, len(run.states)):
+        names = run.varied(at, run.current)
+        if len(names) != 1 or not run.built(at) or run.mislabelled(at):
+            continue
+        (name,) = names
+        out.setdefault(name, []).append((run.states[at]["values"][name], run.changed(at)))
+    return out
+
+
+def _limit(tries, now, sign):
+    """On one side of `now` (`sign`): the farthest value that kept every outline and lies nearer than the nearest value
+    that changed one, or `now` when none did; None when no value on that side changed an outline."""
+    side = [(v, sketch) for v, sketch in tries if (v - now) * sign > _SAME]
+    changes = [abs(v - now) for v, sketch in side if sketch]
+    if not changes:
+        return None
+    kept = [v for v, sketch in side if not sketch and abs(v - now) < min(changes) - _SAME]
+    return max(kept, key=lambda v: abs(v - now), default=now)
+
+
+def outline_windows(run, table, spans, capture=None):
+    """`{Fusion name: {"kept": [low, high], "changed": [[value, sketch]]}}` of the free sizes whose own try changed a
+    followed outline: `changed` lists those values, `kept` the farthest value on each side that kept every outline
+    (`_limit`; None on a side with no change or an end the person typed). When that range and the cut where Fusion did
+    not rebuild (`kept_ranges.failure_cut`, over `spans`) leave only the value now, `kept` is the value now at both
+    ends."""
+    entries = {e.name: e for e in table.entries}
+    mine = kept_ranges._part_step(capture)
+    out = {}
+    for name, tries in _alone_tries(run).items():
+        e = entries.get(name)
+        size = table.sizes.get(e.size_name) if e is not None and e.size_name else None
+        changed = [[v, sketch] for v, sketch in tries if sketch]
+        if not changed or not size or "min" not in size or name not in spans:
+            continue
+        now, typed = run.current[name], table.typed_ends(name)
+        kept = [None if typed[at] else _limit(tries, now, sign) for at, sign in ((0, -1), (1, 1))]
+        span = dict(spans[name], kept=kept, changed=changed)
+        low, high, _ = kept_ranges.failure_cut(table, e, span, mine)
+        o_low, o_high, _ = kept_ranges.outline_cut(table, e, span)
+        if min(high, o_high) - max(low, o_low) <= _SAME:
+            kept = [now, now]
+        out[name] = {"kept": kept, "changed": changed}
+    return out
 
 
 def moved_sizes(capture, states, current=None):
@@ -249,11 +341,16 @@ def build(capture, table, states, after=None):
     run.find_apart(current)
     out.flipped = run.find_flips()
     out.apart = sorted(at - 1 for at in run.apart)
+    windows = outline_windows(run, table, out.spans, capture)
+    for name, window in windows.items():
+        out.spans[name].update(window)
+    run.leave_out(windows)
     for target in run.targets:
         _fit_target(out, run, target, shared, models, current)
     out.curves = {match.prefix(t) for t in run.targets if t["kind"] in ("profile", "path")}
     for ref in refs.usable:
-        ref_fit.fit_ref(out, ref, [s.get("read") for s in run.states], [run.built(at) for at in range(len(run.states))],
+        ref_fit.fit_ref(out, ref, [s.get("read") for s in run.states],
+                        [run.built(at) and at not in run.outside for at in range(len(run.states))],
                         shared, models, lambda at: run.varied(at, current))
     return out
 

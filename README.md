@@ -275,7 +275,9 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   parameters back and recomputes. A sketch with two solutions can still land on its other one after a try that did
   not rebuild, and stay there. After such a try the add-in reads the design again before the next one. A size is
   blamed for a sketch that "makes a different outline" only when its own try started from the right outline and the
-  outline came back after it; the tries made while a sketch stayed on its other solution count against no size, and
+  outline came back after it. Such a size keeps its range up to the last value tried that kept the outline (the
+  add-in halves toward it, as for a value that does not rebuild); only when no other value works is it not a size,
+  and the reason says why. The tries made while a sketch stayed on its other solution count against no size, and
   the result window says so in one line. When the sketch still reads another outline after the export, the result
   window names it so you can look at it in Fusion. Fusion sometimes gives a projected curve a new name when it
   recomputes; the add-in then knows it by its place in the outline.

@@ -61,12 +61,22 @@ def span_words(span):
     return "between %s and %s" % (number_text(span["low"]), number_text(span["high"]))
 
 
+def _beyond(span):
+    """What lies past the values a size was followed between: a different outline where the probe saw one
+    (`changed`), else values it could not try."""
+    changed = [(v, sketch) for v, sketch in span.get("changed") or ()
+               if v < span["low"] - 1e-9 or v > span["high"] + 1e-9]
+    if changed:
+        return "beyond that %s" % outline_changed_why([min(changed, key=lambda c: abs(c[0] - span["high"]))])
+    return "beyond that it could not be tried"
+
+
 def span_why(span, low, high):
     """A `Past` for a size measured over less than its range: "below 1.8", "past 3.6" or "outside 1.8 to 3.6"."""
     below, past = span["low"] > low + 1e-9, span["high"] < high - 1e-9
     a, b = number_text(span["low"]), number_text(span["high"])
     where = "outside %s to %s" % (a, b) if below and past else "below %s" % a if below else "past %s" % b
-    return Past(where, "it was followed %s; beyond that it could not be tried" % span_words(span))
+    return Past(where, "it was followed %s; %s" % (span_words(span), _beyond(span)))
 
 
 def with_span(why, span, low, high):
@@ -74,7 +84,7 @@ def with_span(why, span, low, high):
     past the note limit stays as it is."""
     if why is None:
         return span_why(span, low, high)
-    text = "%s; it was followed %s, beyond that it could not be tried" % (_ends(why), span_words(span))
+    text = "%s; it was followed %s, %s" % (_ends(why), span_words(span), _beyond(span))
     if len(text) > MAX_NOTE - 80:
         return why
     return Past(why.where, text) if getattr(why, "where", None) else text
@@ -104,6 +114,27 @@ def not_rebuilt_why(failures):
         "%s%s" % (number_text(v), " (%s)" % clip(step, MAX_NAME) if step else "") for v, step in failures)
 
 
+def outline_changed_why(changes):
+    """What the size probe saw at the cut ends, from `(value, sketch)` of each: "LidRail makes a different outline at
+    2.5"."""
+    return " and ".join("%s makes a different outline at %s" % (clip(sketch or "a sketch", MAX_NAME), number_text(v))
+                        for v, sketch in changes)
+
+
+def only_now_why(span):
+    """Why a size can be copied only at its value now: on each side the nearest value tried did not rebuild in Fusion
+    or made a different outline (`Motion.spans` `failed` and `changed`)."""
+    now = span["kept"][0]
+    seen = []
+    for side in (-1, 1):
+        failed = [(v, step, True) for v, step in span.get("failed") or () if (v - now) * side > 0]
+        changed = [(v, sketch, False) for v, sketch in span.get("changed") or () if (v - now) * side > 0]
+        if failed or changed:
+            seen.append(min(failed + changed, key=lambda f: abs(f[0] - now)))
+    parts = [not_rebuilt_why([(v, name)]) if broke else outline_changed_why([(v, name)]) for v, name, broke in seen]
+    return "no value other than %s could be copied, since %s" % (number_text(now), " and ".join(parts))
+
+
 def cut_reason(name, words, why, shared=False):
     """Why a size range was cut: "<name>: the range stops at 0.5, since Fusion did not rebuild the design at 5 (Chamfer3).".
     `shared` says that every part of the file that uses the size has this range."""
@@ -125,7 +156,7 @@ def unmoved_reason(name):
 
 
 def tried_unmoved_reason(name, span=None):
-    where = " " + span_words(span) + "; beyond that it could not be tried" if span else ""
+    where = " %s; %s" % (span_words(span), _beyond(span)) if span else ""
     return clip("%s is not a size: it was tried at other values, and it changes nothing in this part%s." % (
         name, where), MAX_NOTE)
 
@@ -135,7 +166,7 @@ BODY_MOVED_WHY = "it changes this part in a way the copy does not follow"
 
 
 def unmoved_link_reason(name, component, span=None):
-    where = " " + span_words(span) + "; beyond that it could not be tried" if span else ""
+    where = " %s; %s" % (span_words(span), _beyond(span)) if span else ""
     return clip("%s is not a size: it changes %s, but nothing in this part moved with it%s." % (
         name, clip(component, MAX_NAME), where), MAX_NOTE)
 

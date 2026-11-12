@@ -1467,7 +1467,9 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   (`kept_ranges.built_ranges`, before the walk; a `size_table.Cut`, which keeps the nearest failure behind each cut
   end). A failure counts only when its step is one the part is built from: an item of the target's component or a
   step that made a Combine tool body, or a failure with no step name; a step of another component, or a name no
-  capture item has, cuts nothing and the size keeps the "followed between A and B" mark. Second, a value that
+  capture item has, cuts nothing and the size keeps the "followed between A and B" mark. Where a followed sketch made
+  a different outline with only that size changed, the range stops the same way at the farthest value that kept it
+  (`spans.kept`, `Cut.changed`). Second, a value that
   Paramability refuses past some size value (a taper of 45 degrees or more) cuts the ranges of the untyped sizes it
   reads (`Context.cut`). `TranslateResult.cuts` lists each cut size as `{ name, reason, words, why, min, max }`
   (`translate._cut_notes`, `notes.cut_reason`: "Slope: the range stops at 0.5, since Fusion did not rebuild the
@@ -1618,7 +1620,8 @@ order: a line's `offset` (its distance from the sketch origin along the left nor
 (`<item>/p<profile>`) whose curves were measured. For a sketch the probe measured, a key that is not listed did not
 move. `spans` gives, per size the probe set to other values, the lowest and highest value of the states that built
 (the value now included) and `failed`, `[value, step]` for each value tried alone that did not build
-(`probe.build.spans`). A sketch the probe could not measure (a step uses it in a way the probe cannot follow, its first read did not
+(`probe.build.spans`), and `kept` and `changed` for a size whose own row changed a followed outline (see the
+different outline item below). A sketch the probe could not measure (a step uses it in a way the probe cannot follow, its first read did not
 match the capture, or there was no read at the current sizes) is listed in `unmeasured` (sketch name to reason), and
 nothing is known about it. For one sketch and one size the motion file therefore gives one of three answers: measured
 and still, measured and moved (the keys), or not measured (`translator.sizes.sketch_answer`). A motion file without
@@ -1676,6 +1679,17 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   stayed on its other outline after the parameters were put back (a `start` read shows it, or the same different
   read in rows of unrelated sizes) is named in `flipped`, and `health.flipped` gives the result window one line about
   it.
+- A different outline that a size makes in its own row is a limit of its range, not a reason to drop the size
+  (`probe.build.outline_windows`). On that side the range keeps the farthest value tried alone that built and kept
+  every followed outline, nearer than the nearest value that changed one; the states that set the size past it are
+  left out of the fit, and `spans` records `kept` (`[low, high]`, null on a side without a change or with a typed end)
+  and `changed` (`[value, sketch]` of each such row). The translator cuts the range there like a failure in Fusion
+  (`kept_ranges.outline_cut`; the cut reason says "LidRail makes a different outline at 2.5"). When this limit and the
+  failures leave only the value now, nothing is left out: the size stays stuck, `kept` is the value now at both ends,
+  and its reason says "no value other than 12 could be copied, since ..." with the nearest failure or different
+  outline on each side. While the rows run, a row that changed an outline counts as one that did not build, so the
+  nearer rows and the halving (`plan.nearer_rows`) look for the last value that keeps the outline, inside the same
+  row budget. A stuck value's `rest` is fitted over the states that keep its blamed sizes at their value now.
 - Fusion may give a projected or intersection curve a new token when it recomputes a sketch, although it is the same
   curve. A curve of the first read whose token is gone pairs with a new curve of the same kind that sits in its place
   along a loop, between curves that kept their tokens, when every loop agrees (`probe.match.renamed`); the sketch then

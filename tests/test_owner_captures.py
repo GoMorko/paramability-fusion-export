@@ -287,5 +287,33 @@ class OwnerCapture074Test(unittest.TestCase):
         self.assertEqual(check_recipe(result.recipe), [])
 
 
+# Add-in 0.10.2 exports of the lid of the box, with and without its emboss: the wall thickness changes the lid rail's
+# outline above its value, and the box depth reaches the lid only through that rail.
+PACKAGE_LID = "lid Pat - Pipe, Filter (Box, Cylinder).paramability"
+PACKAGE_LID_PLAIN = "lid no embossPat - Pipe, Filter (Box, Cylinder).paramability"
+WALL = "_Filter__Wall_thickness_mm"
+DEPTH = "FilterBox_$_depth__contains_CeramicMedium"
+
+
+class OwnerCaptureLidTest(unittest.TestCase):
+    def test_the_wall_that_changes_the_rail_outline_above_its_value_keeps_the_range_below(self):
+        result, motion = replay(self, PACKAGE_LID)
+        self.assertEqual(motion.spans[WALL]["kept"], [None, 1.25])
+        wall = result.recipe["sizes"][WALL]
+        self.assertEqual((wall["min"], wall["max"]), (0.625, 1.25))
+        cuts = {c["name"]: c["why"] for c in result.cuts}
+        self.assertEqual(cuts[WALL], "LidAndRail makes a different outline at 1.5625")
+        self.assertNotIn(WALL, [f["name"] for f in result.loose])
+        self.assertEqual(check_recipe(result.recipe), [])
+
+    def test_without_the_emboss_the_depth_is_dropped_for_its_own_tries_not_for_the_wall(self):
+        # Below its value no try of the depth rebuilt; above it the rail did not move at the near value and moved at
+        # the next one, so its readings do not lie on a line. The wall's outline change no longer drops it.
+        result, _ = replay(self, PACKAGE_LID_PLAIN)
+        found = {d["name"]: d["reason"] for d in result.dropped}
+        self.assertIn("along a curve", found[DEPTH])
+        self.assertIn("LidAndRail makes a different outline at 1.5625", found[WALL])
+
+
 if __name__ == "__main__":
     unittest.main()

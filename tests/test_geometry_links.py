@@ -295,6 +295,57 @@ class RangeCutTest(unittest.TestCase):
         self.assertNotIn("cut", result.report["sizes"])
 
 
+class OutlinePort(PipePort):
+    """`PipePort` where the pipe hole's sketch reads with one more loop (another outline) when `outline_when` holds
+    for the pipe diameter in mm."""
+
+    def __init__(self, outline_when, **kw):
+        super().__init__(**kw)
+        self.outline_when = outline_when
+
+    def probe_reader(self):
+        read = super().probe_reader()
+
+        def with_outline(request):
+            out = read(request)
+            if self.outline_when(_mm(self.store, "pipe_d_mm")):
+                loops = out["sketches"]["s2"]["profiles"][0]["loops"]
+                inner = copy.deepcopy(loops[0])
+                inner["outer"] = False
+                for curve in inner["curves"]:
+                    curve["entity"] = curve.get("entity", "") + "x"
+                loops.append(inner)
+            return out
+        return with_outline
+
+
+class OutlineRangeTest(unittest.TestCase):
+    """The pipe (12 now, range 6 to 24) does not rebuild in Fusion below `low`, and its hole makes another outline above
+    `high`."""
+
+    def export(self, low, high):
+        port = OutlinePort(lambda d: d > high, bad_item="Extrude2",
+                           bad_when=lambda e: float(e["pipe_d_mm"].split()[0]) < low)
+        return export(port, table_for_body(USER, "mm", MODEL, CAPTURE).ticked)
+
+    def test_a_size_that_fails_below_and_changes_its_outline_above_keeps_the_range_between(self):
+        result = self.export(10, 18)
+        # Each side is halved toward the value now: 10.125 is the last value that built, 17.25 the last that kept the
+        # outline (19.5 and 18.375 did not).
+        self.assertEqual(pipe_range(result), (10.125, 17.25))
+        [cut] = result.report["sizes"]["cut"]
+        self.assertEqual(cut["why"], "Fusion did not rebuild the design at 9.75 (Extrude2); PipeHole makes a "
+                                     "different outline at 18.375")
+        self.assertNotIn("loose", result.manifest)
+
+    def test_a_size_with_no_working_value_but_its_own_is_dropped_with_why(self):
+        result = self.export(11.99, 12.01)
+        [found] = [d for d in result.report["sizes"]["dropped"] if d["name"] == "pipe_d_mm"]
+        self.assertEqual(found["reason"], "pipe_d_mm is not a size: no value other than 12 could be copied, since "
+                                          "Fusion did not rebuild the design at 11.4 (Extrude2) and PipeHole makes "
+                                          "a different outline at 13.2.")
+
+
 class LinkOutcomeTest(unittest.TestCase):
     def test_a_linked_formula_is_reported_as_a_formula_and_a_plain_unticked_one_as_not_ticked(self):
         from lib.export_plan.recipe_export import link_outcomes

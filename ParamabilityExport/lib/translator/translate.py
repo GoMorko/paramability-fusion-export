@@ -148,8 +148,9 @@ def translate(capture, handlers=None, size_table=None, motion=None):
     the other values still follow them. `result.loose` lists those sizes with the reason; one that no formula reads is
     not a size and is listed in `result.dropped` with the reason (as is every ticked size no step reads). After the walk
     an audit (`audit.py`) marks the sizes a copied step reads that no handler named. The ranges are the table's, cut
-    where the size probe saw Fusion fail to rebuild (`kept_ranges.built_ranges`) and where a written value would be
-    refused (`Context.cut`). A formula too long to copy fixes its sizes (`result.fixed`, as `{ name, reason }`).
+    where the size probe saw Fusion fail to rebuild or a followed sketch make a different outline
+    (`kept_ranges.built_ranges`) and where a written value would be refused (`Context.cut`). A formula too long to
+    copy fixes its sizes (`result.fixed`, as `{ name, reason }`).
 
     The walk runs twice when some value cannot follow. The first walk fixes every size such a value reads, to learn
     which sizes and reasons there are. The second keeps them free.
@@ -187,6 +188,8 @@ def translate(capture, handlers=None, size_table=None, motion=None):
     for name in probed_sizes(size_table):
         if coverage.not_built(motion, name):
             upfront.setdefault(name, wording.not_built_why(coverage.span(motion, name)))
+        elif coverage.kept_only_now(motion, name):
+            upfront.setdefault(name, wording.only_now_why(coverage.span(motion, name)))
     held = _Held(motion, size_table) if isinstance(motion, Motion) and not motion.optimistic else motion
     first = _settle(capture, table, size_table, held, upfront, False, cache)
     if first.result.recipe is None or not first.whys:
@@ -352,6 +355,10 @@ def _cut_notes(table, sizes, ctx):
                     if seen and hit and side in seen.failed and abs(seen[0 if side == "low" else 1] - at) < 1e-9]
         if failures:
             causes.append(wording.not_rebuilt_why(failures))
+        changes = [seen.changed[side] for side, at, hit in (("low", low, cut_low), ("high", high, cut_high))
+                   if seen and hit and side in seen.changed and abs(seen[0 if side == "low" else 1] - at) < 1e-9]
+        if changes:
+            causes.append(wording.outline_changed_why(changes))
         causes += [why for ends, why in made.get(e.name, {}).items()
                    if (cut_low and abs(ends[0] - low) < 1e-9) or (cut_high and abs(ends[1] - high) < 1e-9)]
         if not causes:
@@ -368,11 +375,22 @@ def _narrow_spans(table, motion):
     measured."""
     out = {}
     for name in probed_sizes(table):
-        span = coverage.span(motion, name)
+        span = _followed_span(coverage.span(motion, name))
         uncut = table.uncut_range(name)
         if span and uncut and wording.narrow_span(span, *uncut):
             out[name] = (span,) + uncut
     return out
+
+
+def _followed_span(span):
+    """The span without the values past the ends where a followed sketch made a different outline (`kept`): the
+    copy follows the size only up to there."""
+    kept = (span or {}).get("kept")
+    if not kept or (None not in kept and kept[1] - kept[0] <= 1e-9):
+        return span
+    low = span["low"] if kept[0] is None else max(span["low"], kept[0])
+    high = span["high"] if kept[1] is None else min(span["high"], kept[1])
+    return dict(span, low=low, high=high)
 
 
 def _tried(motion):

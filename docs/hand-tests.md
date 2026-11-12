@@ -101,6 +101,7 @@ except U1, L1 to L15, F1 and F2, which are described here.
 - [ ] D1 and D5 to D13, the sketch graph in the capture, the marker held early during the tries, the new first tries
       near the value, the progress window text and sketch dimensions in `dependents`: section 12 (the calls are under
       "Sketch graph, marker roll and progress window" in "Fusion calls to watch").
+- [ ] K23, a size whose own try changes a sketch outline keeps the range below that value: section 9.
 - [ ] K18 to K21, a sketch left on its other solution after a try that does not rebuild, a projected curve that
       Fusion names again, slot ends rounded by half the slot width, and rounds and chamfers on pattern copies that
       follow the count: section 9.
@@ -731,6 +732,18 @@ the sizes on the form and compare the part with Fusion at the same values.
       thickness and the box width (a count times a cube width). Export, then in Paramability set the wall thickness
       and the cube width to their ends: the rail still meets the wall and the part matches Fusion; only the ribs may
       differ.
+- [ ] **K23 A different outline stops the range.** The lid of the filter box, with the wall thickness and the box
+      depth ticked (the lid rail is drawn around the box, and a lid chamfer fails when the box gets small). Export.
+      The progress window shows "(max, nearer)" tries of the wall thickness between its value and the first value
+      where the rail took another outline. Expect: the wall thickness is a size (or "not used" with the values it
+      was followed between and the value where the outline changes), never "not a size" only because of the
+      outline; its range stops at the last value that kept the rail outline and the result window has a "range cut"
+      line that names the rail sketch and that value. `report.json`: `probe.motion.spans` has `kept` and `changed`
+      for it, and `sizes.cut` the same reason. The box depth, when nothing below its value rebuilds, starts at its
+      value and is not dropped for the wall's outline. In Paramability, set the wall thickness inside the cut range:
+      the lid matches Fusion. A size that changes the outline on both sides is "not a size" with "no value other
+      than ... could be copied" and names the nearest failure or outline on each side. Note the number of tries and
+      the export time.
 
 ## 10. Emboss
 

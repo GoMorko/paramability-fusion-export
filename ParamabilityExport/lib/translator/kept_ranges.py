@@ -10,7 +10,8 @@ size whose range the person typed gets no value: the rules cannot be kept for it
 
 `built_ranges` does change ranges: where Fusion itself did not rebuild the design at a value the size probe tried, the
 range stops at the farthest value that built on that side, since the form should not offer a value the design cannot
-take. Only a failure in a step the part is built from counts.
+take. Only a failure in a step the part is built from counts. Where a sketch the copy follows makes a different outline
+(`Motion.spans` `kept`, `probe.build.outline_windows`), the range stops at the farthest value tried that kept it.
 """
 import math
 
@@ -49,12 +50,54 @@ def _part_step(capture):
     return lambda step: not step or (step in mine and step not in other)
 
 
+def failure_cut(table, entry, span, mine):
+    """`(low, high, found)`: the range of a free size cut on each side where Fusion did not rebuild with only that
+    size changed (`span` as `Motion.spans`), past the farthest value that built; `mine(step)` says whether a failed
+    step counts (`_part_step`). An end the person typed is kept; `found` holds `(value, step)` of the nearest failure
+    behind each cut end."""
+    size = table.sizes[entry.size_name]
+    failed = [(value, step) for value, step in span.get("failed") or () if mine(step)]
+    typed_low, typed_high = table.typed_ends(entry.name)
+    low, high, found = size["min"], size["max"], {}
+    below = [f for f in failed if f[0] < span["low"] - _SAME]
+    past = [f for f in failed if f[0] > span["high"] + _SAME]
+    if not typed_low and below:
+        low, found["low"] = max(low, span["low"]), max(below, key=lambda f: f[0])
+    if not typed_high and past:
+        high, found["high"] = min(high, span["high"]), min(past, key=lambda f: f[0])
+    return low, high, found
+
+
+def outline_cut(table, entry, span):
+    """`(low, high, changed)`: the range cut to the values a sketch the copy follows kept its outline at (`span`
+    `kept`, an end None where nothing changed), with `(value, sketch)` of the nearest different outline behind each
+    cut end. An end the person typed is kept."""
+    size = table.sizes[entry.size_name]
+    kept, changed = span.get("kept") or (None, None), span.get("changed") or ()
+    typed = table.typed_ends(entry.name)
+    low, high, found = size["min"], size["max"], {}
+    now = size["value"]
+    for side, at, sign in (("low", 0, -1), ("high", 1, 1)):
+        if kept[at] is None or typed[at]:
+            continue
+        past = [(v, s) for v, s in changed if (v - kept[at]) * sign > _SAME]
+        if not past:
+            continue
+        found[side] = min(past, key=lambda c: abs(c[0] - now))
+        if side == "low":
+            low = max(low, kept[at])
+        else:
+            high = min(high, kept[at])
+    return low, high, found
+
+
 def built_ranges(table, motion, capture=None):
     """`{Fusion name: Cut}` of the free sizes whose range goes past a value at which Fusion did not rebuild the design
-    (`Motion.spans`: a value tried with only that size changed). On that side the range stops at the farthest value
-    that built. An end the person typed is kept, and a range that would shrink to the value now is left as it is (the
-    size could not be measured). A failure in a step the part is not built from (`capture` items of other components)
-    cuts nothing: the part itself may rebuild there."""
+    (`Motion.spans`: a value tried with only that size changed), or at which a followed sketch makes a different
+    outline (`outline_cut`). On that side the range stops at the farthest value that built and kept the outline. An end
+    the person typed is kept, and a range that would shrink to the value now is left as it is (the size could not be
+    measured). A failure in a step the part is not built from (`capture` items of other components) cuts nothing: the
+    part itself may rebuild there."""
     out = {}
     mine = _part_step(capture)
     for e in table.entries:
@@ -62,17 +105,10 @@ def built_ranges(table, motion, capture=None):
         size = table.sizes.get(e.size_name) if e.size_name else None
         if not span or not size or "min" not in size:
             continue
-        failed = [(value, step) for value, step in span.get("failed") or () if mine(step)]
-        typed_low, typed_high = table.typed_ends(e.name)
-        low, high, found = size["min"], size["max"], {}
-        below = [f for f in failed if f[0] < span["low"] - _SAME]
-        past = [f for f in failed if f[0] > span["high"] + _SAME]
-        if not typed_low and below:
-            low, found["low"] = max(low, span["low"]), max(below, key=lambda f: f[0])
-        if not typed_high and past:
-            high, found["high"] = min(high, span["high"]), min(past, key=lambda f: f[0])
-        if (low, high) != (size["min"], size["max"]) and high - low > _SAME:
-            out[e.name] = Cut(low, high, found)
+        low, high, found = failure_cut(table, e, span, mine)
+        cut = Cut(low, high, found).meet(Cut(*outline_cut(table, e, span)[:2], changed=outline_cut(table, e, span)[2]))
+        if (cut[0], cut[1]) != (size["min"], size["max"]) and cut[1] - cut[0] > _SAME:
+            out[e.name] = cut
     return out
 
 

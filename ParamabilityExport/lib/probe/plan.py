@@ -21,6 +21,8 @@ Row order, each step only while rows are left under `MAX_PROBE_ROWS` (64), steps
 A row that does not build is tried again nearer (`nearer_rows`, `NEARER_STEPS`: 50, 25 and 10 percent of the way to
 the range end, the first one nearer than the value tried). On a side where some value built and a farther one did
 not, the values between them are halved (`BISECT_STEPS` times at most) so the last value that builds is found closely.
+A row where the size alone made a followed sketch take a different outline (a state marked `changed`) counts as one
+that did not build: the range stops before it, so the same tries find the farthest value that keeps the outline.
 A size that only feeds step values is exact from its
 formula and gets no row: rows go to the sizes that move a sketch or a measured reference (`moved`) and to the
 guessed ones, and only a size left without a near row because of the limit is reported as untried.
@@ -442,12 +444,13 @@ def far_rows(sizes, moved, room, extra=()):
 
 
 def _tried_alone(states, name, value):
-    """`(value, built)` of every state that set only `name` to another value than `value`."""
+    """`(value, kept)` of every state that set only `name` to another value than `value`: `kept` when it built and
+    no followed outline changed there (`changed`)."""
     out = []
     for state in states:
         values = state.get("values") or {}
         if list(values) == [name] and abs(values[name] - value) > _SAME:
-            out.append((values[name], state.get("built") is not False))
+            out.append((values[name], state.get("built") is not False and not state.get("changed")))
     return out
 
 
@@ -490,14 +493,28 @@ def _between(size, end, tried):
     return value
 
 
+def _changed_alone(states, name, value):
+    """The values of the states that set only `name` and changed a followed outline (`changed`)."""
+    return [v for v, state in ((s["values"][name], s) for s in states
+                               if list(s.get("values") or {}) == [name] and s.get("changed"))
+            if abs(v - value) > _SAME]
+
+
 def _nearer_for(size, states, moved):
-    """`[(label, value)]`: the rows that try `size` nearer to its value after rows that did not build."""
-    tried = _tried_alone(states, size["param"], size["value"])
+    """`[(label, value)]`: the rows that try `size` nearer to its value after rows that did not build. On a side
+    where a row changed an outline, only the values nearer than it count: the range stops before it."""
+    now = size["value"]
+    tried = _tried_alone(states, size["param"], now)
+    changed = _changed_alone(states, size["param"], now)
     out = []
     for label, end in (("min", size["min"]), ("max", size["max"])):
-        side = [(v, ok) for v, ok in tried if (v - size["value"]) * (end - size["value"]) > 0]
-        if side and not any(ok for _, ok in side):
+        side = [(v, ok) for v, ok in tried if (v - now) * (end - now) > 0]
+        stops = [abs(v - now) for v in changed if (v - now) * (end - now) > 0]
+        inside = [(v, ok) for v, ok in side if not stops or abs(v - now) < min(stops) - _SAME]
+        if side and not any(ok for _, ok in inside):
             value = _next_nearer(size, end, [v for v, _ in side])
+        elif stops:
+            value = _between(size, end, inside + [(now + (min(stops) if end > now else -min(stops)), False)])
         else:
             value = _between(size, end, tried)
         if value is not None:
@@ -513,13 +530,15 @@ def _nearer_for(size, states, moved):
 def nearer_rows(sizes, states, moved=(), limit=MAX_NEARER_ROWS):
     """The next rows that try sizes nearer to their value now, after rows that did not build.
 
-    `states` are the probe states so far (`values` and `built`). For each size and each side of its value whose rows
-    all failed to build: one row `NEARER_STEPS` of the way toward that range end, the first step nearer than the
-    nearest value tried there. On a side where a value built and a farther one did not: one row half way between
-    them (`_between`). A size in `moved` (it moved a sketch or a measured place) with only one row that built
-    and nothing left to try gets one more row half way to that value, so the fit has two readings to tell a straight
-    line from a curve. Sizes that no row built come first. At most `limit` rows; the export calls this again after
-    each batch, so each call gives one step per side."""
+    `states` are the probe states so far (`values`, `built` and `changed`, a row that changed a followed outline
+    counting as one that did not build). For each size and each side of its value whose rows all failed to build:
+    one row `NEARER_STEPS` of the way toward that range end, the first step nearer than the nearest value tried
+    there. On a side where a value built and a farther one did not: one row half way between them (`_between`); with
+    a row that changed an outline on that side, only the values nearer than it count. A size in `moved` (it moved a
+    sketch or a measured place) with only one row that built and nothing left to try gets one more row half way to
+    that value, so the fit has two readings to tell a straight line from a curve. Sizes that no row built come
+    first. At most `limit` rows; the export calls this again after each batch, so each call gives one step per
+    side."""
     plans = [(size, _nearer_for(size, states, set(moved))) for size in sizes]
     unbuilt = {size["param"] for size in sizes
                if not any(ok for _, ok in _tried_alone(states, size["param"], size["value"]))}

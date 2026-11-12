@@ -81,6 +81,11 @@ def body_changed(before, now):
     return va is not None and vb is not None and abs(va - vb) > max(VOLUME_TOLERANCE_MM3, VOLUME_RELATIVE * abs(va))
 
 
+def marked_states(states, changed):
+    """The states after E0, each one whose number is in `changed` marked `changed` for `plan.nearer_rows`."""
+    return [dict(state, changed=True) if at in changed else state for at, state in enumerate(states) if at]
+
+
 def kept_size_names(table, free_sizes):
     """Recipe names of the sizes to probe: the free sizes of the first translation and every ticked size that
     reaches a sketch dimension, a construction plane or a sketch through the geometry of another component."""
@@ -282,12 +287,19 @@ class SizeProbe:
         return plan.far_rows(sizes, moved, room, extra=extra)
 
     def nearer_rows(self, sizes, room):
-        """The next rows that try the sizes nearer to their value now where rows did not build (`plan.nearer_rows`),
-        within `room` rows and the export's `plan.MAX_NEARER_ROWS`."""
-        rows = plan.nearer_rows(sizes, self.states[1:], self.moving_sizes(),
+        """The next rows that try the sizes nearer to their value now where rows did not build or changed a followed
+        outline (`plan.nearer_rows`), within `room` rows and the export's `plan.MAX_NEARER_ROWS`."""
+        rows = plan.nearer_rows(sizes, marked_states(self.states, self.outline_changes()), self.moving_sizes(),
                                 min(room, plan.MAX_NEARER_ROWS - self.nearer_count))
         self.nearer_count += len(rows)
         return rows
+
+    def outline_changes(self):
+        """Numbers in `states` of the rows whose own size changed a followed outline (`build.outline_changes`)."""
+        try:
+            return build.outline_changes(self.capture, self.states, {e.name: e.value for e in self.table.entries})
+        except Exception:
+            return set()
 
     def curved_sizes(self):
         """`(curved, partners)` from the states so far: the Fusion names of the sizes that move a value along a curve
@@ -637,7 +649,8 @@ class ProbeGroup:
         that moved a part counts as moving for all."""
         moving = list(dict.fromkeys(n for probe in self.probes for n in probe.moving_sizes()))
         first = self.probes[0]
-        rows = plan.nearer_rows(sizes, first.states[1:], moving,
+        changed = set().union(*(probe.outline_changes() for probe in self.probes))
+        rows = plan.nearer_rows(sizes, marked_states(first.states, changed), moving,
                                 min(room, plan.MAX_NEARER_ROWS - first.nearer_count))
         for probe in self.probes:
             probe.nearer_count += len(rows)

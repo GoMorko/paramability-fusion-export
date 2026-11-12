@@ -145,12 +145,25 @@ class ProblemStateTests(unittest.TestCase):
             state_list[int(number[1:])] = replacement
         return build(CAPTURE, self.table, state_list)
 
-    def test_an_outline_that_changes_shape_fixes_the_size_that_did_it(self):
+    def test_an_outline_that_changes_shape_on_one_side_stops_the_range_there(self):
         motion = self.motion(s5=state({"count": 1}, read_at(count=1, with_hole=False)))
+        self.assertEqual(self.terms_of(motion, "4/p0/l0/width"), {W: 1.0})
+        self.assertEqual({k: motion.spans["count"][k] for k in ("kept", "changed")},
+                         {"kept": [3, None], "changed": [[1, "Sketch1"]]})
+
+    def test_an_outline_that_changes_shape_on_both_sides_fixes_the_size_that_did_it(self):
+        motion = self.motion(s1=state({"count": 6}, read_at(count=6, with_hole=False)),
+                             s5=state({"count": 1}, read_at(count=1, with_hole=False)))
         width = motion.get("4/p0/l0/width")
         self.assertEqual((width.movers, width.cause, width.rest.terms), (("count",), "shape", {W: 1.0}))
         self.assertEqual(motion.get("4/p0/l1/radius"), Stuck(["count"], "shape", "Sketch1"))
         self.assertIsInstance(motion.get("6/p0/plane"), Affine)
+        self.assertEqual(motion.spans["count"]["kept"], [3, 3])
+
+    def terms_of(self, motion, key):
+        value = motion.get(key)
+        self.assertIsInstance(value, Affine, key)
+        return value.terms
 
     def test_the_same_other_outline_at_states_of_different_sizes_blames_none_of_them(self):
         def flipped(**sizes):
@@ -164,7 +177,7 @@ class ProblemStateTests(unittest.TestCase):
         self.assertEqual(motion.apart, [2, 4])
         self.assertNotIsInstance(motion.get("6/p0/l0/radius"), Stuck)
         alone = self.motion(s3=flipped(off=10))
-        self.assertEqual((alone.apart, alone.get("6/p0/l0/radius")), ([], Stuck(["off"], "shape", "Sketch2")))
+        self.assertEqual((alone.apart, alone.spans["off"]["changed"]), ([], [[10, "Sketch2"]]))
         # The same other outline at both ends of one size: the sketch does not follow that size there.
         both = self.motion(s3=flipped(off=10), s7=flipped(off=2.5))
         self.assertEqual(both.apart, [2, 6])
@@ -193,7 +206,7 @@ class ProblemStateTests(unittest.TestCase):
 
     def test_another_outline_blames_a_size_only_in_its_own_row_started_right_and_undone_after(self):
         own = self.motion(s4=state({"height": 40}, self.lid_flipped(height=40)))
-        self.assertEqual(own.get("6/p0/l0/radius").movers, ("height",))
+        self.assertEqual(own.spans["height"]["changed"], [[40, "Sketch2"]])
         combined = self.motion(s10=state({"count": 6, "cube": 20, "off": 10, "height": 40},
                                          self.lid_flipped(count=6, cube=20, off=10, height=40)))
         self.assertNotIsInstance(combined.get("6/p0/l0/radius"), Stuck)
@@ -207,7 +220,7 @@ class ProblemStateTests(unittest.TestCase):
         # The row before did not build, but the read before this row shows the right outline: this row blames.
         motion = self.motion(s3=state({"off": 10}, None, built=False),
                              s4=dict(state({"height": 40}, self.lid_flipped(height=40)), start=read_at()))
-        self.assertEqual(motion.get("6/p0/l0/radius").movers, ("height",))
+        self.assertEqual(motion.spans["height"]["changed"], [[40, "Sketch2"]])
         self.assertEqual(motion.flipped, [])
 
     def test_a_read_that_shows_another_value_of_its_size_is_left_out(self):
