@@ -2,23 +2,28 @@
 
 The reader gives such a face as an outline record (docs/capture-format.md, section 4): its plane as a frame whose z is
 the outward normal, its loops in that plane and, when it knows, the earlier extrude whose faces hold it (`made_by`).
-`prepare` turns it into the outline the extrude handler writes, in one of two ways:
+`prepare` turns it into the outline the extrude handler writes, in one of three ways:
 
+- Followed: the size probe read the face again before the step at every try (`keys.face`, `Motion.faces`). Its loops
+  and plane are written as formulas of the sizes where they move straight with them; a size whose move no formula fits
+  (the face takes another outline, or bends) is marked by the written value (sketch_motion.py), and only a size that
+  may change the face but was not tried is marked here. A size that does not move the face is not marked.
 - Same outline: the face is the start or end face of an earlier extrude step of this walk, that step has no taper,
   and the face still has that step's outline (no round, cut or join changed it). The step's written outline is used
   again on a plane at that face, so the outline and the plane follow the sizes that step follows (its length, its
   start, its sketch). The face is compared at the measured sizes only: when steps came after that extrude, one of
   them may reach the face at other sizes, so the sizes read so far stay free with a warning.
 - As measured: any other flat face, and a face used together with sketch outlines, is written from its read loops
-  as numbers. The sizes read by the steps written so
-  far may change that face, so they stay free with a warning (`Context.doubt`).
+  as numbers. The sizes read by the steps written so far may change that face, so they stay free with a warning
+  (`Context.doubt`); when the probe read the face, only those that moved it or were not tried.
 
-The extrude's own length, taper and operation follow their parameters in both cases (extrude.py).
+The extrude's own length, taper and operation follow their parameters in every case (extrude.py).
 """
 import copy
 
+from ..sketch_values import keys
 from ..sketch_values.motion import Stuck
-from . import loops, vec
+from . import loops, sketch_motion, vec
 from .curved import combine
 from .footprint import Footprint, polyline
 from .result import Refusal
@@ -32,10 +37,22 @@ SAME_OUTLINE_TOL = 1e-3
 
 class FaceOutline:
     """What the extrude handler writes for a face: `profile` (a capture outline record: frame and loops), `loops`
-    (outer, inners) as numbers, and `drawn`, a `CapOutline` on the same outline path, else None."""
+    (outer, inners) as numbers, and `drawn`, the followed `sketch_motion.Outline` or a `CapOutline` on the same
+    outline path, else None."""
 
     def __init__(self, profile, loops_, drawn=None):
         self.profile, self.loops, self.drawn = profile, loops_, drawn
+
+
+def label(item):
+    """How reasons name the flat face the step `item` uses as its outline (the probe names it so too)."""
+    return "the face %s starts on" % (item.get("name") or "a step")
+
+
+def followed(ctx, item, face):
+    """True when the size probe read the face record `face` that `item` uses as its outline at every try."""
+    return (sketch_motion.active(ctx) and bool(face.get("token"))
+            and getattr(ctx.motion, "faces", {}).get(keys.face(item.get("index"))) == face["token"])
 
 
 def refusal(profile):
@@ -68,23 +85,51 @@ def prepare(ctx, item, profiles):
     measured = loops.profile_loops(plain)
     if isinstance(measured, Refusal):
         return measured
+    drawn = _followed(ctx, item, plain, measured)
     if len(faces) < len(profiles):
         # Sketch outlines beside the face keep their own plane, so the face keeps the plane it was measured on.
-        return _as_measured(ctx, item, plain, measured)
+        return _as_measured(ctx, item, plain, measured, drawn)
+    if drawn is not None:
+        _doubt(ctx, item, _untried(ctx, item, _may_change(ctx, plain)))
+        return FaceOutline(plain, measured, drawn)
     return _same_outline(ctx, item, plain) or _as_measured(ctx, item, plain, measured)
 
 
-def _as_measured(ctx, item, face, measured):
-    """The face as read, with the sizes that may change it marked. A face of a body this walk does not build may
-    change with any size."""
+def _followed(ctx, item, face, measured):
+    """The face's `sketch_motion.Outline` from the probe's reads of it, or None when the probe did not read it."""
+    if not followed(ctx, item, face):
+        return None
+    return sketch_motion.measured_outline(ctx, keys.face(item.get("index")), face["frame"],
+                                          [measured[0]] + list(measured[1]), label(item))
+
+
+def _may_change(ctx, face):
+    """Fusion names of the sizes that may change the face: those the steps written so far read, or any size for a
+    face of a body this walk does not build."""
     body = face.get("body")
     if body and not ctx.is_target(body):
-        names = ctx.table.ticked if ctx.table is not None else ()
-    else:
-        names = ctx.written_reads
+        return ctx.table.ticked if ctx.table is not None else ()
+    return ctx.written_reads
+
+
+def _untried(ctx, item, names):
+    return [name for name in names if not sketch_motion.tried(ctx.motion, label(item), name)]
+
+
+def _doubt(ctx, item, names):
     if names:
         ctx.doubt(names, "%s uses a flat face as its outline that may change with it, and the copy keeps that face "
                   "as it was measured" % item.get("name", "a step"))
+
+
+def _as_measured(ctx, item, face, measured, drawn=None):
+    """The face as read, with the sizes that may change it marked; with the probe's reads of it (`drawn`), only the
+    sizes that moved it or were not tried."""
+    names = _may_change(ctx, face)
+    if drawn is not None:
+        moving = set(sketch_motion.outline_movers(ctx.table, drawn))
+        names = [name for name in names if name in moving or name in _untried(ctx, item, [name])]
+    _doubt(ctx, item, names)
     return FaceOutline(face, measured)
 
 

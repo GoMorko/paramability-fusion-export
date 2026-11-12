@@ -1,8 +1,9 @@
 """The size probe of one export: which sketch states to read, and how the answers become a motion. Pure: no Fusion.
 
-The export reads the sketches of the part, and the measured references of other components its steps use (a plane,
-axis, direction or point), at its current settings (E0) and at extra settings that only recompute: the range ends of
-the sizes that move a sketch or such a reference, and all sizes low or high (`probe_rows`). `SizeProbe` keeps that
+The export reads the sketches of the part, the measured references of other components its steps use (a plane,
+axis, direction or point) and the flat faces its steps use as outlines, at its current settings (E0) and at extra
+settings that only recompute: the range ends of the sizes that move a sketch or such a reference, and all sizes low or
+high (`probe_rows`). `SizeProbe` keeps that
 record and hands the states to `probe.build`. Fusion is reached through the `read` callable given to `start`:
 `read(request)` returns one probe state (`fusion_reader.probe_state.read_state`).
 
@@ -22,7 +23,7 @@ from ..translator import borrowed
 from ..translator.notes import loose_reason
 from .part_names import tagged
 
-_STATE_KEYS = ("sketches", "points", "lines", "params", "box", "refs", "unread")
+_STATE_KEYS = ("sketches", "points", "lines", "params", "box", "refs", "faces", "unread")
 BODY_TOLERANCE_MM = 1e-4
 # How far a followed value (mm or degrees) may read from E0 once the values are back before the sketch counts as on
 # another solution; Fusion's own restore leaves up to about a hundredth of a degree on short lines.
@@ -152,8 +153,10 @@ def probe_view(capture):
 
 
 def covers_a_sketch(capture):
-    """True when the probe can follow or watch at least one sketch, or follow a measured reference, of the capture."""
-    return (bool(plan.scan(probe_view(capture)).covered) or bool(borrowed_sketches(capture))
+    """True when the probe can follow or watch at least one sketch, or follow a measured reference or a face used as an
+    outline, of the capture."""
+    found = plan.scan(probe_view(capture))
+    return (bool(found.covered) or bool(found.faces) or bool(borrowed_sketches(capture))
             or any(r["shape"] for r in plan.refs(capture)))
 
 
@@ -216,7 +219,7 @@ class SizeProbe:
             return None
         e0 = read(_with_borrowed(wide, hints, hints))
         if not isinstance(e0, dict) or not (e0.get("sketches") or e0.get("points") or e0.get("lines")
-                                            or e0.get("refs")):
+                                            or e0.get("refs") or e0.get("faces")):
             return None
         readable = match.readable(plan.scan(view), e0)
         watch = {t: h for t, h in hints.items() if t not in readable}

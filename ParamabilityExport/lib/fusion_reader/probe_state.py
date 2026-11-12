@@ -5,12 +5,15 @@ Everything is read by token from the native objects of the target's component, s
 coordinates (mm), like the capture. A sketch of another component (one a step of the target borrows) is read native
 too, and its frame is brought into the target's coordinates through that component's place at this state. `params` stay in Fusion's own units (cm, radians). The
 measured references of other components (planes, axes, directions, points) are read again too, in the target's
-coordinates as the target sits at this state (`probe_refs`). A part that cannot be read is left out of the result and
-reads as "unread" to the fit; nothing here raises and nothing here changes the design. No adsk import.
+coordinates as the target sits at this state (`probe_refs`), and the flat faces steps use as outlines, each with the
+timeline marker before its step (`read_face.read_faces`; the marker goes back after). A part that cannot be read is
+left out of the result and reads as "unread" to the fit; nothing here raises, and the design is left as it was found.
+No adsk import.
 """
 from . import placement, probe_refs
 from . import read_geometry as geo
 from .read_sketch import into_target, read_profile
+from .read_face import read_faces
 from .read_solid import line_axis
 from .read_sweep import flat_record
 
@@ -96,16 +99,17 @@ def read_state(design, request, ctx):
     (true to read the target body's box) and optionally `curves`: { sketch token: [curve token] } for the curves of
     sweep paths to read, and `borrowed`: { sketch token: { path } } for sketches of other
     components, with the occurrence path the capture recorded, `native`: sketch tokens of tool bodies from other
-    components, read in their own component's frame like the target's sketches, and `refs`: { reference key: { token,
-    path, shape } }.
+    components, read in their own component's frame like the target's sketches, `refs`: { reference key: { token,
+    path, shape } }, and `faces`: { key: { token, before } } of flat faces steps use as outlines.
 
     `sketches` maps a token to { frame, profiles } (profiles as in the capture, each curve with `entity`) and, for a
     sketch in `curves`, `curves`: { curve token: flat curve }; a borrowed one also has `native_frame` and `placement`.
     `points` maps a token to [x, y, z] mm; `lines` to { point, dir };
     `params` a name to its value in cm or radians; `box` is the target's { min, max } and absent when it cannot be
     read. `refs` maps a reference key to its place in the target's coordinates, in mm: { point, normal },
-    { point, dir }, { dir } or { point }. `unread` gives a reason per borrowed sketch token that could not be read or
-    placed, and per reference key that could not be read.
+    { point, dir }, { dir } or { point }. `faces` maps a face key to { frame, loops } as the capture holds a face used
+    as an outline; it is read last, since it moves the timeline marker for a while. `unread` gives a reason per borrowed
+    sketch token that could not be read or placed, and per reference or face key that could not be read.
     """
     request = request or {}
     hints = request.get("borrowed") if isinstance(request.get("borrowed"), dict) else {}
@@ -144,10 +148,14 @@ def read_state(design, request, ctx):
     if followed:
         state["refs"], missed = probe_refs.read_refs(design, ctx, followed)
         unread.update(missed)
-    if unread:
-        state["unread"] = unread
     if request.get("target"):
         box = geo.safe(ctx.target_box, None)
         if box is not None:
             state["box"] = box
+    faces = request.get("faces") if isinstance(request.get("faces"), dict) else {}
+    if faces:
+        state["faces"], missed = read_faces(design, ctx, faces)
+        unread.update(missed)
+    if unread:
+        state["unread"] = unread
     return state

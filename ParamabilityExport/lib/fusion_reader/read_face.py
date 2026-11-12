@@ -3,9 +3,13 @@
 The face's plane becomes the record's frame: z is the outward normal, x the plane's u direction. Its loops are the
 face's edges as curves in that plane, read like sketch curves, in the target component's coordinates. `made_by` names
 the earlier extrude whose start, end or side faces hold the face, read with the marker before the step that uses it.
+
+`read_faces` reads such faces again for the size probe: the step that uses a face changes or removes it, so each face
+is read with the timeline marker moved before its step, and the marker goes back after.
 """
 import math
 
+from ..design_edit.marker import put_back, read_marker
 from . import read_geometry as geo
 from .read_finish import strict_items
 from .read_sketch import read_curve
@@ -97,6 +101,55 @@ def made_by(face, ctx, before):
             if any(_same_face(geo.native_input(f, ctx), face, token) for f in faces):
                 return {"index": index, "name": geo.safe(lambda: extrude.name, "") or "", "which": which}
     return None
+
+
+def face_loops(face, ctx=None):
+    """{ frame, loops } of a flat BRepFace as `face_outline` gives them, or None when it is not flat or does not
+    read."""
+    face = geo.native_input(face, ctx)
+    if geo.safe(lambda: geo.surface_kind(face), None) != "Plane":
+        return None
+    frame = geo.safe(lambda: face_frame(face, face.geometry), None)
+    loops = geo.safe(lambda: _loops(face, FaceSpace(frame)), None) if frame is not None else None
+    return {"frame": frame, "loops": loops} if loops else None
+
+
+FACE_NOT_FOUND = "The face was not found before its step."
+NO_MARKER = "The timeline marker could not be moved before the step."
+
+
+def read_faces(design, ctx, wanted):
+    """`(found, unread)` for `wanted` ({ key: { token, before } }): `found` maps a key to the face's `face_loops` read
+    with the timeline marker at `before` (the step that uses it not built yet, as when it was captured), `unread` a key
+    to why it was left out. A position after the marker now is not read. The marker goes back to where it was, which
+    rebuilds the steps after the earliest position read. Never raises."""
+    found, unread = {}, {}
+    timeline = geo.safe(lambda: design.timeline, None)
+    home = read_marker(timeline) if timeline is not None else None
+    groups = {}
+    for key, hint in wanted.items():
+        before = hint.get("before") if isinstance(hint, dict) else None
+        if home is None or not isinstance(before, int) or not 0 < before <= min(home["position"], home["count"]):
+            unread[key] = NO_MARKER
+        else:
+            groups.setdefault(before, []).append((key, hint.get("token") or ""))
+    if not groups:
+        return found, unread
+    try:
+        for before in sorted(groups):
+            if not put_back(timeline, before):
+                unread.update((key, NO_MARKER) for key, _ in groups[before])
+                continue
+            for key, token in groups[before]:
+                face = geo.find_native(design, token) if token else None
+                record = geo.safe(lambda: face_loops(face, ctx), None) if face is not None else None
+                if record is None:
+                    unread[key] = FACE_NOT_FOUND
+                else:
+                    found[key] = record
+    finally:
+        put_back(timeline, home)
+    return found, unread
 
 
 def face_outline(face, ctx=None, before=None):

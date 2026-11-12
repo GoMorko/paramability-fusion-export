@@ -13,6 +13,9 @@
                                           circle's `center.0`, `center.1` and `radius`. Coordinates are in the path
                                           sketch's own plane.
     <item>/path/plane                     the position of the path sketch plane along its normal
+    <item>/face                           a flat face of the part used as the item's outline: the prefix of keys
+                                          like a profile's (`l<loop>/<field path>` and `plane`), in the face's own
+                                          frame as captured
     <item>/positions/<n>/<0|1|2>          a coordinate of a hole point
     <item>/axis/point/<0|1|2>             a coordinate of a revolve axis point
     <item>/r/<slot>/offset                how far a measured reference plane moved along its captured normal
@@ -42,6 +45,11 @@ def plane(prefix):
 def curve(prefix, loop, number):
     """The prefix of a sketch curve's keys, ending in a slash: add the field name."""
     return "%s/c%d.%d/" % (prefix, loop, number)
+
+
+def face(item):
+    """The prefix of the keys of the flat face timeline item `item` uses as its outline."""
+    return "%s/face" % item
 
 
 def path(item):

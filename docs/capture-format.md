@@ -492,8 +492,14 @@ The area of the face (`BRepFace.area`, mm2) is the record's entry in `areas` and
 `end_offset` and `side_leans` are measured along the face's `z`. A capture made before add-in 0.8.1 has
 `{ "face": true, "type": "BRepFace" }` only; the translator refuses it and asks for a new export.
 
-The translator (`lib/translator/face_outline.py`) copies an extrude or emboss of one such face. Sketch outlines may
-come with it when they lie on the face plane; the face is then written as measured. When `made_by` names the
+The translator (`lib/translator/face_outline.py`) copies an extrude or emboss of one such face. When the size probe
+read the face before its step at every try (`Motion.faces` names its `token` under `<item>/face`, "Probe states"), its
+loops and plane are written as formulas of the sizes from the keys `<item>/face/l<loop>/<field path>` and
+`<item>/face/plane`; a size whose move no formula fits (stuck, or along a curve) is marked by the value it moves, a size
+that may change the face but was not tried is marked with the reason below, and a size that does not move the face is
+not marked. Otherwise the rules below apply. Sketch outlines may
+come with it when they lie on the face plane; the face is then written as measured (with the probe's reads, only the
+sizes that moved the face or were not tried are marked). When `made_by` names the
 `start` or `end` face of an extrude step written earlier in the same walk, that step has no taper, `face_point` lies
 on its start or end face and the face's edges lie on that step's outline and back (within 1e-3 mm), the step's written
 outline is drawn again on a plane at that face: the plane's origin is the step's origin plus its length (times the
@@ -1828,7 +1834,7 @@ rows, `NOT_LOOKED` for a key not in `refs`).
 
 The size probe sets other size values, recomputes and reads a state with `read_state(design, request, ctx)`.
 `request` is `{ "sketches": [token], "points": [token], "lines": [token], "params": [name], "target": true }`, plus
-`curves`, `borrowed`, `native` and `refs` below. Every
+`curves`, `borrowed`, `native`, `refs` and `faces` below. Every
 entity is found with `Design.findEntityByToken` (the match without `assemblyContext`; for a proxy only, its
 `nativeObject`), so values are in component coordinates like the capture. The result, mm and degrees except `params`:
 
@@ -1839,7 +1845,8 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
   "lines": { "<sketch line token>": { "point": [x, y, z], "dir": [x, y, z] } },
   "params": { "d12": 2.0 },
   "box": { "min": [..], "max": [..] },
-  "refs": { "57.plane": { "point": [x, y, z], "normal": [x, y, z] } }
+  "refs": { "57.plane": { "point": [x, y, z], "normal": [x, y, z] } },
+  "faces": { "15/face": { "frame": FRAME, "loops": [LOOP, ...] } }
 }
 ```
 
@@ -1873,6 +1880,16 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
   component is taken out). `refs` maps a key to `{ point, normal }`, `{ point, dir }`, `{ dir }` or `{ point }`; a
   reference that cannot be read has no key there and `unread` gives `{ key: reason }`. The reads change nothing in the
   design.
+- A flat face a step uses as its outline (one face among an extrude's or emboss's outlines, or the face a trimmed
+  emboss keeps to; `plan.outline_face`, a `token` and loops of lines, arcs, circles and ellipses) is requested with
+  `faces`: `{ "<item>/face": { "token", "before" } }`, `before` the step's timeline index. The step changes or removes
+  the face, so the reader moves the timeline marker to `before`, finds the face by its token, reads its `frame` and
+  `loops` like the capture's face record (section 4) and moves the marker back (`read_face.read_faces`, read last). A
+  `before` past the marker, a marker that does not move or a face that is not found gives `unread`. The probe pairs
+  the edges with the captured ones by kind and place along each loop, writes the values under the keys of a profile
+  (`<item>/face/...`) and tries every size an item reads before the step (`plane_sizes.plane_driven`). A different
+  outline that one size makes on its own is a range limit, like a sketch's, named "the face <step> starts on". A face
+  whose first read does not match the capture is not read again; the motion file lists the measured ones in `faces`.
 - Nothing raises. A part that cannot be read has no key, which the fit treats as unread.
 
 ## 6. Report and capture file

@@ -101,6 +101,8 @@ except U1, L1 to L15, F1 and F2, which are described here.
 - [ ] D1 and D5 to D13, the sketch graph in the capture, the marker held early during the tries, the new first tries
       near the value, the progress window text and sketch dimensions in `dependents`: section 12 (the calls are under
       "Sketch graph, marker roll and progress window" in "Fusion calls to watch").
+- [ ] K27, a flat face used as an outline (an extrude from a face, an emboss kept to its face) is read before its
+      step at every try: section 9 (the calls are under "Sketch graph, marker roll and progress window").
 - [ ] K26, a sketch that flips to its other solution during the tries is put back before the next try: section 9
       (the calls are under "Sketch graph, marker roll and progress window").
 - [ ] K25, an extrude that reaches to a face or plane no earlier extrude places (a cut's side wall, a plane on it):
@@ -777,6 +779,15 @@ the sizes on the form and compare the part with Fusion at the same values.
       fail in steps of another component; a row listed again carries `again`. `probe.motion.flipped` is empty, and
       the result window has no line about a sketch that stayed on its other outline. Check in Fusion that the sketch
       is on its first solution after the export, and note the export time (each put back is one more rebuild).
+- [ ] **K27 Outline face read before its step.** A plate whose width `width_mm` and thickness `plate_mm` are sizes,
+      with a tapered join extruded from its top face (the face itself as the outline), then a fillet on a plate edge.
+      Tick both and export. Expect: `probe.request.faces` holds the join's key with the face `token` and `before`, the
+      states have `faces` with that key, `probe.motion.faces` names it, and neither size is marked; in Paramability
+      change both and the join stays on the top face with its outline. Repeat with an emboss whose outline runs over
+      a hole of its face (E8): the `within` outline follows the sizes. Then make the face take another outline at a
+      large width (a hole that appears there): the width's range stops before it, "the face ... starts on makes a
+      different outline". Check in Fusion that the marker is back where it was after the export, and note the export
+      time (each read moves the marker before the step and back).
 
 ## 10. Emboss
 
@@ -1345,6 +1356,9 @@ These were written from the API reference and never run:
 Written from the API reference and never run (sections: "Sketch graphs" in `docs/capture-format.md`, hand tests D1 and
 D5 to D13). Every read is guarded: a member that raises is listed in the record's `unread` or leaves the old behaviour.
 
+- Outline faces at each state (`lib/fusion_reader/read_face.py` `read_faces`, hand test K27): `Timeline.markerPosition`
+  set to the step's index, `Design.findEntityByToken` of the face with the marker there (one face, not a split one),
+  its loops read as at the capture, and the marker set back, which rebuilds the steps after it with the values tried.
 - Sketch put back (`lib/fusion_reader/sketch_keep.py`, hand test K26): `SketchPoint.geometry` in sketch space,
   `isReference`, `isFixed`, `SketchPoint.move(Vector3D)` while `Sketch.isComputeDeferred` is true, and whether
   Fusion solves the sketch from the moved points (back on its first solution) once compute is turned on again and

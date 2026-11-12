@@ -485,7 +485,20 @@ def outline(ctx, item, profile, outer, inners, parts):
     return Outline(ctx, profile["frame"], loops, raw_loops, plane, sketch)
 
 
-def _tried(motion, sketch, name):
+def measured_outline(ctx, prefix, frame, loops, sketch):
+    """The `Outline` of loops the probe read as a whole under `prefix` (a flat face used as an outline, `keys.face`),
+    named `sketch` in reasons. A value that moves along a curve is stuck: only straight moves are written."""
+    raw_loops = _stuck_curves(_keyed_loops(ctx, prefix, loops, sketch), sketch)
+    plane = _stuck_curves(raw(ctx, keys.plane(prefix), _dot(frame["origin"], frame["z"]), sketch), sketch)
+    return Outline(ctx, frame, loops, raw_loops, plane, sketch)
+
+
+def outline_movers(table, drawn):
+    """The free sizes that move any value of an `Outline`: a loop number or its plane."""
+    return _free_sizes(table, _names(_raw_values(drawn.raw_loops) + [drawn.plane]))
+
+
+def tried(motion, sketch, name):
     """True when the probe measured the sketch named `sketch` with the size `name` at another value. A motion file
     with no states and no spans (written by hand) says nothing about tries and counts as measured."""
     if getattr(motion, "unmeasured", {}).get(sketch) or name in getattr(motion, "untried", ()):
@@ -511,7 +524,7 @@ def placement_doubts(ctx, item, profile, plane=None):
     sketch = profile.get("sketch") or "a sketch"
     if motion is not None:
         moved = set(movers(ctx.table, plane)) if plane is not None else set()
-        names = [n for n in names if n not in moved and not _tried(motion, sketch, n)]
+        names = [n for n in names if n not in moved and not tried(motion, sketch, n)]
     if names:
         ctx.doubt(names, "it may move the plane %s sits on, and that could not be tried at other values" % sketch)
 

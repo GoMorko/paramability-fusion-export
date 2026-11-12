@@ -4,7 +4,9 @@
 is a profile, a hole point set, a revolve axis line or a sweep path of lines and arcs that the reader gave tokens
 for. Which records a step type carries comes from the step kind table (`translator/step_kinds.py`, `sketches`).
 `refs` finds the measured references (a plane, axis, direction or point of another component that a step uses, and
-a face or plane of the part that an extrude starts from or reaches to) that the probe reads again at every state.
+a face or plane of the part that an extrude starts from or reaches to) that the probe reads again at every state. A
+flat face a step uses as its outline (`outline_face`) is a target of its own (`kind` "face"): the reader reads its
+loops again at every state with the timeline marker before that step, since the step itself changes the face.
 `request` is what the reader reads per state, `kept_sizes` the sizes worth probing, `probe_rows` the size settings to
 try.
 
@@ -32,10 +34,12 @@ from ..package.units import display_from_manifest, unit_kind
 from ..params.expressions import format_number
 from ..params import defaults, geometry_links
 from ..params.size_table import DERIVED, FREE
+from ..sketch_values import keys
+from ..translator import emboss, face_outline
 from ..translator.loops import profile_loops
 from ..translator.result import Refusal
 from ..translator.sizes import moving_reaches, probed_sizes
-from ..translator.step_kinds import AXIS, HOLE_POINTS, PATH, PROFILES, step_type
+from ..translator.step_kinds import AXIS, HOLE_POINTS, OUTLINE_FACE, PATH, PROFILES, step_type
 
 MAX_PROBE_ROWS = 64
 # How far from its value a size is first tried, as a share of the value, below and above.
@@ -62,15 +66,17 @@ _PATH_CURVES = ("line", "arc", "circle")
 
 
 class Scan:
-    """`targets`: the covered records (dicts with `kind` "profile", "hole", "axis" or "path", `item` and what the fit
-    reads).
+    """`targets`: the covered records (dicts with `kind` "profile", "hole", "axis", "path" or "face", `item` and what
+    the fit reads; a face's `sketch_token` is its key prefix, `keys.face`).
     `covered`: sketch token to name ("" when the record has none). `uncovered`: tokens of sketches that some record
     uses in a way the probe cannot follow. `named`: the name of every sketch a record names, covered or not, by token
     (a sketch no record gives a name for is missing). `native`: tokens of the covered sketches of tool bodies from other
-    components: they are read in their own component's frame, not brought into the part's (`request`)."""
+    components: they are read in their own component's frame, not brought into the part's (`request`). `faces`: the
+    face targets' key prefix to the name reasons give the face."""
 
     def __init__(self):
         self.targets = []
+        self.faces = {}
         self.native = set()
         self.covered = {}
         self.uncovered = set()
@@ -121,11 +127,17 @@ def scan(capture):
         if not records:
             _stray_tokens(data, out)
         if item.get("helper_of"):
+            # A tool body of another component is read in its own frame; its faces are not read again.
+            out.targets[before:] = [t for t in out.targets[before:] if t["kind"] != FACE]
             out.native.update(t["sketch_token"] for t in out.targets[before:])
+        for target in out.targets[before:]:
+            if target["kind"] == FACE:
+                target["sketch"] = out.faces[target["sketch_token"]] = face_outline.label(item)
     for token in out.uncovered:
         out.covered.pop(token, None)
-    out.targets = [t for t in out.targets if t["sketch_token"] in out.covered]
+    out.targets = [t for t in out.targets if t["sketch_token"] in out.covered or t["kind"] == FACE]
     return out
+
 
 
 def _cover(out, token, name):
@@ -203,7 +215,35 @@ def _scan_hole(out, index, data):
                         "positions": positions, "point_tokens": points})
 
 
-_SCANNERS = {PROFILES: _scan_profiles, AXIS: _scan_axis, HOLE_POINTS: _scan_hole, PATH: _scan_path}
+FACE = OUTLINE_FACE
+
+
+def outline_face(data):
+    """The flat face record a step uses as its outline and that the probe can read again: the one face among its
+    outlines, else the face a trimmed emboss is limited to (`translator.emboss.trimmed_face`). None when there is none,
+    or it has no token, or its loops are not lines, arcs, circles and ellipses the translator writes."""
+    faces = [p for p in data.get("profiles") or [] if isinstance(p, dict) and p.get("face")]
+    record = faces[0] if len(faces) == 1 else (emboss.trimmed_face(data) if not faces else None)
+    if (not isinstance(record, dict) or record.get("foreign") or not record.get("token")
+            or not isinstance(record.get("frame"), dict) or not isinstance(record.get("loops"), list)):
+        return None
+    curves = [c for loop in record["loops"] for c in (loop.get("curves") or [])]
+    if not curves or any(not isinstance(c, dict) or c.get("kind") not in _CURVES for c in curves):
+        return None
+    plain = {k: v for k, v in record.items() if k != "face"}
+    return None if isinstance(profile_loops(plain), Refusal) else record
+
+
+def _scan_face(out, index, data):
+    """A flat face the step uses as its outline, keyed `keys.face`; `scan` names it after the step."""
+    face = outline_face(data) if isinstance(index, int) else None
+    if face is not None:
+        out.targets.append({"kind": FACE, "item": index, "profile": face, "sketch_token": keys.face(index),
+                            "sketch": "", "reference": {}})
+
+
+_SCANNERS = {PROFILES: _scan_profiles, AXIS: _scan_axis, HOLE_POINTS: _scan_hole, PATH: _scan_path,
+             OUTLINE_FACE: _scan_face}
 
 
 # ---- measured references ---------------------------------------------------------------------------------------
@@ -271,13 +311,16 @@ def _numeric_model(table):
 def request(capture, table, covered=None, wanted=None):
     """What the reader reads at each state, or None when no sketch is covered and no reference can be followed.
 
-    `covered` limits the sketches to these tokens (the ones whose first read matched the capture). `wanted` limits the
-    references to these keys.
+    `covered` limits the sketches to these tokens (the ones whose first read matched the capture) and the faces to these
+    key prefixes. `wanted` limits the references to these keys.
     `{ "sketches": [token], "points": [token], "lines": [token], "params": [Fusion name], "target": True,
        "curves": { sketch token: [curve token] },
-       "refs": { key: { "token", "type", "path", "shape" } } }`; `curves` lists the sketch curves of sweep paths to read
+       "refs": { key: { "token", "type", "path", "shape" } },
+       "faces": { key prefix: { "token", "before" } } }`; `curves` lists the sketch curves of sweep paths to read
        (left out when empty), `refs` is left out when empty (a face or plane of the part adds `"own": true`). `native`
-       lists the sketches of tool bodies from other components, and is left out when there are none.
+       lists the sketches of tool bodies from other components, and is left out when there are none. `faces` are the
+       flat faces steps use as outlines, read with the timeline marker at `before` (the step's timeline index), and is
+       left out when empty.
     """
     found = scan(capture)
     tokens = [t for t in found.covered if covered is None or t in covered]
@@ -285,7 +328,9 @@ def request(capture, table, covered=None, wanted=None):
                                 "path": r["ref"].get("path") or "", "shape": r["shape"]},
                                **({"own": True} if r["ref"].get("own") else {}))
                 for r in refs(capture) if r["shape"] and (wanted is None or r["key"] in wanted)}
-    if not tokens and not followed:
+    faces = {t["sketch_token"]: {"token": t["profile"]["token"], "before": t["item"]} for t in found.targets
+             if t["kind"] == FACE and (covered is None or t["sketch_token"] in covered)}
+    if not tokens and not followed and not faces:
         return None
     points, lines, curves = [], [], {}
     for target in found.targets:
@@ -308,6 +353,8 @@ def request(capture, table, covered=None, wanted=None):
         out["native"] = native
     if followed:
         out["refs"] = followed
+    if faces:
+        out["faces"] = faces
     return out
 
 

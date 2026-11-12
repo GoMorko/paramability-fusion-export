@@ -5,6 +5,9 @@ frame of the capture, and run through the translator's own `profile_loops`, so a
 translator writes. Pieces of one sketch curve are paired by their place along the loop, so a loop that moved further
 than its pieces are apart still pairs each piece with its own. A state that cannot be turned into the same outline is
 a problem with a cause (`motion.SHAPE`, `TURNS`, `UNREAD`), not a number.
+
+A flat face used as an outline is read the same way, from its edges (`read["faces"]`): edges carry no sketch token,
+so its curves pair by kind and by their place along the loop.
 """
 import math
 
@@ -251,9 +254,11 @@ def curve_values(loops, like, prefix):
 
 
 def prefix(target):
-    """`<item>/p<profile>` of a profile record, `<item>/path` of a sweep path."""
+    """`<item>/p<profile>` of a profile record, `<item>/path` of a sweep path, `<item>/face` of a face."""
     if target["kind"] == "path":
         return keys.path(target["item"])
+    if target["kind"] == "face":
+        return keys.face(target["item"])
     return keys.profile(target["item"], target["p"])
 
 
@@ -264,6 +269,39 @@ def _capture_profile_values(target):
     out = _values_of([loops[0]] + list(loops[1]), _dot(frame["origin"], frame["z"]), prefix(target))
     out.update(curve_values(profile["loops"], profile["loops"], prefix(target)))
     return out
+
+
+def _by_kind(loops):
+    """Face loops with each curve named by its kind, so the pairing above matches edges by kind and place."""
+    return [dict(loop, curves=[dict(c, entity=c.get("kind")) for c in loop.get("curves") or []]) for loop in loops]
+
+
+def _capture_face_values(target):
+    profile = target["profile"]
+    loops = _profile_loops(profile, target["sketch"])
+    return _values_of([loops[0]] + list(loops[1]), _dot(profile["frame"]["origin"], profile["frame"]["z"]),
+                      prefix(target))
+
+
+def _state_face_values(target, read):
+    record = (read.get("faces") or {}).get(target["sketch_token"])
+    if not isinstance(record, dict) or not isinstance(record.get("frame"), dict) or not record.get("loops"):
+        return None, UNREAD
+    ref, frame = target["profile"]["frame"], record["frame"]
+    if _turned(frame["z"], ref["z"]):
+        return None, TURNS
+    arranged = _arrange({"loops": _by_kind(record["loops"])}, {"loops": _by_kind(target["profile"]["loops"])}, frame,
+                        ref)
+    if arranged is None:
+        return None, SHAPE
+    mapped = _profile_loops({"loops": arranged[0]}, target["sketch"])
+    base = _profile_loops(target["profile"], target["sketch"])
+    if isinstance(mapped, Refusal) or isinstance(base, Refusal):
+        return None, SHAPE
+    got, want = [mapped[0]] + list(mapped[1]), [base[0]] + list(base[1])
+    if _outline(got) != _outline(want) or not all(_angles_equal(a, b) for a, b in zip(got, want)):
+        return None, SHAPE
+    return _values_of(got, _dot(frame["origin"], ref["z"]), prefix(target)), None
 
 
 def _loops_of(record):
@@ -445,6 +483,8 @@ def captured_values(target):
     """The values of one covered record as the capture has them: a dict by key."""
     if target["kind"] == "profile":
         return _capture_profile_values(target)
+    if target["kind"] == "face":
+        return _capture_face_values(target)
     if target["kind"] == "hole":
         return _hole_values(target, None, None)[0]
     if target["kind"] == "path":
@@ -456,6 +496,8 @@ def state_values(target, read, e0=None):
     """`(values, cause)` of one covered record in a state read: the numbers by key, or None and the cause."""
     if target["kind"] == "profile":
         return _state_profile_values(target, read, e0)
+    if target["kind"] == "face":
+        return _state_face_values(target, read)
     if target["kind"] == "hole":
         return _hole_values(target, read, e0)
     if target["kind"] == "path":
@@ -474,10 +516,11 @@ def matches_capture(target, e0):
 
 def readable(found, e0):
     """Tokens of the covered sketches whose every record the first read gives back as the capture has it
-    (within 1e-4 mm). A sketch that fails is not followed: the sizes that change it are loose. A sweep path that fails
-    does not count: only the path is left unfollowed (`matches_capture`), not the outlines drawn in its sketch."""
+    (within 1e-4 mm), and the key prefixes of the faces that read back so. A sketch that fails is not followed: the
+    sizes that change it are loose. A sweep path that fails does not count: only the path is left unfollowed
+    (`matches_capture`), not the outlines drawn in its sketch. A face that fails is written as the capture has it."""
     bad = {t["sketch_token"] for t in found.targets if t["kind"] != "path" and not matches_capture(t, e0)}
-    return {t for t in found.covered if t not in bad}
+    return {t for t in list(found.covered) + list(found.faces) if t not in bad}
 
 
 def _all_numbers(node, out):

@@ -23,6 +23,7 @@ PROFILES = "profiles"   # data.profiles: sketch outlines
 AXIS = "axis"           # data.axis: a sketch line used as a revolve axis
 HOLE_POINTS = "hole"    # data.positions with point_tokens: hole centres on a sketch
 PATH = "path"           # data.path: the curves of one sketch a sweep follows
+OUTLINE_FACE = "face"   # a flat face used as the outline: one in data.profiles, or the face a trimmed emboss keeps to
 
 # How a pattern or mirror treats a recipe step it repeats.
 SOLID = "solid"         # repeated by the pattern or mirror step itself (`of`)
@@ -39,8 +40,9 @@ class StepType:
     reader: the `lib/fusion_reader` module whose `READERS` dict gives its (before, after) reader pair, or None.
     handler: "module:function" in `lib/translator` that copies it (`handle(item, ctx) -> StepResult | Refusal`),
       or None when the recipe has no step for it.
-    sketches: the sketch records it carries that the size probe follows (PROFILES, AXIS, HOLE_POINTS, PATH). A sketch
-      token anywhere else in its data leaves that sketch unfollowed.
+    sketches: the sketch records it carries that the size probe follows (PROFILES, AXIS, HOLE_POINTS, PATH), and
+      OUTLINE_FACE when the probe reads a flat face it uses as its outline. A sketch token anywhere else in its data
+      leaves that sketch unfollowed.
     unsupported: for a modeling type without a handler, the plain reason the copy stops at it.
     splits_faces: it cuts faces of a body without changing its solid, so it is skipped when the capture shows the
       body unchanged.
@@ -88,7 +90,8 @@ class RecipeKind:
 
 
 STEP_TYPES = (
-    StepType("ExtrudeFeature", "extrude", reader="read_solid", handler="extrude:handle", sketches=(PROFILES,)),
+    StepType("ExtrudeFeature", "extrude", reader="read_solid", handler="extrude:handle",
+             sketches=(PROFILES, OUTLINE_FACE)),
     StepType("RevolveFeature", "revolve", reader="read_solid", handler="revolve:handle", sketches=(PROFILES, AXIS)),
     StepType("HoleFeature", "hole", reader="read_solid", handler="hole:hole", sketches=(HOLE_POINTS,)),
     StepType("ThreadFeature", "thread", reader="read_solid", handler="hole:thread"),
@@ -105,7 +108,8 @@ STEP_TYPES = (
     StepType("SplitFaceFeature", "split face", splits_faces=True),
     StepType("CopyPasteBody", "pasted body", reader="read_paste", handler="paste:handle", makes_bodies=True),
     StepType("MoveFeature", "move", reader="read_move", handler="move:handle", moves_bodies=True),
-    StepType("EmbossFeature", "emboss", reader="read_emboss", handler="emboss:handle", sketches=(PROFILES,)),
+    StepType("EmbossFeature", "emboss", reader="read_emboss", handler="emboss:handle",
+             sketches=(PROFILES, OUTLINE_FACE)),
     StepType("SweepFeature", "sweep", reader="read_sweep", handler="sweep:handle", sketches=(PROFILES, PATH)),
     StepType("LoftFeature", "loft", reader="read_sweep", handler="loft:handle", sketches=(PROFILES,)),
     StepType("Sketch", "sketch", role=SKETCH),

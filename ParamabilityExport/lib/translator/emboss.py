@@ -100,6 +100,17 @@ def _volume_check(data, depth):
     return None, trimmed
 
 
+def trimmed_face(data):
+    """The outline record of the lone face an emboss is trimmed to (written as `within`), or None."""
+    faces, depth = data.get("faces"), data.get("depth")
+    if (not isinstance(faces, list) or len(faces) != 1 or not isinstance(faces[0], dict)
+            or not isinstance(depth, (int, float)) or abs(depth) <= ZERO_TOL or not data.get("profiles")):
+        return None
+    refusal, trimmed = _volume_check(data, depth)
+    outline = faces[0].get("outline")
+    return outline if refusal is None and trimmed and isinstance(outline, dict) else None
+
+
 def _on_plane(face, plane):
     """True when a neighbour record is a flat face on the plane of the input face."""
     own = face.get("plane") if isinstance(face, dict) else None

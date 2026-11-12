@@ -2,8 +2,8 @@
 
 A state is `{ "values": { Fusion name: manifest number }, "built": bool, "read": READ, "e0": bool }`. `values` holds the
 kept sizes that differ from the current settings (a size that is missing stays at its current value). `read` is the
-probe state of `fusion_reader.probe_state` (sketches, points, lines, params in Fusion's own units, box). Exactly one
-state has `"e0": true`: the read at the current settings, before any size is changed. A state that is not `built`
+probe state of `fusion_reader.probe_state` (sketches, points, lines, params in Fusion's own units, box, faces). Exactly
+one state has `"e0": true`: the read at the current settings, before any size is changed. A state that is not `built`
 (Fusion could not build the part there) is left out of the fit; its `failed` names the first step that failed.
 
 A sketch can have more than one solution, and Fusion may land on another one depending on the rows run before (a row
@@ -171,19 +171,23 @@ class StateRun:
     def find_flips(self):
         """Adds to `apart` the states whose different outline blames no size, and returns the names of the sketches
         known to have stayed on another outline across a restore and that a row started from: a `start` read on another
-        outline that no `put_back` corrected, or the same different read in rows of unrelated sizes (`find_apart`)."""
+        outline that no `put_back` corrected, or the same different read in rows of unrelated sizes (`find_apart`).
+        A face is no sketch: it is never named, and only another outline of it (not a failed read) blames no size."""
         flipped = []
         for token in dict.fromkeys(t["sketch_token"] for t in self.targets):
-            name = next(t["sketch"] for t in self.targets if t["sketch_token"] == token)
+            target = next(t for t in self.targets if t["sketch_token"] == token)
+            face = target["kind"] == plan.FACE
             if token in self.apart_tokens:
-                flipped.append(name)
+                flipped.append(target["sketch"])
             for at in range(1, len(self.states)):
                 start = self.states[at].get("start")
                 stayed = isinstance(start, dict) and not self.outline_right(token, start)
-                if stayed and not self.started_right(token, at):
-                    flipped.append(name)
+                if stayed and not face and not self.started_right(token, at):
+                    flipped.append(target["sketch"])
                 if (not self.built(at) or self.mislabelled(at)
                         or self.outline_right(token, self.states[at].get("read"))):
+                    continue
+                if face and self.values_at(target, at)[1] != SHAPE:
                     continue
                 if not self.shape_blames(token, at):
                     self.apart.add(at)
@@ -193,7 +197,7 @@ class StateRun:
         """The states where a sketch reads as the same different outline as in another state that changes other
         sizes, or the same sizes to other values. A sketch that reads exactly alike at two values of a size does not
         follow that size there: it landed on another solution."""
-        for token in dict.fromkeys(t["sketch_token"] for t in self.targets):
+        for token in dict.fromkeys(t["sketch_token"] for t in self.targets if t["kind"] != plan.FACE):
             shaped = [at for at in range(1, len(self.states))
                       if any(self.values_at(t, at)[1] == SHAPE for t in self.targets if t["sketch_token"] == token)]
             reads = {at: self.states[at]["read"]["sketches"].get(token) for at in shaped}
@@ -382,6 +386,7 @@ def build(capture, table, states, after=None):
     for target in run.targets:
         _fit_target(out, run, target, shared, models, current)
     out.curves = {match.prefix(t) for t in run.targets if t["kind"] in ("profile", "path")}
+    out.faces = {match.prefix(t): t["profile"]["token"] for t in run.targets if t["kind"] == plan.FACE}
     for ref in refs.usable:
         ref_fit.fit_ref(out, ref, [s.get("read") for s in run.states],
                         [run.built(at) and at not in run.outside for at in range(len(run.states))],
