@@ -18,17 +18,28 @@ except U1, L1 to L15, F1 and F2, which are described here.
       `body_states` for the body they build. Repeat with a split by a construction plane
       offset from a face by a user parameter: changing the parameter in Paramability moves the cut. A fillet after the
       split on the other half as well (the fillet lists both bodies) stops the copy at the split and names the fillet.
+      Seen with 0.10.5 (Fusion 2706.1.17, 2026-11-12): both pieces of the origin plane split copy and match. The width
+      range starts at 26.56, not 25, and that is real: the sketch keeps its right edge fixed, so at 25 the box lies
+      on one side of the plane and Fusion does not split it. The offset plane split marked its offset size; later
+      versions follow it (Fusion gives that plane a second parameter, `ExtraOffset`, at 0 mm). The fillet across both
+      halves stopped the copy as expected.
 - [ ] SB2, Split Body by another body. Split a plate with a cylinder body (kept), remove the piece inside the
       cylinder, and export the plate; then export the inside piece of a second split. Expect: `data.tool` has
       `kind: "body"` and `solid: true`, each piece has `inside` (false for the plate, true for the core; check it
       against the model), and the copy is a cut by the cylinder for the plate and an intersect for the core. A split
       along a curved face of a body (a cylinder side, not extended) stops with "curved surface".
+      Seen with 0.10.5 (Fusion 2706.1.17, 2026-11-12): `inside` was missing, so the plate stopped; later versions read
+      it. The "core" export held the cylinder tool body, not the piece inside it: export the inside piece again.
 - [ ] DR1, Draft. On a box extruded from a sketch on the XY plane, draft two side faces by 3 degrees with the XY
       plane as the fixed plane, the angle from a user parameter. Export. Expect: a `draft` step with two `near` points
       on the faces, `neutral` on the plane, and an angle that follows the parameter; in Paramability the walls lean
       the same way as in Fusion (narrower at the top when the volume went down). Repeat with the direction flipped
       and with a negative angle: the copy still leans like Fusion. A draft with "Symmetric" whose faces cross the
       plane, or with two different angles, is left out with its reason.
+      Seen with 0.10.5 (Fusion 2706.1.17, 2026-11-12): both directions copy and match, but the angle size was marked
+      (its default range starts at 0 degrees); later versions follow it with the range cut to 0.01 to 29.98. A draft
+      of 35 degrees is left out with "Drafts of 30 degrees or more are not copied." Negative and two angle drafts are
+      still to check.
 - [ ] SB3, a split part inside a component. Put the cup of SB1 in a component inside another component, join a
       second body to it with a Combine before the splits (a sweep or an extrude with a draft), split it with the root's
       YZ and XZ origin planes, and after the splits add a symmetric cut "through all" and a mirror of the body across
@@ -818,6 +829,8 @@ the sizes on the form and compare the part with Fusion at the same values.
       faces the other way there: that size's range stops before the value with the same reason, and it is not marked
       "turns the plane". Check in Fusion that the marker is back where it was after the export, and note the export
       time (each read moves the marker before the step and back).
+      Seen with 0.10.5 (Fusion 2706.1.17, 2026-11-12): a tapered join from the plate's top face copies, matches, and
+      follows width and thickness with neither marked (no fillet in that test).
 
 ## 10. Emboss
 

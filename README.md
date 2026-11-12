@@ -202,7 +202,8 @@ shows a short line with the same step (Fusion decides how long it stays):
 - a step that Fusion shows as an error;
 - a step that splits the part or makes another body. A Split Body by a plane, a flat face or a solid body is copied
   when the part comes out of it as one piece and no later step changes another piece together with it: the copy
-  follows the body it was split from and removes the other side, also for a tool body that a Combine takes. A split along a curved surface still stops the copy;
+  follows the body it was split from and removes the other side, also for a tool body that a Combine takes. A split
+  along a construction plane offset by a size follows that size. A split along a curved surface still stops the copy;
 - a recipe that is too large to open, or a list of left out steps that cannot be written.
 
 Every plain part or recipe the add-in writes (also the one size case of Export size choices) also lists the design's
@@ -340,7 +341,7 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   faces) of a curved face, of a face with a leaning or rounded side, or of two faces that meet, and every
   step type not listed above (coil). A draft is copied when its faces all lie on one side of its plane, with one angle
   under 30 degrees (or the same on both sides; it follows a size only when both sides use the same formula, and the
-  size range stops before 30 degrees), and the part's volume changes (it tells which way the faces lean);
+  size range stays above 0 and below 30 degrees), and the part's volume changes (it tells which way the faces lean);
   other drafts are left out. A step of that kind in a tool body leaves the Combine that
   takes the tool out of the copy, as one missing step. A Remove of another body, a Split Face (the solid stays the same, so picks on its faces may not follow) and steps of
   other bodies that are never joined to the picked body do not stop the copy.

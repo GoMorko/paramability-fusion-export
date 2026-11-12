@@ -929,7 +929,8 @@ the plane and no cut reaches across it; otherwise (a round, chamfer, shell or Mo
   computed. Each has its box and volume (mm3, null when unreadable).
 - `inside` (a split by a solid body only): whether the piece lies inside the tool body, from
   `BRepBody.pointContainment` of a point 0.01 mm inside the piece under one of its first 16 faces; null when no face
-  tells.
+  tells or the tool body is not found. It is read with the marker after the item, where Fusion no longer gives
+  `splittingTool`, so the tool body is found by the token read before the item.
 
 The translator follows a body that a split made back to the body it was split from (`lib/translator/lineage.py`),
 for the exported body and for a Combine tool body of its own component (`tool_walk.lineage_chain`): a piece belongs to the only split body, or to the one whose box holds its box. A split of the body it builds becomes the
@@ -1499,8 +1500,9 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   - other points write the coordinate along the extrude as a formula (`0.5 * height` for a side point half way up);
   - a "to entity" reach to a moving end face writes its length as a formula. A construction plane follows what it is
     built on (`follow._plane_shift`): an offset plane its base plus its own distance when that is the only parameter
-    it made (`sizes.offset_param`), a midplane its two bases, through chains of planes. An origin plane, or one made
-    from parameters alone, stays. Any other plane built on the part (at an angle, through an edge, tangent, along a
+    it made that reads a ticked size (`sizes.offset_param`; Fusion may give the plane a second parameter, a fixed
+    extra offset, and the distance is followed only where it matches the measured plane), a midplane its two bases,
+    through chains of planes. An origin plane, or one made from parameters alone, stays. Any other plane built on the part (at an angle, through an edge, tangent, along a
     path) marks the sizes read before the step, and so does a plane the capture does not describe (an older add-in).
     When the steps cannot place the face or plane (a side wall whose sketch line moves, a face of a step the copy
     does not model, a plane built on such a face), the probe's measure of it decides instead
@@ -1689,7 +1691,8 @@ be tried" (added to its other reason when there is one and it fits the note), un
 that built on every side the probe did not cover. Every state also
 reads the body's box (and volume when the state has it): a size whose state alone changed the box but moved no
 followed sketch or reference is kept in `Motion.body_moved` (`SizeProbe.finish`), unless it was tried only for a
-sketch plane: it feeds step values, which follow it. The translator treats it as doubtful
+sketch plane, or it moves a construction plane and no sketch (`sizes.construction_only`): it feeds step values, which
+follow it or mark it. The translator treats it as doubtful
 with "it changes this part in a way the copy does not follow": loose when a formula reads it, else dropped with
 `used` true. It is never reported as changing nothing.
 
@@ -1868,8 +1871,13 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   circle inside an outline (sampled on a grid).
 - A construction plane or axis that a step uses itself (start from, reach to, turn about, mirror across, with `token`)
   marks the sizes of the model parameters it made (`created_by.token`); without a token, of every construction plane
-  or axis. An offset plane an extrude starts from or reaches to, whose distance `sizes.offset_param` names, follows that
-  distance instead.
+  or axis. An offset plane that the step places, whose distance `sizes.offset_param` names, follows that distance
+  instead: where an extrude starts or reaches to, the plane of a mirror or a draft, and the plane a split cuts along
+  (`sizes._placed_planes`).
+- An angle the step needs above zero (a draft, a revolve) that reaches zero inside the size ranges cuts the ranges
+  of the untyped sizes it reads where it stays above 0.005 degrees ("needs an angle above zero"), since the default
+  range of an angle under 45 degrees starts at 0; only when no cut keeps it are they marked. A length or count that
+  leaves its working range still marks its sizes.
 
 ### Measured references in the motion file (`lib/probe/ref_fit.py`)
 
@@ -2153,7 +2161,9 @@ face outlines: `BRepFace` (`loops`, `geometry`, `evaluator`, `pointOnFace`, `ent
 `Features.extrudeFeatures`, `Feature.timelineObject`, `TimelineObject.index`, `ExtrudeFeature` (`startFaces`,
 `endFaces`, `sideFaces`; the stub says the start faces of a symmetric extrude are on the positive normal side).
 
-Read in the same stubs on 2026-11-12 for Split Body, not yet confirmed on a real design (hand tests SB1 and SB2):
+Read in the same stubs on 2026-11-12 for Split Body (hand tests SB1 and SB2; exports of 0.10.5 on Fusion 2706.1.17
+confirm a split by an origin plane, by an offset plane and by a body, and that `splittingTool` gives nothing with
+the marker after the feature, so `inside` was missing there):
 `SplitBodyFeature` (`splittingTool` and `splitBodies`, both read with the marker before the feature as the stub
 asks; `isSplittingToolExtended`; `bodies`), `BRepBody.pointContainment` (a `PointContainment` value: inside 0, on 1,
 outside 2, unknown 3), `BRepBody.isSolid`. For drafts (hand test DR1): `DraftFeature` (`inputFaces`, `plane`,
