@@ -1537,8 +1537,9 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   the round either, and the app refuses the slot.
 - A formula longer than the app's cap (`MAX_FORMULA_LENGTH` in `lib/params/expressions.py`, 300 characters) has the
   equal terms of its outer sum added up first (`collected_sum`: a plane's move less the same move of another plane
-  cancels). One still too long fixes the sizes it reads (they become plain numbers), also when a step builds it from
-  several values.
+  cancels; a coefficient that is a small fraction is written as one, any other with 12 decimals). The shorter formula
+  reads only the sizes left in it. One still too long fixes the sizes it reads (they become plain numbers), also when
+  a step builds it from several values.
 - Sketch values follow sizes through the probe's motion file (next section). Without one, every size that a model
   parameter created by a sketch dimension (also one whose creator reads as `other` but whose `role` names a
   dimension), construction plane or axis, or joint reads cannot be followed (reason "it changes a sketch, which could

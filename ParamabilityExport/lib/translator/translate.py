@@ -15,7 +15,7 @@ from .result import TranslateResult
 from .step_walk import all_steps, nesting
 from .tool_walk import MAX_DEPTH as MAX_TOOL_DEPTH
 from ..params import geometry_links
-from ..params.expressions import MAX_FORMULA_LENGTH, collected_sum
+from ..params.expressions import MAX_FORMULA_LENGTH, collected_sum, tokenize_formula
 from .values import Sized, number
 from ..sketch_values import coverage, keys
 from ..sketch_values.motion import Motion, Stuck, Terms
@@ -477,6 +477,19 @@ def _walk(capture, table, size_table, motion=None, cache=None):
     return result, ctx
 
 
+def _still_read(table, reads, formula):
+    """The Fusion names among `reads` that the recipe sizes named in `formula` still depend on: a size whose terms
+    cancelled is no longer read."""
+    if table is None:
+        return reads
+    named = {token[1] for token in tokenize_formula(formula) if token[0] == "id"}
+    kept = set()
+    for e in table.entries:
+        if table.size_name(e.name) in named:
+            kept.update(table.depends(e.name))
+    return tuple(name for name in reads if name in kept)
+
+
 def _fix_long_formulas(recipe, ctx):
     """Formulas a step builds from several values can pass the app's length cap. Their equal terms are added up first
     (a plane's move less the same move of another plane cancels); a formula still too long fixes its sizes."""
@@ -485,6 +498,7 @@ def _fix_long_formulas(recipe, ctx):
             shorter = collected_sum(node["expr"])
             if len(shorter) <= MAX_FORMULA_LENGTH:
                 node["expr"] = shorter
+                node.reads = _still_read(ctx.table, node.reads, shorter)
             else:
                 ctx.doubt(node.reads, "a value in %s needs a formula too long to copy" % (label or "a step"),
                           fixed=True)

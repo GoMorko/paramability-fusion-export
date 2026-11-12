@@ -7,6 +7,7 @@ from unittest import mock
 import copy
 
 from tests import context  # noqa: F401
+from tests.probe_helpers import table, user
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
 from tests.test_translate_loft import SIZES, SQUARES, circle_hole, loft_data
 from tests.test_translate_sized import CUBE, H, param, run
@@ -202,19 +203,22 @@ class CapsTest(unittest.TestCase):
         self.assertIn("too long", result.fixed[0]["reason"])
         self.assertEqual(steps_of(result.recipe, "round")[0]["edges"]["near"][0], [0, 0, 16])
 
-    def test_a_long_formula_whose_terms_cancel_is_written_shorter_and_keeps_its_sizes(self):
+    def test_a_long_formula_whose_terms_cancel_is_written_shorter_and_reads_only_what_is_left(self):
         # A plane's move less the same move of another plane: the long part cancels out.
         bend = "wall_mm * (cos(0.5 * angle_deg) / sin(0.5 * angle_deg))"
         twice = bend + " + " + bend
-        long_sum = "height_mm + %s - 40 - (0.5 * height_mm + %s) + 9.5" % (twice, twice)
+        long_sum = "height_mm + %s - 40 - (height_mm / 3 + %s) + 9.5" % (twice, twice)
         value = Sized(expr=long_sum)
         value.n, value.reads = 12.0, ("height_mm", "wall_mm", "angle_deg")
+        sizes = table([user("height_mm", "50 mm", 50), user("wall_mm", "3 mm", 3), user("angle_deg", "120 deg", 120,
+                                                                                         "deg")],
+                      ["height_mm", "wall_mm", "angle_deg"])
         doubts = []
-        ctx = SimpleNamespace(doubt=lambda names, why, fixed=False: doubts.append((names, fixed)))
+        ctx = SimpleNamespace(table=sizes, doubt=lambda names, why, fixed=False: doubts.append((names, fixed)))
         with mock.patch("lib.translator.translate.MAX_FORMULA_LENGTH", len(long_sum) - 1):
             importlib.import_module("lib.translator.translate")._fix_long_formulas(
                 {"features": [{"label": "Cap", "distance": value}]}, ctx)
-        self.assertEqual((value["expr"], doubts), ("0.5 * height_mm - 30.5", []))
+        self.assertEqual((value["expr"], value.reads, doubts), ("2 * height_mm / 3 - 30.5", ("height_mm",), []))
 
     def test_an_extent_pattern_with_a_sized_count_never_divides_by_zero(self):
         def edit(capture):

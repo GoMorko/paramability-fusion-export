@@ -170,6 +170,9 @@ class CollectedSumTest(unittest.TestCase):
         self.assertEqual(found, "h + %s - s - 12" % bend)
         self.assertAlmostEqual(evaluate(found, env), evaluate(text, env), places=9)
 
+    def test_a_fraction_stays_exact(self):
+        self.assertEqual(collected_sum("x / 3 + x / 3 - 0.5 * y + y"), "2 * x / 3 + y / 2")
+
 
 if __name__ == "__main__":
     unittest.main()
