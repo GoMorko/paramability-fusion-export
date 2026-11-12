@@ -72,18 +72,30 @@ def inside(piece, tool):
     return None
 
 
+def _tool_body(feature, ctx, tool):
+    """The solid tool body at the current marker position. Fusion gives a feature's splitting tool only while the
+    marker sits before the feature, so once it is computed the body is looked up by the token read before it."""
+    body = geo.native_input(geo.safe(lambda: feature.splittingTool, None), ctx)
+    if body is not None:
+        return body
+    token = (tool.get("body") or {}).get("token")
+    return geo.find_native(ctx.design, token) if token else None
+
+
 def split_after(feature, ctx, data):
     """pieces: every body the feature lists once computed. A split by a solid body says per piece whether it lies
     inside that body (`inside`, null when it cannot tell)."""
     tool = data.get("tool") or {}
     by_body = None
     if tool.get("kind") == "body" and tool.get("solid"):
-        by_body = geo.native_input(geo.safe(lambda: feature.splittingTool, None), ctx)
+        by_body = _tool_body(feature, ctx, tool)
     pieces = []
     for body in geo.collection_items(feature.bodies):
         record = _state(body, ctx)
         if by_body is not None:
             record["inside"] = inside(geo.native_input(body, ctx), by_body)
+        elif tool.get("kind") == "body" and tool.get("solid"):
+            record["inside"] = None
         pieces.append(record)
     return {"pieces": pieces}
 
