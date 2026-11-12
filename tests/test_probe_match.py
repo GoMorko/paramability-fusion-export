@@ -91,5 +91,35 @@ class TurnedLegTest(unittest.TestCase):
         self.assertAlmostEqual(values["1/p0/c0.0/turn"], 150.0, places=6)
 
 
+def arc(start, end, mid, center, radius, entity):
+    return {"kind": "arc", "start": list(start), "end": list(end), "mid": list(mid), "center": list(center),
+            "radius": radius, "entity": entity}
+
+
+def lens_regions(dy=0.0):
+    """Two regions of one sketch moved `dy` along y: a circle (entity "c", radius 1.5) cut in half by an arc ("a",
+    radius 1.625) through its ends. The lower region is the arc with the lower half of the circle, the upper one the
+    arc with the upper half: both list the same two entities."""
+    def p(x, y):
+        return (x, y + dy)
+    over = arc(p(1.5, 0), p(-1.5, 0), p(0, 1), p(0, -0.625), 1.625, "a")
+    lower = [over, arc(p(-1.5, 0), p(1.5, 0), p(0, -1.5), p(0, 0), 1.5, "c")]
+    upper = [arc(p(1.5, 0), p(-1.5, 0), p(0, 1.5), p(0, 0), 1.5, "c"), over]
+    return lower, upper
+
+
+class SharedCurvesTest(unittest.TestCase):
+    def test_a_region_that_moved_further_than_its_neighbour_is_away_is_still_matched_by_its_shape(self):
+        # Moved 3 mm down, the upper region lies where the lower one was captured.
+        lower, upper = lens_regions()
+        target = plan.scan(capture(extrude(1, profile("Lens", "sk1", [loop(lower)])))).targets[0]
+        moved_lower, moved_upper = lens_regions(-3.0)
+        state = read(sketch_state("sk1", [{"loops": [loop(moved_upper)]}, {"loops": [loop(moved_lower)]}]))
+        values, cause = match.state_values(target, state)
+        self.assertIsNone(cause)
+        want = match.captured_values(target)
+        self.assertEqual({round(values[k] - v, 9) for k, v in want.items() if k.endswith(".1")}, {-3.0})
+
+
 if __name__ == "__main__":
     unittest.main()

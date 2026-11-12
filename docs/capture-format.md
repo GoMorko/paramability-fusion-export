@@ -1708,6 +1708,10 @@ reason }`, and the result window counts those in its "More sizes" section (ticki
 `also_changes` lists the parameters that moved the part; the result window says "These parameters also change this
 part: ... Tick them and export again to get them as sizes." For a parts file the group is "Also change these parts" and
 each parameter names the parts it changed (read from each part's `probe.discovery`).
+In each state the read sketch profile with the captured shape stands for the captured profile: the one whose loops
+are nearest once each loop's slide is taken out, then the nearest in place. Regions of one sketch share curves (each
+half of a cut circle bounds its own region), so a region that moved further than its neighbour lies would otherwise
+pass for the neighbour.
 The sketch curves of each profile have `<item>/p<profile>/c<loop>.<curve>/<field>` in the capture's loop and curve
 order: a line's `offset` (its distance from the sketch origin along the left normal of its captured direction) and
 `turn` (degrees it turned; Fusion lists a profile curve with its ends either way round, so where the loop's joins

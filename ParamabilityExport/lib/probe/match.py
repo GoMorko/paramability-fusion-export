@@ -179,7 +179,8 @@ def _nearest(mapped, curves):
 
 
 def _arrange_loop(state_loop, loop, frame, ref):
-    """The state loop's curves in the order and direction of the capture loop, mapped to `ref`; and their gap.
+    """The state loop's curves in the order and direction of the capture loop, mapped to `ref`; their gap; and the
+    gap left once the loop's slide is taken out.
 
     Pieces of one sketch curve are told apart by their place along the loop when the loop reads in order, else by
     nearness once the loop's slide is taken out, so a loop that moved far still pairs each piece with its own."""
@@ -189,21 +190,20 @@ def _arrange_loop(state_loop, loop, frame, ref):
     repeated = len(set(entities)) < len(entities)
     walked = [_lined_up(order, curves) for order in _walks(mapped, curves)] if repeated else []
     if walked:
-        best = min(walked, key=lambda w: w[2])
-        return best[0], best[1]
+        return min(walked, key=lambda w: w[2])
     order = _nearest(mapped, curves)
     if order is None:
         return None
-    aligned, gap, _ = _lined_up(order, curves)
-    return aligned, gap
+    return _lined_up(order, curves)
 
 
 def _arrange(state_profile, profile, frame, ref):
-    """The state profile as capture style loops in the capture's loop order, and the gap to the capture; or None."""
+    """The state profile as capture style loops in the capture's loop order, the gap to the capture, and the gap left
+    once each loop's slide is taken out; or None."""
     state_loops = state_profile.get("loops") or []
     if len(state_loops) != len(profile["loops"]):
         return None
-    used, loops, total = set(), [], 0.0
+    used, loops, total, shape = set(), [], 0.0, 0.0
     for loop in profile["loops"]:
         best = None
         for at, other in enumerate(state_loops):
@@ -211,13 +211,22 @@ def _arrange(state_profile, profile, frame, ref):
                 continue
             arranged = _arrange_loop(other, loop, frame, ref)
             if arranged and (best is None or arranged[1] < best[2]):
-                best = (at, arranged[0], arranged[1])
+                best = (at, arranged[0], arranged[1], arranged[2])
         if best is None:
             return None
         used.add(best[0])
         loops.append({"outer": bool(loop.get("outer")), "curves": best[1]})
         total += best[2]
-    return loops, total
+        shape += best[3]
+    return loops, total, shape
+
+
+def _likeness(arranged):
+    """How a candidate state profile ranks against the capture's: by its shape first (the gap once each loop's slide
+    is taken out, to POINT_TOLERANCE), then by its place. Two profiles of one sketch share curves (each piece of a
+    split circle in its own region), and a profile that moved further than its pieces are apart lies nearer to the
+    other region's place."""
+    return round(arranged[2] / POINT_TOLERANCE), arranged[1]
 
 
 def _outline(node):
@@ -416,7 +425,7 @@ def _state_profile_values(target, read, e0=None):
     best = None
     for candidate in record.get("profiles") or []:
         arranged = _arrange(candidate, profile, frame, ref)
-        if arranged and (best is None or arranged[1] < best[1]):
+        if arranged and (best is None or _likeness(arranged) < _likeness(best)):
             best = arranged
     if best is None:
         return None, SHAPE
