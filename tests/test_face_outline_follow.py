@@ -80,6 +80,13 @@ class FollowedFaceTest(unittest.TestCase):
         self.assertIsNone(result.refusal)
         self.assertEqual(loose_names(result), [CUBE])
 
+    def test_a_face_plane_that_moves_along_a_curve_follows_its_formula(self):
+        moved = {"const": 2, "sum": [{"k": 1, "of": [["", H, 1], ["", CUBE, 1]]}]}
+        result, table = run(tray_face(), followed("2/face", {"2/face/plane": moved}))
+        self.assertEqual(loose_names(result), [])
+        top = steps_of(result.recipe, "extrude")[1]
+        self.assertAlmostEqual(at(result.recipe, table, top["sketch"]["on"]["origin"][2], TALLER), 77.0, places=6)
+
     def test_a_trimmed_emboss_limits_itself_to_the_measured_face(self):
         capture = load_capture(LID)
         trimmed_by(top_face(lid_square([0, 0], [60, 40])), 280.0)(emboss_data(capture))

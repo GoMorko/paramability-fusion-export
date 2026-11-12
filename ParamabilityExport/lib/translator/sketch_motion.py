@@ -487,9 +487,11 @@ def outline(ctx, item, profile, outer, inners, parts):
 
 def measured_outline(ctx, prefix, frame, loops, sketch):
     """The `Outline` of loops the probe read as a whole under `prefix` (a flat face used as an outline, `keys.face`),
-    named `sketch` in reasons. A value that moves along a curve is stuck: only straight moves are written."""
+    named `sketch` in reasons. A loop value that moves along a curve is stuck: only straight moves of the edges are
+    written. The plane is one distance along its normal, so a curved formula of it (a wall set back along a half angle)
+    is written as fitted."""
     raw_loops = _stuck_curves(_keyed_loops(ctx, prefix, loops, sketch), sketch)
-    plane = _stuck_curves(raw(ctx, keys.plane(prefix), _dot(frame["origin"], frame["z"]), sketch), sketch)
+    plane = raw(ctx, keys.plane(prefix), _dot(frame["origin"], frame["z"]), sketch)
     return Outline(ctx, frame, loops, raw_loops, plane, sketch)
 
 
