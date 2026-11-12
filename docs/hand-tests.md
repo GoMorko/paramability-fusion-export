@@ -788,6 +788,9 @@ the Fusion part. The calls behind these tests are listed under "Capture reader c
       pad onto the face around it. The emboss item's `profiles` holds a record with `face` true and, when an extrude
       made that face, `made_by`. The copy matches; with `made_by` the pad's sizes stay free, without it they are
       marked loose. If the dialog takes no faces, note that here.
+- [ ] **E8 Outline past its face.** Emboss a raised outline that reaches over a hole or a chamfered edge in its face.
+      Fusion raises only the part on the face. The copy stops with "reaches past the face it sits on" and the part
+      saves without it; `end_area` times `depth` equals `volume_after` minus `volume_before`.
 
 ## 11. Spline outlines and sketch text
 

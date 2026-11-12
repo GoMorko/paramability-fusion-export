@@ -11,8 +11,8 @@ so the volume check below also confirms that the text outlines have the area the
 
 Refused, with the part then saved as a fixed shape: curved input faces, an outline moved or turned on its face (the
 frame of those settings is not documented), a text whose outlines could not be read, a sketch plane tilted to the
-face, and a result whose measured volume does not match the outline area times the depth (an outline that runs past
-its face is trimmed by Fusion).
+face, and a result whose measured volume does not match the outline area times the depth. An outline that runs past
+its face is trimmed there by Fusion; the end face then holds the whole change, and the refusal says so.
 """
 from . import extrude, loops, values, vec
 from .result import Refusal
@@ -64,6 +64,10 @@ def _tilted(profiles, normal):
     return any(isinstance(p.get("frame"), dict) and not _parallel(p["frame"]["z"], normal) for p in profiles)
 
 
+def _matches(change, expected):
+    return abs(abs(change) - expected) <= VOLUME_RELATIVE_TOL * expected + VOLUME_ABSOLUTE_TOL
+
+
 def _volume_refusal(data, depth):
     """A Refusal when the measured change of the part is not the outline area times the depth, in the direction the
     sign of the depth says; None when it agrees."""
@@ -73,7 +77,13 @@ def _volume_refusal(data, depth):
         return Refusal("The change this emboss makes to the part could not be measured, so it is not copied.")
     expected = sum(areas) * abs(depth)
     change = after - before
-    if abs(abs(change) - expected) > VOLUME_RELATIVE_TOL * expected + VOLUME_ABSOLUTE_TOL:
+    if not _matches(change, expected):
+        end = data.get("end_area")
+        if isinstance(end, (int, float)) and end < sum(areas) and _matches(change, end * abs(depth)):
+            # The end face holds the whole change but is smaller than the outline: Fusion kept only what lies on
+            # the face, and the outline alone does not say which part that is.
+            return Refusal("This emboss reaches past the face it sits on, and Fusion trims it there, which is not "
+                           "copied yet.")
         return Refusal("The result of this emboss does not match its outline and depth, so it is not copied yet.")
     if (change > 0) != (depth > 0):
         return Refusal("This emboss does not raise or sink its outline the way its depth says, so it is not copied.")

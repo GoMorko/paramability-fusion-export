@@ -297,6 +297,53 @@ class HoleAndAxisTests(unittest.TestCase):
         self.assertEqual(motion.get("8/positions/0/0").cause, "turns")
 
 
+def rail_profile(w=32, h=20, shift=0.0):
+    """A second outline of the lid sketch: a strip whose length follows the filter width."""
+    rail = loop(rect_curves("q", 1 + shift, 1, 1 + shift + w / 4, 3))
+    return profile("Sketch2", "sk2", [rail], frame=lid_profile(h)["frame"],
+                   reference={"kind": "constructionPlane", "token": "cp1"})
+
+
+TWO_OUTLINES = capture(extrude(4, base_profile()), extrude(6, lid_profile(), rail_profile()))
+
+
+def two_outlines_at(other=False, **sizes):
+    """`read_at` with the rail in the lid sketch. On the other solution the lid circle reads another outline and
+    the rail sits 0.3 mm aside."""
+    found = ProblemStateTests.lid_flipped(**sizes) if other else read_at(**sizes)
+    w = sizes.get("count", 3) * sizes.get("cube", 10) + 2
+    rail = rail_profile(w, sizes.get("height", 20), 0.3 if other else 0.0)
+    found["sketches"]["sk2"]["profiles"].append({"loops": rail["loops"]})
+    return state(sizes, found)
+
+
+class OtherSolutionTests(unittest.TestCase):
+    def setUp(self):
+        self.table = table(PARAMS, TICKED, MODEL)
+
+    def test_an_outline_of_a_sketch_on_its_other_solution_is_not_fitted(self):
+        rows = [two_outlines_at(**s) for s in ({}, {"count": 6}, {"cube": 20}, {"off": 10}, {"height": 40},
+                                                {"count": 1}, {"cube": 5}, {"off": 2.5}, {"height": 10})]
+        rows[0]["e0"] = True
+        # Both rows of `off` land on the other solution: the rail's 0.3 mm jump is no move of `off`.
+        rows[3], rows[7] = two_outlines_at(True, off=10), two_outlines_at(True, off=2.5)
+        motion = build(TWO_OUTLINES, self.table, rows)
+        self.assertEqual(motion.apart, [2, 6])
+        rail = [v for k, v in motion.values.items() if k.startswith("6/p1/")]
+        self.assertTrue(rail)
+        self.assertFalse([v for v in rail if isinstance(v, Stuck)])
+
+    def test_two_sizes_that_give_a_formula_one_value_make_the_same_other_outline_on_their_own(self):
+        # count 2 and cube 20/3 both give the filter width 22: the same other read is expected, so each row blames.
+        flipped = ProblemStateTests.lid_flipped
+        rows = states()
+        rows[2], rows[5] = state({"cube": 20 / 3}, flipped(cube=20 / 3)), state({"count": 2}, flipped(count=2))
+        motion = build(CAPTURE, self.table, rows)
+        self.assertEqual(motion.apart, [])
+        self.assertEqual(motion.spans["count"]["changed"], [[2, "Sketch2"]])
+        self.assertEqual([c[1] for c in motion.spans["cube"]["changed"]], ["Sketch2"])
+
+
 class MovedSizesTests(unittest.TestCase):
     def test_only_sizes_whose_own_state_moved_a_value(self):
         current = {"count": 3, "cube": 10, "off": 5, "height": 20}

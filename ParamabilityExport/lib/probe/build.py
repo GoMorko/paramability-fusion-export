@@ -87,7 +87,17 @@ class StateRun:
         return False
 
     def values_at(self, target, at):
-        """`(values, cause)` of a target in state `at`; (None, None) for a state that was not built."""
+        """`(values, cause)` of a target in state `at`; (None, None) for a state that was not built. A sketch is
+        solved as a whole: when another outline of the same sketch reads differently there, this record is on that
+        other solution too, so it gives no values either (cause `SHAPE`)."""
+        values, cause = self._own_values(target, at)
+        if values is not None and any(
+                t is not target and t["sketch_token"] == target["sketch_token"] and t["kind"] != "path"
+                and self._own_values(t, at)[1] == SHAPE for t in self.targets):
+            return None, SHAPE
+        return values, cause
+
+    def _own_values(self, target, at):
         key = (id(target), at)
         if key not in self._values:
             self._values[key] = self._read_values(target, at)
@@ -202,12 +212,29 @@ class StateRun:
         self._values = {}
 
     def _unrelated(self, a, b, current):
-        """True when states `a` and `b` change no size to the same value: other sizes, or the same ones elsewhere."""
+        """True when states `a` and `b` change no size to the same value: other sizes, or the same ones elsewhere.
+        States that give a parameter the same new value (two sizes feeding one formula) are related: alike reads are
+        expected there."""
         sizes_a, sizes_b = self.varied(a, current), self.varied(b, current)
         if not sizes_a or not sizes_b:
             return False
         values_a, values_b = self.states[a].get("values") or {}, self.states[b].get("values") or {}
-        return all(abs(values_a[n] - values_b[n]) > _SAME for n in sizes_a & sizes_b)
+        return (all(abs(values_a[n] - values_b[n]) > _SAME for n in sizes_a & sizes_b)
+                and not self._same_new_value(a, b))
+
+    def _same_new_value(self, a, b):
+        """True when the reads of states `a` and `b` give some parameter the same value, other than its value at E0."""
+        first = (self.base or {}).get("params") or {}
+        read_a = (self.states[a].get("read") or {}).get("params") or {}
+        read_b = (self.states[b].get("read") or {}).get("params") or {}
+        for name, before in first.items():
+            x, y = read_a.get(name), read_b.get(name)
+            if not all(isinstance(v, (int, float)) for v in (before, x, y)):
+                continue
+            tol = 1e-9 * max(1.0, abs(before))
+            if abs(x - before) > tol and abs(x - y) <= tol:
+                return True
+        return False
 
 
 def outline_changes(capture, states, current=None):

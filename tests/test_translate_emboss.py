@@ -226,8 +226,12 @@ class EmbossRefusalTest(unittest.TestCase):
     def test_a_sketch_plane_tilted_to_the_face(self):
         self.check(lambda d: d["profiles"][0]["frame"].update(z=[0, 0.6, 0.8]), "tilted")
 
-    def test_an_outline_that_runs_past_its_face(self):
+    def test_a_result_that_does_not_match_the_outline(self):
         self.check(lambda d: d.update(volume_after=d["volume_before"] + 200.0), "does not match")
+
+    def test_an_outline_that_runs_past_its_face(self):
+        # Fusion kept 200 of the 304 mm2 outline: the end face holds the whole change.
+        self.check(lambda d: d.update(volume_after=d["volume_before"] + 200.0, end_area=200.0), "reaches past the face")
 
     def test_a_result_that_goes_the_other_way_than_the_depth_says(self):
         self.check(lambda d: d.update(volume_after=d["volume_before"] - 304.0), "the way its depth says")

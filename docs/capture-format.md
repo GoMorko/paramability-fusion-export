@@ -1117,7 +1117,9 @@ rules of an extrude from a face (`face_outline.py`). It refuses a curved face, f
 one plane, a moved or turned outline, text, a sketch plane tilted to the face, Tangent Chain on (or unreadable) with a
 tangent neighbour that is curved or not on the input plane (when the neighbours could not be listed: any curved made
 face), and a measured volume change that is not
-`sum(areas) * abs(depth)` within 1 percent in the direction the sign of `depth` says.
+`sum(areas) * abs(depth)` within 1 percent in the direction the sign of `depth` says. When the change is
+`end_area * abs(depth)` with `end_area` smaller than the outlines, the outline reaches past the face and Fusion trimmed
+it there; the refusal says so ("reaches past the face it sits on").
 
 **SweepFeature** and **LoftFeature** (`lib/fusion_reader/read_sweep.py`; the handlers `lib/translator/sweep.py` and
 `lib/translator/loft.py` copy the simple cases, and a step they refuse becomes a gap that holds this data):
@@ -1686,7 +1688,10 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   first) tells how it started, and the next row's `start` or read (or the read once all rows are done) tells whether
   it came back. A row of several sizes never blames one for a different outline. Every other state with a different
   outline blames no size (`apart` lists them, by number in `states`), and so do the states where a sketch reads as
-  the same different outline in rows that change different sizes or one size to two values. A sketch known to have
+  the same different outline in rows that change different sizes or one size to two values, unless both rows give
+  some parameter the same new value (two sizes behind one formula), where alike reads are expected. A sketch is
+  solved as a whole: in a state where one of its outlines reads differently, its other outlines give no values
+  either, since they sit on that other solution too (a strip that only shifts there is no move). A sketch known to have
   stayed on its other outline after the parameters were put back (a `start` read shows it, or the same different
   read in rows of unrelated sizes) is named in `flipped`, and `health.flipped` gives the result window one line about
   it.
