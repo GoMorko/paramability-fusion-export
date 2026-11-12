@@ -1,7 +1,8 @@
 """Emboss feature handler (EmbossFeature) for an outline on a flat face.
 
 An emboss of sketch outlines on a flat face is an extrude of those outlines that starts on the face: it joins the
-part when the depth is positive (raised) and cuts it when the depth is negative (sunk). The handler checks what the
+part when the depth is positive (raised) and cuts it when the depth is negative (sunk). A flat face used as an outline
+goes the way of an extrude from a face (face_outline.py). The handler checks what the
 copy relies on, rewrites the item as such an extrude and passes it to `extrude.handle`, so outline merging, size
 formulas, slabs and picks work as for any extrude. Fusion keeps one signed depth and no emboss or deboss flag.
 
@@ -137,7 +138,7 @@ def handle(item, ctx):
     if not profiles:
         return Refusal("This emboss has no sketch outline.")
     for profile in profiles:
-        refusal = loops.outline_refusal(profile)
+        refusal = None if profile.get("face") else loops.outline_refusal(profile)
         if refusal is not None:
             return refusal
     face = faces[0]

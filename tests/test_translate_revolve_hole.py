@@ -47,10 +47,11 @@ class RevolveTest(unittest.TestCase):
         self.assertIsNotNone(ok.recipe)
 
     def test_other_or_face_profile_entries_are_refused(self):
-        for entry in ({"kind": "other", "type": "Unknown"}, {"face": True, "type": "BRepFace"}):
+        for entry, word in (({"kind": "other", "type": "Unknown"}, "could not be read"),
+                            ({"face": True, "type": "BRepFace"}, "flat face")):
             result = variant("revolve_full", lambda item, entry=entry: item["data"].update(profiles=[entry]))
             self.assertIsNone(result.recipe)
-            self.assertIn("flat face", result.refusal["reason"])
+            self.assertIn(word, result.refusal["reason"])
 
     def test_an_axis_that_cannot_be_copied_is_refused_with_a_reason_per_kind_of_axis(self):
         axes = ({"kind": "other"}, {"kind": "other", "type": "BRepEdge", "geometry": "Arc3D"},

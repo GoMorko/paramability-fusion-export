@@ -224,15 +224,15 @@ def _number(read, kind="scalar"):
 
 
 def _faces_made(read, ctx):
-    """[{ point, normal }] for the faces `read()` gives (a collection, one face or nothing); null when the member
-    cannot be read."""
+    """[{ point, normal }] for the faces `read()` gives (a collection or vector, one face or nothing); null when the
+    member cannot be read."""
     try:
         raw = read()
     except Exception:
         return None
     if raw is None:
         return []
-    faces = geo.collection_items(raw) if hasattr(raw, "count") and hasattr(raw, "item") else [raw]
+    faces = geo.collection_items(raw) if geo.is_sequence(raw) else [raw]
     faces = [geo.native_input(f, ctx) for f in faces]
     return [{"point": geo.safe(lambda: geo.point(f.pointOnFace), None),
              "normal": geo.safe(lambda: geo.outward_normal(f), None)} for f in faces]

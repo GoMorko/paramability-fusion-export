@@ -115,7 +115,7 @@ except U1, L1 to L15, F1 and F2, which are described here.
       "Show in timeline", the result window) and the export pipeline entry under "Fusion calls to watch".
 - [ ] SW1 to SW20 and LF1 to LF6, sweeps and lofts (0.9.2; SW15 to SW20 and LF6 0.10.0): section 13 (the calls are under "Capture reader calls to watch
       (sweep and loft)").
-- [ ] E1 to E6, Emboss on a flat face: section 10.
+- [ ] E1 to E7, Emboss on a flat face: section 10.
 - [ ] T1 to T5, thin walled extrudes of one closed outline (T5 is `%` with a negative left side): section "Thin
       extrudes".
 - [ ] S1 to S5 and X1 onward, spline outlines and sketch text: section 11.
@@ -749,6 +749,10 @@ the Fusion part. The calls behind these tests are listed under "Capture reader c
 - [ ] **E6 Tangent Chain.** Emboss an outline near the edge of a face that has a fillet along that edge, with Tangent
       Chain on. The copy stops with "Tangent Chain" and the part saves as a fixed shape. With Tangent Chain off, or on
       a face with no rounded edge, it is copied.
+- [ ] **E7 Face as the outline.** If the Emboss dialog takes a flat face as its profile, emboss the top face of a small
+      pad onto the face around it. The emboss item's `profiles` holds a record with `face` true and, when an extrude
+      made that face, `made_by`. The copy matches; with `made_by` the pad's sizes stay free, without it they are
+      marked loose. If the dialog takes no faces, note that here.
 
 ## 11. Spline outlines and sketch text
 
@@ -1519,8 +1523,9 @@ Emboss tests of section 10 and read the capture in `report.json`.
 
 - `adsk.fusion.EmbossFeature` itself: it came with the September 2025 release and the API reference marks it as
   preview, so members may change. A Fusion build without it cannot hold the step (E5).
-- `EmbossFeature.profiles` with the marker just before the item: a collection of `Profile` and `SketchText` items on
-  one plane. A text item is read as outlines (X1).
+- `EmbossFeature.profiles` with the marker just before the item: `Profile` and `SketchText` items on one plane (a
+  flat face, if the dialog takes one: E7). Fusion 2706 gives them without `count` and `item` (a list or a vector);
+  the reader takes lists, collections and vectors. A text item is read as outlines (X1).
 - `EmbossFeature.inputFaces` with the marker just before the item: Fusion 2706 gives a `BRepFaceVector`, which has
   only len and indexing, no `count` or `item`. Every collection reader accepts lists, collections and such vectors,
   and raises when it cannot list them.

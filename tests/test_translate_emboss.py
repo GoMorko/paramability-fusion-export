@@ -67,6 +67,69 @@ class EmbossCopyTest(unittest.TestCase):
                 self.assertEqual((raised["combine"], raised["sketch"]["on"]["normal"]), ("add", [0.0, 0.0, 1.0]))
 
 
+TOP = {"origin": [0, 0, 4], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
+
+
+def square(lo, hi):
+    corners = [lo, [hi[0], lo[1]], hi, [lo[0], hi[1]]]
+    return [{"outer": True, "curves": [{"kind": "line", "start": corners[n], "end": corners[(n + 1) % 4]}
+                                       for n in range(4)]}]
+
+
+def top_face(loops, made_by=None):
+    """A flat face on the lid's top plane used as the emboss outline."""
+    record = {"face": True, "type": "BRepFace", "surface": "Plane", "token": "f1", "frame": TOP, "space": "sketch",
+              "loops": loops, "face_point": [30, 20, 4], "body": {"token": "t1", "name": "Body1"}}
+    if made_by:
+        record["made_by"] = made_by
+    return record
+
+
+def outlined_by(profiles, areas):
+    """The emboss raised 1 mm from `profiles` (outline records) of `areas` mm2."""
+    def edit(data):
+        data.update(profiles=profiles, areas=areas, volume_after=data["volume_before"] + sum(areas))
+    return edit
+
+
+class EmbossFaceOutlineTest(unittest.TestCase):
+    LID_TOP = {"index": 1, "name": "Extrude1", "which": "end"}
+
+    def test_the_top_face_of_the_lid_follows_the_lid_thickness(self):
+        capture = load_capture(LID)
+        outlined_by([top_face(square([0, 0], [60, 40]), self.LID_TOP)], [2400.0])(emboss_data(capture))
+        result = sized(capture)
+        self.assertIsNone(result.refusal)
+        base, raised = steps_of(result.recipe, "extrude")
+        self.assertEqual(raised["sketch"]["outer"], base["sketch"]["outer"])
+        self.assertEqual(raised["sketch"]["on"]["origin"][2], {"expr": "lid_mm"})
+        self.assertEqual((raised["combine"], raised["distance"]), ("add", {"expr": "raise_mm"}))
+        self.assertEqual((result.fixed, result.loose, result.dropped), ([], [], []))
+        assert_schema_ok(self, result.recipe)
+
+    def test_a_face_no_extrude_made_is_written_as_measured_with_the_sizes_marked(self):
+        capture = load_capture(LID)
+        outlined_by([top_face(square([20, 15], [30, 25]))], [100.0])(emboss_data(capture))
+        result = sized(capture)
+        _, raised = steps_of(result.recipe, "extrude")
+        self.assertEqual(raised["sketch"]["outer"]["center"], [25.0, 20.0])
+        self.assertEqual(raised["distance"], {"expr": "raise_mm"})
+        self.assertEqual([d["name"] for d in result.loose], ["lid_mm"])
+
+    def test_a_face_with_sketch_outlines_on_its_plane_raises_both(self):
+        ring = load_capture(LID)["items"][EMBOSS]["data"]["profiles"][0]
+        result = with_edit(outlined_by([top_face(square([20, 15], [30, 25])), ring], [100.0, 304.0]))
+        self.assertIsNone(result.refusal)
+        raised = steps_of(result.recipe, "extrude")[1:]
+        self.assertEqual([(s["combine"], s["sketch"]["on"]["origin"]) for s in raised], [("add", [0, 0, 4])] * 2)
+        assert_schema_ok(self, result.recipe)
+
+    def test_an_outline_the_reader_could_not_read_says_so(self):
+        reason = reason_of(with_edit(outlined_by([{"kind": "other", "type": "none"}], [0.0])))
+        self.assertIn("could not be read", reason)
+        self.assertNotIn("flat face", reason)
+
+
 class EmbossSizesTest(unittest.TestCase):
     def test_a_depth_driven_by_a_parameter_is_a_free_size_the_recipe_reads(self):
         result = sized(load_capture(LID))

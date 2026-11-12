@@ -129,6 +129,21 @@ class AsMeasuredTest(unittest.TestCase):
         self.assertEqual(steps_of(result.recipe, "extrude")[1]["sketch"]["on"]["origin"], [0, 0, 32])
 
 
+class WithSketchOutlinesTest(unittest.TestCase):
+    def test_a_face_and_sketch_outlines_on_its_plane_are_all_extruded(self):
+        made = face(UP, square((40, 30), (50, 40)), [45, 35, 32])
+        sketch = dict(load_capture("filter_tray_sized")["items"][1]["data"]["profiles"][0], frame=UP,
+                      loops=square((10, 10), (20, 20)))
+        capture = on_tray(made)
+        capture["items"][-1]["data"]["profiles"] = [made, sketch]
+        result, _ = run(capture)
+        self.assertIsNone(result.refusal)
+        joins = steps_of(result.recipe, "extrude")[1:]
+        self.assertEqual([(s["combine"], s["sketch"]["on"]["origin"]) for s in joins], [("add", [0, 0, 32])] * 2)
+        self.assertEqual(sorted(corners_in_model(s)[0] for s in joins), [(10, 10, 32), (40, 30, 32)])
+        assert_schema_ok(self, result.recipe)
+
+
 def tool_with_face_step():
     """The peg tool of `combine_tool_cut_inside` without its core, with a tapered join on its top face: a tool that only
     adds material, cut from the plate by the Combine."""
@@ -170,7 +185,7 @@ class RefusalTest(unittest.TestCase):
             "curved": [{"face": True, "type": "BRepFace", "surface": "Cylinder"}],
             "edges unread": [{"face": True, "type": "BRepFace", "surface": "Plane", "problem": "unread"}],
             "open loop": [dict(made, loops=[{"outer": True, "curves": made["loops"][0]["curves"][:3]}])],
-            "with a sketch outline": [made, sketch],
+            "with a sketch outline on another plane": [made, sketch],
             "two faces": [made, made],
         }
         for name, profiles in cases.items():

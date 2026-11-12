@@ -13,14 +13,16 @@ several outlines, outlines with holes, two sided and tapered thin extrudes are r
 An extrude of text or spline outlines is also checked against the volume Fusion made.
 
 A flat face of the part used as the outline is drawn again from the earlier extrude that made it, or written as
-measured with the sizes that may change it marked (face_outline.py).
+measured with the sizes that may change it marked (face_outline.py). Sketch outlines beside the face must lie on its
+plane.
 """
 import heapq
 import math
 
 from ..package.numbers import round9
 
-from . import face_outline, follow, kept_ranges, loops, outlines, placement, sketch_motion, thin_wall, values, vec
+from . import (face_outline, follow, kept_ranges, loops, notes, outlines, placement, sketch_motion, thin_wall, values,
+               vec)
 from .footprint import Footprint, polyline
 from .placer_makers import SlabMaker, ThinWallMaker
 from .result import Refusal, StepResult
@@ -727,6 +729,26 @@ def _face_built(face, thin):
     return [(face.profile, face.loops, face.drawn)]
 
 
+def _outlines_built(ctx, item, face, drawn, thin):
+    """`(profile, (outer, inners), drawn)` per outline: the flat face first, then the sketch outlines; or a Refusal.
+    Sketch outlines beside a face must lie on its plane. The face keeps its measured plane there, so the sizes that
+    move a sketch plane are marked."""
+    built = []
+    if face is not None:
+        built = _face_built(face, thin)
+        if isinstance(built, Refusal) or not drawn:
+            return built
+    sketches = _sketch_built(ctx, item, drawn, thin)
+    if isinstance(sketches, Refusal) or face is None:
+        return sketches
+    if not _same_plane([face.profile] + drawn):
+        return Refusal("This extrude uses outlines on different planes, which is not copied yet.")
+    names = [n for _, _, one in sketches if one is not None for n in sketch_motion.movers(ctx.table, one.plane)]
+    if names:
+        ctx.doubt(names, notes.stuck_reason("apart", item.get("name") or ""))
+    return built + sketches
+
+
 def handle(item, ctx):
     data = item.get("data") or {}
     operation = data.get("operation")
@@ -754,26 +776,21 @@ def handle(item, ctx):
     face = face_outline.prepare(ctx, item, profiles)
     if isinstance(face, Refusal):
         return face
-    if face is None:
-        for profile in profiles:
-            refusal = loops.outline_refusal(profile)
-            if refusal is not None:
-                return refusal
+    drawn_ones = [p for p in profiles if not p.get("face")]
+    for profile in drawn_ones:
+        refusal = loops.outline_refusal(profile)
+        if refusal is not None:
+            return refusal
     combine = COMBINE[operation]
     # Several outlines that Fusion made into one body touch each other, so the first makes it and the rest join.
     if combine == "new" and len(profiles) > 1 and len(item.get("bodies_after") or []) != 1:
         return Refusal("A new body from several outlines makes several bodies, which is not copied yet.")
-    if face is not None:
-        built = _face_built(face, thin)
-        if isinstance(built, Refusal):
-            return built
-        picked, sources, profiles = 1, [face.profile], [face.profile]
-    else:
-        built = _sketch_built(ctx, item, profiles, thin)
-        if isinstance(built, Refusal):
-            return built
-        picked, sources = len(profiles), profiles
-        profiles = [profile for profile, _, _ in built]
+    built = _outlines_built(ctx, item, face, drawn_ones, thin)
+    if isinstance(built, Refusal):
+        return built
+    sources = ([face.profile] if face is not None else []) + drawn_ones
+    picked = len(sources)
+    profiles = [profile for profile, _, _ in built]
     first_drawn = built[0][2]
     plane_q = first_drawn.plane_shift(ctx) if first_drawn is not None else Quantity(0.0)
 

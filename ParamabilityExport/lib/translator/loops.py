@@ -243,8 +243,10 @@ def outline_refusal(profile):
     an entity the reader does not know), else None."""
     if profile.get("text") and "loops" not in profile:
         return Refusal(TEXT_PROBLEMS.get(profile.get("problem"), TEXT_PROBLEMS["unread"]))
-    if profile.get("face") or "loops" not in profile:
+    if profile.get("face"):
         return Refusal("A flat face used as a sketch outline is not copied yet.")
+    if "loops" not in profile:
+        return Refusal("An outline of this step could not be read from Fusion, so it is not copied.")
     return None
 
 

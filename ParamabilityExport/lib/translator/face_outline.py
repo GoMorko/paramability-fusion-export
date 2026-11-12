@@ -9,7 +9,8 @@ the outward normal, its loops in that plane and, when it knows, the earlier extr
   again on a plane at that face, so the outline and the plane follow the sizes that step follows (its length, its
   start, its sketch). The face is compared at the measured sizes only: when steps came after that extrude, one of
   them may reach the face at other sizes, so the sizes read so far stay free with a warning.
-- As measured: any other flat face is written from its read loops as numbers. The sizes read by the steps written so
+- As measured: any other flat face, and a face used together with sketch outlines, is written from its read loops
+  as numbers. The sizes read by the steps written so
   far may change that face, so they stay free with a warning (`Context.doubt`).
 
 The extrude's own length, taper and operation follow their parameters in both cases (extrude.py).
@@ -52,12 +53,11 @@ def refusal(profile):
 
 
 def prepare(ctx, item, profiles):
-    """The `FaceOutline` of an extrude whose outline is a flat face, a Refusal, or None when no outline is a face."""
+    """The `FaceOutline` of the flat face among an extrude's outlines (the others are sketch outlines), a Refusal, or
+    None when no outline is a face."""
     faces = [p for p in profiles if isinstance(p, dict) and p.get("face")]
     if not faces:
         return None
-    if len(faces) != len(profiles):
-        return Refusal("This extrude uses a flat face together with sketch outlines, which is not copied yet.")
     if len(faces) > 1:
         return Refusal("This extrude uses several flat faces as outlines, which is not copied yet.")
     face = faces[0]
@@ -68,6 +68,9 @@ def prepare(ctx, item, profiles):
     measured = loops.profile_loops(plain)
     if isinstance(measured, Refusal):
         return measured
+    if len(faces) < len(profiles):
+        # Sketch outlines beside the face keep their own plane, so the face keeps the plane it was measured on.
+        return _as_measured(ctx, item, plain, measured)
     return _same_outline(ctx, item, plain) or _as_measured(ctx, item, plain, measured)
 
 

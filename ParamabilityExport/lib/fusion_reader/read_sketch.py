@@ -524,10 +524,10 @@ def read_text_outlines(text, ctx=None):
 
 
 def read_outlines(raw, ctx=None, measure=True, before=None):
-    """(profiles, areas) of a feature's `profile` property: a Profile, a planar BRepFace, a SketchText or a
-    collection of them. `areas` has one entry per profile record: `Profile.areaProperties` in mm2 for a Profile
-    (read only when `measure`), the area of the text outlines for a SketchText record, the face area for a face, else
-    None. `before` is the timeline index of the step, so a face record can name the extrude that made it."""
+    """(profiles, areas) of a feature's `profile` property: a Profile, a planar BRepFace, a SketchText or a list,
+    collection or vector of them. `areas` has one entry per profile record: `Profile.areaProperties` in mm2 for a
+    Profile (read only when `measure`), the area of the text outlines for a SketchText record, the face area for a
+    face, else None. `before` is the timeline index of the step, so a face record can name the extrude that made it."""
     name = geo.type_name(raw)
     if name == "Profile":
         return [read_profile(raw, ctx)], [profile_area(raw) if measure else None]
@@ -537,7 +537,7 @@ def read_outlines(raw, ctx=None, measure=True, before=None):
         from .read_face import face_outline  # read_face reads its edges with this module's read_curve
         record, area = face_outline(raw, ctx, before)
         return [record], [area if measure else None]
-    if raw is not None and hasattr(raw, "count") and hasattr(raw, "item"):
+    if geo.is_sequence(raw):
         profiles, areas = [], []
         for entity in geo.collection_items(raw):
             found = read_outlines(entity, ctx, measure, before)

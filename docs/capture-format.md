@@ -490,7 +490,8 @@ The area of the face (`BRepFace.area`, mm2) is the record's entry in `areas` and
 `end_offset` and `side_leans` are measured along the face's `z`. A capture made before add-in 0.8.1 has
 `{ "face": true, "type": "BRepFace" }` only; the translator refuses it and asks for a new export.
 
-The translator (`lib/translator/face_outline.py`) copies an extrude of one such face, alone. When `made_by` names the
+The translator (`lib/translator/face_outline.py`) copies an extrude or emboss of one such face. Sketch outlines may
+come with it when they lie on the face plane; the face is then written as measured. When `made_by` names the
 `start` or `end` face of an extrude step written earlier in the same walk, that step has no taper, `face_point` lies
 on its start or end face and the face's edges lie on that step's outline and back (within 1e-3 mm), the step's written
 outline is drawn again on a plane at that face: the plane's origin is the step's origin plus its length (times the
@@ -1083,9 +1084,10 @@ order (empty when one cannot be read, since a gap would shift the order).
 }
 ```
 
-- `profiles`: sketch profile records (section 4), including the outline records of a `SketchText`. `areas` holds
-  `Profile.areaProperties` of each, in mm2; for a text record it is the area of its outlines (outer less holes),
-  computed by the reader, null for a text marker.
+- `profiles`: sketch profile records (section 4), including the outline records of a `SketchText`, and the outline
+  record of a flat face (section 4, with `made_by`). Fusion may give them as a list, a collection or a vector.
+  `areas` holds `Profile.areaProperties` of each, in mm2; for a text record it is the area of its outlines (outer less
+  holes), computed by the reader, the face area for a face, null for a text marker.
 - `faces`: the `inputFaces` the outline lands on. `surface` is `Plane`, `Cylinder`, `Cone` or `other` (from
   `BRepFace.geometry`); `plane` (origin and normal of the geometry), `outward` (`getNormalAtPoint` at `pointOnFace`) and
   `face_point` are null when they cannot be read. `participants` are the bodies of these faces.
@@ -1105,7 +1107,8 @@ order (empty when one cannot be read, since a gap would shift the order).
 
 The translator (`lib/translator/emboss.py`) copies a flat face emboss as an extrude that starts on the face
 (`start.kind` is `fromEntity`): `join` for a positive depth, `cut` for a negative one, going out of the face or into
-it. The measured `end_offset` decides the direction when it is known. It refuses a curved face, faces that are not on
+it. The measured `end_offset` decides the direction when it is known. A flat face used as the outline follows the
+rules of an extrude from a face (`face_outline.py`). It refuses a curved face, faces that are not on
 one plane, a moved or turned outline, text, a sketch plane tilted to the face, Tangent Chain on (or unreadable) with a
 tangent neighbour that is curved or not on the input plane (when the neighbours could not be listed: any curved made
 face), and a measured volume change that is not

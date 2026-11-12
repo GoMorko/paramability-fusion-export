@@ -1,9 +1,10 @@
 """Emboss features (adsk.fusion.EmbossFeature) as plain dicts (docs/capture-format.md).
 
-Before the item: the outlines it raises or sinks (sketch profiles and the outlines of sketch text), the faces they land on, the
-depth and the shift and turn of the outline, and the size of the part. After the item: the size of the part again and
-where the feature put its farthest face parallel to the input face. For Tangent Chain it also reads the faces that
-touch the input faces tangentially and the surface kinds of the faces the feature made. The translator checks the two against each other.
+Before the item: the outlines it raises or sinks (sketch profiles, the outlines of sketch text, flat faces), the
+faces they land on, the depth and the shift and turn of the outline, and the size of the part. After the item: the
+size of the part again and where the feature put its farthest face parallel to the input face. For Tangent Chain it
+also reads the faces that touch the input faces tangentially and the surface kinds of the faces the feature made. The
+translator checks the two against each other.
 
 `EmbossFeature` is marked as preview in the API reference. Each setting is read on its
 own: one that cannot be read becomes null, and the translator then refuses the step.
@@ -72,7 +73,8 @@ def emboss_before(feature, ctx):
     params.add("offset_x", lambda: feature.horizontalDistance)
     params.add("offset_y", lambda: feature.verticalDistance)
     params.add("rotation_deg", lambda: feature.rotationAngle, "angle")
-    profiles, areas = read_outlines(feature.profiles, ctx)
+    index = geo.safe(lambda: feature.timelineObject.index, None)
+    profiles, areas = read_outlines(feature.profiles, ctx, before=index)
     return with_params({
         "profiles": profiles,
         "areas": areas,
