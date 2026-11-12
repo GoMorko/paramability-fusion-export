@@ -24,9 +24,10 @@ from .values import Quantity
 
 # A piece's box may reach this far (mm) past the plane on the side it does not lie on.
 SIDE_TOL_MM = 0.01
-# The pieces of a body add up to its volume within this (mm3), or this share of it.
+# The pieces of a body add up to its volume within this (mm3), or this share of it. Fusion measures the volume of a
+# curved body to a few parts in 100 000, each piece on its own.
 VOLUME_TOL_MM3 = 0.01
-VOLUME_RELATIVE = 1e-6
+VOLUME_RELATIVE = 1e-3
 # The box tool reaches this many times the body's half diagonal past the body, plus a fixed margin (mm), times how
 # much the sizes may grow the part (`_growth`), so that the part still lies inside it at every size.
 BOX_REACH = 4.0

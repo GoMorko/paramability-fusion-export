@@ -63,6 +63,10 @@ class SplitByPlaneTest(unittest.TestCase):
         self.assertEqual((combine, on["origin"], on["normal"]), ("cut", [10.0, 10.0, 5.0], [-1.0, 0.0, 0.0]))
         assert_schema_ok(self, result.recipe)
 
+    def test_pieces_of_a_curved_body_may_add_up_to_a_little_more_than_it(self):
+        pieces = [piece(PLATE, LEFT, 2000.1), piece(OTHER, RIGHT, 6000.2)]
+        self.assertEqual(verdict_of(translate(plate_split(OTHER, pieces=pieces)), 2)["verdict"], "translated")
+
     def test_the_body_that_keeps_its_name_removes_the_other_side(self):
         result = translate(plate_split(PLATE))
         self.assertEqual(box_cut(result)[1]["normal"], [1.0, 0.0, 0.0])
