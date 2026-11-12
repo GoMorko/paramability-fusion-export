@@ -12,7 +12,7 @@ import tempfile
 
 from ...lib.export_plan import health as health_module
 from ...lib.design_edit.marker import read_marker
-from ...lib.package.naming import design_title, package_file_name
+from ...lib.package.naming import body_file_title, component_names, design_title, package_file_name
 from ...lib.export_plan.pipeline import ExportRequest, run_pipeline
 from ...lib.export_plan.parts_pipeline import run_parts_pipeline
 from ...lib.dialog_model.result_rows import parts_result_view, result_view
@@ -232,7 +232,7 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
         message_box(PENDING_POSITION_MESSAGE)
         return
     title = design_title(design_info.document_name(app))
-    out_path = ask_save_path(package_file_name(title))
+    out_path = ask_save_path(package_file_name(body_file_title(title, component_names(bodies))))
     if out_path is None:
         return
 

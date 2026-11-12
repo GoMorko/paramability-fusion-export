@@ -15,6 +15,24 @@ def design_title(document_name):
     return (text or "Design")[:120]
 
 
+def body_file_title(document_name, component_names):
+    """Title for the default file name: the component that holds the exported bodies, or the design when the
+    bodies sit in several components (or none is known)."""
+    names = {design_title(n) for n in component_names if n}
+    return names.pop() if len(names) == 1 else design_title(document_name)
+
+
+def component_names(bodies):
+    """Names of the components that hold `bodies`; a body whose component cannot be read gives None."""
+    names = []
+    for body in bodies:
+        try:
+            names.append(body.parentComponent.name)
+        except Exception:
+            names.append(None)
+    return names
+
+
 def package_file_name(title):
     """Safe default file name with the package extension."""
     base = _BAD_FILE_CHARS.sub("_", title or "").strip(" .")[:80] or "design"
