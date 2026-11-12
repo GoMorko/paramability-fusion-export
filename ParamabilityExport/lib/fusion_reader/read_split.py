@@ -1,0 +1,94 @@
+"""Split Body features as plain dicts (docs/capture-format.md).
+
+Before the item: the bodies it splits, each with its box and volume, and what it splits with (`tool`): a plane (a
+construction plane or a flat face, with what it is built on, like a mirror plane), a body, or something else (a curved
+face, a sketch curve). After the item: the pieces Fusion lists for the feature, each with its box and volume, and for
+a split by a solid body whether the piece lies inside that body.
+"""
+import math
+
+from . import read_geometry as geo
+from .read_repeat import plane_record
+
+# How far (mm) a point on a face of a piece is moved into the piece before the tool body is asked whether it holds it.
+INSIDE_STEP_MM = 0.01
+# Faces of a piece tried before the inside test gives up.
+MAX_FACES = 16
+
+
+def _state(body, ctx):
+    """`{ token, name, box, volume }` of a body at the current marker position."""
+    record = geo.body_ref(body, ctx)
+    record["box"] = geo.safe(lambda: geo.box_of(geo.native_input(body, ctx)), None)
+    record["volume"] = geo.volume_mm3(geo.native_input(body, ctx))
+    return record
+
+
+def _tool(entity, ctx):
+    name = geo.type_name(entity)
+    if name == "BRepBody":
+        body = _state(entity, ctx)
+        return {"kind": "body", "body": body, "solid": geo.safe(lambda: bool(entity.isSolid), None)}
+    if name in ("ConstructionPlane", "BRepFace"):
+        plane = geo.safe(lambda: plane_record(entity, ctx), None)
+        if plane and "point" in plane and "normal" in plane:
+            return {"kind": "plane", "plane": plane}
+        return {"kind": "surface", "type": geo.safe(lambda: geo.type_name(entity.geometry), "other")}
+    return {"kind": "other", "type": name}
+
+
+def split_before(feature, ctx):
+    tool = geo.native_input(feature.splittingTool, ctx)
+    return {
+        "tool": _tool(tool, ctx),
+        "extended": geo.safe(lambda: bool(feature.isSplittingToolExtended), None),
+        "bodies": [_state(b, ctx) for b in geo.collection_items(feature.splitBodies)],
+    }
+
+
+def _probe(face, tool):
+    """True or False when a point just inside the face's body lies inside or outside `tool`; None when unknown."""
+    ok, normal = face.evaluator.getNormalAtPoint(face.pointOnFace)
+    size = math.sqrt(normal.x ** 2 + normal.y ** 2 + normal.z ** 2) if ok else 0.0
+    if not size:
+        return None
+    at = geo.point(face.pointOnFace)
+    inward = [at[0] - normal.x / size * INSIDE_STEP_MM, at[1] - normal.y / size * INSIDE_STEP_MM,
+              at[2] - normal.z / size * INSIDE_STEP_MM]
+    name = geo.enum_name(tool.pointContainment(geo.point3d(inward)), "PointContainment").lower()
+    if "inside" in name:
+        return True
+    if "outside" in name:
+        return False
+    return None
+
+
+def inside(piece, tool):
+    """Whether the body `piece` lies inside the body `tool`, tried on its faces in turn; None when no face tells."""
+    for face in geo.collection_items(geo.safe(lambda: piece.faces, None))[:MAX_FACES]:
+        found = geo.safe(lambda: _probe(face, tool), None)
+        if found is not None:
+            return found
+    return None
+
+
+def split_after(feature, ctx, data):
+    """pieces: every body the feature lists once computed. A split by a solid body says per piece whether it lies
+    inside that body (`inside`, null when it cannot tell)."""
+    tool = data.get("tool") or {}
+    by_body = None
+    if tool.get("kind") == "body" and tool.get("solid"):
+        by_body = geo.native_input(geo.safe(lambda: feature.splittingTool, None), ctx)
+    pieces = []
+    for body in geo.collection_items(feature.bodies):
+        record = _state(body, ctx)
+        if by_body is not None:
+            record["inside"] = inside(geo.native_input(body, ctx), by_body)
+        pieces.append(record)
+    return {"pieces": pieces}
+
+
+# type name -> (before, after); either may be None
+READERS = {
+    "SplitBodyFeature": (split_before, split_after),
+}

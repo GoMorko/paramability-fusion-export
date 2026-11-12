@@ -232,6 +232,22 @@ def handle(item, ctx):
     model = data.get("intersect_model")
     if combine == "intersect" and len(tools) > 1 and model not in ("every", "any"):
         return Refusal("This combine keeps a shared part that the copy could not work out.")
+    out = write_tools(ctx, item, data, combine)
+    if isinstance(out, Refusal):
+        return out
+    if data.get("keep_tools"):
+        ctx.note("Fusion kept the tool bodies next to the part. Only the part is copied.")
+    else:
+        ctx.used_tools.update(tool_key(body) for body in tools)
+    return out
+
+
+def write_tools(ctx, item, data, combine):
+    """The steps that join, cut or intersect (`combine`: add, cut, intersect) the tool bodies `data.tools` with the
+    body the walk builds, at the place of `item`; or a Refusal. `data` holds the measures the checks read
+    (`volume_before`, `volume_after`, the tools' `volume`, `intersect_model`, `intersect_volumes`)."""
+    tools = data["tools"]
+    model = data.get("intersect_model")
     for body in tools:
         problem = _unusable(ctx, body)
         if problem is not None:
@@ -276,8 +292,4 @@ def handle(item, ctx):
         out.extend(written.entries)
         out.join(written)
         out.wraps_body = out.wraps_body or written.wraps_body
-    if data.get("keep_tools"):
-        ctx.note("Fusion kept the tool bodies next to the part. Only the part is copied.")
-    else:
-        ctx.used_tools.update(tool_key(body) for body in tools)
     return out

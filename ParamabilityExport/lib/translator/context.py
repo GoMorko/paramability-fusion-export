@@ -6,7 +6,7 @@ only when the walk writes its steps.
 """
 from contextlib import contextmanager
 
-from . import gap_measures, gaps as gap_records, tool_items
+from . import gap_measures, gaps as gap_records, lineage as body_lineage, tool_items
 from .capture import same_body
 from .result import Doubt, StepResult
 from .step_kinds import recipe_kind
@@ -50,6 +50,8 @@ class Context:
     gaps: the steps this walk left out (`gaps.Gap`), in order, with those of the tools it wrote (`commit`).
     cache: results that depend on the capture alone, shared by every walk of one translation (one translation walks
       the capture many times). Handlers keep their own entry under their module name.
+    lineage: `[(index, parent)]` of the splits the target comes through (lineage.py), for the walk of the exported
+      body only: before each split the walk builds the body it split.
     """
 
     def __init__(self, capture, table=None, motion=None, cache=None, handlers=None):
@@ -71,6 +73,7 @@ class Context:
         self.written_reads = ()
         self.plain_picks = {}
         self.target = capture["target"]
+        self.lineage = []
         self.steps = []
         self.used_tools = set()
         self.entries_by_index = {}
@@ -115,7 +118,16 @@ class Context:
             self.current, self.placers, self.slabs, self.written_reads = saved
 
     def is_target(self, body):
-        return same_body(body, self.target)
+        """`body` is the body this walk builds: the target, or at the current item the body of the lineage."""
+        if same_body(body, self.target):
+            return True
+        if not self.lineage or self.current is None:
+            return False
+        return any(same_body(body, held) for held in self.lineage_at(self.current.get("index", 0)))
+
+    def lineage_at(self, index):
+        """`(before, after)`: the body this walk builds just before and just after the item at `index`."""
+        return body_lineage.at(self.lineage, self.target, index)
 
     def doubt(self, names, why, fixed=False, cut=None):
         """Record that a value cannot follow the sizes `names` (Fusion names), so it is written as its number. `why`

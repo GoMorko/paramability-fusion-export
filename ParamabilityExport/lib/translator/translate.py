@@ -1,7 +1,7 @@
 """The driver: walks a capture's items, calls one handler per feature type, builds the recipe."""
 import importlib
 
-from . import gap_file, gap_measures, gap_place, gaps, kept_ranges, range_check, repeat, step_kinds
+from . import gap_file, gap_measures, gap_place, gaps, kept_ranges, lineage, range_check, repeat, step_kinds
 from .audit import audit
 from .sizes import joint_reasons, probed_sizes, text_reasons, untried_reasons, used_sizes
 from . import notes as wording, place
@@ -442,6 +442,7 @@ def _sweep_version(step):
 def _walk(capture, table, size_table, motion=None, cache=None):
     """One walk over the items: (TranslateResult, Context). `cache` is shared by the walks of one translation."""
     ctx = Context(capture, size_table, motion, cache, table)
+    ctx.lineage = lineage.of(capture)
     result = TranslateResult()
     if not walk_items(ctx, result):
         return result, ctx

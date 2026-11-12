@@ -49,6 +49,7 @@ class StepType:
     makes_bodies: it can make bodies that copy others (a Paste, a pattern or mirror of bodies). Its other results are
       expected, so the walk of one body does not refuse them.
     moves_bodies: it carries the bodies its data names to another place.
+    splits_bodies: it cuts bodies into pieces, and a piece may come out as a new body (translator/lineage.py).
     """
 
     name: str
@@ -61,6 +62,7 @@ class StepType:
     splits_faces: bool = False
     makes_bodies: bool = False
     moves_bodies: bool = False
+    splits_bodies: bool = False
 
 
 @dataclass(frozen=True)
@@ -106,6 +108,8 @@ STEP_TYPES = (
              makes_bodies=True),
     StepType("MirrorFeature", "mirror", reader="read_repeat", handler="body_copies:mirror", makes_bodies=True),
     StepType("SplitFaceFeature", "split face", splits_faces=True),
+    StepType("SplitBodyFeature", "split body", reader="read_split", handler="split:handle",
+             splits_bodies=True),
     StepType("CopyPasteBody", "pasted body", reader="read_paste", handler="paste:handle", makes_bodies=True),
     StepType("MoveFeature", "move", reader="read_move", handler="move:handle", moves_bodies=True),
     StepType("EmbossFeature", "emboss", reader="read_emboss", handler="emboss:handle",

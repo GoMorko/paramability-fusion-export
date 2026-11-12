@@ -8,7 +8,7 @@ still reads right, is left out as a gap (gaps.py). A gap is a step type with no 
 that reaches into another component, and a step that picks faces a gap made. What a left out item would have recorded
 (doubts, notes) is dropped with it. Anything that leaves the body unknown still stops the copy.
 """
-from . import borrowed, gap_picks, gaps, notes as wording, ref_motion, step_kinds
+from . import borrowed, gap_picks, gaps, notes as wording, ref_motion, split_rules, step_kinds
 from .capture import outside_component, renamed_target, same_body
 from .result import Refusal, StepResult, make_verdict
 from .sizes import construction_fixes
@@ -28,7 +28,7 @@ def _label(item):
 
 
 # Lists of the bodies a step takes or makes. A body of another component in one of them has its own rules.
-_BODY_LISTS = ("participants", "tools", "sources", "source_bodies", "result_bodies", "bodies")
+_BODY_LISTS = ("participants", "tools", "sources", "source_bodies", "result_bodies", "bodies", "pieces")
 
 
 def is_foreign(node):
@@ -232,8 +232,11 @@ def walk_items(ctx, result):
                 # walks it as a tool.
                 result.items.append(make_verdict(item, "skipped", note="Does not change the exported body."))
                 continue
-            # Later steps may belong to the other body, so no single missing step can stand for this one.
-            return refuse(item, "This step splits the part or makes another body, which is not copied yet.")
+            # Later steps may belong to the other body, so no single missing step can stand for this one. A split
+            # that keeps the body as one piece apart from the others is copied (split_rules.py).
+            stop = split_rules.stop_reason(item, ctx)
+            if stop is not None:
+                return refuse(item, stop)
         if handler is None and _only_splits_faces(item, ctx):
             note = wording.split_face_note(_label(item))
             result.items.append(make_verdict(item, "skipped", note=note))
@@ -269,6 +272,8 @@ def walk_items(ctx, result):
             continue
         outcome = run_handler(handler, item, ctx)
         if isinstance(outcome, Refusal):
+            if outcome.stops:
+                return refuse(item, outcome.reason)
             if outcome.over_gap_cap:
                 result.over_gap_cap = True
                 refuse(item, outcome.reason)

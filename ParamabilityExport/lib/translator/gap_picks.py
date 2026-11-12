@@ -4,7 +4,7 @@ A step that picks geometry a gap would have made cannot be copied either: the co
 which the kernel matches to the closest edge or face, and that geometry is missing from the copy.
 """
 # Lists in an item's data that hold bodies, faces made by the step, or faces next to the input: none of them is a pick.
-_NOT_PICKS = ("participants", "tools", "sources", "source_bodies", "result_bodies", "bodies", "faces_after",
+_NOT_PICKS = ("participants", "tools", "sources", "source_bodies", "result_bodies", "bodies", "pieces", "faces_after",
               "tangent_faces", "made_surfaces", "side_cylinders", "end_points", "elements")
 
 

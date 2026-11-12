@@ -8,6 +8,20 @@ note the Fusion version and system.
 What 0.6.0 to 0.8.0 added, and what this version adds, in this order. Each id is described in the section named,
 except U1, L1 to L15, F1 and F2, which are described here.
 
+- [ ] SB1, Split Body by a plane. Model a cup or a box with a shell and a fillet, then Split Body with the YZ origin
+      plane and Remove the other half (a second Split Body with the XZ plane of the half gives a quarter). Export the
+      piece that the split made (a new body, not the one that kept its name), and once more the piece that kept its
+      name. Expect: the steps before the split are copied, the split is a tool step (`toolBody`, combine `cut`) with
+      one extrude of a large square on the plane, facing away from the piece, and in Paramability the copy matches
+      the STEP. The capture item has `data.tool` with `kind: "plane"`, `data.bodies` with one body and `data.pieces`
+      with both pieces, their boxes and volumes adding up to the body's. Repeat with a split by a construction plane
+      offset from a face by a user parameter: changing the parameter in Paramability moves the cut. A fillet after the
+      split on the other half as well (the fillet lists both bodies) stops the copy at the split and names the fillet.
+- [ ] SB2, Split Body by another body. Split a plate with a cylinder body (kept), remove the piece inside the
+      cylinder, and export the plate; then export the inside piece of a second split. Expect: `data.tool` has
+      `kind: "body"` and `solid: true`, each piece has `inside` (false for the plate, true for the core; check it
+      against the model), and the copy is a cut by the cylinder for the plate and an intersect for the core. A split
+      along a curved face of a body (a cylinder side, not extended) stops with "curved surface".
 - [ ] U1, faster tries (0.9.1, experimental). Use a design with a body in one component and two or more other
       components the body does not use (no joints), with a ticked size that moves a sketch. Suppress one step of an
       unused component by hand first. Export for Paramability twice, once with "Faster tries" off and once with it

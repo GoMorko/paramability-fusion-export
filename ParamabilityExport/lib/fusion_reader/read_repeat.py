@@ -199,7 +199,9 @@ def _result_bodies(feature, ctx, data):
     return {"result_bodies": result_bodies(feature, ctx)} if data.get("entity_type") == "bodies" else {}
 
 
-def _plane_record(entity, ctx):
+def plane_record(entity, ctx):
+    """A plane (construction plane or flat face) as `{ point, normal }` with what it is built on; None when it is not
+    flat."""
     entity = geo.native_input(entity, ctx)
     record = from_assembly(geo.mark_foreign(geo.plane_of(entity), entity, ctx), entity, ctx, slot="plane")
     if isinstance(record, dict):
@@ -211,7 +213,7 @@ def _plane_record(entity, ctx):
 def mirror_before(feature, ctx):
     data = _common(feature, ctx)
     data.update({
-        "plane": geo.safe(lambda: _plane_record(feature.mirrorPlane, ctx), None),
+        "plane": geo.safe(lambda: plane_record(feature.mirrorPlane, ctx), None),
         "combine": geo.safe(lambda: bool(feature.isCombine), False),
         "target_box_before": ctx.target_box(),
     })

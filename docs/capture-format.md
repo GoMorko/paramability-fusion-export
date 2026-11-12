@@ -878,6 +878,32 @@ for extrudes).
 `plane` from a `ConstructionPlane` (`geometry`, a `Plane`: `origin`, `normal`) or a planar `BRepFace`
 (`geometry`). A construction plane adds `token`.
 
+**SplitBodyFeature** (`splittingTool`, `isSplittingToolExtended`, `splitBodies` before the item; `bodies` after it;
+`lib/fusion_reader/read_split.py`):
+
+```json
+{ "tool": { "kind": "plane", "plane": PLANE }, "extended": true,
+  "bodies": [{ "token": "..", "name": "Body1", "box": BOX, "volume": 8000.0 }],
+  "pieces": [{ "token": "..", "name": "Body1", "box": BOX, "volume": 2000.0 },
+             { "token": "..", "name": "Body2", "box": BOX, "volume": 6000.0, "inside": false }] }
+```
+
+- `tool`: a construction plane or a flat face is `{ kind: "plane", plane }`, with the keys of the mirror `plane`; a body
+  is `{ kind: "body", body: { token, name, box, volume }, solid }`; a curved face is `{ kind: "surface", type }`
+  (the surface type name); anything else (a sketch curve) is `{ kind: "other", type }`.
+- `bodies`: the bodies it splits, read with the marker before the item; `pieces`: every body the feature lists once
+  computed. Each has its box and volume (mm3, null when unreadable).
+- `inside` (a split by a solid body only): whether the piece lies inside the tool body, from
+  `BRepBody.pointContainment` of a point 0.01 mm inside the piece under one of its first 16 faces; null when no face
+  tells.
+
+The translator follows a body that a split made back to the body it was split from (`lib/translator/lineage.py`): a
+piece belongs to the only split body, or to the one whose box holds its box. A split of the body it builds becomes the
+removal of the other side (`lib/translator/split.py`): a cut by a large box beyond the plane, or a cut or intersect with
+the tool body. It stops the copy unless the capture shows the piece is the whole of its side (one side of the plane, or
+inside or outside the tool body, with every other piece of that body on the other side), the pieces add up to the
+body's volume, and no later step changes another piece together with the part (`lib/translator/split_rules.py`).
+
 **CombineFeature** (`targetBody`, `toolBodies`, `operation`, `isKeepToolBodies`):
 
 ```json

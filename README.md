@@ -200,7 +200,9 @@ shows a short line with the same step (Fusion decides how long it stays):
   the part;
 - the body cannot be followed through the timeline, or a step cannot be read from Fusion;
 - a step that Fusion shows as an error;
-- a step that splits the part or makes another body;
+- a step that splits the part or makes another body. A Split Body by a plane, a flat face or a solid body is copied
+  when the part comes out of it as one piece and no later step changes another piece together with it: the copy
+  follows the body it was split from and removes the other side. A split along a curved surface still stops the copy;
 - a recipe that is too large to open, or a list of left out steps that cannot be written.
 
 Every plain part or recipe the add-in writes (also the one size case of Export size choices) also lists the design's

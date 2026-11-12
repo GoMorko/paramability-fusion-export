@@ -11,6 +11,7 @@ and are only compared with each other. Captures without component tokens match b
 """
 from ..params import geometry_links
 from ..params.defaults import reads_of
+from ..translator import lineage
 from ..translator.capture import same_body
 
 QUANTITY_PATHS = ("quantity", "quantity_one", "quantity_two")
@@ -36,8 +37,9 @@ def _touches(item, wanted):
 
 
 def body_items(capture):
-    """The timeline items that build the picked body: those that touch it, or touch a tool body combined into it."""
-    wanted = [capture["target"]]
+    """The timeline items that build the picked body: those that touch it, a body it was split from, or a tool body
+    combined into it."""
+    wanted = [capture["target"]] + lineage.bodies(capture)
     used = {}
     changed = True
     while changed:

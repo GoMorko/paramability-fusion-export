@@ -7,14 +7,16 @@ class Refusal:
     """Returned by a handler instead of a `StepResult` when its item cannot be copied. `reason` is one plain
     sentence. `depends_on` names the gaps (gaps.py) that make the item impossible to copy, when that is the cause.
     `over_gap_cap` says a tool body walk met more gaps than a part may hold: the whole copy stops, the item does not
-    become a gap. `tool_steps` are then the verdicts of that walk, so its own gaps are known."""
+    become a gap. `tool_steps` are then the verdicts of that walk, so its own gaps are known. `stops` says the body
+    after the item cannot be known without it, so the copy stops there instead of leaving the item out."""
 
-    def __init__(self, reason, depends_on=(), over_gap_cap=False, tool_steps=()):
+    def __init__(self, reason, depends_on=(), over_gap_cap=False, tool_steps=(), stops=False):
         self.reason = reason
         self.doubts = []
         self.depends_on = list(depends_on)
         self.over_gap_cap = over_gap_cap
         self.tool_steps = list(tool_steps)
+        self.stops = stops
 
     def __repr__(self):
         return "Refusal(%r)" % (self.reason,)
