@@ -53,6 +53,13 @@ class DraftTest(unittest.TestCase):
         result = translate(capture, size_table=table_of(capture, ["turn_deg"]))
         self.assertLess(result.recipe["sizes"]["turn_deg"]["max"], 120.0)
 
+    def test_a_sized_angle_whose_range_reaches_zero_has_its_range_cut_there(self):
+        capture = drafted(params={"angle_deg": {"name": "d9", "expression": "turn_deg - 87", "value": 3.0}})
+        capture["parameters"] = load_capture(TRAY)["parameters"]
+        result = translate(capture, size_table=table_of(capture, ["turn_deg"]))
+        self.assertIn("turn_deg", steps_of(result.recipe, "draft")[0]["angleDeg"]["expr"])
+        self.assertEqual(result.recipe["sizes"]["turn_deg"]["min"], 87.01)
+
     def test_two_angles_from_different_formulas_stay_a_number(self):
         capture = drafted(two_angles=True, angle_two_deg=3.0, params={
             "angle_deg": {"name": "d9", "expression": "turn_deg / 30", "value": 3.0},

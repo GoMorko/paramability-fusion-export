@@ -9,16 +9,21 @@ When a value cannot follow its sizes (the formula does not translate, its unit o
 or the step writes it as a plain number), it is written as its number and the sizes it reads are recorded as a doubt
 (`Context.doubt`). The driver then keeps them free with a warning (`translate`); a value that depends on a size never
 stays a number while that size stays free without one. A formula the
-parser cannot read still marks the sizes on Fusion's own list of what its parameter depends on.
+parser cannot read still marks the sizes on Fusion's own list of what its parameter depends on. An angle the step
+needs above zero that reaches zero inside the size ranges has the ranges cut instead, since the default range of a
+small angle starts at 0 degrees.
 """
 import re
 
 from ..package.numbers import round9
 from ..params.expressions import MAX_FORMULA_LENGTH, tokenize_formula
-from . import range_check
+from . import kept_ranges, range_check
 from .range_check import size_env as _env  # noqa: F401  (the size values at a setting; tests read it from here)
 
 TOLERANCE = 1e-6
+# How far above zero (degrees) an angle the step needs positive stays when the size ranges are cut for it: half the
+# form's step, so the cut end lands on 0.01.
+ABOVE_ZERO = 0.005
 _ATOM = re.compile(r"^(?:[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?)$")
 
 
@@ -331,13 +336,29 @@ def quantity(ctx, item, path, literal, dim="length", sign=1, absolute=False, who
         ctx.doubt(tr.reads, "%s needs a whole number of copies, and its formula can give a part number"
                   % item.get("name", "a step"))
         return plain
-    if absolute or whole:
-        if not _stays_in_range(ctx.table, tr.formula, tr.reads, sign, 1.0 if whole else 1e-9):
-            ctx.doubt(tr.reads, "%s would leave its working range (a length reaching zero or a count under 1)"
-                      % item.get("name", "a step"))
-            return plain
     text = tr.formula if sign > 0 else _negated(tr.formula)
-    return Quantity(literal, text, tr.reads)
+    q = Quantity(literal, text, tr.reads)
+    if (absolute or whole) and not _stays_in_range(ctx.table, tr.formula, tr.reads, sign, 1.0 if whole else 1e-9):
+        if dim == "angle" and not whole:
+            return _angle_above_zero(ctx, item, q)
+        ctx.doubt(tr.reads, "%s would leave its working range (a length reaching zero or a count under 1)"
+                  % item.get("name", "a step"))
+        return plain
+    return q
+
+
+def _angle_above_zero(ctx, item, q):
+    """`q`, an angle the step needs above zero that reaches zero inside the size ranges (the default range of a small
+    angle starts at 0 degrees): the ranges of the sizes it reads are cut where it stays above ABOVE_ZERO, or its number
+    when no cut does that, with its sizes marked."""
+    found = kept_ranges.holding_ranges(ctx.table, [(q, 1)], ABOVE_ZERO)
+    why = "%s needs an angle above zero" % item.get("name", "a step")
+    if found is None:
+        ctx.doubt(q.reads, why)
+        return Quantity(q.n)
+    if found:
+        ctx.cut(found, why)
+    return q
 
 
 def num(ctx, item, path, literal, **kwargs):

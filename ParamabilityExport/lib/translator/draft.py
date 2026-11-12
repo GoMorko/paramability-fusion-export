@@ -6,7 +6,7 @@ reads it from the part: with every face on one side of the plane, a draft that r
 takes material off there. The part's volume must change, and a draft with faces on both sides of its plane, two
 different angles, or an angle at the recipe's cap is left out with the reason.
 
-The angle follows its sizes, and the size ranges are cut where it would reach the recipe's cap; a draft with two angles
+The angle follows its sizes, and the size ranges are cut where it would reach zero or the recipe's cap; a draft with two angles
 follows them only when both come from the same formula. The faces are picked by points on them, like the open faces of a shell, and the plane
 follows sizes like a mirror plane.
 """
