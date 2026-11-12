@@ -263,21 +263,26 @@ class MirrorTest(unittest.TestCase):
             data = capture["items"][3]["data"]
             data["positions"] = [[1, 0, 10]]
             data["side_cylinders"][0]["origin"] = [1, 0, 10]
-        self.assertIsNotNone(left_out(edited("mirror_body_tip_hole", across)))
+        self.assertEqual(steps_of(edited("mirror_body_tip_hole", across).recipe, "mirror")[0]["of"], ["body_4"])
 
-    def test_body_mirror_refusals(self):
+    def test_a_body_its_steps_cannot_mirror_one_by_one_is_gathered_into_one_tool_and_mirrored(self):
         no_box = edited("mirror_body", lambda c: pattern_data(c).pop("target_box_before"))
         cases = [
             ("straddles the plane", translate_fixture("mirror_body_straddling")),
             ("a cut reaches across", translate_fixture("mirror_body_cut_across")),
             ("part not measured", no_box),
             ("round before it", translate_fixture("mirror_body_after_round")),
-            ("not joined", edited("mirror_body", lambda c: pattern_data(c).update(combine=False))),
         ]
         for label, result in cases:
             with self.subTest(label):
-                self.assertIsNotNone(left_out(result))
-                self.assertEqual(left_out(result)["type"], "MirrorFeature")
+                gathered = result.recipe["features"][0]
+                self.assertEqual((gathered["kind"], gathered["combine"]), ("toolBody", "new"))
+                self.assertEqual(steps_of(result.recipe, "mirror")[0]["of"], [gathered["id"]])
+                assert_schema_ok(self, result.recipe)
+
+    def test_a_mirrored_body_not_joined_to_the_part_is_left_out(self):
+        result = edited("mirror_body", lambda c: pattern_data(c).update(combine=False))
+        self.assertEqual(left_out(result)["type"], "MirrorFeature")
 
     def test_other_refusals(self):
         no_plane = edited("mirror_features", lambda c: pattern_data(c).update(plane=None))

@@ -1,16 +1,20 @@
 """Mirrors (MirrorFeature) of features and of the whole body.
 
 A mirror plane that sits on a face or edge of the part moves when a size moves it (`follow.place_plane`), and the
-copies move twice as far. A mirror of the whole body is only written when it equals the body joined with its image
-(`repeat_mirror_reach.py`).
+copies move twice as far. A mirror of the whole body repeats every earlier step when that equals the body joined with
+its image (`repeat_mirror_reach.py`). Otherwise (a round, chamfer, shell or Move among the steps, a step left out, a
+cut across the plane, a body on both sides) everything written so far is gathered into one tool step and the mirror
+repeats that, which is the body joined with its image by definition.
 """
-from . import follow, notes as wording, vec
+from . import follow, tool_walk, vec
 from .follow import Motion
 from .repeat_build import build, round_vec
 from .repeat_mirror_reach import body_mirror_problem, keep_one_side, side_of_plane
 from .repeat_sources import MAX_REFERENCES, split_sources
 from .result import Refusal
 from .step_kinds import SOLID, recipe_kind
+from .step_walk import nesting
+from .tool_placer import wrap_body
 from .values import Quantity
 
 
@@ -41,6 +45,18 @@ def _mirror_motion(plane, shift, name):
                               for i, c in enumerate(plane["normal"])], by=name)
 
 
+def _step_by_step(ctx, item, data, plane, written):
+    """The ids of the steps to mirror one by one, or None when the mirror of every step would not equal the body
+    joined with its image."""
+    if ctx.gaps or any(recipe_kind(step["kind"]).repeat != SOLID for step in ctx.steps):
+        return None
+    if body_mirror_problem(data, plane, ctx.steps) or len(ctx.steps) > MAX_REFERENCES:
+        return None
+    keep_one_side(ctx, item, written, ctx.steps, side_of_plane(data["target_box_before"], plane["origin"],
+                                                                 plane["normal"]))
+    return [step["id"] for step in ctx.steps]
+
+
 def mirror(item, ctx, sources=None):
     """`sources` is `(solid step ids, finish steps)` when the caller wrote what the mirror repeats."""
     data = item.get("data") or {}
@@ -55,20 +71,16 @@ def mirror(item, ctx, sources=None):
     elif entity == "bodies":
         if not data.get("combine"):
             return Refusal("A mirrored body is only copied when it is joined to the part.")
-        if ctx.gaps:
-            # The mirror repeats the written steps one by one and checks them against the plane, so it cannot
-            # hold a step left out of the copy.
-            return Refusal(wording.repeats_gap_reason([gap.name for gap in ctx.gaps]), [gap.id for gap in ctx.gaps])
-        if any(recipe_kind(step["kind"]).repeat != SOLID for step in ctx.steps):
-            return Refusal("A mirror of the whole body after a round, chamfer, shell or Move is not copied yet.")
-        problem = body_mirror_problem(data, plane, ctx.steps)
-        if problem:
-            return Refusal(problem)
-        keep_one_side(ctx, item, written, ctx.steps, side_of_plane(data["target_box_before"], plane["origin"],
-                                                                     plane["normal"]))
-        solids, finishes = [step["id"] for step in ctx.steps], []
-        if len(solids) > MAX_REFERENCES:
-            return Refusal("This mirror repeats more than %d steps." % MAX_REFERENCES)
+        solids, finishes = _step_by_step(ctx, item, data, plane, written), []
+        if solids is None:
+            if ctx.depth + 1 + nesting(ctx.steps) > tool_walk.MAX_DEPTH:
+                return Refusal("The body %s is built from tools nested too deep to mirror." % tool_walk.name_of(ctx.target))
+            wrapped = "%sbody_%s" % (ctx.id_prefix, item["index"])
+            out = build(ctx, item, [wrapped], [], [({"kind": "mirror", "plane": written},
+                                                    [_mirror_motion(plane, moved, item.get("name", ""))])], "mirror")
+            if not isinstance(out, Refusal):
+                out.wraps_body = wrap_body(wrapped, ctx.target.get("name"))
+            return out
     elif entity == "features":
         sources = split_sources(data, ctx, "mirror")
         if isinstance(sources, Refusal):

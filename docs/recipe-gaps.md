@@ -134,8 +134,8 @@ A face given only by a point on it (an extrude that starts from or reaches to a 
 a face used as an outline are not such picks: the copy writes them as measured numbers or as shifts that follow sizes,
 and marks the sizes it cannot follow, so they do not make a step a gap.
 
-A mirror of bodies after a gap is left out, since it repeats the steps written so far and checks them against the
-plane.
+A mirror of the whole body after a gap gathers every step written so far, the gap's place among them, into one tool
+step and mirrors that (`repeat_mirror.py`), so the gap stays one missing step inside the tool.
 
 ## Sizes
 

@@ -164,12 +164,14 @@ class PicksTest(unittest.TestCase):
         self.assertEqual(gap_names(result), ["Hole1", "RectangularPattern1"])
         self.assertEqual(result.gaps[1]["dependsOn"], ["gap_5"])
 
-    def test_a_mirror_of_the_whole_body_after_a_gap_is_left_out(self):
+    def test_a_mirror_of_the_whole_body_after_a_gap_mirrors_the_gathered_body_with_the_gap_inside(self):
         capture = load_capture("mirror_body")
         capture["items"][3]["type"] = "CoilFeature"
         result = translate(capture)
-        self.assertEqual(gap_names(result), ["Extrude2", "Mirror1"])
-        self.assertEqual(steps_of(result.recipe, "mirror"), [])
+        gathered = result.recipe["features"][0]
+        self.assertEqual(gap_names(result), ["Extrude2"])
+        self.assertEqual(result.gaps[0]["list"], gathered["id"])
+        self.assertEqual(steps_of(result.recipe, "mirror")[0]["of"], [gathered["id"]])
 
     def test_the_pick_records_of_an_item_are_the_edges_and_faces_it_picks_by_measured_points(self):
         item = {"data": {

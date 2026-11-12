@@ -875,6 +875,10 @@ there a plane without them (an older capture) marks the sizes that may move it.
 `target_box_before`: the target body's box with the marker before the item, or null when it does not exist yet (as
 for extrudes).
 
+A mirror of the whole body joined to it (`combine` true) repeats every earlier step when the body lies on one side of
+the plane and no cut reaches across it; otherwise (a round, chamfer, shell or Move among the steps, a gap, no
+`target_box_before`) the translator gathers the steps into one `toolBody` and mirrors that (`repeat_mirror.py`).
+
 `plane` from a `ConstructionPlane` (`geometry`, a `Plane`: `origin`, `normal`) or a planar `BRepFace`
 (`geometry`). A construction plane adds `token`.
 

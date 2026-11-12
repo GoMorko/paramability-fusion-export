@@ -216,14 +216,15 @@ class RefusedPatternTest(unittest.TestCase):
         capture["items"][-1]["data"].update(tools=[{"token": "t3", "name": "Body3"}], volume_before=None, volume_after=None)
         self.assertEqual(left_out(translate(capture))["name"], "Combine1")
 
-    def test_a_mirror_of_the_whole_body_after_a_cutting_tool_refuses(self):
+    def test_a_mirror_of_the_whole_body_after_a_cutting_tool_mirrors_the_gathered_body(self):
         capture = load_capture("combine_tool_chamfer")
         capture["items"].append({
             "index": 6, "name": "Mirror1", "type": "MirrorFeature", "suppressed": False, "health": "ok", "message": "",
             "in_target_component": True, "bodies_after": [{"token": "t1", "name": "Body1"}], "data": {
                 "entity_type": "bodies", "combine": True, "sources": [], "plane": {"point": [40, 0, 0], "normal": [1, 0, 0], "origin": True},
                 "target_box_before": capture["target"]["box"]}})
-        self.assertEqual(left_out(translate(capture))["name"], "Mirror1")
+        result = translate(capture)
+        self.assertEqual(steps_of(result.recipe, "mirror")[0]["of"], [result.recipe["features"][0]["id"]])
 
     def test_more_copies_than_the_recipe_holds_refuse(self):
         capture = load_capture(ROW)

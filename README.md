@@ -181,7 +181,7 @@ A step that picks edges or faces of a left out step is left out too, since in th
 round on the edges of a coil, for example). The add-in asks Fusion which step made the faces each later round,
 chamfer or shell picks, and leaves out only the ones that pick faces of a missing step. When Fusion does not
 answer, every later step that picks edges or faces is left out. A pattern or mirror of a left out step is left out
-too, and so is a Combine whose tool body cannot be copied (the Combine is one missing step; the rest of the part is
+too (a mirror of the whole body mirrors the part with the step missing instead), and so is a Combine whose tool body cannot be copied (the Combine is one missing step; the rest of the part is
 copied). The result window lists every step left out with its reason. In `report.json` each of them has the verdict
 `leftOut`.
 
