@@ -128,6 +128,24 @@ class SplitStopTest(unittest.TestCase):
         self.assertIn("was not read", stopped(translate(capture))["reason"])
 
 
+class SplitToolTest(unittest.TestCase):
+    def test_a_combine_tool_that_a_split_made_is_built_from_the_body_it_came_from(self):
+        capture = load_capture("combine_cut")
+        combine = capture["items"][4]
+        cylinder, top = {"token": "t2", "name": "Body2"}, {"token": "t5", "name": "Body5"}
+        split = split_item(4, {"kind": "plane", "plane": {"point": [0, 0, 5], "normal": [0, 0, 1]}},
+                           [piece(cylinder, box((15, 5, -2), (25, 15, 5)), 549.8),
+                            piece(top, box((15, 5, 5), (25, 15, 12)), 549.8)],
+                           bodies=[piece(cylinder, box((15, 5, -2), (25, 15, 12)), 1099.6)])
+        combine = dict(combine, index=5, data=dict(combine["data"], tools=[top]))
+        capture["items"][4:] = [split, combine]
+        result = translate(capture)
+        self.assertEqual(result.gaps, [])
+        tool = steps_of(result.recipe, "toolBody")[0]
+        self.assertEqual([step["kind"] for step in tool["features"]], ["extrude", "toolBody"])
+        self.assertEqual(tool["features"][1]["features"][0]["sketch"]["on"]["normal"], [0.0, 0.0, -1.0])
+
+
 class SplitByBodyTest(unittest.TestCase):
     def capture(self, kept_inside):
         """The plate split by the cylinder of combine_cut: the piece inside the cylinder and the plate around it."""

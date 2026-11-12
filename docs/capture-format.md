@@ -925,8 +925,8 @@ the plane and no cut reaches across it; otherwise (a round, chamfer, shell or Mo
   `BRepBody.pointContainment` of a point 0.01 mm inside the piece under one of its first 16 faces; null when no face
   tells.
 
-The translator follows a body that a split made back to the body it was split from (`lib/translator/lineage.py`): a
-piece belongs to the only split body, or to the one whose box holds its box. A split of the body it builds becomes the
+The translator follows a body that a split made back to the body it was split from (`lib/translator/lineage.py`),
+for the exported body and for a Combine tool body of its own component (`tool_walk.lineage_chain`): a piece belongs to the only split body, or to the one whose box holds its box. A split of the body it builds becomes the
 removal of the other side (`lib/translator/split.py`): a cut by a large box beyond the plane, or a cut or intersect with
 the tool body. The box reaches four half diagonals of the body plus 100 mm past it, times the largest ratio of a free
 size's range end to its value (up to 25; a size past that is marked), so a part the sizes grow is still cut. It stops the copy unless the capture shows the piece is the whole of its side (one side of the plane, or

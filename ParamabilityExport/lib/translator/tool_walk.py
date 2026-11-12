@@ -7,7 +7,7 @@ until the Combine decides how to write them.
 Steps written one by one onto the part are a different matter: they meet the part, not the tool. `on_part` works such
 steps out again against the part as it stood at each step.
 """
-from . import step_kinds, tool_items, walk
+from . import lineage, step_kinds, tool_items, walk
 from .capture import outside_component, renamed_target, same_body
 from .combine_volume import intersect_model, same_volume
 from .result import Refusal, StepResult, TranslateResult
@@ -89,6 +89,24 @@ def chain_of(ctx, body, before):
     return found if owner else [item for item in found if not outside_component(item)]
 
 
+def lineage_chain(ctx, body, before):
+    """`(links, chain)` for a tool body that a split made: the splits it comes through (`lineage.of`) and the items
+    that built it, those of the bodies it was split from up to each split included. Without such a split, no links
+    and `chain_of`."""
+    links = [] if tool_items.is_foreign_tool(body) else lineage.of({"target": body, "items": [
+        item for item in ctx.timeline if item.get("index", 0) < before]})
+    found, start = {}, -1
+    for at, parent in links:
+        for item in chain_of(ctx, parent, at + 1):
+            if item["index"] > start:
+                found[item["index"]] = item
+        start = at
+    for item in chain_of(ctx, body, before):
+        if item["index"] >= start:
+            found[item["index"]] = item
+    return links, [found[i] for i in sorted(found)]
+
+
 def _keeps(item, body):
     """The item only holds `body` as a tool it keeps, so it does not change it."""
     data = item.get("data") or {}
@@ -154,7 +172,8 @@ def build(ctx, body, before, depth, place=0):
     if unseen is not None:
         return cannot_copy(body, *unseen)
     exported = _exported(ctx, body)
-    chain = [_seen_from_tool(item, body, exported) for item in chain_of(ctx, body, before)]
+    links, made = lineage_chain(ctx, body, before)
+    chain = [_seen_from_tool(item, lineage.at(links, body, item["index"])[0], exported) for item in made]
     if not chain:
         return Refusal("The tool body %s is built in a way that cannot be copied." % name_of(body))
     for item in chain:
@@ -162,6 +181,7 @@ def build(ctx, body, before, depth, place=0):
             return Refusal("The tool body %s cannot be copied: %s could not be read: %s"
                            % (name_of(body), item.get("name"), item["helper_unread"]))
     child = ctx.child(body, "%st%s_%s_" % (ctx.id_prefix, before, place), chain, depth)
+    child.lineage = links
     walked = TranslateResult()
     if not walk.walk_items(child, walked):
         if walked.over_gap_cap:
