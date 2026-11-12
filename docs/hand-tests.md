@@ -814,7 +814,9 @@ the sizes on the form and compare the part with Fusion at the same values.
       change both and the join stays on the top face with its outline. Repeat with an emboss whose outline runs over
       a hole of its face (E8): the `within` outline follows the sizes. Then make the face take another outline at a
       large width (a hole that appears there): the width's range stops before it, "the face ... starts on makes a
-      different outline". Check in Fusion that the marker is back where it was after the export, and note the export
+      different outline". Then let an earlier two sided extrude reach past its start at a low size value, so the face
+      faces the other way there: that size's range stops before the value with the same reason, and it is not marked
+      "turns the plane". Check in Fusion that the marker is back where it was after the export, and note the export
       time (each read moves the marker before the step and back).
 
 ## 10. Emboss

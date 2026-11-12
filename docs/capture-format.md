@@ -1963,8 +1963,9 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
   profile (`<item>/face/...`) and tries every size an item reads before the step (`plane_sizes.plane_driven`). A
   different outline that one size makes on its own is a range limit, like a sketch's, named "the face <step> starts
   on". A face read on its own plane but facing the other way counts as another outline, not as a turned plane: the
-  body behind it lies on its other side (an earlier extrude reached past its start), so the step goes the other way. A face whose first read does not match the capture is not read again; the motion file lists the measured ones
-  in `faces`.
+  body behind it lies on its other side (an earlier extrude reached past its start), so the step goes the other way.
+  A face whose first read does not match the capture is not read again; the motion file lists the measured ones in
+  `faces`.
 - Nothing raises. A part that cannot be read has no key, which the fit treats as unread.
 
 ## 6. Report and capture file

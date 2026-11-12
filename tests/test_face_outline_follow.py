@@ -92,11 +92,13 @@ class FollowedFaceTest(unittest.TestCase):
         self.assertEqual(result.loose, [])
 
 
-def face_read(height, holed=False):
+def face_read(height, holed=False, back=False):
     """The tray's top face as the reader gives it at `height`: its frame turned a quarter about the normal and set
-    apart, its edges from another corner and the other way round. `holed` adds a round hole."""
+    apart, its edges from another corner and the other way round. `holed` adds a round hole; `back` reads it facing
+    down, as when the body under it lies on its other side."""
     origin = (5, 5)
-    frame = {"origin": [origin[0], origin[1], height], "x": [0, 1, 0], "y": [-1, 0, 0], "z": [0, 0, 1]}
+    frame = {"origin": [origin[0], origin[1], height], "x": [0, 1, 0], "y": [1, 0, 0] if back else [-1, 0, 0],
+             "z": [0, 0, -1] if back else [0, 0, 1]}
     local = [[y - origin[1], origin[0] - x] for x, y in [(80, 0), (0, 0), (0, 60), (80, 60)]]
     loops = [{"outer": True, "curves": [{"kind": "line", "start": local[n], "end": local[(n + 1) % 4]}
                                         for n in range(4)]}]
@@ -105,12 +107,13 @@ def face_read(height, holed=False):
     return {"frame": frame, "loops": loops}
 
 
-def tray_read(values, holed_above=None):
+def tray_read(values, holed_above=None, back_above=None):
     h, cube = values.get(H, 1.5), values.get(CUBE, 20.0)
     top = h * cube + 2
     holed = holed_above is not None and h > holed_above
+    back = back_above is not None and h > back_above
     return {"sketches": {}, "points": {}, "lines": {}, "params": {}, "box": {"min": [0, 0, 0], "max": [80, 60, top]},
-            "faces": {"2/face": face_read(top, holed=holed)}}
+            "faces": {"2/face": face_read(top, holed=holed, back=back)}}
 
 
 class ProbeTest(unittest.TestCase):
@@ -146,6 +149,17 @@ class ProbeTest(unittest.TestCase):
         table = table_of(capture, [H, CUBE])
         tries = [{}, {H: 1.125}, {H: 1.875}, {H: 2.5}, {CUBE: 15.0}, {CUBE: 25.0}]
         states = [{"values": v, "built": True, "read": tray_read(v, holed_above=2.0), "e0": not v} for v in tries]
+        motion = build.build(capture, table, states, after=tray_read({}))
+        result = translate(capture, size_table=table, motion=motion)
+        self.assertEqual(loose_names(result), [])
+        cut = next(c for c in result.cuts if c["name"] == H)
+        self.assertEqual(cut["max"], 1.875)
+
+    def test_a_face_that_faces_the_other_way_at_one_value_cuts_the_range_there(self):
+        capture = tray_face()
+        table = table_of(capture, [H, CUBE])
+        tries = [{}, {H: 1.125}, {H: 1.875}, {H: 2.5}, {CUBE: 15.0}, {CUBE: 25.0}, {H: 2.5, CUBE: 25.0}]
+        states = [{"values": v, "built": True, "read": tray_read(v, back_above=2.0), "e0": not v} for v in tries]
         motion = build.build(capture, table, states, after=tray_read({}))
         result = translate(capture, size_table=table, motion=motion)
         self.assertEqual(loose_names(result), [])

@@ -41,6 +41,12 @@ def _turned(z, ref):
     return math.sqrt(_dot(cross, cross)) > TURN_TOLERANCE or _dot(z, ref) < 0
 
 
+def _faces_back(z, ref):
+    """True when the unit normal `z` is `ref` reversed: the plane stays, but the face looks the other way."""
+    cross = [z[1] * ref[2] - z[2] * ref[1], z[2] * ref[0] - z[0] * ref[2], z[0] * ref[1] - z[1] * ref[0]]
+    return math.sqrt(_dot(cross, cross)) <= TURN_TOLERANCE and _dot(z, ref) < 0
+
+
 def _to_ref(world_vector, ref):
     return [_dot(world_vector, ref["x"]), _dot(world_vector, ref["y"])]
 
@@ -312,6 +318,10 @@ def _state_face_values(target, read):
     if not isinstance(record, dict) or not isinstance(record.get("frame"), dict) or not record.get("loops"):
         return None, UNREAD
     ref, frame = target["profile"]["frame"], record["frame"]
+    if _faces_back(frame["z"], ref["z"]):
+        # The body behind the face lies on its other side (an earlier extrude reached past its start): the step
+        # that starts on the face goes the other way, another shape, which limits the range like another outline.
+        return None, SHAPE
     if _turned(frame["z"], ref["z"]):
         return None, TURNS
     arranged = _arrange({"loops": _by_kind(record["loops"])}, {"loops": _by_kind(target["profile"]["loops"])}, frame,
