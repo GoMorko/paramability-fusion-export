@@ -7,16 +7,12 @@ until the Combine decides how to write them.
 Steps written one by one onto the part are a different matter: they meet the part, not the tool. `on_part` works such
 steps out again against the part as it stood at each step.
 """
-from . import lineage, step_kinds, tool_items, walk
+from . import body_states, lineage, step_kinds, tool_items, walk
 from .capture import outside_component, renamed_target, same_body
-from .combine_volume import intersect_model, same_volume
 from .result import Refusal, StepResult, TranslateResult
 from .words import type_words
 
 MAX_DEPTH = 3
-# What the reader measured on the tool itself, under the names the handlers read for their target.
-_BODY_STATE_FIELDS = (("box_before", "target_box_before"), ("volume_before", "volume_before"),
-                      ("volume_after", "volume_after"))
 
 
 class ToolBuild:
@@ -146,22 +142,6 @@ def _exported(ctx, body):
     return ctx.is_target(body)
 
 
-def _seen_from_tool(item, body, exported):
-    """The item as a walk of `body` reads it: in the body's component, with what was measured on the body itself. What
-    the capture says about the exported body does not apply to a tool: without measures of the tool the fields are
-    null, so handlers refuse or skip their checks. `exported` is True when `body` is the exported body."""
-    data = item.get("data")
-    state = (item.get("body_states") or {}).get(body.get("token"))
-    state = state if isinstance(state, dict) else {}
-    if isinstance(data, dict) and not exported:
-        data = dict(data, **{field: state.get(key) for key, field in _BODY_STATE_FIELDS})
-        if "intersect_volumes" in data:
-            data["intersect_model"] = intersect_model(data["intersect_volumes"], data["volume_after"])
-    before, after = state.get("volume_before"), state.get("volume_after")
-    unchanged = before is not None and after is not None and same_volume(before, after)
-    return dict(item, data=data, in_target_component=True, target_changed=False if unchanged else None)
-
-
 def build(ctx, body, before, depth, place=0):
     """Walk the tool `body` up to timeline index `before`: a `ToolBuild`, or a Refusal that names the step that stops
     it. `depth` is the tool's nesting level, 1 for a tool of the exported body. `place` is its place among the tools
@@ -173,7 +153,7 @@ def build(ctx, body, before, depth, place=0):
         return cannot_copy(body, *unseen)
     exported = _exported(ctx, body)
     links, made = lineage_chain(ctx, body, before)
-    chain = [_seen_from_tool(item, lineage.at(links, body, item["index"])[0], exported) for item in made]
+    chain = [body_states.seen_on(item, lineage.at(links, body, item["index"])[0], exported) for item in made]
     if not chain:
         return Refusal("The tool body %s is built in a way that cannot be copied." % name_of(body))
     for item in chain:

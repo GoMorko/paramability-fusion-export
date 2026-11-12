@@ -155,7 +155,9 @@ ITEM:
   below for the steps of a Combine's tool bodies from other components; the other items keep `"data": {}` with their
   `bodies_after`, health and message.
 - `helper_of`, `helper_unread`, `body_states`: only on items that made a body a Combine of the target takes as a tool,
-  or a body such a tool is copied from (see CombineFeature in section 5). `helper_of` (items of another component):
+  or a body such a tool is copied from (see CombineFeature in section 5). `body_states` is also on the steps that built
+  a body the target was split from, up to that split (SplitBodyFeature in section 5): the translator reads those
+  steps with these measures, as steps of the target, so a draft or a Split Face before the split is checked. `helper_of` (items of another component):
   the body's token; the item's `data` was read in a second pass in that component's frame. `body_states` (any such
   item, in the target's component or another): per body token the state of that body around the item,
   `{ "box_before": BOX, "volume_before": 8000.0, "volume_after": 7000.0 }` (mm3). `box_before` and `volume_before` are

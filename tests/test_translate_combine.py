@@ -6,7 +6,7 @@ from tests.translator_helpers import left_out
 from tests.translator_helpers import assert_schema_ok, edited, load_capture, steps_of, translate_fixture, verdict_of
 
 from lib.params import size_table
-from lib.translator import translate, tool_walk
+from lib.translator import body_states, translate, tool_walk
 from lib.translator.context import Context
 from lib.translator.finish import fillet
 from lib.translator.result import Refusal
@@ -176,7 +176,7 @@ class ToolWalkTest(unittest.TestCase):
 
     def test_the_exported_body_keeps_the_measures_of_its_own_steps(self):
         item = {"data": {"volume_after": 7.0}}
-        self.assertEqual(tool_walk._seen_from_tool(item, {"token": "t1"}, True)["data"]["volume_after"], 7.0)
+        self.assertEqual(body_states.seen_on(item, {"token": "t1"}, True)["data"]["volume_after"], 7.0)
 
     def test_a_handler_reads_what_was_measured_on_the_tool(self):
         box = {"min": [0, 0, 0], "max": [1, 1, 1]}

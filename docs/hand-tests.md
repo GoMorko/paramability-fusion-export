@@ -14,7 +14,8 @@ except U1, L1 to L15, F1 and F2, which are described here.
       name. Expect: the steps before the split are copied, the split is a tool step (`toolBody`, combine `cut`) with
       one extrude of a large square on the plane, facing away from the piece, and in Paramability the copy matches
       the STEP. The capture item has `data.tool` with `kind: "plane"`, `data.bodies` with one body and `data.pieces`
-      with both pieces, their boxes and volumes adding up to the body's. Repeat with a split by a construction plane
+      with both pieces, their boxes and volumes adding up to the body's; the steps before the split have
+      `body_states` for the body they build. Repeat with a split by a construction plane
       offset from a face by a user parameter: changing the parameter in Paramability moves the cut. A fillet after the
       split on the other half as well (the fillet lists both bodies) stops the copy at the split and names the fillet.
 - [ ] SB2, Split Body by another body. Split a plate with a cylinder body (kept), remove the piece inside the

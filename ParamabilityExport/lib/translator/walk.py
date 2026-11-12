@@ -8,7 +8,7 @@ still reads right, is left out as a gap (gaps.py). A gap is a step type with no 
 that reaches into another component, and a step that picks faces a gap made. What a left out item would have recorded
 (doubts, notes) is dropped with it. Anything that leaves the body unknown still stops the copy.
 """
-from . import borrowed, gap_picks, gaps, notes as wording, ref_motion, split_rules, step_kinds
+from . import body_states, borrowed, gap_picks, gaps, notes as wording, ref_motion, split_rules, step_kinds
 from .capture import outside_component, renamed_target, same_body
 from .result import Refusal, StepResult, make_verdict
 from .sizes import construction_fixes
@@ -142,6 +142,17 @@ def _gap_ids(ctx, item):
     return [gap.id for gap in gap_picks.picked_gaps(ctx, item)[0]]
 
 
+def _seen_before_split(item, ctx):
+    """Before the split that made the body this walk builds, an item of the body it was split from is read with what
+    the reader measured on that body (`body_states`), like a step of the target."""
+    if not ctx.lineage or split_rules.is_split(item) or outside_component(item):
+        return item
+    held = ctx.lineage_at(item.get("index", 0))[0]
+    if same_body(held, ctx.target) or not body_states.measured(item, held):
+        return item
+    return body_states.seen_on(item, held)
+
+
 def walk_items(ctx, result):
     """Walk the items of `ctx.capture`: True when every item was dealt with, False when one stops the copy (then
     `result.refusal` says why). Verdicts and notes go to `result`, steps and doubts to `ctx`."""
@@ -168,6 +179,7 @@ def walk_items(ctx, result):
     made_in_component = False
     for item in ctx.capture["items"]:
         ctx.enter(item)
+        item = ctx.current = _seen_before_split(item, ctx)
         reason = _skip_reason(item)
         if reason is not None:
             result.items.append(make_verdict(item, "skipped", note=reason))

@@ -93,6 +93,20 @@ class SplitByPlaneTest(unittest.TestCase):
         normals = [t["features"][0]["sketch"]["on"]["normal"] for t in steps_of(result.recipe, "toolBody")]
         self.assertEqual(normals, [[-1.0, 0.0, 0.0], [0.0, -1.0, 0.0]])
 
+    def test_steps_before_the_split_read_the_measures_of_the_body_they_build(self):
+        capture = plate_split(OTHER)
+        wall = {"token": "f1", "point": [0, 10, 5], "box": {"min": [0, 0, 0], "max": [0, 20, 10]}}
+        draft = {"index": 2, "name": "Draft1", "type": "DraftFeature", "suppressed": False, "health": "ok",
+                 "message": "", "in_target_component": True, "bodies_after": [PLATE], "target_changed": None,
+                 "body_states": {"t1": {"box_before": WHOLE, "volume_before": 8000.0, "volume_after": 7950.0}},
+                 "data": {"faces": [wall], "plane": {"point": [0, 0, 0], "normal": [0, 0, 1]}, "two_angles": False,
+                          "angle_deg": 3.0, "volume_before": None, "volume_after": None}}
+        capture["items"][2:2] = [draft]
+        capture["items"][3]["index"] = 3
+        result = translate(capture)
+        self.assertEqual(result.gaps, [])
+        self.assertEqual(len(steps_of(result.recipe, "draft")), 1)
+
     def test_the_steps_of_the_body_it_came_from_are_in_the_export_scope_up_to_the_split(self):
         later = {"index": 3, "name": "Extrude9", "type": "ExtrudeFeature", "suppressed": False, "health": "ok",
                  "message": "", "in_target_component": True, "bodies_after": [PLATE], "data": {"operation": "join"}}

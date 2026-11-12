@@ -60,5 +60,21 @@ class SplitReaderTest(unittest.TestCase):
         self.assertEqual(read(curved, [body()])["tool"], {"kind": "surface", "type": "Cylinder"})
 
 
+class LineageStatesTest(unittest.TestCase):
+    def test_the_body_a_split_made_the_target_from_is_measured_on_the_steps_before_the_split(self):
+        plate = body("b1", "Body1", hi=(40, 20, 10), volume=8.0)
+        right = body("b2", "Body2", lo=(10, 0, 0), hi=(40, 20, 10), volume=6.0)
+        plane = Obj("fusion::ConstructionPlane", entityToken="cp1",
+                    geometry=Obj("core::Plane", origin=P(10, 0, 0), normal=vector(1, 0, 0)))
+        made = entry(feature("CoilFeature", "Coil1", bodies=[plate]))
+        split = entry(feature("SplitBodyFeature", "Split1", bodies=[plate, right], splittingTool=plane,
+                              splitBodies=Coll([plate]), isSplittingToolExtended=True))
+        design = FakeDesign([made, split], right, appears_at=2)
+        design.findEntityByToken = lambda token: {"b1": [plate], "b2": [right]}.get(token, [])
+        items = read_capture(design, right, fusion="", name="", up_axis="z")["items"]
+        self.assertEqual(items[0]["body_states"]["b1"]["volume_after"], 8000.0)
+        self.assertIn("b1", items[1]["body_states"])
+
+
 if __name__ == "__main__":
     unittest.main()

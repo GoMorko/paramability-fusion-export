@@ -9,12 +9,15 @@ read with the same feature readers, in the tool component's own frame: a `ReadCo
 component's sketches, planes and faces are not foreign. A body of another component gets `place`
 (`placement.tool_place`), read with the marker just before the item that holds it.
 
+The same pass measures the bodies the exported body was split from (`translator/lineage.py`) on the steps that built
+them up to each split, so the translator reads those steps with measures as it reads steps of the target.
+
 Reading comes in rounds: each round reads what the plan names, and the steps it reads name the next bodies. At most
 `tool_items.MAX_ITEMS` steps are read. Nothing here raises: a body that cannot be found gets `place.error`, an item that
 cannot be read keeps `read_error`, and items past a limit keep `helper_unread` with the reason. The caller restores the
 timeline marker.
 """
-from ..translator import tool_items
+from ..translator import lineage, tool_items
 from . import read_geometry as geo
 from .parameters import list_model_parameters
 from .placement import find_occurrence, tool_place
@@ -175,7 +178,22 @@ def read_helpers(design, ctx, timeline, items, readers, native_entity, component
             break
         run.read(jobs)
     _mark_limits(plan)
+    run.read(_lineage_jobs(run, items, ctx))
     return run.components
+
+
+def _lineage_jobs(run, items, ctx):
+    """The jobs that measure the bodies the exported body was split from (`translator/lineage.py`) on the items that
+    built them, up to each split: the translator reads those steps with these measures, like steps of the target."""
+    ordered = [items[i] for i in sorted(items)]
+    jobs, start = {}, -1
+    for at, parent in lineage.of({"target": ctx.target_ref, "items": ordered}):
+        token = parent.get("token")
+        for item in tool_items.chain(ordered, parent, at + 1, ctx.component_token or None):
+            if item["index"] > start and token and (item["index"], token) not in run.done:
+                jobs.setdefault(item["index"], (item, None, []))[2].append(token)
+        start = at
+    return jobs
 
 
 def _mark_limits(plan):
