@@ -227,6 +227,11 @@ def walk_items(ctx, result):
             continue
 
         if _new_bodies(item, ctx) and not copies_bodies(item):
+            if item.get("target_changed") is False:
+                # Another body made next to the part (a surface offset, for one): a later Combine that takes it
+                # walks it as a tool.
+                result.items.append(make_verdict(item, "skipped", note="Does not change the exported body."))
+                continue
             # Later steps may belong to the other body, so no single missing step can stand for this one.
             return refuse(item, "This step splits the part or makes another body, which is not copied yet.")
         if handler is None and _only_splits_faces(item, ctx):

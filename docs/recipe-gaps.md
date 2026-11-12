@@ -26,7 +26,8 @@ Everything that leaves the body unknown still stops the copy and the part is a f
 the assembly, a step of another component or an assembly item that changes the part, a body that cannot be followed,
 a step or its bodies that cannot be read (also a step type with no handler whose data could not be read), a step Fusion
 marks as an error, a step that splits the part or makes another body (whether or not it has a handler or reaches into
-another component), a gap before the copy has written its first step (a gap needs a body to add to), a gap inside a
+another component; one that the reader saw leave the exported body as it was, `target_changed` false, is passed by
+instead), a gap before the copy has written its first step (a gap needs a body to add to), a gap inside a
 walk of another component's body, more than 16 gaps in one part (the gaps inside the tool bodies count, and a tool
 that meets the cap stops the whole copy), and the size caps of the recipe.
 

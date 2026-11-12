@@ -9,7 +9,7 @@ from unittest import mock
 from tests import context  # noqa: F401
 from tests.schema_check import check_recipe
 from tests.test_translate_sized import H, run
-from tests.translator_helpers import load_capture, steps_of, stopped
+from tests.translator_helpers import load_capture, steps_of, stopped, verdict_of
 
 from lib.translator import CaptureError, Refusal, gaps as gaps_module, translate
 from lib.translator.translate import _gap_sizes
@@ -101,6 +101,14 @@ class StopTest(unittest.TestCase):
                 result = translate(tray(edit))
                 self.assertIsNotNone(stopped(result))
                 self.assertEqual((stopped(result)["index"], result.gaps), (index, []))
+
+    def test_a_step_that_makes_another_body_and_leaves_the_part_as_it_was_is_passed_by(self):
+        def edit(capture):
+            _shell_with_new_body("OffsetFeature")(capture)
+            capture["items"][SHELL]["target_changed"] = False
+        result = translate(tray(edit))
+        self.assertIsNone(stopped(result))
+        self.assertEqual(verdict_of(result, SHELL)["verdict"], "skipped")
 
     def test_a_tool_body_that_passes_the_gap_cap_stops_the_whole_copy(self):
         # Two left out steps after the tool's first one: the second meets the cap inside the tool walk.
