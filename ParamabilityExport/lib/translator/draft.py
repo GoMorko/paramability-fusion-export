@@ -6,10 +6,12 @@ reads it from the part: with every face on one side of the plane, a draft that r
 takes material off there. The part's volume must change, and a draft with faces on both sides of its plane, two
 different angles, or an angle at the recipe's cap is left out with the reason.
 
-The angle follows its sizes; the faces are picked by points on them, like the open faces of a shell, and the plane
+The angle follows its sizes, and the size ranges are cut where it would reach the recipe's cap; a draft with two angles
+follows them only when both come from the same formula. The faces are picked by points on them, like the open faces of a shell, and the plane
 follows sizes like a mirror plane.
 """
 from . import follow, picks, values, vec
+from .extrude import keep_angle_within
 from .repeat_build import round_vec
 from .result import Refusal, StepResult
 from .split import SIDE_TOL_MM
@@ -38,6 +40,24 @@ def _faces_side(faces, point, normal):
         return 0
     sides = {_side(face["box"], point, normal) for face in faces}
     return sides.pop() if len(sides) == 1 else 0
+
+
+def _angle(ctx, item, data, angle):
+    """The angle's size as a Quantity of its magnitude. Two angles from different formulas stay a number, since the
+    copy leans every face by one of them, and the sizes behind both are marked."""
+    params = data.get("params") or {}
+    expressions = [(params.get(path) or {}).get("expression") for path in ("angle_deg", "angle_two_deg")]
+    if data.get("two_angles") and expressions[0] != expressions[1]:
+        why = "%s leans the two sides of its plane by two values, and the copy follows one angle" % (
+            item.get("name") or "A draft")
+        for path in ("angle_deg", "angle_two_deg"):
+            values.pin(ctx, item, path, why)
+        return values.Quantity(abs(angle))
+    size = values.quantity(ctx, item, "angle_deg", abs(angle), dim="angle", sign=1 if angle > 0 else -1,
+                           absolute=True)
+    if size.sized:
+        keep_angle_within(ctx, item, size, MAX_ANGLE_DEG, "lean its faces %g degrees or more" % MAX_ANGLE_DEG)
+    return size
 
 
 def handle(item, ctx):
@@ -69,8 +89,7 @@ def handle(item, ctx):
     if abs(after - before) <= VOLUME_TOL_MM3:
         return Refusal("This draft does not change the part's volume, so the way it leans cannot be checked.")
     lean = side if after < before else -side
-    size = values.quantity(ctx, item, "angle_deg", abs(angle), dim="angle", sign=1 if angle > 0 else -1,
-                           absolute=True)
+    size = _angle(ctx, item, data, angle)
     shift = follow.place_plane(ctx, item, plane, normal, "leans faces about")
     origin = round_vec(point)
     if shift is not None and shift.sized:

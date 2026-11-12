@@ -46,6 +46,21 @@ class DraftTest(unittest.TestCase):
         step = steps_of(translate(capture, size_table=table).recipe, "draft")[0]
         self.assertIn(table.size_name("turn_deg"), step["angleDeg"]["expr"])
 
+    def test_a_sized_angle_keeps_under_the_recipe_cap(self):
+        capture = drafted(angle_deg=22.5, params={"angle_deg": {"name": "d9", "expression": "turn_deg / 4",
+                                                                "value": 22.5}})
+        capture["parameters"] = load_capture(TRAY)["parameters"]
+        result = translate(capture, size_table=table_of(capture, ["turn_deg"]))
+        self.assertLess(result.recipe["sizes"]["turn_deg"]["max"], 120.0)
+
+    def test_two_angles_from_different_formulas_stay_a_number(self):
+        capture = drafted(two_angles=True, angle_two_deg=3.0, params={
+            "angle_deg": {"name": "d9", "expression": "turn_deg / 30", "value": 3.0},
+            "angle_two_deg": {"name": "d10", "expression": "3 deg", "value": 3.0}})
+        capture["parameters"] = load_capture(TRAY)["parameters"]
+        result = translate(capture, size_table=table_of(capture, ["turn_deg"]))
+        self.assertEqual(steps_of(result.recipe, "draft")[0]["angleDeg"], 3.0)
+
     def test_each_draft_the_copy_cannot_check_is_left_out(self):
         cases = {
             "faces on both sides": drafted(plane={"point": [0, 0, 5], "normal": [0, 0, 1]}),

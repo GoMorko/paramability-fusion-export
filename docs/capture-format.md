@@ -815,7 +815,8 @@ neither way, refuses an uneven chamfer.
 - `volume_before` and `volume_after`: the target's volume around the item.
 
 The translator (`lib/translator/draft.py`) writes the recipe's `draft` step with the faces as `near` points, the
-plane as `neutral` (its normal is the pull direction) and the angle as a size. Fusion's sign and flip are not
+plane as `neutral` (its normal is the pull direction) and the angle as a size; the size ranges are cut where the
+angle would reach 30 degrees, and two angles from different formulas stay a number with their sizes marked. Fusion's sign and flip are not
 documented, so the sign is read from the part: with every face on one side of the plane, a draft that removes
 material takes it off there (a positive recipe angle on the side the normal points to). A draft with faces on both
 sides of its plane, two different angles, an angle of 30 degrees or more, or no measured change of volume is left out.
