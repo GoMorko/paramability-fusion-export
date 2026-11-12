@@ -22,8 +22,8 @@ import math
 
 from ..package.numbers import round9
 
-from . import (face_outline, follow, kept_ranges, loops, notes, outlines, placement, reach_motion, sketch_motion,
-               thin_wall, values, vec)
+from . import (face_outline, follow, kept_ranges, loops, notes, outlines, placement, range_check, reach_motion,
+               sketch_motion, thin_wall, values, vec)
 from .footprint import Footprint, polyline
 from .placer_makers import SlabMaker, ThinWallMaker
 from .result import Refusal, StepResult
@@ -238,6 +238,20 @@ def _is_through(side):
     return side is not None and side.get("kind") in ("throughAll", "all")
 
 
+def _through_both(ctx, item, sides):
+    """The plan of a cut through all both ways, or a Refusal when a side is tapered or its taper cannot be read.
+    `sides` holds each side with the parameter path of its taper, which is pinned: a taper of zero cannot follow a
+    size. A side recorded without a taper (older exports) has none."""
+    for side, path in sides:
+        taper = side.get("taper_deg", 0.0)
+        if taper is None:
+            return Refusal(UNREADABLE)
+        if taper:
+            return Refusal("A tapered cut through all both ways is not copied yet.")
+        values.pin(ctx, item, path, "a taper of zero cannot follow it")
+    return [{"extent": "through", "sign": 1, "distance": None, "taper": 0.0}]
+
+
 def _plan(item, data, frame, shift_q, combine, ctx, plane_q):
     """The sides to extrude, as dicts {extent, sign, distance, taper}; or a Refusal.
 
@@ -307,7 +321,7 @@ def _plan(item, data, frame, shift_q, combine, ctx, plane_q):
     if extent_type == "symmetric":
         side = data.get("side_one")
         if _is_through(side):
-            return [{"extent": "through", "sign": 1, "distance": None, "taper": 0.0}]
+            return _through_both(ctx, item, [(side, "symmetric.taper_deg")])
         sym = data.get("symmetric")
         if not sym:
             return Refusal("This extrude has no readable length.")
@@ -331,7 +345,7 @@ def _plan(item, data, frame, shift_q, combine, ctx, plane_q):
         if one is None or two is None:
             return Refusal("This extrude has no readable length.")
         if _is_through(one) and _is_through(two):
-            return [{"extent": "through", "sign": 1, "distance": None, "taper": 0.0}]
+            return _through_both(ctx, item, [(one, "side_one.taper_deg"), (two, "side_two.taper_deg")])
         if combine == "intersect":
             return Refusal("Two sided intersect extrudes are not copied yet.")
         first = one_side(one, "side_one", other=_reach_of(two))
@@ -411,14 +425,13 @@ def _box_union(box, other):
             "max": [max(a, b) for a, b in zip(box["max"], other["max"])]}
 
 
-def _resolve_through(plan, data, origin, z, combine, box_max=None, profiles=()):
+def _resolve_through(ctx, plan, data, origin, z, combine, box_max=None, profiles=()):
     """Give a one sided through all its distance, or a Refusal. `box_max` holds the part at every size the probe
     tried, so the cut still clears it when sizes grow.
 
     A tapered side keeps the same outline at each height whatever its length, so any length past the part cuts what
-    Fusion's through all cuts. One whose walls lean in ends just past the part, and only while its outlines stay open
-    there: they shrink by the length times the tangent of the taper (of the largest taper the copy allows when the
-    taper follows sizes)."""
+    Fusion's through all cuts. One whose walls can lean in, at the taper or at any size its taper follows, ends just
+    past the part, and only while its outlines stay open there at the steepest such lean (`_lean_in`)."""
     for entry in plan:
         if entry["extent"] == "through" and combine not in ("cut", "intersect"):
             return Refusal("Extruding through all is only copied for cuts.")
@@ -430,9 +443,11 @@ def _resolve_through(plan, data, origin, z, combine, box_max=None, profiles=()):
                 return Refusal("The part this cuts through could not be measured.")
             entry["extent"] = "oneSide"
             direction = vec.scale(z, entry["sign"])
-            if (entry["taper"] or 0.0) > 0:
+            lean = _lean_in(ctx, entry)
+            if lean > 0:
                 entry["distance"] = _farthest(box, origin, direction) + THROUGH_TAPER_MARGIN_MM
-                if not _stays_open(entry, profiles):
+                shrink = entry["distance"] * math.tan(math.radians(lean))
+                if any(inner_reach(profile, 2.0 * shrink) < 2.0 * shrink for profile in profiles):
                     return Refusal("This tapered cut through all closes before it passes the part, which is not "
                                    "copied.")
             else:
@@ -440,18 +455,24 @@ def _resolve_through(plan, data, origin, z, combine, box_max=None, profiles=()):
     return None
 
 
-def _stays_open(entry, profiles):
-    """True when the side's length times the tangent of its taper is at most half the `inner_reach` of every outline,
-    so the outlines are still well open at the end."""
+def _lean_in(ctx, entry):
+    """The steepest recipe taper (degrees, walls leaning in) the side reaches: its own, or the largest its formula
+    gives over the size ranges, at most MAX_TAPER_DEG (also when that cannot be worked out)."""
+    lean = entry["taper"] or 0.0
     q = entry.get("taper_q")
-    angle = MAX_TAPER_DEG if q is not None and q.sized else entry["taper"]
-    shrink = entry["distance"] * math.tan(math.radians(angle))
-    return all(shrink <= inner_reach(profile) / 2.0 for profile in profiles)
+    if q is not None and q.sized:
+        span = range_check.sweep(ctx.table, q.text, q.reads)
+        lean = MAX_TAPER_DEG if span.failed or span.high is None else max(lean, span.high)
+    return min(lean, MAX_TAPER_DEG)
 
 
-def inner_reach(profile, steps=48):
+# Grid sizes `inner_reach` tries in turn, coarse first.
+_REACH_GRIDS = (8, 16, 32, 48)
+
+
+def inner_reach(profile, enough=math.inf):
     """About the radius of the largest circle inside a profile's region (a little less): the largest distance to its
-    outline over a grid of points inside it."""
+    outline over a grid of points inside it. Finer grids are tried only while the reach stays under `enough`."""
     footprint = Footprint(profile)
     flat = [p for curve in footprint.curves for p in polyline(curve)]
     if not flat:
@@ -459,11 +480,14 @@ def inner_reach(profile, steps=48):
     lo = [min(p[i] for p in flat) for i in (0, 1)]
     hi = [max(p[i] for p in flat) for i in (0, 1)]
     best = 0.0
-    for a in range(1, steps):
-        for b in range(1, steps):
-            p = [lo[0] + (hi[0] - lo[0]) * a / steps, lo[1] + (hi[1] - lo[1]) * b / steps]
-            if footprint.covers(p):
-                best = max(best, footprint.nearest_curve(p)[1])
+    for steps in _REACH_GRIDS:
+        for a in range(1, steps):
+            for b in range(1, steps):
+                p = [lo[0] + (hi[0] - lo[0]) * a / steps, lo[1] + (hi[1] - lo[1]) * b / steps]
+                if footprint.covers(p):
+                    best = max(best, footprint.nearest_curve(p)[1])
+                    if best >= enough:
+                        return best
     return best
 
 
@@ -856,6 +880,8 @@ def handle(item, ctx):
         return plan
     z0 = vec.unit(first_frame["z"])
     start = vec.add(first_frame["origin"], vec.scale(z0, shift))
+    # A cut through all may turn to the side its outlines meet the part on: the taper check reads that side's walls.
+    _cut_toward_material(ctx, plan, data, profiles, shift, combine)
     for check in (_check_measured_length(plan, data, shift, start, z0, combine),
                   _check_taper(plan, data, combine, picked),
                   _volume_refusal(data, plan, combine, sources, thin)):
@@ -865,8 +891,7 @@ def handle(item, ctx):
     if isinstance(thin_step, Refusal):
         return thin_step
     box_max = ctx.motion.box_max if sketch_motion.active(ctx) else None
-    _cut_toward_material(ctx, plan, data, profiles, shift, combine)
-    refusal = _resolve_through(plan, data, start, z0, combine, box_max, [profile for profile, _, _ in built])
+    refusal = _resolve_through(ctx, plan, data, start, z0, combine, box_max, profiles)
     if refusal:
         return refusal
     if combine == "intersect" and (len(plan) * len(built) > 1):

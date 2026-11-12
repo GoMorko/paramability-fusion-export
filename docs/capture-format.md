@@ -632,8 +632,9 @@ The translator fits the app's spline through points chosen from the samples (`li
   the body's component has `token` too, so the size probe can read it again at every try (older exports leave it out).
 - `symmetric`: `{ "distance": mm, "full_length": bool, "taper_deg": d }`
   (`SymmetricExtentDefinition.distance`, `isFullLength`, `taperAngle`). A symmetric extrude through all has no
-  distance: `symmetric` is null and `side_one` holds `extentOne` when that is a through all extent, so the translator
-  writes a cut through all both ways.
+  distance: `symmetric` is null and `side_one` holds `extentOne` when that is a through all extent, with the taper of
+  `taperAngle`, so the translator writes a cut through all both ways. A cut through all both ways with a taper, or with
+  a taper that cannot be read, is left out; an untapered one marks the sizes behind its taper.
 - `target_box_before`: the target body's box with the marker before the item, or null when it does not exist yet.
 - `end_offset`: signed distance along the first profile's sketch `z` from its sketch plane to
   `endFaces[0].pointOnFace`, or null. The measured check of the direction and, for one side, symmetric (half
@@ -1866,10 +1867,11 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
 - A through cut clears the part at the largest sizes tried (`box_max` of the motion file). A cut through all to one
   side without a measured end face cuts toward the side where its outline meets the part built so far (sampled on a
   grid over the outline); Fusion's stored direction is kept when both sides, or neither, hold material, and turned with
-  a note otherwise. A tapered side keeps its outline at each height whatever its length: one that widens gets the
-  same length as an untapered cut, one that narrows ends 1 mm past the part's box, and is left out when the length
-  times the tangent of its taper (of 45 degrees when the taper follows sizes) passes half the radius of the largest
-  circle inside an outline (sampled on a grid).
+  a note otherwise. A tapered side keeps its outline at each height whatever its length: one that only widens gets the
+  same length as an untapered cut, one whose walls lean in (at its taper, or at some size inside the ranges of a taper
+  that follows sizes) ends 1 mm past the part's box, and is left out when the length times the tangent of the steepest
+  such lean passes half the radius of the largest circle inside an outline (sampled on a grid, coarse first). The
+  measured wall leans are compared with the side the cut goes, after it is turned toward the material.
 - A construction plane or axis that a step uses itself (start from, reach to, turn about, mirror across, with `token`)
   marks the sizes of the model parameters it made (`created_by.token`); without a token, of every construction plane
   or axis. An offset plane that the step places, whose distance `sizes.offset_param` names, follows that distance

@@ -159,6 +159,20 @@ class ExtentTest(unittest.TestCase):
             side_leans=[lean] * 4))
         self.assertIn("closes before it passes the part", left_out(result)["reason"])
 
+    def test_a_tapered_cut_through_all_stored_toward_empty_space_checks_the_walls_of_the_side_it_cuts(self):
+        lean = -math.sin(math.radians(1.0))
+        result = variant("extrude_cut_through_one", lambda d: d.update(
+            side_one={"kind": "throughAll", "positive": False, "taper_deg": -1.0}, end_offset=None,
+            side_leans=[lean] * 4))
+        (step,) = under_test(result, 3)
+        self.assertEqual((step["sketch"]["on"]["normal"], step["taperDeg"]), ([1, 0, 0], 1))
+
+    def test_a_cut_through_all_both_ways_with_a_taper_is_left_out(self):
+        result = variant("extrude_cut_through_one", lambda d: d.update(
+            extent_type="symmetric", symmetric=None, end_offset=None,
+            side_one={"kind": "throughAll", "positive": True, "taper_deg": 2.0}))
+        self.assertIn("both ways", left_out(result)["reason"])
+
     def test_through_all_join_refuses(self):
         result = variant("extrude_cut_through_one", lambda d: d.update(operation="join"))
         self.assertIn("only copied for cuts", left_out(result)["reason"])

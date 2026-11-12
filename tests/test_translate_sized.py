@@ -1,9 +1,10 @@
 """Feature values that follow sizes (the size table passed to translate)."""
 import copy
+import math
 import unittest
 
 from tests import context  # noqa: F401
-from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
+from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of
 
 from lib.params import size_table
 from lib.params.expressions import evaluate
@@ -239,6 +240,23 @@ class ValueKindsTest(unittest.TestCase):
         edit(capture["items"][-1]["data"])
         result = self.check(capture, ticked)
         self.assertEqual(steps_of(result.recipe, "extrude")[0]["taperDeg"], {"expr": "-(turn_deg / 18)"})
+
+    def tapered_through(self, formula, fusion_deg):
+        """The one way cut through all of `extrude_cut_through_one` with a taper of `fusion_deg` that follows
+        `formula`, its measured walls leaning that way."""
+        def edit(data):
+            data.update(side_one={"kind": "throughAll", "positive": True, "taper_deg": fusion_deg}, end_offset=None,
+                        side_leans=[math.sin(math.radians(fusion_deg))] * 4,
+                        params={"side_one.taper_deg": param("d4", formula, fusion_deg)})
+        return run(*on_fixture("extrude_cut_through_one", edit, TICKED + ["turn_deg"]))[0]
+
+    def test_a_cut_through_all_that_widens_but_leans_in_at_other_sizes_is_left_out_when_it_would_close(self):
+        result = self.tapered_through("turn_deg - 89", 1.0)
+        self.assertIn("closes before it passes the part", left_out(result, 3)["reason"])
+
+    def test_a_cut_through_all_with_a_small_sized_taper_follows_it(self):
+        result = self.tapered_through("-(turn_deg / 180)", -0.5)
+        self.assertEqual(steps_of(result.recipe, "extrude")[-1]["taperDeg"], {"expr": "turn_deg / 180"})
 
     def test_the_angle_range_stops_where_the_taper_would_reach_45_degrees(self):
         def edit(data):
