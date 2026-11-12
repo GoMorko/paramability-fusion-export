@@ -15,7 +15,7 @@ from .result import TranslateResult
 from .step_walk import all_steps, nesting
 from .tool_walk import MAX_DEPTH as MAX_TOOL_DEPTH
 from ..params import geometry_links
-from ..params.expressions import MAX_FORMULA_LENGTH
+from ..params.expressions import MAX_FORMULA_LENGTH, collected_sum
 from .values import Sized, number
 from ..sketch_values import coverage, keys
 from ..sketch_values.motion import Motion, Stuck, Terms
@@ -478,10 +478,16 @@ def _walk(capture, table, size_table, motion=None, cache=None):
 
 
 def _fix_long_formulas(recipe, ctx):
-    """Formulas a step builds from several values can pass the app's length cap: their sizes become fixed numbers."""
+    """Formulas a step builds from several values can pass the app's length cap. Their equal terms are added up first
+    (a plane's move less the same move of another plane cancels); a formula still too long fixes its sizes."""
     def walk(node, label):
         if isinstance(node, Sized) and len(node["expr"]) > MAX_FORMULA_LENGTH:
-            ctx.doubt(node.reads, "a value in %s needs a formula too long to copy" % (label or "a step"), fixed=True)
+            shorter = collected_sum(node["expr"])
+            if len(shorter) <= MAX_FORMULA_LENGTH:
+                node["expr"] = shorter
+            else:
+                ctx.doubt(node.reads, "a value in %s needs a formula too long to copy" % (label or "a step"),
+                          fixed=True)
         if isinstance(node, dict):
             for value in node.values():
                 walk(value, label)

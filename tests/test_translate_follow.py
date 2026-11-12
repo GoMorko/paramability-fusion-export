@@ -1,5 +1,7 @@
 """Picks and reaches that follow sizes on the sized filter tray."""
+import importlib
 import unittest
+from types import SimpleNamespace
 from unittest import mock
 
 import copy
@@ -17,7 +19,7 @@ from lib.sketch_values.motion import Affine, Motion
 
 from lib.params.expressions import evaluate
 from lib.translator import translate
-from lib.translator.values import _env
+from lib.translator.values import Sized, _env
 
 HEIGHT = "FilterBox_height_mm"
 TOP = [40, 30, 32]
@@ -199,6 +201,20 @@ class CapsTest(unittest.TestCase):
         self.assertEqual(fixed_names(result), sorted([H, CUBE]))
         self.assertIn("too long", result.fixed[0]["reason"])
         self.assertEqual(steps_of(result.recipe, "round")[0]["edges"]["near"][0], [0, 0, 16])
+
+    def test_a_long_formula_whose_terms_cancel_is_written_shorter_and_keeps_its_sizes(self):
+        # A plane's move less the same move of another plane: the long part cancels out.
+        bend = "wall_mm * (cos(0.5 * angle_deg) / sin(0.5 * angle_deg))"
+        twice = bend + " + " + bend
+        long_sum = "height_mm + %s - 40 - (0.5 * height_mm + %s) + 9.5" % (twice, twice)
+        value = Sized(expr=long_sum)
+        value.n, value.reads = 12.0, ("height_mm", "wall_mm", "angle_deg")
+        doubts = []
+        ctx = SimpleNamespace(doubt=lambda names, why, fixed=False: doubts.append((names, fixed)))
+        with mock.patch("lib.translator.translate.MAX_FORMULA_LENGTH", len(long_sum) - 1):
+            importlib.import_module("lib.translator.translate")._fix_long_formulas(
+                {"features": [{"label": "Cap", "distance": value}]}, ctx)
+        self.assertEqual((value["expr"], doubts), ("0.5 * height_mm - 30.5", []))
 
     def test_an_extent_pattern_with_a_sized_count_never_divides_by_zero(self):
         def edit(capture):

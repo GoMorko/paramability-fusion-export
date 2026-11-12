@@ -2,7 +2,8 @@ import math
 import unittest
 
 from tests import context  # noqa: F401
-from lib.params.expressions import ExpressionError, Typed, evaluate, parse, referenced_names, render, translate_tree
+from lib.params.expressions import (
+    ExpressionError, Typed, collected_sum, evaluate, parse, referenced_names, render, translate_tree)
 from lib.params.expressions import ANGLE, LENGTH, SCALAR
 
 
@@ -158,6 +159,16 @@ class TranslateTest(unittest.TestCase):
         self.assertEqual(referenced_names("min(b, a) + b * 2 mm"), ["b", "a"])
         self.assertEqual(referenced_names("if(c > PI; a / mm; d) and e"), ["c", "a", "d", "e"])
         self.assertEqual(referenced_names("a +"), [])
+
+
+class CollectedSumTest(unittest.TestCase):
+    def test_equal_terms_of_a_sum_add_up_and_the_value_stays(self):
+        bend = "w * (cos(0.5 * a) / sin(0.5 * a))"
+        text = "0.5 * h - 6 + %s + (h - s + %s - 44.5 - (0.5 * h - 29 + %s) + 9.5)" % (bend, bend, bend)
+        env = {"h": 55.0, "s": 12.0, "w": 3.0, "a": 120.0}
+        found = collected_sum(text)
+        self.assertEqual(found, "h + %s - s - 12" % bend)
+        self.assertAlmostEqual(evaluate(found, env), evaluate(text, env), places=9)
 
 
 if __name__ == "__main__":

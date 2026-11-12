@@ -780,6 +780,49 @@ def parse_formula(formula):
     return node
 
 
+def _summands(node, factor, out):
+    """Adds `factor` times `node` to `out` (term text to coefficient, "" for the number), splitting sums, differences,
+    negations and multiples by a number; any other node is one term, keyed by its text."""
+    kind = node[0]
+    if kind == "num":
+        out[""] = out.get("", 0.0) + factor * node[1]
+    elif kind == "neg":
+        _summands(node[1], -factor, out)
+    elif kind == "bin" and node[1] in ("+", "-"):
+        _summands(node[2], factor, out)
+        _summands(node[3], factor if node[1] == "+" else -factor, out)
+    elif kind == "bin" and node[1] == "*" and node[2][0] == "num":
+        _summands(node[3], factor * node[2][1], out)
+    elif kind == "bin" and node[1] in ("*", "/") and node[3][0] == "num" and node[3][1] != 0:
+        _summands(node[2], factor * (node[3][1] if node[1] == "*" else 1.0 / node[3][1]), out)
+    else:
+        text = render(node)
+        out[text] = out.get(text, 0.0) + factor
+
+
+def collected_sum(formula):
+    """The formula with equal terms of its outer sum added up (`a + 2 * b - (b + 1) + 3` is `a + b + 2`), or the formula
+    itself when it does not read as a formula."""
+    try:
+        parts = {}
+        _summands(parse_formula(formula), 1.0, parts)
+    except ExpressionError:
+        return formula
+    const = parts.pop("", 0.0)
+    out = ""
+    for text, coef in parts.items():
+        if abs(coef) <= 1e-9:
+            continue
+        body = text if _prec(parse_formula(text)) > _PREC["+"] else "(" + text + ")"
+        if abs(abs(coef) - 1.0) > 1e-9:
+            body = "%s * %s" % (format_number(abs(coef)), body if _prec(parse_formula(text)) > _PREC["*"] else
+                                "(" + text + ")")
+        out += (" - " if coef < 0 else " + ") + body if out else ("-" if coef < 0 else "") + body
+    if abs(const) > 1e-9 or not out:
+        out += (" - " if const < 0 else " + ") + format_number(abs(const)) if out else format_number(const)
+    return out
+
+
 _PREC_COMPARE = ("<", "<=", ">", ">=", "==", "!=")
 _COMPARISONS = {
     "<": lambda a, b: a < b, "<=": lambda a, b: a <= b, ">": lambda a, b: a > b, ">=": lambda a, b: a >= b,
