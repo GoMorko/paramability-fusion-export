@@ -133,6 +133,32 @@ class ExtentTest(unittest.TestCase):
         self.assertEqual(step["sketch"]["on"]["normal"], [1, 0, 0])
         self.assertTrue(verdict_of(result, 3)["note"])
 
+    def test_a_cut_through_all_that_narrows_ends_just_past_the_part(self):
+        # Fusion's -1 degrees leans the walls in; the side walls of the cut show that lean.
+        lean = -math.sin(math.radians(1.0))
+        result = variant("extrude_cut_through_one", lambda d: d.update(
+            side_one={"kind": "throughAll", "positive": True, "taper_deg": -1.0}, end_offset=None,
+            side_leans=[lean] * 4))
+        (step,) = under_test(result, 3)
+        self.assertEqual((step["extent"], step["taperDeg"], step["distance"]), ("oneSide", 1, 41))
+        assert_schema_ok(self, result.recipe)
+
+    def test_a_cut_through_all_that_widens_reaches_well_past_the_part(self):
+        lean = math.sin(math.radians(1.0))
+        result = variant("extrude_cut_through_one", lambda d: d.update(
+            side_one={"kind": "throughAll", "positive": True, "taper_deg": 1.0}, end_offset=None,
+            side_leans=[lean] * 4))
+        (step,) = under_test(result, 3)
+        self.assertEqual(step["taperDeg"], -1)
+        self.assertGreater(step["distance"], 41)
+
+    def test_a_cut_through_all_whose_outline_closes_inside_the_part_is_left_out(self):
+        lean = -math.sin(math.radians(10.0))
+        result = variant("extrude_cut_through_one", lambda d: d.update(
+            side_one={"kind": "throughAll", "positive": True, "taper_deg": -10.0}, end_offset=None,
+            side_leans=[lean] * 4))
+        self.assertIn("closes before it passes the part", left_out(result)["reason"])
+
     def test_through_all_join_refuses(self):
         result = variant("extrude_cut_through_one", lambda d: d.update(operation="join"))
         self.assertIn("only copied for cuts", left_out(result)["reason"])

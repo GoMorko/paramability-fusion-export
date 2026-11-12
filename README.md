@@ -293,7 +293,9 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   angle size (or of half of it), alone or times a length, and products of two lengths, up to 3 such terms per value.
   Other curves (a square root, a power, an angle divided by a length) leave that size loose or not a size.
 - A cut through all to one side cuts on the side of its sketch where it meets the part. When Fusion's stored
-  direction points to a side without material there, the other side is used, with a note.
+  direction points to a side without material there, the other side is used, with a note. A tapered one is copied
+  as a tapered cut that ends past the part; one whose walls lean in ends just past it, and is left out when its
+  outline would come close to closing there.
 - A round or chamfer that picks an edge inside one flat side wall of an extrude (where a round meets the wall) follows
   that wall.
 - A revolve axis the copy cannot use (an edge that is not straight, a face that is not round, an axis that cannot be

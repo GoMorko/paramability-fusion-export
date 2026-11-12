@@ -1848,7 +1848,10 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
 - A through cut clears the part at the largest sizes tried (`box_max` of the motion file). A cut through all to one
   side without a measured end face cuts toward the side where its outline meets the part built so far (sampled on a
   grid over the outline); Fusion's stored direction is kept when both sides, or neither, hold material, and turned with
-  a note otherwise.
+  a note otherwise. A tapered side keeps its outline at each height whatever its length: one that widens gets the
+  same length as an untapered cut, one that narrows ends 1 mm past the part's box, and is left out when the length
+  times the tangent of its taper (of 45 degrees when the taper follows sizes) passes half the radius of the largest
+  circle inside an outline (sampled on a grid).
 - A construction plane or axis that a step uses itself (start from, reach to, turn about, mirror across, with `token`)
   marks the sizes of the model parameters it made (`created_by.token`); without a token, of every construction plane
   or axis. An offset plane an extrude starts from or reaches to, whose distance `sizes.offset_param` names, follows that
