@@ -226,11 +226,12 @@ def handle(item, ctx):
         return Refusal("This combine changes a body other than the exported one.")
     if not tools:
         return Refusal("This combine has no tool bodies.")
+    # Fusion may list one tool body twice; taking it once gives the same shape.
+    tools = list({tool_key(body): body for body in tools}.values())
+    data = dict(data, tools=tools)
     model = data.get("intersect_model")
     if combine == "intersect" and len(tools) > 1 and model not in ("every", "any"):
         return Refusal("This combine keeps a shared part that the copy could not work out.")
-    if len({tool_key(body) for body in tools}) != len(tools):
-        return Refusal("This combine lists the same tool body twice.")
     for body in tools:
         problem = _unusable(ctx, body)
         if problem is not None:

@@ -50,6 +50,13 @@ class CombineTest(unittest.TestCase):
         self.assertEqual(left_out(result)["name"], "Fillet1")
         self.assertEqual(result.gaps[0]["list"], steps_of(result.recipe, "toolBody")[0]["id"])
 
+    def test_a_tool_listed_twice_is_taken_once(self):
+        def twice(capture):
+            tools = capture["items"][-1]["data"]["tools"]
+            tools.append(dict(tools[0]))
+        once, doubled = translate_fixture("combine_cut"), edited("combine_cut", twice)
+        self.assertEqual(doubled.recipe, once.recipe)
+
     def test_other_refusals(self):
         def other_target(capture):
             capture["items"][-1]["data"]["target"] = {"token": "t2", "name": "Body2"}
