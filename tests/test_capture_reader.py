@@ -321,6 +321,14 @@ class UnreadableTest(unittest.TestCase):
                             symmetricExtent=Obj("fusion::SymmetricExtentDefinition"))
         self.assertIsNone(self.capture([sketch_entry(), symmetric], target)["items"][1]["data"]["symmetric"])
 
+    def test_a_symmetric_extrude_through_all_reads_its_extent_like_one_side(self):
+        target = body()
+        through = extrude(rect_profile(), target=target, extentType="SymmetricFeatureExtentType",
+                          symmetricExtent=Obj("fusion::SymmetricExtentDefinition"),
+                          extentOne=Obj("fusion::ThroughAllExtentDefinition", isPositiveDirection=True))
+        data = self.capture([sketch_entry(), through], target)["items"][1]["data"]
+        self.assertEqual((data["symmetric"], data["side_one"]["kind"]), (None, "throughAll"))
+
     def test_end_face_types_follow_the_end_points(self):
         target = body()
         hole = entry(feature("HoleFeature", "H", bodies=[target], holeType="SimpleHoleType",

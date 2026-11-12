@@ -29,6 +29,13 @@ except U1, L1 to L15, F1 and F2, which are described here.
       the same way as in Fusion (narrower at the top when the volume went down). Repeat with the direction flipped
       and with a negative angle: the copy still leans like Fusion. A draft with "Symmetric" whose faces cross the
       plane, or with two different angles, is left out with its reason.
+- [ ] SB3, a split part inside a component. Put the cup of SB1 in a component inside another component, join a
+      second body to it with a Combine before the splits (a sweep or an extrude with a draft), split it with the root's
+      YZ and XZ origin planes, and after the splits add a symmetric cut "through all" and a mirror of the body across
+      a root origin plane. Export the quarter. Expect: the split planes and the mirror plane have `assembly: true` and
+      a `ref` (not `foreign`), the symmetric cut has `symmetric` null and `side_one` with `kind: "throughAll"`, and
+      the steps that made the Combine's tool body have `body_states` for that body. Repeat with a cut "through all"
+      to one side with a taper of -5 degrees: it is copied as a tapered cut.
 - [ ] U1, faster tries (0.9.1, experimental). Use a design with a body in one component and two or more other
       components the body does not use (no joints), with a ticked size that moves a sketch. Suppress one step of an
       unused component by hand first. Export for Paramability twice, once with "Faster tries" off and once with it

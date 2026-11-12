@@ -630,7 +630,9 @@ The translator fits the app's spline through points chosen from the samples (`li
   component also has `origin`, or `made_by`, `definition` and `built_on` (`read_reference.describe_plane`). A face of
   the body's component has `token` too, so the size probe can read it again at every try (older exports leave it out).
 - `symmetric`: `{ "distance": mm, "full_length": bool, "taper_deg": d }`
-  (`SymmetricExtentDefinition.distance`, `isFullLength`, `taperAngle`).
+  (`SymmetricExtentDefinition.distance`, `isFullLength`, `taperAngle`). A symmetric extrude through all has no
+  distance: `symmetric` is null and `side_one` holds `extentOne` when that is a through all extent, so the translator
+  writes a cut through all both ways.
 - `target_box_before`: the target body's box with the marker before the item, or null when it does not exist yet.
 - `end_offset`: signed distance along the first profile's sketch `z` from its sketch plane to
   `endFaces[0].pointOnFace`, or null. The measured check of the direction and, for one side, symmetric (half

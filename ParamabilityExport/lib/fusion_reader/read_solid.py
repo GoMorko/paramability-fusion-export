@@ -194,6 +194,11 @@ def extrude_before(feature, ctx):
             "full_length": geo.safe(lambda: bool(sym.isFullLength), None),
             "taper_deg": geo.safe(lambda: geo.angle(sym.taperAngle), None),
         }
+        if distance is None:
+            # A symmetric extrude through all has no distance: its extent reads like one side's.
+            side = geo.safe(lambda: _extent(feature.extentOne, None, ctx, "side_one"), None)
+            if side and side.get("kind") in ("throughAll", "all"):
+                side_one = side
     else:
         side_one = _extent(feature.extentOne, _taper(feature, "taperAngleOne"), ctx, "side_one")
         if extent_type == "two":
