@@ -83,8 +83,10 @@ class SplitByPlaneTest(unittest.TestCase):
         normals = [t["features"][0]["sketch"]["on"]["normal"] for t in steps_of(result.recipe, "toolBody")]
         self.assertEqual(normals, [[-1.0, 0.0, 0.0], [0.0, -1.0, 0.0]])
 
-    def test_the_steps_of_the_body_it_came_from_are_in_the_export_scope(self):
-        self.assertEqual([item["index"] for item in body_items(plate_split(OTHER))], [1, 2])
+    def test_the_steps_of_the_body_it_came_from_are_in_the_export_scope_up_to_the_split(self):
+        later = {"index": 3, "name": "Extrude9", "type": "ExtrudeFeature", "suppressed": False, "health": "ok",
+                 "message": "", "in_target_component": True, "bodies_after": [PLATE], "data": {"operation": "join"}}
+        self.assertEqual([item["index"] for item in body_items(plate_split(OTHER, after=[later]))], [1, 2])
 
 
 class SplitStopTest(unittest.TestCase):

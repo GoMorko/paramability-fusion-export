@@ -39,14 +39,19 @@ def _touches(item, wanted):
 def body_items(capture):
     """The timeline items that build the picked body: those that touch it, a body it was split from, or a tool body
     combined into it."""
-    wanted = [capture["target"]] + lineage.bodies(capture)
+    wanted = [capture["target"]]
+    # A body the picked one was split from counts only up to that split: later steps on it build the other piece.
+    split_from = lineage.of(capture)
     used = {}
     changed = True
     while changed:
         changed = False
         for item in capture["items"]:
             index = item.get("index")
-            if index in used or item.get("suppressed") or not _touches(item, wanted):
+            if index in used or item.get("suppressed"):
+                continue
+            parents = [parent for at, parent in split_from if index is not None and index <= at]
+            if not _touches(item, wanted + parents):
                 continue
             used[index] = item
             changed = True
