@@ -20,7 +20,7 @@ from ..translator import step_kinds
 from . import helper_pass
 from . import read_geometry as geo
 from .parameters import list_model_parameters, list_user_parameters
-from .placement import occurrence_path, read_placement
+from .placement import occurrence_path, read_placement, target_move
 from .read_constraints import sketch_graphs
 from .read_links import sketch_inputs, sketch_links
 
@@ -320,6 +320,9 @@ def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_reade
     count = timeline.count
     end = count if marker is None else min(marker["position"], count)
     ctx = geo.ReadContext(design, body)
+    # The target's place is measured on the picked body, which a later step (a split, for one) may make: it is read
+    # here, before the marker moves back, and kept for the readers of the earlier steps.
+    target_move(ctx)
     readers = feature_readers()
     readers.update(extra_readers or {})
     items = {}

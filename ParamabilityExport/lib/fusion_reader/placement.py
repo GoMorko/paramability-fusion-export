@@ -245,7 +245,8 @@ _UNREAD = object()
 
 def target_move(ctx):
     """The move from the target's component coordinates to the root's (identity for a root body), or None when the
-    target's place cannot be read. Read once per capture."""
+    target's place cannot be read. Read once per capture, with the marker where the export starts: the place is
+    measured on the picked body, which does not exist before the step that makes it."""
     found = getattr(ctx, "_target_move", _UNREAD)
     if found is _UNREAD:
         record = geo.safe(lambda: read_placement(ctx.picked, ctx.root, ctx.component), {})
