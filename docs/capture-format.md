@@ -498,9 +498,10 @@ The area of the face (`BRepFace.area`, mm2) is the record's entry in `areas` and
 The translator (`lib/translator/face_outline.py`) copies an extrude or emboss of one such face. When the size probe
 read the face before its step at every try (`Motion.faces` names its `token` under `<item>/face`, "Probe states"), its
 loops and plane are written as formulas of the sizes from the keys `<item>/face/l<loop>/<field path>` and
-`<item>/face/plane`; a size whose move no formula fits (stuck, or along a curve) is marked by the value it moves, a size
-that may change the face but was not tried is marked with the reason below, and a size that does not move the face is
-not marked. Otherwise the rules below apply. Sketch outlines may
+`<item>/face/plane`; a size whose move no formula fits (stuck, or an edge along a curve) is marked by the value it
+moves, a size that may change the face but was not tried is marked with the reason below, and a size that does not
+move the face is not marked. The plane is one distance along the face normal, so a curved formula of it (a wall set
+back along a half angle) is written as fitted. Otherwise the rules below apply. Sketch outlines may
 come with it when they lie on the face plane; the face is then written as measured (with the probe's reads, only the
 sizes that moved the face or were not tried are marked). When `made_by` names the
 `start` or `end` face of an extrude step written earlier in the same walk, that step has no taper, `face_point` lies
@@ -936,7 +937,8 @@ removal of the other side (`lib/translator/split.py`): a cut by a large box beyo
 the tool body. The box reaches four half diagonals of the body plus 100 mm past it, times the largest ratio of a free
 size's range end to its value (up to 25; a size past that is marked), so a part the sizes grow is still cut. It stops the copy unless the capture shows the piece is the whole of its side (one side of the plane, or
 inside or outside the tool body, with every other piece of that body on the other side), the pieces add up to the
-body's volume, and no later step changes another piece together with the part (`lib/translator/split_rules.py`).
+body's volume (within a thousandth: Fusion measures each curved piece on its own, to a few parts in 100 000), and no
+later step changes another piece together with the part (`lib/translator/split_rules.py`).
 
 **CombineFeature** (`targetBody`, `toolBodies`, `operation`, `isKeepToolBodies`):
 
@@ -1708,7 +1710,8 @@ part: ... Tick them and export again to get them as sizes." For a parts file the
 each parameter names the parts it changed (read from each part's `probe.discovery`).
 The sketch curves of each profile have `<item>/p<profile>/c<loop>.<curve>/<field>` in the capture's loop and curve
 order: a line's `offset` (its distance from the sketch origin along the left normal of its captured direction) and
-`turn` (degrees it turned), an arc's `center.0`, `center.1` and `radius`; `curves` lists the profiles
+`turn` (degrees it turned; Fusion lists a profile curve with its ends either way round, so where the loop's joins
+tell, a read curve runs the way the captured one does along the loop), an arc's `center.0`, `center.1` and `radius`; `curves` lists the profiles
 (`<item>/p<profile>`) whose curves were measured. For a sketch the probe measured, a key that is not listed did not
 move. `spans` gives, per size the probe set to other values, the lowest and highest value of the states that built
 (the value now included) and `failed`, `[value, step]` for each value tried alone that did not build
@@ -1958,7 +1961,8 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
   pairs the edges with the captured ones by kind and place along each loop, writes the values under the keys of a
   profile (`<item>/face/...`) and tries every size an item reads before the step (`plane_sizes.plane_driven`). A
   different outline that one size makes on its own is a range limit, like a sketch's, named "the face <step> starts
-  on". A face whose first read does not match the capture is not read again; the motion file lists the measured ones
+  on". A face read on its own plane but facing the other way counts as another outline, not as a turned plane: the
+  body behind it lies on its other side (an earlier extrude reached past its start), so the step goes the other way. A face whose first read does not match the capture is not read again; the motion file lists the measured ones
   in `faces`.
 - Nothing raises. A part that cannot be read has no key, which the fit treats as unread.
 
