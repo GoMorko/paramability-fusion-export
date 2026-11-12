@@ -6,7 +6,8 @@ suits its kind, and a comment such as `Wall [1..6]` sets the range.
 import re
 
 from ..package.units import unit_kind
-from .expressions import internal_factor, referenced_names, unit_scale
+from .dependencies import Graph, names_in
+from .expressions import internal_factor, unit_scale
 
 LABEL_MAX = 120
 COUNT_CAP = 64
@@ -83,35 +84,16 @@ def size_range(p, kind, value):
     return default_range(kind, value)
 
 
-def reads_of(p):
-    """Names a parameter reads: the Fusion dependency list plus the names found in its expression."""
-    return list(dict.fromkeys(list(p.get("dependency_parameters", ())) + referenced_names(p.get("expression", ""))))
-
-
-def _closure(start, lookup):
-    """Names reached from the start parameters through formulas, transitively."""
-    seen = set()
-    stack = list(start)
-    while stack:
-        p = stack.pop()
-        for dep in reads_of(p):
-            if dep not in seen:
-                seen.add(dep)
-                if dep in lookup:
-                    stack.append(lookup[dep])
-    return seen
-
-
-def _lookup(params, model_params):
-    table = {m["name"]: m for m in model_params}
-    table.update({p["name"]: p for p in params})
-    return table
+def reads_of(p, known=None):
+    """Names a parameter reads: the Fusion dependency list plus the names found in its expression
+    (`dependencies.names_in`; `known` lets a formula the parser refuses still give the names it holds)."""
+    return list(dict.fromkeys(list(p.get("dependency_parameters", ())) + names_in(p.get("expression", ""), known)))
 
 
 def names_read_by(params, model_params):
     """Names of user parameters that any model parameter of the body reads, through formulas, transitively."""
-    user = {p["name"] for p in params}
-    return _closure(model_params, _lookup(params, model_params)) & user
+    graph = Graph(params, model_params)
+    return graph.closure([m["name"] for m in model_params]) & {p["name"] for p in params}
 
 
 def count_names(params, model_params, quantity_refs=()):
@@ -121,11 +103,11 @@ def count_names(params, model_params, quantity_refs=()):
     capture). A model parameter whose role text names a quantity counts as well; the role strings of Fusion are not
     all verified, so that match is on the word "quantity".
     """
-    user = {p["name"] for p in params}
-    lookup = _lookup(params, model_params)
-    quantities = [lookup.get(ref["name"], ref) for ref in quantity_refs]
-    quantities += [m for m in model_params if "quantity" in (m.get("role") or "").lower()]
-    return _closure(quantities, lookup) & user
+    refs = {ref["name"]: ref for ref in quantity_refs}
+    model = list(model_params) + [ref for name, ref in refs.items() if name not in {m["name"] for m in model_params}]
+    graph = Graph(params, model)
+    starts = list(refs) + [m["name"] for m in model_params if "quantity" in (m.get("role") or "").lower()]
+    return graph.closure(starts) & {p["name"] for p in params}
 
 
 def is_offered(p):
@@ -134,14 +116,27 @@ def is_offered(p):
             and dim_of_unit(p.get("unit")) is not None)
 
 
-def default_ticked(params, model_params=(), linked=()):
+def body_usage(params, model_params=(), linked=()):
+    """`dependencies.Usage` of a body: the user parameters its model parameters read at any depth, and `linked`, the
+    parameters that may reach one of its sketches through the geometry of another component
+    (`geometry_links.linked_names`), with the bases of a derived one among them."""
+    return Graph(params, model_params).usage([m["name"] for m in model_params], linked)
+
+
+def default_ticked(params, model_params=(), linked=(), usage=None):
     """Favourites the body uses. With no favourite among them, every plain parameter the body uses.
 
-    The body uses what its model parameters read, and `linked`: the parameters that may reach one of its sketches
-    through the geometry of another component (`geometry_links.linked_names`)."""
-    read = names_read_by(params, model_params) | set(linked)
-    offered = [p for p in params if is_offered(p) and p["name"] in read]
-    favourites = [p["name"] for p in offered if p.get("is_favorite")]
+    The body uses what its model parameters read and what `linked` names, at any depth (`body_usage`, or `usage`
+    when given). A plain parameter that only a favourite formula reads counts as a favourite: the formula cannot
+    change without it."""
+    usage = usage or body_usage(params, model_params, linked)
+    graph = Graph(params)
+    offered = [p for p in params if is_offered(p) and p["name"] in usage.used]
+    chosen = {p["name"] for p in params if p.get("is_favorite") and p["name"] in usage.used}
+    for p in params:
+        if p["name"] in chosen and graph.is_derived(p["name"]):
+            chosen.update(graph.user_reads(p["name"]))
+    favourites = [p["name"] for p in offered if p["name"] in chosen]
     if favourites:
         return favourites
     return [p["name"] for p in offered]

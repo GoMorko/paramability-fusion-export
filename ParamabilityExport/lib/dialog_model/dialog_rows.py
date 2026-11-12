@@ -178,8 +178,9 @@ def name_cell(name):
 
 
 def name_tooltip(offer):
-    """The tooltip of a name cell: the full name, and why it is offered when another component links it."""
-    return offer["param"] + ("\n" + offer["link"] if offer.get("link") else "")
+    """The tooltip of a name cell: the full name, the formulas the part reads it through, and why it is offered when
+    another component links it."""
+    return "\n".join([offer["param"]] + [offer[key] for key in ("through", "link") if offer.get(key)])
 
 
 def _detail_parts(offer, ticked, lo_text, hi_text):
@@ -188,7 +189,8 @@ def _detail_parts(offer, ticked, lo_text, hi_text):
     if offer["state"] == LOCKED:
         return name, ", " + now, [offer["reason"]]
     if offer["state"] == FORMULA:
-        return name, " = " + offer["formula"], ["Now %s. It follows the parameters it reads." % now]
+        lines = ["Now %s. It follows the parameters it reads." % now]
+        return name, " = " + offer["formula"], lines + ([offer["through"]] if offer.get("through") else [])
     lines = []
     if offer["comment"]:
         lines.append("Comment: %s" % offer["comment"])
@@ -200,6 +202,8 @@ def _detail_parts(offer, ticked, lo_text, hi_text):
         lines.append("Size in Paramability from %s to %s%s." % (lo, hi, unit))
     else:
         lines.append("Stays a fixed number. Tick it to make it a size.")
+    if offer.get("through"):
+        lines.append(offer["through"])
     if offer.get("link"):
         lines.append(offer["link"])
     if offer.get("doubt"):

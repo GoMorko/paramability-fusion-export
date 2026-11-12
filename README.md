@@ -32,7 +32,8 @@ Nothing is typed in Fusion.
    row has a Min and a Max: they start from the comment rule below, and you can type your own numbers (in the length
    unit of your design, in degrees, or whole numbers for a count; a typed unit such as `2 in` is read too). The
    current value must sit between them. An unticked row says "stays 3 mm". A parameter worked out by a formula says
-   "formula" and follows the parameters it reads. A parameter that changes another component that the body is drawn
+   "formula" and follows the parameters it reads. A plain parameter the body reads only through formulas is ticked
+   too, and its row names the formula. A parameter that changes another component that the body is drawn
    around (for example the diameter of a pipe whose outline a hole in the body follows) is ticked too, and its row
    says so. A parameter that drives a joint is not ticked to start with: the part does not follow it in the assembly.
    You can still tick it; its row then says "size, may be unexpected". Click a row to read its comment, its formula

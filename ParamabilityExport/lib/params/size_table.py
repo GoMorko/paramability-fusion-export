@@ -34,9 +34,10 @@ from itertools import product
 
 from ..package.manifest import MAX_FIXED_REASON
 from . import defaults, names
+from .dependencies import Graph, names_in
 from .expressions import (
     ANGLE, LENGTH, LENGTH_MM, MAX_FORMULA_LENGTH, SCALAR, ExpressionError, Typed, evaluate, scale_node,
-    internal_factor, parse, parse_formula, referenced_names, render, translate_tree, unit_scale)
+    internal_factor, parse, parse_formula, render, translate_tree, unit_scale)
 
 # Named sizes in one recipe, derived ones included (the app's recipe cap).
 MAX_SIZES = 64
@@ -121,7 +122,7 @@ def _round(x):
 
 class SizeTable:
     def __init__(self, params, ticked, model_params=(), design_unit="mm", fixed=None, quantity_params=(),
-                 ranges=None, max_sizes=MAX_SIZES, links=(), narrowed=None):
+                 ranges=None, max_sizes=MAX_SIZES, links=(), narrowed=None, graph=None):
         self._params = [p for p in params]
         self._narrowed = dict(narrowed or {})
         self.links = tuple(dict(link) for link in links)
@@ -134,6 +135,8 @@ class SizeTable:
         self._quantity_params = list(quantity_params)
         self._design_mm = LENGTH_MM.get((design_unit or "mm").lower(), 1.0)
         self.model_params = {m["name"]: m for m in self._model}
+        # What each parameter reads (`dependencies.Graph`); the `with_` copies share it, their parameters are the same.
+        self.graph = graph or Graph(self._params, self._model)
         self.entries = []
         self.sizes = {}
         self.renames = {}
@@ -371,7 +374,7 @@ class SizeTable:
     def _merge_reads(self, reads, expression):
         """Free sizes read: those met while translating, plus everything the names in the text depend on."""
         found = list(reads)
-        for name in referenced_names(expression):
+        for name in names_in(expression, self.graph.names):
             found.extend(self.depends(name))
         return tuple(dict.fromkeys(found))
 
@@ -391,28 +394,14 @@ class SizeTable:
         return p.get("unit") or ""
 
     def depends(self, name):
-        """Fusion names of the free sizes that a parameter (user or model) depends on, transitively.
-
-        A free size depends on itself. An unknown name or a plain constant gives an empty set.
+        """Fusion names of the free sizes that a parameter (user or model) depends on, at any depth
+        (`dependencies.Graph`). A free size depends on itself; the walk stops there. An unknown name or a plain
+        constant gives an empty set.
         """
-        out = set()
-        seen = set()
-        stack = [name]
-        while stack:
-            current = stack.pop()
-            if current in seen:
-                continue
-            seen.add(current)
+        def free(current):
             e = self._entries.get(current)
-            if e is not None and e.state == FREE:
-                out.add(current)
-                continue
-            p = self._cand.get(current) or self.model_params.get(current)
-            if p is None:
-                continue
-            stack.extend(p.get("dependency_parameters", ()))
-            stack.extend(referenced_names(p.get("expression", "")))
-        return frozenset(out)
+            return e is not None and e.state == FREE
+        return frozenset(n for n in self.graph.walk([name], free) if free(n))
 
     # ---- queries ---------------------------------------------------------------------------------------------
 
@@ -459,7 +448,7 @@ class SizeTable:
         merged.update(reasons)
         return SizeTable(self._params, [n for n in self._ticked_in if n not in merged], self._model,
                          self._design_unit, merged, self._quantity_params, self._ranges, self._max_sizes, self.links,
-                         self._narrowed)
+                         self._narrowed, self.graph)
 
     def typed_ends(self, name):
         """(min typed, max typed) of a free size: the person set that end to another number than the default range
@@ -487,12 +476,12 @@ class SizeTable:
     def with_ticked(self, names):
         """A new table where these Fusion names are the ticked ones (the size cap still applies)."""
         return SizeTable(self._params, list(names), self._model, self._design_unit, self._fixed_in,
-                         self._quantity_params, self._ranges, self._max_sizes, self.links, self._narrowed)
+                         self._quantity_params, self._ranges, self._max_sizes, self.links, self._narrowed, self.graph)
 
     def with_links(self, links):
         """A new table with these geometry links (`params.geometry_links`) instead of its own."""
         return SizeTable(self._params, self._ticked_in, self._model, self._design_unit, self._fixed_in,
-                         self._quantity_params, self._ranges, self._max_sizes, links, self._narrowed)
+                         self._quantity_params, self._ranges, self._max_sizes, links, self._narrowed, self.graph)
 
     def with_narrowed(self, ranges):
         """A new table where the ranges of these Fusion names (a `Cut` or (min, max) each) are cut to those values,
@@ -504,7 +493,7 @@ class SizeTable:
             found = found if isinstance(found, Cut) else Cut(*found)
             merged[name] = merged[name].meet(found) if name in merged else found
         return SizeTable(self._params, self._ticked_in, self._model, self._design_unit, self._fixed_in,
-                         self._quantity_params, self._ranges, self._max_sizes, self.links, merged)
+                         self._quantity_params, self._ranges, self._max_sizes, self.links, merged, self.graph)
 
     def cut_of(self, name):
         """The `Cut` of a Fusion name (`with_narrowed`), or None."""

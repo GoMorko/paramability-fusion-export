@@ -60,6 +60,31 @@ its number is written into each formula that reads it. Unticked and a formula, i
 follows a ticked size, else its number. Past 64 named sizes, a derived formula is written in full where it is read.
 A formula that cannot be translated and follows no size is read as its number, so it breaks nothing.
 
+### Which parameters a body reads
+
+`lib/params/dependencies.py` builds one graph of what each parameter reads, user and model parameters alike:
+
+- the names in its expression, read with the parser above. When the parser refuses the text (a unit it cannot
+  read, a chained comparison), the words of the text that name a known parameter stand in, so the chain is not cut;
+- Fusion's own list (`dependency_parameters`), which Fusion fills through every formula on the way;
+- the reverse of a user parameter's `dependent_parameters` and `dependents`. A model parameter of the body that reads
+  a model parameter of another component (one the capture does not hold) still reaches the user parameters behind
+  it this way.
+
+A walk over the graph keeps a set of the names it has seen, so a cycle ends. The size table walks it to find the
+free sizes behind a value (`depends`); the dialog walks it from the body's model parameters and from the parameters
+that reach the body through another component (`Graph.usage`):
+
+- every plain user parameter the body reads, at any depth, is ticked to start with (with favourites, the favourites
+  it reads, plus the plain parameters behind a favourite formula);
+- a parameter the body reads only through formulas of other user parameters says so in its row: "This part uses it
+  through the formula `FilterBox_width_mm`." The formula named is the outermost one, the one the body reads itself;
+- a formula stays a derived size over the base sizes (`expr`), and the size probe tries only the base sizes.
+
+A formula that cannot be translated still passes on what it reads: its base sizes are ticked, and a value that reads
+the formula cannot follow them, so the driver fixes them with the reason. In the manifest `parameters` list such a
+formula keeps Fusion's text next to its number.
+
 ## Functions
 
 Function names are matched without case.

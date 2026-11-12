@@ -292,6 +292,33 @@ def referenced_names(text):
     return out
 
 
+def scanned_names(text):
+    """The words of an expression that may name a parameter, in order of first use, also when the parser refuses the
+    text: identifiers that do not start with a digit and are not followed by `(` (a function). Unit words and
+    constants are kept, so callers compare the result with the names they know."""
+    out = []
+    i, n = 0, len(text or "")
+    while i < n:
+        c = text[i]
+        if c.isdigit() or c == ".":
+            m = _NUMBER.match(text, i)
+            i = m.end() if m else i + 1
+            while i < n and _ident_char(text[i]):
+                i += 1  # a unit written against its number: `2mm`
+        elif _ident_char(c):
+            k = i
+            while k < n and _ident_char(text[k]):
+                k += 1
+            word, i = text[i:k], k
+            while k < n and text[k].isspace():
+                k += 1
+            if (k >= n or text[k] != "(") and word not in out:
+                out.append(word)
+        else:
+            i += 1
+    return out
+
+
 # Output nodes: ("num", v), ("name", s), ("neg", a), ("not", a), ("bin", op, a, b) for + - * /,
 # ("cmp", op, a, b), ("logic", op, a, b), ("cond", test, a, b), ("call", f, args)
 

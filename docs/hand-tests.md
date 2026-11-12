@@ -115,6 +115,7 @@ except U1, L1 to L15, F1 and F2, which are described here.
       "Show in timeline", the result window) and the export pipeline entry under "Fusion calls to watch".
 - [ ] SW1 to SW20 and LF1 to LF6, sweeps and lofts (0.9.2; SW15 to SW20 and LF6 0.10.0): section 13 (the calls are under "Capture reader calls to watch
       (sweep and loft)").
+- [ ] V1, a body that reads a parameter only through formulas: section 7.2.
 - [ ] E1 to E7, Emboss on a flat face: section 10.
 - [ ] T1 to T5, thin walled extrudes of one closed outline (T5 is `%` with a negative left side): section "Thin
       extrudes".
@@ -393,6 +394,15 @@ Use the filter box design (names such as `FilterBox_$_depth__contains_CeramicMed
       updates late, note when.
 - [ ] "Tick what the body uses" returns the ticks to what the body reads; "Untick all" clears them. Both keep typed
       ranges. A greyed row is never ticked by either.
+- [ ] **V1 Used only through a formula.** A design with plain user parameters `cells` (a count), `pitch` (6 mm) and
+      `wall` (1.5 mm), a formula `inner = cells * pitch` and a formula `outer = inner + 2 * wall`. Draw a body whose
+      sketch and extrude read only `outer` (for example a square of side `outer` extruded `outer / 2`), with no
+      favourites. Open the export dialog on it. Expect: `cells`, `pitch` and `wall` are ticked; `inner` and `outer` say
+      "formula". Click `cells`: the box under the table says "This part uses it through the formula outer." and so does
+      the tooltip of its name. Export: the progress window tries only `cells`, `pitch` and `wall`, never `inner` or
+      `outer`; in Paramability `outer` is a formula over the three sizes and the body follows a change of each. Then
+      mark `outer` as a favourite and a plain parameter the body does not read as another favourite, and open the
+      dialog again: `cells`, `pitch` and `wall` are still ticked. Note any base parameter left unticked.
 - [ ] Pick another body: ticks, greyed rows and texts follow; typed ranges go back to the defaults.
 - [ ] The Design up direction menu is under the box with the count.
 - [ ] **The export window has no empty gaps.** Open the dialog on the filter box design, then look at:

@@ -117,7 +117,7 @@ def scoped_model_params(capture):
     lookup = {p["name"]: p for p in model}
     pending = list(kept.values())
     while pending:
-        for dep in reads_of(pending.pop()):
+        for dep in reads_of(pending.pop(), lookup):
             if dep in lookup and dep not in kept:
                 kept[dep] = lookup[dep]
                 pending.append(lookup[dep])
