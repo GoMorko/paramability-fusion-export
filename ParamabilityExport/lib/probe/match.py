@@ -108,10 +108,34 @@ def _shift(pairs):
     return tuple(sum(m[i] for m in moves) / len(moves) for i in range(2))
 
 
+def _joined_end(curves, at):
+    """"start" or "end": the end of the line or arc `curves[at]` that touches the curve before it in the loop, or None
+    when neither or both do (a loop of fewer than three curves, a curve that is not a line or arc, a gap)."""
+    curve, before = curves[at], curves[at - 1]
+    if len(curves) < 3 or curve["kind"] not in ("line", "arc") or before["kind"] not in ("line", "arc"):
+        return None
+    touches = [min(_dist(curve[k], before[e]) for e in ("start", "end")) <= POINT_TOLERANCE for k in ("start", "end")]
+    if touches[0] == touches[1]:
+        return None
+    return "start" if touches[0] else "end"
+
+
+def _chained(aligned, curves):
+    """The state curves run the way the capture's run along the loop: a curve that starts where the curve before it
+    ends in the capture does so in the state too. Fusion lists a profile curve with its ends either way round, and a
+    curve that turned far can look nearer swapped, so where the loop's joins tell, they decide."""
+    out = list(aligned)
+    for at, curve in enumerate(aligned):
+        want, got = _joined_end(curves, at), _joined_end(aligned, at)
+        if want and got and want != got:
+            out[at] = dict(curve, start=curve["end"], end=curve["start"])
+    return out
+
+
 def _lined_up(order, curves):
     """(state curves turned like the capture's, their gap, the gap left once the loop's slide is taken out)."""
     shift = _shift(list(zip(order, curves)))
-    aligned = [_aligned(o, c, shift) for o, c in zip(order, curves)]
+    aligned = _chained([_aligned(o, c, shift) for o, c in zip(order, curves)], curves)
     return (aligned, sum(_gap(a, c) for a, c in zip(aligned, curves)),
             sum(_gap(a, c, shift) for a, c in zip(aligned, curves)))
 

@@ -1711,7 +1711,8 @@ each parameter names the parts it changed (read from each part's `probe.discover
 The sketch curves of each profile have `<item>/p<profile>/c<loop>.<curve>/<field>` in the capture's loop and curve
 order: a line's `offset` (its distance from the sketch origin along the left normal of its captured direction) and
 `turn` (degrees it turned; Fusion lists a profile curve with its ends either way round, so where the loop's joins
-tell, a read curve runs the way the captured one does along the loop), an arc's `center.0`, `center.1` and `radius`; `curves` lists the profiles
+tell, a read curve runs the way the captured one does along the loop), an arc's `center.0`, `center.1` and
+`radius`; `curves` lists the profiles
 (`<item>/p<profile>`) whose curves were measured. For a sketch the probe measured, a key that is not listed did not
 move. `spans` gives, per size the probe set to other values, the lowest and highest value of the states that built
 (the value now included) and `failed`, `[value, step]` for each value tried alone that did not build

@@ -1,4 +1,5 @@
 """Matching a sketch state read in Fusion to the captured profile, curve by curve."""
+import math
 import unittest
 
 from tests.probe_helpers import capture, extrude, line, loop, profile, read, sketch_state
@@ -72,6 +73,22 @@ class CurveMadeAgainTest(unittest.TestCase):
                                    line((0, 3), (0, 0), "x4")])]}]
         _, cause = match.state_values(self.target, read(sketch_state("sk", others)), self.e0)
         self.assertEqual(cause, "shape")
+
+
+def leg(turn):
+    """A triangle whose first side, a 10 mm leg from the origin, is turned `turn` degrees about the origin; the other
+    two sides close it through (0, 3)."""
+    tip = (round(10 * math.cos(math.radians(turn)), 6), round(10 * math.sin(math.radians(turn)), 6))
+    return [line((0, 0), tip, "a"), line(tip, (0, 3), "b"), line((0, 3), (0, 0), "c")]
+
+
+class TurnedLegTest(unittest.TestCase):
+    def test_a_side_that_turned_far_keeps_its_direction_along_the_loop(self):
+        # Turned 150 degrees, the leg lies nearer its captured place with its ends swapped; the loop says otherwise.
+        target = plan.scan(capture(extrude(1, profile("Leg", "sk1", [loop(leg(0))])))).targets[0]
+        values, cause = match.state_values(target, read(sketch_state("sk1", [{"loops": [loop(leg(150))]}])))
+        self.assertIsNone(cause)
+        self.assertAlmostEqual(values["1/p0/c0.0/turn"], 150.0, places=6)
 
 
 if __name__ == "__main__":
