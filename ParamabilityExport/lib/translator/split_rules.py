@@ -48,6 +48,22 @@ def used_later(ctx, item, body):
     return None
 
 
+def is_split(item):
+    return lineage.is_split(item)
+
+
+def _other_pieces(item, ctx, kept):
+    """The bodies the split leaves besides `kept`: those it lists after it, and every piece of the body it split."""
+    before = ctx.lineage_at(item.get("index", 0))[0]
+    pieces = [p for p in _data(item).get("pieces") or () if isinstance(p, dict)
+              and same_body(lineage.parent_of(item, p) or {}, before)]
+    found = []
+    for body in list(item.get("bodies_after") or []) + pieces:
+        if not same_body(body, kept) and not any(same_body(body, other) for other in found):
+            found.append(body)
+    return found
+
+
 def stop_reason(item, ctx):
     """None when the walk may run the split handler on `item`, a step that leaves more than one body; else the reason
     the copy stops."""
@@ -59,9 +75,7 @@ def stop_reason(item, ctx):
     after = item.get("bodies_after") or []
     if not any(same_body(b, kept) for b in after):
         return ANOTHER_BODY
-    for body in after:
-        if same_body(body, kept):
-            continue
+    for body in _other_pieces(item, ctx, kept):
         later = used_later(ctx, item, body)
         if later is not None:
             return ("%s changes %s, another piece of this split, together with the part. That is not copied yet."

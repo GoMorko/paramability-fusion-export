@@ -226,14 +226,16 @@ def walk_items(ctx, result):
             result.items.append(make_verdict(item, "skipped", note="Helper geometry, not part of the exported body."))
             continue
 
-        if _new_bodies(item, ctx) and not copies_bodies(item):
-            if item.get("target_changed") is False:
-                # Another body made next to the part (a surface offset, for one): a later Combine that takes it
-                # walks it as a tool.
-                result.items.append(make_verdict(item, "skipped", note="Does not change the exported body."))
-                continue
+        makes_other = bool(_new_bodies(item, ctx)) and not copies_bodies(item)
+        if makes_other and item.get("target_changed") is False:
+            # Another body made next to the part (a surface offset, for one): a later Combine that takes it walks it
+            # as a tool.
+            result.items.append(make_verdict(item, "skipped", note="Does not change the exported body."))
+            continue
+        if makes_other or split_rules.is_split(item):
             # Later steps may belong to the other body, so no single missing step can stand for this one. A split
-            # that keeps the body as one piece apart from the others is copied (split_rules.py).
+            # that keeps the body as one piece apart from the others is copied (split_rules.py), whichever piece
+            # keeps the name of the body it split.
             stop = split_rules.stop_reason(item, ctx)
             if stop is not None:
                 return refuse(item, stop)

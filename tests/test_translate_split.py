@@ -99,6 +99,7 @@ class SplitStopTest(unittest.TestCase):
             "pieces that do not add up": (plate_split(OTHER, pieces=short), "add up"),
             "a curved tool": (plate_split(OTHER, tool=curved), "curved"),
             "the other piece used later": (plate_split(PLATE, after=[fillet]), "Fillet1"),
+            "the piece that kept the name used later": (plate_split(OTHER, after=[fillet]), "Fillet1"),
         }
         for label, (capture, words) in cases.items():
             with self.subTest(label):
