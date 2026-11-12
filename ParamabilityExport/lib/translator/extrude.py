@@ -188,7 +188,9 @@ def _origin(frame, shift_q):
 
 def _reach_quantity(ctx, item, which, side, z, reach, offset, plane_q):
     """The length of the side `which` that reaches to a face, as a Quantity that follows the face when it moves with
-    sizes: the face's move less the sketch plane's move (`plane_q`, along the sketch normal)."""
+    sizes: the face's move less the sketch plane's move (`plane_q`, along the sketch normal). Where the length would
+    pass zero at a range end, the ranges are cut to where it stays positive; its sizes are marked only when no cut
+    keeps it."""
     plain = Quantity(abs(reach) + float(offset))
     moved = reach_motion.target_shift(ctx, item, which, side, z)
     if moved is None:
@@ -198,9 +200,14 @@ def _reach_quantity(ctx, item, which, side, z, reach, offset, plane_q):
     if not moved.sized:
         return plain
     length = moved.plus(reach - moved.n).scaled(_sign_of(reach)).plus(float(offset))
-    if not values.stays_positive(ctx.table, length):
-        ctx.doubt(length.reads, "%s would reach past the face it starts from" % item.get("name", "a step"))
+    if values.stays_positive(ctx.table, length):
+        return length
+    why = "%s would reach past the face it starts from" % item.get("name", "a step")
+    found = kept_ranges.holding_ranges(ctx.table, [(length, 1)], LENGTH_TOL)
+    if not found:
+        ctx.doubt(length.reads, why)
         return plain
+    ctx.cut(found, why)
     return length
 
 

@@ -86,6 +86,27 @@ class FaceOfAnEarlierStepTest(unittest.TestCase):
         self.assertEqual(set(found), {"plate_mm", "lift_mm"})
 
 
+class ReachPastItsStartTest(unittest.TestCase):
+    """The face moves twice as fast as the plate: below a plate of 6 the post would reach past its own start."""
+
+    STEEP = {"const": -20, "terms": {"plate_mm": 2}}
+
+    def test_the_range_is_cut_where_the_length_stays_positive_and_the_size_is_not_marked(self):
+        result = run(post_on_hidden_face(), ["plate_mm", "lift_mm"], measured("5.side_one", self.STEEP))
+        self.assertEqual(expr(steps_of(result.recipe, "extrude")[2]["distance"]), "2 * plate_mm - 12")
+        self.assertEqual(reasons(result), {})
+        self.assertEqual([(c["name"], c["min"], c["max"]) for c in result.cuts], [("plate_mm", 6.01, 20.0)])
+
+    def test_a_typed_range_keeps_the_mark(self):
+        capture = post_on_hidden_face()
+        params = capture["parameters"]
+        table = size_table.build(params["user"], ["plate_mm", "lift_mm"], params["model"], "mm",
+                                 ranges={"plate_mm": (2.0, 20.0)})
+        result = translate(capture, size_table=table, motion=measured("5.side_one", self.STEEP))
+        self.assertIn("reach past the face it starts from", reasons(result)["plate_mm"])
+        self.assertEqual(result.cuts, [])
+
+
 class PlaneOnAFaceTest(unittest.TestCase):
     def test_a_reach_to_a_plane_built_on_a_face_the_slabs_cannot_place_follows_the_measured_plane(self):
         plane = {"entity_type": "ConstructionPlane", "token": "cp9", "definition": OFFSET, "made_by": 4,

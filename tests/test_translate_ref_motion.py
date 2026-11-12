@@ -133,11 +133,14 @@ class ReachTest(unittest.TestCase):
         result = translate(capture, size_table=table)
         self.assertEqual(sorted(marked(result)), ["ear_mm", "gap_mm"])
 
-    def test_a_length_that_would_pass_the_start_marks_the_size(self):
+    def test_a_length_that_would_pass_the_start_cuts_the_range_where_it_stays_positive(self):
         values = {"3/r/side_one/offset": {"const": -30, "terms": {"gap_mm": 3}}}
         result = self.run_reach(motion_with(self.NAME, values))
-        self.assertIn("gap_mm", marked(result))
-        self.assertIn("reach past", marked(result)["gap_mm"])
+        self.assertEqual(marked(result), {})
+        (cut,) = result.cuts
+        self.assertEqual(cut["name"], "gap_mm")
+        self.assertIn("reach past", cut["reason"])
+        self.assertGreater(value_at(self.boss(result)["distance"], cut["min"]), 0)
 
     def test_a_curved_face_of_another_component_is_refused_with_that_reason(self):
         def edit(capture):

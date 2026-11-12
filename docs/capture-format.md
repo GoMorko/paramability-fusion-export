@@ -1771,6 +1771,9 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
 - A taper that follows sizes should stay under 45 degrees either way, since Paramability refuses a steeper one: the
   ranges of the untyped sizes it reads are cut where it reaches 45 (`Context.cut`, `kept_ranges.holding_ranges`).
   When no cut keeps it under 45 (every size it reads has a typed range), those sizes are marked instead.
+- A "to entity" length that follows a moving face or plane would pass its own start at some sizes: the ranges of the
+  untyped sizes it reads are cut where it stays positive ("would reach past the face it starts from"), the same way;
+  only when no cut keeps it are they marked.
 - A through cut clears the part at the largest sizes tried (`box_max` of the motion file). A cut through all to one
   side without a measured end face cuts toward the side where its outline meets the part built so far (sampled on a
   grid over the outline); Fusion's stored direction is kept when both sides, or neither, hold material, and turned with
