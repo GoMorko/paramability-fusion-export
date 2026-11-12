@@ -179,8 +179,7 @@ def _nearest(mapped, curves):
 
 
 def _arrange_loop(state_loop, loop, frame, ref):
-    """The state loop's curves in the order and direction of the capture loop, mapped to `ref`; their gap; and the
-    gap left once the loop's slide is taken out.
+    """The state loop's curves in the order and direction of the capture loop, mapped to `ref`; and their gap.
 
     Pieces of one sketch curve are told apart by their place along the loop when the loop reads in order, else by
     nearness once the loop's slide is taken out, so a loop that moved far still pairs each piece with its own."""
@@ -190,20 +189,21 @@ def _arrange_loop(state_loop, loop, frame, ref):
     repeated = len(set(entities)) < len(entities)
     walked = [_lined_up(order, curves) for order in _walks(mapped, curves)] if repeated else []
     if walked:
-        return min(walked, key=lambda w: w[2])
+        best = min(walked, key=lambda w: w[2])
+        return best[0], best[1]
     order = _nearest(mapped, curves)
     if order is None:
         return None
-    return _lined_up(order, curves)
+    aligned, gap, _ = _lined_up(order, curves)
+    return aligned, gap
 
 
 def _arrange(state_profile, profile, frame, ref):
-    """The state profile as capture style loops in the capture's loop order, the gap to the capture, and the gap left
-    once each loop's slide is taken out; or None."""
+    """The state profile as capture style loops in the capture's loop order, and the gap to the capture; or None."""
     state_loops = state_profile.get("loops") or []
     if len(state_loops) != len(profile["loops"]):
         return None
-    used, loops, total, shape = set(), [], 0.0, 0.0
+    used, loops, total = set(), [], 0.0
     for loop in profile["loops"]:
         best = None
         for at, other in enumerate(state_loops):
@@ -211,22 +211,37 @@ def _arrange(state_profile, profile, frame, ref):
                 continue
             arranged = _arrange_loop(other, loop, frame, ref)
             if arranged and (best is None or arranged[1] < best[2]):
-                best = (at, arranged[0], arranged[1], arranged[2])
+                best = (at, arranged[0], arranged[1])
         if best is None:
             return None
         used.add(best[0])
         loops.append({"outer": bool(loop.get("outer")), "curves": best[1]})
         total += best[2]
-        shape += best[3]
-    return loops, total, shape
+    return loops, total
 
 
-def _likeness(arranged):
-    """How a candidate state profile ranks against the capture's: by its shape first (the gap once each loop's slide
-    is taken out, to POINT_TOLERANCE), then by its place. Two profiles of one sketch share curves (each piece of a
-    split circle in its own region), and a profile that moved further than its pieces are apart lies nearer to the
-    other region's place."""
-    return round(arranged[2] / POINT_TOLERANCE), arranged[1]
+def _bulge(arc):
+    """The direction from an arc's centre to its middle point: the side of its circle the arc piece lies on."""
+    centre = arc.get("center")
+    if centre is None:
+        return None
+    return _sub(arc["mid"], centre)
+
+
+def _likeness(arranged, profile):
+    """How a candidate state profile ranks against the capture's: first by how many of its arcs lie on the other side
+    of their circle than the captured arcs they pair with, then by its gap. Regions of one sketch share curves (each
+    piece of a cut circle bounds its own region), and a region that moved further than the pieces are apart lies
+    nearer to its neighbour's place; the piece of the circle each region holds does not change side."""
+    flipped = 0
+    for state_loop, loop in zip(arranged[0], profile["loops"]):
+        for got, want in zip(state_loop["curves"], loop["curves"]):
+            if got["kind"] != "arc" or want["kind"] != "arc" or "mid" not in got or "mid" not in want:
+                continue
+            a, b = _bulge(got), _bulge(want)
+            if a is not None and b is not None and _dot(a, b) < 0:
+                flipped += 1
+    return flipped, arranged[1]
 
 
 def _outline(node):
@@ -425,7 +440,7 @@ def _state_profile_values(target, read, e0=None):
     best = None
     for candidate in record.get("profiles") or []:
         arranged = _arrange(candidate, profile, frame, ref)
-        if arranged and (best is None or _likeness(arranged) < _likeness(best)):
+        if arranged and (best is None or _likeness(arranged, profile) < _likeness(best, profile)):
             best = arranged
     if best is None:
         return None, SHAPE

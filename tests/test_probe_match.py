@@ -121,5 +121,24 @@ class SharedCurvesTest(unittest.TestCase):
         self.assertEqual({round(values[k] - v, 9) for k, v in want.items() if k.endswith(".1")}, {-3.0})
 
 
+def disc_regions(d, r=2.0):
+    """A circle ("c", radius `r`) cut by a chord ("k") at height `d`: the region below the chord and the one above."""
+    x = math.sqrt(r * r - d * d)
+    below = [line((x, d), (-x, d), "k"), arc((-x, d), (x, d), (0, -r), (0, 0), r, "c")]
+    above = [arc((x, d), (-x, d), (0, r), (0, 0), r, "c"), line((-x, d), (x, d), "k")]
+    return below, above
+
+
+class ChordRegionTest(unittest.TestCase):
+    def test_a_region_whose_shape_changes_keeps_its_own_piece_of_the_circle(self):
+        # Captured as the small cap below a chord at -1; with the chord at 1.5 the cap above looks more like it.
+        target = plan.scan(capture(extrude(1, profile("Disc", "sk1", [loop(disc_regions(-1.0)[0])])))).targets[0]
+        below, above = disc_regions(1.5)
+        values, cause = match.state_values(target, read(sketch_state("sk1", [{"loops": [loop(above)]},
+                                                                             {"loops": [loop(below)]}])))
+        self.assertIsNone(cause)
+        self.assertEqual(round(values["1/p0/l0/segments.1.through.1"], 9), -2.0)
+
+
 if __name__ == "__main__":
     unittest.main()
