@@ -463,7 +463,7 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 - Paramability opens up to 256 MB per size and 1 GB per file. The export stops with a message above that.
 - The design needs history (a parametric design).
 - Made for the current Fusion release.
-- This is version 0.10.2. It writes recipe version 16 when a sweep needs it, which needs a Paramability build that opens version 16. The Fusion side has not been run by a tool: see `docs/hand-tests.md`.
+- This is version 0.10.3. It writes recipe version 16 when a sweep needs it, which needs a Paramability build that opens version 16. The Fusion side has not been run by a tool: see `docs/hand-tests.md`.
 
 ## Code layout
 
