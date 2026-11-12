@@ -1,6 +1,6 @@
-"""Fillet, chamfer and shell features as plain dicts (docs/capture-format.md).
+"""Fillet, chamfer, shell and draft features as plain dicts (docs/capture-format.md).
 
-All three read their inputs with the timeline marker just before the item, so the edges and faces still exist in
+All four read their inputs with the timeline marker just before the item, so the edges and faces still exist in
 the shape the feature was applied to. Edge and face inputs are expanded here: a face gives its edges, and a tangent
 chain gives every tangentially connected edge or face, so the translator sees one flat list of picks. A fillet or
 chamfer set also keeps how its edges were picked: the faces it was given (`faces`), whether it follows tangent
@@ -286,9 +286,51 @@ def shell_before(feature, ctx):
     return with_params(data, Params().add("inside", lambda: feature.insideThickness).found)
 
 
+def _drafted_face(face, ctx):
+    """A face a draft leans: its point and token like a shell face, with its box."""
+    record = _face_record(face, ctx)
+    record["box"] = geo.safe(lambda: geo.box_of(geo.native_input(face, ctx)), None)
+    return record
+
+
+def draft_before(feature, ctx):
+    """The faces (tangent chains completed), the plane that gives the pull direction, the angle definition and the
+    target's volume. `draftDefinition` is an `AngleExtentDefinition` (one angle; `symmetric` leans the faces away
+    from the plane on both sides) or a `TwoSidesAngleExtentDefinition` (`angle_two_deg` for the second side)."""
+    from .read_repeat import plane_record  # read_repeat reads collections with this module
+    tangent_chain = geo.safe(lambda: bool(feature.isTangentChain), False)
+    faces = []
+    for face in strict_items(feature.inputFaces):
+        faces += _chain(face, "tangentiallyConnectedFaces", tangent_chain)
+    definition = feature.draftDefinition
+    two = geo.type_name(definition) == "TwoSidesAngleExtentDefinition"
+    first = (lambda: definition.angleOne) if two else (lambda: definition.angle)
+    data = {
+        "faces": [_drafted_face(f, ctx) for f in _unique(faces)],
+        "tangent_chain": tangent_chain,
+        "plane": geo.safe(lambda: plane_record(feature.plane, ctx), None),
+        "flipped": geo.safe(lambda: bool(feature.isDirectionFlipped), None),
+        "two_angles": two,
+        "symmetric": False if two else geo.safe(lambda: bool(definition.isSymmetric), None),
+        "angle_deg": geo.angle(first()),
+        "angle_two_deg": geo.angle(definition.angleTwo) if two else None,
+        "volume_before": geo.target_volume(ctx),
+        "volume_after": None,
+    }
+    found = Params().add("angle_deg", first, "angle")
+    if two:
+        found.add("angle_two_deg", lambda: definition.angleTwo, "angle")
+    return with_params(data, found.found)
+
+
+def draft_after(feature, ctx, data):
+    return {"volume_after": geo.target_volume(ctx)}
+
+
 # type name -> (before, after); either may be None
 READERS = {
     "FilletFeature": (fillet_before, None),
     "ChamferFeature": (chamfer_before, chamfer_after),
     "ShellFeature": (shell_before, None),
+    "DraftFeature": (draft_before, draft_after),
 }

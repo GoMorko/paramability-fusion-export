@@ -22,6 +22,12 @@ except U1, L1 to L15, F1 and F2, which are described here.
       `kind: "body"` and `solid: true`, each piece has `inside` (false for the plate, true for the core; check it
       against the model), and the copy is a cut by the cylinder for the plate and an intersect for the core. A split
       along a curved face of a body (a cylinder side, not extended) stops with "curved surface".
+- [ ] DR1, Draft. On a box extruded from a sketch on the XY plane, draft two side faces by 3 degrees with the XY
+      plane as the fixed plane, the angle from a user parameter. Export. Expect: a `draft` step with two `near` points
+      on the faces, `neutral` on the plane, and an angle that follows the parameter; in Paramability the walls lean
+      the same way as in Fusion (narrower at the top when the volume went down). Repeat with the direction flipped
+      and with a negative angle: the copy still leans like Fusion. A draft with "Symmetric" whose faces cross the
+      plane, or with two different angles, is left out with its reason.
 - [ ] U1, faster tries (0.9.1, experimental). Use a design with a body in one component and two or more other
       components the body does not use (no joints), with a ticked size that moves a sketch. Suppress one step of an
       unused component by hand first. Export for Paramability twice, once with "Faster tries" off and once with it

@@ -797,6 +797,27 @@ neither way, refuses an uneven chamfer.
 `faces[].point` is `BRepFace.pointOnFace`; tangent chains expanded with `tangentiallyConnectedFaces`;
 `bodies_input` true when the input is a body (a closed hollow). `shell_type`: `sharp` or `rounded`.
 
+**DraftFeature** (`inputFaces`, `isTangentChain`, `plane`, `isDirectionFlipped`, `draftDefinition`; read in
+`read_finish.py`):
+
+```json
+{ "faces": [{ "token": "...", "point": [..], "box": BOX }], "tangent_chain": false, "plane": PLANE, "flipped": false,
+  "two_angles": false, "symmetric": false, "angle_deg": 3.0, "angle_two_deg": null,
+  "volume_before": 8000.0, "volume_after": 7900.0 }
+```
+
+- `faces` as for a shell, each with its box (`BRepFace.boundingBox`); `plane` with the keys of the mirror `plane`.
+- `draftDefinition` is an `AngleExtentDefinition` (`angle`, `isSymmetric`: the faces are split at the plane and lean
+  away from it on both sides) or a `TwoSidesAngleExtentDefinition` (`angleOne`, `angleTwo`; `two_angles` true).
+  `params` holds `angle_deg` and `angle_two_deg`.
+- `volume_before` and `volume_after`: the target's volume around the item.
+
+The translator (`lib/translator/draft.py`) writes the recipe's `draft` step with the faces as `near` points, the
+plane as `neutral` (its normal is the pull direction) and the angle as a size. Fusion's sign and flip are not
+documented, so the sign is read from the part: with every face on one side of the plane, a draft that removes
+material takes it off there (a positive recipe angle on the side the normal points to). A draft with faces on both
+sides of its plane, two different angles, an angle of 30 degrees or more, or no measured change of volume is left out.
+
 **RectangularPatternFeature** (`patternEntityType`, `inputEntities`, `directionOne`, `directionTwo`,
 `quantityOne`, `quantityTwo`, `distanceOne`, `distanceTwo`, `patternDistanceType`, `isSymmetricInDirectionOne`,
 `isSymmetricInDirectionTwo`, `patternElements`, `suppressedElementsIds`):
@@ -2104,7 +2125,9 @@ face outlines: `BRepFace` (`loops`, `geometry`, `evaluator`, `pointOnFace`, `ent
 Read in the same stubs on 2026-11-12 for Split Body, not yet confirmed on a real design (hand tests SB1 and SB2):
 `SplitBodyFeature` (`splittingTool` and `splitBodies`, both read with the marker before the feature as the stub
 asks; `isSplittingToolExtended`; `bodies`), `BRepBody.pointContainment` (a `PointContainment` value: inside 0, on 1,
-outside 2, unknown 3), `BRepBody.isSolid`.
+outside 2, unknown 3), `BRepBody.isSolid`. For drafts (hand test DR1): `DraftFeature` (`inputFaces`, `plane`,
+`isTangentChain`, `isDirectionFlipped`, `draftDefinition`), `AngleExtentDefinition` (`angle`, `isSymmetric`),
+`TwoSidesAngleExtentDefinition` (`angleOne`, `angleTwo`), `BRepFace.boundingBox`.
 
 Used by the reach read and not yet confirmed on a real design (see its row below): `Feature.faces` (the faces a
 feature created, for each feature type that can be a candidate), `BRepEdge.faces`, `Design.findEntityByToken`,

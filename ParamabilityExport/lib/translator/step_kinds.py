@@ -101,6 +101,7 @@ STEP_TYPES = (
     StepType("FilletFeature", "fillet", reader="read_finish", handler="finish:fillet"),
     StepType("ChamferFeature", "chamfer", reader="read_finish", handler="finish:chamfer"),
     StepType("ShellFeature", "shell", reader="read_finish", handler="finish:shell"),
+    StepType("DraftFeature", "draft", reader="read_finish", handler="draft:handle"),
     StepType("OffsetFacesFeature", "offset faces", reader="read_offset", handler="offset:handle"),
     StepType("RectangularPatternFeature", "rectangular pattern", reader="read_repeat",
              handler="body_copies:rectangular", makes_bodies=True),
@@ -162,7 +163,8 @@ RECIPE_KINDS = (
     RecipeKind("thread", written=False),
     RecipeKind("coil", written=False),
     RecipeKind("skin", written=False),
-    RecipeKind("draft", written=False),
+    RecipeKind("draft", version=8, positions=(("faces", "near", "[]"), ("neutral", "origin")),
+               directions=(("neutral", "normal"),)),
     RecipeKind("bevelGear", written=False),
 )
 

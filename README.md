@@ -336,7 +336,9 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   usual places, mirrors of faces, a chamfer with two different sizes whose sides could not be
   measured, a press pull (offset
   faces) of a curved face, of a face with a leaning or rounded side, or of two faces that meet, and every
-  step type not listed above (coil, draft). A step of that kind in a tool body leaves the Combine that
+  step type not listed above (coil). A draft is copied when its faces all lie on one side of its plane, with one angle
+  under 30 degrees (or the same on both sides), and the part's volume changes (it tells which way the faces lean);
+  other drafts are left out. A step of that kind in a tool body leaves the Combine that
   takes the tool out of the copy, as one missing step. A Remove of another body, a Split Face (the solid stays the same, so picks on its faces may not follow) and steps of
   other bodies that are never joined to the picked body do not stop the copy.
 - A sweep is copied when its outline is one closed sketch outline (holes allowed) and its path starts at the outline,

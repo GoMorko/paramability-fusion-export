@@ -1,0 +1,81 @@
+"""Draft handler (DraftFeature): the picked faces lean about the neutral plane, the recipe's `draft` step.
+
+The recipe step leans faces about where they meet the neutral plane, and a positive angle takes material off the side
+the pull direction points to. Fusion's API does not say which way its angle and its flip turn a face, so the copy
+reads it from the part: with every face on one side of the plane, a draft that removes material leans the way that
+takes material off there. The part's volume must change, and a draft with faces on both sides of its plane, two
+different angles, or an angle at the recipe's cap is left out with the reason.
+
+The angle follows its sizes; the faces are picked by points on them, like the open faces of a shell, and the plane
+follows sizes like a mirror plane.
+"""
+from . import follow, picks, values, vec
+from .repeat_build import round_vec
+from .result import Refusal, StepResult
+from .split import SIDE_TOL_MM
+
+# The recipe refuses a draft angle at or past this, either way.
+MAX_ANGLE_DEG = 30.0
+# A smaller change of the part's volume (mm3) does not tell which way the faces lean.
+VOLUME_TOL_MM3 = 1e-3
+
+
+def _side(box, point, normal):
+    """+1 or -1 when the box lies on that side of the plane, 0 when it crosses it."""
+    lo, hi = box["min"], box["max"]
+    dists = [vec.dot(vec.sub([hi[0] if i & 1 else lo[0], hi[1] if i & 2 else lo[1], hi[2] if i & 4 else lo[2]],
+                             point), normal) for i in range(8)]
+    if min(dists) >= -SIDE_TOL_MM:
+        return 1
+    if max(dists) <= SIDE_TOL_MM:
+        return -1
+    return 0
+
+
+def _faces_side(faces, point, normal):
+    """The side of the plane every face lies on, or 0."""
+    if any(not isinstance(face.get("box"), dict) for face in faces):
+        return 0
+    sides = {_side(face["box"], point, normal) for face in faces}
+    return sides.pop() if len(sides) == 1 else 0
+
+
+def handle(item, ctx):
+    data = item.get("data") or {}
+    faces = [face for face in data.get("faces") or [] if isinstance(face, dict)]
+    points = picks.face_points(faces)
+    if not points or len(points) != len(faces):
+        return Refusal("The faces of this draft could not be read.")
+    if len(points) > picks.MAX_NEAR_POINTS:
+        return Refusal("This draft leans more than %d faces." % picks.MAX_NEAR_POINTS)
+    plane = data.get("plane") or {}
+    point, normal = plane.get("point"), plane.get("normal")
+    if not (isinstance(point, list) and isinstance(normal, list) and vec.length(normal) > 1e-9):
+        return Refusal("The plane of this draft could not be read.")
+    normal = vec.unit(normal)
+    angle, second = data.get("angle_deg"), data.get("angle_two_deg")
+    if not isinstance(angle, (int, float)) or angle == 0:
+        return Refusal("The angle of this draft could not be read.")
+    if data.get("two_angles") and not (isinstance(second, (int, float)) and abs(abs(second) - abs(angle)) < 1e-9):
+        return Refusal("This draft leans the two sides of its plane by different angles, which is not copied yet.")
+    if abs(angle) >= MAX_ANGLE_DEG:
+        return Refusal("Drafts of %g degrees or more are not copied." % MAX_ANGLE_DEG)
+    side = _faces_side(faces, point, normal)
+    if not side:
+        return Refusal("This draft leans faces on both sides of its plane, so the way it leans cannot be checked.")
+    before, after = data.get("volume_before"), data.get("volume_after")
+    if not isinstance(before, (int, float)) or not isinstance(after, (int, float)):
+        return Refusal("The part was not measured around this draft, so the way it leans cannot be checked.")
+    if abs(after - before) <= VOLUME_TOL_MM3:
+        return Refusal("This draft does not change the part's volume, so the way it leans cannot be checked.")
+    lean = side if after < before else -side
+    size = values.quantity(ctx, item, "angle_deg", abs(angle), dim="angle", sign=1 if angle > 0 else -1,
+                           absolute=True)
+    shift = follow.place_plane(ctx, item, plane, normal, "leans faces about")
+    origin = round_vec(point)
+    if shift is not None and shift.sized:
+        origin = [shift.scaled(c).plus(o).json() if abs(c) > 1e-9 else o for o, c in zip(origin, normal)]
+    out = StepResult()
+    out.add({"kind": "draft", "faces": follow.faces(ctx, item, faces), "angleDeg": size.scaled(lean).json(),
+             "neutral": {"origin": origin, "normal": round_vec(normal)}})
+    return out
