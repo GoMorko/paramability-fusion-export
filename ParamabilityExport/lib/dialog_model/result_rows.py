@@ -72,6 +72,12 @@ def _cut_text(entry):
     return entry["why"] + (", the same in every part that uses it" if entry.get("shared") else "")
 
 
+def kept_number_lines(manifest):
+    """One line per listed formula parameter that stayed a plain number, with Fusion's own formula and the reason."""
+    return ["kept as a number: %s = %s (%s)" % (p.get("label") or p["name"], p["expression"], _tidy(p["untranslated"]))
+            for p in manifest.get("parameters") or [] if p.get("expression") and p.get("untranslated")]
+
+
 def _row(name, rng, check, found=()):
     """A size row: `condition` and `why` come from the reasons found for it (joined when there are several)."""
     return {"name": name, "range": rng, "check": check,
@@ -234,7 +240,7 @@ def _build(file_name, manifest, report, table, ticked, result_extra=()):
     sections = [
         _section("check", "Check your design", health_lines(report.get("health"))),
         _section("result", "Result", _result_lines(file_name, manifest, report, size_count, result_extra)),
-        _section("sizes", "Sizes", [size_line(r) for r in rows], rows),
+        _section("sizes", "Sizes", [size_line(r) for r in rows] + kept_number_lines(manifest), rows),
         _section("left_out", "Left out", _left_out_lines(report)),
         _section("more", "More sizes", also_lines(report) + not_tried_lines(report)),
     ]
@@ -249,7 +255,8 @@ def result_view(file_name, manifest, report, table, ticked):
     the keys, in this order, are `check` (what is wrong with the design or the sketch measuring, and what to do),
     `result` (open the file, kind of copy, variables), `sizes` (one line per size or parameter that is not a size,
     with its range or state and its reason, a cut range as "range cut" with what was seen at the cut; `rows` holds the
-    same as data), `left_out` (steps with reasons) and `more` (unticked parameters that also change the part, and
+    same as data; then a "kept as a number: name = Fusion formula (reason)" line for each formula parameter that was
+    not translated), `left_out` (steps with reasons) and `more` (unticked parameters that also change the part, and
     parameters not tried). A section without content is absent.
     """
     if manifest.get("kind") != "recipe" or "sizes" not in report:

@@ -49,8 +49,25 @@ class ListingTest(unittest.TestCase):
     def test_formula_that_cannot_be_translated_is_listed_with_its_value_only(self):
         params = [plain("wall", 2), formula("odd", "wall + 30 deg", 5, reads=["wall"])]
         listing = list_parameters(params)
-        self.assertEqual(by_label(listing)["odd"], {"name": "odd", "label": "odd", "value": 5.0, "unit": "mm"})
-        self.assertEqual([x["name"] for x in listing.no_formula], ["odd"])
+        odd = by_label(listing)["odd"]
+        self.assertEqual((odd["value"], odd["expression"]), (5.0, "wall + 30 deg"))
+        self.assertNotIn("expr", odd)
+        self.assertTrue(odd["untranslated"])
+        self.assertEqual(listing.no_formula, [{"name": "odd", "reason": odd["untranslated"]}])
+
+    def test_a_translated_formula_carries_no_fusion_text(self):
+        listing = list_parameters([plain("wall", 2), formula("outer", "wall * 2 + 1 mm", 5, reads=["wall"])])
+        outer = by_label(listing)["outer"]
+        self.assertEqual(outer["expr"], "wall * 2 + 1")
+        self.assertFalse({"expression", "untranslated"} & set(outer))
+
+    def test_the_fusion_text_and_reason_are_cut_to_the_manifest_caps(self):
+        long = "wall + 30 deg + " + "wall + " * 60 + "1"
+        listing = list_parameters([plain("wall", 2), formula("odd", long, 5, reads=["wall"])])
+        odd = by_label(listing)["odd"]
+        self.assertEqual(len(odd["expression"]), mf.MAX_PARAMETER_EXPR)
+        self.assertLessEqual(len(odd["untranslated"]), mf.MAX_FIXED_REASON)
+        self.assertEqual(mf.validate_manifest(mf.build_step_only_manifest("N", "w", parameters=listing.entries)), [])
 
     def test_every_intermediate_of_a_hobby_project_comes_with_its_formula(self):
         listing = list_parameters(hobby_dicts())
@@ -87,6 +104,7 @@ class ListingTest(unittest.TestCase):
         listing = list_parameters(params)
         self.assertEqual(len(listing.entries), 64)
         self.assertNotIn("expr", listing.entries[0])
+        self.assertEqual(listing.entries[0]["expression"], "p69 * 2")
         self.assertEqual(listing.no_formula[0]["name"], "total")
 
 
@@ -104,6 +122,10 @@ class ManifestParametersTest(unittest.TestCase):
                     {**good, "comment": "x" * 201}, {**good, "expr": ""}):
             self.assertTrue(mf.validate_manifest(self.stepped([bad])), bad)
         self.assertTrue(mf.validate_manifest(self.stepped([good, dict(good)])))
+        for key, limit in (("expression", mf.MAX_PARAMETER_EXPR), ("untranslated", mf.MAX_FIXED_REASON)):
+            self.assertEqual(mf.validate_manifest(self.stepped([{**good, key: "x" * limit}])), [])
+            for bad in ("", "x" * (limit + 1), 5):
+                self.assertTrue(mf.validate_manifest(self.stepped([{**good, key: bad}])), (key, bad))
         many = [{"name": f"p{i}"} for i in range(65)]
         self.assertTrue(mf.validate_manifest(self.stepped(many)))
 

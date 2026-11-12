@@ -380,6 +380,10 @@ def _validate_parameters(params, problems):
         expr = p.get("expr")
         if expr is not None and (not isinstance(expr, str) or not 1 <= len(expr) <= MAX_PARAMETER_EXPR):
             problems.append(f"{label}: expr must be 1 to {MAX_PARAMETER_EXPR} characters.")
+        for key, limit in (("expression", MAX_PARAMETER_EXPR), ("untranslated", MAX_FIXED_REASON)):
+            text = p.get(key)
+            if text is not None and (not isinstance(text, str) or not 1 <= len(text) <= limit):
+                problems.append(f"{label}: {key} must be 1 to {limit} characters.")
         comment = p.get("comment")
         if comment is not None and (not isinstance(comment, str) or len(comment) > MAX_PARAMETER_COMMENT):
             problems.append(f"{label}: comment must be at most {MAX_PARAMETER_COMMENT} characters.")

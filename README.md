@@ -50,6 +50,7 @@ Nothing is typed in Fusion.
    - `# Sizes`: one line per size, with its range, then "may be unexpected" (and from where) or "kept fixed" or "not
      followed" or "not used" when that applies, and the short reason in brackets. Sizes that follow come first, then
      the marked ones, then the fixed ones.
+     A formula parameter that stayed a plain number is listed last as "kept as a number: name = formula (reason)".
    - `# Left out`: each step the copy left out, with the reason.
    - `# More sizes`: parameters you did not tick that also change the part, or that could not be tried. Tick them and
      export again to get them as sizes.

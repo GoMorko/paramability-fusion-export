@@ -1767,6 +1767,11 @@ step left out only because it picks, or may pick, faces of a gap, `own` otherwis
 package notes say how many steps were left out and which ("2 steps were left out: Extrude5, Fillet3."). A parts file
 has `gaps` and `reach` in the record of each part.
 
+The manifest `parameters` entry of a formula parameter (`lib/params/listing.py`) holds `expr`, the formula in the recipe
+grammar, when the size table translated it. When it did not, the entry holds the plain `value` and two optional fields:
+`expression` (Fusion's own text, at most 300 characters) and `untranslated` (the reason, at most 200); the report lists
+them in `parameters.no_formula`. A reader that does not know the fields ignores them, so version 1 and 2 stay as they are.
+
 `sizes` holds `free` (recipe size names), `fixed` and `loose` (`{ name, reason }` by recipe size name; `loose` here is
 the doubts only, and the manifest `loose` the same; the cut sizes go in the manifest `cuts` list, `{ name, reason }`,
 which the app shows as a quiet note, not a warning; `cuts` is an optional field of manifest version 1 and 2, so an
