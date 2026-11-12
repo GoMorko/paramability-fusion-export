@@ -136,7 +136,7 @@ class GapPackageTest(unittest.TestCase):
         port = ReachPort(tray(), design=tray_design())
         result = export(port)
         self.assertEqual(port.asked, [([SHELL], False)])
-        self.assertEqual(result.report["reach"], {"read": True, "gaps": [SHELL], "makers": {str(FILLET): []}})
+        self.assertEqual(result.report["reach"], {"read": True, "gaps": [SHELL], "makers": {str(FILLET): []}, "moves": 1})
 
     def test_a_fillet_on_edges_the_left_out_step_made_is_left_out_by_the_real_reach_read(self):
         result = export(ReachPort(tray(), design=tray_design(fillet_on_the_sweep=True)))

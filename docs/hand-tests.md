@@ -411,6 +411,12 @@ Use the filter box design (names such as `FilterBox_$_depth__contains_CeramicMed
       and in the message after the export). Pick a body that copies fully: the box and the button go away. A step
       copied with a note (for example a round with setback corners, or an extrude that uses a sketch of another
       component) adds one line "Copied with a note: ...".
+      A body whose steps hold one the copy leaves out but can go on without (for example a coil after the first
+      extrude) shows "Likely left out of the copy:", then one line per step with the reason (at most three, then
+      "and N more."). It is a guess made without the size tries, so after the export compare it with "N steps left out"
+      in the Saved window: it should name the same steps, except rounds or shells that pick faces of a left out step
+      (only the export can tell those). Note any step the box named that the Saved window did not, or the reverse
+      for a step the box could have known.
 - [ ] **Show in timeline.** With a stop shown, click "Show in timeline". The stopping step's feature is selected in
       the canvas and the timeline marker does not move; the design is not changed. The body picker still holds the
       body. If Fusion refuses the selection a message says so. Note whether the step also shows as selected in the
@@ -1634,4 +1640,8 @@ every later step that picks geometry, so a wrong guess shows up as too many left
   BRepEntityTypes.BRepFaceEntityType)` at the recorded point.
 - Two entities are the same face when `entityToken` matches or `geo.same_entity` says so.
 - `Timeline.markerPosition = index` for each tested step, and back to the start marker at the end: after a read the
-  marker must be where it was (`MarkerError` stops the export otherwise).
+  marker must be where it was (`MarkerError` stops the export otherwise). The marker visits each position once, so
+  the read moves it about once per tested step. Measure it on L2 and on a part with a run of rounds after the coil:
+  `reach.moves` in `report.json` is the number of moves (the move back is not counted); note it with the
+  seconds the export waits before the result window. A move that takes long in Fusion (a design that rebuilds
+  slowly) is the number to report.
