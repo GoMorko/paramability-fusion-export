@@ -14,6 +14,10 @@ Without it, the row started where the row before it ended (E0 for the first row)
 read once all rows are done) tells whether the outline came back. A different outline that blames no size this way is
 listed in `Motion.apart`. A sketch known to have stayed on its other outline across a restore (a `start` read shows it,
 or it reads as the same other outline in rows of unrelated sizes) is named in `Motion.flipped`.
+A state may also carry `put_back`: the read once the probe put such a sketch back on its first solution, before the
+row ran; the row started from that read. A state with `again` is a row run a second time from a checked start, since
+its first run may have started on the other solution: another outline there blames its size even when the outline
+did not come back.
 When a sketch reads as the same different outline in states that change different sizes, none of those sizes made it
 either.
 
@@ -126,7 +130,9 @@ class StateRun:
 
     def started_right(self, token, at):
         """True when the row of state `at` is known to have started on the captured outline of the sketch."""
-        start = self.states[at].get("start")
+        start = self.states[at].get("put_back")
+        if not isinstance(start, dict):
+            start = self.states[at].get("start")
         if isinstance(start, dict):
             return self.outline_right(token, start)
         before = at - 1
@@ -149,7 +155,7 @@ class StateRun:
         """True when the different outline of the sketch in state `at` blames the size of that row: its own row,
         started on the right outline, and the outline came back after it (`came_back`, `open_end`)."""
         return (len(self.varied(at, self.current)) == 1 and self.started_right(token, at)
-                and self.came_back(token, at, open_end))
+                and (bool(self.states[at].get("again")) or self.came_back(token, at, open_end)))
 
     def changed(self, at, open_end=False):
         """The name of a followed sketch whose outline the size of state `at` changed on its own (`shape_blames`), or
@@ -164,8 +170,8 @@ class StateRun:
 
     def find_flips(self):
         """Adds to `apart` the states whose different outline blames no size, and returns the names of the sketches
-        known to have stayed on another outline across a restore: a `start` read on another outline, or the same
-        different read in rows of unrelated sizes (`find_apart`)."""
+        known to have stayed on another outline across a restore and that a row started from: a `start` read on another
+        outline that no `put_back` corrected, or the same different read in rows of unrelated sizes (`find_apart`)."""
         flipped = []
         for token in dict.fromkeys(t["sketch_token"] for t in self.targets):
             name = next(t["sketch"] for t in self.targets if t["sketch_token"] == token)
@@ -173,7 +179,8 @@ class StateRun:
                 flipped.append(name)
             for at in range(1, len(self.states)):
                 start = self.states[at].get("start")
-                if isinstance(start, dict) and not self.outline_right(token, start):
+                stayed = isinstance(start, dict) and not self.outline_right(token, start)
+                if stayed and not self.started_right(token, at):
                     flipped.append(name)
                 if (not self.built(at) or self.mislabelled(at)
                         or self.outline_right(token, self.states[at].get("read"))):

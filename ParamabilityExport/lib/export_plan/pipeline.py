@@ -52,6 +52,8 @@ class ExportPort(Protocol):
     read_reach(capture, gaps): the `reach` of the capture when the steps at the timeline indexes `gaps` are left out
       of the copy (`read_gap_reach.read_reach`); raises `MarkerError` when the timeline marker cannot go back.
     probe_reader(): a callable `read(request)` giving one probe state, or raising.
+    sketch_keeper(tokens): optional; an object that keeps the sketches `tokens` as they are now and whose
+      `put_back()` moves their points back there (`fusion_reader.sketch_keep.SketchKeeper`, `ProbeRun`).
     progress(verb): a context manager whose value has `step(index, total, name)`; the step returns False when the
       person cancelled.
     warn_unrestored(names): tell the person that these parameters could not be put back, when the export stops.
@@ -132,15 +134,41 @@ class ProbeRun:
     used.
 
     A row that did not build, or left a followed sketch on another outline, may leave that sketch there after the
-    parameters are put back. The design is then read again before the next row (`starts`, by row key), so the motion
-    knows whether that row started from the right outline."""
+    parameters are put back: a sketch with two solutions keeps the one it was last solved to. The design is then read
+    again before the next row (`starts`, by row key). When a followed sketch reads otherwise than at E0 there, the
+    port's sketch keeper (`port.sketch_keeper(tokens)`, kept at E0) moves its points back to where they were and the
+    design is rebuilt once (`backs`, by row key), so the row starts from the first solution. After
+    `MAX_PUT_BACK_MISSES` put backs in a row that do not bring the sketch back, no more are tried.
+
+    A row whose start was not read, and after which the sketch was found on another solution (it read another outline
+    or did not build, and the next read with the values back shows it), may itself have started there. It runs once
+    more right after its batch, from a checked start, within the row limit; its first run is left out of the states.
+    When that second run reads another outline too, the outline change is its own size's (`again` in its state)."""
+
+    MAX_PUT_BACK_MISSES = 2
 
     def __init__(self, port, tmp, probe):
         self.port, self.tmp, self.probe = port, tmp, probe
-        self.reads, self.rows, self.starts = {}, [], {}
+        self.reads, self.rows, self.starts, self.backs = {}, [], {}, {}
         self.read_failure = None
+        self.put_backs = 0  # design rebuilds made to put a sketch back
+        self.redone = []  # keys of the rows run a second time
+        self._tails = {}  # key of a batch's last row: the read once the values were back after it
+        self._misses = 0
         self._previous = None  # key of the row run last
+        self.keeper = self._keeper()
         self.job = RowExport(port.store, port.units, self._export, self._before_row)
+
+    def _keeper(self):
+        """The port's keeper of the followed sketches as they are now, or None when the port has none."""
+        make = getattr(self.port, "sketch_keeper", None)
+        if make is None:
+            return None
+        try:
+            return make(self.probe.followed_sketches())
+        except Exception as exc:
+            self.port.log(f"keeping the sketches failed: {exc!r}")
+            return None
 
     def _read_now(self):
         """The probe state of the design now. Raises when the timeline marker is not where the tries keep it: a read
@@ -152,21 +180,55 @@ class ProbeRun:
 
     def _before_row(self, row):
         """`RowExport`'s hook once the parameters are back: read the design when the row before did not build or
-        read a followed sketch on another outline."""
+        read a followed sketch on another outline, and always before a row run again; put the sketch back when that
+        read shows it on another solution."""
         key = row.get("key", row["name"])
         previous, self._previous = self._previous, key
-        if previous is None or self.read_failure is not None:
+        if self.read_failure is not None or (previous is None and not row.get("again")):
             return
         read = self.reads.get(previous)
-        if read is not None and not self.probe.off_outline(read):
+        if not row.get("again") and read is not None and not self.probe.off_outline(read):
             return
+        start = self._try_read()
+        if start is None:
+            return
+        self.starts[key] = start
+        if self.probe.left_start(start):
+            self._put_back(key)
+
+    def _try_read(self):
+        """`_read_now`, or None with `read_failure` set when the read failed."""
         try:
-            self.starts[key] = self._read_now()
+            return self._read_now()
         except ExportCancelled:
             raise
         except Exception as exc:
             self.read_failure = exc
             self.port.log(f"size probe read failed: {exc!r}")
+            return None
+
+    def _put_back(self, key=None, last=False):
+        """Move the followed sketches back to their kept solution and rebuild once, then read the design again; the
+        read is kept in `backs` under `key`. `last` tries even after `MAX_PUT_BACK_MISSES`. Returns the read."""
+        if self.keeper is None or (self._misses >= self.MAX_PUT_BACK_MISSES and not last):
+            return None
+        self.put_backs += 1
+        try:
+            self.keeper.put_back()
+            self.port.store.recompute()
+        except Exception as exc:
+            self.port.log(f"putting a sketch back failed: {exc!r}")
+        read = self._try_read()
+        if read is None:
+            return None
+        if key is not None:
+            self.backs[key] = read
+        self._misses = self._misses + 1 if self.probe.left_start(read) else 0
+        self._note()
+        return read
+
+    def _note(self):
+        self.probe.note_recovery({"put_backs": self.put_backs, "again": len(self.redone)})
 
     def _export(self, path):
         """`RowExport`'s step callback: a probe row has no STEP, so `path` is None and only the state is read."""
@@ -193,22 +255,72 @@ class ProbeRun:
         return results
 
     def probe_states(self, since=0):
-        """(values, result, read, start) of the rows run from number `since` on, for `SizeProbe.add_states`."""
+        """(values, result, read, start, more) of the rows run from number `since` on, for `SizeProbe.add_states`;
+        a row run again replaces its first run."""
         out = []
         for row, result in self.rows[since:]:
             state = row.get("state") or {}
             values = {param: state[param] for param in row.get("varied") or [] if param in state}
             key = row.get("key", row["name"])
-            out.append((values, result, self.reads.get(key), self.starts.get(key)))
+            if key in self.redone:
+                continue
+            more = {"put_back": self.backs.get(key), "again": bool(row.get("again"))}
+            out.append((values, result, self.reads.get(key), self.starts.get(key), more))
         return out
 
-    def run_rows(self, rows):
-        """Run `rows` and give the probe the states they gave. Raises the first failed read."""
-        done = len(self.rows)
-        self.try_rows(rows)
+    def _check_reads(self):
         if self.read_failure is not None:
             raise self.read_failure
+
+    def _suspect(self, at):
+        """True when row number `at` did not start from a checked read (its start was not read, and it is not the
+        first row) and did not end on the first solution: it read another outline or did not build."""
+        row, result = self.rows[at]
+        key = row.get("key", row["name"])
+        if at == 0 or row.get("again") or key in self.starts:
+            return False
+        read = self.reads.get(key)
+        return bool(result.get("error")) or read is None or self.probe.off_outline(read)
+
+    def _again(self, since):
+        """`(key, copy)` of the rows run from number `since` on that may have started on another solution (`_suspect`,
+        and the next read with the values back shows a sketch there), within the rows left."""
+        keys = [row.get("key", row["name"]) for row, _ in self.rows]
+        out = []
+        for at in range(since, len(self.rows)):
+            if not self._suspect(at):
+                continue
+            after = self.starts.get(keys[at + 1]) if at + 1 < len(keys) else self._tails.get(keys[at])
+            if after is not None and self.probe.left_start(after):
+                out.append((keys[at], dict(self.rows[at][0], key=keys[at] + " (again)", again=True)))
+        return out[:plan_rows_left(self.rows)]
+
+    def run_rows(self, rows):
+        """Run `rows`, run again those that may have started on another solution (`_again`), and give the probe the
+        states they gave. Raises the first failed read."""
+        done = len(self.rows)
+        self.try_rows(rows)
+        self._check_reads()
+        if self.rows and self._suspect(len(self.rows) - 1):
+            last = self.rows[-1][0]
+            self._tails[last.get("key", last["name"])] = self._try_read()
+            self._check_reads()
+        again = self._again(done)
+        if again:
+            self.redone.extend(key for key, _ in again)
+            self._note()
+            self.try_rows([row for _, row in again])
+            self._check_reads()
         self.probe.add_states(self.probe_states(done))
+
+    def settle(self):
+        """Put the followed sketches back when they read otherwise than at E0 now, with the values back, so the design
+        is left on the solution it had. Never raises."""
+        try:
+            if self.probe.left_start(self._read_now()):
+                self._put_back(last=True)
+        except Exception as exc:
+            self.port.log(f"putting a sketch back after the tries failed: {exc!r}")
 
     def _retry(self, sizes):
         """Rows nearer to the value for the sizes whose rows did not build (`SizeProbe.nearer_rows`), one step per
@@ -238,7 +350,9 @@ class ProbeRun:
     def discover(self, tries):
         """Read the design once the parameters are back, then run the discovery rows in the room the other rows left
         and keep what they found. Returns the parameters that changed the part."""
-        self.probe.set_discovery_base(self._read_now())
+        base = self._read_now()
+        back = self._put_back() if self.probe.left_start(base) else None
+        self.probe.set_discovery_base(base, back)
         found = self.probe.discovery_rows(list(tries), plan_rows_left(self.rows))
         if not found:
             return []
@@ -410,8 +524,8 @@ class _Pipeline:
         in `tries` once each (`size_offers.discovery_sizes`); they only find which of them also change the part
         (`self.also`) and are not used for the motion. A failure other than a cancel
         leaves the translation without a motion (no size behind a sketch is then followed, by the translator's own
-        rule) and is noted for the person. The parameters are put back, and the suppressed items turned back on,
-        before the last read."""
+        rule) and is noted for the person. The parameters are put back, the suppressed items turned back on and
+        a sketch left on another solution put back (`ProbeRun.settle`) before the last read."""
         probe = self.probe
         try:
             run.measure(probe.probe_rows(sizes, extra), sizes)
@@ -420,6 +534,7 @@ class _Pipeline:
                 self.roll.tries_done()
             self._restore()
             self._end_trim()
+            run.settle()
             found = probe.finish(probe.read_now(), labels(self.table))
         except ExportCancelled:
             raise

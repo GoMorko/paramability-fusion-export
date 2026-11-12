@@ -1700,10 +1700,13 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   the same different outline in rows that change different sizes or one size to two values, unless both rows give
   some parameter the same new value (two sizes behind one formula), where alike reads are expected. A sketch is
   solved as a whole: in a state where one of its outlines reads differently, its other outlines give no values
-  either, since they sit on that other solution too (a strip that only shifts there is no move). A sketch known to have
-  stayed on its other outline after the parameters were put back (a `start` read shows it, or the same different
-  read in rows of unrelated sizes) is named in `flipped`, and `health.flipped` gives the result window one line about
-  it.
+  either, since they sit on that other solution too (a strip that only shifts there is no move). When the probe put
+  the sketch back before a row, the read after that (`put_back` of the state) tells how the row started instead of
+  `start`. A row run a second time from a checked start (`again`, see "Solver flips" below) blames its own size for
+  another outline even when the outline did not come back. A sketch known to have stayed on its other outline after
+  the parameters were put back, with a row run from it (a `start` read shows it and no `put_back` corrected it, or the
+  same different read in rows of unrelated sizes) is named in `flipped`, and `health.flipped` gives the result window
+  one line about it.
 - A different outline that a size makes in its own row is a limit of its range, not a reason to drop the size
   (`probe.build.outline_windows`). On that side the range keeps the farthest value tried alone that built and kept
   every followed outline, nearer than the nearest value that changed one; the states that set the size past it are
@@ -1913,6 +1916,20 @@ the parameters were put back; `health.unchecked` then names each such sketch and
 the result window says that the tries made then were not used to judge any size. After a row that did not build, or
 whose read showed a followed sketch on another outline, the design is read again once the parameters are back and
 before the next row (`ProbeRun`); that read is the next state's `start` in `probe.states`. A probe row that Fusion cannot build is listed in `probe.dropped`; no size is fixed for it.
+
+Solver flips. Putting the values back does not bring back a sketch that a try moved to its other solution: Fusion solves
+a sketch from where its points are. So the export keeps the places of the followed sketches' own points at E0
+(`fusion_reader.sketch_keep.SketchKeeper`; projected and fixed points stay). When the `start` read shows a followed
+sketch otherwise than at E0 (another outline, or a value more than 0.05 mm or degrees off, `FLIP_TOLERANCE`; Fusion's
+own restore leaves about a hundredth), the points are moved back with the sketch's compute deferred and the design is
+rebuilt once; the read after that is the state's `put_back`. After two put backs in a row that do not bring the sketch
+back, no more are tried. A row whose start was not read (the row before it ended right) and after which the sketch was
+found on its other solution (the row read another outline or did not build, and the next read with the values back shows
+the flip) may have started there: it runs once more right after its batch, from a checked start, and its first run is
+left out of the states. The second run carries `again`; another outline there is a range limit of its own size. Rows run
+again count in the 64 rows. The sketch is also put back before the discovery rows (their base is the read after it) and
+once after the tries, so the design is left on the solution it had. `probe.recovery` (`{ put_backs, again }`, only when
+either happened) counts the extra rebuilds: one per put back and two per row run again (the row and its restore).
 
 A file with several bodies (package kind `parts`) has one `report.json` with a `parts` list, one record per body:
 `{ name, outcome, items, notes, capture, probe, sizes, derived }`, plus `refusal` or `error` for a body saved as a fixed

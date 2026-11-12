@@ -23,6 +23,7 @@ from ...lib.fusion_reader.probe_state import read_state
 from ...lib.fusion_reader.read_gap_reach import read_reach
 from ...lib.fusion_reader.read_geometry import ReadContext
 from ...lib.fusion_reader.rows import DesignParameterStore
+from ...lib.fusion_reader.sketch_keep import SketchKeeper
 from ...lib.fusion_reader.step_export import export_body_step, resolve_body
 from ...lib.fusion_ui import result_dialog
 from ...lib.fusion_ui.file_dialog import ask_save_path
@@ -93,6 +94,9 @@ class FusionPort:
         ctx = ReadContext(self.design, self._current())
         return lambda request: read_state(self.design, request, ctx)
 
+    def sketch_keeper(self, tokens):
+        return SketchKeeper(self.design, tokens)
+
     def progress(self, verb):
         return export_common.progress_dialog(verb)
 
@@ -137,6 +141,9 @@ class FusionPartsPort:
     def probe_reader(self, index):
         ctx = ReadContext(self.design, self._current(index))
         return lambda request: read_state(self.design, request, ctx)
+
+    def sketch_keeper(self, tokens):
+        return SketchKeeper(self.design, tokens)
 
     def progress(self, verb):
         return export_common.progress_dialog(verb)

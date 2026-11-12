@@ -101,6 +101,8 @@ except U1, L1 to L15, F1 and F2, which are described here.
 - [ ] D1 and D5 to D13, the sketch graph in the capture, the marker held early during the tries, the new first tries
       near the value, the progress window text and sketch dimensions in `dependents`: section 12 (the calls are under
       "Sketch graph, marker roll and progress window" in "Fusion calls to watch").
+- [ ] K26, a sketch that flips to its other solution during the tries is put back before the next try: section 9
+      (the calls are under "Sketch graph, marker roll and progress window").
 - [ ] K25, an extrude that reaches to a face or plane no earlier extrude places (a cut's side wall, a plane on it):
       section 9.
 - [ ] K24, sketches and extrude reaches on construction planes built on the part (offset from a face, a chain of
@@ -768,6 +770,13 @@ the sizes on the form and compare the part with Fusion at the same values.
       In Paramability change `plate_mm` and `slot_mm`: the peg still ends 1 mm under the slot's top wall. Then reach
       "to" the slot's top wall itself instead of the plane: the same holds (Fusion finds the face again by its token
       at every try; when it does not, `motion.refs` names why and the sizes stay marked as before).
+- [ ] **K26 Sketch that flips during the tries.** A lid sketch drawn around a projected point of another component,
+      with a distance dimension from a sketch point to that projected point (a distance has no side), and sizes that
+      make the box shallower. Export with those sizes ticked. `report.json`: `probe.recovery` counts the put backs;
+      every state with a `start` on the other outline has a `put_back` read on the first one; the rows after it do not
+      fail in steps of another component; a row listed again carries `again`. `probe.motion.flipped` is empty, and
+      the result window has no line about a sketch that stayed on its other outline. Check in Fusion that the sketch
+      is on its first solution after the export, and note the export time (each put back is one more rebuild).
 
 ## 10. Emboss
 
@@ -1336,6 +1345,11 @@ These were written from the API reference and never run:
 Written from the API reference and never run (sections: "Sketch graphs" in `docs/capture-format.md`, hand tests D1 and
 D5 to D13). Every read is guarded: a member that raises is listed in the record's `unread` or leaves the old behaviour.
 
+- Sketch put back (`lib/fusion_reader/sketch_keep.py`, hand test K26): `SketchPoint.geometry` in sketch space,
+  `isReference`, `isFixed`, `SketchPoint.move(Vector3D)` while `Sketch.isComputeDeferred` is true, and whether
+  Fusion solves the sketch from the moved points (back on its first solution) once compute is turned on again and
+  the design is recomputed. If it solves to the other solution again, the put back counts as a miss and the probe
+  stops after two.
 - Sketch graph (`lib/fusion_reader/read_constraints.py`): `Sketch.sketchPoints`, `sketchCurves`, `sketchDimensions`,
   `geometricConstraints`, `isFullyConstrained`, `originPoint`; `SketchEntity.isFixed`, `isFullyConstrained`, `isLinked`,
   `isReference`, `referencedEntity`, `entityToken`; `SketchPoint.geometry` (sketch space, cm); `SketchLine.startSketchPoint`,

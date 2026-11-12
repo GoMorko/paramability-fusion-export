@@ -47,6 +47,7 @@ class PartsPort(Protocol):
     read_reach(index, capture, gaps): the `reach` of body `index` when the steps at the timeline indexes `gaps` are
       left out of its copy (`pipeline.ExportPort.read_reach`).
     probe_reader(index): a callable `read(request)` giving one probe state of body `index`, or raising.
+    sketch_keeper(tokens): optional, as `pipeline.ExportPort.sketch_keeper`.
     """
 
     store: object
@@ -325,7 +326,8 @@ class _PartsPipeline:
 
         The rows are the ones of `SizeProbe.probe_rows` for all sizes of all parts together, so the row limit is for
         the whole export. A failure other than a cancel leaves every part without a motion and is noted for the person.
-        The parameters are put back, and the suppressed items turned back on, before the last read."""
+        The parameters are put back, the suppressed items turned back on and a sketch left on another solution put
+        back (`ProbeRun.settle`) before the last read."""
         group = self.group
         self.roll = TryTimeline(self.port.store, self.port.log, self.request.faster_tries)
         self.roll.begin([self.captures[i] for i in self.probed], lambda: group.matches_start(group.read_now()))
@@ -337,6 +339,7 @@ class _PartsPipeline:
             self.roll.tries_done()
             self._restore()
             self._end_trim()
+            run.settle()
             found = group.finish(group.read_now(), labels(self.table))
         except ExportCancelled:
             raise

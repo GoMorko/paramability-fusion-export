@@ -4,7 +4,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.fakes import FakeStore
-from tests.probe_helpers import size, table, user
+from tests.probe_helpers import circle, loop, size, table, user
 from tests.test_probe_motion import CAPTURE, MODEL, PARAMS, TICKED, W, read_at
 
 from lib.export_plan.probe_flow import SizeProbe, covers_a_sketch, kept_size_names
@@ -219,6 +219,91 @@ class StartReadTest(unittest.TestCase):
                                                                                    (False, True)])
         self.assertEqual(probe.states[2]["start"], read_at())
         self.assertIn("start", probe.report()["states"][2])
+
+
+def on_other_solution(found):
+    """`found` with the lid sketch on its other solution: another outline."""
+    lid = found["sketches"]["sk2"]
+    found["sketches"]["sk2"] = dict(lid, profiles=[{"loops": [loop([circle((0, 0), 4, "c2")]),
+                                                              loop([circle((1, 0), 1, "c3")], False)]}])
+    return found
+
+
+class TwoSolutionFusion(Fusion):
+    """The lid sketch has a second solution. A recompute moves it there when `flips(before, now)` holds for the
+    expressions of the recompute before and of this one; it stays there until the keeper puts its points back."""
+
+    def __init__(self, flips):
+        super().__init__()
+        self.flipped = False
+        fusion, last = self, [dict(START)]
+
+        class Store(FakeStore):
+            def recompute(self):
+                if flips(last[0], self.exprs):
+                    fusion.flipped = True
+                last[0] = dict(self.exprs)
+                return super().recompute()
+
+        self.store = Store(START)
+
+    def read(self, request):
+        found = super().read(request)
+        return on_other_solution(found) if self.flipped else found
+
+
+class _KeeperPort(_Port):
+    def sketch_keeper(self, tokens):
+        fusion = self.fusion
+
+        class Keeper:
+            @staticmethod
+            def put_back():
+                fusion.flipped = False
+
+        return Keeper()
+
+    def __init__(self, fusion):
+        super().__init__(fusion)
+        self.fusion = fusion
+
+
+def size_row(name, value):
+    return {"name": "%s (max)" % name, "key": name, "values": {name: value}, "varied": [name], "state": {name: value},
+            "step": False}
+
+
+class SolverFlipTest(unittest.TestCase):
+    """A sketch left on its other solution after a try is put back before the next row, and the row that may have
+    run on it is run again."""
+
+    def run_flip(self, flips):
+        from lib.export_plan.pipeline import ProbeRun
+        fusion = TwoSolutionFusion(flips)
+        probe = SizeProbe.start(CAPTURE, table(PARAMS, TICKED, MODEL), fusion.read)
+        run = ProbeRun(_KeeperPort(fusion), "", probe)
+        run.run_rows([size_row("height", 40.0), size_row("off", 10.0), size_row("cube", 20.0)])
+        run.settle()
+        probe.finish(fusion.read(probe.request), {})
+        return fusion, run, probe
+
+    def test_a_flip_left_by_a_restore_is_put_back_and_the_row_that_ran_on_it_is_run_again(self):
+        def restore_after_tall(before, now):
+            return number(before["height"]) == 40 and now == START
+
+        fusion, run, probe = self.run_flip(restore_after_tall)
+        self.assertEqual([s["values"] for s in probe.states[1:]], [{"height": 40.0}, {"cube": 20.0}, {"off": 10.0}])
+        self.assertEqual((run.put_backs, run.redone), (1, ["off"]))
+        self.assertEqual((probe.motion.flipped, probe.motion.apart), ([], []))
+        self.assertEqual(probe.states[3]["read"], read_at(off=10))
+        self.assertEqual(probe.report()["recovery"], {"put_backs": 1, "again": 1})
+
+    def test_a_row_that_flips_again_from_a_checked_start_limits_its_own_size(self):
+        fusion, run, probe = self.run_flip(lambda before, now: number(now["off"]) == 10)
+        self.assertEqual(probe.motion.spans["off"]["changed"], [[10.0, "Sketch2"]])
+        self.assertEqual((probe.motion.flipped, probe.motion.apart), ([], []))
+        self.assertEqual(run.put_backs, 2)  # before the next row, and once more after the tries
+        self.assertFalse(fusion.flipped)
 
 
 class ProgressTextTest(unittest.TestCase):

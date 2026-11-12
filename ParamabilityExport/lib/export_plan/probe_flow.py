@@ -24,6 +24,9 @@ from .part_names import tagged
 
 _STATE_KEYS = ("sketches", "points", "lines", "params", "box", "refs", "unread")
 BODY_TOLERANCE_MM = 1e-4
+# How far a followed value (mm or degrees) may read from E0 once the values are back before the sketch counts as on
+# another solution; Fusion's own restore leaves up to about a hundredth of a degree on short lines.
+FLIP_TOLERANCE = 0.05
 VOLUME_TOLERANCE_MM3 = 1e-4
 VOLUME_RELATIVE = 1e-6
 # Why a parameter of another component got no try; kept in the discovery record of `report.json`.
@@ -197,8 +200,10 @@ class SizeProbe:
         self.checked = False
         self._far = None  # (moved, extra) of the near rows, until the far rows are asked for
         self.discovery_base = None  # the read the discovery rows are compared with
+        self.rows_end = None  # the read once the measured rows were done and the parameters back
         self.after_rows = None  # what read differently from E0 once the parameters were put back after the rows
         self.restore_unchecked = []  # "<sketch>: <why>" for each sketch the restore check could not compare
+        self.recovery = None  # what was done when a sketch stayed on another solution (`note_recovery`)
 
     @classmethod
     def start(cls, capture, table, read):
@@ -229,11 +234,14 @@ class SizeProbe:
         return self.read(self.request)
 
     def add_states(self, entries):
-        """Add one state per `(values, result, read)` or `(values, result, read, start)`: the size values a row set,
-        its RowExport result, the probe state read there (None when it did not build) and the read of the design
-        before the row ran, once the parameters were back (None when it was not read)."""
+        """Add one state per `(values, result, read)`, `(values, result, read, start)` or `(values, result, read,
+        start, more)`: the size values a row set, its RowExport result, the probe state read there (None when it did
+        not build), the read of the design before the row ran, once the parameters were back (None when it was not
+        read), and `more`: `put_back`, the read once the followed sketches were put back on their first solution
+        before the row ran, and `again`, true for a row run a second time (`pipeline.ProbeRun`)."""
         for values, result, read, *rest in entries:
             start = rest[0] if rest else None
+            more = rest[1] if len(rest) > 1 and isinstance(rest[1], dict) else {}
             if result.get("error"):
                 detail = result.get("detail") or {}
                 state = {"values": values, "built": False, "failed": (detail.get("items") or [""])[0]}
@@ -242,7 +250,35 @@ class SizeProbe:
                 state = {"values": values, "built": True, "read": read}
             if isinstance(start, dict):
                 state["start"] = start
+            if isinstance(more.get("put_back"), dict):
+                state["put_back"] = more["put_back"]
+            if more.get("again"):
+                state["again"] = True
             self.states.append(state)
+
+    def followed_sketches(self):
+        """Tokens of the sketches this probe reads at every row."""
+        return list(self.request.get("sketches") or [])
+
+    def left_start(self, read):
+        """True when a followed sketch reads otherwise than at E0 in `read`, a read taken with every value back: the
+        sketch stayed on another solution (another outline, or the same outline more than `FLIP_TOLERANCE` away). A
+        sketch that could not be read does not count."""
+        if not isinstance(read, dict):
+            return False
+        for target in self._followed_targets():
+            before, _ = match.state_values(target, self.e0, self.e0)
+            now, cause = match.state_values(target, read, self.e0)
+            if before is None or (now is None and cause != SHAPE):
+                continue
+            if now is None or now.keys() != before.keys() or any(
+                    abs(now[k] - v) > FLIP_TOLERANCE for k, v in before.items()):
+                return True
+        return False
+
+    def note_recovery(self, record):
+        """Keep what `pipeline.ProbeRun` did when a sketch stayed on another solution, for `report`."""
+        self.recovery = dict(record)
 
     def matches_start(self, read):
         """True when `read` has the same sketches, points, lines, references and body box as the first read (E0), within
@@ -354,12 +390,14 @@ class SizeProbe:
                               for c in plan.discovery_left(candidates, room))
         return rows
 
-    def set_discovery_base(self, read):
-        """Keep the read of the design once the parameters are back after the measured rows. The discovery rows are
-        compared with it, not with E0: a sketch that Fusion left on another solution, or a place it left elsewhere,
-        must not count as moved by every parameter tried later. What reads differently from E0 is kept in the report
+    def set_discovery_base(self, read, put_back=None):
+        """Keep the read of the design once the parameters are back after the measured rows, and `put_back`, the read
+        once a sketch left on another solution there was put back. The discovery rows are compared with the last of
+        them, not with E0: a sketch that Fusion left on another solution, or a place it left elsewhere, must not count
+        as moved by every parameter tried later. What `read` shows differently from E0 is kept in the report
         (`after_rows`)."""
-        self.discovery_base = read
+        self.rows_end = read
+        self.discovery_base = put_back if isinstance(put_back, dict) else read
         changed, unread = self.differences(self.e0, read)
         self.after_rows = {"changed": changed, "unread": unread}
 
@@ -492,7 +530,7 @@ class SizeProbe:
         try:
             # The read once the measured rows were done and the parameters back tells whether the last row's sketch
             # came back; the discovery rows ran after it.
-            settled = self.discovery_base if isinstance(self.discovery_base, dict) else after
+            settled = self.rows_end if isinstance(self.rows_end, dict) else after
             self.motion = build.build(self.capture, self.table, self.states, settled)
         except Exception:
             self.motion = None
@@ -589,6 +627,8 @@ class SizeProbe:
             out["after_rows"] = dict(self.after_rows)
         if self.restore_unchecked:
             out["restore_unchecked"] = list(self.restore_unchecked)
+        if self.recovery:
+            out["recovery"] = dict(self.recovery)
         return out
 
     @staticmethod
@@ -598,7 +638,9 @@ class SizeProbe:
             out["failed"] = state["failed"]
         if state.get("e0"):
             out["e0"] = True
-        for key in ("read", "start"):
+        if state.get("again"):
+            out["again"] = True
+        for key in ("read", "start", "put_back"):
             if isinstance(state.get(key), dict):
                 out[key] = {k: v for k, v in state[key].items() if k in _STATE_KEYS}
         return out
@@ -631,12 +673,30 @@ class ProbeGroup:
         return [probe.far_rows(sizes, room) for probe in self.probes][0]
 
     def add_states(self, entries):
-        """Give each probe its own state per `(values, result, reads)` or `(values, result, reads, starts)`; `reads`
-        and `starts` have one read per probe."""
+        """Give each probe its own state per `(values, result, reads)`, `(values, result, reads, starts)` or
+        `(values, result, reads, starts, more)`; `reads`, `starts` and the `put_back` of `more` have one read per
+        probe."""
+        def mine(more, number):
+            backs = (more or {}).get("put_back")
+            return dict(more or {}, put_back=backs[number] if backs else None)
+
         for number, probe in enumerate(self.probes):
             probe.add_states([(values, result, reads[number] if reads else None,
-                               rest[0][number] if rest and rest[0] else None)
+                               rest[0][number] if rest and rest[0] else None,
+                               mine(rest[1] if len(rest) > 1 else None, number))
                               for values, result, reads, *rest in entries])
+
+    def followed_sketches(self):
+        """Tokens of the sketches any part reads at every row."""
+        return list(dict.fromkeys(t for probe in self.probes for t in probe.followed_sketches()))
+
+    def left_start(self, reads):
+        """True when a part's followed sketch reads otherwise than at its E0 (`SizeProbe.left_start`)."""
+        return any(probe.left_start(read) for probe, read in zip(self.probes, reads or []))
+
+    def note_recovery(self, record):
+        for probe in self.probes:
+            probe.note_recovery(record)
 
     def matches_start(self, reads):
         """True when every part's read equals its first read (`SizeProbe.matches_start`)."""
@@ -673,10 +733,10 @@ class ProbeGroup:
     def discovery_rows(self, candidates, room):
         return self.probes[0].discovery_rows(candidates, room)
 
-    def set_discovery_base(self, reads):
-        """Give each probe its own read of the design before the discovery rows."""
-        for probe, read in zip(self.probes, reads):
-            probe.set_discovery_base(read)
+    def set_discovery_base(self, reads, put_backs=None):
+        """Give each probe its own read of the design before the discovery rows (`SizeProbe.set_discovery_base`)."""
+        for number, (probe, read) in enumerate(zip(self.probes, reads)):
+            probe.set_discovery_base(read, put_backs[number] if put_backs else None)
 
     def discover(self, entries):
         """Give each probe its own reads of the discovery rows `(row, result, reads)`."""
