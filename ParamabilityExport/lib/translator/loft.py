@@ -7,12 +7,17 @@ between the two outlines by the nearest centre and share a key, so the kernel lo
 Refused, with the step left out as a gap: more than two outlines, a section that is a point, a face or not a closed
 outline, end conditions other than free, rails, a centre line, a closed loft, outlines with different numbers of
 openings, and outlines whose planes cross or touch (the kernel needs the sections in order along the loft).
+
+Two parallel outlines of straight lines make a ruled loft whose volume follows from the way the kernel pairs the
+corners (`loft_volume`). A new body that has another volume is refused, since Fusion paired the corners another way.
+Where the volume cannot be told, outlines of the same corners that are turned against each other get a note.
 """
-from . import borrowed, loops, placement, sketch_motion, vec
+from . import borrowed, loft_volume, loops, placement, sketch_motion, vec
 from .extrude import COMBINE
 from .footprint import polyline
 from .placer_makers import EndCapsMaker
 from .result import Refusal, StepResult
+from .sweep_volume import made_volume
 from .values import Quantity
 
 PLANE_TOL = 1e-6
@@ -23,6 +28,8 @@ KIND_REASONS = {
     "face": "A loft section that is a face of the part is not copied yet.",
 }
 NOT_AN_OUTLINE = "A loft section is not a closed sketch outline."
+CORNERS_PAIRED = ("Fusion joins the corners of the two outlines of this loft another way than the copy does, so it is "
+                  "not copied yet.")
 
 
 def _settings_refusal(data):
@@ -140,6 +147,28 @@ def _shape_of(loop):
     return ("profile", len(loop["segments"]))
 
 
+def _pairing_check(item, data, profiles):
+    """A Refusal when a new body does not have the volume of the loft the copy builds from the outlines; True when it
+    does; False when that cannot be told (not a new body, no measured volume, outlines of other kinds)."""
+    if data["operation"] != "newBody":
+        return False
+    made = made_volume(item, data)
+    volumes = loft_volume.ruled_volumes(profiles)
+    if made is None or volumes is None:
+        return False
+    return True if loft_volume.matches(volumes, made) else Refusal(CORNERS_PAIRED)
+
+
+def _turned_corners(profiles, built):
+    """True when both outlines are corner outlines (squares, polygons) of the same count whose sketch frames are
+    turned against each other."""
+    kinds = [_shape_of(outer) for outer, _ in built]
+    if kinds[0] != kinds[1] or kinds[0][0] != "corners":
+        return False
+    first, second = (vec.unit(p["frame"]["x"]) for p in profiles)
+    return vec.length(vec.sub(first, second)) > 1e-6
+
+
 def handle(item, ctx):
     data = item.get("data") or {}
     refusal = _settings_refusal(data)
@@ -167,6 +196,10 @@ def handle(item, ctx):
     if _out_of_order(*profiles):
         return Refusal("The outlines of this loft cross each other.")
 
+    checked = _pairing_check(item, data, profiles)
+    if isinstance(checked, Refusal):
+        return checked
+
     keys = [[None] * len(inners) for _, inners in built]
     keys[0] = ["h%d" % n for n in range(len(built[0][1]))]
     for first_hole, second_hole in enumerate(_pairing(*[(p["frame"], b[1]) for p, b in zip(profiles, built)])):
@@ -187,6 +220,9 @@ def handle(item, ctx):
     if _shape_of(built[0][0]) != _shape_of(built[1][0]):
         ctx.note("The two outlines of %s have different shapes. The copy joins them with straight faces, which can "
                  "differ from Fusion between the outlines." % item.get("name", "this loft"))
+    elif not checked and _turned_corners(profiles, built):
+        ctx.note("The two outlines of %s are turned against each other. Fusion and the copy may join their corners in "
+                 "different ways, so check the shape." % item.get("name", "this loft"))
     if data.get("merge_tangent") is False:
         ctx.note("Merge tangent edges is off in %s. This only changes how Fusion splits the faces, so the copy has the "
                  "same shape." % item.get("name", "this loft"))

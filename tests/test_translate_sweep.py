@@ -344,6 +344,63 @@ class VolumeTest(unittest.TestCase):
         self.assertIsNone(translate(capture).refusal)
 
 
+class EndFaceTest(unittest.TestCase):
+    """Both paths end heading along y: the pipe (a new body, radius 3) at (30, 40, 0), the plate's wire (a join, or a
+    cut, radius 1) at (40, 30, 4)."""
+    ENDS = {"new": (PIPE, PIPE_ITEM, (30, 40, 0), None), "join": (PLATE, PLATE_ITEM, (40, 30, 4), None),
+            "cut": (PLATE, PLATE_ITEM, (40, 30, 4), "cut")}
+
+    def made(self, kind, shift=(0, 0, 0.5), normal=(0, 1, 0), faces=None):
+        name, index, end, operation = self.ENDS[kind]
+
+        def edit(data):
+            point = [end[i] + shift[i] for i in range(3)]
+            data["faces_after"]["end"] = faces if faces is not False else None
+            if faces is None:
+                data["faces_after"]["end"] = [{"point": point, "normal": list(normal)}]
+            if operation:
+                data["operation"] = operation
+        return translate(edited(name, index, edit))
+
+    def reason(self, kind, **change):
+        """Why the sweep was refused: it stops the copy as the first step, and is a gap after the plate."""
+        result = self.made(kind, **change)
+        found = stopped(result) if kind == "new" else left_out(result, PLATE_ITEM)
+        return found["reason"] if found else None
+
+    def test_an_end_face_where_the_path_ends_is_copied(self):
+        for kind in self.ENDS:
+            with self.subTest(kind=kind):
+                self.assertIsNone(self.made(kind).refusal)
+
+    def test_an_end_face_somewhere_else_is_refused_whatever_the_operation(self):
+        wrong = {"on a plane past the end": dict(shift=(0, 4, 0)), "facing another way": dict(normal=(1, 0, 0)),
+                 "at the path start": dict(shift=(-30, -40, 0), normal=(-1, 0, 0))}
+        for kind in self.ENDS:
+            for name, change in wrong.items():
+                with self.subTest(kind=kind, face=name):
+                    self.assertEqual(self.reason(kind, **change), sweep_limits.NOT_MATCHING)
+
+    def test_a_new_bodys_one_end_face_must_lie_within_the_reach_of_the_outline(self):
+        self.assertEqual(self.reason("new", shift=(0, 0, 9)), sweep_limits.NOT_MATCHING)
+        self.assertIsNone(self.made("join", shift=(0, 0, 9)).refusal)
+
+    def test_end_faces_that_were_not_read_are_a_note_and_none_is_no_check(self):
+        for faces in (False, [{"point": None, "normal": None}]):
+            with self.subTest(faces=faces):
+                result = self.made("new", faces=faces)
+                self.assertIsNone(result.refusal)
+                self.assertEqual(verdict_of(result, PIPE_ITEM)["verdict"], "translatedWithNote")
+        self.assertEqual(verdict_of(self.made("new", faces=[]), PIPE_ITEM)["verdict"], "translated")
+
+    def test_an_outline_kept_in_one_direction_ends_square_to_its_own_normal(self):
+        capture = load_capture("sweep_straight")
+        data = sweep_of(capture, 2)
+        data["orientation"] = "parallel"
+        data["faces_after"]["end"] = [{"point": [0, 0, 40], "normal": [1, 0, 0]}]
+        self.assertEqual(stopped(translate(capture))["reason"], sweep_limits.NOT_MATCHING)
+
+
 class RefusalTest(unittest.TestCase):
     """Settings the copy does not follow leave the sweep out as a gap after the plate."""
 
@@ -542,6 +599,7 @@ class TaperTest(unittest.TestCase):
                 piece.update(start=list(start), end=list(end))
             data["areas"] = [80.0]
             data["path"]["curves"][0].update(end=[0, 0, 20], check={"start": [0, 0, 0], "end": [0, 0, 20]})
+            data["faces_after"]["end"][0]["point"] = [0, 0, 20]
             data["taper_deg"] = fusion_deg
         capture = edited("sweep_straight", 2, edit)
         capture["items"][2]["target_after"]["volume_mm3"] = volume
@@ -773,6 +831,27 @@ class PathFollowTest(unittest.TestCase):
         (step,) = steps_of(result.recipe, "revolve")
         self.assertEqual((step["axis"]["point"], step["angleDeg"]), ([{"expr": "bend_mm"}, 0.0], 90.0))
         self.assertEqual(result.loose, [])
+
+    def arc_bend_values(self):
+        bend = {"bend_mm": 1.0}
+        return sketch_motion_of("Sketch2", path_values(PIPE_ITEM, {0: {
+            "center.1": Affine(0, bend), "end.0": Affine(0, bend), "end.1": Affine(0, bend),
+            "mid.0": Affine(0, {"bend_mm": K}), "mid.1": Affine(0, {"bend_mm": 1 - K}), "radius": Affine(0, bend)}}))
+
+    def test_an_outline_beside_the_arc_stays_clear_of_the_axis_whatever_the_radius(self):
+        """The circle of radius 3 sits 4 mm to the outer side of the arc's start, so it never reaches the axis."""
+        capture = pipe_along([quarter([0, 10, 0], [0, -1, 0], [1, 0, 0], 10)])
+        data = capture["items"][PIPE_ITEM]["data"]
+        data["path"]["curves"][0].update(entity="p0", flat={"kind": "arc", "start": [0, 0], "end": [10, 10],
+                                                           "mid": data["path"]["curves"][0]["mid"][:2],
+                                                           "center": [0, 10], "radius": 10.0})
+        data["profiles"][0]["loops"][0]["curves"][0]["center"] = [-4.0, 0.0]
+        motion = Motion(self.arc_bend_values(), curves={"2/path"})
+        result = sized(capture, motion, ["bend_mm"], {"bend_mm": (4.0, 12.0)})
+        (step,) = steps_of(result.recipe, "revolve")
+        self.assertEqual(step["angleDeg"], 90.0)
+        self.assertEqual(result.recipe["sizes"]["bend_mm"]["min"], 4.0)
+        self.assertEqual((result.loose, result.fixed), ([], []))
 
     def test_a_full_circle_path_stays_as_measured_with_its_sizes_marked(self):
         result = sized(load_capture("sweep_ring"), Motion({}, curves={"2/path"}), ["ring_mm"])

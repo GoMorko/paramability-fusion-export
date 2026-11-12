@@ -1,9 +1,12 @@
 """Loft through two outlines with free ends: copied as a ruled loft; each case it cannot copy is left out as a gap."""
+import math
 import unittest
 
 from tests import context  # noqa: F401
 from tests.test_translate_sketch_motion import motion_of, run
-from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of, translate, verdict_of
+from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of, stopped, translate, verdict_of
+
+from lib.translator import loft
 
 SQUARES = "loft_two_squares"
 ROUND_TO_SQUARE = "loft_circle_to_square"
@@ -59,6 +62,38 @@ class LoftCopyTest(unittest.TestCase):
         result = edited(SQUARES, lambda data, _: data.update(merge_tangent=False))
         self.assertEqual(verdict_of(result, 2)["verdict"], "translatedWithNote")
         self.assertEqual(len(steps_of(result.recipe, "loft")), 1)
+
+
+class LoftPairingTest(unittest.TestCase):
+    """A 20 by 20 square and a 10 by 10 square 30 mm above it. Turned 45 degrees the top square pairs with the bottom
+    one by the nearest corners (6414.2 mm3) or, joined the other way, by corners far apart (3585.8 mm3)."""
+    S = math.sqrt(0.5)
+
+    def made(self, volume, turned=False):
+        capture = load_capture(SQUARES)
+        data = loft_data(capture)
+        if turned:
+            data["profiles"][1]["frame"].update(x=[self.S, self.S, 0], y=[-self.S, self.S, 0])
+        capture["items"][2]["target_after"] = {"volume_mm3": volume}
+        return translate(capture)
+
+    def test_a_new_body_with_the_volume_of_the_copy_is_copied_without_a_note(self):
+        for turned, volume in ((False, 7000.0), (True, 6414.2)):
+            with self.subTest(turned=turned):
+                result = self.made(volume, turned)
+                self.assertIsNone(result.refusal)
+                self.assertEqual(verdict_of(result, 2)["verdict"], "translated")
+
+    def test_a_new_body_with_another_volume_is_refused_since_the_corners_are_paired_another_way(self):
+        for turned, volume in ((False, 8000.0), (True, 3585.8)):
+            with self.subTest(turned=turned):
+                self.assertEqual(stopped(self.made(volume, turned))["reason"], loft.CORNERS_PAIRED)
+
+    def test_turned_outlines_without_a_volume_to_compare_are_copied_with_a_note(self):
+        result = self.made(None, True)
+        self.assertEqual(verdict_of(result, 2)["verdict"], "translatedWithNote")
+        self.assertIn("turned against each other", verdict_of(result, 2)["note"])
+        self.assertEqual(verdict_of(self.made(None), 2)["verdict"], "translated")
 
 
 class LoftOpeningsTest(unittest.TestCase):

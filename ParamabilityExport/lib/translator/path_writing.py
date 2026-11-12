@@ -5,8 +5,8 @@ import math
 from ..package.numbers import round9
 
 from . import spline_fit, vec
-from .path_checks import (carried_reach_refusal, off_square, outline_reach, overlap_refusal, reach_refusal, seam_turn,
-                          self_touch)
+from .path_checks import (axis_reach_refusal, carried_reach_refusal, off_square, outline_reach, overlap_refusal,
+                          reach_refusal, seam_turn, self_touch)
 from .path_curves import arc_of, near, polyline, round_point, round_point2, tangents
 from .path_limits import (BENDS_3D, CHAIN_TOL, CLOSED_NOT_SMOOTH, CORNER_MATCH_TOL, CROSSES, CURVATURE_SAMPLES,
                           LINE_BEND_RADIUS, MAX_POINTS, MAX_SEGMENTS, MAX_TURN_DEG, NOT_SQUARE, OFF_PLANE, PLANE_TOL,
@@ -17,7 +17,7 @@ from .result import Refusal
 
 def arc_plan(base, curve, profile_points):
     centre, radius, normal, turn = arc_of(curve)
-    refusal = reach_refusal(profile_points, curve["start"], normal, radius)
+    refusal = axis_reach_refusal(profile_points, curve["start"], centre, radius)
     if refusal:
         return refusal
     return PathPlan(kind="arc", axis={"point": round_point(centre), "dir": round_point(normal)}, radius=round9(radius),
@@ -47,7 +47,7 @@ def circle_plan(ring, curves, profile_frame, profile_points):
     direction = vec.unit(vec.cross(normal, vec.sub(start, centre)))
     if off_square(direction, plane):
         return Refusal(NOT_SQUARE)
-    refusal = reach_refusal(profile_points, start, normal, radius)
+    refusal = axis_reach_refusal(profile_points, start, centre, radius)
     if refusal:
         return refusal
     return PathPlan(kind="circle", curves=curves, start=round_point(start), end=round_point(start),

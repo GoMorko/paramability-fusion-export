@@ -77,13 +77,17 @@ def _spline_points(points):
     return [curve.at(i / steps) for i in range(steps + 1)]
 
 
-def reach_of(loop, env, start, across=None):
+def reach_of(loop, env, start, across=None, toward=None):
     """How far a written loop reaches from `start` (2D, the outline's frame): the loop's farthest point, or for a
     loop of lines, arcs and splines its farthest point, with the arcs and splines sampled as the app does. With `across` (a 2D unit direction) only the
     reach along the direction square to it counts: a flat path bends in the plane square to `across`, so the outline
-    reaches toward a bend's centre only that way."""
+    reaches toward a bend's centre only that way. With `toward` (a 2D unit direction) only the reach in that direction
+    counts, and a point on the other side counts negative: an outline beside a revolved arc reaches the axis only
+    toward it."""
     def away(point):
         d = [point[0] - start[0], point[1] - start[1]]
+        if toward is not None:
+            return d[0] * toward[0] + d[1] * toward[1]
         if across is not None:
             along = d[0] * across[0] + d[1] * across[1]
             d = [d[0] - along * across[0], d[1] - along * across[1]]

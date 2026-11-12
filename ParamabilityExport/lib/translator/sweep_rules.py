@@ -5,7 +5,7 @@ import time
 
 from ..params.expressions import ExpressionError
 
-from . import kept_ranges, path_motion, path_rebuilt, range_check, sweep_reach, vec
+from . import kept_ranges, path_curves, path_motion, path_rebuilt, range_check, sweep_reach, vec
 from .sweep_marks import drawn_outline, mark_sketch_place
 
 PATH_BREAKS = "%s would make its path touch itself, bend tighter than its outline, or turn sharply (the app refuses)"
@@ -33,7 +33,17 @@ def _across(profile, followed, options):
     return [c / size for c in across] if abs(size - 1.0) <= 1e-6 else None
 
 
-def _keep_path_valid(ctx, item, profile, found, followed, drawn, options):
+def _toward_centre(arc, frame):
+    """The direction from an arc's start to its centre in the outline's frame (2D unit)."""
+    inward = vec.sub(path_curves.arc_of(arc)[0], arc["start"])
+    across = [vec.dot(inward, frame["x"]), vec.dot(inward, frame["y"])]
+    size = math.hypot(*across)
+    if size <= 1e-12:
+        raise ValueError("an arc that starts at its centre")
+    return [c / size for c in across]
+
+
+def _keep_path_valid(ctx, item, profile, found, followed, drawn, options, form):
     """The app's rules for the path (it starts square to the outline, no sharp corner, no touching itself, the
     outline clear of the tightest bend, a closed seam, an outline kept in one direction rising) must hold at every
     size setting: the sizes' ranges are cut where they stop holding, or the sizes marked when no cut helps.
@@ -66,7 +76,7 @@ def _keep_path_valid(ctx, item, profile, found, followed, drawn, options):
             else:
                 offset = vec.sub(curves[0]["start"], frame["origin"])
                 reach = sweep_reach.reach_of(outer, env, [vec.dot(offset, frame["x"]), vec.dot(offset, frame["y"])],
-                                             across)
+                                             across, _toward_centre(curves[0], frame) if form == "revolve" else None)
                 answers[key] = path_rebuilt.rebuilt_refusal(curves, found.closed, normal, reach, options.fixed,
                                                      leaves=found.direction) is not None
         except _FAILURES:
@@ -115,5 +125,5 @@ def follow_path(ctx, item, profile, path, found, form, options):
     name = item.get("name", "a sweep")
     path_motion.keep_on_plane(ctx, followed, profile["frame"], drawn, name)
     mark_sketch_place(ctx, name, path, plane_follows=True)
-    _keep_path_valid(ctx, item, profile, found, followed, drawn, options)
+    _keep_path_valid(ctx, item, profile, found, followed, drawn, options, form)
     return followed

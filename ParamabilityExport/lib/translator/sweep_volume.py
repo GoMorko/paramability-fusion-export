@@ -9,7 +9,7 @@ from .sweep_outline import centroid
 from .sweep_settings import is_number
 
 
-def _made_volume(item, data):
+def made_volume(item, data):
     """The volume of the body a new body sweep made, or None when it was not measured. A walk of a tool body lists
     its own `volume_after` (null when not measured); otherwise the body of the capture is the one made."""
     if "volume_after" in data:
@@ -69,7 +69,7 @@ def volume_refusal(item, data, combine, profile, found):
         return None
     if not isinstance(areas, list) or len(areas) != 1 or not is_number(areas[0]) or areas[0] <= 0:
         return None
-    made = _made_volume(item, data)
+    made = made_volume(item, data)
     if parallel:
         expected = areas[0] * _rise(profile, found)
     else:
@@ -84,7 +84,7 @@ def volume_refusal(item, data, combine, profile, found):
 def taper_lean(item, shapes, data, combine, found, slope):
     """The taper's meaning read from the volume of a new body along a straight path: `OFFSET`, `FLIPPED` (it leans the
     other way), `SCALED`, `NO_FIT` (no model gives the volume), or None when it cannot be told."""
-    areas, made = data.get("areas"), _made_volume(item, data)
+    areas, made = data.get("areas"), made_volume(item, data)
     if (shapes is None or found.kind != "line" or combine != "new" or made is None or not isinstance(areas, list)
             or len(areas) != 1):
         return None

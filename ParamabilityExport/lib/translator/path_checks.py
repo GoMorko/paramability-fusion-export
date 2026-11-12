@@ -77,6 +77,15 @@ def reach_refusal(profile_points, start, normal, radius, extra=0.0):
     return bend_refusal(outline_reach(profile_points, start, normal) + extra, radius)
 
 
+def axis_reach_refusal(profile_points, start, centre, radius):
+    """A Refusal when the outline reaches the axis of an arc or circle path. Only the reach toward the centre counts:
+    an outline on the outer side of the arc can be as wide as it likes, since a revolve about the axis builds it."""
+    if not profile_points:
+        return None
+    toward = vec.unit(vec.sub(centre, start))
+    return bend_refusal(max(vec.dot(vec.sub(p, start), toward) for p in profile_points), radius)
+
+
 def bend_refusal(reach, radius):
     """A Refusal when an outline reaching `reach` from the path reaches the centre of a bend of `radius`."""
     if radius != math.inf and reach >= radius * REACH_SHARE:

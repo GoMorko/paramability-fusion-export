@@ -525,6 +525,26 @@ class RefusalTest(unittest.TestCase):
         found = plan([ring], points=[[10, 0, 0], [0, 0, 0]], outline={"origin": [0, 0, 0], "z": [0, 1, 0]})
         self.assertIn("reaches 10.00 mm", found.reason)
 
+class AxisReachTest(unittest.TestCase):
+    """A path of one arc or a full circle is a revolve about its axis: only an outline that reaches the axis is refused,
+    one on the outer side may be as wide as it likes."""
+    OUTER = [[0, y, z] for y in (-4, 0) for z in (-2, 2)]
+    INNER = [[0, y, z] for y in (0, 4) for z in (-2, 2)]
+
+    def test_an_outline_on_the_outer_side_of_an_arc_is_not_refused(self):
+        found = plan([quarter([0, 3, 0], [0, -1, 0], [1, 0, 0], 3)], points=self.OUTER)
+        self.assertIsInstance(found, path_model.PathPlan)
+        self.assertIn("reaches 4.00 mm", plan([quarter([0, 3, 0], [0, -1, 0], [1, 0, 0], 3)], points=self.INNER).reason)
+
+    def test_an_outline_on_the_outer_side_of_a_circle_is_not_refused(self):
+        ring = {"kind": "circle", "center": [0, 3, 0], "normal": [1, 0, 0], "radius": 3}
+        frame = {"origin": [0, 0, 0], "z": [0, 0, 1]}
+        outer = [[x, y, 0] for x in (-2, 2) for y in (-4, 0)]
+        self.assertIsInstance(plan([ring], points=outer, outline=frame), path_model.PathPlan)
+        self.assertIn("bends in a radius", plan([ring], points=[[x, y, 0] for x in (-2, 2) for y in (0, 4)],
+                                                outline=frame).reason)
+
+
 class RebuiltTest(unittest.TestCase):
     """A flat path read back from written numbers is tested against the app's rules (`rebuilt_refusal`)."""
 

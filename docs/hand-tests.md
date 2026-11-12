@@ -866,9 +866,14 @@ surprises.
 - [ ] **SW2 Pipe with bends.** A circle swept along a flat path of lines joined by tangent arcs. The recipe holds a
       `sweep` step with a flat path, the part matches, and `volume_after` minus `volume_before` is the circle area
       times the path length. Sizes behind the path sketch follow in the path (see SW19).
+      `faces_after.end` holds a point on the end cap and its normal; both lie at the far end of the path, square to
+      it. Then draw the same path from the far end, or use Join and Cut: the cap must still be at the far end, or the
+      sweep is left out as not matching.
 - [ ] **SW3 Ring.** A triangle swept along a full sketch circle. The recipe holds a full turn `revolve` and the part
       matches. `path.closed` is true. With a twist of 360 degrees the same ring becomes a `sweep` step along a closed
       flat path of two half arcs (see SW18).
+      A triangle drawn on the outer side of a small arc (an arc of radius 3 mm, the triangle 4 mm wide beside it) is
+      copied too; one that reaches across the arc's axis is left out.
 - [ ] **SW4 Profile at the far end.** Draw the path from the far end towards the profile. Note the order of
       `path.curves` and the `opposed` flags. The copy turns the path round and the part matches.
 - [ ] **SW5 Profile in the middle.** Put the profile plane through the middle of the path. Note `distance_one` and
@@ -951,9 +956,18 @@ surprises.
       a round wire's side edge, or on the end of a twisted, tapered or hollow wire, or of a closed path, marks every
       size written before it. A twisted sweep names its start cap but not its end cap. Send `report.json` when
       Paramability picks another edge than Fusion after a size changes.
+- [ ] **SW21 Chamfer where three edges meet.** Make a 20 mm cube. Chamfer the three edges that meet at one corner
+      with the same distance (2 mm), in one Chamfer feature, and export. The app kernel and its wedge fallback give
+      different shapes at such a corner, and the app refuses the wedge there, so we need to learn which shape Fusion
+      makes. Send a photo of the corner (from outside, close up) or the `report.json`, and say whether the corner is a
+      small triangle where the three chamfer faces meet, a flat patch with more sides, or something else.
 - [ ] **LF1 Two squares.** A loft from a 20 mm square to a 10 mm square, 30 mm apart, free ends. The recipe holds a
       loft with `ruled` set and `volume_after` is the frustum volume (7000 mm3). Note whether Fusion builds straight
       faces between the two outlines (a curved side would show in the volume).
+      Then turn the top square 45 degrees (turn its sketch, not its outline) and export: the copy is accepted when
+      the part's volume is 6414 mm3, and left out ("joins the corners ... another way") when it is 3586 mm3. Note which
+      volume Fusion gives; with a Join or Cut instead of a new body the copy carries a note that the outlines are
+      turned against each other.
 - [ ] **LF2 Circle to square.** A loft from a circle to a square. It is copied with a note that the outlines have
       different shapes. Compare the part's volume in Paramability with Fusion's, and note how the corners are
       paired.

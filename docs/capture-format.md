@@ -1153,6 +1153,9 @@ face), and a measured volume change that is not
   whole turns and is written as a number. The overlap check measures the distance along the path round the loop. A
   new body must have the volume of Pappus: the area times the path length less 2 pi times the offset of the
   outline's centre towards the inside; a twisting outline is checked only when its centre sits on the path.
+- Arc and circle paths (`lib/translator/path_writing.py`): the revolve about the arc's axis builds an outline on the
+  outer side of the arc however wide it is; only an outline that reaches the axis is left out (the reach toward the
+  centre counts, along the radius). The check over the size ranges (`sweep_rules.py`) uses the same rule.
 - Path sizes (`lib/translator/path_motion.py`). A path of sketch lines and arcs that the probe measured (its
   `<item>/path` is in `Motion.curves`) follows the sizes. The probe covers such a path when every entity is a line,
   arc or circle of one sketch with a token and a `flat` record (`probe.plan`, kind `path`, and the request's
@@ -1180,6 +1183,11 @@ face), and a measured volume change that is not
 - `faces_after`: a point and the outward normal of the made start and end faces (`startFaces` and `endFaces` of a
   sweep, `startFace` and `endFace` of a loft), read with the marker after the item. Each side is null when the member
   cannot be read. The key is not a pick.
+  The translator checks a sweep's `end` faces against the planned path end (`lib/translator/sweep_ends.py`): each
+  must lie on the plane through the path end that is square to the path's end direction (square to the outline's own
+  normal when the outline keeps its direction) and face along it, and a new body's one end face must lie within the
+  outline's reach of the path end (not checked with a taper). A mismatch leaves the sweep out; unreadable faces add a
+  note; an empty list, a closed path and a full circle are not checked.
 
 PATH, the record of a `Path` (a sweep's path or guide rail, a loft's rails and centre line):
 
@@ -1251,6 +1259,11 @@ Loft `data`:
 - `rails` and `centerline` come from `centerLineOrRails`: `rails` is the list of rail paths (empty when there are
   none), `centerline` the path when `isCenterLine` is true (then `rails` is empty). Both are null when the member
   cannot be read. `closed` is `isClosed`, `merge_tangent` is `isTangentEdgesMerged`.
+- Pairing check (`lib/translator/loft_volume.py`): for a new body between two parallel outlines of straight lines of
+  the same corner count, the measured volume must equal the volume of the loft the copy builds, with the corners
+  paired as the app kernel pairs them (nearest corners about each outline's centre); another volume means Fusion
+  paired them another way and the loft is left out. Where this cannot be told, corner outlines whose sketch frames
+  are turned against each other get a note.
 
 ### Inputs from another component (`foreign`)
 

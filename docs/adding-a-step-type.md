@@ -132,9 +132,10 @@ sizes behind the path sketch (its plane, face or projected curves), behind a pla
 the path, and behind an outline that could reach past the tightest bend (`sweep_reach.py`).
 
 The sweep code is split by concern. `sweep.py` is the handler. `sweep_settings` (twist, taper, direction, rail),
-`sweep_outline`, `sweep_volume` (volume checks), `sweep_marks` (sizes the copy cannot follow), `sweep_rules` (the path's
+`sweep_outline`, `sweep_volume` (volume checks), `sweep_ends` (the made end face against the path end), `sweep_marks` (sizes the copy cannot follow), `sweep_rules` (the path's
 rules held over the size ranges) and `sweep_write` (the extrude, revolve or `sweep` step written) each hold one part, and
-`sweep_limits` holds the refusal texts. The path side follows the same pattern: `paths.py` orders and classifies the path,
+`sweep_limits` holds the refusal texts. `loft.py` is the loft handler; `loft_volume` pairs the corners of two
+straight outlines as the kernel does, for a volume check of a new body. The path side follows the same pattern: `paths.py` orders and classifies the path,
 `path_curves` (curve geometry, chaining), `path_checks` (the app's limits as refusals), `path_writing` (arc, circle, flat
 and corners forms), `path_closed` (closed chains), `path_rebuilt` (a path read back from numbers, for the range rules),
 `path_model` (`PathOptions`, `PathPlan`) and `path_limits` (tolerances, caps, refusal texts). A new refusal text goes into
