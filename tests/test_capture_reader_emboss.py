@@ -74,9 +74,9 @@ class EmbossFeatureStub(Obj):
 
 
 def read(depth_cm=0.1, after=8304.0, made_z=11, face_z=10, surface="Plane", text=False, broken=False, tangent=None,
-         made_extra=(), faces_as=Coll, outlines_as=Coll, outline_face=None, earlier=()):
+         made_extra=(), faces_as=Coll, outlines_as=Coll, outline_face=None, earlier=(), edges=False):
     """The emboss data. `outline_face` is a flat face used as the outline in place of the sketch profile; `earlier`
-    are the component's extrudes before the emboss (timeline index 1)."""
+    are the component's extrudes before the emboss (timeline index 1). `edges` gives the input face its outline."""
     target = lid(after)
     sketch = Obj("fusion::Sketch", name="Sketch1", transform=identity(), entityToken="sk1")
     if outline_face is not None:
@@ -87,6 +87,8 @@ def read(depth_cm=0.1, after=8304.0, made_z=11, face_z=10, surface="Plane", text
     made = face_of("Plane", made_z, target, area=3.04)
     kind = EmbossFeatureStub if broken else Obj
     input_face = face_of(surface, face_z, target)
+    if edges:
+        with_outline(input_face, WALLS)
     if tangent is not None:
         input_face.tangentiallyConnectedFaces = Coll(tangent)
     emboss = kind("fusion::EmbossFeature", parentComponent=Obj(entityToken="root"), bodies=Coll([target]),
@@ -140,6 +142,16 @@ class EmbossReaderTest(unittest.TestCase):
         # The sketch plane is z = 0, the face z = 10 and the floor z = 9: end_offset runs from the sketch plane.
         data = read(depth_cm=-0.1, after=7696.0, made_z=9)
         self.assertEqual((data["depth"], data["end_offset"], data["volume_after"]), (-1.0, 9.0, 7696.0))
+
+    def test_a_lone_input_face_carries_its_edges_as_an_outline(self):
+        outline = read(edges=True)["faces"][0]["outline"]
+        self.assertEqual((outline["face"], outline["frame"]["origin"]), (True, [0, 0, 10]))
+        self.assertEqual(outline["loops"][0]["curves"][1], {"kind": "line", "start": [40, 0], "end": [40, 20]})
+        self.assertNotIn("outline", read()["faces"][0])
+
+    def test_input_faces_beyond_the_first_are_not_given_an_outline(self):
+        data = read(faces_as=lambda faces: Coll(faces * 2), edges=True)
+        self.assertTrue(all("outline" not in face for face in data["faces"]))
 
     def test_a_curved_input_face_is_named_by_its_surface_without_a_plane(self):
         face = read(surface="Cylinder")["faces"][0]

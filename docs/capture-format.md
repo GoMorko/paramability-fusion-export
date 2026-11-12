@@ -1095,7 +1095,9 @@ order (empty when one cannot be read, since a gap would shift the order).
   holes), computed by the reader, the face area for a face, null for a text marker.
 - `faces`: the `inputFaces` the outline lands on. `surface` is `Plane`, `Cylinder`, `Cone` or `other` (from
   `BRepFace.geometry`); `plane` (origin and normal of the geometry), `outward` (`getNormalAtPoint` at `pointOnFace`) and
-  `face_point` are null when they cannot be read. `participants` are the bodies of these faces.
+  `face_point` are null when they cannot be read. A lone face also has `outline`, its edges as an outline record
+  (section 4, flat face) for an outline that reaches past it; left out when they cannot be read. `participants` are the
+  bodies of these faces.
 - `depth`: mm, as Fusion stores it. There is no emboss or deboss flag: the sign decides (assumed: positive raises the
   outline, negative sinks it; hand test E1 and E2). `offset_x`, `offset_y` (`horizontalDistance`,
   `verticalDistance`, mm) and `rotation_deg` (`rotationAngle`) move and turn the outline on the face in a frame the
@@ -1119,7 +1121,9 @@ tangent neighbour that is curved or not on the input plane (when the neighbours 
 face), and a measured volume change that is not
 `sum(areas) * abs(depth)` within 1 percent in the direction the sign of `depth` says. When the change is
 `end_area * abs(depth)` with `end_area` smaller than the outlines, the outline reaches past the face and Fusion trimmed
-it there; the refusal says so ("reaches past the face it sits on").
+it there: the step is written with `within`, the face's `outline` (holes included, drawn like an extrude from a face),
+so the extrude acts only on the face. That needs a lone input face with its `outline`, no flat tangent neighbour while
+Tangent Chain is on, and edges the copy can write; otherwise the refusal says why ("reaches past the face it sits on").
 
 **SweepFeature** and **LoftFeature** (`lib/fusion_reader/read_sweep.py`; the handlers `lib/translator/sweep.py` and
 `lib/translator/loft.py` copy the simple cases, and a step they refuse becomes a gap that holds this data):

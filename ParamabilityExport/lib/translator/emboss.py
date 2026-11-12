@@ -9,13 +9,22 @@ formulas, slabs and picks work as for any extrude. Fusion keeps one signed depth
 Sketch text arrives as ordinary outline profiles (`text_outlines.py`) whose areas come from the outlines themselves,
 so the volume check below also confirms that the text outlines have the area the feature used.
 
+An outline that runs past its face (over a hole of it or off its edge) is trimmed to the face by Fusion: the end
+face then holds the whole change, which is the end face area times the depth. The step is then written with `within`,
+the outline of the face with its holes, so the extrude acts only on the face. The face is drawn like the outline of an
+extrude from a face (face_outline.py).
+
 Refused, with the part then saved as a fixed shape: curved input faces, an outline moved or turned on its face (the
 frame of those settings is not documented), a text whose outlines could not be read, a sketch plane tilted to the
-face, and a result whose measured volume does not match the outline area times the depth. An outline that runs past
-its face is trimmed there by Fusion; the end face then holds the whole change, and the refusal says so.
+face, a result whose measured volume does not match the outline area times the depth (or, for a trimmed outline,
+the end face area times the depth), and a trimmed outline whose face cannot be copied (several input faces, edges not
+read, flat faces following it by Tangent Chain).
 """
-from . import extrude, loops, values, vec
-from .result import Refusal
+import copy
+
+from . import extrude, face_outline, loops, placement, values, vec
+from .result import Refusal, StepResult
+from .values import Quantity
 
 PLANE_TOL = 1e-4
 ZERO_TOL = 1e-6
@@ -68,26 +77,27 @@ def _matches(change, expected):
     return abs(abs(change) - expected) <= VOLUME_RELATIVE_TOL * expected + VOLUME_ABSOLUTE_TOL
 
 
-def _volume_refusal(data, depth):
-    """A Refusal when the measured change of the part is not the outline area times the depth, in the direction the
-    sign of the depth says; None when it agrees."""
+def _volume_check(data, depth):
+    """(refusal, trimmed): a Refusal when the measured change of the part is neither the outline area times the depth
+    nor, with an end face smaller than the outline, the end face area times the depth, or goes the way the sign of the
+    depth does not say; `trimmed` is True when Fusion kept only what lies on the face."""
     areas, before, after = data.get("areas"), data.get("volume_before"), data.get("volume_after")
     if (not isinstance(areas, list) or len(areas) != len(data["profiles"]) or any(a is None for a in areas)
             or before is None or after is None):
-        return Refusal("The change this emboss makes to the part could not be measured, so it is not copied.")
+        return Refusal("The change this emboss makes to the part could not be measured, so it is not copied."), False
     expected = sum(areas) * abs(depth)
     change = after - before
+    trimmed = False
     if not _matches(change, expected):
         end = data.get("end_area")
-        if isinstance(end, (int, float)) and end < sum(areas) and _matches(change, end * abs(depth)):
-            # The end face holds the whole change but is smaller than the outline: Fusion kept only what lies on
-            # the face, and the outline alone does not say which part that is.
-            return Refusal("This emboss reaches past the face it sits on, and Fusion trims it there, which is not "
-                           "copied yet.")
-        return Refusal("The result of this emboss does not match its outline and depth, so it is not copied yet.")
+        if not (isinstance(end, (int, float)) and end < sum(areas) and _matches(change, end * abs(depth))):
+            return Refusal("The result of this emboss does not match its outline and depth, so it is not copied "
+                           "yet."), False
+        trimmed = True
     if (change > 0) != (depth > 0):
-        return Refusal("This emboss does not raise or sink its outline the way its depth says, so it is not copied.")
-    return None
+        return Refusal("This emboss does not raise or sink its outline the way its depth says, so it is not "
+                       "copied."), False
+    return None, trimmed
 
 
 def _on_plane(face, plane):
@@ -112,6 +122,37 @@ def _tangent_refusal(data, face):
     if isinstance(made, list) and any(kind not in (None, "Plane") for kind in made):
         return reason
     return None
+
+
+def _limit(ctx, item, data, face):
+    """The `FaceOutline` of the face a trimmed emboss sits on, or a Refusal when that face cannot be the limit."""
+    reason = "This emboss reaches past the face it sits on, and Fusion trims it there; %s, so it is not copied."
+    if len(data.get("faces") or []) > 1:
+        return Refusal(reason % "it lands on several faces")
+    neighbours = data.get("tangent_faces")
+    if data.get("tangent_chain") is not False and isinstance(neighbours, list) and neighbours:
+        return Refusal(reason % "it also follows the faces next to its face (Tangent Chain)")
+    outline = face.get("outline")
+    if not isinstance(outline, dict):
+        return Refusal(reason % "the edges of the face could not be read")
+    found = face_outline.prepare(ctx, item, [outline])
+    if isinstance(found, Refusal):
+        return Refusal(reason % "the edges of the face cannot be written")
+    return found
+
+
+def _within(ctx, limit):
+    """The limit as a recipe sketch: the face's outline with its holes, on the face's plane."""
+    on = placement.from_frame(limit.profile["frame"])
+    if limit.drawn is not None:
+        on["origin"] = limit.drawn.origin(ctx, Quantity(0.0))
+        outer, inner = limit.drawn.written(ctx)
+    else:
+        outer, inner = copy.deepcopy(limit.loops[0]), copy.deepcopy(limit.loops[1])
+    sketch = {"on": on, "outer": outer}
+    if inner:
+        sketch["inner"] = inner
+    return sketch
 
 
 def _direction(data, face, depth):
@@ -154,9 +195,12 @@ def handle(item, ctx):
     face = faces[0]
     if _tilted(profiles, face["outward"]):
         return Refusal("This emboss is drawn on a plane that is tilted to its face, which is not copied yet.")
-    refusal = _volume_refusal(data, depth)
+    refusal, trimmed = _volume_check(data, depth)
     if refusal is not None:
         return refusal
+    limit = _limit(ctx, item, data, face) if trimmed else None
+    if isinstance(limit, Refusal):
+        return limit
     refusal = _tangent_refusal(data, face)
     if refusal is not None:
         return refusal
@@ -183,4 +227,7 @@ def handle(item, ctx):
         built["params"] = {"side_one.distance": data["params"]["depth"]}
     outcome = extrude.handle(dict(item, data=built), ctx)
     values.handled(ctx, item, "depth", same_as="side_one.distance")
+    if limit is not None and isinstance(outcome, StepResult):
+        for entry in outcome.entries:
+            entry.step["within"] = _within(ctx, limit)
     return outcome

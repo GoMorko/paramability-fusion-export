@@ -789,8 +789,10 @@ the Fusion part. The calls behind these tests are listed under "Capture reader c
       made that face, `made_by`. The copy matches; with `made_by` the pad's sizes stay free, without it they are
       marked loose. If the dialog takes no faces, note that here.
 - [ ] **E8 Outline past its face.** Emboss a raised outline that reaches over a hole or a chamfered edge in its face.
-      Fusion raises only the part on the face. The copy stops with "reaches past the face it sits on" and the part
-      saves without it; `end_area` times `depth` equals `volume_after` minus `volume_before`.
+      Fusion raises only the part on the face. `end_area` times `depth` equals `volume_after` minus `volume_before`, and
+      `faces[0].outline` holds the edges of the face, holes included. The copy writes the extrude with a `within`
+      outline of that face and matches. Repeat with a sunk outline (a deboss) and with an outline that runs off the
+      face's edge. An older export without `outline` stops with "the edges of the face could not be read".
 
 ## 11. Spline outlines and sketch text
 
@@ -1566,7 +1568,7 @@ Emboss tests of section 10 and read the capture in `report.json`.
   the reader takes lists, collections and vectors. A text item is read as outlines (X1).
 - `EmbossFeature.inputFaces` with the marker just before the item: Fusion 2706 gives a `BRepFaceVector`, which has
   only len and indexing, no `count` or `item`. Every collection reader accepts lists, collections and such vectors,
-  and raises when it cannot list them.
+  and raises when it cannot list them. A lone input face also gets its loops read as for an extrude face (`outline`).
 - `EmbossFeature.faces` with the marker just after the item: the faces the feature made. The reader takes the flat
   face parallel to the input face that lies farthest from the sketch plane (`end_offset`, `end_area`); check that it
   is the top of a raised outline and the floor of a sunk one.

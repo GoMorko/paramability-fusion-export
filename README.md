@@ -436,8 +436,11 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   times the depth, as for other outlines.
 - An Emboss of sketch outlines on a flat face is copied as an extrude that starts on the face: it raises the outline
   when its depth is positive and sinks it when the depth is negative. The depth follows a parameter. The copy checks
-  that the part grows or shrinks by the outline area times the depth, so an outline that runs past its face stops the
-  copy. An emboss whose outline is a flat face of the part is copied like an extrude from that face (below).
+  that the part grows or shrinks by the outline area times the depth. An outline that runs past its face (over a hole
+  or off an edge) is trimmed to the face by Fusion: the copy then checks the end face area times the depth and limits
+  the extrude to the outline of that face, holes included (`within`). That works for one flat face with no flat
+  neighbour following it; the face's edges are exact when it is an untapered end of an earlier extrude, else measured
+  with the sizes marked loose. Older exports lack the edges and stop the copy. An emboss whose outline is a flat face of the part is copied like an extrude from that face (below).
 - An extrude whose outline is a flat face of the part is copied. When the face is the top or bottom face of an earlier
   extrude without a taper, and no round, cut or join changed that face, the copy draws that extrude's outline again
   on the face. The outline and the face then follow the sizes of the earlier extrude (its length, its start and its

@@ -1,7 +1,7 @@
 """Emboss features (adsk.fusion.EmbossFeature) as plain dicts (docs/capture-format.md).
 
 Before the item: the outlines it raises or sinks (sketch profiles, the outlines of sketch text, flat faces), the
-faces they land on, the depth and the shift and turn of the outline, and the size of the part. After the item: the
+faces they land on (a lone face with its edges as `outline`), the depth and the shift and turn of the outline, and the size of the part. After the item: the
 size of the part again and where the feature put its farthest face parallel to the input face. For Tangent Chain it
 also reads the faces that touch the input faces tangentially and the surface kinds of the faces the feature made. The
 translator checks the two against each other.
@@ -11,6 +11,7 @@ own: one that cannot be read becomes null, and the translator then refuses the s
 """
 from . import read_geometry as geo
 from .param_refs import Params, with_params
+from .read_face import face_outline
 from .read_finish import strict_items
 from .read_sketch import read_outlines
 
@@ -28,6 +29,17 @@ def _face_record(face, ctx):
         "face_point": geo.safe(lambda: geo.point(face.pointOnFace), None),
     }
     return geo.mark_foreign(record, face, ctx)
+
+
+def _face_records(faces, ctx, index):
+    """The input face records. A lone face also carries `outline`, its edges as an outline record (read_face.py), for
+    an emboss whose outline reaches past it; left out when the edges cannot be read."""
+    records = [_face_record(f, ctx) for f in faces]
+    if len(faces) == 1:
+        outline = geo.safe(lambda: face_outline(faces[0], ctx, index)[0], None)
+        if isinstance(outline, dict) and "loops" in outline:
+            records[0]["outline"] = outline
+    return records
 
 
 def _input_faces(feature):
@@ -78,7 +90,7 @@ def emboss_before(feature, ctx):
     return with_params({
         "profiles": profiles,
         "areas": areas,
-        "faces": [_face_record(f, ctx) for f in faces],
+        "faces": _face_records(faces, ctx, index),
         "tangent_chain": geo.safe(lambda: bool(feature.isTangentChain), None),
         "tangent_faces": _tangent_faces(faces, ctx),
         "made_surfaces": None,

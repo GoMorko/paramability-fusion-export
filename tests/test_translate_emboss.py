@@ -229,9 +229,10 @@ class EmbossRefusalTest(unittest.TestCase):
     def test_a_result_that_does_not_match_the_outline(self):
         self.check(lambda d: d.update(volume_after=d["volume_before"] + 200.0), "does not match")
 
-    def test_an_outline_that_runs_past_its_face(self):
+    def test_an_outline_that_runs_past_a_face_whose_edges_were_not_read(self):
         # Fusion kept 200 of the 304 mm2 outline: the end face holds the whole change.
-        self.check(lambda d: d.update(volume_after=d["volume_before"] + 200.0, end_area=200.0), "reaches past the face")
+        self.check(lambda d: d.update(volume_after=d["volume_before"] + 200.0, end_area=200.0),
+                   "the edges of the face could not be read")
 
     def test_a_result_that_goes_the_other_way_than_the_depth_says(self):
         self.check(lambda d: d.update(volume_after=d["volume_before"] - 304.0), "the way its depth says")
@@ -252,6 +253,92 @@ class EmbossRefusalTest(unittest.TestCase):
 
     def test_no_outline(self):
         self.check(lambda d: d.update(profiles=[], areas=[]), "no sketch outline")
+
+
+def circle(center, radius, outer=False):
+    return {"outer": outer, "curves": [{"kind": "circle", "center": center, "radius": radius}]}
+
+
+def trimmed_by(face, kept, depth=1.0):
+    """The emboss of the lid fixture where Fusion kept `kept` mm2 of the 304 mm2 outline, on `face`."""
+    def edit(data):
+        data.update(end_area=kept, volume_after=data["volume_before"] + kept * depth)
+        data["faces"][0]["outline"] = face
+    return edit
+
+
+class EmbossTrimmedTest(unittest.TestCase):
+    LID_TOP = {"index": 1, "name": "Extrude1", "which": "end"}
+
+    def test_an_outline_over_a_hole_of_its_face_is_limited_to_the_face_with_the_hole(self):
+        face = top_face(square([0, 0], [60, 40]) + [circle([30, 6], 3)], self.LID_TOP)
+        result = with_edit(trimmed_by(face, 280.0))
+        self.assertIsNone(result.refusal)
+        _, raised = steps_of(result.recipe, "extrude")
+        self.assertEqual(raised["combine"], "add")
+        within = raised["within"]
+        self.assertEqual((within["on"]["origin"], within["on"]["normal"]), ([0.0, 0.0, 4.0], [0.0, 0.0, 1.0]))
+        self.assertEqual(within["outer"]["kind"], "rect")
+        self.assertEqual(within["inner"], [{"kind": "circle", "center": [30.0, 6.0], "radius": 3.0}])
+        assert_schema_ok(self, result.recipe)
+
+    def test_an_outline_over_the_edge_of_its_face_is_limited_to_the_face(self):
+        face = top_face(square([0, 0], [60, 20]))
+        result = with_edit(trimmed_by(face, 160.0))
+        self.assertIsNone(result.refusal)
+        _, raised = steps_of(result.recipe, "extrude")
+        self.assertEqual((raised["within"]["outer"]["center"], raised["within"]["outer"]["height"]), ([30.0, 10.0], 20.0))
+        self.assertNotIn("inner", raised["within"])
+        assert_schema_ok(self, result.recipe)
+
+    def test_a_sunk_outline_over_the_edge_of_its_face_cuts_inside_the_face(self):
+        def both(data):
+            sunk(data)
+            kept = 200.0
+            data.update(end_area=kept, volume_after=data["volume_before"] - kept)
+            data["faces"][0]["outline"] = top_face(square([0, 0], [60, 20]))
+        _, cut = steps_of(with_edit(both).recipe, "extrude")
+        self.assertEqual(cut["combine"], "cut")
+        self.assertEqual(cut["within"]["outer"]["height"], 20.0)
+
+    def test_the_limit_is_the_outline_of_the_extrude_that_made_the_face_and_follows_its_sizes(self):
+        face = top_face(square([0, 0], [60, 40]), self.LID_TOP)
+        capture = load_capture(LID)
+        trimmed_by(face, 280.0)(emboss_data(capture))
+        result = sized(capture)
+        base, raised = steps_of(result.recipe, "extrude")
+        self.assertEqual(raised["within"]["outer"], base["sketch"]["outer"])
+        self.assertEqual(raised["within"]["on"]["origin"][2], {"expr": "lid_mm"})
+        self.assertEqual((result.fixed, result.loose, result.dropped), ([], [], []))
+
+    def test_a_face_no_extrude_made_is_written_as_measured_and_marks_the_sizes_it_may_follow(self):
+        capture = load_capture(LID)
+        trimmed_by(top_face(square([0, 0], [60, 40])), 280.0)(emboss_data(capture))
+        result = sized(capture)
+        self.assertIsNone(result.refusal)
+        self.assertEqual([d["name"] for d in result.loose], ["lid_mm"])
+
+    def test_a_trimmed_outline_whose_face_cannot_be_the_limit_is_refused(self):
+        def two_faces(data):
+            data["faces"].append(dict(data["faces"][0]))
+        def next_to_flat(data):
+            data["tangent_faces"] = [EmbossTangentChainTest.FLAT]
+        def curved_edge(data):
+            data["faces"][0]["outline"]["loops"][0]["curves"][0] = {"kind": "other", "type": "NurbsCurve3D",
+                                                                      "start": [0, 0], "end": [60, 0], "samples": []}
+        for edit, word in ((two_faces, "several faces"), (next_to_flat, "Tangent Chain"),
+                           (curved_edge, "cannot be written")):
+            def run(data, edit=edit):
+                trimmed_by(top_face(square([0, 0], [60, 40])), 280.0)(data)
+                edit(data)
+            with self.subTest(word):
+                self.assertIn(word, reason_of(with_edit(run)))
+
+    def test_a_change_that_is_neither_the_outline_nor_the_end_face_is_still_refused(self):
+        def edit(data):
+            trimmed_by(top_face(square([0, 0], [60, 40])), 280.0)(data)
+            data["volume_after"] = data["volume_before"] + 250.0
+        self.assertIn("does not match", reason_of(with_edit(edit)))
 
 
 class SketchTextTest(unittest.TestCase):
