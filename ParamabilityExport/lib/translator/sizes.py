@@ -62,6 +62,22 @@ def probed_sizes(table):
     return [name for name in table.ticked if name in reached]
 
 
+def construction_only(table):
+    """Fusion names of the ticked sizes that reach a model parameter made by a construction plane, but none made by a
+    sketch dimension and no geometry of another component, in table order: they move the plane alone, and each step
+    that uses it follows it or marks them (`construction_fixes`)."""
+    sketch, plane = set(), set()
+    for m in table.model_params.values():
+        kind = _kind(m)
+        if kind == "sketchDimension":
+            sketch |= table.depends(m["name"])
+        elif kind == "constructionPlane":
+            plane |= table.depends(m["name"])
+    for link in table.links:
+        sketch |= table.depends(link["param"])
+    return [name for name in table.ticked if name in plane and name not in sketch]
+
+
 def joint_reasons(table, names=None):
     """{ Fusion name: why } for each ticked size (or each of `names`) that a joint reads. A joint is not copied, so
     the part does not follow such a size in the assembly."""
@@ -222,18 +238,17 @@ def construction_sizes(table, kind, token=""):
 
 def offset_param(table, ref):
     """The model parameter that sets how far an offset construction plane of the body's component lies from the one
-    plane or face it is built on, when it is the only parameter the plane made and it reads a ticked size; else
-    None. An extrude that starts from or reaches to such a plane writes that distance as a formula
-    (`follow._plane_shift`)."""
+    plane or face it is built on, when it is the only parameter the plane made that reads a ticked size (Fusion may
+    give the plane a second one, a fixed extra offset); else None. A step that places such a plane writes that
+    distance as a formula (`follow._own_offset`), which checks it against where the plane was measured."""
     if (table is None or not isinstance(ref, dict) or ref.get("entity_type") != "ConstructionPlane"
             or "offset" not in (ref.get("definition") or "").lower() or len(ref.get("built_on") or ()) != 1
             or not ref.get("token")):
         return None
     made = [p for p in table.model_params.values()
-            if _kind(p) == "constructionPlane" and (p.get("created_by") or {}).get("token") == ref["token"]]
-    if len(made) != 1 or not table.depends(made[0]["name"]) & set(table.ticked):
-        return None
-    return made[0]
+            if _kind(p) == "constructionPlane" and (p.get("created_by") or {}).get("token") == ref["token"]
+            and table.depends(p["name"]) & set(table.ticked)]
+    return made[0] if len(made) == 1 else None
 
 
 def _followed_planes(table, ref, found):
@@ -247,16 +262,24 @@ def _followed_planes(table, ref, found):
     return found
 
 
+def _placed_planes(data):
+    """The plane records of a step that its handler places with `follow.place_plane` or an extrude reach, which
+    follow an offset plane's own distance: where an extrude starts and what each side reaches to, the plane a mirror
+    or a draft uses, and the plane a split cuts along."""
+    tool = data.get("tool") if isinstance(data.get("tool"), dict) else {}
+    return [data.get(key) for key in ("start", "side_one", "side_two", "plane")] + [tool.get("plane")]
+
+
 def construction_fixes(table, item):
     """[(Fusion names, reason)] for the ticked sizes behind each construction plane or axis that the step uses itself
     (to start from, reach to, turn about or mirror across). A record without a token stands for every one of its kind.
-    An offset plane an extrude starts from or reaches to follows its own distance (`offset_param`) and is left out.
+    An offset plane the step places (`_placed_planes`) follows its own distance (`offset_param`) and is left out.
     The reason follows "<name> stays fixed: "."""
     out = []
     data = item.get("data") if isinstance(item.get("data"), dict) else {}
     followed = set()
-    for key in ("start", "side_one", "side_two"):
-        _followed_planes(table, data.get(key), followed)
+    for record in _placed_planes(data):
+        _followed_planes(table, record, followed)
     for kind, token in _construction_records(data, []):
         if token and token in followed:
             continue

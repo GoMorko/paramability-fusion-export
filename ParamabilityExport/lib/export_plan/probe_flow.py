@@ -22,6 +22,7 @@ from ..probe import build, derived, fit, match, plan, plane_sizes, ref_fit
 from ..sketch_values.motion import CURVE, SHAPE, TURNS, UNREAD, Stuck, Terms
 from ..translator import borrowed
 from ..translator.notes import loose_reason
+from ..translator.sizes import construction_only
 from .part_names import tagged
 
 _STATE_KEYS = ("sketches", "points", "lines", "params", "box", "refs", "faces", "unread")
@@ -514,8 +515,10 @@ class SizeProbe:
                 followed.add(varied[0])
             elif body_changed(self.e0, read) and varied[0] not in body:
                 body.append(varied[0])
-        # A size tried only for a sketch plane feeds step values: those follow it, so its body change is explained.
-        placed = set(plane_sizes.plane_driven(self.capture, self.table)) - set(plan.sketch_driven(self.table))
+        # A size tried only for a sketch plane, or for a construction plane alone, feeds step values: those follow it
+        # (or mark it), so its body change is explained.
+        placed = (set(plane_sizes.plane_driven(self.capture, self.table)) - set(plan.sketch_driven(self.table))
+                  | set(construction_only(self.table)))
         return [n for n in body if n not in followed and n not in skip and n not in placed]
 
     def _target_moved(self, target, read):

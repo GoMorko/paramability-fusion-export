@@ -3,7 +3,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.fakes import FakeStore
-from tests.probe_helpers import capture, size, table, user
+from tests.probe_helpers import capture, model, size, table, user
 from tests.test_probe_flow import START, Fusion, number, states
 from tests.test_probe_motion import CAPTURE, MODEL, PARAMS, TICKED, read_at
 from tests.test_probe_refs import MIRROR, plane_at, with_refs
@@ -151,6 +151,11 @@ class BodyOnlyTest(unittest.TestCase):
         self.assertEqual(probe.motion.body_moved, ["wall"])
         self.assertEqual(Motion.from_json(probe.report()["motion"]).body_moved, ["wall"])
         self.assertEqual(self.probed(WallBody(grows=False)).motion.body_moved, [])
+
+    def test_a_size_that_moves_a_construction_plane_alone_explains_its_body_change(self):
+        self.table = table(PARAMS + [user("wall", "2 mm", 2)], TICKED + ["wall"],
+                           MODEL + [model("d9", "wall", 2, kind="constructionPlane", token="cp9")])
+        self.assertEqual(self.probed(WallBody()).motion.body_moved, [])
 
     def test_a_size_that_changes_the_body_is_not_dropped_as_changing_nothing(self):
         motion = motion_with("component_ref_reach")

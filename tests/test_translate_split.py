@@ -7,6 +7,7 @@ from tests.test_translate_sized import table_of
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, stopped, verdict_of
 
 from lib.export_plan.body_scope import body_items
+from lib.sketch_values.motion import Motion
 from lib.translator import translate
 
 PLATE = {"token": "t1", "name": "Body1"}
@@ -84,6 +85,24 @@ class SplitByPlaneTest(unittest.TestCase):
         plain, sized = (steps_of(r.recipe, "toolBody")[0]["features"][0]["distance"]
                         for r in (translate(capture), translate(capture, size_table=table)))
         self.assertAlmostEqual(sized / plain, size["max"] / size["value"], places=3)
+
+    def test_a_split_along_a_plane_offset_by_a_size_follows_that_size(self):
+        plane = {"entity_type": "ConstructionPlane", "token": "cp1", "made_by": 1, "point": [10, 0, 0],
+                 "normal": [1, 0, 0], "definition": "ConstructionPlaneOffsetDefinition",
+                 "built_on": [{"entity_type": "ConstructionPlane", "token": "yz", "origin": True, "normal": [1, 0, 0]}]}
+        capture = plate_split(OTHER, tool={"kind": "plane", "plane": plane})
+        made = {"kind": "constructionPlane", "token": "cp1", "name": "Plane1"}
+        capture["parameters"] = {
+            "user": [{"name": "cut_mm", "expression": "10 mm", "value": 1.0, "unit": "mm", "kind": "length",
+                      "comment": "", "dependency_parameters": [], "dependent_parameters": ["d9"]}],
+            # Fusion also gives an offset plane a fixed extra offset.
+            "model": [{"name": "d9", "expression": "cut_mm", "value": 1.0, "unit": "mm", "role": "AlongDistance",
+                       "dependency_parameters": ["cut_mm"], "created_by": made},
+                      {"name": "d10", "expression": "0.00 mm", "value": 0.0, "unit": "mm", "role": "ExtraOffset",
+                       "dependency_parameters": [], "created_by": made}]}
+        result = translate(capture, size_table=table_of(capture, ["cut_mm"]), motion=Motion())
+        self.assertEqual(box_cut(result)[1]["origin"][0], {"expr": "cut_mm"})
+        self.assertEqual((result.loose, result.fixed, result.dropped), ([], [], []))
 
     def test_a_split_of_a_split_off_piece_follows_both(self):
         quarter = {"token": "t4", "name": "Body4"}
