@@ -311,6 +311,16 @@ class UnreadableTest(unittest.TestCase):
         self.assertIsNone(data["side_one"]["taper_deg"])
         self.assertEqual(data["start"]["kind"], "other")
 
+    def test_a_distance_fusion_refuses_reads_as_another_way_of_setting_the_length(self):
+        target = body()
+        refused = Obj("fusion::DistanceExtentDefinition")  # reading `distance` raises
+        data = self.capture([sketch_entry(), extrude(rect_profile(), target=target, extentOne=refused)],
+                            target)["items"][1]["data"]
+        self.assertEqual(data["side_one"], {"kind": "other", "type": "DistanceExtentDefinition"})
+        symmetric = extrude(rect_profile(), target=target, extentType="SymmetricFeatureExtentType",
+                            symmetricExtent=Obj("fusion::SymmetricExtentDefinition"))
+        self.assertIsNone(self.capture([sketch_entry(), symmetric], target)["items"][1]["data"]["symmetric"])
+
     def test_end_face_types_follow_the_end_points(self):
         target = body()
         hole = entry(feature("HoleFeature", "H", bodies=[target], holeType="SimpleHoleType",

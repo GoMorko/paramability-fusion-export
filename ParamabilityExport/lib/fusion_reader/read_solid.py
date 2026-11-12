@@ -89,7 +89,11 @@ def _extent(definition, taper_deg, ctx, slot):
         return dict({"kind": "toEntity", "offset": geo.safe(lambda: geo.length(definition.offset), None)},
                     **_target(definition, ctx, slot))
     if name == "DistanceExtentDefinition":
-        return {"kind": "distance", "distance": geo.length(definition.distance), "taper_deg": taper_deg}
+        # Fusion can refuse the distance of a valid extrude; the step is then left out, not the whole copy stopped.
+        distance = geo.safe(lambda: geo.length(definition.distance), None)
+        if distance is None:
+            return {"kind": "other", "type": name}
+        return {"kind": "distance", "distance": distance, "taper_deg": taper_deg}
     return {"kind": "other", "type": name}
 
 
@@ -184,8 +188,9 @@ def extrude_before(feature, ctx):
         side_one = {"kind": "other", "type": "FeatureExtentTypes"}
     elif extent_type == "symmetric":
         sym = feature.symmetricExtent
-        symmetric = {
-            "distance": geo.length(sym.distance),
+        distance = geo.safe(lambda: geo.length(sym.distance), None)
+        symmetric = None if distance is None else {
+            "distance": distance,
             "full_length": geo.safe(lambda: bool(sym.isFullLength), None),
             "taper_deg": geo.safe(lambda: geo.angle(sym.taperAngle), None),
         }
