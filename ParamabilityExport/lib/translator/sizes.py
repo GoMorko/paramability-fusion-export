@@ -62,20 +62,41 @@ def probed_sizes(table):
     return [name for name in table.ticked if name in reached]
 
 
-def construction_only(table):
-    """Fusion names of the ticked sizes that reach a model parameter made by a construction plane, but none made by a
-    sketch dimension and no geometry of another component, in table order: they move the plane alone, and each step
-    that uses it follows it or marks them (`construction_fixes`)."""
-    sketch, plane = set(), set()
+def _placed_offsets(table, capture):
+    """Names of the model parameters that set the own distance of an offset plane a step of the capture places
+    (`_placed_planes`, through chains of planes): the copy follows those distances (`follow._own_offset`)."""
+    found = set()
+
+    def visit(ref):
+        if isinstance(ref, dict) and ref.get("entity_type") == "ConstructionPlane":
+            param = offset_param(table, ref)
+            if param is not None:
+                found.add(param["name"])
+            for entry in ref.get("built_on") or ():
+                visit(entry)
+
+    for item in capture.get("items") or ():
+        data = item.get("data") if isinstance(item.get("data"), dict) else {}
+        for record in _placed_planes(data):
+            visit(record)
+    return found
+
+
+def construction_only(table, capture):
+    """Fusion names of the ticked sizes whose every use is the own distance of an offset plane that a step places
+    (`_placed_offsets`): no other model parameter reads them, and no geometry of another component. They move that
+    plane alone, and the step follows it (or marks them when the measured plane does not match), in table order."""
+    followed = _placed_offsets(table, capture)
+    other = set()
     for m in table.model_params.values():
-        kind = _kind(m)
-        if kind == "sketchDimension":
-            sketch |= table.depends(m["name"])
-        elif kind == "constructionPlane":
-            plane |= table.depends(m["name"])
+        if m["name"] not in followed:
+            other |= table.depends(m["name"])
     for link in table.links:
-        sketch |= table.depends(link["param"])
-    return [name for name in table.ticked if name in plane and name not in sketch]
+        other |= table.depends(link["param"])
+    reached = set()
+    for name in followed:
+        reached |= table.depends(name)
+    return [name for name in table.ticked if name in reached and name not in other]
 
 
 def joint_reasons(table, names=None):

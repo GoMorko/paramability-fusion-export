@@ -515,10 +515,10 @@ class SizeProbe:
                 followed.add(varied[0])
             elif body_changed(self.e0, read) and varied[0] not in body:
                 body.append(varied[0])
-        # A size tried only for a sketch plane, or for a construction plane alone, feeds step values: those follow it
-        # (or mark it), so its body change is explained.
+        # A size tried only for a sketch plane, or only for the distance of an offset plane a step places, feeds
+        # step values: those follow it (or mark it), so its body change is explained.
         placed = (set(plane_sizes.plane_driven(self.capture, self.table)) - set(plan.sketch_driven(self.table))
-                  | set(construction_only(self.table)))
+                  | set(construction_only(self.table, self.capture)))
         return [n for n in body if n not in followed and n not in skip and n not in placed]
 
     def _target_moved(self, target, read):

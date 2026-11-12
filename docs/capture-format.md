@@ -1691,8 +1691,8 @@ be tried" (added to its other reason when there is one and it fits the note), un
 that built on every side the probe did not cover. Every state also
 reads the body's box (and volume when the state has it): a size whose state alone changed the box but moved no
 followed sketch or reference is kept in `Motion.body_moved` (`SizeProbe.finish`), unless it was tried only for a
-sketch plane, or it moves a construction plane and no sketch (`sizes.construction_only`): it feeds step values, which
-follow it or mark it. The translator treats it as doubtful
+sketch plane, or its only use is the distance of an offset plane a step places (`sizes.construction_only`): it feeds
+step values, which follow it or mark it. The translator treats it as doubtful
 with "it changes this part in a way the copy does not follow": loose when a formula reads it, else dropped with
 `used` true. It is never reported as changing nothing.
 
