@@ -27,10 +27,12 @@ SIDE_TOL_MM = 0.01
 # The pieces of a body add up to its volume within this (mm3), or this share of it.
 VOLUME_TOL_MM3 = 0.01
 VOLUME_RELATIVE = 1e-6
-# The box tool reaches this many times the body's half diagonal past the body, plus a fixed margin (mm), so that the
-# part still lies inside it when sizes grow it.
+# The box tool reaches this many times the body's half diagonal past the body, plus a fixed margin (mm), times how
+# much the sizes may grow the part (`_growth`), so that the part still lies inside it at every size.
 BOX_REACH = 4.0
 BOX_MARGIN_MM = 100.0
+# A larger growth is not followed: the sizes behind it are marked.
+MAX_GROWTH = 25.0
 
 
 def _stop(reason):
@@ -90,12 +92,32 @@ def _square(normal):
     return vec.unit(vec.cross(normal, helper))
 
 
+def _growth(ctx, item):
+    """How many times the part may grow inside the size ranges, bounded by the largest ratio of a free size's range
+    end to its value (a part whose lengths are formulas of the sizes grows by at most that). A size that grows past
+    MAX_GROWTH is marked."""
+    table, found, past = ctx.table, 1.0, []
+    for entry in getattr(table, "entries", None) or ():
+        size = table.sizes.get(entry.size_name) if entry.size_name else None
+        value = (size or {}).get("value")
+        if not isinstance(value, (int, float)) or not value or "min" not in size:
+            continue
+        ratio = max(abs(size["min"]), abs(size["max"])) / abs(value)
+        if ratio > MAX_GROWTH:
+            past.append(entry.name)
+        found = max(found, min(ratio, MAX_GROWTH))
+    if past:
+        ctx.doubt(past, "%s removes the far side with a box that may not reach past the part at these sizes"
+                  % (item.get("name") or "A split"))
+    return found
+
+
 def _box_tool(ctx, item, plane, far, shift, around):
     """The `toolBody` cut that removes everything on the `far` side of `plane` (its point and normal) near the box
     `around`. A sized `shift` moves the plane along its normal."""
     lo, hi = around["min"], around["max"]
     centre = [(a + b) / 2.0 for a, b in zip(lo, hi)]
-    reach = BOX_REACH * vec.length(vec.sub(hi, lo)) / 2.0 + BOX_MARGIN_MM
+    reach = (BOX_REACH * vec.length(vec.sub(hi, lo)) / 2.0 + BOX_MARGIN_MM) * _growth(ctx, item)
     on_plane = vec.sub(centre, vec.scale(plane["normal"], vec.dot(vec.sub(centre, plane["point"]), plane["normal"])))
     origin = round_vec(on_plane)
     if shift is not None and shift.sized:
@@ -123,7 +145,10 @@ def _by_plane(ctx, item, tool, parent, piece, others):
     if piece.get("box") is None or any(p.get("box") is None for p in others):
         return _stop("The pieces of this split could not be measured.")
     side = _side(piece["box"], point, normal)
-    if not side or any(_side(p["box"], point, normal) != -side for p in others):
+    sides = [_side(p["box"], point, normal) for p in others]
+    if side and side in sides:
+        return _stop("This split leaves more than one piece on the side of the part, which is not copied yet.")
+    if not side or any(s != -side for s in sides):
         return _stop("This split leaves pieces on both sides of its plane, which is not copied yet.")
     shift = follow.place_plane(ctx, item, plane, normal, "splits along")
     around = parent.get("box") or piece["box"]

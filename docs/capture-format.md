@@ -928,7 +928,8 @@ the plane and no cut reaches across it; otherwise (a round, chamfer, shell or Mo
 The translator follows a body that a split made back to the body it was split from (`lib/translator/lineage.py`): a
 piece belongs to the only split body, or to the one whose box holds its box. A split of the body it builds becomes the
 removal of the other side (`lib/translator/split.py`): a cut by a large box beyond the plane, or a cut or intersect with
-the tool body. It stops the copy unless the capture shows the piece is the whole of its side (one side of the plane, or
+the tool body. The box reaches four half diagonals of the body plus 100 mm past it, times the largest ratio of a free
+size's range end to its value (up to 25; a size past that is marked), so a part the sizes grow is still cut. It stops the copy unless the capture shows the piece is the whole of its side (one side of the plane, or
 inside or outside the tool body, with every other piece of that body on the other side), the pieces add up to the
 body's volume, and no later step changes another piece together with the part (`lib/translator/split_rules.py`).
 
@@ -1942,11 +1943,14 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
   `faces`: `{ "<item>/face": { "token", "before" } }`, `before` the step's timeline index. The step changes or removes
   the face, so the reader moves the timeline marker to `before`, finds the face by its token, reads its `frame` and
   `loops` like the capture's face record (section 4) and moves the marker back (`read_face.read_faces`, read last). A
-  `before` past the marker, a marker that does not move or a face that is not found gives `unread`. The probe pairs
-  the edges with the captured ones by kind and place along each loop, writes the values under the keys of a profile
-  (`<item>/face/...`) and tries every size an item reads before the step (`plane_sizes.plane_driven`). A different
-  outline that one size makes on its own is a range limit, like a sketch's, named "the face <step> starts on". A face
-  whose first read does not match the capture is not read again; the motion file lists the measured ones in `faces`.
+  `before` past the marker, a marker that does not move or a face that is not found gives `unread`. A marker that does
+  not go back leaves every face unread and adds `"marker"` to `unread`, and the probe stops. A face is read only in a
+  state that sets a size read before its step (`SizeProbe.read_now`); the other states take its E0 read. The probe
+  pairs the edges with the captured ones by kind and place along each loop, writes the values under the keys of a
+  profile (`<item>/face/...`) and tries every size an item reads before the step (`plane_sizes.plane_driven`). A
+  different outline that one size makes on its own is a range limit, like a sketch's, named "the face <step> starts
+  on". A face whose first read does not match the capture is not read again; the motion file lists the measured ones
+  in `faces`.
 - Nothing raises. A part that cannot be read has no key, which the fit treats as unread.
 
 ## 6. Report and capture file

@@ -3,6 +3,7 @@
 import unittest
 
 from tests import context  # noqa: F401
+from tests.test_translate_sized import table_of
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, stopped, verdict_of
 
 from lib.export_plan.body_scope import body_items
@@ -71,6 +72,15 @@ class SplitByPlaneTest(unittest.TestCase):
         self.assertGreater(tool["distance"], 4 * 40)
         self.assertGreater(tool["sketch"]["outer"]["width"], 4 * 40)
 
+    def test_the_box_grows_with_the_size_ranges(self):
+        capture = plate_split(OTHER)
+        capture["parameters"] = load_capture("filter_tray_sized")["parameters"]
+        table = table_of(capture, ["wall_mm"])
+        size = table.sizes[table.size_name("wall_mm")]
+        plain, sized = (steps_of(r.recipe, "toolBody")[0]["features"][0]["distance"]
+                        for r in (translate(capture), translate(capture, size_table=table)))
+        self.assertAlmostEqual(sized / plain, size["max"] / size["value"], places=3)
+
     def test_a_split_of_a_split_off_piece_follows_both(self):
         quarter = {"token": "t4", "name": "Body4"}
         low, high = box((10, 0, 0), (40, 5, 10)), box((10, 5, 0), (40, 20, 10))
@@ -92,6 +102,8 @@ class SplitByPlaneTest(unittest.TestCase):
 class SplitStopTest(unittest.TestCase):
     def test_each_split_the_copy_cannot_show_stops_it(self):
         straddles = [piece(PLATE, box((0, 0, 0), (12, 20, 10)), 2000.0), piece(OTHER, RIGHT, 6000.0)]
+        three = [piece(PLATE, LEFT, 2000.0), piece(OTHER, box((10, 0, 0), (40, 10, 10)), 3000.0),
+                 piece({"token": "t4", "name": "Body4"}, box((10, 10, 0), (40, 20, 10)), 3000.0)]
         short = [piece(PLATE, LEFT, 2000.0), piece(OTHER, RIGHT, 5000.0)]
         curved = {"kind": "surface", "type": "Cylinder"}
         fillet = {"index": 3, "name": "Fillet1", "type": "FilletFeature", "suppressed": False, "health": "ok",
@@ -99,6 +111,7 @@ class SplitStopTest(unittest.TestCase):
         cases = {
             "a piece on both sides": (plate_split(OTHER, pieces=straddles), "both sides"),
             "pieces that do not add up": (plate_split(OTHER, pieces=short), "add up"),
+            "two pieces on the part's side": (plate_split(OTHER, pieces=three), "more than one piece"),
             "a curved tool": (plate_split(OTHER, tool=curved), "curved"),
             "the other piece used later": (plate_split(PLATE, after=[fillet]), "Fillet1"),
             "the piece that kept the name used later": (plate_split(OTHER, after=[fillet]), "Fillet1"),
