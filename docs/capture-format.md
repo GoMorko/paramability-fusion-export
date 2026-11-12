@@ -2097,6 +2097,11 @@ face outlines: `BRepFace` (`loops`, `geometry`, `evaluator`, `pointOnFace`, `ent
 `Features.extrudeFeatures`, `Feature.timelineObject`, `TimelineObject.index`, `ExtrudeFeature` (`startFaces`,
 `endFaces`, `sideFaces`; the stub says the start faces of a symmetric extrude are on the positive normal side).
 
+Read in the same stubs on 2026-11-12 for Split Body, not yet confirmed on a real design (hand tests SB1 and SB2):
+`SplitBodyFeature` (`splittingTool` and `splitBodies`, both read with the marker before the feature as the stub
+asks; `isSplittingToolExtended`; `bodies`), `BRepBody.pointContainment` (a `PointContainment` value: inside 0, on 1,
+outside 2, unknown 3), `BRepBody.isSolid`.
+
 Used by the reach read and not yet confirmed on a real design (see its row below): `Feature.faces` (the faces a
 feature created, for each feature type that can be a candidate), `BRepEdge.faces`, `Design.findEntityByToken`,
 `Component.findBRepUsingPoint`, `Timeline.markerPosition`, `TimelineObject.entity`. The stub of `Feature.faces` says it
