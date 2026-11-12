@@ -82,6 +82,42 @@ class SplitReaderTest(unittest.TestCase):
         data = read_capture(design, inner, fusion="", name="", up_axis="z")["items"][0]["data"]
         self.assertEqual([p["inside"] for p in data["pieces"]], [False, True])
 
+    def test_a_tool_body_of_a_moved_component_is_seen_where_its_occurrence_puts_it(self):
+        core = install_adsk_core()
+        core.Point3D = types.SimpleNamespace(create=lambda x, y, z: Obj(x=x, y=y, z=z))
+        inner = body("b2", "Body2", lo=(15, 5, 0), hi=(25, 15, 10), volume=0.8)
+        inner.faces = Coll([face((20, 10, 10), (0, 0, 1))])
+        outer = body("b1", "Body1", hi=(40, 20, 10), volume=7.2)
+        outer.faces = Coll([face((0, 10, 5), (-1, 0, 0))])
+        occurrence = Obj("fusion::Occurrence", entityToken="occ1")
+
+        def tool_body(shift, context):
+            # Holds the points of a 1 cm square that starts `shift` cm along x.
+            return Obj("fusion::BRepBody", entityToken="b3", name="Body3", isSolid=True, volume=1.1,
+                       assemblyContext=context, parentComponent=Obj(entityToken="other"),
+                       pointContainment=lambda p: "PointInsidePointContainment"
+                       if shift < p.x < shift + 1 and 0.5 < p.y < 1.5 else "PointOutsidePointContainment",
+                       boundingBox=Obj(minPoint=P(15, 5, -2), maxPoint=P(25, 15, 12)))
+
+        native = tool_body(0.5, None)
+        proxy = tool_body(1.5, occurrence)
+        proxy.nativeObject = native
+        native.createForAssemblyContext = lambda context: proxy if context is occurrence else None
+
+        class Split(Obj):
+            @property
+            def splittingTool(self):
+                return proxy if design.timeline.markerPosition == 0 else None
+
+        split, _ = feature("SplitBodyFeature", "Split1", bodies=[outer, inner],
+                           splitBodies=Coll([body("b1", "Body1", hi=(40, 20, 10), volume=8.0)]),
+                           isSplittingToolExtended=False)
+        split.__class__ = Split
+        design = FakeDesign([entry((split, "Split1"))], inner)
+        design.findEntityByToken = lambda token: {"b3": [native], "b2": [inner]}.get(token, [])
+        data = read_capture(design, inner, fusion="", name="", up_axis="z")["items"][0]["data"]
+        self.assertEqual([p["inside"] for p in data["pieces"]], [False, True])
+
     def test_a_curved_face_is_a_surface(self):
         curved = Obj("fusion::BRepFace", geometry=Obj("core::Cylinder"))
         self.assertEqual(read(curved, [body()])["tool"], {"kind": "surface", "type": "Cylinder"})

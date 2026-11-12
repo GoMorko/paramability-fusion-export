@@ -39,6 +39,8 @@ def _tool(entity, ctx):
 
 def split_before(feature, ctx):
     tool = geo.native_input(feature.splittingTool, ctx)
+    # A tool body of another component comes through an occurrence: its place is kept for the read after the split.
+    ctx.held[("split tool", geo.safe(lambda: tool.entityToken, None))] = geo.safe(lambda: tool.assemblyContext, None)
     return {
         "tool": _tool(tool, ctx),
         "extended": geo.safe(lambda: bool(feature.isSplittingToolExtended), None),
@@ -74,12 +76,22 @@ def inside(piece, tool):
 
 def _tool_body(feature, ctx, tool):
     """The solid tool body at the current marker position. Fusion gives a feature's splitting tool only while the
-    marker sits before the feature, so once it is computed the body is looked up by the token read before it."""
+    marker sits before the feature, so once it is computed the body is looked up by the token read before it, seen
+    through the same occurrence as then (a body of another component sits where its occurrence puts it)."""
     body = geo.native_input(geo.safe(lambda: feature.splittingTool, None), ctx)
     if body is not None:
         return body
     token = (tool.get("body") or {}).get("token")
-    return geo.find_native(ctx.design, token) if token else None
+    if not token:
+        return None
+    occurrence = ctx.held.get(("split tool", token))
+    if occurrence is None:
+        return geo.find_native(ctx.design, token)
+    for found in geo.safe(lambda: list(ctx.design.findEntityByToken(token)), None) or []:
+        if geo.same_entity(geo.safe(lambda: found.assemblyContext, None), occurrence):
+            return found
+    native = geo.find_native(ctx.design, token)
+    return geo.safe(lambda: native.createForAssemblyContext(occurrence), None) if native is not None else None
 
 
 def split_after(feature, ctx, data):
