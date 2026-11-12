@@ -149,3 +149,7 @@ another reason keeps that state.
 `docs/capture-format.md`). The result window lists each gap as "name: reason" under "N steps left out", with one line
 saying that Paramability keeps the original shape and an unfinished copy. A parts file puts the part name first and
 names its own gaps file per part.
+
+The export window warns early: under the body picker, "Likely left out of the copy:" lists (`dialog_model/stop_warning.py`)
+the steps the first translation leaves out for their own reason, at most three, then "and N more". It runs without
+the size tries and the face read, so a step that is a gap only because it picks faces of another gap is not listed.
