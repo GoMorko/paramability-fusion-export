@@ -269,6 +269,12 @@
                 "minLength": 1,
                 "type": "string"
               },
+              "expression": {
+                "description": "Fusion's own text of a formula that `expr` does not hold, because the source program's formula could not be written in the recipe grammar. The app keeps `value`; it may show this text.",
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string"
+              },
               "label": {
                 "description": "The parameter name as the source program shows it (default: `name`).",
                 "maxLength": 64,
@@ -288,6 +294,12 @@
                   "deg",
                   ""
                 ],
+                "type": "string"
+              },
+              "untranslated": {
+                "description": "Short plain sentence on why `expression` was not written as `expr`.",
+                "maxLength": 200,
+                "minLength": 1,
                 "type": "string"
               },
               "value": {
@@ -381,6 +393,12 @@
                 "minLength": 1,
                 "type": "string"
               },
+              "expression": {
+                "description": "Fusion's own text of a formula that `expr` does not hold, because the source program's formula could not be written in the recipe grammar. The app keeps `value`; it may show this text.",
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string"
+              },
               "label": {
                 "description": "The parameter name as the source program shows it (default: `name`).",
                 "maxLength": 64,
@@ -400,6 +418,12 @@
                   "deg",
                   ""
                 ],
+                "type": "string"
+              },
+              "untranslated": {
+                "description": "Short plain sentence on why `expression` was not written as `expr`.",
+                "maxLength": 200,
+                "minLength": 1,
                 "type": "string"
               },
               "value": {
@@ -512,6 +536,12 @@
                 "minLength": 1,
                 "type": "string"
               },
+              "expression": {
+                "description": "Fusion's own text of a formula that `expr` does not hold, because the source program's formula could not be written in the recipe grammar. The app keeps `value`; it may show this text.",
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string"
+              },
               "label": {
                 "description": "The parameter name as the source program shows it (default: `name`).",
                 "maxLength": 64,
@@ -531,6 +561,12 @@
                   "deg",
                   ""
                 ],
+                "type": "string"
+              },
+              "untranslated": {
+                "description": "Short plain sentence on why `expression` was not written as `expr`.",
+                "maxLength": 200,
+                "minLength": 1,
                 "type": "string"
               },
               "value": {

@@ -113,6 +113,13 @@ class ResultViewTest(unittest.TestCase):
         self.assertEqual(section_lines(shown, "left_out")[0], "Extrude5: No.")
         self.assertIn("left out", section_lines(shown, "result")[1])
 
+    def test_a_formula_kept_as_a_number_gets_a_line_after_the_sizes(self):
+        listed = [{"name": "odd", "label": "odd", "value": 5, "unit": "mm", "expression": "wall + 30 deg",
+                   "untranslated": "It adds a length and an angle."}, {"name": "wall", "value": 2, "unit": "mm"}]
+        manifest = {"kind": "recipe", "notes": [], "parameters": listed}
+        self.assertEqual(section_lines(view(manifest), "sizes"), [
+            "wall: 1 to 4 mm", "kept as a number: odd = wall + 30 deg (It adds a length and an angle)"])
+
     def test_parameters_that_also_change_the_part_are_in_a_more_sizes_section(self):
         shown = view(extra={"also_changes": ["spare"]})
         self.assertEqual(len(section_lines(shown, "more")), 1)

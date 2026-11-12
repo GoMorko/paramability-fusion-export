@@ -200,6 +200,21 @@ class CutsManifestTest(unittest.TestCase):
         self.assertTrue(validate({**manifest, "version": 2}, load_schema(PACKAGE_SCHEMA_V2)))
 
 
+class UntranslatedParameterManifestTest(unittest.TestCase):
+    ENTRY = {"name": "odd", "label": "odd", "value": 5.0, "unit": "mm", "expression": "wall + 30 deg",
+             "untranslated": "It adds a length and an angle."}
+
+    def test_a_parameter_with_fusion_text_follows_the_schema_copy_and_long_text_is_refused_by_both(self):
+        manifest = mf.build_recipe_manifest("Part", "w", notes=["1 step copied."], parameters=[self.ENTRY])
+        self.assertEqual(mf.validate_manifest(manifest), [])
+        schema = load_schema(PACKAGE_SCHEMA_V2)
+        self.assertEqual(validate({**manifest, "version": 2}, schema), [])
+        for key, size in (("expression", 301), ("untranslated", 201)):
+            long = {**manifest, "parameters": [{**self.ENTRY, key: "x" * size}]}
+            self.assertTrue(mf.validate_manifest(long), key)
+            self.assertTrue(validate({**long, "version": 2}, schema), key)
+
+
 class SchemaCopyTest(unittest.TestCase):
     """The writers' manifests fit the app's schema copy, so a cap that drifts from the app is noticed here."""
 
