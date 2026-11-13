@@ -1053,6 +1053,16 @@ class PathKeptTest(unittest.TestCase):
                           outline={"2/p0/l0/radius": radius})
         self.assertEqual([f["name"] for f in result.loose], ["wire_mm"])
 
+    def test_a_stuck_path_point_holds_its_sizes_in_the_outline_of_the_same_sweep(self):
+        from lib.translator.translate import _Held
+        capture = load_capture(PIPE)
+        params = capture["parameters"]
+        table = size_table.build(params["user"], [p["name"] for p in params["user"]], params["model"], "mm")
+        curved = Terms(0.0, [(0.5, [("", "wire_mm", 1.0)])], "Sketch1")
+        held = _Held(Motion({"2/path/c1/mid.0": Stuck(["wire_mm"], "curve", "Sketch2"), "2/p0/l0/radius": curved}),
+                     table)
+        self.assertTrue(held.get("2/p0/l0/radius").is_constant)
+
     def test_a_point_stuck_for_one_size_marks_only_the_sizes_that_move_it(self):
         values = dict(bend_values(), **{"2/path/c1/mid.0": Stuck(["bend_mm"], "curve", "Sketch2")})
         result = followed(values)

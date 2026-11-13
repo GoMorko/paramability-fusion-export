@@ -27,6 +27,7 @@ A key of a sketch belongs to one sketch; the sketch is named by the record the k
 reference key belongs to the reference `<item>.<slot>` of the capture (`params.geometry_links.ref_key`); its values are
 moves from the captured place, so they are zero at the sizes the capture was read at.
 """
+import re
 
 
 def profile(item, number):
@@ -107,6 +108,8 @@ def item_of(key):
 
 
 def is_curve(key):
-    """True for a key of a sketch curve (`<prefix>/c<loop>.<curve>/<field>`)."""
+    """True for a key of a sketch curve of an outline (`<item>/p<profile>/c<loop>.<curve>/<field>`), not of a sweep
+    path (`<item>/path/c<curve>/<field>`)."""
     parts = key.split("/")
-    return len(parts) == 4 and parts[1].startswith("p") and parts[2].startswith("c")
+    return (len(parts) == 4 and re.fullmatch(r"p\d+", parts[1]) is not None
+            and re.fullmatch(r"c\d+\.\d+", parts[2]) is not None)
