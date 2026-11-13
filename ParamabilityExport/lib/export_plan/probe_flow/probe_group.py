@@ -3,6 +3,7 @@ from ...package.manifest import MAX_FIXED_REASON
 from ...package.text import clip
 from ...probe import plan
 from ..part_names import tagged
+from .row_schedule import RowSchedule
 from .shadow import shadow_of
 from .states import marked_states
 
@@ -13,13 +14,15 @@ class ProbeGroup:
     Every part has its own `SizeProbe` (its sketches, references and motion), all over the same size table. The rows
     are the same for all of them (sizes that move a sketch of any part), so Fusion recomputes once per row and each
     probe reads its own part there. The row limit (`plan.MAX_PROBE_ROWS`) is for the whole export, not per part. It
-    offers the calls of `SizeProbe` that `ProbeRun` and the pipeline use; a read is a list with one entry per probe.
+    has every member of `interface.Probe`; a read is a list with one entry per probe. Each part's probe keeps its own
+    row phase; the group keeps the nearer and check rows the parts share (`schedule`).
     """
 
     def __init__(self, probes, names):
         self.probes = list(probes)
         self.names = list(names)
         self.table = self.probes[0].table
+        self.schedule = RowSchedule()
 
     def read_now(self, values=None, outline=False, park=False):
         """The probe state of each part as the design is now (`SizeProbe.read_now`). Only the last part's read may leave
@@ -95,19 +98,15 @@ class ProbeGroup:
         moving = list(dict.fromkeys(n for probe in self.probes for n in probe.moving_sizes()))
         first = self.probes[0]
         changed = set().union(*(probe.outline_changes() for probe in self.probes))
-        rows = plan.nearer_rows(sizes, marked_states(first.states, changed), moving,
-                                min(room, plan.MAX_NEARER_ROWS - first.nearer_count))
-        for probe in self.probes:
-            probe.nearer_count += len(rows)
+        rows = plan.nearer_rows(sizes, marked_states(first.states, changed), moving, self.schedule.nearer_room(room))
+        self.schedule.count_nearer(rows)
         return rows
 
     def check_rows(self, sizes, room):
         """The check rows for all parts: a size curved in any part counts as curved for all."""
-        first = self.probes[0]
-        if first.checked:
+        if not self.schedule.check_once():
             return []
-        for probe in self.probes:
-            probe.checked = True
+        first = self.probes[0]
         found = [probe.curved_sizes() for probe in self.probes]
         curved = list(dict.fromkeys(n for c, _ in found for n in c))
         partners = [n for n in dict.fromkeys(n for _, p in found for n in p) if n not in curved]

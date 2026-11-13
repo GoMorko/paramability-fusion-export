@@ -43,7 +43,7 @@ def _row_values(row):
 
 class ProbeRun:
     """Runs the probe's rows in one job: one baseline, and the parameters put back after every row. The rows only
-    recompute (no STEP). It keeps the probe state read at every row that built, by row key, and `rows` lists
+    recompute (no STEP). `probe` is a `probe_flow.Probe` (one part, or a group of parts over shared rows). It keeps the probe state read at every row that built, by row key, and `rows` lists
     (row, result) of every row run. `read_failure` holds the first probe read that failed: the probe is then not
     used.
 

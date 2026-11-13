@@ -1,6 +1,6 @@
-"""The parameter store and the export port are declared once (`design_edit.store.ParameterStore`,
-`pipeline.ExportPort`, `pipeline.PartsPort`). The Fusion classes and the shared fakes must have every declared member,
-and the pure code may ask a store or port only for a declared one."""
+"""The parameter store, the export port and the probe are declared once (`design_edit.store.ParameterStore`,
+`pipeline.ExportPort`, `pipeline.PartsPort`, `probe_flow.Probe`). The Fusion classes, the shared fakes and both probes
+must have every declared member, and the pure code may ask a store, port or probe only for a declared one."""
 import ast
 import os
 import typing
@@ -13,12 +13,15 @@ from tests.test_pipeline import FakePort
 
 from lib.design_edit.store import TIMELINE_CONTROLS, ParameterStore
 from lib.export_plan.pipeline import ExportPort, PartsPort
+from lib.export_plan.probe_flow import Probe
 
 LIB = os.path.join(context.ADDIN_DIR, "lib")
 FUSION_STORE = os.path.join(LIB, "fusion_reader", "rows.py")
 FUSION_PORTS = os.path.join(context.ADDIN_DIR, "commands", "ExportForParamability", "export_flow.py")
 # Folders of the pure code that is handed a store or a port.
 PURE_FOLDERS = ("design_edit", "export_plan")
+PROBE_FLOW = os.path.join(LIB, "export_plan", "probe_flow")
+PIPELINE = os.path.join(LIB, "export_plan", "pipeline")
 
 STORE_NAMES = {"store", "self.store", "port.store", "self.port.store"}
 PORT_NAMES = {"port", "self.port"}
@@ -26,6 +29,7 @@ PORT_NAMES = {"port", "self.port"}
 STORE_MEMBERS = set(typing.get_protocol_members(ParameterStore)) | set(TIMELINE_CONTROLS)
 PORT_MEMBERS = set(typing.get_protocol_members(ExportPort))
 PARTS_PORT_MEMBERS = set(typing.get_protocol_members(PartsPort))
+PROBE_MEMBERS = set(typing.get_protocol_members(Probe))
 
 
 def _dotted(node):
@@ -86,6 +90,17 @@ def _asked_of_store_and_port():
     return found
 
 
+def _asked_of(path, names):
+    """Members asked of the objects called `names` in a file."""
+    with open(path, encoding="utf-8") as f:
+        tree = ast.parse(f.read())
+    return {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute) and _dotted(node.value) in names}
+
+
+def _asked_of_probe_by_the_runner():
+    return _asked_of(os.path.join(PIPELINE, "probe_run.py"), {"self.probe"})
+
+
 class DeclaredInterfaceTest(unittest.TestCase):
     def test_the_fusion_store_has_every_declared_member(self):
         missing = STORE_MEMBERS - _class_members(FUSION_STORE, "DesignParameterStore")
@@ -111,6 +126,20 @@ class DeclaredInterfaceTest(unittest.TestCase):
     def test_every_declared_member_is_asked_for_somewhere(self):
         asked = {member for _, member in _asked_of_store_and_port()}
         self.assertEqual((STORE_MEMBERS | PORT_MEMBERS | PARTS_PORT_MEMBERS) - asked - {"export_step"}, set())
+
+    def test_both_probes_have_every_declared_member(self):
+        self.assertEqual(PROBE_MEMBERS - _class_members(os.path.join(PROBE_FLOW, "size_probe.py"), "SizeProbe"), set())
+        self.assertEqual(PROBE_MEMBERS - _class_members(os.path.join(PROBE_FLOW, "probe_group.py"), "ProbeGroup"), set())
+
+    def test_the_try_runner_asks_the_probe_only_for_declared_members(self):
+        asked = _asked_of_probe_by_the_runner()
+        self.assertIn("far_pair_rows", asked)
+        self.assertEqual(asked - PROBE_MEMBERS, set())
+
+    def test_every_declared_probe_member_is_asked_for_by_the_runner_or_both_pipelines(self):
+        single = _asked_of(os.path.join(PIPELINE, "run.py"), {"probe", "self.probe"})
+        parts = _asked_of(os.path.join(PIPELINE, "parts.py"), {"group", "self.group"})
+        self.assertEqual(PROBE_MEMBERS - _asked_of_probe_by_the_runner() - (single & parts), set())
 
 
 if __name__ == "__main__":

@@ -541,7 +541,7 @@ package may import only packages above it in this list (not every one of them). 
 - `design_edit`: setting parameter values row by row, restoring them, the timeline marker, the temporary copy, and the declared interface of the parameter store (`store.py`).
 - `translator`: a capture dict in, a recipe plus verdicts out (one handler per step kind).
 - `probe`: measures sketches and the places of other components' planes, axes and points at other size values and fits the motion file.
-- `export_plan`: the export itself: the pipeline (one body or several), the put back of the design at its end (`pipeline/put_back.py`), the recipe and its notes, the probe run, size offers.
+- `export_plan`: the export itself: the pipeline (one body or several), the put back of the design at its end (`pipeline/put_back.py`), the recipe and its notes, the probe run, size offers. The try runner (`pipeline/probe_run.py`) calls the probe through one declared interface (`probe_flow/interface.py`) that the probe of one part (`probe_flow/size_probe.py`) and the group of several parts (`probe_flow/probe_group.py`) both have.
 - `dialog_model`: what the dialogs show, as plain data (rows, Sizes table, result view, stop warning).
 - `fusion_reader`: reads the design with `adsk` into a capture.
 - `fusion_ui`: draws the dialogs and handles their events with `adsk`.
@@ -556,7 +556,8 @@ reading code is tested with fakes. Anything that touches `adsk` stays in `lib/fu
 `commands/`. `tests/test_boundary.py` checks that, which package may import which (so imports only go one way), and
 that no module imports an underscore name from another module. `tests/test_interfaces.py` checks that the Fusion
 parameter store, the two Fusion ports and the shared fakes have every member the pure code asks of a store or a port
-(declared in `design_edit/store.py` and `export_plan/pipeline/port.py`).
+(declared in `design_edit/store.py` and `export_plan/pipeline/port.py`), and that both probes have every member the try
+runner asks of a probe (declared in `export_plan/probe_flow/interface.py`).
 From this folder:
 
 ```

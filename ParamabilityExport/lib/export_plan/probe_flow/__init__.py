@@ -14,16 +14,19 @@ A borrowed sketch that the fit cannot follow (it did not read back as captured) 
 changes it, or leaves it unreadable, is loose. A reference that did not read back as captured is not read again; the
 motion file says so (`Motion.refs`).
 
-The modules: `size_probe` (`SizeProbe`: the states and the calls of the try runner), `row_planning`, `discovery` and
-`findings` (the parts of `SizeProbe` that plan rows, read the discovery rows and build the result), `probe_group`
-(`ProbeGroup`), `borrowed_view` (the borrowed sketches and the view of the capture), `shared_reads`, `states` (comparing
-states), `sizes` (`sizes_to_try`: which sizes to probe), `reasons` (the texts of untried sizes) and `shadow` (the `derived` block).
+The modules: `size_probe` (`SizeProbe`: the states of one part, the rows it plans, the discovery rows and the motion),
+`probe_group` (`ProbeGroup`: several parts over shared rows), `interface` (`Probe`: what the try runner and the
+pipelines call; both classes have every member), `row_schedule` (the row phases), `borrowed_view` (the borrowed
+sketches and the view of the capture), `shared_reads`, `states` (comparing states), `sizes` (`sizes_to_try`: which
+sizes to probe), `reasons` (the texts of untried sizes) and `shadow` (the `derived` block).
 This package re-exports what the rest of the add-in reads as `probe_flow.<name>`.
 """
 from .borrowed_view import borrowed_sketches, covers_a_sketch, probe_view
+from .interface import Probe
 from .probe_group import ProbeGroup
 from .shadow import shadow_of
 from .size_probe import SizeProbe
 from .sizes import sizes_to_try
 
-__all__ = ["ProbeGroup", "SizeProbe", "borrowed_sketches", "covers_a_sketch", "probe_view", "shadow_of", "sizes_to_try"]
+__all__ = ["Probe", "ProbeGroup", "SizeProbe", "borrowed_sketches", "covers_a_sketch", "probe_view", "shadow_of",
+           "sizes_to_try"]
