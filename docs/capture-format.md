@@ -2407,7 +2407,7 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | `getAsCoordinateSystem()` returns `(origin, xAxis, yAxis, zAxis)` in Python | the Tilted sketch test |
 | `CurveEvaluator3D.getParameterExtents`, `getPointAtParameter`, `getTangent`; `SurfaceEvaluator.getNormalAtPoint` | the "Capture reader calls to watch" lists in `docs/hand-tests.md` |
 | A flipped one sided extrude stores a negative distance | `end_offset`; the Extrude directions test |
-| Taper sign (Fusion positive grows or shrinks) | one constant `FUSION_TAPER_SIGN` in `extrude.py`; the Extrude directions test |
+| Taper sign (Fusion positive grows or shrinks) | one constant `FUSION_TAPER_SIGN` in `extrude/taper.py`; the Extrude directions test |
 | `ToEntityExtentDefinition`, `TwoSidesDistanceExtentDefinition`, `TwoSidesAngleExtentDefinition`, `FromEntityStartDefinition` field names | reader falls back to `other`; the Extrude directions test |
 | Revolve turning sense | `start_face_normal`; the Turned knob test |
 | Hole `direction` points into the material; blind depth is measured to the shoulder, not the tip; how a flat drill point shows (`tipAngle` 180 or another member) | `end_points`; the Holes test |

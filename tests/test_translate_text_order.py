@@ -1,5 +1,5 @@
 """The order the outlines of one extrude are written in, and what it costs with many outlines
-(lib/translator/extrude.py, `_touching_order`)."""
+(lib/translator/extrude/order.py, `_touching_order`)."""
 import random
 import time
 import unittest
@@ -7,7 +7,8 @@ import unittest
 from tests import context  # noqa: F401
 from tests.translator_helpers import load_capture, steps_of
 
-from lib.translator import extrude, translate
+from lib.translator import translate
+from lib.translator.extrude.order import _touching_order
 
 LID = "emboss_lid_outline"
 EMBOSS = 3
@@ -102,7 +103,7 @@ class SearchTest(unittest.TestCase):
             units = [(built[n], entry, box) for n, box in enumerate(boxes) for entry in used]
             rng.shuffle(units)
             pairs = [(one, entry) for one, entry, _ in units]
-            found = extrude._touching_order(_Context, pairs, 0.0, False)
+            found = _touching_order(_Context, pairs, 0.0, False)
             expected = _plain_order([(box, entry) for _, entry, box in units])
             self.assertEqual([next(n for n, pair in enumerate(pairs) if pair is f) for f in found], expected)
 

@@ -13,10 +13,11 @@ NO_HINT = {gap_hints.REFUSED, gap_hints.UNSUPPORTED}
 def _named_causes():
     """The causes the translator gives: every `gap_hints.NAME` it reads, and the causes of the step kind table."""
     found = {spec.gap_cause for spec in step_kinds.STEP_TYPES if spec.gap_cause}
-    for name in sorted(os.listdir(TRANSLATOR_DIR)):
-        if not name.endswith(".py") or name == "gap_hints.py":
+    paths = sorted(os.path.join(folder, name) for folder, _, names in os.walk(TRANSLATOR_DIR) for name in names)
+    for path in paths:
+        if not path.endswith(".py") or os.path.basename(path) == "gap_hints.py":
             continue
-        with open(os.path.join(TRANSLATOR_DIR, name), encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             tree = ast.parse(f.read())
         for node in ast.walk(tree):
             if (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)

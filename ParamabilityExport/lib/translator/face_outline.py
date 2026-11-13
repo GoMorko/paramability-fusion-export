@@ -17,7 +17,7 @@ the outward normal, its loops in that plane and, when it knows, the earlier extr
   as numbers. The sizes read by the steps written so far may change that face, so they stay free with a warning
   (`Context.doubt`); when the probe read the face, only those that moved it or were not tried.
 
-The extrude's own length, taper and operation follow their parameters in every case (extrude.py).
+The extrude's own length, taper and operation follow their parameters in every case (the `extrude` package).
 """
 import copy
 

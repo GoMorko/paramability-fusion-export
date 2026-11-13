@@ -1,5 +1,5 @@
 """An extrude that starts on a face is measured from its sketch plane: the plane's own move and the face's move are
-counted once (lib/translator/extrude.py, lib/translator/sketch_motion.py)."""
+counted once (lib/translator/extrude/, lib/translator/sketch_motion.py)."""
 import copy
 import unittest
 
