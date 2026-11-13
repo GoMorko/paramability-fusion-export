@@ -1224,7 +1224,9 @@ Tangent Chain is on, and edges the copy can write; otherwise the refusal says wh
   `distanceOne` and `distanceTwo` (the share of the path the sweep covers; the translator takes 1 and 0 or null as the whole path), `taper_deg` and `twist_deg` are
   `taperAngle` and `twistAngle` in degrees. `scaling` (`profileScaling`) is `scale`, `stretch`, `none` or `other`.
   `extent` is the `extent` setting as text. Every one of these is null when the member cannot be read or does not
-  exist in the running Fusion build, which holds for `extent` in particular. `params` follows the usual rules (the
+  exist in the running Fusion build, which holds for `extent` in particular. `unread` (only when one of them is null)
+  says per key of `orientation`, `taper_deg` and `twist_deg` what Fusion gave instead: the error text of the member,
+  `none`, or `unusable <type>`; the sweep's reason names the missing settings and quotes it. `params` follows the usual rules (the
   scalar ones have kind `scalar`).
 - Twist and taper (`lib/translator/sweep.py`): a twist, a taper or `parallel` along a path that turns makes a `sweep`
   step with `twistDeg`, `taperDeg` and `orientation: "fixed"` (a line becomes a corners path of its two points, an

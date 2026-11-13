@@ -447,15 +447,19 @@ class RefusalTest(unittest.TestCase):
             ("rail", lambda d: d.update(rail=copy.deepcopy(d["path"])), sweep_limits.RAIL),
             ("rail unread", lambda d: d.update(rail={"kind": "unread"}), sweep_limits.RAIL_UNREADABLE),
             ("other orientation", lambda d: d.update(orientation="other"), sweep_limits.OTHER_KIND),
-            ("orientation unread", lambda d: d.update(orientation=None), sweep_limits.UNREADABLE),
-            ("twist unread", lambda d: d.update(twist_deg=None), sweep_limits.UNREADABLE),
         ])
+
+    def test_settings_fusion_did_not_give_are_named_with_what_fusion_said(self):
+        reason = gap_reason(on_plate(lambda d: d.update(
+            orientation=None, taper_deg=None, twist_deg=None,
+            unread={"orientation": "none", "taper_deg": "RuntimeError: 3 : invalid", "twist_deg": "none"})))
+        for words in ("orientation, twist and taper", "RuntimeError: 3 : invalid"):
+            self.assertIn(words, reason)
 
     def test_part_of_the_path(self):
         self.reasons([
             ("distance one", lambda d: d.update(distance_one=0.5), sweep_limits.PART_OF_PATH),
             ("distance two", lambda d: d.update(distance_two=0.25), sweep_limits.PART_OF_PATH),
-            ("distance one unread", lambda d: d.update(distance_one=None), sweep_limits.UNREADABLE),
         ])
 
     def test_a_parallel_outline_on_a_bent_path(self):

@@ -111,7 +111,19 @@ class Broken(Obj):
         raise RuntimeError("not available")
 
 
+class NoTwist(Obj):
+    @property
+    def twistAngle(self):
+        raise RuntimeError("3 : the twist is not available")
+
+
 class SweepSettingsTest(unittest.TestCase):
+    def test_a_setting_fusion_does_not_give_keeps_what_fusion_said(self):
+        data = read_sweep(NoTwist)
+        self.assertEqual(data["unread"], {"twist_deg": "3 : the twist is not available"})
+        self.assertNotIn("unread", read_sweep())
+
+
     def test_the_settings_and_the_outline_are_read(self):
         data = read_sweep()
         self.assertEqual((data["operation"], data["solid"], data["orientation"], data["scaling"]),

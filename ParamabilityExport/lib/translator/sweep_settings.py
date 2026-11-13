@@ -27,7 +27,7 @@ def settings_refusal(data):
     twist, taper = data.get("twist_deg"), data.get("taper_deg")
     one, two = data.get("distance_one"), data.get("distance_two")
     if not (is_number(twist) and is_number(taper) and is_number(one)) or data.get("orientation") is None:
-        return Refusal(UNREADABLE)
+        return Refusal(_unread_reason(data))
     if data["orientation"] not in ("perpendicular", "parallel"):
         return Refusal(OTHER_KIND)
     if abs(twist) > ZERO_TOL and abs(taper) > ZERO_TOL:
@@ -41,6 +41,22 @@ def settings_refusal(data):
     if abs(one - 1.0) > ZERO_TOL or (is_number(two) and abs(two) > ZERO_TOL):
         return Refusal(PART_OF_PATH)
     return None
+
+
+_SETTING_WORDS = (("orientation", "orientation"), ("twist_deg", "twist"), ("taper_deg", "taper"),
+                  ("distance_one", "length along its path"))
+
+
+def _unread_reason(data):
+    """The refusal text for settings read as null, naming them (and what Fusion said, when the capture has it)."""
+    missing = [words for key, words in _SETTING_WORDS
+               if (data.get(key) is None if key == "orientation" else not is_number(data.get(key)))]
+    if not missing:
+        return UNREADABLE
+    named = missing[0] if len(missing) == 1 else "%s and %s" % (", ".join(missing[:-1]), missing[-1])
+    said = sorted(set((data.get("unread") or {}).values()))
+    tail = " (Fusion said: %s)" % "; ".join(said) if said else ""
+    return "Fusion did not give the %s of this sweep%s, so it is not copied." % (named, tail)
 
 
 def pin_settings(ctx, item, data, closed):

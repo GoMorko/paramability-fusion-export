@@ -267,6 +267,26 @@ def _rail(feature, ctx):
     return geo.safe(lambda: path_record(rail, ctx), unread)
 
 
+# Settings of a sweep whose failure the capture explains in `unread`: capture key and API member.
+_EXPLAINED = (("orientation", "orientation"), ("taper_deg", "taperAngle"), ("twist_deg", "twistAngle"))
+
+
+def _why_unread(feature, data):
+    """`{ capture key: what Fusion said }` for each setting of `_EXPLAINED` read as null: the error text of the member,
+    or "none" when it gave nothing. Empty when all of them were read."""
+    out = {}
+    for key, member in _EXPLAINED:
+        if data.get(key) is not None:
+            continue
+        try:
+            found = getattr(feature, member)
+        except Exception as exc:
+            out[key] = (str(exc) or type(exc).__name__)[:200]
+            continue
+        out[key] = "none" if found is None else "unusable %s" % geo.type_name(found)
+    return out
+
+
 def sweep_before(feature, ctx):
     params = Params()
     params.add("distance_one", lambda: feature.distanceOne, "scalar")
@@ -290,6 +310,9 @@ def sweep_before(feature, ctx):
             geo.enum_name(feature.profileScaling, "SweepProfileScalingOptions"), _SCALINGS, "other"), None),
         "extent": geo.safe(lambda: _extent_name(feature.extent), None),
     })
+    unread = _why_unread(feature, data)
+    if unread:
+        data["unread"] = unread
     return with_params(data, params.found)
 
 
