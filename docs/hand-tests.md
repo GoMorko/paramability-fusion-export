@@ -1461,7 +1461,7 @@ These were written from the API reference and never run:
   `Snapshots.hasPendingSnapshot` (asked when the dialog opens, before the capture moves the marker, and again at OK;
   an unreadable answer counts as "nothing pending"); the capture members of "Bodies inside
   components" in `docs/capture-format.md`.
-- The size probe (`lib/fusion_reader/probe_state.py`, `lib/probe/`, `lib/export_plan/probe_flow.py`), none of it run
+- The size probe (`lib/fusion_reader/probe_state.py`, `lib/probe/`, `lib/export_plan/probe_flow/`), none of it run
   yet. Each member below is read at every state; a missing one only leaves that sketch unread, so its sizes may give
   unexpected results, and it shows in `probe.states` of `report.json`:
   - `Sketch.entityToken`, `Sketch.profiles` per state (the profiles at the timeline end must equal the ones the
