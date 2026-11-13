@@ -557,9 +557,10 @@ Everything under `lib/` except `fusion_reader/` and `fusion_ui/` is pure Python 
 reading code is tested with fakes. Anything that touches `adsk` stays in `lib/fusion_reader/`, `lib/fusion_ui/` and
 `commands/`. `tests/test_boundary.py` checks that, which package may import which (so imports only go one way), and
 that no module imports an underscore name from another module. `tests/test_interfaces.py` checks that the Fusion
-parameter store, the two Fusion ports and the shared fakes have every member the pure code asks of a store or a port
-(declared in `design_edit/store.py` and `export_plan/pipeline/port.py`), and that both probes have every member the try
-runner asks of a probe (declared in `export_plan/probe_flow/interface.py`).
+parameter store, the two Fusion ports and the shared fakes have every member declared for a store or a port (in
+`design_edit/store.py` and `export_plan/pipeline/port.py`) with the declared parameters, that both probes have every
+member declared for a probe (in `export_plan/probe_flow/interface.py`), and that the code asks a store, a port or a probe
+only for a declared member, also through another name for it or `getattr`.
 
 The shared fakes live in `tests/fakes/`, by domain: one parameter store with options for the answers a test needs
 (`store.py`, with the stores that also hold the timeline marker), one port for one body and one for several bodies
