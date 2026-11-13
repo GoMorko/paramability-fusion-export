@@ -77,10 +77,11 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
    Export: each copy leans the same way as in Fusion. A "Symmetric" draft that crosses the plane is left out with a
    reason.
 
-4. K26, a sketch that flips. Model a sketch with a constrained arc or slot whose solution can flip when a length
-   parameter goes far (for example a tangent arc between two lines), and extrude it.
-   Export: tick that length. After the export the sketch is on the same solution as before (not flipped), and the
-   Paramability copy matches at the default size.
+4. TH2, a sketch with two solutions. Sketch a triangle: one corner on the origin, one 40 mm along X, the third
+   placed only by two distances (`Arm` = 30 mm from the origin, 35 mm from the second corner), no other constraint,
+   so it can flip below the X axis. Extrude 10 mm and fillet one top edge with 2 mm.
+   Export: tick `Arm` with a range of 5 to 80. `health.flipped` may name the sketch. Afterwards the triangle is on
+   the same side as before, the fillet has no warning, and `health` has no `steps_changed` and no `deferred_left`.
 
 5. SW9 and LF3, sweep and loft inputs. Sweep a small closed profile along the closed edge loop of a box top face,
    once as Single path and once as Path + Guide Surface. Then loft from a closed loop of a body's edges (picked as
@@ -107,7 +108,12 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
    Export: watch Fusion in Activity Monitor (Memory) before, during and after; then use Edit, Undo once. Note the
    peak, the value after the export and after Undo, and whether Undo lists the export as one step.
 
-10. Timeline restore. Make a design with 15 or more steps, one component, a timeline group, and the marker moved
-    back to step 8 (also once inside the group).
-    Export: the marker is back where it was, no item is left over in the timeline, and no step is newly in warning
-    or error. Repeat with a sketch that is edited by a parameter you tick.
+10. TH1 and TH5, steps after the export. TH1: a box from a 20 by 20 mm rectangle (user parameter `Width` = 20 mm)
+    extruded 15 mm, the four vertical edges filleted with 9.9 mm. TH5: the same box, with a second design that has a
+    longer timeline.
+    Export: TH1, tick `Width` with a range of 12 to 40. The low tries fail at the fillet and the range is cut; after
+    the export the fillet has no warning and `health` has no `steps_changed` (`steps_recovered` and `end_actions` may
+    show the add-in rebuilt the design). If `steps_changed` is there, note each `name`, `before`, `after` and
+    `message`, then use Edit, Undo and count the steps that bring the fillet back. TH5: cancel in the "Try 3 of ..."
+    window, then use Export size choices with a row `Width` = 12, which Fusion cannot build. In both, every step is
+    as before; if not, a message box names the step and says to use Undo.
