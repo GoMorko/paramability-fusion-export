@@ -26,8 +26,10 @@ from ..design_edit.runner import ExportCancelled
 from . import health as health_module
 from .body_scope import body_links, scope_inputs
 from .part_names import tagged, unique_names
-from .pipeline import (ProbeRun, deferred_left, gap_after_settle, left_off, settle_after_tries, settle_steps,
-                       start_steps, undo_dropped, warn_left_off, warn_steps, with_try_seconds)
+from .pipeline.probe_run import ProbeRun, with_try_seconds
+from .pipeline.settle import (deferred_left, gap_after_settle, left_off, settle_after_tries, settle_steps, start_steps,
+                              undo_dropped)
+from .pipeline.warn import warn_left_off, warn_steps
 from .reach_pass import needs_reach, with_reach
 from .probe_flow import ProbeGroup, SizeProbe, covers_a_sketch, extra_size_params, kept_size_names
 from .recipe_export import PartInput, free_sizes, plan_parts_export, translate_capture

@@ -1531,7 +1531,7 @@ These were written from the API reference and never run:
   has the token `bodies_after` gives (compare `sketch_links[].links[].bodies` with the pipe steps' `bodies_after`);
   that `lineOne`, `lineTwo`, `line` and `curve` are members of the other line constraints; that reading `profile` and
   `path` on steps of other components with the marker before them is quick on a large design (note the export time).
-- The export pipeline (`lib/export_plan/pipeline.py`, wired in `commands/ExportForParamability/export_flow.py`):
+- The export pipeline (`lib/export_plan/pipeline/`, wired in `commands/ExportForParamability/export_flow.py`):
   the export measures the sketches, and the probe reads the sketches once more after the last restore, so
   `report.json` `probe.restore_gap_mm` and `health` describe the design as the person gets it back. Check that the
   extra read after a restore does not move the timeline marker, that `health.sketch_drift` stays false on a design

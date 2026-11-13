@@ -257,7 +257,7 @@ class PipelineTrimTest(unittest.TestCase):
 
     def test_the_discovery_tries_run_with_every_item_back_on(self):
         port = self.port(store=SettingStore(START))
-        with mock.patch("lib.export_plan.pipeline.discovery_sizes", return_value=[dict(PIPE_TRY)]):
+        with mock.patch("lib.export_plan.pipeline.run.discovery_sizes", return_value=[dict(PIPE_TRY)]):
             result = export(port)
         events = port.store.events
         tried = events.index(("set", "pipe_offset_mm"))

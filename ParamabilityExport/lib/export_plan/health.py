@@ -42,7 +42,7 @@ def make_health(unrestored=(), gap_mm=None, probe=NOT_NEEDED, probe_error="", un
       start, and what was done to bring them back (`timeline_health.record` gives its keys).
     deferred_left: sketches whose compute flag would not go back after their points were moved
       (`SketchKeeper.deferred_left`).
-    gap_after_mm: the gap read again after the end check rebuilt the design (`pipeline.gap_after_settle`), already
+    gap_after_mm: the gap read again after the end check rebuilt the design (`pipeline.settle.gap_after_settle`), already
       counted in `gap_mm`; None when there was no such rebuild or read.
     left_off: timeline items turned off for the tries that are still off (`TryTimeline.left_off`).
     undo_dropped: True when Fusion forgot Undo data during the export (Lighter on memory, `undo_steps`).
