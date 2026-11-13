@@ -1,0 +1,364 @@
+"""The order of the Fusion calls an export makes to put the design back, on every way it ends. A recording store,
+port, sketch keeper and Undo step note each call in one list; each batch of try rows counts as one entry."""
+import dataclasses
+import tempfile
+import unittest
+from unittest import mock
+
+from tests import context  # noqa: F401
+from tests.test_parts_pipeline import FakePartsPort
+from tests.test_parts_pipeline import request as parts_request
+from tests.test_pipeline import START, FakePort, shifted
+from tests.test_pipeline import request as single_request
+from tests.test_timeline_trim import TrimStore, trim_capture
+
+from lib.design_edit.errors import StepExportError
+from lib.design_edit.runner import ExportCancelled
+from lib.export_plan import undo_steps
+from lib.export_plan.pipeline import ProbeRun, run_parts_pipeline, run_pipeline
+
+# Store calls made before every read; they say nothing about the order of the put back.
+QUIET = {"marker_holds", "read_value", "error_items", "error_entries"}
+
+
+class Log:
+    """The calls in order. While `rows` is above zero the calls are not noted: a batch of rows is one entry."""
+
+    def __init__(self):
+        self.calls, self.rows = [], 0
+
+    def note(self, text):
+        if not self.rows:
+            self.calls.append(text)
+
+
+def _shown(args):
+    """The arguments of a call, short: index pairs by index, a dict by its names, long texts by their count."""
+    out = []
+    for arg in args:
+        if isinstance(arg, dict):
+            arg = ", ".join(arg) if len(arg) < 3 else "%d values" % len(arg)
+        elif isinstance(arg, (list, tuple)) and arg and all(isinstance(a, str) and len(a) > 40 for a in arg):
+            arg = "lines=%d" % len(arg)
+        elif isinstance(arg, (list, tuple)):
+            arg = [a[0] if isinstance(a, tuple) else a for a in arg]
+        out.append(str(arg))
+    return "(%s)" % ", ".join(out) if out else ""
+
+
+class Recorded:
+    """`target` with each call of a member noted in `log` as "<prefix>.<name>(<args>)"."""
+
+    def __init__(self, target, log, prefix, quiet=()):
+        object.__setattr__(self, "_target", target)
+        object.__setattr__(self, "_log", log)
+        object.__setattr__(self, "_prefix", prefix)
+        object.__setattr__(self, "_quiet", set(quiet))
+
+    def __getattr__(self, name):
+        value = getattr(self._target, name)
+        if not callable(value) or name in self._quiet:
+            return value
+
+        def call(*args, **kw):
+            self._log.note("%s.%s%s" % (self._prefix, name, _shown(args)))
+            return value(*args, **kw)
+        return call
+
+    def __setattr__(self, name, value):
+        setattr(self._target, name, value)
+
+
+class OrderStore(TrimStore):
+    """A trim store with two timeline steps. `changed` names a step that reads in a warning once a value changed,
+    until a full rebuild with the marker home and every value back (never without `heals`); `stuck_param` a parameter
+    that will not go back to its saved expression; `broken_above` a depth that leaves a step in error for good."""
+
+    def __init__(self, changed=None, heals=True, stuck=(), stuck_param=None, broken_above=None):
+        super().__init__(START, stuck=stuck)
+        self.saved = dict(START)
+        self.changed, self.heals, self.warning, self.home = changed, heals, False, False
+        self.stuck_param = stuck_param
+        self.broken_above, self.broken = broken_above, False
+
+    def set_expression(self, name, expression):
+        if name == self.stuck_param and self.exprs[name] != self.saved[name] and expression == self.saved[name]:
+            raise RuntimeError("refused")
+        super().set_expression(name, expression)
+        if expression != self.saved[name]:
+            self.warning = self.changed is not None
+            number = float(expression.split()[0])
+            self.broken = self.broken or (self.broken_above is not None and name == "depth_mm"
+                                          and number > self.broken_above)
+
+    def unroll_marker(self):
+        self.home = True
+        return super().unroll_marker()
+
+    def recompute(self):
+        if self.heals and self.home and self.exprs == self.saved:
+            self.warning = False
+        return super().recompute()
+
+    def error_items(self):
+        return ["RemoveBody1"] if self.broken else []
+
+    def timeline_health(self):
+        return [{"index": 0, "name": "Sketch1", "type": "Sketch", "health": "ok", "message": "", "suppressed": False},
+                {"index": 1, "name": self.changed or "Fillet1", "type": "FilletFeature",
+                 "health": "warning" if self.warning else "ok", "message": "", "suppressed": False}]
+
+    def turn_on(self, steps):
+        return []
+
+    def return_marker(self):
+        return ""
+
+
+class Keeper:
+    def __init__(self, port):
+        self.port, self.deferred_left = port, []
+
+    def put_back(self):
+        self.port.flipped = False
+        return 1
+
+
+class OrderPort(FakePort):
+    """The single body port over an `OrderStore`; with `flip` the sketch goes to its other solution in the first try
+    and stays there with the values back until the keeper puts it back."""
+
+    def __init__(self, store, flip=False, **options):
+        super().__init__(capture=trim_capture(), store=store, **options)
+        self.flip, self.flipped = flip, False
+
+    def probe_reader(self):
+        read = super().probe_reader()
+
+        def flipping(request):
+            state = read(request)
+            if self.flip and self.store.exprs != START:
+                self.flipped = True
+            return shifted(state, 0.5) if self.flipped and self.store.exprs == START else state
+        return flipping
+
+    def sketch_keeper(self, tokens):
+        return Keeper(self)
+
+
+class OrderPartsPort(FakePartsPort):
+    """Two bodies over an `OrderStore`."""
+
+    def __init__(self, store, **options):
+        super().__init__([trim_capture(), trim_capture()], store=store, **options)
+
+
+def recorded(port):
+    """`port` with its store, reads, sketch keeper, warnings, log and Undo steps noted in one `Log`."""
+    log = Log()
+    port.store = Recorded(port.store, log, "store", QUIET)
+    reader, keeper, port_log = port.probe_reader, port.sketch_keeper, port.log
+
+    def probe_reader(*index):
+        read = reader(*index)
+
+        def noted(request):
+            log.note("read(%s)" % ("outline" if "params" not in request else "full"))
+            return read(request)
+        return noted
+
+    def sketch_keeper(tokens):
+        kept = keeper(tokens)
+        return Recorded(kept, log, "keeper") if kept is not None else None
+
+    def noted_log(text):
+        log.note("log(%s)" % text.split(":")[0])
+        port_log(text)
+
+    def warning(name, method):
+        def warn(*args):
+            log.note("port.%s%s" % (name, _shown(args)))
+            return method(*args)
+        return warn
+
+    port.probe_reader, port.sketch_keeper, port.log = probe_reader, sketch_keeper, noted_log
+    for name in ("warn_unrestored", "warn_left_off", "warn_steps"):
+        setattr(port, name, warning(name, getattr(port, name)))
+    undo_steps.attach(port, undo_steps.UndoSteps(lambda flag: log.note("undo.drop") or True, port.log))
+    return port, log
+
+
+def export(port, parts=False):
+    """The calls of one export, as the command runs it, and the export's health (None when it raised)."""
+    port, log = recorded(port)
+    original = ProbeRun.try_rows
+
+    def try_rows(run, rows):
+        log.note("rows")
+        log.rows += 1
+        try:
+            return original(run, rows)
+        finally:
+            log.rows -= 1
+
+    run, asked = (run_parts_pipeline, parts_request()) if parts else (run_pipeline, single_request())
+    health = None
+    with mock.patch.object(ProbeRun, "try_rows", try_rows), tempfile.TemporaryDirectory() as tmp:
+        try:
+            result = run(port, dataclasses.replace(asked, faster_tries=True), tmp)
+            undo_steps.drop_after(port.undo_steps, result.health)
+            health = result.health
+        except (ExportCancelled, StepExportError):
+            pass
+    return log.calls, health
+
+
+# What every export that tries sizes does first: values and steps saved, the marker held, unused items turned off
+# (each a read that checks the design reads the same).
+START_ONE = ["store.saved_expressions", "store.timeline_health", "read(full)", "store.roll_marker(9)", "read(full)",
+             "store.suppress_items([6, 7])", "read(full)"]
+START_TWO = ["store.saved_expressions", "store.timeline_health", "read(full)", "read(full)", "store.roll_marker(9)",
+             "read(full)", "read(full)", "store.suppress_items([6, 7])", "read(full)", "read(full)"]
+# The end check with nothing changed: the marker back, then the steps compared with the start.
+END_CHECK = ["store.unroll_marker", "store.return_marker", "store.timeline_health"]
+# The end check found a changed step: a full rebuild, then the steps and the marker read again.
+FULL_COMPUTE = ["store.recompute", "store.timeline_health"]
+VALUES_AGAIN = ["store.set_expressions(8 values)", "store.current_expressions", "store.recompute",
+                "store.timeline_health"]
+STUCK_BACK = ["store.current_expressions", "store.set_expressions(box_count)", "store.set_expression(box_count, 3)",
+              "store.set_expression(box_count, 3)", "store.recompute"]
+
+
+class SingleBodyOrderTest(unittest.TestCase):
+    maxDiff = None
+
+    def test_a_clean_export_puts_everything_back_then_drops_the_last_undo_step(self):
+        calls, health = export(OrderPort(OrderStore()))
+        self.assertEqual(calls, START_ONE + [
+            "rows", "rows", "rows", "rows",
+            "read(full)",  # the discovery base
+            "store.current_expressions", "store.unsuppress_items", "read(outline)", "undo.drop",  # tries done
+            "read(full)",  # the probe's last read
+            "store.current_expressions", "read(full)", *END_CHECK,
+            "store.current_expressions", "undo.drop",  # closed
+        ])
+        self.assertTrue(health["undo_dropped"])
+
+    def test_a_sketch_put_back_an_end_rebuild_and_a_step_left_off(self):
+        calls, health = export(OrderPort(OrderStore(changed="Fillet1", stuck=["Lid sketch"]), flip=True))
+        self.assertEqual(calls, START_ONE + [
+            "rows", "rows", "rows", "rows",
+            "read(full)", "keeper.put_back", "store.recompute", "read(full)",
+            "store.current_expressions", "store.unsuppress_items", "log(steps still turned off)", "read(outline)",
+            "undo.drop",
+            "read(full)",
+            "store.current_expressions", "read(full)", *END_CHECK, *FULL_COMPUTE, "store.return_marker",
+            "read(outline)",  # the sketches after the end rebuild
+            "store.current_expressions", "port.warn_left_off(['Lid sketch'], True)",  # closed, no Undo drop
+        ])
+        self.assertEqual(health["end_actions"], ["full_compute"])
+
+    def test_a_step_that_stays_changed_gets_the_values_again_and_keeps_the_undo_data(self):
+        calls, health = export(OrderPort(OrderStore(changed="Fillet1", heals=False)))
+        self.assertEqual(calls, START_ONE + [
+            "rows", "rows", "rows", "rows",
+            "read(full)",
+            "store.current_expressions", "store.unsuppress_items", "read(outline)", "undo.drop",
+            "read(full)",
+            "store.current_expressions", "read(full)", *END_CHECK, *FULL_COMPUTE, *VALUES_AGAIN,
+            "store.return_marker", "read(outline)",
+            "store.current_expressions",
+        ])
+        self.assertEqual(health["end_actions"], ["full_compute", "values_again"])
+
+    def test_a_failed_probe_puts_back_after_its_log_line(self):
+        calls, health = export(OrderPort(OrderStore(), fail_read_from=8))
+        self.assertEqual(calls, START_ONE + [
+            "rows", "log(size probe failed)",
+            "store.current_expressions", "store.unsuppress_items", "read(outline)",
+            "log(putting a sketch back after the tries failed)", "undo.drop",
+            "store.current_expressions", "read(full)", "log(reading the sketches after the restore failed)",
+            *END_CHECK,
+            "store.current_expressions",
+        ])
+        self.assertEqual(health["probe"], "failed")
+
+    def test_a_cancel_puts_back_then_warns_about_values_steps_and_items(self):
+        store = OrderStore(changed="Fillet1", heals=False, stuck=["Lid sketch"], stuck_param="box_count")
+        calls, health = export(OrderPort(store, cancel_at=4))
+        self.assertEqual(calls, START_ONE + [
+            "rows",
+            *STUCK_BACK, "store.unsuppress_items", "log(steps still turned off)", "read(outline)", "undo.drop",
+            *STUCK_BACK, "store.unroll_marker",  # closed: values and marker back, then the warnings
+            "port.warn_unrestored(['box_count'])",
+            "store.return_marker", "store.timeline_health", *FULL_COMPUTE, "store.set_expressions(8 values)",
+            *STUCK_BACK, "store.recompute", "store.timeline_health", "store.return_marker",
+            "port.warn_steps(lines=1)", "port.warn_left_off(['Lid sketch'], True)",
+        ])
+        self.assertIsNone(health)
+
+    def test_tries_stopped_on_a_broken_design(self):
+        calls, health = export(OrderPort(OrderStore(broken_above=70)))
+        self.assertEqual(calls, START_ONE + [
+            "rows", "read(outline)", "rows",
+            "store.current_expressions", "store.unsuppress_items", "read(outline)", "undo.drop",
+            "read(full)",
+            "store.current_expressions", "read(full)", *END_CHECK,
+            "store.current_expressions",
+        ])
+        self.assertIn("tries_stopped", health)
+
+    def test_a_step_file_that_fails_before_the_tries(self):
+        calls, _ = export(OrderPort(OrderStore(), fail_step_at=1))
+        self.assertEqual(calls, ["store.saved_expressions", "store.timeline_health",
+                                 "store.current_expressions", "store.return_marker", "store.timeline_health"])
+
+
+class SeveralBodiesOrderTest(unittest.TestCase):
+    maxDiff = None
+
+    def test_a_clean_export_of_two_bodies(self):
+        calls, health = export(OrderPartsPort(OrderStore(changed="Fillet1")), parts=True)
+        self.assertEqual(calls, START_TWO + [
+            "rows", "rows", "rows", "rows",
+            "read(full)", "read(full)",
+            "store.current_expressions", "store.unsuppress_items", "read(outline)", "read(outline)", "undo.drop",
+            "read(full)", "read(full)",
+            "store.current_expressions", "read(full)", "read(full)", *END_CHECK, *FULL_COMPUTE,
+            "store.return_marker", "read(outline)", "read(outline)",
+            "store.current_expressions", "undo.drop",
+        ])
+        self.assertEqual(health["steps_recovered"], ["Fillet1"])
+
+    def test_a_cancel(self):
+        calls, _ = export(OrderPartsPort(OrderStore(changed="Fillet1", heals=False, stuck=["Lid sketch"]),
+                                         cancel_at=3), parts=True)
+        self.assertEqual(calls, START_TWO + [
+            "rows",
+            "store.current_expressions", "store.unsuppress_items", "log(steps still turned off)", "read(outline)",
+            "read(outline)", "undo.drop",
+            "store.current_expressions", "store.unroll_marker",
+            "store.return_marker", "store.timeline_health", *FULL_COMPUTE, *VALUES_AGAIN, "store.return_marker",
+            "port.warn_steps(lines=1)", "port.warn_left_off(['Lid sketch'], True)",
+        ])
+
+    def test_a_failed_probe(self):
+        calls, health = export(OrderPartsPort(OrderStore(), fail_read_from=9), parts=True)
+        self.assertEqual(calls, START_TWO + [
+            "rows", "log(size probe failed)",
+            "store.current_expressions", "store.unsuppress_items", "read(outline)",
+            "log(putting a sketch back after the tries failed)", "undo.drop",
+            "store.current_expressions", "read(full)", "log(reading the sketches after the restore failed)",
+            *END_CHECK,
+            "store.current_expressions",
+        ])
+        self.assertEqual(health["probe"], "failed")
+
+    def test_a_step_file_that_fails_before_the_tries(self):
+        calls, _ = export(OrderPartsPort(OrderStore(), fail_step_at=2), parts=True)
+        self.assertEqual(calls, ["store.saved_expressions", "store.timeline_health",
+                                 "store.current_expressions", "store.return_marker", "store.timeline_health"])
+
+
+if __name__ == "__main__":
+    unittest.main()
