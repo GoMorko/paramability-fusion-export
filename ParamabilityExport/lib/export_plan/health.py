@@ -5,10 +5,8 @@ measuring must have worked. `make_health` records what is known, `health_lines` 
 what to do, and `measuring_doubtful` tells when the recipe rests on measurements that cannot be trusted.
 """
 from ..design_edit import timeline_health as steps_module
+from ..geometry.tolerances import RESTORE_TOLERANCE_MM
 from ..package.text import clip
-
-# Largest gap in mm between the sketches at the start and after the parameters were put back.
-RESTORE_TOLERANCE_MM = 1e-4
 
 MEASURED, NOT_NEEDED, FAILED = "measured", "not needed", "failed"
 MAX_LISTED = 5

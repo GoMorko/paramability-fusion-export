@@ -2178,7 +2178,7 @@ add-in cannot tell this from a change it made, so the line says the design may b
 Solver flips. Putting the values back does not bring back a sketch that a try moved to its other solution: Fusion solves
 a sketch from where its points are. So the export keeps the places of the followed sketches' own points at E0
 (`fusion_reader.sketch_keep.SketchKeeper`; projected and fixed points stay). When the `start` read shows a followed
-sketch otherwise than at E0 (another outline, or a value more than 0.05 mm or degrees off, `FLIP_TOLERANCE`; Fusion's
+sketch otherwise than at E0 (another outline, or a value more than 0.05 mm or degrees off, `geometry.tolerances.FLIP_TOLERANCE`; Fusion's
 own restore leaves about a hundredth), every kept point more than 0.0001 mm from its place (`MOVE_TOL_CM`) is moved back,
 with its sketch's compute deferred and then set back to what it was when kept, and read again (a sketch whose points
 are all in place is not touched), and the design is rebuilt once, also when no point

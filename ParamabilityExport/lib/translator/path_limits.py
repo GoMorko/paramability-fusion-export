@@ -1,6 +1,5 @@
 """Tolerances, caps and refusal texts of the sweep path code. Pure: no Fusion imports."""
 
-CHAIN_TOL = 1e-4          # curve ends closer than this (mm) are one point
 PLANE_TOL = 1e-4          # the path start must lie this close to the outline's plane (mm), as in the app
 SQUARE_TOL_DEG = 0.1      # the path must leave the outline's plane at a right angle within this
 STRAIGHT_DEG = 0.01       # a turn below this (degrees) is straight on: the app's own limit for a straight continuation

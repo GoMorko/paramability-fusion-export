@@ -10,7 +10,8 @@ overlapping strokes) are not sorted at all: `OVERLAP` is returned instead.
 import math
 
 from .footprint import polyline
-from .outlines import CHAIN_TOL, closed_loops
+from .outlines import closed_loops
+from .tolerances import CHAIN_TOL
 
 OPEN = "open"
 OVERLAP = "overlap"

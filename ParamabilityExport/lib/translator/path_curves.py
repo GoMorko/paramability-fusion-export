@@ -2,9 +2,10 @@
 import math
 
 from ..geometry import vec
+from ..geometry.tolerances import CHAIN_TOL
 from ..package.numbers import round9
 
-from .path_limits import ARC_SAMPLE_DEG, CHAIN_TOL, STRAIGHT_DEG
+from .path_limits import ARC_SAMPLE_DEG, STRAIGHT_DEG
 
 
 def near(a, b, tol=CHAIN_TOL):

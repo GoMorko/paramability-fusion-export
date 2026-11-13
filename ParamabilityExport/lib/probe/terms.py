@@ -19,7 +19,8 @@ cannot tell them apart and the fit is refused: more rows are needed.
 """
 import math
 
-from .fit import TOLERANCE, fit_residual, least_squares, snap_coefficients
+from .fit import fit_residual, least_squares, snap_coefficients
+from ..geometry import tolerances
 from ..sketch_values.motion import FUNCTIONS, Terms, factor_value
 
 MAX_EXTRA = 3
@@ -176,7 +177,7 @@ def _const(problem, terms, coefficients):
     return problem.x0 - sum(c * problem.column(t)[0] for c, t in zip(coefficients, terms))
 
 
-def fit_terms(x, sizes, tol=TOLERANCE, owner="", partners=()):
+def fit_terms(x, sizes, tol=tolerances.FIT_TOLERANCE, owner="", partners=()):
     """The `TermsFit` of `x` (a number per state, None where a state gave none, index 0 the first read) over `sizes`
     (the free sizes that moved it, `Size`). `partners` (`Size`) join `sizes` for the turn terms only."""
     problem = _Problem(x, sizes)

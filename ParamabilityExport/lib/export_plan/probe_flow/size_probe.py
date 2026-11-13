@@ -1,5 +1,6 @@
 """The size probe of one part: its states, and the calls the try runner and the pipeline use."""
 from ...design_edit.marker import MARKER_LOST
+from ...geometry.tolerances import FLIP_TOLERANCE
 from ...probe import build, fit, match, plan, plane_sizes, ref_fit
 from ...sketch_values.motion import SHAPE
 from .borrowed_view import borrowed_sketches, probe_view, with_borrowed
@@ -11,9 +12,6 @@ from .states import same_numbers
 
 # What an outline read (`SizeProbe.read_now`) leaves out of the request.
 OUTLINE_SKIPS = ("params", "refs", "target", "patterns")
-# How far a followed value (mm or degrees) may read from E0 once the values are back before the sketch counts as on
-# another solution; Fusion's own restore leaves up to about a hundredth of a degree on short lines.
-FLIP_TOLERANCE = 0.05
 
 
 class SizeProbe(RowPlanning, Discovery, Findings):

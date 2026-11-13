@@ -28,13 +28,14 @@ geometry, chaining), `path_checks` (the app's limits as refusals), `path_writing
 forms), `path_closed` (closed chains) and `path_rebuilt` (a path read back from written numbers).
 """
 from ..geometry import vec
+from ..geometry.tolerances import CHAIN_TOL
 from ..package.numbers import round9
 
 from .path_checks import corners_refusal, off_square, outline_reach, rise_refusal
 from .path_closed import closed_plan, half_circles
 from .path_curves import (arc_of, chain, curve_length, flip, joined_lines, near, polyline, readable, tangents, turn_deg,
                           turned_round)
-from .path_limits import (BOTH_SIDES, CHAIN_TOL, CLOSED, NOT_ONE_CHAIN, NOT_SKETCH, NOT_SQUARE, OFF_PLANE, PLANE_TOL,
+from .path_limits import (BOTH_SIDES, CLOSED, NOT_ONE_CHAIN, NOT_SKETCH, NOT_SQUARE, OFF_PLANE, PLANE_TOL,
                           UNKNOWN_CURVE, UNREADABLE)
 from .path_model import PathOptions, PathPlan
 from .path_writing import arc_plan, circle_plan, corners_plan, flat_frame, flat_plan, two_points

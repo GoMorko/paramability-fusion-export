@@ -17,12 +17,11 @@ take. Only a failure in a step the part is built from counts. Where a sketch the
 """
 import math
 
+from ..geometry.tolerances import SAME_SIZE
 from . import range_check
 from .notes import Past, number_text as _number
 from ..params.size_table import Cut
 from ..sketch_values import coverage
-
-_SAME = 1e-9
 
 
 def past_reasons(table, found, why):
@@ -61,8 +60,8 @@ def failure_cut(table, entry, span, mine):
     failed = [(value, step) for value, step in span.get("failed") or () if mine(step)]
     typed_low, typed_high = table.typed_ends(entry.name)
     low, high, found = size["min"], size["max"], {}
-    below = [f for f in failed if f[0] < span["low"] - _SAME]
-    past = [f for f in failed if f[0] > span["high"] + _SAME]
+    below = [f for f in failed if f[0] < span["low"] - SAME_SIZE]
+    past = [f for f in failed if f[0] > span["high"] + SAME_SIZE]
     if not typed_low and below:
         low, found["low"] = max(low, span["low"]), max(below, key=lambda f: f[0])
     if not typed_high and past:
@@ -82,7 +81,7 @@ def outline_cut(table, entry, span):
     for side, at, sign in (("low", 0, -1), ("high", 1, 1)):
         if kept[at] is None or typed[at]:
             continue
-        past = [(v, s) for v, s in changed if (v - kept[at]) * sign > _SAME]
+        past = [(v, s) for v, s in changed if (v - kept[at]) * sign > SAME_SIZE]
         if not past:
             continue
         found[side] = min(past, key=lambda c: abs(c[0] - now))
@@ -110,7 +109,7 @@ def built_ranges(table, motion, capture=None):
         low, high, found = failure_cut(table, e, span, mine)
         kept_low, kept_high, changed = outline_cut(table, e, span)
         cut = Cut(low, high, found).meet(Cut(kept_low, kept_high, changed=changed))
-        if (cut[0], cut[1]) != (size["min"], size["max"]) and cut[1] - cut[0] > _SAME:
+        if (cut[0], cut[1]) != (size["min"], size["max"]) and cut[1] - cut[0] > SAME_SIZE:
             out[e.name] = cut
     return out
 

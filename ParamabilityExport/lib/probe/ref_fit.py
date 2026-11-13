@@ -19,10 +19,10 @@ import math
 from . import plan
 from .series import fit_series
 from ..geometry import vec
+from ..geometry.tolerances import POINT_TOLERANCE_MM
 from ..sketch_values import keys
 from ..sketch_values.motion import TURNS, UNREAD
 
-POINT_TOLERANCE = 1e-4
 TURN_TOLERANCE = 1e-6
 NOT_MATCHED = "its first read did not match the capture"
 NOT_READ = "it could not be read at the current sizes"
@@ -100,7 +100,7 @@ def check_start(ref, read):
         reason = ((read.get("unread") or {}).get(ref["key"]))
         return reason if cause == UNREAD and isinstance(reason, str) and reason else (
             NOT_READ if cause == UNREAD else NOT_MATCHED)
-    return "" if all(abs(v) <= POINT_TOLERANCE for v in values.values()) else NOT_MATCHED
+    return "" if all(abs(v) <= POINT_TOLERANCE_MM for v in values.values()) else NOT_MATCHED
 
 
 def measurable(refs, first):
@@ -117,7 +117,7 @@ def measurable(refs, first):
 def moved_in(ref, read):
     """True when the reference reads differently in `read` than in the capture: it moved, turned or cannot be read."""
     values, _ = state_values(ref, read)
-    return values is None or any(abs(v) > POINT_TOLERANCE for v in values.values())
+    return values is None or any(abs(v) > POINT_TOLERANCE_MM for v in values.values())
 
 
 def fit_ref(out, ref, reads, built, shared, models, varied):

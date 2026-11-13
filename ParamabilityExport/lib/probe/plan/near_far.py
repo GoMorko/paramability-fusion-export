@@ -1,7 +1,8 @@
 """The first tries: near rows, near pair rows, far rows and far pair rows."""
+from ...geometry.tolerances import SAME_SIZE
 from ...package.manifest import MAX_NAME_CHARS
 from .history import fails_by, farthest_built
-from .rows import MAX_PROBE_ROWS, SAME_VALUE, probe_row, tried_sizes
+from .rows import MAX_PROBE_ROWS, probe_row, tried_sizes
 
 # How far from its value a size is first tried, as a share of the value, below and above.
 NEAR_SHARE = 0.25
@@ -13,23 +14,23 @@ def near_values(size):
     cannot move off the value is None."""
     value, lo, hi = size["value"], size["min"], size["max"]
     step = NEAR_SHARE * abs(value)
-    sides = [value - step, value + step] if step > SAME_VALUE else [value + NEAR_SHARE * (lo - value),
+    sides = [value - step, value + step] if step > SAME_SIZE else [value + NEAR_SHARE * (lo - value),
                                                                  value + NEAR_SHARE * (hi - value)]
     out = []
     for number, sign in zip(sides, (-1, 1)):
         if size.get("kind") == "count":
             number = float(round(number))
-            if abs(number - value) <= SAME_VALUE:
+            if abs(number - value) <= SAME_SIZE:
                 number = value + sign
         number = min(max(number, lo), hi)
-        out.append(number if abs(number - value) > SAME_VALUE else None)
+        out.append(number if abs(number - value) > SAME_SIZE else None)
     return tuple(out)
 
 
 def _far_ends(size, near):
     """The ends of the size's range that differ from its value and from the near values."""
     return [end for end in (size["min"], size["max"])
-            if abs(end - size["value"]) > SAME_VALUE and all(n is None or abs(end - n) > SAME_VALUE for n in near)]
+            if abs(end - size["value"]) > SAME_SIZE and all(n is None or abs(end - n) > SAME_SIZE for n in near)]
 
 
 def probe_rows(sizes, moved, limit=MAX_PROBE_ROWS, extra=()):
@@ -107,11 +108,11 @@ def far_pair_rows(sizes, moved, states, room, extra=()):
         overrides, past = {}, False
         for size in sizes:
             value = farthest_built(states, size, size[key]) if size["param"] in tried else size[key]
-            if value is not None and abs(value - size["value"]) > SAME_VALUE:
+            if value is not None and abs(value - size["value"]) > SAME_SIZE:
                 overrides[size["param"]] = value
                 near = near_values(size)[side]
                 past = past or (size["param"] in tried and (near is None or abs(value - size["value"])
-                                                            > abs(near - size["value"]) + SAME_VALUE))
+                                                            > abs(near - size["value"]) + SAME_SIZE))
         if len(overrides) >= 2 and past and len(rows) < room:
             rows.append(probe_row(sizes, label, overrides))
     return rows

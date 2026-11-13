@@ -25,13 +25,13 @@ from ..package.numbers import round9
 from ..params import geometry_links
 from ..params.size_table import DERIVED, FREE
 from ..sketch_solve.outcome import DERIVED as SOLVED, NOT_DERIVED, PARTLY
+from ..geometry import tolerances
 from ..sketch_solve.solve import solve_sketch
 from ..sketch_values.motion import Affine, Stuck, Terms
 from . import derived_keys as dk
 from . import derived_sizes as sizes
 from . import match
 from .build import StateRun
-from .fit import TOLERANCE
 
 VERSION = 1
 # The most points and curves of a sketch that are worked out; a larger sketch is skipped.
@@ -387,11 +387,11 @@ class _Compare:
         entry = self.stat.setdefault(key, [0, 0.0, None])
         entry[0] += 1
         entry[1] = max(entry[1], diff)
-        if diff > TOLERANCE and entry[2] is None:
+        if diff > tolerances.FIT_TOLERANCE and entry[2] is None:
             entry[2] = {"key": key, "state": at, "derived": _round(got), "read": _round(read), "sizes": dict(overrides)}
             if info.inputs:
                 entry[2]["reads_inputs"] = True
-        if (info.expr is not None and direct is not None and key in direct and abs(got - direct[key]) > TOLERANCE
+        if (info.expr is not None and direct is not None and key in direct and abs(got - direct[key]) > tolerances.FIT_TOLERANCE
                 and len(self.off) < MAX_LISTED):
             self.off.append({"key": key, "state": at, "formula": _round(got), "numbers": _round(direct[key])})
 

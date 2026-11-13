@@ -19,7 +19,7 @@ ALLOWED_IMPORTS = {
     "design_edit": {"package", "params"},
     "translator": {"capture_model", "geometry", "package", "params", "sketch_values", "timing"},
     "probe": {"capture_model", "geometry", "package", "params", "sketch_solve", "sketch_values", "translator"},
-    "export_plan": {"capture_model", "design_edit", "package", "params", "probe", "sketch_values", "timing", "translator"},
+    "export_plan": {"capture_model", "design_edit", "geometry", "package", "params", "probe", "sketch_values", "timing", "translator"},
     "dialog_model": {"export_plan", "package", "params", "translator"},
     "fusion_reader": {"capture_model", "design_edit", "geometry", "package", "params", "timing"},
     "fusion_ui": {"dialog_model", "export_plan", "fusion_reader", "package"},

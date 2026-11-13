@@ -31,11 +31,10 @@ stuck, and `kept` is the value now at both ends.
 from . import columns as cols
 from . import match, plan, ref_fit
 from .series import fit_series, moved as _moved
+from ..geometry.tolerances import SAME_SIZE
 from ..sketch_values import coverage
 from ..sketch_values.motion import SHAPE, UNREAD, Motion
 from ..translator import kept_ranges
-
-_SAME = 1e-9
 
 
 class StateRun:
@@ -65,7 +64,7 @@ class StateRun:
         out = set()
         for name, value in (self.states[at].get("values") or {}).items():
             before = base.get(name, (current or {}).get(name, value))
-            if abs(value - before) > _SAME:
+            if abs(value - before) > SAME_SIZE:
                 out.add(name)
         return out
 
@@ -83,7 +82,7 @@ class StateRun:
             now, before = read.get(name), first.get(name)
             if not all(isinstance(v, (int, float)) for v in (now, before)) or name not in (self.current or {}):
                 continue
-            if abs(before) <= _SAME:
+            if abs(before) <= SAME_SIZE:
                 continue
             scale = self.current[name] / before
             if abs(now * scale - value) > 1e-6 * max(1.0, abs(value)):
@@ -215,10 +214,10 @@ class StateRun:
             values = self.states[at].get("values") or {}
             for name, window in windows.items():
                 low, high = window["kept"]
-                if name not in values or (low is not None and high is not None and high - low <= _SAME):
+                if name not in values or (low is not None and high is not None and high - low <= SAME_SIZE):
                     continue
-                below = low is not None and values[name] < low - _SAME
-                if below or (high is not None and values[name] > high + _SAME):
+                below = low is not None and values[name] < low - SAME_SIZE
+                if below or (high is not None and values[name] > high + SAME_SIZE):
                     self.outside.add(at)
         self._values = {}
 
@@ -230,7 +229,7 @@ class StateRun:
         if not sizes_a or not sizes_b:
             return False
         values_a, values_b = self.states[a].get("values") or {}, self.states[b].get("values") or {}
-        return (all(abs(values_a[n] - values_b[n]) > _SAME for n in sizes_a & sizes_b)
+        return (all(abs(values_a[n] - values_b[n]) > SAME_SIZE for n in sizes_a & sizes_b)
                 and not self._same_new_value(a, b))
 
     def _same_new_value(self, a, b):
@@ -271,11 +270,11 @@ def _alone_tries(run):
 def _limit(tries, now, sign):
     """On one side of `now` (`sign`): the farthest value that kept every outline and lies nearer than the nearest value
     that changed one, or `now` when none did; None when no value on that side changed an outline."""
-    side = [(v, sketch) for v, sketch in tries if (v - now) * sign > _SAME]
+    side = [(v, sketch) for v, sketch in tries if (v - now) * sign > SAME_SIZE]
     changes = [abs(v - now) for v, sketch in side if sketch]
     if not changes:
         return None
-    kept = [v for v, sketch in side if not sketch and abs(v - now) < min(changes) - _SAME]
+    kept = [v for v, sketch in side if not sketch and abs(v - now) < min(changes) - SAME_SIZE]
     return max(kept, key=lambda v: abs(v - now), default=now)
 
 
@@ -299,7 +298,7 @@ def outline_windows(run, table, spans, capture=None):
         span = dict(spans[name], kept=kept, changed=changed)
         low, high, _ = kept_ranges.failure_cut(table, e, span, mine)
         o_low, o_high, _ = kept_ranges.outline_cut(table, e, span)
-        if min(high, o_high) - max(low, o_low) <= _SAME:
+        if min(high, o_high) - max(low, o_low) <= SAME_SIZE:
             kept = [now, now]
         out[name] = {"kept": kept, "changed": changed}
     return out
@@ -351,7 +350,7 @@ def spans(states, current):
     out = {}
     for state in states:
         values = state.get("values") or {}
-        moved = {n: v for n, v in values.items() if n in current and abs(v - current[n]) > _SAME}
+        moved = {n: v for n, v in values.items() if n in current and abs(v - current[n]) > SAME_SIZE}
         for name, value in moved.items():
             span = out.setdefault(name, {"low": current[name], "high": current[name], "failed": []})
             if state.get("built") is not False:

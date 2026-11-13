@@ -1,18 +1,18 @@
 """What the states tried so far show for one size set alone: which values built and kept every outline."""
-from .rows import SAME_VALUE
+from ...geometry.tolerances import SAME_SIZE
 
 
 def _side(size, value):
     """1 or -1: the side of the size's value `value` lies on (0 for the value itself)."""
     delta = value - size["value"]
-    return 0 if abs(delta) <= SAME_VALUE else (1 if delta > 0 else -1)
+    return 0 if abs(delta) <= SAME_SIZE else (1 if delta > 0 else -1)
 
 
 def fails_by(states, size, value):
     """True when a state that set only this size, on the side of `value` and not farther, did not build or changed
     an outline: a row at `value` would end past the range the size keeps."""
     side, reach = _side(size, value), abs(value - size["value"])
-    return side != 0 and any(not ok and _side(size, v) == side and abs(v - size["value"]) <= reach + SAME_VALUE
+    return side != 0 and any(not ok and _side(size, v) == side and abs(v - size["value"]) <= reach + SAME_SIZE
                              for v, ok in tried_alone(states, size["param"], size["value"]))
 
 
@@ -24,7 +24,7 @@ def farthest_built(states, size, end):
         return None
     tried = [(v, ok) for v, ok in tried_alone(states, size["param"], size["value"]) if _side(size, v) == side]
     bad = min((abs(v - size["value"]) for v, ok in tried if not ok), default=None)
-    good = [v for v, ok in tried if ok and (bad is None or abs(v - size["value"]) < bad - SAME_VALUE)]
+    good = [v for v, ok in tried if ok and (bad is None or abs(v - size["value"]) < bad - SAME_SIZE)]
     return max(good, key=lambda v: abs(v - size["value"])) if good else None
 
 
@@ -34,7 +34,7 @@ def tried_alone(states, name, value):
     out = []
     for state in states:
         values = state.get("values") or {}
-        if list(values) == [name] and abs(values[name] - value) > SAME_VALUE:
+        if list(values) == [name] and abs(values[name] - value) > SAME_SIZE:
             out.append((values[name], state.get("built") is not False and not state.get("changed")))
     return out
 
@@ -43,4 +43,4 @@ def changed_alone(states, name, value):
     """The values of the states that set only `name` and changed a followed outline (`changed`)."""
     return [v for v, state in ((s["values"][name], s) for s in states
                                if list(s.get("values") or {}) == [name] and s.get("changed"))
-            if abs(v - value) > SAME_VALUE]
+            if abs(v - value) > SAME_SIZE]

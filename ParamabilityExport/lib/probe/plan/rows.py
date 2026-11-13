@@ -1,10 +1,10 @@
 """One probe row and the helpers every kind of row shares."""
+from ...geometry.tolerances import SAME_SIZE
 from ...package.manifest import MAX_NAME_CHARS
 from ...package.units import display_from_manifest, unit_kind
 from ...params.expressions.text import format_number
 
 MAX_PROBE_ROWS = 64
-SAME_VALUE = 1e-9
 # Added to the progress line of a row that tries again nearer after a value that did not build.
 RETRY_NOTE = ". The last value did not rebuild, so this one is nearer."
 
@@ -37,7 +37,7 @@ def _label(sizes, manifest, varied, retry):
 def probe_row(sizes, name, overrides, key=None, retry=False):
     manifest = state_values(sizes, overrides)
     current = {s["param"]: s["value"] for s in sizes}
-    varied = sorted(p for p in overrides if abs(manifest[p] - current[p]) > SAME_VALUE)
+    varied = sorted(p for p in overrides if abs(manifest[p] - current[p]) > SAME_SIZE)
     row = {
         "name": name[:MAX_NAME_CHARS],
         "key": "probe: " + (key or name),

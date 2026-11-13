@@ -12,13 +12,13 @@ so its curves pair by kind and by their place along the loop.
 import math
 
 from ..geometry import vec
+from ..geometry.tolerances import POINT_TOLERANCE_MM
 from ..translator.loops import profile_loops
 from ..translator.path_motion import swept_degrees
 from ..translator.result import Refusal
 from ..sketch_values import keys
 from ..sketch_values.motion import SHAPE, TURNS, UNREAD
 
-POINT_TOLERANCE = 1e-4
 TURN_TOLERANCE = 1e-6
 ANGLE_TOLERANCE = 1e-6
 _SKIP = ("angleDeg",)
@@ -113,7 +113,8 @@ def _joined_end(curves, at):
     curve, before = curves[at], curves[at - 1]
     if len(curves) < 3 or curve["kind"] not in ("line", "arc") or before["kind"] not in ("line", "arc"):
         return None
-    touches = [min(_dist(curve[k], before[e]) for e in ("start", "end")) <= POINT_TOLERANCE for k in ("start", "end")]
+    touches = [min(_dist(curve[k], before[e]) for e in ("start", "end")) <= POINT_TOLERANCE_MM
+               for k in ("start", "end")]
     if touches[0] == touches[1]:
         return None
     return "start" if touches[0] else "end"
@@ -495,7 +496,8 @@ def _path_state(target, read):
         return None, UNREAD
     frame, ref = record["frame"], path["frame"]
     if _turned(frame["z"], ref["z"]) or _turned(frame["x"], ref["x"]) or any(
-            abs(vec.dot(vec.sub(frame["origin"], ref["origin"]), ref[axis])) > POINT_TOLERANCE for axis in ("x", "y")):
+            abs(vec.dot(vec.sub(frame["origin"], ref["origin"]), ref[axis])) > POINT_TOLERANCE_MM
+            for axis in ("x", "y")):
         return None, TURNS
     found = [record["curves"].get(curve["entity"]) for curve in path["curves"]]
     if any(not isinstance(f, dict) or f.get("kind") != c["kind"] for f, c in zip(found, path["curves"])):
@@ -562,7 +564,7 @@ def matches_capture(target, e0):
     values, _ = state_values(target, e0 or {}, e0)
     want = captured_values(target)
     return values is not None and values.keys() == want.keys() and all(
-        abs(values[k] - v) <= POINT_TOLERANCE for k, v in want.items())
+        abs(values[k] - v) <= POINT_TOLERANCE_MM for k, v in want.items())
 
 
 def readable(found, e0):
@@ -608,7 +610,7 @@ def _read_signature(record):
 
 
 def _close(a, b):
-    return len(a) == len(b) and all(abs(x - y) <= POINT_TOLERANCE for x, y in zip(a, b))
+    return len(a) == len(b) and all(abs(x - y) <= POINT_TOLERANCE_MM for x, y in zip(a, b))
 
 
 def same_read(before, now):

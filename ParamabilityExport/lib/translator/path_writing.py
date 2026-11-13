@@ -4,13 +4,14 @@ import math
 
 from ..capture_model import gap_hints
 from ..geometry import vec
+from ..geometry.tolerances import CHAIN_TOL
 from ..package.numbers import round9
 
 from . import spline_fit
 from .path_checks import (axis_reach_refusal, carried_reach_refusal, off_square, outline_reach, overlap_refusal,
                           reach_refusal, seam_turn, self_touch)
 from .path_curves import arc_of, near, polyline, round_point, round_point2, tangents
-from .path_limits import (BENDS_3D, CHAIN_TOL, CLOSED_NOT_SMOOTH, CORNER_MATCH_TOL, CROSSES, CURVATURE_SAMPLES,
+from .path_limits import (BENDS_3D, CLOSED_NOT_SMOOTH, CORNER_MATCH_TOL, CROSSES, CURVATURE_SAMPLES,
                           LINE_BEND_RADIUS, MAX_POINTS, MAX_SEGMENTS, MAX_TURN_DEG, NOT_SQUARE, OFF_PLANE, PLANE_TOL,
                           SHARP_CORNER, SMOOTH_JOIN_DEG, STRAIGHT_DEG, TOO_COMPLEX, TOO_MANY)
 from .path_model import PathPlan

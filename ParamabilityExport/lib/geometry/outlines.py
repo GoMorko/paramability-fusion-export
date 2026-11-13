@@ -9,9 +9,9 @@ keeps no corner where the shared curves crossed it. A free curve is shared when 
 curve (same entity token and ends); text outlines have no such token and are never merged.
 """
 from .footprint import Footprint, polyline
+from .tolerances import CHAIN_TOL
 
 KEY_DIGITS = 4
-CHAIN_TOL = 1e-4
 FRAME_TOL = 1e-6
 
 

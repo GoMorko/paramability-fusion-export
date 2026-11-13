@@ -7,9 +7,11 @@ in enough states to tell a line from a coincidence.
 import itertools
 import math
 
+from ..geometry import tolerances
 from ..sketch_values.motion import CURVE, UNTRIED
 
-TOLERANCE = 1e-4
+# The name the export code reads the fit tolerance by.
+TOLERANCE = tolerances.FIT_TOLERANCE
 MAX_COLUMNS = 4
 MAX_CANDIDATES = 12
 SNAP_DENOMINATOR = 24
@@ -110,7 +112,7 @@ def snap_coefficients(coefficients, deltas, dx, tol):
     return [round(a, 9) for a in coefficients]
 
 
-def fit_value(x, columns, tol=TOLERANCE):
+def fit_value(x, columns, tol=tolerances.FIT_TOLERANCE):
     """Fit `x` (a number per state, None for a state without it) over `columns`.
 
     Returns a `Result`: "const" when it moves less than `tol` everywhere, "affine" for the first exact subset of
