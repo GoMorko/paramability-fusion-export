@@ -60,15 +60,19 @@ def _doubt_angle(ctx, item, what, quantity, outline_reads):
 
 def as_sweep(item, combine, profile, found, ctx, angles=(), fixed=False, growth=0.0, followed=None):
     """A `sweep` step: the outline on its own placement and the path, with the twist, taper and direction setting.
-    `angles` are `(what, recipe key, Quantity, confirmed)`. A path that follows sizes is written as it gives it."""
+    `angles` are `(what, recipe key, Quantity, confirmed)`. A path that follows sizes is written as it gives it. An
+    outline the path planner moved to the path's start (`found.moved`) is written there."""
     outcome = loops.profile_loops(profile)
     if isinstance(outcome, Refusal):
         return outcome
     outer, inners = outcome
     drawn = sketch_motion.outline(ctx, item, profile, outer, inners, [(sketch_motion.profile_number(profile), profile)])
-    on = placement.from_frame(profile["frame"])
+    frame = profile["frame"]
+    on = placement.from_frame(dict(frame, origin=vec.add(frame["origin"], found.moved)) if found.moved else frame)
     if drawn is not None:
-        on["origin"] = drawn.origin(ctx, Quantity(0.0))
+        # A move along the first line of the path is a move along the outline's normal.
+        along = vec.dot(found.moved, vec.unit(frame["z"])) if found.moved else 0.0
+        on["origin"] = drawn.origin(ctx, Quantity(along))
         outer, inners = drawn.written(ctx)
         if followed is None:
             keep_outline_in_bends(ctx, item, profile, found, outer, growth)

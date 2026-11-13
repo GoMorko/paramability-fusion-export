@@ -393,14 +393,17 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   outline's plane becomes a sweep step too (recipe version 16); a twist or taper is copied with a note to check the
   shape, since Fusion does not document how it measures them. A closed chain of lines, arcs and spline curves in one
   plane becomes a sweep step along a closed flat path (version 16), cut open where the path meets the outline's plane;
-  a full circle stays a revolve unless a twist needs the sweep step. A twist along a closed path must be whole turns
+  a full circle stays a revolve unless a twist needs the sweep step. Sharp corners between lines of a closed path are
+  mitred, as Fusion builds them; an outline sitting on such a corner is moved to the middle of the next side, where the
+  copied path starts. A twist along a closed path must be whole turns
   and is copied as a number, not as a size. These sweeps are left out of the copy: a twist together
   with a taper or parallel orientation, a taper along spline curves or along a scaled outline, a taper that would close part of the outline
   or a hole, a taper of 45 degrees
   or more, a twist over 3600 degrees, a guide rail, parallel orientation on a path that turns back (the path's direction
   must keep a rise of 0.05 along the outline's normal at every point, ends and arc points included), several outlines at once that intersect the part or taper, an outline that is a face of the part, a path of
-  sketch curves mixed with edges, a closed path that bends in 3D, that is cut at a sharp corner, or that tapers or keeps
-  the outline in one direction, a twist along a closed path that is not whole turns, a sharp corner in the path, a path that
+  sketch curves mixed with edges, a closed path that bends in 3D or that tapers or keeps the outline in one direction,
+  a twist along a closed path that is not whole turns or that has a sharp corner, a sharp corner in an open path or
+  next to a curve, corners of a closed path too close together for the outline, a path that
   crosses itself or bends tighter than the outline allows, a path in 3D with splines or arcs that are not tangent, an
   outline in the middle of the path or not square to it, a sweep along only part of the path, a surface sweep and a
   sweep that makes a new component. A new body must have the volume the outline and path give (a parallel outline: its area times the rise of the
@@ -412,10 +415,13 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   path or an outline with holes has no cap placed. A pick on part of a cap, or on a side edge at a corner of the
   outline along a path of lines and arcs, keeps its points and marks only the sizes the sweep reads. Any other pick on
   a sweep marks every size written before it.
-- A loft is copied when it joins two closed sketch outlines with free ends and no rails or centre line. It is written
+- A loft is copied when it joins two closed outlines with free ends and no rails or centre line. An outline is a
+  sketch outline, a closed loop of edges in one plane or a flat face; a loop of edges or a face is copied as measured,
+  and the sizes that may move it are marked. It is written
   with straight faces between the outlines. Both outlines need the same number of holes, and their planes must not
   cross. Outlines of different shapes are copied with a note, since Fusion may pair the corners differently. These
-  lofts are left out: three or more outlines, a point end, an outline that is a face of the part, tangent or direction
+  lofts are left out: three or more outlines, a point end, a curved face or a loop of edges that is open or not flat,
+  tangent or direction
   ends, rails, a centre line, a closed loft, a surface loft and a loft that makes a new component. A round or chamfer
   on all edges of an outline of a loft (no holes) names the loft and follows its sizes; a pick on part of an outline
   keeps its points and marks the sizes the loft reads, and a pick on its side marks every size before it.

@@ -4,7 +4,9 @@ The path decides what is written (`paths.plan` orders it and checks the limits o
 - a straight path is an extrude of the outline (`extrude.handle`);
 - one arc or a full circle is a revolve of the outline about the arc's axis (`revolve.handle`);
 - a chain of lines, arcs and free curves in one plane, or of lines and tangent arcs in 3D, is a `sweep` step; a closed
-  chain in one plane is a `sweep` step along a closed flat path (a full circle stays a revolve unless it twists);
+  chain in one plane is a `sweep` step along a closed flat path (a full circle stays a revolve unless it twists),
+  with sharp corners between lines mitred as Fusion builds them and an outline on such a corner moved along the path
+  to the middle of the line it is square to (`path_closed`);
 - a twist, a taper, or an outline kept in one direction (parallel) along a path that turns, also makes a `sweep` step
   (a line becomes a path of two points, an arc a flat path), with `twistDeg`, `taperDeg` and `orientation`.
 
@@ -37,7 +39,7 @@ taper marks the sizes behind it and the outline, and adds a note asking the pers
 """
 import math
 
-from . import borrowed, path_model, paths, sweep_taper
+from . import borrowed, path_model, paths, sweep_taper, vec
 from .extrude import COMBINE
 from .result import Refusal, StepResult
 from .sweep_limits import (MIXED_PATH, NOT_MATCHING, PATH_TOO_LONG, PATH_UNREADABLE, SCALED_OUTLINE,
@@ -57,6 +59,13 @@ TWIST_SIGN_CONFIRMED = False      # true once an export shows which way Fusion's
 # them, and the sweep is taken the same way. A twist turns the same way in both. Fusion does not document this.
 TAPER_SIGN = -1
 TWIST_SIGN = 1
+
+
+def _carried(profile, moved):
+    """The outline moved by `moved` (where the path planner started the path), or the outline itself."""
+    if not moved:
+        return profile
+    return dict(profile, frame=dict(profile["frame"], origin=vec.add(profile["frame"]["origin"], moved)))
 
 
 def _each_outline(item, ctx, data, profiles):
@@ -128,17 +137,19 @@ def handle(item, ctx):
             taper_sign = -TAPER_SIGN
         elif lean is None and shapes is not None and sweep_taper.closes(shapes, found.length, slope):
             return Refusal(TAPER_CLOSES)
-    refusal = volume_refusal(item, data, combine, profile, found)
+    placed = _carried(profile, found.moved)
+    refusal = volume_refusal(item, data, combine, placed, found)
     if refusal is not None:
         return refusal
-    refusal, end_note = end_check(data, combine, profile, found, profile_points(profile), fixed, tapered)
+    refusal, end_note = end_check(data, combine, placed, found, profile_points(placed), fixed, tapered)
     if refusal is not None:
         return refusal
     pin_settings(ctx, item, data, found.closed)
     if end_note:
         ctx.note(end_note % item.get("name", "this sweep"))
     form = written_form(found, twisted, tapered, fixed)
-    followed = follow_path(ctx, item, profile, path, found, form, options)
+    # A path started away from the outline is written as measured.
+    followed = None if found.moved else follow_path(ctx, item, profile, path, found, form, options)
     if followed is None:
         mark_path(ctx, item, path)
         keep_path_on_plane(ctx, item, profile)

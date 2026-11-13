@@ -10,6 +10,7 @@ TOUCH_TOL = 1e-4          # parts of a path closer than this (mm) touch
 MAX_SEGMENTS = 64         # segments of a flat path (recipe cap)
 MAX_POINTS = 64           # points of a corners path (recipe cap)
 MAX_TURN_DEG = 179.5      # a bend turning more than this cannot be a rounded corner
+MAX_MITRE_DEG = 160.0     # a sharp corner between two lines turning more than this has no usable mitre, as in the app
 ARC_SAMPLE_DEG = 3.0
 MAX_OVERLAP_SAMPLES = 1500   # samples along a path when two far apart parts are checked for coming close
 OVERLAP_STEP_SHARE = 0.5     # samples are at most this share of the outline's reach apart
@@ -37,6 +38,8 @@ OFF_PLANE = "The path of this sweep does not start on the plane of its outline."
 NOT_SQUARE = "The outline is not square to the path at its start."
 TURNED_ROUND = "The path of this sweep would leave its outline the other way round."
 SHARP_CORNER = "The path of this sweep has a sharp corner."
+CORNER_TOO_TIGHT = ("A sharp corner of the path of this sweep is too close to the next one for its outline: the "
+                    "outline needs %.2f mm of straight path there and has %.2f mm.")
 BENDS_3D = "The path of this sweep bends in 3D in a way that is not copied yet."
 TOO_MANY = "The path of this sweep has too many parts to copy."
 CROSSES = "The path of this sweep crosses itself."

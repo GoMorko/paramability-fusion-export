@@ -315,6 +315,14 @@ class LoftTest(unittest.TestCase):
         self.assertEqual(data["sections"][0]["kind"], "profile")
         self.assertEqual((data["sections"][1]["items"], data["sections"][1]["count"]), (["BRepEdge", "BRepEdge"], 2))
 
+    def test_a_section_given_as_a_path_of_edges_holds_its_path_record(self):
+        corners = [(0, 0, 20), (40, 0, 20), (40, 40, 20), (0, 40, 20)]
+        sides = zip(corners, corners[1:] + corners[:1])
+        loop = path(*[step(edge("e%d" % n, a=a, b=b)) for n, (a, b) in enumerate(sides)], closed=True)
+        found = read_loft(loftSections=Coll([section(loop), section(profile())]))["sections"][0]
+        self.assertEqual((found["kind"], found["path"]["kind"], found["path"]["closed"]), ("path", "edges", True))
+        self.assertEqual([c["start"] for c in found["path"]["curves"]], [list(c) for c in corners])
+
     def test_rails_and_a_centre_line_are_read_like_paths(self):
         one = path(step(sketch_curve(line3((0, 0, 0), (0, 50, 0)), sketch("RailA", "rail_a"))))
         two = path(step(sketch_curve(line3((0, 0, 0), (0, 40, 0)), sketch("RailB", "rail_b"))))

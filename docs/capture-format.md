@@ -1236,7 +1236,9 @@ Tangent Chain is on, and edges the copy can write; otherwise the refusal says wh
   checked on its own without the new body's volume, which Fusion measures for all of them; an intersect or a taper
   refuses.
   `orientation` is `perpendicular`, `parallel` or `other`. `distance_one` and `distance_two` are the unitless
-  `distanceOne` and `distanceTwo` (the share of the path the sweep covers; the translator takes 1 and 0 or null as the whole path), `taper_deg` and `twist_deg` are
+  `distanceOne` and `distanceTwo` (the share of the path the sweep covers on each side of the outline; the translator
+  takes 1 and 0 or null as the whole path, and on a closed path also 1 and 1, Fusion's default there, which makes the
+  same ring unless it twists), `taper_deg` and `twist_deg` are
   `taperAngle` and `twistAngle` in degrees. `scaling` (`profileScaling`) is `scale`, `stretch`, `none` or `other`.
   `extent` is the `extent` setting as text. Every one of these is null when the member cannot be read or does not
   exist in the running Fusion build, which holds for `extent` in particular. `unread` (only when one of them is null)
@@ -1256,13 +1258,19 @@ Tangent Chain is on, and edges the copy can write; otherwise the refusal says wh
   normal).
 - Closed paths (`lib/translator/paths.py`): a closed chain in one plane becomes a flat path with `closed: true`. The
   chain is cut where it meets the outline's plane nearest to the outline (a line, an arc or a spline sample is split
-  in two; a joint is used as it is), turned to start there, and its last segment ends exactly on the start. The cut
-  must not be at a sharp corner, and the written directions at the seam must differ by at most 2 degrees (spline
-  halves are fitted apart). A closed chain that bends in 3D, or a taper or `parallel` along a closed path, is left
+  in two; a joint is used as it is), turned to start there, and its last segment ends exactly on the start. A sharp
+  corner between two lines is mitred, as Fusion builds it (a 3 by 3 mm outline round the 40 by 40 mm top edges of a
+  box made the volume of the mitred ring): it may turn up to 160 degrees, and the straight path on each side must be
+  at least the outline's reach across the path's plane times tan(turn / 2). A cut at a sharp corner between two lines
+  starts the path in the middle of the line the outline is square to instead (the chain is turned round when that
+  line arrives at the corner), and the outline is written moved along that line by the same distance. Sharp corners
+  next to a curve, and any sharp corner of a twisting path, are left out. The written directions at the seam must
+  differ by at most 2 degrees (spline halves are fitted apart). A closed chain that bends in 3D, or a taper or `parallel` along a closed path, is left
   out. A full circle stays a revolve; with a twist it becomes a closed flat path of two half arcs. The twist must be
   whole turns and is written as a number. The overlap check measures the distance along the path round the loop. A
-  new body must have the volume of Pappus: the area times the path length less 2 pi times the offset of the
-  outline's centre towards the inside; a twisting outline is checked only when its centre sits on the path.
+  new body must have the volume of Pappus: the area times the path length less the offset of the outline's centre
+  towards the inside times the turn of the path (2 pi, where each mitred corner turning by t counts 2 tan(t / 2)); a
+  twisting outline is checked only when its centre sits on the path.
 - Arc and circle paths (`lib/translator/path_writing.py`): the revolve about the arc's axis builds an outline on the
   outer side of the arc however wide it is; only an outline that reaches the axis is left out (the reach toward the
   centre counts, along the radius). The check over the size ranges (`sweep_rules.py`) uses the same rule.
@@ -1348,7 +1356,8 @@ Loft `data`:
     { "kind": "profile", "profile": 1, "end": "direction", "angle": 10.0, "weight": 1.5 },
     { "kind": "point", "point": [x, y, z], "end": "pointSharp" },
     { "kind": "face", "face": FACE, "end": "free" },
-    { "kind": "other", "type": "Path", "end": null }
+    { "kind": "path", "path": PATH, "end": "free" },
+    { "kind": "other", "type": "ObjectCollection", "items": ["BRepEdge"], "count": 1, "end": null }
   ],
   "rails": [ PATH ], "centerline": null,
   "closed": false, "merge_tangent": true,
@@ -1361,9 +1370,16 @@ Loft `data`:
 - `sections`: `LoftFeature.loftSections` in order, null when they cannot be listed. `kind` is `profile` (a `Profile`:
   its record is appended to `profiles` and `areas`, and `profile` is its place there, so the size probe follows the
   sketches under the usual keys), `point` (a sketch point, construction point or vertex, in the component frame),
-  `face` (a `BRepFace`, as the face record of section 4, under a key the probe does not follow) or `other` (with the
-  entity `type`, `Path` for a chain of curves). A section Fusion gives as a collection is the profile it holds when
-  it holds one profile; otherwise it is `other` with `items` (the type names of up to 16 entries) and `count`.
+  `face` (a `BRepFace`, as the face record of section 4, under a key the probe does not follow), `path` (a `Path`, a
+  chain of edges or sketch curves, as the PATH record; a loop of the top edges of a box comes this way) or `other`
+  (with the entity `type`). A section Fusion gives as a collection is the profile it holds when it holds one profile;
+  otherwise it is `other` with `items` (the type names of up to 16 entries) and `count`, as is a `Path` that cannot
+  be read.
+- Loops of the part as sections (`lib/translator/loft_sections.py`): a `path` section that is one closed chain of
+  lines and arcs in one plane (or one circle), and a flat `face` section, are written as outlines measured where they
+  are, the sizes that may move them marked (those the steps written so far read; any size for edges or a face of
+  another body). The chain gets a frame on its plane turned like the other section's sketch. An open chain, a chain
+  off one plane, another curve kind and a curved face are left out with their own reasons.
 - `end`: the `LoftSection.endCondition` as `free`, `direction`, `tangent`, `smooth`, `pointSharp`, `pointTangent` or
   `other`; null when it cannot be read. `angle` (degrees) and `weight` are added where the condition has them, and
   the ones that are model parameters are in `params` as `sections.<n>.angle` and `sections.<n>.weight`.

@@ -5,9 +5,9 @@ import math
 from . import sweep_taper, values
 from .extrude import MAX_TAPER_DEG, keep_angle_within
 from .result import Refusal
-from .sweep_limits import (MAX_TAPER_STATIONS, MAX_TWIST_DEG, OTHER_KIND, PARALLEL_AND_SHAPE, PART_OF_PATH, RAIL,
-                           RAIL_UNREADABLE, TAPER_CURVES, TAPER_STATIONS, TAPER_STEEP, TWIST_AND_TAPER, TWIST_LONG,
-                           UNREADABLE, ZERO_TOL)
+from .sweep_limits import (BOTH_WAYS_TWIST, MAX_TAPER_STATIONS, MAX_TWIST_DEG, OTHER_KIND, PARALLEL_AND_SHAPE,
+                           PART_OF_PATH, RAIL, RAIL_UNREADABLE, TAPER_CURVES, TAPER_STATIONS, TAPER_STEEP,
+                           TWIST_AND_TAPER, TWIST_LONG, UNREADABLE, ZERO_TOL)
 from .sweep_outline import loop_polygon
 from .values import Quantity
 
@@ -38,9 +38,19 @@ def settings_refusal(data):
         return Refusal(TAPER_STEEP)
     if abs(twist) > MAX_TWIST_DEG:
         return Refusal(TWIST_LONG)
-    if abs(one - 1.0) > ZERO_TOL or (is_number(two) and abs(two) > ZERO_TOL):
+    return _coverage_refusal(data, one, two, twist)
+
+
+def _coverage_refusal(data, one, two, twist):
+    """A Refusal unless the sweep covers its whole path once. Along a closed path a second side that also runs the
+    whole way (`distance_two` 1, Fusion's default there) makes the same ring, unless it twists."""
+    if abs(one - 1.0) > ZERO_TOL:
         return Refusal(PART_OF_PATH)
-    return None
+    if not is_number(two) or abs(two) <= ZERO_TOL:
+        return None
+    if abs(two - 1.0) > ZERO_TOL or (data.get("path") or {}).get("closed") is not True:
+        return Refusal(PART_OF_PATH)
+    return Refusal(BOTH_WAYS_TWIST) if abs(twist) > ZERO_TOL else None
 
 
 _SETTING_WORDS = (("orientation", "orientation"), ("twist_deg", "twist"), ("taper_deg", "taper"),

@@ -30,4 +30,5 @@ PATH_TOO_LONG = "The path of this sweep has more parts than can be read, so it i
 OTHER_KIND = "This kind of sweep is not copied yet."
 KEEPS_DIRECTION = TURNS_BACK
 PART_OF_PATH = "This sweep covers only part of its path, which is not copied yet."
+BOTH_WAYS_TWIST = "This sweep runs both ways round its closed path and twists, which is not copied yet."
 NOT_MATCHING = "The result of this sweep does not match its outline and path, so it is not copied yet."
