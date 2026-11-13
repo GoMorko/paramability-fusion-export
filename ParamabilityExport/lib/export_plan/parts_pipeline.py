@@ -130,7 +130,7 @@ class _PartsPipeline:
                 if failed:
                     self.port.warn_unrestored(failed)
                 warn_steps(self)
-            warn_left_off(self.port, self.roll, self.settled)
+            warn_left_off(self.port, self.roll, self.settled, undo_dropped(self))
 
     def _end_trim(self):
         """Turn back on the timeline items suppressed for the tries (a no-op when none were)."""

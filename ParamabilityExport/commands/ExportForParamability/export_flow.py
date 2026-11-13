@@ -139,8 +139,8 @@ class FusionPort:
     def warn_unrestored(self, names):
         export_common.warn_unrestored(names)
 
-    def warn_left_off(self, names):
-        export_common.warn_left_off(names)
+    def warn_left_off(self, names, undo_dropped=False):
+        export_common.warn_left_off(names, undo_dropped)
 
     def warn_steps(self, lines):
         export_common.warn_steps(lines)
@@ -191,8 +191,8 @@ class FusionPartsPort:
     def warn_unrestored(self, names):
         export_common.warn_unrestored(names)
 
-    def warn_left_off(self, names):
-        export_common.warn_left_off(names)
+    def warn_left_off(self, names, undo_dropped=False):
+        export_common.warn_left_off(names, undo_dropped)
 
     def warn_steps(self, lines):
         export_common.warn_steps(lines)

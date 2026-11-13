@@ -9,7 +9,7 @@ from ..lib.design_edit.apply import RowBuildError
 from ..lib.design_edit.errors import StepExportError
 from ..lib.design_edit.marker import not_put_back_message, put_back
 from ..lib.design_edit.timeline_health import settle_timeline
-from ..lib.export_plan.health import steps_lines
+from ..lib.export_plan.health import left_off_line, steps_lines
 from ..lib.package.naming import addin_version, writer_text
 from ..lib.design_edit.runner import ExportCancelled
 from ..lib.export_plan import messages
@@ -55,15 +55,13 @@ def warn_unrestored(names):
         + ".\nUse Undo in Fusion if they look wrong, or reopen the design from its last save.", error=True)
 
 
-def warn_left_off(names):
-    """Tell the person when timeline steps turned off for the faster tries could not be turned back on."""
+def warn_left_off(names, undo_dropped=False):
+    """Tell the person when timeline steps turned off for the faster tries could not be turned back on. With
+    `undo_dropped` (Lighter on memory) Undo is not offered, as in the health lines."""
     if not names:
         return
-    names = ", ".join(names)
-    log(f"could not turn back on: {names}")
-    message_box(
-        "These timeline steps could not be turned back on after the tries: " + names
-        + ".\nIn the timeline, right click each one and pick Unsuppress, or use Undo in Fusion.", error=True)
+    log("could not turn back on: " + ", ".join(names))
+    message_box(left_off_line(names, undo_dropped), error=True)
 
 
 def warn_steps(lines):

@@ -82,8 +82,9 @@ class ExportPort(Protocol):
     progress(verb): a context manager whose value has `step(index, total, name)`; the step returns False when the
       person cancelled.
     warn_unrestored(names): tell the person that these parameters could not be put back, when the export stops.
-    warn_left_off(names): optional; tell the person that these timeline steps, turned off for the tries
-      (`timeline_trim`), could not be turned back on.
+    warn_left_off(names, undo_dropped): optional; tell the person that these timeline steps, turned off for the tries
+      (`timeline_trim`), could not be turned back on; `undo_dropped` is True when Fusion forgot Undo data
+      (`undo_dropped`), so Undo is not offered.
     warn_steps(lines): optional; tell the person, when the export stops, the `health.health_lines` about steps that
       differ from the start of the export (`settle_steps`).
     log(text): a line for the log.
@@ -145,14 +146,15 @@ def run_pipeline(port, request, tmp):
     return _Pipeline(port, request, tmp).run()
 
 
-def warn_left_off(port, timeline, settled=None):
+def warn_left_off(port, timeline, settled=None, undo=False):
     """Tell the person about timeline items that would not turn back on after the tries (`TryTimeline.left_off`),
-    leaving out the steps the end check (`settle_steps`) still lists as changed: its own lines name them."""
+    leaving out the steps the end check (`settle_steps`) still lists as changed: its own lines name them. `undo` is
+    True when Fusion forgot Undo data during the export (`undo_dropped`)."""
     told = {c["name"] for c in settled.changed} if settled is not None else set()
     names = [name for name in (timeline.left_off if timeline is not None else []) if name not in told]
     warn = getattr(port, "warn_left_off", None)
     if names and warn is not None:
-        warn(names)
+        warn(names, undo)
 
 
 class MarkerNotHeld(Exception):
@@ -633,7 +635,7 @@ class _Pipeline:
                 if failed:
                     self.port.warn_unrestored(failed)
                 warn_steps(self)
-            warn_left_off(self.port, self.roll, self.settled)
+            warn_left_off(self.port, self.roll, self.settled, undo_dropped(self))
 
     def _end_trim(self):
         """Turn back on the timeline items suppressed for the tries (a no-op when none were)."""

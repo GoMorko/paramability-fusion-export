@@ -16,6 +16,8 @@ from tests.test_timeline_marker import Item, Timeline
 from tests.fakes import FakeDesign
 
 from lib.design_edit.runner import ExportCancelled
+from lib.export_plan import health as health_module
+from lib.export_plan import undo_steps
 from lib.export_plan.parts_pipeline import run_parts_pipeline
 from lib.export_plan.pipeline import run_pipeline
 from lib.export_plan.timeline_trim import unused_items
@@ -176,8 +178,9 @@ class LeftOffPort(FakePort):
         super().__init__(**options)
         self.left_off = []
 
-    def warn_left_off(self, names):
+    def warn_left_off(self, names, undo_dropped=False):
         self.left_off.append(list(names))
+        self.undo_dropped = undo_dropped
 
 
 def export(port, faster=None):
@@ -279,6 +282,15 @@ class PipelineTrimTest(unittest.TestCase):
         port = self.port(store=TrimStore(START, stuck=["Lid sketch"]))
         export(port)
         self.assertEqual(port.left_off, [["Lid sketch"]])
+        self.assertFalse(port.undo_dropped)
+
+    def test_with_undo_data_dropped_the_left_off_box_sends_to_the_saved_version_not_to_undo(self):
+        port = self.port(store=TrimStore(START, stuck=["Lid sketch"]))
+        undo_steps.attach(port, undo_steps.UndoSteps(lambda non_undoable: True, port.log))
+        export(port)
+        self.assertEqual(port.left_off, [["Lid sketch"]])
+        self.assertTrue(port.undo_dropped)
+        self.assertTrue(health_module.left_off_line(["Lid sketch"], True).endswith(health_module.NO_UNDO_ADVICE))
 
     def test_items_the_end_check_turns_back_on_or_names_get_no_box_of_their_own(self):
         class Settling(TrimStore):

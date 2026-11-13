@@ -210,6 +210,13 @@ def health_lines(health):
     return lines
 
 
+def left_off_line(names, undo_dropped=False):
+    """The message about timeline items of the faster tries that would not turn back on (`TryTimeline.left_off`)."""
+    fix = NO_UNDO_ADVICE if undo_dropped else "Or use Undo in Fusion."
+    return ("These timeline steps could not be turned back on after the tries: %s.\nIn the timeline, right click each "
+            "one and pick Unsuppress. %s" % (", ".join(names), fix))
+
+
 def steps_lines(settled, deferred_left=(), undo_dropped=False):
     """The lines about the timeline steps (`timeline_health.TimelineSettle`) and the sketches left deferred alone, for
     an export that stopped or keeps no other health record."""
