@@ -16,18 +16,29 @@ def _square(side, frame_z):
                 {"kind": "line", "start": [side, side], "end": [0, side]}, {"kind": "line", "start": [0, side], "end": [0, 0]}]}]}
 
 
-def capture(base="extrude_plate", join_z=50.0, gap=True):
-    """The base body, a step the copy leaves out (a coil that changes the body), then a 4 mm square extrude joined at
-    height `join_z`, as the last item. The plate of `extrude_plate` runs from 0 to 10 mm high."""
+def _join(index, name, target, side, at, height):
+    """A `side` mm square extrude joined from `at` ([x, y, z] of its corner), `height` mm up."""
+    join = copy.deepcopy(load_capture("extrude_plate")["items"][1])
+    square = _square(side, at[2])
+    square["frame"]["origin"] = list(at)
+    join.update(index=index, name=name, bodies_after=target)
+    join["data"].update(operation="join", participants=target, profiles=[square],
+                        side_one={"kind": "distance", "distance": height, "taper_deg": 0.0}, end_offset=height)
+    return join
+
+
+def capture(base="extrude_plate", join_z=50.0, gap=True, before=(), side=4.0, corner=(0, 0), height=3.0):
+    """The base body, the joins `before` (`(side, [x, y, z], height)` each), a step the copy leaves out (a coil that
+    changes the body), then a `side` mm square extrude joined at height `join_z`, as the last item. The plate of
+    `extrude_plate` runs from 0 to 10 mm high."""
     found = load_capture(base)
     target = found["items"][-1]["bodies_after"]
+    for n, (post_side, post_at, post_height) in enumerate(before):
+        found["items"].append(_join(len(found["items"]), "Post%d" % (n + 1), target, post_side, post_at, post_height))
     at = len(found["items"])
     coil = {"index": at, "name": "Coil1", "type": "CoilFeature", "suppressed": False, "health": "ok", "message": "",
             "in_target_component": True, "bodies_after": target, "target_changed": True, "data": {}}
-    join = copy.deepcopy(load_capture("extrude_plate")["items"][1])
-    join.update(index=at + 1 if gap else at, name="Extrude2", bodies_after=target)
-    join["data"].update(operation="join", participants=target, profiles=[_square(4.0, join_z)],
-                        side_one={"kind": "distance", "distance": 3.0, "taper_deg": 0.0}, end_offset=3.0)
+    join = _join(at + 1 if gap else at, "Extrude2", target, side, [corner[0], corner[1], join_z], height)
     found["items"] += ([coil] if gap else []) + [join]
     return found
 
@@ -45,6 +56,13 @@ class FloatingJoinTest(unittest.TestCase):
 
     def test_a_join_that_sits_on_the_copied_part_stays(self):
         result = translate(capture(join_z=10.0))
+        self.assertEqual(join_verdict(result)["verdict"], "translated")
+
+    def test_a_join_that_encloses_copied_material_stays(self):
+        # A 2 mm post from 50 to 52 mm high, then an 8 mm join from 48 to 54 mm round it: no face of the join comes
+        # near the post.
+        result = translate(capture(before=[(2.0, [0, 0, 50], 2.0)], join_z=48.0, side=8.0, corner=(-3, -3),
+                                   height=6.0))
         self.assertEqual(join_verdict(result)["verdict"], "translated")
 
     def test_a_join_away_from_the_part_stays_when_no_step_was_left_out(self):

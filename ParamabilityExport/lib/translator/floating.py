@@ -4,18 +4,26 @@ In Fusion such a join touches the body, but the copy lacks what it sits on (a fl
 app's kernel then finds a separate piece and stops the whole copy. So the walk leaves the join out as a gap too.
 
 It does so only when it can tell. The translator keeps its own model of the copied part (the placers of the written
-steps, `follow.inside`). The join floats when that model holds no material at or near the join, and every written step
-that adds material the model does not hold stays clear of the join by its own bounds: a sweep within its path grown by
-its profile, a draft within its walk's slabs grown by its lean, a round or bevel within its size of the part (so the
-join must stay that far from the model too). A step it cannot bound, a join that is not a plain extrude, or a join too
-large to sample keeps the join in the copy.
+steps, `follow.inside`). The join floats when that model holds no material at, near or inside the join, and every
+written step that adds material the model does not hold stays clear of the join by its own bounds: a sweep within its
+path grown by its profile, a draft within its walk's slabs grown by its lean, a round or bevel within its size of the
+part (so the join must stay that far from the model too). Material of the model is looked for on and right next to the
+join's faces, on a coarse grid through the join and the band round it, and then closely wherever the box of a step of
+the model meets that band; a slab of the model with a corner inside the join keeps it (the join may enclose it). A step
+it cannot bound, a join that is not a plain extrude, or a join or nearby material too large to sample keeps the join in
+the copy.
 """
 import math
 
 from . import follow, step_kinds, vec
+from .end_caps import EndCaps
 from .footprint import polyline
+from .moved_placer import MovedPlacer
+from .offset_faces import MovedFaces
 from .placer_makers import SlabMaker
+from .shells import Shell
 from .slabs import Slab
+from .thin_wall import ThinWall
 from .tool_placer import ToolPlacer
 
 # Spacing of the sample points on and right next to the join, in mm, and how far out that dense band runs. A wall of
@@ -57,9 +65,29 @@ def floats(ctx, outcome):
     region = _grown(box, SPACING + CLEAR)
     if region is None or not _others_clear(ctx, ctx.steps, ctx.placers, region):
         return False
-    if reach > NEAR:
-        points += _grid(_grown(box, reach))
-    return len(points) <= MAX_SAMPLES and not any(follow.inside(ctx, p) for p in points[64:])
+    band = _grown(box, max(reach, NEAR))
+    points += _grid(band)
+    if len(points) > MAX_SAMPLES or any(follow.inside(ctx, p) for p in points[64:]):
+        return False
+    return _model_clear(ctx, slabs, band)
+
+
+def _model_clear(ctx, slabs, band):
+    """True when no material of the model lies in `band` (the join's box grown by the reach): every step of the model
+    whose box meets it is sampled there SPACING apart, and a slab of the model with a corner in the join keeps the join
+    whatever the samples say. False when a step's box cannot be told or the samples would be too many."""
+    found = _material_boxes(ctx.placers)
+    if found is _UNKNOWN:
+        return False
+    for box, corners in found:
+        if not _meets(box, band):
+            continue
+        if any(join.material_at(p) is not None for join in slabs for p in corners):
+            return False
+        points = _dense(_overlap(box, band))
+        if points is None or any(follow.inside(ctx, p) for p in points):
+            return False
+    return True
 
 
 def _join_slabs(outcome):
@@ -135,6 +163,15 @@ def _samples(slab, reach):
     return out
 
 
+def _dense(box):
+    """Points filling a box SPACING apart, or None when they would be more than MAX_SAMPLES."""
+    counts = [max(1, int(math.ceil((box[1][i] - box[0][i]) / SPACING))) for i in range(3)]
+    if (counts[0] + 1) * (counts[1] + 1) * (counts[2] + 1) > MAX_SAMPLES:
+        return None
+    axes = [[box[0][i] + (box[1][i] - box[0][i]) * k / counts[i] for k in range(counts[i] + 1)] for i in range(3)]
+    return [[x, y, z] for x in axes[0] for y in axes[1] for z in axes[2]]
+
+
 def _grid(box):
     """Points filling a box, FAR_STEPS + 1 along each side (closer when that is under SPACING)."""
     axes = []
@@ -177,18 +214,79 @@ def _meets(a, b):
     return all(a[0][i] <= b[1][i] and b[0][i] <= a[1][i] for i in range(3))
 
 
-def _slab_box(slab):
-    """The box of a slab's solid in model space (a copy where its motion carries it)."""
+def _overlap(a, b):
+    return ([max(a[0][i], b[0][i]) for i in range(3)], [min(a[1][i], b[1][i]) for i in range(3)])
+
+
+def _slab_box(slab, grow=0.0):
+    """The box of a slab's solid in model space (a copy where its motion carries it), its sides moved out by `grow`."""
     box = _footprint_box(slab)
     if box is None:
         return None
     low, high = slab.span
-    lean = _lean(slab)
+    lean = _lean(slab) + grow
     corners = [_model_point(slab, [u, v], h) for u in (box[0] - lean, box[2] + lean)
                for v in (box[1] - lean, box[3] + lean) for h in (low, high)]
     if slab.is_copy:
         corners = [slab.motion.numbers(p) for p in corners]
     return _box_of(corners)
+
+
+def _slab_corners(slab):
+    """The corners of a slab's outline at both ends, in model space (a copy where its motion carries it)."""
+    low, high = slab.span
+    flat = [p for curve in slab.footprint.curves for p in polyline(curve)]
+    out = [_model_point(slab, uv, h) for uv in flat for h in (low, high)]
+    return [slab.motion.numbers(p) for p in out] if slab.is_copy else out
+
+
+def _face_box(frame, footprint, distance):
+    """The box of the prism an offsetFaces step sweeps a face through."""
+    flat = [p for curve in footprint.curves for p in polyline(curve)]
+    return _box_of([vec.frame_apply(frame, [p[0], p[1], h]) for p in flat for h in (0.0, distance)])
+
+
+def _material_boxes(placers, motion=None):
+    """`[(box, corners)]` of the material the placers may add, a slab's outline corners in `corners` ([] for another
+    step), or _UNKNOWN when the box of one cannot be told. `motion` carries the boxes of a moved step's placers."""
+    found = []
+    for placer in placers:
+        if isinstance(placer, (Shell, EndCaps)):
+            continue
+        if isinstance(placer, Slab):
+            if placer.combine not in ("new", "add"):
+                continue
+            box, corners = _slab_box(placer), _slab_corners(placer)
+        elif isinstance(placer, ThinWall):
+            if placer.combine not in ("new", "add"):
+                continue
+            box, corners = _slab_box(placer.slab, max(abs(b) for b in placer.band)), []
+        elif isinstance(placer, MovedFaces):
+            if placer.distance.n <= 0:
+                continue
+            boxes = [_face_box(frame, footprint, placer.distance.n) for frame, footprint in placer.faces]
+            box, corners = (_union(boxes) if boxes else None), []
+        elif isinstance(placer, (ToolPlacer, MovedPlacer)):
+            inner = placer.placers if isinstance(placer, ToolPlacer) else [placer.inner]
+            if isinstance(placer, ToolPlacer) and placer.combine == "cut":
+                continue
+            more = _material_boxes(inner, placer.motion if isinstance(placer, MovedPlacer) else None)
+            if more is _UNKNOWN:
+                return _UNKNOWN
+            found += [(b, c) for b, c in more] if motion is None else [_moved(motion, b, c) for b, c in more]
+            continue
+        else:
+            return _UNKNOWN
+        if box is None:
+            return _UNKNOWN
+        found.append((box, corners) if motion is None else _moved(motion, box, corners))
+    return found
+
+
+def _moved(motion, box, corners):
+    """A box and corners carried by `motion` (`slabs.Motion`)."""
+    ends = [[box[k][0], box[j][1], box[i][2]] for k in (0, 1) for j in (0, 1) for i in (0, 1)]
+    return _box_of([motion.numbers(p) for p in ends]), [motion.numbers(p) for p in corners]
 
 
 # ---- the other steps that add material --------------------------------------------------------------------------
