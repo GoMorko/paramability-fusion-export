@@ -21,8 +21,8 @@ from ..package.manifest import MAX_FIXED_REASON
 from ..design_edit.marker import MARKER_LOST
 from ..package.text import clip
 from ..params.expressions import format_number
-from ..probe import build, derived, fit, match, plan, plane_sizes, ref_fit
-from ..sketch_values.motion import CURVE, SHAPE, TURNS, UNREAD, Stuck, Terms
+from ..probe import build, derived, fit, match, plan, plane_sizes, ref_fit, series
+from ..sketch_values.motion import SHAPE, TURNS, UNREAD
 from ..translator import borrowed
 from ..translator.notes import loose_reason
 from ..translator.sizes import construction_only
@@ -443,23 +443,12 @@ class SizeProbe:
         return set(self._changes[1])
 
     def curved_sizes(self):
-        """`(curved, partners)` from the states so far: the Fusion names of the sizes that move a value along a curve
-        on their own (a `Stuck` with `rest` blames them, or a `Terms` value reads them through an angle function),
-        and the other sizes of those values."""
+        """`(curved, partners)` from the states so far (`series.curve_sizes`)."""
         try:
             motion = build.build(self.capture, self.table, self.states)
         except Exception:
             return [], []
-        curved, partners = [], []
-        for value in motion.values.values():
-            if isinstance(value, Stuck) and value.cause == CURVE and value.rest is not None:
-                curved.extend(value.movers)
-                partners.extend(value.rest.terms)
-            elif isinstance(value, Terms):
-                curved.extend(f[1] for _, factors in value.parts for f in factors if f[0])
-                partners.extend(value.names())
-        curved = list(dict.fromkeys(curved))
-        return curved, [n for n in dict.fromkeys(partners) if n not in curved]
+        return series.curve_sizes(motion.values)
 
     def spans_now(self):
         """`Motion.spans` of the states so far."""

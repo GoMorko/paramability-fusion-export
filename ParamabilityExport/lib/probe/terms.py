@@ -7,11 +7,15 @@ of half the angle, alone and times a length size.
 
 `fit_terms` looks for the smallest set of those terms that gives every measured state of the value within the fit
 tolerance: the straight terms of the sizes that moved it, plus up to `MAX_EXTRA` other terms chosen one at a time
-(each time the one that leaves the smallest miss), then every term the value can do without is dropped. A set is
-accepted only when every measured state follows from the others (`_Problem.checked`): solved without that state,
-the sum still gives it. A term only one state shows is then refused, since that state is needed to solve it. When another term in place of a chosen one also gives every state but a different value somewhere inside the
-ranges tried (at a size half way to an end, or every size at an end), the states cannot tell them apart and the fit
-is refused: more rows are needed.
+(each time the one that leaves the smallest miss), then every term the value can do without is dropped. When that
+finds nothing, it tries every turn term at once (`turn_terms`): a corner on a leg that turns with an angle moves by a
+sum of each length times the sine and the cosine of the angle, often two to four such products, which one term at a
+time does not find. The turn terms may also read partner sizes: sizes that move the value only once the angle has
+turned, so their own states did not move it. A set is accepted only when every measured state follows from the others
+(`_Problem.checked`): solved without that state, the sum still gives it. A term only one state shows is then refused,
+since that state is needed to solve it. When another term in place of a chosen one also gives every state but a
+different value somewhere inside the ranges tried (at a size half way to an end, or every size at an end), the states
+cannot tell them apart and the fit is refused: more rows are needed.
 """
 import math
 
@@ -52,6 +56,19 @@ def candidate_terms(sizes):
                 trig = (function, angle.name, scale)
                 out.append((trig,))
                 out.extend((("", length.name, 1.0), trig) for length in lengths)
+    return out
+
+
+def turn_terms(sizes):
+    """Every term of a turn, straight terms first: each size, then per angle size its sine and cosine, alone and
+    times each length size."""
+    lengths = [s for s in sizes if not s.angle]
+    out = [_linear(s) for s in sizes]
+    for angle in (s for s in sizes if s.angle):
+        for function in ("sin", "cos"):
+            trig = (function, angle.name, 1.0)
+            out.append((trig,))
+            out.extend((("", length.name, 1.0), trig) for length in lengths)
     return out
 
 
@@ -159,15 +176,20 @@ def _const(problem, terms, coefficients):
     return problem.x0 - sum(c * problem.column(t)[0] for c, t in zip(coefficients, terms))
 
 
-def fit_terms(x, sizes, tol=TOLERANCE, owner=""):
+def fit_terms(x, sizes, tol=TOLERANCE, owner="", partners=()):
     """The `TermsFit` of `x` (a number per state, None where a state gave none, index 0 the first read) over `sizes`
-    (the free sizes that moved it, `Size`)."""
+    (the free sizes that moved it, `Size`). `partners` (`Size`) join `sizes` for the turn terms only."""
     problem = _Problem(x, sizes)
     if 0 not in problem.usable or len(problem.usable) < 3:
         return TermsFit("none")
     straight = [_linear(s) for s in sizes]
     extra = [t for t in candidate_terms(sizes) if problem.column(t) is not None]
     terms, found = _grow(problem, straight, extra, tol)
+    if found is None and any(s.angle for s in sizes):
+        sizes = list(sizes) + list(partners)
+        problem = _Problem(x, sizes)
+        extra = [t for t in candidate_terms(sizes) if problem.column(t) is not None]
+        terms, found = _turned(problem, sizes, tol)
     if found is None:
         return TermsFit("none")
     terms, found = _prune(problem, terms, found, tol)
@@ -203,6 +225,17 @@ def _grow(problem, straight, extra, tol):
     if found is not None and found[1] <= tol:
         return terms, found
     return terms, None
+
+
+def _turned(problem, sizes, tol):
+    """Every turn term the states can tell apart from the ones before it, solved at once. `(terms, (coefficients,
+    miss))`, or `(terms, None)` when that sum misses a state."""
+    terms = []
+    for term in turn_terms(sizes):
+        if problem.column(term) is not None and problem.solve(terms + [term]) is not None:
+            terms.append(term)
+    found = problem.solve(terms) if terms else None
+    return terms, found if found is not None and found[1] <= tol else None
 
 
 def _prune(problem, terms, found, tol):

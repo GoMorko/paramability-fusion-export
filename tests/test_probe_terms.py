@@ -12,7 +12,7 @@ from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.probe import plan
 from lib.probe.fit import Column
-from lib.probe.series import fit_series
+from lib.probe.series import curve_sizes, fit_series
 from lib.probe.terms import Size, fit_terms
 from lib.sketch_values.motion import Motion, Stuck, Terms
 from lib.translator import translate
@@ -48,6 +48,19 @@ LEG = states({"leg": 12.0, "a": 120.0}, {"leg": (6.0, 24.0), "a": (75.0, 165.0, 
 WALL = states({"wall": 3.0, "h": 50.0, "a": 120.0}, {"wall": (1.5, 6.0), "h": (25.0, 100.0),
                                                       "a": (75.0, 165.0, 97.5, 142.5)},
               [{"wall": 6.0, "a": 165.0}, {"wall": 1.5, "a": 75.0}, {"h": 100.0, "a": 165.0}])
+
+
+TURNED = states({"p": 20.0, "q": 5.0, "g": 6.0, "w": 2.0, "a": 100.0},
+                {"p": (15.0, 25.0, 10.0, 40.0), "q": (3.75, 6.25, 2.5, 10.0), "g": (4.5, 7.5, 3.0, 12.0),
+                 "w": (1.5, 2.5, 1.0, 4.0), "a": (75.0, 125.0, 55.0, 145.0, 77.5, 122.5)},
+                [{"p": 15.0, "q": 3.75, "g": 4.5, "w": 1.5, "a": 75.0},
+                 {"p": 25.0, "q": 6.25, "g": 7.5, "w": 2.5, "a": 125.0}]
+                + [{n: v, "a": a} for n, ends in (("p", (10.0, 40.0)), ("q", (2.5, 10.0)), ("g", (3.0, 12.0)),
+                                                  ("w", (1.0, 4.0))) for v, a in zip(ends, (55.0, 145.0))])
+
+
+def _varied(at):
+    return lambda n: {k for k in at[0] if abs(at[n][k] - at[0][k]) > 1e-9}
 
 
 def parts(fit):
@@ -89,6 +102,25 @@ class FitTermsTest(unittest.TestCase):
         sizes = [Size(n, n == "a", [s[n] for s in LEG]) for n in ("leg", "a")]
         self.assertEqual(fit_terms(x, sizes).kind, "none")
 
+    def test_a_corner_of_two_turned_legs_sums_four_products_of_a_leg_and_the_sine_or_cosine(self):
+        def corner(s):
+            return (s["p"] - s["q"]) * cos(s["a"]) + (s["g"] + 3 * s["w"]) * sin(s["a"])
+
+        found = fitted(corner, TURNED)
+        self.assertEqual(found.kind, "terms")
+        other = {"p": 30.0, "q": 4.0, "g": 10.0, "w": 3.0, "a": 70.0}
+        self.assertAlmostEqual(found.value.value(other), corner(other), places=6)
+
+    def test_a_size_that_moves_a_value_only_once_the_angle_turned_is_read_as_its_partner(self):
+        # At 100 degrees the wall lies along the line it moves, so its own states leave the value where it is.
+        values = {}
+        x = [s["w"] * sin(s["a"] - 100.0) for s in TURNED]
+        columns = [Column(n, 2, [s[n] for s in TURNED], "angle" if n == "a" else "length") for n in TURNED[0]]
+        fit_series(values, {"k": x}, [], columns, _varied(TURNED))
+        self.assertIsInstance(values["k"], Terms)
+        self.assertEqual(set(values["k"].names()), {"a", "w"})
+        self.assertAlmostEqual(values["k"].value({"w": 3.0, "a": 130.0}), 3.0 * sin(30.0), places=6)
+
     def test_the_value_round_trips_through_the_motion_file(self):
         value = Terms(2.0, [(1.0, [("", "wall", 1.0), ("cot", "a", 0.5)])], "S")
         back = Motion.from_json(Motion(values={"k": value}).json()).get("k")
@@ -106,6 +138,50 @@ class CurveRowsTest(unittest.TestCase):
         self.assertEqual([r["state"] for r in rows], [
             {"a": 97.5, "leg": 12.0}, {"a": 142.5, "leg": 12.0}, {"a": 75.0, "leg": 6.0}, {"a": 165.0, "leg": 24.0}])
         self.assertEqual(len(plan.check_rows(sizes, ["a"], spans, room=3, partners=["leg"])), 3)
+
+
+def _run(rows, now):
+    return [dict(now, **{n: row["state"][n] for n in row["varied"]}) for row in rows]
+
+
+class TurnedLegRowsTest(unittest.TestCase):
+    """The probe's own rows give a corner of two turned legs, and a line a leg moves only once it turned, the states
+    their fits need."""
+
+    def test_the_rows_fit_the_corners_and_lines_of_turned_legs(self):
+        now = {"p": 20.0, "q": 5.0, "g": 6.0, "w": 2.0, "a": 100.0}
+        sizes = [{"param": n, "size": n, "unit": "deg" if n == "a" else "mm", "kind": "angle" if n == "a" else "length",
+                  "value": v, "min": 55.0 if n == "a" else v / 2, "max": 145.0 if n == "a" else v * 2}
+                 for n, v in now.items()]
+        # The wall moves no turned value but the line, and at 120 degrees not that one either: only the straight
+        # corner of the same sketch tells it belongs to the turn.
+        sketch = {"corner": lambda s: (s["p"] - s["q"]) * cos(s["a"]) + s["g"] * sin(s["a"]),
+                  "end": lambda s: s["p"] * sin(s["a"]),
+                  "line": lambda s: s["w"] * sin(s["a"] - 100.0),
+                  "base": lambda s: 2 * s["w"] + s["g"]}
+        moved = list(now)
+        at = [dict(now)] + _run(plan.probe_rows(sizes, moved)[0], now)
+        at += _run(plan.pair_rows(sizes, moved, [], 64), now)
+        at += _run(plan.far_rows(sizes, moved, 64), now)
+        at += _run(plan.far_pair_rows(sizes, moved, [{"values": s, "built": True} for s in at[1:]], 64), now)
+
+        def fits():
+            values = {}
+            columns = [Column(n, 2, [s[n] for s in at], "angle" if n == "a" else "length") for n in now]
+            fit_series(values, {k: [f(s) for s in at] for k, f in sketch.items()}, [], columns, _varied(at),
+                       "Sketch1")
+            return values
+
+        curved, partners = curve_sizes(fits())
+        before = len(at)
+        at += _run(plan.check_rows(sizes, curved, {}, 64 - before, partners), now)
+        found = fits()
+        other = {"p": 30.0, "q": 4.0, "g": 10.0, "w": 3.0, "a": 70.0}
+        for key, f in sketch.items():
+            with self.subTest(key):
+                self.assertNotIsInstance(found[key], Stuck)
+                self.assertAlmostEqual(found[key].value(other), f(other), places=6)
+        self.assertLessEqual(len(at) - 1, plan.MAX_PROBE_ROWS)
 
 
 def _tilted():
