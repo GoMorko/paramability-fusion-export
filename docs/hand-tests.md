@@ -47,6 +47,16 @@ except U1, L1 to L15, F1 and F2, which are described here.
       a `ref` (not `foreign`), the symmetric cut has `symmetric` null and `side_one` with `kind: "throughAll"`, and
       the steps that made the Combine's tool body have `body_states` for that body. Repeat with a cut "through all"
       to one side with a taper of -5 degrees: it is copied as a tapered cut.
+- [ ] SW9, a sweep whose settings Fusion does not give. Sweep a small closed sketch profile along the closed loop of
+      edges of a box's top face, once as "Single path" and once as "Path + Guide Surface" with the top face as the
+      guide. Export each. Expect: the single path sweep has `orientation`, `taper_deg` and `twist_deg`; for the other,
+      the ones that are null are listed in `data.unread` with Fusion's answer, and the gap reason names them.
+- [ ] LF3, a loft section of edges. Loft from a closed loop of a body's edges (picked as edges, not a face) to a sketch
+      profile above it. Export. Expect: the section shows `kind: "other"` with `items` naming what Fusion gave
+      (`BRepEdge` or another type) and `count`.
+- [ ] AS1, the steps after a stop. Make a part whose second step cannot be copied (a coil) and add a shell with
+      "rounded" corners later. Export. Expect: a fixed shape with the coil in `refusal`, `report.json` `after_stop`
+      with `steps` naming the coil and the shell, and a second note "Not copied either: Shell1".
 - [ ] U1, faster tries (0.9.1, experimental). Use a design with a body in one component and two or more other
       components the body does not use (no joints), with a ticked size that moves a sketch. Suppress one step of an
       unused component by hand first. Export for Paramability twice, once with "Faster tries" off and once with it
