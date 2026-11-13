@@ -205,7 +205,7 @@ shows a short line with the same step (Fusion decides how long it stays):
 
 - a step that cannot be copied comes before the first step the copy writes (the copy needs a body to add to), or the
   body starts in a way that cannot be copied;
-- more than 16 steps would be left out of one part;
+- more than 256 steps would be left out of one part;
 - the place of the part in the assembly cannot be used, or a step of another component or an assembly step changes
   the part;
 - the body cannot be followed through the timeline, or a step cannot be read from Fusion;
@@ -282,8 +282,9 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 
 ## Limits
 
-- A part with left out steps is exported the same way as any other, so it takes as long as a full export. At most 16
-  steps can be left out of one part; a longer list stops the copy.
+- A part with left out steps is exported the same way as any other, so it takes as long as a full export. At most 256
+  steps can be left out of one part; a longer list stops the copy. A part with more than 16 left out steps needs a
+  Paramability build that reads version 2 gaps files; an older build opens it as a fixed shape.
 - Every size row and sketch try starts from the saved values: before each one after the first the add-in puts the
   parameters back and recomputes. A sketch with two solutions can still land on its other one after a try that did
   not rebuild, and stay there. After such a try the add-in reads the design again before the next one. A size is

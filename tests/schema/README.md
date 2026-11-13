@@ -10,8 +10,8 @@ Copies of the files published by the Paramability app. Re-copy them when the app
 - `paramability.recipePackage.v1.schema.json`, `paramability.recipePackage.v2.schema.json`: the package manifest
   schemas (copied from `schemas/` in the app repository). The writer makes version 1, and version 2 only for a
   package that holds a gaps file.
-- `paramability.recipeGaps.v1.schema.json`: the schema of the gaps file (copied from `schemas/` in the app
-  repository).
+- `paramability.recipeGaps.v1.schema.json`, `paramability.recipeGaps.v2.schema.json`: the schemas of the gaps file
+  (copied from `schemas/` in the app repository). The writer makes version 1 for up to 16 gaps and version 2 above.
 - `v1.json`: the app's `valueRows` manifest fixture
   (`src/features/project/savedFormats/fixtures/recipePackage/v1.json`), written by `scripts/write_app_fixture.py`
   through the package writer. The manifest test uses it.

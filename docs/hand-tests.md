@@ -127,7 +127,8 @@ except U1, L1 to L15, F1, F2 and SP1 to SP4, which are described here.
       `manifest.json` of `version` 2 where only that part has `gaps` (`parts/01/gaps.json`), the other part is as
       before, and the result window lists the left out step with the part name first.
 - [ ] L8, more than 16 steps left out. A design with 17 steps of a type that cannot be copied after its first body
-      stops the copy with the reason "More than 16 steps of this part cannot be copied."
+      exports a recipe with a `gaps.json` of `version` 2 that lists all 17. In Paramability it opens like L9: the
+      original shape, the unfinished copy beside it, and the card says 17 steps are missing.
 - [ ] L9 to L13, in Paramability (a build that reads version 2 packages), with the files of L1, L2 and L5. L9: the
       original shape shows, the card says how many steps are missing, the tip names the steps and reasons, and
       Editable copy shows the unfinished copy. L10: with assistant mode off there is no assistant text in the

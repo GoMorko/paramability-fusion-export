@@ -100,6 +100,16 @@ class StopTest(unittest.TestCase):
                 self.assertIsNotNone(stopped(result))
                 self.assertEqual((stopped(result)["index"], result.gaps), (index, []))
 
+    def test_a_part_with_more_gaps_than_an_old_gaps_file_held_keeps_its_recipe_and_every_gap(self):
+        def edit(capture):
+            shell = capture["items"][SHELL]
+            capture["items"][SHELL:] = [dict(copy.deepcopy(shell), index=10 + n, name="Coil%d" % n, type="CoilFeature")
+                                        for n in range(20)]
+        result = translate(tray(edit))
+        self.assertIsNone(stopped(result))
+        self.assertIsNotNone(result.recipe)
+        self.assertEqual(len(result.gaps), 20)
+
     def test_a_step_that_makes_another_body_and_leaves_the_part_as_it_was_is_passed_by(self):
         def edit(capture):
             _shell_with_new_body("OffsetFeature")(capture)

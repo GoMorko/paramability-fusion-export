@@ -2,8 +2,10 @@
 
 A step the copy cannot hold is left out of the recipe and recorded as a gap. This page describes the gaps file the
 add-in writes next to the recipe. The format is published by the Paramability app as `paramability.recipeGaps`,
-version 1 (`schemas/paramability.recipeGaps.v1.schema.json` in the app repository; a copy is in `tests/schema/`). That
-schema is the contract: it holds every limit. This page says what the add-in puts in each field and why.
+version 1 or 2 (`schemas/paramability.recipeGaps.v1.schema.json` and `v2`, in the app repository; copies are in
+`tests/schema/`). That schema is the contract: it holds every limit. Version 2 only allows more gaps (256 instead of
+16), so the add-in writes version 1 when a part has 16 gaps or fewer (an older app still opens it) and version 2 above
+(`package/gaps_file.py`). This page says what the add-in puts in each field and why.
 
 Code: `lib/translator/gap*.py` (the records, the picked gaps, where a gap belongs, the file data), `lib/translator/walk.py` (what becomes a gap),
 `lib/export_plan/reach_pass.py` and `lib/fusion_reader/read_gap_reach.py` (later steps that pick faces of a gap),
@@ -29,8 +31,8 @@ marks as an error, a step that splits the part or makes another body (whether or
 another component; one that the reader saw leave the exported body as it was, `target_changed` false, is passed by
 instead), a Split Body the copy cannot write as the removal of the other side (`split.py` answers a `Refusal` with
 `stops`; a split that keeps the body as one piece apart from the others is copied, `split_rules.py`), a gap before the copy has written its first step (a gap needs a body to add to), a gap inside a
-walk of another component's body, more than 16 gaps in one part (the gaps inside the tool bodies count, and a tool
-that meets the cap stops the whole copy), and the size caps of the recipe.
+walk of another component's body, more than 256 gaps in one part (`gaps.MAX_GAPS`, the count a version 2 gaps file holds; the gaps inside
+the tool bodies count, and a tool that meets the cap stops the whole copy), and the size caps of the recipe.
 
 A tool body of a Combine is walked by the same loop. A gap inside a tool body is kept only when the Combine writes that
 tool, and the tool is then always a `toolBody` step (the gap is in its list). When the tool cannot be built (its first
