@@ -6,14 +6,17 @@ import math
 import unittest
 
 from tests import context  # noqa: F401
+from unittest import mock
+
 from tests.test_translate_crossings import capture_with, line, user
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
 
 from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.sketch_values.motion import Motion, Terms
-from lib.translator import translate
+from lib.translator import sketch_crossings, translate
 from lib.translator.loops import profile_loops
+from lib.translator.values import Quantity
 
 
 def angle(name, deg):
@@ -46,6 +49,16 @@ class CrossingCutTest(unittest.TestCase):
         self.assertEqual((sorted(sizes), result.loose, result.fixed), (["a_deg", "p_mm", "q_mm"], [], []))
         self.assertGreater(sizes["p_mm"]["min"], sizes["q_mm"]["max"])
         self.assertEqual(sorted(c["name"] for c in result.cuts), ["p_mm", "q_mm"])
+
+    def test_a_cut_range_keeps_the_order_inside_it_not_only_at_its_ends_and_middle(self):
+        # A check that dips below zero only round p = 12.5, inside the default range 5 to 20 of p (now 10).
+        rule = "abs(p_mm - 12.5) - 0.5"
+        table = size_table.build([user("p_mm", 10.0)], ["p_mm"], [])
+        with mock.patch.object(sketch_crossings, "_checks", lambda *_: [object()]), \
+                mock.patch.object(sketch_crossings, "render", lambda *_: Quantity(1.5, rule, ("p_mm",))):
+            kept = sketch_crossings.order_ranges(table, [{}], [{}], "Sketch1")
+        low, high = kept["p_mm"]
+        self.assertTrue(all(evaluate(rule, {"p_mm": low + (high - low) * n / 200}) > 0 for n in range(201)))
 
 
 def _v_shape(p, q, a, w=3.0):

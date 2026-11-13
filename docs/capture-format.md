@@ -1878,8 +1878,9 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   becomes a fixed direction from its centre. The rebuilt outline (and an outline of `Terms` values) must keep its
   crossings and the order of its corners at every mix of the size ends (up to 6 sizes; a bounded sample past that) and
   the probe's states. Where it keeps them only inside shorter ranges (a leg turned while shorter than another, so the
-  outline would cross itself), the ranges are cut there (`sketch_crossings.order_ranges`: each check above zero at the
-  corners and middles of the ranges, `kept_ranges.holding_ranges_where`): "the range stops at A, since the outline of
+  outline would cross itself), the ranges are cut there (`sketch_crossings.order_ranges`: each check above zero over the
+  cut ranges by the settings of `range_check.sweep`, so inner values and the places where a term changes sign too,
+  plus the middles of the ranges and the probe's states inside them; `kept_ranges.holding_ranges_where`): "the range stops at A, since the outline of
   <sketch> would cross itself or lose a corner". When no shorter ranges keep them (a check that fails at the values
   now, or every size behind it has a typed range), its sizes are fixed ("along a curve"). A line that turns cannot
   carry its crossings.

@@ -500,7 +500,7 @@ def outline(ctx, item, profile, outer, inners, parts):
         raw_loops = [_from_anchors(loop, anchors, sketch, sources) for loop in loops]
     if any(isinstance(v, Curved) for v in _raw_values(raw_loops)) and not keeps_order(
             ctx.table, ctx.motion, loops, raw_loops, sketch):
-        kept = order_ranges(ctx.table, loops, raw_loops, sketch)
+        kept = order_ranges(ctx.table, loops, raw_loops, sketch, ctx.motion)
         if kept:
             ctx.cut(kept, notes.crosses_reason(sketch))
             bounds = {ctx.table.size_name(name): ends for name, ends in kept.items()}

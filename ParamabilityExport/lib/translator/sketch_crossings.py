@@ -294,11 +294,16 @@ def _stays_above_zero(table, motion, value):
     return range_check.sweep(table, q.text, q.reads, extra=_states(table, motion)).above(LEAST)
 
 
-def order_ranges(table, loops, raw_loops, sketch=""):
+def _inside(setting, bounds):
+    return all(bounds[name][0] - 1e-9 <= value <= bounds[name][1] + 1e-9
+               for name, value in setting.items() if name in bounds)
+
+
+def order_ranges(table, loops, raw_loops, sketch="", motion=None):
     """`{Fusion name: (min, max)}` inside which every rebuilt loop keeps the order of its corners: each check of
-    `_checks` stays above zero at the corners and middles of the ranges (`range_check`), the ranges cut by
-    `kept_ranges.holding_ranges_where`. None when no shorter ranges keep it (a check that cannot be written, or one
-    that fails at the values now)."""
+    `_checks` stays above zero over the ranges by the same settings as `keeps_order` (`range_check.sweep`, with the
+    middles of the ranges and the probe's built states that fall inside them), the ranges cut by `kept_ranges.holding_ranges_where`. None when no
+    shorter ranges keep it (a check that cannot be written, or one that fails at the values now)."""
     texts = {}
     for loop, raw_loop in zip(loops, raw_loops):
         for check in _checks(loop, raw_loop, sketch):
@@ -311,24 +316,22 @@ def order_ranges(table, loops, raw_loops, sketch=""):
         return {}
     reads = list(dict.fromkeys(r for found in texts.values() for r in found))
     trees = [parse_formula(text) for text in texts]
-    answers = {}
+    states = _states(table, motion)
 
     def above_at(setting):
-        key = tuple(sorted(setting.items()))
-        if key not in answers:
-            try:
-                env = range_check.size_env(table, setting)
-                answers[key] = all(range_check.value_of(tree, env) > LEAST for tree in trees)
-            except _FAILURES:
-                answers[key] = False
-        return answers[key]
+        try:
+            env = range_check.size_env(table, setting)
+            return all(range_check.value_of(tree, env) > LEAST for tree in trees)
+        except _FAILURES:
+            return False
 
     def holds(bounds, only=None):
         if only is not None:
-            settings = [{only[0]: bounds[only[0]][only[1]]}]
-        else:
-            settings = range_check.corners(table, reads, bounds) + range_check.middles(table, reads, bounds)
-        return all(above_at(setting) for setting in settings)
+            return above_at({only[0]: bounds[only[0]][only[1]]})
+        inside = [state for state in states if _inside(state, bounds)]
+        return all(range_check.sweep(table, text, found, bounds=bounds,
+                                     extra=range_check.middles(table, found, bounds) + inside).above(LEAST)
+                   for text, found in texts.items())
 
     return kept_ranges.holding_ranges_where(table, reads, holds, steps=ORDER_STEPS)
 
