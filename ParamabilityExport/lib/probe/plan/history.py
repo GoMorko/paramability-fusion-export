@@ -1,6 +1,6 @@
-"""What the states tried so far show for one size set alone: which values built and kept every outline."""
+"""What the states tried so far show for one size set alone: which values built and kept every outline. `states` are
+`probe.state.ProbeState` records; the row planning converts them once (`as_states`)."""
 from ...geometry.tolerances import SAME_SIZE
-from ..state import as_states
 
 
 def _side(size, value):
@@ -33,7 +33,7 @@ def tried_alone(states, name, value):
     """`(value, kept)` of every state that set only `name` to another value than `value`: `kept` when it built and
     no followed outline changed there (`changed`)."""
     out = []
-    for state in as_states(states):
+    for state in states:
         values = state.values
         if list(values) == [name] and abs(values[name] - value) > SAME_SIZE:
             out.append((values[name], state.built and not state.changed))
@@ -42,5 +42,5 @@ def tried_alone(states, name, value):
 
 def changed_alone(states, name, value):
     """The values of the states that set only `name` and changed a followed outline (`changed`)."""
-    return [v for v in (s.values[name] for s in as_states(states) if list(s.values) == [name] and s.changed)
+    return [v for v in (s.values[name] for s in states if list(s.values) == [name] and s.changed)
             if abs(v - value) > SAME_SIZE]

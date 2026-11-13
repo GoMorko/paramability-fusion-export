@@ -1,6 +1,7 @@
 """Rows that try a size nearer to its value after a row that did not build, or between values that built and failed."""
 from ...geometry.tolerances import SAME_SIZE
 from ...package.manifest import MAX_NAME_CHARS
+from ..state import as_states
 from .history import changed_alone, tried_alone
 from .rows import probe_row, value_toward
 
@@ -88,6 +89,7 @@ def nearer_rows(sizes, states, moved=(), limit=MAX_NEARER_ROWS):
     that value, so the fit has two readings to tell a straight line from a curve. Sizes that no row built come
     first. At most `limit` rows; the export calls this again after each batch, so each call gives one step per
     side."""
+    states = as_states(states)
     plans = [(size, _nearer_for(size, states, set(moved))) for size in sizes]
     unbuilt = {size["param"] for size in sizes
                if not any(ok for _, ok in tried_alone(states, size["param"], size["value"]))}

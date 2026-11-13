@@ -349,9 +349,9 @@ def _state_record(state):
 def spans(states, current):
     """`Motion.spans`: per size a state sets to another value than `current` has, the lowest and highest value of the
     states that built (the current value included), and `[value, step]` for each state that set it alone and did not
-    build."""
+    build. `states` are `ProbeState` records."""
     out = {}
-    for state in as_states(states):
+    for state in states:
         values = state.values
         moved = {n: v for n, v in values.items() if n in current and abs(v - current[n]) > SAME_SIZE}
         for name, value in moved.items():

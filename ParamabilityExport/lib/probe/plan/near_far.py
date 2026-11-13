@@ -1,6 +1,7 @@
 """The first tries: near rows, near pair rows, far rows and far pair rows."""
 from ...geometry.tolerances import SAME_SIZE
 from ...package.manifest import MAX_NAME_CHARS
+from ..state import as_states
 from .history import fails_by, farthest_built
 from .rows import MAX_PROBE_ROWS, probe_row, tried_sizes
 
@@ -64,6 +65,7 @@ def pair_rows(sizes, moved, states, room, extra=()):
     tried = tried_sizes(sizes, moved, extra)
     if len(tried) < 2:
         return []
+    states = as_states(states)
     rows = []
     for label, side in (("all lower", 0), ("all higher", 1)):
         overrides = {}
@@ -84,6 +86,7 @@ def far_rows(sizes, moved, room, extra=(), states=()):
     tries."""
     rows = []
     tried = tried_sizes(sizes, moved, extra)
+    states = as_states(states)
     for size in tried:
         wanted = [end for end in _far_ends(size, near_values(size)) if not fails_by(states, size, end)]
         if len(rows) + len(wanted) > room:
@@ -104,6 +107,7 @@ def far_pair_rows(sizes, moved, states, room, extra=()):
     tried = {s["param"] for s in tried_sizes(sizes, moved, extra)}
     if len(tried) < 2:
         return []
+    states = as_states(states)
     rows = []
     for label, key, side in (("all min", "min", 0), ("all max", "max", 1)):
         overrides, past = {}, False
