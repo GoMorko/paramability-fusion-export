@@ -14,11 +14,11 @@ def not_built_try(value, step):
     return "not tried: the design does not rebuild in Fusion%s%s" % (at, " (%s)" % step if step else "")
 
 
-_UNTRIED = "it changes a sketch and could not be tried at other values"
+UNTRIED = "it changes a sketch and could not be tried at other values"
 # Why a sketch could not be compared with its first read after the parameters were put back, by `match` cause.
-_RESTORE_WHY = {SHAPE: "reads another outline", TURNS: "lies on a turned plane", UNREAD: "could not be read"}
-_UNREADABLE = "a sketch it changes could not be read at other values"
+RESTORE_WHY = {SHAPE: "reads another outline", TURNS: "lies on a turned plane", UNREAD: "could not be read"}
+UNREADABLE = "a sketch it changes could not be read at other values"
 
 
-def _watched_why(sketch):
+def watched_why(sketch):
     return "it changes the sketch %s, which could not be followed" % sketch

@@ -67,7 +67,7 @@ def scan(capture):
         records = spec.sketches if spec is not None else ()
         before = len(out.targets)
         for record in records:
-            _SCANNERS[record](out, item.get("index"), data)
+            SCANNERS[record](out, item.get("index"), data)
         if not records:
             _stray_tokens(data, out)
         if item.get("helper_of"):
@@ -185,5 +185,5 @@ def _scan_face(out, index, data):
                             "sketch": "", "reference": {}})
 
 
-_SCANNERS = {PROFILES: _scan_profiles, AXIS: _scan_axis, HOLE_POINTS: _scan_hole, PATH: _scan_path,
+SCANNERS = {PROFILES: _scan_profiles, AXIS: _scan_axis, HOLE_POINTS: _scan_hole, PATH: _scan_path,
              OUTLINE_FACE: _scan_face}

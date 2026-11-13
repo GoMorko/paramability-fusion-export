@@ -3,7 +3,7 @@ import math
 import unittest
 
 from tests import context  # noqa: F401
-from tests.test_translate_copies import _edges_set, _item
+from tests.test_translate_copies import copy_item, edges_set
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
 
 from lib.params import size_table
@@ -111,8 +111,8 @@ class CrossingTest(unittest.TestCase):
 
     def fillet_at(self, point):
         capture = capture_with(d_shape(), "w_mm", 10.0)
-        capture["items"].append(_item(2, "Fillet1", "FilletFeature", {
-            "sets": [_edges_set("constant", [point], radius=1.0, continuity="tangent")]}))
+        capture["items"].append(copy_item(2, "Fillet1", "FilletFeature", {
+            "sets": [edges_set("constant", [point], radius=1.0, continuity="tangent")]}))
         return run(capture, "w_mm", d_motion(), {"w_mm": (4.0, 16.0)})
 
     def test_a_pick_on_an_arc_that_changes_shape_marks_its_sizes(self):

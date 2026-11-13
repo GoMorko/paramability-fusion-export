@@ -10,9 +10,9 @@ COMBINE = {"join": "add", "cut": "cut", "intersect": "intersect", "newBody": "ne
 UNREADABLE = "A setting of this extrude could not be read from Fusion."
 
 
-def _sign_of(value):
+def sign_of(value):
     return -1 if value < 0 else 1
 
 
-def _parallel(a, b):
+def parallel(a, b):
     return vec.length(vec.cross(vec.unit(a), vec.unit(b))) <= PARALLEL_TOL

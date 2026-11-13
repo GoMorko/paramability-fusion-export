@@ -13,7 +13,7 @@ MAX_TAPER_DEG = 45.0
 TAPER_MARGIN_DEG = 0.01
 
 
-def _taper(deg):
+def taper_degrees(deg):
     """Recipe `taperDeg` from Fusion's, or a Refusal. None (unreadable) refuses."""
     if deg is None:
         return Refusal(UNREADABLE)
@@ -25,7 +25,7 @@ def _taper(deg):
     return value
 
 
-def _taper_quantity(ctx, item, path, taper):
+def taper_quantity(ctx, item, path, taper):
     """The taper as the recipe writes it: a Quantity that may follow sizes, or None for no taper."""
     if not taper:
         values.pin(ctx, item, path, "a taper of zero cannot follow it")

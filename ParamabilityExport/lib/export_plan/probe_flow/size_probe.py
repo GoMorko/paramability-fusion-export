@@ -2,12 +2,12 @@
 from ...design_edit.marker import MARKER_LOST
 from ...probe import build, fit, match, plan, plane_sizes, ref_fit
 from ...sketch_values.motion import SHAPE
-from .borrowed_view import _with_borrowed, borrowed_sketches, probe_view
+from .borrowed_view import borrowed_sketches, probe_view, with_borrowed
 from .discovery import Discovery
 from .findings import Findings
 from .row_planning import RowPlanning
 from .shared_reads import SharedReads
-from .states import _same_numbers
+from .states import same_numbers
 
 # What an outline read (`SizeProbe.read_now`) leaves out of the request.
 OUTLINE_SKIPS = ("params", "refs", "target", "patterns")
@@ -63,7 +63,7 @@ class SizeProbe(RowPlanning, Discovery, Findings):
         wide = plan.request(view, table) or (bare if hints else None)
         if wide is None:
             return None
-        e0 = read(_with_borrowed(wide, hints, hints))
+        e0 = read(with_borrowed(wide, hints, hints))
         if not isinstance(e0, dict) or MARKER_LOST in (e0.get("unread") or {}) or not (
                 e0.get("sketches") or e0.get("points") or e0.get("lines") or e0.get("refs") or e0.get("faces")):
             return None
@@ -74,7 +74,7 @@ class SizeProbe(RowPlanning, Discovery, Findings):
         request = plan.request(view, table, covered=readable, wanted=keys) or (bare if watch else None)
         if request is None:
             return None
-        return cls(capture, table, read, _with_borrowed(request, hints, watch), e0, watch, measured.usable)
+        return cls(capture, table, read, with_borrowed(request, hints, watch), e0, watch, measured.usable)
 
     # ---- states -----------------------------------------------------------------------------------------------
 
@@ -163,7 +163,7 @@ class SizeProbe(RowPlanning, Discovery, Findings):
         keys = ("sketches", "points", "lines", "refs", "box")
         before = {k: self.e0.get(k) or {} for k in keys}
         now = {k: read.get(k) or {} for k in keys}
-        return all(set(before[k]) == set(now[k]) for k in keys) and _same_numbers(before, now)
+        return all(set(before[k]) == set(now[k]) for k in keys) and same_numbers(before, now)
 
     def off_outline(self, read):
         """True when a sketch the probe follows reads as another outline than captured in `read` (a sketch on its

@@ -68,7 +68,7 @@ def _candidates(columns, usable, moving=()):
     return out[:MAX_CANDIDATES]
 
 
-def _least_squares(vectors, y):
+def least_squares(vectors, y):
     """Coefficients `a` with `sum(a_j * vectors[j])` nearest to `y` (modified Gram Schmidt), or None when a vector
     adds nothing the earlier ones have not."""
     q, r = [], []
@@ -93,7 +93,7 @@ def _least_squares(vectors, y):
     return coefficients
 
 
-def _residual(coefficients, deltas, dx):
+def fit_residual(coefficients, deltas, dx):
     return max(abs(d - sum(a * col[s] for a, col in zip(coefficients, deltas))) for s, d in enumerate(dx))
 
 
@@ -102,10 +102,10 @@ def _snap(a):
     return nearest if abs(a - nearest) <= SNAP_TOLERANCE else round(a, 9)
 
 
-def _tidy(coefficients, deltas, dx, tol):
+def snap_coefficients(coefficients, deltas, dx, tol):
     """Coefficients on the nearest k / 24 when that keeps every state within tolerance, else rounded to 9 digits."""
     snapped = [_snap(a) for a in coefficients]
-    if _residual(snapped, deltas, dx) <= tol:
+    if fit_residual(snapped, deltas, dx) <= tol:
         return snapped
     return [round(a, 9) for a in coefficients]
 
@@ -129,14 +129,14 @@ def fit_value(x, columns, tol=TOLERANCE):
     for size in range(1, MAX_COLUMNS + 1):
         for subset in itertools.combinations(candidates, size):
             deltas = [[v - vals[0] for v in vals[1:]] for _, vals in subset]
-            a = _least_squares(deltas, dx)
-            if a is None or _residual(a, deltas, dx) > tol:
+            a = least_squares(deltas, dx)
+            if a is None or fit_residual(a, deltas, dx) > tol:
                 continue
             changed = sum(1 for s in range(len(dx)) if any(abs(col[s]) > _DEFICIENT for col in deltas))
             if changed < size + 1:
                 too_few = True
                 continue
-            a = _tidy(a, deltas, dx, tol)
+            a = snap_coefficients(a, deltas, dx, tol)
             const = x[0] - sum(c * vals[0] for c, (_, vals) in zip(a, subset))
             terms = {column.name: c for c, (column, _) in zip(a, subset)}
             return Result("affine", const=round(const, 6) if abs(const - round(const, 6)) <= 1e-6 else round(const, 9),

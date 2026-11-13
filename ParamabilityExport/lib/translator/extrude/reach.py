@@ -2,15 +2,15 @@
 from .. import gap_hints, kept_ranges, placement, reach_motion, values, vec
 from ..result import Refusal
 from ..values import Quantity
-from .common import LENGTH_TOL, UNREADABLE, _parallel, _sign_of
+from .common import LENGTH_TOL, UNREADABLE, parallel, sign_of
 
 
-def _distance_quantity(ctx, item, path, raw):
+def distance_quantity(ctx, item, path, raw):
     """The length of one side. The recipe writes the absolute value, so a negative parameter is written negated."""
-    return values.quantity(ctx, item, path, abs(raw), sign=_sign_of(raw), absolute=True)
+    return values.quantity(ctx, item, path, abs(raw), sign=sign_of(raw), absolute=True)
 
 
-def _start_shift(start, frame, ctx, item, plane_q):
+def start_shift(start, frame, ctx, item, plane_q):
     """Signed distance along the sketch normal from the sketch plane to where the extrude starts, as a Quantity that
     follows sizes (an offset parameter, or a face that moves with an earlier extrude); or a Refusal.
 
@@ -31,7 +31,7 @@ def _start_shift(start, frame, ctx, item, plane_q):
         if not plane:
             return Refusal("This extrude starts from a surface that is not flat, which is not copied yet.",
                            cause=gap_hints.EXTRUDE_END_FACE)
-        if not _parallel(plane["normal"], frame["z"]):
+        if not parallel(plane["normal"], frame["z"]):
             return Refusal("This extrude starts from a tilted surface, which is not copied yet.",
                            cause=gap_hints.EXTRUDE_END_FACE)
         shift = vec.dot(vec.sub(plane["point"], frame["origin"]), vec.unit(frame["z"]))
@@ -45,7 +45,7 @@ def _start_shift(start, frame, ctx, item, plane_q):
     return Refusal("This extrude starts in a way that is not copied yet.")
 
 
-def _origin(frame, shift_q):
+def sketch_origin(frame, shift_q):
     """The sketch origin moved along its normal by the start shift: a position that may follow sizes."""
     z = vec.unit(frame["z"])
     if not shift_q.sized:
@@ -57,7 +57,7 @@ def _origin(frame, shift_q):
     return out
 
 
-def _reach_quantity(ctx, item, which, side, z, reach, offset, plane_q, shift_q):
+def reach_quantity(ctx, item, which, side, z, reach, offset, plane_q, shift_q):
     """The length of the side `which` that reaches to a face, as a Quantity that follows the face when it moves with
     sizes: the face's move less the moves of the sketch plane (`plane_q`, along the sketch normal) and of the start
     (`shift_q`, from the sketch plane). A face the copy cannot follow counts as staying (its sizes are marked)."""
@@ -70,10 +70,10 @@ def _reach_quantity(ctx, item, which, side, z, reach, offset, plane_q, shift_q):
             moved = moved.plus(part.scaled(-1))
     if not moved.sized:
         return plain
-    return moved.plus(reach - moved.n).scaled(_sign_of(reach)).plus(float(offset))
+    return moved.plus(reach - moved.n).scaled(sign_of(reach)).plus(float(offset))
 
 
-def _keep_reaches_positive(ctx, item, sides):
+def keep_reaches_positive(ctx, item, sides):
     """The lengths of the `sides` that follow a moving face must stay above zero. Where one would pass zero, the ranges
     are cut to where all of them stay positive, in one search, so the cut for one side does not shorten a range only
     the other side would need; their sizes are marked only when no cut keeps them."""

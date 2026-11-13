@@ -24,6 +24,25 @@ ALLOWED_IMPORTS = {
     "commands": {"design_edit", "dialog_model", "export_plan", "fusion_reader", "fusion_ui", "package", "timing"},
 }
 
+# Private names (a leading underscore) that a test reaches in another module, by test file. A name used by the
+# add-in itself in another module is never listed: it is public in the module that owns it.
+PRIVATE_REACHES_IN_TESTS = {
+    "test_capture_reader.py": {"_target_state"},
+    "test_capture_reader_helpers.py": {"_Pass"},
+    "test_parts_pipeline.py": {"_PartsPipeline"},
+    "test_recipe_export.py": {"_parts_notes"},
+    "test_step_export_copy_guard.py": {"_require_copy_in_place"},
+    "test_translate_crossings.py": {"_from_anchors", "_joined"},
+    "test_translate_follow.py": {"_env"},
+    "test_translate_moved_faces.py": {"_walk"},
+    "test_translate_sized.py": {"_env", "_gives_whole_numbers"},
+    "test_translate_spline.py": {"_to_segment"},
+    "test_translate_sweep.py": {"_sweep_version"},
+    "test_translate_sweep_limits.py": {"_scaled_volume"},
+    "test_translate_text.py": {"_fit"},
+    "test_translate_tool_body.py": {"_over_caps"},
+}
+
 
 def _python_files(folder):
     for dirpath, dirnames, names in os.walk(folder):
@@ -73,6 +92,31 @@ def _imported_zones(path):
     return found
 
 
+def _private(name):
+    return name.startswith("_") and not name.startswith("__")
+
+
+def _private_reaches(path):
+    """The underscore names a file takes from another module: `from m import _x`, or `m._x` on an imported name."""
+    with open(path, encoding="utf-8") as f:
+        tree = ast.parse(f.read())
+    imported = set()
+    found = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.update((a.asname or a.name).split(".")[0] for a in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            for a in node.names:
+                imported.add(a.asname or a.name)
+                if _private(a.name):
+                    found.add(a.name)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and _private(node.attr):
+            if isinstance(node.value, ast.Name) and node.value.id in imported:
+                found.add(node.attr)
+    return found
+
+
 class BoundaryTest(unittest.TestCase):
     def test_every_package_is_listed_and_has_more_than_one_module(self):
         lib = os.path.join(context.ADDIN_DIR, "lib")
@@ -100,6 +144,20 @@ class BoundaryTest(unittest.TestCase):
             return seen
         for name in ALLOWED_IMPORTS:
             self.assertNotIn(name, reaches(name, set()), name)
+
+    def test_no_module_imports_an_underscore_name_from_another(self):
+        for path in _python_files(context.ADDIN_DIR):
+            where = os.path.relpath(path, context.ADDIN_DIR)
+            self.assertEqual(_private_reaches(path), set(), "%s reaches a private name of another module" % where)
+
+    def test_tests_reach_only_the_private_names_listed(self):
+        tests_dir = os.path.dirname(os.path.abspath(__file__))
+        found = {}
+        for path in _python_files(tests_dir):
+            names = _private_reaches(path)
+            if names:
+                found[os.path.relpath(path, tests_dir)] = names
+        self.assertEqual(found, PRIVATE_REACHES_IN_TESTS)
 
     def test_adsk_only_in_reader_ui_and_commands(self):
         pattern = re.compile(r"^\s*(import|from)\s+adsk\b", re.M)

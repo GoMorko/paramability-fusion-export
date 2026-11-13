@@ -19,7 +19,7 @@ cannot tell them apart and the fit is refused: more rows are needed.
 """
 import math
 
-from .fit import TOLERANCE, _least_squares, _residual, _tidy
+from .fit import TOLERANCE, fit_residual, least_squares, snap_coefficients
 from ..sketch_values.motion import FUNCTIONS, Terms, factor_value
 
 MAX_EXTRA = 3
@@ -113,10 +113,10 @@ class _Problem:
         dx = [self.dx[r] for r in rows]
         if not terms:
             return [], max([abs(d) for d in dx] or [0.0])
-        coefficients = _least_squares(deltas, dx)
+        coefficients = least_squares(deltas, dx)
         if coefficients is None:
             return None
-        return coefficients, _residual(coefficients, deltas, dx)
+        return coefficients, fit_residual(coefficients, deltas, dx)
 
     def checked(self, terms, tol):
         """True when every measured state follows from the others: the sum solved without it is still determined and
@@ -195,7 +195,7 @@ def fit_terms(x, sizes, tol=TOLERANCE, owner="", partners=()):
     terms, found = _prune(problem, terms, found, tol)
     if problem.changed_states(terms) < len(terms) + 1 or not problem.checked(terms, tol):
         return TermsFit("none")
-    coefficients = _tidy(found[0], [[v - c[0] for v in c[1:]] for c in map(problem.column, terms)], problem.dx, tol)
+    coefficients = snap_coefficients(found[0], [[v - c[0] for v in c[1:]] for c in map(problem.column, terms)], problem.dx, tol)
     const = _const(problem, terms, coefficients)
     if _ambiguous(problem, terms, coefficients, const, extra, sizes, tol):
         return TermsFit("ambiguous")

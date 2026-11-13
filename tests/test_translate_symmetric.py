@@ -2,7 +2,7 @@
 import unittest
 
 from tests import context  # noqa: F401
-from tests.test_translate_copies import FLAT, _edges_set, _extrude, _item, _turned
+from tests.test_translate_copies import FLAT, copy_extrude, copy_item, edges_set, turned_copy
 from tests.test_translate_sized import CUBE, TICKED, param, table_of
 from tests.translator_helpers import assert_schema_ok, edited, left_out, load_capture, steps_of, translate_fixture
 
@@ -25,8 +25,8 @@ def centred(*later):
     """A 120 by 20 plate with a 8 mm post on the middle of its top, then `later`."""
     capture = load_capture("filter_tray_sized")
     top = dict(FLAT, origin=[0, 0, 10])
-    capture["items"] = [_extrude(1, "Plate", "newBody", FLAT, (0, 0, 120, 20), 10.0),
-                        _extrude(2, "Post", "join", top, (56, 4, 64, 12), 10.0)] + list(later)
+    capture["items"] = [copy_extrude(1, "Plate", "newBody", FLAT, (0, 0, 120, 20), 10.0),
+                        copy_extrude(2, "Post", "join", top, (56, 4, 64, 12), 10.0)] + list(later)
     return capture
 
 
@@ -35,7 +35,7 @@ def row(index, sources, count, step, kind="spacing", params=None, symmetric=True
     elements = [{"id": n + 1, "suppressed": False, "frame": dict(FLAT, origin=[k * step, 0, 0])}
                 for n, k in enumerate(places_of(count))]
     distance = step if kind == "spacing" else step * max(count // 2, 1)
-    return _item(index, name, "RectangularPatternFeature", {
+    return copy_item(index, name, "RectangularPatternFeature", {
         "entity_type": "features", "sources": sources, "direction_one": [1, 0, 0], "quantity_one": count,
         "distance_one": distance, "direction_two": None, "quantity_two": 1, "distance_two": 0.0,
         "distance_type": kind, "symmetric_one": symmetric, "symmetric_two": False, "elements": elements,
@@ -43,8 +43,8 @@ def row(index, sources, count, step, kind="spacing", params=None, symmetric=True
 
 
 def fillet(index, x):
-    return _item(index, "Fillet1", "FilletFeature", {
-        "sets": [_edges_set("constant", [[x, 12, 15]], radius=1.0, continuity="tangent")]})
+    return copy_item(index, "Fillet1", "FilletFeature", {
+        "sets": [edges_set("constant", [[x, 12, 15]], radius=1.0, continuity="tangent")]})
 
 
 def sized(capture, ranges=None, tries=None):
@@ -322,9 +322,9 @@ class SymmetricSizedTest(unittest.TestCase):
 
 
 def circular(index, count, total, degrees, symmetric=True, params=None):
-    elements = [{"id": n + 1, "suppressed": False, "frame": _turned([6, 6, 0], a, True)}
+    elements = [{"id": n + 1, "suppressed": False, "frame": turned_copy([6, 6, 0], a, True)}
                 for n, a in enumerate(degrees)]
-    return _item(index, "C-Pattern1", "CircularPatternFeature", {
+    return copy_item(index, "C-Pattern1", "CircularPatternFeature", {
         "entity_type": "features", "sources": [2], "axis": {"point": [6, 6, 0], "dir": [0, 0, 1]}, "quantity": count,
         "total_angle_deg": total, "symmetric": symmetric, "elements": elements, "params": params or {}})
 
@@ -352,7 +352,7 @@ class SymmetricCircularTest(unittest.TestCase):
         base = centred(circular(3, 5, 120.0, [-60, -30, 0, 30, 60], params=count))
         # CUBE 25 gives 6 copies over 120 degrees: 24 degrees apart, the extra one ahead of the original.
         turns = [-48, -24, 0, 24, 48, 72]
-        frames = [_turned([6, 6, 0], a, True) for a in turns]
+        frames = [turned_copy([6, 6, 0], a, True) for a in turns]
         result, table = sized(base, tries=[tried(CUBE, 25.0, 3, 6, frames)])
         self.assertEqual(result.loose, [])
         forward, backward = steps_of(result.recipe, "pattern")
@@ -363,7 +363,7 @@ class SymmetricCircularTest(unittest.TestCase):
 
         self.assertEqual([value(forward["polar"]["count"]), round(value(forward["polar"]["angleDeg"]), 6)], [4, 72])
         self.assertEqual([value(backward["polar"]["count"]), round(value(backward["polar"]["angleDeg"]), 6)], [3, 48])
-        other = [_turned([6, 6, 0], a, True) for a in (-60, -36, -12, 12, 36, 60)]
+        other = [turned_copy([6, 6, 0], a, True) for a in (-60, -36, -12, 12, 36, 60)]
         result, _ = sized(base, tries=[tried(CUBE, 25.0, 3, 6, other)])
         self.assertEqual([f["name"] for f in result.loose], [CUBE])
 
@@ -375,7 +375,7 @@ class SymmetricCircularTest(unittest.TestCase):
                                                     "z": [0, 0, 1]}}
         elements = capture["items"][-1]["data"]["elements"]
         for element, angle in zip(elements, (-60, -30, 0, 30, 60)):
-            element["frame"] = _turned([6, 186, 0], angle, True)
+            element["frame"] = turned_copy([6, 186, 0], angle, True)
         result = translate(capture)
         self.assertIsNone(left_out(result))
         forward, backward = steps_of(result.recipe, "pattern")
@@ -388,7 +388,7 @@ class SymmetricCircularTest(unittest.TestCase):
         place = {"origin": [0, 12, 0], "x": [1, 0, 0], "y": [0, -1, 0], "z": [0, 0, -1]}
         count = {"quantity": param("d22", "ceil(%s / 5) + 1" % CUBE, 5.0)}
         capture = placed_at(centred(circular(3, 5, 120.0, [-60, -30, 0, 30, 60], params=count)), place)
-        frames = [in_assembly(place, _turned([6, 6, 0], a, True)) for a in (-48, -24, 0, 24, 48, 72)]
+        frames = [in_assembly(place, turned_copy([6, 6, 0], a, True)) for a in (-48, -24, 0, 24, 48, 72)]
         result, table = sized(capture, tries=[tried(CUBE, 25.0, 3, 6, frames)])
         self.assertEqual(result.loose, [])
         forward, backward = steps_of(result.recipe, "pattern")

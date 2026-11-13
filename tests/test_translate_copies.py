@@ -21,13 +21,13 @@ def _square(x0, y0, x1, y1):
     return [{"kind": "line", "start": corners[n], "end": corners[(n + 1) % 4]} for n in range(4)]
 
 
-def _item(index, name, kind, data):
+def copy_item(index, name, kind, data):
     return {"index": index, "name": name, "type": kind, "suppressed": False, "health": "ok", "message": "",
             "in_target_component": True, "bodies_after": [{"token": "t1", "name": "Body1"}], "data": data}
 
 
-def _extrude(index, name, operation, frame, square, distance, params=None):
-    return _item(index, name, "ExtrudeFeature", {
+def copy_extrude(index, name, operation, frame, square, distance, params=None):
+    return copy_item(index, name, "ExtrudeFeature", {
         "operation": operation, "profiles": [{"sketch": name, "frame": frame,
                                               "loops": [{"outer": True, "curves": _square(*square)}]}],
         "start": {"kind": "profilePlane"}, "extent_type": "one",
@@ -37,14 +37,14 @@ def _extrude(index, name, operation, frame, square, distance, params=None):
 
 def _grid(index, sources, spacing, count=2, params=None):
     elements = [{"id": n + 1, "suppressed": False, "frame": dict(FLAT, origin=[n * spacing, 0, 0])} for n in range(count)]
-    return _item(index, "R-Pattern1", "RectangularPatternFeature", {
+    return copy_item(index, "R-Pattern1", "RectangularPatternFeature", {
         "entity_type": "features", "sources": sources, "direction_one": [1, 0, 0], "quantity_one": count,
         "distance_one": spacing, "direction_two": None, "quantity_two": 1, "distance_two": 0.0,
         "distance_type": "spacing", "symmetric_one": False, "symmetric_two": False, "elements": elements,
         "params": params or {}})
 
 
-def _edges_set(kind, points, **values):
+def edges_set(kind, points, **values):
     entry = dict({"kind": kind, "input_kinds": ["edge"]}, **values)
     entry["edges"] = [{"token": "e%d" % n, "closed": False, "points": [p]} for n, p in enumerate(points)]
     return entry
@@ -55,8 +55,8 @@ def post_capture(*later, post_params=None):
     capture = load_capture("filter_tray_sized")
     top = dict(FLAT, origin=[0, 0, 10])
     capture["items"] = [
-        _extrude(1, "Plate", "newBody", FLAT, (0, 0, 60, 20), 10.0),
-        _extrude(2, "Post", "join", top, (4, 4, 8, 8), 10.0,
+        copy_extrude(1, "Plate", "newBody", FLAT, (0, 0, 60, 20), 10.0),
+        copy_extrude(2, "Post", "join", top, (4, 4, 8, 8), 10.0,
                  post_params or {"side_one.distance": param("d20", "wall_mm * 5", 10.0)}),
     ] + list(later)
     return capture
@@ -74,8 +74,8 @@ def loose_names(result):
 
 def counted(ranges=None):
     """(capture, size table): three posts counted by holes_count, and a fillet on the second one."""
-    fillet = _item(4, "Fillet1", "FilletFeature", {
-        "sets": [_edges_set("constant", [[32, 8, 15]], radius=1.0, continuity="tangent")]})
+    fillet = copy_item(4, "Fillet1", "FilletFeature", {
+        "sets": [edges_set("constant", [[32, 8, 15]], radius=1.0, continuity="tangent")]})
     grid = _grid(3, [2], 24.0, count=3, params={"distance_one": param("d21", "hole_pitch_mm", 24.0),
                                                 "quantity_one": param("d22", "holes_count", 3.0)})
     capture = post_capture(grid, fillet)
@@ -85,8 +85,8 @@ def counted(ranges=None):
 
 class PickOnCopyTest(unittest.TestCase):
     def test_an_edge_on_a_pattern_copy_follows_the_spacing_and_the_length(self):
-        fillet = _item(4, "Fillet1", "FilletFeature", {
-            "sets": [_edges_set("constant", [[32, 8, 15]], radius=1.0, continuity="tangent")]})
+        fillet = copy_item(4, "Fillet1", "FilletFeature", {
+            "sets": [edges_set("constant", [[32, 8, 15]], radius=1.0, continuity="tangent")]})
         result = run(post_capture(_grid(3, [2], 24.0, params={"distance_one": param("d21", "hole_pitch_mm", 24.0)}),
                                   fillet))
         self.assertEqual((result.fixed, result.loose), ([], []))
@@ -106,11 +106,11 @@ class PickOnCopyTest(unittest.TestCase):
         self.assertEqual(steps_of(result.recipe, "round")[0]["edges"]["near"][0][0], {"expr": "8 + hole_pitch_mm"})
 
     def test_an_edge_on_a_mirror_copy_is_mirrored_with_its_formula(self):
-        mirror = _item(3, "Mirror1", "MirrorFeature", {
+        mirror = copy_item(3, "Mirror1", "MirrorFeature", {
             "entity_type": "features", "sources": [2], "plane": {"point": [30, 0, 0], "normal": [1, 0, 0]},
             "combine": False})
-        fillet = _item(4, "Fillet1", "FilletFeature", {
-            "sets": [_edges_set("constant", [[52, 8, 15]], radius=1.0, continuity="tangent")]})
+        fillet = copy_item(4, "Fillet1", "FilletFeature", {
+            "sets": [edges_set("constant", [[52, 8, 15]], radius=1.0, continuity="tangent")]})
         result = run(post_capture(mirror, fillet))
         self.assertEqual((result.fixed, result.loose), ([], []))
         self.assertEqual(steps_of(result.recipe, "round")[0]["edges"]["near"],
@@ -119,8 +119,8 @@ class PickOnCopyTest(unittest.TestCase):
 
 class CopiedFinishTest(unittest.TestCase):
     def test_copied_rounds_follow_the_spacing_and_keep_the_count(self):
-        fillet = _item(3, "Fillet1", "FilletFeature", {
-            "sets": [_edges_set("constant", [[4, 4, 15]], radius=1.0, continuity="tangent")]})
+        fillet = copy_item(3, "Fillet1", "FilletFeature", {
+            "sets": [edges_set("constant", [[4, 4, 15]], radius=1.0, continuity="tangent")]})
         grid = _grid(4, [3], 24.0, count=3, params={"distance_one": param("d21", "hole_pitch_mm", 24.0),
                                                     "quantity_one": param("d22", "holes_count", 3.0)})
         result = run(post_capture(fillet, grid))
@@ -133,11 +133,11 @@ class CopiedFinishTest(unittest.TestCase):
         assert_schema_ok(self, result.recipe)
 
     def test_a_mirrored_uneven_chamfer_mirrors_the_face_of_its_first_distance(self):
-        chamfer = _item(3, "Chamfer1", "ChamferFeature", {"corner_type": "chamfer", "sets": [
-            _edges_set("twoDistances", [[6, 4, POST_TOP]], distance=1.0, distance_two=2.0)]})
+        chamfer = copy_item(3, "Chamfer1", "ChamferFeature", {"corner_type": "chamfer", "sets": [
+            edges_set("twoDistances", [[6, 4, POST_TOP]], distance=1.0, distance_two=2.0)]})
         edge = chamfer["data"]["sets"][0]["edges"][0]
         edge["sides"], edge["cut_normals"] = [[[0, 0, 1], [0, -1, 0]]], [[0, -1, 2]]
-        mirror = _item(4, "Mirror1", "MirrorFeature", {
+        mirror = copy_item(4, "Mirror1", "MirrorFeature", {
             "entity_type": "features", "sources": [3], "plane": {"point": [0, 10, 0], "normal": [0, 1, 0]},
             "combine": False})
         recipe = translate(post_capture(chamfer, mirror)).recipe
@@ -170,11 +170,11 @@ class CopyCountTest(unittest.TestCase):
 
 
 def _mirror(index, plane, entity_type="features", combine=False, box=None):
-    return _item(index, "Mirror1", "MirrorFeature", {
+    return copy_item(index, "Mirror1", "MirrorFeature", {
         "entity_type": entity_type, "sources": [2], "plane": plane, "combine": combine, "target_box_before": box})
 
 
-def _turned(about, degrees, vertical=False):
+def turned_copy(about, degrees, vertical=False):
     """An element frame that turns by `degrees` about the line through `about` along x (or along z)."""
     cos, sin = math.cos(math.radians(degrees)), math.sin(math.radians(degrees))
     frame = ({"origin": [0, 0, 0], "x": [cos, sin, 0], "y": [-sin, cos, 0], "z": [0, 0, 1]} if vertical else
@@ -184,9 +184,9 @@ def _turned(about, degrees, vertical=False):
 
 def _circular(index, axis, count=4):
     elements = [{"id": n + 1, "suppressed": False,
-                 "frame": _turned(axis["point"], 360.0 * n / count, axis["dir"] == [0, 0, 1])}
+                 "frame": turned_copy(axis["point"], 360.0 * n / count, axis["dir"] == [0, 0, 1])}
                 for n in range(count)]
-    return _item(index, "C-Pattern1", "CircularPatternFeature", {
+    return copy_item(index, "C-Pattern1", "CircularPatternFeature", {
         "entity_type": "features", "sources": [2], "axis": axis, "quantity": count, "total_angle_deg": 360.0,
         "symmetric": False, "elements": elements})
 
@@ -211,8 +211,8 @@ class MovedReferenceTest(unittest.TestCase):
         return result, steps_of(result.recipe, "mirror")[0]["plane"]["origin"]
 
     def test_a_mirror_plane_on_a_moving_face_follows_it_and_so_does_a_pick_on_the_copy(self):
-        fillet = _item(4, "Fillet1", "FilletFeature", {
-            "sets": [_edges_set("constant", [[6, 8, 2 * POST_TOP - 10]], radius=1.0, continuity="tangent")]})
+        fillet = copy_item(4, "Fillet1", "FilletFeature", {
+            "sets": [edges_set("constant", [[6, 8, 2 * POST_TOP - 10]], radius=1.0, continuity="tangent")]})
         result = run(post_capture(_mirror(3, TOP_FACE), fillet))
         self.assertEqual((result.fixed, result.loose), ([], []))
         (mirror,) = steps_of(result.recipe, "mirror")
@@ -259,8 +259,8 @@ class MovedReferenceTest(unittest.TestCase):
     def test_a_turning_axis_on_a_moving_edge_follows_it_and_so_does_a_pick_on_the_copy(self):
         axis = {"point": [6, 4, POST_TOP], "dir": [1, 0, 0], "entity_type": "BRepEdge",
                 "edge_points": [[6, 4, POST_TOP]]}
-        fillet = _item(4, "Fillet1", "FilletFeature", {
-            "sets": [_edges_set("constant", [[6, 0, 2 * POST_TOP - 10]], radius=1.0, continuity="tangent")]})
+        fillet = copy_item(4, "Fillet1", "FilletFeature", {
+            "sets": [edges_set("constant", [[6, 0, 2 * POST_TOP - 10]], radius=1.0, continuity="tangent")]})
         result = run(post_capture(_circular(3, axis), fillet))
         self.assertEqual((result.fixed, result.loose), ([], []))
         (pattern,) = steps_of(result.recipe, "pattern")
@@ -279,7 +279,7 @@ class MovedReferenceTest(unittest.TestCase):
     def test_the_axis_of_a_round_wall_stays_while_it_only_grows_taller(self):
         axis = {"point": [6, 6, 10], "dir": [0, 0, 1], "entity_type": "BRepFace", "surface": "Cylinder",
                 "face_point": [8, 6, 15]}
-        boss = _item(2, "Post", "ExtrudeFeature", {
+        boss = copy_item(2, "Post", "ExtrudeFeature", {
             "operation": "join", "profiles": [{"sketch": "Post", "frame": dict(FLAT, origin=[0, 0, 10]), "loops": [
                 {"outer": True, "curves": [{"kind": "circle", "center": [6, 6], "radius": 2.0}]}]}],
             "start": {"kind": "profilePlane"}, "extent_type": "one",
@@ -302,7 +302,7 @@ class BodyMirrorOverRangesTest(unittest.TestCase):
     PLATE_BOX = {"min": [0, 0, 0], "max": [60, 20, POST_TOP]}
 
     def result(self, plane_z, *middle):
-        pocket = _extrude(3, "Pocket", "cut", {"origin": [0, 0, 10], "x": [1, 0, 0], "y": [0, -1, 0], "z": [0, 0, -1]},
+        pocket = copy_extrude(3, "Pocket", "cut", {"origin": [0, 0, 10], "x": [1, 0, 0], "y": [0, -1, 0], "z": [0, 0, -1]},
                           (20, 5, 30, 15), 8.0, {"side_one.distance": param("d30", "wall_mm * 4", 8.0)})
         plane = {"point": [0, 0, plane_z], "normal": [0, 0, 1], "origin": True}
         capture = post_capture(pocket, *middle, _mirror(4 + len(middle), plane, "bodies", True, self.PLATE_BOX))

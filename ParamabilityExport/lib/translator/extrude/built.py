@@ -1,7 +1,7 @@
 """The outlines of an extrude as the recipe writes them: sketch outlines and flat faces, merged and checked."""
 from .. import gap_hints, loops, notes, outlines, sketch_motion, thin_wall, values, vec
 from ..result import Refusal
-from .common import _parallel
+from .common import parallel
 
 
 PLANE_TOL = 1e-4
@@ -13,7 +13,7 @@ def _same_plane(profiles):
     z = vec.unit(first["z"])
     for profile in profiles[1:]:
         other = profile["frame"]
-        if not _parallel(other["z"], z) or vec.dot(vec.unit(other["z"]), z) < 0:
+        if not parallel(other["z"], z) or vec.dot(vec.unit(other["z"]), z) < 0:
             return False
         if abs(vec.dot(vec.sub(other["origin"], first["origin"]), z)) > PLANE_TOL:
             return False
@@ -27,7 +27,7 @@ def _parts(profile, sources):
     return [(sketch_motion.profile_number(profile, next(n for n, p in enumerate(sources) if p is profile)), profile)]
 
 
-def _thin_step(ctx, item, data, wall, profile):
+def thin_wall_step(ctx, item, data, wall, profile):
     """`(side, thickness Quantity)` of a thin extrude's wall, or a Refusal when the measured end face does not fit the
     outline and thickness. The thickness follows its parameter and must stay above zero."""
     decided = thin_wall.decide(thin_wall.outer_curves(profile), wall, data.get("end_area"))
@@ -65,7 +65,7 @@ def _face_built(face, thin):
     return [(face.profile, face.loops, face.drawn)]
 
 
-def _outlines_built(ctx, item, face, drawn, thin):
+def outlines_built(ctx, item, face, drawn, thin):
     """`(profile, (outer, inners), drawn)` per outline: the flat face first, then the sketch outlines; or a Refusal.
     Sketch outlines beside a face must lie on its plane. The face keeps its measured plane there, so the sizes that
     move a sketch plane are marked."""

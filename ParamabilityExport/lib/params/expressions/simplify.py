@@ -1,7 +1,7 @@
 """Adding up the equal terms of a formula's outer sum."""
 from .errors import ExpressionError
 from .formula import parse_formula
-from .writing import _PREC, _prec, render
+from .writing import PRECEDENCE, precedence, render
 
 
 def _plain_value(node):
@@ -59,10 +59,10 @@ def _exact_text(value):
 
 def _times(coef, text):
     """`coef` (positive) times the term `text`, written over a small denominator where the coefficient is one."""
-    level = _prec(parse_formula(text))
+    level = precedence(parse_formula(text))
     if abs(coef - 1.0) <= 1e-12:
-        return text if level > _PREC["+"] else "(" + text + ")"
-    body = text if level > _PREC["*"] else "(" + text + ")"
+        return text if level > PRECEDENCE["+"] else "(" + text + ")"
+    body = text if level > PRECEDENCE["*"] else "(" + text + ")"
     if abs(coef - round(coef)) <= 1e-12 * max(1.0, coef):
         return "%d * %s" % (round(coef), body)
     for q in _DENOMINATORS:

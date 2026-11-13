@@ -30,7 +30,7 @@ def _box_union(box, other):
             "max": [max(a, b) for a, b in zip(box["max"], other["max"])]}
 
 
-def _resolve_through(ctx, plan, data, origin, z, combine, box_max=None, profiles=(), item=None, outlines=()):
+def resolve_through(ctx, plan, data, origin, z, combine, box_max=None, profiles=(), item=None, outlines=()):
     """Give a one sided through all its distance, or a Refusal. `box_max` holds the part at every size the probe
     tried, so the cut still clears it when sizes grow.
 

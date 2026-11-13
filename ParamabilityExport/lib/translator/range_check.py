@@ -39,7 +39,7 @@ import random
 from itertools import combinations, product
 
 from ..params.expressions.errors import ExpressionError
-from ..params.expressions.evaluation import _eval, evaluate
+from ..params.expressions.evaluation import evaluate, evaluate_tree
 from ..params.expressions.formula import parse_formula
 
 MAX_CORNER_SIZES = 6
@@ -203,10 +203,7 @@ def _reads(node):
 
 def value_of(tree, env):
     """The number of a parsed formula (`parse_formula`) at `env`, for a rule worked out at many settings."""
-    value = _eval(tree, env)
-    if value != value or value in (float("inf"), float("-inf")):
-        raise ExpressionError("The formula does not give a number.")
-    return value
+    return evaluate_tree(tree, env)
 
 
 def _inner_values(ends):

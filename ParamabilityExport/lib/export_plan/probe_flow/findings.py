@@ -5,7 +5,7 @@ from ...probe import build, derived, match, plan, plane_sizes, ref_fit
 from ...sketch_values.motion import SHAPE
 from ...translator.notes import loose_reason
 from ...translator.sizes import construction_only
-from .reasons import _RESTORE_WHY, _UNREADABLE, _UNTRIED, _watched_why
+from .reasons import RESTORE_WHY, UNREADABLE, UNTRIED, watched_why
 from .states import body_changed
 
 _STATE_KEYS = ("sketches", "points", "lines", "params", "box", "refs", "faces", "patterns", "unread")
@@ -26,7 +26,7 @@ class Findings:
                  if len(state.get("values") or {}) == 1}
         self.untried.extend(p for p in self._unrun if p in self._moving and p not in alone and p not in self.untried)
         for param in self.untried:
-            found.append(self._entry(param, _UNTRIED, labels))
+            found.append(self._entry(param, UNTRIED, labels))
         try:
             # The read once the measured rows were done and the parameters back tells whether the last row's sketch
             # came back; the discovery rows ran after it.
@@ -36,7 +36,7 @@ class Findings:
             self.motion = None
             current = {e.name: e.value for e in self.table.entries}
             self.moved = list(dict.fromkeys(self.moved + build.moved_sizes(self.capture, self.states, current)))
-            found.extend(self._entry(p, _UNREADABLE, labels) for p in self.moved if p not in self.untried)
+            found.extend(self._entry(p, UNREADABLE, labels) for p in self.moved if p not in self.untried)
         found.extend(self._watched(labels, {f["param"] for f in found}))
         if self.motion is not None:
             self.motion.untried = list(self.untried)
@@ -70,7 +70,7 @@ class Findings:
                 done.add(param)
                 name = hint["sketch"] or "a sketch"
                 sketch = "%s of %s" % (name, hint["component"]) if hint["component"] else name
-                out.append(self._entry(param, _watched_why(sketch), labels))
+                out.append(self._entry(param, watched_why(sketch), labels))
         return out
 
     def _entry(self, param, why, labels):
@@ -105,7 +105,7 @@ class Findings:
             before, _ = match.state_values(target, self.e0, self.e0)
             now, cause = match.state_values(target, after, self.e0)
             if before is None or now is None or before.keys() != now.keys():
-                why = _RESTORE_WHY.get(cause, _RESTORE_WHY[SHAPE])
+                why = RESTORE_WHY.get(cause, RESTORE_WHY[SHAPE])
                 self.restore_unchecked.append("%s %s" % (target["sketch"] or "a sketch", why))
                 continue
             gap = max([gap] + [abs(now[k] - v) for k, v in before.items()])

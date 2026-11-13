@@ -60,12 +60,12 @@ class FreeCurveTest(unittest.TestCase):
         self.assertEqual((got["kind"], got["type"]), ("other", "EllipticalArc3D"))
 
     def test_samples_stop_at_the_cap_and_the_curve_says_so(self):
-        original = read_sketch._MAX_SAMPLES
-        read_sketch._MAX_SAMPLES = 40
+        original = read_sketch.MAX_SAMPLES
+        read_sketch.MAX_SAMPLES = 40
         try:
             got = read_curves([curve_on(half_circle)])[0]
         finally:
-            read_sketch._MAX_SAMPLES = original
+            read_sketch.MAX_SAMPLES = original
         self.assertTrue(got["truncated"])
         self.assertLessEqual(len(got["samples"]), 40 + 16)
 
@@ -169,15 +169,15 @@ class TextOutlinesTest(unittest.TestCase):
         self.assertEqual(read_sketch.read_text_outlines(broken)[0][0]["problem"], "unread")
 
     def test_more_curves_or_outlines_than_the_caps_allow_are_a_marker(self):
-        many = [line((i, 0), (i + 0.5, 0)) for i in range(read_sketch._MAX_TEXT_CURVES + 1)]
+        many = [line((i, 0), (i + 0.5, 0)) for i in range(read_sketch.MAX_TEXT_CURVES + 1)]
         self.assertEqual(read_sketch.read_text_outlines(self.text(many))[0][0]["problem"], "too_many")
-        original = read_sketch._MAX_TEXT_PROFILES
-        read_sketch._MAX_TEXT_PROFILES = 2
+        original = read_sketch.MAX_TEXT_PROFILES
+        read_sketch.MAX_TEXT_PROFILES = 2
         try:
             curves = self.square(0, 0, 5) + self.square(10, 0, 5) + self.square(20, 0, 5)
             self.assertEqual(read_sketch.read_text_outlines(self.text(curves))[0][0]["problem"], "too_many")
         finally:
-            read_sketch._MAX_TEXT_PROFILES = original
+            read_sketch.MAX_TEXT_PROFILES = original
 
     def test_the_space_of_the_points_is_decided_by_the_bounding_box(self):
         # A sketch turned a quarter about z: sketch (u, v) is model (-v, u). The box is in sketch space.

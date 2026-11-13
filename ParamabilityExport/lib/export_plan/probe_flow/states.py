@@ -6,7 +6,7 @@ VOLUME_TOLERANCE_MM3 = 1e-4
 VOLUME_RELATIVE = 1e-6
 
 
-def _box_numbers(read):
+def box_numbers(read):
     box = read.get("box") if isinstance(read, dict) else None
     if not isinstance(box, dict):
         return None
@@ -34,7 +34,7 @@ def _numbers(node, out):
     return out
 
 
-def _same_numbers(a, b):
+def same_numbers(a, b):
     """True when two records hold the same numbers in the same places, within the fit tolerance."""
     x, y = _numbers(a, []), _numbers(b, [])
     return len(x) == len(y) and all(abs(p - q) <= fit.TOLERANCE for p, q in zip(x, y))
@@ -43,7 +43,7 @@ def _same_numbers(a, b):
 def body_changed(before, now):
     """True when the body reads differently in two probe states: its box moved, or its volume changed when both states
     read it. False when they agree or the body cannot be compared (a state without a box)."""
-    a, b = _box_numbers(before), _box_numbers(now)
+    a, b = box_numbers(before), box_numbers(now)
     if a is not None and b is not None and any(abs(x - y) > BODY_TOLERANCE_MM for x, y in zip(a, b)):
         return True
     va, vb = _volume(before), _volume(now)

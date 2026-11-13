@@ -91,7 +91,7 @@ def _touches_part(ctx, outline, entry, shift, join=False):
                for h in _heights(entry, shift, join) for uv in outline.samples())
 
 
-def _touching_order(ctx, units, shift, join):
+def touching_order(ctx, units, shift, join):
     """(outline, side) pairs in an order where each one joins what is built: one that reaches into the part, or
     touches a pair already taken, comes next. Fusion adds all outlines at once, the recipe one step after the other,
     so a step that touches only a later one would stand apart for a while. The order stays Fusion's where it works.

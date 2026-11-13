@@ -22,7 +22,7 @@ def _beyond_part(box, start, direction, length):
     return length > max(vec.dot(vec.sub(c, start), direction) for c in corners) + LENGTH_TOL
 
 
-def _check_measured_length(plan, data, shift, start, z, combine):
+def check_measured_length(plan, data, shift, start, z, combine):
     """Refuse when the measured end face is not where the planned length puts it (None when it agrees or is unknown).
 
     A cut that ends past the part makes no end face of its own; the face Fusion lists then is a wall it cut through,
@@ -45,7 +45,7 @@ def _check_measured_length(plan, data, shift, start, z, combine):
 
 
 def _expected_leans(plan, combine):
-    """Per plan entry, the leans its side walls can show along the sketch normal (see `_check_taper`)."""
+    """Per plan entry, the leans its side walls can show along the sketch normal (see `check_taper`)."""
     out = []
     for entry in plan:
         lean = math.sin(math.radians(entry["taper"] or 0.0)) * (-1 if combine == "cut" else 1)
@@ -53,7 +53,7 @@ def _expected_leans(plan, combine):
     return out
 
 
-def _check_leans(plan, leans, combine):
+def check_leans(plan, leans, combine):
     """Refuse when a measured side wall leans in a way no side of the plan gives, or a tapered side has no wall
     that shows its taper. A wall narrowing away from the sketch leans its outward normal along the travel; a cut
     shows the part's walls, which face the other way."""
@@ -67,7 +67,7 @@ def _check_leans(plan, leans, combine):
     return None
 
 
-def _check_taper(plan, data, combine, outlines):
+def check_taper(plan, data, combine, outlines):
     """Refuse a taper whose sign disagrees with the measured side walls (or, for one outline, the end face area),
     or that cannot be measured."""
     tapered = [entry for entry in plan if entry["taper"]]
@@ -75,7 +75,7 @@ def _check_taper(plan, data, combine, outlines):
         return None
     leans = data.get("side_leans")
     if isinstance(leans, list) and leans:
-        return _check_leans(plan, leans, combine)
+        return check_leans(plan, leans, combine)
     if not plan[0]["taper"] or outlines != 1:
         return Refusal("The taper of this extrude could not be measured.")
     start, end = data.get("profile_area"), data.get("end_area")
@@ -94,7 +94,7 @@ def _holds_free_outline(profiles):
                                     for c in loop.get("curves") or []) for p in profiles)
 
 
-def _volume_refusal(data, plan, combine, profiles, thin):
+def volume_refusal(data, plan, combine, profiles, thin):
     """Refuse when the part Fusion made from text or spline outlines is not the outline area times the length.
 
     Text outlines are sorted into outer outlines and holes by the reader, and overlapping strokes can be read as a hole,

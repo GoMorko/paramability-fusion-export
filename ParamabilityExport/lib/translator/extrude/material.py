@@ -1,7 +1,7 @@
 """The side of the part that a cut through all goes to, found from where the outlines meet material."""
 from .. import follow, vec
 from ..footprint import Footprint, polyline
-from .checks import _check_leans
+from .checks import check_leans
 from .common import SAMPLE_INSET
 
 
@@ -52,7 +52,7 @@ def _sample_heights(reach):
     return near + [step * k for k in range(1, _SAMPLE_STEPS + 1)]
 
 
-def _cut_toward_material(ctx, plan, data, profiles, shift, combine):
+def cut_toward_material(ctx, plan, data, profiles, shift, combine):
     """A cut through all to one side with no measured end face cuts on the side where its outlines meet the part:
     Fusion's stored direction is used only when both sides, or neither, hold material there, or when the measured
     walls of a tapered cut lean the way that direction gives and not the other (they show where Fusion cut)."""
@@ -79,4 +79,4 @@ def _walls_confirm(entry, data, combine):
     if not entry["taper"] or not isinstance(leans, list) or not leans:
         return False
     turned = dict(entry, sign=-entry["sign"])
-    return _check_leans([entry], leans, combine) is None and _check_leans([turned], leans, combine) is not None
+    return check_leans([entry], leans, combine) is None and check_leans([turned], leans, combine) is not None

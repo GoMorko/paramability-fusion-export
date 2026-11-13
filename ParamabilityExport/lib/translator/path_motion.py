@@ -23,8 +23,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Optional
 
-from ..params.expressions.errors import ExpressionError
-from ..params.expressions.evaluation import _eval
+from ..params.expressions.evaluation import evaluate_tree
 from ..params.expressions.formula import parse_formula
 from ..sketch_values import keys
 from ..sketch_values.motion import Stuck
@@ -53,10 +52,7 @@ _tree = lru_cache(maxsize=4096)(parse_formula)
 
 def worked_out(formula, env):
     """The value of a written formula over the size values `env`; the formula is read once."""
-    value = _eval(_tree(formula), env)
-    if math.isnan(value) or math.isinf(value):
-        raise ExpressionError("The formula does not give a number.")
-    return value
+    return evaluate_tree(_tree(formula), env)
 
 
 def _numbers(node, env):

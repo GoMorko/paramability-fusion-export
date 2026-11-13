@@ -13,21 +13,21 @@ def mm(value):
     return value / 10.0
 
 
-def _plain(name, expression, value, unit, **extra):
+def plain_param(name, expression, value, unit, **extra):
     return dict(name=name, expression=expression, value=value, unit=unit, comment=extra.pop("comment", ""),
                 isFavorite=extra.pop("isFavorite", False), **extra)
 
 
 RAW = [
-    _plain(W, "1.8", 1.8, "", isFavorite=True),
-    _plain(H, "1.2", 1.2, "", isFavorite=True),
-    _plain(D, "1.8", 1.8, "", isFavorite=True),
-    _plain(CUBE, "18 mm", mm(CUBE_MM), "mm", isFavorite=True),
-    _plain("FilterBox_width_mm", f"{W} * {CUBE} + 2 mm", mm(34.4), "mm"),
-    _plain("FilterBox_height_mm", f"{H} * {CUBE}", mm(21.6), "mm"),
-    _plain("FilterBox_depth_mm", f"{D} * {CUBE} + 2 mm", mm(34.4), "mm"),
-    _plain("FilterBox__PipeTop_offsetFromCenter_mm", "0.05 mm", mm(0.05), "mm"),
-    _plain("FilterBox__PipeBottom_offsetFromCenter_mm", "0.05 mm", mm(0.05), "mm"),
+    plain_param(W, "1.8", 1.8, "", isFavorite=True),
+    plain_param(H, "1.2", 1.2, "", isFavorite=True),
+    plain_param(D, "1.8", 1.8, "", isFavorite=True),
+    plain_param(CUBE, "18 mm", mm(CUBE_MM), "mm", isFavorite=True),
+    plain_param("FilterBox_width_mm", f"{W} * {CUBE} + 2 mm", mm(34.4), "mm"),
+    plain_param("FilterBox_height_mm", f"{H} * {CUBE}", mm(21.6), "mm"),
+    plain_param("FilterBox_depth_mm", f"{D} * {CUBE} + 2 mm", mm(34.4), "mm"),
+    plain_param("FilterBox__PipeTop_offsetFromCenter_mm", "0.05 mm", mm(0.05), "mm"),
+    plain_param("FilterBox__PipeBottom_offsetFromCenter_mm", "0.05 mm", mm(0.05), "mm"),
 ]
 
 DEPENDENCIES = {
@@ -64,19 +64,19 @@ def reader_dicts(raw=None, dependencies=None):
 # A hobby storage box: unitless counts, a count turned into a length with `* 1 mm`, a setup value only read by other
 # formulas, a chain three deep, an `if` on an intermediate, a plain number formula in a length, and a weight in grams.
 HOBBY_RAW = [
-    _plain("cols", "4", 4, "", isFavorite=True),
-    _plain("rows", "3", 3, "", isFavorite=True),
-    _plain("layers", "3", 3, ""),
-    _plain("grid", "42 mm", mm(42), "mm"),
-    _plain("clearance", "0.25 mm", mm(0.25), "mm", comment="Setup: gap per side"),
-    _plain("cols_mm", "cols * 1 mm", mm(4), "mm"),
-    _plain("wall", "layers * 0.4", mm(1.2), "mm"),
-    _plain("width", "cols * grid - clearance * 2", mm(167.5), "mm"),
-    _plain("inner", "width - wall * 2", mm(165.1), "mm"),
-    _plain("lip", "if(inner > 100 mm; 3 mm; 2 mm)", mm(3), "mm"),
-    _plain("lip_ratio", "lip / clearance", 12, ""),
-    _plain("spacing", "cols_mm + rows * 1 mm + lip", mm(10), "mm"),
-    _plain("weight", "50 g", 0.05, "g"),
+    plain_param("cols", "4", 4, "", isFavorite=True),
+    plain_param("rows", "3", 3, "", isFavorite=True),
+    plain_param("layers", "3", 3, ""),
+    plain_param("grid", "42 mm", mm(42), "mm"),
+    plain_param("clearance", "0.25 mm", mm(0.25), "mm", comment="Setup: gap per side"),
+    plain_param("cols_mm", "cols * 1 mm", mm(4), "mm"),
+    plain_param("wall", "layers * 0.4", mm(1.2), "mm"),
+    plain_param("width", "cols * grid - clearance * 2", mm(167.5), "mm"),
+    plain_param("inner", "width - wall * 2", mm(165.1), "mm"),
+    plain_param("lip", "if(inner > 100 mm; 3 mm; 2 mm)", mm(3), "mm"),
+    plain_param("lip_ratio", "lip / clearance", 12, ""),
+    plain_param("spacing", "cols_mm + rows * 1 mm + lip", mm(10), "mm"),
+    plain_param("weight", "50 g", 0.05, "g"),
 ]
 
 HOBBY_DEPENDENCIES = {

@@ -38,7 +38,7 @@ The modules: `covered` (`scan`), `references` (`refs`), `request` (`request`), `
 (one row), `history` (what earlier states show), `near_far`, `nearer` and `extra_rows` (the row kinds). This package
 re-exports what the rest of the add-in reads as `plan.<name>`.
 """
-from .covered import FACE, Scan, _SCANNERS, outline_face, scan
+from .covered import FACE, SCANNERS, Scan, outline_face, scan
 from .extra_rows import MAX_DISCOVERY, check_rows, discovery_left, discovery_rows
 from .near_far import far_pair_rows, far_rows, near_values, pair_rows, probe_rows
 from .nearer import BISECT_STEPS, MAX_NEARER_ROWS, NEARER_STEPS, nearer_rows
@@ -49,7 +49,7 @@ from .sizes import MAX_EXTRA_SIZES, extra_sizes, kept_sizes, sketch_driven
 
 __all__ = [
     "BISECT_STEPS", "FACE", "MAX_DISCOVERY", "MAX_EXTRA_SIZES", "MAX_NEARER_ROWS", "MAX_PROBE_ROWS", "NEARER_STEPS",
-    "NO_PLACE", "NO_TOKEN", "RETRY_NOTE", "SHAPE_AXIS", "SHAPE_DIRECTION", "SHAPE_PLANE", "SHAPE_POINT", "Scan",
-    "_SCANNERS", "check_rows", "discovery_left", "discovery_rows", "extra_sizes", "far_pair_rows", "far_rows",
+    "NO_PLACE", "NO_TOKEN", "RETRY_NOTE", "SHAPE_AXIS", "SHAPE_DIRECTION", "SHAPE_PLANE", "SHAPE_POINT", "SCANNERS",
+    "Scan", "check_rows", "discovery_left", "discovery_rows", "extra_sizes", "far_pair_rows", "far_rows",
     "is_vector", "kept_sizes", "near_values", "nearer_rows", "outline_face", "pair_rows", "probe_rows", "refs",
     "request", "scan", "sketch_driven", "state_values", "symmetric_patterns"]

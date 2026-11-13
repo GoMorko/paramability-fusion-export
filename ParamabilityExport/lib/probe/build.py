@@ -286,7 +286,7 @@ def outline_windows(run, table, spans, capture=None):
     not rebuild (`kept_ranges.failure_cut`, over `spans`) leave only the value now, `kept` is the value now at both
     ends."""
     entries = {e.name: e for e in table.entries}
-    mine = kept_ranges._part_step(capture)
+    mine = kept_ranges.part_step(capture)
     out = {}
     for name, tries in _alone_tries(run).items():
         e = entries.get(name)

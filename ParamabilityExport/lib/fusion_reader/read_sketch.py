@@ -16,7 +16,7 @@ _FLAT_CM = 1e-5  # 1e-4 mm
 _IDENTITY = {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
 # A free curve is read as a dense polyline. It starts with `_START_SPANS` parameter spans (more when the curve has
 # many control points: `_SPANS_PER_KNOT_SPAN` each, at most `_MAX_START_SPANS`). A span is kept when every point at
-# `_INNER_FRACTIONS` of it is within _CHORD_TOL_MM of its chord, else it is split in two; at most _MAX_SAMPLES points
+# `_INNER_FRACTIONS` of it is within _CHORD_TOL_MM of its chord, else it is split in two; at most MAX_SAMPLES points
 # in all. The chords must then add up to the curve's own length (within `_LENGTH_TOL`, relative, and
 # `_LENGTH_TOL_MM`): a wave that fell between the tested points shows as missing length, and the curve is marked
 # `truncated` like one that hit the point cap. The translator fits the recipe's spline through the samples.
@@ -28,11 +28,11 @@ _MIDDLE = 2  # the entry of _INNER_FRACTIONS at one half
 _CHORD_TOL_MM = 0.0005
 _LENGTH_TOL = 1e-3
 _LENGTH_TOL_MM = 0.01
-_MAX_SAMPLES = 800
+MAX_SAMPLES = 800
 _MAX_SPLIT_DEPTH = 12
 # Text outlines: past these the text is not read (the copy refuses it).
-_MAX_TEXT_CURVES = 4000
-_MAX_TEXT_PROFILES = 400
+MAX_TEXT_CURVES = 4000
+MAX_TEXT_PROFILES = 400
 _BOX_MARGIN = 0.005
 
 
@@ -243,7 +243,7 @@ def dense_samples(geometry, space):
         inner = [(t0 + (t1 - t0) * f, geo.safe(lambda t=t0 + (t1 - t0) * f: at(t), None)) for f in _INNER_FRACTIONS]
         found = [p for _, p in inner if p is not None]
         if found and depth < _MAX_SPLIT_DEPTH and any(_chord_gap(p, p0, p1) > _CHORD_TOL_MM for p in found):
-            if len(out) >= _MAX_SAMPLES:
+            if len(out) >= MAX_SAMPLES:
                 state["truncated"] = True
             else:
                 mid_t, mid = inner[_MIDDLE]
@@ -503,7 +503,7 @@ def read_text_outlines(text, ctx=None):
     geometries = geo.collection_items(raw)
     if sketch is None or not geometries:
         return [_text_marker(text, ctx, "unread")], [None]
-    if len(geometries) > _MAX_TEXT_CURVES:
+    if len(geometries) > MAX_TEXT_CURVES:
         return [_text_marker(text, ctx, "too_many")], [None]
     frame = geo.frame_of(sketch.transform)
     space = _Space(sketch, [_OnCurve(g) for g in geometries], frame, _text_box(text))
@@ -513,7 +513,7 @@ def read_text_outlines(text, ctx=None):
     found = text_outlines.outlines_of(curves)
     if isinstance(found, str):
         return [_text_marker(text, ctx, found)], [None]
-    if len(found) > _MAX_TEXT_PROFILES:
+    if len(found) > MAX_TEXT_PROFILES:
         return [_text_marker(text, ctx, "too_many")], [None]
     base = {"text": True, "sketch": geo.safe(lambda: sketch.name, "") or "", "frame": frame, "space": space.mode}
     base.update(_text_params(text))

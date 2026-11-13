@@ -4,12 +4,12 @@ import unittest
 from tests import context  # noqa: F401
 from lib.params import size_table
 from lib.params.size_table import DERIVED, NOT_OFFERED
-from tests.params_fixtures import _plain, mm, reader_dicts
+from tests.params_fixtures import mm, plain_param, reader_dicts
 
 
 def table(remainder_of, ticked=("w",)):
     """A width of 100 mm (range 50 to 200) and `r`, the remainder expression over it (value 2 mm)."""
-    raw = [_plain("w", "100 mm", mm(100.0), "mm", isFavorite=True), _plain("r", remainder_of, mm(2.0), "mm")]
+    raw = [plain_param("w", "100 mm", mm(100.0), "mm", isFavorite=True), plain_param("r", remainder_of, mm(2.0), "mm")]
     return size_table.build(reader_dicts(raw, {"r": ["w"]}), list(ticked))
 
 
@@ -33,7 +33,7 @@ class ModuloTest(unittest.TestCase):
         self.assertEqual(table("(0 mm - 20 mm) % 7 mm", ticked=()).entry("r").state, NOT_OFFERED)
 
     def test_the_range_the_person_typed_decides(self):
-        raw = [_plain("w", "130 mm", mm(130.0), "mm", isFavorite=True), _plain("r", "(w - 120 mm) % 7 mm", mm(3.0), "mm")]
+        raw = [plain_param("w", "130 mm", mm(130.0), "mm", isFavorite=True), plain_param("r", "(w - 120 mm) % 7 mm", mm(3.0), "mm")]
         for ranges, state in (({}, NOT_OFFERED), ({"w": (125.0, 200.0)}, DERIVED)):
             built = size_table.build(reader_dicts(raw, {"r": ["w"]}), ["w"], ranges=ranges)
             self.assertEqual(built.entry("r").state, state)

@@ -4,14 +4,14 @@ from .. import face_outline, gap_hints, loops, placement, sketch_motion, thin_wa
 from ..placer_makers import SlabMaker, ThinWallMaker
 from ..result import Refusal, StepResult
 from ..values import Quantity
-from .built import _outlines_built, _thin_step
-from .checks import _check_measured_length, _check_taper, _volume_refusal
+from .built import outlines_built, thin_wall_step
+from .checks import check_measured_length, check_taper, volume_refusal
 from .common import COMBINE, UNREADABLE
-from .material import _cut_toward_material
-from .order import _touching_order
-from .plan import _plan
-from .reach import _origin, _start_shift
-from .through import _resolve_through
+from .material import cut_toward_material
+from .order import touching_order
+from .plan import plan_sides
+from .reach import sketch_origin, start_shift
+from .through import resolve_through
 
 
 def handle(item, ctx):
@@ -50,7 +50,7 @@ def handle(item, ctx):
     # Several outlines that Fusion made into one body touch each other, so the first makes it and the rest join.
     if combine == "new" and len(profiles) > 1 and len(item.get("bodies_after") or []) != 1:
         return Refusal("A new body from several outlines makes several bodies, which is not copied yet.")
-    built = _outlines_built(ctx, item, face, drawn_ones, thin)
+    built = outlines_built(ctx, item, face, drawn_ones, thin)
     if isinstance(built, Refusal):
         return built
     sources = ([face.profile] if face is not None else []) + drawn_ones
@@ -60,27 +60,27 @@ def handle(item, ctx):
     plane_q = first_drawn.plane_shift(ctx) if first_drawn is not None else Quantity(0.0)
 
     first_frame = profiles[0]["frame"]
-    shift_q = _start_shift(data.get("start", {"kind": "profilePlane"}), first_frame, ctx, item, plane_q)
+    shift_q = start_shift(data.get("start", {"kind": "profilePlane"}), first_frame, ctx, item, plane_q)
     if isinstance(shift_q, Refusal):
         return shift_q
     shift = shift_q.n
-    plan = _plan(item, data, first_frame, shift_q, combine, ctx, plane_q)
+    plan = plan_sides(item, data, first_frame, shift_q, combine, ctx, plane_q)
     if isinstance(plan, Refusal):
         return plan
     z0 = vec.unit(first_frame["z"])
     start = vec.add(first_frame["origin"], vec.scale(z0, shift))
     # A cut through all may turn to the side its outlines meet the part on: the taper check reads that side's walls.
-    _cut_toward_material(ctx, plan, data, profiles, shift, combine)
-    for check in (_check_measured_length(plan, data, shift, start, z0, combine),
-                  _check_taper(plan, data, combine, picked),
-                  _volume_refusal(data, plan, combine, sources, thin)):
+    cut_toward_material(ctx, plan, data, profiles, shift, combine)
+    for check in (check_measured_length(plan, data, shift, start, z0, combine),
+                  check_taper(plan, data, combine, picked),
+                  volume_refusal(data, plan, combine, sources, thin)):
         if check:
             return check
-    thin_step = _thin_step(ctx, item, data, wall, profiles[0]) if thin else None
+    thin_step = thin_wall_step(ctx, item, data, wall, profiles[0]) if thin else None
     if isinstance(thin_step, Refusal):
         return thin_step
     box_max = ctx.motion.box_max if sketch_motion.active(ctx) else None
-    refusal = _resolve_through(ctx, plan, data, start, z0, combine, box_max, profiles, item,
+    refusal = resolve_through(ctx, plan, data, start, z0, combine, box_max, profiles, item,
                                [drawn for _, _, drawn in built])
     if refusal:
         return refusal
@@ -89,12 +89,12 @@ def handle(item, ctx):
 
     units = [(one, entry) for one in built for entry in plan]
     if combine in ("new", "add") and len(built) > 1:
-        units = _touching_order(ctx, units, shift, combine == "add")
+        units = touching_order(ctx, units, shift, combine == "add")
     out = StepResult()
     for (profile, (outer, inner), drawn), entry in units:
         frame = profile["frame"]
         base = placement.moved_along(placement.from_frame(frame), shift, vec.unit(frame["z"]))
-        base["origin"] = drawn.origin(ctx, shift_q) if drawn is not None else _origin(frame, shift_q)
+        base["origin"] = drawn.origin(ctx, shift_q) if drawn is not None else sketch_origin(frame, shift_q)
         if drawn is not None:
             outer, inner = drawn.written(ctx)
         reverse = entry["sign"] < 0

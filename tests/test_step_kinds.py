@@ -64,7 +64,7 @@ class StepKindTableTest(unittest.TestCase):
 
     def test_every_sketch_record_has_a_probe_scanner(self):
         for spec in step_kinds.STEP_TYPES:
-            self.assertLessEqual(set(spec.sketches), set(plan._SCANNERS), spec.name)
+            self.assertLessEqual(set(spec.sketches), set(plan.SCANNERS), spec.name)
 
     def test_no_other_module_keeps_a_list_of_step_types_or_kinds(self):
         types = {t.name for t in step_kinds.STEP_TYPES if t.role == step_kinds.MODELING}

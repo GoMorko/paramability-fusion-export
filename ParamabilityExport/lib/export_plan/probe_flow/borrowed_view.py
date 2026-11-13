@@ -60,7 +60,7 @@ def covers_a_sketch(capture):
             or any(r["shape"] for r in plan.refs(capture)))
 
 
-def _with_borrowed(request, hints, watch):
+def with_borrowed(request, hints, watch):
     """`request` with the watched sketches added and the occurrence paths of its borrowed sketches."""
     sketches = list(request["sketches"]) + [t for t in watch if t not in request["sketches"]]
     out = dict(request, sketches=sketches)

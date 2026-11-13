@@ -1,7 +1,7 @@
 """What the discovery rows show: which unticked parameters also change the part."""
 from ...probe import match, plan, ref_fit
 from .reasons import NOT_READ_TRY, NOT_TRIED, NOT_TRIED_STOPPED, not_built_try
-from .states import _box_numbers, _same_numbers, body_changed
+from .states import body_changed, box_numbers, same_numbers
 
 
 class Discovery:
@@ -65,7 +65,7 @@ class Discovery:
 
     def _comparable(self, read):
         """True when `read` holds anything the discovery compares."""
-        return isinstance(read, dict) and bool(read.get("sketches") or read.get("refs") or _box_numbers(read))
+        return isinstance(read, dict) and bool(read.get("sketches") or read.get("refs") or box_numbers(read))
 
     def differences(self, base, read):
         """`(changed, unread)` between two reads of the design: names of the sketches, hole points, axis lines and
@@ -87,10 +87,10 @@ class Discovery:
         for kind in ("points", "lines"):
             for token in self.request.get(kind) or []:
                 sort("a sketch %s" % kind[:-1], ((base or {}).get(kind) or {}).get(token),
-                     ((read or {}).get(kind) or {}).get(token), _same_numbers)
+                     ((read or {}).get(kind) or {}).get(token), same_numbers)
         for ref in self.refs:
-            sort(ref["key"], ref_fit.state_values(ref, base)[0], ref_fit.state_values(ref, read)[0], _same_numbers)
-        if _box_numbers(base) is None or _box_numbers(read) is None:
+            sort(ref["key"], ref_fit.state_values(ref, base)[0], ref_fit.state_values(ref, read)[0], same_numbers)
+        if box_numbers(base) is None or box_numbers(read) is None:
             unread.append("the body")
         elif body_changed(base, read):
             changed.append("the body")

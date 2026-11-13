@@ -3,14 +3,14 @@ import math
 
 from .. import gap_hints, values, vec
 from ..result import Refusal
-from .common import LENGTH_TOL, SIGN_TOL, UNREADABLE, _parallel, _sign_of
-from .reach import _distance_quantity, _keep_reaches_positive, _reach_quantity
-from .taper import _taper, _taper_quantity
+from .common import LENGTH_TOL, SIGN_TOL, UNREADABLE, parallel, sign_of
+from .reach import distance_quantity, keep_reaches_positive, reach_quantity
+from .taper import taper_degrees, taper_quantity
 
 
 def _fits(sign, rel_end, reach, other):
     """True when a face at `rel_end` can lie in an extrude that goes `reach` along `sign` and `other` the other way."""
-    limit = reach if _sign_of(rel_end) == sign else other
+    limit = reach if sign_of(rel_end) == sign else other
     return abs(rel_end) <= limit + LENGTH_TOL
 
 
@@ -21,7 +21,7 @@ def _choose_sign(ctx, geometric, rel_end, reach=None, other=None):
     the measured face turns the direction only when it fits the turned extrude and not the stored one."""
     if rel_end is None or abs(rel_end) < SIGN_TOL:
         return geometric
-    measured = _sign_of(rel_end)
+    measured = sign_of(rel_end)
     if measured != geometric and reach is not None and other is not None and (
             _fits(geometric, rel_end, reach, other) or not _fits(-geometric, rel_end, reach, other)):
         return geometric
@@ -56,7 +56,7 @@ def _through_both(ctx, item, sides):
     return [{"extent": "through", "sign": 1, "distance": None, "taper": 0.0}]
 
 
-def _plan(item, data, frame, shift_q, combine, ctx, plane_q):
+def plan_sides(item, data, frame, shift_q, combine, ctx, plane_q):
     """The sides to extrude, as dicts {extent, sign, distance, taper}; or a Refusal.
 
     `sign` is the travel direction relative to the sketch normal. extent is oneSide, symmetric or through. A distance
@@ -75,12 +75,12 @@ def _plan(item, data, frame, shift_q, combine, ctx, plane_q):
 
     def one_side(side, which, forced_sign=None, measured=True, other=None):
         kind = (side or {}).get("kind")
-        taper = _taper(side.get("taper_deg", 0.0)) if side else 0.0
+        taper = taper_degrees(side.get("taper_deg", 0.0)) if side else 0.0
         if isinstance(taper, Refusal):
             return taper
         taper_q = None
         if kind in ("distance", "toEntity"):
-            taper_q = _taper_quantity(ctx, item, which + ".taper_deg", taper)
+            taper_q = taper_quantity(ctx, item, which + ".taper_deg", taper)
         end = rel_end if measured else None
         if kind == "distance":
             raw = float(side["distance"])
@@ -88,9 +88,9 @@ def _plan(item, data, frame, shift_q, combine, ctx, plane_q):
                 return Refusal("This extrude has no length.")
             sign = forced_sign if forced_sign is not None else side.get("direction")
             if sign is None:
-                sign = _choose_sign(ctx, _sign_of(raw), end, abs(raw), other)
+                sign = _choose_sign(ctx, sign_of(raw), end, abs(raw), other)
             return {"extent": "oneSide", "sign": sign, "distance": abs(raw), "taper": taper, "taper_q": taper_q,
-                    "q": side.get("quantity") or _distance_quantity(ctx, item, which + ".distance", raw)}
+                    "q": side.get("quantity") or distance_quantity(ctx, item, which + ".distance", raw)}
         if kind in ("throughAll", "all"):
             positive = side.get("positive", True)
             if positive is None:
@@ -98,20 +98,20 @@ def _plan(item, data, frame, shift_q, combine, ctx, plane_q):
             sign = forced_sign if forced_sign is not None else _choose_sign(
                 ctx, 1 if positive else -1, end, math.inf, other)
             return {"extent": "through-one", "sign": sign, "distance": None, "taper": taper,
-                    "taper_q": _taper_quantity(ctx, item, which + ".taper_deg", taper), "adjusts": True}
+                    "taper_q": taper_quantity(ctx, item, which + ".taper_deg", taper), "adjusts": True}
         if kind == "toEntity":
             plane = side.get("plane")
             if not plane:
                 return Refusal("This extrude ends on a surface that is not flat, which is not copied yet.",
                                cause=gap_hints.EXTRUDE_END_FACE)
-            if not _parallel(plane["normal"], z):
+            if not parallel(plane["normal"], z):
                 return Refusal("This extrude ends on a tilted surface, which is not copied yet.",
                                cause=gap_hints.EXTRUDE_END_FACE)
             reach = vec.dot(vec.sub(plane["point"], origin), z)
             if abs(reach) < SIGN_TOL:
                 return Refusal("This extrude ends on the surface it starts from.")
             sign = forced_sign if forced_sign is not None else _choose_sign(
-                ctx, _sign_of(reach), end, abs(reach), other)
+                ctx, sign_of(reach), end, abs(reach), other)
             offset = side.get("offset", 0.0)
             if offset is None:
                 return Refusal(UNREADABLE)
@@ -121,7 +121,7 @@ def _plan(item, data, frame, shift_q, combine, ctx, plane_q):
                 return Refusal("This extrude has no length.")
             return {"extent": "oneSide", "sign": sign, "distance": distance, "taper": taper,
                     "taper_q": taper_q, "adjusts": True, "reaches": True,
-                    "q": _reach_quantity(ctx, item, which, side, z, reach, offset, plane_q, shift_q)}
+                    "q": reach_quantity(ctx, item, which, side, z, reach, offset, plane_q, shift_q)}
         return Refusal("This way of setting the extrude length is not copied yet.")
 
     if extent_type == "symmetric":
@@ -131,7 +131,7 @@ def _plan(item, data, frame, shift_q, combine, ctx, plane_q):
         sym = data.get("symmetric")
         if not sym:
             return Refusal("This extrude has no readable length.")
-        taper = _taper(sym.get("taper_deg", 0.0))
+        taper = taper_degrees(sym.get("taper_deg", 0.0))
         if isinstance(taper, Refusal):
             return taper
         full_length = sym.get("full_length", False)
@@ -141,9 +141,9 @@ def _plan(item, data, frame, shift_q, combine, ctx, plane_q):
         full = float(sym["distance"]) * factor
         if not abs(full) > 0:
             return Refusal("This extrude has no length.")
-        half = _distance_quantity(ctx, item, "symmetric.distance", float(sym["distance"]))
+        half = distance_quantity(ctx, item, "symmetric.distance", float(sym["distance"]))
         return [{"extent": "symmetric", "sign": 1, "distance": abs(full), "taper": taper,
-                 "taper_q": _taper_quantity(ctx, item, "symmetric.taper_deg", taper),
+                 "taper_q": taper_quantity(ctx, item, "symmetric.taper_deg", taper),
                  "q": half.scaled(factor) if factor != 1.0 else half}]
 
     if extent_type == "two":
@@ -160,11 +160,11 @@ def _plan(item, data, frame, shift_q, combine, ctx, plane_q):
         second = one_side(two, "side_two", forced_sign=-first["sign"], measured=False)
         if isinstance(second, Refusal):
             return second
-        _keep_reaches_positive(ctx, item, [first, second])
+        keep_reaches_positive(ctx, item, [first, second])
         return [first, second]
 
     side = one_side(data.get("side_one"), "side_one")
     if isinstance(side, Refusal):
         return side
-    _keep_reaches_positive(ctx, item, [side])
+    keep_reaches_positive(ctx, item, [side])
     return [side]

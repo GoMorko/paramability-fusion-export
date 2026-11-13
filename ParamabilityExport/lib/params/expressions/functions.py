@@ -34,7 +34,7 @@ def _mod(a, b):
 
 
 # App function name -> (argument count, None for 2 or more; function over the argument list)
-_APP_FUNCTIONS = {
+APP_FUNCTIONS = {
     "abs": (1, lambda a: abs(a[0])),
     "acos": (1, lambda a: math.degrees(math.acos(a[0]))),
     "asin": (1, lambda a: math.degrees(math.asin(a[0]))),

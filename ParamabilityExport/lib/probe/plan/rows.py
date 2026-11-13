@@ -4,7 +4,7 @@ from ...package.units import display_from_manifest, unit_kind
 from ...params.expressions.text import format_number
 
 MAX_PROBE_ROWS = 64
-_SAME = 1e-9
+SAME_VALUE = 1e-9
 # Added to the progress line of a row that tries again nearer after a value that did not build.
 RETRY_NOTE = ". The last value did not rebuild, so this one is nearer."
 
@@ -34,10 +34,10 @@ def _label(sizes, manifest, varied, retry):
     return text + RETRY_NOTE if retry else text
 
 
-def _row(sizes, name, overrides, key=None, retry=False):
+def probe_row(sizes, name, overrides, key=None, retry=False):
     manifest = state_values(sizes, overrides)
     current = {s["param"]: s["value"] for s in sizes}
-    varied = sorted(p for p in overrides if abs(manifest[p] - current[p]) > _SAME)
+    varied = sorted(p for p in overrides if abs(manifest[p] - current[p]) > SAME_VALUE)
     row = {
         "name": name[:MAX_NAME_CHARS],
         "key": "probe: " + (key or name),
@@ -50,13 +50,13 @@ def _row(sizes, name, overrides, key=None, retry=False):
     return row
 
 
-def _tried_sizes(sizes, moved, extra):
+def tried_sizes(sizes, moved, extra):
     """The sizes that get rows: the ones that move a sketch or a measured reference, then those tried on a guess."""
     moved_sizes = [s for s in sizes if s["param"] in moved]
     return moved_sizes + [s for s in sizes if s["param"] in extra and s["param"] not in moved]
 
 
-def _toward(size, end, share):
+def value_toward(size, end, share):
     """The value `share` of the way from the size's value to `end`; a count is rounded to a whole number."""
     value = size["value"] + share * (end - size["value"])
     return float(round(value)) if size.get("kind") == "count" else value

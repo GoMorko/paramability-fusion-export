@@ -38,7 +38,7 @@ def past_reasons(table, found, why):
     return out
 
 
-def _part_step(capture):
+def part_step(capture):
     """A test for the step names (`Motion.spans` `failed`) of timeline items the part is built from: items of the
     target's component and the steps that made a tool body of a Combine. A name that also belongs to an item outside
     those, or to no item, is not the part's. A failure with no step name (the design did not recompute at all), or
@@ -55,7 +55,7 @@ def _part_step(capture):
 def failure_cut(table, entry, span, mine):
     """`(low, high, found)`: the range of a free size cut on each side where Fusion did not rebuild with only that
     size changed (`span` as `Motion.spans`), past the farthest value that built; `mine(step)` says whether a failed
-    step counts (`_part_step`). An end the person typed is kept; `found` holds `(value, step)` of the nearest failure
+    step counts (`part_step`). An end the person typed is kept; `found` holds `(value, step)` of the nearest failure
     behind each cut end."""
     size = table.sizes[entry.size_name]
     failed = [(value, step) for value, step in span.get("failed") or () if mine(step)]
@@ -101,7 +101,7 @@ def built_ranges(table, motion, capture=None):
     measured). A failure in a step the part is not built from (`capture` items of other components) cuts nothing: the
     part itself may rebuild there."""
     out = {}
-    mine = _part_step(capture)
+    mine = part_step(capture)
     for e in table.entries:
         span = coverage.span(motion, e.name)
         size = table.sizes.get(e.size_name) if e.size_name else None
