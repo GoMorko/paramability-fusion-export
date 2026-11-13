@@ -9,12 +9,17 @@ The reader notes, by span name:
 - `readers`: the feature readers of the steps, before and after the step.
 - `helper_pass`: the whole pass over the tool bodies; `body_states` is the measuring of bodies inside it.
 - `faces`: reads of a face outline; `split`: reads of Split Body steps. Both are inside `readers`.
-- `restore_marker`: the move back to the person's marker; `tail`: what is read after the walk.
+- `placement`: the place of the picked body, read once before the walk.
+- `restore_marker`: the move back to the person's marker; `tail`: what is read after the walk, split into
+  `tail_target` (the body's volume and box), `tail_parameters` (user and model parameters, with where each acts),
+  `tail_links` (sketch links) and `tail_graphs` (sketch graphs).
 `step(index)` adds the time of one timeline step: the marker move that built it, its measures and its reads.
 """
 from .timer import Timer, rounded
 
 TOP = 10
+# The parts of the read after the walk (`fusion_reader.capture._finish_capture`).
+TAIL_PARTS = ("target", "parameters", "links", "graphs")
 
 
 class CaptureTimer(Timer):
@@ -89,8 +94,10 @@ class CaptureTimer(Timer):
             "faces": self.entry("faces"),
             "split": self.entry("split"),
             "helper_pass": rounded(self.seconds("helper_pass")),
+            "placement": rounded(self.seconds("placement")),
             "restore_marker": rounded(self.seconds("restore_marker")),
             "tail": rounded(self.seconds("tail")),
+            "tail_parts": {part: rounded(self.seconds("tail_" + part)) for part in TAIL_PARTS},
             "by_type": table(by_type),
             "by_component": table(by_component),
             "slowest": [{"index": index, "name": self.info.get(index, ("",))[0],

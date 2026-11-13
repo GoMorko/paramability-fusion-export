@@ -113,6 +113,19 @@ class FrameTest(unittest.TestCase):
         proxy, _ = moved(noisy)
         self.assertNotIn("error", read_placement(proxy, Root()))
 
+    def test_a_body_with_many_vertices_gives_only_the_points_checked(self):
+        many = POINTS + [(n, 2 * n, 3) for n in range(1, 400)]
+        native = FakeSolid(many, component=Comp("tray"))
+        place = turn_z(90, (100, 50, 0))
+        proxy = FakeSolid([apply_matrix(place, p) for p in many], context=FakeOccurrence("Tray:1", place),
+                          native=native, component=native.parentComponent)
+        fetched = []
+        for each in (native, proxy):
+            item = each.vertices.item
+            each.vertices.item = lambda i, item=item: fetched.append(i) or item(i)
+        self.assertEqual(read_placement(proxy, Root())["checked_points"], 3)
+        self.assertEqual(fetched, [0, 1, 2, 0, 1, 2])
+
     def test_few_vertices_add_face_points(self):
         place = turn_z(90, (10, 0, 0))
         native = FakeSolid([(0, 0, 0)], faces=[(5, 5, 5), (1, 2, 3)], component=Comp("c"))

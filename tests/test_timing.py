@@ -1,6 +1,7 @@
 """The timing block of report.json: the stopwatch, the capture read's breakdown and the export's phases."""
 import json
 import unittest
+from unittest import mock
 
 from tests import context  # noqa: F401
 from tests.test_capture_reader import FakeDesign, body, extrude, rect_profile, sketch_entry
@@ -8,6 +9,7 @@ from tests.test_parts_pipeline import FakePartsPort, export as export_parts
 from tests.test_parts_pipeline import BASE
 from tests.test_pipeline import FakePort, export
 
+from lib.fusion_reader import placement
 from lib.fusion_reader.capture import read_capture
 from tests.translator_helpers import load_capture
 from lib.translator.translate import translate
@@ -89,6 +91,15 @@ class CaptureReadTest(unittest.TestCase):
         self.assertEqual({row["type"] for row in summary["slowest"]}, {"Sketch", "ExtrudeFeature"})
         self.assertNotIn("timing", capture)
         self.assertEqual(json.loads(json.dumps(summary)), summary)
+        self.assertEqual(set(summary["tail_parts"]), {"target", "parameters", "links", "graphs"})
+
+    def test_the_place_of_the_body_is_read_once_per_capture(self):
+        target = body()
+        design = FakeDesign([sketch_entry(), extrude(rect_profile(), target=target)], target)
+        with mock.patch.object(placement, "occurrence_path", wraps=placement.occurrence_path) as path:
+            capture = read_capture(design, target, fusion="", name="", up_axis="z")
+        self.assertEqual(path.call_count, 1)
+        self.assertIn("placement", capture["target"])
 
 
 class ExportTimingTest(unittest.TestCase):

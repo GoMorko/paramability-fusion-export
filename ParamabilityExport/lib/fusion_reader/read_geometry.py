@@ -233,6 +233,20 @@ def sequence_items(value):
     return [value[i] for i in range(len(value))]
 
 
+def iter_items(collection):
+    """The items of a Fusion collection or vector, or of a list, fetched one at a time: a caller that needs only the
+    first few does not pay for the rest. Nothing for None or a collection whose size cannot be read."""
+    if collection is None:
+        return
+    if isinstance(collection, (list, tuple)):
+        yield from collection
+        return
+    by_item = hasattr(collection, "count") and hasattr(collection, "item")
+    count = safe(lambda: int(collection.count) if by_item else len(collection), 0)
+    for i in range(count):
+        yield collection.item(i) if by_item else collection[i]
+
+
 def collection_items(collection):
     """Items of a Fusion collection or vector (see sequence_items); empty for None or one that cannot be read."""
     if collection is None:
