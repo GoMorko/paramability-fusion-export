@@ -54,6 +54,24 @@ class FloatingJoinTest(unittest.TestCase):
         self.assertEqual([g["name"] for g in result.gaps], ["Coil1", "Extrude2"])
         self.assertEqual(join_verdict(result)["note"], floats_reason())
 
+    def test_a_left_out_join_depends_on_the_gap_that_grew_the_body_out_to_it(self):
+        found = capture()
+        coil = found["items"][-2]
+        tall = copy.deepcopy(coil)
+        tall.update(name="Coil0", index=coil["index"])
+        coil["index"] += 1
+        found["items"][-1]["index"] += 1
+
+        def body(top, volume):
+            return {"box": {"min": [0, 0, 0], "max": [40, 20, top]}, "volume_mm3": volume}
+
+        # Coil0 grows the body up to the join at 50 mm; Coil1 adds material lower down, after it.
+        tall.update(target_before=body(10, 8000.0), target_after=body(60, 9000.0))
+        coil.update(target_before=body(60, 9000.0), target_after=body(60, 9500.0))
+        found["items"].insert(len(found["items"]) - 2, tall)
+        gaps = {g["name"]: g for g in translate(found).gaps}
+        self.assertEqual(gaps["Extrude2"]["dependsOn"], [gaps["Coil0"]["id"]])
+
     def test_a_join_that_sits_on_the_copied_part_stays(self):
         result = translate(capture(join_z=10.0))
         self.assertEqual(join_verdict(result)["verdict"], "translated")

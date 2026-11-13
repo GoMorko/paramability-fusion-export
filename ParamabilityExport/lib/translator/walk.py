@@ -317,7 +317,7 @@ def walk_items(ctx, result):
                 return False
             return None
         if floating.floats(ctx, outcome):
-            if not leave_out(item, wording.floats_reason(), cause=gap_hints.AFTER_GAP):
+            if not leave_out(item, wording.floats_reason(), floating.sat_on(ctx, outcome), cause=gap_hints.AFTER_GAP):
                 return False
             return None
         ctx.doubts.extend(brought.doubts + construction.doubts)

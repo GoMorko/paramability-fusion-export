@@ -26,12 +26,18 @@ leaves out when the effect stays on the body and the rest of the timeline still 
 - an extrude join whose material meets only material of earlier gaps of its walk (`floating.py`, reason "It sits on a
   step that was left out, so it would float apart from the copy."). The app's kernel refuses a step that leaves the
   part in separate pieces, so such a join would stop the whole copy. The translator's model of the copied part (the
-  placers, `follow.inside`) must hold no material on and around the join, out to the size of the largest round or
-  bevel written so far, and every written step whose material that model lacks must stay clear of the join by its
+  placers, `follow.inside`) must hold no material on, around and inside the join, out to the size of the largest
+  round or bevel written so far: the faces and a thin band round them are sampled closely, the join and that band on a
+  coarse grid, and closely again wherever the box of a step of the model meets the band; a slab of the model with an
+  outline corner inside the join keeps it, and so does a step of the model whose box cannot be told or whose part of
+  the band would need more than 20000 points. Every written step whose material that model lacks must stay clear of the join by its
   own bounds: a sweep within its path grown by its profile and taper, a draft within its walk's slabs grown by its
   lean, each grown by the rounds and bevels written after it. Any other step that adds material (a revolve, a loft,
   an extrude up to a face), a thin or non-extrude join, or a join that needs more than 20000 sample points keeps the
-  join in the copy.
+  join in the copy. The gap of such a join has in `dependsOn` the gaps it sits on, from the body measured round each
+  gap: those that grew the body out to the join (the body reaches it after the gap and not before), else those that
+  added material with the body after them reaching it, else the latest gap that may have added material, else the
+  latest gap.
 
 Everything that leaves the body unknown still stops the copy and the part is a fixed shape: the place of the part in
 the assembly, a step of another component or an assembly item that changes the part, a body that cannot be followed,
@@ -113,7 +119,7 @@ GAP:
 | `reason` | The refusal sentence, at most 200 characters. For a step that picks faces of a gap, a pattern of a gap, or a Combine with a tool that failed, it names the gap or the step |
 | `hint` | What to change in Fusion so the step copies, from the gap's cause (below). Left out when the cause has no useful advice |
 | `after`, `before`, `list` | Where the step belongs (above) |
-| `dependsOn` | Ids of earlier gaps whose faces the step picks, or whose steps it repeats |
+| `dependsOn` | Ids of earlier gaps whose faces the step picks, whose steps it repeats, or that a join left out because it would float sits on |
 | `sizes` | Names of the recipe sizes the step reads: through its values, the sketches it names (unless the probe measured that the size does not move the sketch), its construction geometry and its measured references; at most 64 |
 | `looseSizes` | Of those, the sizes that are loose only because of this gap: no copied step reads them. They stay in the recipe `sizes` so the missing step can use them, and the reason says they change nothing in the copy yet |
 | `values` | One entry per `data.params` value: the Fusion expression (`fusion`, at most 300 characters) and, when the size table can write it, the formula of the recipe (`expr`) |

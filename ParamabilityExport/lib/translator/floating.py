@@ -38,6 +38,8 @@ MAX_SAMPLES = 20000
 CLEAR = 0.5
 # Steps of a large angle (a draft, a sweep's taper) are not bounded.
 MAX_LEAN_DEG = 45.0
+# A gap whose body grew by more than this volume, in cubic mm, added material.
+ADDED_MM3 = 1e-3
 
 _UNKNOWN = object()
 
@@ -88,6 +90,30 @@ def _model_clear(ctx, slabs, band):
         if points is None or any(follow.inside(ctx, p) for p in points):
             return False
     return True
+
+
+def sat_on(ctx, outcome):
+    """Ids of the gaps of this walk a floating join sits on, by the body measured round each gap (`Gap.before` and
+    `after`): the gaps that grew the body out to the join, else those that added material with the body after them
+    reaching the join, else the latest gap that may have added material, else the latest gap."""
+    slabs = _join_slabs(outcome)
+    region = _grown(_union([_slab_box(slab) for slab in slabs]), NEAR) if slabs else None
+
+    def reaches(measure):
+        if measure is None or region is None:
+            return None
+        return _meets((measure["box"]["min"], measure["box"]["max"]), region)
+
+    def added(gap):
+        if gap.before is None or gap.after is None:
+            return None
+        return gap.after["volume"] > gap.before["volume"] + ADDED_MM3
+
+    grew = [gap for gap in ctx.gaps if added(gap)]
+    out = [gap for gap in grew if reaches(gap.after) and reaches(gap.before) is False]
+    out = out or [gap for gap in grew if reaches(gap.after)]
+    out = out or [gap for gap in ctx.gaps if added(gap) is not False][-1:] or ctx.gaps[-1:]
+    return [gap.id for gap in out]
 
 
 def _join_slabs(outcome):
