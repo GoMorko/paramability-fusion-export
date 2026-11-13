@@ -260,6 +260,11 @@ class ValueKindsTest(unittest.TestCase):
         self.assertIn("would close before it passes the part", cut["reason"])
         self.assertLess(cut["max"], 89 + 45)
 
+    def test_a_cut_through_all_is_left_out_only_once_its_leaning_walls_meet_before_the_part_ends(self):
+        # The 10 x 6 outline cuts 41 mm: its walls, 3 mm from the middle, meet at a lean of about 4.2 degrees.
+        self.assertIsNone(left_out(self.tapered_through("-4", -4.0), 3))
+        self.assertIn("closes before it passes the part", left_out(self.tapered_through("-5", -5.0), 3)["reason"])
+
     def narrowing(self):
         """A motion where the cut's outline is 2 * wall_mm + 2 mm high: it narrows as wall_mm goes down."""
         return Motion.from_json({"version": 1, "box_max": {"min": [0, 0, 0], "max": [40, 20, 10]}, "states": [],

@@ -45,10 +45,12 @@ def inner_reach(profile, enough=math.inf):
 
 
 def _open(profile, distance, lean):
-    """True when the outline, its walls leaning in by `lean` degrees, still has room left after `distance`."""
+    """True when the outline, its walls leaning in by `lean` degrees, still has room left after `distance`: each wall
+    moves in by `distance * tan(lean)`, so the outline closes once that passes the radius of its largest inner
+    circle (`inner_reach`)."""
     if lean <= 0.0:
         return True
-    shrink = 2.0 * distance * math.tan(math.radians(lean))
+    shrink = distance * math.tan(math.radians(lean))
     return inner_reach(profile, shrink) >= shrink
 
 
