@@ -1,5 +1,7 @@
 # Hand tests
 
+For a quick check of a release with your own projects, start with `docs/hand-checks.md`. This file is the long list.
+
 No tool can run Fusion, so these checks are done by hand after each change to the Fusion side. Tick each one and
 note the Fusion version and system.
 

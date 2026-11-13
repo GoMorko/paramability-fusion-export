@@ -507,6 +507,8 @@ list (lowest first); `tests/test_boundary.py` holds the exact table.
 
 ## Tests
 
+For a quick check of a release by hand, with your own projects and a few small test models, see `docs/hand-checks.md`.
+
 Everything under `lib/` except `fusion_reader/` and `fusion_ui/` is pure Python and runs without Fusion. The Fusion
 reading code is tested with fakes. Anything that touches `adsk` stays in `lib/fusion_reader/`, `lib/fusion_ui/` and
 `commands/`. `tests/test_boundary.py` checks that and which package may import which, so imports only go one way.
