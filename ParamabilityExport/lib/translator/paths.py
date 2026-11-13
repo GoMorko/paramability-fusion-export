@@ -10,7 +10,8 @@ is swept, and returns a `PathPlan` or a `Refusal`. It
 - writes the flat and corners forms the recipe's sweep step takes (`PathPlan.recipe`), with free curves fitted by
   `spline_fit`;
 - checks what the app refuses to build: a closed path that bends in 3D or is cut at a sharp corner, a path that
-  crosses itself, a sharp corner, an outline that reaches past the tightest bend, a path that does not start square
+  crosses itself, a sharp corner it cannot mitre (between two lines of a flat path that does not twist, taper or
+  keep the outline's direction, Fusion and the app mitre it), an outline that reaches past the tightest bend, a path that does not start square
   on the outline, and for an outline kept in one direction a path that turns back past the outline's plane.
 
 A closed flat path is written with `closed: true` and no end faces. A full circle stays a circle (a revolve) unless
@@ -29,12 +30,12 @@ forms), `path_closed` (closed chains) and `path_rebuilt` (a path read back from 
 from ..package.numbers import round9
 
 from . import vec
-from .path_checks import off_square, rise_refusal
+from .path_checks import corners_refusal, off_square, outline_reach, rise_refusal
 from .path_closed import closed_plan, half_circles
 from .path_curves import (arc_of, chain, curve_length, flip, joined_lines, near, polyline, readable, tangents, turn_deg,
                           turned_round)
 from .path_limits import (BOTH_SIDES, CHAIN_TOL, CLOSED, NOT_ONE_CHAIN, NOT_SKETCH, NOT_SQUARE, OFF_PLANE, PLANE_TOL,
-                          SHARP_CORNER, SMOOTH_JOIN_DEG, STRAIGHT_DEG, UNKNOWN_CURVE, UNREADABLE)
+                          UNKNOWN_CURVE, UNREADABLE)
 from .path_model import PathOptions, PathPlan
 from .path_writing import arc_plan, circle_plan, corners_plan, flat_frame, flat_plan, two_points
 from .result import Refusal
@@ -175,6 +176,8 @@ def _chain_plan(base, ordered, path, profile_points, options):
     frame = flat_frame(path.get("frame"), ordered)
     if frame is None:
         return corners_plan(base, ordered, junctions, profile_points, options)
-    if any(turn > (STRAIGHT_DEG if both_lines else SMOOTH_JOIN_DEG) for turn, both_lines in junctions):
-        return Refusal(SHARP_CORNER)
+    mitres = not (options.twisted or options.tapered or options.fixed)
+    refusal = corners_refusal(ordered, outline_reach(profile_points, ordered[0]["start"], frame["z"]), mitres)
+    if refusal is not None:
+        return refusal
     return flat_plan(base, ordered, frame, profile_points, options)

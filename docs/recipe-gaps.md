@@ -137,8 +137,10 @@ it is saved as a fixed shape with the note "The list of steps left out could not
 Each gap has a cause (`gap_hints.py`), and the cause gives the hint: one short sentence per cause, from one table. A
 handler names the cause with its `Refusal(..., cause=...)`; a step type with no handler names it in the step kind table
 (`StepType.gap_cause`); a step that reaches into another component, a step that picks faces of a gap and a refusal
-that names the gaps it depends on (a pattern of a gap) get theirs in the walk. A refusal without a cause and a step
-type without one have no hint. The wording follows the app's user guide page "Steps that do not copy yet" (chapter
+that names the gaps it depends on (a pattern of a gap) get theirs in the walk. A Combine left out because a step of
+its tool body cannot be copied gets the cause of that step (`tool_walk.cannot_copy`, from the tool walk's
+`TranslateResult.refusal_cause`), so a tool built with a thicken gets the thicken's hint. A refusal without a cause and
+a step type without one have no hint. The wording follows the app's user guide page "Steps that do not copy yet" (chapter
 "Designing in Fusion (experimental)"): when they disagree, the guide is right and the hint changes.
 `tests/test_gap_hints.py` checks that every cause the translator gives has a hint and every hint is given.
 

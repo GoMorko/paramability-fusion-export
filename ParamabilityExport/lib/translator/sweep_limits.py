@@ -25,6 +25,9 @@ TWIST_LONG = "The twist of this sweep is more than ten turns, which is not copie
 SCALED_OUTLINE = "This sweep scales its outline along the path, which is not copied yet."
 PARALLEL_AND_SHAPE = "Sweeps that keep their outline in one direction and also twist or taper are not copied."
 RAIL = "Sweeps with a guide rail are not copied yet."
+GUIDE_SURFACE = "Sweeps with a guide surface are not copied yet."
+GUIDE_SURFACE_LIKELY = ("This sweep likely has a guide surface (Fusion did not give its orientation, twist and taper), "
+                        "and sweeps with a guide surface are not copied yet.")
 RAIL_UNREADABLE = "The guide rail of this sweep could not be read from Fusion."
 PATH_TOO_LONG = "The path of this sweep has more parts than can be read, so it is not copied."
 OTHER_KIND = "This kind of sweep is not copied yet."

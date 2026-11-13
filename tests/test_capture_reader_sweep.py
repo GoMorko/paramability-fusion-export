@@ -68,7 +68,7 @@ def read(made, name, members, kind=Obj):
 
 def read_sweep(kind=Obj, **members):
     base = dict(profile=profile(), path=path(step(sketch_curve(line3((0, 0, 0), (0, 50, 0)), sketch()))),
-                guideRail=None, operation="JoinFeatureOperation", isSolid=True,
+                guideRail=None, guideSurfaces=Coll([]), operation="JoinFeatureOperation", isSolid=True,
                 orientation="PerpendicularOrientationType", distanceOne=parameter(1.0, "d1", "1"),
                 distanceTwo=parameter(0.0, "d2", "0"), taperAngle=parameter(0.0, "d3", "0 deg"),
                 twistAngle=parameter(math.radians(90), "d4", "90 deg"),
@@ -103,6 +103,12 @@ class RailBroken(Obj):
     @property
     def guideRail(self):
         raise RuntimeError("not available")
+
+
+class GuideBroken(Obj):
+    @property
+    def guideSurfaces(self):
+        raise RuntimeError("2 : InternalValidationError : false")
 
 
 class Broken(Obj):
@@ -209,6 +215,13 @@ class SweepPathTest(unittest.TestCase):
     def test_a_guide_rail_that_cannot_be_read_is_not_taken_for_no_rail(self):
         self.assertEqual(read_sweep(kind=RailBroken)["rail"], {"kind": "unread"})
         self.assertIsNone(read_sweep()["rail"])
+
+    def test_guide_surfaces_are_listed_and_ones_fusion_does_not_give_keep_what_it_said(self):
+        guided = read_sweep(guideSurfaces=Coll([face(5, "Cylinder")]))["guide_surfaces"]
+        self.assertEqual([(g["token"], g["surface"]) for g in guided], [("f5", "Cylinder")])
+        self.assertEqual(read_sweep()["guide_surfaces"], [])
+        self.assertEqual(read_sweep(GuideBroken)["guide_surfaces"],
+                         {"kind": "unread", "said": "2 : InternalValidationError : false"})
 
     def test_a_path_of_more_entities_than_are_read_is_marked_truncated(self):
         def many(count):

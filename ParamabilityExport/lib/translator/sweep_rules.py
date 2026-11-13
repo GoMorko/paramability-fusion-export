@@ -77,8 +77,9 @@ def _keep_path_valid(ctx, item, profile, found, followed, drawn, options, form):
                 offset = vec.sub(curves[0]["start"], frame["origin"])
                 reach = sweep_reach.reach_of(outer, env, [vec.dot(offset, frame["x"]), vec.dot(offset, frame["y"])],
                                              across, _toward_centre(curves[0], frame) if form == "revolve" else None)
-                answers[key] = path_rebuilt.rebuilt_refusal(curves, found.closed, normal, reach, options.fixed,
-                                                     leaves=found.direction) is not None
+                answers[key] = path_rebuilt.rebuilt_refusal(
+                    curves, found.closed, normal, reach, options.fixed, leaves=found.direction,
+                    mitres=not (options.twisted or options.tapered or options.fixed)) is not None
         except _FAILURES:
             answers[key] = True
         return answers[key]

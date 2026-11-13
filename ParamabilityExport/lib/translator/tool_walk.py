@@ -71,11 +71,13 @@ def name_of(body):
     return "%s of %s" % (name, tool_items.component_name(body)) if tool_items.is_foreign_tool(body) else name
 
 
-def cannot_copy(body, item, why):
-    """The refusal that names the step of a tool that stops the copy, and what it is."""
+def cannot_copy(body, item, why, cause=None):
+    """The refusal that names the step of a tool that stops the copy, and what it is. `cause` is that step's
+    `gap_hints` cause, so the gap gets its hint."""
     operation = (item.get("data") or {}).get("operation")
     kind = operation if operation in ("cut", "intersect") else type_words(item.get("type") or "")
-    return Refusal("The tool body %s cannot be copied: %s (%s): %s" % (name_of(body), item.get("name"), kind, why))
+    return Refusal("The tool body %s cannot be copied: %s (%s): %s" % (name_of(body), item.get("name"), kind, why),
+                   cause=cause)
 
 
 def chain_of(ctx, body, before):
@@ -167,7 +169,7 @@ def build(ctx, body, before, depth, place=0):
         if walked.over_gap_cap:
             return Refusal(walked.refusal["reason"], over_gap_cap=True, tool_steps=walked.items)
         stopped = next(item for item in chain if item["index"] == walked.refusal["index"])
-        return cannot_copy(body, stopped, walked.refusal["reason"])
+        return cannot_copy(body, stopped, walked.refusal["reason"], walked.refusal_cause)
     if not child.steps:
         return Refusal("The tool body %s is built in a way that cannot be copied." % name_of(body))
     return ToolBuild(body, chain, child, walked.items, walked.notes)
@@ -185,7 +187,7 @@ def on_part(ctx, tool):
                 walk.fix_construction(ctx, item)
             outcome = walk.run_handler(ctx.handlers[item["type"]], item, ctx)
         if isinstance(outcome, Refusal):
-            return cannot_copy(tool.body, item, outcome.reason)
+            return cannot_copy(tool.body, item, outcome.reason, outcome.cause)
         out.extend(outcome.entries)
         out.doubts.extend(construction.doubts + outcome.doubts)
         out.asked |= outcome.asked

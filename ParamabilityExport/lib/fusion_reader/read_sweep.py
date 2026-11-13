@@ -1,6 +1,6 @@
 """Sweep and loft features (adsk.fusion.SweepFeature, LoftFeature) as plain dicts.
 
-Before the item: the outlines, the path (or rails, or centre line) as curves in the target component's coordinates,
+Before the item: the outlines, the path (or rails, or centre line, and a sweep's guide surfaces) as curves in the target component's coordinates,
 and the settings that shape the result (orientation, distances, taper, twist, section end conditions, closed). After
 the item: a point and normal on each end face the feature made.
 
@@ -18,6 +18,7 @@ from .read_sketch import dense_samples, read_curve, read_outlines, sketch_refere
 MAX_PATH_ENTITIES = 256
 MAX_SECTIONS = 64
 MAX_RAILS = 16
+MAX_GUIDE_SURFACES = 16
 # Item types a loft section given as a collection lists at most.
 MAX_COLLECTION_TYPES = 16
 _FLAT_MM = 1e-4
@@ -269,6 +270,23 @@ def _rail(feature, ctx):
     return geo.safe(lambda: path_record(rail, ctx), unread)
 
 
+def _guide_surfaces(feature, ctx):
+    """The guide surfaces of the sweep as `[{ token, surface, body }]` (empty when it has none, at most
+    MAX_GUIDE_SURFACES), or `{ "kind": "unread", "said": ... }` when Fusion does not give them."""
+    try:
+        raw = feature.guideSurfaces
+    except Exception as exc:
+        return {"kind": "unread", "said": (str(exc) or type(exc).__name__)[:200]}
+    faces = [] if raw is None else geo.collection_items(raw) if geo.is_sequence(raw) else [raw]
+    out = []
+    for face in faces[:MAX_GUIDE_SURFACES]:
+        face = geo.native_input(face, ctx)
+        out.append({"token": geo.safe(lambda: face.entityToken, ""),
+                    "surface": geo.safe(lambda: geo.surface_kind(face), None),
+                    "body": geo.safe(lambda: geo.owner_body(face, ctx), None)})
+    return out
+
+
 # Settings of a sweep whose failure the capture explains in `unread`: capture key and API member.
 _EXPLAINED = (("orientation", "orientation"), ("taper_deg", "taperAngle"), ("twist_deg", "twistAngle"))
 
@@ -302,6 +320,7 @@ def sweep_before(feature, ctx):
         "areas": areas,
         "path": geo.safe(lambda: path_record(feature.path, ctx), None),
         "rail": _rail(feature, ctx),
+        "guide_surfaces": _guide_surfaces(feature, ctx),
         "orientation": geo.safe(lambda: geo.pick_by_text(
             geo.enum_name(feature.orientation, "SweepOrientationTypes"), _ORIENTATIONS, "other"), None),
         "distance_one": _number(lambda: feature.distanceOne),

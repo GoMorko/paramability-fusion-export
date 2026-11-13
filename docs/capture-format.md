@@ -1221,7 +1221,7 @@ Tangent Chain is on, and edges the copy can write; otherwise the refusal says wh
 {
   "operation": "join", "solid": true,
   "profiles": [ ... ], "areas": [120.5],
-  "path": PATH, "rail": null,
+  "path": PATH, "rail": null, "guide_surfaces": [],
   "orientation": "perpendicular", "distance_one": 1.0, "distance_two": 0.0,
   "taper_deg": 0.0, "twist_deg": 0.0, "scaling": "scale", "extent": null,
   "participants": [{ "token": "...", "name": "Body1" }],
@@ -1233,7 +1233,13 @@ Tangent Chain is on, and edges the copy can write; otherwise the refusal says wh
 
 - Sweep: `profiles` and `areas` are `SweepFeature.profile` read like an extrude's outline (section 4, a flat face
   included). `path` is `SweepFeature.path`; `rail` is `guideRail` read the same way, null when there is none and
-  `{ "kind": "unread" }` when the member raised (the sweep is then left out). Several `profiles` are copied as one
+  `{ "kind": "unread" }` when the member raised (the sweep is then left out). `guide_surfaces` is `guideSurfaces`,
+  read with the marker just before the sweep: `[{ token, surface, body }]` per face (`surface` as in a face record,
+  `body` the body it lies on or null; at most 16), empty when the sweep has none, and `{ "kind": "unread", "said": ...
+  }` with Fusion's error text when the member raised or does not exist; older captures have no key. A listed guide
+  surface leaves the sweep out ("Sweeps with a guide surface"). Without a list, a sweep whose `unread` names all of
+  `orientation`, `twist_deg` and `taper_deg`, with an InternalValidationError for `orientation`, is left out as "likely"
+  a guide surface sweep: Fusion answers this way for a "Path + Guide Surface" sweep. Several `profiles` are copied as one
   sweep each along the same path (the first with the sweep's operation, the rest joined to it for a new body), each
   checked on its own without the new body's volume, which Fusion measures for all of them; an intersect or a taper
   refuses.

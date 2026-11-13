@@ -375,6 +375,15 @@ class ClosedTest(unittest.TestCase):
         found = paths.plan(path_of(self.SQUARE_LOOP, frame=XY_SKETCH), plane, wide)
         self.assertTrue(found.reason.startswith("A sharp corner of the path of this sweep is too close"))
 
+    def test_a_line_between_two_corners_needs_room_for_both_mitres(self):
+        """Each 90 degree corner needs 6 mm of straight path: the 10 mm sides have room for one mitre, not two."""
+        corners = [(0, 0, 0), (30, 0, 0), (30, 10, 0), (0, 10, 0)]
+        loop = [line(a, b) for a, b in zip(corners, corners[1:] + corners[:1])]
+        plane, points = at_point((15, 0, 0), [1, 0, 0])
+        wide = [vec.add(p, vec.scale(vec.sub(p, [15, 0, 0]), 5.0)) for p in points]
+        found = paths.plan(path_of(loop, frame=XY_SKETCH), plane, wide)
+        self.assertEqual(found.reason, path_limits.CORNER_TOO_TIGHT % (12.0, 10.0))
+
     def test_a_closed_chain_that_bends_in_3d_is_refused(self):
         skew = [line((0, 0, 0), (10, 0, 0)), line((10, 0, 0), (10, 10, 0)), line((10, 10, 0), (0, 10, 5)),
                 line((0, 10, 5), (0, 0, 0))]
@@ -468,8 +477,17 @@ class RefusalTest(unittest.TestCase):
         ring = {"kind": "circle", "center": [0, 20, 0], "normal": [0, 0, 1], "radius": 10}
         self.refused([ring], path_limits.OFF_PLANE, outline={"origin": [0, 0, 0], "z": [0, 1, 0]})
 
-    def test_a_sharp_corner_between_two_lines(self):
-        self.refused([line((0, 0, 0), (10, 0, 0)), line((10, 0, 0), (10, 10, 0))], path_limits.SHARP_CORNER)
+    def test_a_sharp_corner_between_two_lines_is_mitred_unless_the_outline_twists(self):
+        corner = [line((0, 0, 0), (10, 0, 0)), line((10, 0, 0), (10, 10, 0))]
+        found = plan(corner)
+        self.assertEqual([s["kind"] for s in found.recipe["segments"]], ["line", "line"])
+        twisted = paths.plan(path_of(corner), FRAME, SQUARE, path_model.PathOptions(as_step=True, twisted=True))
+        self.assertEqual((twisted.reason, twisted.cause), (path_limits.SHARP_CORNER, "sharpCorner"))
+
+    def test_a_sharp_corner_of_an_open_path_too_tight_for_its_outline(self):
+        wide = [[0, 4 * y, z] for y in (-1, 1) for z in (-1, 1)]
+        found = plan([line((0, 0, 0), (3, 0, 0)), line((3, 0, 0), (3, 10, 0))], points=wide)
+        self.assertTrue(found.reason.startswith("A sharp corner of the path of this sweep is too close"))
 
     def test_a_sharp_corner_next_to_an_arc(self):
         across = quarter([15, 0, 0], [-1, 0, 0], [0, -1, 0], 5)
@@ -580,9 +598,11 @@ class RebuiltTest(unittest.TestCase):
         self.assertIsNone(self.refusal(back, leaves=None))
         self.assertEqual(self.refusal(back, leaves=[1.0, 0.0, 0.0]).reason, path_limits.TURNED_ROUND)
 
-    def test_a_corner_between_two_lines_is_refused(self):
+    def test_a_corner_between_two_lines_is_refused_unless_it_is_mitred_with_room_for_the_outline(self):
         corner = self.recipe({"kind": "line", "to": [20, 0]}, {"kind": "line", "to": [20, 20]})
         self.assertEqual(self.refusal(corner).reason, path_limits.SHARP_CORNER)
+        self.assertIsNone(self.refusal(corner, mitres=True))
+        self.assertIn("too close", self.refusal(corner, reach=21.0, mitres=True).reason)
 
     def test_a_path_that_crosses_itself_is_refused(self):
         """Along x, three quarters of a turn about (20, 10), then back down across the first leg."""

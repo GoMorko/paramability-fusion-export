@@ -158,5 +158,8 @@ class TranslateResult:
     to_recipe: Optional[list] = None
     # True when the walk stopped because the part holds more gaps than `gaps.MAX_GAPS`.
     over_gap_cap: bool = False
+    # When the copy stops: the `gap_hints` cause of the step that stops it, when it has one. A tool body walk passes
+    # it on, so the gap its Combine becomes gets that step's hint.
+    refusal_cause: Optional[str] = None
     # When the copy stops: what a walk past the stop finds (`translate._diagnosis`), or None.
     after_stop: Optional[dict] = None

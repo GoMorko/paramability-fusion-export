@@ -1,12 +1,13 @@
 """Limits the app puts on a sweep path, as refusals: a path touching itself, two parts too close, an outline
-reaching past a bend, a path that stops rising, and the turn at a closed path's seam. Pure."""
+reaching past a bend, a sharp corner it cannot mitre, a path that stops rising, and the turn at a closed path's seam.
+Pure."""
 import math
 
-from . import spline_fit, vec
-from .path_curves import arc_of, polyline, tangents, turn_deg
-from .path_limits import (MAX_OVERLAP_SAMPLES, MIN_RISE, OVERLAP, OVERLAP_CLEAR_SHARE, OVERLAP_CORNER_DEG,
-                          OVERLAP_MAX_CORNER_DEG, OVERLAP_STEP_SHARE, REACH_SHARE, SQUARE_TOL_DEG, TOUCH_TOL,
-                          TURNS_BACK)
+from . import gap_hints, spline_fit, vec
+from .path_curves import arc_of, curve_length, polyline, tangents, turn_deg
+from .path_limits import (CORNER_TOO_TIGHT, MAX_MITRE_DEG, MAX_OVERLAP_SAMPLES, MIN_RISE, OVERLAP, OVERLAP_CLEAR_SHARE, OVERLAP_CORNER_DEG,
+                          OVERLAP_MAX_CORNER_DEG, OVERLAP_STEP_SHARE, REACH_SHARE, SHARP_CORNER, SMOOTH_JOIN_DEG,
+                          SQUARE_TOL_DEG, STRAIGHT_DEG, TOUCH_TOL, TURNS_BACK)
 from .result import Refusal
 
 
@@ -58,6 +59,37 @@ def seam_turn(start, segments):
 
     before = segments[-2]["to"] if len(segments) > 1 else start
     return turn_deg(directions(before, segments[-1])[1], directions(start, segments[0])[0])
+
+
+def sharp_corner(before, after):
+    """`(turn in degrees, both lines)` where `before` meets `after` when the join is a sharp corner, else None."""
+    turn, both_lines = turn_deg(tangents(before)[1], tangents(after)[0]), before["kind"] == after["kind"] == "line"
+    return (turn, both_lines) if turn > (STRAIGHT_DEG if both_lines else SMOOTH_JOIN_DEG) else None
+
+
+def corners_refusal(ordered, reach, mitres, closed=False):
+    """A Refusal for a sharp corner of the chain the app cannot build. A corner between two lines is mitred when
+    `mitres` is true: it may not turn back past `MAX_MITRE_DEG`, and its mitre takes the outline's `reach` across the
+    path's plane times tan(turn / 2) of straight path on both sides, so a line between two corners needs room for
+    both mitres. Any other sharp corner is refused. On a closed chain the last curve meets the first."""
+    count = len(ordered)
+    pairs = [((i - 1) % count, i) for i in range(count)] if closed else [(i, i + 1) for i in range(count - 1)]
+    needs = [0.0] * count
+    for before, after in pairs:
+        found = sharp_corner(ordered[before], ordered[after])
+        if found is None:
+            continue
+        turn, both_lines = found
+        if not (mitres and both_lines) or turn > MAX_MITRE_DEG:
+            return Refusal(SHARP_CORNER, cause=gap_hints.SHARP_CORNER)
+        need = reach * math.tan(math.radians(turn) / 2.0)
+        needs[before] += need
+        needs[after] += need
+    for curve, need in zip(ordered, needs):
+        length = curve_length(curve)
+        if need > 0 and length < need:
+            return Refusal(CORNER_TOO_TIGHT % (need, length))
+    return None
 
 
 def outline_reach(profile_points, start, normal):

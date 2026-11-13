@@ -14,7 +14,7 @@ from lib.fusion_reader import read_geometry as geo
 from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.sketch_values.motion import Motion
-from lib.translator import body_states, follow, tool_walk, translate
+from lib.translator import body_states, follow, gap_hints, tool_walk, translate
 from lib.translator.combine_volume import exceeds_tools
 from lib.translator.context import Context
 from lib.translator.place import Move, place
@@ -126,6 +126,13 @@ class WrittenToolTest(unittest.TestCase):
         item["data"].update(side_one={"kind": "throughAll", "positive": True, "taper_deg": 0.0}, params={}, end_offset=None,
                             target_box_before={"min": [0, 0, 0], "max": [400, 400, 400]})
         self.assertEqual(left_out(translate(capture))["name"], "Extrude5")
+
+    def test_a_tool_step_that_cannot_be_copied_gives_the_combine_its_hint(self):
+        capture = load_capture("combine_tool_chamfer")
+        capture["items"][3]["type"] = "ThickenFeature"
+        result = translate(capture)
+        self.assertIn("Extrude3 (thicken)", left_out(result)["reason"])
+        self.assertEqual([gap["hint"] for gap in result.gaps], [gap_hints.HINTS[gap_hints.SURFACE]])
 
     def test_a_step_of_the_tool_from_another_component_leaves_the_combine_out(self):
         capture = load_capture("combine_tool_cut_inside")

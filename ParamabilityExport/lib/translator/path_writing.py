@@ -4,7 +4,7 @@ import math
 
 from ..package.numbers import round9
 
-from . import spline_fit, vec
+from . import gap_hints, spline_fit, vec
 from .path_checks import (axis_reach_refusal, carried_reach_refusal, off_square, outline_reach, overlap_refusal,
                           reach_refusal, seam_turn, self_touch)
 from .path_curves import arc_of, near, polyline, round_point, round_point2, tangents
@@ -171,7 +171,7 @@ def _spline_radius(at, segments):
 def corners_plan(base, ordered, junctions, profile_points, options):
     """Lines joined by tangent arcs, written as corner points: each line extended to where its neighbours cross it."""
     if any(turn > STRAIGHT_DEG and both_lines for turn, both_lines in junctions):
-        return Refusal(SHARP_CORNER)
+        return Refusal(SHARP_CORNER, cause=gap_hints.SHARP_CORNER)
     kinds = [c["kind"] for c in ordered]
     if (kinds[0] != "line" or kinds[-1] != "line" or "other" in kinds or any(turn > STRAIGHT_DEG for turn, _ in junctions)
             or any(a == b == "arc" for a, b in zip(kinds, kinds[1:]))):
