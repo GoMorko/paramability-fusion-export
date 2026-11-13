@@ -152,6 +152,15 @@ another reason keeps that state.
 saying that Paramability keeps the original shape and an unfinished copy. A parts file puts the part name first and
 names its own gaps file per part.
 
+When the copy stops (a stop reason, or more gaps than the cap), the package is still a fixed shape with the same
+`refusal`, and `report.json` adds `after_stop` (`translate._diagnosis`): a second walk without sizes in which every
+stop is a gap and there is no cap. It holds `stopped_at` (the index of the step the copy stopped at, null for a stop
+found after the walk), `items` (that walk's verdicts of the steps after it) and `steps` (`{ index, name, type, reason }`
+of every step that walk could not copy, the last with `stops: true` when even that walk had to stop, as for a first
+step that cannot be copied). The manifest gets a second note, "Not copied either: ...", with the names of those steps
+other than the one it stopped at, so the person and an AI assistant see every failing step from one export. A parts
+file puts `after_stop` in the part's record. Nothing in the package changes otherwise.
+
 The export window warns early: under the body picker, "Likely left out of the copy:" lists (`dialog_model/stop_warning.py`)
 the steps the first translation leaves out for their own reason, at most three, then "and N more". It runs without
 the size tries and the face read, so a step that is a gap only because it picks faces of another gap is not listed.

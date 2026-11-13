@@ -158,6 +158,14 @@ def walk_items(ctx, result):
     `result.refusal` says why). Verdicts and notes go to `result`, steps and doubts to `ctx`."""
 
     def refuse(item, reason, note=None):
+        """Stop the copy at `item`: False. A diagnosing walk (`Context.diagnose`) records the stop as a gap and goes
+        on instead: True, unless there is no body to add the gap to yet."""
+        if ctx.diagnose and not gaps.first_body_stop(ctx):
+            gap = ctx.leave_out(item, reason, ())
+            verdict = make_verdict(item, "leftOut", note=gap.reason)
+            verdict.update(gap=gap.id, cause="stop")
+            result.items.append(verdict)
+            return True
         result.items.append(make_verdict(item, "unsupported", note=reason))
         result.refusal = _refusal(item, reason, note)
         return False
@@ -177,13 +185,16 @@ def walk_items(ctx, result):
         return True
 
     made_in_component = False
-    for item in ctx.capture["items"]:
+
+    def visit(item):
+        """One item: False when it stops the copy, else None (a step forced to a gap while diagnosing too)."""
+        nonlocal made_in_component
         ctx.enter(item)
         item = ctx.current = _seen_before_split(item, ctx)
         reason = _skip_reason(item)
         if reason is not None:
             result.items.append(make_verdict(item, "skipped", note=reason))
-            continue
+            return None
 
         if step_kinds.is_assembly(item.get("type")):
             # Components, joints and the like: in component coordinates they never change the part's shape.
@@ -193,12 +204,12 @@ def walk_items(ctx, result):
                                   "Steps across components are not copied yet.", wording.made_elsewhere_note())
                 return refuse(item, "This step changes the part, which is not copied yet.")
             result.items.append(make_verdict(item, "skipped", note=""))
-            continue
+            return None
 
         if outside_component(item) and item.get("helper_of"):
             # A step of a tool body from another component: the Combine that takes the tool walks it.
             result.items.append(make_verdict(item, "skipped", note="Helper geometry, not part of the exported body."))
-            continue
+            return None
 
         if outside_component(item):
             # A step made in another component: harmless unless it changes the target.
@@ -210,7 +221,7 @@ def walk_items(ctx, result):
                               "Steps across components are not copied yet.",
                               wording.from_other_component_note(_label(item)))
             result.items.append(make_verdict(item, "skipped", note="In another component."))
-            continue
+            return None
 
         if _lost_target(item, ctx):
             return refuse(item, "The body could not be followed through the timeline.")
@@ -225,7 +236,7 @@ def walk_items(ctx, result):
         if not touches and not item["bodies_after"] and (handler is None or _changes_named_bodies(item)):
             if item.get("target_changed") is False:
                 result.items.append(make_verdict(item, "skipped", note="Does not change the exported body."))
-                continue
+                return None
             if handler is not None or item.get("target_changed") is not True:
                 # Only a step the reader saw change the body is a gap: one that may have done anything stops.
                 return refuse(item, "The bodies this %s changes could not be read." % type_words(item["type"]))
@@ -233,17 +244,17 @@ def walk_items(ctx, result):
                              _gap_ids(ctx, item)):
                 return False
             made_in_component = True
-            continue
+            return None
         if not touches:
             result.items.append(make_verdict(item, "skipped", note="Helper geometry, not part of the exported body."))
-            continue
+            return None
 
         makes_other = bool(_new_bodies(item, ctx)) and not copies_bodies(item)
         if makes_other and item.get("target_changed") is False:
             # Another body made next to the part (a surface offset, for one): a later Combine that takes it walks it
             # as a tool.
             result.items.append(make_verdict(item, "skipped", note="Does not change the exported body."))
-            continue
+            return None
         if makes_other or split_rules.is_split(item):
             # Later steps may belong to the other body, so no single missing step can stand for this one. A split
             # that keeps the body as one piece apart from the others is copied (split_rules.py), whichever piece
@@ -255,7 +266,7 @@ def walk_items(ctx, result):
             note = wording.split_face_note(_label(item))
             result.items.append(make_verdict(item, "skipped", note=note))
             result.notes.append(note)
-            continue
+            return None
         if _data(item).get("read_error"):
             return refuse(item, "This step could not be read from Fusion.")
         if handler is None:
@@ -265,7 +276,7 @@ def walk_items(ctx, result):
                              _gap_ids(ctx, item)):
                 return False
             made_in_component = True
-            continue
+            return None
         picked, sure = gap_picks.picked_gaps(ctx, item)
         with ctx.recording() as brought:
             item = ctx.current = ref_motion.bring_in(borrowed.bring_in(item, ctx))
@@ -275,7 +286,7 @@ def walk_items(ctx, result):
                              [gap.id for gap in picked], wording.reaches_component_note(_label(item))):
                 return False
             made_in_component = True
-            continue
+            return None
         made_in_component = True
         with ctx.recording() as construction:
             fix_construction(ctx, item)
@@ -283,7 +294,7 @@ def walk_items(ctx, result):
             if not leave_out(item, wording.picks_gap_reason([gap.name for gap in picked], sure),
                              [gap.id for gap in picked], picks=True):
                 return False
-            continue
+            return None
         outcome = run_handler(handler, item, ctx)
         if isinstance(outcome, Refusal):
             if outcome.stops:
@@ -296,14 +307,14 @@ def walk_items(ctx, result):
                 return False
             if not leave_out(item, outcome.reason, outcome.depends_on):
                 return False
-            continue
+            return None
         ctx.doubts.extend(brought.doubts + construction.doubts)
         ctx.commit(outcome)
         notes = brought.notes + outcome.notes
         if not outcome.entries:
             result.items.append(make_verdict(item, "skipped", note=" ".join(notes)))
             result.notes.extend(notes)
-            continue
+            return None
         if not ctx.steps and outcome.steps[0].get("combine") != "new":
             return refuse(item, "The body starts in a way that cannot be copied.")
         ids = ctx.add_steps(item, outcome)
@@ -315,6 +326,10 @@ def walk_items(ctx, result):
             verdict["tool_steps"] = outcome.tool_steps
         result.items.append(verdict)
         result.notes.extend(notes)
+        return None
 
+    for item in ctx.capture["items"]:
+        if visit(item) is False:
+            return False
     ctx.current = None
     return True

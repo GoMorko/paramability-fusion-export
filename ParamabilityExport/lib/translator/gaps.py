@@ -55,14 +55,16 @@ def gap_id(ctx, item):
     return found[-MAX_ID:]
 
 
-def _first_body_stop(ctx):
+def first_body_stop(ctx):
+    """True when a gap here has no body to add to: before the walk's first step, or in another component's walk."""
     return not ctx.steps or ctx.component is not None
 
 
 def at_cap(ctx):
     """True when a gap at the walk's current place stops the copy because the part already holds MAX_GAPS gaps,
-    counting those of the walks that hold this one. A tool walk that stops this way stops the whole copy."""
-    if _first_body_stop(ctx):
+    counting those of the walks that hold this one. A tool walk that stops this way stops the whole copy. A diagnosing
+    walk (`Context.diagnose`) has no cap."""
+    if first_body_stop(ctx) or ctx.diagnose:
         return False
     count, walk = 0, ctx
     while walk is not None:
@@ -77,7 +79,7 @@ def stop_reason(ctx, reason):
     A gap needs a body to add to, so one before the walk's first step stops it with its own reason. So does a gap in a
     walk of another component's body, whose data is not in the part's coordinates. A part with too many gaps stops
     too."""
-    if _first_body_stop(ctx):
+    if first_body_stop(ctx):
         return reason
     if at_cap(ctx):
         return wording.too_many_gaps_reason(MAX_GAPS)

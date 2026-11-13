@@ -229,6 +229,14 @@ def step_label(name, type_name):
     return "%s (%s)" % (name, words) if name and words else (name or words)
 
 
+def also_failing_note(after_stop):
+    """'Not copied either: Fillet3, Combine2.' for the steps a walk past the stop could not copy, other than the one the
+    copy stopped at; empty when there are none."""
+    stop = (after_stop or {}).get("stopped_at")
+    names = [step["name"] for step in (after_stop or {}).get("steps") or () if step.get("index") != stop]
+    return clip("Not copied either: %s." % ", ".join(names), MAX_NOTE) if names else ""
+
+
 def step_only_note(refusal):
     """Note for a part that could not be copied. `refusal` is the translator's {index, name, type, reason}; a refusal
     that carries its own `note` is written as it is."""

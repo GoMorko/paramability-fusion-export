@@ -136,6 +136,40 @@ def _over_caps(recipe, ctx):
 
 
 def translate(capture, handlers=None, size_table=None, motion=None):
+    """`_translate`, and when the copy stops in the walk, `result.after_stop` from a walk that goes on past the stop
+    (`_diagnosis`): the export still lands as a fixed shape, and the report names every step that cannot be copied."""
+    result = _translate(capture, handlers, size_table, motion)
+    if result.recipe is None and result.refusal is not None and result.items:
+        result.after_stop = _diagnosis(capture, handlers, result.refusal)
+    return result
+
+
+def _diagnosis(capture, handlers, refusal):
+    """What a walk with every stop turned into a gap and no gap cap (`Context.diagnose`) finds, without sizes:
+    `{ stopped_at, items, steps }`. `stopped_at` is the timeline index of the step the copy stopped at (null for a
+    check after the walk), `items` the verdicts of the steps after it, `steps` every step that walk could not copy
+    (`{ index, name, type, reason }`, in timeline order; the last one `stops: true` when even that walk had to stop).
+    None when that walk fails: it only explains, so it never changes the export."""
+    try:
+        table = dict(HANDLERS)
+        table.update(handlers or {})
+        ctx = Context(capture, None, None, {}, table)
+        ctx.lineage = lineage.of(capture)
+        ctx.diagnose = True
+        found = TranslateResult()
+        walk_items(ctx, found)
+    except Exception:
+        return None
+    stop = refusal.get("index")
+    steps = [{"index": gap.index, "name": gap.name, "type": gap.item.get("type", ""), "reason": gap.reason}
+             for gap in ctx.gaps]
+    if found.refusal is not None:
+        steps.append(dict(found.refusal, stops=True))
+    later = [v for v in found.items if stop is not None and isinstance(v.get("index"), int) and v["index"] > stop]
+    return {"stopped_at": stop, "items": later, "steps": steps}
+
+
+def _translate(capture, handlers=None, size_table=None, motion=None):
     """Capture dict to TranslateResult. `handlers` maps a feature type to a handler and overrides the table.
 
     A handler is `handle(item, ctx) -> StepResult | Refusal` (result.py). An empty result means the item makes no step

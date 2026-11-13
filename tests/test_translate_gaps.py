@@ -122,6 +122,22 @@ class StopTest(unittest.TestCase):
         self.assertEqual(result.gaps, [])
 
 
+class AfterStopTest(unittest.TestCase):
+    def test_a_copy_that_stops_still_names_every_step_after_it_that_cannot_be_copied(self):
+        def edit(capture):
+            capture["items"][SHELL].update(health="error")
+            unsupported(HOLE)(capture)
+        result = translate(tray(edit))
+        self.assertEqual((stopped(result)["index"], result.recipe), (SHELL, None))
+        after = result.after_stop
+        self.assertEqual([s["index"] for s in after["steps"]], [SHELL, FILLET, HOLE, PATTERN])
+        self.assertEqual([v["index"] for v in after["items"]], [FILLET, FILLET + 1, HOLE, PATTERN])
+
+    def test_a_copy_past_the_gap_cap_lists_every_gap(self):
+        result = translate(tray(_more_gaps_than_the_cap))
+        self.assertEqual(len(result.after_stop["steps"]), MAX_GAPS + 1)
+
+
 class PicksTest(unittest.TestCase):
     def test_without_reach_a_later_picking_step_is_left_out_and_a_later_step_that_picks_nothing_is_copied(self):
         result = translate(tray(unsupported(SHELL)))

@@ -15,7 +15,8 @@ from ..package.text import clip
 from ..params.size_table import CONSTANT, DERIVED
 from ..translator import CaptureError, translate
 from ..translator.notes import (
-    cut_reason, left_out_note, recipe_note, reader_failure_note, step_only_note, translate_failure_note, used_several_times_note)
+    also_failing_note, cut_reason, left_out_note, recipe_note, reader_failure_note, step_only_note,
+    translate_failure_note, used_several_times_note)
 from .health import measuring_note
 from .messages import (
     MAX_NOTE, ORIGINAL_KEPT_NOTE, ORIGINAL_KEPT_PARTS_NOTE, cut_note, dropped_note, fixed_note, left_out_parts_note, loose_note,
@@ -266,6 +267,8 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
     }
     if refusal is not None:
         report["refusal"] = refusal
+    if result is not None and result.after_stop is not None:
+        report["after_stop"] = result.after_stop
     if error is not None:
         report["error"] = ("%s: %s" % (type(error).__name__, error))[:500]
     if marker is not None:
@@ -323,7 +326,8 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         if gaps_data is not None:
             files[GAPS_ENTRY] = gaps_data
     else:
-        notes = [note or step_only_note(refusal)]
+        also = also_failing_note(result.after_stop) if result is not None and note is None else ""
+        notes = [note or step_only_note(refusal)] + ([also] if also else [])
         manifest = build_step_only_manifest(title, writer, up_axis=up_axis, notes=notes, parameters=listed)
     files["report.json"] = _report_bytes(report)
 
@@ -442,6 +446,8 @@ def _part_record(part, loose, cut=()):
     }
     if part.refusal is not None:
         record["refusal"] = part.refusal
+    if result is not None and result.after_stop is not None:
+        record["after_stop"] = result.after_stop
     if part.error is not None:
         record["error"] = ("%s: %s" % (type(part.error).__name__, part.error))[:500]
     if part.capture is not None:

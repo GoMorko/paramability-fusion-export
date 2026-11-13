@@ -61,6 +61,8 @@ class Context:
         self.component = None
         self.depth = 0
         self.outer = None
+        # A walk that only names the steps the copy cannot hold: its stops become gaps and it has no gap cap.
+        self.diagnose = False
         self.id_prefix = ""
         self.cache = {} if cache is None else cache
         self.table = table
@@ -94,6 +96,7 @@ class Context:
                         self.handlers)
         found.timeline = self.timeline
         found.outer = self
+        found.diagnose = self.diagnose
         found.id_prefix = id_prefix
         found.depth = self.depth + 1 if depth is None else depth
         found.component = tool_items.component_token(body) if tool_items.is_foreign_tool(body) else self.component

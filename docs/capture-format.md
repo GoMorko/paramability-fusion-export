@@ -2048,7 +2048,9 @@ either happened) counts the extra rebuilds: one per put back and two per row run
 
 A file with several bodies (package kind `parts`) has one `report.json` with a `parts` list, one record per body:
 `{ name, outcome, items, notes, capture, probe, sizes, derived }`, plus `refusal` or `error` for a body saved as a fixed
-shape (and `gaps`, `reach` for a body with left out steps). The `sizes` record at the top is shared by all bodies;
+shape (and `gaps`, `reach` for a body with left out steps). A body whose copy stopped also has `after_stop`, as the
+single body report does: what a walk past the stop finds (`docs/recipe-gaps.md`, "report.json and the result
+window"). The `sizes` record at the top is shared by all bodies;
 `derived` is per body.
 
 ### Derived values (`derived`)

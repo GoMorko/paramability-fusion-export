@@ -156,3 +156,5 @@ class TranslateResult:
     to_recipe: Optional[list] = None
     # True when the walk stopped because the part holds more gaps than `gaps.MAX_GAPS`.
     over_gap_cap: bool = False
+    # When the copy stops: what a walk past the stop finds (`translate._diagnosis`), or None.
+    after_stop: Optional[dict] = None
