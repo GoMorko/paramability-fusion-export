@@ -125,10 +125,17 @@ def _on_created(args):
         command.validateInputs,
         lambda a: setattr(a, "areInputsValid", recipe_dialog.inputs_valid(a.inputs, offers)),
         _command_handlers)
-    handlers.on_execute(
-        command.execute,
-        lambda a: export_flow.run_export(
+    exported = {"started": False}
+
+    def on_execute(args):
+        """Run the export once per dialog. A step the export starts (`export_plan.undo_steps`) fires this event
+        again, while the export runs or after it; that must not start a second export."""
+        if exported["started"]:
+            return
+        exported["started"] = True
+        export_flow.run_export(
             design, parameters, model_params, design_unit,
-            recipe_dialog.read_form(a.command.commandInputs, offers), captures),
-        _command_handlers)
+            recipe_dialog.read_form(args.command.commandInputs, offers), captures, command=args.command)
+
+    handlers.on_execute(command.execute, on_execute, _command_handlers)
     handlers.on_destroy(command.destroy, lambda a: captures.clear(), _command_handlers)

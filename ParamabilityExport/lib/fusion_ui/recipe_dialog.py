@@ -26,6 +26,7 @@ CLEAR_ID = "pm_untick_all"
 WARN_ID = "pm_stop_warning"
 SHOW_ID = "pm_show_in_timeline"
 FASTER_ID = "pm_faster_tries"
+LIGHT_UNDO_ID = "pm_light_undo"
 
 TICK_PREFIX = "pm_tick_"
 CELL_PREFIX = {"tick": TICK_PREFIX, "name": "pm_name_", "now": "pm_now_", "min": "pm_min_", "max": "pm_max_",
@@ -92,6 +93,8 @@ def build(command, offers, body, up_axis, design_unit="mm", stop=None, marker_no
     show_stop(inputs, stop)
     faster = inputs.addBoolValueInput(FASTER_ID, rows.FASTER_TRIES, True, "", False)
     _safely("Faster tries tooltip", lambda: setattr(faster, "tooltipDescription", rows.FASTER_TRIES_TOOLTIP))
+    light = inputs.addBoolValueInput(LIGHT_UNDO_ID, rows.LIGHT_UNDO, True, "", False)
+    _safely("Lighter on memory tooltip", lambda: setattr(light, "tooltipDescription", rows.LIGHT_UNDO_TOOLTIP))
 
     if offers:
         _safely("Dialog size", lambda: command.setDialogInitialSize(700, 700))
@@ -328,12 +331,14 @@ def restore_bodies(inputs, bodies):
 def read_form(inputs, offers):
     """Plain dict: bodies (the picked bodies), body (the one picked body, else None), ticked (Fusion parameter names),
     ranges ({name: (min, max)} of the ticked ones), range_problem ('' when every typed range is fine), up_axis and
-    faster_tries (the box that turns off unused timeline steps during the tries)."""
+    faster_tries (the box that turns off unused timeline steps during the tries) and light_undo (the box that leaves
+    the tries out of Undo, `export_plan.undo_steps`)."""
     ticks = _ticks(inputs, offers)
     ranges, problem = rows.read_ranges(
         offers, ticks, _range_texts(inputs, offers, "min"), _range_texts(inputs, offers, "max"))
     up_item = inputs.itemById(UP_ID).selectedItem
     faster = inputs.itemById(FASTER_ID)
+    light = inputs.itemById(LIGHT_UNDO_ID)
     bodies = picked_bodies(inputs)
     return {
         "bodies": bodies,
@@ -343,6 +348,7 @@ def read_form(inputs, offers):
         "range_problem": problem,
         "up_axis": "y" if up_item and up_item.name == UP_LABELS["y"] else "z",
         "faster_tries": bool(faster is not None and adsk.core.BoolValueCommandInput.cast(faster).value),
+        "light_undo": bool(light is not None and adsk.core.BoolValueCommandInput.cast(light).value),
     }
 
 

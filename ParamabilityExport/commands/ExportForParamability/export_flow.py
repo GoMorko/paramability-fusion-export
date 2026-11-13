@@ -16,6 +16,7 @@ from ...lib.design_edit.marker import read_marker
 from ...lib.package.naming import body_file_title, component_names, design_title, package_file_name
 from ...lib.export_plan.pipeline import ExportRequest, run_pipeline
 from ...lib.export_plan.parts_pipeline import run_parts_pipeline
+from ...lib.export_plan import undo_steps
 from ...lib.dialog_model.result_rows import parts_result_view, result_view
 from ...lib.dialog_model.stop_warning import saved_message, status_text
 from ...lib.fusion_reader import design_info
@@ -254,10 +255,12 @@ def _show_result(file_name, result, ticked, parts=False):
         result_dialog.show(view)
 
 
-def run_export(design, parameters, model_params, design_unit, form, captures=None):
+def run_export(design, parameters, model_params, design_unit, form, captures=None, command=None):
     """Run one export. Parameters are always put back before this returns.
 
-    `captures` is the dialog's CaptureCache; a capture it already holds for the picked body is not read again."""
+    `captures` is the dialog's CaptureCache; a capture it already holds for the picked body is not read again.
+    `command` is the running Fusion command; with the dialog's "lighter on memory" box on, the tries end its steps
+    without undo data (`undo_steps`)."""
     app = export_common.app()
     bodies = form["bodies"]
     body = form["body"]
@@ -279,13 +282,16 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
         marker=marker, faster_tries=bool(form.get("faster_tries")))
 
     units = {p["name"]: p["unit"] for p in parameters}
+    steps = undo_steps.command_steps(command, log) if form.get("light_undo") else None
 
     def work():
         with tempfile.TemporaryDirectory(prefix="paramability_", ignore_cleanup_errors=True) as tmp:
             if body is not None:
-                result = run_pipeline(FusionPort(design, body, units, captures), request, tmp)
+                result = run_pipeline(undo_steps.attach(FusionPort(design, body, units, captures), steps), request, tmp)
             else:
-                result = run_parts_pipeline(FusionPartsPort(design, bodies, units, captures), request, tmp)
+                result = run_parts_pipeline(
+                    undo_steps.attach(FusionPartsPort(design, bodies, units, captures), steps), request, tmp)
+            undo_steps.drop_after(steps, result.health)
             written = time.perf_counter()
             write_package(out_path, result.manifest, result.files)
             log("package written in %.2f s" % (time.perf_counter() - written))

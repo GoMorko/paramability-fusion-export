@@ -30,6 +30,7 @@ class ExportTiming(Timer):
         self.started = self._now()
         self.captures = []  # (part name or None, summary)
         self.probe = None
+        self.undo = None  # `export_plan.undo_steps` record: whether the tries were kept out of Undo
 
     def _now(self):
         try:
@@ -65,6 +66,8 @@ class ExportTiming(Timer):
             out["capture"] = self.captures[0][1]
         if self.probe is not None:
             out["probe"] = self.probe
+        if self.undo is not None:
+            out["undo"] = dict(self.undo)
         return out
 
 

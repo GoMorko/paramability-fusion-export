@@ -132,15 +132,18 @@ class DoubtfulTest(unittest.TestCase):
         self.assertEqual(row(inputs, "status", 0).formattedText, "size, may be unexpected")
         self.assertEqual(row(inputs, "status", 1).formattedText, "size")
         self.assertEqual(set(recipe_dialog.read_form(inputs, offers)),
-                         {"bodies", "body", "ticked", "ranges", "range_problem", "up_axis", "faster_tries"})
+                         {"bodies", "body", "ticked", "ranges", "range_problem", "up_axis", "faster_tries",
+                          "light_undo"})
 
 
 class FasterTriesTest(unittest.TestCase):
-    def test_the_faster_tries_box_starts_off_and_the_form_reads_it(self):
-        _, inputs = make_dialog([offer("wall")])
-        self.assertFalse(recipe_dialog.read_form(inputs, [offer("wall")])["faster_tries"])
-        inputs.itemById(recipe_dialog.FASTER_ID).value = True
-        self.assertTrue(recipe_dialog.read_form(inputs, [offer("wall")])["faster_tries"])
+    def test_the_experiment_boxes_start_off_and_the_form_reads_them(self):
+        for key, box in (("faster_tries", recipe_dialog.FASTER_ID), ("light_undo", recipe_dialog.LIGHT_UNDO_ID)):
+            with self.subTest(key):
+                _, inputs = make_dialog([offer("wall")])
+                self.assertFalse(recipe_dialog.read_form(inputs, [offer("wall")])[key])
+                inputs.itemById(box).value = True
+                self.assertTrue(recipe_dialog.read_form(inputs, [offer("wall")])[key])
 
 
 class SeveralBodiesTest(unittest.TestCase):

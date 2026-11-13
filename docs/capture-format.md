@@ -2140,6 +2140,12 @@ export, the recipe and the notes do not depend on it.
   `read_parts`, the time of each part of those reads (`sketches`, `points` with the lines, `params`, `refs`, `box`,
   `faces`; a part no read held is left out), and `put_back` the sketch put backs (`probe.recovery`). `try_seconds` is the same value as in
   `probe.timeline` (from the first try to the end of the discovery rows).
+- `undo`: the "Lighter on memory" box of the dialog (`lib/export_plan/undo_steps.py`). `{ "on": false }` when the box is
+  off. When it is on: `{ "on": true, "applied": true, "steps": 12, "error": "" }`. `steps` counts the calls of
+  `Command.beginStep(makeExistingStepNonUndoable=True)` that worked: one before each try (with every value back) and
+  one after the tries. `applied: false` with `error` set means the call was missing, raised or answered False; then no
+  further call was made and the export ran as with the box off. A call that worked once and failed later keeps
+  `applied: true` and names the failure in `error`.
 
 ### Derived values (`derived`)
 
