@@ -565,7 +565,10 @@ only for a declared member, also through another name for it or `getattr`.
 The shared fakes live in `tests/fakes/`, by domain: one parameter store with options for the answers a test needs
 (`store.py`, with the stores that also hold the timeline marker), one port for one body and one for several bodies
 (`port.py`), Fusion objects for the reader tests (`design.py`) and the dialog inputs (`dialog.py`). A test that needs
-another answer passes an option (a recompute hook, a probe read, a sketch keeper, a reach read) rather than a subclass.
+another answer passes an option (a recompute hook, a probe read, a sketch keeper, a reach read). A test subclasses a
+fake store only to act out how Fusion behaves over several calls, such as the order it rebuilds items in with the
+timeline marker held or the health of timeline steps through an export (`OrderStore`, `ParkStore`, `StepStore`,
+`BatchStore`).
 
 From this folder:
 
