@@ -136,17 +136,36 @@ class TimelineDesign(FakeDesign):
 
 
 class StoreRollTest(unittest.TestCase):
-    def test_a_rolled_marker_stays_through_recomputes_and_goes_back_with_one_rebuild(self):
+    def test_a_rolled_marker_stays_through_recomputes_and_goes_back_without_a_rebuild_when_the_values_are_back(self):
         design = TimelineDesign(marker=4)
         store = DesignParameterStore(design)
         self.assertTrue(store.roll_marker(2))
+        store.set_expression("width", "30 mm")
         store.recompute()
         self.assertEqual(design.timeline.markerPosition, 2)
         self.assertEqual(store.error_entries(), [])
+        store.set_expression("width", "20 mm")
+        before = design.computed
+        self.assertTrue(store.unroll_marker())
+        self.assertEqual((design.timeline.markerPosition, design.computed), (4, before))
+        self.assertEqual(store.marker, {"position": 4, "count": 4})
+
+    def test_a_value_that_did_not_go_back_rebuilds_the_design_once_after_the_unroll(self):
+        design = TimelineDesign(marker=4)
+        store = DesignParameterStore(design)
+        store.roll_marker(2)
+        store.set_expression("width", "30 mm")
         before = design.computed
         self.assertTrue(store.unroll_marker())
         self.assertEqual((design.timeline.markerPosition, design.computed), (4, before + 1))
-        self.assertEqual(store.marker, {"position": 4, "count": 4})
+
+    def test_a_marker_a_read_left_early_is_brought_back_where_the_store_holds_it(self):
+        design = TimelineDesign(marker=4)
+        store = DesignParameterStore(design)
+        store.roll_marker(3)
+        design.timeline.markerPosition = 1
+        self.assertTrue(store.keep_marker())
+        self.assertEqual(design.timeline.markerPosition, 3)
 
     def test_a_marker_the_person_left_in_the_middle_comes_back_there(self):
         design = TimelineDesign(marker=3)
