@@ -32,6 +32,13 @@ def length(line):
     return ("len", line)
 
 
+def slot_text(slot):
+    """A slot in words, for messages: "x of point 3"."""
+    kind, at = slot
+    return {"x": "x of point %d", "y": "y of point %d", "o": "the place of line %d", "r": "the radius of curve %d",
+            "len": "the length of line %d"}[kind] % at
+
+
 class Lin:
     """`sum(coef * slot) + const`; coefficients and the constant are `Expr` values."""
 

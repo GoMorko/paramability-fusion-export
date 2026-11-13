@@ -6,8 +6,11 @@ import unittest
 from tests import context  # noqa: F401
 from tests.sketch_solve_helpers import A, C, L, P, SolvedCase, Sketch, rectangle
 
+from lib.sketch_solve.crossings import Crossings
 from lib.sketch_solve.outcome import DERIVED
+from lib.sketch_solve.slots import Dist, Lin, y
 from lib.sketch_solve.solve import solve_sketch
+from lib.sketch_values.expr import name, num
 
 
 class CircleTest(SolvedCase, unittest.TestCase):
@@ -138,6 +141,39 @@ class BranchTest(SolvedCase, unittest.TestCase):
         self.assertEqual([a.flips for a in flipped], [[1]])
         self.assertEqual(flipped[0].where, "point %d" % tip)
         self.assertEqual(out.outcome, DERIVED)
+
+
+class _OneGapRun(Crossings):
+    """A point 5 from the origin whose x gap is known and whose y gap is `k` times one unknown: the solver's slots
+    keep number factors today, so a size factor in front of the unknown is set up by hand."""
+
+    tol = 1e-9
+
+    def __init__(self):
+        self.items = [Dist(1, 0, Lin({}, 5.0), "d1")]
+        self.assumed, self.assigned = [], []
+        positions = {0: (0.0, 0.0), 1: (3.0, 4.0)}
+        self.g = type("Graph", (), {"xy": staticmethod(positions.get)})()
+        gaps = {"r": ({}, num(5.0)), "x": ({}, num(3.0)), "y": ({y(1): name("k")}, num(0.0))}
+        self.slots = type("Slots", (), {"reduce": staticmethod(
+            lambda lin: gaps[next(iter(lin.terms))[0] if lin.terms else "r"])})()
+
+    def _at_base(self, expr):
+        return expr.value({"k": 2.0})
+
+    def _assume(self, text, guard, where):
+        self.assumed.append((text, where))
+
+    def _assign(self, root, value, source):
+        self.assigned.append((root, source))
+
+
+class DistanceFactorTest(unittest.TestCase):
+    def test_a_size_factor_in_front_of_the_unknown_gap_is_assumed_not_zero(self):
+        run = _OneGapRun()
+        self.assertTrue(run._distances())
+        self.assertIn(("d1 divides by a value that must not reach zero", "y of point 1"), run.assumed)
+        self.assertEqual(run.assigned, [(y(1), "d1")])
 
 
 if __name__ == "__main__":

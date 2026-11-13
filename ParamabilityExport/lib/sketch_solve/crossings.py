@@ -9,7 +9,7 @@ crossing, and the choice is recorded with the square root's argument as its guar
 `Crossings` is a part of the solver (`solve._Solver`): it uses its slots, its relations and its checks.
 """
 from ..sketch_values.expr import ExprDomainError, sqrt
-from .slots import Dist, Lin, Rel, x, y
+from .slots import Dist, Lin, Rel, slot_text, x, y
 
 _MATH_ERRORS = (ExprDomainError, ZeroDivisionError, OverflowError, ValueError)
 
@@ -63,7 +63,7 @@ class Crossings:
         gap = sqrt(inside).scaled(side)
         if not a.is_constant:
             self._assume("%s divides by a value that must not reach zero" % item.source,
-                         a.scaled(1.0 if self._at_base(a) > 0 else -1.0), _slot_text(root))
+                         a.scaled(1.0 if self._at_base(a) > 0 else -1.0), slot_text(root))
         self._assign(root, (gap - const) / a, item.source)
         return True
 

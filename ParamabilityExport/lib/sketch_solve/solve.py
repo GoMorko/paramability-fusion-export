@@ -24,7 +24,7 @@ from .crossings import Conflict as _Conflict, Crossings
 from .directions import Dir, Directions, from_points, matches
 from .graph import GraphError, load
 from .outcome import BLOCKED, CONFLICT, FREE, NO_RULE, REFUSED, UNREAD, Assumption, Leaf, Solution, Usage, Value
-from .slots import Rel, Slots, length, offset, radius, x, y
+from .slots import Rel, Slots, length, offset, radius, slot_text, x, y
 
 TOLERANCE = 1e-6
 SETTINGS = 3
@@ -472,7 +472,7 @@ class _Solver(Crossings):
                 raise _Conflict("%s gives no value on the drawing" % source)
             want = self.slots.base[slot]
             if abs(got - want) > self.tol * (1.0 + abs(want) * 1e-3):
-                raise _Conflict("%s gives %.6g for %s, the drawing has %.6g" % (source, got, _slot_text(slot), want))
+                raise _Conflict("%s gives %.6g for %s, the drawing has %.6g" % (source, got, slot_text(slot), want))
         self.slots.assign(root, value, source)
 
     # --- propagation ---------------------------------------------------------------------------------------------
@@ -585,7 +585,7 @@ class _Solver(Crossings):
                     continue
                 if not a.is_constant:
                     self._assume("%s divides by a value that must not reach zero" % item.source,
-                                 a.scaled(1.0 if a0 > 0 else -1.0), _slot_text(root))
+                                 a.scaled(1.0 if a0 > 0 else -1.0), slot_text(root))
                 self._assign(root, (-const) / a, item.source)
                 self.items.remove(item)
                 progress = True
@@ -621,7 +621,7 @@ class _Solver(Crossings):
                 where = "%s and %s" % (item1.source, item2.source)
                 if not det.is_constant:
                     self._assume("%s cross where they are not parallel" % where, det.scaled(1.0 if d0 > 0 else -1.0),
-                                 _slot_text(r1))
+                                 slot_text(r1))
                 # a1 r1 + b1 r2 + c1 = 0, a2 r1 + b2 r2 + c2 = 0
                 self._assign(r1, (b1 * c2 - b2 * c1) / det, where)
                 self._assign(r2, (a2 * c1 - a1 * c2) / det, where)
@@ -684,9 +684,3 @@ class _Solver(Crossings):
 
 def _same_dir(a, b):
     return a.c.same(b.c) and a.s.same(b.s)
-
-
-def _slot_text(slot):
-    kind, at = slot
-    return {"x": "x of point %d", "y": "y of point %d", "o": "the place of line %d", "r": "the radius of curve %d",
-            "len": "the length of line %d"}[kind] % at
