@@ -46,7 +46,7 @@ def swept_degrees(arc):
     return math.degrees(abs(turn(a, m)) + abs(turn(m, e)))
 
 
-_tree = lru_cache(maxsize=None)(parse_formula)
+_tree = lru_cache(maxsize=4096)(parse_formula)
 
 
 def worked_out(formula, env):

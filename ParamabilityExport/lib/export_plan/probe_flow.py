@@ -14,6 +14,9 @@ A borrowed sketch that the fit cannot follow (it did not read back as captured) 
 changes it, or leaves it unreadable, is loose. A reference that did not read back as captured is not read again; the
 motion file says so (`Motion.refs`).
 """
+import hashlib
+import json
+
 from ..package.manifest import MAX_FIXED_REASON
 from ..design_edit.marker import MARKER_LOST
 from ..package.text import clip
@@ -182,6 +185,35 @@ def _watched_why(sketch):
     return "it changes the sketch %s, which could not be followed" % sketch
 
 
+class SharedReads:
+    """One copy of each part of a probe read that reads the same in several states. Most tries read most sketches
+    exactly as E0 or as an earlier try did; the states keep every read, so a long probe would otherwise hold the same
+    sketch many times over. `share(read)` puts the copy already kept in place of each equal sketch, face, point, line
+    and reference of `read`, and returns `read`."""
+
+    KEYS = ("sketches", "faces", "points", "lines", "refs")
+
+    def __init__(self):
+        self._kept = {}
+
+    def share(self, read):
+        if not isinstance(read, dict):
+            return read
+        for key in self.KEYS:
+            part = read.get(key)
+            if not isinstance(part, dict):
+                continue
+            for name, value in part.items():
+                try:
+                    text = json.dumps(value, sort_keys=True, separators=(",", ":"))
+                except (TypeError, ValueError):
+                    continue
+                kept = self._kept.setdefault((key, name, hashlib.sha1(text.encode("utf-8")).digest()), value)
+                if kept is not value and kept == value:
+                    part[name] = kept
+        return read
+
+
 class SizeProbe:
     """One export's sketch states and what they gave. Build it with `start`, which returns None when there is
     nothing to follow."""
@@ -212,6 +244,8 @@ class SizeProbe:
         self.recovery = None  # what was done when a sketch stayed on another solution (`note_recovery`)
         self.stopped = None  # `{ after, items }` when a try left the design broken and the tries stopped (`note_stop`)
         self.face_sizes = plane_sizes.face_sizes(self.capture, table)  # face key to the sizes that may change it
+        self.shared = SharedReads()
+        self.shared.share(e0)
 
     @classmethod
     def start(cls, capture, table, read):
@@ -245,14 +279,14 @@ class SizeProbe:
         moved = set(values or ())
         wanted = {k: v for k, v in faces.items() if values is None or self.face_sizes.get(k, set()) & moved}
         if len(wanted) == len(faces):
-            return self.read(self.request)
+            return self.shared.share(self.read(self.request))
         request = dict(self.request, faces=wanted) if wanted else {k: v for k, v in self.request.items()
                                                                    if k != "faces"}
         read = self.read(request)
         if isinstance(read, dict):
             same = {k: v for k, v in (self.e0.get("faces") or {}).items() if k in faces and k not in wanted}
             read["faces"] = dict(same, **(read.get("faces") or {}))
-        return read
+        return self.shared.share(read)
 
     def add_states(self, entries):
         """Add one state per `(values, result, read)`, `(values, result, read, start)` or `(values, result, read,

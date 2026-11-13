@@ -67,6 +67,14 @@ class SizeProbeTest(unittest.TestCase):
         self.assertTrue(covers_a_sketch(CAPTURE))
         self.assertIsNone(SizeProbe.start(CAPTURE, self.table, lambda request: {}))
 
+    def test_a_sketch_that_reads_as_before_is_kept_once_across_reads(self):
+        probe = self.start()
+        first, again = probe.read_now({}), probe.read_now({})
+        token = next(iter(first["sketches"]))
+        self.assertIsNot(first, again)
+        self.assertIs(first["sketches"][token], again["sketches"][token])
+        self.assertIs(again["sketches"][token], probe.e0["sketches"][token])
+
     def test_sizes_that_move_sketches_get_rows_without_a_step_and_the_motion_follows_the_width(self):
         probe = self.start()
         rows, results = run(self.fusion, probe, self.sizes)

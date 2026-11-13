@@ -72,6 +72,12 @@ class CaptureCache:
         self._read = {}
         self._summaries = {}
 
+    def clear(self):
+        """Drop every capture read so far; the dialog calls it when it closes, so the reads do not stay in memory
+        until the next export."""
+        self._read.clear()
+        self._summaries.clear()
+
     def get(self, body, timing=None, part=None):
         token = body.entityToken
         cached = self._read.get(token)

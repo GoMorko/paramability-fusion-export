@@ -109,6 +109,11 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(manifest["kind"], "recipe")
         self.assertEqual(json.loads(files["report.json"])["capture"]["sketch_graphs"], capture["sketch_graphs"])
 
+    def test_report_json_is_written_without_indentation(self):
+        _, files, _ = self.plan(load_capture("component_moved"))
+        self.assertNotIn(b"\n", files["report.json"])
+        self.assertEqual(json.loads(files["report.json"])["capture"]["target"]["placement"]["path"], "Tray:1")
+
     def test_a_part_used_several_times_says_which_copy_the_file_holds(self):
         capture = load_capture("component_moved")
         capture["target"]["placement"]["uses"] = 3

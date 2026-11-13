@@ -131,4 +131,4 @@ def _on_created(args):
             design, parameters, model_params, design_unit,
             recipe_dialog.read_form(a.command.commandInputs, offers), captures),
         _command_handlers)
-    handlers.on_destroy(command.destroy, lambda a: None, _command_handlers)
+    handlers.on_destroy(command.destroy, lambda a: captures.clear(), _command_handlers)

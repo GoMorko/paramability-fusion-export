@@ -37,11 +37,13 @@ def _json_bytes(value, **options):
 
 
 def _report_bytes(report):
+    """`report.json` without indentation: it is read by tools, not by eye, and the compact form is written by the
+    fast JSON encoder and takes about a third of the room of an indented one on a large probe."""
     try:
-        return _json_bytes(report, indent=2, default=str)
+        return _json_bytes(report, separators=(",", ":"), default=str)
     except (TypeError, ValueError):
         trimmed = {k: v for k, v in report.items() if k != "capture"}
-        return _json_bytes(trimmed, indent=2, default=str)
+        return _json_bytes(trimmed, separators=(",", ":"), default=str)
 
 
 def _recipe_bytes(recipe):
