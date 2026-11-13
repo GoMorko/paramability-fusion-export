@@ -228,6 +228,7 @@ def _other_at(timeline, ctx, index):
 def _measure_run(timeline, ctx, items, run, start, end_state, position):
     """Set the target's numbers of the items `run` (consecutive indexes) whose target was not measured around them:
     `start` is the state before the first, `end_state` the state after the last, read with the marker at `position`.
+    A run of one item is the item between two measures.
     When the two agree no step of the run changed the target; else (or when a measure failed) the marker goes back
     over the run to measure it at each step, and returns to `position`."""
     if not run:
@@ -247,13 +248,10 @@ def _measure_run(timeline, ctx, items, run, start, end_state, position):
             _set_target(item, states[n], states[n + 1])
 
 
-def _finish_item(timeline, ctx, readers, index, items, states):
-    """Marker is just after `index`: read bodies, health, whether the target changed and what the feature produced.
-
-    `states` is the target state before and after the item (see `_target_state`). They also go to the item as
-    `target_before` and `target_after`, so a step with no reader still says where it changed the part. None leaves
-    them for `_measure_run`.
-    """
+def _finish_item(timeline, ctx, readers, index, items):
+    """Marker is just after `index`: read bodies, health and what the feature produced. Whether the target changed, and
+    its numbers before and after (`target_before`, `target_after`, so a step with no reader still says where it
+    changed the part), are set by `_measure_run` once the target is measured after the item."""
     item = items.get(index)
     if item is None:
         return
@@ -263,10 +261,7 @@ def _finish_item(timeline, ctx, readers, index, items, states):
     entity, _ = _native_entity(obj)
     if entity is None or item["suppressed"]:
         return
-    if states is None:
-        item["target_measured"] = False  # set by `_measure_run` once the target is measured after the run
-    else:
-        _set_target(item, *states)
+    item["target_measured"] = False  # the mark `_measure_run` looks for
     item["bodies_after"] = [] if step_kinds.makes_no_body(item["type"]) else _bodies_after(item, entity)
     after = (readers.get(item["type"]) or (None, None))[1]
     if after is not None and item["in_target_component"] and "read_error" not in item["data"]:
@@ -417,7 +412,7 @@ def _read_capture(design, body, fusion, name, up_axis, extra_readers, timer):
                     with timer.span("target_state"):
                         state = _target_state(ctx)
                 if k > 0:
-                    _finish_item(timeline, ctx, readers, k - 1, items, None)
+                    _finish_item(timeline, ctx, readers, k - 1, items)
                     run.append(k - 1)
                 if measure:
                     with timer.span("target_state"):
