@@ -26,8 +26,8 @@ from ..design_edit.runner import ExportCancelled
 from . import health as health_module
 from .body_scope import body_links, scope_inputs
 from .part_names import tagged, unique_names
-from .pipeline import (ProbeRun, deferred_left, gap_after_settle, settle_after_tries, settle_steps, start_steps,
-                       warn_left_off, warn_steps, with_try_seconds)
+from .pipeline import (ProbeRun, deferred_left, gap_after_settle, left_off, settle_after_tries, settle_steps,
+                       start_steps, undo_dropped, warn_left_off, warn_steps, with_try_seconds)
 from .reach_pass import needs_reach, with_reach
 from .probe_flow import ProbeGroup, SizeProbe, covers_a_sketch, extra_size_params, kept_size_names
 from .recipe_export import PartInput, free_sizes, plan_parts_export, translate_capture
@@ -189,7 +189,8 @@ class _PartsPipeline:
                    for name in motion.flipped]
         health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error, unchecked,
                                            flipped, self.stopped, steps=settled,
-                                           deferred_left=deferred_left(self), gap_after_mm=gap_after)
+                                           deferred_left=deferred_left(self), gap_after_mm=gap_after,
+                                           left_off=left_off(self), undo_dropped=undo_dropped(self))
         inputs = [PartInput(self.names[i], self.steps[i], self.captures[i], finals.get(i), self.motions.get(i),
                             probe_of.get(i), derived_of.get(i)) for i in range(port.count)]
         manifest, files, report = plan_parts_export(

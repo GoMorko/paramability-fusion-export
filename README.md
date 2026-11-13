@@ -154,8 +154,13 @@ The box "Lighter on memory" is off to start with, and it is an experiment too. A
 many GB, because Fusion keeps Undo data for every try until the export ends. When you tick the box, the add-in asks
 Fusion to forget the tries as they run, each time all values are back where they were (Fusion's preview call
 `Command.beginStep`). The add-in puts every value back itself, so nothing should be lost, but Undo may not step back
-through the export afterwards: save your design before you export. If your Fusion does not have the call or refuses
-it, the export runs as with the box off. `report.json` says what happened in `timing.undo` (`on`, `applied`, `steps`).
+through the export afterwards: save your design before you export (the dialog reminds you once the box is ticked).
+The Undo data of the last part of the export is dropped only when the check at the end confirms the design is as it
+was: every value back, no sketch moved, no step worse or left turned off, and every check could be made. On any doubt
+it is kept. When a step still looks changed after Undo data was dropped, the result window and the message box do not
+send you to Undo: they say to close the design without saving and open the version you saved. If your Fusion does
+not have the call or refuses it, the export runs as with the box off. `report.json` says what happened in
+`timing.undo` (`on`, `applied`, `steps`) and `health.undo_dropped`.
 
 A point can also move along a curve: the end of a leg that turns with an angle, or a corner set back by a wall along
 half the angle. The add-in then looks for a formula with the angle's sine, cosine, tangent or cotangent (of the angle

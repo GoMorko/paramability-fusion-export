@@ -6,6 +6,8 @@ import unittest
 from tests import context  # noqa: F401
 from tests.test_pipeline import START, FakePort, request
 
+from lib.design_edit import timeline_health as steps_module
+from lib.export_plan import health as health_module
 from lib.export_plan import undo_steps
 from lib.export_plan.pipeline import run_pipeline
 from lib.timing.export_timing import ExportTiming
@@ -68,15 +70,35 @@ class UndoStepsTest(unittest.TestCase):
                 self.assertEqual(result.health, plain.health)
                 self.assertEqual(port.store.exprs, START)
 
-    def test_the_last_part_of_the_export_is_dropped_only_when_the_design_is_back(self):
-        for name, health, applied, expected in (("back", {}, True, 1), ("changed", {"unrestored": ["Width"]}, True, 0),
-                                                ("never applied", {}, False, 0)):
+    def test_the_last_part_of_the_export_is_dropped_only_when_the_end_check_confirms_the_design_is_back(self):
+        back = health_module.make_health(gap_mm=0.0, probe=health_module.MEASURED)
+        cases = (("back", back, True, 1), ("never applied", back, False, 0),
+                 ("a value not back", dict(back, unrestored=["Width"]), True, 0),
+                 ("a worse step past the listed ones", dict(back, steps_worse=True), True, 0),
+                 ("sketch drift", dict(back, sketch_drift=True), True, 0),
+                 ("a step left off", dict(back, left_off=["Lid"]), True, 0),
+                 ("steps not read", dict(back, steps_unread=True), True, 0),
+                 ("sketches not compared", dict(back, restore_unverified=True), True, 0),
+                 ("marker lost", dict(back, end_actions=[steps_module.MARKER_LOST]), True, 0),
+                 ("no health", None, True, 0))
+        for name, health, applied, expected in cases:
             with self.subTest(name):
                 calls = []
                 steps = undo_steps.UndoSteps(lambda flag: calls.append(flag) or True, lambda text: None)
                 steps.record["applied"] = applied
                 undo_steps.drop_after(steps, health)
                 self.assertEqual(calls, [True] * expected)
+
+    def test_a_changed_design_after_undo_data_was_dropped_is_not_sent_to_undo(self):
+        made = []
+        _, _, result = export(lambda store: made.append(FakeCommand(store)) or made[-1])
+        self.assertTrue(result.health["undo_dropped"])
+        worse = {"name": "Fillet1", "type": "FilletFeature", "before": "ok", "after": "warning", "message": ""}
+        for health in (dict(result.health, steps_changed=[worse]), dict(result.health, unrestored=["Width"]),
+                       dict(result.health, sketch_drift=True, sketch_gap_mm=0.5)):
+            line = health_module.health_lines(health)[0]
+            self.assertIn("close it without saving", line)
+            self.assertNotIn("Use Undo", line)
 
 
 if __name__ == "__main__":

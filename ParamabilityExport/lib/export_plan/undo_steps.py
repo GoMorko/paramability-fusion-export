@@ -61,9 +61,10 @@ def attach(port, steps):
 
 def drop_after(steps, health):
     """Once the export put the design back, drop the undo data of its last part too (the marker and the suppressed
-    steps put back), so Undo does not bring back the state of the tries. Kept when the design may be changed
-    (`health`), so Undo can still help there. Not done when no call worked during the tries."""
-    if steps is not None and steps.record["applied"] and not health_module.design_changed(health):
+    steps put back), so Undo does not bring back the state of the tries. Only when the end check confirms the design is
+    as it was (`health.back_as_it_was`): on any doubt the data is kept, so Undo can still help. Not done when no call
+    worked during the tries."""
+    if steps is not None and steps.record["applied"] and health_module.back_as_it_was(health):
         steps.drop()
 
 

@@ -27,6 +27,7 @@ WARN_ID = "pm_stop_warning"
 SHOW_ID = "pm_show_in_timeline"
 FASTER_ID = "pm_faster_tries"
 LIGHT_UNDO_ID = "pm_light_undo"
+LIGHT_UNDO_NOTE_ID = "pm_light_undo_note"
 
 TICK_PREFIX = "pm_tick_"
 CELL_PREFIX = {"tick": TICK_PREFIX, "name": "pm_name_", "now": "pm_now_", "min": "pm_min_", "max": "pm_max_",
@@ -95,6 +96,8 @@ def build(command, offers, body, up_axis, design_unit="mm", stop=None, marker_no
     _safely("Faster tries tooltip", lambda: setattr(faster, "tooltipDescription", rows.FASTER_TRIES_TOOLTIP))
     light = inputs.addBoolValueInput(LIGHT_UNDO_ID, rows.LIGHT_UNDO, True, "", False)
     _safely("Lighter on memory tooltip", lambda: setattr(light, "tooltipDescription", rows.LIGHT_UNDO_TOOLTIP))
+    reminder = inputs.addTextBoxCommandInput(LIGHT_UNDO_NOTE_ID, "", rows.escape(rows.LIGHT_UNDO_REMINDER), 1, True)
+    reminder.isVisible = False
 
     if offers:
         _safely("Dialog size", lambda: command.setDialogInitialSize(700, 700))
@@ -286,11 +289,17 @@ def _set_ticks(inputs, offers, wanted):
 
 
 def handle_change(inputs, offers, changed):
-    """React to a tick, a typed Min or Max, or one of the two buttons; then refresh the count and the details."""
+    """React to a tick, a typed Min or Max, or one of the two buttons; then refresh the count and the details. The
+    Lighter on memory box shows or hides its reminder to save first."""
     key, index = _row_of(changed.id)
     if index is not None and index >= len(offers):
         key, index = None, None
     over = False
+    if changed.id == LIGHT_UNDO_ID:
+        note = inputs.itemById(LIGHT_UNDO_NOTE_ID)
+        if note is not None:
+            note.isVisible = adsk.core.BoolValueCommandInput.cast(changed).value
+        return
     if changed.id == TICK_USED_ID:
         _set_ticks(inputs, offers, [o["ticked"] for o in offers])
     elif changed.id == CLEAR_ID:

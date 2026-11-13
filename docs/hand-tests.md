@@ -71,7 +71,11 @@ except U1 to U3, UM1, L1 to L16, F1, F2, SP1 to SP4 and TH1 to TH6, which are de
       steps back to before the export, does nothing, or undoes your own edit made before the export; whether the
       marker or values change; whether Redo brings it back. Also note if Fusion shows an error or a second save window
       during the export (it must not). If Fusion has no such call, `applied: false` with an `error` and the export is
-      as with the box off.
+      as with the box off. Ticking the box shows the line "Save your design before you export" under it; unticking
+      hides it. When an export with the box on ends with a line about changed steps or sketches, the message box and
+      the result window say Undo may not step back and to close the design without saving and open the saved version,
+      with no "Use Undo" advice, and `report.json` has `health.undo_dropped: true`; Undo then still steps back through
+      the last part of the export (its Undo data is kept when the end check is in doubt).
 - [ ] SB1, Split Body by a plane. Model a cup or a box with a shell and a fillet, then Split Body with the YZ origin
       plane and Remove the other half (a second Split Body with the XZ plane of the half gives a quarter). Export the
       piece that the split made (a new body, not the one that kept its name), and once more the piece that kept its

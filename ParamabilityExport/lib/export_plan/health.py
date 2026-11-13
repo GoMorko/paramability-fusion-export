@@ -18,10 +18,14 @@ MAX_LINE = 400
 UNDO_ADVICE = (
     "Use Undo in Fusion until the design looks as it did before the export, or reopen the design from its last "
     "save. Then export again.")
+# With Lighter on memory on, Fusion forgot the Undo data of the tries (`undo_steps`), so Undo is not offered.
+NO_UNDO_ADVICE = (
+    "Undo may not step back through this export, since Lighter on memory was on. If the design looks wrong, close "
+    "it without saving and open the version you saved before the export.")
 
 
 def make_health(unrestored=(), gap_mm=None, probe=NOT_NEEDED, probe_error="", unchecked=(), flipped=(), stopped=None,
-                broken=(), steps=None, deferred_left=(), gap_after_mm=None):
+                broken=(), steps=None, deferred_left=(), gap_after_mm=None, left_off=(), undo_dropped=False):
     """The record kept in `report.json` under `health`.
 
     unrestored: Fusion names of the parameters that could not be put back.
@@ -40,6 +44,8 @@ def make_health(unrestored=(), gap_mm=None, probe=NOT_NEEDED, probe_error="", un
       (`SketchKeeper.deferred_left`).
     gap_after_mm: the gap read again after the end check rebuilt the design (`pipeline.gap_after_settle`), already
       counted in `gap_mm`; None when there was no such rebuild or read.
+    left_off: timeline items turned off for the tries that are still off (`TryTimeline.left_off`).
+    undo_dropped: True when Fusion forgot Undo data during the export (Lighter on memory, `undo_steps`).
     """
     measured = probe == MEASURED
     out = {
@@ -65,6 +71,10 @@ def make_health(unrestored=(), gap_mm=None, probe=NOT_NEEDED, probe_error="", un
         out["deferred_left"] = list(dict.fromkeys(deferred_left))[:MAX_LISTED]
     if gap_after_mm is not None:
         out["sketch_gap_after_rebuild_mm"] = gap_after_mm
+    if left_off:
+        out["left_off"] = list(dict.fromkeys(left_off))[:MAX_LISTED]
+    if undo_dropped:
+        out["undo_dropped"] = True
     return out
 
 
@@ -81,6 +91,24 @@ def design_changed(health):
     a worse state than before, or a sketch left with its compute deferred."""
     return bool(health and (health.get("unrestored") or health.get("sketch_drift") or health.get("broken")
                             or any_worse(health) or health.get("deferred_left")))
+
+
+def back_as_it_was(health):
+    """True only when the end check confirms the design is as it was before the export: every value back, no sketch
+    drift, no step worse or left turned off, nothing left deferred, and every check that tells this could be made
+    (the steps read, the sketches compared, the marker back)."""
+    if not health or design_changed(health) or health.get("left_off"):
+        return False
+    if health.get("steps_unread") or health.get("restore_unverified") or health.get("tries_stopped"):
+        return False
+    if steps_module.MARKER_LOST in (health.get("end_actions") or []):
+        return False
+    return not (health.get("probe") == FAILED and health.get("sketch_gap_mm") is None)
+
+
+def _undo(health):
+    """What to do about a changed design: Undo, unless the export made Fusion forget Undo data."""
+    return NO_UNDO_ADVICE if (health or {}).get("undo_dropped") else UNDO_ADVICE
 
 
 def measuring_doubtful(health):
@@ -125,7 +153,9 @@ def steps_line(health):
         shown += " and %d more" % more
     if any_worse(health):
         tail = ("Fusion rebuilt the design with your values and they stayed so, so your design may be changed. "
-                + UNDO_ADVICE)
+                + _undo(health))
+    elif health.get("undo_dropped"):
+        tail = "Check them in the timeline. " + NO_UNDO_ADVICE
     else:
         tail = "Check them in the timeline, and use Undo in Fusion if they look wrong."
     text = "After the export these steps differ from before: %s. " + tail
@@ -141,19 +171,19 @@ def health_lines(health):
     if health.get("unrestored"):
         lines.append(
             "These parameters could not be set back to their values: %s. Your design is changed. %s"
-            % (_names(health["unrestored"]), UNDO_ADVICE))
+            % (_names(health["unrestored"]), _undo(health)))
     line = steps_line(health)
     if line:
         lines.append(line)
     elif health.get("broken"):
         lines.append(clip(
             "After the export these steps of your design show an error they did not have before: %s. Your design is "
-            "changed. %s" % (_names(health["broken"]), UNDO_ADVICE), MAX_LINE))
+            "changed. %s" % (_names(health["broken"]), _undo(health)), MAX_LINE))
     if health.get("sketch_drift"):
         lines.append(
             "The sketches did not come back to their first shape after the tries (largest gap %.4g mm). "
             "Your design may be changed, and sizes that move a sketch may be off. %s"
-            % (health["sketch_gap_mm"], UNDO_ADVICE))
+            % (health["sketch_gap_mm"], _undo(health)))
     elif health.get("restore_unverified") and health.get("unchecked"):
         lines.append(clip("Could not check that the sketches came back to their first shape: %s. Please look at %s "
                           "in Fusion." % ("; ".join(health["unchecked"]),
@@ -161,8 +191,9 @@ def health_lines(health):
     elif health.get("restore_unverified"):
         lines.append("Could not check that the sketches came back to their first shape. Please look at them.")
     if health.get("deferred_left"):
-        lines.append(clip("These sketches may not update until you edit them: %s. Open each one and finish it, or use "
-                          "Undo in Fusion." % _names(health["deferred_left"]), MAX_LINE))
+        fix = (" " + NO_UNDO_ADVICE) if health.get("undo_dropped") else ", or use Undo in Fusion."
+        lines.append(clip("These sketches may not update until you edit them: %s. Open each one and finish it%s"
+                          % (_names(health["deferred_left"]), "." + fix if fix.startswith(" ") else fix), MAX_LINE))
     if health.get("flipped"):
         lines.append(clip("During the tries Fusion left %s on its other solution after a value was put back. The "
                           "tries made while it stayed there were not used to judge any size." % _names(health["flipped"]),
@@ -179,10 +210,10 @@ def health_lines(health):
     return lines
 
 
-def steps_lines(settled, deferred_left=()):
+def steps_lines(settled, deferred_left=(), undo_dropped=False):
     """The lines about the timeline steps (`timeline_health.TimelineSettle`) and the sketches left deferred alone, for
     an export that stopped or keeps no other health record."""
-    return health_lines(make_health(steps=settled, deferred_left=deferred_left))
+    return health_lines(make_health(steps=settled, deferred_left=deferred_left, undo_dropped=undo_dropped))
 
 
 def measuring_note(health):

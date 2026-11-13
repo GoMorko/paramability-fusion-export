@@ -2157,6 +2157,8 @@ when it has something to say:
 | `end_actions` | What was done, in order: `marker_back` (the marker read elsewhere and was put back), `marker_lost` (it would not go back), `turned_back_on`, `full_compute`, `values_again`. |
 | `steps_unread` | True when the steps could not be compared (the timeline could not be read). |
 | `deferred_left` | Sketches whose compute stayed deferred after the keeper moved their points (`SketchKeeper.deferred_left`). |
+| `left_off` | Items turned off for the tries that are still off (`TryTimeline.left_off`, at most 5). |
+| `undo_dropped` | True when Fusion forgot Undo data during the export (Lighter on memory, `timing.undo.applied`). The lines about a changed design then say to close the design without saving and open the saved version instead of using Undo. |
 | `sketch_gap_after_rebuild_mm` | When `full_compute` or `values_again` ran and the sketches were followed: the gap of a read of the outlines after those rebuilds (`pipeline.gap_after_settle`). `sketch_gap_mm` and `sketch_drift` take the larger of this and the gap read before, so a sketch the end rebuild moved counts as a changed design. |
 
 A step that is worse than at the start (`steps_worse`), or a sketch in `deferred_left`, counts as a changed design:
@@ -2253,7 +2255,9 @@ export, the recipe and the notes do not depend on it.
   `Command.beginStep(makeExistingStepNonUndoable=True)` that worked: one before each try (with every value back) and
   one after the tries. `applied: false` with `error` set means the call was missing, raised or answered False; then no
   further call was made and the export ran as with the box off. A call that worked once and failed later keeps
-  `applied: true` and names the failure in `error`.
+  `applied: true` and names the failure in `error`. After the export one more call drops the Undo data of its last part,
+  only when `health` confirms the design is as it was (`health.back_as_it_was`: no value left, no sketch drift, no
+  worse step, nothing left off or deferred, the steps read, the sketches compared and the marker back).
 
 ### Derived values (`derived`)
 

@@ -196,6 +196,17 @@ def gap_after_settle(owner, gap, measure):
     return (after if gap is None else max(gap, after)), after
 
 
+def undo_dropped(owner):
+    """True when Fusion forgot Undo data during the export (Lighter on memory, `undo_steps.UndoSteps`)."""
+    steps = getattr(owner.port, "undo_steps", None)
+    return bool(steps is not None and steps.record.get("applied"))
+
+
+def left_off(owner):
+    """The items of the tries still turned off (`TryTimeline.left_off`)."""
+    return list(owner.roll.left_off) if getattr(owner, "roll", None) is not None else []
+
+
 def deferred_left(owner):
     """Sketches whose compute flag the keeper could not put back (`SketchKeeper.deferred_left`)."""
     return list(getattr(getattr(owner, "keeper", None), "deferred_left", None) or [])
@@ -205,7 +216,7 @@ def warn_steps(owner):
     """Tell the person, when the export stopped, which timeline steps differ from the start (`settle_steps`). Never
     raises: it runs while the export stops for another reason."""
     try:
-        lines = health_module.steps_lines(settle_steps(owner), deferred_left(owner))
+        lines = health_module.steps_lines(settle_steps(owner), deferred_left(owner), undo_dropped(owner))
         warn = getattr(owner.port, "warn_steps", None)
         if lines and warn is not None:
             warn(lines)
@@ -674,7 +685,8 @@ class _Pipeline:
         health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error,
                                            self._unchecked(), self.motion.flipped if self.motion is not None else (),
                                            self.stopped, steps=settled, deferred_left=deferred_left(self),
-                                           gap_after_mm=gap_after)
+                                           gap_after_mm=gap_after, left_off=left_off(self),
+                                           undo_dropped=undo_dropped(self))
         capture = self.capture if self.capture is not None else capture
         manifest, files, report = plan_single_export(
             capture if capture is not None else RuntimeError("The steps were not read."),
