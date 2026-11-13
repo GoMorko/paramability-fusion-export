@@ -30,7 +30,7 @@ from ..translator import step_kinds
 from . import helper_pass
 from . import read_geometry as geo
 from .parameters import list_model_parameters, list_user_parameters
-from .placement import occurrence_path, read_placement, target_move
+from .placement import occurrence_path, target_move, target_place
 from .read_constraints import sketch_graphs
 from .read_links import sketch_inputs, sketch_links
 
@@ -361,7 +361,7 @@ def _target_record(ctx, final):
             "name": geo.safe(lambda: ctx.component.name, "") or "",
             "root": ctx.is_root_component,
         },
-        "placement": read_placement(ctx.picked, ctx.root, ctx.component),
+        "placement": target_place(ctx),
     }
 
 
@@ -395,8 +395,9 @@ def _read_capture(design, body, fusion, name, up_axis, extra_readers, timer):
     ctx = geo.ReadContext(design, body)
     ctx.timer = timer
     # The target's place is measured on the picked body, which a later step (a split, for one) may make: it is read
-    # here, before the marker moves back, and kept for the readers of the earlier steps.
-    target_move(ctx)
+    # here, before the marker moves back, and kept for the readers of the earlier steps and the target record.
+    with timer.span("placement"):
+        target_move(ctx)
     readers = feature_readers()
     readers.update(extra_readers or {})
     items = {}
@@ -436,19 +437,25 @@ def _read_capture(design, body, fusion, name, up_axis, extra_readers, timer):
         timer.describe(index, item["name"], item["type"], item["component"])
     with timer.span("tail"):
         return _finish_capture(design, ctx, timeline, end, count, items, group_indices, tool_components, fusion, name,
-                               up_axis)
+                               up_axis, timer)
 
 
-def _finish_capture(design, ctx, timeline, end, count, items, group_indices, tool_components, fusion, name, up_axis):
-    """The capture dict once the walk is done: the groups are checked, and the parameters, links and graphs read."""
+def _finish_capture(design, ctx, timeline, end, count, items, group_indices, tool_components, fusion, name, up_axis,
+                    timer):
+    """The capture dict once the walk is done: the groups are checked, and the parameters, links and graphs read. Each
+    part is timed on `timer` (`tail_<part>`)."""
     _check_groups(timeline, end, count, items, group_indices)
-    final = ctx.find_target() or ctx.target
-    parameters, design_units = _parameters(design, ctx)
-    _add_tool_parameters(parameters, tool_components)
-    target = _target_record(ctx, final)
+    with timer.span("tail_target"):
+        final = ctx.find_target() or ctx.target
+        target = _target_record(ctx, final)
+    with timer.span("tail_parameters"):
+        parameters, design_units = _parameters(design, ctx)
+        _add_tool_parameters(parameters, tool_components)
     ordered = [items[i] for i in sorted(items)]
-    links = geo.safe(lambda: sketch_links(design, ctx, ordered), [])
-    graphs = geo.safe(lambda: sketch_graphs(design, ctx, ordered), [])
+    with timer.span("tail_links"):
+        links = geo.safe(lambda: sketch_links(design, ctx, ordered), [])
+    with timer.span("tail_graphs"):
+        graphs = geo.safe(lambda: sketch_graphs(design, ctx, ordered), [])
     app_fusion, app_name, app_up = _app_details() if None in (fusion, name, up_axis) else ("", "", "z")
     return {
         "capture": CAPTURE_VERSION,

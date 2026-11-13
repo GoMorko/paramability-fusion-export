@@ -18,13 +18,16 @@ class DesignParameterStore:
     The design is worked on as it is at the timeline marker: the marker found when the store is made stays there
     after every recompute, and only the items before it count for health. `roll_marker` holds it earlier for a while
     (Fusion then rebuilds fewer items per recompute) and `unroll_marker` puts it back. `suppress_items` turns off
-    timeline items for a while for the same reason, and `unsuppress_items` turns them back on."""
+    timeline items for a while for the same reason, and `unsuppress_items` turns them back on. A read may leave the
+    marker earlier for a while (an outline face read before its step); the next change, recompute or `keep_marker`
+    brings it back."""
 
     def __init__(self, design, value_input=None):
         self.design = design
         self._value_input = value_input  # text to a Fusion ValueInput; `adsk.core.ValueInput.createByString` if None
         self.marker = read_marker(getattr(design, "timeline", None))
         self._home = None  # the marker the store was made with, while it is rolled
+        self._rolled_with = None  # the parameter expressions when the marker was rolled
         self._suppressed = []  # (name, timeline object) of the items `suppress_items` turned off
 
     def _rebuild(self):
@@ -118,6 +121,22 @@ class DesignParameterStore:
             return ""
         return "moved" if put_back(timeline, self.marker) else "lost"
 
+    def keep_marker(self):
+        """Move the marker back to where the store holds it, when a read left it earlier. True when it reads there (or
+        there is no timeline)."""
+        if self.marker is None:
+            return True
+        try:
+            return put_back(self.design.timeline, self.marker)
+        except Exception:
+            return False
+
+    def _expressions(self):
+        try:
+            return self.saved_expressions()
+        except Exception:
+            return None
+
     def roll_marker(self, position):
         """Hold the marker at `position` (that many items stay built) until `unroll_marker`. False, with the marker
         back where it was, when there is no timeline, it is rolled already, the position is not before the marker or
@@ -128,19 +147,23 @@ class DesignParameterStore:
         if not 0 < position < end:
             return False
         self._home, self.marker = self.marker, {"position": position, "count": self.marker["count"]}
+        self._rolled_with = self._expressions()
         if put_back(self.design.timeline, self.marker):
             return True
         self.unroll_marker()
         return False
 
     def unroll_marker(self):
-        """Put the marker back where the store found it and rebuild once, so the items after the rolled position are
-        built with the values set now. True when the marker reads there."""
+        """Put the marker back where the store found it. Fusion builds the items after the rolled position as the
+        marker passes them. When a parameter expression differs from the roll, or cannot be read, the design is also
+        rebuilt once, so every item is built with the values set now. True when the marker reads there."""
         if self._home is None:
             return True
         self.marker, self._home = self._home, None
         moved = put_back(self.design.timeline, self.marker)
-        self._rebuild()
+        before, self._rolled_with = self._rolled_with, None
+        if before is None or self._expressions() != before:
+            self._rebuild()
         return moved
 
     def marker_holds(self):

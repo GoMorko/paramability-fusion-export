@@ -115,20 +115,16 @@ def _along_path(path, members=_MEMBERS):
 
 
 def _sample_points(body):
-    """Up to POINTS_TO_CHECK points in mm: vertices first, then points on faces when there are too few vertices."""
+    """Up to POINTS_TO_CHECK points in mm: vertices first, then points on faces when there are too few vertices. The
+    items are fetched one at a time, so a body with many vertices costs only the few points it needs."""
     points = []
-    for vertex in geo.collection_items(geo.safe(lambda: body.vertices, None)):
-        p = geo.safe(lambda: geo.point(vertex.geometry), None)
-        if p is not None:
-            points.append(p)
-        if len(points) == POINTS_TO_CHECK:
-            return points
-    for face in geo.collection_items(geo.safe(lambda: body.faces, None)):
-        p = geo.safe(lambda: geo.point(face.pointOnFace), None)
-        if p is not None:
-            points.append(p)
-        if len(points) == POINTS_TO_CHECK:
-            break
+    for member, read in (("vertices", lambda vertex: vertex.geometry), ("faces", lambda face: face.pointOnFace)):
+        for entity in geo.iter_items(geo.safe(lambda: getattr(body, member), None)):
+            p = geo.safe(lambda: geo.point(read(entity)), None)
+            if p is not None:
+                points.append(p)
+            if len(points) == POINTS_TO_CHECK:
+                return points
     return points
 
 
@@ -197,7 +193,7 @@ def _sketch_points(sketch, occurrence):
     """Up to POINTS_TO_CHECK (native, proxy) point pairs of a sketch: in its component's coordinates, and as the
     assembly shows them through `occurrence`."""
     native, proxy = [], []
-    for point in geo.collection_items(geo.safe(lambda: sketch.sketchPoints, None)):
+    for point in geo.iter_items(geo.safe(lambda: sketch.sketchPoints, None)):
         a = geo.safe(lambda: geo.point(point.worldGeometry), None)
         b = geo.safe(lambda: geo.point(point.createForAssemblyContext(occurrence).worldGeometry), None)
         if a is not None and b is not None:
@@ -243,13 +239,23 @@ def find_occurrence(root, component, path_name=""):
 _UNREAD = object()
 
 
+def target_place(ctx):
+    """The placement record of the picked body (`read_placement`), read once per capture with the marker where the
+    export starts and kept on `ctx`: the place is measured on the picked body, which does not exist before the step
+    that makes it, and the capture's `target.placement` is the same record."""
+    found = getattr(ctx, "_target_place", _UNREAD)
+    if found is _UNREAD:
+        found = geo.safe(lambda: read_placement(ctx.picked, ctx.root, ctx.component), {})
+        ctx._target_place = found
+    return found
+
+
 def target_move(ctx):
     """The move from the target's component coordinates to the root's (identity for a root body), or None when the
-    target's place cannot be read. Read once per capture, with the marker where the export starts: the place is
-    measured on the picked body, which does not exist before the step that makes it."""
+    target's place cannot be read (`target_place`)."""
     found = getattr(ctx, "_target_move", _UNREAD)
     if found is _UNREAD:
-        record = geo.safe(lambda: read_placement(ctx.picked, ctx.root, ctx.component), {})
+        record = target_place(ctx)
         if record is None:
             found = Move(IDENTITY_ROWS)
         else:

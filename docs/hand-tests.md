@@ -6,7 +6,7 @@ note the Fusion version and system.
 ## Check first in this version
 
 What 0.6.0 to 0.8.0 added, and what this version adds, in this order. Each id is described in the section named,
-except U1, L1 to L15, F1, F2, SP1 to SP4 and TH1 to TH6, which are described here.
+except U1 to U3, L1 to L15, F1, F2, SP1 to SP4 and TH1 to TH6, which are described here.
 
 - [ ] SP1, the marker roll past other components. Make component Cup: a sketch with a 60 mm square whose side is the
       user parameter `Width`, extruded 40 mm. In that sketch project an edge of a body of an earlier component (once
@@ -51,8 +51,8 @@ except U1, L1 to L15, F1, F2, SP1 to SP4 and TH1 to TH6, which are described her
 - [ ] TH5, a cancelled and a failed export. On TH3, cancel in the "Try 3 of ..." window; then export TH1 with Export
       size choices and a row `Width` = 12, which Fusion cannot build. Expect: in both, every step is as before; when a
       step is not, a message box after the export names it and says to use Undo.
-- [ ] TH6, Faster tries. Add a second component with about 20 steps of its own (holes, fillets) after TH1's box. Tick
-      Faster tries and export the box, once to the end and once cancelled during the tries. Expect: every step of the
+- [ ] TH6, Faster tries. Add a second component with about 20 steps of its own (holes, fillets) after TH1's box. Leave
+      Faster tries on and export the box, once to the end and once cancelled during the tries. Expect: every step of the
       second component is on after the export; `health.end_actions` has no `turned_back_on` (if it has, note which
       steps stayed off before the add-in turned them on again).
 - [ ] SB1, Split Body by a plane. Model a cup or a box with a shell and a fillet, then Split Body with the YZ origin
@@ -105,10 +105,10 @@ except U1, L1 to L15, F1, F2, SP1 to SP4 and TH1 to TH6, which are described her
       and remove the outer piece (this stops the copy), then add a coil joined to the box. Export the box. Expect: a
       fixed shape with the split in `refusal`, `report.json` `after_stop` with `steps` naming the split and the coil,
       and a second note "Not copied either: Coil1".
-- [ ] U1, faster tries (0.9.1, experimental). Use a design with a body in one component and two or more other
+- [ ] U1, faster tries (on by default). Use a design with a body in one component and two or more other
       components the body does not use (no joints), with a ticked size that moves a sketch. Suppress one step of an
-      unused component by hand first. Export for Paramability twice, once with "Faster tries" off and once with it
-      on, to two files. Expect: the two files hold the same recipe and sizes (compare `recipe.json` and `manifest.json`);
+      unused component by hand first. Export for Paramability twice, once with "Faster tries" unticked and once with
+      it left on, to two files. Expect: the two files hold the same recipe and sizes (compare `recipe.json` and `manifest.json`);
       with the box on, the steps of the unused components show as suppressed in the timeline while the tries run, and
       `report.json` has `probe.timeline.suppressed` with `on: true` and the number of steps; with it off, `on: false`
       and `asked: false`. Compare `try_seconds` of the two files. After each export the timeline looks as before: the
@@ -116,7 +116,22 @@ except U1, L1 to L15, F1, F2, SP1 to SP4 and TH1 to TH6, which are described her
       suppressed, the marker where it was, parameters back. Export again with the box on and press Cancel during the
       tries: every step is back on (the hand suppressed one still off), the marker and parameters are back. Note
       whether Undo or the "unsaved changes" mark show anything new. A design with a joint gives `on: false` with a
-      reason and suppresses nothing.
+      reason and suppresses nothing. With a body whose sketch projects an edge of another component (so discovery
+      tries run, `probe.discovery`), the unused steps show as on again while the "checking if ... changes this part"
+      tries run.
+- [ ] U2, faster face reads. Make a box extrude whose height is the user parameter `Height`, then a second extrude
+      that starts on the box's top face, using that face as its outline, then 30 or more fillets and chamfers after
+      it. Tick `Height` and export, once with this version and once with 0.10.11.
+      Export: compare `timing.probe.rebuild` and `read_parts.faces` of the two files; with this version the face
+      read time drops and `rebuild` per try stays about the same, so `tries_seconds` per try is about one rebuild
+      lower. The recipe and sizes are the same, and after the export the marker, the values and the steps are as
+      before. Press Cancel during the tries once: the marker is back where it was.
+- [ ] U3, the place of a body with many vertices. Put a body with a few thousand vertices (a box with a rectangular
+      pattern of 400 small holes) inside a component that sits moved and turned in the root, add a construction
+      plane of another component that a step of the body uses (an extrude to that plane), tick a size and export.
+      Export: `timing.capture.placement` and `tail_parts.target` are well under a second, and the per-read time
+      (`timing.probe.read.seconds` divided by its `count`) is small; `target.placement` in the capture reads as
+      before (`checked_points: 3`).
 - [ ] L1, a step in the middle of the timeline that cannot be copied. In a part, add a coil in the middle
       of the timeline (a join, between two extrudes). Export for Paramability. Expect: the export finishes with a
       recipe; the result window has a "Left out" list with the coil and a reason, and a line that says
@@ -1475,6 +1490,9 @@ D5 to D13). Every read is guarded: a member that raises is listed in the record'
 - Outline faces at each state (`lib/fusion_reader/read_face.py` `read_faces`, hand test K27): `Timeline.markerPosition`
   set to the step's index, `Design.findEntityByToken` of the face with the marker there (one face, not a split one),
   its loops read as at the capture, and the marker set back, which rebuilds the steps after it with the values tried.
+  In a try (hand test U2) the marker stays at the face's step and `Design.modifyParameters` puts the values back
+  with it there; the store then moves it to where the tries hold it. Check that the steps after the face are built
+  with the values back, and that their health is read only after the marker is back.
 - Sketch put back (`lib/fusion_reader/sketch_keep.py`, hand test K26): `SketchPoint.geometry` in sketch space,
   `isReference`, `isFixed`, `SketchPoint.move(Vector3D)` while `Sketch.isComputeDeferred` is true, and whether
   Fusion solves the sketch from the moved points (back on its first solution) once compute is turned on again and
@@ -1499,8 +1517,9 @@ D5 to D13). Every read is guarded: a member that raises is listed in the record'
   `Timeline.markerPosition` to a position before the end while parameters change; `Design.computeAll` then rebuilds only
   the items before the marker and leaves the marker in place (the store sets it back after each recompute anyway); a
   read of sketches, points, lines, references and the body box at that marker equals the read at the full marker (the
-  export checks this once and does not roll when it differs); moving the marker forward again and calling
-  `computeAll` builds the later items with the restored parameter values and leaves no entry in Undo.
+  export checks this once and does not roll when it differs); moving the marker forward again builds the later items
+  with the restored parameter values and leaves no entry in Undo (`computeAll` follows only when a parameter did not
+  go back; hand test SP1 checks the body after the export).
 - One change per try (`fusion_reader/rows.py` `set_expressions`, hand tests SP2 and SP4): `Design.modifyParameters`
   with `ValueInput.createByString` sets every expression or none and rebuilds once; `TimelineObject.healthState` is
   up to date after it without `computeAll` (a step in error then is judged after one `computeAll`); the marker stays

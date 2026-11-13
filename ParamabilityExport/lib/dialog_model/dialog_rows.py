@@ -28,11 +28,11 @@ MAX_TABLE_ROWS = 14
 HINT = "Click a row to see its comment, formula or why it stays fixed."
 HINT_TOOLTIP = ("While it exports, the design is changed for a moment to measure the sketches, then put back. "
                 "Every parameter also comes along as a variable.")
-FASTER_TRIES = "Faster tries: turn off unused timeline steps while measuring (experimental)"
-FASTER_TRIES_TOOLTIP = ("While the sizes are tried, timeline steps of other components that this body does not use "
-                        "are turned off, so each try rebuilds less. Every step is turned back on afterwards, and "
-                        "steps you had turned off stay off. If the body looks different with them off, the tries run "
-                        "as usual.")
+FASTER_TRIES = "Faster tries: turn off steps this body does not use while measuring"
+FASTER_TRIES_TOOLTIP = ("On to start with. While the sizes are tried, timeline steps of other components that this "
+                        "body does not use are turned off, so each try rebuilds less. Every step is turned back on "
+                        "afterwards, and steps you had turned off stay off. If the body looks different with them "
+                        "off, nothing is turned off. Untick it to keep every step on.")
 ELLIPSIS = "..."
 _TYPED = re.compile(r"^\s*([-+]?[0-9.,]+)\s*([a-z]*)\s*$", re.I)
 # A comma that starts exactly three digits ("2,500") reads as a thousands mark or a decimal comma: not guessed.

@@ -1670,10 +1670,11 @@ at the rolled marker gives the same sketches, points, lines, references and body
 `probe.timeline`: `{ rolled, items, of, reason?, suppressed, try_seconds }`, the items each try rebuilt out of the
 items before the person's marker, why it did not move, the suppression record below, and the seconds from the start of
 the tries to the end of the last one. A read while the marker sits before the rolled position counts as not read: the
-probe is not used. The marker and the later items are put back and rebuilt once when the tries end, also on cancel and
-error.
+probe is not used. The marker is put back when the tries end, also on cancel and error; Fusion builds the later items
+as the marker passes them. The design is also rebuilt once (`computeAll`) when a parameter expression differs from the
+one at the roll (a parameter that did not go back) or cannot be read (`DesignParameterStore.unroll_marker`).
 
-When the person ticks "Faster tries" in the dialog (off by default), the items before the stop point (the items each
+Unless the person unticks "Faster tries" in the dialog (on by default), the items before the stop point (the items each
 try rebuilds) that the tries do not use are also suppressed while the rows run (`lib/export_plan/timeline_trim.py`).
 The evidence is the one above, with a component as the unit: an item is suppressed only when it is not suppressed
 already, belongs to a named component other than the ones of the picked bodies, no item of that component is needed,
@@ -1683,9 +1684,11 @@ no component, when an item before the stop point has a type the step kind table 
 feature (a type ending in `Feature` of a named component), or when an assembly item other than an occurrence (a joint, a rigid group) comes
 before the stop point. The store checks that each item still has the name the capture saw at its index before it
 touches any. With the items suppressed, a read must give the same state as E0 and no step may show a new error;
-otherwise every item is turned back on and the tries run as without the option. The items are turned back on after the
-parameters are put back and before the last read, the restore check and the marker unroll, on every way out; every
-item the store tried to turn off goes back on, also one whose state could not be read after.
+otherwise every item is turned back on and the tries run as without the option. The items are turned back on before
+the discovery rows read their base, when rows are left for them (those rows look for links to other components that
+the capture cannot show, so every component must be built), and else after the parameters are put back and before the
+last read, the restore check and the marker unroll, on every way out; every item the store tried to turn off goes back
+on, also one whose state could not be read after.
 `suppressed`: `{ asked, on, items, reason?, left_off? }`: whether the box was ticked, whether the tries ran with items
 suppressed, how many, why not, and the names of items that would not turn back on (the person is told about those).
 
@@ -1997,7 +2000,13 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
   the face, so the reader moves the timeline marker to `before`, finds the face by its token, reads its `frame` and
   `loops` like the capture's face record (section 4) and moves the marker back (`read_face.read_faces`, read last). A
   `before` past the marker, a marker that does not move or a face that is not found gives `unread`. A marker that does
-  not go back leaves every face unread and adds `"marker"` to `unread`, and the probe stops. A face is read only in a
+  not go back leaves every face unread and adds `"marker"` to `unread`, and the probe stops. The read of a try's own
+  state asks to `park` the marker (`request.park`, when the store has `keep_marker`): the marker stays at the face's
+  position, and the change that puts the try's values back moves it back to where the tries hold it. Fusion then
+  rebuilds the steps after the face once, with the values back, instead of once with the try's values and once more
+  with the values back. The marker is brought back (`keep_marker`) before any other read and when the rows of a batch
+  end; when it does not go back the probe stops (`pipeline.ProbeRun`). In a file with several bodies only the last
+  body's read parks the marker. A face is read only in a
   state that sets a size read before its step (`SizeProbe.read_now`); the other states take its E0 read. The probe
   pairs the edges with the captured ones by kind and place along each loop, writes the values under the keys of a
   profile (`<item>/face/...`) and tries every size an item reads before the step (`plane_sizes.plane_driven`). A
@@ -2133,7 +2142,8 @@ export, the recipe and the notes do not depend on it.
                "measure": { "target_state": 2.0, "body_states": 0.4 },
                "readers": { "count": 480, "seconds": 3.1 },
                "faces": { "count": 12, "seconds": 0.9 }, "split": { "count": 2, "seconds": 0.2 },
-               "helper_pass": 1.5, "restore_marker": 0.8, "tail": 0.4,
+               "helper_pass": 1.5, "placement": 0.1, "restore_marker": 0.8, "tail": 0.4,
+               "tail_parts": { "target": 0.1, "parameters": 0.2, "links": 0.05, "graphs": 0.05 },
                "by_type": { "ExtrudeFeature": { "steps": 60, "seconds": 12.4 } },
                "by_component": { "Cup": { "steps": 200, "seconds": 35.0 } },
                "slowest": [ { "index": 87, "name": "Extrude41", "type": "ExtrudeFeature", "component": "Cup",
@@ -2158,14 +2168,20 @@ export, the recipe and the notes do not depend on it.
   the marker + 1), `helper` the moves of the pass over the tool bodies of Combines. `measure.target_state` is the volume
   and box of the target at every position, `measure.body_states` the measures in the helper pass. `readers` is the sum
   of all feature readers (before and after each step); `faces` (outline face reads) and `split` (Split Body reads) are
-  inside `readers`. `restore_marker` is the move back to the person's marker, which makes Fusion build the later steps
-  again; `tail` is what is read after the walk (links, graphs, parameters). `by_type` and `by_component` sum the time
-  of the steps, slowest first (a component is named by its name, or its token); `slowest` lists the 10 slowest steps.
+  inside `readers`. `placement` is the place of the picked body, read once before the walk (the capture's
+  `target.placement` is the same record; only the first few vertices of the body are fetched, so a body with many
+  vertices costs no more). `restore_marker` is the move back to the person's marker, which makes Fusion build the
+  later steps again; `tail` is what is read after the walk, with `tail_parts`: `target` (the body's volume and box),
+  `parameters` (user and model parameters, with where each acts), `links` (sketch links) and `graphs` (sketch
+  graphs). `by_type` and `by_component` sum the time of the steps, slowest first (a component is named by its name,
+  or its token); `slowest` lists the 10 slowest steps.
 - `probe`: `tries` is the rows run (rows run again included), `tries_seconds` the time inside them, `rebuild` that time
   without the state reads made inside it (setting sizes, Fusion rebuilding, putting them back), `read` the state reads of
   the tries (rows, starts, put backs, the discovery base; not the marker roll check or the read after the tries) with
   `read_parts`, the time of each part of those reads (`sketches`, `points` with the lines, `params`, `refs`, `box`,
-  `faces`; a part no read held is left out), and `put_back` the sketch put backs (`probe.recovery`). `try_seconds` is the same value as in
+  `faces`; a part no read held is left out; a face read that parks the marker does not count the move back, which
+  happens in the change that puts the values back and so counts in `rebuild`), and `put_back` the sketch put backs
+  (`probe.recovery`). `try_seconds` is the same value as in
   `probe.timeline` (from the first try to the end of the discovery rows).
 
 ### Derived values (`derived`)

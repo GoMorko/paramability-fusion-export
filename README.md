@@ -138,13 +138,17 @@ sizes gets the same kind of range: it stops before the taper reaches 45 degrees,
 tapered cut through all whose walls would meet before it passes the part at some sizes is checked over the ranges of
 the sizes behind its taper and its outline, and those ranges stop where the cut would close.
 
-The box "Faster tries" under the body picker is off to start with. When you tick it, the tries also turn off the
-timeline steps of other components that the body does not use, so each try rebuilds less. Every step is turned back
-on when the tries end, also on cancel or an error, and steps you had turned off yourself stay off. Before the tries,
-the add-in checks that the body reads the same with those steps off; if not, or if it is not sure which steps the body
-uses (for example when the design has joints), it turns nothing off. This is an experiment: `report.json` says what
-happened and how long the tries took (`probe.timeline.suppressed`, `try_seconds`), so you can compare an export with
-the box on and off.
+The box "Faster tries" under the body picker is on to start with. The tries then also turn off the timeline steps of
+other components that the body does not use, so each try rebuilds less. Every step is turned back on when the tries
+end, also on cancel or an error, and steps you had turned off yourself stay off. Before the tries, the add-in checks
+that the body reads the same with those steps off; if not, or if it is not sure which steps the body uses (for example
+when the design has joints), it turns nothing off. The discovery tries, which check whether a parameter of another
+component also changes the body, run with every step back on. Untick the box to keep every step on; `report.json`
+says what happened and how long the tries took (`probe.timeline.suppressed`, `try_seconds`).
+
+A try that reads a flat face a step uses as its outline (see "Limits") leaves the timeline marker before that step
+until the values are put back, so Fusion rebuilds the steps after it once per try instead of twice. The marker
+is always back where the tries hold it before the next read and when the tries end.
 
 A point can also move along a curve: the end of a leg that turns with an angle, or a corner set back by a wall along
 half the angle. The add-in then looks for a formula with the angle's sine, cosine, tangent or cotangent (of the angle

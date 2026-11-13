@@ -1,10 +1,12 @@
 """A flat face a step uses as its outline, read again by the size probe before that step (keys `<item>/face`): the
 outline follows the sizes that move the face, and only a size the copy cannot follow, or that was not tried, is
 marked (lib/translator/face_outline.py, lib/probe/match.py, lib/fusion_reader/read_face.py)."""
+import contextlib
+import tempfile
 import unittest
 
 from tests import context  # noqa: F401
-from tests.fakes import FakeMarkerTimeline
+from tests.fakes import FakeMarkerTimeline, FakeStore
 from tests.probe_helpers import size
 from tests.test_capture_reader import Obj
 from tests.test_capture_reader_offset import plane_face, side, with_outline
@@ -16,6 +18,7 @@ from tests.test_translate_sized import CUBE, H, TICKED, table_of
 from tests.translator_helpers import load_capture, steps_of
 
 from lib.design_edit.marker import MARKER_LOST
+from lib.export_plan.pipeline import MarkerNotHeld, ProbeRun
 from lib.export_plan.probe_flow import SizeProbe
 from lib.fusion_reader.read_face import read_faces
 from lib.params import size_table
@@ -165,6 +168,89 @@ class ProbeTest(unittest.TestCase):
                 self.assertEqual(cut["max"], 1.875)
 
 
+class ParkStore(FakeStore):
+    """A store whose marker is held at `HELD`, counting how often Fusion rebuilds the items after the outline face's
+    step (`tail_builds`). A change or a recompute rebuilds them: at once with the marker held, or as the marker goes
+    back there from an earlier place. `homes` false keeps the marker where a read left it."""
+
+    HELD = 10
+
+    def __init__(self, expressions, homes=True):
+        super().__init__(expressions)
+        self.at, self.tail_builds, self.homes = self.HELD, 0, homes
+
+    def _rebuilt(self):
+        if self.homes:
+            self.tail_builds += 1
+            self.at = self.HELD
+
+    def set_expressions(self, expressions):
+        self.exprs.update(expressions)
+        self._rebuilt()
+        return True
+
+    def recompute(self):
+        self.recomputes += 1
+        self._rebuilt()
+        return True
+
+    def keep_marker(self):
+        if self.at != self.HELD:
+            self._rebuilt()
+        return self.at == self.HELD
+
+    def marker_holds(self):
+        return self.at >= self.HELD
+
+
+class ParkPort:
+    def __init__(self, capture, store):
+        self.store, self.logs = store, []
+        self.units = {p["name"]: p["unit"] for p in capture["parameters"]["user"]}
+
+    def progress(self, verb):
+        return contextlib.nullcontext(type("Step", (), {"step": lambda self, *args: True})())
+
+    def log(self, text):
+        self.logs.append(text)
+
+
+def face_reader(store):
+    """A read that moves the marker to the face's step and back, as `read_faces` does, unless asked to `park` it."""
+    def read(request):
+        if request.get("faces"):
+            store.at = 2
+            if not request.get("park"):
+                store.keep_marker()
+        return tray_read({})
+    return read
+
+
+class ParkedFaceReadTest(unittest.TestCase):
+    def run_rows(self, store):
+        capture = tray_face()
+        table = table_of(capture, [H, CUBE])
+        probe = SizeProbe.start(capture, table, face_reader(store))
+        store.tail_builds = 0  # the first read is not a try
+        run = ProbeRun(ParkPort(capture, store), tempfile.gettempdir(), probe)
+        rows = probe.probe_rows([size(table, H, "count"), size(table, CUBE)])
+        run.run_rows(rows)
+        return rows
+
+    def test_a_row_that_reads_a_face_rebuilds_the_later_items_once_with_its_values_and_once_with_them_back(self):
+        store = ParkStore({p["name"]: p["expression"] for p in tray_face()["parameters"]["user"]})
+        rows = self.run_rows(store)
+        self.assertEqual(len(rows), 4)
+        # The baseline, then per row the change and the change back; the face read adds none.
+        self.assertEqual(store.tail_builds, 1 + 2 * len(rows))
+        self.assertEqual(store.at, ParkStore.HELD)
+
+    def test_a_marker_that_does_not_go_back_after_a_face_read_stops_the_probe(self):
+        store = ParkStore({p["name"]: p["expression"] for p in tray_face()["parameters"]["user"]}, homes=False)
+        with self.assertRaises(MarkerNotHeld):
+            self.run_rows(store)
+
+
 class ReadFacesTest(unittest.TestCase):
     def test_each_face_is_read_with_the_marker_before_its_step_and_the_marker_goes_back(self):
         timeline = FakeMarkerTimeline([Obj() for _ in range(4)], marker=3)
@@ -177,6 +263,14 @@ class ReadFacesTest(unittest.TestCase):
         self.assertEqual(len(found["2/face"]["loops"][0]["curves"]), 4)
         self.assertEqual(list(unread), ["4/face"])
         self.assertEqual((timeline.markerPosition, timeline.visited), (3, [2, 3]))
+
+    def test_a_read_asked_to_stay_leaves_the_marker_before_the_step(self):
+        timeline = FakeMarkerTimeline([Obj() for _ in range(4)], marker=3)
+        top = with_outline(plane_face(10), [side((0, -1, 0)), side((1, 0, 0)), side((0, 1, 0)), side((-1, 0, 0))])
+        design = Obj(timeline=timeline, findEntityByToken=lambda token: [top])
+        found, unread = read_faces(design, None, {"2/face": {"token": "top", "before": 2}}, stay=True)
+        self.assertEqual((list(found), unread), (["2/face"], {}))
+        self.assertEqual((timeline.markerPosition, timeline.visited), (2, [2]))
 
     def test_a_marker_that_does_not_go_back_leaves_every_face_unread_and_says_so(self):
         timeline = FakeMarkerTimeline([Obj() for _ in range(4)], marker=3, moves_allowed=1)
