@@ -1,4 +1,5 @@
 """What the states tried so far show for one size set alone: which values built and kept every outline."""
+from ..state import as_states
 from .rows import SAME_VALUE
 
 
@@ -32,15 +33,14 @@ def tried_alone(states, name, value):
     """`(value, kept)` of every state that set only `name` to another value than `value`: `kept` when it built and
     no followed outline changed there (`changed`)."""
     out = []
-    for state in states:
-        values = state.get("values") or {}
+    for state in as_states(states):
+        values = state.values
         if list(values) == [name] and abs(values[name] - value) > SAME_VALUE:
-            out.append((values[name], state.get("built") is not False and not state.get("changed")))
+            out.append((values[name], state.built and not state.changed))
     return out
 
 
 def changed_alone(states, name, value):
     """The values of the states that set only `name` and changed a followed outline (`changed`)."""
-    return [v for v, state in ((s["values"][name], s) for s in states
-                               if list(s.get("values") or {}) == [name] and s.get("changed"))
+    return [v for v in (s.values[name] for s in as_states(states) if list(s.values) == [name] and s.changed)
             if abs(v - value) > SAME_VALUE]

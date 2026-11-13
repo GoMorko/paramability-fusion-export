@@ -1,6 +1,6 @@
 """The try runner: runs the probe rows in one job, reads each state and puts the followed sketches back."""
 from ...design_edit.marker import MARKER_LOST
-from ...design_edit.runner import ExportCancelled, RowExport
+from ...design_edit.runner import ExportCancelled, RowExport, row_key
 from ...design_edit.store import timeline_control
 from ...probe.plan.nearer import BISECT_STEPS, NEARER_STEPS
 from ...probe.plan.rows import MAX_PROBE_ROWS
@@ -149,7 +149,7 @@ class ProbeRun:
         each such row reads its own start, also once put backs are given up."""
         self._home()
         self._drop_undo()
-        key = row.get("key", row["name"])
+        key = row_key(row)
         previous, self._previous = self._previous, key
         if self.read_failure is not None or (previous is None and not row.get("again")):
             return
@@ -230,7 +230,7 @@ class ProbeRun:
     def try_rows(self, rows):
         """Run the probe's rows. Returns their results."""
         done = len(self.rows)
-        self._values.update((row.get("key", row["name"]), _row_values(row)) for row in rows)
+        self._values.update((row_key(row), _row_values(row)) for row in rows)
         with self.port.progress(messages.TRY_VERB) as progress:
             def step(index, total, label):
                 # The window counts the tries of the whole export, not of this batch.
@@ -272,7 +272,7 @@ class ProbeRun:
         a row run again replaces its first run."""
         out = []
         for row, result in self.rows[since:]:
-            key = row.get("key", row["name"])
+            key = row_key(row)
             if key in self.redone:
                 continue
             more = {"put_back": self.backs.get(key), "again": bool(row.get("again"))}
@@ -287,7 +287,7 @@ class ProbeRun:
         """True when row number `at` did not start from a checked read (its start was not read, and it is not the
         first row) and did not end on the first solution: it read another outline or did not build."""
         row, result = self.rows[at]
-        key = row.get("key", row["name"])
+        key = row_key(row)
         if at == 0 or row.get("again") or key in self.starts:
             return False
         read = self.reads.get(key)
@@ -296,7 +296,7 @@ class ProbeRun:
     def _again(self, since):
         """`(key, copy)` of the rows run from number `since` on that may have started on another solution (`_suspect`,
         and the next read with the values back shows a sketch there), within the rows left."""
-        keys = [row.get("key", row["name"]) for row, _ in self.rows]
+        keys = [row_key(row) for row, _ in self.rows]
         out = []
         for at in range(since, len(self.rows)):
             if not self._suspect(at):
@@ -314,7 +314,7 @@ class ProbeRun:
         self._check_reads()
         if self.rows and self.job.not_back is None and self._suspect(len(self.rows) - 1):
             last = self.rows[-1][0]
-            self._tails[last.get("key", last["name"])] = self._try_read()
+            self._tails[row_key(last)] = self._try_read()
             self._check_reads()
         again = self._again(done)
         if again:
@@ -386,6 +386,6 @@ class ProbeRun:
         self.try_rows(found)
         if self.read_failure is not None:
             raise self.read_failure
-        self.probe.discover([(row, result, self.reads.get(row.get("key", row["name"])))
+        self.probe.discover([(row, result, self.reads.get(row_key(row)))
                              for row, result in self.rows[done:]])
         return self.probe.also_changes

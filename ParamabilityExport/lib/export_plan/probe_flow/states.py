@@ -1,4 +1,6 @@
 """Comparing probe states: the body's box and volume, the numbers of a read and the states a try marked."""
+from dataclasses import replace
+
 from ...probe import fit
 
 BODY_TOLERANCE_MM = 1e-4
@@ -52,4 +54,4 @@ def body_changed(before, now):
 
 def marked_states(states, changed):
     """The states after E0, each one whose number is in `changed` marked `changed` for `plan.nearer_rows`."""
-    return [dict(state, changed=True) if at in changed else state for at, state in enumerate(states) if at]
+    return [replace(state, changed=True) if at in changed else state for at, state in enumerate(states) if at]

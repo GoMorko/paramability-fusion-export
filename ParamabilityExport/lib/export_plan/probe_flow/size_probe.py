@@ -4,6 +4,7 @@ from ...design_edit.marker import MARKER_LOST
 from ...package.manifest import MAX_FIXED_REASON
 from ...package.text import clip
 from ...probe import build, derived, fit, match, plan, plane_sizes, ref_fit, series
+from ...probe.state import ProbeState
 from ...sketch_values.motion import SHAPE
 from ...translator.notes import loose_reason
 from ...translator.sizes import construction_only, probed_sizes
@@ -19,8 +20,6 @@ OUTLINE_SKIPS = ("params", "refs", "target", "patterns")
 # How far a followed value (mm or degrees) may read from E0 once the values are back before the sketch counts as on
 # another solution; Fusion's own restore leaves up to about a hundredth of a degree on short lines.
 FLIP_TOLERANCE = 0.05
-# The parts of a read that a state keeps in `report.json`.
-_STATE_KEYS = ("sketches", "points", "lines", "params", "box", "refs", "faces", "patterns", "unread")
 
 
 class SizeProbe:
@@ -35,7 +34,7 @@ class SizeProbe:
         self.read = read
         self.request = request
         self.e0 = e0
-        self.states = [{"values": {}, "built": True, "read": e0, "e0": True}]
+        self.states = [ProbeState(read=e0, e0=True)]  # `probe.state.ProbeState`, E0 first
         self.dropped = []
         self.untried = []
         self.restore_gap_mm = None
@@ -112,18 +111,15 @@ class SizeProbe:
         for values, result, read, *rest in entries:
             start = rest[0] if rest else None
             more = rest[1] if len(rest) > 1 and isinstance(rest[1], dict) else {}
+            put_back = more.get("put_back")
+            kept = {"start": start if isinstance(start, dict) else None,
+                    "put_back": put_back if isinstance(put_back, dict) else None, "again": bool(more.get("again"))}
             if result.get("error"):
                 detail = result.get("detail") or {}
-                state = {"values": values, "built": False, "failed": (detail.get("items") or [""])[0]}
+                state = ProbeState(values or {}, built=False, failed=(detail.get("items") or [""])[0], **kept)
                 self.dropped.append({"name": result.get("name"), "error": result.get("error"), "detail": detail})
             else:
-                state = {"values": values, "built": True, "read": read}
-            if isinstance(start, dict):
-                state["start"] = start
-            if isinstance(more.get("put_back"), dict):
-                state["put_back"] = more["put_back"]
-            if more.get("again"):
-                state["again"] = True
+                state = ProbeState(values or {}, read=read, **kept)
             self.states.append(state)
 
     def followed_sketches(self):
@@ -196,7 +192,7 @@ class SizeProbe:
         targets = self._followed_targets()
         found = []
         for state in self.states[1:]:
-            values, read = state.get("values") or {}, state.get("read")
+            values, read = state.values, state.read
             varied = [n for n, v in values.items() if abs(v - current.get(n, v)) > 1e-9]
             if (len(varied) == 1 and varied[0] not in found and isinstance(read, dict)
                     and self._followed_moved(targets, read)):
@@ -405,8 +401,7 @@ class SizeProbe:
         size name to the text for the person.
         """
         found = []
-        alone = {name for state in self.states[1:] for name in (state.get("values") or {})
-                 if len(state.get("values") or {}) == 1}
+        alone = {name for state in self.states[1:] for name in state.values if len(state.values) == 1}
         tried = self.schedule.moved
         self.untried.extend(p for p in self._unrun if p in tried and p not in alone and p not in self.untried)
         for param in self.untried:
@@ -443,9 +438,8 @@ class SizeProbe:
             if before is None:
                 continue
             for state in self.states[1:]:
-                values = state.get("values") or {}
-                read = state.get("read")
-                if state.get("built") is False or len(values) != 1 or not isinstance(read, dict):
+                values, read = state.values, state.read
+                if not state.built or len(values) != 1 or not isinstance(read, dict):
                     continue
                 param = next(iter(values))
                 now = (read.get("sketches") or {}).get(token)
@@ -500,7 +494,7 @@ class SizeProbe:
         """The record kept in `report.json`: what was asked, what was read, and what was found."""
         out = {
             "request": self.request,
-            "states": [self._state_json(s) for s in self.states],
+            "states": [s.json() for s in self.states],
             "dropped": list(self.dropped),
             "untried": list(self.untried),
             "restore_gap_mm": self.restore_gap_mm,
@@ -517,20 +511,6 @@ class SizeProbe:
             out["stopped"] = dict(self.stopped)
         return out
 
-    @staticmethod
-    def _state_json(state):
-        out = {"values": state.get("values") or {}, "built": state.get("built") is not False}
-        if state.get("failed"):
-            out["failed"] = state["failed"]
-        if state.get("e0"):
-            out["e0"] = True
-        if state.get("again"):
-            out["again"] = True
-        for key in ("read", "start", "put_back"):
-            if isinstance(state.get(key), dict):
-                out[key] = {k: v for k, v in state[key].items() if k in _STATE_KEYS}
-        return out
-
     def _body_only(self, skip):
         """Fusion names of the sizes that changed the body in a state where they alone differ, and in no such state
         moved a sketch or reference the probe follows: the body changes by a route the copy does not model."""
@@ -538,10 +518,10 @@ class SizeProbe:
         targets = self._followed_targets()
         body, followed = [], set()
         for state in self.states[1:]:
-            read = state.get("read")
-            if state.get("built") is False or not isinstance(read, dict):
+            read = state.read
+            if not state.built or not isinstance(read, dict):
                 continue
-            varied = [n for n, v in (state.get("values") or {}).items() if abs(v - current.get(n, v)) > 1e-9]
+            varied = [n for n, v in state.values.items() if abs(v - current.get(n, v)) > 1e-9]
             if len(varied) != 1:
                 continue
             if self._followed_moved(targets, read):

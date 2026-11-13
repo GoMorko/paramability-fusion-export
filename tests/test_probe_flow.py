@@ -124,7 +124,7 @@ class SizeProbeTest(unittest.TestCase):
         self.fusion = Fusion(bad_when=lambda e: e["height"] == "40 mm")
         probe = self.start()
         run(self.fusion, probe, self.sizes)
-        self.assertTrue(any(not s["built"] for s in probe.states))
+        self.assertTrue(any(not s.built for s in probe.states))
         self.assertEqual([d["name"] for d in probe.dropped][:1], ["height (max)"])
         self.assertEqual(probe.dropped[0]["detail"]["items"], ["Fillet1"])
         probe.finish(probe.read_now(), {})
@@ -220,9 +220,9 @@ class StartReadTest(unittest.TestCase):
                 {"name": "cube (max)", "key": "c", "values": {"cube": 20.0}, "varied": ["cube"], "state": {"cube": 20.0},
                  "step": False}]
         ProbeRun(_Port(fusion), "", probe).run_rows(rows)
-        self.assertEqual([("start" in s, s["built"]) for s in probe.states[1:]], [(False, False), (True, True),
+        self.assertEqual([(s.start is not None, s.built) for s in probe.states[1:]], [(False, False), (True, True),
                                                                                    (False, True)])
-        self.assertEqual(probe.states[2]["start"], read_at())
+        self.assertEqual(probe.states[2].start, read_at())
         self.assertIn("start", probe.report()["states"][2])
         # The start read asks only for what tells the outlines apart.
         start_request = fusion.requests[-3]
@@ -321,7 +321,7 @@ class StartAfterGivingUpTest(unittest.TestCase):
         run = ProbeRun(port_class(fusion), "", probe)
         run.run_rows(keyed(size_row("height", 40.0), size_row("off", 10.0), size_row("height", 30.0),
                            size_row("cube", 20.0), size_row("off", 8.0)))
-        return probe, next(s for s in probe.states if s["values"] == {"off": 8.0})["start"]
+        return probe, next(s for s in probe.states if s.values == {"off": 8.0}).start
 
     def test_a_row_that_needs_its_start_reads_it_with_a_keeper_that_cannot_help_or_none(self):
         for port_class in (_InertKeeperPort, _Port):
@@ -352,7 +352,7 @@ class PutBackTest(unittest.TestCase):
         probe = SizeProbe.start(CAPTURE, table(PARAMS, TICKED, MODEL), fusion.read)
         run = ProbeRun(Port(fusion), "", probe)
         run.run_rows(keyed(size_row("off", 10.0), size_row("height", 40.0)))
-        back = probe.states[2].get("put_back")
+        back = probe.states[2].put_back
         self.assertTrue(isinstance(back, dict) and not probe.left_start(back))
 
     def test_after_the_tries_every_kept_sketch_goes_back_also_one_whose_move_reads_within_tolerance(self):
@@ -443,10 +443,10 @@ class SolverFlipTest(unittest.TestCase):
             return number(before["height"]) == 40 and now == START
 
         fusion, run, probe = self.run_flip(restore_after_tall)
-        self.assertEqual([s["values"] for s in probe.states[1:]], [{"height": 40.0}, {"cube": 20.0}, {"off": 10.0}])
+        self.assertEqual([s.values for s in probe.states[1:]], [{"height": 40.0}, {"cube": 20.0}, {"off": 10.0}])
         self.assertEqual((run.put_backs, run.redone), (1, ["off"]))
         self.assertEqual((probe.motion.flipped, probe.motion.apart), ([], []))
-        self.assertEqual(probe.states[3]["read"], read_at(off=10))
+        self.assertEqual(probe.states[3].read, read_at(off=10))
         self.assertEqual(probe.report()["recovery"], {"put_backs": 1, "again": 1})
 
     def test_a_row_that_flips_again_from_a_checked_start_limits_its_own_size(self):
