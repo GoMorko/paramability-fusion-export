@@ -33,6 +33,10 @@ FASTER_TRIES_TOOLTIP = ("On to start with. While the sizes are tried, timeline s
                         "body does not use are turned off, so each try rebuilds less. Every step is turned back on "
                         "afterwards, and steps you had turned off stay off. If the body looks different with them "
                         "off, nothing is turned off. Untick it to keep every step on.")
+LIGHT_UNDO = "Lighter on memory: leave the tries out of Undo (experimental)"
+LIGHT_UNDO_TOOLTIP = ("Fusion keeps Undo data for every try, which can make it use many GB during a long export. "
+                      "With this on, Fusion forgets the tries as they run. The add-in puts every value back itself, "
+                      "but Undo may not step back through the export afterwards. Save your design first.")
 ELLIPSIS = "..."
 _TYPED = re.compile(r"^\s*([-+]?[0-9.,]+)\s*([a-z]*)\s*$", re.I)
 # A comma that starts exactly three digits ("2,500") reads as a thousands mark or a decimal comma: not guessed.

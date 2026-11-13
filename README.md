@@ -150,6 +150,13 @@ A try that reads a flat face a step uses as its outline (see "Limits") leaves th
 until the values are put back, so Fusion rebuilds the steps after it once per try instead of twice. The marker
 is always back where the tries hold it before the next read and when the tries end.
 
+The box "Lighter on memory" is off to start with, and it is an experiment too. A long export can make Fusion grow to
+many GB, because Fusion keeps Undo data for every try until the export ends. When you tick the box, the add-in asks
+Fusion to forget the tries as they run, each time all values are back where they were (Fusion's preview call
+`Command.beginStep`). The add-in puts every value back itself, so nothing should be lost, but Undo may not step back
+through the export afterwards: save your design before you export. If your Fusion does not have the call or refuses
+it, the export runs as with the box off. `report.json` says what happened in `timing.undo` (`on`, `applied`, `steps`).
+
 A point can also move along a curve: the end of a leg that turns with an angle, or a corner set back by a wall along
 half the angle. The add-in then looks for a formula with the angle's sine, cosine, tangent or cotangent (of the angle
 or of half of it), alone or times a length, and with products of two lengths. A formula is used only when the tries

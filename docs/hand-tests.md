@@ -6,7 +6,7 @@ note the Fusion version and system.
 ## Check first in this version
 
 What 0.6.0 to 0.8.0 added, and what this version adds, in this order. Each id is described in the section named,
-except U1 to U3, L1 to L15, F1, F2, SP1 to SP4 and TH1 to TH6, which are described here.
+except U1 to U3, UM1, L1 to L15, F1, F2, SP1 to SP4 and TH1 to TH6, which are described here.
 
 - [ ] SP1, the marker roll past other components. Make component Cup: a sketch with a 60 mm square whose side is the
       user parameter `Width`, extruded 40 mm. In that sketch project an edge of a body of an earlier component (once
@@ -55,6 +55,21 @@ except U1 to U3, L1 to L15, F1, F2, SP1 to SP4 and TH1 to TH6, which are describ
       Faster tries on and export the box, once to the end and once cancelled during the tries. Expect: every step of the
       second component is on after the export; `health.end_actions` has no `turned_back_on` (if it has, note which
       steps stayed off before the add-in turned them on again).
+- [ ] UM1, lighter on memory (experimental). Make component Plate: a sketch with a 120 mm by 80 mm rectangle whose
+      width is the user parameter `Width` (range 80 to 160 mm) and whose depth is `Depth` (range 60 to 100 mm),
+      extruded 10 mm. Add a rectangular pattern of 20 by 12 holes of 4 mm on the top face, fillets of 1 mm on all hole
+      edges and on the outer edges, and a shell of 2 mm from the bottom face, so each rebuild takes about a second.
+      Tick both sizes. Save the design.
+      Export: in Activity Monitor (Memory column) note Fusion's memory before the export. Export with "Lighter on
+      memory" off, note the highest value during the tries and the value after, then use Edit, Undo once and note what
+      changes. Reopen the design, export again with the box on and note the same three values. Expect: with the box on
+      the memory grows less during the tries; `report.json` has `timing.undo` with `on: true`, `applied: true` and
+      `steps` above 1 (with the box off, `on: false`); the two files hold the same recipe and sizes. After the export
+      with the box on, the design shows the values, timeline and marker it had. Note what Undo does now: whether it
+      steps back to before the export, does nothing, or undoes your own edit made before the export; whether the
+      marker or values change; whether Redo brings it back. Also note if Fusion shows an error or a second save window
+      during the export (it must not). If Fusion has no such call, `applied: false` with an `error` and the export is
+      as with the box off.
 - [ ] SB1, Split Body by a plane. Model a cup or a box with a shell and a fillet, then Split Body with the YZ origin
       plane and Remove the other half (a second Split Body with the XZ plane of the half gives a quarter). Export the
       piece that the split made (a new body, not the one that kept its name), and once more the piece that kept its
@@ -1529,6 +1544,10 @@ D5 to D13). Every read is guarded: a member that raises is listed in the record'
   test U1): `Timeline.item(index)`, `TimelineObject.name`, `isGroup`, and `isSuppressed` get and set on items before
   the rolled marker; `computeAll` then rebuilds without them and leaves the marker in place; setting `isSuppressed`
   back to false restores the items exactly.
+- Lighter on memory (`export_plan/undo_steps.py`, hand test UM1): `Command.beginStep(True)` called inside the execute
+  event, between the tries, ends the step without Undo data and starts a new one; the call is marked a preview in the
+  API. The API says it fires the execute event for the new step; the add-in starts at most one export per dialog, so
+  that event must do nothing. Check that Fusion frees memory after the call, and what Undo does after the export.
 - Progress window (`fusion_ui/progress.py`): `ProgressDialog.message` with a line break (`\n`) shows two lines, and
   `show` with the text "Try %v of %m" accepts the placeholders as "Size %v of %m" did. If it shows one line only, move
   the explanation (`export_plan/messages.TRY_INTRO`) to the title passed to `show`.

@@ -256,6 +256,7 @@ class ProbeRun:
         self._misses = 0
         self._previous = None  # key of the row run last
         self.keeper = self._keeper()
+        self.undo = getattr(port, "undo_steps", None)  # `undo_steps.UndoSteps` when the person turned it on
         self.job = RowExport(port.store, port.units, self._export, self._before_row)
 
     def _keeper(self):
@@ -320,6 +321,7 @@ class ProbeRun:
         back when that read shows it on another solution. A row may bring a sketch back as well as move it away, so
         each such row reads its own start, also once put backs are given up."""
         self._home()
+        self._drop_undo()
         key = row.get("key", row["name"])
         previous, self._previous = self._previous, key
         if self.read_failure is not None or (previous is None and not row.get("again")):
@@ -333,6 +335,11 @@ class ProbeRun:
         self.starts[key] = start
         if self.probe.left_start(start):
             self._put_back(key)
+
+    def _drop_undo(self):
+        """Let Fusion forget the undo data of the tries so far (`undo_steps`); only called with every value back."""
+        if self.undo is not None:
+            self.undo.drop()
 
     def _try_read(self, outline=True):
         """`_read_now` with every value back (only the outlines with `outline`), or None with `read_failure` set when
@@ -492,12 +499,13 @@ class ProbeRun:
 
     def settle(self):
         """Put the followed sketches back when they read otherwise than at E0 now, with the values back, so the design
-        is left on the solution it had. Never raises."""
+        is left on the solution it had, then drop the undo data of the tries (`_drop_undo`). Never raises."""
         try:
             if self.probe.left_start(self._read_now({}, outline=True)):
                 self._put_back(last=True)
         except Exception as exc:
             self.port.log(f"putting a sketch back after the tries failed: {exc!r}")
+        self._drop_undo()
 
     def _retry(self, sizes):
         """Rows nearer to the value for the sizes whose rows did not build (`SizeProbe.nearer_rows`), one step per
