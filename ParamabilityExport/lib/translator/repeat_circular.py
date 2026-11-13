@@ -142,18 +142,43 @@ def _measured_places(setup):
     return steps, every
 
 
+def _on_step(turn, delta):
+    """True when `turn` sits on a whole number of steps of `delta` (a turn of 360 degrees more or less counts as the
+    same)."""
+    for wrap in (0.0, -FULL_TURN_DEG, FULL_TURN_DEG):
+        if abs(turn + wrap - round((turn + wrap) / delta) * delta) <= ANGLE_TOL_DEG:
+            return True
+    return False
+
+
+def _centred_places(setup):
+    """The signed copy numbers of an odd count centred on the original, or None.
+
+    Fusion's own transforms of a symmetric turn do not always show the copies behind the original on their side, so
+    an odd count is taken as centred when every copy is listed and kept, the original is among them, and each copy
+    still turns by a whole number of steps."""
+    count, delta, data = setup["count"], setup["delta"], setup["data"]
+    elements = data["elements"]
+    left_out = set(data.get("suppressed_ids") or [])
+    if count % 2 == 0 or len(elements) != count or any(
+            e.get("suppressed") or e.get("id") in left_out for e in elements):
+        return None
+    turns = [turn for _, turn in setup["turns"]]
+    if not any(_on_step(turn, FULL_TURN_DEG) for turn in turns) or not all(_on_step(t, delta) for t in turns):
+        return None
+    return list(range(-(count // 2), count // 2 + 1))
+
+
 def _symmetric_circular(item, ctx, setup):
     """A circular pattern that turns copies to both sides of the original: a part turning one way and a part turning
     the other, both from the original (`symmetric.py`). `setup` holds what `circular` has read."""
     count, delta, point, direction, turns = (setup[key] for key in ("count", "delta", "point", "direction", "turns"))
     steps, every = _measured_places(setup)
     if steps is None:
-        # Fusion's own transforms of a symmetric turn do not always show the copies behind the original, so an odd
-        # count with every copy listed is taken as centred on the original.
-        if count % 2 == 0 or len(setup["data"]["elements"]) != count or any(
-                e.get("suppressed") for e in setup["data"]["elements"]):
+        centred = _centred_places(setup)
+        if centred is None:
             return Refusal(every)
-        every = list(range(-(count // 2), count // 2 + 1))
+        every = centred
         steps = [(None, k) for k in every]
     reach = symmetric.reach(every, count)
     back, forward = reach

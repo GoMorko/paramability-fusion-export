@@ -398,6 +398,15 @@ class SymmetricCircularTest(unittest.TestCase):
         capture["items"][-1]["data"]["elements"][0]["suppressed"] = True
         self.assertIsNotNone(left_out(translate(capture)))
 
+    def test_an_odd_count_is_not_centred_when_a_copy_is_left_out_or_turned_off_the_steps(self):
+        for label, turns, left in (("a copy left out by number", [60, 0, 0, 30, 90], [2]),
+                                   ("a turn off the steps", [60, 0, 0, 30, 85], []),
+                                   ("no original", [60, 30, 30, 30, 90], [])):
+            with self.subTest(label):
+                capture = centred(circular(3, 5, 120.0, turns))
+                capture["items"][-1]["data"]["suppressed_ids"] = left
+                self.assertIsNotNone(left_out(translate(capture)))
+
     def test_a_full_circle_ignores_the_flag(self):
         (step,) = steps_of(translate_fixture("cpattern_symmetric").recipe, "pattern")
         self.assertNotIn("angleDeg", step["polar"])
