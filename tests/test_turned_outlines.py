@@ -1,0 +1,104 @@
+"""Outlines whose corners turn with an angle size: the range is cut where the outline would cross itself
+(sketch_crossings.order_ranges), and a point picked inside an end face moves with one corner, not the centre of all
+of them (inner_pick.py)."""
+import copy
+import math
+import unittest
+
+from tests import context  # noqa: F401
+from tests.test_translate_crossings import capture_with, line, user
+from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
+
+from lib.params import size_table
+from lib.params.expressions import evaluate
+from lib.sketch_values.motion import Motion, Terms
+from lib.translator import translate
+from lib.translator.loops import profile_loops
+
+
+def angle(name, deg):
+    return {"name": name, "expression": "%g deg" % deg, "value": math.radians(deg), "display_value": deg,
+            "unit": "deg", "comment": "", "is_favorite": False, "kind": "angle", "value_type": "numeric",
+            "dependency_parameters": []}
+
+
+def turned(*legs):
+    """`Terms` of a sum of `(coefficient, length size or "", function)` products with the angle `a_deg`."""
+    return Terms(0.0, [(k, ([("", leg, 1.0)] if leg else []) + [(f, "a_deg", 1.0)]) for k, leg, f in legs],
+                 "Sketch1")
+
+
+def run(capture, motion):
+    params = capture["parameters"]
+    table = size_table.build(params["user"], [p["name"] for p in params["user"]], params["model"])
+    return translate(capture, size_table=table, motion=motion)
+
+
+class CrossingCutTest(unittest.TestCase):
+    def test_an_outline_that_crosses_itself_in_a_corner_of_the_ranges_cuts_them(self):
+        # The right side sits at (p - q) * sin(a): with p at its minimum and q at its maximum it passes the left side.
+        corners = [(0, 0), (9.0, 0), (9.0, 5), (-2, 5)]
+        capture = capture_with([line(corners[i], corners[(i + 1) % 4], "e%d" % i) for i in range(4)], "p_mm", 14.0)
+        capture["parameters"]["user"] += [user("q_mm", 5.0), angle("a_deg", 90.0)]
+        side = turned((1.0, "p_mm", "sin"), (-1.0, "q_mm", "sin"))
+        result = run(capture, Motion({"1/p0/l0/points.1.0": side, "1/p0/l0/points.2.0": side}))
+        sizes = result.recipe.get("sizes", {})
+        self.assertEqual((sorted(sizes), result.loose, result.fixed), (["a_deg", "p_mm", "q_mm"], [], []))
+        self.assertGreater(sizes["p_mm"]["min"], sizes["q_mm"]["max"])
+        self.assertEqual(sorted(c["name"] for c in result.cuts), ["p_mm", "q_mm"])
+
+
+def _v_shape(p, q, a, w=3.0):
+    """Corners of a V: a leg of length p along x and a leg of length q turned by a, both w wide."""
+    c, s = math.cos(math.radians(a)), math.sin(math.radians(a))
+    return [(0.0, -w), (p, -w), (p, 0.0), (q * c, q * s), (q * c - w * s, q * s + w * c), (-w * s, w * c)]
+
+
+def _v_values():
+    """The corner formulas of `_v_shape`, by corner and coordinate (a fixed one has none)."""
+    return {
+        (1, 0): Terms(0.0, [(1.0, [("", "p_mm", 1.0)])], "Sketch1"),
+        (2, 0): Terms(0.0, [(1.0, [("", "p_mm", 1.0)])], "Sketch1"),
+        (3, 0): turned((1.0, "q_mm", "cos")),
+        (3, 1): turned((1.0, "q_mm", "sin")),
+        (4, 0): turned((1.0, "q_mm", "cos"), (-3.0, "", "sin")),
+        (4, 1): turned((1.0, "q_mm", "sin"), (3.0, "", "cos")),
+        (5, 0): turned((-3.0, "", "sin")),
+        (5, 1): turned((3.0, "", "cos")),
+    }
+
+
+def _v_capture():
+    """A chamfer of the edges around both end faces of an extruded V, picked by points near the end of the leg that
+    does not turn, and the motion of the V's corners."""
+    capture = copy.deepcopy(load_capture("chamfer_equal"))
+    corners = _v_shape(16.0, 9.0, 90.0)
+    profile = capture["items"][1]["data"]["profiles"][0]
+    profile.update(sketch="Sketch1", sketch_token="s1", loops=[{"outer": True, "curves": [
+        line(corners[i], corners[(i + 1) % len(corners)], "e%d" % i) for i in range(len(corners))]}])
+    capture["capture"] = 3
+    capture["parameters"] = {"user": [user("p_mm", 16.0), user("q_mm", 9.0), angle("a_deg", 90.0)], "model": []}
+    capture["target"]["box"] = {"min": [-3.0, -3.0, 0.0], "max": [16.0, 9.0, 10.0]}
+    capture["items"][2]["data"]["sets"][0].update(input_kinds=["face"], faces=[
+        {"token": "top", "point": [15.0, -1.5, 10.0]}, {"token": "bottom", "point": [15.0, -1.5, 0.0]}])
+    outer = profile_loops(profile)[0]
+    values, by_corner = {}, _v_values()
+    for at, point in enumerate(outer["points"]):
+        corner = min(range(len(corners)), key=lambda c: math.dist(corners[c], point))
+        for axis in (0, 1):
+            if (corner, axis) in by_corner:
+                values["1/p0/l0/points.%d.%d" % (at, axis)] = by_corner[(corner, axis)]
+    return capture, Motion(values)
+
+
+class InnerPickTest(unittest.TestCase):
+    def test_a_face_picked_near_the_leg_that_does_not_turn_stays_when_the_angle_turns(self):
+        capture, motion = _v_capture()
+        result = run(capture, motion)
+        assert_schema_ok(self, result.recipe)
+        self.assertEqual((result.loose, result.fixed), ([], []))
+        (step,) = steps_of(result.recipe, "bevel")
+        env = {n: s["value"] for n, s in result.recipe["sizes"].items() if "value" in s}
+        for point in step["edges"]["faceEdges"]["near"]:
+            at = [evaluate(c["expr"], dict(env, a_deg=135.0)) if isinstance(c, dict) else c for c in point]
+            self.assertAlmostEqual(math.dist(at[:2], (15.0, -1.5)), 0.0, places=6)

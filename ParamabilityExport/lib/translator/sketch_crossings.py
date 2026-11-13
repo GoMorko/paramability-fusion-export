@@ -8,17 +8,21 @@ square root (`curved.Curved`). An arc's middle point becomes a fixed direction f
 arc.
 
 `keeps_order` checks that the rebuilt outline keeps its shape over the size range and the probe's states: every
-crossing still exists and the corners keep their order. Otherwise its sizes stay fixed.
+crossing still exists and the corners keep their order. `order_ranges` gives the ranges inside which it does, for an
+outline that crosses itself only in a corner of the ranges (a leg turned while shorter than another).
 """
 import math
 
+from ..params.expressions import ExpressionError, parse_formula
 from ..sketch_values import keys
 from ..sketch_values.motion import CURVE, Affine, Stuck
-from . import range_check
+from . import kept_ranges, range_check
 from .curved import Curved, combine, names_of, render, times
 from .vec import POINT_TOL
 
 FIT_TOL = 1e-4
+ORDER_STEPS = 20  # halvings that find where a range stops keeping the order: a millionth of the range
+_FAILURES = (ExpressionError, ValueError, ZeroDivisionError, OverflowError)
 TURN_TOL = 1e-9
 LEAST = 1e-9
 
@@ -288,6 +292,45 @@ def _stays_above_zero(table, motion, value):
     if not q.sized:
         return q.n > LEAST
     return range_check.sweep(table, q.text, q.reads, extra=_states(table, motion)).above(LEAST)
+
+
+def order_ranges(table, loops, raw_loops, sketch=""):
+    """`{Fusion name: (min, max)}` inside which every rebuilt loop keeps the order of its corners: each check of
+    `_checks` stays above zero at the corners and middles of the ranges (`range_check`), the ranges cut by
+    `kept_ranges.holding_ranges_where`. None when no shorter ranges keep it (a check that cannot be written, or one
+    that fails at the values now)."""
+    texts = {}
+    for loop, raw_loop in zip(loops, raw_loops):
+        for check in _checks(loop, raw_loop, sketch):
+            q = None if isinstance(check, Stuck) else render(check, table)
+            if q is None or isinstance(q, Stuck) or (not q.sized and q.n <= LEAST):
+                return None
+            if q.sized:
+                texts[q.text] = q.reads
+    if not texts:
+        return {}
+    reads = list(dict.fromkeys(r for found in texts.values() for r in found))
+    trees = [parse_formula(text) for text in texts]
+    answers = {}
+
+    def above_at(setting):
+        key = tuple(sorted(setting.items()))
+        if key not in answers:
+            try:
+                env = range_check.size_env(table, setting)
+                answers[key] = all(range_check.value_of(tree, env) > LEAST for tree in trees)
+            except _FAILURES:
+                answers[key] = False
+        return answers[key]
+
+    def holds(bounds, only=None):
+        if only is not None:
+            settings = [{only[0]: bounds[only[0]][only[1]]}]
+        else:
+            settings = range_check.corners(table, reads, bounds) + range_check.middles(table, reads, bounds)
+        return all(above_at(setting) for setting in settings)
+
+    return kept_ranges.holding_ranges_where(table, reads, holds, steps=ORDER_STEPS)
 
 
 def keeps_order(table, motion, loops, raw_loops, sketch=""):

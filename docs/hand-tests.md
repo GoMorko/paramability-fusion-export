@@ -232,6 +232,8 @@ except U1 to U3, UM1, L1 to L15, F1, F2, SP1 to SP4 and TH1 to TH6, which are de
       "Sketch graph, marker roll and progress window" in "Fusion calls to watch").
 - [ ] K27, a flat face used as an outline (an extrude from a face, an emboss kept to its face) is read before its
       step at every try: section 9 (the calls are under "Sketch graph, marker roll and progress window").
+- [ ] K28, legs that turn with an angle size: the corners follow the angle, the range stops where the outline would
+      cross itself, and a chamfer of the end faces keeps short formulas: section 9.
 - [ ] K26, a sketch that flips to its other solution during the tries is put back before the next try: section 9
       (the calls are under "Sketch graph, marker roll and progress window").
 - [ ] K25, an extrude that reaches to a face or plane no earlier extrude places (a cut's side wall, a plane on it):
@@ -921,6 +923,13 @@ the sizes on the form and compare the part with Fusion at the same values.
       time (each read moves the marker before the step and back).
       Seen with 0.10.5 (Fusion 2706.1.17, 2026-11-12): a tapered join from the plate's top face copies, matches, and
       follows width and thickness with neither marked (no fillet in that test).
+- [ ] **K28 Legs that turn with an angle.** Sketch a V of two legs from one corner, both `wall_mm` (4) wide: one along
+      X of length `long_mm` (20), the other of length `short_mm` (14) at `turn_deg` (100) from the first (an angle
+      dimension between the legs). Extrude it 10 mm, then chamfer the edges around both end faces (pick the two
+      faces). Tick all four sizes and export. Expect: `turn_deg` is not marked "along a curve" and no size is fixed
+      with "a formula too long"; where a corner of the ranges would let the outline cross itself, a range stops with
+      "the outline of ... would cross itself or lose a corner". In Paramability set `turn_deg` to both ends of its
+      range, with the legs at their ends too: the V turns as in Fusion and the chamfer stays on the end faces.
 
 ## 10. Emboss
 
