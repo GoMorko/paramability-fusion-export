@@ -1662,7 +1662,7 @@ keys `<item>/p<profile>/l<loop>/<field path>` (loop 0 is the outer one, then the
 
 Measured references of other components (below) have their own keys, `<item>/r/<slot>/...`, and their own list `refs`.
 
-The probe tries (`lib/probe/plan.py`, at most 64 rows), in this order:
+The probe tries (`lib/probe/plan/`, at most 64 rows), in this order:
 
 1. Near rows (`plan.probe_rows`): each ticked size that moves a covered sketch value or reaches a sketch dimension, a
    construction plane or, through another component, a sketch ("Geometry links" in section 2), or that may move the
@@ -2047,7 +2047,7 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
   the target's own sketches, in their own component's frame (not brought into the part's), since the translator writes
   those steps in that frame before it moves them.
 - Measured references are requested with `refs`: `{ "<key>": { "token", "type", "path", "shape" } }` (`shape` is
-  `plane`, `axis`, `direction` or `point`, from the record: `lib/probe/plan.py` `refs`). Each is found by the token of
+  `plane`, `axis`, `direction` or `point`, from the record: `lib/probe/plan/references.py` `refs`). Each is found by the token of
   its native entity (`lib/fusion_reader/probe_refs.py`), shown through the occurrence with the recorded `path` as that
   occurrence sits now (`createForAssemblyContext`), read the way the capture read it (`plane_of`, `axis_of`,
   `direction_of`, `worldGeometry`), and brought into the target's coordinates with the inverse of the target's own

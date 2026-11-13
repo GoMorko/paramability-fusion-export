@@ -35,7 +35,7 @@ StepType("EmbossFeature", "emboss", reader="read_emboss", handler="emboss:handle
   `unsupported`, the plain reason the step is left out of the copy (it becomes the gap's reason). Once a handler
   exists, drop `unsupported`: the handler gives its own reasons.
 - `sketches`: the sketch records in the step data that the size probe can follow (`PROFILES`, `AXIS`, `HOLE_POINTS`, `PATH`).
-  The probe (`lib/probe/plan.py`) tries other size values only for sketches it can follow. A sketch token anywhere
+  The probe (`lib/probe/plan/`) tries other size values only for sketches it can follow. A sketch token anywhere
   else in the data leaves that sketch unfollowed for every step that uses it, so its sizes end up loose. Name a
   record only when the probe fits it the same way it fits extrude profiles, revolve axes or hole points.
 

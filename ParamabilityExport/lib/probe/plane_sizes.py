@@ -10,7 +10,7 @@ earlier step gets no row of its own (`plan.probe_rows`), so without this list th
 capture has it. A face used as an outline may change with every size read before its step (`plan.outline_face`).
 """
 from ..translator.sizes import placement_driven, reach_driven, reach_sizes
-from .plan import FACE, scan
+from .plan.covered import FACE, scan
 
 
 def plane_driven(capture, table):

@@ -24,7 +24,8 @@ from typing import Optional, Protocol
 
 from ..params import size_table as size_tables
 from ..params.listing import list_parameters
-from ..probe.plan import BISECT_STEPS, MAX_PROBE_ROWS, NEARER_STEPS
+from ..probe.plan.nearer import BISECT_STEPS, NEARER_STEPS
+from ..probe.plan.rows import MAX_PROBE_ROWS
 from ..sketch_values.motion import OPTIMISTIC
 from ..timing.export_timing import ExportTiming
 from ..timing.timer import Timer, rounded
