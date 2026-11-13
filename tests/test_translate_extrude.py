@@ -167,6 +167,22 @@ class ExtentTest(unittest.TestCase):
         (step,) = under_test(result, 3)
         self.assertEqual((step["sketch"]["on"]["normal"], step["taperDeg"]), ([1, 0, 0], 1))
 
+    def test_a_cut_through_all_toward_a_thin_wall_at_its_start_keeps_its_direction(self):
+        def thin(d):
+            d.update(end_offset=None)
+            d["profiles"][0]["frame"]["origin"] = [39.5, 0, 0]  # 0.5 mm of the plate ahead, the rest behind
+
+        (step,) = under_test(variant("extrude_cut_through_one", thin), 3)
+        self.assertEqual(step["sketch"]["on"]["normal"], [1, 0, 0])
+
+    def test_a_tapered_cut_through_all_whose_walls_show_its_stored_direction_keeps_it(self):
+        lean = math.sin(math.radians(1.0))  # the walls of a cut toward -x that narrows
+        result = variant("extrude_cut_through_one", lambda d: d.update(
+            side_one={"kind": "throughAll", "positive": False, "taper_deg": -1.0}, end_offset=None,
+            side_leans=[lean] * 4))
+        (step,) = under_test(result, 3)
+        self.assertEqual(step["sketch"]["on"]["normal"], [-1, 0, 0])
+
     def test_a_cut_through_all_both_ways_with_a_taper_is_left_out(self):
         result = variant("extrude_cut_through_one", lambda d: d.update(
             extent_type="symmetric", symmetric=None, end_offset=None,

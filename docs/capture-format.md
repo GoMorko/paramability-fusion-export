@@ -1866,8 +1866,9 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   with both sides of a two sided extrude in one cut; only when no cut keeps it are they marked.
 - A through cut clears the part at the largest sizes tried (`box_max` of the motion file). A cut through all to one
   side without a measured end face cuts toward the side where its outline meets the part built so far (sampled on a
-  grid over the outline); Fusion's stored direction is kept when both sides, or neither, hold material, and turned with
-  a note otherwise. A tapered side keeps its outline at each height whatever its length: one that only widens gets the
+  grid over the outline, at even steps and at heights doubling from 0.02 mm, so a thin wall at the sketch counts);
+  Fusion's stored direction is kept when both sides, or neither, hold material, or when the measured walls of a tapered
+  cut lean the way it gives and not the other, and turned with a note otherwise. A tapered side keeps its outline at each height whatever its length: one that only widens gets the
   same length as an untapered cut, one whose walls lean in (at its taper, or at some size inside the ranges of a taper
   that follows sizes) ends 1 mm past the part's box, and is left out when the length times the tangent of the steepest
   such lean passes half the radius of the largest circle inside an outline (sampled on a grid, coarse first). The
