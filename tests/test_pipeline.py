@@ -309,6 +309,57 @@ class RestoreTest(unittest.TestCase):
         self.assertEqual(json.loads(json.dumps(result.report["health"]))["sketch_drift"], True)
 
 
+class FlipPort(FakePort):
+    """A design whose sketch goes to its other solution in the first try and stays there with the values back, until
+    a keeper (when `keeper`) puts its points back. The read number `fail_read_at` raises."""
+
+    def __init__(self, keeper=True, fail_read_at=None, **options):
+        super().__init__(**options)
+        self.flipped, self.keeper, self.fail_read_at = False, keeper, fail_read_at
+        port = self
+
+        class Store(FakeStore):
+            def recompute(self):
+                port.flipped = port.flipped or self.exprs != START
+                return super().recompute()
+
+        self.store = Store(START)
+
+    def probe_reader(self):
+        def read(request):
+            self.reads += 1
+            if self.reads == self.fail_read_at:
+                raise RuntimeError("Fusion would not answer")
+            return shifted(self.e0, 0.5) if self.flipped and self.store.exprs == START else self.e0
+        return read
+
+    def sketch_keeper(self, tokens):
+        if not self.keeper:
+            raise RuntimeError("no keeper")
+        port = self
+
+        class Keeper:
+            @staticmethod
+            def put_back():
+                port.flipped = False
+                return 1
+
+        return Keeper()
+
+
+class TriesEndedEarlyTest(unittest.TestCase):
+    def test_a_cancel_during_the_tries_puts_a_flipped_sketch_back(self):
+        port = FlipPort(cancel_at=2)
+        with self.assertRaises(ExportCancelled):
+            export(port)
+        self.assertFalse(port.flipped)
+
+    def test_failed_tries_that_leave_a_sketch_off_its_solution_are_reported(self):
+        result = export(FlipPort(keeper=False, fail_read_at=3))
+        self.assertEqual(result.health["probe"], "failed")
+        self.assertTrue(result.health["sketch_drift"])
+
+
 class FailingStepTest(unittest.TestCase):
     def test_a_part_step_that_fails_stops_the_export_before_any_parameter_changes(self):
         port = FakePort(fail_step_at=1)

@@ -44,6 +44,18 @@ from .timeline_trim import TryTimeline
 READ_PARTS = ("sketches", "points", "params", "refs", "box", "faces")
 
 
+def settle_after_tries(owner, run):
+    """Put every parameter back, turn the suppressed items back on (`owner._restore`, `owner._end_trim`) and put a
+    sketch left on another solution back (`ProbeRun.settle`). Never raises, so it also runs when the tries ended with
+    an error or a cancel."""
+    try:
+        owner._restore()
+        owner._end_trim()
+    except Exception as exc:
+        owner.port.log(f"putting the design back after the tries failed: {exc!r}")
+    run.settle()
+
+
 def plan_rows_left(rows):
     """How many probe rows the cap leaves after `rows`."""
     return max(0, MAX_PROBE_ROWS - len(rows))
@@ -661,16 +673,17 @@ class _Pipeline:
         (`self.also`) and are not used for the motion. A failure other than a cancel
         leaves the translation without a motion (no size behind a sketch is then followed, by the translator's own
         rule) and is noted for the person. The parameters are put back, the suppressed items turned back on and
-        a sketch left on another solution put back (`ProbeRun.settle`) before the last read."""
+        a sketch left on another solution put back (`ProbeRun.settle`) before the last read, also when the tries fail
+        or are cancelled."""
         probe = self.probe
+        settled = False
         try:
             run.measure(probe.probe_rows(sizes, extra), sizes)
             self.also = run.discover(tries)
             if self.roll is not None:
                 self.roll.tries_done()
-            self._restore()
-            self._end_trim()
-            run.settle()
+            settled = True
+            settle_after_tries(self, run)
             found = probe.finish(probe.read_now(), labels(self.table))
         except ExportCancelled:
             raise
@@ -680,6 +693,8 @@ class _Pipeline:
             self.motion = None
             return None
         finally:
+            if not settled:
+                settle_after_tries(self, run)
             self.stopped = run.stopped
             self.timing.note_probe(with_try_seconds(run.summary(), self.roll))
         self.motion = probe.motion
@@ -687,8 +702,9 @@ class _Pipeline:
 
     def _restore_gap(self):
         """How far the sketches are from their start after the last restore, or None when that cannot be told. Read
-        again here because the probe rows changed the design once more."""
-        if self.probe is None or self.probe_status != health_module.MEASURED:
+        again here because the probe rows changed the design once more; also after tries that failed, which can
+        leave a sketch on another solution."""
+        if self.probe is None:
             return None
         try:
             return self.probe.measure_restore(self.probe.read_now())

@@ -26,7 +26,7 @@ from ..design_edit.runner import ExportCancelled
 from . import health as health_module
 from .body_scope import body_links, scope_inputs
 from .part_names import tagged, unique_names
-from .pipeline import ProbeRun, broken_since, read_errors, warn_left_off, with_try_seconds
+from .pipeline import ProbeRun, broken_since, read_errors, settle_after_tries, warn_left_off, with_try_seconds
 from .reach_pass import needs_reach, with_reach
 from .probe_flow import ProbeGroup, SizeProbe, covers_a_sketch, extra_size_params, kept_size_names
 from .recipe_export import PartInput, free_sizes, plan_parts_export, translate_capture
@@ -346,19 +346,19 @@ class _PartsPipeline:
         The rows are the ones of `SizeProbe.probe_rows` for all sizes of all parts together, so the row limit is for
         the whole export. A failure other than a cancel leaves every part without a motion and is noted for the person.
         The parameters are put back, the suppressed items turned back on and a sketch left on another solution put
-        back (`ProbeRun.settle`) before the last read."""
+        back (`ProbeRun.settle`) before the last read, also when the tries fail or are cancelled."""
         group = self.group
         self.roll = TryTimeline(self.port.store, self.port.log, self.request.faster_tries)
         self.roll.begin([self.captures[i] for i in self.probed], lambda: group.matches_start(group.read_now()))
         run = ProbeRun(self.port, self.tmp, group)
         tries = self._tries()
+        settled = False
         try:
             run.measure(group.probe_rows(sizes, extra), sizes)
             self.also = run.discover(tries)
             self.roll.tries_done()
-            self._restore()
-            self._end_trim()
-            run.settle()
+            settled = True
+            settle_after_tries(self, run)
             found = group.finish(group.read_now(), labels(self.table))
         except ExportCancelled:
             raise
@@ -368,6 +368,8 @@ class _PartsPipeline:
             self.motions = {}
             return
         finally:
+            if not settled:
+                settle_after_tries(self, run)
             self.stopped = run.stopped
             self.timing.note_probe(with_try_seconds(run.summary(), self.roll))
         self.motions = dict(zip(self.probed, group.motions))
@@ -382,8 +384,9 @@ class _PartsPipeline:
         return list(found.values())
 
     def _restore_gap(self):
-        """How far the sketches are from their start after the last restore, or None when that cannot be told."""
-        if self.group is None or not self._measured():
+        """How far the sketches are from their start after the last restore, or None when that cannot be told; also
+        after tries that failed, which can leave a sketch on another solution."""
+        if self.group is None:
             return None
         try:
             return self.group.measure_restore(self.group.read_now())
