@@ -128,9 +128,10 @@ class TimelineTrim:
             return
         before = self._errors()
         count = 0
+        # The store turns back on whatever it tried to turn off, also an item it could not count as off.
+        self._off = True
         try:
             count = suppress(picked)
-            self._off = count > 0
             if count != len(picked):
                 self.record["reason"] = "the unused steps could not all be turned off"
             elif not unchanged():

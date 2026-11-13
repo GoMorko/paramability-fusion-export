@@ -236,6 +236,17 @@ class PipelineTrimTest(unittest.TestCase):
             self.assertEqual(port.store.events[-2:], [("unsuppress", [6, 7]), ("unroll", 9)])
             self.assertEqual(port.store.exprs, START)
 
+    def test_items_the_store_turned_off_without_counting_them_are_turned_back_on(self):
+        class Uncounted(TrimStore):
+            def suppress_items(self, items):
+                super().suppress_items(items)
+                return 0
+
+        port = self.port(store=Uncounted(START))
+        export(port)
+        self.assertIn(("unsuppress", [6, 7]), port.store.events)
+        self.assertEqual(port.store.off_at[-1], ())
+
     def test_items_that_will_not_turn_back_on_are_named_to_the_person(self):
         port = self.port(store=TrimStore(START, stuck=["Lid sketch"]))
         export(port)
