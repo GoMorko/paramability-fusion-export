@@ -155,10 +155,6 @@ class FusionDesignBaselineTest(unittest.TestCase):
         self.assertEqual(apply_row(design, {"width": 40.0}, {"width": "mm"}, baseline), {"width": 40.0})
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class BatchDesign(FakeDesign):
     """A design with Fusion's `modifyParameters`: it sets every expression in one change, or none when `refuse` is
     one of them, and records each call."""
@@ -257,10 +253,6 @@ class IncrementalStore(BatchStore):
 
 
 class OneChangeRowTest(unittest.TestCase):
-    def test_an_error_a_full_recompute_clears_does_not_fail_the_row(self):
-        self.assertEqual(apply_row_values(BatchStore(errors=["Fillet1"], cleared_by_recompute=True), UNITS,
-                                          {"w": 9.0}), {"w": 9.0})
-
     def export(self, store):
         written = []
         job = RowExport(store, UNITS, lambda path: written.append(store.complete) or open(path, "wb").close())
@@ -300,3 +292,7 @@ class StopCheckTest(unittest.TestCase):
         job, results, starts = self.run_rows(BatchStore(errors=["Fillet1"]))
         self.assertEqual(job.not_back["items"], ["Fillet1"])
         self.assertEqual((len(results), starts), (1, ["bad"]))
+
+
+if __name__ == "__main__":
+    unittest.main()

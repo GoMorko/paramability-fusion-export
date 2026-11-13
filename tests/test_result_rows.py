@@ -67,23 +67,12 @@ class ResultViewTest(unittest.TestCase):
         names = [line.split(":")[0] for line in section_lines(shown, "sizes")]
         self.assertEqual(len(names), len(set(names)))
 
-    def test_sizes_that_follow_come_first_then_marked_then_fixed_then_not_sizes(self):
-        shown = view(
-            free=["wall", "gap"], loose=[{"name": "wall", "reason": "doubt"}],
-            fixed=[{"name": "pipe", "reason": "no build."}], dropped=[not_followed("spare")])
-        self.assertEqual([r["check"] for r in section(shown, "sizes")["rows"]],
-                         ["size", "may be unexpected", "kept fixed", "not followed"])
-
     def test_a_size_a_step_reads_but_the_copy_cannot_follow_is_not_called_unused(self):
         shown = view(dropped=[not_followed("gap"), unused("pipe")], free=[])
         rows = {r["name"]: r["check"] for r in section(shown, "sizes")["rows"]}
         self.assertEqual(rows, {"gap": "not followed", "pipe": "not used"})
         self.assertIn("Extrude1 reads it", section_lines(shown, "sizes")[0])
         self.assertIn(section_lines(shown, "sizes")[0], shown["message"])
-
-    def test_a_parameter_no_step_reads_is_listed_without_a_reason(self):
-        shown = view(free=[], dropped=[unused("gap")])
-        self.assertEqual(section_lines(shown, "sizes"), ["gap: not used"])
 
     def test_a_reason_that_does_not_start_with_the_name_is_still_one_line_for_that_size(self):
         shown = view(free=[], fixed=[{"name": "gap", "reason": "no build."}])

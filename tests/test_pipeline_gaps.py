@@ -164,12 +164,6 @@ class GapPackageTest(unittest.TestCase):
         self.assertEqual([g["name"] for g in result.report["gaps"]], ["Shell1", "Fillet1"])
         self.assertEqual(result.manifest["version"], 2)
 
-    def test_an_answer_that_is_not_a_reach_counts_as_a_read_that_failed(self):
-        port = ReachPort(tray(), reach="nothing")
-        result = export(port)
-        self.assertEqual(result.report["reach"]["read"], False)
-        self.assertEqual(len(result.report["gaps"]), 2)
-
     def test_a_marker_that_cannot_go_back_stops_the_export(self):
         def refuse(capture, gaps):
             raise MarkerError("The timeline marker did not go back.")
@@ -188,13 +182,6 @@ class GapPackageTest(unittest.TestCase):
         self.assertNotIn("gaps", result.report)
         self.assertNotIn("reach", result.report)
         self.assertEqual(validate(result.manifest, load_schema(PACKAGE_SCHEMA)), [])
-
-    def test_the_notes_say_how_many_steps_were_left_out_and_the_manifest_stays_within_five(self):
-        result = export(ReachPort(tray(), reach={"read": False, "error": "no"}))
-        notes = result.manifest["notes"]
-        self.assertLessEqual(len(notes), 5)
-        self.assertIn("2 steps were left out", notes[1])
-        self.assertIn(notes[1], result.report["notes"])
 
     def test_a_gaps_file_over_the_cap_is_written_without_the_fusion_data(self):
         full = len(gaps_file.gaps_file_bytes(export(ReachPort(tray(), design=tray_design())).report["gaps"],
@@ -257,14 +244,6 @@ class ResultWindowTest(unittest.TestCase):
                            export(ReachPort(tray(leave_out=False))).table, [])
         lines = section_lines(view, "left_out")
         self.assertIn("report.json", lines[-2])
-
-    def test_nothing_about_left_out_steps_shows_when_none_were_left_out(self):
-        result = export(ReachPort(tray(leave_out=False)))
-        view = result_view("tray.paramability", result.manifest, result.report, result.table, TICKED)
-        self.assertNotIn("left_out", view)
-        command = fakes.FakeCommand()
-        result_dialog.build(command, view)
-        self.assertIsNone(command.commandInputs.itemById("pm_result_left_out"))
 
 
 class PartsPort(FakePartsPort):

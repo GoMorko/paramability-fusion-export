@@ -25,6 +25,17 @@ def read(tool, pieces, split=None):
     return read_capture(FakeDesign([item], target), target, fusion="", name="", up_axis="z")["items"][0]["data"]
 
 
+def inner_and_outer():
+    """A block inside a plate, each with one face, for the reader's point-containment path."""
+    core = install_adsk_core()
+    core.Point3D = types.SimpleNamespace(create=lambda x, y, z: Obj(x=x, y=y, z=z))
+    inner = body("b2", "Body2", lo=(15, 5, 0), hi=(25, 15, 10), volume=0.8)
+    inner.faces = Coll([face((20, 10, 10), (0, 0, 1))])
+    outer = body("b1", "Body1", hi=(40, 20, 10), volume=7.2)
+    outer.faces = Coll([face((0, 10, 5), (-1, 0, 0))])
+    return inner, outer
+
+
 class SplitReaderTest(unittest.TestCase):
     def test_a_construction_plane_with_the_bodies_and_pieces(self):
         plane = Obj("fusion::ConstructionPlane", entityToken="cp1",
@@ -39,12 +50,7 @@ class SplitReaderTest(unittest.TestCase):
                          [("Body1", 0, 2000.0), ("Body2", 10, 6000.0)])
 
     def test_a_solid_tool_body_says_which_pieces_lie_inside_it(self):
-        core = install_adsk_core()
-        core.Point3D = types.SimpleNamespace(create=lambda x, y, z: Obj(x=x, y=y, z=z))
-        inner = body("b2", "Body2", lo=(15, 5, 0), hi=(25, 15, 10), volume=0.8)
-        inner.faces = Coll([face((20, 10, 10), (0, 0, 1))])
-        outer = body("b1", "Body1", hi=(40, 20, 10), volume=7.2)
-        outer.faces = Coll([face((0, 10, 5), (-1, 0, 0))])
+        inner, outer = inner_and_outer()
 
         def holds(p):
             return "PointInsidePointContainment" if 1.5 < p.x < 2.5 and 0.5 < p.y < 1.5 else "PointOutsidePointContainment"
@@ -56,12 +62,7 @@ class SplitReaderTest(unittest.TestCase):
         self.assertEqual([p["inside"] for p in data["pieces"]], [False, True])
 
     def test_inside_is_read_once_fusion_no_longer_gives_the_tool(self):
-        core = install_adsk_core()
-        core.Point3D = types.SimpleNamespace(create=lambda x, y, z: Obj(x=x, y=y, z=z))
-        inner = body("b2", "Body2", lo=(15, 5, 0), hi=(25, 15, 10), volume=0.8)
-        inner.faces = Coll([face((20, 10, 10), (0, 0, 1))])
-        outer = body("b1", "Body1", hi=(40, 20, 10), volume=7.2)
-        outer.faces = Coll([face((0, 10, 5), (-1, 0, 0))])
+        inner, outer = inner_and_outer()
         tool = Obj("fusion::BRepBody", entityToken="b3", name="Body3", isSolid=True, volume=1.1,
                    pointContainment=lambda p: "PointInsidePointContainment" if 1.5 < p.x < 2.5 and 0.5 < p.y < 1.5
                    else "PointOutsidePointContainment",
@@ -83,12 +84,7 @@ class SplitReaderTest(unittest.TestCase):
         self.assertEqual([p["inside"] for p in data["pieces"]], [False, True])
 
     def test_a_tool_body_of_a_moved_component_is_seen_where_its_occurrence_puts_it(self):
-        core = install_adsk_core()
-        core.Point3D = types.SimpleNamespace(create=lambda x, y, z: Obj(x=x, y=y, z=z))
-        inner = body("b2", "Body2", lo=(15, 5, 0), hi=(25, 15, 10), volume=0.8)
-        inner.faces = Coll([face((20, 10, 10), (0, 0, 1))])
-        outer = body("b1", "Body1", hi=(40, 20, 10), volume=7.2)
-        outer.faces = Coll([face((0, 10, 5), (-1, 0, 0))])
+        inner, outer = inner_and_outer()
         occurrence = Obj("fusion::Occurrence", entityToken="occ1")
 
         def tool_body(shift, context):

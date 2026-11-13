@@ -57,15 +57,11 @@ class CombinePatternTest(unittest.TestCase):
         self.assertTrue(all(p["of"] == written for p in steps_of(result.recipe, "pattern")))
         self.assertEqual(check_recipe(result.recipe), [])
 
-    def test_a_combine_without_every_step_of_its_tool_refuses(self):
-        for sources in ([3, 6], [6]):
+    def test_sources_that_are_not_a_combine_with_every_step_of_its_tool_are_left_out(self):
+        for sources in ([3, 6], [6], [3, 5]):
             with self.subTest(sources):
                 result = translate(with_sources(load_capture("combine_tool_pattern"), sources))
                 self.assertEqual(left_out(result)["index"], PATTERN)
-
-    def test_the_steps_of_a_tool_without_their_combine_refuse(self):
-        result = translate(with_sources(load_capture("combine_tool_pattern"), [3, 5]))
-        self.assertEqual(left_out(result)["index"], PATTERN)
 
     def test_an_intersecting_combine_refuses(self):
         capture = load_capture("combine_tool_pattern")

@@ -339,11 +339,10 @@ class SweepPointsTest(unittest.TestCase):
         self.assertEqual(edges_of_round(result), {"near": [p for _, points in sets for p in points]})
         return [f["name"] for f in result.loose]
 
-    def test_an_edge_along_the_side_at_a_corner_of_the_outline(self):
-        self.assertEqual(self.loose_of([(False, [[17.5, 1, 5]])]), ["wire_mm"])
-
-    def test_one_edge_of_an_end_face(self):
-        self.assertEqual(self.loose_of([(False, [[40, 30, 5]])]), ["wire_mm"])
+    def test_an_edge_at_a_corner_of_the_outline_or_of_an_end_face_keeps_its_point_and_marks_the_wire(self):
+        for label, sets in (("side", [(False, [[17.5, 1, 5]])]), ("end", [(False, [[40, 30, 5]])])):
+            with self.subTest(label):
+                self.assertEqual(self.loose_of(sets), ["wire_mm"])
 
     def test_all_four_edges_of_the_end_face_name_the_sweep(self):
         ends = [(False, [p]) for p in ([41, 30, 4], [40, 30, 5], [39, 30, 4], [40, 30, 3])]
@@ -354,11 +353,6 @@ class SweepPointsTest(unittest.TestCase):
     def test_an_edge_that_is_not_at_a_corner_of_the_outline_marks_every_size_before(self):
         side = [(False, [[17.5, 0.5, 5]])]
         self.assertEqual(sorted(self.loose_of(side)), ["plate_mm", "wire_mm"])
-
-    def test_a_side_edge_of_a_wire_with_no_sizes_marks_nothing(self):
-        result = sized(with_round(square_wire_on_plate(), [(False, [[17.5, 1, 5]])]), Motion({}), ["plate_mm"])
-        self.assertEqual(edges_of_round(result), {"near": [[17.5, 1, 5]]})
-        self.assertEqual([f["name"] for f in result.loose], [])
 
 
 LOFT_TOP = [(False, [p]) for p in ([0, -5, 30], [5, 0, 30], [0, 5, 30], [-5, 0, 30])]

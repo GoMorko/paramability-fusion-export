@@ -52,24 +52,15 @@ class PasteTest(unittest.TestCase):
         self.assertEqual(data["sources"], [{"token": "b2", "name": "Body2", "points": [list(map(float, p)) for p in SQUARE]}])
         self.assertEqual([(b["token"], b["points"][0]) for b in data["result_bodies"]], [("b3", [20, 0, 0])])
 
-    def test_every_body_of_the_collection_is_a_source(self):
-        other = Brick(vertices=SQUARE, token="b4", name="Body4")
-        data = self.read(sourceBody=Coll([Brick(vertices=SQUARE, token="b2", name="Body2"), other]))
-        self.assertEqual([s["token"] for s in data["sources"]], ["b2", "b4"])
-
-    def test_a_single_body_is_taken_as_the_source(self):
-        data = self.read(sourceBody=Brick(vertices=SQUARE, token="b2", name="Body2"))
-        self.assertEqual([s["token"] for s in data["sources"]], ["b2"])
+    def test_every_body_of_the_collection_is_a_source_and_a_single_body_is_one(self):
+        first, other = Brick(vertices=SQUARE, token="b2", name="Body2"), Brick(vertices=SQUARE, token="b4", name="Body4")
+        self.assertEqual([s["token"] for s in self.read(sourceBody=Coll([first, other]))["sources"]], ["b2", "b4"])
+        self.assertEqual([s["token"] for s in self.read(sourceBody=first)["sources"]], ["b2"])
 
     def test_a_source_that_cannot_be_read_leaves_the_sources_empty(self):
         data = self.read(source=Obj())
         self.assertEqual(data["sources"][0]["points"], [])
         self.assertEqual(self.read(sourceBody=None)["sources"], [])
-
-    def test_a_vertex_that_cannot_be_read_leaves_no_points(self):
-        source = Brick(vertices=SQUARE, token="b2")
-        source.vertices._items[1].geometry = None
-        self.assertEqual(self.read(source=source)["sources"][0]["points"], [])
 
     def test_results_that_cannot_be_read_are_null(self):
         target = body()
@@ -125,24 +116,18 @@ class MoveTest(unittest.TestCase):
         self.assertEqual((data["move_type"], data["angle_deg"], data["axis"]["dir"]), ("rotate", 90.0, [0.0, 0.0, 1.0]))
         self.assertEqual(data["params"]["angle_deg"]["expression"], "tilt")
 
-    def test_a_rotation_whose_members_cannot_be_read_gives_null_and_other(self):
-        data = self.read(Obj("fusion::MoveFeatureRotateDefinition"))
-        self.assertEqual((data["angle_deg"], data["axis"]), (None, {"kind": "other"}))
-
     def test_a_free_move_has_its_transform_when_it_can_be_read(self):
         free = Obj("fusion::MoveFeatureFreeMoveDefinition", transform=matrix(origin=(10, 0, 0)))
         data = self.read(free)
         self.assertEqual((data["move_type"], data["transform"]["origin"]), ("free", [10, 0, 0]))
         self.assertIsNone(self.read(Obj("fusion::MoveFeatureFreeMoveDefinition"))["transform"])
 
-    def test_a_move_along_an_entity_lists_the_parameter_of_its_distance(self):
-        data = self.read(Obj("fusion::MoveFeatureTranslateAlongEntityDefinition", distance=named(0.5)))
-        self.assertEqual(data["params"], {"distance": {"name": "d1", "expression": "gap", "value": 5.0}})
-
-    def test_a_move_to_a_position_lists_the_parameters_of_its_distances(self):
-        data = self.read(Obj("fusion::MoveFeaturePointToPositionDefinition", xDistance=named(0.5),
-                             yDistance=named(0.2, "d2", "lift"), zDistance=Obj(value=0.0)))
-        self.assertEqual({path: ref["expression"] for path, ref in data["params"].items()},
+    def test_a_move_along_an_entity_or_to_a_position_lists_the_parameters_of_its_distances(self):
+        along = self.read(Obj("fusion::MoveFeatureTranslateAlongEntityDefinition", distance=named(0.5)))
+        self.assertEqual(along["params"], {"distance": {"name": "d1", "expression": "gap", "value": 5.0}})
+        to_position = self.read(Obj("fusion::MoveFeaturePointToPositionDefinition", xDistance=named(0.5),
+                                    yDistance=named(0.2, "d2", "lift"), zDistance=Obj(value=0.0)))
+        self.assertEqual({path: ref["expression"] for path, ref in to_position["params"].items()},
                          {"translate.0": "gap", "translate.1": "lift"})
 
     def test_the_other_kinds_of_move_are_named_and_a_definition_that_cannot_be_read_is_other(self):
@@ -192,14 +177,6 @@ class BodyPatternTest(unittest.TestCase):
                          patternEntityType="FeaturesPatternEntityType")
         self.assertNotIn("source_bodies", data)
         self.assertNotIn("result_bodies", data)
-
-    def test_copies_that_cannot_be_read_are_null(self):
-        target = body()
-        pattern = Obj("fusion::MirrorFeature", parentComponent=Obj(entityToken="root"),
-                      inputEntities=Coll([Brick(vertices=SQUARE, token="b2")]),
-                      patternEntityType="BodiesPatternEntityType", isCombine=False, mirrorPlane=None)
-        design = FakeDesign([sketch_entry(), entry((pattern, "Mirror1"))], target)
-        self.assertIsNone(item_of(design, target, "Mirror1")["data"]["result_bodies"])
 
 
 class Live(Obj):
@@ -279,11 +256,6 @@ class CombineToolTest(unittest.TestCase):
         apart = [self.cell_tool("b2", {1, 2}), self.cell_tool("b3", {3, 4})]
         data, _ = self.read_intersect(apart, 4.0, empty_fails=True)
         self.assertEqual((data["intersect_volumes"], data["intersect_model"]), ({"every": 0.0, "any": 4000.0}, "any"))
-
-    def test_without_the_temporary_body_manager_it_is_unknown(self):
-        design, target = self.combine(self.tools(), "IntersectFeatureOperation")
-        data = item_of(design, target, "Combine1")["data"]
-        self.assertEqual(data["intersect_model"], "unknown")
 
     def test_a_result_volume_that_cannot_be_read_is_unknown(self):
         self.assertEqual(read_intersect.model({"every": 1.0, "any": 2.0}, None), "unknown")

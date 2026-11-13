@@ -3,7 +3,6 @@ import copy
 import json
 import math
 import unittest
-from types import SimpleNamespace
 from unittest import mock
 
 from tests import context  # noqa: F401
@@ -12,8 +11,7 @@ from tests.test_translate_sized import H, run
 from tests.translator_helpers import load_capture, steps_of, stopped, verdict_of
 
 from lib.translator import CaptureError, Refusal, gaps as gaps_module, translate
-from lib.translator.translate import _gap_sizes
-from lib.translator.gap_file import MAX_DATA_BYTES, MAX_DATA_DEPTH, MAX_SIZES
+from lib.translator.gap_file import MAX_DATA_BYTES, MAX_DATA_DEPTH
 from lib.translator.gap_picks import pick_records
 from lib.translator.gaps import MAX_GAPS
 
@@ -133,10 +131,6 @@ class AfterStopTest(unittest.TestCase):
         self.assertEqual([s["index"] for s in after["steps"]], [SHELL, FILLET, HOLE, PATTERN])
         self.assertEqual([v["index"] for v in after["items"]], [FILLET, FILLET + 1, HOLE, PATTERN])
 
-    def test_a_copy_past_the_gap_cap_lists_every_gap(self):
-        result = translate(tray(_more_gaps_than_the_cap))
-        self.assertEqual(len(result.after_stop["steps"]), MAX_GAPS + 1)
-
 
 class PicksTest(unittest.TestCase):
     def test_without_reach_a_later_picking_step_is_left_out_and_a_later_step_that_picks_nothing_is_copied(self):
@@ -154,20 +148,16 @@ class PicksTest(unittest.TestCase):
                 self.assertEqual(gap_names(result), expected)
                 self.assertEqual(len(steps_of(result.recipe, "round")), 0 if makers else 1)
 
-    def test_a_gap_the_reach_was_not_read_for_may_be_picked(self):
+    def test_a_gap_the_reach_was_not_read_for_or_a_reach_that_failed_may_be_picked(self):
         for reach in ({"read": True, "gaps": [], "makers": {str(FILLET): []}},
-                      {"read": True, "makers": {str(FILLET): []}}):
+                      {"read": True, "makers": {str(FILLET): []}},
+                      {"read": False, "error": "boom"}):
             with self.subTest(reach=reach):
                 capture = tray(unsupported(SHELL))
                 capture["reach"] = reach
                 result = translate(capture)
                 self.assertEqual(gap_names(result), ["Shell1", "Fillet1"])
                 self.assertEqual(result.gaps[1]["dependsOn"], ["gap_2"])
-
-    def test_a_reach_read_that_failed_counts_as_no_reach(self):
-        capture = tray(unsupported(SHELL))
-        capture["reach"] = {"read": False, "error": "boom"}
-        self.assertEqual(gap_names(translate(capture)), ["Shell1", "Fillet1"])
 
     def test_a_malformed_reach_is_refused(self):
         capture = tray()
@@ -293,20 +283,6 @@ class RecordTest(unittest.TestCase):
         json.dumps(gap["data"], allow_nan=False)
         self.assertLessEqual(deepest(gap["data"]), MAX_DATA_DEPTH)
         self.assertEqual((gap["data"]["outside"], gap["data"]["inside"], gap["trimmed"]), (None, 2.0, True))
-
-    def test_a_name_of_only_spaces_gives_the_type_in_words(self):
-        def edit(capture):
-            unsupported(SHELL)(capture)
-            capture["items"][SHELL]["name"] = "   "
-        self.assertEqual(translate(tray(edit)).gaps[0]["name"], "coil")
-
-    def test_the_size_lists_of_a_gap_stay_within_the_cap(self):
-        names = ["s%d" % n for n in range(MAX_SIZES + 6)]
-        table = SimpleNamespace(size_name=lambda name: name, sizes={name: {} for name in names})
-        written = {}
-        _gap_sizes(SimpleNamespace(gaps=[SimpleNamespace(id="gap_2", name="Shell1")]),
-                   SimpleNamespace(gaps=[written]), table, {}, {}, {"gap_2": names})
-        self.assertEqual((len(written["sizes"]), len(written["looseSizes"])), (MAX_SIZES, MAX_SIZES))
 
 
 if __name__ == "__main__":

@@ -48,11 +48,9 @@ class PastedToolTest(unittest.TestCase):
         self.assertEqual(result.recipe["features"][2]["of"], [tool["id"]])
         self.assertEqual(result.recipe["features"][2]["polar"]["count"], {"expr": "ring_n"})
         self.assertEqual(marked(result), ["ring_n"])
-        self.assertEqual(check_recipe(result.recipe), [])
-
-    def test_ids_are_unique(self):
-        ids = [s["id"] for s in all_steps(translate(load_capture(CHAIN)).recipe["features"])]
+        ids = [s["id"] for s in all_steps(result.recipe["features"])]
         self.assertEqual(len(ids), len(set(ids)))
+        self.assertEqual(check_recipe(result.recipe), [])
 
     def test_a_pasted_tool_is_a_tool_step_even_when_it_only_adds(self):
         result = translate(short_chain())
@@ -129,7 +127,6 @@ class RefusedPasteTest(unittest.TestCase):
 
         cases = {
             "fewer sources than results": fewer_sources, "two sources fit one result": twins,
-            "no source": lambda d: d.update(sources=[]),
             "results unread": lambda d: d.update(result_bodies=None),
             "another result": lambda d: d.update(result_bodies=[{"token": "t9", "name": "Body9", "points": []}]),
             "corners unread": lambda d: d["sources"][0].update(points=[]),

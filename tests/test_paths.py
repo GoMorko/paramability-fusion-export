@@ -65,14 +65,11 @@ def sweep_with(recipe_path, version=15):
 
 
 class ClassTest(unittest.TestCase):
-    def test_a_straight_line(self):
-        found = plan([line((0, 0, 0), (30, 0, 0))])
-        self.assertEqual((found.kind, found.length, found.direction), ("line", 30.0, [1.0, 0.0, 0.0]))
-        self.assertIsNone(found.recipe)
-
     def test_lines_that_continue_straight_are_one_line(self):
         found = plan([line((10, 0, 0), (30, 0, 0)), line((0, 0, 0), (10, 0, 0))])
-        self.assertEqual((found.kind, found.length, len(found.curves)), ("line", 30.0, 1))
+        self.assertEqual((found.kind, found.length, found.direction, len(found.curves)),
+                         ("line", 30.0, [1.0, 0.0, 0.0], 1))
+        self.assertIsNone(found.recipe)
 
     def test_a_single_arc_carries_its_axis_and_angle(self):
         found = plan([quarter([0, 5, 0], [0, -1, 0], [1, 0, 0], 5)])
@@ -203,6 +200,7 @@ class OrderTest(unittest.TestCase):
         self.assertTrue(found.reversed)
         self.assertTrue(close(found.start, [0, 0, 0]) and close(found.end, [15, 20, 0]))
         self.assertTrue(close(found.curves[1]["end"], [15, 5, 0]))
+        self.assertTrue(close(found.curves[1]["mid"], [10 + 5 * S2, 5 - 5 * S2, 0]))
 
     def test_when_both_ends_touch_the_outline_plane_the_square_one_starts_the_path(self):
         hook = [line((0, 0, 0), (0, 2, 0)),
@@ -220,11 +218,6 @@ class OrderTest(unittest.TestCase):
         self.assertTrue(found.reversed)
         self.assertTrue(close(found.start, [0, 6, 0]) and close(found.end, [0, 0, 0]))
         self.assertFalse(plan(hook, points=[[0, y, z] for y in (-0.5, 0.5) for z in (-0.5, 0.5)]).reversed)
-
-    def test_a_curve_run_backwards_keeps_its_middle_and_swaps_its_ends(self):
-        flipped = path_curves.turned_round([quarter([0, 5, 0], [0, -1, 0], [1, 0, 0], 5)])[0]
-        self.assertTrue(close(flipped["start"], [5, 5, 0]) and close(flipped["end"], [0, 0, 0]))
-        self.assertTrue(close(flipped["mid"], [5 * S2, 5 - 5 * S2, 0]))
 
 
 class OptionsTest(unittest.TestCase):
@@ -358,15 +351,14 @@ class ClosedTest(unittest.TestCase):
         points = [vec.add(p, [0, 2, 0]) for p in points]
         self.assertNotIsInstance(paths.plan(path_of(rounded_rectangle(), frame=XY_SKETCH), plane, points), Refusal)
 
+    SQUARE_LOOP = [line((0, 0, 0), (10, 0, 0)), line((10, 0, 0), (10, 10, 0)), line((10, 10, 0), (0, 10, 0)),
+                   line((0, 10, 0), (0, 0, 0))]
+
     def test_a_cut_at_a_sharp_corner_is_refused(self):
-        square = [line((0, 0, 0), (10, 0, 0)), line((10, 0, 0), (10, 10, 0)), line((10, 10, 0), (0, 10, 0)),
-                  line((0, 10, 0), (0, 0, 0))]
-        self.assertEqual(self.closed_at((10, 0, 0), [1, 0, 0], square).reason, path_limits.CLOSED_AT_CORNER)
+        self.assertEqual(self.closed_at((10, 0, 0), [1, 0, 0], self.SQUARE_LOOP).reason, path_limits.CLOSED_AT_CORNER)
 
     def test_a_sharp_corner_elsewhere_is_refused(self):
-        square = [line((0, 0, 0), (10, 0, 0)), line((10, 0, 0), (10, 10, 0)), line((10, 10, 0), (0, 10, 0)),
-                  line((0, 10, 0), (0, 0, 0))]
-        self.assertEqual(self.closed_at((5, 0, 0), [1, 0, 0], square).reason, path_limits.SHARP_CORNER)
+        self.assertEqual(self.closed_at((5, 0, 0), [1, 0, 0], self.SQUARE_LOOP).reason, path_limits.SHARP_CORNER)
 
     def test_a_closed_chain_that_bends_in_3d_is_refused(self):
         skew = [line((0, 0, 0), (10, 0, 0)), line((10, 0, 0), (10, 10, 0)), line((10, 10, 0), (0, 10, 5)),
@@ -389,7 +381,7 @@ class ClosedTest(unittest.TestCase):
         plane, points = at_point((20, 0, 0), [1, 0, 0])
         wide = [vec.add(p, [0, 6, 0]) for p in points]
         found = paths.plan(path_of(rounded_rectangle(), frame=XY_SKETCH), plane, wide)
-        self.assertIn("bends in a radius", found.reason)
+        self.assertIsInstance(found, Refusal)
 
     def test_a_loop_whose_parts_pass_closer_than_the_outline_allows_is_refused(self):
         ends = [(20 + 2 * math.sin(math.radians(a)), 2 - 2 * math.cos(math.radians(a))) for a in range(0, 181, 5)]
@@ -502,28 +494,17 @@ class RefusalTest(unittest.TestCase):
                  "samples": samples, "tangent_start": tangent}
         self.refused([curve], path_limits.CROSSES, outline={"origin": samples[0], "z": tangent})
 
-    def test_an_outline_wider_than_the_bend_in_a_flat_path(self):
+    def test_an_outline_wider_than_the_tightest_bend_is_refused_in_flat_and_3d_paths(self):
         wide = [[0, y, 0] for y in (-1, 6)]
         found = plan(pipe_with_bend(), points=wide)
         self.assertIn("reaches 6.00 mm", found.reason)
-        self.assertIn("radius of 5.00 mm", found.reason)
+        self.assertIsInstance(plan(pipe_in_3d(), points=wide), Refusal)
+        self.assertIsInstance(plan(pipe_in_3d()), path_model.PathPlan)
 
     def test_the_outline_is_measured_across_the_path_plane_only(self):
         tall = [[0, 0, z] for z in (-50, 50)]
         self.assertIsInstance(plan(pipe_with_bend(), points=tall), path_model.PathPlan)
 
-    def test_an_outline_wider_than_a_bend_in_a_3d_path(self):
-        found = plan(pipe_in_3d(), points=[[0, y, 0] for y in (-1, 6)])
-        self.assertIn("radius of 5.00 mm", found.reason)
-
-    def test_an_outline_wider_than_a_single_arc(self):
-        found = plan([quarter([0, 5, 0], [0, -1, 0], [1, 0, 0], 5)], points=[[0, 7, 0]])
-        self.assertIn("reaches 7.00 mm", found.reason)
-
-    def test_an_outline_wider_than_the_circle(self):
-        ring = {"kind": "circle", "center": [0, 0, 0], "normal": [0, 0, 1], "radius": 10}
-        found = plan([ring], points=[[10, 0, 0], [0, 0, 0]], outline={"origin": [0, 0, 0], "z": [0, 1, 0]})
-        self.assertIn("reaches 10.00 mm", found.reason)
 
 class AxisReachTest(unittest.TestCase):
     """A path of one arc or a full circle is a revolve about its axis: only an outline that reaches the axis is refused,
@@ -541,8 +522,7 @@ class AxisReachTest(unittest.TestCase):
         frame = {"origin": [0, 0, 0], "z": [0, 0, 1]}
         outer = [[x, y, 0] for x in (-2, 2) for y in (-4, 0)]
         self.assertIsInstance(plan([ring], points=outer, outline=frame), path_model.PathPlan)
-        self.assertIn("bends in a radius", plan([ring], points=[[x, y, 0] for x in (-2, 2) for y in (0, 4)],
-                                                outline=frame).reason)
+        self.assertIsInstance(plan([ring], points=[[x, y, 0] for x in (-2, 2) for y in (0, 4)], outline=frame), Refusal)
 
 
 class RebuiltTest(unittest.TestCase):

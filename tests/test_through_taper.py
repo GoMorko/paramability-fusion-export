@@ -30,5 +30,6 @@ class WrittenOutlineRoomTest(unittest.TestCase):
         self.assertLess(inner_reach(profile_at(square, [hole], {"r": 8.0})), 3.0)
         self.assertGreater(inner_reach(profile_at(square, [hole], {"r": 1.0})), 4.0)
 
+
 if __name__ == "__main__":
     unittest.main()

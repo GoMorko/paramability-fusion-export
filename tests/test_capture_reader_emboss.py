@@ -143,15 +143,12 @@ class EmbossReaderTest(unittest.TestCase):
         data = read(depth_cm=-0.1, after=7696.0, made_z=9)
         self.assertEqual((data["depth"], data["end_offset"], data["volume_after"]), (-1.0, 9.0, 7696.0))
 
-    def test_a_lone_input_face_carries_its_edges_as_an_outline(self):
+    def test_only_a_lone_input_face_carries_its_edges_as_an_outline(self):
         outline = read(edges=True)["faces"][0]["outline"]
         self.assertEqual((outline["face"], outline["frame"]["origin"]), (True, [0, 0, 10]))
         self.assertEqual(outline["loops"][0]["curves"][1], {"kind": "line", "start": [40, 0], "end": [40, 20]})
-        self.assertNotIn("outline", read()["faces"][0])
-
-    def test_input_faces_beyond_the_first_are_not_given_an_outline(self):
-        data = read(faces_as=lambda faces: Coll(faces * 2), edges=True)
-        self.assertTrue(all("outline" not in face for face in data["faces"]))
+        two = read(faces_as=lambda faces: Coll(faces * 2), edges=True)
+        self.assertTrue(all("outline" not in face for face in two["faces"]))
 
     def test_a_curved_input_face_is_named_by_its_surface_without_a_plane(self):
         face = read(surface="Cylinder")["faces"][0]

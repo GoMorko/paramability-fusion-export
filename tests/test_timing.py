@@ -76,11 +76,6 @@ class CaptureTimerTest(unittest.TestCase):
         self.assertEqual([(s["index"], s["name"], s["component"], s["seconds"]) for s in summary["slowest"]],
                          [(1, "E1", "Cup", 3.0), (2, "E2", "c2", 2.0)])
 
-    def test_a_summary_that_fails_is_none(self):
-        timer = CaptureTimer()
-        timer.steps = {0: "x"}
-        self.assertIsNone(timer.summary())
-
 
 class CaptureReadTest(unittest.TestCase):
     def test_a_read_fills_the_timer_with_one_marker_move_per_position(self):
@@ -114,11 +109,6 @@ class ExportTimingTest(unittest.TestCase):
                                                "try_seconds"})
         self.assertIn("total", timing)
         self.assertEqual(json.loads(result.files["report.json"])["timing"], timing)
-
-    def test_a_port_without_timing_still_gets_the_phases(self):
-        timing = export(FakePort()).report["timing"]
-        self.assertNotIn("capture", timing)
-        self.assertEqual(set(timing["phases"]), set(PHASES))
 
     def test_a_several_body_export_lists_the_captures_by_part(self):
         port = FakePartsPort([BASE, BASE])

@@ -102,13 +102,11 @@ class PathCurvesTest(unittest.TestCase):
         self.sk.profiles = Coll([])
         self.design = Design({"sk1": [self.sk]})
 
-    def test_the_asked_curves_are_read_in_the_sketch_plane_and_the_rest_is_left_out(self):
+    def test_only_the_asked_curves_are_read_in_the_sketch_plane(self):
         record = state(self.design, sketches=["sk1"], curves={"sk1": ["c1", "c2", "off"]})["sketches"]["sk1"]
         self.assertEqual(record["curves"]["c1"], {"kind": "line", "start": [0, 0], "end": [0, 50]})
         self.assertEqual(record["curves"]["c2"]["kind"], "arc")
         self.assertEqual(sorted(record["curves"]), ["c1", "c2"])
-
-    def test_a_sketch_asked_for_without_curves_has_none(self):
         self.assertNotIn("curves", state(self.design, sketches=["sk1"])["sketches"]["sk1"])
 
 

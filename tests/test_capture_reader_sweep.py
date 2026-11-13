@@ -123,7 +123,6 @@ class SweepSettingsTest(unittest.TestCase):
         self.assertEqual(data["unread"], {"twist_deg": "3 : the twist is not available"})
         self.assertNotIn("unread", read_sweep())
 
-
     def test_the_settings_and_the_outline_are_read(self):
         data = read_sweep()
         self.assertEqual((data["operation"], data["solid"], data["orientation"], data["scaling"]),
@@ -155,10 +154,8 @@ class SweepSettingsTest(unittest.TestCase):
         self.assertEqual((data["path"], data["participants"]), (None, None))
         self.assertEqual(data["faces_after"], {"start": None, "end": None})
         self.assertEqual((data["distance_one"], data["operation"]), (1.0, "join"))
-
-    def test_outlines_that_cannot_be_read_are_null(self):
-        data = read_sweep(profile=Obj("fusion::Profile"))
-        self.assertEqual((data["profiles"], data["areas"]), (None, None))
+        unreadable = read_sweep(profile=Obj("fusion::Profile"))
+        self.assertEqual((unreadable["profiles"], unreadable["areas"]), (None, None))
 
 
 class SweepPathTest(unittest.TestCase):
@@ -228,14 +225,11 @@ class SweepPathTest(unittest.TestCase):
         found = read_sweep(path=path(step(sketch_curve(line3((0, 0, 0), (0, 50, 0)), sk))))["path"]
         self.assertEqual((found["reference"], found["projected"]), ({"kind": "constructionPlane", "token": "cp1"}, True))
 
-    def test_an_edge_says_which_body_it_lies_on(self):
-        found = read_sweep(path=path(step(edge("e1"))))["path"]
-        self.assertEqual(found["edges"][0]["body"]["token"], "eb")
-
     def test_edges_are_pick_records_and_not_pick_free_curves(self):
         data = read_sweep(path=path(step(edge("e1")), step(edge("e2", a=(30, 0, 0), b=(30, 20, 0)))))
         self.assertEqual(data["path"]["kind"], "edges")
         self.assertEqual([e["token"] for e in data["path"]["edges"]], ["e1", "e2"])
+        self.assertEqual(data["path"]["edges"][0]["body"]["token"], "eb")
         self.assertEqual(data["path"]["curves"][0]["start"], [0, 0, 0])
         self.assertEqual([r["kind"] for r in pick_records({"data": data})], ["edge", "edge"])
         self.assertNotIn("foreign", data["path"])

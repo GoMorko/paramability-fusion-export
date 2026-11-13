@@ -326,13 +326,11 @@ class StartAfterGivingUpTest(unittest.TestCase):
                            size_row("cube", 20.0), size_row("off", 8.0)))
         return probe, next(s for s in probe.states if s["values"] == {"off": 8.0})["start"]
 
-    def test_with_a_keeper_that_cannot_bring_the_sketch_back(self):
-        probe, start = self.start_of_last_row(_InertKeeperPort)
-        self.assertFalse(probe.left_start(start))
-
-    def test_without_a_keeper(self):
-        probe, start = self.start_of_last_row(_Port)
-        self.assertFalse(probe.left_start(start))
+    def test_a_row_that_needs_its_start_reads_it_with_a_keeper_that_cannot_help_or_none(self):
+        for port_class in (_InertKeeperPort, _Port):
+            with self.subTest(port_class.__name__):
+                probe, start = self.start_of_last_row(port_class)
+                self.assertFalse(probe.left_start(start))
 
 
 class PutBackTest(unittest.TestCase):

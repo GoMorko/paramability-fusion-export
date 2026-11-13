@@ -133,13 +133,11 @@ class PlaneChainTest(unittest.TestCase):
         self.capture["items"][4]["data"]["profiles"][0]["reference"].update(
             token="cp2", made_by=3, built_on=chain["built_on"])
 
-    def test_a_reach_to_the_last_plane_of_a_chain_follows_the_face_under_it(self):
+    def test_the_last_plane_of_a_chain_follows_the_face_under_it_and_is_tried_with_that_size(self):
         result = run(self.capture, ["plate_mm"], Motion())
         post = steps_of(result.recipe, "extrude")[2]
         self.assertEqual(expr(post["distance"]), "plate_mm - 1")
         self.assertNotIn("plate_mm", reasons(result))
-
-    def test_a_sketch_on_the_last_plane_of_a_chain_is_tried_with_the_size_under_it(self):
         self.assertEqual(plane_driven(self.capture, table_of(self.capture, ["plate_mm"])), ["plate_mm"])
 
     def test_a_chain_on_a_plane_the_copy_cannot_place_marks_its_sizes(self):

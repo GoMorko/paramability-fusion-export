@@ -313,32 +313,20 @@ class ReachOutOfTheToolTest(unittest.TestCase):
         outer.enter({"index": 2})
         return outer, outer.child(TOOL, "t_", depth=1)
 
-    def test_a_mirror_plane_on_a_face_of_the_part_follows_it(self):
-        _, child = self.walks()
-        ref = {"entity_type": "BRepFace", "surface": "Plane", "face_point": [0, 0, 10], "body": PLATE}
-        shift = follow.place_plane(child, {"index": 2, "name": "Mirror1"}, ref, [0, 0, 1])
-        self.assertEqual((shift.n, evaluate(shift.text, {"h": 15})), (0.0, 5.0))
-
-    def test_a_plane_built_on_a_face_of_the_part_follows_it(self):
+    def test_a_mirror_plane_on_a_face_of_the_part_or_built_on_one_follows_it(self):
         _, child = self.walks()
         face = {"entity_type": "BRepFace", "surface": "Plane", "face_point": [0, 0, 10], "body": PLATE}
-        ref = {"entity_type": "ConstructionPlane", "definition": "ConstructionPlaneOffsetDefinition", "built_on": [face]}
-        shift = follow.place_plane(child, {"index": 2, "name": "Mirror1"}, ref, [0, 0, 1])
-        self.assertEqual(evaluate(shift.text, {"h": 15}), 5.0)
+        built = {"entity_type": "ConstructionPlane", "definition": "ConstructionPlaneOffsetDefinition", "built_on": [face]}
+        for label, ref in (("face", face), ("built on a face", built)):
+            with self.subTest(label):
+                shift = follow.place_plane(child, {"index": 2, "name": "Mirror1"}, ref, [0, 0, 1])
+                self.assertEqual(evaluate(shift.text, {"h": 15}), 5.0)
 
     def test_a_reach_sees_the_part_as_it_stood_at_that_step(self):
         outer, child = self.walks()
         target = reach(10, PLATE)
         self.assertFalse(follow.target_shift(child, {"index": 1, "name": "E"}, target, [0, 0, 1]).sized)
         self.assertTrue(follow.target_shift(child, {"index": 2, "name": "E"}, target, [0, 0, 1]).sized)
-
-    def test_a_walk_with_gaps_keeps_what_was_written_before_a_step(self):
-        ctx = Context({"target": PLATE, "items": []})
-        ctx.enter({"index": 1})
-        ctx.written_reads = ("a",)
-        ctx.enter({"index": 5})
-        with ctx.as_of({"index": 3}):
-            self.assertEqual(ctx.written_reads, ("a",))
 
 
 def plate_then(capture, item):

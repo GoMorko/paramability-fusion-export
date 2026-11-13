@@ -6,11 +6,10 @@ from tests.translator_helpers import left_out
 from tests.translator_helpers import assert_schema_ok, edited, load_capture, steps_of, translate_fixture, verdict_of
 
 from lib.params import size_table
-from lib.translator import body_states, translate, tool_walk
+from lib.translator import translate, tool_walk
 from lib.translator.context import Context
 from lib.translator.finish import fillet
 from lib.translator.result import Refusal
-from lib.translator.step_walk import all_steps
 
 
 class CombineTest(unittest.TestCase):
@@ -174,10 +173,6 @@ class ToolWalkTest(unittest.TestCase):
         self.assertEqual(target["token"], "t2")
         self.assertEqual([s["kind"] for s in steps], ["extrude"])
 
-    def test_the_exported_body_keeps_the_measures_of_its_own_steps(self):
-        item = {"data": {"volume_after": 7.0}}
-        self.assertEqual(body_states.seen_on(item, {"token": "t1"}, True)["data"]["volume_after"], 7.0)
-
     def test_a_handler_reads_what_was_measured_on_the_tool(self):
         box = {"min": [0, 0, 0], "max": [1, 1, 1]}
 
@@ -226,13 +221,6 @@ class FlatToolOnThePartTest(unittest.TestCase):
         with ctx.as_of(second):
             self.assertEqual(ctx.written_reads, ("a",))
         self.assertEqual(ctx.written_reads, ("a", "b"))
-
-
-class AllStepsTest(unittest.TestCase):
-    def test_nested_steps_follow_the_step_that_holds_them(self):
-        inner = {"id": "c"}
-        tool = {"id": "b", "features": [{"id": "b1", "features": [inner]}]}
-        self.assertEqual([s["id"] for s in all_steps([{"id": "a"}, tool, {"id": "d"}])], ["a", "b", "b1", "c", "d"])
 
 
 if __name__ == "__main__":

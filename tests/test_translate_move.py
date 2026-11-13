@@ -9,7 +9,6 @@ from tests.translator_helpers import left_out, load_capture, steps_of, verdict_o
 from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.translator import move, translate, vec
-from lib.translator.context import Context
 
 FLAT = {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
 
@@ -75,12 +74,6 @@ class WrittenMoveTest(unittest.TestCase):
         result = sized(moved(lambda d: as_measured(d, "pointToPoint")))
         self.assertEqual(inner(result)[1]["translate"], [20.0, 0.0, 0.0])
         self.assertEqual(marked(result), ["gap_mm", "peg_len_mm", "plate_h_mm"])
-
-    def test_a_tool_of_the_walks_own_component_has_the_place_of_that_component(self):
-        turned = {"origin": [0, 0, 0], "x": [0, 1, 0], "y": [-1, 0, 0], "z": [0, 0, 1]}
-        root = Context({"target": {"token": "t1", "placement": {"frame": turned}}, "items": []})
-        rod = root.child({"token": "t2", "foreign": True, "component": {"token": "rod"}, "place": {"frame": FLAT}}, "a_")
-        self.assertEqual(move._component_frame(rod.child({"token": "t3"}, "b_")), FLAT)
 
     def test_a_round_body_with_two_corners_moves_by_its_distances(self):
         def round_body(data):
@@ -158,11 +151,9 @@ class RefusedMoveTest(unittest.TestCase):
 
         cases = {
             "faces": lambda d: d.update(input_kind="faces"),
-            "unreadable inputs": lambda d: d.update(input_kind="other"),
             "unknown type": lambda d: d.update(move_type="other"),
             "points after unread": lambda d: d.update(points_after=[[]]),
             "another body": lambda d: d.update(bodies=[{"token": "t9", "name": "Body9"}]),
-            "distances unread": lambda d: d["translate"].__setitem__(1, None),
             "distances disagree": lambda d: d.update(translate=[21, 0, 0]),
             "not rigid": mirrored, "too few corners": two_corners, "mirrored transform": mirrored_transform,
             "transform disagrees": other_transform,

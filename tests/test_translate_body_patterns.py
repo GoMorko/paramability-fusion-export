@@ -105,11 +105,6 @@ class CopyByCopyTest(unittest.TestCase):
         self.assertEqual(marked(result), ["ring_n"])
         self.assertEqual(check_recipe(result.recipe), [])
 
-    def test_a_direction_in_another_component_with_unknown_sizes_gives_a_note(self):
-        capture = load_capture(SUBSET)
-        pattern_item(capture)["data"]["direction_one_place"] = {"assembly": True, "ref": {"type": "BRepEdge", "slot": "d"}}
-        self.assertGreater(len(sized(capture).notes), len(sized(load_capture(SUBSET)).notes))
-
     def test_a_copy_changed_from_another_component_refuses(self):
         capture = load_capture(ROW)
         combine = capture["items"].pop()

@@ -186,6 +186,9 @@ class CutsManifestTest(unittest.TestCase):
         self.assertEqual(validate(manifest, load_schema(PACKAGE_SCHEMA)), [])
         self.assertEqual(validate({**manifest, "version": 2}, load_schema(PACKAGE_SCHEMA_V2)), [])
         self.assertNotIn("cuts", mf.build_recipe_manifest("Part", "w", notes=["1 step copied."]))
+        long = mf.build_recipe_manifest("Part", "w", cuts=[{"name": "slope", "reason": "x" * 201}])
+        self.assertTrue(mf.validate_manifest(long))
+        self.assertTrue(validate({**long, "version": 2}, load_schema(PACKAGE_SCHEMA_V2)))
 
     def test_a_part_lists_its_cut_sizes(self):
         parts = [{"name": "Tray", "step": mf.part_step_path(1), "recipe": mf.part_recipe_path(1), "cuts": self.CUTS}]
@@ -193,11 +196,6 @@ class CutsManifestTest(unittest.TestCase):
         self.assertEqual(manifest["parts"][0]["cuts"], self.CUTS)
         self.assertEqual(mf.validate_manifest(manifest), [])
         self.assertEqual(validate({**manifest, "version": 2}, load_schema(PACKAGE_SCHEMA_V2)), [])
-
-    def test_a_long_cut_reason_is_refused_by_both(self):
-        manifest = mf.build_recipe_manifest("Part", "w", cuts=[{"name": "slope", "reason": "x" * 201}])
-        self.assertTrue(mf.validate_manifest(manifest))
-        self.assertTrue(validate({**manifest, "version": 2}, load_schema(PACKAGE_SCHEMA_V2)))
 
 
 class UntranslatedParameterManifestTest(unittest.TestCase):

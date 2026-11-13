@@ -77,14 +77,10 @@ class ParallelVolumeTest(unittest.TestCase):
 
 class RiseTest(unittest.TestCase):
     def test_a_rise_below_the_limit_at_the_end_tangent_is_left_out(self):
-        for turn, copied in ((87.0, True), (87.4, False)):
-            capture = edited_after(pipe_along([arc_xy((0, 10), 10, -90, -90 + turn)]), orientation="parallel")
-            with self.subTest(turn):
-                reason = stopped(translate(capture)) if not copied else None
-                if copied:
-                    self.assertEqual(only_sweep(self, translate(capture))["orientation"], "fixed")
-                else:
-                    self.assertEqual(reason["reason"], sweep_limits.KEEPS_DIRECTION)
+        def made(turn):
+            return translate(edited_after(pipe_along([arc_xy((0, 10), 10, -90, -90 + turn)]), orientation="parallel"))
+        self.assertEqual(only_sweep(self, made(87.0))["orientation"], "fixed")
+        self.assertEqual(stopped(made(87.4))["reason"], sweep_limits.KEEPS_DIRECTION)
 
 
 class SizedLimitsTest(unittest.TestCase):
@@ -98,16 +94,16 @@ class SizedLimitsTest(unittest.TestCase):
         capture["items"][2]["target_after"]["volume_mm3"] = None
         table = table_of(capture, TICKED + ["turn_deg"])
         result = translate(capture, size_table=table)
-        return {f["name"]: f["reason"] for f in result.loose}.get("turn_deg", ""), result
+        return result
 
     def test_a_taper_that_follows_a_size_stops_the_range_before_45_degrees(self):
-        _, result = self.sized_sweep("taper_deg", "turn_deg - 88", 2.0, taper_deg=2.0)
+        result = self.sized_sweep("taper_deg", "turn_deg - 88", 2.0, taper_deg=2.0)
         self.assertIsNone(result.refusal)
         turn = result.recipe["sizes"]["turn_deg"]
         self.assertTrue(90.0 <= turn["max"] < 133.0, turn)
 
     def test_a_twist_that_follows_a_size_stops_the_range_before_3600_degrees(self):
-        _, result = self.sized_sweep("twist_deg", "turn_deg * 30", 2700.0, twist_deg=2700.0)
+        result = self.sized_sweep("twist_deg", "turn_deg * 30", 2700.0, twist_deg=2700.0)
         self.assertIsNone(result.refusal)
         turn = result.recipe["sizes"]["turn_deg"]
         self.assertTrue(90.0 <= turn["max"] <= 120.0, turn)

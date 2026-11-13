@@ -155,15 +155,13 @@ class WrittenTest(unittest.TestCase):
         self.assertNotIn("tilt_deg", height["expr"])
         self.assertIn("depth_mm", height["expr"])
 
-    def test_a_stuck_point_of_another_step_holds_no_size_in_this_one(self):
-        capture, motion = _tilted()
-        motion.values["5/positions/0/0"] = Stuck(["tilt_deg"], "curve", "Sketch2", motion.values["5/positions/0/0"])
-        self.assertAlmostEqual(_height_at(capture, motion, tilt_deg=50.0), 120.0 * cos(50.0), places=6)
-
-    def test_a_stuck_line_direction_holds_no_size(self):
-        capture, motion = _tilted()
-        motion.values["1/p0/c0.0/turn"] = Stuck(["tilt_deg"], "curve", "Sketch1")
-        self.assertAlmostEqual(_height_at(capture, motion, tilt_deg=50.0), 120.0 * cos(50.0), places=6)
+    def test_a_stuck_point_or_line_direction_holds_no_size(self):
+        for key, stuck in (("5/positions/0/0", lambda old: Stuck(["tilt_deg"], "curve", "Sketch2", old)),
+                           ("1/p0/c0.0/turn", lambda old: Stuck(["tilt_deg"], "curve", "Sketch1"))):
+            with self.subTest(key):
+                capture, motion = _tilted()
+                motion.values[key] = stuck(motion.values.get(key))
+                self.assertAlmostEqual(_height_at(capture, motion, tilt_deg=50.0), 120.0 * cos(50.0), places=6)
 
 
 def _height_at(capture, motion, **values):

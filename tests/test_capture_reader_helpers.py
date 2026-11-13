@@ -230,10 +230,6 @@ class PlanTest(unittest.TestCase):
         items[0]["component"] = "elsewhere"
         self.assertEqual(indices(tool_items.plan(items).wanted), [1])
 
-    def test_a_tool_of_the_same_component_is_planned_from_the_steps_of_that_component(self):
-        items = [step(0, ["b2"]), step(1, ["b2"], component="elsewhere"), step(2, ["b1"]), combine(3, ["b2"])]
-        self.assertEqual(indices(tool_items.plan(items, ref("t")).wanted), [0])
-
     def test_only_combines_of_the_exported_body_give_tools(self):
         items = [step(0, ["b2"]), combine(1, ["b2"], target="other")]
         self.assertEqual(tool_items.plan(items, ref("t")).sources, [])

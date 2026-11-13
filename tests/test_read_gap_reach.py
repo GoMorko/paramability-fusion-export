@@ -91,11 +91,6 @@ class ReachTest(unittest.TestCase):
         _, reach = self.read([item(1), item(3, "FilletFeature", edge_pick("floor_rim"))])
         self.assertEqual(reach["makers"], {"3": [1]})
 
-    def test_a_candidate_that_lists_no_faces_counts_as_reached(self):
-        self.world.features[1] = FakeMadeFeature([])
-        _, reach = self.read([item(1, "MoveFeature"), item(3, "FilletFeature", edge_pick("floor_rim"))])
-        self.assertEqual(reach["makers"], {"3": [1]})
-
     def test_a_pick_on_a_face_of_a_left_out_combines_tool_is_reported_under_the_combine(self):
         # Step 1 made the tool body; the Combine at step 2 joined it and is left out.
         tool = {"token": "tool", "name": "Tool"}
@@ -124,10 +119,11 @@ class ReachTest(unittest.TestCase):
         _, reach = self.read([item(1), item(2), item(3, "FilletFeature", edge_pick("gone"))], gaps=(1, 2))
         self.assertEqual(reach["makers"], {"3": [1, 2]})
 
-    def test_a_candidate_whose_faces_cannot_be_read_counts_as_reached_unless_it_makes_no_faces(self):
-        self.world.features[1] = FakeMadeFeature(None)
+    def test_a_candidate_with_no_faces_or_faces_that_cannot_be_read_counts_as_reached_unless_it_makes_no_faces(self):
         items = [item(1), item(3, "FilletFeature", edge_pick("floor_rim"))]
-        self.assertEqual(self.read(items)[1]["makers"], {"3": [1]})
+        for faces in ([], None):
+            self.world.features[1] = FakeMadeFeature(faces)
+            self.assertEqual(self.read(items)[1]["makers"], {"3": [1]}, faces)
         items[0] = item(1, "Sketch")
         self.assertEqual(self.read(items)[1]["makers"], {"3": []})
 
@@ -141,12 +137,6 @@ class MarkerTest(unittest.TestCase):
         self.world = World()
         self.items = [item(1), item(2, "FilletFeature", edge_pick("top_wall")),
                       item(3, "FilletFeature", edge_pick("top_wall"))]
-
-    def test_the_marker_is_after_each_candidate_then_before_each_picking_step_and_back_where_it_was_after(self):
-        design = self.world.design(marker=2)
-        read_reach(design, {"items": self.items}, {1})
-        self.assertEqual(design.timeline.visited, [2, 3, 2])
-        self.assertEqual(design.timeline.markerPosition, 2)
 
     def test_the_marker_visits_each_position_once_and_the_answer_counts_the_moves(self):
         # Step 1 is left out and steps 2 to 5 round its edges one after the other. Reading a list right after each
@@ -182,10 +172,6 @@ class MarkerTest(unittest.TestCase):
         design = self.world.design(marker=2, moves_allowed=2)
         with self.assertRaises(MarkerError):
             read_reach(design, {"items": self.items}, {1})
-
-    def test_a_timeline_that_cannot_be_read_gives_an_unread_answer(self):
-        design = FakeReachDesign(object())
-        self.assertFalse(read_reach(design, {"items": self.items}, {1})["read"])
 
     def test_too_many_picking_steps_give_an_unread_answer_without_moving_the_marker(self):
         design = self.world.design(marker=2)

@@ -151,27 +151,18 @@ class ProbeTest(unittest.TestCase):
                 state = probe.read_now(values)
                 self.assertEqual((asked[-1], state["faces"]), (faces, tray_read({})["faces"]))
 
-    def test_a_face_that_takes_another_outline_cuts_the_range_there(self):
-        capture = tray_face()
-        table = table_of(capture, [H, CUBE])
-        tries = [{}, {H: 1.125}, {H: 1.875}, {H: 2.5}, {CUBE: 15.0}, {CUBE: 25.0}]
-        states = [{"values": v, "built": True, "read": tray_read(v, holed_above=2.0), "e0": not v} for v in tries]
-        motion = build.build(capture, table, states, after=tray_read({}))
-        result = translate(capture, size_table=table, motion=motion)
-        self.assertEqual(loose_names(result), [])
-        cut = next(c for c in result.cuts if c["name"] == H)
-        self.assertEqual(cut["max"], 1.875)
-
-    def test_a_face_that_faces_the_other_way_at_one_value_cuts_the_range_there(self):
+    def test_a_face_that_changes_outline_or_turns_over_at_a_value_cuts_the_range_there(self):
         capture = tray_face()
         table = table_of(capture, [H, CUBE])
         tries = [{}, {H: 1.125}, {H: 1.875}, {H: 2.5}, {CUBE: 15.0}, {CUBE: 25.0}, {H: 2.5, CUBE: 25.0}]
-        states = [{"values": v, "built": True, "read": tray_read(v, back_above=2.0), "e0": not v} for v in tries]
-        motion = build.build(capture, table, states, after=tray_read({}))
-        result = translate(capture, size_table=table, motion=motion)
-        self.assertEqual(loose_names(result), [])
-        cut = next(c for c in result.cuts if c["name"] == H)
-        self.assertEqual(cut["max"], 1.875)
+        for label, change in (("hole", {"holed_above": 2.0}), ("other way", {"back_above": 2.0})):
+            with self.subTest(label):
+                states = [{"values": v, "built": True, "read": tray_read(v, **change), "e0": not v} for v in tries]
+                motion = build.build(capture, table, states, after=tray_read({}))
+                result = translate(capture, size_table=table, motion=motion)
+                self.assertEqual(loose_names(result), [])
+                cut = next(c for c in result.cuts if c["name"] == H)
+                self.assertEqual(cut["max"], 1.875)
 
 
 class ReadFacesTest(unittest.TestCase):

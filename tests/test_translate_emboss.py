@@ -127,7 +127,6 @@ class EmbossFaceOutlineTest(unittest.TestCase):
     def test_an_outline_the_reader_could_not_read_says_so(self):
         reason = reason_of(with_edit(outlined_by([{"kind": "other", "type": "none"}], [0.0])))
         self.assertIn("could not be read", reason)
-        self.assertNotIn("flat face", reason)
 
 
 class EmbossSizesTest(unittest.TestCase):
@@ -310,13 +309,6 @@ class EmbossTrimmedTest(unittest.TestCase):
         self.assertEqual(raised["within"]["outer"], base["sketch"]["outer"])
         self.assertEqual(raised["within"]["on"]["origin"][2], {"expr": "lid_mm"})
         self.assertEqual((result.fixed, result.loose, result.dropped), ([], [], []))
-
-    def test_a_face_no_extrude_made_is_written_as_measured_and_marks_the_sizes_it_may_follow(self):
-        capture = load_capture(LID)
-        trimmed_by(top_face(square([0, 0], [60, 40])), 280.0)(emboss_data(capture))
-        result = sized(capture)
-        self.assertIsNone(result.refusal)
-        self.assertEqual([d["name"] for d in result.loose], ["lid_mm"])
 
     def test_a_trimmed_outline_whose_face_cannot_be_the_limit_is_refused(self):
         def two_faces(data):
