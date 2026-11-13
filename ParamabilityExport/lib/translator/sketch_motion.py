@@ -79,10 +79,6 @@ def same(a, b):
     return abs(a.const - b.const) <= SAME_TOL
 
 
-def fix_stuck(ctx, stuck):
-    ctx.doubt(movers(ctx.table, stuck), notes.stuck_reason(stuck.cause, stuck.sketch))
-
-
 def rendered(table, value, number):
     """A raw value as a Quantity whose number is the captured `number`, or a Stuck when it cannot be written: stuck
     already, a parameter that does not translate, or a formula that misses the captured number."""
@@ -98,16 +94,22 @@ def rendered(table, value, number):
     return Quantity(number, q.text, q.reads)
 
 
+def _as_written(table, value, number, positive):
+    """`(Quantity, doubt)`: what `quantity` writes, and the `(names, why)` it marks (None when it marks nothing)."""
+    q = rendered(table, value, number)
+    if isinstance(q, Stuck):
+        return Quantity(number), (movers(table, q), notes.stuck_reason(q.cause, q.sketch))
+    if positive and q.sized and not stays_positive(table, q):
+        return Quantity(number), (q.reads, notes.shrinks_reason(value.sketch))
+    return q, None
+
+
 def quantity(ctx, value, number, positive=False):
     """The Quantity a raw value is written as. Its number stays the captured `number`. A stuck value, a formula that
     misses the captured number, or a length that would reach zero fixes its sizes and writes the number."""
-    q = rendered(ctx.table, value, number)
-    if isinstance(q, Stuck):
-        fix_stuck(ctx, q)
-        return Quantity(number)
-    if positive and q.sized and not stays_positive(ctx.table, q):
-        ctx.doubt(q.reads, notes.shrinks_reason(value.sketch))
-        return Quantity(number)
+    q, doubt = _as_written(ctx.table, value, number, positive)
+    if doubt is not None:
+        ctx.doubt(*doubt)
     return q
 
 
@@ -307,6 +309,15 @@ class Outline:
         """(outer, inners) as the recipe writes them: numbers, or formulas where they follow sizes."""
         def write(field, number, value):
             return quantity(ctx, value, number, positive=field in POSITIVE_FIELDS).json()
+
+        out = [_pair(loop, raw_loop, write) for loop, raw_loop in zip(self.loops, self.raw_loops)]
+        return out[0], out[1:]
+
+    def preview(self):
+        """(outer, inners) as `written` gives them, without marking any size: for a check made before the step is
+        written, which may still leave the step out."""
+        def write(field, number, value):
+            return _as_written(self.table, value, number, field in POSITIVE_FIELDS)[0].json()
 
         out = [_pair(loop, raw_loop, write) for loop, raw_loop in zip(self.loops, self.raw_loops)]
         return out[0], out[1:]

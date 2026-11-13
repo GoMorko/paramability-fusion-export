@@ -7,46 +7,13 @@ any setting reaches too far.
 """
 import math
 
-from ..params.expressions import ExpressionError, evaluate
-from . import range_check, spline_fit
+from ..params.expressions import ExpressionError
+from . import range_check
 from .path_limits import REACH_SHARE
+from .written_loops import point as _point, rect_corners as _corners, spline_points as _spline_points, \
+    value as _value, written_reads
 
 ARC_STEPS = 16      # points per arc, as the app samples an arc of an outline
-SPLINE_STEPS = 16   # readings of a fitted spline between two of its points
-
-
-def _value(node, env):
-    return evaluate(node["expr"], env) if isinstance(node, dict) else float(node)
-
-
-def _point(point, env):
-    return [_value(point[0], env), _value(point[1], env)]
-
-
-def _reads(node, found):
-    """The Fusion names of every size a written value reads."""
-    if isinstance(node, dict):
-        found.extend(getattr(node, "reads", ()))
-        for value in node.values():
-            _reads(value, found)
-    elif isinstance(node, list):
-        for value in node:
-            _reads(value, found)
-    return tuple(dict.fromkeys(found))
-
-
-def written_reads(*loops):
-    """The Fusion names of every size the written `loops` read."""
-    return _reads(list(loops), [])
-
-
-def _corners(loop, env):
-    """The four corners of a rect loop, turned by its angle."""
-    cx, cy = _point(loop["center"], env)
-    half_w, half_h = _value(loop["width"], env) / 2.0, _value(loop["height"], env) / 2.0
-    angle = math.radians(_value(loop.get("angleDeg", 0.0), env))
-    c, s = math.cos(angle), math.sin(angle)
-    return [[cx + c * x - s * y, cy + s * x + c * y] for x in (-half_w, half_w) for y in (-half_h, half_h)]
 
 
 def _arc_points(a, b, c):
@@ -66,15 +33,6 @@ def _arc_points(a, b, c):
     sweep = (end - start) % full if counter else -((start - end) % full)
     return [a] + [[centre[0] + radius * math.cos(start + sweep * i / ARC_STEPS),
                    centre[1] + radius * math.sin(start + sweep * i / ARC_STEPS)] for i in range(1, ARC_STEPS)] + [c]
-
-
-def _spline_points(points):
-    """Points along the app's curve through `points` (the chords when it cannot be fitted)."""
-    curve = spline_fit.interpolate(points)
-    if curve is None:
-        return points
-    steps = SPLINE_STEPS * (len(points) - 1)
-    return [curve.at(i / steps) for i in range(steps + 1)]
 
 
 def reach_of(loop, env, start, across=None, toward=None):
@@ -119,7 +77,7 @@ def outgrown_reads(table, loop, start, limit):
     """The Fusion names of the sizes behind the written outer `loop` when some setting of them makes it reach `limit`
     (the radius of the path's tightest bend) from `start`, else an empty tuple. A loop that cannot be worked out at
     some setting counts as one that can."""
-    reads = _reads(loop, [])
+    reads = written_reads(loop)
     if not reads or limit == math.inf:
         return ()
     try:

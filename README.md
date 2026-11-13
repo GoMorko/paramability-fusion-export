@@ -135,8 +135,8 @@ design broken (a step stays in error even with your values back), the tries stop
 fail for that reason; the result window says so, and if a step is still in error after the export it tells you to use
 Undo. A taper that follows
 sizes gets the same kind of range: it stops before the taper reaches 45 degrees, the steepest Paramability builds. A
-tapered cut through all whose walls would meet before it passes the part at some sizes keeps the range up to the
-steepest taper that stays open, when no size changes its outline; else it is left out.
+tapered cut through all whose walls would meet before it passes the part at some sizes is checked over the ranges of
+the sizes behind its taper and its outline, and those ranges stop where the cut would close.
 
 The box "Faster tries" under the body picker is off to start with. When you tick it, the tries also turn off the
 timeline steps of other components that the body does not use, so each try rebuilds less. Every step is turned back

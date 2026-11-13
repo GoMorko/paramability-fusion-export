@@ -23,7 +23,7 @@ import math
 from ..package.numbers import round9
 
 from . import (face_outline, follow, kept_ranges, loops, notes, outlines, placement, range_check, reach_motion,
-               sketch_motion, thin_wall, values, vec)
+               sketch_motion, thin_wall, through_taper, values, vec)
 from .footprint import Footprint, polyline
 from .placer_makers import SlabMaker, ThinWallMaker
 from .result import Refusal, StepResult
@@ -454,10 +454,9 @@ def _resolve_through(ctx, plan, data, origin, z, combine, box_max=None, profiles
 
     A tapered side keeps the same outline at each height whatever its length, so any length past the part cuts what
     Fusion's through all cuts. One whose walls can lean in, at the taper or at any size its taper follows, ends just
-    past the part, and only while its outlines stay open there at the steepest such lean (`_lean_in`). When they close
-    only at a lean the sizes reach and not at the taper now, and the outlines (`outlines`, the `sketch_motion.Outline`
-    of each) follow no size, the ranges of those sizes are cut to the steepest lean that keeps them open
-    (`_keep_open`) and the step is copied."""
+    past the part, and only while its outlines stay open there. When the taper or the outlines (`outlines`, the
+    `sketch_motion.Outline` of each) follow sizes, it is checked over their ranges, which are cut where it would close
+    (`through_taper.keep_open`)."""
     for entry in plan:
         if entry["extent"] == "through" and combine not in ("cut", "intersect"):
             return Refusal("Extruding through all is only copied for cuts.")
@@ -472,46 +471,14 @@ def _resolve_through(ctx, plan, data, origin, z, combine, box_max=None, profiles
             lean = _lean_in(ctx, entry)
             if lean > 0:
                 entry["distance"] = _farthest(box, origin, direction) + THROUGH_TAPER_MARGIN_MM
-                if not _stays_open(profiles, entry["distance"], lean) and not _keep_open(
-                        ctx, item, entry, profiles, lean, outlines):
+                moves = any(drawn is not None and sketch_motion.outline_movers(ctx.table, drawn) for drawn in outlines)
+                if (moves or not through_taper.stays_open(profiles, entry["distance"], lean)) and not \
+                        through_taper.keep_open(ctx, item, entry, profiles, outlines, MAX_TAPER_DEG):
                     return Refusal("This tapered cut through all closes before it passes the part, which is not "
                                    "copied.")
             else:
                 entry["distance"] = _reach_through(box, origin, direction)
     return None
-
-
-def _stays_open(profiles, distance, lean):
-    """True when every outline, its walls leaning in by `lean` degrees, still has room left after `distance`."""
-    shrink = distance * math.tan(math.radians(lean))
-    return all(inner_reach(profile, 2.0 * shrink) >= 2.0 * shrink for profile in profiles)
-
-
-# Halvings of the lean between the taper now and the steepest one the sizes reach (`_keep_open`).
-OPEN_LEAN_STEPS = 12
-
-
-def _keep_open(ctx, item, entry, profiles, lean, outlines=()):
-    """For a taper that follows sizes and keeps the outlines open now: cut the ranges of its sizes so it stays under
-    the steepest lean at which they stay open, found by halving between the taper now and `lean`. True when that
-    holds the taper (the ranges are cut as needed); False when the taper is fixed, closes already, or no cut keeps
-    it. The check reads the outlines as they are now, so it holds only while no size moves them (`outlines`)."""
-    q = entry.get("taper_q")
-    now = max(entry["taper"] or 0.0, 0.0)
-    if q is None or not q.sized or not _stays_open(profiles, entry["distance"], now):
-        return False
-    if any(drawn is not None and sketch_motion.outline_movers(ctx.table, drawn) for drawn in outlines):
-        return False
-    low, high = now, lean
-    for _ in range(OPEN_LEAN_STEPS):
-        middle = (low + high) / 2.0
-        low, high = (middle, high) if _stays_open(profiles, entry["distance"], middle) else (low, middle)
-    found = kept_ranges.holding_ranges(ctx.table, [(Quantity(low).plus(q.scaled(-1.0)), 1)], TAPER_MARGIN_DEG)
-    if found is None:
-        return False
-    if found:
-        ctx.cut(found, "%s would close before it passes the part" % ((item or {}).get("name") or "a tapered cut"))
-    return True
 
 
 def _lean_in(ctx, entry):
@@ -523,31 +490,6 @@ def _lean_in(ctx, entry):
         span = range_check.sweep(ctx.table, q.text, q.reads)
         lean = MAX_TAPER_DEG if span.failed or span.high is None else max(lean, span.high)
     return min(lean, MAX_TAPER_DEG)
-
-
-# Grid sizes `inner_reach` tries in turn, coarse first.
-_REACH_GRIDS = (8, 16, 32, 48)
-
-
-def inner_reach(profile, enough=math.inf):
-    """About the radius of the largest circle inside a profile's region (a little less): the largest distance to its
-    outline over a grid of points inside it. Finer grids are tried only while the reach stays under `enough`."""
-    footprint = Footprint(profile)
-    flat = [p for curve in footprint.curves for p in polyline(curve)]
-    if not flat:
-        return 0.0
-    lo = [min(p[i] for p in flat) for i in (0, 1)]
-    hi = [max(p[i] for p in flat) for i in (0, 1)]
-    best = 0.0
-    for steps in _REACH_GRIDS:
-        for a in range(1, steps):
-            for b in range(1, steps):
-                p = [lo[0] + (hi[0] - lo[0]) * a / steps, lo[1] + (hi[1] - lo[1]) * b / steps]
-                if footprint.covers(p):
-                    best = max(best, footprint.nearest_curve(p)[1])
-                    if best >= enough:
-                        return best
-    return best
 
 
 def _beyond_part(box, start, direction, length):
