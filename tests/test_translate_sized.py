@@ -10,7 +10,8 @@ from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.sketch_values.motion import Motion
 from lib.translator import translate
-from lib.translator.values import Quantity, _env, _gives_whole_numbers
+from lib.translator.ranges.range_check import size_env
+from lib.translator.values import Quantity, _gives_whole_numbers
 
 TRAY = "filter_tray_sized"
 H = "FilterBox_$_height__contains_CeramicMedium"
@@ -53,7 +54,7 @@ def param(name, expression, value):
 
 def resolved(recipe, table):
     """The recipe with every formula worked out at the default sizes and the sizes left out."""
-    env = _env(table, {})
+    env = size_env(table, {})
 
     def walk(node):
         if isinstance(node, dict):
