@@ -94,6 +94,15 @@ class CaptureCache:
         return capture
 
 
+def _timed_reader(port, ctx):
+    """`read(request)` of one probe state; each read times its parts on the port's `read_timer` (set by
+    `pipeline.ProbeRun`) when it has one."""
+    def read(request):
+        ctx.timer = getattr(port, "read_timer", None)
+        return read_state(port.design, request, ctx)
+    return read
+
+
 class FusionPort:
     """The pipeline's door to Fusion (`export_plan.pipeline.ExportPort`) for one picked body."""
 
@@ -118,8 +127,7 @@ class FusionPort:
         return read_reach(self.design, capture, gaps)
 
     def probe_reader(self):
-        ctx = ReadContext(self.design, self._current())
-        return lambda request: read_state(self.design, request, ctx)
+        return _timed_reader(self, ReadContext(self.design, self._current()))
 
     def sketch_keeper(self, tokens):
         return SketchKeeper(self.design, tokens)
@@ -168,8 +176,7 @@ class FusionPartsPort:
         return read_reach(self.design, capture, gaps)
 
     def probe_reader(self, index):
-        ctx = ReadContext(self.design, self._current(index))
-        return lambda request: read_state(self.design, request, ctx)
+        return _timed_reader(self, ReadContext(self.design, self._current(index)))
 
     def sketch_keeper(self, tokens):
         return SketchKeeper(self.design, tokens)

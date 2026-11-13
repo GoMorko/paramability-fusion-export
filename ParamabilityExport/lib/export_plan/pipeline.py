@@ -40,6 +40,10 @@ from .size_offers import discovery_sizes, labels, probe_sizes
 from .timeline_trim import TryTimeline
 
 
+# The parts of a probe read the Fusion reader times (`fusion_reader.probe_state.read_state`).
+READ_PARTS = ("sketches", "points", "params", "refs", "box", "faces")
+
+
 def plan_rows_left(rows):
     """How many probe rows the cap leaves after `rows`."""
     return max(0, MAX_PROBE_ROWS - len(rows))
@@ -196,6 +200,10 @@ class ProbeRun:
     def __init__(self, port, tmp, probe):
         self.port, self.tmp, self.probe = port, tmp, probe
         self.timer = Timer()  # where the time of the tries goes (`summary`)
+        try:
+            port.read_timer = self.timer  # the Fusion reader times the parts of each read on it (`read_parts`)
+        except Exception:
+            pass
         self.reads, self.rows, self.starts, self.backs = {}, [], {}, {}
         self._values = {}  # key of a row to the sizes it sets (`_row_values`)
         self.read_failure = None
@@ -203,6 +211,8 @@ class ProbeRun:
         self.redone = []  # keys of the rows run a second time
         self._tails = {}  # key of a batch's last row: the read once the values were back after it
         self._misses = 0
+        self._last_start = None  # the start read (or the read after its put back) of the row that read one last
+        self.reused = 0  # rows that took `_last_start` as their start instead of reading the design
         self._previous = None  # key of the row run last
         self.keeper = self._keeper()
         self.job = RowExport(port.store, port.units, self._export, self._before_row)
@@ -218,8 +228,9 @@ class ProbeRun:
             self.port.log(f"keeping the sketches failed: {exc!r}")
             return None
 
-    def _read_now(self, values=None):
-        """The probe state of the design now, with `values` the sizes set to other values (`SizeProbe.read_now`).
+    def _read_now(self, values=None, outline=False):
+        """The probe state of the design now, with `values` the sizes set to other values (`SizeProbe.read_now`;
+        `outline` reads only the outlines).
         Raises when the timeline marker is not where the tries keep it, before or after the read: a read before it
         would miss items the sketches need, so the row counts as not read and the probe stops."""
         holds = getattr(self.port.store, "marker_holds", None)
@@ -227,15 +238,17 @@ class ProbeRun:
             raise MarkerNotHeld("The timeline marker was not where the tries keep it.")
         with self.timer.span("read"):
             with self.timer.span("read_in_rows" if self.timer.is_open("rows") else "read_outside"):
-                read = self.probe.read_now(values)
+                read = self.probe.read_now(values, outline) if outline else self.probe.read_now(values)
         if _marker_lost(read):
             raise MarkerNotHeld("The timeline marker did not go back after an outline face was read.")
         return read
 
     def _before_row(self, row):
-        """`RowExport`'s hook once the parameters are back: read the design when the row before did not build or
-        read a followed sketch on another outline, and always before a row run again; put the sketch back when that
-        read shows it on another solution."""
+        """`RowExport`'s hook once the parameters are back: read the outlines of the design when the row before did
+        not build or read a followed sketch on another outline, and always before a row run again; put the sketch
+        back when that read shows it on another solution. Once put backs are given up (`MAX_PUT_BACK_MISSES`) and the
+        last start still showed a sketch off its first solution, nothing can bring it back, so that start is taken as
+        the start of the row and the design is not read again."""
         key = row.get("key", row["name"])
         previous, self._previous = self._previous, key
         if self.read_failure is not None or (previous is None and not row.get("again")):
@@ -243,17 +256,27 @@ class ProbeRun:
         read = self.reads.get(previous)
         if not row.get("again") and read is not None and not self.probe.off_outline(read):
             return
+        if self._given_up() and self.probe.left_start(self._last_start):
+            self.starts[key] = self._last_start
+            self.reused += 1
+            return
         start = self._try_read()
         if start is None:
             return
-        self.starts[key] = start
+        self.starts[key] = self._last_start = start
         if self.probe.left_start(start):
-            self._put_back(key)
+            back = self._put_back(key, read=start)
+            self._last_start = back if back is not None else start
+
+    def _given_up(self):
+        """True when no more sketch put backs will be tried."""
+        return self.keeper is None or self._misses >= self.MAX_PUT_BACK_MISSES
 
     def _try_read(self):
-        """`_read_now` with every value back, or None with `read_failure` set when the read failed."""
+        """`_read_now` of the outlines with every value back, or None with `read_failure` set when the read
+        failed."""
         try:
-            return self._read_now({})
+            return self._read_now({}, outline=True)
         except ExportCancelled:
             raise
         except Exception as exc:
@@ -261,15 +284,22 @@ class ProbeRun:
             self.port.log(f"size probe read failed: {exc!r}")
             return None
 
-    def _put_back(self, key=None, last=False):
-        """Move the followed sketches back to their kept solution and rebuild once, then read the design again; the
-        read is kept in `backs` under `key`. `last` tries even after `MAX_PUT_BACK_MISSES`. Returns the read."""
+    def _put_back(self, key=None, last=False, read=None):
+        """Move the followed sketches that `read` shows off their first solution (all of them without a read) back to
+        their kept places and rebuild once, then read the design again; the read is kept in `backs` under `key`.
+        `last` tries even after `MAX_PUT_BACK_MISSES`. When no point had to move, nothing is rebuilt or read and the
+        put back counts as one that did not help. Returns the read, or None."""
         if self.keeper is None or (self._misses >= self.MAX_PUT_BACK_MISSES and not last):
             return None
-        self.put_backs += 1
+        tokens = self.probe.left_sketches(read) if read is not None else None
         try:
             with self.timer.span("put_back"):
-                self.keeper.put_back()
+                moved = self.keeper.put_back(tokens)
+                if moved == 0 and not isinstance(moved, bool):
+                    self._misses += 1
+                    self.port.log("putting a sketch back: no point had left its place")
+                    return None
+                self.put_backs += 1
                 self.port.store.recompute()
         except Exception as exc:
             self.port.log(f"putting a sketch back failed: {exc!r}")
@@ -327,7 +357,9 @@ class ProbeRun:
     def summary(self):
         """How the time of the tries went, for `report.json` (`timing.probe`): `tries` rows run, `rebuild` (the rows
         without the reads made inside them: setting the sizes, rebuilding the design, putting them back), the state
-        `read`s and the `put_back` of sketches. Never raises."""
+        `read`s with the time of their parts (`read_parts`: sketches, points and lines, params, refs, box, faces), the
+        `put_back` of sketches, and `starts_reused`, the rows that took the last start read instead of a new one.
+        Never raises."""
         try:
             timer = self.timer
             return {
@@ -335,7 +367,10 @@ class ProbeRun:
                 "tries_seconds": rounded(timer.seconds("rows")),
                 "rebuild": rounded(max(0.0, timer.seconds("rows") - timer.seconds("read_in_rows"))),
                 "read": timer.entry("read"),
+                "read_parts": {name: timer.entry("read_" + name) for name in READ_PARTS
+                               if timer.count("read_" + name)},
                 "put_back": timer.entry("put_back"),
+                "starts_reused": self.reused,
             }
         except Exception:
             return None
@@ -401,8 +436,9 @@ class ProbeRun:
         """Put the followed sketches back when they read otherwise than at E0 now, with the values back, so the design
         is left on the solution it had. Never raises."""
         try:
-            if self.probe.left_start(self._read_now({})):
-                self._put_back(last=True)
+            read = self._read_now({}, outline=True)
+            if self.probe.left_start(read):
+                self._put_back(last=True, read=read)
         except Exception as exc:
             self.port.log(f"putting a sketch back after the tries failed: {exc!r}")
 
@@ -446,7 +482,7 @@ class ProbeRun:
             self.probe.discovery_rows(list(tries), 0)
             return []
         base = self._read_now({})
-        back = self._put_back() if self.probe.left_start(base) else None
+        back = self._put_back(read=base) if self.probe.left_start(base) else None
         self.probe.set_discovery_base(base, back)
         found = self.probe.discovery_rows(list(tries), self._left())
         if not found:

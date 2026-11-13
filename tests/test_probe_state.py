@@ -53,6 +53,16 @@ class ReadStateTest(unittest.TestCase):
         self.assertEqual(record["frame"], {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]})
         self.assertEqual([c["entity"] for c in record["profiles"][0]["loops"][0]["curves"]], ["c1", "c2", "c3", "c4"])
 
+    def test_each_part_of_a_read_is_timed_on_the_timer_it_is_given(self):
+        from lib.timing.timer import Timer
+        sk = sketch()
+        sk.profiles = Coll([profile(sk, SQUARE)])
+        design = Design({"sk1": [sk]}, user={"width": 2.0})
+        ctx = ReadContext(design, design.target)
+        ctx.timer = Timer()
+        read_state(design, {"sketches": ["sk1"], "params": ["width"], "target": True}, ctx)
+        self.assertEqual([ctx.timer.count("read_" + p) for p in ("sketches", "params", "box", "refs")], [1, 1, 1, 0])
+
     def test_the_entity_without_an_assembly_context_wins_and_a_proxy_falls_back_to_its_native_object(self):
         native = Obj("fusion::SketchPoint", worldGeometry=P(1, 0, 0), assemblyContext=None)
         proxy = Obj("fusion::SketchPoint", worldGeometry=P(9, 9, 9), assemblyContext=Obj(), nativeObject=native)

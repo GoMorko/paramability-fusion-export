@@ -54,6 +54,15 @@ class SketchKeeperTest(unittest.TestCase):
         self.assertEqual(sketch.deferred, [True, False])
         self.assertEqual(keeper.put_back(), 0)
 
+    def test_only_the_named_sketches_with_points_out_of_place_are_touched(self):
+        moved, still, other = Point(1.0, 2.0), Point(0.0, 0.0), Point(4.0, 4.0)
+        first, second, third = Sketch([moved]), Sketch([still]), Sketch([other])
+        keeper = SketchKeeper(Design({"a": first, "b": second, "c": third}), ["a", "b", "c"], vector=lambda *d: d)
+        moved.at, other.at = [1.0, 3.0, 0.0], [5.0, 5.0, 0.0]
+        self.assertEqual(keeper.put_back(["a", "b"]), 1)
+        self.assertEqual((moved.at, other.at), ([1.0, 2.0, 0.0], [5.0, 5.0, 0.0]))
+        self.assertEqual((first.deferred, second.deferred, third.deferred), ([True, False], [], []))
+
     def test_a_sketch_whose_points_changed_is_left_alone(self):
         own = Point(1.0, 2.0)
         sketch = Sketch([own])

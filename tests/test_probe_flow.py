@@ -227,6 +227,10 @@ class StartReadTest(unittest.TestCase):
                                                                                    (False, True)])
         self.assertEqual(probe.states[2]["start"], read_at())
         self.assertIn("start", probe.report()["states"][2])
+        # The start read asks only for what tells the outlines apart.
+        start_request = fusion.requests[-3]
+        self.assertTrue(start_request["sketches"])
+        self.assertFalse({"params", "refs", "target"} & set(start_request))
 
 
 def on_other_solution(found):
@@ -266,7 +270,7 @@ class _KeeperPort(_Port):
 
         class Keeper:
             @staticmethod
-            def put_back():
+            def put_back(tokens=None):
                 fusion.flipped = False
 
         return Keeper()
@@ -279,6 +283,43 @@ class _KeeperPort(_Port):
 def size_row(name, value):
     return {"name": "%s (max)" % name, "key": name, "values": {name: value}, "varied": [name], "state": {name: value},
             "step": False}
+
+
+class StuckFlipTest(unittest.TestCase):
+    """A sketch that no put back brings back: once put backs are given up, the rows take the last start read."""
+
+    def run_rows(self, moved):
+        from lib.export_plan.pipeline import ProbeRun
+        fusion = TwoSolutionFusion(lambda before, now: now != START)
+
+        class Port(_Port):
+            def sketch_keeper(self, tokens):
+                class Keeper:
+                    @staticmethod
+                    def put_back(tokens=None):
+                        return moved
+                return Keeper()
+
+        probe = SizeProbe.start(CAPTURE, table(PARAMS, TICKED, MODEL), fusion.read)
+        run = ProbeRun(Port(fusion), "", probe)
+        rows = [size_row("height", 40.0), size_row("off", 10.0), size_row("cube", 20.0), size_row("height", 30.0),
+                size_row("off", 8.0)]
+        for n, row in enumerate(rows):
+            row["key"] = "r%d" % n
+        before = len(fusion.requests)
+        run.run_rows(rows)
+        return run, probe, len(fusion.requests) - before
+
+    def test_rows_after_put_backs_are_given_up_take_the_last_start_read(self):
+        run, probe, reads = self.run_rows(moved=3)
+        self.assertEqual(run.put_backs, 2)
+        self.assertEqual(run.reused, 2)
+        self.assertIs(probe.states[5]["start"], probe.states[4]["start"])
+        self.assertEqual(reads, 5 + 2 + 2)  # each row, the starts before rows 2 and 3, a read after each put back
+
+    def test_a_put_back_that_moves_no_point_rebuilds_and_reads_nothing(self):
+        run, probe, _ = self.run_rows(moved=0)
+        self.assertEqual((run.put_backs, run.backs), (0, {}))
 
 
 class SolverFlipTest(unittest.TestCase):

@@ -50,25 +50,32 @@ class SketchKeeper:
             places = [(index, _place(point)) for index, point in _free_points(sketch)]
             self.kept[token] = (count, [(index, at) for index, at in places if at is not None])
 
-    def put_back(self):
-        """Move every kept point that left its place back to it. Returns how many points moved. A sketch whose points
-        were added or removed since is left alone."""
+    def put_back(self, tokens=None):
+        """Move every kept point that left its place back to it, for the sketches `tokens` (all kept ones when None).
+        Returns how many points moved. A sketch whose points were added or removed since is left alone, and one whose
+        points are all in place is not touched: its compute is deferred only while points move."""
         moved = 0
         for token, (count, places) in self.kept.items():
+            if tokens is not None and token not in tokens:
+                continue
             sketch = geo.find_native(self.design, token)
             points = geo.collection_items(geo.safe(lambda: sketch.sketchPoints, None)) if sketch is not None else []
             if len(points) != count:
                 continue
+            moves = []
+            for index, kept in places:
+                now = _place(points[index])
+                if now is None:
+                    continue
+                delta = [k - n for k, n in zip(kept, now)]
+                if max(abs(d) for d in delta) > MOVE_TOL_CM:
+                    moves.append((points[index], delta))
+            if not moves:
+                continue
             geo.safe(lambda: setattr(sketch, "isComputeDeferred", True), None)
             try:
-                for index, kept in places:
-                    now = _place(points[index])
-                    if now is None:
-                        continue
-                    delta = [k - n for k, n in zip(kept, now)]
-                    if max(abs(d) for d in delta) <= MOVE_TOL_CM:
-                        continue
-                    if geo.safe(lambda: points[index].move(self._vector(*delta)), False) is not False:
+                for point, delta in moves:
+                    if geo.safe(lambda: point.move(self._vector(*delta)), False) is not False:
                         moved += 1
             finally:
                 geo.safe(lambda: setattr(sketch, "isComputeDeferred", False), None)

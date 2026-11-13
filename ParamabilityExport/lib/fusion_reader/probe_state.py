@@ -10,6 +10,7 @@ timeline marker before its step (`read_face.read_faces`; the marker goes back af
 left out of the result and reads as "unread" to the fit; nothing here raises, and the design is left as it was found.
 No adsk import.
 """
+from ..timing.timer import span_on
 from . import placement, probe_refs
 from . import read_geometry as geo
 from .read_sketch import into_target, read_profile
@@ -138,23 +139,32 @@ def read_state(design, request, ctx):
             record = dict(record, curves=_read_curves(found, set(wanted[token] or ())))
         return record
 
-    state = {
-        "sketches": _each(request.get("sketches"), lambda t: entity(t, lambda e: sketch_with_curves(e, t))),
-        "points": _each(request.get("points"), lambda t: entity(t, lambda e: geo.point(e.worldGeometry))),
-        "lines": _each(request.get("lines"), lambda t: entity(t, lambda e: line_axis(e.worldGeometry))),
-        "params": _each(request.get("params"), lambda n: _param_value(design, ctx, n)),
-    }
+    # Each part is timed on `ctx.timer` when the read has one (`read_<part>`), so the export says where a read goes.
+    state = {}
+    with span_on(ctx, "read_sketches"):
+        state["sketches"] = _each(request.get("sketches"), lambda t: entity(t, lambda e: sketch_with_curves(e, t)))
+    with span_on(ctx, "read_points"):
+        state["points"] = _each(request.get("points"), lambda t: entity(t, lambda e: geo.point(e.worldGeometry)))
+        state["lines"] = _each(request.get("lines"), lambda t: entity(t, lambda e: line_axis(e.worldGeometry)))
+    if request.get("params"):
+        with span_on(ctx, "read_params"):
+            state["params"] = _each(request.get("params"), lambda n: _param_value(design, ctx, n))
+    else:
+        state["params"] = {}
     followed = request.get("refs") if isinstance(request.get("refs"), dict) else {}
     if followed:
-        state["refs"], missed = probe_refs.read_refs(design, ctx, followed)
+        with span_on(ctx, "read_refs"):
+            state["refs"], missed = probe_refs.read_refs(design, ctx, followed)
         unread.update(missed)
     if request.get("target"):
-        box = geo.safe(ctx.target_box, None)
+        with span_on(ctx, "read_box"):
+            box = geo.safe(ctx.target_box, None)
         if box is not None:
             state["box"] = box
     faces = request.get("faces") if isinstance(request.get("faces"), dict) else {}
     if faces:
-        state["faces"], missed = read_faces(design, ctx, faces)
+        with span_on(ctx, "read_faces"):
+            state["faces"], missed = read_faces(design, ctx, faces)
         unread.update(missed)
     if unread:
         state["unread"] = unread

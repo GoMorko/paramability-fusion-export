@@ -28,6 +28,8 @@ from ..translator.notes import loose_reason
 from ..translator.sizes import construction_only
 from .part_names import tagged
 
+# What an outline read (`SizeProbe.read_now`) leaves out of the request.
+OUTLINE_SKIPS = ("params", "refs", "target")
 _STATE_KEYS = ("sketches", "points", "lines", "params", "box", "refs", "faces", "unread")
 BODY_TOLERANCE_MM = 1e-4
 # How far a followed value (mm or degrees) may read from E0 once the values are back before the sketch counts as on
@@ -281,17 +283,19 @@ class SizeProbe:
 
     # ---- states -----------------------------------------------------------------------------------------------
 
-    def read_now(self, values=None):
+    def read_now(self, values=None, outline=False):
         """The probe state of the design as it is now. `values` are the sizes set to other values now ({} with every
         value back): a face a step uses as its outline is read only when one of them may change it, since each face
-        read rolls the timeline back and forth; the others take their E0 read. None reads every face."""
-        faces = self.request.get("faces") or {}
+        read rolls the timeline back and forth; the others take their E0 read. None reads every face. With `outline`
+        only what tells the outlines apart is read (sketches, points, lines and those faces): no parameters,
+        references or body box, which a read that only checks where the design starts from does not use."""
+        asked = {k: v for k, v in self.request.items() if not outline or k not in OUTLINE_SKIPS}
+        faces = asked.get("faces") or {}
         moved = set(values or ())
         wanted = {k: v for k, v in faces.items() if values is None or self.face_sizes.get(k, set()) & moved}
         if len(wanted) == len(faces):
-            return self.shared.share(self.read(self.request))
-        request = dict(self.request, faces=wanted) if wanted else {k: v for k, v in self.request.items()
-                                                                   if k != "faces"}
+            return self.shared.share(self.read(asked))
+        request = dict(asked, faces=wanted) if wanted else {k: v for k, v in asked.items() if k != "faces"}
         read = self.read(request)
         if isinstance(read, dict):
             same = {k: v for k, v in (self.e0.get("faces") or {}).items() if k in faces and k not in wanted}
@@ -329,8 +333,13 @@ class SizeProbe:
         """True when a followed sketch reads otherwise than at E0 in `read`, a read taken with every value back: the
         sketch stayed on another solution (another outline, or the same outline more than `FLIP_TOLERANCE` away). A
         sketch that could not be read does not count."""
+        return bool(self.left_sketches(read))
+
+    def left_sketches(self, read):
+        """Tokens of the followed sketches that read otherwise than at E0 in `read` (`left_start`)."""
+        found = []
         if not isinstance(read, dict):
-            return False
+            return found
         for target in self._followed_targets():
             before, _ = match.state_values(target, self.e0, self.e0)
             now, cause = match.state_values(target, read, self.e0)
@@ -338,8 +347,9 @@ class SizeProbe:
                 continue
             if now is None or now.keys() != before.keys() or any(
                     abs(now[k] - v) > FLIP_TOLERANCE for k, v in before.items()):
-                return True
-        return False
+                if target["sketch_token"] not in found:
+                    found.append(target["sketch_token"])
+        return found
 
     def note_recovery(self, record):
         """Keep what `pipeline.ProbeRun` did when a sketch stayed on another solution, for `report`."""
@@ -766,9 +776,9 @@ class ProbeGroup:
         self.names = list(names)
         self.table = self.probes[0].table
 
-    def read_now(self, values=None):
+    def read_now(self, values=None, outline=False):
         """The probe state of each part as the design is now (`SizeProbe.read_now`)."""
-        return [probe.read_now(values) for probe in self.probes]
+        return [probe.read_now(values, outline) for probe in self.probes]
 
     def probe_rows(self, sizes, extra=()):
         """The extra rows. Every probe plans them (that sets what it leaves untried); they are the same for all."""
@@ -815,6 +825,11 @@ class ProbeGroup:
     def left_start(self, reads):
         """True when a part's followed sketch reads otherwise than at its E0 (`SizeProbe.left_start`)."""
         return any(probe.left_start(read) for probe, read in zip(self.probes, reads or []))
+
+    def left_sketches(self, reads):
+        """Tokens of the followed sketches of any part that read otherwise than at its E0."""
+        return list(dict.fromkeys(t for probe, read in zip(self.probes, reads or [])
+                                  for t in probe.left_sketches(read)))
 
     def note_recovery(self, record):
         for probe in self.probes:
