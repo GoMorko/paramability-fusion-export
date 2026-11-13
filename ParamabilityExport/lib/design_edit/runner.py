@@ -18,6 +18,7 @@ class RowExport:
     units: {parameter name: Fusion unit string}.
     export_step: callable(path) writing the STEP of the picked body for the current design state. A row with
     `"step": False` only recomputes: export_step is called with None, expects no file, and the result has no STEP.
+    A row with a STEP is recomputed in full before its STEP is written (`apply_row_values` with `full`).
     current_row is the name of the row being exported while export_step runs, current_key its `key` (the name when
     the row has none); a name is cut to the manifest limit, so use the key to tell rows apart.
     Before its first row the job measures a baseline (`apply.measure_baseline`) and notes the parameters: a design
@@ -93,7 +94,8 @@ class RowExport:
                     self.before_row(row)
                 self._last, self._last_failed = row.get("label") or row["name"], False
                 try:
-                    values = apply_row_values(self.store, self.units, row["values"], self._baseline)
+                    values = apply_row_values(self.store, self.units, row["values"], self._baseline,
+                                              full=row.get("step") is not False)
                 except RowBuildError as exc:
                     if tolerate_build_errors:
                         self._last_failed = True

@@ -193,6 +193,20 @@ class BatchedParametersTest(unittest.TestCase):
         self.assertEqual(design.batches, [{"w": "6 mm", "h": "9 mm"}, {"w": "5 mm", "h": "8 mm"}])
         self.assertEqual(design.computed, 0)
 
+    def test_a_value_the_one_change_did_not_take_is_put_back_on_its_own(self):
+        class Skipping(BatchDesign):
+            def modifyParameters(self, parameters, values):
+                kept = [(p, v) for p, v in zip(parameters, values) if p.name != "h"]
+                return super().modifyParameters([p for p, _ in kept], [v for _, v in kept])
+
+        design = Skipping()
+        store = self.store(design)
+        saved = store.saved_expressions()
+        apply_row_values(store, self.UNITS, {"w": 6.0})
+        store.set_expression("h", "9 mm")
+        self.assertEqual(restore_parameters(store, saved), [])
+        self.assertEqual(store.current_expressions(), saved)
+
     def test_a_change_fusion_refuses_as_a_whole_is_set_one_value_at_a_time(self):
         design = BatchDesign(refuse="9 mm")
         store = self.store(design)
@@ -222,6 +236,45 @@ class BatchStore(FakeStore):
 
     def error_items(self):
         return list(self.errors) if self.stale else []
+
+
+class IncrementalStore(BatchStore):
+    """A store whose one change leaves the design rebuilt only in part until a full recompute; `answers` are what
+    the recomputes report, in turn (the last one repeats)."""
+
+    def __init__(self, answers=(True,)):
+        super().__init__()
+        self.answers, self.complete = list(answers), True
+
+    def set_expressions(self, expressions):
+        self.complete = False
+        return super().set_expressions(expressions)
+
+    def recompute(self):
+        super().recompute()
+        self.complete = True
+        return self.answers.pop(0) if len(self.answers) > 1 else self.answers[0]
+
+
+class OneChangeRowTest(unittest.TestCase):
+    def test_an_error_a_full_recompute_clears_does_not_fail_the_row(self):
+        self.assertEqual(apply_row_values(BatchStore(errors=["Fillet1"], cleared_by_recompute=True), UNITS,
+                                          {"w": 9.0}), {"w": 9.0})
+
+    def export(self, store):
+        written = []
+        job = RowExport(store, UNITS, lambda path: written.append(store.complete) or open(path, "wb").close())
+        with tempfile.TemporaryDirectory() as tmp:
+            job.run([{"name": "wide", "values": {"w": 6.0}}], tmp, lambda *a: True)
+        return written
+
+    def test_a_row_with_a_step_file_is_recomputed_in_full_before_the_file_is_written(self):
+        self.assertEqual(self.export(IncrementalStore()), [True])
+
+    def test_a_row_whose_full_recompute_fails_is_not_written(self):
+        with self.assertRaises(RowBuildError) as raised:
+            self.export(IncrementalStore(answers=(True, False)))
+        self.assertEqual(raised.exception.detail["reason"], "recompute_failed")
 
 
 class StopCheckTest(unittest.TestCase):

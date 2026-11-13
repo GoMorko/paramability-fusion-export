@@ -65,6 +65,11 @@ def _set_each(store, expressions):
             raise RowBuildError(
                 f"Fusion did not accept \"{expression}\" for {name}.",
                 {"reason": "expression_refused", "parameter": name, "expression": expression}) from exc
+    return _recompute(store)
+
+
+def _recompute(store):
+    """Recompute the whole design; whether Fusion reported it done. Raises RowBuildError when the recompute raises."""
     try:
         return store.recompute() is not False
     except Exception as exc:
@@ -99,7 +104,7 @@ def set_all(store, expressions):
         return False
 
 
-def apply_row_values(store, units, values, baseline=None):
+def apply_row_values(store, units, values, baseline=None, full=False):
     """Set the row's values, rebuild, and return {name: number in mm or deg}.
 
     store needs set_expression, recompute, error_items and read_value (internal cm or rad); error_entries
@@ -109,15 +114,24 @@ def apply_row_values(store, units, values, baseline=None):
 
     The values go in as one change when the store can: Fusion rebuilds the steps they change once, as when the person
     edits the parameters, and no full recompute follows; that rebuild gives no answer of its own, so `recompute_ok`
-    is None and only the steps in error judge the row. Else each value is set in turn and the design is recomputed.
+    is None and only the steps in error judge the row. A step that reads in error then is judged after one full
+    recompute, as `new_errors` does: a rebuild of only the changed steps can leave an error that a full one clears.
+    With `full` (a row whose STEP is written next) the design is recomputed in full after the change and judged by
+    that recompute, as when each value is set in turn and the design is recomputed.
     The row fails when Fusion refuses an expression, the recompute raises, the recompute reports failure while
     the baseline did not, or timeline items went into error that were not in error in the baseline.
     """
     baseline = baseline or Baseline()
     expressions = {name: format_expression(value, units[name]) for name, value in values.items()}
     # After one change Fusion gives no answer for the rebuild as a whole (None): the steps in error decide alone.
-    ok = None if set_all(store, expressions) else _set_each(store, expressions)
+    if set_all(store, expressions):
+        ok = _recompute(store) if full else None
+    else:
+        ok = _set_each(store, expressions)
     broken = [n for key, n in error_entries(store).items() if key not in baseline.errors]
+    if broken and ok is None:
+        _recompute(store)
+        broken = [n for key, n in error_entries(store).items() if key not in baseline.errors]
     if broken:
         raise RowBuildError(
             f"This size does not build in Fusion: {broken[0]}",
