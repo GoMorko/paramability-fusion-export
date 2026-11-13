@@ -6,9 +6,9 @@ coordinates (mm), like the capture. A sketch of another component (one a step of
 too, and its frame is brought into the target's coordinates through that component's place at this state. `params` stay in Fusion's own units (cm, radians). The
 measured references of other components (planes, axes, directions, points) are read again too, in the target's
 coordinates as the target sits at this state (`probe_refs`), and the flat faces steps use as outlines, each with the
-timeline marker before its step (`read_face.read_faces`; the marker goes back after). A part that cannot be read is
-left out of the result and reads as "unread" to the fit; nothing here raises, and the design is left as it was found.
-No adsk import.
+timeline marker before its step (`read_face.read_faces`; the marker goes back after, unless the request asks to `park`
+it). A part that cannot be read is left out of the result and reads as "unread" to the fit; nothing here raises, and
+the design is left as it was found. No adsk import.
 """
 from ..timing.timer import span_on
 from . import placement, probe_refs
@@ -101,7 +101,9 @@ def read_state(design, request, ctx):
     sweep paths to read, and `borrowed`: { sketch token: { path } } for sketches of other
     components, with the occurrence path the capture recorded, `native`: sketch tokens of tool bodies from other
     components, read in their own component's frame like the target's sketches, `refs`: { reference key: { token,
-    path, shape } }, and `faces`: { key: { token, before } } of flat faces steps use as outlines.
+    path, shape } }, `faces`: { key: { token, before } } of flat faces steps use as outlines, and `park`: true to
+    leave the marker at the last face's position after the face reads (the caller's next parameter change or
+    `keep_marker` brings it back, so Fusion rebuilds the later items once, with those values).
 
     `sketches` maps a token to { frame, profiles } (profiles as in the capture, each curve with `entity`) and, for a
     sketch in `curves`, `curves`: { curve token: flat curve }; a borrowed one also has `native_frame` and `placement`.
@@ -164,7 +166,7 @@ def read_state(design, request, ctx):
     faces = request.get("faces") if isinstance(request.get("faces"), dict) else {}
     if faces:
         with span_on(ctx, "read_faces"):
-            state["faces"], missed = read_faces(design, ctx, faces)
+            state["faces"], missed = read_faces(design, ctx, faces, stay=bool(request.get("park")))
         unread.update(missed)
     if unread:
         state["unread"] = unread

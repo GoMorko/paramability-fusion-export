@@ -5,7 +5,8 @@ face's edges as curves in that plane, read like sketch curves, in the target com
 the earlier extrude whose start, end or side faces hold the face, read with the marker before the step that uses it.
 
 `read_faces` reads such faces again for the size probe: the step that uses a face changes or removes it, so each face
-is read with the timeline marker moved before its step, and the marker goes back after.
+is read with the timeline marker moved before its step, and the marker goes back after (or stays, for a caller that
+brings it back itself).
 """
 import math
 
@@ -125,12 +126,14 @@ NO_MARKER = "The timeline marker could not be moved before the step."
 NOT_BACK = "The timeline marker did not go back after the face was read."
 
 
-def read_faces(design, ctx, wanted):
+def read_faces(design, ctx, wanted, stay=False):
     """`(found, unread)` for `wanted` ({ key: { token, before } }): `found` maps a key to the face's `face_loops` read
     with the timeline marker at `before` (the step that uses it not built yet, as when it was captured), `unread` a key
     to why it was left out. A position after the marker now is not read. The marker goes back to where it was, which
     rebuilds the steps after the earliest position read; when it does not, no face counts and `unread` also holds
-    `MARKER_LOST`, so the caller stops reading. Never raises."""
+    `MARKER_LOST`, so the caller stops reading. With `stay` the marker is left at the last position read: the caller
+    moves it back after its next parameter change, so the later steps are rebuilt once instead of twice, and checks
+    that it went back. Never raises."""
     found, unread = {}, {}
     timeline = geo.safe(lambda: design.timeline, None)
     home = read_marker(timeline) if timeline is not None else None
@@ -143,6 +146,7 @@ def read_faces(design, ctx, wanted):
             groups.setdefault(before, []).append((key, hint.get("token") or ""))
     if not groups:
         return found, unread
+    back = True
     try:
         for before in sorted(groups):
             if not put_back(timeline, before):
@@ -156,7 +160,8 @@ def read_faces(design, ctx, wanted):
                 else:
                     found[key] = record
     finally:
-        back = put_back(timeline, home)
+        if not stay:
+            back = put_back(timeline, home)
     if not back:
         return {}, dict({key: NOT_BACK for key in wanted}, **{MARKER_LOST: NOT_BACK})
     return found, unread

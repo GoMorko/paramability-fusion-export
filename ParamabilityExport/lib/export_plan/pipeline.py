@@ -202,6 +202,15 @@ class ProbeRun:
     A row that leaves the design broken with the parameters back stops the tries (`RowExport.not_back`): no later
     batch runs, and the probe keeps the states read before (`stopped`).
 
+    The read inside a row may leave the timeline marker before an outline face's step (`SizeProbe.read_now` with
+    `park`), when the store can bring it back (`keep_marker`): the change that puts the values back then rebuilds the
+    items after the face only once, with the values back, instead of once with the row's values (the marker going back
+    after the face read) and once more with the values back. The marker is brought back before any other read and when
+    the rows of a batch end.
+
+    `before_discovery()`, when given, runs before the discovery rows read their base: the pipeline turns the
+    suppressed items back on there, so those rows see every component.
+
     A row whose start was not read, and after which the sketch was found on another solution (it read another outline
     or did not build, and the next read with the values back shows it), may itself have started there. It runs once
     more right after its batch, from a checked start, within the row limit; its first run is left out of the states.
@@ -209,8 +218,10 @@ class ProbeRun:
 
     MAX_PUT_BACK_MISSES = 2
 
-    def __init__(self, port, tmp, probe):
+    def __init__(self, port, tmp, probe, before_discovery=None):
         self.port, self.tmp, self.probe = port, tmp, probe
+        self.before_discovery = before_discovery
+        self._parked = False  # a row read may have left the marker before an outline face's step
         self.timer = Timer()  # where the time of the tries goes (`summary`)
         self.reads, self.rows, self.starts, self.backs = {}, [], {}, {}
         self._values = {}  # key of a row to the sizes it sets (`_row_values`)
@@ -234,19 +245,37 @@ class ProbeRun:
             self.port.log(f"keeping the sketches failed: {exc!r}")
             return None
 
-    def _read_now(self, values=None, outline=False):
+    def _can_park(self):
+        return callable(getattr(self.port.store, "keep_marker", None))
+
+    def _home(self):
+        """Bring the marker back where the tries hold it after a row read that may have left it before an outline face's
+        step. When it does not go back, the probe stops (`read_failure`)."""
+        if not self._parked:
+            return
+        self._parked = False
+        try:
+            back = self.port.store.keep_marker() is not False
+        except Exception:
+            back = False
+        if not back and self.read_failure is None:
+            self.read_failure = MarkerNotHeld("The timeline marker did not go back after an outline face was read.")
+
+    def _read_now(self, values=None, outline=False, park=False):
         """The probe state of the design now, with `values` the sizes set to other values (`SizeProbe.read_now`;
-        `outline` reads only the outlines).
+        `outline` reads only the outlines, `park` may leave the marker before an outline face's step).
         Raises when the timeline marker is not where the tries keep it, before or after the read: a read before it
         would miss items the sketches need, so the row counts as not read and the probe stops."""
+        self._home()
         holds = getattr(self.port.store, "marker_holds", None)
         if holds is not None and not holds():
             raise MarkerNotHeld("The timeline marker was not where the tries keep it.")
         with self.timer.span("read"):
             with self.timer.span("read_in_rows" if self.timer.is_open("rows") else "read_outside"):
                 self._lend_timer(self.timer)
+                self._parked = park
                 try:
-                    read = self.probe.read_now(values, outline)
+                    read = self.probe.read_now(values, outline, park) if park else self.probe.read_now(values, outline)
                 finally:
                     self._lend_timer(None)
         if _marker_lost(read):
@@ -266,6 +295,7 @@ class ProbeRun:
         not build or read a followed sketch on another outline, and always before a row run again; put the sketch
         back when that read shows it on another solution. A row may bring a sketch back as well as move it away, so
         each such row reads its own start, also once put backs are given up."""
+        self._home()
         key = row.get("key", row["name"])
         previous, self._previous = self._previous, key
         if self.read_failure is not None or (previous is None and not row.get("again")):
@@ -323,7 +353,7 @@ class ProbeRun:
         key = self.job.current_key
         if self.read_failure is None:
             try:
-                self.reads[key] = self._read_now(self._values.get(key))
+                self.reads[key] = self._read_now(self._values.get(key), park=self._can_park())
             except ExportCancelled:
                 raise
             except Exception as exc:
@@ -349,7 +379,10 @@ class ProbeRun:
                 return progress.step(done + index, done + total, label)
 
             with self.timer.span("rows"):
-                results = self.job.run(rows, self.tmp, step, tolerate_build_errors=True)
+                try:
+                    results = self.job.run(rows, self.tmp, step, tolerate_build_errors=True)
+                finally:
+                    self._home()
         self.rows.extend(zip(rows, results))
         if self.job.not_back is not None:
             self.port.log("tries stopped: the design did not rebuild with the values back after %s"

@@ -285,16 +285,19 @@ class SizeProbe:
 
     # ---- states -----------------------------------------------------------------------------------------------
 
-    def read_now(self, values=None, outline=False):
+    def read_now(self, values=None, outline=False, park=False):
         """The probe state of the design as it is now. `values` are the sizes set to other values now ({} with every
         value back): a face a step uses as its outline is read only when one of them may change it, since each face
         read rolls the timeline back and forth; the others take their E0 read. None reads every face. With `outline`
         only what tells the outlines apart is read (sketches, points, lines and those faces): no parameters,
-        references or body box, which a read that only checks where the design starts from does not use."""
+        references or body box, which a read that only checks where the design starts from does not use. With `park`
+        a face read leaves the marker before the face's step (`read_face.read_faces`); the caller brings it back."""
         asked = {k: v for k, v in self.request.items() if not outline or k not in OUTLINE_SKIPS}
         faces = asked.get("faces") or {}
         moved = set(values or ())
         wanted = {k: v for k, v in faces.items() if values is None or self.face_sizes.get(k, set()) & moved}
+        if park and wanted:
+            asked = dict(asked, park=True)
         if len(wanted) == len(faces):
             return self.shared.share(self.read(asked))
         request = dict(asked, faces=wanted) if wanted else {k: v for k, v in asked.items() if k != "faces"}
@@ -777,9 +780,11 @@ class ProbeGroup:
         self.names = list(names)
         self.table = self.probes[0].table
 
-    def read_now(self, values=None, outline=False):
-        """The probe state of each part as the design is now (`SizeProbe.read_now`)."""
-        return [probe.read_now(values, outline) for probe in self.probes]
+    def read_now(self, values=None, outline=False, park=False):
+        """The probe state of each part as the design is now (`SizeProbe.read_now`). Only the last part's read may leave
+        the marker before a face's step (`park`), since every part reads with the marker where the tries hold it."""
+        last = len(self.probes) - 1
+        return [probe.read_now(values, outline, park and number == last) for number, probe in enumerate(self.probes)]
 
     def probe_rows(self, sizes, extra=()):
         """The extra rows. Every probe plans them (that sets what it leaves untried); they are the same for all."""

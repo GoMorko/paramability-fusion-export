@@ -17,7 +17,9 @@ class DesignParameterStore:
     The design is worked on as it is at the timeline marker: the marker found when the store is made stays there
     after every recompute, and only the items before it count for health. `roll_marker` holds it earlier for a while
     (Fusion then rebuilds fewer items per recompute) and `unroll_marker` puts it back. `suppress_items` turns off
-    timeline items for a while for the same reason, and `unsuppress_items` turns them back on."""
+    timeline items for a while for the same reason, and `unsuppress_items` turns them back on. A read may leave the
+    marker earlier for a while (an outline face read before its step); the next change, recompute or `keep_marker`
+    brings it back."""
 
     def __init__(self, design, value_input=None):
         self.design = design
