@@ -323,8 +323,8 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   value past which it starts.
 - A rectangular or circular pattern that spreads copies to both sides of the original is copied as a forward and a
   backward pattern from the original, at the places Fusion measured. Its count and spacing can follow sizes. A count that
-  was measured odd and can become even inside its size range may give unexpected results, since the places Fusion
-  uses for an even count were not checked for it.
+  was measured odd and can become even inside its size range follows the sizes when the tries put the copies for an
+  even count by the expected rule; without such a try it may give unexpected results.
 - A mirror plane, pattern or revolve axis, a flat face or plane an extrude starts from or reaches to, a hole on sketch
   points or on a flat face of another component, and a pattern direction taken from one, are copied and follow the
   sizes the tries measured (see above). Where the tries could not measure the place, or it turns, the size that may move

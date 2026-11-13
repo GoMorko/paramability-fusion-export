@@ -8,6 +8,7 @@ from tests.translator_helpers import assert_schema_ok, edited, left_out, load_ca
 
 from lib.params import size_table
 from lib.params.expressions import evaluate
+from lib.sketch_values.motion import Motion
 from lib.translator import range_check, translate
 
 CENTRE = 60.0
@@ -46,10 +47,23 @@ def fillet(index, x):
         "sets": [_edges_set("constant", [[x, 12, 15]], radius=1.0, continuity="tangent")]})
 
 
-def sized(capture, ranges=None):
+def sized(capture, ranges=None, tries=None):
+    """The translation with the sizes ticked and, when `tries` are given, a probe that read the copies in them."""
     params = capture["parameters"]
     table = size_table.build(params["user"], TICKED, params["model"], ranges=ranges)
-    return translate(capture, size_table=table), table
+    return translate(capture, size_table=table, motion=Motion(states=tries) if tries else None), table
+
+
+def tried(size, value, index, count, frames, built=True):
+    """A probe state with `size` set to `value` where the pattern at timeline `index` made `count` copies at
+    `frames` (element origins)."""
+    elements = [{"id": n, "suppressed": False, "frame": frame} for n, frame in enumerate(frames)]
+    return {"values": {size: value}, "built": built,
+            "patterns": {str(index): {"count": [count, 1], "elements": elements}}}
+
+
+def along_x(step, places):
+    return [dict(FLAT, origin=[k * step, 0, 0]) for k in places]
 
 
 def offsets(recipe, env=None):
@@ -161,6 +175,36 @@ class SymmetricSizedTest(unittest.TestCase):
         self.assertIn("even count", result.loose[0]["reason"])
         self.assertEqual(offsets(result.recipe, at(table, **{CUBE: 30})), [-102, -68, -34, 0, 34, 68, 102])
 
+    def test_an_odd_count_that_can_turn_even_follows_the_places_the_tries_read(self):
+        count = {"quantity_one": param("d22", "ceil(%s / 5) + 1" % CUBE, 5.0)}
+        # CUBE 25 gives 6 copies a spacing of 29 apart; Fusion kept the extra copy behind or ahead of the original.
+        for label, places, offsets_at_25 in (
+                ("extra copy behind", [-3, -2, -1, 0, 1, 2], [-87, -58, -29, 0, 29, 58]),
+                ("extra copy ahead", [-2, -1, 0, 1, 2, 3], [-58, -29, 0, 29, 58, 87])):
+            with self.subTest(label):
+                tries = [tried(CUBE, 25.0, 3, 6, along_x(29.0, places))]
+                result, table = sized(centred(row(3, [2], 5, 24.0, params=dict(PITCH, **count))), tries=tries)
+                self.assertEqual(result.loose, [])
+                self.assertEqual(offsets(result.recipe, at(table, **{CUBE: 25})), offsets_at_25)
+                self.assertEqual(offsets(result.recipe, at(table)), [-48, -24, 0, 24, 48])
+                assert_schema_ok(self, result.recipe)
+
+    def test_tries_that_break_the_rule_or_never_made_an_even_count_leave_the_mark(self):
+        count = {"quantity_one": param("d22", "ceil(%s / 5) + 1" % CUBE, 5.0)}
+        centred_even = along_x(29.0, [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5])
+        for label, tries in (("no try with an even count", [tried(CUBE, 30.0, 3, 7, along_x(34.0, range(-3, 4)))]),
+                             ("the original is not a copy", [tried(CUBE, 25.0, 3, 6, centred_even)]),
+                             ("the copies do not fill the count",
+                              [tried(CUBE, 25.0, 3, 6, along_x(29.0, [-2, 0, 1, 2]))]),
+                             ("the try did not build",
+                              [tried(CUBE, 25.0, 3, 6, along_x(29.0, range(-3, 3)), built=False)]),
+                             ("the tries disagree on the side",
+                              [tried(CUBE, 25.0, 3, 6, along_x(29.0, range(-3, 3))),
+                               tried(CUBE, 15.0, 3, 4, along_x(19.0, range(-1, 3)))])):
+            with self.subTest(label):
+                result, _ = sized(centred(row(3, [2], 5, 24.0, params=dict(PITCH, **count))), tries=tries)
+                self.assertEqual([f["name"] for f in result.loose], [CUBE])
+
     def test_an_odd_count_that_never_changes_is_not_marked(self):
         count = {"quantity_one": param("d22", "5", 5.0)}
         result, _ = sized(centred(row(3, [2], 5, 24.0, params=dict(PITCH, **count))))
@@ -231,6 +275,26 @@ class SymmetricCircularTest(unittest.TestCase):
         forward, backward = steps_of(result.recipe, "pattern")
         self.assertEqual((forward["polar"]["count"], forward["polar"]["angleDeg"]), (2, 30))
         self.assertEqual((backward["polar"]["count"], backward["polar"]["angleDeg"]), (3, 60))
+
+    def test_an_odd_turn_count_that_can_turn_even_follows_the_places_the_tries_read(self):
+        count = {"quantity": param("d22", "ceil(%s / 5) + 1" % CUBE, 5.0)}
+        base = centred(circular(3, 5, 120.0, [-60, -30, 0, 30, 60], params=count))
+        # CUBE 25 gives 6 copies over 120 degrees: 24 degrees apart, the extra one ahead of the original.
+        turns = [-48, -24, 0, 24, 48, 72]
+        frames = [_turned([6, 6, 0], a, True) for a in turns]
+        result, table = sized(base, tries=[tried(CUBE, 25.0, 3, 6, frames)])
+        self.assertEqual(result.loose, [])
+        forward, backward = steps_of(result.recipe, "pattern")
+        env = at(table, **{CUBE: 25})
+
+        def value(v):
+            return evaluate(v["expr"], env) if isinstance(v, dict) else v
+
+        self.assertEqual([value(forward["polar"]["count"]), round(value(forward["polar"]["angleDeg"]), 6)], [4, 72])
+        self.assertEqual([value(backward["polar"]["count"]), round(value(backward["polar"]["angleDeg"]), 6)], [3, 48])
+        other = [_turned([6, 6, 0], a, True) for a in (-60, -36, -12, 12, 36, 60)]
+        result, _ = sized(base, tries=[tried(CUBE, 25.0, 3, 6, other)])
+        self.assertEqual([f["name"] for f in result.loose], [CUBE])
 
     def test_a_full_circle_ignores_the_flag(self):
         (step,) = steps_of(translate_fixture("cpattern_symmetric").recipe, "pattern")

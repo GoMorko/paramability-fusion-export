@@ -4,6 +4,7 @@ import unittest
 from tests import context  # noqa: F401
 from tests.fakes import FakeMatrix3D, FakeOccurrence, apply_matrix, turn_z
 from tests.test_capture_reader import Coll, FakeDesign as CaptureDesign, Obj, P, body, entry, extrude, line
+from tests.test_capture_reader_finish import element
 from tests.test_capture_reader_sweep import line3, quarter_arc, sketch_curve
 from tests.test_capture_reader_tokens import SQUARE, profile, sketch
 from lib.fusion_reader.probe_state import MAX_PROFILES, read_state
@@ -220,3 +221,31 @@ class BorrowedAgreementTest(unittest.TestCase):
         ctx = ReadContext(design, tray.proxy)
         first = read_state(design, {"sketches": ["skL"], "borrowed": borrowed_sketches(capture)}, ctx)
         self.assertEqual(match.readable(found, first), {"skL"})
+
+
+class PatternCopiesTest(unittest.TestCase):
+    def _design(self, feature):
+        design = Design({})
+        design.timeline = Obj(item=lambda index: Obj(entity=feature) if index == 4 else None)
+        return design
+
+    def test_the_count_and_the_copies_of_a_pattern_are_read_at_a_state(self):
+        feature = Obj("fusion::RectangularPatternFeature", quantityOne=Obj(value=3.0), quantityTwo=Obj(value=1.0),
+                      patternElements=Coll([element(n + 1, (10 * (n - 1), 0, 0)) for n in range(3)]))
+        got = state(self._design(feature), patterns={"4": {"index": 4, "kind": "rectangular"}})
+        read = got["patterns"]["4"]
+        self.assertEqual(read["count"], [3, 1])
+        self.assertEqual([e["frame"]["origin"] for e in read["elements"]], [[-10, 0, 0], [0, 0, 0], [10, 0, 0]])
+        self.assertNotIn("unread", got)
+
+    def test_a_circular_pattern_has_one_count(self):
+        feature = Obj("fusion::CircularPatternFeature", quantity=Obj(value=2.0),
+                      patternElements=Coll([element(1, (0, 0, 0)), element(2, (0, 0, 0))]))
+        got = state(self._design(feature), patterns={"4": {"index": 4, "kind": "circular"}})
+        self.assertEqual(got["patterns"]["4"]["count"], [2])
+
+    def test_a_pattern_that_cannot_be_read_is_named_not_raised(self):
+        got = state(self._design(Obj(quantityOne=Obj(value=3.0))),
+                    patterns={"4": {"index": 4, "kind": "rectangular"}, "9": {"index": 9, "kind": "circular"}})
+        self.assertEqual(got["patterns"], {})
+        self.assertEqual(sorted(got["unread"]), ["4", "9"])

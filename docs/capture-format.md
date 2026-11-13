@@ -1869,7 +1869,11 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   measured copies must match it or the pattern is refused: for `n` copies, an odd `n` has `n // 2` steps each way and
   an even `n` has `n // 2` on one side and one less on the other, the longer side being the one measured. The two part
   counts are `floor(n / 2) + 1` and `floor((n - 1) / 2) + 1`, so a count formula keeps the pattern centred. A count
-  measured odd that can be even inside its range marks its sizes (the even places were not seen). A pick on a copy
+  measured odd that can be even inside its range takes the side of the extra step from the tries: each built state
+  that read the pattern (`Motion.states[n].patterns`) is checked against the rule at the counts and spacing the sizes
+  give there, and the sizes are marked unless at least one try had an even count, every try follows the rule and the
+  even ones agree on the side. The two part counts then use the longer formula on that side. Tries that did not run
+  (no size moves a sketch, the probe was cut short) leave the mark. A pick on a copy
   off the middle of a symmetric direction fixes the sizes behind the count, since Fusion moves its copies when the
   count changes. A pattern whose original is not among the copies (it sits between two) is refused. The circular
   case turns the copies back and forth from the original by `k * total / (count - 1)`. Copies left out by number need
@@ -1945,7 +1949,7 @@ rows, `NOT_LOOKED` for a key not in `refs`).
 
 The size probe sets other size values, recomputes and reads a state with `read_state(design, request, ctx)`.
 `request` is `{ "sketches": [token], "points": [token], "lines": [token], "params": [name], "target": true }`, plus
-`curves`, `borrowed`, `native`, `refs` and `faces` below. Every
+`curves`, `borrowed`, `native`, `refs`, `faces` and `patterns` below. Every
 entity is found with `Design.findEntityByToken` (the match without `assemblyContext`; for a proxy only, its
 `nativeObject`), so values are in component coordinates like the capture. The result, mm and degrees except `params`:
 
@@ -1957,7 +1961,8 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
   "params": { "d12": 2.0 },
   "box": { "min": [..], "max": [..] },
   "refs": { "57.plane": { "point": [x, y, z], "normal": [x, y, z] } },
-  "faces": { "15/face": { "frame": FRAME, "loops": [LOOP, ...] } }
+  "faces": { "15/face": { "frame": FRAME, "loops": [LOOP, ...] } },
+  "patterns": { "17": { "count": [7, 1], "elements": [{ "id": 3, "suppressed": false, "frame": FRAME }, ...] } }
 }
 ```
 
@@ -2006,6 +2011,13 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
   body behind it lies on its other side (an earlier extrude reached past its start), so the step goes the other way.
   A face whose first read does not match the capture is not read again; the motion file lists the measured ones in
   `faces`.
+- A pattern that spreads copies to both sides of the original and whose count follows a parameter
+  (`plan.symmetric_patterns`) is requested with `patterns`: `{ "<timeline index>": { "index", "kind" } }`, `kind`
+  `rectangular` or `circular`. The reader finds the feature through `Timeline.item(index).entity` and gives the counts
+  (`quantityOne` and `quantityTwo`, or `quantity`) and the `patternElements` as the capture reads them
+  (`probe_patterns.read_patterns`). A pattern that cannot be read gives `unread` `{ key: reason }`. Built states keep
+  these reads in `Motion.states[n].patterns`. The translator uses them to learn where Fusion puts the copies for an
+  even count (`translator/symmetric.py`, "Symmetric patterns"). The start reads of a flipped sketch skip them.
 - Nothing raises. A part that cannot be read has no key, which the fit treats as unread.
 
 ## 6. Report and capture file

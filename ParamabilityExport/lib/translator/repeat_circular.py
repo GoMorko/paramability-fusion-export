@@ -99,6 +99,27 @@ def _signed_copy(angle, delta, count):
     return None
 
 
+def _tried_turns(direction, point, angle_q):
+    """`places_at` of `symmetric.extra_side`: the signed copy numbers of the copies the probe read at a try, for the
+    turn between copies that the sizes of that try give. None when a copy does not sit on that turn or the count read
+    differs from the one the formulas give."""
+    def places_at(env, read, count):
+        total = symmetric.value_at(angle_q, env)
+        if total is None or total <= 0 or (read.get("count") or [None])[0] != count:
+            return None
+        found = []
+        for element in read.get("elements") or []:
+            turn = _turn_about(element["frame"], direction)
+            if turn is None or not vec.close(vec.frame_apply(element["frame"], point), point, FIT_TOL_MM):
+                return None
+            k = _signed_copy(turn, total / (count - 1), count)
+            if k is None:
+                return None
+            found.append(k)
+        return found
+    return places_at
+
+
 def _symmetric_circular(item, ctx, setup):
     """A circular pattern that turns copies to both sides of the original: a part turning one way and a part turning
     the other, both from the original (`symmetric.py`). `setup` holds what `circular` has read."""
@@ -121,8 +142,9 @@ def _symmetric_circular(item, ctx, setup):
                        "expected.")
     back, forward = reach
     count_q, angle_q = setup["count_q"], setup["angle_q"]
-    symmetric.check_even_unseen(ctx, item, count_q, count)
-    back_q, forward_q = symmetric.part_counts(count_q, back, forward)
+    side = symmetric.extra_side(ctx, item, count_q, count, (back, forward),
+                                _tried_turns(direction, point, angle_q))
+    back_q, forward_q = symmetric.part_counts(count_q, back, forward, side)
     moved = axis_shift(ctx, item, setup["axis"], direction)
     present = {k for _, k in steps}
     needs = count_q.reads + angle_q.reads

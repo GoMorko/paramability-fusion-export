@@ -119,7 +119,7 @@ def _number(parameter, default):
     return geo.safe(lambda: int(round(geo.value_of(parameter))), default)
 
 
-def _elements(feature):
+def pattern_elements(feature):
     return [
         {
             "id": int(element.id),
@@ -189,7 +189,7 @@ def circular_before(feature, ctx):
 
 
 def pattern_after(feature, ctx, data):
-    found = {"elements": _elements(feature), "suppressed_ids": _suppressed_ids(feature)}
+    found = {"elements": pattern_elements(feature), "suppressed_ids": _suppressed_ids(feature)}
     found.update(_result_bodies(feature, ctx, data))
     return found
 

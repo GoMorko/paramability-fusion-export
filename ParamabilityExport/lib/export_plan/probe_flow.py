@@ -29,8 +29,8 @@ from ..translator.sizes import construction_only
 from .part_names import tagged
 
 # What an outline read (`SizeProbe.read_now`) leaves out of the request.
-OUTLINE_SKIPS = ("params", "refs", "target")
-_STATE_KEYS = ("sketches", "points", "lines", "params", "box", "refs", "faces", "unread")
+OUTLINE_SKIPS = ("params", "refs", "target", "patterns")
+_STATE_KEYS = ("sketches", "points", "lines", "params", "box", "refs", "faces", "patterns", "unread")
 BODY_TOLERANCE_MM = 1e-4
 # How far a followed value (mm or degrees) may read from E0 once the values are back before the sketch counts as on
 # another solution; Fusion's own restore leaves up to about a hundredth of a degree on short lines.

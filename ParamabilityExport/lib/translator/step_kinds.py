@@ -52,6 +52,7 @@ class StepType:
     splits_bodies: it cuts bodies into pieces, and a piece may come out as a new body (translator/lineage.py).
     reaches_bodies: it can change or take bodies of another component than its own (a Combine's tool bodies, a Move,
       a split), so the capture walk measures the target around it also when it lives in another component.
+    pattern: `rectangular` or `circular` for the patterns whose copies the probe reads again at each state.
     """
 
     name: str
@@ -66,6 +67,7 @@ class StepType:
     moves_bodies: bool = False
     splits_bodies: bool = False
     reaches_bodies: bool = False
+    pattern: str = None
 
 
 @dataclass(frozen=True)
@@ -107,9 +109,9 @@ STEP_TYPES = (
     StepType("DraftFeature", "draft", reader="read_finish", handler="draft:handle"),
     StepType("OffsetFacesFeature", "offset faces", reader="read_offset", handler="offset:handle"),
     StepType("RectangularPatternFeature", "rectangular pattern", reader="read_repeat",
-             handler="body_copies:rectangular", makes_bodies=True),
+             handler="body_copies:rectangular", makes_bodies=True, pattern="rectangular"),
     StepType("CircularPatternFeature", "circular pattern", reader="read_repeat", handler="body_copies:circular",
-             makes_bodies=True),
+             makes_bodies=True, pattern="circular"),
     StepType("MirrorFeature", "mirror", reader="read_repeat", handler="body_copies:mirror", makes_bodies=True),
     StepType("SplitFaceFeature", "split face", splits_faces=True),
     StepType("SplitBodyFeature", "split body", reader="read_split", handler="split:handle",
@@ -180,6 +182,12 @@ _UNKNOWN_KIND = RecipeKind("")
 def step_type(name):
     """The StepType of a capture `type`, or None for a type the table does not list (it is not copied)."""
     return _TYPES.get(name)
+
+
+def pattern_kind(name):
+    """`rectangular` or `circular` for the capture type of a pattern whose copies the probe reads, else None."""
+    found = _TYPES.get(name)
+    return found.pattern if found else None
 
 
 def role(name):
