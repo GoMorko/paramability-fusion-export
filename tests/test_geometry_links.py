@@ -4,6 +4,7 @@ The fixture is a box with a pipe hole drawn around the pipe body of another comp
 sketch the root owns, which a step of the pipe component extrudes into that body, so no parameter of the box reads it.
 """
 import copy
+import json
 import re
 import tempfile
 import unittest
@@ -14,7 +15,7 @@ from tests.test_pipeline import FakePort
 from tests.test_translate_sketch_motion import motion_of
 from tests.translator_helpers import load_capture, steps_of
 
-from lib.dialog_model.result_rows import NOT_USED, result_view
+from lib.dialog_model.result_rows import NOT_USED, result_view, section, section_lines
 from lib.export_plan.pipeline import ExportRequest, run_pipeline
 from lib.export_plan.size_offers import offers, table_for_body
 from lib.params import geometry_links, size_table
@@ -154,7 +155,7 @@ class TranslateTest(unittest.TestCase):
 class MeasuredSpanTest(unittest.TestCase):
     """pipe_d_mm is 12, with the range 6 to 24; the probe tried it alone at the values in `failed` and `built`."""
 
-    def run_with(self, failed, built=(), moved=False):
+    def run_with(self, failed, built=(), moved=False, ranges=None):
         def edit(values):
             if not moved:
                 for key in [k for k in values if k.startswith("5/")]:
@@ -163,7 +164,8 @@ class MeasuredSpanTest(unittest.TestCase):
         motion = motion_of(NAME, edit)
         low, high = min((12.0,) + tuple(built)), max((12.0,) + tuple(built))
         motion.spans = {"pipe_d_mm": {"low": low, "high": high, "failed": [list(f) for f in failed]}}
-        return run(CAPTURE, motion)
+        table = size_table.build(CAPTURE["parameters"]["user"], ALL, CAPTURE["parameters"]["model"], ranges=ranges)
+        return translate(CAPTURE, size_table=table, motion=motion)
 
     def test_a_size_whose_rows_never_built_was_not_measured_and_is_not_called_unchanging(self):
         found = dropped(self.run_with([(6.0, "Fillet16"), (24.0, "Chamfer3")]))["pipe_d_mm"]
@@ -179,11 +181,24 @@ class MeasuredSpanTest(unittest.TestCase):
         self.assertNotEqual(part["reason"], whole["reason"])
         self.assertIn("between 12 and 24", part["reason"])
 
-    def test_a_size_followed_over_part_of_its_range_stays_a_size_with_the_values_it_was_followed_between(self):
-        result = self.run_with([(6.0, "Fillet16")], built=[24.0], moved=True)
-        self.assertIn("pipe_d_mm", result.recipe["sizes"])
+    def test_a_size_tried_over_part_of_its_range_stays_a_size_with_the_values_it_was_followed_between(self):
+        result = self.run_with([], built=[24.0], moved=True)
+        self.assertEqual((result.recipe["sizes"]["pipe_d_mm"]["min"], result.recipe["sizes"]["pipe_d_mm"]["max"]),
+                         (6.0, 24.0))
         loose = {f["name"]: f["reason"] for f in result.loose}
         self.assertIn("between 12 and 24", loose["pipe_d_mm"])
+
+    def test_the_range_stops_at_the_last_value_that_rebuilt_where_fusion_did_not_rebuild(self):
+        result = self.run_with([(6.0, "Extrude2")], built=[24.0], moved=True)
+        size = result.recipe["sizes"]["pipe_d_mm"]
+        self.assertEqual((size["min"], size["max"]), (12.0, 24.0))
+        self.assertEqual([c["name"] for c in result.cuts], ["pipe_d_mm"])
+        self.assertNotIn("pipe_d_mm", [f["name"] for f in result.loose])
+
+    def test_a_typed_range_end_is_kept_where_fusion_did_not_rebuild(self):
+        result = self.run_with([(8.0, "Fillet16")], built=[24.0], moved=True, ranges={"pipe_d_mm": (8.0, 24.0)})
+        size = result.recipe["sizes"]["pipe_d_mm"]
+        self.assertEqual((size["min"], size["max"]), (8.0, 24.0))
 
 
 # ---- the whole export against a simulated Fusion ---------------------------------------------------------------
@@ -198,8 +213,8 @@ def _mm(store, name):
 class PipePort(FakePort):
     """Fusion where the box outline follows width and depth and the hole follows the pipe (unless `still`)."""
 
-    def __init__(self, still=False):
-        super().__init__(capture=CAPTURE, store=FakeStore(START))
+    def __init__(self, still=False, bad_when=None, bad_item="Fillet1"):
+        super().__init__(capture=CAPTURE, store=FakeStore(START, bad_when=bad_when, bad_item=bad_item))
         self.units = {p["name"]: p["unit"] for p in USER}
         self.still = still
         self.varied = []
@@ -230,6 +245,88 @@ def export(port, ticked):
         return run_pipeline(port, request, tmp)
 
 
+def pipe_range(result):
+    recipe = json.loads(result.files["recipe.json"])
+    return recipe["sizes"]["pipe_d_mm"]["min"], recipe["sizes"]["pipe_d_mm"]["max"]
+
+
+class RangeCutTest(unittest.TestCase):
+    """Fusion does not rebuild the design when the pipe is wider than 20 (12 now, range 6 to 24)."""
+
+    def export(self, step):
+        port = PipePort(bad_when=lambda e: float(e["pipe_d_mm"].split()[0]) > 20, bad_item=step)
+        return export(port, table_for_body(USER, "mm", MODEL, CAPTURE).ticked)
+
+    def test_the_range_stops_near_the_failure_not_at_the_nearest_try_that_built(self):
+        result = self.export("Extrude2")
+        # The near try at 15 built and 24 did not: the values between are halved, so 19.5 is the last that built.
+        self.assertEqual(pipe_range(result), (6.0, 19.5))
+
+    def test_the_cut_is_in_the_report_the_manifest_and_the_result_window(self):
+        result = self.export("Extrude2")
+        [cut] = result.report["sizes"]["cut"]
+        self.assertEqual((cut["name"], "Extrude2" in cut["reason"]), ("pipe_d_mm", True))
+        self.assertEqual(result.manifest["cuts"], [{"name": "pipe_d_mm", "reason": cut["reason"]}])
+        self.assertNotIn("loose", result.manifest)
+        view = result_view("Box.paramability", result.manifest, result.report, result.table, ALL)
+        [line] = [x for x in section_lines(view, "sizes") if x.startswith("pipe_d_mm")]
+        self.assertIn("6 to 19.5 mm", line)
+        self.assertIn("Extrude2", line)
+
+    def test_a_failure_in_a_step_of_another_component_leaves_the_range_alone(self):
+        result = self.export("PipeExtrude")
+        self.assertEqual(pipe_range(result), (6.0, 24.0))
+        self.assertNotIn("cut", result.report["sizes"])
+
+
+class OutlinePort(PipePort):
+    """`PipePort` where the pipe hole's sketch reads with one more loop (another outline) when `outline_when` holds
+    for the pipe diameter in mm."""
+
+    def __init__(self, outline_when, **kw):
+        super().__init__(**kw)
+        self.outline_when = outline_when
+
+    def probe_reader(self):
+        read = super().probe_reader()
+
+        def with_outline(request):
+            out = read(request)
+            if self.outline_when(_mm(self.store, "pipe_d_mm")):
+                loops = out["sketches"]["s2"]["profiles"][0]["loops"]
+                inner = copy.deepcopy(loops[0])
+                inner["outer"] = False
+                for curve in inner["curves"]:
+                    curve["entity"] = curve.get("entity", "") + "x"
+                loops.append(inner)
+            return out
+        return with_outline
+
+
+class OutlineRangeTest(unittest.TestCase):
+    """The pipe (12 now, range 6 to 24) does not rebuild in Fusion below `low`, and its hole makes another outline above
+    `high`."""
+
+    def export(self, low, high):
+        port = OutlinePort(lambda d: d > high, bad_item="Extrude2",
+                           bad_when=lambda e: float(e["pipe_d_mm"].split()[0]) < low)
+        return export(port, table_for_body(USER, "mm", MODEL, CAPTURE).ticked)
+
+    def test_a_size_that_fails_below_and_changes_its_outline_above_keeps_the_range_between(self):
+        result = self.export(10, 18)
+        # Each side is halved toward the value now: 10.125 is the last value that built, 17.25 the last that kept the
+        # outline (19.5 and 18.375 did not).
+        self.assertEqual(pipe_range(result), (10.125, 17.25))
+        [cut] = result.report["sizes"]["cut"]
+        self.assertTrue("Extrude2" in cut["why"] and "PipeHole" in cut["why"])
+        self.assertNotIn("loose", result.manifest)
+
+    def test_a_size_with_no_working_value_but_its_own_is_dropped_with_why(self):
+        result = self.export(11.99, 12.01)
+        [found] = [d for d in result.report["sizes"]["dropped"] if d["name"] == "pipe_d_mm"]
+        self.assertTrue("Extrude2" in found["reason"] and "PipeHole" in found["reason"])
+
+
 class LinkOutcomeTest(unittest.TestCase):
     def test_a_linked_formula_is_reported_as_a_formula_and_a_plain_unticked_one_as_not_ticked(self):
         from lib.export_plan.recipe_export import link_outcomes
@@ -256,7 +353,7 @@ class ExportTest(unittest.TestCase):
         [link] = result.report["links"]
         self.assertEqual(link["outcome"], "dropped")
         view = result_view("Box.paramability", result.manifest, result.report, result.table, ALL)
-        rows = {r["name"]: r["check"] for r in view["rows"]}
+        rows = {r["name"]: r["check"] for r in section(view, "sizes")["rows"]}
         self.assertEqual((rows["pipe_d_mm"], rows["spare_mm"]), (NOT_USED, NOT_USED))
         spare = next(d for d in result.report["sizes"]["dropped"] if d["name"] == "spare_mm")
         self.assertEqual((spare["used"], spare.get("tried")), (False, True))
@@ -269,7 +366,7 @@ class ExportTest(unittest.TestCase):
         self.assertEqual(result.report["also_changes"], ["pipe_d_mm"])
         self.assertNotIn("pipe_d_mm", result.report["sizes"]["free"])
         view = result_view("Box.paramability", result.manifest, result.report, result.table, ticked)
-        self.assertEqual(len(view["also"]), 1)
+        self.assertEqual(len(section_lines(view, "more")), 1)
 
 
 if __name__ == "__main__":

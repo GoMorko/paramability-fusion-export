@@ -7,6 +7,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.schema_check import check_recipe
+from tests.translator_helpers import left_out
 from tests.translator_helpers import FIXTURES, assert_schema_ok, load_capture, translate_fixture, variant, verdict_of
 
 from tests.test_translate_start_from_face import as_extrude
@@ -80,8 +81,8 @@ class PlacementTest(unittest.TestCase):
     def test_start_from_a_tilted_plane_refuses(self):
         plane = {"point": [0, 0, 14], "normal": [0.3, 0, 0.954]}
         result = variant("extrude_start_offset", lambda d: d.update(start={"kind": "fromEntity", "plane": plane}))
-        self.assertIsNone(result.recipe)
-        self.assertEqual(result.refusal["index"], 3)
+        self.assertIsNotNone(left_out(result))
+        self.assertEqual(left_out(result)["index"], 3)
 
 
 class ExtentTest(unittest.TestCase):
@@ -132,13 +133,69 @@ class ExtentTest(unittest.TestCase):
         self.assertEqual(step["sketch"]["on"]["normal"], [1, 0, 0])
         self.assertTrue(verdict_of(result, 3)["note"])
 
+    def test_a_cut_through_all_that_narrows_ends_just_past_the_part(self):
+        # Fusion's -1 degrees leans the walls in; the side walls of the cut show that lean.
+        lean = -math.sin(math.radians(1.0))
+        result = variant("extrude_cut_through_one", lambda d: d.update(
+            side_one={"kind": "throughAll", "positive": True, "taper_deg": -1.0}, end_offset=None,
+            side_leans=[lean] * 4))
+        (step,) = under_test(result, 3)
+        self.assertEqual((step["extent"], step["taperDeg"], step["distance"]), ("oneSide", 1, 41))
+        assert_schema_ok(self, result.recipe)
+
+    def test_a_cut_through_all_that_widens_reaches_well_past_the_part(self):
+        lean = math.sin(math.radians(1.0))
+        result = variant("extrude_cut_through_one", lambda d: d.update(
+            side_one={"kind": "throughAll", "positive": True, "taper_deg": 1.0}, end_offset=None,
+            side_leans=[lean] * 4))
+        (step,) = under_test(result, 3)
+        self.assertEqual(step["taperDeg"], -1)
+        self.assertGreater(step["distance"], 41)
+
+    def test_a_cut_through_all_whose_outline_closes_inside_the_part_is_left_out(self):
+        lean = -math.sin(math.radians(10.0))
+        result = variant("extrude_cut_through_one", lambda d: d.update(
+            side_one={"kind": "throughAll", "positive": True, "taper_deg": -10.0}, end_offset=None,
+            side_leans=[lean] * 4))
+        self.assertIn("closes before it passes the part", left_out(result)["reason"])
+
+    def test_a_tapered_cut_through_all_stored_toward_empty_space_checks_the_walls_of_the_side_it_cuts(self):
+        lean = -math.sin(math.radians(1.0))
+        result = variant("extrude_cut_through_one", lambda d: d.update(
+            side_one={"kind": "throughAll", "positive": False, "taper_deg": -1.0}, end_offset=None,
+            side_leans=[lean] * 4))
+        (step,) = under_test(result, 3)
+        self.assertEqual((step["sketch"]["on"]["normal"], step["taperDeg"]), ([1, 0, 0], 1))
+
+    def test_a_cut_through_all_toward_a_thin_wall_at_its_start_keeps_its_direction(self):
+        def thin(d):
+            d.update(end_offset=None)
+            d["profiles"][0]["frame"]["origin"] = [39.5, 0, 0]  # 0.5 mm of the plate ahead, the rest behind
+
+        (step,) = under_test(variant("extrude_cut_through_one", thin), 3)
+        self.assertEqual(step["sketch"]["on"]["normal"], [1, 0, 0])
+
+    def test_a_tapered_cut_through_all_whose_walls_show_its_stored_direction_keeps_it(self):
+        lean = math.sin(math.radians(1.0))  # the walls of a cut toward -x that narrows
+        result = variant("extrude_cut_through_one", lambda d: d.update(
+            side_one={"kind": "throughAll", "positive": False, "taper_deg": -1.0}, end_offset=None,
+            side_leans=[lean] * 4))
+        (step,) = under_test(result, 3)
+        self.assertEqual(step["sketch"]["on"]["normal"], [-1, 0, 0])
+
+    def test_a_cut_through_all_both_ways_with_a_taper_is_left_out(self):
+        result = variant("extrude_cut_through_one", lambda d: d.update(
+            extent_type="symmetric", symmetric=None, end_offset=None,
+            side_one={"kind": "throughAll", "positive": True, "taper_deg": 2.0}))
+        self.assertIn("both ways", left_out(result)["reason"])
+
     def test_through_all_join_refuses(self):
         result = variant("extrude_cut_through_one", lambda d: d.update(operation="join"))
-        self.assertIn("only copied for cuts", result.refusal["reason"])
+        self.assertIn("only copied for cuts", left_out(result)["reason"])
 
     def test_through_all_without_a_measured_part_refuses(self):
         result = variant("extrude_cut_through_one", lambda d: d.update(target_box_before=None))
-        self.assertIsNone(result.recipe)
+        self.assertIsNotNone(left_out(result))
 
     def test_to_plane_measures_the_distance_and_adds_its_offset(self):
         (step,) = under_test(translate_fixture("extrude_to_plane"), 3)
@@ -155,8 +212,8 @@ class ExtentTest(unittest.TestCase):
 
     def test_to_tilted_plane_refuses_naming_the_item(self):
         result = translate_fixture("extrude_to_tilted")
-        self.assertIsNone(result.recipe)
-        self.assertEqual((result.refusal["index"], result.refusal["name"]), (3, "Extrude2"))
+        self.assertIsNotNone(left_out(result))
+        self.assertEqual((left_out(result)["index"], left_out(result)["name"]), (3, "Extrude2"))
 
     def test_two_profiles_make_two_add_steps(self):
         result = translate_fixture("extrude_two_profiles")
@@ -174,8 +231,8 @@ class ExtentTest(unittest.TestCase):
 
     def test_profiles_must_share_one_plane_and_facing(self):
         result = translate_fixture("extrude_profiles_two_planes")
-        self.assertIsNone(result.recipe)
-        self.assertIn("different planes", result.refusal["reason"])
+        self.assertIsNotNone(left_out(result))
+        self.assertIn("different planes", left_out(result)["reason"])
 
         capture = load_capture("extrude_profiles_two_planes")
         capture["items"][-1]["data"]["profiles"][1]["frame"]["origin"] = [0, 0, 10]
@@ -183,7 +240,7 @@ class ExtentTest(unittest.TestCase):
 
         frame = capture["items"][-1]["data"]["profiles"][1]["frame"]
         frame.update(z=[0, 0, -1], y=[0, -1, 0])
-        self.assertIsNone(translate(capture).recipe)
+        self.assertIsNotNone(left_out(translate(capture)))
 
 
 class MeasuredLengthTest(unittest.TestCase):
@@ -216,13 +273,13 @@ class MeasuredLengthTest(unittest.TestCase):
 
     def test_to_entity_offset_is_checked_against_the_measured_end(self):
         result = variant("extrude_to_plane", lambda d: d["side_one"].update(offset=1.5))
-        self.assertIsNone(result.recipe)
+        self.assertIsNotNone(left_out(result))
 
     def test_a_cut_past_the_part_is_not_checked_against_a_nearer_wall(self):
         def cut(distance):
             return lambda d: d.update(side_one={"kind": "distance", "distance": distance, "taper_deg": 0.0}, end_offset=30.0)
         self.assertEqual(under_test(variant("extrude_cut_through_one", cut(60.0)), 3)[0]["distance"], 60)
-        self.assertIsNone(variant("extrude_cut_through_one", cut(35.0)).recipe)
+        self.assertIsNotNone(left_out(variant("extrude_cut_through_one", cut(35.0))))
 
 
 class TaperTest(unittest.TestCase):
@@ -311,9 +368,9 @@ class OperationTest(unittest.TestCase):
         capture = load_capture("extrude_intersect")
         data = capture["items"][-1]["data"]
         data["profiles"].append(copy.deepcopy(data["profiles"][0]))
-        self.assertIsNone(translate(capture).recipe)
+        self.assertIsNotNone(left_out(translate(capture)))
         two_sided = lambda d: d.update(extent_type="two", side_two={"kind": "distance", "distance": 2.0, "taper_deg": 0.0})
-        self.assertIsNone(variant("extrude_intersect", two_sided).recipe)
+        self.assertIsNotNone(left_out(variant("extrude_intersect", two_sided)))
 
     def test_two_sided_cut_cuts_twice(self):
         def edit(d):
@@ -401,9 +458,9 @@ class UnreadableTest(unittest.TestCase):
             self.assertEqual((result.refusal["index"], result.refusal["type"]), (1, "ExtrudeFeature"), name)
 
     def test_unreadable_through_all_direction_to_offset_and_to_plane_refuse(self):
-        self.assertIsNone(variant("extrude_cut_through_one", lambda d: d["side_one"].update(positive=None)).recipe)
-        self.assertIsNone(variant("extrude_to_plane", lambda d: d["side_one"].update(offset=None)).recipe)
-        self.assertIsNone(variant("extrude_to_plane", lambda d: d["side_one"].update(plane=None)).recipe)
+        self.assertIsNotNone(left_out(variant("extrude_cut_through_one", lambda d: d["side_one"].update(positive=None))))
+        self.assertIsNotNone(left_out(variant("extrude_to_plane", lambda d: d["side_one"].update(offset=None))))
+        self.assertIsNotNone(left_out(variant("extrude_to_plane", lambda d: d["side_one"].update(plane=None))))
 
     def test_model_space_profile_translates_like_sketch_space(self):
         a = translate_fixture("extrude_space_model").recipe
@@ -473,12 +530,12 @@ class FreeOutlineVolumeTest(unittest.TestCase):
     def test_a_join_may_lose_volume_to_the_part_but_never_gain_more_than_its_outlines(self):
         self.assertIsNotNone(self.run_with(self.TEXT, lambda expected: expected, "join").recipe)
         self.assertIsNotNone(self.run_with(self.TEXT, lambda expected: 0.5 * expected, "join").recipe)
-        self.assertIsNone(self.run_with(self.TEXT, lambda expected: 1.4 * expected, "join").recipe)
-        self.assertIsNone(self.run_with(self.TEXT, lambda expected: -1.0, "join").recipe)
+        self.assertIsNotNone(left_out(self.run_with(self.TEXT, lambda expected: 1.4 * expected, "join")))
+        self.assertIsNotNone(left_out(self.run_with(self.TEXT, lambda expected: -1.0, "join")))
 
     def test_a_cut_that_removes_more_than_its_outlines_is_refused(self):
         self.assertIsNotNone(self.run_with(self.TEXT, lambda expected: -0.5 * expected, "cut").recipe)
-        self.assertIsNone(self.run_with(self.TEXT, lambda expected: -1.4 * expected, "cut").recipe)
+        self.assertIsNotNone(left_out(self.run_with(self.TEXT, lambda expected: -1.4 * expected, "cut")))
 
     def test_plain_outlines_are_not_checked(self):
         capture = load_capture("extrude_plate")

@@ -8,14 +8,18 @@ depends on items before it, so the last item that is read directly is enough: wh
 references and the body box, so the position is just after the latest of:
 - an item that may change the target body (anything but `target_changed` false);
 - a sketch or construction item named by a record that carries a sketch token, a `sketch_inputs` entry or a sketch link;
-- an item of another component that a sketch link, a measured reference or a tool body of a Combine depends on (the
-  last item of that component, since a link gives the component and not the item);
+- an item of another component that a sketch link or a measured reference depends on, or that builds a tool body of a
+  Combine. A link gives the component and not the item, so every item of that component counts, but only the items
+  before the step that holds the link: Fusion builds the timeline in order, so a step never depends on a later item. A
+  link that does not name its component counts for every other component, again only before its step;
 - an assembly item that is not an occurrence (joint, rigid group and the like), which can move a component and so
   every place read at a try (an occurrence only adds a component; its own component is covered by the rules above);
-- an item of a type the step kind table does not know.
-When something cannot be matched (a sketch record without a name, a reference without a component, a link whose
-reference has no source) the answer is "no roll": the tries keep the person's marker. The caller also checks that the
-design reads the same at the rolled marker as before (`MarkerRoll.begin`).
+- an item of a type the step kind table does not know, unless it is a feature (its type ends in "Feature") of another
+  named component that did not change the target: a body feature acts only on bodies, and the measures and links above
+  cover the target. An unknown type of the target's component, or one that may be an assembly item, counts.
+When a used sketch cannot be matched to a timeline item (a sketch record without a name) the answer is "no roll": the
+tries keep the person's marker. The caller also checks that the design reads the same at the rolled marker as before
+(`MarkerRoll.begin`).
 
 `MarkerRoll` moves the marker through the parameter store (`DesignParameterStore.roll_marker`) for the tries and puts it
 back (`unroll_marker`). The record it keeps goes to `report.json` under `probe.timeline`.
@@ -74,28 +78,60 @@ def _used_sketches(capture):
     return found
 
 
-def _linked_components(capture):
-    """(tokens, all_other): the component tokens that links and references depend on, and whether some of them could
-    not be named so that every other component counts."""
-    tokens, unknown = set(), False
+def _sketch_index(capture, name):
+    """The timeline index of the target's own sketch named `name` (the latest one when names repeat), or None."""
+    own = ((capture.get("target") or {}).get("component") or {}).get("token")
+    found = [i["index"] for i in capture.get("items") or [] if _is_item(i) and i.get("type") == "Sketch"
+             and name and i.get("name") == name and i.get("in_target_component") is not False
+             and (own is None or i.get("component") in (own, "", None))]
+    return max(found) if found else None
+
+
+def links(capture):
+    """`[(component, before)]`: the other components that sketch links and measured references depend on. `component`
+    is a component token, or ANY when the link or reference does not name its component. `before` is the timeline
+    index of the step that holds it: only items before it can matter. It is None when that step cannot be found, and
+    then every item of the component counts."""
+    out = []
     for record in capture.get("sketch_links") or []:
         if not isinstance(record, dict):
             continue
-        unknown = unknown or bool(record.get("unknown")) or bool(record.get("error"))
+        before = _sketch_index(capture, record.get("sketch"))
+        if record.get("unknown") or record.get("error"):
+            out.append((ANY, before))
         for link in record.get("links") or []:
             token = link.get("token") if isinstance(link, dict) else None
-            if token:
-                tokens.add(token)
-            else:
-                unknown = True
+            out.append((token or ANY, before))
     for entry in geometry_links.capture_refs(capture):
         component = entry["ref"].get("component")
         token = component.get("token") if isinstance(component, dict) else None
-        if token:
-            tokens.add(token)
-        else:
-            unknown = True
-    return tokens, unknown
+        index = entry.get("item")
+        out.append((token or ANY, index if isinstance(index, int) else None))
+    return out
+
+
+def unbounded_link(capture):
+    """True when a link or reference names no component and its step cannot be found: then every item of every other
+    component may matter."""
+    return any(component is ANY and before is None for component, before in links(capture))
+
+
+def _linked(item, found):
+    """True when the item of another component comes before a step that depends on its component (`links`)."""
+    for component, before in found:
+        if (component is ANY or component == item.get("component")) and (before is None or item["index"] < before):
+            return True
+    return False
+
+
+def is_feature(item):
+    """True for an item of a named component whose type reads as a body feature (`...Feature`), not an assembly item."""
+    return bool(item.get("component")) and str(item.get("type") or "").endswith("Feature")
+
+
+def other_feature(item):
+    """True for a body feature (`is_feature`) of another component than the target's."""
+    return item.get("in_target_component") is False and is_feature(item)
 
 
 def _named(item, named):
@@ -104,13 +140,14 @@ def _named(item, named):
                for name, owner in named)
 
 
-def _capture_position(capture):
-    """`(position, reason)`: how many timeline items one capture needs (see the module docstring), or None and why not."""
+def needed_items(capture):
+    """`(items, reason)`: the timeline items of one capture that the tries read directly (see the module docstring),
+    in timeline order, or `(None, key of NO_ROLL_WHY)` when the evidence cannot be matched."""
     marker = capture.get("marker")
     if not isinstance(marker, dict) or not isinstance(marker.get("position"), int):
         return None, "no_marker"
     items = [i for i in capture.get("items") or [] if _is_item(i)]
-    needed = 0
+    found = []
     named, unnamed = set(), False
     own = ((capture.get("target") or {}).get("component") or {}).get("token")
     for token, name, owner in _used_sketches(capture):
@@ -120,21 +157,30 @@ def _capture_position(capture):
             unnamed = True
     if unnamed or (own is None and any(owner == OWN for _, owner in named)):
         return None, "unnamed_sketch"
-    components, all_other = _linked_components(capture)
+    linked = links(capture)
     for item in items:
         if item.get("suppressed"):
             continue
         spec = step_kinds.step_type(item.get("type"))
+        role = spec.role if spec is not None else None
         outside = item.get("in_target_component") is False
         needs = (item.get("target_changed") is not False
-                 or spec is None or spec.role == step_kinds.UNREAD
-                 or (spec.role == step_kinds.ASSEMBLY and item.get("type") != "Occurrence")
-                 or (spec.role == step_kinds.SKETCH and _named(item, named))
+                 or (spec is None and not other_feature(item)) or role == step_kinds.UNREAD
+                 or (role == step_kinds.ASSEMBLY and item.get("type") != "Occurrence")
+                 or (role == step_kinds.SKETCH and _named(item, named))
                  or bool(item.get("helper_of"))
-                 or (outside and (all_other or item.get("component") in components)))
+                 or (outside and item.get("type") != "Occurrence" and _linked(item, linked)))
         if needs:
-            needed = max(needed, item["index"] + 1)
-    return needed, ""
+            found.append(item)
+    return found, ""
+
+
+def _capture_position(capture):
+    """`(position, reason)`: how many timeline items one capture needs (see the module docstring), or None and why not."""
+    items, why = needed_items(capture)
+    if items is None:
+        return None, why
+    return max((item["index"] + 1 for item in items), default=0), ""
 
 
 def needed_position(captures):

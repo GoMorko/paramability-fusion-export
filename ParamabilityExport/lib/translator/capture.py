@@ -25,6 +25,7 @@ def validate_capture(capture):
     if not isinstance(target, dict) or not (target.get("token") or target.get("name")):
         raise CaptureError("The capture target has no token or name.")
     _check_targets(capture)
+    _check_reach(capture.get("reach"))
     for position, item in enumerate(capture["items"]):
         if not isinstance(item, dict):
             raise CaptureError("Item %d is not an object." % position)
@@ -49,6 +50,30 @@ def _check_targets(capture):
         return
     if not isinstance(placement.get("frame"), dict) or place.frame_problem(placement["frame"]) == _NOT_NUMBERS:
         raise CaptureError("The placement of the target has no frame of numbers.")
+
+
+def _is_index(value):
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _check_reach(reach):
+    """`reach` (optional) says which earlier steps made the faces each step picks: `{ read: true, gaps: [indexes],
+    makers: { "<index>": [indexes] } }`, or `{ read: false, error }` when that could not be read. `gaps` are the
+    left out steps the read was asked about; without it no answer is trusted (gap_picks.picked_gaps)."""
+    if reach is None:
+        return
+    if not isinstance(reach, dict) or not isinstance(reach.get("read"), bool):
+        raise CaptureError("The capture 'reach' is not a read result.")
+    if not reach["read"]:
+        return
+    makers = reach.get("makers")
+    if not isinstance(makers, dict) or not all(
+            isinstance(key, str) and isinstance(found, list) and all(_is_index(i) for i in found)
+            for key, found in makers.items()):
+        raise CaptureError("The capture 'reach' has no list of makers per step.")
+    read_for = reach.get("gaps")
+    if read_for is not None and not (isinstance(read_for, list) and all(_is_index(i) for i in read_for)):
+        raise CaptureError("The capture 'reach' names its left out steps in a way that cannot be read.")
 
 
 def outside_component(item):

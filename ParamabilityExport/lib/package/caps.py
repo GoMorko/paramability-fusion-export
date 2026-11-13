@@ -5,9 +5,12 @@ tests/schema/ carries text limits only, so these byte limits live here. Update t
 """
 import os
 
+from .manifest import GAPS_ENTRY
+
 MAX_TOTAL_BYTES = 1024 ** 3
 MAX_STEP_BYTES = 256 * 1024 ** 2
-MAX_ENTRIES = 80
+MAX_ENTRIES = 200
+MAX_GAPS_BYTES = 1024 ** 2
 
 
 class PackageCapError(Exception):
@@ -32,6 +35,16 @@ def check_total_size(total):
             "Export fewer sizes or remove fine detail from the part.")
 
 
+def _mb_small(size):
+    return f"{size / (1024 * 1024):.1f} MB"
+
+
+def check_gaps_size(label, size):
+    if size > MAX_GAPS_BYTES:
+        raise PackageCapError(
+            f"{label} is {_mb_small(size)}. Paramability opens a list of left out steps up to {_mb_small(MAX_GAPS_BYTES)}.")
+
+
 def _size_of(source):
     return len(source) if isinstance(source, (bytes, bytearray)) else os.path.getsize(source)
 
@@ -44,5 +57,7 @@ def check_package_caps(files):
     for path, source in files.items():
         size = _size_of(source)
         check_step_size(f"\"{path}\"", size)
+        if path.rsplit("/", 1)[-1] == GAPS_ENTRY:
+            check_gaps_size(f"\"{path}\"", size)
         total += size
     check_total_size(total)

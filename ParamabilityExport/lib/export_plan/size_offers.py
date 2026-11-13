@@ -25,19 +25,18 @@ def initial_table(params, model_params=(), design_unit="mm", quantity_params=(),
     The sensible default parameters are ticked, at most `limit`. A parameter that a joint reads is not ticked to
     start with: it can be a size, but the part does not follow it in the assembly (`doubts`). Sketch dimensions and
     construction planes are offered as well: the export tries them at other values. So is a parameter that may reach
-    a sketch of the body through the geometry of another component (`links`, `params.geometry_links`).
+    a sketch of the body through the geometry of another component (`links`, `params.geometry_links`). A plain
+    parameter the body reads only through formulas of other parameters, at any depth, counts as read (`body_usage`).
     """
-    def build(ticked):
-        return size_table.build(params, ticked, model_params, design_unit, None, quantity_params, links=links)
-
     offered = [p["name"] for p in params if defaults.is_offered(p)]
-    doubtful = joint_reasons(build(offered), offered)
+    every = size_table.build(params, offered, model_params, design_unit, None, quantity_params, links=links)
+    doubtful = joint_reasons(every, offered)
     if model_params or links:
-        wanted = defaults.default_ticked(params, model_params, geometry_links.linked_names(links))
+        wanted = defaults.default_ticked(params, usage=body_usage(every))
     else:
         # Without the model parameters nothing tells what the body reads: start from the favourites.
         wanted = [p["name"] for p in params if defaults.is_offered(p) and p.get("is_favorite")] or offered
-    return build([n for n in wanted if n not in doubtful][:limit])
+    return every.with_ticked([n for n in wanted if n not in doubtful][:limit])
 
 
 def link_text(links):
@@ -51,6 +50,30 @@ def link_text(links):
                 "to see if the part follows." % (first["component"], first.get("step") or "a step", first["component"]))
     return ("It changes %s, and the sketch %s of this part is drawn around %s. The export tries it to see if the "
             "part follows." % (first["component"], first["sketch"], first["component"]))
+
+
+# The formulas a "used through" line names; past it the rest is counted.
+MAX_THROUGH_NAMES = 2
+
+
+def through_text(names):
+    """Why a parameter no step reads itself is offered: the formulas of other parameters it reaches the part
+    through. Empty without names."""
+    names = list(names)
+    if not names:
+        return ""
+    shown = names[:MAX_THROUGH_NAMES]
+    rest = len(names) - len(shown)
+    if rest:
+        listed = "%s and %d more" % (", ".join(shown), rest)
+    else:
+        listed = " and ".join(shown)
+    return "This part uses it through the formula%s %s." % ("s" if len(names) > 1 else "", listed)
+
+
+def body_usage(table):
+    """`dependencies.Usage` of the body the table was built for: what its model parameters and geometry links read."""
+    return table.graph.usage(list(table.model_params), geometry_links.linked_names(table.links))
 
 
 def doubts(table, params):
@@ -96,6 +119,7 @@ def offers(table, params, design_unit="mm"):
 
     Keys: param (Fusion name), ticked, enabled, reason (why it is greyed or what the tick does), doubt (why a size
     may give unexpected results, else ''), link (why a parameter no step reads is offered: `link_text`, else ''),
+    through (the formulas the part reads it through: `through_text`, else ''),
     state ('size' or 'keep' for a plain number, 'formula', 'locked'), now (value with unit), comment, formula (the
     Fusion expression of a formula), kind, value, min and max (the default range of a plain number, else None),
     range_unit (the unit of the Now, Min and Max cells). value, min and max are mm, deg or plain numbers; the cells
@@ -105,6 +129,7 @@ def offers(table, params, design_unit="mm"):
     """
     by_name = {p["name"]: p for p in params}
     doubtful = doubts(table, params)
+    through = body_usage(table).through
     out = []
     for entry in table.entries:
         p = by_name.get(entry.name)
@@ -117,7 +142,8 @@ def offers(table, params, design_unit="mm"):
                   "comment": (p.get("comment") or "").strip(), "formula": p.get("expression") or "",
                   "kind": entry.kind, "value": entry.value,
                   "range_unit": range_unit(entry.kind, design_unit), "min": None, "max": None,
-                  "doubt": doubtful.get(entry.name, ""), "link": link_text(table.links_of(entry.name))}
+                  "doubt": doubtful.get(entry.name, ""), "link": link_text(table.links_of(entry.name)),
+                  "through": through_text(through.get(entry.name, ()))}
         if entry.state == DERIVED or (entry.state == CONSTANT and not plain):
             out.append({**common, "ticked": False, "enabled": False,
                         "state": "formula", "reason": "A formula. It follows the parameters it reads."})

@@ -1,12 +1,14 @@
 """Feature values that follow sizes (the size table passed to translate)."""
 import copy
+import math
 import unittest
 
 from tests import context  # noqa: F401
-from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
+from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of
 
 from lib.params import size_table
 from lib.params.expressions import evaluate
+from lib.sketch_values.motion import Motion
 from lib.translator import translate
 from lib.translator.values import Quantity, _env, _gives_whole_numbers
 
@@ -240,7 +242,52 @@ class ValueKindsTest(unittest.TestCase):
         result = self.check(capture, ticked)
         self.assertEqual(steps_of(result.recipe, "extrude")[0]["taperDeg"], {"expr": "-(turn_deg / 18)"})
 
-    def test_a_taper_that_would_reach_45_degrees_keeps_the_angle_range_and_marks_the_size_loose(self):
+    def tapered_through(self, formula, fusion_deg, motion=None):
+        """The one way cut through all of `extrude_cut_through_one` with a taper of `fusion_deg` that follows
+        `formula`, its measured walls leaning that way."""
+        def edit(data):
+            data.update(side_one={"kind": "throughAll", "positive": True, "taper_deg": fusion_deg}, end_offset=None,
+                        side_leans=[math.sin(math.radians(fusion_deg))] * 4,
+                        params={"side_one.taper_deg": param("d4", formula, fusion_deg)})
+        capture, ticked = on_fixture("extrude_cut_through_one", edit, TICKED + ["turn_deg"])
+        return translate(capture, size_table=table_of(capture, ticked), motion=motion)
+
+    def test_a_cut_through_all_that_widens_but_would_close_at_other_sizes_cuts_their_range_and_is_copied(self):
+        result = self.tapered_through("turn_deg - 89", 1.0)
+        self.assertIsNotNone(result.recipe, result.refusal)
+        self.assertEqual(steps_of(result.recipe, "extrude")[-1]["taperDeg"], {"expr": "-(turn_deg - 89)"})
+        cut = next(c for c in result.cuts if c["name"] == "turn_deg")
+        self.assertLess(cut["max"], 89 + 45)
+
+    def test_a_cut_through_all_is_left_out_only_once_its_leaning_walls_meet_before_the_part_ends(self):
+        # The 10 x 6 outline cuts 41 mm: its walls, 3 mm from the middle, meet at a lean of about 4.2 degrees.
+        self.assertIsNone(left_out(self.tapered_through("-4", -4.0), 3))
+        self.assertIsNotNone(left_out(self.tapered_through("-5", -5.0), 3))
+
+    def narrowing(self):
+        """A motion where the cut's outline is 2 * wall_mm + 2 mm high: it narrows as wall_mm goes down."""
+        return Motion.from_json({"version": 1, "box_max": {"min": [0, 0, 0], "max": [40, 20, 10]}, "states": [],
+                                 "values": {"3/p0/l0/height": {"const": 2.0, "terms": {"wall_mm": 2.0},
+                                                               "sketch": "Sketch1"}}})
+
+    def test_a_cut_through_all_whose_outline_narrows_with_a_size_cuts_that_size_where_it_would_close(self):
+        result = self.tapered_through("turn_deg - 89", 1.0, self.narrowing())
+        self.assertIsNotNone(result.recipe, result.refusal)
+        self.assertEqual(steps_of(result.recipe, "extrude")[-1]["sketch"]["outer"]["height"],
+                         {"expr": "2 * wall_mm + 2"})
+        cut = next(c for c in result.cuts if c["name"] == "wall_mm")
+        self.assertGreater(cut["min"], 1.0)
+
+    def test_a_cut_through_all_whose_outline_follows_sizes_and_stays_open_keeps_their_ranges(self):
+        result = self.tapered_through("-(turn_deg / 180)", -0.5, self.narrowing())
+        self.assertIsNotNone(result.recipe, result.refusal)
+        self.assertFalse([c for c in result.cuts if "would close" in c["reason"]])
+
+    def test_a_cut_through_all_with_a_small_sized_taper_follows_it(self):
+        result = self.tapered_through("-(turn_deg / 180)", -0.5)
+        self.assertEqual(steps_of(result.recipe, "extrude")[-1]["taperDeg"], {"expr": "turn_deg / 180"})
+
+    def test_the_angle_range_stops_where_the_taper_would_reach_45_degrees(self):
         def edit(data):
             data["side_one"]["taper_deg"] = 5.0
             data["profile_area"], data["end_area"] = 800.0, 900.0
@@ -248,11 +295,8 @@ class ValueKindsTest(unittest.TestCase):
         capture, ticked = on_fixture("extrude_plate", edit, TICKED + ["turn_deg"])
         result = self.check(capture, ticked)
         turn = result.recipe["sizes"]["turn_deg"]
-        self.assertEqual((turn["min"], turn["max"]), (45.0, 135.0))
-        self.assertEqual(result.fixed, [])
-        reason = {f["name"]: f["reason"] for f in result.loose}["turn_deg"]
-        self.assertIn("past 129.98", reason)
-        self.assertIn("lean its walls 45 degrees or more", reason)
+        self.assertEqual((turn["min"], turn["max"]), (45.0, 129.98))
+        self.assertEqual((result.fixed, result.loose), ([], []))
 
     def test_revolve_turn_follows_an_angle_size(self):
         capture, ticked = on_fixture(

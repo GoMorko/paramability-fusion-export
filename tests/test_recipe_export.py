@@ -2,21 +2,27 @@ import json
 import os
 import tempfile
 import unittest
+from types import SimpleNamespace
 
 from tests import context  # noqa: F401
 from tests.schema_check import check_recipe
 from tests.translator_helpers import load_capture
 
 from lib.export_plan import recipe_export
+from lib.export_plan.messages import fixed_note, loose_note
 from lib.export_plan.recipe_export import plan_single_export
+from lib.params import size_table
 from lib.package.manifest import validate_manifest
 
 
-def plate_then_loft():
+def coil_then_plate():
+    """A coil that starts the body: nothing is copied before it, so the copy stops there."""
     capture = load_capture("extrude_plate")
     body = capture["items"][1]["bodies_after"]
-    capture["items"].append({"index": 2, "name": "Loft1", "type": "LoftFeature", "suppressed": False,
-                             "health": "ok", "message": "", "in_target_component": True, "bodies_after": body, "data": {}})
+    capture["items"][1]["index"] = 3
+    capture["items"].insert(1, {"index": 2, "name": "Coil1", "type": "CoilFeature", "suppressed": False,
+                                "health": "ok", "message": "", "in_target_component": True, "bodies_after": body,
+                                "data": {}})
     return capture
 
 
@@ -68,6 +74,26 @@ class PlanTest(unittest.TestCase):
         self.assertIn("below 1.01", loose["wall_mm"])
         self.assertEqual(report["sizes"]["loose"], manifest["loose"])
 
+    def test_with_steps_left_out_the_loose_and_fixed_size_notes_stay_within_the_note_cap(self):
+        capture = load_capture("filter_tray_sized")
+        capture["items"][2]["type"] = "CoilFeature"
+        params = capture["parameters"]
+        table = size_table.build(params["user"], ["wall_mm", "pipe_d_mm", "holes_count"], params["model"], "mm",
+                                 fixed={"pipe_d_mm": "it cannot follow"})
+        loose = [{"name": "wall_mm", "reason": "wall_mm may give unexpected results: x."}]
+        manifest, _, _ = plan_single_export(capture, self.step, "Tray", "w", "z", size_table=table, loose=loose)
+        self.assertEqual(manifest["gaps"], "gaps.json")
+        self.assertLessEqual(len(manifest["notes"]), recipe_export.MAX_NOTES)
+        self.assertIn(loose_note(["wall_mm"]), manifest["notes"])
+        self.assertIn(fixed_note(["pipe_d_mm"]), manifest["notes"])
+
+        parts = [SimpleNamespace(is_recipe=True, gaps=[{}], given=SimpleNamespace(name="Lid")),
+                 SimpleNamespace(is_recipe=False, gaps=[], given=SimpleNamespace(name="Base"))]
+        notes = recipe_export._parts_notes(parts, ["a"], [{"name": "a"}], [{"name": "b"}], None)
+        self.assertLessEqual(len(notes), recipe_export.MAX_NOTES)
+        self.assertIn(loose_note(["a"]), notes)
+        self.assertIn(fixed_note(["b"]), notes)
+
     def test_body_in_a_component_is_a_recipe_at_its_place(self):
         manifest, files, report = self.plan(load_capture("component_moved"))
         self.assertEqual(manifest["kind"], "recipe")
@@ -82,6 +108,11 @@ class PlanTest(unittest.TestCase):
         manifest, files, report = self.plan(capture)
         self.assertEqual(manifest["kind"], "recipe")
         self.assertEqual(json.loads(files["report.json"])["capture"]["sketch_graphs"], capture["sketch_graphs"])
+
+    def test_report_json_is_written_without_indentation(self):
+        _, files, _ = self.plan(load_capture("component_moved"))
+        self.assertNotIn(b"\n", files["report.json"])
+        self.assertEqual(json.loads(files["report.json"])["capture"]["target"]["placement"]["path"], "Tray:1")
 
     def test_a_part_used_several_times_says_which_copy_the_file_holds(self):
         capture = load_capture("component_moved")
@@ -122,14 +153,24 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(json.loads(files["report.json"])["capture"]["design"], "Test")
 
     def test_unsupported_feature_gives_step_only_naming_it(self):
-        manifest, files, report = self.plan(plate_then_loft())
+        manifest, files, report = self.plan(coil_then_plate())
         self.assertEqual(manifest["kind"], "stepOnly")
         self.assertNotIn("recipe", manifest)
         self.assertEqual(sorted(files), ["part.step", "report.json"])
-        self.assertIn("loft", manifest["notes"][0].lower())
+        self.assertIn("coil", manifest["notes"][0].lower())
         self.assertEqual(validate_manifest(manifest), [])
-        self.assertEqual(report["refusal"]["type"], "LoftFeature")
+        self.assertEqual(report["refusal"]["type"], "CoilFeature")
         self.assertEqual(report["outcome"], "stepOnly")
+
+    def test_a_stop_still_reports_the_later_steps_that_cannot_be_copied(self):
+        capture = load_capture("filter_tray_sized")
+        capture["items"][2]["health"] = "error"
+        capture["items"][5]["type"] = "CoilFeature"
+        manifest, files, report = self.plan(capture)
+        self.assertEqual((manifest["kind"], report["refusal"]["index"]), ("stepOnly", 2))
+        self.assertIn(5, [step["index"] for step in report["after_stop"]["steps"]])
+        self.assertIn("Hole1", manifest["notes"][1])
+        self.assertEqual(validate_manifest(manifest), [])
 
     def test_a_capture_that_cannot_be_read_gives_a_fixed_shape(self):
         for name, capture in (("bad version", load_capture("core_bad_version")), ("reader error", RuntimeError("boom"))):
@@ -199,7 +240,7 @@ class MotionHandoverTest(unittest.TestCase):
         self.assertEqual(report["probe"], {"restore_gap_mm": 0.0})
 
     def test_a_translation_that_refused_is_used_as_given_and_nothing_translates_again(self):
-        capture = plate_then_loft()
+        capture = coil_then_plate()
         refused = recipe_export.translate(capture)
         self.assertIsNone(refused.recipe)
         self.seen.clear()

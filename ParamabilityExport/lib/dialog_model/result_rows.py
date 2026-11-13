@@ -1,81 +1,130 @@
 """What the result dialog shows after a recipe is saved. Pure: no Fusion imports.
 
-The view is built from the manifest and report that plan_single_export returned, and the size table of the export.
+The view is a list of sections, each a `# Title` and its lines, built from the manifest and report that the export
+returned and the size table of the export. A section with nothing to say is not in the list. Detail that only helps
+debugging stays in `report.json`.
 """
+import re
+
 from .dialog_rows import range_text
-from ..export_plan.health import FAILED, health_lines, with_lines
+from ..export_plan.health import FAILED, health_lines
 from ..export_plan.messages import (
-    MAX_LISTED_FIXED, also_changes_line, also_changes_parts_line, listed_lines, not_tried_line, recipe_saved_message)
+    ORIGINAL_KEPT_NOTE, ORIGINAL_KEPT_PARTS_NOTE, also_changes_line, also_changes_parts_line, left_out_lines,
+    not_tried_line)
 
 KEPT_FIXED, NOT_USED = "kept fixed", "not used"
 NOT_FOLLOWED = "not followed"
+CUT = "range cut"
 NOT_MEASURED = "not measured"
 SKETCHES = "Sketches"
 DOUBTFUL = "may be unexpected"
 FREE = "size"
-STATUS_HEADER = "In Paramability"
+
+# The words of a reason that the status already says, so the line keeps only the part that adds something.
+_STATUS_WORDS = ("may give unexpected results", "stays fixed", "is not a size")
 
 
-def _size_rows(table, report):
-    """One row per size the recipe holds: its Fusion name, its range and whether it may give unexpected results."""
+def _tidy(text):
+    return text.strip(" :.,;")
+
+
+def _split_reason(reason, names):
+    """`(condition, detail)` of a reason. The leading name and the words the status already says are cut away: "wall
+    may give unexpected results past 1.8: Extrude5 may not meet the part." gives ("past 1.8", "Extrude5 may not meet
+    the part"). A part tag in front of the name ("Lid: wall ...") stays at the start of the detail."""
+    found = [(m.start(), m.end()) for words in _STATUS_WORDS for m in [re.search(re.escape(words), reason)] if m]
+    if found:
+        start, end = min(found)
+        lead, rest = reason[:start], reason[end:]
+        tag = _tidy(lead.rsplit(": ", 1)[0]) if ": " in lead else ""
+    else:
+        tag = ""
+        rest = reason
+        for name in sorted(names, key=len, reverse=True):
+            if rest.startswith(name):
+                rest = rest[len(name):]
+                break
+    condition, detail = "", rest
+    if found and ": " in rest and not rest.lstrip().startswith(":"):
+        condition, detail = rest.split(": ", 1)
+    detail = _tidy(detail)
+    return _tidy(condition), ("%s: %s" % (tag, detail) if tag and detail else tag or detail)
+
+
+def size_line(row):
+    """The one line of a size: "wall: 1 to 4 mm, may be unexpected past 1.8 (why)". A plain size shows only its range.
+    A name never shows twice."""
+    status = "" if row["check"] == FREE else " ".join(x for x in (row["check"], row["condition"]) if x)
+    state = ", ".join(x for x in (row["range"], status) if x)
+    return "%s: %s%s" % (row["name"], state, " (%s)" % row["why"] if row["why"] else "")
+
+
+def _reasons(entries, names):
+    """`{name: [(condition, detail)]}` of manifest style `{name, reason}` entries, in the order given."""
+    out = {}
+    for entry in entries:
+        out.setdefault(entry["name"], []).append(_split_reason(entry["reason"], names | {entry["name"]}))
+    return out
+
+
+def _cut_text(entry):
+    """What was seen where a range was cut, and that every part of a file has the same range when it is shared."""
+    return entry["why"] + (", the same in every part that uses it" if entry.get("shared") else "")
+
+
+def kept_number_lines(manifest):
+    """One line per listed formula parameter that stayed a plain number, with Fusion's own formula and the reason."""
+    return ["kept as a number: %s = %s (%s)" % (p.get("label") or p["name"], p["expression"], _tidy(p["untranslated"]))
+            for p in manifest.get("parameters") or [] if p.get("expression") and p.get("untranslated")]
+
+
+def _row(name, rng, check, found=()):
+    """A size row: `condition` and `why` come from the reasons found for it (joined when there are several)."""
+    return {"name": name, "range": rng, "check": check,
+            "condition": "; ".join(c for c, _ in found if c), "why": "; ".join(dict.fromkeys(d for _, d in found if d))}
+
+
+def _size_rows(table, report, ticked):
+    """One row per size and per ticked or fixed parameter that is not a size, in this order: sizes that follow, sizes
+    that may give unexpected results, parameters kept fixed, then parameters not followed or not used. Each row holds
+    the reason, so no name is listed twice."""
     sizes = report["sizes"]
-    loose = {f["name"] for f in sizes.get("loose") or []}
-    by_size = {e.size_name: e for e in table.entries if e.size_name}
-    rows = []
+    shown = {e.size_name: e.name for e in table.entries if e.size_name}
+    names = set(shown) | set(shown.values()) | set(ticked)
+    loose = _reasons(sizes.get("loose") or [], names)
+    fixed = _reasons(sizes.get("fixed") or [], names)
+    cut = {entry["name"]: entry for entry in sizes.get("cut") or []}
+    followed, doubtful, kept, dropped = [], [], [], []
     for size_name in sizes.get("free") or []:
-        entry = by_size.get(size_name)
         size = table.sizes.get(size_name) or {}
-        rows.append({
-            "name": entry.name if entry is not None else size_name,
-            "range": range_text(size, size.get("min"), size.get("max")) if "min" in size else "",
-            "check": DOUBTFUL if size_name in loose else FREE,
-        })
-    return rows
-
-
-def _left_out_rows(table, report, ticked):
-    """Rows for ticked parameters that did not become sizes: fixed, no copied step reads them, or a step reads them and
-    the copy could not follow."""
-    sizes = report["sizes"]
-    fixed_names = {f["name"] for f in sizes.get("fixed") or []}
-    dropped = {d["name"]: d for d in sizes.get("dropped") or []}
-    rows = []
-    for name in ticked:
-        if name in dropped:
-            rows.append({"name": name, "range": "", "check": NOT_FOLLOWED if dropped[name]["used"] else NOT_USED})
-        elif table.recipe_name(name) in fixed_names:
-            rows.append({"name": name, "range": "", "check": KEPT_FIXED})
-    return rows
+        if size_name in cut:
+            size = dict(size, min=cut[size_name]["min"], max=cut[size_name]["max"])
+        rng = range_text(size, size.get("min"), size.get("max")) if "min" in size else ""
+        name = shown.get(size_name, size_name)
+        if size_name in loose:
+            row = _row(name, rng, DOUBTFUL, loose[size_name])
+            if size_name in cut:
+                row["why"] = "; ".join(x for x in (row["why"], "%s: %s" % (CUT, _cut_text(cut[size_name]))) if x)
+            doubtful.append(row)
+        elif size_name in cut:
+            followed.append(_row(name, rng, CUT, [("", _cut_text(cut[size_name]))]))
+        else:
+            followed.append(_row(name, rng, FREE))
+    for size_name, found in fixed.items():
+        kept.append(_row(shown.get(size_name, size_name), "", KEPT_FIXED, found))
+    for entry in sizes.get("dropped") or []:
+        if entry["name"] not in ticked:
+            continue
+        found = [_split_reason(entry["reason"], names | {entry["name"]})] if entry["used"] or entry.get("tried") else []
+        dropped.append(_row(entry["name"], "", NOT_FOLLOWED if entry["used"] else NOT_USED, found))
+    return followed + doubtful + kept + dropped
 
 
 def _probe_rows(report):
     """A row that says the sketches could not be measured, so no one reads the sizes as measured."""
     if (report.get("health") or {}).get("probe") == FAILED:
-        return [{"name": SKETCHES, "range": "", "check": NOT_MEASURED}]
+        return [_row(SKETCHES, "", NOT_MEASURED)]
     return []
-
-
-def _lines(table, entries):
-    """"name: reason" for the first entries, then one line that counts the rest (`messages.listed_lines`). A reason
-    that already starts with the name (Fusion's or the recipe's) is shown as it is."""
-    return listed_lines(entries, {e.size_name: e.name for e in table.entries if e.size_name})
-
-
-def _fixed_lines(table, report):
-    return _lines(table, report["sizes"].get("fixed") or [])
-
-
-def _loose_lines(table, report):
-    return _lines(table, report["sizes"].get("loose") or [])
-
-
-def _dropped_lines(table, report):
-    """The reasons of the ticked parameters that a step reads and the copy could not follow, or that were tried and
-    changed nothing. A parameter that no step reads has its own row and needs no reason."""
-    return _lines(table, [d for d in report["sizes"].get("dropped") or [] if d["used"] or d.get("tried")])
-
-
-ALSO_TITLE, ALSO_PARTS_TITLE = "Also change this part", "Also change these parts"
 
 
 def _probe_records(report):
@@ -109,113 +158,118 @@ def not_tried_lines(report):
     return [not_tried_line(len(left), "parts" in report)] if left else []
 
 
-def variables_line(manifest):
-    count = len(manifest.get("parameters") or [])
-    if not count:
-        return ""
-    noun = "parameter comes" if count == 1 else "parameters come"
-    return "All %d %s along as variables, with their formulas and comments." % (count, noun)
+def _left_out_entries(report):
+    """`[(part name or None, gap record)]` of the steps left out of the copy. A parts report holds the gaps of each
+    part in its record."""
+    if "parts" in report:
+        return [(part.get("name") or "", gap) for part in report["parts"] for gap in part.get("gaps") or []]
+    return [(None, gap) for gap in report.get("gaps") or []]
 
 
-def result_view(file_name, manifest, report, table, ticked):
-    """Plain data for the result dialog, or None when the file holds no recipe (the message box tells that story).
+def _left_out_lines(report):
+    """The steps left out with their reasons and a closing sentence about how the file opens, or none."""
+    entries = _left_out_entries(report)
+    if not entries:
+        return []
+    return left_out_lines(entries) + [ORIGINAL_KEPT_PARTS_NOTE if "parts" in report else ORIGINAL_KEPT_NOTE]
 
-    Keys: saved (first sentence), size_title, check_header (the title of the last column), rows ({name, range,
-    check}), fixed (lines), loose (lines: sizes that stay free but may not follow every step, with why), dropped
-    (lines: ticked parameters that a step reads but the copy could not follow, or tried and changed nothing, with
-    why), also (a line naming unticked parameters that also change this part) with its title `also_title`,
-    untried (a line counting the parameters of other components the export did not try), variables,
-    warnings (what is wrong with the design or the sketch measuring, and what to do: empty when all is well),
-    message (the whole story as plain text, for a message box, with the warnings below it).
-    """
-    if manifest.get("kind") != "recipe" or "sizes" not in report:
-        return None
+
+def _count(n, one, many):
+    return "%d %s" % (n, one if n == 1 else many)
+
+
+def _result_lines(file_name, manifest, report, size_count, part_lines=()):
+    """What the person can do next, what kind of file it is, and how many parameters came along as variables."""
+    if size_count:
+        lines = ["Saved %s. Open it in Paramability: %s ready for the form." % (
+            file_name, _count(size_count, "size is", "sizes are"))]
+    else:
+        lines = ["Saved %s. Open it in Paramability. No parameter became a size, so the form is empty." % file_name]
     notes = manifest.get("notes") or []
-    rows = _size_rows(table, report)
-    count = len(rows)
-    dropped = _dropped_lines(table, report)
-    story = recipe_saved_message(manifest, file_name)
-    if dropped:
-        story += "\n\n" + "\n".join("- " + line for line in dropped)
-    also, untried = also_lines(report), not_tried_lines(report)
-    for line in also + untried:
-        story += "\n\n" + line
-    return {
-        "saved": ("Saved %s. %s" % (file_name, notes[0] if notes else "")).strip(),
-        "size_title": "%d %s ready for the form" % (count, "size" if count == 1 else "sizes"),
-        "check_header": STATUS_HEADER,
-        "rows": rows + _left_out_rows(table, report, ticked) + _probe_rows(report),
-        "fixed": _fixed_lines(table, report),
-        "loose": _loose_lines(table, report),
-        "dropped": dropped,
-        "also": also,
-        "also_title": ALSO_TITLE,
-        "untried": untried,
-        "variables": variables_line(manifest),
-        "warnings": health_lines(report.get("health")),
-        "message": with_lines(story, report.get("health")),
-    }
-
-
-def _reason_lines(entries):
-    """The reasons of the first entries as they are (each already starts with its part and size), then one line that
-    counts the rest."""
-    lines = [e["reason"] for e in entries[:MAX_LISTED_FIXED]]
-    if len(entries) > MAX_LISTED_FIXED:
-        lines.append("and %d more (see report.json)." % (len(entries) - MAX_LISTED_FIXED))
+    if "parts" in report:
+        lines += part_lines
+    else:
+        kind = "Editable copy with steps left out (listed below)" if _left_out_entries(report) else "Editable copy"
+        lines.append((kind + ". " + (notes[0] if notes else "")).strip())
+    variables = len(manifest.get("parameters") or [])
+    if variables:
+        lines.append("%s along as variables." % _count(variables, "parameter comes", "parameters come"))
     return lines
 
 
-def part_lines(manifest):
-    """One short line per part of a parts package: whether it is editable, how many sizes it has, or why it is a fixed
-    shape."""
+def _part_lines(manifest, report):
+    """One short line per part of a parts package: an editable copy (with a mark when steps were left out of it), or a
+    fixed shape with the reason."""
+    left_out = {name for name, _ in _left_out_entries(report)}
     lines = []
     for part in manifest.get("parts") or []:
         if part.get("recipe"):
-            line = "%s: editable part." % part["name"]
-            if part.get("loose"):
-                line += " %d %s may give unexpected results." % (
-                    len(part["loose"]), "size" if len(part["loose"]) == 1 else "sizes")
+            line = "%s: editable copy%s." % (part["name"], ", some steps left out" if part["name"] in left_out else "")
         else:
             line = ("%s: fixed shape. %s" % (part["name"], part.get("note") or "")).strip()
         lines.append(line)
     return lines
 
 
+def _section(key, title, lines, rows=None):
+    """A section as plain data, or None when it holds nothing to show."""
+    if not lines and not rows:
+        return None
+    return {"key": key, "title": title, "lines": list(lines), "rows": list(rows or [])}
+
+
+def section(view, key):
+    """The section of `view` with this key, or None when the view does not show it."""
+    return next((s for s in view["sections"] if s["key"] == key), None)
+
+
+def section_lines(view, key):
+    """The lines of one section of `view`, empty when the section is not shown."""
+    found = section(view, key)
+    return found["lines"] if found else []
+
+
+def view_message(sections):
+    """The sections as plain text for a message box: each `# Title` and its lines."""
+    return "\n\n".join("\n".join(["# " + found["title"]] + found["lines"]) for found in sections)
+
+
+def _build(file_name, manifest, report, table, ticked, result_extra=()):
+    rows = _size_rows(table, report, ticked) + _probe_rows(report)
+    size_count = len(report["sizes"].get("free") or [])
+    sections = [
+        _section("check", "Check your design", health_lines(report.get("health"))),
+        _section("result", "Result", _result_lines(file_name, manifest, report, size_count, result_extra)),
+        _section("sizes", "Sizes", [size_line(r) for r in rows] + kept_number_lines(manifest), rows),
+        _section("left_out", "Left out", _left_out_lines(report)),
+        _section("more", "More sizes", also_lines(report) + not_tried_lines(report)),
+    ]
+    sections = [found for found in sections if found]
+    return {"sections": sections, "message": view_message(sections)}
+
+
+def result_view(file_name, manifest, report, table, ticked):
+    """Plain data for the result dialog, or None when the file holds no recipe (the message box tells that story).
+
+    Keys: `sections` and `message` (the same text for a message box). Each section is `{key, title, lines, rows}`;
+    the keys, in this order, are `check` (what is wrong with the design or the sketch measuring, and what to do),
+    `result` (open the file, kind of copy, variables), `sizes` (one line per size or parameter that is not a size,
+    with its range or state and its reason, a cut range as "range cut" with what was seen at the cut; `rows` holds the
+    same as data; then a "kept as a number: name = Fusion formula (reason)" line for each formula parameter that was
+    not translated), `left_out` (steps with reasons) and `more` (unticked parameters that also change the part, and
+    parameters not tried). A section without content is absent.
+    """
+    if manifest.get("kind") != "recipe" or "sizes" not in report:
+        return None
+    return _build(file_name, manifest, report, table, ticked)
+
+
 def parts_result_view(file_name, manifest, report, table, ticked):
     """`result_view` for a parts package (`recipe_export.plan_parts_export`), or None for any other file.
 
-    The sizes are the file's: each is listed once, whatever number of parts read it. The extra key `parts` holds one
-    line per part (`part_lines`). `fixed`, `loose` and `dropped` are for the whole file, each reason names its part."""
+    The sizes are the file's: each is listed once, whatever number of parts read it, and its reason names its part. The
+    `result` section holds one line per part."""
     if manifest.get("kind") != "parts" or "parts" not in report:
         return None
     sizes = report.get("sizes") or {"free": [], "fixed": [], "loose": [], "dropped": []}
-    shaped = dict(report, sizes=sizes)
-    notes = manifest.get("notes") or []
-    rows = _size_rows(table, shaped)
-    parts = part_lines(manifest)
-    dropped = _lines(table, [d for d in sizes.get("dropped") or [] if d["used"] or d.get("tried")])
-    fixed, loose = _reason_lines(sizes.get("fixed") or []), _reason_lines(sizes.get("loose") or [])
-    story = "Saved %s. %s" % (file_name, " ".join(notes))
-    for group in (parts, fixed, loose, dropped):
-        if group:
-            story += "\n\n" + "\n".join("- " + line for line in group)
-    also, untried = also_lines(report), not_tried_lines(report)
-    for line in also + untried:
-        story += "\n\n" + line
-    return {
-        "saved": ("Saved %s. %s" % (file_name, notes[0] if notes else "")).strip(),
-        "size_title": "%d %s ready for the form" % (len(rows), "size" if len(rows) == 1 else "sizes"),
-        "check_header": STATUS_HEADER,
-        "rows": rows + _left_out_rows(table, shaped, ticked) + _probe_rows(report),
-        "parts": parts,
-        "fixed": fixed,
-        "loose": loose,
-        "dropped": dropped,
-        "also": also,
-        "also_title": ALSO_PARTS_TITLE,
-        "untried": untried,
-        "variables": variables_line(manifest),
-        "warnings": health_lines(report.get("health")),
-        "message": with_lines(story, report.get("health")),
-    }
+    return _build(file_name, manifest, dict(report, sizes=sizes), table, ticked, _part_lines(manifest, report))

@@ -11,9 +11,10 @@ from tests.fakes import FakeStore
 from tests.translator_helpers import load_capture
 
 from lib.design_edit.errors import StepExportError
+from lib.export_plan import health as health_module
 from lib.export_plan import recipe_export
 from lib.export_plan.pipeline import ExportRequest, run_pipeline
-from lib.dialog_model.result_rows import NOT_FOLLOWED, NOT_MEASURED, result_view
+from lib.dialog_model.result_rows import NOT_FOLLOWED, NOT_MEASURED, result_view, section, section_lines
 from lib.design_edit.runner import ExportCancelled
 
 CAPTURE = load_capture("sketch_rect_centred")
@@ -54,6 +55,23 @@ class StuckStore(FakeStore):
         if name in self.stuck and self.exprs[name] != self.saved[name] and expression == self.saved[name]:
             raise RuntimeError("refused")
         super().set_expression(name, expression)
+
+
+class BreakingStore(FakeStore):
+    """A store where a value of `name` above `above` breaks a step for good: it stays in error after the values are back,
+    as Fusion can leave a step that lost its input."""
+
+    def __init__(self, expressions, name="depth_mm", above=70):
+        super().__init__(expressions)
+        self.broken = False
+        self.name, self.above = name, above
+
+    def set_expression(self, name, expression):
+        super().set_expression(name, expression)
+        self.broken = self.broken or (name == self.name and float(expression.split()[0]) > self.above)
+
+    def error_items(self):
+        return ["RemoveBody1"] if self.broken else []
 
 
 class FakePort:
@@ -140,7 +158,7 @@ class ExportTest(unittest.TestCase):
         self.assertGreater(port.reads, 2)
         self.assertIsNotNone(result.report["probe"])
         self.assertEqual(result.health["probe"], "measured")
-        self.assertEqual(view(result)["warnings"], [])
+        self.assertEqual(section_lines(view(result), "check"), [])
         self.assertEqual(port.store.exprs, START)
 
     def test_a_part_whose_steps_could_not_be_read_is_saved_as_a_fixed_shape(self):
@@ -176,13 +194,18 @@ class SizeRangeTest(unittest.TestCase):
         self.assertEqual(port.store.exprs, START)
 
     def test_a_size_that_does_not_build_at_the_end_of_its_range_is_left_out_of_the_probe_and_the_export_goes_on(self):
-        port = FakePort(bad_when=lambda e: float(e["depth_mm"].split()[0]) > 80)
+        port = FakePort(bad_when=lambda e: float(e["depth_mm"].split()[0]) > 90)
         result = export(port, ranges={"depth_mm": (30, 120)})
         self.assertEqual(result.manifest["kind"], "recipe")
-        self.assertEqual([d["name"] for d in result.report["probe"]["dropped"]], ["depth_mm (max)", "all max"])
-        # A quarter above the value, 75, builds and 120 does not, so the size is measured up to 75.
+        dropped = [d["name"] for d in result.report["probe"]["dropped"]]
+        self.assertEqual(dropped[0], "depth_mm (max)")
+        # All sizes at their maximum take depth_mm only as far as it built on its own, so that row builds.
+        self.assertNotIn("all max", dropped)
+        # 75 builds and 120 does not: the values between are halved, so the size is measured up to the last of them
+        # that builds, not just to 75. (The cut itself is in `test_geometry_links`.)
         span = result.report["probe"]["motion"]["spans"]["depth_mm"]
-        self.assertEqual((span["low"], span["high"], [v for v, _ in span["failed"]]), (30, 75, [120]))
+        self.assertEqual((span["low"], span["high"]), (30, 86.25))
+        self.assertEqual([v for v, _ in span["failed"]], [120, 97.5, 91.875])
         self.assertEqual(result.report["sizes"]["fixed"], [])
         self.assertEqual(port.store.exprs, START)
 
@@ -198,13 +221,14 @@ class RowOrderTest(unittest.TestCase):
         # 60 is the value: a quarter below and above first, then the range ends.
         self.assertEqual(self.depth_values(result), [45.0, 75.0, 30, 120])
 
-    def test_a_near_value_that_does_not_build_is_tried_nearer_before_the_far_ends(self):
+    def test_a_near_value_that_does_not_build_is_tried_nearer_and_the_far_end_past_it_is_not_tried(self):
         port = FakePort(bad_when=lambda e: float(e["depth_mm"].split()[0]) > 70)
         result = export(port, ranges={"depth_mm": (30, 120)})
         values = self.depth_values(result)
         self.assertEqual(values[:2], [45.0, 75.0])
-        # 75 does not build: a value between 60 and 75 is tried before the far end.
-        self.assertTrue(any(60 < v < 75 for v in values[2:values.index(120)]))
+        # 75 does not build: a value between 60 and 75 is tried before the far end, and 120 is never tried.
+        self.assertTrue(any(60 < v < 75 for v in values[2:values.index(30)]))
+        self.assertNotIn(120, values)
 
 
 class ProbeFailureTest(unittest.TestCase):
@@ -214,14 +238,14 @@ class ProbeFailureTest(unittest.TestCase):
         self.assertEqual(result.manifest["kind"], "recipe")
         self.assertEqual(result.health["probe"], "failed")
         shown = view(result)
-        self.assertIn(NOT_MEASURED, [r["check"] for r in shown["rows"]])
-        self.assertTrue(any("could not be measured" in line for line in shown["warnings"]))
+        self.assertIn(NOT_MEASURED, [r["check"] for r in section(shown, "sizes")["rows"]])
+        self.assertTrue(any("could not be measured" in line for line in section_lines(shown, "check")))
         self.assertIsNone(result.report.get("probe"))
         self.assertEqual(port.store.exprs, START)
 
     def test_sizes_that_move_a_sketch_are_not_called_unused_when_the_sketches_were_not_measured(self):
         result = export(FakePort(fail_read_from=1))
-        left_out = {r["name"]: r["check"] for r in view(result)["rows"]}
+        left_out = {r["name"]: r["check"] for r in section(view(result), "sizes")["rows"]}
         self.assertEqual(left_out["depth_mm"], NOT_FOLLOWED)
         self.assertFalse(any("Not used by any copied step" in n and "depth_mm" in n for n in result.manifest["notes"]))
 
@@ -230,8 +254,37 @@ class ProbeFailureTest(unittest.TestCase):
         result = export(port)
         self.assertEqual(result.manifest["kind"], "recipe")
         self.assertEqual(result.health["probe"], "failed")
-        self.assertTrue(view(result)["warnings"])
+        self.assertTrue(section_lines(view(result), "check"))
         self.assertEqual(port.store.exprs, START)
+
+
+class BrokenDesignTest(unittest.TestCase):
+    def test_the_tries_stop_once_a_try_leaves_the_design_broken_and_the_person_is_told(self):
+        port = FakePort(store=BreakingStore(START))
+        result = export(port, ranges={"depth_mm": (30, 120)})
+        states = result.report["probe"]["states"]
+        failed = [n for n, s in enumerate(states) if not s["built"]]
+        self.assertEqual(len(states) - 1, failed[0])  # nothing ran after the try that broke the design
+        self.assertEqual(result.report["probe"]["stopped"]["items"], ["RemoveBody1"])
+        self.assertEqual(result.health["tries_stopped"]["items"], ["RemoveBody1"])
+        self.assertEqual(result.health["broken"], ["RemoveBody1"])
+        lines = section_lines(view(result), "check")
+        self.assertTrue(any("stopped early" in line for line in lines))
+        self.assertTrue(any("RemoveBody1" in line and "Undo" in line for line in lines))
+
+    def test_a_long_list_of_broken_steps_is_capped_and_its_line_kept_short(self):
+        names = ["Step%d" % n for n in range(40)]
+        health = health_module.make_health(broken=names)
+        self.assertEqual(len(health["broken"]), health_module.MAX_LISTED)
+        self.assertLessEqual(len(health_module.health_lines(health)[0]), health_module.MAX_LINE)
+
+    def test_sizes_whose_tries_never_ran_after_the_stop_are_untried_not_still(self):
+        result = export(FakePort(store=BreakingStore(START, "box_count", 3.5)))
+        probe = result.report["probe"]
+        self.assertEqual(probe["untried"], ["cube_mm", "depth_mm"])
+        self.assertEqual(probe["motion"]["untried"], ["cube_mm", "depth_mm"])
+        dropped = {d["name"]: d["used"] for d in result.report["sizes"]["dropped"]}
+        self.assertEqual((dropped["cube_mm"], dropped["depth_mm"]), (True, True))
 
 
 class RestoreTest(unittest.TestCase):
@@ -239,7 +292,7 @@ class RestoreTest(unittest.TestCase):
         port = FakePort(store=StuckStore(START, stuck=["height_mm"]))
         result = export(port)
         self.assertEqual(result.health["unrestored"], ["height_mm"])
-        lines = view(result)["warnings"]
+        lines = section_lines(view(result), "check")
         self.assertIn("height_mm", lines[0])
         self.assertIn("Undo", lines[0])
         self.assertTrue(any("measured" in n for n in result.manifest["notes"]))
@@ -250,10 +303,61 @@ class RestoreTest(unittest.TestCase):
         result = export(port)
         self.assertTrue(result.health["sketch_drift"])
         self.assertGreater(result.health["sketch_gap_mm"], 0.1)
-        lines = view(result)["warnings"]
+        lines = section_lines(view(result), "check")
         self.assertTrue(any("did not come back" in line and "Undo" in line for line in lines))
         self.assertTrue(any("measured" in n for n in result.manifest["notes"]))
         self.assertEqual(json.loads(json.dumps(result.report["health"]))["sketch_drift"], True)
+
+
+class FlipPort(FakePort):
+    """A design whose sketch goes to its other solution in the first try and stays there with the values back, until
+    a keeper (when `keeper`) puts its points back. The read number `fail_read_at` raises."""
+
+    def __init__(self, keeper=True, fail_read_at=None, **options):
+        super().__init__(**options)
+        self.flipped, self.keeper, self.fail_read_at = False, keeper, fail_read_at
+        port = self
+
+        class Store(FakeStore):
+            def recompute(self):
+                port.flipped = port.flipped or self.exprs != START
+                return super().recompute()
+
+        self.store = Store(START)
+
+    def probe_reader(self):
+        def read(request):
+            self.reads += 1
+            if self.reads == self.fail_read_at:
+                raise RuntimeError("Fusion would not answer")
+            return shifted(self.e0, 0.5) if self.flipped and self.store.exprs == START else self.e0
+        return read
+
+    def sketch_keeper(self, tokens):
+        if not self.keeper:
+            raise RuntimeError("no keeper")
+        port = self
+
+        class Keeper:
+            @staticmethod
+            def put_back():
+                port.flipped = False
+                return 1
+
+        return Keeper()
+
+
+class TriesEndedEarlyTest(unittest.TestCase):
+    def test_a_cancel_during_the_tries_puts_a_flipped_sketch_back(self):
+        port = FlipPort(cancel_at=2)
+        with self.assertRaises(ExportCancelled):
+            export(port)
+        self.assertFalse(port.flipped)
+
+    def test_failed_tries_that_leave_a_sketch_off_its_solution_are_reported(self):
+        result = export(FlipPort(keeper=False, fail_read_at=3))
+        self.assertEqual(result.health["probe"], "failed")
+        self.assertTrue(result.health["sketch_drift"])
 
 
 class FailingStepTest(unittest.TestCase):

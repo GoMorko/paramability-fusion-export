@@ -155,6 +155,24 @@ class WrittenTest(unittest.TestCase):
         self.assertNotIn("tilt_deg", height["expr"])
         self.assertIn("depth_mm", height["expr"])
 
+    def test_a_stuck_point_or_line_direction_holds_no_size(self):
+        for key, stuck in (("5/positions/0/0", lambda old: Stuck(["tilt_deg"], "curve", "Sketch2", old)),
+                           ("1/p0/c0.0/turn", lambda old: Stuck(["tilt_deg"], "curve", "Sketch1"))):
+            with self.subTest(key):
+                capture, motion = _tilted()
+                motion.values[key] = stuck(motion.values.get(key))
+                self.assertAlmostEqual(_height_at(capture, motion, tilt_deg=50.0), 120.0 * cos(50.0), places=6)
+
+
+def _height_at(capture, motion, **values):
+    """The copied box depth with `values` set and every other size at its value."""
+    params = capture["parameters"]
+    table = size_table.build(params["user"], [p["name"] for p in params["user"]], params["model"])
+    result = translate(capture, size_table=table, motion=motion)
+    height = steps_of(result.recipe, "extrude")[0]["sketch"]["outer"]["height"]
+    env = {n: s["value"] for n, s in result.recipe["sizes"].items() if "value" in s}
+    return evaluate(height["expr"], dict(env, **values))
+
 
 if __name__ == "__main__":
     unittest.main()

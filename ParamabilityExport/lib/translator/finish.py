@@ -62,7 +62,7 @@ def _edge_steps(ctx, item, kind, edges, sizes, extra=None, sets=()):
     even = all(s.same_as(sizes[0]) for s in sizes)
     whole = follow.whole_edges(ctx, edges) if even else None
     if whole is not None:
-        reads = next(slab.length.reads for slab in ctx.slabs if slab.id == whole["featureEdges"])
+        reads = next(p.followed_reads for p in ctx.placers if getattr(p, "id", None) == whole["featureEdges"])
         return [_with_plain(dict({"kind": kind, "edges": whole, "size": sizes[0].json()}, **extra), edges, reads)]
     picked = _input_pick(ctx, item, edges, sets) if even else None
     if picked is not None:
@@ -152,7 +152,7 @@ def _repeated_without(ctx, item, source_index):
             continue
         sources = (other.get("data") or {}).get("sources") or []
         spec = step_kinds.step_type(other.get("type"))
-        repeats = spec is not None and (spec.handler or "").startswith("repeat:")
+        repeats = spec is not None and (spec.handler or "").startswith("body_copies:")
         if later and repeats and source_index in sources and item.get("index") not in sources:
             return True
     return False
@@ -170,7 +170,8 @@ def _slot_outline(ctx, item, edges, size):
         return None
     slab = found[0].slab
     corners = {f.corner for f in found}
-    if (slab.is_copy or any(f.slab is not slab or f.which != "side" for f in found) or None in corners
+    if (not isinstance(slab, follow.Slab) or slab.is_copy or any(f.slab is not slab or f.which != "side" for f in found)
+            or None in corners
             or len(corners) != 4 or len(edges) != 4 or len(slab.footprint.corners) != 4):
         return None
     at = next((n for n, step in enumerate(ctx.steps) if step.get("id") == slab.id), None)

@@ -19,16 +19,19 @@ from typing import Protocol
 from ..params import size_table as size_tables
 from ..params.listing import list_parameters
 from ..sketch_values.motion import OPTIMISTIC
+from ..timing.export_timing import ExportTiming
+from ..translator.kept_ranges import built_ranges
 from ..design_edit.restore import restore_parameters
 from ..design_edit.runner import ExportCancelled
 from . import health as health_module
 from .body_scope import body_links, scope_inputs
-from .marker_roll import MarkerRoll
 from .part_names import tagged, unique_names
-from .pipeline import ProbeRun
+from .pipeline import ProbeRun, broken_since, read_errors, settle_after_tries, warn_left_off, with_try_seconds
+from .reach_pass import needs_reach, with_reach
 from .probe_flow import ProbeGroup, SizeProbe, covers_a_sketch, extra_size_params, kept_size_names
 from .recipe_export import PartInput, free_sizes, plan_parts_export, translate_capture
 from .size_offers import discovery_sizes, labels, probe_sizes
+from .timeline_trim import TryTimeline
 
 # How many times the bodies are translated again because one more size had to be fixed for all.
 MAX_SHARE_ROUNDS = 3
@@ -42,7 +45,10 @@ class PartsPort(Protocol):
     body_names(): a name per body, for the file.
     export_step(index, path): write the STEP of body `index` as the design is now.
     read_capture(index): the capture dict of body `index`, or the exception that stopped the read.
+    read_reach(index, capture, gaps): the `reach` of body `index` when the steps at the timeline indexes `gaps` are
+      left out of its copy (`pipeline.ExportPort.read_reach`).
     probe_reader(index): a callable `read(request)` giving one probe state of body `index`, or raising.
+    sketch_keeper(tokens): optional, as `pipeline.ExportPort.sketch_keeper`.
     """
 
     store: object
@@ -54,6 +60,8 @@ class PartsPort(Protocol):
     def export_step(self, index, path): ...
 
     def read_capture(self, index): ...
+
+    def read_reach(self, index, capture, gaps): ...
 
     def probe_reader(self, index): ...
 
@@ -100,9 +108,13 @@ class _PartsPipeline:
         self.motions = {}
         self.doubtful = []
         self.also = []
+        self.stopped = None  # `ProbeRun.stopped`
+        self.errors_before = None  # the timeline items in error when the export started (`pipeline.read_errors`)
+        self.timing = getattr(port, "timing", None) or ExportTiming()
 
     def run(self):
         self.saved = self.port.store.saved_expressions()
+        self.errors_before = read_errors(self.port.store)
         done = False
         try:
             result = self._run()
@@ -113,9 +125,16 @@ class _PartsPipeline:
             self._end_roll()
             if not done and failed:
                 self.port.warn_unrestored(failed)
+            warn_left_off(self.port, self.roll)
+
+    def _end_trim(self):
+        """Turn back on the timeline items suppressed for the tries (a no-op when none were)."""
+        if self.roll is not None:
+            self.roll.end_trim()
 
     def _end_roll(self):
-        """Put the timeline marker back where the export found it (a no-op when it was not moved)."""
+        """Turn the suppressed items back on and put the timeline marker back where the export found it (a no-op
+        when nothing was changed)."""
         if self.roll is not None:
             self.roll.end()
 
@@ -129,36 +148,46 @@ class _PartsPipeline:
 
     def _run(self):
         port, request = self.port, self.request
+        timing = self.timing
         for index in range(port.count):
             path = os.path.join(self.tmp, "part_%02d.step" % (index + 1))
-            port.export_step(index, path)
+            with timing.span("step_export"):
+                port.export_step(index, path)
             self.steps.append(path)
-            self.captures.append(port.read_capture(index))
-        self.table = self._merged_table()
+            with timing.span("capture"):
+                self.captures.append(port.read_capture(index))
+        with timing.span("size_table"):
+            self.table = self._merged_table()
 
         finals = self._translate_and_measure()
 
-        self._restore()
-        gap = self._restore_gap()
-        self._end_roll()
+        with timing.span("restore"):
+            self._restore()
+            self._end_trim()
+        with timing.span("probe"):
+            gap = self._restore_gap()
+        with timing.span("restore"):
+            self._end_roll()
+            broken = broken_since(port.store, self.errors_before)
         reports = self.group.reports() if self.group is not None and self._measured() else []
         if self.roll is not None and self.roll.record is not None:
             for report in reports:
                 report["timeline"] = self.roll.record
         probe_of = dict(zip(self.probed, reports))
-        shadows = self.group.derived_records(port.log) if self.group is not None else []
+        with timing.span("probe"):
+            shadows = self.group.derived_records(port.log) if self.group is not None else []
         derived_of = dict(zip(self.probed, shadows))
         unchecked = self.group.restore_unchecked if self.group is not None else []
         flipped = ["%s (%s)" % (name, self.names[i]) for i, motion in self.motions.items() if motion is not None
                    for name in motion.flipped]
         health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error, unchecked,
-                                           flipped)
+                                           flipped, self.stopped, broken)
         inputs = [PartInput(self.names[i], self.steps[i], self.captures[i], finals.get(i), self.motions.get(i),
                             probe_of.get(i), derived_of.get(i)) for i in range(port.count)]
         manifest, files, report = plan_parts_export(
             inputs, request.title, request.writer, request.up_axis, size_table=self.table, listing=self._listing(),
             marker=request.marker, loose=[{"name": m["name"], "reason": m["reason"]} for m in self.doubtful],
-            health=health, also=self.also)
+            health=health, also=self.also, timing=self.timing)
         return PartsResult(manifest, files, report, self.table, health)
 
     def _merged_table(self):
@@ -183,7 +212,9 @@ class _PartsPipeline:
             if not isinstance(capture, dict):
                 continue
             motion = OPTIMISTIC if covers_a_sketch(capture) else None
-            first = self._translation(index, motion)
+            first = self._translation(index, motion, "translate_first")
+            if needs_reach(first):
+                first = self._with_reach(index, first, motion)
             if first is None:
                 continue
             if first.recipe is None:
@@ -198,11 +229,13 @@ class _PartsPipeline:
         extra = extra_size_params(self.table, free)
         keep = kept_size_names(self.table, free) | {self.table.size_name(n) for n in extra}
         sizes = probe_sizes(self.table, self.request.parameters, keep=keep)
-        self._start_probes(list(firsts))
-        if self.group is not None:
-            self._measure(sizes, extra)
+        with self.timing.span("probe"):
+            self._start_probes(list(firsts))
+            if self.group is not None:
+                self._measure(sizes, extra)
+                self._share_cuts()
         for index in firsts:
-            result = self._translation(index, self.motions.get(index))
+            result = self._translation(index, self.motions.get(index), "translate_final")
             if result is not None:
                 finals[index] = result
         return self._share_fixed(finals)
@@ -215,13 +248,35 @@ class _PartsPipeline:
         links = self.part_links[index] if index < len(self.part_links) else []
         return self.table.with_links(links)
 
-    def _translation(self, index, motion):
-        """The translator's result for part `index`, a refusal included, or None when it failed. Never raises."""
+    def _translation(self, index, motion, phase):
+        """The translator's result for part `index`, a refusal included, or None when it failed. Never raises. `phase`
+        is the timing phase the time is added to."""
         try:
-            return translate_capture(self.captures[index], self.request.up_axis, self._part_table(index), motion)
+            with self.timing.span(phase):
+                return translate_capture(self.captures[index], self.request.up_axis, self._part_table(index), motion,
+                                         timer=self.timing)
         except Exception as exc:
             self.port.log("translation of %s failed: %r" % (self.names[index], exc))
             return None
+
+    def _with_reach(self, index, first, motion):
+        """The translation of part `index` again with the `reach` of the steps `first` left out. The capture of the
+        part keeps the answer for the rest of the export."""
+        def read(capture, gaps):
+            return self.port.read_reach(index, capture, gaps)
+
+        with self.timing.span("reach"):
+            self.captures[index] = with_reach(read, self.captures[index], first, self.port.log)
+        return self._translation(index, motion, "translate_first")
+
+    def _share_cuts(self):
+        """Cut the ranges of a size that several parts read to the narrowest cut over the parts that were probed, so
+        every part writes the same range: the form takes one range for a size, from the first part that has it."""
+        shared = {}
+        for index, motion in self.motions.items():
+            for name, cut in built_ranges(self._part_table(index), motion, self.captures[index]).items():
+                shared[name] = shared[name].meet(cut) if name in shared else cut
+        self.table = self.table.with_narrowed(shared)
 
     def _share_fixed(self, finals):
         """Translate the parts again with the sizes that one part had to fix fixed in all, until no part asks for more
@@ -241,7 +296,7 @@ class _PartsPipeline:
             self.table = self.table.with_fixed(asked)
             for index, result in list(finals.items()):
                 if result is not None and result.recipe is not None:
-                    redone = self._translation(index, self.motions.get(index))
+                    redone = self._translation(index, self.motions.get(index), "translate_final")
                     if redone is not None:
                         finals[index] = redone
         return finals
@@ -290,16 +345,20 @@ class _PartsPipeline:
 
         The rows are the ones of `SizeProbe.probe_rows` for all sizes of all parts together, so the row limit is for
         the whole export. A failure other than a cancel leaves every part without a motion and is noted for the person.
-        The parameters are put back before the last read."""
+        The parameters are put back, the suppressed items turned back on and a sketch left on another solution put
+        back (`ProbeRun.settle`) before the last read, also when the tries fail or are cancelled."""
         group = self.group
-        self.roll = MarkerRoll(self.port.store, self.port.log)
+        self.roll = TryTimeline(self.port.store, self.port.log, self.request.faster_tries)
         self.roll.begin([self.captures[i] for i in self.probed], lambda: group.matches_start(group.read_now()))
         run = ProbeRun(self.port, self.tmp, group)
         tries = self._tries()
+        settled = False
         try:
             run.measure(group.probe_rows(sizes, extra), sizes)
             self.also = run.discover(tries)
-            self._restore()
+            self.roll.tries_done()
+            settled = True
+            settle_after_tries(self, run)
             found = group.finish(group.read_now(), labels(self.table))
         except ExportCancelled:
             raise
@@ -308,6 +367,11 @@ class _PartsPipeline:
             self.probe_status, self.probe_error = health_module.FAILED, repr(exc)
             self.motions = {}
             return
+        finally:
+            if not settled:
+                settle_after_tries(self, run)
+            self.stopped = run.stopped
+            self.timing.note_probe(with_try_seconds(run.summary(), self.roll))
         self.motions = dict(zip(self.probed, group.motions))
         self.doubtful.extend(found)
 
@@ -320,8 +384,9 @@ class _PartsPipeline:
         return list(found.values())
 
     def _restore_gap(self):
-        """How far the sketches are from their start after the last restore, or None when that cannot be told."""
-        if self.group is None or not self._measured():
+        """How far the sketches are from their start after the last restore, or None when that cannot be told; also
+        after tries that failed, which can leave a sketch on another solution."""
+        if self.group is None:
             return None
         try:
             return self.group.measure_restore(self.group.read_now())

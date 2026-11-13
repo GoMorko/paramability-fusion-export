@@ -32,6 +32,18 @@ class ProfileTokensTest(unittest.TestCase):
         self.assertEqual(record["reference"], {"kind": "constructionPlane", "token": "cp1"})
         self.assertEqual([c["entity"] for c in record["loops"][0]["curves"]], ["c1", "c2", "c3", "c4"])
 
+    def test_a_construction_plane_says_what_it_is_built_on(self):
+        from tests.test_capture_reader_finish import face, plane_geometry
+        base = face("f1", geometry=plane_geometry((0, 0, 10), (0, 0, 1)))
+        plane = Obj("fusion::ConstructionPlane", entityToken="cp1", timelineObject=Obj(index=2),
+                    geometry=plane_geometry((0, 0, 8), (0, 0, 1)),
+                    definition=Obj("fusion::ConstructionPlaneOffsetDefinition", planarEntity=base))
+        reference = read_sketch.read_profile(profile(sketch(reference=plane), SQUARE))["reference"]
+        self.assertEqual((reference["token"], reference["made_by"], reference["definition"]),
+                         ("cp1", 2, "ConstructionPlaneOffsetDefinition"))
+        self.assertEqual(reference["built_on"], [{"entity_type": "BRepFace", "face_point": [0, 1, 2],
+                                                  "surface": "Plane"}])
+
     def test_reference_kinds(self):
         kinds = {"BRepFace": "face", "Plane": "plane", "Vertex": "other"}
         for name, kind in kinds.items():
@@ -101,12 +113,12 @@ class FeatureTokensTest(unittest.TestCase):
         self.assertEqual((found["kind"], found["type"]), ("other", "ConstructionAxis"))
         self.assertTrue(found["error"])
 
-    def test_extrude_target_token_only_for_construction_planes(self):
+    def test_extrude_target_token_for_construction_planes_and_faces(self):
         plane = Obj("fusion::ConstructionPlane", entityToken="cp1",
                     geometry=Obj("core::Plane", origin=P(0, 0, 5), normal=Obj(x=0.0, y=0.0, z=1.0)))
         face = Obj("fusion::BRepFace", entityToken="f1", pointOnFace=P(1, 1, 5),
                    geometry=Obj("core::Plane", origin=P(0, 0, 5), normal=Obj(x=0.0, y=0.0, z=1.0)))
-        for entity, token in ((plane, "cp1"), (face, None)):
+        for entity, token in ((plane, "cp1"), (face, "f1")):
             data = read_item(feature("ExtrudeFeature", "E", operation="NewBodyFeatureOperation",
                                      extentType="OneSideFeatureExtentType", profile=profile(sketch(), SQUARE),
                                      startExtent=Obj("fusion::FromEntityStartDefinition", entity=entity),

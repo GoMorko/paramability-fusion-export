@@ -9,14 +9,14 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.schema_check import check_recipe
-from tests.translator_helpers import load_capture, steps_of
+from tests.translator_helpers import left_out, load_capture, steps_of
 
 from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.sketch_values.motion import Motion
 from lib.translator import translate
 from lib.translator.moved_placer import MovedPlacer
-from lib.translator.place import Move
+from lib.translator.slabs import Motion as CopyMotion
 
 NAME = "component_tool_foreign"
 SIZES = ["box_h", "tool_len", "rod_x"]
@@ -168,30 +168,21 @@ class RefusedToolTest(unittest.TestCase):
 
     def refusal(self, capture):
         result = translate(capture)
-        self.assertIsNone(result.recipe)
-        return result.refusal
+        self.assertIsNotNone(left_out(result))
+        return left_out(result)
 
-    def test_a_round_on_the_tool_stops_the_copy_and_names_the_step_and_the_component(self):
+    def test_a_round_on_the_tool_leaves_the_combine_out_and_names_the_step_and_the_component(self):
         refusal = self.refusal(self.step_before_combine("FilletFeature", "Fillet1"))
         self.assertEqual(refusal["name"], "Combine1")
         self.assertIn("Fillet1", refusal["reason"])
         self.assertIn("Rod", refusal["reason"])
 
-    def test_a_cut_into_the_tool_stops_the_copy(self):
-        capture = self.step_before_combine("ExtrudeFeature", "Cut1", copy.deepcopy(load_capture(NAME)["items"][6]["data"]))
-        capture["items"][7]["data"]["operation"] = "cut"
-        reason = self.refusal(capture)["reason"]
-        self.assertIn("Cut1", reason)
-        self.assertIn("Rod", reason)
-
-    def test_a_pasted_tool_and_a_moved_tool_stop_the_copy_with_their_own_reason(self):
-        for kind, said in (("CopyPasteBody", "pasted body is not copied"), ("MoveFeature", "move is not copied")):
+    def test_a_pasted_tool_and_a_moved_tool_that_were_not_read_leave_the_combine_out_and_name_the_step(self):
+        for kind in ("CopyPasteBody", "MoveFeature"):
             with self.subTest(kind):
-                reason = self.refusal(self.step_before_combine(kind, "Step1"))["reason"]
-                self.assertIn("Step1", reason)
-                self.assertIn(said, reason)
+                self.assertIn("Step1", self.refusal(self.step_before_combine(kind, "Step1"))["reason"])
 
-    def test_a_step_that_was_not_read_stops_the_copy_and_says_why(self):
+    def test_a_step_that_was_not_read_leaves_the_combine_out_and_says_why(self):
         capture = self.step_before_combine("ExtrudeFeature", "Extrude9", {})
         del capture["items"][7]["helper_of"]
         capture["items"][7]["helper_unread"] = "the export reads at most 40 steps of tool bodies"
@@ -199,17 +190,17 @@ class RefusedToolTest(unittest.TestCase):
         self.assertIn("Extrude9", reason)
         self.assertIn("at most 40", reason)
 
-    def test_a_step_that_could_not_be_read_stops_the_copy(self):
+    def test_a_step_that_could_not_be_read_leaves_the_combine_out(self):
         capture = load_capture(NAME)
         capture["items"][6]["data"] = {"read_error": "boom"}
         self.assertIn("Extrude2", self.refusal(capture)["reason"])
 
-    def test_a_step_that_reaches_into_a_third_component_stops_the_copy(self):
+    def test_a_step_that_reaches_into_a_third_component_leaves_the_combine_out(self):
         capture = load_capture(NAME)
         capture["items"][6]["data"]["side_one"] = {"kind": "toEntity", "foreign": True}
         self.assertIn("another component", self.refusal(capture)["reason"])
 
-    def test_a_tool_whose_place_cannot_be_used_stops_the_copy_and_names_the_component(self):
+    def test_a_tool_whose_place_cannot_be_used_leaves_the_combine_out_and_names_the_component(self):
         cases = {
             "error": lambda t, c: t.update(place={"path": "Rod:1", "error": "No planes of the component could be compared."}),
             "scaled": lambda t, c: t["place"]["frame"].update(x=[2, 0, 0]),
@@ -226,6 +217,16 @@ class RefusedToolTest(unittest.TestCase):
         def edit(tool, capture):
             del tool["place"]
         self.assertIn("another component", self.refusal(with_tool(edit))["reason"])
+
+    def test_a_tool_of_a_third_component_inside_the_tool_leaves_the_combine_out(self):
+        capture = load_capture(NAME)
+        third = {"token": "t9", "name": "Body9", "foreign": True, "component": {"token": "c3", "name": "Third"},
+                 "place": {"frame": capture["items"][-1]["data"]["tools"][0]["place"]["frame"]}}
+        capture["items"][5] = dict(copy.deepcopy(capture["items"][4]), index=5, name="Extrude9", component="c3", helper_of="t9",
+                                   bodies_after=[{"token": "t9", "name": "Body9"}])
+        capture["items"][6].update(type="CombineFeature", name="Combine2", data={
+            "target": {"token": "t2", "name": "Body2"}, "tools": [third], "operation": "join", "keep_tools": False})
+        self.assertIn("Body9", self.refusal(capture)["reason"])
 
     def test_a_combine_that_removes_more_than_the_tool_fills_is_refused(self):
         capture = load_capture(NAME)
@@ -245,6 +246,17 @@ class KeptToolTest(unittest.TestCase):
         self.assertEqual(len([s for s in result.recipe["features"] if s.get("combine") == "cut"]), 4)
 
 
+class ReachingToolTest(unittest.TestCase):
+    def test_a_single_step_that_reaches_a_face_is_a_tool_step(self):
+        capture = load_capture(NAME)
+        del capture["items"][5:7]
+        capture["items"][4]["data"].update(side_one={
+            "kind": "toEntity", "plane": {"point": [0, 0, 20], "normal": [0, 0, 1]}, "offset": 0.0,
+            "entity_type": "BRepFace", "face_point": [0, 0, 20]}, params={})
+        result = translate(capture)
+        self.assertEqual([s["kind"] for s in result.recipe["features"]], ["extrude", "toolBody"])
+
+
 class MovedPlacerTest(unittest.TestCase):
     class Inner:
         opaque = False
@@ -253,8 +265,7 @@ class MovedPlacerTest(unittest.TestCase):
             return "add" if all(0 <= c <= 1 for c in p) else None
 
     def test_material_is_asked_about_the_point_carried_back(self):
-        move = Move(((1, 0, 0), (0, 1, 0), (0, 0, 1)), (10, 0, 0))
-        placer = MovedPlacer(self.Inner(), move)
+        placer = MovedPlacer(self.Inner(), CopyMotion(shift=(10, 0, 0)))
         self.assertEqual((placer.material_at([10.5, 0.5, 0.5]), placer.material_at([0.5, 0.5, 0.5])), ("add", None))
         self.assertIsNone(placer.place([10.5, 0.5, 0.5], False))
 

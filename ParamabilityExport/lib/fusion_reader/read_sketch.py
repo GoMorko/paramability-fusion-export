@@ -182,11 +182,11 @@ def read_curve(geometry, space):
 
 
 def _chord_gap(p, a, b):
-    """Distance of a 2D point from the segment a-b."""
-    dx, dy = b[0] - a[0], b[1] - a[1]
-    size = dx * dx + dy * dy
-    t = 0.0 if size <= 0 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / size))
-    return math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy)
+    """Distance of a point (2D or 3D) from the segment a-b."""
+    d = [bi - ai for ai, bi in zip(a, b)]
+    size = sum(c * c for c in d)
+    t = 0.0 if size <= 0 else max(0.0, min(1.0, sum((pi - ai) * di for pi, ai, di in zip(p, a, d)) / size))
+    return math.sqrt(sum((pi - ai - t * di) ** 2 for pi, ai, di in zip(p, a, d)))
 
 
 def _start_spans(geometry):
@@ -214,13 +214,14 @@ def _own_length_mm(evaluator, low, high):
 
 
 def _chord_length(points):
-    return sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(points, points[1:]))
+    return sum(math.dist(a, b) for a, b in zip(points, points[1:]))
 
 
-def _dense_samples(geometry, space):
-    """([[x, y], ...], truncated): the curve as a polyline within `_CHORD_TOL_MM` of it, or None when the curve
-    cannot be evaluated. `truncated` is set when the point cap stopped the refinement or when the chords do not add up
-    to the curve's own length (so the samples do not stand for the whole curve)."""
+def dense_samples(geometry, space):
+    """([point, ...], truncated): the curve as a polyline within `_CHORD_TOL_MM` of it, or None when the curve
+    cannot be evaluated. The points are what `space.xy` gives (2D, or 3D for a path). `truncated` is set when the
+    point cap stopped the refinement or when the chords do not add up to the curve's own length (so the samples do
+    not stand for the whole curve)."""
     evaluator = geo.safe(lambda: geometry.evaluator, None)
     extents = geo.safe(lambda: evaluator.getParameterExtents(), None)
     if not extents or not extents[0]:
@@ -278,7 +279,7 @@ def _end_direction(geometry, space, parameter_at_end):
 def _read_free_curve(geometry, name, space):
     """A curve that is not a line, circle, arc or ellipse (a spline, an elliptical arc): its dense samples, ends,
     middle point and end directions. A curve that cannot be evaluated has no samples and is refused later."""
-    dense = _dense_samples(geometry, space)
+    dense = dense_samples(geometry, space)
     samples, truncated = dense if dense else ([], False)
     record = {
         "kind": "other",
@@ -369,14 +370,18 @@ def _borrowed(proxy, sketch, frame, ctx):
 _REFERENCE_KINDS = {"ConstructionPlane": "constructionPlane", "BRepFace": "face", "Plane": "plane"}
 
 
-def _reference(sketch, ctx):
-    """{ kind, token } of what the sketch sits on (`Sketch.referencePlane`), or None when it cannot be read."""
+def sketch_reference(sketch, ctx):
+    """{ kind, token } of what the sketch sits on (`Sketch.referencePlane`), or None when it cannot be read. A
+    construction plane also says what it is built on (`read_reference.describe_plane`)."""
+    from .read_reference import describe_plane  # read_reference reads axes through read_solid, which imports this
+
     entity = geo.safe(lambda: sketch.referencePlane, None)
     if entity is None:
         return None
     entity = geo.native_input(entity, ctx)
-    return {"kind": _REFERENCE_KINDS.get(geo.type_name(entity), "other"),
-            "token": geo.safe(lambda: entity.entityToken, "") or ""}
+    record = {"kind": _REFERENCE_KINDS.get(geo.type_name(entity), "other"),
+              "token": geo.safe(lambda: entity.entityToken, "") or ""}
+    return describe_plane(record, entity, ctx)
 
 
 def _curve_record(profile_curve, space):
@@ -419,7 +424,7 @@ def read_profile(profile, ctx=None):
     token = geo.safe(lambda: sketch.entityToken, "")
     if token:
         record["sketch_token"] = token
-    reference = _reference(sketch, ctx)
+    reference = sketch_reference(sketch, ctx)
     if reference is not None:
         record["reference"] = reference
     if proxy is not None:
@@ -495,7 +500,7 @@ def read_text_outlines(text, ctx=None):
         return [_text_marker(text, ctx, "foreign")], [None]
     sketch = geo.safe(lambda: text.parentSketch, None)
     raw = geo.safe(lambda: text.asCurves(), None)
-    geometries = list(raw) if isinstance(raw, (list, tuple)) else geo.collection_items(raw)
+    geometries = geo.collection_items(raw)
     if sketch is None or not geometries:
         return [_text_marker(text, ctx, "unread")], [None]
     if len(geometries) > _MAX_TEXT_CURVES:
@@ -515,28 +520,31 @@ def read_text_outlines(text, ctx=None):
     token = geo.safe(lambda: sketch.entityToken, "")
     if token:
         base["sketch_token"] = token
-    reference = _reference(sketch, ctx)
+    reference = sketch_reference(sketch, ctx)
     if reference is not None:
         base["reference"] = reference
     profiles = [dict(base, loops=outline["loops"]) for outline in found]
     return profiles, [outline["area"] for outline in found]
 
 
-def read_outlines(raw, ctx=None, measure=True):
-    """(profiles, areas) of a feature's `profile` property: a Profile, a planar BRepFace, a SketchText or a
-    collection of them. `areas` has one entry per profile record: `Profile.areaProperties` in mm2 for a Profile
-    (read only when `measure`), the area of the text outlines for a SketchText record, else None."""
+def read_outlines(raw, ctx=None, measure=True, before=None):
+    """(profiles, areas) of a feature's `profile` property: a Profile, a planar BRepFace, a SketchText or a list,
+    collection or vector of them. `areas` has one entry per profile record: `Profile.areaProperties` in mm2 for a
+    Profile (read only when `measure`), the area of the text outlines for a SketchText record, the face area for a
+    face, else None. `before` is the timeline index of the step, so a face record can name the extrude that made it."""
     name = geo.type_name(raw)
     if name == "Profile":
         return [read_profile(raw, ctx)], [profile_area(raw) if measure else None]
     if name == "SketchText":
         return read_text_outlines(raw, ctx)
     if name == "BRepFace":
-        return [geo.mark_foreign({"face": True, "type": "BRepFace"}, raw, ctx)], [None]
-    if raw is not None and hasattr(raw, "count") and hasattr(raw, "item"):
+        from .read_face import face_outline  # read_face reads its edges with this module's read_curve
+        record, area = face_outline(raw, ctx, before)
+        return [record], [area if measure else None]
+    if geo.is_sequence(raw):
         profiles, areas = [], []
         for entity in geo.collection_items(raw):
-            found = read_outlines(entity, ctx, measure)
+            found = read_outlines(entity, ctx, measure, before)
             profiles.extend(found[0])
             areas.extend(found[1])
         return profiles, areas

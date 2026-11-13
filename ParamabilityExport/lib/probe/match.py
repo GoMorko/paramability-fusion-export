@@ -5,10 +5,14 @@ frame of the capture, and run through the translator's own `profile_loops`, so a
 translator writes. Pieces of one sketch curve are paired by their place along the loop, so a loop that moved further
 than its pieces are apart still pairs each piece with its own. A state that cannot be turned into the same outline is
 a problem with a cause (`motion.SHAPE`, `TURNS`, `UNREAD`), not a number.
+
+A flat face used as an outline is read the same way, from its edges (`read["faces"]`): edges carry no sketch token,
+so its curves pair by kind and by their place along the loop.
 """
 import math
 
 from ..translator.loops import profile_loops
+from ..translator.path_motion import swept_degrees
 from ..translator.result import Refusal
 from ..sketch_values import keys
 from ..sketch_values.motion import SHAPE, TURNS, UNREAD
@@ -35,6 +39,12 @@ def _turned(z, ref):
     """True when the unit normal `z` is not the unit normal `ref`."""
     cross = [z[1] * ref[2] - z[2] * ref[1], z[2] * ref[0] - z[0] * ref[2], z[0] * ref[1] - z[1] * ref[0]]
     return math.sqrt(_dot(cross, cross)) > TURN_TOLERANCE or _dot(z, ref) < 0
+
+
+def _faces_back(z, ref):
+    """True when the unit normal `z` is `ref` reversed: the plane stays, but the face looks the other way."""
+    cross = [z[1] * ref[2] - z[2] * ref[1], z[2] * ref[0] - z[0] * ref[2], z[0] * ref[1] - z[1] * ref[0]]
+    return math.sqrt(_dot(cross, cross)) <= TURN_TOLERANCE and _dot(z, ref) < 0
 
 
 def _to_ref(world_vector, ref):
@@ -104,10 +114,34 @@ def _shift(pairs):
     return tuple(sum(m[i] for m in moves) / len(moves) for i in range(2))
 
 
+def _joined_end(curves, at):
+    """"start" or "end": the end of the line or arc `curves[at]` that touches the curve before it in the loop, or None
+    when neither or both do (a loop of fewer than three curves, a curve that is not a line or arc, a gap)."""
+    curve, before = curves[at], curves[at - 1]
+    if len(curves) < 3 or curve["kind"] not in ("line", "arc") or before["kind"] not in ("line", "arc"):
+        return None
+    touches = [min(_dist(curve[k], before[e]) for e in ("start", "end")) <= POINT_TOLERANCE for k in ("start", "end")]
+    if touches[0] == touches[1]:
+        return None
+    return "start" if touches[0] else "end"
+
+
+def _chained(aligned, curves):
+    """The state curves run the way the capture's run along the loop: a curve that starts where the curve before it
+    ends in the capture does so in the state too. Fusion lists a profile curve with its ends either way round, and a
+    curve that turned far can look nearer swapped, so where the loop's joins tell, they decide."""
+    out = list(aligned)
+    for at, curve in enumerate(aligned):
+        want, got = _joined_end(curves, at), _joined_end(aligned, at)
+        if want and got and want != got:
+            out[at] = dict(curve, start=curve["end"], end=curve["start"])
+    return out
+
+
 def _lined_up(order, curves):
     """(state curves turned like the capture's, their gap, the gap left once the loop's slide is taken out)."""
     shift = _shift(list(zip(order, curves)))
-    aligned = [_aligned(o, c, shift) for o, c in zip(order, curves)]
+    aligned = _chained([_aligned(o, c, shift) for o, c in zip(order, curves)], curves)
     return (aligned, sum(_gap(a, c) for a, c in zip(aligned, curves)),
             sum(_gap(a, c, shift) for a, c in zip(aligned, curves)))
 
@@ -186,6 +220,30 @@ def _arrange(state_profile, profile, frame, ref):
     return loops, total
 
 
+def _bulge(arc):
+    """The direction from an arc's centre to its middle point: the side of its circle the arc piece lies on."""
+    centre = arc.get("center")
+    if centre is None:
+        return None
+    return _sub(arc["mid"], centre)
+
+
+def _likeness(arranged, profile):
+    """How a candidate state profile ranks against the capture's: first by how many of its arcs lie on the other side
+    of their circle than the captured arcs they pair with, then by its gap. Regions of one sketch share curves (each
+    piece of a cut circle bounds its own region), and a region that moved further than the pieces are apart lies
+    nearer to its neighbour's place; the piece of the circle each region holds does not change side."""
+    flipped = 0
+    for state_loop, loop in zip(arranged[0], profile["loops"]):
+        for got, want in zip(state_loop["curves"], loop["curves"]):
+            if got["kind"] != "arc" or want["kind"] != "arc" or "mid" not in got or "mid" not in want:
+                continue
+            a, b = _bulge(got), _bulge(want)
+            if a is not None and b is not None and _dot(a, b) < 0:
+                flipped += 1
+    return flipped, arranged[1]
+
+
 def _outline(node):
     """The loop with its numbers taken out: what two loops must share to be the same outline."""
     if isinstance(node, dict):
@@ -250,7 +308,11 @@ def curve_values(loops, like, prefix):
 
 
 def prefix(target):
-    """`<item>/p<profile>` of a profile record."""
+    """`<item>/p<profile>` of a profile record, `<item>/path` of a sweep path, `<item>/face` of a face."""
+    if target["kind"] == "path":
+        return keys.path(target["item"])
+    if target["kind"] == "face":
+        return keys.face(target["item"])
     return keys.profile(target["item"], target["p"])
 
 
@@ -261,6 +323,43 @@ def _capture_profile_values(target):
     out = _values_of([loops[0]] + list(loops[1]), _dot(frame["origin"], frame["z"]), prefix(target))
     out.update(curve_values(profile["loops"], profile["loops"], prefix(target)))
     return out
+
+
+def _by_kind(loops):
+    """Face loops with each curve named by its kind, so the pairing above matches edges by kind and place."""
+    return [dict(loop, curves=[dict(c, entity=c.get("kind")) for c in loop.get("curves") or []]) for loop in loops]
+
+
+def _capture_face_values(target):
+    profile = target["profile"]
+    loops = _profile_loops(profile, target["sketch"])
+    return _values_of([loops[0]] + list(loops[1]), _dot(profile["frame"]["origin"], profile["frame"]["z"]),
+                      prefix(target))
+
+
+def _state_face_values(target, read):
+    record = (read.get("faces") or {}).get(target["sketch_token"])
+    if not isinstance(record, dict) or not isinstance(record.get("frame"), dict) or not record.get("loops"):
+        return None, UNREAD
+    ref, frame = target["profile"]["frame"], record["frame"]
+    if _faces_back(frame["z"], ref["z"]):
+        # The body behind the face lies on its other side (an earlier extrude reached past its start): the step
+        # that starts on the face goes the other way, another shape, which limits the range like another outline.
+        return None, SHAPE
+    if _turned(frame["z"], ref["z"]):
+        return None, TURNS
+    arranged = _arrange({"loops": _by_kind(record["loops"])}, {"loops": _by_kind(target["profile"]["loops"])}, frame,
+                        ref)
+    if arranged is None:
+        return None, SHAPE
+    mapped = _profile_loops({"loops": arranged[0]}, target["sketch"])
+    base = _profile_loops(target["profile"], target["sketch"])
+    if isinstance(mapped, Refusal) or isinstance(base, Refusal):
+        return None, SHAPE
+    got, want = [mapped[0]] + list(mapped[1]), [base[0]] + list(base[1])
+    if _outline(got) != _outline(want) or not all(_angles_equal(a, b) for a, b in zip(got, want)):
+        return None, SHAPE
+    return _values_of(got, _dot(frame["origin"], ref["z"]), prefix(target)), None
 
 
 def _loops_of(record):
@@ -341,7 +440,7 @@ def _state_profile_values(target, read, e0=None):
     best = None
     for candidate in record.get("profiles") or []:
         arranged = _arrange(candidate, profile, frame, ref)
-        if arranged and (best is None or arranged[1] < best[1]):
+        if arranged and (best is None or _likeness(arranged, profile) < _likeness(best, profile)):
             best = arranged
     if best is None:
         return None, SHAPE
@@ -377,6 +476,55 @@ def _hole_values(target, read, e0):
     return out, None
 
 
+_PATH_POINTS = {"line": ("start", "end"), "arc": ("start", "mid", "end", "center"), "circle": ("center",)}
+
+
+def _path_curve_values(prefix, curve):
+    """The keys of one sweep path curve (`sketch_values.keys`): its points in the sketch plane, an arc's or circle's
+    radius, and the angle an arc turns."""
+    out = {}
+    for name in _PATH_POINTS[curve["kind"]]:
+        out.update({"%s%s.%d" % (prefix, name, c): float(curve[name][c]) for c in range(2)})
+    if curve["kind"] != "line":
+        out[prefix + "radius"] = float(curve["radius"])
+    if curve["kind"] == "arc":
+        out[prefix + "turn"] = swept_degrees(curve)
+    return out
+
+
+def _path_state(target, read):
+    """`(frame, curves)` of the sweep path's sketch in a state read, or None and the cause. A state where the sketch
+    plane turned, or its origin slid across the plane, has a cause."""
+    path = target["path"]
+    record = (read.get("sketches") or {}).get(target["sketch_token"])
+    if not isinstance(record, dict) or not isinstance(record.get("frame"), dict) or not isinstance(
+            record.get("curves"), dict):
+        return None, UNREAD
+    frame, ref = record["frame"], path["frame"]
+    if _turned(frame["z"], ref["z"]) or _turned(frame["x"], ref["x"]) or any(
+            abs(_dot(_sub(frame["origin"], ref["origin"]), ref[axis])) > POINT_TOLERANCE for axis in ("x", "y")):
+        return None, TURNS
+    found = [record["curves"].get(curve["entity"]) for curve in path["curves"]]
+    if any(not isinstance(f, dict) or f.get("kind") != c["kind"] for f, c in zip(found, path["curves"])):
+        return None, UNREAD
+    return (frame, found), None
+
+
+def _path_values(target, read):
+    """The keys of a sweep path: each curve of it and the position of its sketch plane along the plane's normal."""
+    path = target["path"]
+    frame, curves = path["frame"], [c["flat"] for c in path["curves"]]
+    if read is not None:
+        state, cause = _path_state(target, read)
+        if state is None:
+            return None, cause
+        frame, curves = state
+    out = {keys.path_plane(target["item"]): _dot(frame["origin"], path["frame"]["z"])}
+    for number, curve in enumerate(curves):
+        out.update(_path_curve_values(keys.path_curve(target["item"], number), curve))
+    return out, None
+
+
 def _axis_values(target, read):
     item = target["item"]
     if read is None:
@@ -393,8 +541,12 @@ def captured_values(target):
     """The values of one covered record as the capture has them: a dict by key."""
     if target["kind"] == "profile":
         return _capture_profile_values(target)
+    if target["kind"] == "face":
+        return _capture_face_values(target)
     if target["kind"] == "hole":
         return _hole_values(target, None, None)[0]
+    if target["kind"] == "path":
+        return _path_values(target, None)[0]
     return _axis_values(target, None)[0]
 
 
@@ -402,22 +554,31 @@ def state_values(target, read, e0=None):
     """`(values, cause)` of one covered record in a state read: the numbers by key, or None and the cause."""
     if target["kind"] == "profile":
         return _state_profile_values(target, read, e0)
+    if target["kind"] == "face":
+        return _state_face_values(target, read)
     if target["kind"] == "hole":
         return _hole_values(target, read, e0)
+    if target["kind"] == "path":
+        return _path_values(target, read)
     return _axis_values(target, read)
+
+
+def matches_capture(target, e0):
+    """True when the first read `e0` gives back every value of the record `target` as the capture has it (within
+    1e-4 mm)."""
+    values, _ = state_values(target, e0 or {}, e0)
+    want = captured_values(target)
+    return values is not None and values.keys() == want.keys() and all(
+        abs(values[k] - v) <= POINT_TOLERANCE for k, v in want.items())
 
 
 def readable(found, e0):
     """Tokens of the covered sketches whose every record the first read gives back as the capture has it
-    (within 1e-4 mm). A sketch that fails is not followed: the sizes that change it are loose."""
-    bad = set()
-    for target in found.targets:
-        values, _ = state_values(target, e0 or {}, e0)
-        want = captured_values(target)
-        if values is None or values.keys() != want.keys() or any(
-                abs(values[k] - v) > POINT_TOLERANCE for k, v in want.items()):
-            bad.add(target["sketch_token"])
-    return {t for t in found.covered if t not in bad}
+    (within 1e-4 mm), and the key prefixes of the faces that read back so. A sketch that fails is not followed: the
+    sizes that change it are loose. A sweep path that fails does not count: only the path is left unfollowed
+    (`matches_capture`), not the outlines drawn in its sketch. A face that fails is written as the capture has it."""
+    bad = {t["sketch_token"] for t in found.targets if t["kind"] != "path" and not matches_capture(t, e0)}
+    return {t for t in list(found.covered) + list(found.faces) if t not in bad}
 
 
 def _all_numbers(node, out):
@@ -432,7 +593,8 @@ def _all_numbers(node, out):
 
 
 def _read_signature(record):
-    """(frame numbers, curves sorted by their sketch curve token) of a sketch read."""
+    """(frame numbers, outline curves sorted by their sketch curve token, path curves sorted by kind and numbers) of
+    a sketch read."""
     frame = []
     _all_numbers(record.get("frame"), frame)
     curves = []
@@ -442,7 +604,14 @@ def _read_signature(record):
                 numbers = []
                 _all_numbers({k: v for k, v in curve.items() if k not in ("entity", "kind", "type")}, numbers)
                 curves.append((str(curve.get("entity") or ""), str(curve.get("kind") or ""), numbers))
-    return frame, sorted(curves)
+    path = []
+    for curve in (record.get("curves") or {}).values():
+        if not isinstance(curve, dict):
+            continue
+        numbers = []
+        _all_numbers({k: v for k, v in curve.items() if k not in ("entity", "kind", "type")}, numbers)
+        path.append((str(curve.get("kind") or ""), numbers))
+    return frame, sorted(curves), sorted(path)
 
 
 def _close(a, b):
@@ -450,9 +619,11 @@ def _close(a, b):
 
 
 def same_read(before, now):
-    """True when two reads of one sketch (`{ frame, profiles }`) have the same frame and curves, within 1e-4 mm. A curve
-    Fusion made again under a new token counts as the same curve (`renamed`)."""
-    frame_a, curves_a = _read_signature(before)
-    frame_b, curves_b = _read_signature(renamed(now, before))
-    return _close(frame_a, frame_b) and len(curves_a) == len(curves_b) and all(
+    """True when two reads of one sketch (`{ frame, profiles, curves }`) have the same frame and curves, within 1e-4 mm.
+    An outline curve Fusion made again under a new token counts as the same curve (`renamed`); path curves are
+    compared by their numbers."""
+    frame_a, curves_a, path_a = _read_signature(before)
+    frame_b, curves_b, path_b = _read_signature(renamed(now, before))
+    return (_close(frame_a, frame_b) and len(curves_a) == len(curves_b) and all(
         a[:2] == b[:2] and _close(a[2], b[2]) for a, b in zip(curves_a, curves_b))
+        and len(path_a) == len(path_b) and all(a[0] == b[0] and _close(a[1], b[1]) for a, b in zip(path_a, path_b)))

@@ -4,6 +4,7 @@ import unittest
 from unittest import mock
 
 from tests import context  # noqa: F401
+from lib.fusion_reader import capture as capture_module
 from lib.fusion_reader import read_sketch
 from lib.fusion_reader.capture import CaptureReadError, read_capture
 from lib.fusion_reader.read_geometry import edge_record
@@ -243,7 +244,7 @@ class WalkTest(unittest.TestCase):
         self.assertEqual(items[2]["data"]["target_box_before"], {"min": [0, 0, 0], "max": [40, 20, 10]})
 
     def test_unknown_type_suppressed_and_error_health(self):
-        loft = entry(feature("LoftFeature", "Loft1"))
+        loft = entry(feature("CoilFeature", "Coil1"))
         hidden_entity, hidden_name = feature("ExtrudeFeature", "Hidden")
         design = FakeDesign([loft, (hidden_entity, hidden_name, {})], self.target)
         design.timeline.entries[0][2]["healthState"] = "ErrorFeatureHealthState"
@@ -251,7 +252,7 @@ class WalkTest(unittest.TestCase):
         design.timeline.entries[1][2]["isSuppressed"] = True
         items = read_capture(design, self.target, fusion="", name="", up_axis="z")["items"]
         self.assertEqual((items[0]["type"], items[0]["data"], items[0]["health"], items[0]["message"]),
-                         ("LoftFeature", {}, "error", "Cannot build"))
+                         ("CoilFeature", {}, "error", "Cannot build"))
         self.assertTrue(items[1]["suppressed"])
         self.assertEqual(items[1]["data"], {})
 
@@ -276,6 +277,48 @@ class WalkTest(unittest.TestCase):
         self.assertEqual((items[0]["component"], items[0]["in_target_component"], items[0]["data"]),
                          ("child", False, {}))
 
+    def other_run_design(self, gone_at=None):
+        """Own extrude, three steps of another component, own extrude. With `gone_at`, the target is gone from that
+        marker position on, as when a step of the other component takes it as a tool body."""
+        others = [(Obj("fusion::ExtrudeFeature", parentComponent=Obj(entityToken="child"), bodies=Coll([])),
+                   "Other%d" % n, {}) for n in range(3)]
+        entries = [extrude(rect_profile(), target=self.target)] + others + [
+            extrude(rect_profile(), name="Extrude2", target=self.target, operation="JoinFeatureOperation")]
+        design = FakeDesign(entries, self.target)
+        if gone_at is not None:
+            found = design.findEntityByToken
+            design.findEntityByToken = lambda token: [] if design.timeline.markerPosition >= gone_at else found(token)
+        return design
+
+    def test_the_target_is_not_measured_between_steps_of_another_component(self):
+        design = self.other_run_design()
+        with mock.patch.object(capture_module, "_target_state", wraps=capture_module._target_state) as measured:
+            items = read_capture(design, self.target, fusion="", name="", up_axis="z")["items"]
+        # Positions 2 and 3 lie between steps of the other component; the other four are measured.
+        self.assertEqual(measured.call_count, 4)
+        self.assertEqual([i["target_changed"] for i in items[1:4]], [False, False, False])
+        self.assertEqual(items[2]["target_before"], items[1]["target_after"])
+        self.assertNotIn("target_measured", items[2])
+
+    def test_a_run_that_changed_the_target_is_measured_again_step_by_step(self):
+        design = self.other_run_design(gone_at=3)
+        items = read_capture(design, self.target, fusion="", name="", up_axis="z")["items"]
+        self.assertEqual([i["target_changed"] for i in items[1:4]], [False, True, None])
+        self.assertEqual(design.timeline.markerPosition, 5)
+
+    def test_a_move_of_another_component_that_is_undone_later_in_the_run_is_still_seen(self):
+        moves = [(Obj("fusion::MoveFeature", parentComponent=Obj(entityToken="child"), bodies=Coll([])), "Move%d" % n,
+                  {}) for n in range(2)]
+        other = (Obj("fusion::ExtrudeFeature", parentComponent=Obj(entityToken="child"), bodies=Coll([])), "Other", {})
+        entries = [extrude(rect_profile(), target=self.target), other] + moves + [
+            extrude(rect_profile(), name="Extrude2", target=self.target, operation="JoinFeatureOperation")]
+        design = FakeDesign(entries, self.target)
+        moved = body(lo=(5, 0, 0), hi=(45, 20, 10))
+        found = design.findEntityByToken
+        design.findEntityByToken = lambda token: [moved] if design.timeline.markerPosition == 3 else found(token)
+        items = read_capture(design, self.target, fusion="", name="", up_axis="z")["items"]
+        self.assertEqual([i["target_changed"] for i in items[1:4]], [False, True, True])
+
     def test_extra_readers_plug_in_before_and_after(self):
         fillet = entry(feature("FilletFeature", "Fillet1"))
         design = FakeDesign([fillet], self.target)
@@ -294,7 +337,7 @@ class UnreadableTest(unittest.TestCase):
         item = self.capture([(move, "Move1", {})])["items"][0]
         self.assertIsNone(item["bodies_after"])
         self.assertTrue(item["read_error"].startswith("bodies"))
-        empty = self.capture([entry(feature("LoftFeature", "E"))])["items"][0]
+        empty = self.capture([entry(feature("CoilFeature", "E"))])["items"][0]
         self.assertEqual(empty["bodies_after"], [])
         self.assertNotIn("read_error", empty)
 
@@ -310,6 +353,25 @@ class UnreadableTest(unittest.TestCase):
         data = self.capture([sketch_entry(), ext], target)["items"][1]["data"]
         self.assertIsNone(data["side_one"]["taper_deg"])
         self.assertEqual(data["start"]["kind"], "other")
+
+    def test_a_distance_fusion_refuses_reads_as_another_way_of_setting_the_length(self):
+        target = body()
+        refused = Obj("fusion::DistanceExtentDefinition")  # reading `distance` raises
+        data = self.capture([sketch_entry(), extrude(rect_profile(), target=target, extentOne=refused)],
+                            target)["items"][1]["data"]
+        self.assertEqual(data["side_one"], {"kind": "other", "type": "DistanceExtentDefinition"})
+        symmetric = extrude(rect_profile(), target=target, extentType="SymmetricFeatureExtentType",
+                            symmetricExtent=Obj("fusion::SymmetricExtentDefinition"))
+        self.assertIsNone(self.capture([sketch_entry(), symmetric], target)["items"][1]["data"]["symmetric"])
+
+    def test_a_symmetric_extrude_through_all_reads_its_extent_like_one_side(self):
+        target = body()
+        through = extrude(rect_profile(), target=target, extentType="SymmetricFeatureExtentType",
+                          symmetricExtent=Obj("fusion::SymmetricExtentDefinition", taperAngle=param(0.05)),
+                          extentOne=Obj("fusion::ThroughAllExtentDefinition", isPositiveDirection=True))
+        data = self.capture([sketch_entry(), through], target)["items"][1]["data"]
+        self.assertEqual((data["symmetric"], data["side_one"]["kind"], round(data["side_one"]["taper_deg"], 6)),
+                         (None, "throughAll", round(math.degrees(0.05), 6)))
 
     def test_end_face_types_follow_the_end_points(self):
         target = body()
@@ -412,7 +474,7 @@ class ExtrudeDataTest(unittest.TestCase):
         faceish = Obj("fusion::BRepFace")
         data = self.read(profile=Coll([rect_profile(), faceish]))
         self.assertEqual(len(data["profiles"]), 2)
-        self.assertEqual(data["profiles"][1], {"face": True, "type": "BRepFace"})
+        self.assertEqual(data["profiles"][1], {"face": True, "type": "BRepFace", "surface": None, "problem": "unread"})
 
 
 class SketchCurveTest(unittest.TestCase):
@@ -573,7 +635,7 @@ class CombineThreadTest(unittest.TestCase):
         design = FakeDesign([combine, modeled], target)
         items = read_capture(design, target, fusion="", name="", up_axis="z")["items"]
         self.assertEqual(items[0]["data"], {
-            "target": {"token": "b1", "name": "Body1"}, "tools": [{"token": "b2", "name": "Body2"}],
+            "target": {"token": "b1", "name": "Body1"}, "tools": [{"token": "b2", "name": "Body2", "volume": 8000.0}],
             "operation": "cut", "keep_tools": True, "volume_before": None, "volume_after": 8000.0})
         self.assertEqual(items[1]["data"], {"modeled": False})
 

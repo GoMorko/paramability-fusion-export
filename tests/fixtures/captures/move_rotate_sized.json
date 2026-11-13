@@ -1,0 +1,525 @@
+{
+  "_comment": "A plate cut by a peg turned about the z axis by tilt_deg.",
+  "capture": 3,
+  "fusion": "2.0.0",
+  "design": "Test",
+  "up_axis": "z",
+  "design_units": "mm",
+  "target": {
+    "token": "t1",
+    "name": "Body1",
+    "box": {
+      "min": [
+        -30.0,
+        -30.0,
+        0.0
+      ],
+      "max": [
+        30.0,
+        30.0,
+        10.0
+      ]
+    },
+    "volume_mm3": 35856.0
+  },
+  "items": [
+    {
+      "index": 0,
+      "name": "Sketch1",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 1,
+      "name": "Extrude1",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "operation": "newBody",
+        "profiles": [
+          {
+            "sketch": "Sketch1",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      -30,
+                      -30
+                    ],
+                    "end": [
+                      30,
+                      -30
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      30,
+                      -30
+                    ],
+                    "end": [
+                      30,
+                      30
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      30,
+                      30
+                    ],
+                    "end": [
+                      -30,
+                      30
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      -30,
+                      30
+                    ],
+                    "end": [
+                      -30,
+                      -30
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 10.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [
+          {
+            "token": "t1",
+            "name": "Body1"
+          }
+        ],
+        "target_box_before": null,
+        "end_offset": 10.0,
+        "params": {}
+      }
+    },
+    {
+      "index": 2,
+      "name": "Sketch2",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 3,
+      "name": "Extrude2",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t2",
+          "name": "Body2"
+        }
+      ],
+      "data": {
+        "operation": "newBody",
+        "profiles": [
+          {
+            "sketch": "Sketch2",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                3
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      15,
+                      -3
+                    ],
+                    "end": [
+                      21,
+                      -3
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      21,
+                      -3
+                    ],
+                    "end": [
+                      21,
+                      3
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      21,
+                      3
+                    ],
+                    "end": [
+                      15,
+                      3
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      15,
+                      3
+                    ],
+                    "end": [
+                      15,
+                      -3
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 4.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [
+          {
+            "token": "t2",
+            "name": "Body2"
+          }
+        ],
+        "target_box_before": null,
+        "end_offset": 4.0,
+        "params": {
+          "side_one.distance": {
+            "name": "d3",
+            "expression": "peg_len_mm",
+            "value": 4.0
+          }
+        }
+      }
+    },
+    {
+      "index": 4,
+      "name": "Move1",
+      "type": "MoveFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t2",
+          "name": "Body2"
+        }
+      ],
+      "data": {
+        "input_kind": "bodies",
+        "bodies": [
+          {
+            "token": "t2",
+            "name": "Body2"
+          }
+        ],
+        "move_type": "rotate",
+        "points_before": [
+          [
+            [
+              15,
+              -3,
+              3
+            ],
+            [
+              21,
+              -3,
+              3
+            ],
+            [
+              15,
+              3,
+              3
+            ],
+            [
+              21,
+              3,
+              3
+            ],
+            [
+              15,
+              -3,
+              7
+            ],
+            [
+              21,
+              -3,
+              7
+            ],
+            [
+              15,
+              3,
+              7
+            ],
+            [
+              21,
+              3,
+              7
+            ]
+          ]
+        ],
+        "points_after": [
+          [
+            [
+              3.0,
+              15.0,
+              3
+            ],
+            [
+              3.0,
+              21.0,
+              3
+            ],
+            [
+              -3.0,
+              15.0,
+              3
+            ],
+            [
+              -3.0,
+              21.0,
+              3
+            ],
+            [
+              3.0,
+              15.0,
+              7
+            ],
+            [
+              3.0,
+              21.0,
+              7
+            ],
+            [
+              -3.0,
+              15.0,
+              7
+            ],
+            [
+              -3.0,
+              21.0,
+              7
+            ]
+          ]
+        ],
+        "angle_deg": 90.0,
+        "axis": {
+          "point": [
+            0,
+            0,
+            0
+          ],
+          "dir": [
+            0,
+            0,
+            1
+          ],
+          "origin": true
+        },
+        "params": {
+          "angle_deg": {
+            "name": "d5",
+            "expression": "tilt_deg",
+            "value": 90.0
+          }
+        }
+      }
+    },
+    {
+      "index": 5,
+      "name": "Combine1",
+      "type": "CombineFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "target": {
+          "token": "t1",
+          "name": "Body1"
+        },
+        "tools": [
+          {
+            "token": "t2",
+            "name": "Body2",
+            "volume": 144.0
+          }
+        ],
+        "operation": "cut",
+        "keep_tools": false,
+        "volume_before": 36000.0,
+        "volume_after": 35856.0
+      }
+    }
+  ],
+  "parameters": {
+    "user": [
+      {
+        "name": "peg_len_mm",
+        "expression": "4 mm",
+        "value": 0.4,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 4.0
+      },
+      {
+        "name": "tilt_deg",
+        "expression": "90 deg",
+        "value": 1.5707963267948966,
+        "unit": "deg",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "angle",
+        "display_value": 1.5707963267948966
+      }
+    ],
+    "model": [
+      {
+        "name": "d3",
+        "expression": "peg_len_mm",
+        "value": 0.4,
+        "unit": "mm",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [
+          "peg_len_mm"
+        ],
+        "role": "Distance",
+        "kind": "derived",
+        "display_value": 4.0,
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d3",
+          "name": ""
+        }
+      },
+      {
+        "name": "d5",
+        "expression": "tilt_deg",
+        "value": 1.5707963267948966,
+        "unit": "deg",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [
+          "tilt_deg"
+        ],
+        "role": "Distance",
+        "kind": "angle",
+        "display_value": 1.5707963267948966,
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d5",
+          "name": ""
+        }
+      }
+    ]
+  }
+}

@@ -1,9 +1,10 @@
 # Adding a Fusion step type
 
 This guide is for a developer who wants the export to copy one more kind of Fusion timeline step (for example a
-modeled thread, a loft or a sweep). Read `docs/capture-format.md` sections 1 and 5 first. The Emboss
+modeled thread or a coil). Read `docs/capture-format.md` sections 1 and 5 first. The Emboss
 step (`read_emboss.py`, `emboss.py`, `tests/test_translate_emboss.py`) is a small worked example of every part below,
-and of a step that reuses another handler.
+and of a step that reuses another handler. The sweep handler (`sweep.py`, `paths.py` and the `sweep_*.py` and `path_*.py` modules next to them) is a second example
+of that.
 
 ## What a new step type touches
 
@@ -31,9 +32,9 @@ StepType("EmbossFeature", "emboss", reader="read_emboss", handler="emboss:handle
   assembly items have their own roles and are never copied.
 - `reader`: the name of the `lib/fusion_reader` module that reads it.
 - `handler`: `"module:function"` in `lib/translator`. Leave it out while the step cannot be copied; then give
-  `unsupported`, the plain reason the copy stops at it. Once a handler exists, drop `unsupported`: the handler gives
-  its own reasons.
-- `sketches`: the sketch records in the step data that the size probe can follow (`PROFILES`, `AXIS`, `HOLE_POINTS`).
+  `unsupported`, the plain reason the step is left out of the copy (it becomes the gap's reason). Once a handler
+  exists, drop `unsupported`: the handler gives its own reasons.
+- `sketches`: the sketch records in the step data that the size probe can follow (`PROFILES`, `AXIS`, `HOLE_POINTS`, `PATH`).
   The probe (`lib/probe/plan.py`) tries other size values only for sketches it can follow. A sketch token anywhere
   else in the data leaves that sketch unfollowed for every step that uses it, so its sizes end up loose. Name a
   record only when the probe fits it the same way it fits extrude profiles, revolve axes or hole points.
@@ -95,12 +96,19 @@ A handler is `handle(item, ctx) -> StepResult | Refusal` (`lib/translator/result
   slab, shell, moved faces and copies makers do not describe the new faces. A step that leaves material whose faces
   the copy cannot place (a thin wall, `thin_wall.ThinWall`) gives a placer whose `place` returns None and whose
   `material_at` answers for the material; it sets `opaque = True`, so a step on another part's sketch (`meets_part`)
-  says it cannot check that it still meets the material.
+  says it cannot check that it still meets the material. A sweep or loft gives `EndCapsMaker`
+  (`lib/translator/end_caps.py`): its start and end faces are named by a later pick of all their edges, and any other
+  pick on them keeps its points and marks the sizes the step reads.
 - `picks`: for a round or bevel, the measured edge points, so a later pattern or mirror can copy them.
 - `repeatable=False`: Fusion recomputes the step for each copy of a pattern (it reaches to a face or through the
   part), so patterns and mirrors refuse it as a source.
-- `Refusal(reason)`: the item cannot be copied. The reason is one plain sentence for a hobbyist. The walk stops there
-  and the part is saved as a fixed shape.
+- `Refusal(reason)`: the item cannot be copied. The reason is one plain sentence for a hobbyist, at most 200
+  characters, since it is the reason of the gap and the app shows it. The walk leaves the item out and goes on (a gap,
+  `docs/recipe-gaps.md`); only a refusal before the copy has written a first step, or in a walk of another
+  component's body, stops the copy and leaves the part a fixed shape. A refusal that comes from earlier gaps (a step
+  that repeats or picks what a gap made) is `Refusal(reason, depends_on=[gap ids])`; `ctx.gap_of(index)` gives the gap
+  of an earlier item. Doubts and notes a handler recorded before it refused are dropped with the
+  item, so a step that is not written fixes no size.
 
 A step whose result is another step in other words can hand its item to that step's handler. Emboss on a flat face is
 an extrude that starts on the face, so `emboss.handle` checks what the copy relies on, builds the data of an extrude
@@ -112,8 +120,30 @@ sketches. A value the other handler asks for under another path is mapped back w
 `values.handled(ctx, item, "depth", same_as="side_one.distance")`. A key that only the new step needs (a fixed direction of travel, for instance) goes into the other handler as
 an optional field of its data, and must not change what that handler writes without it.
 
+A sweep hands over in two ways (`sweep.py`). `paths.plan` orders the path and names it. A straight path builds the data
+of an extrude (`start` on the profile plane, one `side_one` distance as long as the path, no taper) and returns
+`extrude.handle(...)`, so the sweep gets the extrude's slab placer and later rounds follow sizes. One arc or a full
+circle builds the data of a revolve (the arc's axis, the arc's angle, the direction the start face looks) and returns
+`revolve.handle(...)`. Only a chain of lines, arcs and free curves, or a 3D chain with tangent arcs, is written as a
+`sweep` step of its own, with the path as measured. The handler checks every setting it does not follow (twist,
+taper, rail, part of the path, a path that is not square to the outline) before it hands over, and refuses with a
+plain reason. A size the written path cannot follow is marked on the sweep's side, whichever form is written: the
+sizes behind the path sketch (its plane, face or projected curves), behind a plane that moves the outline away from
+the path, and behind an outline that could reach past the tightest bend (`sweep_reach.py`).
+
+The sweep code is split by concern. `sweep.py` is the handler. `sweep_settings` (twist, taper, direction, rail),
+`sweep_outline`, `sweep_volume` (volume checks), `sweep_ends` (the made end face against the path end), `sweep_marks` (sizes the copy cannot follow), `sweep_rules` (the path's
+rules held over the size ranges) and `sweep_write` (the extrude, revolve or `sweep` step written) each hold one part, and
+`sweep_limits` holds the refusal texts. `loft.py` is the loft handler; `loft_volume` pairs the corners of two
+straight outlines as the kernel does, for a volume check of a new body. The path side follows the same pattern: `paths.py` orders and classifies the path,
+`path_curves` (curve geometry, chaining), `path_checks` (the app's limits as refusals), `path_writing` (arc, circle, flat
+and corners forms), `path_closed` (closed chains), `path_rebuilt` (a path read back from numbers, for the range rules),
+`path_model` (`PathOptions`, `PathPlan`) and `path_limits` (tolerances, caps, refusal texts). A new refusal text goes into
+the limits module of its side.
+
 A step that takes sketch outlines checks each profile record with `loops.outline_refusal` (sketch text that could not
-be read, a flat face or an unknown entity is not an outline) and gets its loops from `loops.profile_loops`. Its reader
+be read, a flat face or an unknown entity is not an outline) and gets its loops from `loops.profile_loops`. Only the
+extrude takes a flat face as its outline, through `face_outline.prepare`, which marks the sizes the face may follow. Its reader
 reads them with `read_sketch.read_outlines(raw, ctx)`, which gives the profile records and one area per record: a
 sketch text becomes one record per outer outline, so the list can be longer than the feature's own list of profiles.
 Records are expanded in the reader, never in the handler, so the position of a profile in `data.profiles` (the key of
@@ -134,6 +164,73 @@ later Combine, counts only once the Combine joins it.
 
 The walk runs a handler many times per export (once per pass, with other size tables), so a handler must not keep
 state outside `ctx`. Work that depends on the capture alone can be kept in `ctx.cache` under the module name.
+
+### Inside a tool body
+
+A Combine takes tool bodies, and a tool that is more than steps that add material is written as one `toolBody` step
+that holds the steps that made the tool (`features`). A handler does not need to know about this: the tool is walked
+on its own (`lib/translator/tool_walk.py`) by the same item loop, in a child context (`Context.child`) whose
+`target` is the tool body. So a handler that tests `ctx.is_target(body)`, reads `data["target_box_before"]` and
+`data["volume_before"]`, and writes steps with `out.add(...)` works unchanged for a tool.
+
+- Which handlers see the tool as their target: all of them. The walk of a tool starts with the items that made the tool
+  (`tool_walk.chain_of`), in the component that holds it. The reader gave the items of the target's component their
+  data; for another component's items (`helper_of`) the second pass in `lib/fusion_reader/helper_pass.py` read them in
+  that component's frame. For the numbers measured on the body itself (box and volume before and after), a walk takes
+  `item["body_states"][token]` (`tool_walk._seen_from_tool`), not the exported body's fields.
+- What a handler may not assume: that the part is its target's whole world. A child walk cannot see the part. A step
+  that reaches to a face of the part has no place for it in the child; `tool_walk.on_part` works such steps out again
+  against the part when a Combine writes them one by one, and a tool step that holds them marks the sizes it cannot
+  follow. Put every pick, plane and axis through `follow.py`, as for any step, and the audit says when one is missed.
+- `combine_tool` on the `RecipeKind`: the step can be one of the steps that a tool made only of such steps is written
+  with, one by one, onto the part (`combine.adds_only`). Set it only for a kind that adds material and nothing else
+  (extrude and revolve do). A kind without it is still copied inside a `toolBody`; it just stops the flat form.
+- `RecipeKind.repeat`: `toolBody` is `SOLID`, so a pattern repeats a tool. A step inside a tool is a `features` entry:
+  walk steps with `step_walk.all_steps`, never `ctx.steps` alone, when code must see every step (the version, the
+  `place.place` of a body into the assembly, the audit and the copy limits do). A new `RecipeKind` with `positions` and
+  `directions` is moved inside a tool by `place.place` the same way.
+- Ids: a step in a tool keeps the id the child gave it, built from the Combine's index and the tool's place in the
+  list, so one item written twice (a paste, or a tool that two Combines use) has distinct ids. `Context.add_steps`
+  keeps an id a handler set. A step that Fusion made twice from one item, such as a paste, has its steps in
+  `ctx.steps_of(index)`, and the audit reads all of them through `written_for`.
+- Placers: a tool step is one placer (`tool_placer.ToolPlacer`) for the steps after it. Its slabs are copies owned by
+  the tool step, so `follow` never names a step inside it. A kind whose faces a later pick must follow needs a placer
+  maker, as for any step; a tool made of such steps hands them over through `ToolMaker`.
+- The reader's limits: `tool_items.MAX_ITEMS` steps, `MAX_TOOLS` tool bodies and `MAX_DEPTH` levels for the second
+  pass, and `tool_walk.MAX_DEPTH` for nesting in the translator. A step type that makes bodies (a paste, a pattern of
+  bodies: `makes_bodies` on the step type) or moves them (`moves_bodies`) must say so, or the walk skips it when it
+  names no body of its target.
+- A step type that cannot be copied inside a tool gives `unsupported` as usual, and the Combine becomes one gap whose
+  reason names it: "The tool body Body3 cannot be copied: Coil1 (coil): ...". The gaps inside the tool are dropped
+  with the failed tool. A tool that is written but has a gap is always a `toolBody` step, never written one by one
+  onto the part (`combine._writes_flat`).
+
+### What a gap needs from a step type
+
+A step that cannot be copied is kept as a gap, with the data the reader has for it, so that the missing step can be
+added later (by hand or by an AI assistant connected to Paramability) from the gap alone. What makes a gap useful:
+
+- A reader, even a small one. A type with no reader gives `"data": {}`, and the gap then has only the name, the
+  reason and the measured box and volume of the part around the step (`target_before` and `target_after`, written for
+  every item). Read the member values a person would need to redo the step: extents, distances, angles, operation, the
+  inputs.
+- `data.params` for every value that a user parameter can drive (see "Parameters behind values" in
+  `docs/capture-format.md`). The gap lists them as `values` with the Fusion expression and the formula of the recipe,
+  and the audit finds the sizes the step reads (`sizes`, `looseSizes` of the gap). A size that only this step reads
+  is kept as a size and marked, so the missing step can use it.
+- Sketches by token where the step uses them (`sketches=` in the table entry), so the sizes behind those sketches are
+  found.
+- Picks as records the capture already uses (`edges` lists with `token` or `points`, `faces` lists with `token`,
+  `point` or `loops`), so `gap_picks.pick_records` sees them: a later round or shell that picks faces of a gap is then left
+  out too, instead of landing on another edge of the copy. A face given only by a `face_point` is not a pick. A list of faces the step made, or of bodies, goes under one of the names
+  `gap_picks.pick_records` skips (the `_NOT_PICKS` list in `lib/translator/gap_picks.py`); add a new name there so it is not
+  taken for a pick.
+- Marked `foreign` records for inputs of another component, as for a copied step. A step with such an input is left
+  out as a gap, with the reason of `ref_motion.why_foreign` when there is one.
+- Plain data in millimetres and degrees, in the component's coordinates (the gap file gives `toRecipe` to turn them).
+  The file keeps at most 48 KiB of `data` per gap: free curve `samples` and extra loops are cut first, so avoid
+  writing more than the step needs.
+- `makes_bodies` and `moves_bodies` on the table entry when the type makes or moves bodies, as for a copied step.
 
 ## 4. What protects a new handler
 
@@ -164,8 +261,11 @@ state outside `ctx`. Work that depends on the capture alone can be kept in `ctx.
   (`assert_schema_ok`); one test per refusal branch; one test with a size table that shows the values follow the
   sizes, and one that shows a value that cannot follow marks its size with a reason. Assert outcomes (recipe values,
   verdicts, loose and dropped names), not wording.
-- A step type that was listed as unsupported can be the example of a stopping step in older tests (the stop dialog,
-  the stop warning, the capture reader walk). When it becomes copyable those tests need another example type.
+- A step type that was listed as unsupported can be the example of a left out step in older tests (the gap tests,
+  the result window, the capture reader walk). When it becomes copyable those tests need another example type.
+- A new refusal branch is a gap: a test that the walk leaves the item out, with its `after` and `before`, and that the
+  later steps are copied. A step that picks faces of the new step is covered by the reach tests in
+  `tests/test_translate_gaps.py`.
 - Reader tests in `tests/test_capture_reader*.py` with the fakes, for each member the reader reads and for an
   unreadable one.
 

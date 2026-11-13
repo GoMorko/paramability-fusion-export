@@ -8,7 +8,7 @@ from tests.fakes import FakeStore
 from lib.design_edit.apply import RowBuildError
 from lib.export_plan.assemble import build_package
 from lib.params.expressions import format_expression, is_plain_number
-from lib.package.naming import addin_version, design_title, package_file_name, with_extension
+from lib.package.naming import addin_version, body_file_title, design_title, package_file_name, with_extension
 from lib.design_edit.errors import StepExportError
 from lib.design_edit.restore import restore_order, restore_parameters
 from lib.design_edit.runner import ExportCancelled, RowExport
@@ -181,6 +181,11 @@ class NamingTest(unittest.TestCase):
     def test_design_title_drops_version(self):
         self.assertEqual(design_title("Cable clip v12"), "Cable clip")
         self.assertEqual(design_title("  "), "Design")
+
+    def test_file_title_names_the_body_component(self):
+        self.assertEqual(body_file_title("Aquarium v4", ["Light holder v2", "Light holder v2"]), "Light holder")
+        self.assertEqual(body_file_title("Aquarium v4", ["Lid", "Pipe"]), "Aquarium")
+        self.assertEqual(body_file_title("Aquarium v4", [None]), "Aquarium")
 
     def test_file_name_is_safe(self):
         self.assertEqual(package_file_name('a/b:c?'), "a_b_c_.paramability")

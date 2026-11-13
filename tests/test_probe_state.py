@@ -4,6 +4,7 @@ import unittest
 from tests import context  # noqa: F401
 from tests.fakes import FakeMatrix3D, FakeOccurrence, apply_matrix, turn_z
 from tests.test_capture_reader import Coll, FakeDesign as CaptureDesign, Obj, P, body, entry, extrude, line
+from tests.test_capture_reader_sweep import line3, quarter_arc, sketch_curve
 from tests.test_capture_reader_tokens import SQUARE, profile, sketch
 from lib.fusion_reader.probe_state import MAX_PROFILES, read_state
 from lib.fusion_reader.read_geometry import ReadContext
@@ -52,6 +53,16 @@ class ReadStateTest(unittest.TestCase):
         self.assertEqual(record["frame"], {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]})
         self.assertEqual([c["entity"] for c in record["profiles"][0]["loops"][0]["curves"]], ["c1", "c2", "c3", "c4"])
 
+    def test_each_part_of_a_read_is_timed_on_the_timer_it_is_given(self):
+        from lib.timing.timer import Timer
+        sk = sketch()
+        sk.profiles = Coll([profile(sk, SQUARE)])
+        design = Design({"sk1": [sk]}, user={"width": 2.0})
+        ctx = ReadContext(design, design.target)
+        ctx.timer = Timer()
+        read_state(design, {"sketches": ["sk1"], "params": ["width"], "target": True}, ctx)
+        self.assertEqual([ctx.timer.count("read_" + p) for p in ("sketches", "params", "box", "refs")], [1, 1, 1, 0])
+
     def test_the_entity_without_an_assembly_context_wins_and_a_proxy_falls_back_to_its_native_object(self):
         native = Obj("fusion::SketchPoint", worldGeometry=P(1, 0, 0), assemblyContext=None)
         proxy = Obj("fusion::SketchPoint", worldGeometry=P(9, 9, 9), assemblyContext=Obj(), nativeObject=native)
@@ -79,6 +90,24 @@ class ReadStateTest(unittest.TestCase):
         design.findEntityByToken = lambda token: []
         design.rootComponent.bRepBodies = Coll([])
         self.assertNotIn("box", state(design, target=True))
+
+
+class PathCurvesTest(unittest.TestCase):
+    def setUp(self):
+        self.sk = sketch()
+        self.sk.sketchCurves = Coll([sketch_curve(line3((0, 0, 0), (0, 50, 0)), self.sk, "c1"),
+                                     sketch_curve(quarter_arc(), self.sk, "c2", "SketchArc"),
+                                     sketch_curve(line3((0, 0, 0), (0, 50, 5)), self.sk, "off"),
+                                     sketch_curve(line3((1, 1, 0), (2, 2, 0)), self.sk, "other")])
+        self.sk.profiles = Coll([])
+        self.design = Design({"sk1": [self.sk]})
+
+    def test_only_the_asked_curves_are_read_in_the_sketch_plane(self):
+        record = state(self.design, sketches=["sk1"], curves={"sk1": ["c1", "c2", "off"]})["sketches"]["sk1"]
+        self.assertEqual(record["curves"]["c1"], {"kind": "line", "start": [0, 0], "end": [0, 50]})
+        self.assertEqual(record["curves"]["c2"]["kind"], "arc")
+        self.assertEqual(sorted(record["curves"]), ["c1", "c2"])
+        self.assertNotIn("curves", state(self.design, sketches=["sk1"])["sketches"]["sk1"])
 
 
 class ProbeAgreementTest(unittest.TestCase):

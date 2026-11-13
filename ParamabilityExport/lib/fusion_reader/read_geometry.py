@@ -116,6 +116,35 @@ def target_volume(ctx):
     return safe(lambda: round(body.volume * 1000.0, 6) + 0.0, None) if body is not None else None
 
 
+def volume_mm3(body):
+    """Volume of a body in mm3, or None when it cannot be read."""
+    return safe(lambda: round(body.volume * 1000.0, 6) + 0.0, None)
+
+
+# Vertices read per body to follow a body through a Paste, a Move or a pattern.
+BODY_POINTS = 8
+
+
+def native_object(entity):
+    """The native object of an entity seen through an occurrence, else the entity."""
+    if safe(lambda: entity.assemblyContext, None) is None:
+        return entity
+    return safe(lambda: entity.nativeObject, None) or entity
+
+
+def vertex_points(body, limit=BODY_POINTS):
+    """The first `limit` vertex points of a body in mm, in the body's own coordinates and vertex order. A list with
+    one vertex that cannot be read is empty, since a gap would shift the order the points are matched by."""
+    vertices = safe(lambda: body.vertices, None)
+    found = []
+    for i in range(min(safe(lambda: int(vertices.count), 0), limit)):
+        p = safe(lambda: point(vertices.item(i).geometry), None)
+        if p is None:
+            return []
+        found.append(p)
+    return found
+
+
 def same_entity(a, b):
     """True when two Fusion objects are the same entity. Token text is not compared: Fusion can give one entity
     different tokens over time."""
@@ -185,14 +214,42 @@ def body_ref(body, ctx=None):
     return mark_foreign({"token": safe(lambda: body.entityToken, ""), "name": safe(lambda: body.name, "")}, body, ctx)
 
 
+def is_sequence(value):
+    """Whether `value` holds a run of entities: a list or tuple, a Fusion collection (count and item(i)), or a Fusion
+    vector such as BRepFaceVector, which some members return instead of a collection and which has only len and indexing."""
+    if isinstance(value, (list, tuple)):
+        return True
+    if value is None or isinstance(value, (str, bytes, dict)):
+        return False
+    return (hasattr(value, "count") and hasattr(value, "item")) or (hasattr(value, "__len__") and hasattr(value, "__getitem__"))
+
+
+def sequence_items(value):
+    """Items of a list, a Fusion collection or a Fusion vector (see is_sequence); raises when there are none to read."""
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    if hasattr(value, "count") and hasattr(value, "item"):
+        return [value.item(i) for i in range(value.count)]
+    return [value[i] for i in range(len(value))]
+
+
 def collection_items(collection):
-    """Items of a Fusion collection (count and item(i)); empty for None or a collection that cannot be read."""
+    """Items of a Fusion collection or vector (see sequence_items); empty for None or one that cannot be read."""
     if collection is None:
         return []
     try:
-        return [collection.item(i) for i in range(collection.count)]
+        return sequence_items(collection)
     except Exception:
         return []
+
+
+def owner_body(entity, ctx):
+    """{ token, name } of the body a face or edge lies on, or None when Fusion does not give it."""
+    body = safe(lambda: entity.body, None)
+    found = safe(lambda: body_ref(body, ctx), None) if body is not None else None
+    if not found or not (found.get("token") or found.get("name")):
+        return None
+    return {"token": found.get("token"), "name": found.get("name")}
 
 
 def body_refs(collection, ctx=None):
@@ -285,6 +342,10 @@ class ReadContext:
         self.component = safe(lambda: self.target.parentComponent, None) or self.root
         self.component_token = safe(lambda: self.component.entityToken, "") or ""
         self.is_root_component = same_entity(self.component, self.root)
+        # Fusion objects a reader keeps from before an item for its reader after it; never written to the capture.
+        self.held = {}
+        # The `timing.capture_timer.CaptureTimer` of the read, when it is timed; readers time themselves through it.
+        self.timer = None
 
     def find_target(self):
         """The target body (native) at the current marker position, or None when it does not exist yet.

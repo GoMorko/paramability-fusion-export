@@ -16,12 +16,72 @@ class DesignParameterStore:
 
     The design is worked on as it is at the timeline marker: the marker found when the store is made stays there
     after every recompute, and only the items before it count for health. `roll_marker` holds it earlier for a while
-    (Fusion then rebuilds fewer items per recompute) and `unroll_marker` puts it back."""
+    (Fusion then rebuilds fewer items per recompute) and `unroll_marker` puts it back. `suppress_items` turns off
+    timeline items for a while for the same reason, and `unsuppress_items` turns them back on."""
 
-    def __init__(self, design):
+    def __init__(self, design, value_input=None):
         self.design = design
+        self._value_input = value_input  # text to a Fusion ValueInput; `adsk.core.ValueInput.createByString` if None
         self.marker = read_marker(getattr(design, "timeline", None))
         self._home = None  # the marker the store was made with, while it is rolled
+        self._suppressed = []  # (name, timeline object) of the items `suppress_items` turned off
+
+    def _rebuild(self):
+        try:
+            self.recompute()
+        except Exception:
+            pass
+
+    def suppress_items(self, items):
+        """Suppress the timeline items `items` ((index, name) pairs) until `unsuppress_items`, then rebuild once.
+        Returns how many read suppressed after. Nothing is touched, and 0 is returned, when one of them is not as the
+        capture saw it: another name at that index, suppressed already, a group, or unreadable."""
+        if self._suppressed:
+            return 0
+        try:
+            timeline = self.design.timeline
+            found = [timeline.item(index) for index, _ in items]
+            if any(obj.name != name or obj.isSuppressed or getattr(obj, "isGroup", False)
+                   for obj, (_, name) in zip(found, items)):
+                return 0
+        except Exception:
+            return 0
+        count = 0
+        for obj, (_, name) in zip(found, items):
+            try:
+                obj.isSuppressed = True
+            except Exception:
+                pass
+            try:
+                off = obj.isSuppressed
+            except Exception:
+                off = None  # unreadable: not counted, but turned back on at the end
+            if off is not False:
+                self._suppressed.append((name, obj))
+                count += off is True
+        self._rebuild()
+        return count
+
+    def unsuppress_items(self):
+        """Turn the items `suppress_items` suppressed back on, last first, then rebuild once. Items that were
+        suppressed before are never touched. Returns the names that still read suppressed."""
+        left = []
+        for name, obj in reversed(self._suppressed):
+            try:
+                obj.isSuppressed = False
+            except Exception:
+                pass
+            try:
+                off = obj.isSuppressed
+            except Exception:
+                off = True
+            if off:
+                left.append(name)
+        had = bool(self._suppressed)
+        self._suppressed = []
+        if had:
+            self._rebuild()
+        return left
 
     def _keep_marker(self):
         if self.marker is not None:
@@ -49,10 +109,7 @@ class DesignParameterStore:
             return True
         self.marker, self._home = self._home, None
         moved = put_back(self.design.timeline, self.marker)
-        try:
-            self.recompute()
-        except Exception:
-            pass
+        self._rebuild()
         return moved
 
     def marker_holds(self):
@@ -73,6 +130,32 @@ class DesignParameterStore:
 
     def set_expression(self, name, expression):
         self.design.userParameters.itemByName(name).expression = expression
+
+    def _make_value(self):
+        if self._value_input is None:
+            import adsk.core
+            self._value_input = adsk.core.ValueInput.createByString
+        return self._value_input
+
+    def set_expressions(self, expressions):
+        """Set the user parameters `expressions` ({name: text}) in one change (`Design.modifyParameters`): Fusion sets
+        all or none and rebuilds once, as for the person's own edit. True when it took them all; False, with nothing
+        changed, when this Fusion has no such call, a parameter is missing or Fusion refused one. The marker stays
+        where the store keeps it."""
+        modify = getattr(self.design, "modifyParameters", None)
+        if modify is None or not expressions:
+            return False
+        try:
+            params = self.design.userParameters
+            found = [params.itemByName(name) for name in expressions]
+            if any(p is None for p in found):
+                return False
+            make = self._make_value()
+            done = bool(modify(found, [make(text) for text in expressions.values()]))
+        except Exception:
+            return False
+        self._keep_marker()
+        return done
 
     def read_value(self, name):
         return self.design.userParameters.itemByName(name).value

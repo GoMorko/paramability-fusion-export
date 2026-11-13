@@ -36,13 +36,17 @@ def blocked(problems):
 def fit_series(values, series, problems, candidates, varied, owner=""):
     """Write into `values` (key to `Affine` or `Stuck`) the fit of each series (key to numbers) over the parameter
     `candidates` (`fit.Column`). A series that does not move writes nothing. With `problems`, the states that failed
-    are left out: the value may still follow the other sizes. `owner` names the sketch of an `Affine` or `Stuck`."""
+    are left out: the value may still follow the other sizes. Its `rest` is fitted over the states that keep the
+    blamed sizes at their value now, as it holds once they are fixed. `owner` names the sketch of an `Affine` or
+    `Stuck`."""
     causes = [c for c in _PRIORITY if any(p[0] == c for p in problems)]
     unreadable = blocked(problems)
+    held = set(unreadable)
     for key, x in series.items():
         found = movers(varied, x)
         if problems:
-            rest = fit.fit_value(x, candidates)
+            rest = fit.fit_value([x[0]] + [None if varied(at) & held else x[at] for at in range(1, len(x))],
+                                 candidates)
             if rest.kind == "affine":
                 values[key] = Stuck(unreadable, causes[0], owner, Affine(rest.const, rest.terms, owner))
             elif rest.kind == "const":

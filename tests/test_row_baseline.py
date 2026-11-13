@@ -7,6 +7,7 @@ from tests import context  # noqa: F401
 from tests.fakes import FakeDesign, FakeStore
 
 from lib.design_edit.apply import RowBuildError, apply_row_values, measure_baseline
+from lib.design_edit.restore import restore_parameters
 from lib.design_edit.runner import RowExport
 from lib.fusion_reader.rows import DesignParameterStore
 from tests.row_helpers import apply_row
@@ -152,6 +153,145 @@ class FusionDesignBaselineTest(unittest.TestCase):
         design = Warned(self.PARAMS, [dict(name="Extrude1", isSuppressed=False, healthState=2)])
         baseline = measure_baseline(DesignParameterStore(design))
         self.assertEqual(apply_row(design, {"width": 40.0}, {"width": "mm"}, baseline), {"width": 40.0})
+
+
+class BatchDesign(FakeDesign):
+    """A design with Fusion's `modifyParameters`: it sets every expression in one change, or none when `refuse` is
+    one of them, and records each call."""
+
+    def __init__(self, refuse=None):
+        super().__init__([dict(name="w", expression="5 mm", value=0.5, unit="mm"),
+                          dict(name="h", expression="8 mm", value=0.8, unit="mm")])
+        self.refuse = refuse
+        self.batches = []
+
+    def modifyParameters(self, parameters, values):
+        if self.refuse in values:
+            return False
+        self.batches.append({p.name: v for p, v in zip(parameters, values)})
+        for parameter, value in zip(parameters, values):
+            parameter.expression = value
+        return True
+
+
+class BatchedParametersTest(unittest.TestCase):
+    UNITS = {"w": "mm", "h": "mm"}
+
+    def store(self, design):
+        return DesignParameterStore(design, value_input=lambda text: text)
+
+    def test_a_row_and_its_restore_set_all_values_in_one_change_without_a_full_recompute(self):
+        design = BatchDesign()
+        store = self.store(design)
+        saved = store.saved_expressions()
+        self.assertEqual(apply_row_values(store, self.UNITS, {"w": 6.0, "h": 9.0}), {"w": 6.0, "h": 9.0})
+        self.assertEqual(restore_parameters(store, saved), [])
+        self.assertEqual(design.batches, [{"w": "6 mm", "h": "9 mm"}, {"w": "5 mm", "h": "8 mm"}])
+        self.assertEqual(design.computed, 0)
+
+    def test_a_value_the_one_change_did_not_take_is_put_back_on_its_own(self):
+        class Skipping(BatchDesign):
+            def modifyParameters(self, parameters, values):
+                kept = [(p, v) for p, v in zip(parameters, values) if p.name != "h"]
+                return super().modifyParameters([p for p, _ in kept], [v for _, v in kept])
+
+        design = Skipping()
+        store = self.store(design)
+        saved = store.saved_expressions()
+        apply_row_values(store, self.UNITS, {"w": 6.0})
+        store.set_expression("h", "9 mm")
+        self.assertEqual(restore_parameters(store, saved), [])
+        self.assertEqual(store.current_expressions(), saved)
+
+    def test_a_change_fusion_refuses_as_a_whole_is_set_one_value_at_a_time(self):
+        design = BatchDesign(refuse="9 mm")
+        store = self.store(design)
+        self.assertEqual(apply_row_values(store, self.UNITS, {"w": 6.0, "h": 9.0}), {"w": 6.0, "h": 9.0})
+        self.assertEqual((design.batches, design.computed), ([], 1))
+
+
+class BatchStore(FakeStore):
+    """A store that takes a row in one change (`set_expressions`). `errors` are the steps in error after a change;
+    with `cleared_by_recompute` a full recompute clears them, as when only a partial rebuild left them."""
+
+    def __init__(self, errors=(), cleared_by_recompute=False, bad="9 mm"):
+        super().__init__({"w": "5 mm"})
+        self.bad, self.cleared = bad, cleared_by_recompute
+        self.errors, self.stale = list(errors), False
+
+    def set_expressions(self, expressions):
+        self.exprs.update(expressions)
+        self.stale = self.stale or self.bad in expressions.values()
+        return True
+
+    def recompute(self):
+        self.recomputes += 1
+        if self.cleared:
+            self.stale = False
+        return True
+
+    def error_items(self):
+        return list(self.errors) if self.stale else []
+
+
+class IncrementalStore(BatchStore):
+    """A store whose one change leaves the design rebuilt only in part until a full recompute; `answers` are what
+    the recomputes report, in turn (the last one repeats)."""
+
+    def __init__(self, answers=(True,)):
+        super().__init__()
+        self.answers, self.complete = list(answers), True
+
+    def set_expressions(self, expressions):
+        self.complete = False
+        return super().set_expressions(expressions)
+
+    def recompute(self):
+        super().recompute()
+        self.complete = True
+        return self.answers.pop(0) if len(self.answers) > 1 else self.answers[0]
+
+
+class OneChangeRowTest(unittest.TestCase):
+    def export(self, store):
+        written = []
+        job = RowExport(store, UNITS, lambda path: written.append(store.complete) or open(path, "wb").close())
+        with tempfile.TemporaryDirectory() as tmp:
+            job.run([{"name": "wide", "values": {"w": 6.0}}], tmp, lambda *a: True)
+        return written
+
+    def test_a_row_with_a_step_file_is_recomputed_in_full_before_the_file_is_written(self):
+        self.assertEqual(self.export(IncrementalStore()), [True])
+
+    def test_a_row_whose_full_recompute_fails_is_not_written(self):
+        with self.assertRaises(RowBuildError) as raised:
+            self.export(IncrementalStore(answers=(True, False)))
+        self.assertEqual(raised.exception.detail["reason"], "recompute_failed")
+
+
+class StopCheckTest(unittest.TestCase):
+    def run_rows(self, store):
+        starts = []
+        job = RowExport(store, UNITS, lambda path: None, before_row=lambda row: starts.append(row["name"]))
+        rows = [{"name": n, "values": {"w": v}, "step": False} for n, v in (("bad", 9.0), ("next", 6.0))]
+        with tempfile.TemporaryDirectory() as tmp:
+            results = job.run(rows, tmp, lambda *a: True, tolerate_build_errors=True)
+        return job, results, starts
+
+    def test_a_row_judged_after_one_change_says_its_rebuild_is_not_known(self):
+        with self.assertRaises(RowBuildError) as raised:
+            apply_row_values(BatchStore(errors=["Fillet1"]), UNITS, {"w": 9.0})
+        self.assertIsNone(raised.exception.detail["recompute_ok"])
+
+    def test_an_error_a_full_recompute_clears_does_not_stop_the_rows(self):
+        job, results, _ = self.run_rows(BatchStore(errors=["Fillet1"], cleared_by_recompute=True))
+        self.assertIsNone(job.not_back)
+        self.assertEqual([r["name"] for r in results], ["bad", "next"])
+
+    def test_a_stop_comes_before_the_next_row_reads_the_design(self):
+        job, results, starts = self.run_rows(BatchStore(errors=["Fillet1"]))
+        self.assertEqual(job.not_back["items"], ["Fillet1"])
+        self.assertEqual((len(results), starts), (1, ["bad"]))
 
 
 if __name__ == "__main__":

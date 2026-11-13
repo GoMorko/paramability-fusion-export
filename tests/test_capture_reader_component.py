@@ -126,7 +126,7 @@ class ComponentItemsTest(unittest.TestCase):
     def test_target_changed_follows_the_box_and_volume_at_each_position(self):
         tray = Tray()
         design = tray.design([tray.feature("Sketch", "S"), tray.extrude(),
-                              tray.feature("Sketch", "S2"), tray.feature("LoftFeature", "Cut")])
+                              tray.feature("Sketch", "S2"), tray.feature("CoilFeature", "Cut")])
         timeline = design.timeline
         # The body exists from marker 2 on and loses volume from marker 4 on.
         tray.component.bRepBodies = BodiesWhen(lambda: [tray.native] if timeline.markerPosition >= 2 else [])
@@ -250,6 +250,18 @@ class ForeignTest(unittest.TestCase):
                          {"point": [-50, 100, 0], "normal": [0, -1, 0], "assembly": True})
         self.assertEqual((record["ref"]["slot"], record["ref"]["component"]["token"], record["ref"]["path"]),
                          ("plane", "root", ""))
+
+    def test_a_root_plane_read_before_a_later_step_makes_the_target_is_brought_in(self):
+        plane = Obj("fusion::ConstructionPlane", parentComponent=Obj(entityToken="root"),
+                    geometry=Obj("core::Plane", origin=P(0, 0, 0), normal=Obj(x=1, y=0, z=0)))
+        mirror = self.tray.feature("MirrorFeature", "Mirror1", inputEntities=Coll([]), mirrorPlane=plane)
+        design = self.tray.design([mirror, self.tray.extrude()], appears_at=2)
+        shown = self.tray.proxy.vertices
+        # The picked body has no points before the step that makes it.
+        self.tray.proxy.vertices = BodiesWhen(
+            lambda: [shown.item(i) for i in range(shown.count)] if design.timeline.markerPosition >= 2 else [])
+        record = read(design, self.tray.proxy)["items"][0]["data"]["plane"]
+        self.assertEqual((record["normal"], record.get("assembly")), ([0, -1, 0], True))
 
     def lid(self):
         """The Lid component and an occurrence of it turned and moved in the assembly."""

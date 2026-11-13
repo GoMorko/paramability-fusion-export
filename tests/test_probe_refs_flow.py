@@ -3,7 +3,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.fakes import FakeStore
-from tests.probe_helpers import capture, size, table, user
+from tests.probe_helpers import capture, model, size, table, user
 from tests.test_probe_flow import START, Fusion, number, states
 from tests.test_probe_motion import CAPTURE, MODEL, PARAMS, TICKED, read_at
 from tests.test_probe_refs import MIRROR, plane_at, with_refs
@@ -136,8 +136,8 @@ class BodyOnlyTest(unittest.TestCase):
         self.units = dict(UNITS, wall="mm")
         self.sizes = [size(self.table, n, self.units[n]) for n in TICKED + ["wall"]]
 
-    def probed(self, fusion):
-        probe = SizeProbe.start(CAPTURE, self.table, fusion.read)
+    def probed(self, fusion, captured=CAPTURE):
+        probe = SizeProbe.start(captured, self.table, fusion.read)
         rows = probe.probe_rows(self.sizes, extra=["wall"])
         reads = []
         job = RowExport(fusion.store, self.units, lambda path: reads.append(probe.read_now()))
@@ -151,6 +151,19 @@ class BodyOnlyTest(unittest.TestCase):
         self.assertEqual(probe.motion.body_moved, ["wall"])
         self.assertEqual(Motion.from_json(probe.report()["motion"]).body_moved, ["wall"])
         self.assertEqual(self.probed(WallBody(grows=False)).motion.body_moved, [])
+
+    def test_a_size_that_only_sets_a_placed_offset_plane_explains_its_body_change(self):
+        plane = {"entity_type": "ConstructionPlane", "token": "cp9", "definition": "ConstructionPlaneOffsetDefinition",
+                 "built_on": [{"entity_type": "ConstructionPlane", "token": "xy", "origin": True}]}
+        split = {"index": 8, "name": "Split1", "type": "SplitBodyFeature",
+                 "data": {"tool": {"kind": "plane", "plane": plane}}}
+        offset = model("d9", "wall", 2, kind="constructionPlane", token="cp9")
+        for label, extra, moved in (("plane alone", [], []),
+                                    ("also a step value", [model("d10", "wall", 2, kind="feature")], ["wall"])):
+            with self.subTest(label):
+                self.table = table(PARAMS + [user("wall", "2 mm", 2)], TICKED + ["wall"], MODEL + [offset] + extra)
+                probe = self.probed(WallBody(), dict(CAPTURE, items=CAPTURE["items"] + [split]))
+                self.assertEqual(probe.motion.body_moved, moved)
 
     def test_a_size_that_changes_the_body_is_not_dropped_as_changing_nothing(self):
         motion = motion_with("component_ref_reach")

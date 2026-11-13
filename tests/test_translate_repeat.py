@@ -2,8 +2,9 @@ import copy
 import unittest
 
 from tests import context  # noqa: F401
+from tests.test_translate_copies import counted
 from tests.test_translate_sized import table_of
-from tests.translator_helpers import assert_schema_ok, edited, load_capture, steps_of, translate_fixture, verdict_of
+from tests.translator_helpers import assert_schema_ok, edited, left_out, load_capture, steps_of, translate_fixture, verdict_of
 
 from lib.translator import translate
 
@@ -46,8 +47,8 @@ class RectangularPatternTest(unittest.TestCase):
         def edit(capture):
             del pattern_data(capture)["elements"][0]
         result = edited("rpattern_row", edit)
-        self.assertIsNone(result.recipe)
-        self.assertEqual(result.refusal["index"], 4)
+        self.assertIsNotNone(left_out(result))
+        self.assertEqual(left_out(result)["index"], 4)
 
     def test_copies_running_against_the_direction_negate_it(self):
         (pattern,) = steps_of(translate_fixture("rpattern_negative").recipe, "pattern")
@@ -88,8 +89,8 @@ class RectangularPatternTest(unittest.TestCase):
         ]
         for label, result in cases:
             with self.subTest(label):
-                self.assertIsNone(result.recipe)
-                self.assertEqual(result.refusal["index"], 4)
+                self.assertIsNotNone(left_out(result))
+                self.assertEqual(left_out(result)["index"], 4)
 
     def test_drill_tip_and_multi_point_holes(self):
         tip = translate_fixture("rpattern_drill_tip")
@@ -190,8 +191,8 @@ class CircularPatternTest(unittest.TestCase):
         ]
         for label, result in cases:
             with self.subTest(label):
-                self.assertIsNone(result.recipe)
-                self.assertEqual(result.refusal["index"], 4)
+                self.assertIsNotNone(left_out(result))
+                self.assertEqual(left_out(result)["index"], 4)
 
     def test_fillet_points_turn_with_each_copy(self):
         def edit(capture):
@@ -232,7 +233,7 @@ class MirrorTest(unittest.TestCase):
         assert_schema_ok(self, result.recipe)
 
     def test_fillet_on_the_plane_refuses_instead_of_rounding_twice(self):
-        self.assertIsNotNone(translate_fixture("mirror_fillet_on_plane").refusal)
+        self.assertIsNotNone(left_out(translate_fixture("mirror_fillet_on_plane")))
 
     def test_fillet_partly_on_the_plane_copies_only_the_off_plane_edge_with_its_size(self):
         source, copy_step = steps_of(translate_fixture("mirror_fillet_partly_on_plane").recipe, "round")
@@ -262,28 +263,32 @@ class MirrorTest(unittest.TestCase):
             data = capture["items"][3]["data"]
             data["positions"] = [[1, 0, 10]]
             data["side_cylinders"][0]["origin"] = [1, 0, 10]
-        self.assertIsNone(edited("mirror_body_tip_hole", across).recipe)
+        self.assertEqual(steps_of(edited("mirror_body_tip_hole", across).recipe, "mirror")[0]["of"], ["body_4"])
 
-    def test_body_mirror_refusals(self):
+    def test_a_body_its_steps_cannot_mirror_one_by_one_is_gathered_into_one_tool_and_mirrored(self):
         no_box = edited("mirror_body", lambda c: pattern_data(c).pop("target_box_before"))
         cases = [
             ("straddles the plane", translate_fixture("mirror_body_straddling")),
             ("a cut reaches across", translate_fixture("mirror_body_cut_across")),
             ("part not measured", no_box),
             ("round before it", translate_fixture("mirror_body_after_round")),
-            ("not joined", edited("mirror_body", lambda c: pattern_data(c).update(combine=False))),
         ]
         for label, result in cases:
             with self.subTest(label):
-                self.assertIsNone(result.recipe)
-                self.assertEqual(result.refusal["type"], "MirrorFeature")
+                gathered = result.recipe["features"][0]
+                self.assertEqual((gathered["kind"], gathered["combine"]), ("toolBody", "new"))
+                self.assertEqual(steps_of(result.recipe, "mirror")[0]["of"], [gathered["id"]])
+                assert_schema_ok(self, result.recipe)
+
+    def test_a_mirrored_body_not_joined_to_the_part_is_left_out(self):
+        result = edited("mirror_body", lambda c: pattern_data(c).update(combine=False))
+        self.assertEqual(left_out(result)["type"], "MirrorFeature")
 
     def test_other_refusals(self):
         no_plane = edited("mirror_features", lambda c: pattern_data(c).update(plane=None))
         faces = edited("mirror_features", lambda c: pattern_data(c).update(entity_type="faces"))
         for result in (no_plane, faces):
-            self.assertIsNone(result.recipe)
-            self.assertIsNotNone(result.refusal)
+            self.assertIsNotNone(left_out(result))
 
 
 class RepeatedStepsTest(unittest.TestCase):
@@ -300,8 +305,8 @@ class RepeatedStepsTest(unittest.TestCase):
         for label, edit in (("through all", through), ("to a face", to_face), ("new body", separate_body)):
             with self.subTest(label):
                 result = edited("rpattern_row", edit)
-                self.assertIsNone(result.recipe)
-                self.assertEqual(result.refusal["index"], 4)
+                self.assertIsNotNone(left_out(result))
+                self.assertEqual(left_out(result)["index"], 4)
 
 
 class CopyCapTest(unittest.TestCase):
@@ -332,8 +337,51 @@ class CopyCapTest(unittest.TestCase):
     def test_nested_pattern_over_the_cap(self):
         # 63 + 4 * 64 = 319
         result = self.nested(5)
-        self.assertIsNone(result.recipe)
-        self.assertEqual(result.refusal["index"], 5)
+        self.assertIsNotNone(left_out(result))
+        self.assertEqual(left_out(result)["index"], 5)
+
+
+def _grid(capture, columns, rows):
+    pattern_data(capture).update(
+        quantity_one=columns, quantity_two=rows, direction_two=[0, 1, 0], distance_one=5.0, distance_two=5.0,
+        elements=[{"id": n + 1, "suppressed": False,
+                   "frame": {"origin": [5.0 * (n % columns), 5.0 * (n // columns), 0], "x": [1, 0, 0],
+                             "y": [0, 1, 0], "z": [0, 0, 1]}} for n in range(columns * rows)])
+
+
+class CountVersionTest(unittest.TestCase):
+    """Recipes before version 15 take at most 64 copies per pattern count."""
+
+    def test_a_pattern_of_more_than_64_copies_is_a_version_15_recipe(self):
+        for columns, rows, wide in ((64, 1, False), (65, 1, True), (8, 9, True)):
+            with self.subTest(columns=columns, rows=rows):
+                result = edited("rpattern_row", lambda capture: _grid(capture, columns, rows))
+                self.assertEqual(result.recipe["version"] >= 15, wide)
+                assert_schema_ok(self, result.recipe)
+
+    def test_a_count_whose_size_range_passes_64_copies_is_a_version_15_recipe(self):
+        capture, table = counted(ranges={"holes_count": (1, 80)})
+        self.assertEqual(translate(capture, size_table=table).recipe["version"], 15)
+
+
+class MirrorReachTest(unittest.TestCase):
+    """A whole body mirror bounds each cut of an outline with spline parts by the spline's own points."""
+
+    @staticmethod
+    def problem(through):
+        from lib.translator.repeat_mirror_reach import body_mirror_problem
+        outline = {"kind": "profile", "start": [0.0, 0.0],
+                   "segments": [{"kind": "spline", "through": through, "to": [6.0, 0.0]},
+                                {"kind": "line", "to": [0.0, 0.0]}]}
+        cut = {"id": "extrude_1", "kind": "extrude", "combine": "cut", "extent": "oneSide", "distance": 2.0,
+               "sketch": {"on": {"origin": [10.0, 0.0, 0.0], "normal": [0.0, 0.0, 1.0], "xDir": [1.0, 0.0, 0.0]},
+                          "outer": outline}}
+        data = {"target_box_before": {"min": [1.0, -5.0, 0.0], "max": [20.0, 5.0, 4.0]}}
+        return body_mirror_problem(data, {"origin": [0.0, 0.0, 0.0], "normal": [1.0, 0.0, 0.0]}, [cut])
+
+    def test_a_spline_on_one_side_keeps_the_mirror_and_one_across_the_plane_is_found(self):
+        self.assertIsNone(self.problem([[2.0, 3.0], [4.0, -3.0]]))
+        self.assertIn("reaches across", self.problem([[-12.0, 3.0], [4.0, -3.0]]))
 
 
 if __name__ == "__main__":

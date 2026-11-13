@@ -8,8 +8,10 @@ an `other` entry (which the translator refuses), or the reader raises and the it
 that feed a note, such as the participant bodies, fall back to an empty list.
 """
 from . import read_geometry as geo
+from . import read_intersect
 from .param_refs import Params, with_params
-from .placement import foreign_target_ref, from_assembly, ref_record, tool_identity
+from .placement import foreign_target_ref, from_assembly, ref_record
+from .read_bodies import tool_ref
 from .read_sketch import first_profile, profile_area, read_outlines, read_profiles
 
 _OPERATIONS = [
@@ -27,7 +29,7 @@ _TAP_TYPES = [("taper", "taperTapped"), ("tapped", "tapped"), ("clearance", "cle
 _FULL_TURN_DEG = 360.0 - 1e-6
 
 
-def _operation(value):
+def operation_of(value):
     return geo.pick_by_text(geo.enum_name(value, "FeatureOperations"), _OPERATIONS, "other")
 
 
@@ -45,17 +47,30 @@ def construction_token(entity):
 
 
 def _target(definition, ctx, slot):
-    """The face or plane an extrude starts from or reaches to: its plane, its type, and a point on a face. One of
-    another component is marked foreign and carries its measured reference (`ref`, see `placement.ref_record`)."""
+    """The face or plane an extrude starts from or reaches to: its plane, its type, its token, and a point on a face.
+    One of another component is marked foreign and carries its measured reference (`ref`, see
+    `placement.ref_record`)."""
     entity = geo.native_input(geo.safe(lambda: definition.entity, None), ctx)
     found = {"plane": geo.safe(lambda: geo.plane_of(entity), None),
              "entity_type": geo.safe(lambda: geo.type_name(entity), None)}
     found.update(construction_token(entity))
     if found["entity_type"] == "BRepFace":
         found["face_point"] = geo.safe(lambda: geo.point(entity.pointOnFace), None)
+        body = geo.owner_body(entity, ctx)
+        if body:
+            found["body"] = body
     geo.mark_foreign(found, entity, ctx)
     if found.get("foreign"):
         foreign_target_ref(found, entity, ctx, slot)
+    else:
+        from .read_reference import describe_plane  # read_reference imports this module
+
+        describe_plane(found, entity, ctx)
+        if found["entity_type"] == "BRepFace":
+            # The size probe finds the face again by its token and measures how it moves.
+            token = geo.safe(lambda: entity.entityToken, "")
+            if token:
+                found["token"] = token
     return found
 
 
@@ -74,7 +89,11 @@ def _extent(definition, taper_deg, ctx, slot):
         return dict({"kind": "toEntity", "offset": geo.safe(lambda: geo.length(definition.offset), None)},
                     **_target(definition, ctx, slot))
     if name == "DistanceExtentDefinition":
-        return {"kind": "distance", "distance": geo.length(definition.distance), "taper_deg": taper_deg}
+        # Fusion can refuse the distance of a valid extrude; the step is then left out, not the whole copy stopped.
+        distance = geo.safe(lambda: geo.length(definition.distance), None)
+        if distance is None:
+            return {"kind": "other", "type": name}
+        return {"kind": "distance", "distance": distance, "taper_deg": taper_deg}
     return {"kind": "other", "type": name}
 
 
@@ -109,7 +128,10 @@ def _new_bodies_volume(feature):
     return None if not found or any(v is None for v in found) else round(sum(found), 6) + 0.0
 
 
-def _first_profile_area(feature):
+def _first_profile_area(feature, profiles, areas):
+    """Area in mm2 of the first sketch profile, or of the face when the first outline is a flat face."""
+    if profiles and isinstance(profiles[0], dict) and profiles[0].get("face"):
+        return areas[0] if areas else None
     first = first_profile(geo.safe(lambda: feature.profile, None))
     return profile_area(first) if first is not None else None
 
@@ -166,17 +188,24 @@ def extrude_before(feature, ctx):
         side_one = {"kind": "other", "type": "FeatureExtentTypes"}
     elif extent_type == "symmetric":
         sym = feature.symmetricExtent
-        symmetric = {
-            "distance": geo.length(sym.distance),
+        distance = geo.safe(lambda: geo.length(sym.distance), None)
+        symmetric = None if distance is None else {
+            "distance": distance,
             "full_length": geo.safe(lambda: bool(sym.isFullLength), None),
             "taper_deg": geo.safe(lambda: geo.angle(sym.taperAngle), None),
         }
+        if distance is None:
+            # A symmetric extrude through all has no distance: its extent reads like one side's, with its own taper.
+            taper = geo.safe(lambda: geo.angle(sym.taperAngle), None)
+            side = geo.safe(lambda: _extent(feature.extentOne, taper, ctx, "side_one"), None)
+            if side and side.get("kind") in ("throughAll", "all"):
+                side_one = side
     else:
         side_one = _extent(feature.extentOne, _taper(feature, "taperAngleOne"), ctx, "side_one")
         if extent_type == "two":
             side_two = _extent(feature.extentTwo, _taper(feature, "taperAngleTwo"), ctx, "side_two")
-    operation = _operation(feature.operation)
-    profiles, areas = read_outlines(feature.profile, ctx)
+    operation = operation_of(feature.operation)
+    profiles, areas = read_outlines(feature.profile, ctx, before=geo.safe(lambda: feature.timelineObject.index, None))
     data = {
         "operation": operation,
         "profiles": profiles,
@@ -189,7 +218,7 @@ def extrude_before(feature, ctx):
         "participants": geo.safe(lambda: geo.body_refs(feature.participantBodies, ctx), []),
         "target_box_before": ctx.target_box(),
         "end_offset": None,
-        "profile_area": _first_profile_area(feature),
+        "profile_area": _first_profile_area(feature, profiles, areas),
         "end_area": None,
     }
     if thin:
@@ -334,7 +363,7 @@ def _revolve_extent(definition):
 
 def revolve_before(feature, ctx):
     return with_params({
-        "operation": _operation(feature.operation),
+        "operation": operation_of(feature.operation),
         "profiles": read_profiles(feature.profile, ctx),
         "axis": revolve_axis(feature, ctx),
         "project_axis": geo.safe(lambda: bool(feature.isProjectAxis), None),
@@ -432,7 +461,7 @@ def _foreign_place(feature, ctx):
         value = geo.safe(lambda: getattr(definition, member), None)
         if value is None:
             continue
-        placed += geo.collection_items(value) if geo.safe(lambda: value.count, None) is not None else [value]
+        placed += geo.collection_items(value) if geo.is_sequence(value) else [value]
     outside = [geo.native_input(e, ctx) for e in placed]
     outside = [e for e in outside if geo.foreign(e, ctx)]
     if not outside:
@@ -525,31 +554,40 @@ def hole_after(feature, ctx, data):
 
 
 def _tool_bodies(collection, ctx):
-    """The tool body refs of a Combine. A tool of another component is `foreign` and also names its native token, its
-    component and the occurrence path (`placement.tool_identity`), so the steps that made it can be read there."""
+    """The tool body refs of a Combine, each with its `volume` in mm3 (null when unreadable). A tool of another
+    component is `foreign` and also names its native token, its component and the occurrence path
+    (`read_bodies.tool_ref`), so the steps that made it can be read there."""
     out = []
     for body in geo.collection_items(collection):
-        ref = geo.body_ref(body, ctx)
-        if ref.get("foreign"):
-            ref.update(geo.safe(lambda: tool_identity(body), {}))
+        ref = tool_ref(body, ctx)
+        ref["volume"] = geo.volume_mm3(body)
         out.append(ref)
     return out
 
 
 def combine_before(feature, ctx):
-    return {
+    operation = operation_of(feature.operation)
+    tools = _tool_bodies(feature.toolBodies, ctx)
+    data = {
         "target": geo.body_ref(feature.targetBody, ctx),
-        "tools": _tool_bodies(feature.toolBodies, ctx),
-        "operation": _operation(feature.operation),
+        "tools": tools,
+        "operation": operation,
         "keep_tools": geo.safe(lambda: bool(feature.isKeepToolBodies), False),
         "volume_before": geo.target_volume(ctx),
         "volume_after": None,
     }
+    if operation == "intersect" and len(tools) >= 2:
+        data["intersect_volumes"] = read_intersect.volumes(feature, tools)
+    return data
 
 
 def combine_after(feature, ctx, data):
-    """volume_after: the target's volume in mm3 with the marker after the Combine (null when it cannot be read)."""
-    return {"volume_after": geo.target_volume(ctx)}
+    """volume_after: the target's volume in mm3 with the marker after the Combine (null when it cannot be read).
+    intersect_model: for an intersect of several tools, which shape the Combine made (`read_intersect.model`)."""
+    found = {"volume_after": geo.target_volume(ctx)}
+    if "intersect_volumes" in data:
+        found["intersect_model"] = read_intersect.model(data["intersect_volumes"], found["volume_after"])
+    return found
 
 
 def thread_before(feature, ctx):

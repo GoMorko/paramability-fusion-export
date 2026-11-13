@@ -12,8 +12,9 @@ from . import read_geometry as geo
 from . import read_solid
 from .placement import from_assembly, ref_record
 from .param_refs import Params, with_params
+from .read_bodies import result_bodies, with_points
 from .read_finish import strict_items
-from .read_reference import add_reference
+from .read_reference import add_reference, axis_with_reference
 
 _ENTITY_TYPES = [
     ("feature", "features"),
@@ -51,10 +52,14 @@ def _sources(inputs, entity_type):
     return [entity.timelineObject.index for entity in inputs]
 
 
-def _common(feature):
+def _common(feature, ctx):
     inputs = _inputs(feature)
     entity_type = _entity_type(feature, inputs)
-    return {"entity_type": entity_type, "sources": _sources(inputs, entity_type)}
+    data = {"entity_type": entity_type, "sources": _sources(inputs, entity_type)}
+    if entity_type == "bodies":
+        data["source_bodies"] = [with_points(entity, ctx) for entity in inputs]
+        data["result_bodies"] = None
+    return data
 
 
 def direction_of(entity):
@@ -130,7 +135,7 @@ def _suppressed_ids(feature):
 
 
 def rectangular_before(feature, ctx):
-    data = _common(feature)
+    data = _common(feature, ctx)
     quantity_two = geo.safe(lambda: _number(feature.quantityTwo, 1), 1)
     places, found = {}, {}
     for which, vector_name, entity_name in (("one", "directionOne", "directionOneEntity"),
@@ -169,18 +174,10 @@ def rectangular_before(feature, ctx):
                        .add("distance_two", lambda: feature.distanceTwo).found)
 
 
-def _axis_record(entity, ctx):
-    """The pattern axis with what it is (face, edge, construction axis ...) when the axis could be read."""
-    record = read_solid.axis_record(entity, ctx)
-    if isinstance(record, dict) and "dir" in record:
-        add_reference(record, geo.native_input(entity, ctx), ctx)
-    return record
-
-
 def circular_before(feature, ctx):
-    data = _common(feature)
+    data = _common(feature, ctx)
     data.update({
-        "axis": geo.safe(lambda: _axis_record(feature.axis, ctx), {"kind": "other"}),
+        "axis": geo.safe(lambda: axis_with_reference(feature.axis, ctx), {"kind": "other"}),
         "quantity": _number(feature.quantity, 1),
         "total_angle_deg": geo.angle(feature.totalAngle),
         "symmetric": geo.safe(lambda: bool(feature.isSymmetric), False),
@@ -192,10 +189,19 @@ def circular_before(feature, ctx):
 
 
 def pattern_after(feature, ctx, data):
-    return {"elements": _elements(feature), "suppressed_ids": _suppressed_ids(feature)}
+    found = {"elements": _elements(feature), "suppressed_ids": _suppressed_ids(feature)}
+    found.update(_result_bodies(feature, ctx, data))
+    return found
 
 
-def _plane_record(entity, ctx):
+def _result_bodies(feature, ctx, data):
+    """`result_bodies` of a pattern or mirror of bodies: the copies with their points, read with the marker after."""
+    return {"result_bodies": result_bodies(feature, ctx)} if data.get("entity_type") == "bodies" else {}
+
+
+def plane_record(entity, ctx):
+    """A plane (construction plane or flat face) as `{ point, normal }` with what it is built on; None when it is not
+    flat."""
     entity = geo.native_input(entity, ctx)
     record = from_assembly(geo.mark_foreign(geo.plane_of(entity), entity, ctx), entity, ctx, slot="plane")
     if isinstance(record, dict):
@@ -205,18 +211,22 @@ def _plane_record(entity, ctx):
 
 
 def mirror_before(feature, ctx):
-    data = _common(feature)
+    data = _common(feature, ctx)
     data.update({
-        "plane": geo.safe(lambda: _plane_record(feature.mirrorPlane, ctx), None),
+        "plane": geo.safe(lambda: plane_record(feature.mirrorPlane, ctx), None),
         "combine": geo.safe(lambda: bool(feature.isCombine), False),
         "target_box_before": ctx.target_box(),
     })
     return data
 
 
+def mirror_after(feature, ctx, data):
+    return _result_bodies(feature, ctx, data)
+
+
 # type name -> (before, after); either may be None
 READERS = {
     "RectangularPatternFeature": (rectangular_before, pattern_after),
     "CircularPatternFeature": (circular_before, pattern_after),
-    "MirrorFeature": (mirror_before, None),
+    "MirrorFeature": (mirror_before, mirror_after),
 }

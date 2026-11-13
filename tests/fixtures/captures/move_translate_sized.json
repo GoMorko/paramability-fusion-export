@@ -1,0 +1,555 @@
+{
+  "_comment": "A plate cut by a peg moved along x by gap_mm.",
+  "capture": 3,
+  "fusion": "2.0.0",
+  "design": "Test",
+  "up_axis": "z",
+  "design_units": "mm",
+  "target": {
+    "token": "t1",
+    "name": "Body1",
+    "box": {
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        60.0,
+        20.0,
+        10.0
+      ]
+    },
+    "volume_mm3": 11856.0
+  },
+  "items": [
+    {
+      "index": 0,
+      "name": "Sketch1",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 1,
+      "name": "Extrude1",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "operation": "newBody",
+        "profiles": [
+          {
+            "sketch": "Sketch1",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      0,
+                      0
+                    ],
+                    "end": [
+                      60,
+                      0
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      60,
+                      0
+                    ],
+                    "end": [
+                      60,
+                      20
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      60,
+                      20
+                    ],
+                    "end": [
+                      0,
+                      20
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      0,
+                      20
+                    ],
+                    "end": [
+                      0,
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 10.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [
+          {
+            "token": "t1",
+            "name": "Body1"
+          }
+        ],
+        "target_box_before": null,
+        "end_offset": 10.0,
+        "params": {
+          "side_one.distance": {
+            "name": "d1",
+            "expression": "plate_h_mm",
+            "value": 10.0
+          }
+        }
+      }
+    },
+    {
+      "index": 2,
+      "name": "Sketch2",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 3,
+      "name": "Extrude2",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t2",
+          "name": "Body2"
+        }
+      ],
+      "data": {
+        "operation": "newBody",
+        "profiles": [
+          {
+            "sketch": "Sketch2",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                3
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      5,
+                      7
+                    ],
+                    "end": [
+                      11,
+                      7
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      11,
+                      7
+                    ],
+                    "end": [
+                      11,
+                      13
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      11,
+                      13
+                    ],
+                    "end": [
+                      5,
+                      13
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      5,
+                      13
+                    ],
+                    "end": [
+                      5,
+                      7
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 4.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [
+          {
+            "token": "t2",
+            "name": "Body2"
+          }
+        ],
+        "target_box_before": null,
+        "end_offset": 4.0,
+        "params": {
+          "side_one.distance": {
+            "name": "d3",
+            "expression": "peg_len_mm",
+            "value": 4.0
+          }
+        }
+      }
+    },
+    {
+      "index": 4,
+      "name": "Move1",
+      "type": "MoveFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t2",
+          "name": "Body2"
+        }
+      ],
+      "data": {
+        "input_kind": "bodies",
+        "bodies": [
+          {
+            "token": "t2",
+            "name": "Body2"
+          }
+        ],
+        "move_type": "translateXYZ",
+        "points_before": [
+          [
+            [
+              5,
+              7,
+              3
+            ],
+            [
+              11,
+              7,
+              3
+            ],
+            [
+              5,
+              13,
+              3
+            ],
+            [
+              11,
+              13,
+              3
+            ],
+            [
+              5,
+              7,
+              7
+            ],
+            [
+              11,
+              7,
+              7
+            ],
+            [
+              5,
+              13,
+              7
+            ],
+            [
+              11,
+              13,
+              7
+            ]
+          ]
+        ],
+        "points_after": [
+          [
+            [
+              25,
+              7,
+              3
+            ],
+            [
+              31,
+              7,
+              3
+            ],
+            [
+              25,
+              13,
+              3
+            ],
+            [
+              31,
+              13,
+              3
+            ],
+            [
+              25,
+              7,
+              7
+            ],
+            [
+              31,
+              7,
+              7
+            ],
+            [
+              25,
+              13,
+              7
+            ],
+            [
+              31,
+              13,
+              7
+            ]
+          ]
+        ],
+        "translate": [
+          20.0,
+          0.0,
+          0.0
+        ],
+        "is_design_space": false,
+        "params": {
+          "translate.0": {
+            "name": "d5",
+            "expression": "gap_mm",
+            "value": 20.0
+          }
+        }
+      }
+    },
+    {
+      "index": 5,
+      "name": "Combine1",
+      "type": "CombineFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "target": {
+          "token": "t1",
+          "name": "Body1"
+        },
+        "tools": [
+          {
+            "token": "t2",
+            "name": "Body2",
+            "volume": 144.0
+          }
+        ],
+        "operation": "cut",
+        "keep_tools": false,
+        "volume_before": 12000.0,
+        "volume_after": 11856.0
+      }
+    }
+  ],
+  "parameters": {
+    "user": [
+      {
+        "name": "plate_h_mm",
+        "expression": "10 mm",
+        "value": 1.0,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 10.0
+      },
+      {
+        "name": "peg_len_mm",
+        "expression": "4 mm",
+        "value": 0.4,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 4.0
+      },
+      {
+        "name": "gap_mm",
+        "expression": "20 mm",
+        "value": 2.0,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 20.0
+      }
+    ],
+    "model": [
+      {
+        "name": "d1",
+        "expression": "plate_h_mm",
+        "value": 1.0,
+        "unit": "mm",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [
+          "plate_h_mm"
+        ],
+        "role": "Distance",
+        "kind": "derived",
+        "display_value": 10.0,
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d1",
+          "name": ""
+        }
+      },
+      {
+        "name": "d3",
+        "expression": "peg_len_mm",
+        "value": 0.4,
+        "unit": "mm",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [
+          "peg_len_mm"
+        ],
+        "role": "Distance",
+        "kind": "derived",
+        "display_value": 4.0,
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d3",
+          "name": ""
+        }
+      },
+      {
+        "name": "d5",
+        "expression": "gap_mm",
+        "value": 2.0,
+        "unit": "mm",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [
+          "gap_mm"
+        ],
+        "role": "Distance",
+        "kind": "derived",
+        "display_value": 20.0,
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d5",
+          "name": ""
+        }
+      }
+    ]
+  }
+}

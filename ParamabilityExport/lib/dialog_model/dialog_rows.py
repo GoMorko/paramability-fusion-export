@@ -28,6 +28,11 @@ MAX_TABLE_ROWS = 14
 HINT = "Click a row to see its comment, formula or why it stays fixed."
 HINT_TOOLTIP = ("While it exports, the design is changed for a moment to measure the sketches, then put back. "
                 "Every parameter also comes along as a variable.")
+FASTER_TRIES = "Faster tries: turn off unused timeline steps while measuring (experimental)"
+FASTER_TRIES_TOOLTIP = ("While the sizes are tried, timeline steps of other components that this body does not use "
+                        "are turned off, so each try rebuilds less. Every step is turned back on afterwards, and "
+                        "steps you had turned off stay off. If the body looks different with them off, the tries run "
+                        "as usual.")
 ELLIPSIS = "..."
 _TYPED = re.compile(r"^\s*([-+]?[0-9.,]+)\s*([a-z]*)\s*$", re.I)
 # A comma that starts exactly three digits ("2,500") reads as a thousands mark or a decimal comma: not guessed.
@@ -173,8 +178,9 @@ def name_cell(name):
 
 
 def name_tooltip(offer):
-    """The tooltip of a name cell: the full name, and why it is offered when another component links it."""
-    return offer["param"] + ("\n" + offer["link"] if offer.get("link") else "")
+    """The tooltip of a name cell: the full name, the formulas the part reads it through, and why it is offered when
+    another component links it."""
+    return "\n".join([offer["param"]] + [offer[key] for key in ("through", "link") if offer.get(key)])
 
 
 def _detail_parts(offer, ticked, lo_text, hi_text):
@@ -183,7 +189,8 @@ def _detail_parts(offer, ticked, lo_text, hi_text):
     if offer["state"] == LOCKED:
         return name, ", " + now, [offer["reason"]]
     if offer["state"] == FORMULA:
-        return name, " = " + offer["formula"], ["Now %s. It follows the parameters it reads." % now]
+        lines = ["Now %s. It follows the parameters it reads." % now]
+        return name, " = " + offer["formula"], lines + ([offer["through"]] if offer.get("through") else [])
     lines = []
     if offer["comment"]:
         lines.append("Comment: %s" % offer["comment"])
@@ -195,6 +202,8 @@ def _detail_parts(offer, ticked, lo_text, hi_text):
         lines.append("Size in Paramability from %s to %s%s." % (lo, hi, unit))
     else:
         lines.append("Stays a fixed number. Tick it to make it a size.")
+    if offer.get("through"):
+        lines.append(offer["through"])
     if offer.get("link"):
         lines.append(offer["link"])
     if offer.get("doubt"):

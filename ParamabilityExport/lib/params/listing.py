@@ -2,12 +2,15 @@
 
 Every entry holds the recipe style name (the same one the size table gives), the Fusion name as the label, the
 current value in mm, degrees or a plain number, and its unit. A formula parameter also holds `expr`, the Fusion
-expression written over the names of other entries, when the size table can translate it.
+expression written over the names of other entries, when the size table can translate it. One that cannot be
+translated holds `expression`, Fusion's own text, and `untranslated`, the reason, next to its plain value.
 """
 import math
 from dataclasses import dataclass, field
 
-from ..package.manifest import MAX_PARAMETER_COMMENT, MAX_PARAMETER_LABEL, MAX_PARAMETERS
+from ..package.manifest import (
+    MAX_FIXED_REASON, MAX_PARAMETER_COMMENT, MAX_PARAMETER_EXPR, MAX_PARAMETER_LABEL, MAX_PARAMETERS)
+from ..package.text import clip
 from ..package.units import manifest_unit
 from . import defaults, names, size_table
 from .expressions import tokenize_formula
@@ -16,6 +19,8 @@ UNIT_REASON = size_table.UNIT_REASON
 CAP_REASON = "The list holds at most %d parameters." % MAX_PARAMETERS
 VALUE_REASON = "The value is not a finite number."
 LARGE_REASON = "The value is too large."
+NOT_READ_REASON = "The formulas of the design could not be read."
+NOT_LISTED_REASON = "It reads a parameter that is not in the list."
 # Largest value the list keeps, in mm, degrees or as is.
 MAX_VALUE = 1e9
 
@@ -23,7 +28,8 @@ MAX_VALUE = 1e9
 @dataclass
 class ParameterListing:
     """entries: manifest parameter dicts. left_out: [{'name' (Fusion), 'reason'}] not listed at all.
-    no_formula: the same for listed formula parameters that carry only their value. renames: Fusion name to entry name.
+    no_formula: the same for listed formula parameters that carry only their value (their entry then holds the Fusion
+    text as `expression`). renames: Fusion name to entry name.
     """
     entries: list = field(default_factory=list)
     left_out: list = field(default_factory=list)
@@ -55,6 +61,7 @@ def list_parameters(params, model_params=(), design_unit="mm"):
         # Without the table the values and names still go in, only the formulas are lost.
         table = None
     listed = []
+    source = {}
     for p in candidates:
         if defaults.dim_of_unit(p.get("unit")) is None:
             out.left_out.append({"name": p["name"], "reason": UNIT_REASON})
@@ -75,26 +82,35 @@ def list_parameters(params, model_params=(), design_unit="mm"):
         entry = table.entry(p["name"]) if table is not None else None
         if entry is not None and entry.state in (size_table.DERIVED, size_table.CONSTANT) and entry.formula:
             item["expr"] = entry.formula
-        elif p.get("kind") == "derived" and entry is not None and entry.state == size_table.NOT_OFFERED:
-            out.no_formula.append({"name": p["name"], "reason": entry.reason})
+        elif p.get("kind") == "derived":
+            _keep_fusion_text(item, p, (entry.reason if entry is not None else NOT_READ_REASON) or NOT_READ_REASON)
         comment = (p.get("comment") or "").strip()
         if comment:
             item["comment"] = comment[:MAX_PARAMETER_COMMENT].strip()
         listed.append((p["name"], item))
+        source[p["name"]] = p
 
     if len(listed) > MAX_PARAMETERS:
         cut = listed[:MAX_PARAMETERS]
-        kept_names = {x[0] for x in cut}
         out.left_out += [{"name": n, "reason": CAP_REASON} for n, _ in listed[MAX_PARAMETERS:]]
         listed = cut
-        out.no_formula = [x for x in out.no_formula if x["name"] in kept_names]
 
     present = {item["name"] for _, item in listed}
     for name, item in listed:
         # A formula that reads an entry cut from the list cannot stand alone.
         if "expr" in item and not _names_in(item["expr"]) <= present:
             del item["expr"]
-            out.no_formula.append({"name": name, "reason": "It reads a parameter that is not in the list."})
+            _keep_fusion_text(item, source[name], NOT_LISTED_REASON)
         out.entries.append(item)
         out.renames[name] = item["name"]
+        if "untranslated" in item:
+            out.no_formula.append({"name": name, "reason": item["untranslated"]})
     return out
+
+
+def _keep_fusion_text(item, p, reason):
+    """The entry of a formula that is not translated carries Fusion's own text and why, next to its plain value."""
+    expression = clip(p.get("expression", ""), MAX_PARAMETER_EXPR)
+    if expression:
+        item["expression"] = expression
+        item["untranslated"] = clip(reason, MAX_FIXED_REASON)

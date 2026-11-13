@@ -4,6 +4,7 @@ import copy
 import unittest
 
 from tests import context  # noqa: F401
+from tests.translator_helpers import left_out, stopped
 from tests.translator_helpers import load_capture
 
 from lib.params import size_table
@@ -107,11 +108,13 @@ class StepsThatLeaveTheBodyAloneTest(unittest.TestCase):
         self.assertEqual(verdicts(result)["Remove1"]["verdict"], "skipped")
         self.assertEqual([n for n in result.notes if "Remove1" in n], [])
 
-    def test_a_remove_is_kept_as_a_stop_when_the_capture_cannot_say_the_body_stayed(self):
-        for changed in (True, None):
-            with self.subTest(target_changed=changed):
-                result = translated(tray_with(_item(7, "Remove1", "RemoveFeature", [], target_changed=changed)))
-                self.assertEqual((result.recipe, result.refusal["name"]), (None, "Remove1"))
+    def test_a_remove_that_changed_the_body_is_left_out(self):
+        result = translated(tray_with(_item(7, "Remove1", "RemoveFeature", [], target_changed=True)))
+        self.assertEqual([gap["name"] for gap in result.gaps], ["Remove1"])
+
+    def test_a_remove_the_capture_cannot_say_left_the_body_alone_stops_the_copy(self):
+        result = translated(tray_with(_item(7, "Remove1", "RemoveFeature", [], target_changed=None)))
+        self.assertEqual(stopped(result)["name"], "Remove1")
 
     def test_a_split_face_on_another_body_is_skipped(self):
         result = translated(tray_with(_item(7, "SplitFace1", "SplitFaceFeature", [LID], target_changed=False)))
@@ -126,16 +129,16 @@ class StepsThatLeaveTheBodyAloneTest(unittest.TestCase):
         self.assertEqual(len(notes), 1)
         self.assertIn("Picks", notes[0])
 
-    def test_a_split_face_that_the_capture_cannot_prove_harmless_stops_the_copy(self):
+    def test_a_split_face_that_the_capture_cannot_prove_harmless_is_not_copied(self):
         result = translated(tray_with(_item(7, "SplitFace1", "SplitFaceFeature", [BODY], target_changed=None)))
-        self.assertEqual(result.refusal["name"], "SplitFace1")
+        self.assertEqual(left_out(result)["name"], "SplitFace1")
 
-    def test_an_unknown_step_on_the_exported_body_stops_the_copy_and_is_named_even_if_its_size_stays(self):
+    def test_an_unknown_step_on_the_exported_body_is_left_out_and_named_even_if_its_size_stays(self):
         # Only a split of faces is known to leave the solid as it is, whatever the box and volume say.
         for changed in (True, False):
             with self.subTest(target_changed=changed):
                 result = translated(tray_with(_item(7, "Draft1", "DraftFeature", [BODY], target_changed=changed)))
-                self.assertEqual((result.recipe, result.refusal["name"]), (None, "Draft1"))
+                self.assertEqual([gap["name"] for gap in result.gaps], ["Draft1"])
 
 
 class FusionWarningTest(unittest.TestCase):
@@ -169,17 +172,17 @@ class CopyLimitTest(unittest.TestCase):
         self.assertEqual((result.refusal, result.fixed, result.loose), (None, [], []))
 
     def test_a_count_that_passes_the_limit_inside_its_size_range_marks_its_size(self):
-        # holes_count runs from 1 to 6: 36 copies now, 72 at the top.
-        result = translated(pattern_of("holes_count * 12", 36))
+        # holes_count runs from 1 to 6: 150 copies now, 300 at the top.
+        result = translated(pattern_of("holes_count * 50", 150))
         self.assertIsNone(result.refusal)
         self.assertEqual([f["name"] for f in result.loose], ["holes_count"])
-        self.assertIn("more than 64 copies", result.loose[0]["reason"])
+        self.assertIn("more than 256 copies", result.loose[0]["reason"])
         self.assertIn("holes_count", result.recipe["sizes"])
 
-    def test_a_count_over_the_limit_at_its_current_value_stops_the_copy(self):
-        result = translated(pattern_of("holes_count * 30", 90))
-        self.assertIsNone(result.recipe)
-        self.assertIn("more than 64 copies", result.refusal["reason"])
+    def test_a_count_over_the_limit_at_its_current_value_is_left_out(self):
+        result = translated(pattern_of("holes_count * 100", 300))
+        self.assertIsNotNone(left_out(result))
+        self.assertIn("more than 256 copies", left_out(result)["reason"])
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 {
- "_comment": "Plate 40 by 20 by 10. Pocket: a circle sketched on Plane1, a construction plane lift_mm (8) above the base, cut 4 mm down. Post: a square on the base sketch joined up to Plane1 itself.",
+ "_comment": "Plate 40 by 20 by 10. Pocket: a circle sketched on Plane1, a construction plane lift_mm (8) above the base origin plane, cut 4 mm down. Post: a square on the base sketch joined up to Plane1 itself.",
  "capture": 3,
  "fusion": "2.0.0",
  "design": "Test",
@@ -309,7 +309,14 @@
       ],
       "reference": {
        "kind": "constructionPlane",
-       "token": "cp1"
+       "token": "cp1",
+       "definition": "ConstructionPlaneOffsetDefinition",
+       "built_on": [
+        {
+         "origin": true
+        }
+       ],
+       "made_by": 2
       }
      }
     ],
@@ -466,7 +473,14 @@
      },
      "offset": 0.0,
      "entity_type": "ConstructionPlane",
-     "token": "cp1"
+     "token": "cp1",
+     "definition": "ConstructionPlaneOffsetDefinition",
+     "built_on": [
+      {
+       "origin": true
+      }
+     ],
+     "made_by": 2
     },
     "side_two": null,
     "symmetric": null,

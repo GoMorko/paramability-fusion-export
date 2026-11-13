@@ -11,7 +11,7 @@ from tests.schema_check import check_recipe
 from lib.export_plan.probe_flow import probe_view
 from lib.params import size_table
 from lib.probe import build as probe_build
-from lib.sketch_values.motion import Terms
+from lib.sketch_values.motion import Stuck, Terms
 from lib.translator import translate
 
 REPORTS = os.path.expanduser("~/Documents/free-projects/3mf-compose/tmp/reports")
@@ -94,12 +94,14 @@ class OwnerCaptureTest(unittest.TestCase):
         self.assertEqual(result.fixed, [])
         free = sorted(n for n, size in result.recipe["sizes"].items() if "value" in size)
         self.assertEqual(free, sorted(n.replace("$", "_") for n in PROBE_TICKED[:5] + PROBE_TICKED[6:]))
-        # The ranges stay as the table gives them. The counts that a pick on a pattern copy needs, the lid slot of
-        # Extrude5 and the pipe taper may fail inside them: the sizes they read are marked, with the value past
-        # which they fail where that is known.
+        # Fusion did not rebuild with the depth halved, so its range starts at its value, and the pipe slope stops
+        # before its taper reaches 45 degrees. The lid slot of Extrude5 may fail inside the other ranges: the sizes
+        # it reads are marked, with the value past which it fails.
+        depth = result.recipe["sizes"][PROBE_TICKED[2].replace("$", "_")]
+        self.assertEqual((depth["min"], depth["max"]), (1.8, 3.6))
+        self.assertEqual(result.recipe["sizes"][PROBE_TICKED[6]]["max"], 44.98)
         marked = {f["name"]: f["reason"] for f in result.loose}
-        self.assertEqual(sorted(marked), sorted([PROBE_TICKED[0], PROBE_TICKED[2], PROBE_TICKED[3], PROBE_TICKED[6]]))
-        self.assertIn("past 44.98", marked[PROBE_TICKED[6]])
+        self.assertEqual(sorted(marked), sorted([PROBE_TICKED[0], PROBE_TICKED[3]]))
         self.assertIn("past 20.52", marked[PROBE_TICKED[3]])
         self.assertEqual(check_recipe(result.recipe), [])
 
@@ -117,10 +119,8 @@ class OwnerCaptureTest(unittest.TestCase):
         result = translate(capture, size_table=table, motion=motion)
         # The pipe offset of the lid moves only an outline that cannot follow it, so no formula reads it.
         self.assertEqual(result.fixed, [])
-        # The ranges stay as the dialog sent them; the sizes that the pattern picks, the lid slot and the pipe taper
-        # read are marked, with the value past which they fail where that is known.
-        self.assertEqual(sorted(f["name"] for f in result.loose),
-                         sorted([PROBE_TICKED[0], PROBE_TICKED[2], PROBE_TICKED[3], PROBE_TICKED[6]]))
+        # A dialog range equal to the default is cut as the default is; the sizes the lid slot reads are marked.
+        self.assertEqual(sorted(f["name"] for f in result.loose), sorted([PROBE_TICKED[0], PROBE_TICKED[3]]))
         self.assertEqual(len([n for n, size in result.recipe["sizes"].items() if "value" in size]), 6)
 
     def test_with_the_offset_back_the_filter_box_sizes_stay_free_with_their_ranges(self):
@@ -134,12 +134,13 @@ class OwnerCaptureTest(unittest.TestCase):
         self.assertEqual(motion.apart, [6, 10, 12, 19])
         result = translate(capture, size_table=table, motion=motion)
         self.assertEqual(result.fixed, [])
-        # The ranges stay as Fusion builds them; the lid slot of Extrude5 may stop meeting the part past these.
+        # The ranges stop at the farthest value of the recorded tries that built, and each cut is told. A new export
+        # tries the values between that one and the failure, so its ranges reach further. The lid slot of Extrude5
+        # may stop meeting the part past these.
         marked = {f["name"]: f["reason"] for f in result.loose}
-        self.assertEqual(sorted(marked), sorted([PROBE_TICKED[0], PROBE_TICKED[2], PROBE_TICKED[3], PROBE_TICKED[6],
-                                                 "_Filter__Wall_thickness_mm"]))
-        for name, where in ((PROBE_TICKED[0], "past 1.8"), (PROBE_TICKED[3], "past 18"),
-                            ("_Filter__Wall_thickness_mm", "outside 0.98 to 1.25"), (PROBE_TICKED[6], "past 44.98")):
+        self.assertEqual(sorted(marked), sorted([PROBE_TICKED[0], PROBE_TICKED[3], "_Filter__Wall_thickness_mm"]))
+        for name, where in ((PROBE_TICKED[0], "past 1.97"), (PROBE_TICKED[3], "past 19.74"),
+                            ("_Filter__Wall_thickness_mm", "below 1.17")):
             self.assertIn("may give unexpected results %s:" % where, marked[name])
         self.assertIn("Extrude5", marked[PROBE_TICKED[3]])
         verdicts = {v["index"]: v for v in result.items}
@@ -147,13 +148,15 @@ class OwnerCaptureTest(unittest.TestCase):
         self.assertEqual(verdicts[92]["verdict"], "translated")
         free = {n: (s["min"], s["max"]) for n, s in result.recipe["sizes"].items() if "value" in s}
         self.assertEqual(free, {
-            "FilterBox___width__contains_CeramicMedium": (0.9, 3.6),
+            "FilterBox___width__contains_CeramicMedium": (1.35, 3.6),
             "FilterBox___height__contains_CeramicMedium": (0.6, 2.4),
-            "FilterBox___depth__contains_CeramicMedium": (0.9, 3.6),
-            "_CeramicMedium__Cube_width_unitless": (9.0, 36.0),
+            "FilterBox___depth__contains_CeramicMedium": (1.35, 3.6),
+            "_CeramicMedium__Cube_width_unitless": (13.5, 36.0),
             "FilterBox__PipeTop_offsetFromCenter_mm": (0.025, 0.1),
-            "_Pipe__Slope_deg": (0.0, 45.5),
-            "_Filter__Wall_thickness_mm": (0.625, 2.5)})
+            "_Pipe__Slope_deg": (0.0, 0.5),
+            "_Filter__Wall_thickness_mm": (0.625, 1.25)})
+        cuts = {c["name"]: c["words"] for c in result.cuts}
+        self.assertEqual(cuts["_Pipe__Slope_deg"], "the range stops at 0.5")
         self.assertEqual(check_recipe(result.recipe), [])
 
     def test_the_rim_chamfer_picked_by_the_top_face_follows_the_box(self):
@@ -175,7 +178,7 @@ class OwnerCaptureTest(unittest.TestCase):
         self.assertEqual(result.recipe["version"], 14)
         self.assertEqual(check_recipe(result.recipe), [])
 
-    def test_without_a_motion_every_range_stays_and_the_sketch_sizes_are_marked_loose(self):
+    def test_without_a_motion_the_sketch_sizes_are_marked_loose(self):
         capture = package_report(self, PACKAGE_WITH_OFFSET_FACES)["capture"]
         params = capture["parameters"]
         ticked = PROBE_TICKED + ["_Filter__Wall_thickness_mm"]
@@ -184,10 +187,10 @@ class OwnerCaptureTest(unittest.TestCase):
         self.assertEqual(result.fixed, [])
         free = {n: (s["min"], s["max"]) for n, s in result.recipe["sizes"].items() if "value" in s}
         self.assertEqual(len(free), 6)
-        self.assertEqual(free["_Pipe__Slope_deg"], (0.0, 45.5))
+        self.assertEqual(free["_Pipe__Slope_deg"], (0.0, 44.98))
         # The sketch sizes are loose, and the pipe offset that no step reads is not a size.
         self.assertEqual(sorted(f["name"] for f in result.loose), sorted(
-            [PROBE_TICKED[0], PROBE_TICKED[2], PROBE_TICKED[3], PROBE_TICKED[6], "_Filter__Wall_thickness_mm"]))
+            [PROBE_TICKED[0], PROBE_TICKED[2], PROBE_TICKED[3], "_Filter__Wall_thickness_mm"]))
         self.assertNotIn("FilterBox__PipeTop_offsetFromCenter_mm", [f["name"] for f in result.loose])
         self.assertEqual(check_recipe(result.recipe), [])
 
@@ -232,10 +235,11 @@ class OwnerCapture072Test(unittest.TestCase):
         self.assertEqual((len(free), len(result.dropped)), (7, 1))
         curved = {n for v in motion.values.values() if getattr(v, "cause", "") == "curve" for n in v.movers}
         self.assertEqual(curved, {result.dropped[0]["name"]})
-        # The slot cut goes through the wall, so the rounds on its edges follow; the one loose size was measured over
-        # part of its range only.
-        self.assertEqual(len(result.loose), 1)
-        self.assertNotIn("picks", result.loose[0]["reason"])
+        # The slot cut goes through the wall, so the rounds on its edges follow. Fusion did not rebuild with the
+        # inner leg halved, so that range starts at its value instead of marking the size.
+        self.assertEqual(result.loose, [])
+        leg = result.recipe["sizes"]["InnerLegLength"]
+        self.assertEqual((leg["min"], leg["max"]), (12.0, 24.0))
         # Some points follow the angle times a length through a cosine or a cotangent, checked by the states.
         self.assertTrue(any(isinstance(v, Terms) for v in motion.values.values()))
 
@@ -272,12 +276,43 @@ class OwnerCapture074Test(unittest.TestCase):
         self.assertEqual(len(copies), 28)
         self.assertTrue(all(count in s["when"] for s in copies))
         self.assertFalse([f for f in result.loose if "different outline" in f["reason"]])
-        self.assertEqual(len(result.dropped), 1)
+        # The size that moves the side outline along a curve stays a loose size: another step still follows it.
+        curved = {n for v in motion.values.values() if isinstance(v, Stuck) and v.cause == "curve" for n in v.movers}
+        self.assertEqual(result.dropped, [])
+        self.assertTrue(curved & {f["name"] for f in result.loose})
         # The two half way rows of the angle had one read between them; the one that does not match its row is left
         # out, and a point follows the angle through the cotangent of its half.
         self.assertTrue(any(isinstance(v, Terms) and any(f[0] == "cot" for _, fs in v.parts for f in fs)
                             for v in motion.values.values()))
         self.assertEqual(check_recipe(result.recipe), [])
+
+
+# Add-in 0.10.2 exports of the lid of the box, with and without its emboss: the wall thickness changes the lid rail's
+# outline above its value, and the box depth reaches the lid only through that rail.
+PACKAGE_LID = "lid Pat - Pipe, Filter (Box, Cylinder).paramability"
+PACKAGE_LID_PLAIN = "lid no embossPat - Pipe, Filter (Box, Cylinder).paramability"
+WALL = "_Filter__Wall_thickness_mm"
+DEPTH = "FilterBox_$_depth__contains_CeramicMedium"
+
+
+class OwnerCaptureLidTest(unittest.TestCase):
+    def test_the_wall_that_changes_the_rail_outline_above_its_value_keeps_the_range_below(self):
+        result, motion = replay(self, PACKAGE_LID)
+        self.assertEqual(motion.spans[WALL]["kept"], [None, 1.25])
+        wall = result.recipe["sizes"][WALL]
+        self.assertEqual((wall["min"], wall["max"]), (0.625, 1.25))
+        cuts = {c["name"]: c["why"] for c in result.cuts}
+        self.assertEqual(cuts[WALL], "LidAndRail makes a different outline at 1.5625")
+        self.assertNotIn(WALL, [f["name"] for f in result.loose])
+        self.assertEqual(check_recipe(result.recipe), [])
+
+    def test_without_the_emboss_the_depth_is_dropped_for_its_own_tries_not_for_the_wall(self):
+        # Below its value no try of the depth rebuilt; above it the rail did not move at the near value and moved at
+        # the next one, so its readings do not lie on a line. The wall's outline change no longer drops it.
+        result, _ = replay(self, PACKAGE_LID_PLAIN)
+        found = {d["name"]: d["reason"] for d in result.dropped}
+        self.assertIn("along a curve", found[DEPTH])
+        self.assertIn("LidAndRail makes a different outline at 1.5625", found[WALL])
 
 
 if __name__ == "__main__":

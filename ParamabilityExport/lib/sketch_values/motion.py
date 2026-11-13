@@ -211,7 +211,7 @@ class Motion:
     optimistic = False
 
     def __init__(self, values=None, box_max=None, states=None, dropped=None, curves=None, apart=None,
-                 unmeasured=None, untried=None, refs=None, body_moved=None, spans=None, flipped=None):
+                 unmeasured=None, untried=None, refs=None, body_moved=None, spans=None, flipped=None, faces=None):
         self.values = dict(values or {})
         self.box_max = box_max
         self.states = list(states or [])
@@ -227,6 +227,8 @@ class Motion:
         self.body_moved = list(body_moved or [])
         # Fusion name to { low, high, failed }: the values a size was measured between, and the ones that did not build
         self.spans = dict(spans or {})
+        # `<item>/face` to the token of the flat face used as an outline that the probe read at every try
+        self.faces = dict(faces or {})
 
     def get(self, key):
         """`Affine`, `Terms`, `Stuck`, or None when the value did not move."""
@@ -255,6 +257,8 @@ class Motion:
             out["body_moved"] = list(self.body_moved)
         if self.spans:
             out["spans"] = {name: dict(span) for name, span in self.spans.items()}
+        if self.faces:
+            out["faces"] = dict(self.faces)
         return out
 
     @classmethod
@@ -273,7 +277,7 @@ class Motion:
                 values[key] = Affine(raw.get("const", 0.0), raw.get("terms"), raw.get("sketch", ""))
         return cls(values, data.get("box_max"), data.get("states"), data.get("dropped"), data.get("curves"),
                    data.get("apart"), data.get("unmeasured"), data.get("untried"), data.get("refs"),
-                   data.get("body_moved"), data.get("spans"), data.get("flipped"))
+                   data.get("body_moved"), data.get("spans"), data.get("flipped"), data.get("faces"))
 
 
 class _Optimistic(Motion):

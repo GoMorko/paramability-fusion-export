@@ -53,6 +53,14 @@ def not_built(motion, size):
     return bool(found and found.get("failed") and abs(found["high"] - found["low"]) <= 1e-9)
 
 
+def kept_only_now(motion, size):
+    """True when the probe found no value but the value now at which Fusion rebuilt and every followed sketch kept its
+    outline (`Motion.spans` `kept` is the value now at both ends): the copy cannot follow the size."""
+    found = span(motion, size)
+    kept = (found or {}).get("kept")
+    return bool(kept and None not in kept and abs(kept[1] - kept[0]) <= 1e-9)
+
+
 def unmeasured(found, readable, read):
     """{ sketch name: reason } of the sketches of a `plan.Scan` that the probe could not measure.
 

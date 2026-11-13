@@ -4,7 +4,7 @@ import os
 import tempfile
 
 from ...lib.export_plan.assemble import build_package
-from ...lib.package.naming import design_title, package_file_name, saved_message
+from ...lib.package.naming import body_file_title, component_names, design_title, package_file_name, saved_message
 from ...lib.design_edit.runner import RowExport
 from ...lib.dialog_model.sizes_text import pick_default_index, read_sizes
 from ...lib.design_edit.marker import read_marker
@@ -31,7 +31,7 @@ def run_export(design, parameters, form):
         return
 
     title = design_title(design_info.document_name(app))
-    out_path = ask_save_path(package_file_name(title))
+    out_path = ask_save_path(package_file_name(body_file_title(title, component_names([body]))))
     if out_path is None:
         return
 

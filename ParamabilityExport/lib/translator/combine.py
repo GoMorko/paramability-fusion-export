@@ -1,29 +1,37 @@
 """Combine feature handler (CombineFeature).
 
-A tool body that Fusion builds on its own and then joins, cuts or intersects with the exported body is written at
-the Combine's place. The walk keeps the steps of every other body in `ctx.pending_tools`, but only while they add
-material to it (`adds_only`): a first step that makes the body and later steps that join to it. Written one after the
-other with the Combine's operation, such steps give what the Combine gives: cutting A and then B removes the union of
-A and B, and joining them adds it. A tool body with any other history (a cut, a round, a hole, a shell, a step that
-cannot be copied) cannot be replayed, so the Combine refuses and names it.
+A tool body that Fusion builds on its own and then joins, cuts or intersects with the exported body is written at the
+Combine's place. Each tool is walked on its own (`tool_walk.build`).
 
-An intersect keeps only the shared part of the tool, which is not a sequence of intersects with its steps, so it
-takes a tool of one step. A tool the Combine keeps stays pending, so a later Combine can use it again.
+Steps that only add material to the tool (a first step that makes the body and later steps that join to it) are written
+one after the other with the Combine's operation, which gives what the Combine gives: cutting A and then B removes the
+union of A and B, and joining them adds it. An intersect keeps only the shared part of the tool, so this holds for one
+tool of one step. Such recipes open in older versions of the app.
+
+Any other tool (with a cut, a round, a hole, a shell, a Move, a Paste or a Combine of its own) becomes one `toolBody`
+step that holds the tool's steps. A pattern of bodies the Combine takes whole becomes a tool per source and one step
+that repeats them (`body_copies.py`). A tool whose walk leaves a step out (a gap) is always a `toolBody` step. A tool
+that cannot be built refuses the Combine, and the reason names the step that stops it. A tool the Combine keeps can be
+used again by a later Combine.
+
+Fusion's help does not say what an intersect of several tools keeps, so the export measures it (`intersect_model`):
+what every tool holds is one `toolBody` per tool, what any tool holds is one `toolBody` that holds the tools. When the
+measures cannot tell the two apart, the sizes the tools read are marked.
 
 A tool body made in another component (`foreign`) is handled the same way. Its steps were read in that component's
-frame (`helper_of` items) and wait in `ctx.pending_tools`; the Combine carries them into the exported body's frame
-with the tool's place in the assembly (`tool_move`) before it writes them. The place follows the sizes that move the
-tool's component, or marks them.
+frame (`helper_of` items); the Combine carries them into the exported body's frame with the tool's place in the
+assembly (`tool_move`) before it writes them. The place follows the sizes that move the tool's component, or marks
+them.
 """
 import copy
 
-from . import place, ref_motion, step_kinds, tool_items
-from .capture import outside_component, same_body
-from .combine_volume import exceeds
-from .moved_placer import MovedMaker
+from . import body_copies, place, ref_motion, step_kinds, tool_items, tool_walk
+from .combine_volume import exceeds, exceeds_tools, rule_unproven
+from .moved_placer import MovedMaker, motion_of
 from .result import Refusal, StepResult
-from .values import Quantity
-from .words import type_words
+from .tool_placer import ToolMaker
+from .values import Quantity, reads_in
+from .walk import copies_bodies, is_foreign
 
 
 COMBINE = {"join": "add", "cut": "cut", "intersect": "intersect"}
@@ -49,74 +57,54 @@ def adds_only(entries, joining):
     return bool(entries)
 
 
-def pending_key(body, component=None):
-    """The key a body's steps wait under in `ctx.pending_tools`: its token, else its name (with the token of its
-    component when it lives in another one, since names repeat between components)."""
+def tool_key(body):
+    """What tells tool bodies apart: the token, else the name (with the component when it lives in another one, since
+    names repeat between components)."""
     if body.get("token"):
         return body["token"]
+    component = tool_items.component_token(body) if tool_items.is_foreign_tool(body) else None
     name = body.get("name")
     return "%s/%s" % (component, name) if component and name else name
 
 
-def _pending_for(ctx, body):
-    component = tool_items.component_token(body) if tool_items.is_foreign_tool(body) else None
-    for key in (body.get("token"), pending_key(body, component), body.get("name")):
-        if key and key in ctx.pending_tools:
-            return key
-    return None
-
-
-def _touches(item, body):
-    return any(same_body(b, body) for b in item.get("bodies_after") or [])
-
-
-def _items_on(ctx, body, before):
-    """Timeline items before `before` that built or changed `body`. For a tool of another component, those of that
-    component."""
-    if tool_items.is_foreign_tool(body):
-        return tool_items.chain(ctx.capture["items"], body, before)
-    return [
-        other for other in ctx.capture["items"]
-        if other["index"] < before and not other.get("suppressed") and not outside_component(other)
-        and not step_kinds.skipped(other.get("type")) and _touches(other, body)
-    ]
-
-
-def _what(item, refusal):
-    """The item that stops the copy, in plain words: its name and what it is. `refusal` is the reason the walk gave
-    when it could not copy the item as a step, or None."""
-    operation = (item.get("data") or {}).get("operation")
-    kind = operation if operation in ("cut", "intersect") else type_words(item.get("type") or "")
-    found = "%s (%s)" % (item.get("name"), kind)
-    return "%s, which cannot be copied: %s" % (found, refusal.rstrip(". ").lower()) if refusal else found
-
-
-def _reaches_face(item):
+def _uses_face(item):
+    """True when a step starts from or reaches to a face, or takes a flat face as its outline."""
     data = item.get("data") or {}
     kinds = ((data.get("start") or {}).get("kind"), (data.get("side_one") or {}).get("kind"),
              (data.get("side_two") or {}).get("kind"))
-    return "fromEntity" in kinds or "toEntity" in kinds
+    drawn_on_face = any(isinstance(p, dict) and p.get("face") for p in data.get("profiles") or [])
+    return "fromEntity" in kinds or "toEntity" in kinds or drawn_on_face
 
 
-def _tool_chain(ctx, body, item):
-    """(key, StepResult) of the pending steps that build `body`, or a Refusal that says why they cannot be copied."""
-    name = body.get("name") or "a body"
-    if tool_items.is_foreign_tool(body):
-        name = "%s of %s" % (name, tool_items.component_name(body))
-    key = _pending_for(ctx, body)
-    held = ctx.pending_tools.get(key) if key else None
-    made = {other["index"] for other in held.items} if held else set()
-    for other in _items_on(ctx, body, item["index"]):
-        if other["index"] not in made:
-            reason = ctx.tool_refusals.get(other["index"]) or other.get("helper_unread")
-            return Refusal("The tool body %s has %s. A tool is copied only when every step on it adds material."
-                           % (name, _what(other, reason)))
-    if held is None:
-        return Refusal("The tool body %s is built in a way that cannot be copied." % name)
-    if len(held.entries) > 1 and any(_reaches_face(other) for other in held.items):
-        return Refusal("The tool body %s has a step that starts from or reaches to a face, and a tool of more than "
-                       "one step cannot tell its faces apart." % name)
-    return key, held
+def _writes_flat(tool):
+    """True when the steps of a walked tool can be written one by one onto the part. A tool with a step left out
+    (a gap) is not: the missing step belongs in the tool's own list."""
+    if tool.gaps:
+        return False
+    joining = False
+    for item in tool.chain:
+        data = item.get("data") or {}
+        if (data.get("tools") or len(item.get("bodies_after") or []) != 1 or is_foreign(data) or copies_bodies(item)
+                or not adds_only(tool.entries_of(item), joining)):
+            return False
+        joining = True
+    reaches = any(_uses_face(item) for item in tool.chain)
+    # A step written onto the part is worked out in the part's frame, which is not the frame of another component,
+    # and against the part alone, which does not hold the faces of the tool's earlier steps.
+    return not (reaches and (len(tool.entries) > 1 or tool_items.is_foreign_tool(tool.body)))
+
+
+def _unusable(ctx, body):
+    """A Refusal when the tool `body` cannot be taken by this Combine, else None."""
+    if body.get("foreign") and not (tool_items.is_foreign_tool(body) and isinstance(body.get("place"), dict)):
+        return Refusal("The tool body of %s is in another component, which is not copied yet."
+                       % (body.get("name") or "a body"))
+    if tool_items.is_foreign_tool(body) and ctx.component is not None:
+        return Refusal("The tool body %s is taken by a Combine inside a tool body of another component, which is not "
+                       "copied yet." % tool_walk.name_of(body))
+    if tool_key(body) in ctx.used_tools:
+        return Refusal("The tool body %s was used up by an earlier combine." % tool_walk.name_of(body))
+    return None
 
 
 def _frame_refusal(name, problem):
@@ -168,50 +156,140 @@ def _follow_place(ctx, item, tool, found):
     return shift if any(q.sized for q in shift) else None
 
 
-def handle(item, ctx):
-    data = item.get("data") or {}
-    combine = COMBINE.get(data.get("operation"))
-    if combine is None:
-        return Refusal("This combine works in a way that is not copied yet.")
-    if not ctx.is_target(data.get("target")):
-        return Refusal("This combine changes a body other than the exported one.")
-    tools = data.get("tools") or []
-    if not tools:
-        return Refusal("This combine has no tool bodies.")
-
-    found = []
-    for body in tools:
-        if body.get("foreign") and not (tool_items.is_foreign_tool(body) and isinstance(body.get("place"), dict)):
-            return Refusal("The tool body of %s is in another component, which is not copied yet."
-                           % (body.get("name") or "a body"))
-        chain = _tool_chain(ctx, body, item)
-        if isinstance(chain, Refusal):
-            return chain
-        moved = tool_move(ctx, item, body) if tool_items.is_foreign_tool(body) else (None, None)
-        if isinstance(moved, Refusal):
-            return moved
-        found.append((chain[0], chain[1], moved))
-    if len({key for key, _, _ in found}) != len(found):
-        return Refusal("This combine lists the same tool body twice.")
-    if combine == "intersect" and any(len(held.entries) > 1 for _, held, _ in found):
-        return Refusal("A combine that keeps only the shared part is copied only for a tool of one step.")
-    if combine != "intersect" and exceeds(data, [other for _, held, _ in found for other in held.items]):
-        return Refusal("This combine changes the part by more than the steps of its tool body fill, so the tool "
-                       "cannot be copied exactly.")
-
+def _flat(ctx, found, combine):
+    """The steps of every tool, written one by one with the Combine's operation, or a Refusal."""
     out = StepResult()
-    for key, held, (move, shift) in found:
+    for tool, (move, shift) in found:
+        held = tool_walk.on_part(ctx, tool)
+        if isinstance(held, Refusal):
+            return held
         for entry in held.entries:
             placed = copy.deepcopy(entry.step)
             placers = entry.placers
             if move is not None:
                 placed = place.place({"features": [placed]}, move, shift)["features"][0]
-                placers = [MovedMaker(entry.placers, move)]
+                placers = [MovedMaker(entry.placers, motion_of(move, shift))]
             placed["combine"] = combine
             out.add(placed, placers, entry.picks, entry.repeatable)
         out.join(held)
-        if not data.get("keep_tools"):
-            del ctx.pending_tools[key]
+    return out
+
+
+def _tool_steps(found, combine):
+    """One step per tool that holds the tool's own steps."""
+    out = StepResult()
+    for tool, (move, shift) in found:
+        step = {"kind": "toolBody", "combine": combine, "features": tool.steps}
+        if move is not None:
+            step = place.place({"features": [step]}, move, shift)["features"][0]
+        out.add(step, [ToolMaker(tool.ctx, motion_of(move, shift) if move is not None else None)],
+                label=tool.body.get("name"))
+        tool.hand_over(out)
+    return out
+
+
+def _union_tool(ctx, item, found):
+    """One intersecting step that holds the tools: the part keeps what any of them holds."""
+    inner = _tool_steps(found, "add")
+    inner.steps[0]["combine"] = "new"
+    held = ctx.child({"name": item.get("name")}, "%st%s_any_" % (ctx.id_prefix, item["index"]), depth=ctx.depth + 1)
+    held.add_steps(item, inner)
+    out = StepResult()
+    out.add({"kind": "toolBody", "combine": "intersect", "features": held.steps}, [ToolMaker(held)])
+    out.join(inner)
+    return out
+
+
+def _whole_patterns(ctx, item, tools, combine):
+    """`(results, tools left)`: the steps of each pattern this Combine takes whole, and the tools still to walk; or a
+    Refusal."""
+    results, left = [], list(tools)
+    for number, group in enumerate(body_copies.groups(ctx, item, tools, combine)):
+        written = body_copies.write(ctx, item, group, combine, number)
+        if isinstance(written, Refusal):
+            return written
+        if written is not None:
+            results.append(written)
+            left = [tool for tool in left if not group.holds(tool)]
+    return results, left
+
+
+def handle(item, ctx):
+    data = item.get("data") or {}
+    combine = COMBINE.get(data.get("operation"))
+    if combine is None:
+        return Refusal("This combine works in a way that is not copied yet.")
+    tools = data.get("tools") or []
+    if not ctx.is_target(data.get("target")):
+        if data.get("keep_tools") and item.get("target_changed") is not True and any(ctx.is_target(t) for t in tools):
+            return StepResult()  # This body is only a tool here, and the Combine keeps it as it is.
+        return Refusal("This combine changes a body other than the exported one.")
+    if not tools:
+        return Refusal("This combine has no tool bodies.")
+    # Fusion may list one tool body twice; taking it once gives the same shape.
+    tools = list({tool_key(body): body for body in tools}.values())
+    data = dict(data, tools=tools)
+    model = data.get("intersect_model")
+    if combine == "intersect" and len(tools) > 1 and model not in ("every", "any"):
+        return Refusal("This combine keeps a shared part that the copy could not work out.")
+    out = write_tools(ctx, item, data, combine)
+    if isinstance(out, Refusal):
+        return out
     if data.get("keep_tools"):
         ctx.note("Fusion kept the tool bodies next to the part. Only the part is copied.")
+    else:
+        ctx.used_tools.update(tool_key(body) for body in tools)
+    return out
+
+
+def write_tools(ctx, item, data, combine):
+    """The steps that join, cut or intersect (`combine`: add, cut, intersect) the tool bodies `data.tools` with the
+    body the walk builds, at the place of `item`; or a Refusal. `data` holds the measures the checks read
+    (`volume_before`, `volume_after`, the tools' `volume`, `intersect_model`, `intersect_volumes`)."""
+    tools = data["tools"]
+    model = data.get("intersect_model")
+    for body in tools:
+        problem = _unusable(ctx, body)
+        if problem is not None:
+            return problem
+
+    patterns = _whole_patterns(ctx, item, tools, combine)
+    if isinstance(patterns, Refusal):
+        return patterns
+    patterns, left = patterns
+    # Tools kept where any of them reaches sit inside one more tool step (`_union_tool`), so they are a level deeper.
+    union = combine == "intersect" and model == "any" and len(left) > 1
+    found = []
+    for number, body in enumerate(left):
+        tool = tool_walk.build(ctx, body, item["index"], ctx.depth + (2 if union else 1), number)
+        if isinstance(tool, Refusal):
+            return tool
+        moved = tool_move(ctx, item, body) if tool_items.is_foreign_tool(body) else (None, None)
+        if isinstance(moved, Refusal):
+            return moved
+        found.append((tool, moved))
+
+    flat = not patterns and all(_writes_flat(tool) for tool, _ in found) and (
+        combine != "intersect" or (len(found) == 1 and len(found[0][0].entries) == 1))
+    if flat and combine != "intersect" and exceeds(data, [other for tool, _ in found for other in tool.chain]):
+        return Refusal("This combine changes the part by more than the steps of its tool body fill, so the tool "
+                       "cannot be copied exactly.")
+    if not flat and exceeds_tools(combine, data):
+        return Refusal("This combine changes the part by more than its tool bodies hold, so the tools cannot be "
+                       "copied exactly.")
+    if flat:
+        out = _flat(ctx, found, combine)
+    elif union:
+        out = _union_tool(ctx, item, found)
+    else:
+        out = _tool_steps(found, combine)
+    if isinstance(out, Refusal):
+        return out
+    if combine == "intersect" and len(tools) > 1 and rule_unproven(data.get("intersect_volumes")):
+        ctx.doubt(reads_in(out.steps), "%s keeps the same shape under both rules for several tools at these sizes, and "
+                  "at other sizes the rules can differ" % (item.get("name") or "This combine"))
+    for written in patterns:
+        out.extend(written.entries)
+        out.join(written)
+        out.wraps_body = out.wraps_body or written.wraps_body
     return out

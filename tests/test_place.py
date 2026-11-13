@@ -75,10 +75,13 @@ class FieldTableTest(unittest.TestCase):
     def test_table_matches_every_position_and_direction_in_the_schema(self):
         schema = load_schema()
         defs = schema["$defs"]
-        steps = schema["properties"]["features"]["items"]["anyOf"]
+        steps = [defs[s["$ref"].split("/")[-1]] if "$ref" in s else s
+                 for s in schema["properties"]["features"]["items"]["anyOf"]]
         kinds = set()
         for step in steps:
             kind = step["properties"]["kind"]["const"]
+            if "features" in step["properties"]:
+                continue  # A tool step holds steps and has no place of its own; each nested step is moved by its kind.
             kinds.add(kind)
             paths = schema_paths(step, defs)
             if kind in place.NOT_WRITTEN:

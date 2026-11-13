@@ -2,7 +2,7 @@
 import os
 
 from ..package.caps import check_step_size, check_total_size
-from .apply import RowBuildError, apply_row_values, measure_baseline
+from .apply import RowBuildError, apply_row_values, measure_baseline, new_errors
 from .errors import StepExportError
 from .restore import restore_parameters
 
@@ -18,6 +18,7 @@ class RowExport:
     units: {parameter name: Fusion unit string}.
     export_step: callable(path) writing the STEP of the picked body for the current design state. A row with
     `"step": False` only recomputes: export_step is called with None, expects no file, and the result has no STEP.
+    A row with a STEP is recomputed in full before its STEP is written (`apply_row_values` with `full`).
     current_row is the name of the row being exported while export_step runs, current_key its `key` (the name when
     the row has none); a name is cut to the manifest limit, so use the key to tell rows apart.
     Before its first row the job measures a baseline (`apply.measure_baseline`) and notes the parameters: a design
@@ -27,6 +28,11 @@ class RowExport:
     the parameters that could not be put back by any run, whatever the outcome.
     before_row(row), when given, is called just before each row's values are set, once the parameters are back: the
     place to read the design the row starts from.
+    With build errors tolerated, every row after a row that did not build first checks, with the parameters back and
+    before `before_row`, that the design rebuilds as in the baseline (`apply.new_errors`, which recomputes in full once
+    when a step reads in error). When a step is still in error, the failed row has left the design broken, so every
+    later row would fail for that reason and not for its own values: the run stops and `not_back` says
+    `{ after, items }`, the row run last and the steps in error. No later run of the job runs a row.
     """
 
     def __init__(self, store, units, export_step, before_row=None):
@@ -37,6 +43,9 @@ class RowExport:
         self.current_row = ""
         self.current_key = ""
         self.restore_failures = []
+        self.not_back = None
+        self._last = None  # the label of the row run last
+        self._last_failed = False  # whether that row did not build
         self._saved = None
         self._baseline = None
         self._total = 0
@@ -47,6 +56,16 @@ class RowExport:
         A parameter that cannot be put back is listed in restore_failures, and the run goes on."""
         failed = restore_parameters(self.store, self._saved)
         self.restore_failures = list(dict.fromkeys(self.restore_failures + failed))
+
+    def _stopped(self):
+        """True when an earlier row left the design broken with the parameters back (`not_back`). Only a row that did
+        not build is followed by the check."""
+        if self.not_back is None and self._last_failed:
+            self._last_failed = False
+            broken = new_errors(self.store, self._baseline.errors)
+            if broken:
+                self.not_back = {"after": self._last, "items": broken}
+        return self.not_back is not None
 
     def run(self, rows, tmpdir, progress, tolerate_build_errors=False):
         """Return [{'name', 'values', 'step_file'}]. progress(index, total, text) returns False to cancel; `text` is
@@ -69,12 +88,17 @@ class RowExport:
                     raise ExportCancelled()
                 if index > 1:
                     self._back_to_current()
+                if tolerate_build_errors and self._stopped():
+                    break
                 if self.before_row is not None:
                     self.before_row(row)
+                self._last, self._last_failed = row.get("label") or row["name"], False
                 try:
-                    values = apply_row_values(self.store, self.units, row["values"], self._baseline)
+                    values = apply_row_values(self.store, self.units, row["values"], self._baseline,
+                                              full=row.get("step") is not False)
                 except RowBuildError as exc:
                     if tolerate_build_errors:
+                        self._last_failed = True
                         results.append({"name": row["name"], "values": None, "step_file": None, "error": str(exc),
                                         "detail": exc.detail})
                         continue

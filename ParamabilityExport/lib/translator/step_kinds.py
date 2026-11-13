@@ -22,6 +22,8 @@ UNREAD = "unread"       # an item whose Fusion entity could not be read (type "n
 PROFILES = "profiles"   # data.profiles: sketch outlines
 AXIS = "axis"           # data.axis: a sketch line used as a revolve axis
 HOLE_POINTS = "hole"    # data.positions with point_tokens: hole centres on a sketch
+PATH = "path"           # data.path: the curves of one sketch a sweep follows
+OUTLINE_FACE = "face"   # a flat face used as the outline: one in data.profiles, or the face a trimmed emboss keeps to
 
 # How a pattern or mirror treats a recipe step it repeats.
 SOLID = "solid"         # repeated by the pattern or mirror step itself (`of`)
@@ -38,11 +40,18 @@ class StepType:
     reader: the `lib/fusion_reader` module whose `READERS` dict gives its (before, after) reader pair, or None.
     handler: "module:function" in `lib/translator` that copies it (`handle(item, ctx) -> StepResult | Refusal`),
       or None when the recipe has no step for it.
-    sketches: the sketch records it carries that the size probe follows (PROFILES, AXIS, HOLE_POINTS). A sketch
-      token anywhere else in its data leaves that sketch unfollowed.
+    sketches: the sketch records it carries that the size probe follows (PROFILES, AXIS, HOLE_POINTS, PATH), and
+      OUTLINE_FACE when the probe reads a flat face it uses as its outline. A sketch token anywhere else in its data
+      leaves that sketch unfollowed.
     unsupported: for a modeling type without a handler, the plain reason the copy stops at it.
     splits_faces: it cuts faces of a body without changing its solid, so it is skipped when the capture shows the
       body unchanged.
+    makes_bodies: it can make bodies that copy others (a Paste, a pattern or mirror of bodies). Its other results are
+      expected, so the walk of one body does not refuse them.
+    moves_bodies: it carries the bodies its data names to another place.
+    splits_bodies: it cuts bodies into pieces, and a piece may come out as a new body (translator/lineage.py).
+    reaches_bodies: it can change or take bodies of another component than its own (a Combine's tool bodies, a Move,
+      a split), so the capture walk measures the target around it also when it lives in another component.
     """
 
     name: str
@@ -53,6 +62,10 @@ class StepType:
     sketches: tuple = ()
     unsupported: str = None
     splits_faces: bool = False
+    makes_bodies: bool = False
+    moves_bodies: bool = False
+    splits_bodies: bool = False
+    reaches_bodies: bool = False
 
 
 @dataclass(frozen=True)
@@ -82,24 +95,32 @@ class RecipeKind:
 
 
 STEP_TYPES = (
-    StepType("ExtrudeFeature", "extrude", reader="read_solid", handler="extrude:handle", sketches=(PROFILES,)),
+    StepType("ExtrudeFeature", "extrude", reader="read_solid", handler="extrude:handle",
+             sketches=(PROFILES, OUTLINE_FACE)),
     StepType("RevolveFeature", "revolve", reader="read_solid", handler="revolve:handle", sketches=(PROFILES, AXIS)),
     StepType("HoleFeature", "hole", reader="read_solid", handler="hole:hole", sketches=(HOLE_POINTS,)),
     StepType("ThreadFeature", "thread", reader="read_solid", handler="hole:thread"),
-    StepType("CombineFeature", "combine", reader="read_solid", handler="combine:handle"),
+    StepType("CombineFeature", "combine", reader="read_solid", handler="combine:handle", reaches_bodies=True),
     StepType("FilletFeature", "fillet", reader="read_finish", handler="finish:fillet"),
     StepType("ChamferFeature", "chamfer", reader="read_finish", handler="finish:chamfer"),
     StepType("ShellFeature", "shell", reader="read_finish", handler="finish:shell"),
+    StepType("DraftFeature", "draft", reader="read_finish", handler="draft:handle"),
     StepType("OffsetFacesFeature", "offset faces", reader="read_offset", handler="offset:handle"),
-    StepType("RectangularPatternFeature", "rectangular pattern", reader="read_repeat", handler="repeat:rectangular"),
-    StepType("CircularPatternFeature", "circular pattern", reader="read_repeat", handler="repeat:circular"),
-    StepType("MirrorFeature", "mirror", reader="read_repeat", handler="repeat:mirror"),
+    StepType("RectangularPatternFeature", "rectangular pattern", reader="read_repeat",
+             handler="body_copies:rectangular", makes_bodies=True),
+    StepType("CircularPatternFeature", "circular pattern", reader="read_repeat", handler="body_copies:circular",
+             makes_bodies=True),
+    StepType("MirrorFeature", "mirror", reader="read_repeat", handler="body_copies:mirror", makes_bodies=True),
     StepType("SplitFaceFeature", "split face", splits_faces=True),
-    StepType("CopyPasteBody", "pasted body",
-             unsupported="A pasted body is not copied yet: the copy would need the steps of the body it comes from."),
-    StepType("MoveFeature", "move",
-             unsupported="A Move is not copied yet: the copy cannot tell how far it moves the body."),
-    StepType("EmbossFeature", "emboss", reader="read_emboss", handler="emboss:handle", sketches=(PROFILES,)),
+    StepType("SplitBodyFeature", "split body", reader="read_split", handler="split:handle",
+             splits_bodies=True, reaches_bodies=True),
+    StepType("CopyPasteBody", "pasted body", reader="read_paste", handler="paste:handle", makes_bodies=True),
+    StepType("MoveFeature", "move", reader="read_move", handler="move:handle", moves_bodies=True,
+             reaches_bodies=True),
+    StepType("EmbossFeature", "emboss", reader="read_emboss", handler="emboss:handle",
+             sketches=(PROFILES, OUTLINE_FACE)),
+    StepType("SweepFeature", "sweep", reader="read_sweep", handler="sweep:handle", sketches=(PROFILES, PATH)),
+    StepType("LoftFeature", "loft", reader="read_sweep", handler="loft:handle", sketches=(PROFILES,)),
     StepType("Sketch", "sketch", role=SKETCH),
     StepType("ConstructionPlane", "construction plane", role=SKETCH),
     StepType("ConstructionAxis", "construction axis", role=SKETCH),
@@ -135,12 +156,19 @@ RECIPE_KINDS = (
                directions=(("linear", "dir"), ("linear2", "dir"), ("polar", "axis")), repeat=SOLID, repeats=True),
     RecipeKind("mirror", positions=(("plane", "origin"),), directions=(("plane", "normal"),), repeat=SOLID,
                repeats=True),
-    RecipeKind("loft", written=False),
-    RecipeKind("sweep", written=False),
+    RecipeKind("toolBody", version=15, repeat=SOLID),
+    RecipeKind("move", version=15, positions=(("turn", "axisPoint"),), directions=(("translate",), ("turn", "axis"))),
+    RecipeKind("loft", positions=(("sections", "[]", "on", "origin"), ("within", "on", "origin")),
+               directions=(("sections", "[]", "on", "normal"), ("sections", "[]", "on", "xDir"),
+                           ("within", "on", "normal"), ("within", "on", "xDir")), repeat=SOLID, combine_tool=True),
+    RecipeKind("sweep", positions=(("sketch", "on", "origin"), ("path", "on", "origin"), ("path", "points", "[]")),
+               directions=(("sketch", "on", "normal"), ("sketch", "on", "xDir"), ("path", "on", "normal"),
+                           ("path", "on", "xDir")), repeat=SOLID, combine_tool=True),
     RecipeKind("thread", written=False),
     RecipeKind("coil", written=False),
     RecipeKind("skin", written=False),
-    RecipeKind("draft", written=False),
+    RecipeKind("draft", version=8, positions=(("faces", "near", "[]"), ("neutral", "origin")),
+               directions=(("neutral", "normal"),)),
     RecipeKind("bevelGear", written=False),
 )
 
@@ -167,6 +195,13 @@ def skipped(name):
 
 def is_assembly(name):
     return role(name) == ASSEMBLY
+
+
+def keeps_to_own_bodies(name):
+    """True for a listed type that cannot change bodies of another component than its own (`reaches_bodies`). A type
+    the table does not list may, so it gives False."""
+    found = _TYPES.get(name)
+    return found is not None and not found.reaches_bodies
 
 
 def makes_no_body(name):

@@ -1,24 +1,36 @@
 """What to read from Fusion and which size settings to try. Pure: no Fusion imports.
 
 `scan` finds the sketches whose numbers the probe can follow ("covered" ones): every capture record that names them
-is a profile, a hole point set or a revolve axis line that the reader gave tokens for. Which records a step type
-carries comes from the step kind table (`translator/step_kinds.py`, `sketches`). `refs` finds the measured
-references of other components (a plane, axis, direction or point a step uses) that the probe reads again at every
-state. `request` is what the reader reads per state, `kept_sizes` the sizes worth probing, `probe_rows` the size
-settings to try.
+is a profile, a hole point set, a revolve axis line or a sweep path of lines and arcs that the reader gave tokens
+for. Which records a step type carries comes from the step kind table (`translator/step_kinds.py`, `sketches`).
+`refs` finds the measured references (a plane, axis, direction or point of another component that a step uses, and
+a face or plane of the part that an extrude starts from or reaches to) that the probe reads again at every state. A
+flat face a step uses as its outline (`outline_face`) is a target of its own (`kind` "face"): the reader reads its
+loops again at every state with the timeline marker before that step, since the step itself changes the face.
+`request` is what the reader reads per state, `kept_sizes` the sizes worth probing, `probe_rows` the size settings to
+try.
 
 Sizes are dicts as in `export_plan.size_offers.probe_sizes`: param (Fusion name), size (recipe name), unit, value,
 min, max (manifest numbers).
 
-Row order, each step only while rows are left under `MAX_PROBE_ROWS` (64), steps 1 and 2 in `probe_rows`:
-1. Near rows: every size that moves a sketch, then the sizes tried on a guess, gets one row `NEAR_SHARE` (25 percent)
-   of its value below and one above, kept inside its range (a count is a whole number, at least one step away).
-2. When two or more sizes are tried, one row with all of them at their lower near value and one at the higher.
+Row order, each step only while rows are left under `MAX_PROBE_ROWS` (64):
+1. Near rows (`probe_rows`): every size that moves a sketch, then the sizes tried on a guess, gets one row
+   `NEAR_SHARE` (25 percent) of its value below and one above, kept inside its range (a count is a whole number, at
+   least one step away).
+2. Near pair rows (`pair_rows`, run after the near rows): when two or more sizes are tried, one row with all of them at
+   their lower near value and one at the higher. A size whose own near row on that side did not build stays at its
+   value: the pair would fail for it alone.
 3. Far rows (`far_rows`, run after the nearer tries of step 1 and 2): the range ends that differ from the value and
-   from the near values, so the measured span grows.
-4. When two or more sizes are tried, all sizes at their minimum, then all at their maximum.
+   from the near values, so the measured span grows. An end past a value of the size that did not build on its own is
+   not tried: the range stops before that value anyway.
+4. Far pair rows (`far_pair_rows`, after the nearer tries of step 3): when two or more sizes are tried, all sizes at
+   their minimum, then all at their maximum, a tried size at the farthest value it built at on its own on that side.
 A row that does not build is tried again nearer (`nearer_rows`, `NEARER_STEPS`: 50, 25 and 10 percent of the way to
-the range end, the first one nearer than the value tried). A size that only feeds step values is exact from its
+the range end, the first one nearer than the value tried). On a side where some value built and a farther one did
+not, the values between them are halved (`BISECT_STEPS` times at most) so the last value that builds is found closely.
+A row where the size alone made a followed sketch take a different outline (a state marked `changed`) counts as one
+that did not build: the range stops before it, so the same tries find the farthest value that keeps the outline.
+A size that only feeds step values is exact from its
 formula and gets no row: rows go to the sizes that move a sketch or a measured reference (`moved`) and to the
 guessed ones, and only a size left without a near row because of the limit is reported as untried.
 """
@@ -27,10 +39,12 @@ from ..package.units import display_from_manifest, unit_kind
 from ..params.expressions import format_number
 from ..params import defaults, geometry_links
 from ..params.size_table import DERIVED, FREE
+from ..sketch_values import keys
+from ..translator import emboss, face_outline
 from ..translator.loops import profile_loops
 from ..translator.result import Refusal
-from ..translator.sizes import probed_sizes
-from ..translator.step_kinds import AXIS, HOLE_POINTS, PROFILES, step_type
+from ..translator.sizes import moving_reaches, probed_sizes
+from ..translator.step_kinds import AXIS, HOLE_POINTS, OUTLINE_FACE, PATH, PROFILES, step_type
 
 MAX_PROBE_ROWS = 64
 # How far from its value a size is first tried, as a share of the value, below and above.
@@ -45,21 +59,29 @@ MAX_DISCOVERY = 12
 NEARER_STEPS = (0.5, 0.25, 0.1)
 # Rows the export adds for those tries in all, inside `MAX_PROBE_ROWS`: discovery rows get what is left.
 MAX_NEARER_ROWS = 24
+# A side with a value that built and a farther one that did not is halved between them until the two are within this
+# share of the way from the value now to the range end, so at most `BISECT_STEPS` more tries per side.
+BISECT_GAP = 0.1
+BISECT_STEPS = 4
 _SAME = 1e-9
 # Added to the progress line of a row that tries again nearer after a value that did not build.
 RETRY_NOTE = ". The last value did not rebuild, so this one is nearer."
 _CURVES = ("line", "arc", "circle", "ellipse")
+_PATH_CURVES = ("line", "arc", "circle")
 
 
 class Scan:
-    """`targets`: the covered records (dicts with `kind` "profile", "hole" or "axis", `item` and what the fit reads).
+    """`targets`: the covered records (dicts with `kind` "profile", "hole", "axis", "path" or "face", `item` and what
+    the fit reads; a face's `sketch_token` is its key prefix, `keys.face`).
     `covered`: sketch token to name ("" when the record has none). `uncovered`: tokens of sketches that some record
     uses in a way the probe cannot follow. `named`: the name of every sketch a record names, covered or not, by token
     (a sketch no record gives a name for is missing). `native`: tokens of the covered sketches of tool bodies from other
-    components: they are read in their own component's frame, not brought into the part's (`request`)."""
+    components: they are read in their own component's frame, not brought into the part's (`request`). `faces`: the
+    face targets' key prefix to the name reasons give the face."""
 
     def __init__(self):
         self.targets = []
+        self.faces = {}
         self.native = set()
         self.covered = {}
         self.uncovered = set()
@@ -110,11 +132,17 @@ def scan(capture):
         if not records:
             _stray_tokens(data, out)
         if item.get("helper_of"):
+            # A tool body of another component is read in its own frame; its faces are not read again.
+            out.targets[before:] = [t for t in out.targets[before:] if t["kind"] != FACE]
             out.native.update(t["sketch_token"] for t in out.targets[before:])
+        for target in out.targets[before:]:
+            if target["kind"] == FACE:
+                target["sketch"] = out.faces[target["sketch_token"]] = face_outline.label(item)
     for token in out.uncovered:
         out.covered.pop(token, None)
-    out.targets = [t for t in out.targets if t["sketch_token"] in out.covered]
+    out.targets = [t for t in out.targets if t["sketch_token"] in out.covered or t["kind"] == FACE]
     return out
+
 
 
 def _cover(out, token, name):
@@ -138,6 +166,29 @@ def _scan_profiles(out, index, data):
         out.targets.append({"kind": "profile", "item": index, "p": number, "profile": profile,
                             "sketch_token": token, "sketch": profile.get("sketch") or "",
                             "reference": profile.get("reference") or {}})
+
+
+def _path_ok(path):
+    """True when every curve of a sweep path is a sketch line, arc or circle of one sketch the probe can read again:
+    a token, the curve in the sketch's own plane (`flat`), and the sketch's frame."""
+    curves = path.get("curves")
+    if (path.get("kind") != "sketch" or path.get("foreign") or path.get("truncated") or not path.get("sketch_token")
+            or not isinstance(path.get("frame"), dict) or not isinstance(curves, list) or not curves):
+        return False
+    return all(isinstance(c, dict) and c.get("kind") in _PATH_CURVES and c.get("entity") and isinstance(
+        c.get("flat"), dict) and c["flat"].get("kind") == c["kind"] for c in curves)
+
+
+def _scan_path(out, index, data):
+    """A sweep path of lines and arcs. A path with a free curve, or of body edges, is not covered and leaves its
+    sketch as it is: the translator writes such a path as measured."""
+    path = data.get("path")
+    if not isinstance(path, dict) or not _path_ok(path):
+        return
+    token = path["sketch_token"]
+    _cover(out, token, path.get("sketch"))
+    out.targets.append({"kind": "path", "item": index, "path": path, "sketch_token": token,
+                        "sketch": path.get("sketch") or "", "reference": path.get("reference") or {}})
 
 
 def _scan_axis(out, index, data):
@@ -169,7 +220,35 @@ def _scan_hole(out, index, data):
                         "positions": positions, "point_tokens": points})
 
 
-_SCANNERS = {PROFILES: _scan_profiles, AXIS: _scan_axis, HOLE_POINTS: _scan_hole}
+FACE = OUTLINE_FACE
+
+
+def outline_face(data):
+    """The flat face record a step uses as its outline and that the probe can read again: the one face among its
+    outlines, else the face a trimmed emboss is limited to (`translator.emboss.trimmed_face`). None when there is none,
+    or it has no token, or its loops are not lines, arcs, circles and ellipses the translator writes."""
+    faces = [p for p in data.get("profiles") or [] if isinstance(p, dict) and p.get("face")]
+    record = faces[0] if len(faces) == 1 else (emboss.trimmed_face(data) if not faces else None)
+    if (not isinstance(record, dict) or record.get("foreign") or not record.get("token")
+            or not isinstance(record.get("frame"), dict) or not isinstance(record.get("loops"), list)):
+        return None
+    curves = [c for loop in record["loops"] for c in (loop.get("curves") or [])]
+    if not curves or any(not isinstance(c, dict) or c.get("kind") not in _CURVES for c in curves):
+        return None
+    plain = {k: v for k, v in record.items() if k != "face"}
+    return None if isinstance(profile_loops(plain), Refusal) else record
+
+
+def _scan_face(out, index, data):
+    """A flat face the step uses as its outline, keyed `keys.face`; `scan` names it after the step."""
+    face = outline_face(data) if isinstance(index, int) else None
+    if face is not None:
+        out.targets.append({"kind": FACE, "item": index, "profile": face, "sketch_token": keys.face(index),
+                            "sketch": "", "reference": {}})
+
+
+_SCANNERS = {PROFILES: _scan_profiles, AXIS: _scan_axis, HOLE_POINTS: _scan_hole, PATH: _scan_path,
+             OUTLINE_FACE: _scan_face}
 
 
 # ---- measured references ---------------------------------------------------------------------------------------
@@ -198,11 +277,27 @@ def _shape(ref):
     return SHAPE_POINT if point and ref.get("type") in _POINT_TYPES else None
 
 
-def refs(capture, items=None):
-    """The measured references of the capture's steps (`params.geometry_links.item_refs`), each with its `shape` and,
-    when the probe cannot follow it, a `reason` (else empty)."""
+def own_reaches(item):
+    """The faces and planes of the part that the step `item` starts from or reaches to and that may move with it
+    (`translator.sizes.moving_reaches`), as measured references with `own: true`: the reader reads them in the part's
+    own coordinates."""
     out = []
-    for entry in geometry_links.capture_refs(capture, items):
+    for slot, record in moving_reaches(item):
+        plane = record["plane"]
+        ref = {"slot": slot, "type": record.get("entity_type") or "", "token": record["token"],
+               "point": list(plane["point"]), "normal": list(plane["normal"]), "own": True}
+        out.append({"key": geometry_links.ref_key(item.get("index"), slot), "item": item.get("index"), "slot": slot,
+                    "name": item.get("name") or "", "ref": ref})
+    return out
+
+
+def refs(capture, items=None):
+    """The measured references of the capture's steps (`params.geometry_links.item_refs`, then `own_reaches`), each
+    with its `shape` and, when the probe cannot follow it, a `reason` (else empty)."""
+    out, entries = [], []
+    for item in (capture.get("items") or []) if items is None else items:
+        entries += geometry_links.item_refs(item) + own_reaches(item)
+    for entry in entries:
         ref = entry["ref"]
         shape = _shape(ref)
         reason = "" if shape else NO_PLACE
@@ -221,20 +316,28 @@ def _numeric_model(table):
 def request(capture, table, covered=None, wanted=None):
     """What the reader reads at each state, or None when no sketch is covered and no reference can be followed.
 
-    `covered` limits the sketches to these tokens (the ones whose first read matched the capture). `wanted` limits the
-    references to these keys.
+    `covered` limits the sketches to these tokens (the ones whose first read matched the capture) and the faces to these
+    key prefixes. `wanted` limits the references to these keys.
     `{ "sketches": [token], "points": [token], "lines": [token], "params": [Fusion name], "target": True,
-       "refs": { key: { "token", "type", "path", "shape" } } }`; `refs` is left out when empty. `native` lists the sketches of
-    tool bodies from other components, and is left out when there are none.
+       "curves": { sketch token: [curve token] },
+       "refs": { key: { "token", "type", "path", "shape" } },
+       "faces": { key prefix: { "token", "before" } } }`; `curves` lists the sketch curves of sweep paths to read
+       (left out when empty), `refs` is left out when empty (a face or plane of the part adds `"own": true`). `native`
+       lists the sketches of tool bodies from other components, and is left out when there are none. `faces` are the
+       flat faces steps use as outlines, read with the timeline marker at `before` (the step's timeline index), and is
+       left out when empty.
     """
     found = scan(capture)
     tokens = [t for t in found.covered if covered is None or t in covered]
-    followed = {r["key"]: {"token": r["ref"]["token"], "type": r["ref"].get("type") or "",
-                           "path": r["ref"].get("path") or "", "shape": r["shape"]}
+    followed = {r["key"]: dict({"token": r["ref"]["token"], "type": r["ref"].get("type") or "",
+                                "path": r["ref"].get("path") or "", "shape": r["shape"]},
+                               **({"own": True} if r["ref"].get("own") else {}))
                 for r in refs(capture) if r["shape"] and (wanted is None or r["key"] in wanted)}
-    if not tokens and not followed:
+    faces = {t["sketch_token"]: {"token": t["profile"]["token"], "before": t["item"]} for t in found.targets
+             if t["kind"] == FACE and (covered is None or t["sketch_token"] in covered)}
+    if not tokens and not followed and not faces:
         return None
-    points, lines = [], []
+    points, lines, curves = [], [], {}
     for target in found.targets:
         if target["sketch_token"] not in tokens:
             continue
@@ -242,15 +345,21 @@ def request(capture, table, covered=None, wanted=None):
             points.extend(target["point_tokens"])
         elif target["kind"] == "axis":
             lines.append(target["entity"])
+        elif target["kind"] == "path":
+            curves.setdefault(target["sketch_token"], []).extend(c["entity"] for c in target["path"]["curves"])
     names = [e.name for e in table.entries if e.state in (FREE, DERIVED)]
     names += [m["name"] for m in _numeric_model(table)]
     out = {"sketches": tokens, "points": list(dict.fromkeys(points)), "lines": list(dict.fromkeys(lines)),
            "params": list(dict.fromkeys(names)), "target": True}
+    if curves:
+        out["curves"] = {t: list(dict.fromkeys(names)) for t, names in curves.items()}
     native = [t for t in tokens if t in found.native]
     if native:
         out["native"] = native
     if followed:
         out["refs"] = followed
+    if faces:
+        out["faces"] = faces
     return out
 
 
@@ -355,8 +464,7 @@ def _tried_sizes(sizes, moved, extra):
 
 
 def probe_rows(sizes, moved, limit=MAX_PROBE_ROWS, extra=()):
-    """The first states to try, as `(rows, untried)`: the near rows, then the near pair rows (steps 1 and 2 of the
-    module docstring).
+    """The first states to try, as `(rows, untried)`: the near rows (step 1 of the module docstring).
 
     sizes: the kept sizes. moved: the params that move covered sketch values. A row has no STEP (`"step": False`);
     `state` holds the manifest values, `varied` the params that differ, `label` the progress line. `untried` lists
@@ -375,41 +483,105 @@ def probe_rows(sizes, moved, limit=MAX_PROBE_ROWS, extra=()):
         for label, value in wanted:
             rows.append(_row(sizes, "%s (%s)" % (size["size"][:MAX_NAME_CHARS - 11], label), {size["param"]: value},
                              "%s (%s)" % (size["param"], label)))
-    if len(tried) >= 2 and len(rows) + 2 <= limit:
-        for label, side in (("all lower", 0), ("all higher", 1)):
-            overrides = {s["param"]: near[s["param"]][side] for s in tried if near[s["param"]][side] is not None}
-            if len(overrides) >= 2:
-                rows.append(_row(sizes, label, overrides, "all near %d" % side))
     return rows, untried
 
 
-def far_rows(sizes, moved, room, extra=()):
-    """The far rows, then the far pair rows (steps 3 and 4 of the module docstring), at most `room` of them: every
-    tried size at the range ends that differ from its value and from its near values, so the measured span grows.
-    Sizes and arguments as in `probe_rows`; the export asks for these after the near rows and their nearer tries."""
+def pair_rows(sizes, moved, states, room, extra=()):
+    """The near pair rows (step 2 of the module docstring), at most `room`: all tried sizes at their lower near value,
+    then at the higher. `states` are the probe states so far, marked as for `nearer_rows`: a size whose own row did
+    not build at its near value on that side, or nearer, stays at its value. A row needs two sizes that differ."""
+    tried = _tried_sizes(sizes, moved, extra)
+    if len(tried) < 2:
+        return []
+    rows = []
+    for label, side in (("all lower", 0), ("all higher", 1)):
+        overrides = {}
+        for size in tried:
+            value = near_values(size)[side]
+            if value is not None and not _fails_by(states, size, value):
+                overrides[size["param"]] = value
+        if len(overrides) >= 2 and len(rows) < room:
+            rows.append(_row(sizes, label, overrides, "all near %d" % side))
+    return rows
+
+
+def far_rows(sizes, moved, room, extra=(), states=()):
+    """The far rows (step 3 of the module docstring), at most `room` of them: every tried size at the range ends that
+    differ from its value and from its near values, so the measured span grows. An end is left out when `states` (the
+    probe states so far, marked as for `nearer_rows`) hold a row of that size alone that did not build at a value on
+    that side. Sizes and arguments as in `probe_rows`; the export asks for these after the near rows and their nearer
+    tries."""
     rows = []
     tried = _tried_sizes(sizes, moved, extra)
     for size in tried:
-        wanted = _far_ends(size, near_values(size))
+        wanted = [end for end in _far_ends(size, near_values(size)) if not _fails_by(states, size, end)]
         if len(rows) + len(wanted) > room:
             continue
         for end in wanted:
             label = "min" if end == size["min"] else "max"
             rows.append(_row(sizes, "%s (%s)" % (size["size"][:MAX_NAME_CHARS - 6], label), {size["param"]: end},
                              "%s (%s)" % (size["param"], label)))
-    if len(tried) >= 2 and rows and len(rows) + 2 <= room:
-        for label, key in (("all min", "min"), ("all max", "max")):
-            rows.append(_row(sizes, label, {s["param"]: s[key] for s in sizes}))
     return rows
 
 
+def far_pair_rows(sizes, moved, states, room, extra=()):
+    """The far pair rows (step 4 of the module docstring), at most `room`: all sizes at their minimum, then at their
+    maximum, when two or more sizes are tried. A tried size goes to the farthest value on that side that built on its
+    own and kept every outline (`states` marked as for `nearer_rows`), or stays at its value when none did; a size
+    without rows goes to its range end. A row needs two sizes that differ from their value, and one tried size past
+    its near value (else the near pair row has measured it already)."""
+    tried = {s["param"] for s in _tried_sizes(sizes, moved, extra)}
+    if len(tried) < 2:
+        return []
+    rows = []
+    for label, key, side in (("all min", "min", 0), ("all max", "max", 1)):
+        overrides, past = {}, False
+        for size in sizes:
+            value = _farthest_built(states, size, size[key]) if size["param"] in tried else size[key]
+            if value is not None and abs(value - size["value"]) > _SAME:
+                overrides[size["param"]] = value
+                near = near_values(size)[side]
+                past = past or (size["param"] in tried and (near is None or abs(value - size["value"])
+                                                            > abs(near - size["value"]) + _SAME))
+        if len(overrides) >= 2 and past and len(rows) < room:
+            rows.append(_row(sizes, label, overrides))
+    return rows
+
+
+def _side(size, value):
+    """1 or -1: the side of the size's value `value` lies on (0 for the value itself)."""
+    delta = value - size["value"]
+    return 0 if abs(delta) <= _SAME else (1 if delta > 0 else -1)
+
+
+def _fails_by(states, size, value):
+    """True when a state that set only this size, on the side of `value` and not farther, did not build or changed
+    an outline: a row at `value` would end past the range the size keeps."""
+    side, reach = _side(size, value), abs(value - size["value"])
+    return side != 0 and any(not ok and _side(size, v) == side and abs(v - size["value"]) <= reach + _SAME
+                             for v, ok in _tried_alone(states, size["param"], size["value"]))
+
+
+def _farthest_built(states, size, end):
+    """The farthest value toward `end` at which a state that set only this size built and kept every outline, nearer
+    than any value that did not, or None."""
+    side = _side(size, end)
+    if side == 0:
+        return None
+    tried = [(v, ok) for v, ok in _tried_alone(states, size["param"], size["value"]) if _side(size, v) == side]
+    bad = min((abs(v - size["value"]) for v, ok in tried if not ok), default=None)
+    good = [v for v, ok in tried if ok and (bad is None or abs(v - size["value"]) < bad - _SAME)]
+    return max(good, key=lambda v: abs(v - size["value"])) if good else None
+
+
 def _tried_alone(states, name, value):
-    """`(value, built)` of every state that set only `name` to another value than `value`."""
+    """`(value, kept)` of every state that set only `name` to another value than `value`: `kept` when it built and
+    no followed outline changed there (`changed`)."""
     out = []
     for state in states:
         values = state.get("values") or {}
         if list(values) == [name] and abs(values[name] - value) > _SAME:
-            out.append((values[name], state.get("built") is not False))
+            out.append((values[name], state.get("built") is not False and not state.get("changed")))
     return out
 
 
@@ -433,16 +605,51 @@ def _next_nearer(size, end, tried):
     return None
 
 
+def _between(size, end, tried):
+    """The value half way between the farthest value tried alone toward `end` that built and the nearest one past it
+    that did not, or None when no value failed past the last that built, or the two are already close
+    (`BISECT_GAP`)."""
+    now, span = size["value"], end - size["value"]
+    if abs(span) <= _SAME:
+        return None
+    side = [((v - now) / span, ok) for v, ok in tried if (v - now) / span > _SAME]
+    built = max((share for share, ok in side if ok), default=None)
+    failed = [share for share, ok in side if not ok and built is not None and share > built + _SAME]
+    if not failed or min(failed) - built <= BISECT_GAP + _SAME:
+        return None
+    value = _toward(size, end, (built + min(failed)) / 2)
+    shares = [share for share, _ in side]
+    if abs(value - now) <= _SAME or any(abs((value - now) / span - share) <= _SAME for share in shares):
+        return None
+    return value
+
+
+def _changed_alone(states, name, value):
+    """The values of the states that set only `name` and changed a followed outline (`changed`)."""
+    return [v for v, state in ((s["values"][name], s) for s in states
+                               if list(s.get("values") or {}) == [name] and s.get("changed"))
+            if abs(v - value) > _SAME]
+
+
 def _nearer_for(size, states, moved):
-    """`[(label, value)]`: the rows that try `size` nearer to its value after rows that did not build."""
-    tried = _tried_alone(states, size["param"], size["value"])
+    """`[(label, value)]`: the rows that try `size` nearer to its value after rows that did not build. On a side
+    where a row changed an outline, only the values nearer than it count: the range stops before it."""
+    now = size["value"]
+    tried = _tried_alone(states, size["param"], now)
+    changed = _changed_alone(states, size["param"], now)
     out = []
     for label, end in (("min", size["min"]), ("max", size["max"])):
-        side = [(v, ok) for v, ok in tried if (v - size["value"]) * (end - size["value"]) > 0]
-        if side and not any(ok for _, ok in side):
+        side = [(v, ok) for v, ok in tried if (v - now) * (end - now) > 0]
+        stops = [abs(v - now) for v in changed if (v - now) * (end - now) > 0]
+        inside = [(v, ok) for v, ok in side if not stops or abs(v - now) < min(stops) - _SAME]
+        if side and not any(ok for _, ok in inside):
             value = _next_nearer(size, end, [v for v, _ in side])
-            if value is not None:
-                out.append((label, value))
+        elif stops:
+            value = _between(size, end, inside + [(now + (min(stops) if end > now else -min(stops)), False)])
+        else:
+            value = _between(size, end, tried)
+        if value is not None:
+            out.append((label, value))
     built = [v for v, ok in tried if ok]
     if not out and size["param"] in moved and len(built) == 1:
         value = _toward(size, built[0], 0.5)
@@ -454,12 +661,15 @@ def _nearer_for(size, states, moved):
 def nearer_rows(sizes, states, moved=(), limit=MAX_NEARER_ROWS):
     """The next rows that try sizes nearer to their value now, after rows that did not build.
 
-    `states` are the probe states so far (`values` and `built`). For each size and each side of its value whose rows
-    all failed to build: one row `NEARER_STEPS` of the way toward that range end, the first step nearer than the
-    nearest value tried there. A size in `moved` (it moved a sketch or a measured place) with only one row that built
-    and nothing left to try gets one more row half way to that value, so the fit has two readings to tell a straight
-    line from a curve. Sizes that no row built come first. At most `limit` rows; the export calls this again after
-    each batch, so each call gives one step per side."""
+    `states` are the probe states so far (`values`, `built` and `changed`, a row that changed a followed outline
+    counting as one that did not build). For each size and each side of its value whose rows all failed to build:
+    one row `NEARER_STEPS` of the way toward that range end, the first step nearer than the nearest value tried
+    there. On a side where a value built and a farther one did not: one row half way between them (`_between`); with
+    a row that changed an outline on that side, only the values nearer than it count. A size in `moved` (it moved a
+    sketch or a measured place) with only one row that built and nothing left to try gets one more row half way to
+    that value, so the fit has two readings to tell a straight line from a curve. Sizes that no row built come
+    first. At most `limit` rows; the export calls this again after each batch, so each call gives one step per
+    side."""
     plans = [(size, _nearer_for(size, states, set(moved))) for size in sizes]
     unbuilt = {size["param"] for size in sizes
                if not any(ok for _, ok in _tried_alone(states, size["param"], size["value"]))}

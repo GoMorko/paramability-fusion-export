@@ -198,11 +198,11 @@ class PlaneTest(unittest.TestCase):
         self.assertEqual(expr(pocket["on"]["origin"][2]), "lift_mm")
         self.assertEqual(expr(pocket["outer"]["center"][1]), "-plate_mm")
 
-    def test_a_step_that_reaches_to_the_construction_plane_marks_its_sizes(self):
+    def test_a_step_that_reaches_to_the_construction_plane_follows_its_distance(self):
         result = run(load_capture(LIFTED), ["lift_mm", "plate_mm"], motion_of(LIFTED))
-        self.assertEqual(list(reasons(result)), ["lift_mm"])
-        self.assertIn("construction plane that Extrude3 uses", reasons(result)["lift_mm"])
+        self.assertEqual(reasons(result), {})
         self.assertEqual(expr(steps_of(result.recipe, "extrude")[1]["sketch"]["on"]["origin"][2]), "lift_mm")
+        self.assertEqual(expr(steps_of(result.recipe, "extrude")[2]["distance"]), "lift_mm")
 
     def test_a_construction_plane_record_without_a_token_marks_every_plane_size(self):
         capture = load_capture(LIFTED)
@@ -304,7 +304,7 @@ class OwnerFilterBoxTest(unittest.TestCase):
         self.assertEqual(result.fixed, [])
         reasons = {f["name"]: f["reason"] for f in result.loose}
         self.assertEqual(sorted(reasons), sorted([self.TICKED[0], self.TICKED[2], self.TICKED[3], self.TICKED[4]]))
-        self.assertIn("may give unexpected results past 1.8:", reasons[self.TICKED[0]])
+        self.assertIn("may give unexpected results past 1.97:", reasons[self.TICKED[0]])
         self.assertIn("LidAndRail of BoxLid", reasons[self.TICKED[2]])
         sizes = result.recipe["sizes"]
         width = sizes["FilterBox___width__contains_CeramicMedium"]

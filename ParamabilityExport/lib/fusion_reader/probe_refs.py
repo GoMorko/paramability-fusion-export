@@ -2,7 +2,8 @@
 
 A reference is a plane, axis, direction or point of another component that a step uses. It is found again by the
 token of its native entity, shown through the occurrence it was captured through as that occurrence sits now, and
-brought into the target's coordinates by the target's own place as it is now (a size can move either component).
+brought into the target's coordinates by the target's own place as it is now (a size can move either component). A
+face or plane of the part itself (`own`) is read natively, in the part's coordinates like the capture.
 Everything is plain data in mm. A reference that cannot be read is left out with a reason; nothing here raises, and
 nothing here changes the design. No adsk import.
 """
@@ -87,7 +88,9 @@ def _read_one(design, hint, back, occurrences):
     if native is None:
         return None, NOT_FOUND
     entity = native
-    if hint.get("path"):
+    if hint.get("own"):
+        back = Move(IDENTITY_ROWS)
+    elif hint.get("path"):
         path = occurrences.path(native, hint["path"])
         if not path:
             return None, NO_OCCURRENCE
@@ -101,15 +104,15 @@ def _read_one(design, hint, back, occurrences):
 
 
 def read_refs(design, ctx, wanted):
-    """`(found, unread)` for `wanted` ({ key: { token, path, shape } }): `found` maps a key to the reference's place in
-    the target's coordinates, `unread` a key to why it was left out."""
+    """`(found, unread)` for `wanted` ({ key: { token, path, shape, own } }): `found` maps a key to the reference's
+    place in the target's coordinates, `unread` a key to why it was left out."""
     found, unread = {}, {}
     if not wanted:
         return found, unread
     back, reason = _target_back(ctx)
     occurrences = _Occurrences(ctx.root)
     for key, hint in wanted.items():
-        if back is None:
+        if back is None and not hint.get("own"):
             unread[key] = reason
             continue
         place, why = geo.safe(lambda: _read_one(design, hint, back, occurrences), (None, NO_GEOMETRY))

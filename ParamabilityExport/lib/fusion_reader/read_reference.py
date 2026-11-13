@@ -5,7 +5,8 @@ construction geometry built on any of those. `reference_of` describes one such e
 
 - `origin`: true for an origin plane or axis of the component; nothing else is read then, it never moves.
 - `entity_type`: the type name (`BRepFace`, `BRepEdge`, `ConstructionPlane`, ...).
-- `face_point` and `surface` (`Plane`, `Cylinder`, ...) of a face; `edge_points` of an edge.
+- `face_point` and `surface` (`Plane`, `Cylinder`, ...) of a face; `edge_points` of an edge; `body`, the body either
+  lies on.
 - construction geometry also gets `token`, its plane (`point`, `normal`) or axis (`point`, `dir`), `made_by` (the
   timeline index of the feature that made it), `definition` (the type name of how it is defined) and `built_on`, the
   descriptions of the entities that definition names.
@@ -15,7 +16,7 @@ Entities of another component are left out of `built_on`.
 """
 from . import read_geometry as geo
 from .placement import ORIGIN_MEMBERS
-from .read_solid import axis_of, construction_token
+from .read_solid import axis_of, axis_record, construction_token
 
 # How deep built_on goes (a plane built on a plane built on a face).
 _DEPTH = 3
@@ -91,7 +92,26 @@ def reference_of(entity, ctx, depth=_DEPTH):
             out["edge_points"] = points
     elif name in ORIGIN_MEMBERS:
         out.update(_construction(entity, name, ctx, depth))
+    if name in ("BRepFace", "BRepEdge"):
+        body = geo.owner_body(entity, ctx)
+        if body:
+            out["body"] = body
     return out
+
+
+# What `describe_plane` keeps of a description: enough to tell whether sizes may move the plane.
+_PLANE_KEYS = ("origin", "made_by", "definition", "built_on")
+
+
+def describe_plane(record, entity, ctx):
+    """Adds to `record` what the construction plane `entity` is: `origin`, or `made_by`, `definition` and `built_on`
+    (see the module text). Anything that is not a construction plane of the target's component adds nothing."""
+    if isinstance(record, dict) and geo.type_name(entity) == "ConstructionPlane" and not geo.foreign(entity, ctx):
+        found = geo.safe(lambda: reference_of(entity, ctx), {})
+        for key in _PLANE_KEYS:
+            if key in found:
+                record.setdefault(key, found[key])
+    return record
 
 
 def add_reference(record, entity, ctx):
@@ -100,4 +120,13 @@ def add_reference(record, entity, ctx):
     if isinstance(record, dict) and not record.get("foreign") and not record.get("assembly"):
         for key, value in geo.safe(lambda: reference_of(entity, ctx), {}).items():
             record.setdefault(key, value)
+    return record
+
+
+def axis_with_reference(entity, ctx):
+    """`read_solid.axis_record` of an axis entity (pattern axis, rotate axis), with what it is (`add_reference`) when
+    the axis could be read."""
+    record = axis_record(entity, ctx)
+    if isinstance(record, dict) and "dir" in record:
+        add_reference(record, geo.native_input(entity, ctx), ctx)
     return record

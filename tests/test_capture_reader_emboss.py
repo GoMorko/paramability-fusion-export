@@ -4,6 +4,9 @@ import unittest
 from tests import context  # noqa: F401
 from tests.test_capture_reader import Coll, FakeDesign, Obj, P, entry, feature, line
 
+from tests.test_capture_reader_face import WALLS, earlier_extrude
+from tests.test_capture_reader_offset import plane_face, with_outline
+
 from lib.fusion_reader.capture import read_capture
 
 
@@ -49,6 +52,19 @@ def parameter(value, name="d5", expression="1 mm"):
     return Obj(value=value, name=name, expression=expression)
 
 
+class FaceVector:
+    """A Fusion vector such as BRepFaceVector: len and indexing only, no count or item."""
+
+    def __init__(self, items):
+        self._items = list(items)
+
+    def __len__(self):
+        return len(self._items)
+
+    def __getitem__(self, i):
+        return self._items[i]
+
+
 class EmbossFeatureStub(Obj):
     """An emboss whose horizontal distance cannot be read."""
 
@@ -58,22 +74,30 @@ class EmbossFeatureStub(Obj):
 
 
 def read(depth_cm=0.1, after=8304.0, made_z=11, face_z=10, surface="Plane", text=False, broken=False, tangent=None,
-         made_extra=()):
+         made_extra=(), faces_as=Coll, outlines_as=Coll, outline_face=None, earlier=(), edges=False):
+    """The emboss data. `outline_face` is a flat face used as the outline in place of the sketch profile; `earlier`
+    are the component's extrudes before the emboss (timeline index 1). `edges` gives the input face its outline."""
     target = lid(after)
     sketch = Obj("fusion::Sketch", name="Sketch1", transform=identity(), entityToken="sk1")
-    outlines = [ring_profile(sketch)]
+    if outline_face is not None:
+        outline_face.body, outline_face.area = target, 3.04
+    outlines = [outline_face if outline_face is not None else ring_profile(sketch)]
     if text:
         outlines.append(Obj("fusion::SketchText", parentSketch=sketch, text="Hi"))
     made = face_of("Plane", made_z, target, area=3.04)
     kind = EmbossFeatureStub if broken else Obj
     input_face = face_of(surface, face_z, target)
+    if edges:
+        with_outline(input_face, WALLS)
     if tangent is not None:
         input_face.tangentiallyConnectedFaces = Coll(tangent)
     emboss = kind("fusion::EmbossFeature", parentComponent=Obj(entityToken="root"), bodies=Coll([target]),
-                  profiles=Coll(outlines), inputFaces=Coll([input_face]), faces=Coll([made, *made_extra]),
+                  profiles=outlines_as(outlines), inputFaces=faces_as([input_face]), faces=Coll([made, *made_extra]),
                   isTangentChain=True, depth=parameter(depth_cm), horizontalDistance=parameter(0, "d6", "0 mm"),
-                  verticalDistance=parameter(0, "d7", "0 mm"), rotationAngle=parameter(0, "d8", "0 deg"))
+                  verticalDistance=parameter(0, "d7", "0 mm"), rotationAngle=parameter(0, "d8", "0 deg"),
+                  timelineObject=Obj(index=1))
     design = FakeDesign([entry((emboss, "Emboss1"))], target, appears_at=0)
+    design.rootComponent.features = Obj(extrudeFeatures=Coll(list(earlier)))
     target.timeline = design.timeline
     return read_capture(design, target, fusion="", name="", up_axis="z")["items"][0]["data"]
 
@@ -92,10 +116,39 @@ class EmbossReaderTest(unittest.TestCase):
         self.assertEqual((data["volume_before"], data["volume_after"]), (8000.0, 8304.0))
         self.assertEqual((data["end_offset"], data["end_area"]), (11.0, 304.0))
 
+    def test_input_faces_given_as_a_fusion_vector_are_read(self):
+        data = read(faces_as=FaceVector)
+        self.assertNotIn("read_error", data)
+        self.assertEqual(data["faces"][0]["plane"], {"point": [0, 0, 10], "normal": [0, 0, 1]})
+        self.assertEqual(data["end_offset"], 11.0)
+
+    def test_outlines_given_as_a_list_or_a_fusion_vector_are_read(self):
+        for kind in (list, FaceVector):
+            with self.subTest(kind.__name__):
+                data = read(outlines_as=kind)
+                self.assertEqual(data["profiles"][0]["frame"]["origin"], [0, 0, 0])
+                self.assertEqual(data["areas"], [304.0])
+
+    def test_a_flat_face_outline_names_the_extrude_that_made_it(self):
+        face = with_outline(plane_face(10), WALLS)
+        made = earlier_extrude(0, endFaces=[Obj("fusion::BRepFace", entityToken="top")])
+        data = read(outline_face=face, earlier=[made])
+        record = data["profiles"][0]
+        self.assertEqual((record["face"], record["frame"]["origin"]), (True, [0, 0, 10]))
+        self.assertEqual(record["made_by"], {"index": 0, "name": "Extrude0", "which": "end"})
+        self.assertEqual(data["areas"], [304.0])
+
     def test_a_sunk_outline_has_a_negative_depth_and_its_floor_below_the_face(self):
         # The sketch plane is z = 0, the face z = 10 and the floor z = 9: end_offset runs from the sketch plane.
         data = read(depth_cm=-0.1, after=7696.0, made_z=9)
         self.assertEqual((data["depth"], data["end_offset"], data["volume_after"]), (-1.0, 9.0, 7696.0))
+
+    def test_only_a_lone_input_face_carries_its_edges_as_an_outline(self):
+        outline = read(edges=True)["faces"][0]["outline"]
+        self.assertEqual((outline["face"], outline["frame"]["origin"]), (True, [0, 0, 10]))
+        self.assertEqual(outline["loops"][0]["curves"][1], {"kind": "line", "start": [40, 0], "end": [40, 20]})
+        two = read(faces_as=lambda faces: Coll(faces * 2), edges=True)
+        self.assertTrue(all("outline" not in face for face in two["faces"]))
 
     def test_a_curved_input_face_is_named_by_its_surface_without_a_plane(self):
         face = read(surface="Cylinder")["faces"][0]

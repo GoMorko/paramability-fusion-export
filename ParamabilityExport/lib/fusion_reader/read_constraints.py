@@ -117,14 +117,10 @@ class _Read:
 
 
 def _items_of(value):
-    """The entries of a list, a Fusion collection or one entity; empty for None."""
+    """The entries of a list, a Fusion collection or vector, or one entity; empty for None."""
     if value is None:
         return []
-    if isinstance(value, (list, tuple)):
-        return list(value)
-    if hasattr(value, "count") and hasattr(value, "item"):
-        return geo.collection_items(value)
-    return [value]
+    return geo.collection_items(value) if geo.is_sequence(value) else [value]
 
 
 def _dependency_names(parameter, limit=256):

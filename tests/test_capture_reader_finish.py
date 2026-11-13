@@ -176,6 +176,26 @@ class ShellTest(unittest.TestCase):
         self.assertEqual((data["shell_type"], len(data["faces"])), ("sharp", 1))
 
 
+class DraftTest(unittest.TestCase):
+    def test_faces_plane_and_angles(self):
+        wall = face("f1", x=40)
+        wall.boundingBox = Obj(minPoint=P(40, 0, 0), maxPoint=P(40, 20, 10))
+        floor = Obj("fusion::ConstructionPlane", entityToken="xy", geometry=plane_geometry((0, 0, 0), (0, 0, 1)))
+        one = Obj("fusion::AngleExtentDefinition", angle=Obj(name="d7", expression="3 deg", value=0.0523598776),
+                  isSymmetric=False)
+        data = read_data(feature("DraftFeature", "Draft1", inputFaces=Coll([wall]), isTangentChain=False,
+                                 plane=floor, isDirectionFlipped=True, draftDefinition=one))
+        self.assertEqual(data["faces"], [{"token": "f1", "point": [40, 1, 2],
+                                          "box": {"min": [40, 0, 0], "max": [40, 20, 10]}}])
+        self.assertEqual((data["plane"]["point"], data["plane"]["normal"]), ([0, 0, 0], [0, 0, 1]))
+        self.assertEqual((data["angle_deg"], data["two_angles"], data["flipped"]), (3.0, False, True))
+        self.assertEqual(data["params"]["angle_deg"]["expression"], "3 deg")
+        two = Obj("fusion::TwoSidesAngleExtentDefinition", angleOne=param(0.05), angleTwo=param(0.1))
+        data = read_data(feature("DraftFeature", "Draft1", inputFaces=Coll([wall]), plane=floor,
+                                 draftDefinition=two))
+        self.assertEqual((data["two_angles"], round(data["angle_two_deg"], 3)), (True, 5.73))
+
+
 def element(index, shift, suppressed=False, x=(1, 0, 0), y=(0, 1, 0)):
     return Obj("fusion::PatternElement", id=index, isSuppressed=suppressed,
                transform=matrix(origin=shift, x=x, y=y))

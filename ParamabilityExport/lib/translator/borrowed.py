@@ -12,6 +12,7 @@ range (`meets_part.py`, run when the step is added).
 """
 from ..params.expressions import referenced_names
 from ..sketch_values import keys
+from .sizes import sketch_sizes
 
 BORROWED_KEYS = ("foreign", "placement", "component", "sketch_params", "native_frame")
 
@@ -74,3 +75,14 @@ def bring_in(item, ctx):
              % (item.get("name", "This step"), ", ".join(sorted(set(names))),
                 "" if followed_any else " as fixed numbers"))
     return dict(item, data=dict(data, profiles=out))
+
+
+def mark_unchecked(ctx, item, profile):
+    """The outline of a step with no placer that checks it against the part (a sweep, a loft) was taken from another
+    component: the sizes of that sketch are marked, since the copy cannot tell that it still meets the part."""
+    if not profile.get("borrowed") or ctx.table is None:
+        return
+    names = sketch_sizes(ctx.table, profile.get("sketch") or "")
+    if names:
+        ctx.doubt(names, "%s cannot check that its outline from %s still meets the part"
+                  % (item.get("name", "a step"), profile.get("sketch") or "another component"))

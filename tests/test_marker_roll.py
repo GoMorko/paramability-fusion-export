@@ -10,6 +10,7 @@ from tests.test_parts_pipeline import export as export_parts
 from tests.test_pipeline import CAPTURE, START, FakePort, export, shifted
 from tests.test_timeline_marker import Item, Timeline
 
+from lib.design_edit.marker import MARKER_LOST
 from lib.design_edit.runner import ExportCancelled
 from lib.export_plan.marker_roll import MarkerRoll, needed_position
 from lib.fusion_reader.rows import DesignParameterStore
@@ -58,34 +59,43 @@ class NeededPositionTest(unittest.TestCase):
         theirs = item(3, "Sketch", "Shared", own=False)
         self.assertEqual(self.position(capture([item(0, "Sketch", "Base"), use, mine, theirs, item(4, "Sketch", "Z")])), 4)
 
-    def test_the_last_item_of_a_component_a_link_or_reference_depends_on_is_kept(self):
+    def test_items_of_a_linked_component_are_kept_only_before_the_step_that_holds_the_link(self):
         link = {"sketch": "Base", "token": "t", "unknown": 0, "links": [{"token": PIPE, "name": "Pipe", "sketches": []}]}
-        items = [item(0, "Sketch", "Base"), item(1, "ExtrudeFeature", target_changed=True),
-                 item(2, "ExtrudeFeature", own=False, component=PIPE), item(3, "ExtrudeFeature", own=False),
-                 item(4, "ExtrudeFeature", own=False, component=PIPE), item(5, "Sketch", "Free", own=False)]
-        self.assertEqual(self.position(capture(items, links=[link])), 5)
+        items = [item(0, "ExtrudeFeature", own=False, component=PIPE), item(1, "Sketch", "Base"),
+                 item(2, "ExtrudeFeature", target_changed=True), item(3, "ExtrudeFeature", own=False, component=PIPE),
+                 item(4, "Sketch", "Free", own=False)]
+        self.assertEqual(self.position(capture(items, links=[link])), 3)
+        reference = item(3, "ConstructionPlane", "Plane", data={
+            "ref": {"slot": "plane", "token": "r", "component": {"token": PIPE, "name": "Pipe"}}})
+        items = [item(0, "ExtrudeFeature", target_changed=True), item(1, "ExtrudeFeature", own=False, component=PIPE),
+                 item(2, "ExtrudeFeature", own=False), reference, item(4, "ExtrudeFeature", own=False, component=PIPE),
+                 item(5, "Sketch", "Free", own=False)]
         self.assertEqual(self.position(capture(items)), 2)
-        reference = item(1, "ExtrudeFeature", target_changed=True,
-                         data={"ref": {"slot": "plane", "token": "r", "component": {"token": PIPE, "name": "Pipe"}}})
-        self.assertEqual(self.position(capture([items[0], reference] + items[2:])), 5)
 
-    def test_a_reference_or_link_that_cannot_be_matched_keeps_every_other_component(self):
+    def test_a_reference_or_link_without_a_component_keeps_every_other_component_before_its_step(self):
         items = [item(0, "ExtrudeFeature", target_changed=True), item(1, "ExtrudeFeature", own=False),
                  item(2, "ExtrudeFeature", own=False), item(3, "Sketch", "Free")]
         unknown = {"sketch": "Base", "token": "t", "unknown": 1, "links": []}
         self.assertEqual(self.position(capture(items, links=[unknown])), 3)
-        nameless = item(0, "ExtrudeFeature", target_changed=True,
+        found = [item(0, "Sketch", "Base"), item(1, "ExtrudeFeature", target_changed=True)] + items[1:]
+        found = [dict(each, index=n) for n, each in enumerate(found)]
+        self.assertEqual(self.position(capture(found, links=[unknown])), 2)
+        nameless = item(2, "ConstructionPlane", "Plane",
                         data={"ref": {"slot": "plane", "token": "r", "component": {"name": "Pipe"}}})
-        self.assertEqual(self.position(capture([nameless] + items[1:])), 3)
+        later = [item(3, "ExtrudeFeature", own=False), item(4, "Sketch", "Free", own=False)]
+        self.assertEqual(self.position(capture(items[:2] + [nameless] + later)), 2)
 
     def test_a_tool_body_step_a_joint_and_an_unknown_item_are_kept_but_a_new_occurrence_is_not(self):
         base = [item(0, "ExtrudeFeature", target_changed=True)]
         tail = [item(1, "Occurrence", own=False), item(2, "ExtrudeFeature", own=False)]
         self.assertEqual(self.position(capture(base + tail + [item(3, "Sketch", "Free")])), 1)
         for extra in (item(3, "ExtrudeFeature", own=False, helper_of="tool"), item(3, "Joint", own=False),
-                      item(3, "BrandNewFeature", own=False), item(3, "ExtrudeFeature", own=False, target_changed=None)):
+                      item(3, "BrandNewThing", own=False), item(3, "BrandNewFeature"),
+                      item(3, "ExtrudeFeature", own=False, target_changed=None)):
             with self.subTest(extra["type"]):
                 self.assertEqual(self.position(capture(base + tail + [extra, item(4, "Sketch", "Free")])), 4)
+        unknown_feature = item(3, "BrandNewFeature", own=False)
+        self.assertEqual(self.position(capture(base + tail + [unknown_feature, item(4, "Sketch", "Free")])), 1)
 
     def test_a_suppressed_item_is_not_needed(self):
         items = [item(0, "ExtrudeFeature", target_changed=True), item(1, "Joint", own=False, suppressed=True),
@@ -227,7 +237,8 @@ class PipelineRollTest(unittest.TestCase):
     def test_the_tries_run_with_the_marker_held_early_and_it_goes_back_after_the_last_read(self):
         port = self.port()
         result = export(port)
-        self.assertEqual(result.report["probe"]["timeline"], {"rolled": True, "items": 6, "of": 9})
+        timeline = result.report["probe"]["timeline"]
+        self.assertEqual((timeline["rolled"], timeline["items"], timeline["of"]), (True, 6, 9))
         self.assertEqual(port.store.events, [("roll", 6), ("unroll", 6)])
         self.assertIsNone(port.store.rolled)
         rolled = [at for at in port.store.at if at == 6]
@@ -283,6 +294,26 @@ class PipelineRollTest(unittest.TestCase):
         self.assertIsNone(result.report.get("probe"))
         self.assertEqual(port.store.events[-1][0], "unroll")
 
+    def test_a_read_that_could_not_put_the_marker_back_stops_the_probe(self):
+        port = self.port()
+        reader = port.probe_reader
+
+        def probe_reader():
+            read = reader()
+
+            def lost(request):
+                state = read(request)
+                if port.reads >= 6:
+                    state = dict(state, unread={MARKER_LOST: "not back"})
+                return state
+
+            return lost
+
+        port.probe_reader = probe_reader
+        result = export(port)
+        self.assertEqual(result.health["probe"], "failed")
+        self.assertIsNone(result.report.get("probe"))
+
     def test_a_design_without_marker_support_or_a_marker_that_will_not_move_runs_as_before(self):
         plain = FakePort(capture=box_capture())
         self.assertEqual(export(plain).report["probe"]["timeline"]["rolled"], False)
@@ -308,7 +339,8 @@ class PartsRollTest(unittest.TestCase):
         parts = [p for p in result.report["parts"] if "probe" in p]
         self.assertTrue(parts)
         for part in parts:
-            self.assertEqual(part["probe"]["timeline"], {"rolled": True, "items": 6, "of": 9})
+            timeline = part["probe"]["timeline"]
+            self.assertEqual((timeline["rolled"], timeline["items"], timeline["of"]), (True, 6, 9))
 
     def test_a_cancel_in_the_parts_tries_puts_the_marker_back(self):
         port = FakePartsPort([box_capture(), box_capture()], store=RollingStore(START), cancel_at=3)

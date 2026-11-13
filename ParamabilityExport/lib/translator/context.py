@@ -6,6 +6,7 @@ only when the walk writes its steps.
 """
 from contextlib import contextmanager
 
+from . import gap_measures, gaps as gap_records, lineage as body_lineage, tool_items
 from .capture import same_body
 from .result import Doubt, StepResult
 from .step_kinds import recipe_kind
@@ -18,13 +19,19 @@ MAX_LABEL = 120
 class Context:
     """State of one translate() run.
 
-    target: the exported body, {token, name, box, volume_mm3}.
-    capture: the whole capture (for up_axis and cross item lookups).
-    pending_tools: body token (or name) -> the StepResult of the steps that build a body other than the target, not
-      yet placed, with the doubts their handlers recorded and the capture items that made them. The Combine handler
-      takes them (`StepResult.join`), so these count only once the body joins the exported one.
-    tool_refusals: timeline index -> the reason the walk could not copy that step of a body other than the target. A
-      Combine that finds such a step among the history of its tool body names it in its own refusal.
+    target: the body this walk builds, {token, name, box, volume_mm3}: the exported body, or a tool body in a child.
+    capture: the capture this walk reads (for up_axis and cross item lookups). In a child, `items` are the items that
+      made the tool.
+    timeline: every item of the design, also in a child.
+    handlers: capture type -> handler.
+    component: the token of the component a child's body lives in, when a tool from another component led to it; None
+      while the walk is in the exported body's component.
+    depth: how many tools deep this walk is, 0 for the exported body.
+    outer: the context of the walk that holds this tool, None for the exported body. A tool step can reach to a face
+      only that walk knows.
+    id_prefix: starts the id of every step of this walk.
+    used_tools: keys (`tool_key`) of the tool bodies an earlier Combine used up. Fusion removes such a body.
+    entries_by_index: timeline index -> the `Entry` records written for that item.
     not_repeatable: ids of steps whose length Fusion recomputes per copy (`Entry.repeatable`). Pattern and mirror
       handlers refuse them as sources.
     table: the size table whose sizes the feature values may follow, or None for a recipe with plain
@@ -40,44 +47,109 @@ class Context:
     motion: the probe's motion file (`sketch_values.motion.Motion`), `sketch_values.motion.OPTIMISTIC`, or None. With a motion file the
       sketch values follow sizes (sketch_motion.py); otherwise they are written as numbers.
     plain_picks: round or bevel step id -> `Entry.picks`; patterns and mirrors copy these points.
+    gaps: the steps this walk left out (`gaps.Gap`), in order, with those of the tools it wrote (`commit`).
     cache: results that depend on the capture alone, shared by every walk of one translation (one translation walks
       the capture many times). Handlers keep their own entry under their module name.
+    lineage: `[(index, parent)]` of the splits the target comes through (lineage.py), for the walk of the exported
+      body only: before each split the walk builds the body it split.
     """
 
-    def __init__(self, capture, table=None, motion=None, cache=None):
+    def __init__(self, capture, table=None, motion=None, cache=None, handlers=None):
         self.capture = capture
+        self.timeline = capture["items"]
+        self.handlers = handlers or {}
+        self.component = None
+        self.depth = 0
+        self.outer = None
+        # A walk that only names the steps the copy cannot hold: its stops become gaps and it has no gap cap.
+        self.diagnose = False
+        self.id_prefix = ""
         self.cache = {} if cache is None else cache
         self.table = table
         self.motion = motion
         self.doubts = []
+        self.gaps = []
         self._recordings = []
         self.placers = []
         self.slabs = []
         self.written_reads = ()
         self.plain_picks = {}
         self.target = capture["target"]
+        self.lineage = []
         self.steps = []
-        self.pending_tools = {}
-        self.tool_refusals = {}
+        self.used_tools = set()
+        self.entries_by_index = {}
         self.copied_items = []
         self.asked = set()
         self.not_repeatable = set()
         # item index of a round drawn into an earlier extrude's outline (`finish._slot_outline`) -> that step's id
         self.folded = {}
         self._ids_by_index = {}
+        self._tool_ids_by_index = {}
+        self._written_at = []
         self.current = None
 
-    def is_target(self, body):
-        return same_body(body, self.target)
+    def child(self, body, id_prefix, items=(), depth=None):
+        """The context of a walk that builds the tool `body` from `items` on its own. It has its own steps, placers
+        and doubts, and shares the table, the motion file, the cache and the handlers."""
+        found = Context(dict(self.capture, target=body, items=list(items)), self.table, self.motion, self.cache,
+                        self.handlers)
+        found.timeline = self.timeline
+        found.outer = self
+        found.diagnose = self.diagnose
+        found.id_prefix = id_prefix
+        found.depth = self.depth + 1 if depth is None else depth
+        found.component = tool_items.component_token(body) if tool_items.is_foreign_tool(body) else self.component
+        return found
 
-    def doubt(self, names, why, fixed=False):
+    def enter(self, item):
+        """The walk reaches `item`: remember what is written so far, for `as_of`."""
+        self.current = item
+        self._written_at.append((item.get("index"), self.placers[:], self.slabs[:], self.written_reads))
+
+    @contextmanager
+    def as_of(self, item):
+        """Inside the block, `item` is the current item and the placers, slabs and sizes read are those written before
+        the walk reached it."""
+        saved = self.current, self.placers, self.slabs, self.written_reads
+        placers, slabs, reads = next(((p, s, r) for index, p, s, r in self._written_at if index >= item["index"]),
+                                     (self.placers, self.slabs, self.written_reads))
+        self.current, self.placers, self.slabs, self.written_reads = item, placers[:], slabs[:], reads
+        try:
+            yield
+        finally:
+            self.current, self.placers, self.slabs, self.written_reads = saved
+
+    def is_target(self, body):
+        """`body` is the body this walk builds: the target, or at the current item the body of the lineage."""
+        if same_body(body, self.target):
+            return True
+        if not self.lineage or self.current is None:
+            return False
+        return any(same_body(body, held) for held in self.lineage_at(self.current.get("index", 0)))
+
+    def lineage_at(self, index):
+        """`(before, after)`: the body this walk builds just before and just after the item at `index`."""
+        return body_lineage.at(self.lineage, self.target, index)
+
+    def doubt(self, names, why, fixed=False, cut=None):
         """Record that a value cannot follow the sizes `names` (Fusion names), so it is written as its number. `why`
         ends the reason. The driver keeps these sizes free with a warning (`translate`); with `fixed` the value would
         make the recipe unusable while they stay free, so they become fixed numbers.
 
         While a handler runs, the doubt goes to its StepResult (`recording`); otherwise it counts for the walk."""
-        record = Doubt(names, why, self.current.get("index") if self.current else None, fixed)
+        record = Doubt(names, why, self.current.get("index") if self.current else None, fixed, cut)
         (self._recordings[-1] if self._recordings else self).doubts.append(record)
+
+    def doubted(self):
+        """Fusion names of the sizes marked so far (a doubt without a cut), in this handler and in the walk."""
+        records = self.doubts + (self._recordings[-1].doubts if self._recordings else [])
+        return {name for record in records if not record.cut for name in record.names}
+
+    def cut(self, ranges, why):
+        """Record that a value works only while the sizes stay inside `ranges` ({Fusion name: (min, max)}): the driver
+        cuts their ranges to those values (`cuts`). Recorded like `doubt`."""
+        self.doubt(list(ranges), why, cut=ranges)
 
     def _key(self, item, path):
         index = item.get("index") if isinstance(item, dict) else None
@@ -108,11 +180,35 @@ class Context:
         finally:
             self._recordings.pop()
 
+    def replay(self, recorded, doubts=True):
+        """Record again what a `recording` block kept apart: the values it dealt with and, with `doubts`, its doubts
+        and notes. A handler tries one way to follow a value this way and keeps it only when it worked."""
+        here = self._recordings[-1] if self._recordings else self
+        here.asked |= recorded.asked
+        if doubts:
+            here.doubts.extend(recorded.doubts)
+            if self._recordings:
+                here.notes.extend(recorded.notes)
+
     def commit(self, result):
         """The steps of `result` are part of the recipe: its doubts and the items of other bodies it carries count."""
         self.doubts.extend(result.doubts)
         self.asked |= result.asked
         self.copied_items.extend(result.items)
+        self.gaps.extend(result.gaps)
+
+    def leave_out(self, item, reason, depends_on=(), picks=False):
+        """Record `item` as a gap of this walk, after the steps written so far; returns the `gaps.Gap`. `picks` says
+        it is a gap only because it picks, or may pick, faces of earlier gaps."""
+        before, after = gap_measures.measures(self, item)
+        gap = gap_records.Gap(gap_records.gap_id(self, item), item, reason, depends_on,
+                              [step["id"] for step in self.steps], before, after, picks)
+        self.gaps.append(gap)
+        return gap
+
+    def gap_of(self, index):
+        """The gap of this walk recorded for the timeline item at `index`, or None."""
+        return next((gap for gap in self.gaps if gap.index == index), None)
 
     @property
     def depends(self):
@@ -124,10 +220,29 @@ class Context:
         """The same for the sizes that must become fixed numbers."""
         return self._reasons(True)
 
+    @property
+    def cuts(self):
+        """Fusion name of a size -> (min, max) its range is cut to (`cut`), the narrowest of all records."""
+        found = {}
+        for record in self.doubts:
+            for name, (low, high) in (record.cut or {}).items():
+                was = found.get(name, (low, high))
+                found[name] = (max(low, was[0]), min(high, was[1]))
+        return found
+
+    @property
+    def cut_causes(self):
+        """Fusion name of a size -> {(min, max) it was cut to: why} for each `cut` record that names it."""
+        found = {}
+        for record in self.doubts:
+            for name, ends in (record.cut or {}).items():
+                found.setdefault(name, {})[tuple(ends)] = record.why
+        return found
+
     def _reasons(self, fixed):
         found = {}
         for record in self.doubts:
-            if record.fixed == fixed:
+            if record.fixed == fixed and not record.cut:
                 for name in record.names:
                     found.setdefault(name, record.why)
         return found
@@ -145,39 +260,76 @@ class Context:
         """Step ids written for the timeline item at `index` (empty when it made none)."""
         return list(self._ids_by_index.get(index, ()))
 
-    def slabs_of(self, step_id):
-        """The slabs of the bodies a step makes: an extrude's own, or a repeat's originals and copies."""
+    def written_for(self, index):
+        """Step ids written for the timeline item at `index` at any depth, also inside tool steps."""
+        return self.steps_of(index) + self._tool_ids_by_index.get(index, [])
+
+    def wrote_after(self, index):
+        """True when a timeline item after `index` wrote steps in this walk."""
+        return any(at > index and ids for at, ids in self._ids_by_index.items())
+
+    def credit(self, index, step_id):
+        """The step `step_id` carries the values of the timeline item at `index`, though another item wrote it."""
+        self._tool_ids_by_index.setdefault(index, []).append(step_id)
+
+    def set_aside(self):
+        """A child walk that takes over everything written so far; this walk starts again with nothing written."""
+        held = self.child(self.target, self.id_prefix, depth=self.depth + 1)
+        held.steps, self.steps = self.steps, []
+        held.placers, self.placers = self.placers, []
+        held.slabs, self.slabs = self.slabs, []
+        held.plain_picks, self.plain_picks = self.plain_picks, {}
+        held.not_repeatable, self.not_repeatable = self.not_repeatable, set()
+        held.entries_by_index, self.entries_by_index = self.entries_by_index, {}
+        held._ids_by_index, self._ids_by_index = self._ids_by_index, {}
+        held._tool_ids_by_index, self._tool_ids_by_index = self._tool_ids_by_index, {}
+        return held
+
+    def join_walk(self, child):
+        """A tool step of the walk `child` is written: the ids of its steps count for the items that made them."""
+        for index in set(child._ids_by_index) | set(child._tool_ids_by_index):
+            self._tool_ids_by_index.setdefault(index, []).extend(child.written_for(index))
+
+    def placers_of(self, step_id):
+        """The placers of the bodies a step makes: an extrude's slab, a tool's placer, or a repeat's originals and
+        copies."""
         step = next((s for s in self.steps if s.get("id") == step_id), None)
         found = []
         if step is not None and recipe_kind(step.get("kind")).repeats:
             for of in step.get("of") or []:
-                found.extend(self.slabs_of(of))
-        found.extend(s for s in self.slabs if s.owner == step_id)
+                found.extend(self.placers_of(of))
+        found.extend(p for p in self.placers if getattr(p, "owner", None) == step_id)
         unique = []
-        for slab in found:
-            if all(slab is not other for other in unique):
-                unique.append(slab)
+        for placer in found:
+            if all(placer is not other for other in unique):
+                unique.append(placer)
         return unique
 
     def add_steps(self, item, result):
         """Write the steps of a StepResult: give each step its id and label, append it to the recipe, make its
         placers, and return the ids.
 
-        Ids: `<kind>_<index>`, then `<kind>_<index>_<n>` for the second and later steps of one item.
+        Ids: `<kind>_<index>`, then `<kind>_<index>_<n>` for the second and later steps of one item. An `Entry` with an
+        id keeps it: other steps may name it already. A written entry keeps its id and label when it is written again.
         """
+        if result.wraps_body is not None:
+            result.entries.insert(0, result.wraps_body(self))
+            result.wraps_body = None
         ids = []
-        label = str(item.get("name", ""))[:MAX_LABEL]
+        name = str(item.get("name", ""))
         made = self._ids_by_index.setdefault(item["index"], [])
+        self.entries_by_index.setdefault(item["index"], []).extend(result.entries)
         for n, entry in enumerate(result.entries, start=len(made) + 1):
             step = entry.step
-            base = "%s_%s" % (step["kind"], item["index"])
-            step_id = base if n == 1 else "%s_%d" % (base, n)
+            base = "%s%s_%s" % (self.id_prefix, step["kind"], item["index"])
+            step_id = entry.step_id or (base if n == 1 else "%s_%d" % (base, n))
             if len(step_id) > MAX_ID:
                 step_id = step_id[-MAX_ID:]
             if not entry.repeatable:
                 self.not_repeatable.add(step_id)
             step["id"] = step_id
-            step["label"] = label
+            step["label"] = (entry.label or name)[:MAX_LABEL]
+            entry.step_id, entry.label = step_id, step["label"]
             for maker in entry.placers:
                 maker.make(self, step_id, step)
             if entry.picks is not None:

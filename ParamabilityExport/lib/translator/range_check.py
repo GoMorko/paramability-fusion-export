@@ -21,7 +21,8 @@ Arguments:
   bounds  optional {recipe size name: (low, high)} that replaces the range of a size, for a range under test.
   extra   settings ({recipe size name: value}) tested besides the corners, for example states the probe built.
 
-`size_env` gives the values of every size at a setting; `largest_share` finds where a rule stops holding while a range
+`middles` gives settings inside the ranges (every size at its middle, alone or with the others at their ends) for a rule
+that is not a formula and can fail between the ends. `size_env` gives the values of every size at a setting; `largest_share` finds where a rule stops holding while a range
 is moved toward its value.
 
 A formula that is more than sums and products (`abs`, a division by a size, `min`, `max`, `mod`, a choice, a
@@ -127,6 +128,23 @@ def corners(table, reads, bounds=None):
     rng = random.Random(",".join(names))
     while len(out) < MAX_SETTINGS:
         out.append({n: ends[n][rng.randrange(2)] for n in names})
+    return out
+
+
+def middles(table, reads, bounds=None):
+    """Settings with sizes inside their ranges, as [{recipe size name: value}]: every read size at the middle of its
+    range together, and each one at its middle with the others all low, all high or at their current values. For a
+    rule that can fail between the ends of the ranges and hold at both."""
+    ends = _ends(table, reads, bounds)
+    names = list(ends)
+    middle = {n: (lo + hi) / 2.0 for n, (lo, hi) in ends.items()}
+    if not names:
+        return []
+    out = [dict(middle)]
+    for n in names:
+        out.append({n: middle[n]})
+        if len(names) > 1:
+            out += [dict({m: ends[m][side] for m in names}, **{n: middle[n]}) for side in (0, 1)]
     return out
 
 
@@ -287,14 +305,15 @@ def sweep(table, formula, reads, bounds=None, extra=()):
     return Span(low, high, failed)
 
 
-def largest_share(holds):
-    """The largest share t in [0, 1] for which `holds(t)` is true, when it holds up to some share and fails after.
+def largest_share(holds, steps=STEPS):
+    """The largest share t in [0, 1] for which `holds(t)` is true, when it holds up to some share and fails after,
+    found by `steps` halvings.
 
     `holds(0.0)` is assumed true."""
     if holds(1.0):
         return 1.0
     low, high = 0.0, 1.0
-    for _ in range(STEPS):
+    for _ in range(steps):
         mid = (low + high) / 2.0
         if holds(mid):
             low = mid

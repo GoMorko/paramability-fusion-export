@@ -4,7 +4,7 @@ import unittest
 from tests import context  # noqa: F401
 from tests.test_translate_copies import FLAT, _edges_set, _extrude, _item, _turned
 from tests.test_translate_sized import CUBE, TICKED, param, table_of
-from tests.translator_helpers import assert_schema_ok, edited, load_capture, steps_of, translate_fixture
+from tests.translator_helpers import assert_schema_ok, edited, left_out, load_capture, steps_of, translate_fixture
 
 from lib.params import size_table
 from lib.params.expressions import evaluate
@@ -134,14 +134,14 @@ class SymmetricRowTest(unittest.TestCase):
                               ("flag on, extent misread", edited("rpattern_symmetric_extent", lambda capture: capture[
                                   "items"][-1]["data"].update(distance_one=40.0)))):
             with self.subTest(label):
-                self.assertIsNone(result.recipe)
-                self.assertEqual(result.refusal["index"], 4)
+                self.assertIsNotNone(left_out(result))
+                self.assertEqual(left_out(result)["index"], 4)
 
     def test_copies_on_both_sides_need_the_flag(self):
         result = edited("rpattern_symmetric_odd", lambda capture: capture["items"][-1]["data"].update(
             symmetric_one=False))
-        self.assertIsNone(result.recipe)
-        self.assertEqual(result.refusal["index"], 4)
+        self.assertIsNotNone(left_out(result))
+        self.assertEqual(left_out(result)["index"], 4)
 
 
 class SymmetricSizedTest(unittest.TestCase):
@@ -202,8 +202,8 @@ class SymmetricSizedTest(unittest.TestCase):
 
     def test_a_count_that_can_pass_the_copy_cap_marks_its_size(self):
         count = {"quantity_one": param("d22", "ceil(%s / 5)" % CUBE, 4.0)}
-        result, _ = sized(centred(row(3, [2], 4, 24.0, params=dict(PITCH, **count))), ranges={CUBE: (10.0, 700.0)})
-        self.assertIn("more than 64 copies", {f["name"]: f["reason"] for f in result.loose}[CUBE])
+        result, _ = sized(centred(row(3, [2], 4, 24.0, params=dict(PITCH, **count))), ranges={CUBE: (10.0, 3000.0)})
+        self.assertIn("more than 256 copies", {f["name"]: f["reason"] for f in result.loose}[CUBE])
 
 
 def circular(index, count, total, degrees, symmetric=True, params=None):
@@ -241,8 +241,8 @@ class SymmetricCircularTest(unittest.TestCase):
                                ("copies run one way", centred(circular(3, 4, 90.0, [0, 30, 60, 90])))):
             with self.subTest(label):
                 result = translate(capture)
-                self.assertIsNone(result.recipe)
-                self.assertEqual(result.refusal["index"], 3)
+                self.assertIsNotNone(left_out(result))
+                self.assertEqual(left_out(result)["index"], 3)
 
 
 if __name__ == "__main__":

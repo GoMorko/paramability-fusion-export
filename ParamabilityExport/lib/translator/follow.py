@@ -15,12 +15,16 @@ point on a copy is placed on the original and moved back: its coordinates follow
 A plane, axis or face of another component (`assembly` records, with their `ref`) moves with the sizes the probe
 measured (`ref_motion`): its place is a formula of them, or the sizes that act on its component are marked.
 
+A step inside a tool can reach to a face that is not on the tool. The walk that holds the tool places that face as it
+stood at that step (`_beyond_tool`), so the step follows the part although the tool is built on its own.
+
 A point on the inner wall of a shell is placed through the outer wall it was moved from (shells.py), and a point on
 a face that an offsetFaces step moved through the face before the move (offset_faces.py). An edge where the walls of
 two steps cross is placed on both walls (crossings.py).
 """
-from . import crossings, notes, picks, ref_motion, shells, sketch_motion, vec
+from . import crossings, notes, picks, ref_motion, shells, sketch_motion, values, vec
 from .copy_counts import stays_at_least
+from .sizes import offset_param, on_part
 from .placer import ADD
 from .slabs import (AXIAL_TOL, CONSTANT_TOL, FACTOR_DIGITS, IDENTITY_ROWS, LATERAL_TOL, Motion, Place, Slab,
                     as_quantity, cleaned_all)
@@ -113,10 +117,24 @@ def _keep_copies(ctx, item, found):
             if ctx.table is not None and not stays_at_least(ctx.table, count, least):
                 ctx.doubt(count.reads, "%s picks copy %d of %s, and a smaller value would leave that copy out"
                           % (_name(item), least, by or "a pattern"))
+    for names, what in getattr(found, "keeps", ()):
+        ctx.doubt(names, "%s picks %s, which moves with these sizes, and the copy cannot follow that"
+                  % (_name(item), what))
     for stuck in found.blocked:
         why = (notes.bends_reason(_name(item), stuck.sketch) if stuck.cause == sketch_motion.BENDS
                else notes.stuck_reason(stuck.cause, stuck.sketch))
         ctx.doubt(sketch_motion.movers(ctx.table, stuck), why)
+
+
+def _reads_behind(ctx, p):
+    """The sizes that may move a point no step could place: every size read so far, less those that cannot reach it
+    when it lies on one tool and on nothing else."""
+    for tool in ctx.placers:
+        unrelated = tool.not_moved_by(p)
+        if unrelated and not any(other is not tool and (other.opaque or other.not_moved_by(p)
+                                                        or other.place(p, False) is not None) for other in ctx.placers):
+            return tuple(name for name in ctx.written_reads if name not in unrelated)
+    return ctx.written_reads
 
 
 def follow_points(ctx, item, points, edge=True, what="edges"):
@@ -125,7 +143,7 @@ def follow_points(ctx, item, points, edge=True, what="edges"):
     for p in points:
         found = locate(ctx, p, edge)
         if found is None:
-            ctx.doubt(ctx.written_reads, "the %s that %s picks may move with it, and the copy cannot follow them"
+            ctx.doubt(_reads_behind(ctx, p), "the %s that %s picks may move with it, and the copy cannot follow them"
                       % (what, _name(item)))
             return None
         _keep_copies(ctx, item, found)
@@ -160,8 +178,8 @@ def whole_edges(ctx, edge_list):
             return None
         keys.append(edge_keys.pop())
     slab = first.slab
-    wanted = len(slab.footprint.corners) if first.which == "side" else len(slab.footprint.curves)
-    if not first.moves or len(set(keys)) != len(keys) or len(keys) != wanted:
+    wanted = slab.edge_count(first.which)
+    if wanted is None or not first.moves or len(set(keys)) != len(keys) or len(keys) != wanted:
         return None
     return {"featureEdges": slab.id, "which": "sides" if first.which == "side" else first.which}
 
@@ -179,32 +197,91 @@ def faces(ctx, item, face_list):
     return {"near": followed if followed is not None else points}
 
 
+# `_beyond_tool` answers this for a reference that lies on the body being walked.
+_ON_THIS_BODY = object()
+
+
+def _held_by_a_walk(ctx, body):
+    while ctx is not None:
+        if ctx.is_target(body):
+            return True
+        ctx = ctx.outer
+    return False
+
+
+def reads_with_outer(ctx, item):
+    """The sizes read before `item` by this walk and the walks that hold it."""
+    if ctx.outer is None:
+        return ctx.written_reads
+    with ctx.outer.as_of(item):
+        return tuple(dict.fromkeys(ctx.written_reads + reads_with_outer(ctx.outer, item)))
+
+
+def _beyond_tool(ctx, item, ref, points, what, ask, edge=False):
+    """How a reference a tool step uses moves, when it is not on the tool; `_ON_THIS_BODY` when it is, or outside a
+    tool. `ask(outer)` works it out in the walk that holds the tool, as that walk stood at `item`.
+
+    The body on record says where the reference lies. Without one, a point the tool cannot place is taken to lie
+    outside it. A body no walk builds, or a tool in another frame, cannot be followed: every size may move it."""
+    outer = ctx.outer
+    if outer is None:
+        return _ON_THIS_BODY
+    body = ref.get("body")
+    placed = bool(points) and all(locate(ctx, p, edge) is not None for p in points)
+    why = "%s %s a face outside its tool body that may move with it, and the copy cannot follow that" % (_name(item), what)
+    same_frame = ctx.component == outer.component
+    if not ctx.is_target(body) if body else not placed:
+        if not same_frame or (body and not _held_by_a_walk(outer, body)):
+            ctx.doubt(ctx.table.ticked if ctx.table is not None else (), why)
+            return None
+        with outer.as_of(item), outer.recording() as seen:
+            found = ask(outer)
+        for record in seen.doubts:
+            ctx.doubt(record.names, record.why, record.fixed)
+        if not body and (found is None or not points):
+            ctx.doubt(ctx.written_reads, why)
+        return found
+    if not body and same_frame:
+        # The tool has this point, and the part may have a face there too: either could be the one meant.
+        with outer.as_of(item):
+            shared = outer.written_reads if any(locate(outer, p, edge) is not None for p in points) else ()
+        if shared:
+            ctx.doubt(shared, why)
+    return _ON_THIS_BODY
+
+
 def target_shift(ctx, item, target, direction, what="reaches to"):
     """How a face an extrude starts from or reaches to moves along unit `direction`: a Quantity whose formula gives
     the face's offset and whose number is that offset at the measured sizes (plain zero when it does not move); None
     when it cannot follow (its sizes are then fixed). `what` words the reason.
 
-    A construction plane stays where it is (a size that moves it is fixed with the sketches). A face is placed by
-    its `face_point`.
+    A construction plane follows what it is built on (`_plane_shift`). A face is placed by its `face_point`.
     """
     zero = Quantity(0.0)
     if target.get("assembly"):
         return ref_motion.plane_shift(ctx, item, target, direction, what)
-    if not ctx.written_reads or target.get("entity_type") == "ConstructionPlane":
-        return zero
+    if target.get("entity_type") == "ConstructionPlane":
+        return _plane_shift(ctx, item, target, direction, what)
     point = target.get("face_point")
+    beyond = _beyond_tool(ctx, item, target, [point] if point else [], what,
+                          lambda outer: target_shift(outer, item, target, direction, what))
+    if beyond is not _ON_THIS_BODY:
+        return beyond
+    if not ctx.written_reads:
+        return zero
     found = locate(ctx, point) if point else None
     if isinstance(found, shells.InnerPlace) and (found.single is None or abs(vec.dot(found.single, direction)) < 1 - 1e-9):
         found = None
     if found is None or found.which == "side":
-        ctx.doubt(ctx.written_reads, "%s %s a face that may move with it, and the copy cannot follow that"
-                  % (_name(item), what))
+        names = _reads_behind(ctx, point) if point else ctx.written_reads
+        ctx.doubt(names, "%s %s a face that may move with it, and the copy cannot follow that" % (_name(item), what))
         return None
     if not found.moves:
         return zero
     _keep_copies(ctx, item, found)
     slab = found.slab
-    if found.which in ("start", "end") and not slab.is_copy and not any(q.sized for q in slab.origin):
+    if (isinstance(slab, Slab) and found.which in ("start", "end") and not slab.is_copy
+            and not any(q.sized for q in slab.origin)):
         return slab.length.scaled(found.factor * vec.dot(slab.axis, direction))
     shift = zero
     for q, p, d in zip(found.quantities(point), point, direction):
@@ -213,15 +290,23 @@ def target_shift(ctx, item, target, direction, what="reaches to"):
     return shift
 
 
-def _on_part(ref):
-    """True when a plane or axis description sits on geometry of the part (a face, an edge, a sketch) or on
-    construction geometry built on such. Origin planes and axes, and construction geometry made from parameters
-    alone, do not."""
-    if ref.get("origin") or ref.get("foreign"):
-        return False
-    if ref.get("entity_type") in ("ConstructionPlane", "ConstructionAxis"):
-        return any(_on_part(entry) for entry in ref.get("built_on") or ())
-    return True
+def _plane_shift(ctx, item, target, direction, what):
+    """How a construction plane an extrude starts from or reaches to moves along unit `direction`. An origin plane,
+    or one made from parameters alone, stays: a size behind its own parameters is marked (`sizes.construction_fixes`).
+    One built on the part follows what it is built on (`_built_shift`), through a chain of planes. A record that does
+    not say what the plane is built on (an older capture) marks the sizes read before the step."""
+    if target.get("origin"):
+        return Quantity(0.0)
+    if "definition" in target or "built_on" in target:
+        if on_part(target) or offset_param(ctx.table, target) is not None:
+            return _built_shift(ctx, item, target, direction, what)
+        return Quantity(0.0)
+    reads = reads_with_outer(ctx, item)
+    if not reads:
+        return Quantity(0.0)
+    ctx.doubt(reads, "%s %s a construction plane that may move with it, and this export does not say what the plane "
+              "is built on" % (_name(item), what))
+    return None
 
 
 def _is_plane(ref):
@@ -267,18 +352,65 @@ def _built_shift(ctx, item, ref, direction, what):
     """The shift of construction geometry built on part geometry: an offset plane moves with its base, a midplane
     with the mean of its two bases, an axis on an edge or round face with that edge or face. Anything else cannot be
     followed."""
-    parts, definition = ref["built_on"], (ref.get("definition") or "").lower()
+    parts, definition = ref.get("built_on") or [], (ref.get("definition") or "").lower()
     if ref.get("entity_type") == "ConstructionPlane":
         if "offset" in definition and len(parts) == 1 and _is_plane(parts[0]):
-            return place_plane(ctx, item, parts[0], direction, what)
+            base = place_plane(ctx, item, parts[0], direction, what)
+            return base if base is None else _own_offset(ctx, item, ref, base, direction, what)
         if "midplane" in definition and len(parts) == 2 and all(_is_plane(p) for p in parts):
             shifts = [place_plane(ctx, item, p, direction, what) for p in parts]
             return None if None in shifts else shifts[0].plus(shifts[1]).scaled(0.5)
     elif len(parts) == 1 and parts[0].get("entity_type") in ("BRepEdge", "BRepFace"):
         return place_plane(ctx, item, dict(parts[0], dir=ref.get("dir")), direction, what)
-    ctx.doubt(ctx.written_reads, "%s %s a %s built on part geometry that may move with it, and the copy cannot follow "
-              "that" % (_name(item), what, "plane" if ref.get("entity_type") == "ConstructionPlane" else "axis"))
+    ctx.doubt(reads_with_outer(ctx, item), "%s %s a %s built on part geometry that may move with it, and the copy "
+              "cannot follow that" % (_name(item), what, "plane" if ref.get("entity_type") == "ConstructionPlane" else "axis"))
     return None
+
+
+def _base_point(ref):
+    """A point of the plane or face an offset plane is built on: the origin for an origin plane."""
+    if ref.get("origin"):
+        return [0.0, 0.0, 0.0]
+    return ref.get("point") or ref.get("face_point")
+
+
+def _own_offset(ctx, item, ref, shift, direction, what):
+    """`shift` (the move of the plane an offset plane is built on) plus the change of the plane's own distance when
+    a size sets it (`sizes.offset_param`). The measured distance from the base tells which way a positive distance
+    goes; when it does not, the sizes behind the distance are marked and only the base move is followed."""
+    param = offset_param(ctx.table, ref)
+    if param is None:
+        return shift
+    plane = ref.get("plane") if isinstance(ref.get("plane"), dict) else ref
+    point, normal, base = plane.get("point"), plane.get("normal"), _base_point(ref["built_on"][0])
+    distance = param["value"] * 10.0
+    measured = vec.dot(vec.sub(point, base), normal) if point and normal and base else None
+    sign = None
+    if measured is not None and abs(distance) > 1e-9:
+        sign = 1.0 if abs(measured - distance) <= 1e-6 else -1.0 if abs(measured + distance) <= 1e-6 else None
+    names = [n for n in ctx.table.depends(param["name"]) if n in ctx.table.ticked]
+    if sign is None:
+        ctx.doubt(names, "%s %s a plane whose distance from its base cannot be read, and the copy cannot follow it"
+                  % (_name(item), what))
+        return shift
+    own = {"index": item.get("index"), "name": item.get("name"),
+           "data": {"params": {"plane.offset": {"name": param["name"], "expression": param["expression"],
+                                                "value": distance}}}}
+    q = values.quantity(ctx, own, "plane.offset", distance)
+    if not q.sized:
+        return shift
+    k = sign * vec.dot(vec.unit(normal), direction)
+    # The numbers of both moves go last, so they fold into one.
+    core = Quantity(shift.n - shift.const, shift.core, shift.reads) if shift.sized else Quantity(shift.n)
+    return core.plus(q.scaled(k)).plus(shift.const - distance * k)
+
+
+def shifted_origin(origin, normal, shift):
+    """A plane origin as the recipe writes it, moved along `normal` by `shift` (`place_plane`): formulas in the
+    coordinates the normal has a part in when the shift follows sizes, else `origin` as it is."""
+    if shift is None or not shift.sized:
+        return origin
+    return [shift.scaled(c).plus(o).json() if abs(c) > 1e-9 else o for o, c in zip(origin, normal)]
 
 
 def place_plane(ctx, item, ref, direction, what="mirrors across"):
@@ -293,16 +425,29 @@ def place_plane(ctx, item, ref, direction, what="mirrors across"):
     zero = Quantity(0.0)
     if ref.get("assembly"):
         return ref_motion.shift_along(ctx, item, ref, direction, what)
-    if not ctx.written_reads or ref.get("origin") or ref.get("foreign"):
+    if ref.get("origin") or ref.get("foreign"):
         return zero
     kind = ref.get("entity_type")
-    if ref.get("face_point") is not None or kind == "BRepFace":
+    on_face = ref.get("face_point") is not None or kind == "BRepFace"
+    if on_face or ref.get("edge_points") or kind == "BRepEdge":
+        points = [ref["face_point"]] if ref.get("face_point") is not None else ref.get("edge_points") or []
+        beyond = _beyond_tool(ctx, item, ref, points, what,
+                              lambda outer: place_plane(outer, item, ref, direction, what), not on_face)
+        if beyond is not _ON_THIS_BODY:
+            return beyond
+    if ctx.outer is not None and kind in ("ConstructionPlane", "ConstructionAxis") and on_part(ref):
+        return _built_shift(ctx, item, ref, direction, what)
+    if offset_param(ctx.table, ref) is not None:
+        return _built_shift(ctx, item, ref, direction, what)
+    if not ctx.written_reads:
+        return zero
+    if on_face:
         if ref.get("surface") not in (None, "Plane"):
             return _round_face_axis(ctx, item, ref, what)
         found = locate(ctx, ref["face_point"]) if ref.get("face_point") else None
         if found is not None and getattr(found, "which", None) == "side" and not found.moves:
             return zero
-        offset = target_shift(ctx, item, {"face_point": ref.get("face_point")}, direction, what)
+        offset = target_shift(ctx, item, {"face_point": ref.get("face_point"), "body": ref.get("body")}, direction, what)
         return offset.plus(-offset.n) if offset is not None and offset.sized and abs(offset.n) > 1e-9 else offset
     if ref.get("edge_points") or kind == "BRepEdge":
         if not ref.get("edge_points"):
@@ -310,6 +455,6 @@ def place_plane(ctx, item, ref, direction, what="mirrors across"):
                       % (_name(item), what))
             return None
         return _edge_shift(ctx, item, ref["edge_points"], direction, what)
-    if kind in ("ConstructionPlane", "ConstructionAxis") and _on_part(ref):
+    if kind in ("ConstructionPlane", "ConstructionAxis") and on_part(ref):
         return _built_shift(ctx, item, ref, direction, what)
     return zero

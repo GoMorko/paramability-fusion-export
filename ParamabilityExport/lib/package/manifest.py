@@ -4,6 +4,10 @@ import re
 
 SCHEMA = "paramability.recipePackage"
 VERSION = 1
+# A package that holds a gaps file is version 2, so an older reader refuses it instead of reading an unfinished
+# copy as a finished one. A package without one stays version 1.
+VERSION_WITH_GAPS = 2
+GAPS_ENTRY = "gaps.json"
 KINDS = ("valueRows", "recipe", "stepOnly", "parts")
 UNITS = ("mm", "deg", "")
 MAX_CHECKS = 64
@@ -67,17 +71,19 @@ def build_step_only_manifest(name, writer, up_axis="z", notes=None, parameters=N
 
 
 def build_recipe_manifest(name, writer, up_axis="z", notes=None, checks=None, fixed=None, parameters=None,
-                          loose=None):
+                          loose=None, gaps=None, cuts=None):
     """A translated part: the STEP files plus recipe.json.
 
     checks: [{'values': {size name: number}, 'step': 'checks/01.step'}], one size changed per check.
     fixed: [{'name', 'reason'}] for Fusion parameters that stay fixed numbers in the shape. Left out when empty.
     loose: [{'name', 'reason'}] for recipe sizes that stay free but may not follow every step. Left out when empty.
+    cuts: [{'name', 'reason'}] for recipe sizes whose range was shortened to the values that build. Left out when empty.
     parameters: the design's user parameter entries. Left out when empty.
+    gaps: the path of the gaps file when steps were left out of the recipe. The manifest is then version 2.
     """
     manifest = {
         "schema": SCHEMA,
-        "version": VERSION,
+        "version": VERSION_WITH_GAPS if gaps else VERSION,
         "kind": "recipe",
         "name": name,
         "upAxis": up_axis,
@@ -91,6 +97,10 @@ def build_recipe_manifest(name, writer, up_axis="z", notes=None, checks=None, fi
         manifest["fixed"] = [dict(f) for f in fixed]
     if loose:
         manifest["loose"] = [dict(f) for f in loose]
+    if cuts:
+        manifest["cuts"] = [dict(f) for f in cuts]
+    if gaps:
+        manifest["gaps"] = gaps
     _add_parameters(manifest, parameters)
     return manifest
 
@@ -98,9 +108,11 @@ def build_recipe_manifest(name, writer, up_axis="z", notes=None, checks=None, fi
 def build_parts_manifest(name, writer, parts, up_axis="z", notes=None, fixed=None, parameters=None):
     """Several bodies of one design in one file: shared sizes, one object per part.
 
-    parts: [{'name', 'step', 'recipe', 'note', 'loose', 'checks'}] in order. `step` is a path in the zip. A part
-      without `recipe` is a fixed shape (`note` says why). `loose` ([{'name', 'reason'}]) lists the sizes of that
-      part's recipe that may not follow every step. `note` and `checks` are left out when empty.
+    parts: [{'name', 'step', 'recipe', 'gaps', 'note', 'loose', 'cuts', 'checks'}] in order. `step` is a path in the zip. A
+      part without `recipe` is a fixed shape (`note` says why). `gaps` is the path of the gaps file of a recipe that
+      leaves steps out; the manifest is then version 2. `loose` ([{'name', 'reason'}]) lists the sizes of that
+      part's recipe that may not follow every step; `cuts` ([{'name', 'reason'}]) lists the ones whose range was
+      shortened. `note`, `cuts` and `checks` are left out when empty.
     fixed: [{'name', 'reason'}] for sizes that stay fixed numbers in every part. Left out when empty.
     parameters: the design's user parameter entries, shared by all parts. Left out when empty.
     """
@@ -109,16 +121,20 @@ def build_parts_manifest(name, writer, parts, up_axis="z", notes=None, fixed=Non
         entry = {"name": part["name"], "step": part["step"]}
         if part.get("recipe"):
             entry["recipe"] = part["recipe"]
+        if part.get("gaps"):
+            entry["gaps"] = part["gaps"]
         if part.get("note"):
             entry["note"] = part["note"]
         if part.get("loose"):
             entry["loose"] = [dict(f) for f in part["loose"]]
+        if part.get("cuts"):
+            entry["cuts"] = [dict(f) for f in part["cuts"]]
         if part.get("checks"):
             entry["checks"] = [dict(c) for c in part["checks"]]
         out_parts.append(entry)
     manifest = {
         "schema": SCHEMA,
-        "version": VERSION,
+        "version": VERSION_WITH_GAPS if any(p.get("gaps") for p in out_parts) else VERSION,
         "kind": "parts",
         "name": name,
         "upAxis": up_axis,
@@ -138,6 +154,10 @@ def part_step_path(number):
 
 def part_recipe_path(number):
     return f"parts/{number:02d}/recipe.json"
+
+
+def part_gaps_path(number):
+    return f"parts/{number:02d}/{GAPS_ENTRY}"
 
 
 def _add_parameters(manifest, parameters):
@@ -178,8 +198,10 @@ def validate_manifest(m):
         return ["The manifest is not an object."]
     if m.get("schema") != SCHEMA:
         problems.append(f"schema must be \"{SCHEMA}\".")
-    if m.get("version") != VERSION:
-        problems.append(f"version must be {VERSION}.")
+    gaps_listed = _gaps_listed(m)
+    expected = VERSION_WITH_GAPS if gaps_listed else VERSION
+    if m.get("version") != expected:
+        problems.append(f"version must be {expected}" + (" for a package with gaps." if gaps_listed else "."))
     kind = m.get("kind")
     if kind not in KINDS:
         problems.append("kind must be valueRows, recipe, stepOnly or parts.")
@@ -213,6 +235,8 @@ def validate_manifest(m):
             paths.append(path)
 
     step_suffixes = (".step", ".stp")
+    if kind in ("stepOnly", "valueRows", "parts") and "gaps" in m:
+        problems.append("gaps belong to a recipe or to a part with a recipe.")
     if kind == "stepOnly":
         check_path(m.get("part"), "part", step_suffixes)
     elif kind == "recipe":
@@ -233,11 +257,24 @@ def validate_manifest(m):
                 check_path(c.get("step") if isinstance(c, dict) else None, label, step_suffixes)
         _validate_fixed(m.get("fixed"), problems)
         _validate_fixed(m.get("loose"), problems, "loose")
+        _validate_fixed(m.get("cuts"), problems, "cuts")
+        if m.get("gaps") is not None:
+            check_path(m["gaps"], "gaps", (".json",))
     elif kind == "parts":
         _validate_parts(m, problems, check_path, step_suffixes)
     elif kind == "valueRows":
         _validate_value_rows(m, problems, check_path, step_suffixes)
     return problems
+
+
+def _gaps_listed(m):
+    """True when the manifest names a gaps file: the recipe's, or any part's."""
+    if not isinstance(m, dict):
+        return False
+    if m.get("gaps") is not None:
+        return True
+    parts = m.get("parts")
+    return isinstance(parts, list) and any(isinstance(p, dict) and p.get("gaps") is not None for p in parts)
 
 
 def _validate_checks(checks, label, problems, check_path, step_suffixes, limit):
@@ -279,10 +316,15 @@ def _validate_parts(m, problems, check_path, step_suffixes):
         check_path(part.get("step"), label, step_suffixes)
         if part.get("recipe") is not None:
             check_path(part["recipe"], f"{label} recipe", (".json",))
+        if part.get("gaps") is not None:
+            if part.get("recipe") is None:
+                problems.append(f"{label}: gaps need a recipe.")
+            check_path(part["gaps"], f"{label} gaps", (".json",))
         note = part.get("note")
         if note is not None and (not isinstance(note, str) or len(note) > MAX_PART_NOTE):
             problems.append(f"{label}: note must be text of at most {MAX_PART_NOTE} characters.")
         _validate_fixed(part.get("loose"), problems, f"{label} loose")
+        _validate_fixed(part.get("cuts"), problems, f"{label} cuts")
         if part.get("checks") is not None:
             checks += _validate_checks(part["checks"], label, problems, check_path, step_suffixes, MAX_PART_CHECKS)
     if checks > MAX_PARTS_CHECKS:
@@ -290,7 +332,7 @@ def _validate_parts(m, problems, check_path, step_suffixes):
 
 
 def _validate_fixed(fixed, problems, key="fixed"):
-    """The `fixed` or `loose` list: { name, reason } entries."""
+    """The `fixed`, `loose` or `cuts` list: { name, reason } entries."""
     if fixed is None:
         return
     if not isinstance(fixed, list) or len(fixed) > MAX_FIXED:
@@ -338,6 +380,10 @@ def _validate_parameters(params, problems):
         expr = p.get("expr")
         if expr is not None and (not isinstance(expr, str) or not 1 <= len(expr) <= MAX_PARAMETER_EXPR):
             problems.append(f"{label}: expr must be 1 to {MAX_PARAMETER_EXPR} characters.")
+        for key, limit in (("expression", MAX_PARAMETER_EXPR), ("untranslated", MAX_FIXED_REASON)):
+            text = p.get(key)
+            if text is not None and (not isinstance(text, str) or not 1 <= len(text) <= limit):
+                problems.append(f"{label}: {key} must be 1 to {limit} characters.")
         comment = p.get("comment")
         if comment is not None and (not isinstance(comment, str) or len(comment) > MAX_PARAMETER_COMMENT):
             problems.append(f"{label}: comment must be at most {MAX_PARAMETER_COMMENT} characters.")

@@ -40,7 +40,8 @@ that lacks `capture`, `target` or `items`, with a `CaptureError`.
   "items": [ ITEM, ... ],
   "sketch_links": [ SKETCH LINK, ... ],
   "sketch_graphs": [ SKETCH GRAPH, ... ],
-  "marker": { "position": 48, "count": 120 }
+  "marker": { "position": 48, "count": 120 },
+  "reach": REACH
 }
 ```
 
@@ -49,7 +50,8 @@ nothing reads it yet: it holds the points, curves,
 dimensions and constraints of every sketch the target's steps use, so a later version can work out sketch values
 without trying sizes. `marker` says where the timeline marker was: `position` items sat before it, `count` is the length of the timeline.
 `items` holds only the items before the marker; the design is read as it is there. The translator does not read
-`marker` (captures without it read as before).
+`marker` (captures without it read as before). `reach` is optional and is not written by `read_capture`: the pipeline
+adds it when the first translation left steps out of the copy (see "Reach" below).
 
 TARGET:
 
@@ -132,6 +134,8 @@ ITEM:
   "in_target_component": true,
   "bodies_after": [{ "token": "...", "name": "Body1" }],
   "target_changed": true,
+  "target_before": { "box": { "min": [0, 0, 0], "max": [40, 20, 10] }, "volume_mm3": 8000.0 },
+  "target_after": { "box": { "min": [0, 0, 0], "max": [40, 20, 22] }, "volume_mm3": 8900.0 },
   "data": { }
 }
 ```
@@ -150,15 +154,33 @@ ITEM:
   `lib/translator/step_kinds.py`). Feature readers run only for items in the target's component, plus the second pass
   below for the steps of a Combine's tool bodies from other components; the other items keep `"data": {}` with their
   `bodies_after`, health and message.
-- `helper_of`, `helper_unread`: only on items of another component that made a tool body of a Combine (see
-  CombineFeature in section 5): `helper_of` is the tool body's token and the item's `data` was read in a second pass in
-  that component's frame; `helper_unread` says why such an item was not read.
+- `helper_of`, `helper_unread`, `body_states`: only on items that made a body a Combine of the target (or of a body
+  the target was split from, before that split) takes as a tool, or a body such a tool is copied from (see
+  CombineFeature in section 5). `body_states` is also on the steps that built
+  a body the target was split from, up to that split (SplitBodyFeature in section 5): the translator reads those
+  steps with these measures, as steps of the target, so a draft or a Split Face before the split is checked. `helper_of` (items of another component):
+  the body's token; the item's `data` was read in a second pass in that component's frame. `body_states` (any such
+  item, in the target's component or another): per body token the state of that body around the item,
+  `{ "box_before": BOX, "volume_before": 8000.0, "volume_after": 7000.0 }` (mm3). `box_before` and `volume_before` are
+  null when the body does not exist before the item (the item made it) or cannot be read, `volume_after` when it
+  does not exist after it or cannot be read. The feature readers measure the exported body around an item; these are
+  the numbers of the tool body, and a tool step without an entry reads null, never the exported body's numbers. One
+  item can serve several bodies (a pattern makes many copies), so the map has one
+  entry per token. `helper_unread` says why such an item was not read (a limit, or a body or place that could not be
+  read).
 - `entity_context`: `"proxy"` only when `TimelineObject.entity` came as an occurrence proxy and was turned native
   (`nativeObject`) before reading; absent otherwise.
 - `bodies_before` (not for suppressed items): the bodies of the target's component at the marker before the item.
 - `target_changed`: whether the native target's box (1e-4 mm) or volume changed from the marker before the item to the
   marker after it. `true` also when the target appears or disappears; `null` when it exists on neither side or a
   measure could not be read. The translator uses `false` to skip a step it has no handler for (see "Parameters behind values" in section 5).
+- `target_before`, `target_after`: the native target's box and volume (`{ "box": BOX, "volume_mm3": number }`, in the
+  coordinates of section 1) at the marker before the item and at the marker after it, the same two reads that give
+  `target_changed`. A side is `null` when the target did not exist there or could not be read. They are written for
+  every item, also one with no reader (`"data": {}`: a coil), so a step the copy leaves out still says where
+  it changed the part and by how much. A left out step (see `docs/recipe-gaps.md`) gets them as `bodyBefore` and
+  `bodyAfter`, moved into the recipe's coordinates. The item level `target_box_before` of section 5 stays the
+  box the handlers use.
 - `bodies_after`: `feature.bodies` read with the marker just after the item. `null` (with an item level
   `"read_error": "bodies: ..."`) when the bodies cannot be read; it is not the same as `[]`, which says the item
   makes no body. The driver must not treat `null` as helper geometry. Items that are not modeling steps get `[]`
@@ -342,6 +364,58 @@ curves). A borrowed sketch is read through its native object, so its numbers are
   `cut: "entities"`, `"dimensions"` or `"constraints"`, with empty lists; it must not be used.
 - The read costs no recompute and evaluates no geometry beyond `SketchPoint.geometry`.
 
+### Reach (`reach`)
+
+Which step made the faces a later step picks. It exists because a later round, chamfer, shell or offset of faces picks
+its edges and faces with measured points (`near`), and the capture does not say which step made a face (only `made_by`
+on face outlines, section 4). When a step is left out of the copy, a pick on its faces would land on some other edge of
+the copy. `lib/fusion_reader/read_gap_reach.py` reads the answer, and only when the first translation left a step out
+or stopped because the part holds more gaps than it may (`lib/export_plan/reach_pass.py`; the capture is then
+translated again with it, and the gap cap applies to that translation):
+
+```json
+"reach": { "read": true, "gaps": [12], "makers": { "17": [12], "19": [12, 17] }, "moves": 3 }
+```
+
+or `{ "read": false, "error": "<reason>" }` when the read failed.
+
+- `gaps` are the steps the read was asked about: the steps the first translation left out for their own reason (verdict
+  `leftOut` with `cause: "own"`, also inside the `tool_steps` of a Combine). A step left out only because it may pick
+  faces of another gap (`cause: "picks"`) is not one of them; the read tests it as a picking step.
+- `makers` has one entry per later step that was tested: the key is the item `index`, the list holds the `index` of
+  each candidate step that made, or may have made, a face the step picks. Candidates are the steps of `gaps`, the
+  steps that built the bodies a step among them takes (the tools of a Combine, the source of a Paste, the source
+  bodies of a pattern, and the bodies behind those, by the same rules as the reading pass, `tool_items.built_by`;
+  reported under the index of that step of `gaps`), and every later step that picks geometry, without items that make
+  no body (sketches, construction geometry). Only steps after the first
+  step of `gaps` are tested, and a step of `gaps` is not tested.
+- Which items pick geometry is decided by `translator.gap_picks.pick_records(item)`: the edge records of rounds and
+  bevels, and face records with a token, a point or loops (shell and offset faces, the face inputs of a round). These
+  are the picks the copy writes as measured points. A face given only by a `face_point` (an emboss face, a face an
+  extrude starts from or reaches to) and a face used as an outline are not picks: the copy writes them as numbers or
+  shifts and marks the sizes it cannot follow. Lists of bodies and of the faces a step made (`faces_after`,
+  `tangent_faces`, `end_points` and the like) are not picks either.
+- `Feature.faces` lists the faces a step made, but only all of them with the marker right after the step: the API
+  says a later change to the body can take faces out of the list. So the reader reads each candidate's list with the
+  marker right after it, and moves the marker to just before each tested step to compare each picked
+  face (for an edge: each face it joins, found by `BRepEdge.faces`) with the candidate's list at that point. A face is
+  found by its entity token, or by `Component.findBRepUsingPoint` at the recorded point. A candidate counts as reached
+  by every pick when its list is empty (a Move, a Combine, a draft may list none), shorter than right after the step,
+  or cannot be read; so does every candidate when a pick cannot be found. More than 100 tested steps or 200 candidates
+  give `read: false`, and so does any other failure of the read. The marker goes back to where it was at the end, with the same check as `read_capture`
+  (`MarkerError` when it does not read there).
+- `moves` is how many times the read moved the marker, not counting the move back. The marker goes forward once over
+  the positions it needs: right after each candidate that a later tested step may compare, and right before each
+  tested step; a position that is both is visited once. A face's token is read once per position, not once per pair
+  of faces. `report.json` keeps it in `reach`.
+- The translator (`gap_picks.picked_gaps`): a later step that picks faces of a left out step is left out too, with the gap
+  in its `dependsOn`. A left out step that the read did not cover (not in `gaps` and not a tested step, for example
+  one that only the final translation leaves out) counts as "may pick". Without `reach`, without `gaps`, or with
+  `read: false`, every later step that picks geometry is left out ("It may pick faces of Extrude5, which is missing
+  from the copy."). A step that picks nothing is copied either way.
+- `validate_capture` refuses a `reach` that is not `{ read: bool }`, a `read: true` without a `makers` dict of index
+  lists, and a `gaps` that is not a list of indexes.
+
 ## 3. Walk and marker
 
 `lib/fusion_reader/capture.py`, `read_capture(design, body) -> dict`:
@@ -350,10 +424,18 @@ curves). A borrowed sketch is read through its native object, so its numbers are
    treats it as the end of the timeline: items at `end` and after are left out, never refused.
 2. For `k` from 0 to `end`: set `timeline.markerPosition = k`. Read the target's box and volume once. Read
    `bodies_after` and `target_changed` of item `k - 1` and, for items of the target's component, the inputs of item `k`
-   (profiles, edges, faces, tool bodies, the target box before it). One recompute per item.
-3. The second pass (`lib/fusion_reader/helper_pass.py`), only when a Combine of the target lists a tool body of another
-   component: roll to the Combine to read the tool's place, then to the few items that made the tool (see CombineFeature
-   in section 5). Two marker moves per such item at most, none for other items.
+   (profiles, edges, faces, tool bodies, the target box before it). One recompute per item. Between two quiet steps
+   of another named component the target is not measured (a quiet step is of a type the step kind table lists without
+   `reaches_bodies` and does not belong to the root component; a Combine, a Move or a Split Body is measured on both
+   sides, so a change it makes is seen even when a later step undoes it): a run of quiet steps is measured once before
+   and once after,
+   and when the target reads the same on both sides every step of the run gets `target_changed` false with those
+   numbers. When it does not (or a measure failed), the walk goes back over the run and measures each step, so the
+   capture is the same as with a measure at every position.
+3. The second pass (`lib/fusion_reader/helper_pass.py`), only when a Combine that changes the target lists a tool
+   body: roll to the item that holds a body of another component to read its place, then to the items that made the
+   tool body, and those that made the bodies it is copied from (see CombineFeature in section 5). It runs in rounds,
+   since the items it reads name more bodies. Two marker moves per such item at most, none for other items.
 4. `finally`: put the marker back at `end` (`moveToEnd` when `end == count`, else `markerPosition = end`), then
    check it reads `end`; else `MarkerError`. After that, each `timeline.timelineGroups` entry that starts before
    `end` must be covered by the walk up to `end`; else `read_capture` raises `CaptureReadError` and the export lands
@@ -380,7 +462,9 @@ Reading inputs at the position before the item covers the getters that the refer
       { "outer": false, "curves": [ CURVE, ... ] }
     ]
   },
-  { "face": true, "type": "BRepFace" },
+  { "face": true, "type": "BRepFace", "surface": "Plane", "frame": { ... }, "space": "sketch", "loops": [ ... ],
+    "token": "...", "face_point": [x, y, z], "body": { "token": "...", "name": "Body1" },
+    "made_by": { "index": 3, "name": "Extrude3", "which": "end" } },
   { "text": true, "sketch": "Sketch2", "sketch_token": "...", "frame": { ... }, "space": "sketch", "loops": [ ... ] },
   { "text": true, "sketch": "Sketch2", "sketch_token": "...", "problem": "open" }
 ]
@@ -388,11 +472,56 @@ Reading inputs at the position before the item covers the getters that the refer
 
 Optional keys that let the size probe find the sketch again (section 5, "Probe states"): `sketch_token`
 (`Sketch.entityToken`) and `reference` (`{ "kind": "constructionPlane" | "face" | "plane" | "other", "token" }` from
-`Sketch.referencePlane`; `token` is empty for a plane without one). Each curve also gets `entity`, the token of its
+`Sketch.referencePlane`; `token` is empty for a plane without one). A construction plane of the body's component
+also says what it is: `origin`, or `made_by`, `definition` and `built_on` as in a mirror plane record
+(`read_reference.describe_plane`). Each curve also gets `entity`, the token of its
 sketch curve (`ProfileCurve.sketchEntity.entityToken`). A key is left out when Fusion does not give it.
 
 From `Profile.parentSketch.transform`, `Profile.profileLoops`, `ProfileLoop.isOuter`, `ProfileLoop.profileCurves`,
-`ProfileCurve.geometry` and `ProfileCurve.geometryType`. A planar face used as a profile is `{ "face": true }` and a
+`ProfileCurve.geometry` and `ProfileCurve.geometryType`.
+
+A flat face of a body used as the outline (`ExtrudeFeature.profile` is a `BRepFace`) is read by
+`lib/fusion_reader/read_face.py` into a record shaped like a sketch profile, plus `"face": true`:
+
+- `surface`: the type of `BRepFace.geometry` (`Plane`, `Cylinder`, `Cone`, `other`), null when it cannot be read. A
+  face that is not a `Plane` has only `face`, `type` and `surface`.
+- `frame`: the plane (`Plane.origin`, `Plane.uDirection` as `x`), with `z` the outward normal
+  (`BRepFace.evaluator.getNormalAtPoint` at `pointOnFace`), in the target component's coordinates.
+- `loops`: one entry per `BRepFace.loops` item (`BRepLoop.isOuter`, `BRepLoop.edges`), each edge's
+  `BRepEdge.geometry` read as a CURVE in the face's 2D frame (`Line3D`, `Arc3D`, `Circle3D`, `Ellipse3D`). Any other
+  curve (a NURBS edge) is sampled like a free sketch curve through `BRepEdge.evaluator`, so the samples stop at the
+  edge's ends. `space` is `sketch`.
+- `token` (`entityToken`), `face_point` (`pointOnFace`), `body` (`{ token, name }` of `BRepFace.body`).
+- `made_by` (optional): the latest extrude before the step, of the face's component (`Component.features.
+  extrudeFeatures`, `Feature.timelineObject.index`), whose `startFaces`, `endFaces` or `sideFaces` hold the face (the
+  same entity, or the same `entityToken`), read with the marker before the step. `index` is that extrude's timeline
+  index, `which` is `start`, `end` or `side`. At most 200 earlier extrudes are looked at.
+- A face whose surface, plane or edges cannot be read has `"problem": "unread"` and no `frame` or `loops`.
+
+The area of the face (`BRepFace.area`, mm2) is the record's entry in `areas` and the extrude's `profile_area`, and
+`end_offset` and `side_leans` are measured along the face's `z`. A capture made before add-in 0.8.1 has
+`{ "face": true, "type": "BRepFace" }` only; the translator refuses it and asks for a new export.
+
+The translator (`lib/translator/face_outline.py`) copies an extrude or emboss of one such face. When the size probe
+read the face before its step at every try (`Motion.faces` names its `token` under `<item>/face`, "Probe states"), its
+loops and plane are written as formulas of the sizes from the keys `<item>/face/l<loop>/<field path>` and
+`<item>/face/plane`; a size whose move no formula fits (stuck, or an edge along a curve) is marked by the value it
+moves, a size that may change the face but was not tried is marked with the reason below, and a size that does not
+move the face is not marked. The plane is one distance along the face normal, so a curved formula of it (a wall set
+back along a half angle) is written as fitted. Otherwise the rules below apply. Sketch outlines may
+come with it when they lie on the face plane; the face is then written as measured (with the probe's reads, only the
+sizes that moved the face or were not tried are marked). When `made_by` names the
+`start` or `end` face of an extrude step written earlier in the same walk, that step has no taper, `face_point` lies
+on its start or end face and the face's edges lie on that step's outline and back (within 1e-3 mm), the step's written
+outline is drawn again on a plane at that face: the plane's origin is the step's origin plus its length (times the
+place of the face along it) along its direction, so it follows the sizes of that step. The face is compared only at
+the measured sizes, so when any step was written or left out after that extrude, every size the steps written so far
+read is marked loose: a later step may reach the face at other sizes. Any other flat face is written
+from `loops` and `frame` as numbers, and every size the steps written so far read (every ticked size when the face
+lies on a body this walk does not build) is marked loose with the reason. A tool body with such a step is written as a
+tool step (`toolBody`), never step by step onto the part, since the part alone does not hold the tool's earlier
+faces.
+
 A `SketchText` is read from `SketchText.asCurves()` (transient curves; the text and the design are not changed): the
 curves are chained into closed loops, and each loop is an outer outline or a hole by how many loops contain it (even
 count: outer, odd: hole of the nearest loop around it). Each outer outline with its holes is one profile record like
@@ -488,6 +617,8 @@ The translator fits the app's spline through points chosen from the samples (`li
 
 - `operation`: `join`, `cut`, `intersect`, `newBody`, `newComponent` (from `FeatureOperations`). A new body from
   several profiles is copied only when `bodies_after` lists one body (the profiles touch).
+- `profiles`: section 4. A flat face of a body as the outline is a face record (section 4); the extrude's own
+  length, taper and operation are read and followed as for a sketch outline.
 - `start`: `{ "kind": "profilePlane" }`, `{ "kind": "offset", "offset": mm }` (`OffsetStartDefinition.offset`),
   `{ "kind": "fromEntity", "plane": PLANE or null, "entity_type": "...", "face_point": [..] }`
   (`FromEntityStartDefinition`, TARGET below).
@@ -495,14 +626,22 @@ The translator fits the app's spline through points chosen from the samples (`li
 - EXTENT: `{ "kind": "distance", "distance": mm, "taper_deg": d }` (`DistanceExtentDefinition.distance`, the value
   as Fusion stores it, sign kept), `{ "kind": "throughAll", "positive": bool, "taper_deg": d }`
   (`ThroughAllExtentDefinition.isPositiveDirection`), `{ "kind": "all" }`, `{ "kind": "toEntity", "plane": PLANE or
-  null, "offset": mm, "entity_type": "...", "face_point": [..] }` (TARGET below), `{ "kind": "other", "type": "..." }`.
+  null, "offset": mm, "entity_type": "...", "face_point": [..] }` (TARGET below), `{ "kind": "other", "type": "..." }`
+  (also a distance extent whose `distance` Fusion refuses to give; a symmetric one then has `symmetric` null, so the
+  step is left out instead of stopping the copy).
 - TARGET (the face or plane of a from or to entity): `plane` from the entity's `geometry` (its origin need not lie on
   the face), `entity_type` the entity's type name (`BRepFace`, `ConstructionPlane`, or null), and for a face
-  `face_point` (`BRepFace.pointOnFace`). Both keys are optional; without `face_point` the translator cannot tell
-  whether the face moves with sizes. For a `ConstructionPlane` or `ConstructionAxis` the record also has `token`
-  (`entityToken`), which names the model parameters behind it (`created_by.token`).
+  `face_point` (`BRepFace.pointOnFace`) and `body` (`{ token, name }`, the body it lies on). These keys are optional;
+  without `face_point` the translator cannot tell whether the face moves with sizes, and without `body` a step of a tool
+  body cannot tell a face of the tool from a face of the part at the same place. For a `ConstructionPlane` or `ConstructionAxis` the record also has `token`
+  (`entityToken`), which names the model parameters behind it (`created_by.token`). A construction plane of the body's
+  component also has `origin`, or `made_by`, `definition` and `built_on` (`read_reference.describe_plane`). A face of
+  the body's component has `token` too, so the size probe can read it again at every try (older exports leave it out).
 - `symmetric`: `{ "distance": mm, "full_length": bool, "taper_deg": d }`
-  (`SymmetricExtentDefinition.distance`, `isFullLength`, `taperAngle`).
+  (`SymmetricExtentDefinition.distance`, `isFullLength`, `taperAngle`). A symmetric extrude through all has no
+  distance: `symmetric` is null and `side_one` holds `extentOne` when that is a through all extent, with the taper of
+  `taperAngle`, so the translator writes a cut through all both ways. A cut through all both ways with a taper, or with
+  a taper that cannot be read, is left out; an untapered one marks the sizes behind its taper.
 - `target_box_before`: the target body's box with the marker before the item, or null when it does not exist yet.
 - `end_offset`: signed distance along the first profile's sketch `z` from its sketch plane to
   `endFaces[0].pointOnFace`, or null. The measured check of the direction and, for one side, symmetric (half
@@ -674,6 +813,28 @@ neither way, refuses an uneven chamfer.
 `faces[].point` is `BRepFace.pointOnFace`; tangent chains expanded with `tangentiallyConnectedFaces`;
 `bodies_input` true when the input is a body (a closed hollow). `shell_type`: `sharp` or `rounded`.
 
+**DraftFeature** (`inputFaces`, `isTangentChain`, `plane`, `isDirectionFlipped`, `draftDefinition`; read in
+`read_finish.py`):
+
+```json
+{ "faces": [{ "token": "...", "point": [..], "box": BOX }], "tangent_chain": false, "plane": PLANE, "flipped": false,
+  "two_angles": false, "symmetric": false, "angle_deg": 3.0, "angle_two_deg": null,
+  "volume_before": 8000.0, "volume_after": 7900.0 }
+```
+
+- `faces` as for a shell, each with its box (`BRepFace.boundingBox`); `plane` with the keys of the mirror `plane`.
+- `draftDefinition` is an `AngleExtentDefinition` (`angle`, `isSymmetric`: the faces are split at the plane and lean
+  away from it on both sides) or a `TwoSidesAngleExtentDefinition` (`angleOne`, `angleTwo`; `two_angles` true).
+  `params` holds `angle_deg` and `angle_two_deg`.
+- `volume_before` and `volume_after`: the target's volume around the item.
+
+The translator (`lib/translator/draft.py`) writes the recipe's `draft` step with the faces as `near` points, the
+plane as `neutral` (its normal is the pull direction) and the angle as a size; the size ranges are cut where the
+angle would reach 30 degrees, and two angles from different formulas stay a number with their sizes marked. Fusion's sign and flip are not
+documented, so the sign is read from the part: with every face on one side of the plane, a draft that removes
+material takes it off there (a positive recipe angle on the side the normal points to). A draft with faces on both
+sides of its plane, two different angles, an angle of 30 degrees or more, or no measured change of volume is left out.
+
 **RectangularPatternFeature** (`patternEntityType`, `inputEntities`, `directionOne`, `directionTwo`,
 `quantityOne`, `quantityTwo`, `distanceOne`, `distanceTwo`, `patternDistanceType`, `isSymmetricInDirectionOne`,
 `isSymmetricInDirectionTwo`, `patternElements`, `suppressedElementsIds`):
@@ -692,7 +853,15 @@ neither way, refuses an uneven chamfer.
 ```
 
 - `entity_type`: `features`, `faces`, `bodies`, `occurrences`. `sources`: `timelineObject.index` of each input
-  feature.
+  feature. A Combine of the target among the sources is repeated by the steps it wrote (its `toolBody` step, or its
+  tool's steps written one by one) when every item that built its tools is a source too (`repeat._combined_tools`;
+  the same holds for a circular pattern and a mirror of features). Only some of those items, the items of a tool
+  without its Combine, or an intersect Combine refuse the pattern.
+- For `entity_type: bodies` (rectangular and circular patterns, and the mirror below) the item also has
+  `source_bodies` and `result_bodies`: each a list of body records with `points` (see "Body records" below).
+  `source_bodies` come from `inputEntities` with the marker before the item, `result_bodies` from `bodies` with the
+  marker after it (null when they cannot be read). `PatternElement` has no `bodies` member, so the translator matches a
+  copy to its source and element by the points.
 - `distance_type`: `spacing` or `extent` (enum `PatternDistanceType`), `other` when unreadable. The translator then
   takes the kind whose grid holds every kept element.
 - `elements`: every `PatternElement` (`id`, `isSuppressed`, `transform` as a frame). The original is the element with
@@ -731,18 +900,54 @@ them (`lib/fusion_reader/read_reference.py`). All keys below are optional and ar
 
 - `origin`: true for an origin plane or axis of the component. Nothing else is read then; it never moves.
 - `entity_type`: the type name of the picked entity (`BRepFace`, `BRepEdge`, `ConstructionPlane`, `ConstructionAxis`).
-- `face_point` and `surface` (`Plane`, `Cylinder`, ...) of a face; `edge_points` of an edge.
+- `face_point` and `surface` (`Plane`, `Cylinder`, ...) of a face; `edge_points` of an edge; `body` (`{ token, name }`),
+  the body either lies on, left out when Fusion does not give it.
 - Construction geometry also has `token`, `made_by` (the timeline index of the feature that made it), `definition` (the
   type name of how it is defined) and `built_on`, a list of the same descriptions for the entities that definition
   names (own component only, up to three levels deep).
 
-A reader that cannot read one of these leaves it out, and the plane or axis then stays where it was measured.
+A reader that cannot read one of these leaves it out, and the plane or axis then stays where it was measured. The same
+keys describe a construction plane a sketch sits on and one an extrude starts from or reaches to (section 4 and TARGET);
+there a plane without them (an older capture) marks the sizes that may move it.
 
 `target_box_before`: the target body's box with the marker before the item, or null when it does not exist yet (as
 for extrudes).
 
+A mirror of the whole body joined to it (`combine` true) repeats every earlier step when the body lies on one side of
+the plane and no cut reaches across it; otherwise (a round, chamfer, shell or Move among the steps, a gap, no
+`target_box_before`) the translator gathers the steps into one `toolBody` and mirrors that (`repeat_mirror.py`).
+
 `plane` from a `ConstructionPlane` (`geometry`, a `Plane`: `origin`, `normal`) or a planar `BRepFace`
 (`geometry`). A construction plane adds `token`.
+
+**SplitBodyFeature** (`splittingTool`, `isSplittingToolExtended`, `splitBodies` before the item; `bodies` after it;
+`lib/fusion_reader/read_split.py`):
+
+```json
+{ "tool": { "kind": "plane", "plane": PLANE }, "extended": true,
+  "bodies": [{ "token": "..", "name": "Body1", "box": BOX, "volume": 8000.0 }],
+  "pieces": [{ "token": "..", "name": "Body1", "box": BOX, "volume": 2000.0 },
+             { "token": "..", "name": "Body2", "box": BOX, "volume": 6000.0, "inside": false }] }
+```
+
+- `tool`: a construction plane or a flat face is `{ kind: "plane", plane }`, with the keys of the mirror `plane`; a body
+  is `{ kind: "body", body: { token, name, box, volume }, solid }`; a curved face is `{ kind: "surface", type }`
+  (the surface type name); anything else (a sketch curve) is `{ kind: "other", type }`.
+- `bodies`: the bodies it splits, read with the marker before the item; `pieces`: every body the feature lists once
+  computed. Each has its box and volume (mm3, null when unreadable).
+- `inside` (a split by a solid body only): whether the piece lies inside the tool body, from
+  `BRepBody.pointContainment` of a point 0.01 mm inside the piece under one of its first 16 faces; null when no face
+  tells or the tool body is not found. It is read with the marker after the item, where Fusion no longer gives
+  `splittingTool`, so the tool body is found by the token read before the item.
+
+The translator follows a body that a split made back to the body it was split from (`lib/translator/lineage.py`),
+for the exported body and for a Combine tool body of its own component (`tool_walk.lineage_chain`): a piece belongs to the only split body, or to the one whose box holds its box. A split of the body it builds becomes the
+removal of the other side (`lib/translator/split.py`): a cut by a large box beyond the plane, or a cut or intersect with
+the tool body. The box reaches four half diagonals of the body plus 100 mm past it, times the largest ratio of a free
+size's range end to its value (up to 25; a size past that is marked), so a part the sizes grow is still cut. It stops the copy unless the capture shows the piece is the whole of its side (one side of the plane, or
+inside or outside the tool body, with every other piece of that body on the other side), the pieces add up to the
+body's volume (within a thousandth: Fusion measures each curved piece on its own, to a few parts in 100 000), and no
+later step changes another piece together with the part (`lib/translator/split_rules.py`).
 
 **CombineFeature** (`targetBody`, `toolBodies`, `operation`, `isKeepToolBodies`):
 
@@ -752,15 +957,53 @@ for extrudes).
 
 Optional `volume_before` and `volume_after` (mm3) hold the volume of the target with the marker before and after the
 Combine (`read_geometry.target_volume`; null when it cannot be read). When both are present the translator refuses a Combine that changes the part by more than its tool steps can
-fill (`combine_volume.py`).
+fill (`combine_volume.py`). Each tool also has `volume` (mm3, null when unreadable), read with the marker before the
+Combine.
 
-The translator copies a Combine when every tool body is built by steps that only add material to it
-(`combine.adds_only`): `ExtrudeFeature` and `RevolveFeature` items whose recipe steps are `new` for the
-first and `add` for the rest. Each such step is written at the Combine's place with the Combine's operation. An
-intersect takes a tool of one step. A tool step that starts from or reaches to a face (`fromEntity`, `toEntity`) is
-refused when the tool has more than one step. Any other item that touches the tool body before the Combine (a cut, a
-round, a chamfer, a hole, a pattern, a step the walk could not copy) refuses the Combine, naming that item. A Copy Paste
-Body or a Move on the tool body refuses it the same way, with the reason of their rows in the step kind table.
+An intersect of two or more tools has `intersect_volumes` and `intersect_model`. Fusion's help does not say whether the
+result keeps the part and every tool or the part and any tool. `combine_before` copies the part and the tools with
+`TemporaryBRepManager` (temporary bodies, nothing is added to the design) and measures two volumes in mm3:
+`{ "every": part AND each tool in turn, "any": part AND the union of the tools }` (null when no manager was available
+or a tool is of another component, whose coordinates differ). Each candidate is measured on its own and is null when
+it cannot be measured; a temporary intersect that reports failure counts as empty, 0. `combine_after` compares them with
+`volume_after`: `intersect_model` is `every`, `any` or `unknown` (no match, a volume missing, or `intersect_volumes`
+null). Volumes match within 1e-3 mm3 or 1e-6 of the larger. When the two candidates are equal the model is `every`, and
+the translator marks the sizes the tools read, since the capture cannot show which rule Fusion used; the same goes for
+a candidate that is null. A Combine inside a tool works out the model again in the translator (`tool_walk`), from
+the volume of that tool in `body_states`, since `volume_after` here is the exported body's.
+
+The translator walks each tool body on its own (`tool_walk.build`): the items that made it run through the normal item
+loop in a child context whose target is the tool, so every handler sees the tool as its body. A step that cannot be
+copied stops that walk, and the Combine is refused with the reason naming the tool, the step and what stops it.
+
+- A tool whose steps only add material (`combine.adds_only`: `ExtrudeFeature` and `RevolveFeature` items whose recipe
+  steps are `new` for the first and `add` for the rest) is written step by step at the Combine's place with the
+  Combine's operation, as long as no tool step reaches to a face when the tool has more than one step or lives in
+  another component. An intersect does this only for one tool of one step. The recipe stays at the version it had before tool steps existed.
+- Any other tool is written as one `toolBody` step per tool, whose `features` are the tool's steps and whose `combine`
+  is the Combine's operation. Its steps are those of rounds, chamfers, cuts, holes, shells, a Combine of the tool
+  itself, `move` steps, and a pasted or patterned body (the steps of the source written again).
+- Tool bodies nest 3 levels deep (`tool_walk.MAX_DEPTH`); deeper refuses the Combine. The level a tool step adds
+  around other tools counts where it is made: the tools of an intersect with the model `any` are walked one level
+  deeper, and a pattern of the whole body that gathers the body into one tool step refuses when that would pass the
+  limit.
+- An intersect with several tools has the model `every` (one `toolBody` per tool, each `intersect`) or `any` (one
+  `intersect` step that holds the tools as inner steps, the first `new` and the rest `add`); `unknown` refuses.
+- A pattern or mirror of bodies that the Combine takes whole is written as a `pattern` or `mirror` step over the tool
+  steps (`body_copies.groups`, `write`); a subset of the copies, or a layout `repeat.py` refuses, is one tool per copy
+  with a `move`. An intersect never uses the pattern form. A size the count reads is marked, since it is not known
+  whether Fusion adds new copies to the Combine (hand test B6); spacing and angle follow without a mark.
+- A later pattern or mirror of features may hold the Combine and the items that built its tools as sources; it then
+  repeats the steps the Combine wrote (see RectangularPatternFeature above, hand test F2).
+- A Combine whose result differs from the tools' own volumes by more than they can give (`combine_volume.exceeds_tools`
+  for tool steps, `exceeds` for steps written one by one) is refused.
+- A tool the Combine keeps (`keep_tools`) stays usable: a later Combine walks it again up to its own index. A tool
+  the Combine does not keep is used up, and a second Combine that lists it is refused. A Combine that keeps the
+  exported body as a tool and changes another body is skipped.
+- A tool is refused when a step its walk cannot see may have changed it (`tool_walk.unseen_change`): a step of another
+  component that lists it, or a step that lists its name under another token after the tool first appears.
+- A Combine inside a tool of another component that takes a tool of yet another component is refused: the place of
+  that tool is read against the exported body, not against the component that holds the Combine.
 
 A tool body of another component is `foreign` and names where to find it:
 
@@ -796,18 +1039,84 @@ The steps that made a foreign tool are read in a second pass (`lib/fusion_reader
 with the same feature readers and a `ReadContext` whose target is the tool body, so the tool component's own sketches,
 planes and faces are not `foreign` and every value is in that component's coordinates. Only the items that
 `translator/tool_items.py` picks are rolled to: the modeling steps before the Combine whose `bodies_after` list the tool
-and that sit in the tool's component, at most 40 for the whole capture and 8 foreign tools. Each gets `helper_of` (the
-tool's token) and `bodies_before` of the tool's component; their `in_target_component` stays false. An item past the
-cap, or one whose tool body or place could not be read, keeps `data: {}` and gets `helper_unread` with the reason.
-The model parameters of the tool component and the components above it are added to `parameters.model` (names already
-listed win).
+and that sit in the tool's component (the component a foreign body names, else the one of the item that holds the
+body). Tools of the target's own component are planned the same way: their items are
+already read, and only `body_states` is added. The Combines of a body the target was split from count like the
+target's own, up to the split that made the next body of the chain (`lineage.py`). The plan follows the bodies behind a tool: the source of a Paste
+(`sources`), the source bodies of a pattern or mirror of bodies (`source_bodies`) and the tools of a Combine that
+changed the tool. A body held by several items is followed up to the latest of them, so steps added to a kept tool
+between two Combines are read. Limits: `MAX_ITEMS` 120 steps for the whole capture, `MAX_TOOLS` 32 bodies counted by distinct
+sources (the copies of a Paste or a body pattern count as their source, so a pattern of many copies is one), and
+source depth 3 (`tool_items.MAX_DEPTH`). Each item of another component gets `helper_of` (the body's token) and
+`bodies_before` of its component; their `in_target_component` stays false. An item past a limit keeps its data (empty
+for another component) and gets `helper_unread` with the limit as the reason; a body of another component past the
+tool limit has `place: { "error": reason }`. An item whose body or place could not be read keeps `data: {}` and gets
+`helper_unread` too, unless a later round finds a body it serves whose place can be read and reads its data. A Paste
+source or pattern source of another component carries `foreign`, `component`, `path` and
+`place` like a tool does (the place is read with the marker just before the item that holds it, slot `tool<n>.<plane>`
+with `n` its place in that item's list). The model parameters of the tool component and the components above it are
+added to `parameters.model` (names already listed win).
 
-The translator keeps the steps of a `helper_of` item in `Context.pending_tools` like those of another body of the
-target's component. The Combine moves them by the tool's frame and the inverse of the exported body's own
+The translator walks the steps of a `helper_of` item when a Combine takes its tool (`tool_walk.build`), like those of
+another body of the target's component. The Combine moves them by the tool's frame and the inverse of the exported body's own
 (`combine.tool_move`), plus a move that follows sizes: the offsets of the three origin planes along their normals
 (`ref_motion.moves`, formulas of the sizes, or sizes marked loose where the probe could not follow, as for any
-reference). A frame that is scaled or mirrored refuses the Combine, naming the component. The placers of the moved steps
-(`moved_placer.py`) answer `material_at` for the moved points and cannot place a pick on their faces.
+reference). A frame that is scaled or mirrored refuses the Combine, naming the component. Slabs of the moved steps are
+copied with that move, so picks on them follow sizes; other placers (`moved_placer.py`) answer `material_at` for the
+moved points and cannot place a pick on their faces.
+
+**CopyPasteBody** (`sourceBody` with the marker before the item, `bodies` after it):
+
+```json
+{ "sources": [ BODY WITH POINTS ], "result_bodies": [ BODY WITH POINTS ] }
+```
+
+`sourceBody` is an `ObjectCollection`: `sources` has one record per body in it, and a single body is accepted too. It
+is empty or shorter when a source is gone or cannot be read. A source of another component is `foreign` and has the
+identity keys of a foreign tool. `result_bodies` is null when `bodies` cannot be read.
+
+The handler (`translator/paste.py`) walks the source up to the paste (`tool_walk.build`) and writes its steps again,
+with ids of their own, in the list of the pasted body. It needs as many sources as results, a result among
+`result_bodies`, and a pasted body that has no steps yet. Several sources are paired with the results by their points:
+one at the same place first, else one rigid move apart; a result with no single source refuses. The first vertices of source and result must be the same points (a paste in place) or one
+rigid move apart (`move.fit`); then a `move` step in plain numbers follows, and the sizes that could change that place
+are marked.
+
+**MoveFeature** (`inputEntities`, `definition`, with the marker before the item and again after it):
+
+```json
+{ "input_kind": "bodies", "bodies": [BODY], "move_type": "translateXYZ",
+  "points_before": [[[x, y, z], ...]], "points_after": [[[x, y, z], ...]],
+  "translate": [dx, dy, dz], "is_design_space": true, "params": { "translate.0": PARAM } }
+```
+
+- `input_kind`: `bodies`, `faces` or `other` (mixed or unreadable inputs). `bodies` is empty unless the kind is bodies.
+- `move_type`: from the class of `definition`: `translateXYZ`, `rotate`, `free`, `pointToPoint`, `pointToPosition`,
+  `alongEntity` (translate along entity), else `other`.
+- `points_before`, `points_after`: per body in `bodies`, its first vertex points in the body's own coordinates and
+  vertex order; `points_after` is found again by token with the marker after the item and is empty for a body that
+  cannot be found. The translator fits the rigid move from them.
+- `translateXYZ`: `translate` is the three distances in mm (`xDistance`, `yDistance`, `zDistance`; null for one that
+  cannot be read), `is_design_space` from `isDesignSpace` (null when unreadable). Params paths: `translate.0`,
+  `translate.1`, `translate.2`.
+- `rotate`: `angle_deg` (null when unreadable), `axis` (an axis record with what it is, as for a circular pattern; the
+  axis comes from `axisEntity`, `{ "kind": "other" }` when unreadable). Params path: `angle_deg`.
+- `free`: `transform` as a frame from `transform` of the definition (null when it cannot be read).
+- `alongEntity`: the points, and in `params` the parameter of `distance` (path `distance`).
+- `pointToPosition`: the points, and in `params` the parameters of `xDistance`, `yDistance`, `zDistance` (paths
+  `translate.0`, `translate.1`, `translate.2`).
+- `pointToPoint` carries only the points.
+
+The handler (`translator/move.py`) writes a `move` step in the walk of the body it moves, and refuses a Move of faces
+and one that does not map the measured points rigidly (a mirror or a scale). `translateXYZ`, `rotate` and `free` must
+agree with the measured points, and `translateXYZ` and `rotate` write their distances and angle through the sizes. The
+other types are written as the numbers of the fit. What they follow can move with any size, so every ticked size is
+marked, and the parameters in their `params` are pinned. After the step the walk's
+placers are carried by the move, so later picks follow sizes.
+
+Body records (`lib/fusion_reader/read_bodies.py`): `{ "token", "name" }`, `foreign` and the identity keys of a foreign
+tool for a body of another component, and `points`: up to 8 vertices in mm of the native body, in the body's vertex
+order (empty when one cannot be read, since a gap would shift the order).
 
 **ThreadFeature**: `{ "modeled": bool }` (`isModeled`).
 
@@ -859,12 +1168,15 @@ reference). A frame that is scaled or mirrored refuses the Combine, naming the c
 }
 ```
 
-- `profiles`: sketch profile records (section 4), including the outline records of a `SketchText`. `areas` holds
-  `Profile.areaProperties` of each, in mm2; for a text record it is the area of its outlines (outer less holes),
-  computed by the reader, null for a text marker.
+- `profiles`: sketch profile records (section 4), including the outline records of a `SketchText`, and the outline
+  record of a flat face (section 4, with `made_by`). Fusion may give them as a list, a collection or a vector.
+  `areas` holds `Profile.areaProperties` of each, in mm2; for a text record it is the area of its outlines (outer less
+  holes), computed by the reader, the face area for a face, null for a text marker.
 - `faces`: the `inputFaces` the outline lands on. `surface` is `Plane`, `Cylinder`, `Cone` or `other` (from
   `BRepFace.geometry`); `plane` (origin and normal of the geometry), `outward` (`getNormalAtPoint` at `pointOnFace`) and
-  `face_point` are null when they cannot be read. `participants` are the bodies of these faces.
+  `face_point` are null when they cannot be read. A lone face also has `outline`, its edges as an outline record
+  (section 4, flat face) for an outline that reaches past it; left out when they cannot be read. `participants` are the
+  bodies of these faces.
 - `depth`: mm, as Fusion stores it. There is no emboss or deboss flag: the sign decides (assumed: positive raises the
   outline, negative sinks it; hand test E1 and E2). `offset_x`, `offset_y` (`horizontalDistance`,
   `verticalDistance`, mm) and `rotation_deg` (`rotationAngle`) move and turn the outline on the face in a frame the
@@ -881,11 +1193,180 @@ reference). A frame that is scaled or mirrored refuses the Combine, naming the c
 
 The translator (`lib/translator/emboss.py`) copies a flat face emboss as an extrude that starts on the face
 (`start.kind` is `fromEntity`): `join` for a positive depth, `cut` for a negative one, going out of the face or into
-it. The measured `end_offset` decides the direction when it is known. It refuses a curved face, faces that are not on
+it. The measured `end_offset` decides the direction when it is known. A flat face used as the outline follows the
+rules of an extrude from a face (`face_outline.py`). It refuses a curved face, faces that are not on
 one plane, a moved or turned outline, text, a sketch plane tilted to the face, Tangent Chain on (or unreadable) with a
 tangent neighbour that is curved or not on the input plane (when the neighbours could not be listed: any curved made
 face), and a measured volume change that is not
-`sum(areas) * abs(depth)` within 1 percent in the direction the sign of `depth` says.
+`sum(areas) * abs(depth)` within 1 percent in the direction the sign of `depth` says. When the change is
+`end_area * abs(depth)` with `end_area` smaller than the outlines, the outline reaches past the face and Fusion trimmed
+it there: the step is written with `within`, the face's `outline` (holes included, drawn like an extrude from a face),
+so the extrude acts only on the face. That needs a lone input face with its `outline`, no flat tangent neighbour while
+Tangent Chain is on, and edges the copy can write; otherwise the refusal says why ("reaches past the face it sits on").
+
+**SweepFeature** and **LoftFeature** (`lib/fusion_reader/read_sweep.py`; the handlers `lib/translator/sweep.py` and
+`lib/translator/loft.py` copy the simple cases, and a step they refuse becomes a gap that holds this data):
+
+```json
+{
+  "operation": "join", "solid": true,
+  "profiles": [ ... ], "areas": [120.5],
+  "path": PATH, "rail": null,
+  "orientation": "perpendicular", "distance_one": 1.0, "distance_two": 0.0,
+  "taper_deg": 0.0, "twist_deg": 0.0, "scaling": "scale", "extent": null,
+  "participants": [{ "token": "...", "name": "Body1" }],
+  "target_box_before": { "min": [..], "max": [..] },
+  "params": { "distance_one": {..}, "taper_deg": {..}, "twist_deg": {..} },
+  "faces_after": { "start": [{ "point": [x, y, z], "normal": [x, y, z] }], "end": [ ... ] }
+}
+```
+
+- Sweep: `profiles` and `areas` are `SweepFeature.profile` read like an extrude's outline (section 4, a flat face
+  included). `path` is `SweepFeature.path`; `rail` is `guideRail` read the same way, null when there is none and
+  `{ "kind": "unread" }` when the member raised (the sweep is then left out). Several `profiles` are copied as one
+  sweep each along the same path (the first with the sweep's operation, the rest joined to it for a new body), each
+  checked on its own without the new body's volume, which Fusion measures for all of them; an intersect or a taper
+  refuses.
+  `orientation` is `perpendicular`, `parallel` or `other`. `distance_one` and `distance_two` are the unitless
+  `distanceOne` and `distanceTwo` (the share of the path the sweep covers; the translator takes 1 and 0 or null as the whole path), `taper_deg` and `twist_deg` are
+  `taperAngle` and `twistAngle` in degrees. `scaling` (`profileScaling`) is `scale`, `stretch`, `none` or `other`.
+  `extent` is the `extent` setting as text. Every one of these is null when the member cannot be read or does not
+  exist in the running Fusion build, which holds for `extent` in particular. `unread` (only when one of them is null)
+  says per key of `orientation`, `taper_deg` and `twist_deg` what Fusion gave instead: the error text of the member,
+  `none`, or `unusable <type>`; the sweep's reason names the missing settings and quotes it. `params` follows the usual rules (the
+  scalar ones have kind `scalar`).
+- Twist and taper (`lib/translator/sweep.py`): a twist, a taper or `parallel` along a path that turns makes a `sweep`
+  step with `twistDeg`, `taperDeg` and `orientation: "fixed"` (a line becomes a corners path of its two points, an
+  arc a flat path). `taperDeg` is Fusion's angle times `TAPER_SIGN` (-1, as for the extrude); `twistDeg` is Fusion's
+  angle times `TWIST_SIGN` (1). Fusion does not document either convention, so while `TAPER_MEANING_CONFIRMED` and
+  `TWIST_SIGN_CONFIRMED` are false every written twist or taper marks the sizes behind the angle and the outline and
+  adds a note. For a new body along a straight path the made volume is compared with the offset and the scaled
+  models (`translator/sweep_taper.py`): a match with the opposite lean flips the sign, a match with the scaled model
+  only leaves the step out. Left out: a twist with a taper or `parallel`, a taper with `parallel`, a taper along
+  free curves or more than 64 parts, a taper of 45 degrees or more, a twist over 3600 degrees, and a parallel
+  outline along a path that turns back past its plane (every tangent must rise at least 0.05 along the outline's
+  normal).
+- Closed paths (`lib/translator/paths.py`): a closed chain in one plane becomes a flat path with `closed: true`. The
+  chain is cut where it meets the outline's plane nearest to the outline (a line, an arc or a spline sample is split
+  in two; a joint is used as it is), turned to start there, and its last segment ends exactly on the start. The cut
+  must not be at a sharp corner, and the written directions at the seam must differ by at most 2 degrees (spline
+  halves are fitted apart). A closed chain that bends in 3D, or a taper or `parallel` along a closed path, is left
+  out. A full circle stays a revolve; with a twist it becomes a closed flat path of two half arcs. The twist must be
+  whole turns and is written as a number. The overlap check measures the distance along the path round the loop. A
+  new body must have the volume of Pappus: the area times the path length less 2 pi times the offset of the
+  outline's centre towards the inside; a twisting outline is checked only when its centre sits on the path.
+- Arc and circle paths (`lib/translator/path_writing.py`): the revolve about the arc's axis builds an outline on the
+  outer side of the arc however wide it is; only an outline that reaches the axis is left out (the reach toward the
+  centre counts, along the radius). The check over the size ranges (`sweep_rules.py`) uses the same rule.
+- Path sizes (`lib/translator/path_motion.py`). A path of sketch lines and arcs that the probe measured (its
+  `<item>/path` is in `Motion.curves`) follows the sizes. The probe covers such a path when every entity is a line,
+  arc or circle of one sketch with a token and a `flat` record (`probe.plan`, kind `path`, and the request's
+  `curves`); it keeps `<item>/path/c<n>/<field>` per entity in path order as captured (a line's `start.0`, `start.1`,
+  `end.0`, `end.1`; an arc's also `mid.*`, `center.*`, `radius` and `turn`, the degrees it turns; a circle's `center.*`
+  and `radius`) and `<item>/path/plane`. A state where the sketch plane turned, or its origin slid across the plane,
+  is `turns`. The translator writes each written point (the start, every `to` and `through`) from the raw values of the
+  curve point at that place, so a size behind a line length, an arc radius or a corner position becomes a formula:
+  a straight path gives the extrude its distance, an arc path the revolve its axis point (the arc's centre) and its
+  angle, a flat chain its `start`, `to` and `through` points and its placement origin along the sketch's normal, and a
+  straight path that twists (a `sweep` step along two corner points) both points. Not
+  followed, so written as measured with the sizes behind the sketch marked: a path with a free curve, a circle, 3D
+  corner points, body edges or a taper, a path with a written point that is none of the sketch's points (a cut
+  inside an arc), and a motion file without the path's prefix. A closed path cut open inside a straight line square
+  to the outline's plane follows that line and the plane. The path start must stay on the outline's plane: a size that
+  moves it away from the plane (the sketches are not tied together) is marked. The app's rules for the path
+  (square start, no sharp corner, no touching itself, the outline clear of the tightest bend, a closed seam, an
+  outline kept in one direction rising) are tested at the current values, at the ends of the size ranges (every corner
+  for up to six sizes, else a fixed sample of them) and at the middles of the ranges (`sweep_rules._keep_path_valid`,
+  `path_rebuilt.rebuilt_refusal`, `range_check.middles`). A rule that fails only between those settings is not seen. The
+  ranges are cut where a rule stops holding (`kept_ranges.holding_ranges_where`); a size whose own cut would leave
+  under a tenth of its range is marked, and the others are checked again without it. A size that another part of the
+  copy already marked is held at its value in the check. When more than `MAX_PATH_TESTS` distinct settings or
+  `MAX_PATH_SECONDS` seconds are needed, nothing is cut and the sizes are marked.
+- `faces_after`: a point and the outward normal of the made start and end faces (`startFaces` and `endFaces` of a
+  sweep, `startFace` and `endFace` of a loft), read with the marker after the item. Each side is null when the member
+  cannot be read. The key is not a pick.
+  The translator checks a sweep's `end` faces against the planned path end (`lib/translator/sweep_ends.py`): each
+  must lie on the plane through the path end that is square to the path's end direction (square to the outline's own
+  normal when the outline keeps its direction) and face along it, and a new body's one end face must lie within the
+  outline's reach of the path end (not checked with a taper). A mismatch leaves the sweep out; unreadable faces add a
+  note; an empty list, a closed path and a full circle are not checked.
+
+PATH, the record of a `Path` (a sweep's path or guide rail, a loft's rails and centre line):
+
+```json
+{
+  "closed": false, "kind": "sketch",
+  "sketch": "Sketch3", "sketch_token": "...", "frame": FRAME,
+  "curves": [
+    { "kind": "line", "start": [x, y, z], "end": [x, y, z], "opposed": false, "entity": "<token>",
+      "flat": { "kind": "line", "start": [x, y], "end": [x, y] },
+      "check": { "start": [x, y, z], "end": [x, y, z] } }
+  ],
+  "edges": [],
+  "reference": { "kind": "constructionPlane", "token": "..." }, "projected": false
+}
+```
+
+- `kind`: `sketch` (every entity is a curve of one sketch; only then `sketch`, `sketch_token`, `frame`, `reference` and
+  `projected` are set),
+  `edges` (every entity is a body edge), `mixed` (edges and sketch curves, or curves of several sketches) or `other`
+  (an entity that is neither, or one that cannot be read). `closed` is `Path.isClosed`. `truncated` is true when the
+  path has more than 256 entities: only the first 256 are read, and the sweep is not copied.
+- `reference`: what the path sketch sits on, as on a profile record (`{ kind, token }` from `Sketch.referencePlane`,
+  null when it cannot be read); `projected` is true when the sketch holds projected (reference) curves, null when
+  that cannot be read. The translator marks the sizes that move such a plane, face or projection.
+- `curves`: every `PathEntity` in path order, with the geometry in the target component's coordinates: `line`
+  (`start`, `end`), `arc` (`start`, `end`, `mid`, `center`, `normal`, `radius`), `circle` (`center`, `normal`,
+  `radius`) or `other` (`type` and dense 3D `samples`, as for a free profile curve, with `truncated` when the sampling
+  was cut). A sketch curve is read from `SketchCurve.geometry` (sketch space) and mapped with the sketch's
+  `transform`. `flat` is the same curve in the sketch's own 2D frame (a profile curve record), null for an edge and for
+  a curve that leaves the sketch plane. `entity` is the token of the sketch curve or edge, `opposed` is
+  `PathEntity.isOpposedToEntity`, and `check` holds the end points of `PathEntity.curve`, read only to compare with
+  the mapped curve in a moved component (hand test SW13). An entity that cannot be read is `{ "kind": "other",
+  "type": ... }`.
+- `edges`: an edge record (`token`, `closed`, `points`, as for a round's edges, and `body`, the body the edge lies
+  on, when Fusion gives it) for each body edge of the path. The key name makes them pick records, so a sweep along
+  edges of a step that is left out is left out too.
+- A curve or edge of another component carries `"foreign": true`, and so does the path record.
+
+Loft `data`:
+
+```json
+{
+  "operation": "newBody", "solid": true,
+  "profiles": [ PROFILE, PROFILE ], "areas": [ .. ],
+  "sections": [
+    { "kind": "profile", "profile": 0, "end": "free" },
+    { "kind": "profile", "profile": 1, "end": "direction", "angle": 10.0, "weight": 1.5 },
+    { "kind": "point", "point": [x, y, z], "end": "pointSharp" },
+    { "kind": "face", "face": FACE, "end": "free" },
+    { "kind": "other", "type": "Path", "end": null }
+  ],
+  "rails": [ PATH ], "centerline": null,
+  "closed": false, "merge_tangent": true,
+  "participants": [ .. ], "target_box_before": { .. },
+  "params": { "sections.1.angle": {..}, "sections.1.weight": {..} },
+  "faces_after": { "start": [..], "end": [..] }
+}
+```
+
+- `sections`: `LoftFeature.loftSections` in order, null when they cannot be listed. `kind` is `profile` (a `Profile`:
+  its record is appended to `profiles` and `areas`, and `profile` is its place there, so the size probe follows the
+  sketches under the usual keys), `point` (a sketch point, construction point or vertex, in the component frame),
+  `face` (a `BRepFace`, as the face record of section 4, under a key the probe does not follow) or `other` (with the
+  entity `type`, `Path` for a chain of curves). A section Fusion gives as a collection is the profile it holds when
+  it holds one profile; otherwise it is `other` with `items` (the type names of up to 16 entries) and `count`.
+- `end`: the `LoftSection.endCondition` as `free`, `direction`, `tangent`, `smooth`, `pointSharp`, `pointTangent` or
+  `other`; null when it cannot be read. `angle` (degrees) and `weight` are added where the condition has them, and
+  the ones that are model parameters are in `params` as `sections.<n>.angle` and `sections.<n>.weight`.
+- `rails` and `centerline` come from `centerLineOrRails`: `rails` is the list of rail paths (empty when there are
+  none), `centerline` the path when `isCenterLine` is true (then `rails` is empty). Both are null when the member
+  cannot be read. `closed` is `isClosed`, `merge_tangent` is `isTangentEdgesMerged`.
+- Pairing check (`lib/translator/loft_volume.py`): for a new body between two parallel outlines of straight lines of
+  the same corner count, the measured volume must equal the volume of the loft the copy builds, with the corners
+  paired as the app kernel pairs them (nearest corners about each outline's centre); another volume means Fusion
+  paired them another way and the loft is left out. Where this cannot be told, corner outlines whose sketch frames
+  are turned against each other get a note.
 
 ### Inputs from another component (`foreign`)
 
@@ -1010,8 +1491,8 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
 - Pattern counts that follow sizes must give whole numbers at every size value: the formula is rounded as a whole
   (`round`, `floor`, `ceil`), or it adds, subtracts and multiplies whole numbers and count sizes. Otherwise the sizes
   are fixed. An extent spacing divides by `max((count) - 1, 1)`, so a count of 1 never divides by zero.
-- Values that stay numbers while a size reaches them: construction geometry that a step uses itself, the "up
-  to" offset, a tip angle, a countersink angle, a full circular turn, a revolve that is not a plain
+- Values that stay numbers while a size reaches them: construction geometry that a step uses itself (except the
+  distance of an offset plane an extrude starts from or reaches to), the "up to" offset, a tip angle, a countersink angle, a full circular turn, a revolve that is not a plain
   part turn, and a pattern whose copies are left out by number or are rounds copied one by one. The sizes behind
   them are fixed.
 - Picks and reaches that follow sizes (`lib/translator/follow.py`). Every extrude step is kept with its placement,
@@ -1028,10 +1509,19 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
     one, which one point per edge cannot. A step with part of a set, mixed inputs or sizes per edge keeps a point
     per edge;
   - other points write the coordinate along the extrude as a formula (`0.5 * height` for a side point half way up);
-  - a "to entity" reach to a moving end face writes its length as a formula; a construction plane stays where it is;
+  - a "to entity" reach to a moving end face writes its length as a formula. A construction plane follows what it is
+    built on (`follow._plane_shift`): an offset plane its base plus its own distance when that is the only parameter
+    it made that reads a ticked size (`sizes.offset_param`; Fusion may give the plane a second parameter, a fixed
+    extra offset, and the distance is followed only where it matches the measured plane), a midplane its two bases,
+    through chains of planes. An origin plane, or one made from parameters alone, stays. Any other plane built on the part (at an angle, through an edge, tangent, along a
+    path) marks the sizes read before the step, and so does a plane the capture does not describe (an older add-in).
+    When the steps cannot place the face or plane (a side wall whose sketch line moves, a face of a step the copy
+    does not model, a plane built on such a face), the probe's measure of it decides instead
+    (`lib/translator/reach_motion.py`, "Measured references in the motion file"): its move is written as a formula, a
+    size that does not move it is not marked, and only a size it cannot follow is marked;
   - a start offset that follows sizes, or a "from entity" start on a moving end face, moves the sketch placement
-    along its normal (`sketch.on.origin` as formulas), and the picks on that extrude follow it too. Such a moving
-    start with a side that reaches "to" a face is fixed.
+    along its normal (`sketch.on.origin` as formulas), and the picks on that extrude follow it too. A side that
+    reaches "to" a face from such a start keeps its end on the face: its length is the face's move less the start's.
   - a copy made by a pattern or mirror of an extrude is placed like the extrude and moved by the copy's motion: a
     linear spacing that follows sizes moves the point with it, a turn or a mirror moves it by numbers. A pick on a
     copy fixes the sizes behind that pattern's count (and a circular angle), since the list of points cannot grow.
@@ -1056,8 +1546,11 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   sketch y) and the round writes no step, with a note (`finish._slot_outline`). Not when a later pattern or mirror
   repeats the extrude without the round. Where the other side would get shorter than the short one, Fusion cannot make
   the round either, and the app refuses the slot.
-- A formula longer than the app's cap (`MAX_FORMULA_LENGTH` in `lib/params/expressions.py`, 300 characters) fixes
-  the sizes it reads (they become plain numbers), also when a step builds it from several values.
+- A formula longer than the app's cap (`MAX_FORMULA_LENGTH` in `lib/params/expressions.py`, 300 characters) has the
+  equal terms of its outer sum added up first (`collected_sum`: a plane's move less the same move of another plane
+  cancels; a coefficient that is a small fraction is written as one, any other with 12 decimals). The shorter formula
+  reads only the sizes left in it. One still too long fixes the sizes it reads (they become plain numbers), also when
+  a step builds it from several values.
 - Sketch values follow sizes through the probe's motion file (next section). Without one, every size that a model
   parameter created by a sketch dimension (also one whose creator reads as `other` but whose `role` names a
   dimension), construction plane or axis, or joint reads cannot be followed (reason "it changes a sketch, which could
@@ -1077,9 +1570,21 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   walk a stuck sketch value follows its `rest` (the sizes that still move it), as it does once its own sizes are
   fixed. `TranslateResult.loose` lists the sizes as `{ name, reason }` ("... may give unexpected results: ..."). A
   size that no formula reads after that is not a size: it is left out and listed in `TranslateResult.dropped` with its
-  reason. The ranges are always the table's. A rule that can fail inside a range
-  (a count that a pick needs, a taper, a step that must keep meeting the part) marks the sizes it reads, with the
-  value past which it fails where `kept_ranges` gives one. Only `TranslateResult.fixed` holds sizes that became
+  reason. The ranges are the table's, with two cuts. First, on a side where the probe saw Fusion fail to rebuild
+  the design with only that size changed, an untyped range stops at the farthest value that built
+  (`kept_ranges.built_ranges`, before the walk; a `size_table.Cut`, which keeps the nearest failure behind each cut
+  end). A failure counts only when its step is one the part is built from: an item of the target's component or a
+  step that made a Combine tool body, or a failure with no step name; a step of another component, or a name no
+  capture item has, cuts nothing and the size keeps the "followed between A and B" mark. Where a followed sketch made
+  a different outline with only that size changed, the range stops the same way at the farthest value that kept it
+  (`spans.kept`, `Cut.changed`). Second, a value that
+  Paramability refuses past some size value (a taper of 45 degrees or more) cuts the ranges of the untyped sizes it
+  reads (`Context.cut`). `TranslateResult.cuts` lists each cut size as `{ name, reason, words, why, min, max }`
+  (`translate._cut_notes`, `notes.cut_reason`: "Slope: the range stops at 0.5, since Fusion did not rebuild the
+  design at 5 (Chamfer3)."). In a file with several bodies the table is cut once for all of them, to the narrowest
+  cut over the probed bodies (`parts_pipeline._share_cuts`), so every body writes the same range. A rule that may give
+  a wrong shape inside a range (a count that a pick needs, a step that must keep meeting the part) marks the sizes it
+  reads, with the value past which it fails where `kept_ranges` gives one. Only `TranslateResult.fixed` holds sizes that became
   numbers: a formula too long to copy (`Context.doubt` with `fixed`). Without a motion (`motion=None`) every size behind
   a sketch dimension, construction plane or axis, or a joint, is marked with a reason, and the ones no formula reads
   are dropped with that reason.
@@ -1095,18 +1600,21 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
 - `TranslateResult.dropped` is `[{ name, reason, used }]`, one per ticked size the recipe does not hold: `used` is
   true when a step reads it and the copy could not follow it (the reason says why), false when no copied step reads it
   ("not used by any copied step") or a measured sketch does not move with it.
-- Only steps whose result reaches the exported body count. The steps of another body wait in `Context.pending_tools`
-  with the doubts of their handlers: the sizes they cannot follow join the walk only when a Combine takes that body
-  (`StepResult.join`), and only then do its items count for the audit.
-- A step with no handler stops the copy, with two exceptions that the capture proves harmless: a step that lists no
-  body and whose `target_changed` is false (a Remove of another body) is skipped, and so is a Split Face of the exported
-  body with `target_changed` false, with the note that picks on its faces may not follow. A step of another body that
-  has no handler is helper geometry and is skipped. A `target_changed` of true or null keeps the stop.
+- Only steps whose result reaches the exported body count. The steps of another body are walked on their own when a
+  Combine takes that body (`tool_walk.build`): the sizes they cannot follow join the walk only when the Combine writes
+  them, and only then do its items count for the audit.
+- A step with no handler is left out as a gap (`docs/recipe-gaps.md`), with two exceptions that the capture proves
+  harmless: a step that lists no body and whose `target_changed` is false (a Remove of another body) is skipped, and so
+  is a Split Face of the exported body with `target_changed` false, with the note that picks on its faces may not
+  follow. In the walk of a tool, `target_changed` is false when `body_states` shows the tool's volume unchanged. A step
+  of another body that has no handler is helper geometry and is skipped. A `target_changed` of true leaves the step out
+  as a gap, and null stops the copy.
 - A copied step that Fusion reports with a `warning` health gets a note with Fusion's message.
 - The copy limits (`MAX_PATTERN_COPIES`, `MAX_FEATURES`, `MAX_NEAR_POINTS`) are checked at the current values; a pattern
   count that can pass its limit inside the size ranges (`range_check.sweep`) marks the sizes it reads.
 - The recipe is version 12, or the lowest version that holds its steps and selectors (13 with an `offsetFaces` step, 14
-  with a `chain` or `faceEdges` pick). With a size table it carries `sizesAsWritten: true` and `sizes`: the sizes that a written
+  with a `chain` or `faceEdges` pick, 15 with a tool step, a `move` step, or a pattern whose copy count passes 64: a
+  polar count or the two linear counts together, at the current values or anywhere in the size ranges; 16 with a `sweep` step that has `twistDeg`, `taperDeg`, `orientation` or a path with `closed`: `SWEEP_VERSIONS` and `SWEEP_PATH_VERSIONS` in `translator/translate.py`). With a size table it carries `sizesAsWritten: true` and `sizes`: the sizes that a written
   formula reads, plus the sizes those formulas read. A ticked size that nothing reads is left out (see `dropped`).
   Without a table the recipe has no `sizes`, and no marker.
 
@@ -1116,7 +1624,8 @@ The export measures the sketches at other size values (probe states, next sectio
 writes as a sum over Fusion parameters, or marks it stuck (`lib/probe/`). That is the motion file, `sketch_values.motion`:
 keys `<item>/p<profile>/l<loop>/<field path>` (loop 0 is the outer one, then the holes; `center.0`, `width`,
 `segments.2.through.1`), `<item>/p<profile>/plane` (the sketch plane along its normal, from the component origin),
-`<item>/positions/<n>/<0|1|2>` (hole points) and `<item>/axis/point/<0|1|2>` (a revolve axis from a sketch line).
+`<item>/positions/<n>/<0|1|2>` (hole points), `<item>/axis/point/<0|1|2>` (a revolve axis from a sketch line) and
+`<item>/path/c<n>/<field>` with `<item>/path/plane` (the curves of a sweep path and its sketch plane; below).
 `lib/sketch_values/keys.py` writes all keys; the probe and the translator both use it.
 
 Measured references of other components (below) have their own keys, `<item>/r/<slot>/...`, and their own list `refs`.
@@ -1124,16 +1633,24 @@ Measured references of other components (below) have their own keys, `<item>/r/<
 The probe tries (`lib/probe/plan.py`, at most 64 rows), in this order:
 
 1. Near rows (`plan.probe_rows`): each ticked size that moves a covered sketch value or reaches a sketch dimension, a
-   construction plane or, through another component, a sketch ("Geometry links" in section 2), at 25 percent of its
+   construction plane or, through another component, a sketch ("Geometry links" in section 2), or that may move the
+   plane a covered sketch sits on (`probe/plane_sizes.py`), at 25 percent of its
    value below and above (`NEAR_SHARE`), inside its range; a count moves by whole numbers, a value of zero by that
    share of the way to the range ends. Then up to 8 ticked sizes that nothing ties to a sketch (`MAX_EXTRA_SIZES`, in
    table order) while rows are left: the person ticked them, so a sketch may follow them in a way the capture cannot
    show. Such a size left without rows is not listed as untried.
-2. With two or more sizes tried, one near row puts every tried size at its lower near value and one at its higher.
+2. Near pair rows (`plan.pair_rows`), once the near rows have run: with two or more sizes tried, one row puts every
+   tried size at its lower near value and one at its higher. A size whose own near row on that side did not build (or
+   changed a followed outline) stays at its value; a row left with fewer than two sizes is not run.
 3. The nearer rows below, for near rows that did not build.
 4. Far rows (`plan.far_rows`): the range ends that differ from the value and from the near values, so the measured span
-   grows; then, with two or more sizes tried, every size at its minimum and one at its maximum. Nearer rows follow
+   grows. An end is not tried when a row of that size alone did not build (or changed a followed outline) at a value
+   on that side: the range stops before that value anyway, so the try would only cost a rebuild. Nearer rows follow
    for the far rows that did not build.
+5. Far pair rows (`plan.far_pair_rows`), after those nearer rows: with two or more sizes tried, every size at its
+   minimum and every size at its maximum. A tried size goes only as far as it built on its own on that side (the
+   farthest value that built and kept every outline), or stays at its value; a size without rows goes to its range
+   end. The row runs only when a tried size goes past its near value.
 
 A size that only feeds step values (a free size that moves no covered sketch value and reaches no sketch dimension or
 reference) has no row: its formula is exact, and it is never reported as untried (only a moved size left without a
@@ -1143,16 +1660,40 @@ label with "The last value did not rebuild, so this one is nearer." for a nearer
 
 While the rows run, the timeline marker waits just after the last item the part needs (`lib/export_plan/marker_roll.py`),
 so Fusion rebuilds fewer items per recompute. The items needed: any that may change the target, the sketches the steps
-use (matched by name and component), the last item of every other component a sketch link or measured reference
-depends on, the steps of tool bodies of other components, and joints, rigid groups and items of unknown types. sketch record without a name gives no roll; a reference without a component, or a link with an unsourced reference,
-keeps every other component. The marker is moved only after the first read (E0), and only stays when a read
+use (matched by name and component), the items of every other component a sketch link or measured reference depends
+on that come before the step holding the link (Fusion builds the timeline in order, so a step never depends on a later
+item), the steps of tool bodies of other components, and joints, rigid groups and items of unknown types (an unknown
+type whose name ends in `Feature`, of another named component that did not change the target, is a body feature and
+does not count). A sketch record without a name gives no roll; a reference without a component, or a link with an
+unsourced reference, keeps every other component before its step (every one when its step cannot be found). The marker is moved only after the first read (E0), and only stays when a read
 at the rolled marker gives the same sketches, points, lines, references and body box as E0. `report.json` keeps
-`probe.timeline`: `{ rolled, items, of, reason? }`, the items each try rebuilt out of the items before the person's
-marker, and why it did not move. A read while the marker sits before the rolled position counts as not read: the probe
-is not used. The marker and the later items are put back and rebuilt once when the tries end, also on cancel and error.
+`probe.timeline`: `{ rolled, items, of, reason?, suppressed, try_seconds }`, the items each try rebuilt out of the
+items before the person's marker, why it did not move, the suppression record below, and the seconds from the start of
+the tries to the end of the last one. A read while the marker sits before the rolled position counts as not read: the
+probe is not used. The marker and the later items are put back and rebuilt once when the tries end, also on cancel and
+error.
+
+When the person ticks "Faster tries" in the dialog (off by default), the items before the stop point (the items each
+try rebuilds) that the tries do not use are also suppressed while the rows run (`lib/export_plan/timeline_trim.py`).
+The evidence is the one above, with a component as the unit: an item is suppressed only when it is not suppressed
+already, belongs to a named component other than the ones of the picked bodies, no item of that component is needed,
+and it is not an assembly item. Nothing is suppressed when the roll's evidence cannot be matched, when a link or
+reference leaves its component unnamed and its step cannot be found, when a needed item other than an occurrence has
+no component, when an item before the stop point has a type the step kind table does not know and that is not a body
+feature (a type ending in `Feature` of a named component), or when an assembly item other than an occurrence (a joint, a rigid group) comes
+before the stop point. The store checks that each item still has the name the capture saw at its index before it
+touches any. With the items suppressed, a read must give the same state as E0 and no step may show a new error;
+otherwise every item is turned back on and the tries run as without the option. The items are turned back on after the
+parameters are put back and before the last read, the restore check and the marker unroll, on every way out; every
+item the store tried to turn off goes back on, also one whose state could not be read after.
+`suppressed`: `{ asked, on, items, reason?, left_off? }`: whether the box was ticked, whether the tries ran with items
+suppressed, how many, why not, and the names of items that would not turn back on (the person is told about those).
 
 A row that Fusion cannot build is tried again nearer to the value now (`plan.nearer_rows`, `NEARER_STEPS`): half way
 to that range end, then a quarter, then a tenth, one step per batch and per side, until a row on that side builds.
+On a side with a value that built and a farther one that did not, rows half way between them follow (`plan.
+_between`), until the two are within `BISECT_GAP` (a tenth) of the way from the value to the range end, at most
+`BISECT_STEPS` times; the range then stops at the farthest value that built.
 Sizes that no row built go first. A size that moved a sketch or a measured place with only one row that built, and
 nothing left to try, gets one more row half way to that value, so the fit has two readings. These rows are at most
 24 per export (`MAX_NEARER_ROWS`, each is a Fusion recompute) and stay inside the 64 row cap; the discovery rows get
@@ -1170,9 +1711,12 @@ or a measured place (`translator.sizes.probed_sizes`) and whose rows all failed 
 doubted up front with "the design does not rebuild in Fusion at A (step) or B (step), the nearest values tried, so it
 could not be measured" (loose when a formula reads it, else dropped with `used` true), never called unchanging. A
 free size measured over less than its range is loose with "it was followed between A and B; beyond that it could not
-be tried" (added to its other reason when there is one and it fits the note). Every state also
+be tried" (added to its other reason when there is one and it fits the note), unless the range was cut to the values
+that built on every side the probe did not cover. Every state also
 reads the body's box (and volume when the state has it): a size whose state alone changed the box but moved no
-followed sketch or reference is kept in `Motion.body_moved` (`SizeProbe.finish`). The translator treats it as doubtful
+followed sketch or reference is kept in `Motion.body_moved` (`SizeProbe.finish`), unless it was tried only for a
+sketch plane, or its only use is the distance of an offset plane a step places (`sizes.construction_only`): it feeds
+step values, which follow it or mark it. The translator treats it as doubtful
 with "it changes this part in a way the copy does not follow": loose when a formula reads it, else dropped with
 `used` true. It is never reported as changing nothing.
 
@@ -1189,17 +1733,24 @@ the two reads lacked; `moved` is true when something changed, false when the res
 nothing could be compared. A row that did not build (`failed` names the step) or gave no read has `moved: null`,
 `tried: false` and a `reason`, so it is never a move. They never become sizes in this
 export. `probe.discovery` in `report.json` lists `{ param, value, built, moved, changed, unread }` (see below); a candidate the cap or the row room left without a row is listed as `{ param, moved: null, tried: false,
-reason }`, and the result window counts those in a "Not tried" group (ticking one makes the export try it).
+reason }`, and the result window counts those in its "More sizes" section (ticking one makes the export try it).
 `also_changes` lists the parameters that moved the part; the result window says "These parameters also change this
 part: ... Tick them and export again to get them as sizes." For a parts file the group is "Also change these parts" and
 each parameter names the parts it changed (read from each part's `probe.discovery`).
+In each state the read sketch profile whose arcs lie on the same side of their circles as the captured arcs (the
+direction from centre to middle point) stands for the captured profile, the nearest one among those. Regions of one
+sketch share curves (each piece of a cut circle bounds its own region), so a region that moved further than its
+neighbour lies, or changed its shape, would otherwise pass for the neighbour.
 The sketch curves of each profile have `<item>/p<profile>/c<loop>.<curve>/<field>` in the capture's loop and curve
 order: a line's `offset` (its distance from the sketch origin along the left normal of its captured direction) and
-`turn` (degrees it turned), an arc's `center.0`, `center.1` and `radius`; `curves` lists the profiles
+`turn` (degrees it turned; Fusion lists a profile curve with its ends either way round, so where the loop's joins
+tell, a read curve runs the way the captured one does along the loop), an arc's `center.0`, `center.1` and
+`radius`; `curves` lists the profiles
 (`<item>/p<profile>`) whose curves were measured. For a sketch the probe measured, a key that is not listed did not
 move. `spans` gives, per size the probe set to other values, the lowest and highest value of the states that built
 (the value now included) and `failed`, `[value, step]` for each value tried alone that did not build
-(`probe.build.spans`). A sketch the probe could not measure (a step uses it in a way the probe cannot follow, its first read did not
+(`probe.build.spans`), and `kept` and `changed` for a size whose own row changed a followed outline (see the
+different outline item below). A sketch the probe could not measure (a step uses it in a way the probe cannot follow, its first read did not
 match the capture, or there was no read at the current sizes) is listed in `unmeasured` (sketch name to reason), and
 nothing is known about it. For one sketch and one size the motion file therefore gives one of three answers: measured
 and still, measured and moved (the keys), or not measured (`translator.sizes.sketch_answer`). A motion file without
@@ -1214,8 +1765,8 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
 - A value of an unmeasured sketch is stuck with cause `untried` for every size the sketch reads (`sizes.sketch_sizes`:
   the sizes behind that sketch's dimensions, and the sizes that may reach it through the geometry of another
   component, "Geometry links" in section 2). The size is loose, with "it changes <sketch> and could not be tried at
-  other values". A size the sketch does not read is not touched: a size that moves the sketch only through its
-  construction plane is not named here.
+  other values". A size that moves the sketch only through the plane it sits on is marked by the placement rule
+  below.
 - A size that may reach a sketch only through another component follows the measured motion like any other: when the
   probe saw the sketch move with it and the fit holds, the outline is written as formulas of it (two arcs of radius
   `pipe_d_mm / 2` give points such as `0.5 * pipe_d_mm`; a circle writes its `radius`). When the fit fails or the
@@ -1243,7 +1794,9 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   half angle. The translator writes it as a formula with `sin`, `cos` and `tan` in degrees (`cot` as `cos / sin`),
   checked over the size ranges like any formula (a value that would reach zero, or a divisor that would cross zero,
   marks its sizes; a formula past the length cap fixes them). A `Terms` value holds the sizes that a stuck value of the
-  motion names at their value now, so all values of one outline follow the same sizes. A sketch can
+  same item names at their value now, so all values of the step's outlines follow the same sizes; values of other
+  items still follow them. A stuck curve key (`<prefix>/c<loop>.<curve>/...`, such as a line's `turn`) holds nothing:
+  a line's direction can turn along a curve while both its ends follow. A sketch can
   have more than one solution, and Fusion may land on another one after the rows run before (a row that did not build
   often leaves it there). A different outline blames a size only in that size's own row (the row that changes it
   alone), when the row started on the captured outline and the outline came back once the parameters were put back
@@ -1251,10 +1804,27 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   first) tells how it started, and the next row's `start` or read (or the read once all rows are done) tells whether
   it came back. A row of several sizes never blames one for a different outline. Every other state with a different
   outline blames no size (`apart` lists them, by number in `states`), and so do the states where a sketch reads as
-  the same different outline in rows that change different sizes or one size to two values. A sketch known to have
-  stayed on its other outline after the parameters were put back (a `start` read shows it, or the same different
-  read in rows of unrelated sizes) is named in `flipped`, and `health.flipped` gives the result window one line about
-  it.
+  the same different outline in rows that change different sizes or one size to two values, unless both rows give
+  some parameter the same new value (two sizes behind one formula), where alike reads are expected. A sketch is
+  solved as a whole: in a state where one of its outlines reads differently, its other outlines give no values
+  either, since they sit on that other solution too (a strip that only shifts there is no move). When the probe put
+  the sketch back before a row, the read after that (`put_back` of the state) tells how the row started instead of
+  `start`. A row run a second time from a checked start (`again`, see "Solver flips" below) blames its own size for
+  another outline even when the outline did not come back. A sketch known to have stayed on its other outline after
+  the parameters were put back, with a row run from it (a `start` read shows it and no `put_back` corrected it, or the
+  same different read in rows of unrelated sizes) is named in `flipped`, and `health.flipped` gives the result window
+  one line about it.
+- A different outline that a size makes in its own row is a limit of its range, not a reason to drop the size
+  (`probe.build.outline_windows`). On that side the range keeps the farthest value tried alone that built and kept
+  every followed outline, nearer than the nearest value that changed one; the states that set the size past it are
+  left out of the fit, and `spans` records `kept` (`[low, high]`, null on a side without a change or with a typed end)
+  and `changed` (`[value, sketch]` of each such row). The translator cuts the range there like a failure in Fusion
+  (`kept_ranges.outline_cut`; the cut reason says "LidRail makes a different outline at 2.5"). When this limit and the
+  failures leave only the value now, nothing is left out: the size stays stuck, `kept` is the value now at both ends,
+  and its reason says "no value other than 12 could be copied, since ..." with the nearest failure or different
+  outline on each side. While the rows run, a row that changed an outline counts as one that did not build, so the
+  nearer rows and the halving (`plan.nearer_rows`) look for the last value that keeps the outline, inside the same
+  row budget. A stuck value's `rest` is fitted over the states that keep its blamed sizes at their value now.
 - Fusion may give a projected or intersection curve a new token when it recomputes a sketch, although it is the same
   curve. A curve of the first read whose token is gone pairs with a new curve of the same kind that sits in its place
   along a loop, between curves that kept their tokens, when every loop agrees (`probe.match.renamed`); the sketch then
@@ -1274,6 +1844,13 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   line that turns cannot carry its crossings.
 - A sketch plane that moves writes the placement origin along its normal (`sketch.on.origin`); a "to entity" reach is
   the face's move less the plane's move. Outlines of one step whose planes move differently fix those sizes.
+- A sketch on a face, or on a construction plane built on the part (also a chain of planes), may move with every size
+  an item of the body's component reads before the plane was made, and with the plane's own parameters
+  (`sizes.placement_sizes`; for a plane described only by its token, every such size unless the sketch frame lies on an
+  origin plane). The probe tries those sizes (`probe/plane_sizes.py`), so the plane's move is measured whatever the
+  plane's kind; a plane that turns is stuck with cause `turns`. Such a size that was not measured for the sketch (no
+  probe, the sketch not measured, the size not tried) is marked: "it may move the plane <sketch> sits on, and that could
+  not be tried at other values" (`sketch_motion.placement_doubts`).
 - A reversed placement negates the y formulas of its loops.
 - Hole points write `origin` as formulas (the drill tip revolve too); a revolve axis from a sketch line writes
   `axis.point` in the sketch plane. A symmetric revolve turns its moving origin about the axis.
@@ -1301,21 +1878,47 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   the size range (count formulas such as `ceil(width_count) * 2` are evaluated at the range ends, `lib/translator/
   copy_counts.py`). When the count can drop below that, the sizes it reads are marked ("a smaller value would leave
   that copy out"); the range stays. Copies of a circular pattern keep their count and angle.
-- A taper that follows sizes should stay under 45 degrees either way: the sizes it reads are marked past the value
-  where it reaches 45.
+- A taper that follows sizes should stay under 45 degrees either way, since Paramability refuses a steeper one: the
+  ranges of the untyped sizes it reads are cut where it reaches 45 (`Context.cut`, `kept_ranges.holding_ranges`).
+  When no cut keeps it under 45 (every size it reads has a typed range), those sizes are marked instead. The cut
+  moves both ends of every size it reads by one share, then gives back each end the rule holds at, so a size that
+  only helps one way, or cancels out, keeps that end.
+- A "to entity" length that follows a moving face or plane would pass its own start at some sizes: the ranges of the
+  untyped sizes it reads are cut where it stays positive ("would reach past the face it starts from"), the same way,
+  with both sides of a two sided extrude in one cut; only when no cut keeps it are they marked.
 - A through cut clears the part at the largest sizes tried (`box_max` of the motion file). A cut through all to one
   side without a measured end face cuts toward the side where its outline meets the part built so far (sampled on a
-  grid over the outline); Fusion's stored direction is kept when both sides, or neither, hold material, and turned with
-  a note otherwise.
+  grid over the outline, at even steps and at heights doubling from 0.02 mm, so a thin wall at the sketch counts);
+  Fusion's stored direction is kept when both sides, or neither, hold material, or when the measured walls of a tapered
+  cut lean the way it gives and not the other, and turned with a note otherwise. A tapered side keeps its outline at each height whatever its length: one that only widens gets the
+  same length as an untapered cut, one whose walls lean in (at its taper, or at some size inside the ranges of a taper
+  that follows sizes) ends 1 mm past the part's box, and is left out when the length times the tangent of the steepest
+  such lean passes half the radius of the largest circle inside an outline (sampled on a grid, coarse first). The
+  measured wall leans are compared with the side the cut goes, after it is turned toward the material.
 - A construction plane or axis that a step uses itself (start from, reach to, turn about, mirror across, with `token`)
-  fixes the sizes of the model parameters it made (`created_by.token`); without a token, of every construction plane
-  or axis.
+  marks the sizes of the model parameters it made (`created_by.token`); without a token, of every construction plane
+  or axis. An offset plane that the step places, whose distance `sizes.offset_param` names, follows that distance
+  instead: where an extrude starts or reaches to, the plane of a mirror or a draft, and the plane a split cuts along
+  (`sizes._placed_planes`).
+- An angle the step needs above zero (a draft, a revolve) that reaches zero inside the size ranges cuts the ranges
+  of the untyped sizes it reads where it stays above 0.005 degrees ("needs an angle above zero"), since the default
+  range of an angle under 45 degrees starts at 0; only when no cut keeps it are they marked. A length or count that
+  leaves its working range still marks its sizes.
 
 ### Measured references in the motion file (`lib/probe/ref_fit.py`)
 
 The probe reads every measured reference (`ref`, section 4) that has a place in the target's coordinates and fits how
 far it moves from the captured place. A size that acts on the reference's component is probed like a size behind a
-sketch (`reference` links, section 2). The values are moves, zero at the sizes the capture was read at:
+sketch (`reference` links, section 2). The values are moves, zero at the sizes the capture was read at.
+
+A flat face or construction plane of the body's own component that an extrude starts from or reaches to is measured
+the same way when it may move with the part (a face, or a plane built on the part) and has a `token`
+(`sizes.moving_reaches`, `plan.own_reaches`). Its request carries `"own": true`, and the reader reads it natively, in
+the part's coordinates like the capture. The sizes tried for it are every size an item of the body's component reads
+before the step (for a plane, before the plane was made) and the sizes behind the planes of a chain
+(`sizes.reach_sizes`, part of `plane_sizes.plane_driven`). The translator uses the measure only when the steps written
+before cannot place the face without a doubt (`reach_motion.target_shift`); then those same sizes get the three
+answers below, and the formula keeps its constant apart so the extrude length folds into one number.
 
 | Reference | Keys | Meaning |
 |---|---|---|
@@ -1342,24 +1945,28 @@ rows, `NOT_LOOKED` for a key not in `refs`).
 
 The size probe sets other size values, recomputes and reads a state with `read_state(design, request, ctx)`.
 `request` is `{ "sketches": [token], "points": [token], "lines": [token], "params": [name], "target": true }`, plus
-`borrowed`, `native` and `refs` below. Every
+`curves`, `borrowed`, `native`, `refs` and `faces` below. Every
 entity is found with `Design.findEntityByToken` (the match without `assemblyContext`; for a proxy only, its
 `nativeObject`), so values are in component coordinates like the capture. The result, mm and degrees except `params`:
 
 ```json
 {
-  "sketches": { "<sketch token>": { "frame": FRAME, "profiles": [PROFILE, ...] } },
+  "sketches": { "<sketch token>": { "frame": FRAME, "profiles": [PROFILE, ...], "curves": { "<curve token>": CURVE } } },
   "points": { "<sketch point token>": [x, y, z] },
   "lines": { "<sketch line token>": { "point": [x, y, z], "dir": [x, y, z] } },
   "params": { "d12": 2.0 },
   "box": { "min": [..], "max": [..] },
-  "refs": { "57.plane": { "point": [x, y, z], "normal": [x, y, z] } }
+  "refs": { "57.plane": { "point": [x, y, z], "normal": [x, y, z] } },
+  "faces": { "15/face": { "frame": FRAME, "loops": [LOOP, ...] } }
 }
 ```
 
 - `sketches`: `frame` from `Sketch.transform`; `profiles` are every `Sketch.profiles` item read like a capture
   profile (section 4, each curve with `entity`). A sketch with more than 200 profiles, or a profile whose space is
   `ambiguous`, is left out.
+- `curves` (request): `{ "<sketch token>": ["<curve token>", ...] }`, the sketch curves of sweep paths. The sketch's
+  `curves` then holds each asked curve that reads, by its token, as the `flat` record of a capture path curve (the
+  curve in the sketch's own plane); a curve that is missing, leaves the plane or cannot be read is left out.
 - `points`: `SketchPoint.worldGeometry`; `lines`: `SketchLine.worldGeometry` start point and unit direction.
 - `params`: `value` of each named parameter in Fusion's own units (cm, radians), as in `parameters.*.value`. A name
   is looked up in the user parameters, then in the target component's model parameters.
@@ -1384,12 +1991,29 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
   component is taken out). `refs` maps a key to `{ point, normal }`, `{ point, dir }`, `{ dir }` or `{ point }`; a
   reference that cannot be read has no key there and `unread` gives `{ key: reason }`. The reads change nothing in the
   design.
+- A flat face a step uses as its outline (one face among an extrude's or emboss's outlines, or the face a trimmed
+  emboss keeps to; `plan.outline_face`, a `token` and loops of lines, arcs, circles and ellipses) is requested with
+  `faces`: `{ "<item>/face": { "token", "before" } }`, `before` the step's timeline index. The step changes or removes
+  the face, so the reader moves the timeline marker to `before`, finds the face by its token, reads its `frame` and
+  `loops` like the capture's face record (section 4) and moves the marker back (`read_face.read_faces`, read last). A
+  `before` past the marker, a marker that does not move or a face that is not found gives `unread`. A marker that does
+  not go back leaves every face unread and adds `"marker"` to `unread`, and the probe stops. A face is read only in a
+  state that sets a size read before its step (`SizeProbe.read_now`); the other states take its E0 read. The probe
+  pairs the edges with the captured ones by kind and place along each loop, writes the values under the keys of a
+  profile (`<item>/face/...`) and tries every size an item reads before the step (`plane_sizes.plane_driven`). A
+  different outline that one size makes on its own is a range limit, like a sketch's, named "the face <step> starts
+  on". A face read on its own plane but facing the other way counts as another outline, not as a turned plane: the
+  body behind it lies on its other side (an earlier extrude reached past its start), so the step goes the other way.
+  A face whose first read does not match the capture is not read again; the motion file lists the measured ones in
+  `faces`.
 - Nothing raises. A part that cannot be read has no key, which the fit treats as unread.
 
 ## 6. Report and capture file
 
-The export writes `report.json` into the package: `{ "writer", "outcome": "recipe" | "stepOnly", "items": [ITEM
-VERDICT, ...], "capture": CAPTURE }` (verdicts: see the translator, `lib/translator/result.py`). The app never reads it. A report saved from a real
+The export writes `report.json` into the package, as compact JSON without indentation (format it with a tool such as
+`python3 -m json.tool` to read it): `{ "writer", "outcome": "recipe" | "stepOnly", "items": [ITEM VERDICT, ...],
+"capture": CAPTURE }` (verdicts: see the translator, `lib/translator/result.py`; a Combine written as tool
+steps has `tool_steps`, the verdicts of the items that built its tools). The app never reads it. A report saved from a real
 design gives a fixture: its `capture` is copied as is.
 
 `also_changes` (only when not empty) names the unticked parameters that a discovery try showed changing the part.
@@ -1398,8 +2022,23 @@ parameter: `{ param, sketch, component, outcome, reason }`, `outcome` one of `si
 `formula` (a parameter worked out by a formula, which cannot be ticked; the reason names what it follows) or
 `not ticked` (`recipe_export.link_outcomes`; `reason` when the size has one).
 
-`sizes` holds `free` (recipe size names), `fixed` and `loose` (`{ name, reason }` by recipe size name, as in the
-manifest), and `dropped` (`{ name, reason, used }` by Fusion name, plus `tried: true` for a size the probe set to
+`gaps` (only when the recipe leaves steps out of the copy) holds the gap records exactly as they go into the gaps file
+of the package (`docs/recipe-gaps.md`), and `reach` (the capture's, as read, or `{ read: false, error }`) is beside it.
+An item verdict of a left out step is `leftOut`, with `gap` (the gap id), `note` (the reason) and `cause`: `picks` for a
+step left out only because it picks, or may pick, faces of a gap, `own` otherwise. `outcome` stays `recipe`, and the
+package notes say how many steps were left out and which ("2 steps were left out: Extrude5, Fillet3."). A parts file
+has `gaps` and `reach` in the record of each part.
+
+The manifest `parameters` entry of a formula parameter (`lib/params/listing.py`) holds `expr`, the formula in the recipe
+grammar, when the size table translated it. When it did not, the entry holds the plain `value` and two optional fields:
+`expression` (Fusion's own text, at most 300 characters) and `untranslated` (the reason, at most 200); the report lists
+them in `parameters.no_formula`. A reader that does not know the fields ignores them, so version 1 and 2 stay as they are.
+
+`sizes` holds `free` (recipe size names), `fixed` and `loose` (`{ name, reason }` by recipe size name; `loose` here is
+the doubts only, and the manifest `loose` the same; the cut sizes go in the manifest `cuts` list, `{ name, reason }`,
+which the app shows as a quiet note, not a warning; `cuts` is an optional field of manifest version 1 and 2, so an
+older app ignores it), `cut` (only when a range was cut: `{ name, reason, words, why, min, max, shared }` by recipe size
+name, `min` and `max` the range left, `shared` true when several bodies of a parts file read the size), and `dropped` (`{ name, reason, used }` by Fusion name, plus `tried: true` for a size the probe set to
 other values that changed nothing: the ticked parameters that are not sizes, from
 `TranslateResult.dropped`; `used` is true when a step reads the parameter and the copy could not follow it). `loose` comes
 from the translator and from the probe. `checks` in the manifest is
@@ -1414,9 +2053,93 @@ the result window says that the tries made then were not used to judge any size.
 whose read showed a followed sketch on another outline, the design is read again once the parameters are back and
 before the next row (`ProbeRun`); that read is the next state's `start` in `probe.states`. A probe row that Fusion cannot build is listed in `probe.dropped`; no size is fixed for it.
 
+A try can leave the design broken: a step that lost its input stays in error after the values are put back. Every
+later try would then fail for that reason, not for its own values, and cut ranges it does not own. So after a try that
+did not build, with the values back and before the design is read again, the steps in error are compared with the
+baseline (`RowExport`). A step in error after the change that put the values back is first given one full recompute
+(that change rebuilds only the steps it touches; a try's own change is judged the same way); when a step is still in error that was not, the tries stop there and
+the broken design is not read again (no start read, no sketch put back, no discovery tries, whose parameters are kept
+as not tried). A size that moves a sketch and whose own tries were planned but did not run is listed in
+`probe.untried` and the motion's `untried`, so it is not taken as one that changes nothing. `probe.stopped` (`{ after, items }`: the label of the try run last and the
+steps in error) and `health.tries_stopped` (the same) say so, and the motion is built from the tries before. At the end
+of every export the steps in error are compared with the ones in error when it started (again after one full recompute
+when some read in error); `health.broken` names those that were fine before (at most 5), and the result window tells the person that the design is changed and to use Undo.
+
+Solver flips. Putting the values back does not bring back a sketch that a try moved to its other solution: Fusion solves
+a sketch from where its points are. So the export keeps the places of the followed sketches' own points at E0
+(`fusion_reader.sketch_keep.SketchKeeper`; projected and fixed points stay). When the `start` read shows a followed
+sketch otherwise than at E0 (another outline, or a value more than 0.05 mm or degrees off, `FLIP_TOLERANCE`; Fusion's
+own restore leaves about a hundredth), every kept point that left its place is moved back, with its sketch's compute
+deferred (a sketch whose points are all in place is not touched), and the design is rebuilt once, also when no point
+moved (the keeper matches the points by their entity token and skips a point that is gone); the read after that is
+the state's `put_back`. After two put backs in a row that do not bring the sketch back, no more are tried; a row that needs its
+start still reads it, since a try can bring the sketch back too. A start read and a put back read hold only the outlines
+(sketches, points, lines and outline faces), not `params`, `refs` or `box`. A row whose start was not read (the row
+before it ended right) and after which the sketch was found on its other solution (the row read another outline or did not build, and the next read with the values back shows
+the flip) may have started there: it runs once more right after its batch, from a checked start, and its first run is
+left out of the states. The second run carries `again`; another outline there is a range limit of its own size. Rows run
+again count in the 64 rows. The sketch is also put back before the discovery rows (their base is the read after it, a full read) and
+once after the tries, so the design is left on the solution it had; that last put back also runs when the tries fail or
+are cancelled, and after tries that failed `health.sketch_gap_mm` and `health.sketch_drift` still say whether a sketch
+stayed away from its first read. `probe.recovery` (`{ put_backs, again }`, only when
+either happened) counts the extra rebuilds: one per put back and two per row run again (the row and its restore).
+
 A file with several bodies (package kind `parts`) has one `report.json` with a `parts` list, one record per body:
 `{ name, outcome, items, notes, capture, probe, sizes, derived }`, plus `refusal` or `error` for a body saved as a fixed
-shape. The `sizes` record at the top is shared by all bodies; `derived` is per body.
+shape (and `gaps`, `reach` for a body with left out steps). A body whose copy stopped also has `after_stop`, as the
+single body report does: what a walk past the stop finds (`docs/recipe-gaps.md`, "report.json and the result
+window"). The `sizes` record at the top is shared by all bodies;
+`derived` is per body.
+
+### Timing (`timing`)
+
+Every `report.json` has a `timing` block that says where the export spent its time (`lib/timing/`). It is measured with
+`time.perf_counter`, in seconds rounded to 0.01. A timing failure drops the block and changes nothing else; the
+export, the recipe and the notes do not depend on it.
+
+```json
+{ "total": 61.52,
+  "phases": { "step_export": 1.2, "capture": 40.1, "size_table": 0.0, "translate_first": 0.8, "reach": 0.0,
+              "probe": 15.0, "translate_final": 0.9, "restore": 0.5, "package": 0.1, "after_stop": 0.5 },
+  "capture": { "seconds": 40.1, "steps": 246, "cached": true,
+               "marker_moves": { "count": 250, "seconds": 31.0, "walk": 247, "helper": 3 },
+               "measure": { "target_state": 2.0, "body_states": 0.4 },
+               "readers": { "count": 480, "seconds": 3.1 },
+               "faces": { "count": 12, "seconds": 0.9 }, "split": { "count": 2, "seconds": 0.2 },
+               "helper_pass": 1.5, "restore_marker": 0.8, "tail": 0.4,
+               "by_type": { "ExtrudeFeature": { "steps": 60, "seconds": 12.4 } },
+               "by_component": { "Cup": { "steps": 200, "seconds": 35.0 } },
+               "slowest": [ { "index": 87, "name": "Extrude41", "type": "ExtrudeFeature", "component": "Cup",
+                              "seconds": 1.9 } ] },
+  "probe": { "tries": 9, "tries_seconds": 12.0, "rebuild": 10.5, "read": { "count": 14, "seconds": 3.1 },
+             "read_parts": { "sketches": { "count": 14, "seconds": 2.2 }, "params": { "count": 9, "seconds": 0.4 } },
+             "put_back": { "count": 0, "seconds": 0.0 }, "try_seconds": 13.2 } }
+```
+
+- `total`: from the start of the pipeline to the moment `report.json` is made. The dialog's own reading before the OK
+  click and the write of the package file are not in it (the add-in logs the write time).
+- `phases`: `step_export` (the STEP of the part), `capture` (reading the timeline), `size_table`, `translate_first`
+  (the first translation, and the one after the reach is known), `reach` (asking Fusion which step made the faces later
+  steps pick), `probe` (its start, tries, close and the `derived` shadow), `translate_final` (with the motion the probe
+  found), `restore` (parameters, suppressed steps and the timeline marker put back), `package` (manifest, recipe and
+  report assembled). `after_stop` is the second walk after a stop and is already inside the translate phases. A phase
+  that did not run is 0.0. A several-body export has one `timing` block at the top of its `report.json`.
+- `capture` (one body) or `captures` (several bodies: the same record plus `part`, the body's name): `seconds` is the
+  whole read, `cached: true` marks a read the dialog made before the export. A step's time is the marker move that
+  built it plus its measures and reads (moving the marker to position k makes Fusion build step k - 1). `marker_moves`
+  counts every assignment of the timeline marker made by the read: `walk` is one per timeline position (steps before
+  the marker + 1), `helper` the moves of the pass over the tool bodies of Combines. `measure.target_state` is the volume
+  and box of the target at every position, `measure.body_states` the measures in the helper pass. `readers` is the sum
+  of all feature readers (before and after each step); `faces` (outline face reads) and `split` (Split Body reads) are
+  inside `readers`. `restore_marker` is the move back to the person's marker, which makes Fusion build the later steps
+  again; `tail` is what is read after the walk (links, graphs, parameters). `by_type` and `by_component` sum the time
+  of the steps, slowest first (a component is named by its name, or its token); `slowest` lists the 10 slowest steps.
+- `probe`: `tries` is the rows run (rows run again included), `tries_seconds` the time inside them, `rebuild` that time
+  without the state reads made inside it (setting sizes, Fusion rebuilding, putting them back), `read` the state reads of
+  the tries (rows, starts, put backs, the discovery base; not the marker roll check or the read after the tries) with
+  `read_parts`, the time of each part of those reads (`sketches`, `points` with the lines, `params`, `refs`, `box`,
+  `faces`; a part no read held is left out), and `put_back` the sketch put backs (`probe.recovery`). `try_seconds` is the same value as in
+  `probe.timeline` (from the first try to the end of the discovery rows).
 
 ### Derived values (`derived`)
 
@@ -1506,6 +2229,10 @@ matched through `body` and `bodies_after`), `CoincidentConstraint` (`point`, `en
 (`entityOne`, `entityTwo`), `EqualConstraint` and `TangentConstraint` (`curveOne`, `curveTwo`), `ModelParameter`
 (`component`, `dependentParameters`, `createdBy`).
 
+Read in the API reference on 2026-11-10 for the tool body readers: `CombineFeature`, `MoveFeature`,
+`MoveFeatureDefinition` and its translate, rotate and free move classes, `CopyPasteBody`, `PatternElement`,
+`CircularPatternFeature`, `TemporaryBRepManager`, `BooleanTypes`.
+
 Read in the API reference on 2026-11-08: `HoleFeature` (all members above, plus `isDefaultDirection`;
 the page says "the extent type of a hole is currently limited to a distance extent" but also lists
 `setAllExtent` and `setOneSideToExtent`), `SketchPointsHolePositionDefinition.sketchPoints`,
@@ -1522,6 +2249,28 @@ the page says "the extent type of a hole is currently limited to a distance exte
 (`distanceOne`, `distanceTwo`, `edges`, `isFlipped`), `ShellFeature` (members above; default `SharpOffsetShellType`).
 Read on 2026-11-07: `TimelineObject`, `FilletFeature`, `ChamferFeature`, `CircularPatternFeature`,
 `MirrorFeature`, `CombineFeature`, `Sketch`, `Profile`, `ProfileLoop`, `FeatureOperations`.
+
+Read in the API stubs of the installed Fusion (`API/Python/defs/adsk/fusion.py` and `core.py`) on 2026-11-11 for
+face outlines: `BRepFace` (`loops`, `geometry`, `evaluator`, `pointOnFace`, `entityToken`, `body`, `area`),
+`BRepLoop` (`isOuter`, `edges`), `BRepEdge` (`geometry`, `evaluator`), `Plane` (`origin`, `uDirection`), `Line3D`,
+`Arc3D`, `Circle3D`, `Ellipse3D`, `NurbsCurve3D` (`controlPointCount`, `degree`), `Component.features`,
+`Features.extrudeFeatures`, `Feature.timelineObject`, `TimelineObject.index`, `ExtrudeFeature` (`startFaces`,
+`endFaces`, `sideFaces`; the stub says the start faces of a symmetric extrude are on the positive normal side).
+
+Read in the same stubs on 2026-11-12 for Split Body (hand tests SB1 and SB2; exports of 0.10.5 on Fusion 2706.1.17
+confirm a split by an origin plane, by an offset plane and by a body, and that `splittingTool` gives nothing with
+the marker after the feature, so `inside` was missing there):
+`SplitBodyFeature` (`splittingTool` and `splitBodies`, both read with the marker before the feature as the stub
+asks; `isSplittingToolExtended`; `bodies`), `BRepBody.pointContainment` (a `PointContainment` value: inside 0, on 1,
+outside 2, unknown 3), `BRepBody.isSolid`. For drafts (hand test DR1): `DraftFeature` (`inputFaces`, `plane`,
+`isTangentChain`, `isDirectionFlipped`, `draftDefinition`), `AngleExtentDefinition` (`angle`, `isSymmetric`),
+`TwoSidesAngleExtentDefinition` (`angleOne`, `angleTwo`), `BRepFace.boundingBox`.
+
+Used by the reach read and not yet confirmed on a real design (see its row below): `Feature.faces` (the faces a
+feature created, for each feature type that can be a candidate), `BRepEdge.faces`, `Design.findEntityByToken`,
+`Component.findBRepUsingPoint`, `Timeline.markerPosition`, `TimelineObject.entity`. The stub of `Feature.faces` says it
+may not return every face the feature made once later steps changed the body; the read takes that into account
+(section 2, `reach`).
 
 Not verified (each has a measured check or a test in section 7 of `docs/hand-tests.md`):
 
@@ -1563,3 +2312,17 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | `Component.xYConstructionPlane` / `xZConstructionPlane` / `yZConstructionPlane` and `ConstructionPlane.createForAssemblyContext(occurrence)` (in the API reference) show a component's origin planes in the root's coordinates; the three tips 10 mm along the normals fix the occurrence frame | `tool_place` lands the frame on them within 1e-3 mm or records an error; the G tests in `docs/hand-tests.md` |
 | The `entityToken` of a tool body's native body equals the token in `bodies_after` of the steps that made it, and `Design.findEntityByToken` finds it with the marker just before the Combine | an unmatched token leaves the steps unread and the Combine refused naming the step; G1 |
 | `BRepBody.copyToComponent(proxy)` keeps the assembly place | the copy guard in `step_export.py` compares the bounding boxes (1e-3 mm) and refuses before writing |
+| `MoveFeature.inputEntities` (only bodies or only faces) read with the marker before the item; the same bodies found by token after it, with their vertices in the same order | `points_before` and `points_after` are fitted by the translator; a mismatch is refused; the Move hand tests B3 to B5 |
+| `MoveFeature.definition` has a class per type, and the type name contains `TranslateXYZ`, `Rotate`, `FreeMove`, `PointToPoint`, `PointToPosition` or `TranslateAlongEntity` | an unknown name reads `other` and the Move is refused; B3 to B5 |
+| `xDistance`, `yDistance`, `zDistance` (model parameters in cm) and `isDesignSpace` of a translate move; `angle` (model parameter in radians) and `axisEntity` of a rotate move | a member that cannot be read is null, and the Move is refused; the sign and the space (component or design) come from the fit against the points; B4, B5 |
+| `MoveFeatureFreeMoveDefinition.transform` answers for a free move | null when it cannot be read; the fit against the points decides alone; B3 |
+| `CopyPasteBody.sourceBody`, an `ObjectCollection` in the API stubs, can be read with the marker before the item (and is empty or shorter when a source was consumed), `CopyPasteBody.bodies` after it, also when the source lives in another component | empty `sources` or null `result_bodies` refuse the Paste; B2, B8 |
+| `inputEntities` of a rectangular, circular or mirror pattern of bodies with the marker before the item, `bodies` after it holding every copy (not the sources) | null `result_bodies` refuses the pattern; copies are matched to the elements by the points; B6 |
+| `BRepBody.vertices` and `BRepVertex.geometry` of the native body: the first 8 in a stable order across a paste, a move and a pattern copy | fewer than 3 usable points refuses the fit; B2, B3, B6 |
+| `BRepBody.volume` of a tool body with the marker before the Combine, and of any body the second pass finds by token (`Design.findEntityByToken`) | null in `tools[].volume` and `body_states`; the volume checks on a tool are left out; B1, B9 |
+| `TemporaryBRepManager.get()`, `copy(body)`, `booleanOperation(targetBody, toolBody, booleanType)` (changes the target body in place and answers true or false), `BooleanTypes.IntersectionBooleanType` and `UnionBooleanType`, and the `volume` of a temporary body; none of it changes the design | any exception or a false answer gives null `intersect_volumes` and `intersect_model: unknown`, which refuses the Combine; B7 |
+| Face outlines, to confirm by hand: `ExtrudeFeature.profile` gives the `BRepFace` with the marker before the step; `BRepFace.loops`, `BRepLoop.isOuter`, `BRepLoop.edges` and `BRepEdge.geometry` give the edges in the component's coordinates; `BRepEdge.evaluator` covers only the edge; `Plane.uDirection` lies in the face; `BRepFace.evaluator.getNormalAtPoint` points out of the body; `BRepFace.area`; `Component.features.extrudeFeatures` lists the earlier extrudes and `Feature.timelineObject.index` their places; `startFaces`, `endFaces` and `sideFaces` of an earlier extrude, read with the marker before the step, hold the face the step uses (the same entity or `entityToken`); a positive distance goes along the outward normal | a face that cannot be read refuses the step; a face no extrude lists is copied as measured with its sizes marked; `end_offset` and `side_leans` check the direction and taper; hand test F1 in `docs/hand-tests.md` |
+| Reach, to confirm by hand: `Feature.faces` of the entity of a timeline item, read with the marker right after the step, lists every face that step created, and read with the marker just before a later step it still gives the same faces (the same entity or `entityToken`) as the ones a later pick finds through `BRepEdge.faces`, `findEntityByToken` or `findBRepUsingPoint`, for each feature type that can be a candidate (extrude, revolve, sweep, loft, round, chamfer, shell, pattern, combine, move); whether the list of a Move, a Combine join and a draft is empty; whether a face a later step trimmed or split drops out of the list; `Component.findBRepUsingPoint` with `BRepFaceEntityType` finds a face from a recorded point | a list that is empty, shorter than right after the step or unreadable counts as reached by every pick, a pick that cannot be found counts as reached, and the translator then leaves the later step out (safe side); hand tests L2, L3, L5 and L14 in "Check first in this version" of `docs/hand-tests.md` |
+| An intersect with several tools keeps the part and every tool, or the part and any tool | measured per export from the volumes and written as `intersect_model`; B7 |
+| Faster tries, to confirm by hand (checked against the installed stubs, never run): `Timeline.item(index)` gives the item the capture saw at that index; `TimelineObject.name`, `TimelineObject.isGroup`, and `TimelineObject.isSuppressed` get and set on an item before a rolled back marker; `Design.computeAll` after a change of `isSuppressed` rebuilds with the item off and leaves the marker in place; turning the item back on restores the design exactly, adds no item and keeps the order; whether the changes add entries to Undo or mark the document changed | the store touches nothing when a name does not match, counts only items that read suppressed, and names items that read suppressed after the restore; a read with the items off must equal E0 and show no new error; hand test U1 in "Check first in this version" of `docs/hand-tests.md` |
+| One change for the sizes of a try, to confirm by hand (read in the installed stubs on 2026-11-13, never run): `Design.modifyParameters(parameters, values)` with `ValueInput.createByString` sets every expression or none, rebuilds the design once like an edit in the Parameters dialog, updates `TimelineObject.healthState` of the steps it changed, and leaves the timeline marker where it is, so no `computeAll` is needed after it | a call that is missing, raises or answers false sets the values one at a time and recomputes as before; the store puts the marker back after it in any case; hand tests SP2 and SP4 in `docs/hand-tests.md` |

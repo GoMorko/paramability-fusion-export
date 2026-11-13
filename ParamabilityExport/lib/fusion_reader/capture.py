@@ -5,6 +5,14 @@ after the marker are left out. Per position k the marker is set to k once. At th
 k - 1 (bodies, health, what the feature produced, whether the target changed) and starts item k (its inputs). The
 marker always goes back to where it was.
 
+The target is measured at each position, except inside a run of quiet steps of other components (`_quiet`): such a
+step works on bodies of its own component, so the walk measures the target once before the run and once after it.
+When the two agree, no step of the run changed the target; when they do not, the walk goes back over the run and
+measures the target at each of its steps (`_measure_run`). A step that can reach bodies of another component (a type
+with `reaches_bodies` in the step kind table, a type the table does not know, or a step of the root component) is
+never quiet: the target is measured on both sides of it, so a change it makes is seen even when a later step of
+the run undoes it.
+
 The target is the native body of its component, so every value is in component coordinates; `placement` says where
 the component sits in the assembly. Feature readers run only for items of the target's component, and then for the steps of tool bodies from other
 components (`helper_pass`).
@@ -16,11 +24,13 @@ each type.
 import importlib
 
 from ..design_edit.marker import put_back, read_marker
+from ..timing.capture_timer import CaptureTimer
+from ..timing.timer import span_on
 from ..translator import step_kinds
 from . import helper_pass
 from . import read_geometry as geo
 from .parameters import list_model_parameters, list_user_parameters
-from .placement import occurrence_path, read_placement
+from .placement import occurrence_path, read_placement, target_move
 from .read_constraints import sketch_graphs
 from .read_links import sketch_inputs, sketch_links
 
@@ -92,6 +102,12 @@ def _target_state(ctx):
     return True, state
 
 
+def _measure(state):
+    """{ box, volume_mm3 } of a target state (`_target_state`), or None when the target did not exist or could not be
+    read."""
+    return state[1] if state[0] else None
+
+
 def _box_numbers(box):
     return box["min"] + box["max"]
 
@@ -109,6 +125,13 @@ def _target_changed(before, after):
         return True
     tolerance = max(VOLUME_TOLERANCE_MM3, VOLUME_RELATIVE * abs(a["volume_mm3"]))
     return abs(a["volume_mm3"] - b["volume_mm3"]) > tolerance
+
+
+def _note_component(ctx, component):
+    """Gives the capture timer the name of a component, for its per component totals."""
+    timer = getattr(ctx, "timer", None)
+    if isinstance(timer, CaptureTimer):
+        timer.note_component(geo.safe(lambda: component.entityToken, ""), geo.safe(lambda: component.name, ""))
 
 
 def _start_item(timeline, ctx, readers, index, items, group_indices):
@@ -129,6 +152,8 @@ def _start_item(timeline, ctx, readers, index, items, group_indices):
         "in_target_component": True,
         "bodies_after": [],
         "target_changed": None,
+        "target_before": None,
+        "target_after": None,
         "data": {},
     }
     if is_proxy:
@@ -138,6 +163,7 @@ def _start_item(timeline, ctx, readers, index, items, group_indices):
         return
     component = _owner_component(geo.safe(lambda: obj.entity, None), entity, item["type"])
     if component is not None:
+        _note_component(ctx, component)
         item["component"] = geo.safe(lambda: component.entityToken, "") or ""
         item["in_target_component"] = geo.same_entity(component, ctx.component)
     else:
@@ -155,7 +181,8 @@ def _start_item(timeline, ctx, readers, index, items, group_indices):
     before = (readers.get(item["type"]) or (None, None))[0]
     if before is not None and item["in_target_component"]:
         try:
-            item["data"] = before(entity, ctx)
+            with span_on(ctx, "readers"):
+                item["data"] = before(entity, ctx)
         except Exception as exc:
             item["data"] = {"read_error": str(exc) or type(exc).__name__}
 
@@ -175,11 +202,68 @@ def _bodies_after(item, entity):
         return None
 
 
-def _finish_item(timeline, ctx, readers, index, items, states):
-    """Marker is just after `index`: read bodies, health, whether the target changed and what the feature produced.
+def _set_target(item, before, after):
+    """The target's numbers of an item from the target states before and after it (`_target_state`)."""
+    item["target_changed"] = _target_changed(before, after)
+    item["target_before"], item["target_after"] = _measure(before), _measure(after)
 
-    `states` is the target state before and after the item (see `_target_state`).
-    """
+
+def _quiet(type_name, component, ctx):
+    """True for a step of a type that cannot reach other components' bodies (`step_kinds.keeps_to_own_bodies`), of
+    the named component token `component`, which is neither the target's nor the root."""
+    root = geo.safe(lambda: ctx.root.entityToken, "") or ""
+    return (bool(component) and component != ctx.component_token and component != root
+            and step_kinds.keeps_to_own_bodies(type_name))
+
+
+def _other_step(item, ctx):
+    """True for a started item that is a quiet step of another component (`_quiet`)."""
+    return (isinstance(item, dict) and item.get("in_target_component") is False
+            and _quiet(item.get("type"), item.get("component"), ctx))
+
+
+def _other_at(timeline, ctx, index):
+    """True when timeline item `index` is a quiet step of another component (`_quiet`), read without starting it.
+    Unsure (a group, an unreadable item) is False."""
+    obj = geo.safe(lambda: timeline.item(index), None)
+    if obj is None or _is_group(obj):
+        return False
+    entity, _ = _native_entity(obj)
+    if entity is None:
+        return False
+    type_name = geo.type_name(entity)
+    component = _owner_component(geo.safe(lambda: obj.entity, None), entity, type_name)
+    token = geo.safe(lambda: component.entityToken, "") if component is not None else ""
+    return not geo.same_entity(component, ctx.component) and _quiet(type_name, token, ctx)
+
+
+def _measure_run(timeline, ctx, items, run, start, end_state, position):
+    """Set the target's numbers of the items `run` (consecutive indexes) whose target was not measured around them:
+    `start` is the state before the first, `end_state` the state after the last, read with the marker at `position`.
+    A run of one item is the item between two measures.
+    When the two agree no step of the run changed the target; else (or when a measure failed) the marker goes back
+    over the run to measure it at each step, and returns to `position`."""
+    if not run:
+        return
+    states = [start] * len(run) + [end_state]
+    changed = _target_changed(start, end_state)
+    # None with the target on neither side: it did not exist yet, and a step of another component cannot make it.
+    if len(run) > 1 and (changed or (changed is None and (start[0] or end_state[0]))):
+        for n, index in enumerate(run[1:], start=1):
+            timeline.markerPosition = index
+            states[n] = _target_state(ctx)
+        timeline.markerPosition = position
+    for n, index in enumerate(run):
+        item = items.get(index)
+        if item is not None and "target_measured" in item:
+            del item["target_measured"]
+            _set_target(item, states[n], states[n + 1])
+
+
+def _finish_item(timeline, ctx, readers, index, items):
+    """Marker is just after `index`: read bodies, health and what the feature produced. Whether the target changed, and
+    its numbers before and after (`target_before`, `target_after`, so a step with no reader still says where it
+    changed the part), are set by `_measure_run` once the target is measured after the item."""
     item = items.get(index)
     if item is None:
         return
@@ -189,12 +273,13 @@ def _finish_item(timeline, ctx, readers, index, items, states):
     entity, _ = _native_entity(obj)
     if entity is None or item["suppressed"]:
         return
-    item["target_changed"] = _target_changed(*states)
+    item["target_measured"] = False  # the mark `_measure_run` looks for
     item["bodies_after"] = [] if step_kinds.makes_no_body(item["type"]) else _bodies_after(item, entity)
     after = (readers.get(item["type"]) or (None, None))[1]
     if after is not None and item["in_target_component"] and "read_error" not in item["data"]:
         try:
-            item["data"].update(after(entity, ctx, item["data"]) or {})
+            with span_on(ctx, "readers"):
+                item["data"].update(after(entity, ctx, item["data"]) or {})
         except Exception as exc:
             item["data"] = {"read_error": str(exc) or type(exc).__name__}
 
@@ -217,8 +302,10 @@ def _check_groups(timeline, end, count, items, group_indices):
             raise CaptureReadError("The timeline groups hide steps that could not be read.")
 
 
-def _restore_marker(timeline, end):
-    if not put_back(timeline, end):
+def restore_marker(timeline, marker):
+    """Moves the marker back to `marker` (a position or a `read_marker` dict); raises MarkerError when it does not
+    read there after."""
+    if not put_back(timeline, marker):
         raise MarkerError("The timeline marker could not be moved back to where it was.")
 
 
@@ -297,36 +384,72 @@ def feature_readers():
     return readers
 
 
-def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_readers=None):
+def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_readers=None, timer=None):
     """Capture of `design` for the picked `body` (the occurrence proxy of a body inside a component, or a root body).
 
     Only the items before the timeline marker are read; `marker` records where it was. fusion, name and up_axis
     come from the running app when not given. extra_readers adds feature readers (type name to (before, after)).
+    `timer` (`timing.capture_timer.CaptureTimer`) is given the time of each step and of the parts of the read.
     """
+    timer = timer if timer is not None else CaptureTimer()
+    with timer.span("total"):
+        return _read_capture(design, body, fusion, name, up_axis, extra_readers, timer)
+
+
+def _read_capture(design, body, fusion, name, up_axis, extra_readers, timer):
     timeline = design.timeline
     marker = read_marker(timeline)
     count = timeline.count
     end = count if marker is None else min(marker["position"], count)
     ctx = geo.ReadContext(design, body)
+    ctx.timer = timer
+    # The target's place is measured on the picked body, which a later step (a split, for one) may make: it is read
+    # here, before the marker moves back, and kept for the readers of the earlier steps.
+    target_move(ctx)
     readers = feature_readers()
     readers.update(extra_readers or {})
     items = {}
     group_indices = set()
-    previous = (False, None)
+    previous = (False, None)  # the target state at the last position it was measured
+    run = []  # items finished without a measure since then
     try:
         for k in range(end + 1):
-            timeline.markerPosition = k
-            state = _target_state(ctx)
-            if k > 0:
-                _finish_item(timeline, ctx, readers, k - 1, items, (previous, state))
-            previous = state
+            # Moving the marker to k builds step k - 1, so its cost counts for that step.
+            with timer.step(k - 1):
+                with timer.span("marker_moves"):
+                    timeline.markerPosition = k
+                # Between two steps of other components the target is not measured (see the module docstring).
+                measure = not (0 < k < end and _other_step(items.get(k - 1), ctx) and _other_at(timeline, ctx, k))
+                if measure:
+                    with timer.span("target_state"):
+                        state = _target_state(ctx)
+                if k > 0:
+                    _finish_item(timeline, ctx, readers, k - 1, items)
+                    run.append(k - 1)
+                if measure:
+                    with timer.span("target_state"):
+                        _measure_run(timeline, ctx, items, run, previous, state, k)
+                    previous, run = state, []
             if k < end:
-                _start_item(timeline, ctx, readers, k, items, group_indices)
-        tool_components = geo.safe(
-            lambda: helper_pass.read_helpers(design, ctx, timeline, items, readers, _native_entity, _component_bodies),
-            [])
+                with timer.step(k):
+                    _start_item(timeline, ctx, readers, k, items, group_indices)
+        with timer.span("helper_pass"):
+            tool_components = geo.safe(
+                lambda: helper_pass.read_helpers(design, ctx, timeline, items, readers, _native_entity,
+                                                 _component_bodies),
+                [])
     finally:
-        _restore_marker(timeline, end)
+        with timer.span("restore_marker"):
+            restore_marker(timeline, end)
+    for index, item in items.items():
+        timer.describe(index, item["name"], item["type"], item["component"])
+    with timer.span("tail"):
+        return _finish_capture(design, ctx, timeline, end, count, items, group_indices, tool_components, fusion, name,
+                               up_axis)
+
+
+def _finish_capture(design, ctx, timeline, end, count, items, group_indices, tool_components, fusion, name, up_axis):
+    """The capture dict once the walk is done: the groups are checked, and the parameters, links and graphs read."""
     _check_groups(timeline, end, count, items, group_indices)
     final = ctx.find_target() or ctx.target
     parameters, design_units = _parameters(design, ctx)

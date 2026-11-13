@@ -99,6 +99,15 @@ class FilterBoxTableTest(unittest.TestCase):
         self.assertEqual(table(ranges={W: (size["min"], size["max"])}).typed_ends(W), (False, False))
         self.assertEqual(table(ranges={W: (size["min"], 9.0)}).typed_ends(W), (False, True))
 
+    def test_cuts_to_a_range_meet_in_the_narrowest_one_and_keep_the_failure_behind_each_end(self):
+        once = table().with_narrowed({W: size_table.Cut(0.9, 3.0, {"high": (3.5, "Fillet1")})})
+        twice = once.with_narrowed({W: size_table.Cut(1.2, 3.3, {"low": (1.0, "Chamfer2"), "high": (3.4, "Cut1")})})
+        cut = twice.cut_of(W)
+        self.assertEqual(tuple(cut), (1.2, 3.0))
+        self.assertEqual(cut.failed, {"low": (1.0, "Chamfer2"), "high": (3.5, "Fillet1")})
+        self.assertEqual((twice.sizes[NEW_W]["min"], twice.sizes[NEW_W]["max"]), (1.2, 3.0))
+        self.assertFalse(twice.typed_range(W))
+
     def test_fixing_every_input_turns_derived_sizes_into_numbers(self):
         t = table(ticked=[W]).with_fixed({W: "x"})
         self.assertEqual(t.sizes, {})

@@ -18,7 +18,7 @@ from .curved import Curved, combine, from_terms, names_of, render
 from .footprint import nearest_point
 from .loops import profile_loops
 from .result import Refusal
-from .sizes import unmeasured_sizes
+from .sizes import placement_sizes, unmeasured_sizes
 from .sketch_crossings import Sources, keeps_order
 from .values import Quantity, stays_positive
 
@@ -79,10 +79,6 @@ def same(a, b):
     return abs(a.const - b.const) <= SAME_TOL
 
 
-def fix_stuck(ctx, stuck):
-    ctx.doubt(movers(ctx.table, stuck), notes.stuck_reason(stuck.cause, stuck.sketch))
-
-
 def rendered(table, value, number):
     """A raw value as a Quantity whose number is the captured `number`, or a Stuck when it cannot be written: stuck
     already, a parameter that does not translate, or a formula that misses the captured number."""
@@ -98,16 +94,22 @@ def rendered(table, value, number):
     return Quantity(number, q.text, q.reads)
 
 
+def _as_written(table, value, number, positive):
+    """`(Quantity, doubt)`: what `quantity` writes, and the `(names, why)` it marks (None when it marks nothing)."""
+    q = rendered(table, value, number)
+    if isinstance(q, Stuck):
+        return Quantity(number), (movers(table, q), notes.stuck_reason(q.cause, q.sketch))
+    if positive and q.sized and not stays_positive(table, q):
+        return Quantity(number), (q.reads, notes.shrinks_reason(value.sketch))
+    return q, None
+
+
 def quantity(ctx, value, number, positive=False):
     """The Quantity a raw value is written as. Its number stays the captured `number`. A stuck value, a formula that
     misses the captured number, or a length that would reach zero fixes its sizes and writes the number."""
-    q = rendered(ctx.table, value, number)
-    if isinstance(q, Stuck):
-        fix_stuck(ctx, q)
-        return Quantity(number)
-    if positive and q.sized and not stays_positive(ctx.table, q):
-        ctx.doubt(q.reads, notes.shrinks_reason(value.sketch))
-        return Quantity(number)
+    q, doubt = _as_written(ctx.table, value, number, positive)
+    if doubt is not None:
+        ctx.doubt(*doubt)
     return q
 
 
@@ -311,6 +313,15 @@ class Outline:
         out = [_pair(loop, raw_loop, write) for loop, raw_loop in zip(self.loops, self.raw_loops)]
         return out[0], out[1:]
 
+    def preview(self):
+        """(outer, inners) as `written` gives them, without marking any size: for a check made before the step is
+        written, which may still leave the step out."""
+        def write(field, number, value):
+            return _as_written(self.table, value, number, field in POSITIVE_FIELDS)[0].json()
+
+        out = [_pair(loop, raw_loop, write) for loop, raw_loop in zip(self.loops, self.raw_loops)]
+        return out[0], out[1:]
+
     def plane_shift(self, ctx):
         """How far the sketch plane moves along its normal from where it was captured, as a Quantity (zero number)."""
         return quantity(ctx, combine([(1.0, self.plane), (-1.0, self.plane0)], self.sketch), 0.0)
@@ -452,6 +463,12 @@ def _stuck_curves(node, sketch):
     return Stuck(node.names(), CURVE, sketch) if isinstance(node, Curved) else node
 
 
+def profile_number(profile, at=0):
+    """The number the probe keys `profile` by (`keys.profile`): `at`, its place among the step's profiles, or the
+    `profile_index` a step that copies each of its profiles on its own gave it."""
+    return profile.get("profile_index", at)
+
+
 def outline(ctx, item, profile, outer, inners, parts):
     """The `Outline` of one written profile, or None when sketch values do not follow sizes in this walk.
 
@@ -459,6 +476,7 @@ def outline(ctx, item, profile, outer, inners, parts):
     is, several for an outline merged from touching profiles (its values are taken from theirs). A corner that the
     probe could not fit is rebuilt from the sketch curves that cross there (sketch_crossings.py)."""
     if not active(ctx):
+        placement_doubts(ctx, item, profile)
         return None
     sketch = profile.get("sketch") or ""
     loops = [outer] + list(inners)
@@ -480,7 +498,54 @@ def outline(ctx, item, profile, outer, inners, parts):
         raw_loops = _stuck_curves(raw_loops, sketch)
     # Merged parts share one frame, so the first part's plane stands for all of them.
     plane = raw(ctx, keys.plane(prefix), _dot(profile["frame"]["origin"], profile["frame"]["z"]), sketch)
+    placement_doubts(ctx, item, profile, plane)
     return Outline(ctx, profile["frame"], loops, raw_loops, plane, sketch)
+
+
+def measured_outline(ctx, prefix, frame, loops, sketch):
+    """The `Outline` of loops the probe read as a whole under `prefix` (a flat face used as an outline, `keys.face`),
+    named `sketch` in reasons. A loop value that moves along a curve is stuck: only straight moves of the edges are
+    written. The plane is one distance along its normal, so a curved formula of it (a wall set back along a half angle)
+    is written as fitted."""
+    raw_loops = _stuck_curves(_keyed_loops(ctx, prefix, loops, sketch), sketch)
+    plane = raw(ctx, keys.plane(prefix), _dot(frame["origin"], frame["z"]), sketch)
+    return Outline(ctx, frame, loops, raw_loops, plane, sketch)
+
+
+def outline_movers(table, drawn):
+    """The free sizes that move any value of an `Outline`: a loop number or its plane."""
+    return _free_sizes(table, _names(_raw_values(drawn.raw_loops) + [drawn.plane]))
+
+
+def tried(motion, sketch, name):
+    """True when the probe measured the sketch named `sketch` with the size `name` at another value. A motion file
+    with no states and no spans (written by hand) says nothing about tries and counts as measured."""
+    if getattr(motion, "unmeasured", {}).get(sketch) or name in getattr(motion, "untried", ()):
+        return False
+    states, spans = getattr(motion, "states", None) or [], getattr(motion, "spans", None) or {}
+    if not states and not spans:
+        return True
+    if name in spans:
+        found = spans[name]
+        return abs(found.get("high", 0.0) - found.get("low", 0.0)) > 1e-9
+    return any(name in (s.get("values") or {}) and s.get("built", True) for s in states)
+
+
+def placement_doubts(ctx, item, profile, plane=None):
+    """Mark the sizes that may move the plane the sketch of `profile` sits on (`sizes.placement_sizes`: a face, or a
+    construction plane built on the part) when the probe did not measure that: there is no motion file, the sketch
+    was not measured, or the size was not tried. The plane then stays where the capture has it. A size the measured
+    plane (`plane`, the raw value) moves with is followed and not marked."""
+    motion = getattr(ctx, "motion", None)
+    if ctx.table is None or getattr(motion, "optimistic", False):
+        return
+    names = placement_sizes(ctx.table, ctx.timeline, profile, item.get("index"))
+    sketch = profile.get("sketch") or "a sketch"
+    if motion is not None:
+        moved = set(movers(ctx.table, plane)) if plane is not None else set()
+        names = [n for n in names if n not in moved and not tried(motion, sketch, n)]
+    if names:
+        ctx.doubt(names, "it may move the plane %s sits on, and that could not be tried at other values" % sketch)
 
 
 def _same_plane(a, b):
@@ -518,10 +583,12 @@ def points(ctx, item, rows):
 def axis_point(ctx, item, frame, point2, coords=None):
     """The revolve axis point in the sketch plane (`point2`, numbers) as written: it follows the axis line when the
     probe moved it. The plane only moves along its normal, so the in-plane coordinates read the line alone. `coords`
-    are the raw 3D axis point when the axis is not a line of a sketch of the part (an axis of another component)."""
-    if not active(ctx):
-        return [round(v, 9) + 0.0 for v in point2]
+    are the raw 3D axis point when the axis is not a line of a sketch of the part (an axis of another component). An
+    axis marked `fixed` is not a sketch line (the centre of a sweep path arc): it stays as written unless `coords` give
+    it."""
     axis = (item.get("data") or {}).get("axis") or {}
+    if not active(ctx) or (axis.get("fixed") and coords is None):
+        return [round(v, 9) + 0.0 for v in point2]
     sketch = axis.get("sketch") or ""
     if coords is None:
         coords = [raw(ctx, keys.axis_point(item.get("index"), c), float(axis["point"][c]), sketch) for c in range(3)]
@@ -537,10 +604,8 @@ def axis_point(ctx, item, frame, point2, coords=None):
 
 def axis_raw(ctx, item):
     """The raw 3D axis point of a revolve, or None when sketch values do not follow sizes."""
-    if not active(ctx):
-        return None
     axis = (item.get("data") or {}).get("axis") or {}
-    if "point" not in axis:
+    if not active(ctx) or axis.get("fixed") or "point" not in axis:
         return None
     sketch = axis.get("sketch") or ""
     return [raw(ctx, keys.axis_point(item.get("index"), c), float(axis["point"][c]), sketch) for c in range(3)]

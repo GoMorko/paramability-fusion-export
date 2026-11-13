@@ -6,9 +6,10 @@ import re
 class FakeStore:
     """Parameter store holding expressions as text. Values are the leading number as Fusion stores it (mm to cm, deg to rad)."""
 
-    def __init__(self, expressions, bad_when=None, reject=(), flaky=()):
+    def __init__(self, expressions, bad_when=None, reject=(), flaky=(), bad_item="Fillet1"):
         self.exprs = dict(expressions)
         self.bad_when = bad_when or (lambda exprs: False)
+        self.bad_item = bad_item  # the timeline item that goes into error when `bad_when` holds
         self.reject = set(reject)  # values that set_expression always refuses
         self.flaky = set(flaky)  # names refused once, then accepted
         self.recomputes = 0
@@ -37,7 +38,7 @@ class FakeStore:
         return number / 10.0  # lengths are mm, stored as cm
 
     def error_items(self):
-        return ["Fillet1"] if self.bad_when(self.exprs) else []
+        return [self.bad_item] if self.bad_when(self.exprs) else []
 
 
 class _Item:
@@ -225,6 +226,50 @@ class FakeSolid:
         self.name = name
 
 
+class FakeCellBody:
+    """A body made of named cells of one cm3 each, for boolean tests: a boolean is a set operation on the cells."""
+
+    def __init__(self, cells):
+        self.cells = set(cells)
+
+    @property
+    def volume(self):
+        return float(len(self.cells))
+
+
+class FakeBRepManager:
+    """TemporaryBRepManager stand-in. `copy` leaves the original alone, like Fusion; `failing` makes every boolean
+    report failure, `empty_fails` only an intersect that leaves nothing."""
+
+    def __init__(self, failing=False, empty_fails=False):
+        self.failing = failing
+        self.empty_fails = empty_fails
+        self.copies = 0
+
+    def copy(self, body):
+        self.copies += 1
+        return FakeCellBody(body.cells)
+
+    def booleanOperation(self, target, tool, kind):
+        if self.failing or (self.empty_fails and kind == FakeBooleanTypes.IntersectionBooleanType
+                            and not target.cells & tool.cells):
+            return False
+        target.cells = target.cells & tool.cells if kind == FakeBooleanTypes.IntersectionBooleanType \
+            else target.cells | tool.cells
+        return True
+
+
+class FakeBooleanTypes:
+    IntersectionBooleanType = "intersection"
+    UnionBooleanType = "union"
+    DifferenceBooleanType = "difference"
+
+
+def fake_brep_tools(failing=False, empty_fails=False):
+    """`(manager, types)` as `read_intersect._brep_tools` gives them."""
+    return FakeBRepManager(failing, empty_fails), FakeBooleanTypes
+
+
 # Fake command inputs for the dialog tests. They keep what the code sets, like Fusion's inputs do.
 
 
@@ -398,3 +443,99 @@ def install_adsk_core():
         setattr(core, kind, type(kind, (), {}))
     core.DropDownStyles = types.SimpleNamespace(TextListDropDownStyle=0)
     return core
+
+
+# Faces, edges, features and a timeline for the reach read (`lib/fusion_reader/read_gap_reach.py`).
+
+
+class FakeFace:
+    def __init__(self, token, body=None):
+        self.entityToken = token
+        self.body = body
+
+
+class FakeEdge:
+    def __init__(self, token, faces):
+        self.entityToken = token
+        self.faces = _Collection(list(faces))
+
+
+class FakeMadeFeature:
+    """A timeline feature with the faces it created. `faces=None` makes the member raise, like an unreadable one.
+    `complete` is the list Fusion gives with the marker right after the feature, when later steps took faces out of
+    `faces`."""
+
+    def __init__(self, faces, complete=None):
+        self._faces, self._complete = faces, complete
+        self.timeline, self.place = None, None
+
+    @property
+    def faces(self):
+        right_after = self.timeline is not None and self.timeline.markerPosition == self.place + 1
+        found = self._complete if right_after and self._complete is not None else self._faces
+        if found is None:
+            raise RuntimeError("faces unreadable")
+        return _Collection(list(found))
+
+
+class FakeSolidBody:
+    """A body whose component finds the faces whose point is the given one."""
+
+    def __init__(self, token, faces_at):
+        self.entityToken = token
+        self.parentComponent = self
+        self._faces_at = faces_at
+
+    def findBRepUsingPoint(self, point, entity_type, *rest):
+        return _Collection(list(self._faces_at.get(tuple(point), ())))
+
+
+class FakeMarkerTimeline:
+    """A timeline of features with a marker. `refuse` is a position whose assignment raises; `moves_allowed` ignores
+    every assignment after that many, like a design that cannot be rolled back."""
+
+    def __init__(self, features, marker=None, refuse=None, moves_allowed=None):
+        self._features = features
+        for place, feature in enumerate(features):
+            if isinstance(feature, FakeMadeFeature):
+                feature.timeline, feature.place = self, place
+        self._marker = len(features) if marker is None else marker
+        self._refuse, self._allowed, self._moves = refuse, moves_allowed, 0
+        self.visited = []
+
+    count = property(lambda self: len(self._features))
+
+    @property
+    def markerPosition(self):
+        return self._marker
+
+    @markerPosition.setter
+    def markerPosition(self, value):
+        if value == self._refuse:
+            raise RuntimeError("marker refused")
+        if self._allowed is not None and self._moves >= self._allowed:
+            return
+        self._moves += 1
+        self._marker = value
+        self.visited.append(value)
+
+    def moveToEnd(self):
+        if self._allowed is not None:
+            return False
+        self._marker = len(self._features)
+        return True
+
+    def item(self, i):
+        return _Item(entity=self._features[i])
+
+
+class FakeReachDesign:
+    """A design that finds entities by token."""
+
+    def __init__(self, timeline, entities=()):
+        self.timeline = timeline
+        self._entities = {e.entityToken: e for e in entities}
+
+    def findEntityByToken(self, token):
+        found = self._entities.get(token)
+        return [found] if found is not None else []

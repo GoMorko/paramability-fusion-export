@@ -1,0 +1,497 @@
+{
+  "_comment": "A plate kept only where both tools reach.",
+  "capture": 3,
+  "fusion": "2.0.0",
+  "design": "Test",
+  "up_axis": "z",
+  "design_units": "mm",
+  "target": {
+    "token": "t1",
+    "name": "Body1",
+    "box": {
+      "min": [
+        15.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        25.0,
+        20.0,
+        10.0
+      ]
+    },
+    "volume_mm3": 2000.0
+  },
+  "items": [
+    {
+      "index": 0,
+      "name": "Sketch1",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 1,
+      "name": "Extrude1",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "operation": "newBody",
+        "profiles": [
+          {
+            "sketch": "Sketch1",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      0,
+                      0
+                    ],
+                    "end": [
+                      40,
+                      0
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      40,
+                      0
+                    ],
+                    "end": [
+                      40,
+                      20
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      40,
+                      20
+                    ],
+                    "end": [
+                      0,
+                      20
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      0,
+                      20
+                    ],
+                    "end": [
+                      0,
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 10.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [
+          {
+            "token": "t1",
+            "name": "Body1"
+          }
+        ],
+        "target_box_before": null,
+        "end_offset": 10.0,
+        "params": {}
+      }
+    },
+    {
+      "index": 2,
+      "name": "Sketch2",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 3,
+      "name": "Extrude2",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t2",
+          "name": "Body2"
+        }
+      ],
+      "data": {
+        "operation": "newBody",
+        "profiles": [
+          {
+            "sketch": "Sketch2",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      5,
+                      0
+                    ],
+                    "end": [
+                      25,
+                      0
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      25,
+                      0
+                    ],
+                    "end": [
+                      25,
+                      20
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      25,
+                      20
+                    ],
+                    "end": [
+                      5,
+                      20
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      5,
+                      20
+                    ],
+                    "end": [
+                      5,
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 10.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [
+          {
+            "token": "t2",
+            "name": "Body2"
+          }
+        ],
+        "target_box_before": null,
+        "end_offset": 10.0,
+        "params": {
+          "side_one.distance": {
+            "name": "d3",
+            "expression": "tool_a_mm",
+            "value": 10.0
+          }
+        }
+      }
+    },
+    {
+      "index": 4,
+      "name": "Sketch3",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 5,
+      "name": "Extrude3",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t3",
+          "name": "Body3"
+        }
+      ],
+      "data": {
+        "operation": "newBody",
+        "profiles": [
+          {
+            "sketch": "Sketch3",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      15,
+                      0
+                    ],
+                    "end": [
+                      35,
+                      0
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      35,
+                      0
+                    ],
+                    "end": [
+                      35,
+                      20
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      35,
+                      20
+                    ],
+                    "end": [
+                      15,
+                      20
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      15,
+                      20
+                    ],
+                    "end": [
+                      15,
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 10.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [
+          {
+            "token": "t3",
+            "name": "Body3"
+          }
+        ],
+        "target_box_before": null,
+        "end_offset": 10.0,
+        "params": {}
+      }
+    },
+    {
+      "index": 6,
+      "name": "Combine1",
+      "type": "CombineFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "target": {
+          "token": "t1",
+          "name": "Body1"
+        },
+        "tools": [
+          {
+            "token": "t2",
+            "name": "Body2",
+            "volume": 4000.0
+          },
+          {
+            "token": "t3",
+            "name": "Body3",
+            "volume": 4000.0
+          }
+        ],
+        "operation": "intersect",
+        "keep_tools": false,
+        "volume_before": 8000.0,
+        "volume_after": 2000.0,
+        "intersect_volumes": {
+          "every": 2000.0,
+          "any": 6000.0
+        },
+        "intersect_model": "every"
+      }
+    }
+  ],
+  "parameters": {
+    "user": [
+      {
+        "name": "tool_a_mm",
+        "expression": "10 mm",
+        "value": 1.0,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 10.0
+      }
+    ],
+    "model": [
+      {
+        "name": "d3",
+        "expression": "tool_a_mm",
+        "value": 1.0,
+        "unit": "mm",
+        "is_favorite": false,
+        "value_type": "numeric",
+        "dependency_parameters": [
+          "tool_a_mm"
+        ],
+        "role": "Distance",
+        "kind": "derived",
+        "display_value": 10.0,
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d3",
+          "name": ""
+        }
+      }
+    ]
+  }
+}

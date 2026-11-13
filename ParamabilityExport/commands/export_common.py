@@ -53,6 +53,17 @@ def warn_unrestored(names):
         + ".\nUse Undo in Fusion if they look wrong, or reopen the design from its last save.", error=True)
 
 
+def warn_left_off(names):
+    """Tell the person when timeline steps turned off for the faster tries could not be turned back on."""
+    if not names:
+        return
+    names = ", ".join(names)
+    log(f"could not turn back on: {names}")
+    message_box(
+        "These timeline steps could not be turned back on after the tries: " + names
+        + ".\nIn the timeline, right click each one and pick Unsuppress, or use Undo in Fusion.", error=True)
+
+
 def run_guarded(design, marker, work, unrestored=lambda: ()):
     """Run `work()` and return its value, or None when the export stopped. Each way it stops gets a plain message,
     and the timeline marker is moved back to `marker` at the end. `unrestored()` names the parameters that could not be

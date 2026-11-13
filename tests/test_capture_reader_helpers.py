@@ -1,11 +1,13 @@
 """The second reading pass: steps of a tool body that lives in another component (lib/fusion_reader/helper_pass.py)."""
 import json
 import unittest
+from types import SimpleNamespace
 
 from tests import context  # noqa: F401
 from tests.fakes import FakeOccurrence, FakeSolid, Vec, apply_matrix, turn_z
 from tests.test_capture_reader import Coll, FakeDesign, Obj, P, entry, extrude, feature, rect_profile, sketch_entry, body
 
+from lib.fusion_reader import helper_pass
 from lib.fusion_reader.capture import read_capture
 from lib.translator import tool_items
 
@@ -177,6 +179,29 @@ class HelperFailureTest(unittest.TestCase):
         self.assertNotIn("helper_of", items[2])
 
 
+def ref(token, **kw):
+    return dict({"token": token, "name": "Body" + token}, **kw)
+
+
+def step(index, bodies, component="root", data=None, type_="ExtrudeFeature", **kw):
+    return dict({"index": index, "name": "S%d" % index, "type": type_, "component": component,
+                 "bodies_after": [ref(t) for t in bodies], "data": data or {}}, **kw)
+
+
+def combine(index, tools, target="t", **kw):
+    return step(index, [target], data={"target": ref(target), "tools": [ref(t) for t in tools]},
+                type_="CombineFeature", **kw)
+
+
+def paste(index, result, source, **kw):
+    return step(index, [result], data={"sources": [ref(source)], "result_bodies": [ref(result)]},
+                type_="CopyPasteBody", **kw)
+
+
+def indices(pairs):
+    return [pair[0]["index"] for pair in pairs]
+
+
 class PlanTest(unittest.TestCase):
     def items(self, count, tool_component="rod"):
         tool = {"token": "b2", "name": "Body2", "foreign": True, "component": {"token": tool_component, "name": "Rod"}}
@@ -187,19 +212,110 @@ class PlanTest(unittest.TestCase):
                     "data": {"tools": [tool]}})
         return out
 
+    def test_an_exported_body_that_is_a_copy_follows_its_source(self):
+        items = [step(0, ["s"]), paste(1, "t", "s")]
+        self.assertEqual(indices(tool_items.plan(items, ref("t")).wanted), [0])
+
     def test_the_steps_before_the_combine_that_touch_the_tool_are_planned_in_order(self):
-        wanted, left = tool_items.plan(self.items(3))
-        self.assertEqual(([i["index"] for i, _ in wanted], left), ([0, 1, 2], []))
+        plan = tool_items.plan(self.items(3))
+        self.assertEqual((indices(plan.wanted), plan.left), ([0, 1, 2], []))
 
     def test_steps_past_the_cap_are_left(self):
-        wanted, left = tool_items.plan(self.items(5), cap=3)
-        self.assertEqual((len(wanted), [i["index"] for i, _ in left]), (3, [3, 4]))
+        plan = tool_items.plan(self.items(5), max_items=3)
+        self.assertEqual((len(plan.wanted), [(i["index"], r) for i, r in plan.left]),
+                         (3, [(3, tool_items.TOO_MANY), (4, tool_items.TOO_MANY)]))
 
     def test_a_step_of_another_component_with_the_same_body_name_is_not_planned(self):
         items = self.items(2)
         items[0]["component"] = "elsewhere"
-        wanted, _ = tool_items.plan(items)
-        self.assertEqual([i["index"] for i, _ in wanted], [1])
+        self.assertEqual(indices(tool_items.plan(items).wanted), [1])
+
+    def test_only_combines_of_the_exported_body_give_tools(self):
+        items = [step(0, ["b2"]), combine(1, ["b2"], target="other")]
+        self.assertEqual(tool_items.plan(items, ref("t")).sources, [])
+        self.assertEqual(indices(tool_items.plan(items).wanted), [0])
+
+    def test_combines_of_the_body_the_exported_body_was_split_from_give_tools_up_to_the_split(self):
+        split = step(3, ["p", "t"], type_="SplitBodyFeature", bodies_before=[ref("p")],
+                     data={"bodies": [ref("p")], "pieces": [ref("p"), ref("t")]})
+        items = [step(0, ["p"]), step(1, ["b2"]), combine(2, ["b2"], target="p"), split,
+                 step(4, ["b3"]), combine(5, ["b3"], target="p")]
+        for item in items:
+            item.setdefault("bodies_before", [])
+        plan = tool_items.plan(items, ref("t"))
+        self.assertEqual(([s.record["token"] for s in plan.sources], indices(plan.wanted)), (["b2"], [1]))
+
+    def test_the_source_of_a_paste_is_followed_with_its_depth(self):
+        items = [step(0, ["b2"]), step(1, ["b2"]), paste(2, "b3", "b2"), combine(3, ["b3"])]
+        plan = tool_items.plan(items, ref("t"))
+        self.assertEqual((indices(plan.wanted), [(s.record["token"], s.depth) for s in plan.sources]),
+                         ([2, 0, 1], [("b3", 1), ("b2", 2)]))
+        self.assertEqual([r["token"] for r in plan.wanted[1][1]], ["b2"])
+
+    def test_the_exported_body_is_never_a_source(self):
+        items = [step(0, ["t"]), paste(1, "b3", "t"), combine(2, ["b3"])]
+        plan = tool_items.plan(items, ref("t"))
+        self.assertEqual(([s.record["token"] for s in plan.sources], indices(plan.wanted)), (["b3"], [1]))
+
+    def test_the_tools_of_a_combine_that_changed_a_tool_are_followed(self):
+        items = [step(0, ["b2"]), step(1, ["b4"]), combine(2, ["b4"], target="b2"), combine(3, ["b2"])]
+        self.assertEqual(sorted(indices(tool_items.plan(items, ref("t")).wanted)), [0, 1, 2])
+
+    def test_a_kept_tool_used_again_is_followed_up_to_the_later_combine(self):
+        kept = combine(1, ["b2"])
+        kept["data"]["keep_tools"] = True
+        items = [step(0, ["b2"]), kept, step(2, ["b2"]), combine(3, ["b2"])]
+        self.assertEqual(sorted(indices(tool_items.plan(items, ref("t")).wanted)), [0, 2])
+
+    def test_a_kept_tool_pasted_later_is_followed_up_to_the_paste(self):
+        items = [step(0, ["b2"]), combine(1, ["b2"]), step(2, ["b2"]), paste(3, "b3", "b2"), combine(4, ["b3"])]
+        self.assertEqual(sorted(indices(tool_items.plan(items, ref("t")).wanted)), [0, 2, 3])
+
+    def test_copies_of_one_source_count_as_one_body(self):
+        copies = ["c%d" % n for n in range(5)]
+        pattern = step(1, copies, data={"source_bodies": [ref("b2")], "result_bodies": [ref(c) for c in copies]},
+                       type_="RectangularPatternFeature")
+        items = [step(0, ["b2"]), pattern, combine(2, copies)]
+        plan = tool_items.plan(items, ref("t"), max_tools=1)
+        self.assertEqual((plan.refused, indices(plan.wanted)), ([], [1, 0]))
+
+    def test_bodies_past_the_tool_limit_are_refused_with_their_steps_left(self):
+        items = [step(0, ["b2"]), step(1, ["b3"]), combine(2, ["b2", "b3"])]
+        plan = tool_items.plan(items, ref("t"), max_tools=1)
+        self.assertEqual(([(r["token"], why) for r, why in plan.refused], [(i["index"], why) for i, why in plan.left]),
+                         ([("b3", tool_items.TOO_MANY_TOOLS)], [(1, tool_items.TOO_MANY_TOOLS)]))
+        self.assertEqual(indices(plan.wanted), [0])
+
+    def test_sources_deeper_than_the_limit_are_left_with_their_steps(self):
+        items = [step(0, ["b4"]), paste(1, "b3", "b4"), paste(2, "b2", "b3"), combine(3, ["b2"])]
+        plan = tool_items.plan(items, ref("t"), max_depth=2)
+        self.assertEqual(([s.record["token"] for s in plan.sources], [(i["index"], why) for i, why in plan.left]),
+                         (["b2", "b3"], [(0, tool_items.TOO_DEEP)]))
+
+
+
+class BuiltByTest(unittest.TestCase):
+    def test_the_steps_behind_a_pasted_or_patterned_body_are_those_of_its_source_in_its_component(self):
+        copies = step(6, ["c0"], data={"source_bodies": [ref("b3")], "result_bodies": [ref("c0")]},
+                      type_="RectangularPatternFeature")
+        items = [step(0, ["b4"]), step(1, ["b4"], component="elsewhere"), step(2, ["b2"]),
+                 combine(3, ["b4"], target="b2"), paste(4, "b3", "b2"), combine(5, ["b3"]), copies, combine(7, ["c0"])]
+        self.assertEqual(tool_items.built_by(items, ref("b3"), items[5]), {0, 2, 3, 4})
+        self.assertEqual(tool_items.built_by(items, ref("c0"), items[7]), {6, 4, 3, 2})
+
+
+class HelperRoundsTest(unittest.TestCase):
+    def test_a_step_with_no_read_context_in_one_round_is_read_in_a_later_one(self):
+        timeline = SimpleNamespace(markerPosition=0, item=lambda index: index)
+        run = helper_pass._Pass(None, None, timeline, {}, {}, lambda entity: [entity], lambda hctx: [])
+        item = step(2, [], in_target_component=False)
+        first, second = {"name": "Body2"}, {"name": "Body5"}
+        self.assertEqual(run.job(item, [first]), (False, []))
+        run.contexts[id(second)] = SimpleNamespace(target_ref={"token": "b5"})
+        hctx, tokens = run.job(item, [first, second])
+        run.read({2: (item, hctx, tokens)})
+        self.assertEqual(item["helper_of"], "b5")
+        self.assertNotIn("helper_unread", item)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,11 @@
+{
+ "version": 1,
+ "values": {
+  "2/p0/l0/width": {"const": 0, "terms": {"base_mm": 1}, "sketch": "Sketch1"},
+  "2/p0/l0/height": {"const": 0, "terms": {"base_mm": 1}, "sketch": "Sketch1"},
+  "2/p1/l0/width": {"const": 0, "terms": {"top_mm": 1}, "sketch": "Sketch2"},
+  "2/p1/l0/height": {"const": 0, "terms": {"top_mm": 1}, "sketch": "Sketch2"},
+  "2/p1/plane": {"const": 0, "terms": {"height_mm": 1}, "sketch": "Sketch2"}
+ },
+ "states": []
+}

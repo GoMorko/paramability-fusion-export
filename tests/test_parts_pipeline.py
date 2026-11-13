@@ -11,18 +11,21 @@ from tests.fakes import FakeStore
 from tests.schema_check import load_schema, validate
 from tests.test_manifest import PACKAGE_SCHEMA
 from tests.test_pipeline import MODEL, START, TICKED, USER, StuckStore
+from tests.test_translate_sketch_motion import motion_of
 from tests.translator_helpers import load_capture
 
 from lib.design_edit.errors import StepExportError
 from lib.design_edit.runner import ExportCancelled
-from lib.dialog_model.result_rows import also_lines, not_tried_lines, parts_result_view
+from lib.dialog_model.result_rows import also_lines, not_tried_lines, parts_result_view, section, section_lines
 from lib.export_plan import recipe_export
-from lib.export_plan.parts_pipeline import run_parts_pipeline
+from lib.export_plan.recipe_export import PartInput, translate_capture
+from lib.export_plan.parts_pipeline import _PartsPipeline, run_parts_pipeline
 from lib.export_plan.probe_flow import ProbeGroup
 from lib.export_plan.part_names import unique_names
 from lib.export_plan.pipeline import ExportRequest
 from lib.export_plan.size_offers import table_for_bodies, table_for_body
 from lib.package.manifest import validate_manifest
+from lib.params import size_table as size_tables
 
 BASE = load_capture("sketch_rect_centred")
 
@@ -46,9 +49,9 @@ def with_joint_on(capture, size):
 
 
 def stuck_body():
-    """A body whose last step has a type nothing can copy."""
+    """A body whose last step does not build in Fusion."""
     capture = renamed(BASE, ("t1", "Body1"), ("t3", "Body3"))
-    capture["items"][-1]["type"] = "MysteryFeature"
+    capture["items"][-1]["health"] = "error"
     return capture
 
 
@@ -167,7 +170,7 @@ class LooseAndFixedTest(unittest.TestCase):
     def test_a_size_that_one_part_has_to_fix_is_fixed_in_every_part(self):
         real = recipe_export.translate
 
-        def fixes_wall_for_the_second_body(capture, size_table=None, motion=None):
+        def fixes_wall_for_the_second_body(capture, size_table=None, motion=None, **_):
             result = real(capture, size_table=size_table, motion=motion)
             if capture["target"]["name"] == "Body2" and "wall_mm" in size_table.ticked:
                 result.fixed = [{"name": "wall_mm", "reason": "wall_mm stays fixed: a formula is too long."}]
@@ -181,6 +184,40 @@ class LooseAndFixedTest(unittest.TestCase):
         self.assertTrue(result.manifest["fixed"][0]["reason"].startswith("Body2: "))
         self.assertNotIn("wall_mm", result.report["sizes"]["free"])
         self.assertIn("height_mm", result.report["sizes"]["free"])
+
+
+class SharedCutTest(unittest.TestCase):
+    """The part that was probed saw Fusion fail at 40 for height_mm (20 now, range 10 to 40); the other part has no
+    sketch to follow, so it has no motion."""
+
+    def setUp(self):
+        capture = load_capture("linked_pipe_hole")
+        self.capture, params = capture, capture["parameters"]
+        self.table = size_tables.build(params["user"], ["height_mm"], params["model"])
+        motion = motion_of("linked_pipe_hole", lambda values: None)
+        motion.spans = {"height_mm": {"low": 20.0, "high": 30.0, "failed": [[40.0, "Extrude2"]]}}
+        with tempfile.TemporaryDirectory() as tmp:
+            pipeline = _PartsPipeline(FakePartsPort([capture, capture]), request(["height_mm"]), tmp)
+        pipeline.captures, pipeline.part_links, pipeline.table = [capture, capture], [[], []], self.table
+        pipeline.motions = {0: motion}
+        pipeline._share_cuts()
+        self.pipeline = pipeline
+
+    def test_a_part_with_no_probe_gets_the_range_the_probed_part_was_cut_to(self):
+        result = translate_capture(self.capture, "z", self.pipeline._part_table(1), None)
+        self.assertEqual((result.recipe["sizes"]["height_mm"]["min"], result.recipe["sizes"]["height_mm"]["max"]),
+                         (10.0, 30.0))
+
+    def test_the_file_says_the_range_is_the_same_in_every_part_that_uses_the_size(self):
+        table = self.pipeline.table
+        inputs = [PartInput(name, "part.step", self.capture, translate_capture(self.capture, "z", table, motion), motion)
+                  for name, motion in (("Lid", self.pipeline.motions[0]), ("Base", None))]
+        manifest, _, report = recipe_export.plan_parts_export(inputs, "Box", "test", "z", size_table=table)
+        [cut] = report["sizes"]["cut"]
+        self.assertTrue(cut["shared"] and cut["reason"].startswith("height_mm: the range stops at 30 in every part"))
+        for part in manifest["parts"]:
+            self.assertEqual(part["cuts"], [{"name": "height_mm", "reason": cut["reason"]}])
+            self.assertNotIn("loose", part)
 
 
 class StubProbe:
@@ -242,11 +279,11 @@ class DiscoveryLinesTest(unittest.TestCase):
             {"param": "wall_mm", "moved": p["name"] == "Body2"},
             {"param": "u1", "moved": None, "tried": False, "reason": "x"}]}) for p in report["parts"]]
         view = parts_result_view("box.paramability", result.manifest, report, result.table, TICKED)
-        self.assertIn("parts", view["also_title"])
-        self.assertIn("Body2", view["also"][0])
-        self.assertNotIn("Body1", view["also"][0])
-        self.assertIn("1 more", view["untried"][0])
-        self.assertIn(view["untried"][0], view["message"])
+        also, untried = section_lines(view, "more")
+        self.assertIn("Body2", also)
+        self.assertNotIn("Body1", also)
+        self.assertIn("1 more", untried)
+        self.assertIn(untried, view["message"])
 
 
 class FixedShapeTest(unittest.TestCase):
@@ -340,7 +377,7 @@ class LinksPerPartTest(unittest.TestCase):
                "Body2": [{"param": "cover_h", "sketch": "Sketch1", "component": "Cover", "via": "sketch"}]}
         seen = {}
 
-        def translate(capture, up_axis, table, motion):
+        def translate(capture, up_axis, table, motion, **_):
             seen[capture["target"]["name"]] = table.links
             return recipe_export.translate_capture(capture, up_axis, table, motion)
 
@@ -372,11 +409,12 @@ class ResultViewTest(unittest.TestCase):
     def test_the_view_lists_each_size_once_and_a_line_per_part(self):
         result = export(FakePartsPort([BASE, stuck_body()]))
         view = parts_result_view("box.paramability", result.manifest, result.report, result.table, TICKED)
-        names = [row["name"] for row in view["rows"]]
+        names = [row["name"] for row in section(view, "sizes")["rows"]]
         self.assertEqual(names.count("wall_mm"), 1)
-        self.assertEqual(len(view["parts"]), 2)
-        self.assertTrue(view["parts"][0].startswith("Body1: editable"))
-        self.assertIn("fixed shape", view["parts"][1])
+        part_lines = [line for line in section_lines(view, "result") if line.startswith("Body")]
+        self.assertEqual(len(part_lines), 2)
+        self.assertTrue(part_lines[0].startswith("Body1: editable"))
+        self.assertIn("fixed shape", part_lines[1])
         self.assertIn("Saved box.paramability", view["message"])
 
 if __name__ == "__main__":

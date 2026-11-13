@@ -12,12 +12,16 @@ Every value of a step in its `data.params` is checked on its own: a handler must
 A size is read by a copied step through the model parameters in its `data.params`, through the dimensions of the
 sketches it draws on or the geometry of another component those sketches are drawn around (`table.links`), and
 through the construction geometry it uses.
+
+The steps left out of the copy (gaps.py) read sizes the same ways. `Audit.gap_reads` lists them per gap, so the driver
+can keep a size that only such a step reads and say why it changes nothing yet.
 """
 from ..sketch_values.coverage import MOVED, STILL, ref_answer
 from ..sketch_values.motion import Motion
 from . import ref_motion
 from .notes import step_label, untried_link_reason
 from .sizes import construction_fixes, linked_sizes, sketch_answer, sketch_params, sketch_sizes, used_sizes
+from .step_walk import all_steps
 from .values import reads_in
 
 
@@ -25,12 +29,13 @@ class Audit:
     """`forgotten`: Fusion name of a free size to why, for each size a copied step reads that has no state.
     `unmoved`: Fusion names of the sizes that copied steps read only through sketches the probe measured, and that did
     not move anything. `unmoved_links`: of those, the ones tied to such a sketch only through another component, with
-    that component's name."""
+    that component's name. `gap_reads`: gap id to the Fusion names of the free sizes that left out step reads."""
 
     def __init__(self):
         self.forgotten = {}
         self.unmoved = set()
         self.unmoved_links = {}
+        self.gap_reads = {}
 
 
 def _sketch_names(node, found):
@@ -103,6 +108,22 @@ def _references(ctx, table, item, label, named, own, measured, motion, out):
                     label, component)
 
 
+def _gap_reads(ctx, table, item, measured, motion):
+    """Fusion names of the free sizes a left out step reads: through its values, the sketches it names (unless the
+    probe measured that a size does not move the sketch), its construction geometry and its measured references."""
+    free = set(table.ticked)
+    found = _param_sizes(table, item) & free
+    for sketch in _sketch_names(item.get("data") or {}, {}):
+        for name in sketch_sizes(table, sketch):
+            if not (measured and sketch_answer(table, motion, sketch, name).kind == STILL):
+                found.add(name)
+    for names, _ in construction_fixes(table, item):
+        found |= set(names)
+    for _, names in ref_motion.reaching(ctx, item):
+        found |= set(names)
+    return found & free
+
+
 def audit(capture, ctx, table, named, motion):
     """The `Audit` of one finished walk.
 
@@ -113,10 +134,11 @@ def audit(capture, ctx, table, named, motion):
     free = set(table.ticked)
     reached = {name for name in free if table.size_name(name) in used_sizes(ctx.steps, table.sizes)}
     measured = isinstance(motion, Motion) and not motion.optimistic
+    written = all_steps(ctx.steps)
     for item in ctx.copied_items:
         label = _label(item)
-        ids = set(ctx.steps_of(item["index"]))
-        own = set(reads_in([s for s in ctx.steps if s["id"] in ids])) if ids else reached
+        ids = set(ctx.written_for(item["index"]))
+        own = set(reads_in([s for s in written if s["id"] in ids])) if ids else reached
         unasked = _param_sizes(table, item, lambda path: (item.get("index"), path) not in ctx.asked)
         for name in sorted(_param_sizes(table, item) & free):
             if name not in named and (name not in own or name in unasked):
@@ -141,6 +163,8 @@ def audit(capture, ctx, table, named, motion):
                 if name in free and name not in named and name not in reached:
                     out.forgotten.setdefault(name, "%s uses geometry that it moves, and the copy does not follow it" % label)
         _references(ctx, table, item, label, named, own, measured, motion, out)
+    for gap in ctx.gaps:
+        out.gap_reads[gap.id] = _gap_reads(ctx, table, gap.item, measured, motion)
     out.unmoved -= set(out.forgotten) | named | reached
     out.unmoved_links = {name: c for name, c in out.unmoved_links.items() if name in out.unmoved}
     return out

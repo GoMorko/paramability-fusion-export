@@ -36,6 +36,13 @@ def loose_note(names):
     return clip(text, MAX_NOTE)
 
 
+def cut_note(names):
+    """One note naming the sizes whose range was cut to the values that build, cut to the note limit."""
+    text = "The range of %s was cut to values that build: %s." % (
+        _count(len(names), "size", "sizes"), ", ".join(names))
+    return clip(text, MAX_NOTE)
+
+
 def dropped_note(names):
     """One note naming ticked parameters that no copied step uses, so they are not sizes. Cut to the note limit."""
     text = "Not used by any copied step, so not sizes: %s." % ", ".join(names)
@@ -50,7 +57,7 @@ def unchanged_note(names):
 
 def also_changes_line(names):
     """The line for unticked parameters that the export saw changing this part."""
-    return ("These parameters also change this part: %s. Tick them and export again to get them as sizes."
+    return ("These parameters also change this part: %s. Tick them and export again to make them sizes."
             % ", ".join(names))
 
 
@@ -58,7 +65,7 @@ def also_changes_parts_line(changes):
     """The line for unticked parameters that the export saw changing parts of a parts file: `changes` is
     `[(parameter, [part names])]`, so the person sees which part each one changed."""
     shown = ["%s (%s)" % (name, parts_label(parts)) if parts else name for name, parts in changes]
-    return "These parameters also change parts of this file: %s. Tick them and export again to get them as sizes." % (
+    return "These parameters also change parts of this file: %s. Tick them and export again to make them sizes." % (
         ", ".join(shown))
 
 
@@ -67,10 +74,39 @@ def not_tried_line(count, several_parts=False):
     the part. Ticking one makes the export try it."""
     where = "these parts" if several_parts else "this part"
     if count == 1:
-        return ("1 more parameter of other components was not tried, so it may change %s without showing here. "
-                "Tick it and export again to try it." % where)
-    return ("%d more parameters of other components were not tried, so some may change %s without showing here. "
-            "Tick one and export again to try it." % (count, where))
+        return ("1 more parameter of another component was not tried. Tick it and export again to see if it "
+                "changes %s." % where)
+    return ("%d more parameters of other components were not tried. Tick them and export again to see if they "
+            "change %s." % (count, where))
+
+
+ORIGINAL_KEPT_NOTE = "The part opens with the original shape and an unfinished copy of its steps."
+ORIGINAL_KEPT_PARTS_NOTE = "These parts open with the original shape and an unfinished copy of their steps."
+
+
+def part_left_out_note(count):
+    """The sentence for one part of a parts file: how many steps were left out (the names are in the result window)."""
+    return "%d %s left out." % (count, "step was" if count == 1 else "steps were")
+
+
+def left_out_parts_note(counts):
+    """One note for a parts file: how many steps were left out and of which parts. `counts` is `[(part name, count)]`."""
+    total = sum(count for _, count in counts)
+    names = [name for name, _ in counts]
+    return clip("%d %s left out of %s." % (total, "step was" if total == 1 else "steps were", parts_label(names)),
+                MAX_NOTE)
+
+
+def left_out_lines(entries):
+    """"Extrude5: the reason" for each `(part name or None, gap record)`. A parts file puts the part first. A long
+    list is cut and points to the report."""
+    lines = []
+    for part, gap in entries[:MAX_LISTED_FIXED]:
+        text = "%s: %s" % (gap["name"], gap["reason"])
+        lines.append("%s, %s" % (part, text) if part else text)
+    if len(entries) > MAX_LISTED_FIXED:
+        lines.append("and %d more (see report.json)." % (len(entries) - MAX_LISTED_FIXED))
+    return lines
 
 
 def recipe_saved_message(manifest, file_name):

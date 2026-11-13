@@ -3,21 +3,27 @@
 Profiles that share a curve are merged into one outline (outlines.py); each outline becomes one recipe `extrude` step
 per side. Fusion's sign conventions are checked against the measured
 `end_offset` (where the end face landed), which wins when the two disagree. With the probe's motion file the outline
-and its sketch plane follow sizes (sketch_motion.py). A start or reach on a flat face or plane of another component
-moves with the offset the probe measured for it (follow.target_shift, ref_motion.py).
+and its sketch plane follow sizes (sketch_motion.py). A start or reach on a flat face or plane follows the earlier
+step that made it (follow.target_shift), else the offset the probe measured for it (reach_motion.py, and ref_motion.py
+for one of another component).
 
 A thin extrude of one closed outline without holes is written with the recipe's `thin` wall (thin_wall.py): the wall
 thickness follows its parameter, and the side of the outline comes from the measured area of the end face. Open lines,
 several outlines, outlines with holes, two sided and tapered thin extrudes are refused.
 
 An extrude of text or spline outlines is also checked against the volume Fusion made.
+
+A flat face of the part used as the outline is drawn again from the earlier extrude that made it, or written as
+measured with the sizes that may change it marked (face_outline.py). Sketch outlines beside the face must lie on its
+plane.
 """
 import heapq
 import math
 
 from ..package.numbers import round9
 
-from . import follow, kept_ranges, loops, outlines, placement, sketch_motion, thin_wall, values, vec
+from . import (face_outline, follow, kept_ranges, loops, notes, outlines, placement, range_check, reach_motion,
+               sketch_motion, thin_wall, through_taper, values, vec)
 from .footprint import Footprint, polyline
 from .placer_makers import SlabMaker, ThinWallMaker
 from .result import Refusal, StepResult
@@ -40,6 +46,8 @@ LEAN_TOL = 1e-4
 PLANE_TOL = 1e-4
 VOLUME_RELATIVE_TOL = 0.01
 VOLUME_ABSOLUTE_TOL = 1e-3
+# A tapered cut through all whose walls lean in ends this far (mm) past the part.
+THROUGH_TAPER_MARGIN_MM = 1.0
 COMBINE = {"join": "add", "cut": "cut", "intersect": "intersect", "newBody": "new"}
 
 
@@ -100,17 +108,23 @@ def _taper_quantity(ctx, item, path, taper):
 
 
 def _keep_taper_under_limit(ctx, item, q):
-    """A taper that follows sizes should stay under MAX_TAPER_DEG either way: the sizes it reads are marked past the
-    values where it does not."""
-    limit = Quantity(MAX_TAPER_DEG)
+    """A taper that follows sizes should stay under MAX_TAPER_DEG either way, since Paramability refuses a steeper
+    one."""
+    keep_angle_within(ctx, item, q, MAX_TAPER_DEG, "lean its walls %d degrees or more" % MAX_TAPER_DEG)
+
+
+def keep_angle_within(ctx, item, q, limit_deg, effect):
+    """An angle that follows sizes should stay within `limit_deg` either way: the ranges of the sizes it reads are cut
+    where it does not, or the sizes are marked when no cut keeps it. `effect` says what the step would do beyond the
+    limit."""
+    limit = Quantity(limit_deg)
     rules = [(limit.plus(q.scaled(-1.0)), 1), (limit.plus(q), 1)]
     found = kept_ranges.holding_ranges(ctx.table, rules, TAPER_MARGIN_DEG)
-    lean = "%s would lean its walls %d degrees or more" % (item.get("name", "a step"), MAX_TAPER_DEG)
+    why = "%s would %s" % (item.get("name", "a step"), effect)
     if found is None:
-        ctx.doubt(q.reads, "at other values " + lean)
+        ctx.doubt(q.reads, "at other values " + why)
     elif found:
-        for name, reason in kept_ranges.past_reasons(ctx.table, found, lean).items():
-            ctx.doubt([name], reason)
+        ctx.cut(found, why)
 
 
 def _distance_quantity(ctx, item, path, raw):
@@ -141,7 +155,7 @@ def _start_shift(start, frame, ctx, item, plane_q):
         if not _parallel(plane["normal"], frame["z"]):
             return Refusal("This extrude starts from a tilted surface, which is not copied yet.")
         shift = vec.dot(vec.sub(plane["point"], frame["origin"]), vec.unit(frame["z"]))
-        moved = follow.target_shift(ctx, item, start, vec.unit(frame["z"]), "starts from")
+        moved = reach_motion.target_shift(ctx, item, "start", start, vec.unit(frame["z"]), "starts from")
         face = Quantity(shift) if moved is None or not moved.sized else moved.plus(shift - moved.n)
         if not plane_q.sized:
             return face
@@ -149,17 +163,6 @@ def _start_shift(start, frame, ctx, item, plane_q):
             return Quantity(face.n - plane_q.n)
         return face.plus(plane_q.scaled(-1))
     return Refusal("This extrude starts in a way that is not copied yet.")
-
-
-def _keep_start_with_reach(ctx, item, data, shift_q):
-    """A side that reaches to a face is measured from a start that stays: a moving start is fixed then."""
-    if not shift_q.sized:
-        return shift_q
-    if any((data.get(key) or {}).get("kind") == "toEntity" for key in ("side_one", "side_two")):
-        ctx.doubt(shift_q.reads, "%s starts at a place that moves and reaches to a face, which the copy cannot follow"
-                  % item.get("name", "a step"))
-        return Quantity(shift_q.n)
-    return shift_q
 
 
 def _origin(frame, shift_q):
@@ -174,33 +177,53 @@ def _origin(frame, shift_q):
     return out
 
 
-def _reach_quantity(ctx, item, side, z, reach, offset, plane_q):
-    """The length of a side that reaches to a face, as a Quantity that follows the face when it moves with sizes:
-    the face's move less the sketch plane's move (`plane_q`, along the sketch normal)."""
+def _reach_quantity(ctx, item, which, side, z, reach, offset, plane_q, shift_q):
+    """The length of the side `which` that reaches to a face, as a Quantity that follows the face when it moves with
+    sizes: the face's move less the moves of the sketch plane (`plane_q`, along the sketch normal) and of the start
+    (`shift_q`, from the sketch plane). A face the copy cannot follow counts as staying (its sizes are marked)."""
     plain = Quantity(abs(reach) + float(offset))
-    moved = follow.target_shift(ctx, item, side, z)
-    if moved is None:
-        return plain
-    if plane_q.sized:
-        moved = moved.plus(plane_q.scaled(-1))
+    moved = reach_motion.target_shift(ctx, item, which, side, z) or Quantity(0.0)
+    for part in (plane_q, shift_q):
+        if part.sized and moved.sized and moved.core == part.core:
+            moved = Quantity(moved.n - part.n)
+        elif part.sized:
+            moved = moved.plus(part.scaled(-1))
     if not moved.sized:
         return plain
-    length = moved.plus(reach - moved.n).scaled(_sign_of(reach)).plus(float(offset))
-    if not values.stays_positive(ctx.table, length):
-        ctx.doubt(length.reads, "%s would reach past the face it starts from" % item.get("name", "a step"))
-        return plain
-    return length
+    return moved.plus(reach - moved.n).scaled(_sign_of(reach)).plus(float(offset))
 
 
-def _reach_through(box, origin, direction):
-    """A distance that clears the whole box when cutting from `origin` along `direction`."""
+def _keep_reaches_positive(ctx, item, sides):
+    """The lengths of the `sides` that follow a moving face must stay above zero. Where one would pass zero, the ranges
+    are cut to where all of them stay positive, in one search, so the cut for one side does not shorten a range only
+    the other side would need; their sizes are marked only when no cut keeps them."""
+    reaching = [s for s in sides if s.get("reaches") and s["q"].sized]
+    if all(values.stays_positive(ctx.table, s["q"]) for s in reaching):
+        return
+    why = "%s would reach past the face it starts from" % item.get("name", "a step")
+    found = kept_ranges.holding_ranges(ctx.table, [(s["q"], 1) for s in reaching], LENGTH_TOL)
+    if found:
+        ctx.cut(found, why)
+        return
+    for side in reaching:
+        if not values.stays_positive(ctx.table, side["q"]):
+            ctx.doubt(side["q"].reads, why)
+            side["q"] = Quantity(side["distance"])
+
+
+def _farthest(box, origin, direction):
+    """How far the box reaches from `origin` along `direction` (0 when it lies behind)."""
     lo, hi = box["min"], box["max"]
     farthest = 0.0
     for i in range(8):
         corner = [hi[0] if i & 1 else lo[0], hi[1] if i & 2 else lo[1], hi[2] if i & 4 else lo[2]]
         farthest = max(farthest, vec.dot(vec.sub(corner, origin), direction))
-    diagonal = vec.length(vec.sub(hi, lo))
-    return farthest + diagonal + 1.0
+    return farthest
+
+
+def _reach_through(box, origin, direction):
+    """A distance that clears the whole box when cutting from `origin` along `direction`."""
+    return _farthest(box, origin, direction) + vec.length(vec.sub(box["max"], box["min"])) + 1.0
 
 
 def _reach_of(side):
@@ -215,15 +238,31 @@ def _is_through(side):
     return side is not None and side.get("kind") in ("throughAll", "all")
 
 
-def _plan(item, data, frame, shift, combine, ctx, plane_q):
+def _through_both(ctx, item, sides):
+    """The plan of a cut through all both ways, or a Refusal when a side is tapered or its taper cannot be read.
+    `sides` holds each side with the parameter path of its taper, which is pinned: a taper of zero cannot follow a
+    size. A side recorded without a taper (older exports) has none."""
+    for side, path in sides:
+        taper = side.get("taper_deg", 0.0)
+        if taper is None:
+            return Refusal(UNREADABLE)
+        if taper:
+            return Refusal("A tapered cut through all both ways is not copied yet.")
+        values.pin(ctx, item, path, "a taper of zero cannot follow it")
+    return [{"extent": "through", "sign": 1, "distance": None, "taper": 0.0}]
+
+
+def _plan(item, data, frame, shift_q, combine, ctx, plane_q):
     """The sides to extrude, as dicts {extent, sign, distance, taper}; or a Refusal.
 
     `sign` is the travel direction relative to the sketch normal. extent is oneSide, symmetric or through. A distance
-    side that carries `direction` (+1 or -1 along the sketch normal) travels that way instead of the measured end.
+    side that carries `direction` (+1 or -1 along the sketch normal) travels that way instead of the measured end. One
+    that carries `quantity` (a `values.Quantity`) writes that for its distance instead of a parameter's.
     """
     extent_type = data.get("extent_type", "one")
     if extent_type not in ("one", "two", "symmetric"):
         return Refusal("This extrude sets its length in a way that is not copied yet.")
+    shift = shift_q.n
     rel_end = data.get("end_offset")
     if rel_end is not None:
         rel_end = rel_end - shift
@@ -247,17 +286,15 @@ def _plan(item, data, frame, shift, combine, ctx, plane_q):
             if sign is None:
                 sign = _choose_sign(ctx, _sign_of(raw), end, abs(raw), other)
             return {"extent": "oneSide", "sign": sign, "distance": abs(raw), "taper": taper, "taper_q": taper_q,
-                    "q": _distance_quantity(ctx, item, which + ".distance", raw)}
+                    "q": side.get("quantity") or _distance_quantity(ctx, item, which + ".distance", raw)}
         if kind in ("throughAll", "all"):
-            if taper:
-                return Refusal("A tapered extrude through all is not copied.")
-            values.pin(ctx, item, which + ".taper_deg", "a taper of zero cannot follow it")
             positive = side.get("positive", True)
             if positive is None:
                 return Refusal(UNREADABLE)
             sign = forced_sign if forced_sign is not None else _choose_sign(
                 ctx, 1 if positive else -1, end, math.inf, other)
-            return {"extent": "through-one", "sign": sign, "distance": None, "taper": 0.0, "adjusts": True}
+            return {"extent": "through-one", "sign": sign, "distance": None, "taper": taper,
+                    "taper_q": _taper_quantity(ctx, item, which + ".taper_deg", taper), "adjusts": True}
         if kind == "toEntity":
             plane = side.get("plane")
             if not plane:
@@ -277,14 +314,14 @@ def _plan(item, data, frame, shift, combine, ctx, plane_q):
             if not distance > 0:
                 return Refusal("This extrude has no length.")
             return {"extent": "oneSide", "sign": sign, "distance": distance, "taper": taper,
-                    "taper_q": taper_q, "adjusts": True,
-                    "q": _reach_quantity(ctx, item, side, z, reach, offset, plane_q)}
+                    "taper_q": taper_q, "adjusts": True, "reaches": True,
+                    "q": _reach_quantity(ctx, item, which, side, z, reach, offset, plane_q, shift_q)}
         return Refusal("This way of setting the extrude length is not copied yet.")
 
     if extent_type == "symmetric":
         side = data.get("side_one")
         if _is_through(side):
-            return [{"extent": "through", "sign": 1, "distance": None, "taper": 0.0}]
+            return _through_both(ctx, item, [(side, "symmetric.taper_deg")])
         sym = data.get("symmetric")
         if not sym:
             return Refusal("This extrude has no readable length.")
@@ -308,7 +345,7 @@ def _plan(item, data, frame, shift, combine, ctx, plane_q):
         if one is None or two is None:
             return Refusal("This extrude has no readable length.")
         if _is_through(one) and _is_through(two):
-            return [{"extent": "through", "sign": 1, "distance": None, "taper": 0.0}]
+            return _through_both(ctx, item, [(one, "side_one.taper_deg"), (two, "side_two.taper_deg")])
         if combine == "intersect":
             return Refusal("Two sided intersect extrudes are not copied yet.")
         first = one_side(one, "side_one", other=_reach_of(two))
@@ -317,11 +354,13 @@ def _plan(item, data, frame, shift, combine, ctx, plane_q):
         second = one_side(two, "side_two", forced_sign=-first["sign"], measured=False)
         if isinstance(second, Refusal):
             return second
+        _keep_reaches_positive(ctx, item, [first, second])
         return [first, second]
 
     side = one_side(data.get("side_one"), "side_one")
     if isinstance(side, Refusal):
         return side
+    _keep_reaches_positive(ctx, item, [side])
     return [side]
 
 
@@ -355,21 +394,35 @@ def _meets_material(ctx, profiles, shift, sign, reach):
         z = vec.unit(frame["z"])
         for uv in _outline_samples(profile):
             flat = vec.add(frame["origin"], vec.add(vec.scale(frame["x"], uv[0]), vec.scale(frame["y"], uv[1])))
-            for k in range(1, _SAMPLE_STEPS + 1):
-                if follow.inside(ctx, vec.add(flat, vec.scale(z, shift + sign * reach * k / _SAMPLE_STEPS))):
+            for height in _sample_heights(reach):
+                if follow.inside(ctx, vec.add(flat, vec.scale(z, shift + sign * height))):
                     return True
     return False
 
 
+def _sample_heights(reach):
+    """Heights along the extrude that the material test samples: _SAMPLE_STEPS even steps up to `reach`, and
+    heights doubling from SAMPLE_INSET below the first step, so a thin wall right at the start plane is found."""
+    step = reach / _SAMPLE_STEPS
+    near, height = [], SAMPLE_INSET
+    while height < step:
+        near.append(height)
+        height *= 2.0
+    return near + [step * k for k in range(1, _SAMPLE_STEPS + 1)]
+
+
 def _cut_toward_material(ctx, plan, data, profiles, shift, combine):
     """A cut through all to one side with no measured end face cuts on the side where its outlines meet the part:
-    Fusion's stored direction is used only when both sides, or neither, hold material there."""
+    Fusion's stored direction is used only when both sides, or neither, hold material there, or when the measured
+    walls of a tapered cut lean the way that direction gives and not the other (they show where Fusion cut)."""
     box = data.get("target_box_before")
     if combine != "cut" or data.get("end_offset") is not None or not box:
         return
     reach = vec.length(vec.sub(box["max"], box["min"])) + 1.0
     for entry in plan:
         if entry["extent"] != "through-one":
+            continue
+        if _walls_confirm(entry, data, combine):
             continue
         ahead = _meets_material(ctx, profiles, shift, entry["sign"], reach)
         behind = _meets_material(ctx, profiles, shift, -entry["sign"], reach)
@@ -379,6 +432,15 @@ def _cut_toward_material(ctx, plan, data, profiles, shift, combine):
                      "was used.")
 
 
+def _walls_confirm(entry, data, combine):
+    """True when the measured side walls of a tapered side lean as its direction gives, and not as the other one."""
+    leans = data.get("side_leans")
+    if not entry["taper"] or not isinstance(leans, list) or not leans:
+        return False
+    turned = dict(entry, sign=-entry["sign"])
+    return _check_leans([entry], leans, combine) is None and _check_leans([turned], leans, combine) is not None
+
+
 def _box_union(box, other):
     if not box or not other:
         return box
@@ -386,9 +448,15 @@ def _box_union(box, other):
             "max": [max(a, b) for a, b in zip(box["max"], other["max"])]}
 
 
-def _resolve_through(plan, data, origin, z, combine, box_max=None):
+def _resolve_through(ctx, plan, data, origin, z, combine, box_max=None, profiles=(), item=None, outlines=()):
     """Give a one sided through all its distance, or a Refusal. `box_max` holds the part at every size the probe
-    tried, so the cut still clears it when sizes grow."""
+    tried, so the cut still clears it when sizes grow.
+
+    A tapered side keeps the same outline at each height whatever its length, so any length past the part cuts what
+    Fusion's through all cuts. One whose walls can lean in, at the taper or at any size its taper follows, ends just
+    past the part, and only while its outlines stay open there. When the taper or the outlines (`outlines`, the
+    `sketch_motion.Outline` of each) follow sizes, it is checked over their ranges, which are cut where it would close
+    (`through_taper.keep_open`)."""
     for entry in plan:
         if entry["extent"] == "through" and combine not in ("cut", "intersect"):
             return Refusal("Extruding through all is only copied for cuts.")
@@ -399,8 +467,29 @@ def _resolve_through(plan, data, origin, z, combine, box_max=None):
             if not box:
                 return Refusal("The part this cuts through could not be measured.")
             entry["extent"] = "oneSide"
-            entry["distance"] = _reach_through(box, origin, vec.scale(z, entry["sign"]))
+            direction = vec.scale(z, entry["sign"])
+            lean = _lean_in(ctx, entry)
+            if lean > 0:
+                entry["distance"] = _farthest(box, origin, direction) + THROUGH_TAPER_MARGIN_MM
+                moves = any(drawn is not None and sketch_motion.outline_movers(ctx.table, drawn) for drawn in outlines)
+                if (moves or not through_taper.stays_open(profiles, entry["distance"], lean)) and not \
+                        through_taper.keep_open(ctx, item, entry, profiles, outlines, MAX_TAPER_DEG):
+                    return Refusal("This tapered cut through all closes before it passes the part, which is not "
+                                   "copied.")
+            else:
+                entry["distance"] = _reach_through(box, origin, direction)
     return None
+
+
+def _lean_in(ctx, entry):
+    """The steepest recipe taper (degrees, walls leaning in) the side reaches: its own, or the largest its formula
+    gives over the size ranges, at most MAX_TAPER_DEG (also when that cannot be worked out)."""
+    lean = entry["taper"] or 0.0
+    q = entry.get("taper_q")
+    if q is not None and q.sized:
+        span = range_check.sweep(ctx.table, q.text, q.reads)
+        lean = MAX_TAPER_DEG if span.failed or span.high is None else max(lean, span.high)
+    return min(lean, MAX_TAPER_DEG)
 
 
 def _beyond_part(box, start, direction, length):
@@ -676,7 +765,7 @@ def _parts(profile, sources):
     """(index, capture profile) of the item's profiles that make `profile`: its merged parts, or itself."""
     if "merged_from" in profile:
         return [(n, sources[n]) for n in profile["merged_from"]]
-    return [(next(n for n, p in enumerate(sources) if p is profile), profile)]
+    return [(sketch_motion.profile_number(profile, next(n for n, p in enumerate(sources) if p is profile)), profile)]
 
 
 def _thin_step(ctx, item, data, wall, profile):
@@ -689,6 +778,52 @@ def _thin_step(ctx, item, data, wall, profile):
     if rounded:
         ctx.note("Fusion keeps the corners of this wall sharp. The copy rounds them.")
     return side, values.quantity(ctx, item, "thin.thickness", wall["thickness"], absolute=True)
+
+
+def _sketch_built(ctx, item, profiles, thin):
+    """`(profile, (outer, inners), drawn)` per outline of sketch profiles (touching ones merged), or a Refusal."""
+    if any(not isinstance(p.get("frame"), dict) for p in profiles):
+        return Refusal("A sketch outline has no readable position.")
+    if not _same_plane(profiles):
+        return Refusal("This extrude uses outlines on different planes, which is not copied yet.")
+    built = []
+    for profile in outlines.merge_touching(profiles):
+        outcome = loops.profile_loops(profile)
+        if isinstance(outcome, Refusal):
+            return outcome
+        if thin and outcome[1]:
+            return Refusal("A thin extrude of an outline with holes is not copied yet.")
+        drawn = sketch_motion.outline(ctx, item, profile, outcome[0], outcome[1], _parts(profile, profiles))
+        built.append((profile, outcome, drawn))
+    sketch_motion.planes_apart(ctx, [drawn for _, _, drawn in built], item)
+    return built
+
+
+def _face_built(face, thin):
+    """The one outline of a flat face (face_outline.py), as `_sketch_built` gives it, or a Refusal."""
+    if thin and face.loops[1]:
+        return Refusal("A thin extrude of an outline with holes is not copied yet.")
+    return [(face.profile, face.loops, face.drawn)]
+
+
+def _outlines_built(ctx, item, face, drawn, thin):
+    """`(profile, (outer, inners), drawn)` per outline: the flat face first, then the sketch outlines; or a Refusal.
+    Sketch outlines beside a face must lie on its plane. The face keeps its measured plane there, so the sizes that
+    move a sketch plane are marked."""
+    built = []
+    if face is not None:
+        built = _face_built(face, thin)
+        if isinstance(built, Refusal) or not drawn:
+            return built
+    sketches = _sketch_built(ctx, item, drawn, thin)
+    if isinstance(sketches, Refusal) or face is None:
+        return sketches
+    if not _same_plane([face.profile] + drawn):
+        return Refusal("This extrude uses outlines on different planes, which is not copied yet.")
+    names = [n for _, _, one in sketches if one is not None for n in sketch_motion.movers(ctx.table, one.plane)]
+    if names:
+        ctx.doubt(names, notes.stuck_reason("apart", item.get("name") or ""))
+    return built + sketches
 
 
 def handle(item, ctx):
@@ -715,7 +850,11 @@ def handle(item, ctx):
             refusal = Refusal("A thin extrude of several outlines is not copied yet.")
         if refusal is not None:
             return refusal
-    for profile in profiles:
+    face = face_outline.prepare(ctx, item, profiles)
+    if isinstance(face, Refusal):
+        return face
+    drawn_ones = [p for p in profiles if not p.get("face")]
+    for profile in drawn_ones:
         refusal = loops.outline_refusal(profile)
         if refusal is not None:
             return refusal
@@ -723,24 +862,12 @@ def handle(item, ctx):
     # Several outlines that Fusion made into one body touch each other, so the first makes it and the rest join.
     if combine == "new" and len(profiles) > 1 and len(item.get("bodies_after") or []) != 1:
         return Refusal("A new body from several outlines makes several bodies, which is not copied yet.")
-    if any(not isinstance(p.get("frame"), dict) for p in profiles):
-        return Refusal("A sketch outline has no readable position.")
-    if not _same_plane(profiles):
-        return Refusal("This extrude uses outlines on different planes, which is not copied yet.")
-    picked = len(profiles)
-    sources = profiles
-    profiles = outlines.merge_touching(profiles)
-
-    built = []
-    for profile in profiles:
-        outcome = loops.profile_loops(profile)
-        if isinstance(outcome, Refusal):
-            return outcome
-        if thin and outcome[1]:
-            return Refusal("A thin extrude of an outline with holes is not copied yet.")
-        drawn = sketch_motion.outline(ctx, item, profile, outcome[0], outcome[1], _parts(profile, sources))
-        built.append((profile, outcome, drawn))
-    sketch_motion.planes_apart(ctx, [drawn for _, _, drawn in built], item)
+    built = _outlines_built(ctx, item, face, drawn_ones, thin)
+    if isinstance(built, Refusal):
+        return built
+    sources = ([face.profile] if face is not None else []) + drawn_ones
+    picked = len(sources)
+    profiles = [profile for profile, _, _ in built]
     first_drawn = built[0][2]
     plane_q = first_drawn.plane_shift(ctx) if first_drawn is not None else Quantity(0.0)
 
@@ -748,13 +875,14 @@ def handle(item, ctx):
     shift_q = _start_shift(data.get("start", {"kind": "profilePlane"}), first_frame, ctx, item, plane_q)
     if isinstance(shift_q, Refusal):
         return shift_q
-    shift_q = _keep_start_with_reach(ctx, item, data, shift_q)
     shift = shift_q.n
-    plan = _plan(item, data, first_frame, shift, combine, ctx, plane_q)
+    plan = _plan(item, data, first_frame, shift_q, combine, ctx, plane_q)
     if isinstance(plan, Refusal):
         return plan
     z0 = vec.unit(first_frame["z"])
     start = vec.add(first_frame["origin"], vec.scale(z0, shift))
+    # A cut through all may turn to the side its outlines meet the part on: the taper check reads that side's walls.
+    _cut_toward_material(ctx, plan, data, profiles, shift, combine)
     for check in (_check_measured_length(plan, data, shift, start, z0, combine),
                   _check_taper(plan, data, combine, picked),
                   _volume_refusal(data, plan, combine, sources, thin)):
@@ -764,8 +892,8 @@ def handle(item, ctx):
     if isinstance(thin_step, Refusal):
         return thin_step
     box_max = ctx.motion.box_max if sketch_motion.active(ctx) else None
-    _cut_toward_material(ctx, plan, data, profiles, shift, combine)
-    refusal = _resolve_through(plan, data, start, z0, combine, box_max)
+    refusal = _resolve_through(ctx, plan, data, start, z0, combine, box_max, profiles, item,
+                               [drawn for _, _, drawn in built])
     if refusal:
         return refusal
     if combine == "intersect" and (len(plan) * len(built) > 1):

@@ -10,7 +10,7 @@ import math
 from . import vec
 from .footprint import curve_length
 from .shells import InnerPlace
-from .slabs import cleaned
+from .slabs import Place, cleaned
 from .values import Quantity
 from .vec import POINT_TOL
 
@@ -43,6 +43,8 @@ class Wall:
 
 def _wall(place, p):
     """The Wall of a Place that sits on one face, or None."""
+    if not isinstance(getattr(place, "outer", place), Place):
+        return None
     if isinstance(place, InnerPlace):
         normal = place.single
         if normal is None:

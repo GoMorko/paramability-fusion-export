@@ -5,14 +5,181 @@ note the Fusion version and system.
 
 ## Check first in this version
 
-What 0.6.0 to 0.7.2 added, and what this version adds, in this order. Each id is described in the section named.
+What 0.6.0 to 0.8.0 added, and what this version adds, in this order. Each id is described in the section named,
+except U1, L1 to L15, F1, F2 and SP1 to SP4, which are described here.
 
+- [ ] SP1, the marker roll past other components. Make component Cup: a sketch with a 60 mm square whose side is the
+      user parameter `Width`, extruded 40 mm. In that sketch project an edge of a body of an earlier component (once
+      with the projection link on, once with it off, so the sketch may hold a reference Fusion gives no source for). After the Cup steps,
+      add component Rack with about 100 steps (a pattern of 200 holes, fillets and chamfers on its own body). Tick
+      `Width` and export the Cup. Expect: `probe.timeline` has `rolled: true` and `items` equal to the last Cup step
+      plus one, not the full count; `timing.probe.tries_seconds` per try is about the time of the Cup steps alone.
+- [ ] SP2, one change per try. In SP1, add a second user parameter `Height` for the extrude and a fillet on the top
+      edges whose radius is 5 mm; give `Width` a range down to 8 mm, so the fillet fails at the low end. Export with
+      both ticked. Expect: the tries that fail are still listed in `probe.dropped` with the fillet as the failing
+      step and the range of `Width` is cut, as with 0.10.8; `timing.probe.rebuild` is about half of the 0.10.8 value
+      or less; after the export the design shows the values it had, with no step in error.
+- [ ] SP3, a try that breaks the design. Split a box body with an offset construction plane (offset from the top face
+      by the user parameter `Cut`) and Remove the upper piece. Give `Cut` a range that moves the plane above the box,
+      so the split makes one piece and the Remove step loses its input. Export the box with `Cut` ticked. Expect: when
+      the Remove step stays in error with the values back, `probe.stopped` names the try and `Remove`, no try runs
+      after it, the result window says the tries stopped early, and if the step is still in error at the end it says
+      the design is changed and to use Undo. Edit, Undo then brings the design back.
+- [ ] SP4, memory and Undo. On the SP1 design with SP2's sizes, watch Fusion in Activity Monitor (Memory column)
+      before, during and after the export, then use Edit, Undo once. Note the peak, the value after the export and
+      after Undo, and whether Undo lists the export as one step. Repeat with 0.10.8 for comparison.
+- [ ] SB1, Split Body by a plane. Model a cup or a box with a shell and a fillet, then Split Body with the YZ origin
+      plane and Remove the other half (a second Split Body with the XZ plane of the half gives a quarter). Export the
+      piece that the split made (a new body, not the one that kept its name), and once more the piece that kept its
+      name. Expect: the steps before the split are copied, the split is a tool step (`toolBody`, combine `cut`) with
+      one extrude of a large square on the plane, facing away from the piece, and in Paramability the copy matches
+      the STEP. The capture item has `data.tool` with `kind: "plane"`, `data.bodies` with one body and `data.pieces`
+      with both pieces, their boxes and volumes adding up to the body's; the steps before the split have
+      `body_states` for the body they build. Repeat with a split by a construction plane
+      offset from a face by a user parameter: changing the parameter in Paramability moves the cut. A fillet after the
+      split on the other half as well (the fillet lists both bodies) stops the copy at the split and names the fillet.
+      Seen with 0.10.5 (Fusion 2706.1.17, 2026-11-12): both pieces of the origin plane split copy and match. The width
+      range starts at 26.56, not 25, and that is real: the sketch keeps its right edge fixed, so at 25 the box lies
+      on one side of the plane and Fusion does not split it. The offset plane split marked its offset size; later
+      versions follow it (Fusion gives that plane a second parameter, `ExtraOffset`, at 0 mm). The fillet across both
+      halves stopped the copy as expected.
+- [ ] SB2, Split Body by another body. Split a plate with a cylinder body (kept), remove the piece inside the
+      cylinder, and export the plate; then export the inside piece of a second split. Expect: `data.tool` has
+      `kind: "body"` and `solid: true`, each piece has `inside` (false for the plate, true for the core; check it
+      against the model), and the copy is a cut by the cylinder for the plate and an intersect for the core. A split
+      along a curved face of a body (a cylinder side, not extended) stops with "curved surface".
+      Seen with 0.10.5 (Fusion 2706.1.17, 2026-11-12): `inside` was missing, so the plate stopped; later versions read
+      it. The "core" export held the cylinder tool body, not the piece inside it: export the inside piece again.
+- [ ] DR1, Draft. On a box extruded from a sketch on the XY plane, draft two side faces by 3 degrees with the XY
+      plane as the fixed plane, the angle from a user parameter. Export. Expect: a `draft` step with two `near` points
+      on the faces, `neutral` on the plane, and an angle that follows the parameter; in Paramability the walls lean
+      the same way as in Fusion (narrower at the top when the volume went down). Repeat with the direction flipped
+      and with a negative angle: the copy still leans like Fusion. A draft with "Symmetric" whose faces cross the
+      plane, or with two different angles, is left out with its reason.
+      Seen with 0.10.5 (Fusion 2706.1.17, 2026-11-12): both directions copy and match, but the angle size was marked
+      (its default range starts at 0 degrees); later versions follow it with the range cut to 0.01 to 29.98. A draft
+      of 35 degrees is left out with "Drafts of 30 degrees or more are not copied." Negative and two angle drafts are
+      still to check.
+- [ ] SB3, a split part inside a component. Put the cup of SB1 in a component inside another component, join a
+      second body to it with a Combine before the splits (a sweep or an extrude with a draft), split it with the root's
+      YZ and XZ origin planes, and after the splits add a symmetric cut "through all" and a mirror of the body across
+      a root origin plane. Export the quarter. Expect: the split planes and the mirror plane have `assembly: true` and
+      a `ref` (not `foreign`), the symmetric cut has `symmetric` null and `side_one` with `kind: "throughAll"`, and
+      the steps that made the Combine's tool body have `body_states` for that body. Repeat with a cut "through all"
+      to one side with a taper of -5 degrees: it is copied as a tapered cut.
+- [ ] SW9, a sweep whose settings Fusion does not give. Sweep a small closed sketch profile along the closed loop of
+      edges of a box's top face, once as "Single path" and once as "Path + Guide Surface" with the top face as the
+      guide. Export each. Expect: the single path sweep has `orientation`, `taper_deg` and `twist_deg`; for the other,
+      the ones that are null are listed in `data.unread` with Fusion's answer, and the gap reason names them.
+- [ ] LF3, a loft section of edges. Loft from a closed loop of a body's edges (picked as edges, not a face) to a sketch
+      profile above it. Export. Expect: the section shows `kind: "other"` with `items` naming what Fusion gave
+      (`BRepEdge` or another type) and `count`.
+- [ ] AS1, the steps after a stop. Extrude a box, split it with the curved face of a cylinder body (not extended)
+      and remove the outer piece (this stops the copy), then add a coil joined to the box. Export the box. Expect: a
+      fixed shape with the split in `refusal`, `report.json` `after_stop` with `steps` naming the split and the coil,
+      and a second note "Not copied either: Coil1".
+- [ ] U1, faster tries (0.9.1, experimental). Use a design with a body in one component and two or more other
+      components the body does not use (no joints), with a ticked size that moves a sketch. Suppress one step of an
+      unused component by hand first. Export for Paramability twice, once with "Faster tries" off and once with it
+      on, to two files. Expect: the two files hold the same recipe and sizes (compare `recipe.json` and `manifest.json`);
+      with the box on, the steps of the unused components show as suppressed in the timeline while the tries run, and
+      `report.json` has `probe.timeline.suppressed` with `on: true` and the number of steps; with it off, `on: false`
+      and `asked: false`. Compare `try_seconds` of the two files. After each export the timeline looks as before: the
+      same steps in the same order, none suppressed that were not before, the step you suppressed by hand still
+      suppressed, the marker where it was, parameters back. Export again with the box on and press Cancel during the
+      tries: every step is back on (the hand suppressed one still off), the marker and parameters are back. Note
+      whether Undo or the "unsaved changes" mark show anything new. A design with a joint gives `on: false` with a
+      reason and suppresses nothing.
+- [ ] L1, a step in the middle of the timeline that cannot be copied. In a part, add a coil in the middle
+      of the timeline (a join, between two extrudes). Export for Paramability. Expect: the export finishes with a
+      recipe; the result window has a "Left out" list with the coil and a reason, and a line that says
+      Paramability keeps the original shape and an unfinished copy; the package holds `gaps.json` and a
+      `manifest.json` of `version` 2 with `gaps`; `report.json` has `gaps`, and the item has the verdict `leftOut`
+      with `gap` (the gap id). In `gaps.json` the gap has `after` (the step written before it), `before`, `list`
+      null, `bodyBefore` and `bodyAfter` (the box and volume of the part around the step, in the coordinates of the
+      recipe: compare the box with the part in Paramability), a `data` record with the step's Fusion data (empty
+      for a coil: the reader has none) and `toRecipe` (the identity, or the move of the part in the
+      assembly). The same design without the coil gives a `manifest.json` of `version` 1 and no `gaps.json`.
+- [ ] L2, a round on the edges of the left out step. After the coil of L1, add a fillet on edges that the coil
+      made. Export. Expect: the fillet is left out too, its reason names the coil ("It picks faces of Coil1, which
+      is missing from the copy."), its gap has `dependsOn` with the coil's gap id, and `report.json` has `reach` with
+      `read: true`, the coil's index in `gaps` (the fillet's is not there) and the fillet's index in `makers` with the
+      coil's index in its list.
+- [ ] L3, a round on other edges after the left out step. After the coil of L1, add a fillet on edges of an earlier
+      extrude that the coil did not touch. Export. Expect: the fillet is copied (not left out), `reach.makers` lists
+      only the extrude for it, and in Paramability the copy has the round on the same edges. This test and
+      L2 decide whether `Feature.faces` gives the faces a step made for each feature type ("Reach" in the not
+      verified table of `docs/capture-format.md`). Where `reach.read` is false, `reach.error` says why; every later step that picks edges or faces is then left out.
+- [ ] L4, a first body that cannot be copied. Make a part whose first body comes from a step the add-in cannot copy
+      (a coil as the first step). Export. Expect: the export stops as before: a fixed shape, the message
+      names the step, no `gaps.json`, a `manifest.json` of `version` 1.
+- [ ] L5, a Combine whose tool has a coil. Make a Combine (cut) whose tool body was made with a coil. Export.
+      Expect: the Combine is one left out step ("The tool body Body2 cannot be copied: Coil1 (coil) ..."), the rest
+      of the part is copied, and the gap's `after` and `before` are the steps around the Combine. Then add a fillet
+      on an edge the cut made (an edge of a face of the tool) and export again: the fillet is left out too and
+      `reach.makers` lists the Combine's index for it.
+- [ ] L6, a size used only by the left out step. Give the coil of L1 a size from a user parameter that no
+      other step reads, tick it and export. Expect: the result window lists it as "may give unexpected results" with a
+      reason that says Fusion uses it only in that step and it changes nothing in the copy yet; the gap lists it in
+      `sizes` and `looseSizes`. A parameter that an extrude reads too stays a plain size and is in `sizes` of the gap
+      only. In Paramability, change that size on the form: the copy does not change.
+- [ ] L7, a file with several bodies, one of them with a left out step. Export two bodies, one as in L1. Expect: a
+      `manifest.json` of `version` 2 where only that part has `gaps` (`parts/01/gaps.json`), the other part is as
+      before, and the result window lists the left out step with the part name first.
+- [ ] L8, more than 16 steps left out. A design with 17 steps of a type that cannot be copied after its first body
+      stops the copy with the reason "More than 16 steps of this part cannot be copied."
+- [ ] L9 to L13, in Paramability (a build that reads version 2 packages), with the files of L1, L2 and L5. L9: the
+      original shape shows, the card says how many steps are missing, the tip names the steps and reasons, and
+      Editable copy shows the unfinished copy. L10: with assistant mode off there is no assistant text in the
+      message or the card; with it on, a second message says an AI assistant can add the missing steps. L11: ask the
+      assistant to fill the gaps: it reads them, adds the steps, the line goes away when the copy matches, then
+      switch to Editable copy and change a size on the form. L12: Undo the assistant's last edit and the old copy and
+      line come back; save, close and reopen and the line, the tip and the assistant's read still work. L13: open the
+      file in a build without version 2 support: it says the file needs a newer Paramability.
+- [ ] L14, a moved body before a round. After the first extrude, add a Move of the body that the add-in cannot copy
+      (a free move with a turn about a tilted axis), then a fillet on an edge of that extrude. Export. Expect: the
+      Move and the fillet are both left out, and in `report.json` the fillet's entry in `reach.makers` lists the
+      Move's index. Note in the result whether `Feature.faces` of the Move was empty. Do the same with a draft in place
+      of the Move.
+- [ ] L15, a split of the part in the middle of the timeline. After the first extrude, split the body in two (Split
+      Body) and add a fillet after it. Export. Expect: the export stops with a fixed shape and a message that names
+      the split; no `gaps.json`.
+
+- [ ] F1, an extrude of a flat face. Sketch a circle of 10 mm on the XY plane and extrude it 20 mm as a new body, with
+      the distance set by a user parameter `post_mm`. Extrude its top face 2 mm (join) with a taper of -25 degrees,
+      and its bottom face the same way. Make a box around it and Combine (cut) the post body from the box. Tick
+      `post_mm` and export. Expect: the Combine is translated, `post_mm` is a free size without a warning, and in
+      Paramability both face extrudes move with the post when `post_mm` changes, staying tapered. Then add a round
+      on the top edge of the post before the top face extrude and export again: that face is copied as measured and
+      `post_mm` is marked "may give unexpected results". In `report.json`, each face extrude has a profile with
+      `"face": true`, a `frame` whose `z` points out of the post, closed `loops`, and `made_by` naming the post
+      extrude with `which` `start` or `end` (the stub says the start faces of a symmetric extrude are on its positive
+      side). Watch the calls listed under "Face outlines" in "Capture reader calls to watch (extrude, revolve, hole,
+      combine, thread, sketch profiles)".
+- [ ] F2, a pattern of a Combine with its tool steps. In the F1 design (without the round), add a rectangular pattern
+      of features whose sources are the post extrude, both face extrudes and the Combine: count from a user parameter
+      `posts` (5), set to both sides, distance type extent from `row_mm / 2`. Tick `posts`, `row_mm` and `post_mm` and
+      export. Expect: a recipe, the pattern written as two patterns that repeat the Combine's tool step, and in
+      Paramability the row of holes follows `posts` and `row_mm`. Then take one face extrude out of the sources and
+      export again: the pattern stops the copy with a reason that names the Combine and the tool body.
+- [ ] B1 to B12, tool bodies: a Combine whose tool has rounds, chamfers or cuts, Copy Paste Body, Move, patterns and
+      mirrors of bodies, and an intersect of several tools: section "Tool bodies". B6 (does the Combine take the new
+      copies when a count changes) and B7 (what an intersect of several tools keeps) answer questions only Fusion can.
 - [ ] Export the bracket and the box once with this version and send the two `.paramability` files. Nothing needs
       checking by eye: each file holds a `derived` record in its `report.json` that says how well reading the sketch
       dimensions agrees with what the tries measured ("Derived values" in `docs/capture-format.md`, section 6).
 - [ ] D1 and D5 to D13, the sketch graph in the capture, the marker held early during the tries, the new first tries
       near the value, the progress window text and sketch dimensions in `dependents`: section 12 (the calls are under
       "Sketch graph, marker roll and progress window" in "Fusion calls to watch").
+- [ ] K27, a flat face used as an outline (an extrude from a face, an emboss kept to its face) is read before its
+      step at every try: section 9 (the calls are under "Sketch graph, marker roll and progress window").
+- [ ] K26, a sketch that flips to its other solution during the tries is put back before the next try: section 9
+      (the calls are under "Sketch graph, marker roll and progress window").
+- [ ] K25, an extrude that reaches to a face or plane no earlier extrude places (a cut's side wall, a plane on it):
+      section 9.
+- [ ] K24, sketches and extrude reaches on construction planes built on the part (offset from a face, a chain of
+      planes, an offset that is a size): section 9.
+- [ ] K23, a size whose own try changes a sketch outline keeps the range below that value: section 9.
 - [ ] K18 to K21, a sketch left on its other solution after a try that does not rebuild, a projected curve that
       Fusion names again, slot ends rounded by half the slot width, and rounds and chamfers on pattern copies that
       follow the count: section 9.
@@ -25,7 +192,10 @@ What 0.6.0 to 0.7.2 added, and what this version adds, in this order. Each id is
       copied says what it is: section 9.
 - [ ] Compact export window and result window: section 7.2 ("The export window has no empty gaps", "Early warning",
       "Show in timeline", the result window) and the export pipeline entry under "Fusion calls to watch".
-- [ ] E1 to E6, Emboss on a flat face: section 10.
+- [ ] SW1 to SW20 and LF1 to LF6, sweeps and lofts (0.9.2; SW15 to SW20 and LF6 0.10.0): section 13 (the calls are under "Capture reader calls to watch
+      (sweep and loft)").
+- [ ] V1, a body that reads a parameter only through formulas: section 7.2.
+- [ ] E1 to E7, Emboss on a flat face: section 10.
 - [ ] T1 to T5, thin walled extrudes of one closed outline (T5 is `%` with a negative left side): section "Thin
       extrudes".
 - [ ] S1 to S5 and X1 onward, spline outlines and sketch text: section 11.
@@ -137,7 +307,7 @@ sizes. The file itself can also be checked without the app:
 - in the app repo, `npm run recipe:check -- <file>.paramability` prints `ok` for a recipe package;
 - the steps listed in `recipe.json` (a zip entry) match the design, and `report.json` holds the capture;
 - after any export of a recipe or a plain part (also one size from Export size choices), the manifest lists the user parameters under `parameters`, with
-  value, unit and, for a formula parameter, `expr`; a body in a component and a part the translator cannot copy list
+  value, unit and, for a formula parameter, `expr` (or `expression` and `untranslated` when it was not translated); a body in a component and a part the translator cannot copy list
   them too, and `report.json` shows how many were listed and which were left out.
 
 When a design surprises you, send `report.json`: its `capture` becomes a test fixture. The calls and enum names these
@@ -159,15 +329,15 @@ builds agrees with the Fusion part.
 - [ ] **Combine with a tool of several steps**: a separate body made by an extrude (new body) and two more extrudes
       that join it (overlapping cylinders). Combine it as a cut from the main body, then undo and join it instead.
       Both match. Make one of the joined steps read a user parameter that nothing else reads: it shows as a size.
-      Then add a fillet to the tool body: the part saves as a fixed shape and the message says the tool has a
-      rounded edge. Try a join whose first tool step lies apart from the main body and is bridged by a later step:
+      Then add a fillet to the tool body: the Combine is written as a tool step and the fillet follows the tool's
+      sizes ("Tool bodies", B1). Try a join whose first tool step lies apart from the main body and is bridged by a later step:
       if Paramability refuses the step "does not touch the part built so far", note it.
 - [ ] **Marker and document**: after each export the timeline marker is where it was (at the end, or the step it was
       rolled back to), the design is unchanged, and
       Fusion's undo list and "unsaved changes" mark are as before (or, if moving the marker marks the document
       changed, note it). Cancel, and a forced error during the read, leave the marker where it was and the parameters
       as they were.
-- [ ] **Fixed shape**: a part with a sweep, and one with a variable radius fillet. Each saves as a fixed shape
+- [ ] **Fixed shape**: a part with a coil, and one with a variable radius fillet. Each saves as a fixed shape
       (plain CAD part) and the message after the export names that feature.
 - [ ] **Y up**: a design made with the Y up preference, exported with "Y up". The plain part stands upright in
       Paramability, and the positions in `recipe.json` are Z up (a plate drawn on the ground plane has its sketch
@@ -303,6 +473,15 @@ Use the filter box design (names such as `FilterBox_$_depth__contains_CeramicMed
       updates late, note when.
 - [ ] "Tick what the body uses" returns the ticks to what the body reads; "Untick all" clears them. Both keep typed
       ranges. A greyed row is never ticked by either.
+- [ ] **V1 Used only through a formula.** A design with plain user parameters `cells` (a count), `pitch` (6 mm) and
+      `wall` (1.5 mm), a formula `inner = cells * pitch` and a formula `outer = inner + 2 * wall`. Draw a body whose
+      sketch and extrude read only `outer` (for example a square of side `outer` extruded `outer / 2`), with no
+      favourites. Open the export dialog on it. Expect: `cells`, `pitch` and `wall` are ticked; `inner` and `outer` say
+      "formula". Click `cells`: the box under the table says "This part uses it through the formula outer." and so does
+      the tooltip of its name. Export: the progress window tries only `cells`, `pitch` and `wall`, never `inner` or
+      `outer`; in Paramability `outer` is a formula over the three sizes and the body follows a change of each. Then
+      mark `outer` as a favourite and a plain parameter the body does not read as another favourite, and open the
+      dialog again: `cells`, `pitch` and `wall` are still ticked. Note any base parameter left unticked.
 - [ ] Pick another body: ticks, greyed rows and texts follow; typed ranges go back to the defaults.
 - [ ] The Design up direction menu is under the box with the count.
 - [ ] **The export window has no empty gaps.** Open the dialog on the filter box design, then look at:
@@ -315,26 +494,31 @@ Use the filter box design (names such as `FilterBox_$_depth__contains_CeramicMed
         changes a sketch") is not cut off. About ten rows show before the table scrolls; the table spans the width.
       - The Saved window (result dialog) has no blank lines under its notes and fixed lists either.
       If a box is still too tall or too short, note the text it holds and the dialog width.
-- [ ] **Early warning.** Pick a body whose steps hold one the add-in cannot copy (for example a sweep, a loft or a
-      coil). Right under the body picker a box shows "Copy stops at Sweep1 (sweep)." in bold, the reason in short,
+- [ ] **Early warning.** Pick a body whose steps hold one the add-in cannot copy (for example a coil). Right under the body picker a box shows "Copy stops at Coil1 (coil)." in bold, the reason in short,
       and "The part will be saved as a fixed shape; your parameters still come along as variables." Hover the box:
       the tooltip holds the full reason. If no tooltip shows, note it (the reason is then only in the box when short,
       and in the message after the export). Pick a body that copies fully: the box and the button go away. A step
       copied with a note (for example a round with setback corners, or an extrude that uses a sketch of another
       component) adds one line "Copied with a note: ...".
+      A body whose steps hold one the copy leaves out but can go on without (for example a coil after the first
+      extrude) shows "Likely left out of the copy:", then one line per step with the reason (at most three, then
+      "and N more."). It is a guess made without the size tries, so after the export compare it with "N steps left out"
+      in the Saved window: it should name the same steps, except rounds or shells that pick faces of a left out step
+      (only the export can tell those). Note any step the box named that the Saved window did not, or the reverse
+      for a step the box could have known.
 - [ ] **Show in timeline.** With a stop shown, click "Show in timeline". The stopping step's feature is selected in
       the canvas and the timeline marker does not move; the design is not changed. The body picker still holds the
       body. If Fusion refuses the selection a message says so. Note whether the step also shows as selected in the
       timeline bar. No button shows when the stop has no step (a linked part, an unreadable place, a read that failed).
 - [ ] **Message and status line.** Click OK on such a body. The message box starts with "Saved <file>. Copy stopped
-      at Sweep1 (sweep)." then the reason and "The part is saved as a fixed shape." After you close the box, the
+      at Coil1 (coil)." then the reason and "The part is saved as a fixed shape." After you close the box, the
       lower-right corner of the Fusion window shows "Paramability: saved as a fixed shape. Copy stopped at ...". Note
       whether the line stays or Fusion replaces it at once (its lifetime is not fixed by the API).
-- [ ] Click OK: the progress window shows as before, then the result window "Saved for Paramability" opens with the
-      saved line, a table of sizes (name, range, and under "In Paramability": "size", "may be unexpected", "kept fixed",
-      "not followed" or "not used"), a "Stays fixed" group, a "May give unexpected results" group and a "Not followed"
-      group with each reason (a group with nothing in it is left out),
-      and the line "All N parameters come along as variables ...". Only a Close button shows.
+- [ ] Click OK: the progress window shows as before, then the result window "Saved for Paramability" opens with
+      sections that start with a "# Title" line: "# Result" (the file, what to do next, the kind of copy, the variables
+      count), "# Sizes" (one line per size: name, range, "may be unexpected", "kept fixed", "not followed" or "not used" and the reason in brackets),
+      and "# Left out", "# More sizes" or "# Check your design" when
+      they apply (a section with nothing in it is left out). Only a Close button shows.
 - [ ] The result window opens right after the export ends, not while the progress window is still up. If it does not
       open, the same text shows in a message box. Note which: the log line "result dialog failed" gives the reason.
 
@@ -465,7 +649,7 @@ Pick two or more bodies in the body picker of Export for Paramability. Open the 
 - [ ] **P2 Time.** Export 2, 4 and 8 bodies of a real design with sketches. Note the time and the number of probe
       rows in `report.json` (`parts[].probe.states`). The export reads each body's steps once (N captures) and tries
       the sketches over one set of rows of at most 64.
-- [ ] **P3 Fixed shape.** One picked body has a Sweep (or another step that stops the copy), the other copies. The
+- [ ] **P3 Fixed shape.** One picked body starts with a Coil (a step before the first copied one stops the copy), the other copies. The
       warning under the picker names the first body. The file holds an editable part and a fixed shape with a note;
       the editable part keeps its sizes.
 - [ ] **P4 Moves in the assembly.** A size that drives a joint offset moving one of the bodies. Tick it: it is marked
@@ -479,9 +663,9 @@ A Combine in the exported body's component can take a tool body made in another 
 that made the tool a second time (in the tool component's own frame), carries them to the Combine's place with the
 tool component's place in the assembly, and writes them with the Combine's operation. Look in `report.json` at the
 Combine's `data.tools[]` (`component`, `path`, `place` with `frame`, `target_frame` and the three plane `ref`s) and at
-the items of the tool component (`helper_of`, `data`). A tool step that cannot be copied stops the copy, and the
-reason names the step and the component. Copy Paste Body and Move are not copied: they stop the copy with their own
-reason (G3, G4).
+the items of the tool component (`helper_of`, `data`). A tool step that cannot be copied leaves the Combine out as a gap, and the
+reason names the step and the component. The tool is written as a tool step, like a tool of the same component
+("Tool bodies").
 
 - [ ] **G1 Cut with a tool from another component.** Component `Rod` holds a body made by two join extrudes (two
       cylinders, one sketch each). `Rod` is moved by (30, 10, 0) and turned 90 degrees about Z. In the root (or in
@@ -495,15 +679,16 @@ reason (G3, G4).
       and changing it in Paramability changes the cut. The probe request lists the `Rod` sketches under `native`, and
       `probe.motion.values` has keys for the extrude items of `Rod`. A size that acts on `Rod` without moving
       anything (a joint it is not part of) is dropped as "tried, changes nothing".
-- [ ] **G3 Pasted body.** A body in `Rod` made by Copy Paste Body of another body, used as the tool. The copy stops
-      ("A pasted body is not copied yet") and the reason names the paste step and `Rod`. Nothing is guessed.
-- [ ] **G4 Moved tool.** A body in `Rod` moved by Move/Copy (free move) before the Combine: the copy stops ("A Move is
-      not copied yet") and names the Move. A Move of the exported body itself stops the copy the same way.
+- [ ] **G3 Pasted body.** A body in `Rod` made by Copy Paste Body of another body of `Rod`, used as the tool. The
+      Combine is copied: the tool step holds the steps of the source, at the place of `Rod`. Same check as B8, with
+      the paste inside the other component.
+- [ ] **G4 Moved tool.** A body in `Rod` moved by Move/Copy (free move) before the Combine: the tool step holds the
+      steps and a `move` for it, and the cut sits where Fusion shows it.
 - [ ] **G5 Time.** Export a body whose tool chain has about 20 steps in other components; note the export time with
       and without the tool (the second pass moves the marker at most twice per tool step, and not for other steps).
-      More than 40 tool steps stop the copy ("reads at most 40 steps").
-- [ ] **G6 Tool with a fillet.** Round the edges of the `Rod` body before the Combine: the copy stops and the reason
-      names the fillet step and `Rod` ("has Fillet1 (fillet)"). A cut inside the tool stops it the same way.
+      More than 120 tool steps stop the copy ("reads at most 120 steps").
+- [ ] **G6 Tool with a fillet.** Round the edges of the `Rod` body before the Combine: the tool step holds the round
+      and it follows the sizes of `Rod`. A tool with a coil leaves the Combine out and the reason names the coil and `Rod`.
 - [ ] **G7 Tool component moved by a size.** Move `Rod` with a ticked parameter (an offset on a joint or a move
       driven by `rod_x`). The probe request lists three `refs` per tool (`<Combine index>.tool0.xy|xz|yz`) and
       `probe.motion.refs` marks them measured. The cut follows the move in Paramability (the recipe positions are
@@ -527,8 +712,8 @@ the sizes on the form and compare the part with Fusion at the same values.
       dimension, cut through. Then a hole feature on a sketch point at `pipe_offset_mm`. Both follow both sizes and
       the box width.
 - [ ] **K3 Offset plane.** A sketch on a construction plane offset by `FilterBox_height_mm`, a boss extruded from it.
-      The boss moves with the height. Then make an extrude reach "to" that plane: the height may give unexpected
-      results, with the construction plane reason.
+      The boss moves with the height. Then make an extrude reach "to" that plane: its length follows the height
+      (`recipe.json` writes the distance as a formula) and nothing is marked.
 - [ ] **K4 Sketch on a face.** A sketch on the top face of the base, a lid lip extruded from it with projected edges.
       The lip follows the height and the width.
 - [ ] **K5 What may give unexpected results.** A point placed by an angle parameter on a circle (reason: along a curve); a line that
@@ -566,8 +751,14 @@ the sizes on the form and compare the part with Fusion at the same values.
       "(min, nearer)" and "(max, nearer)" after the first ones. `report.json`: `probe.states` has `failed` with the
       step on each state that did not build, and `probe.motion.spans` gives, for that size, `low` and `high` (the
       values that built) and `failed` (the values that did not, with the step). When a nearer try built, the size is a
-      size (or "not used") and its reason says "between A and B"; in Paramability it matches Fusion between those
-      values. When no try built, the result window shows it as not followed, and the reason names the nearest values
+      size (or "not used"), its range in `recipe.json` stops at the values that built on the sides that failed (a
+      range typed in the dialog keeps its ends), and it is not marked for those sides; in Paramability it matches
+      Fusion over that range. Where a near value built and the range end did not, extra tries "(max, nearer)" split
+      the gap (up to four per side), so the range stops close to the real limit. The result window has a "range cut"
+      line for the size with the value and step where Fusion did not rebuild, `report.json` has `sizes.cut`, and
+      Paramability shows the same reason as a quiet info mark next to the size (the file's `cuts` list), not a warning. A failure in a step of another
+      component leaves the range alone. Export two bodies that read that size in one file: both recipes have the same
+      range and the reason says it holds in every part that uses the size. When no try built, the result window shows it as not followed, and the reason names the nearest values
       tried and the step that failed there; it never says "changes nothing". Note how many extra tries ran (at most 24)
       and the export time.
 - [ ] **K13 Only the curved size is marked.** A bracket with two legs at an angle parameter, a wall thickness and leg
@@ -614,6 +805,63 @@ the sizes on the form and compare the part with Fusion at the same values.
       each with a `when` that reads the count. In Paramability set the count lower and higher: each groove copy keeps
       its round and chamfer and no step picks an edge where no copy is. Note copies where Paramability leaves a round
       out (the step list says so).
+- [ ] **K22 A curved point holds only its own step.** A box with ribs whose corners a wall thickness moves along a
+      curve (marked "along a curve"), and a lid rail in another sketch that sits on the walls and follows the wall
+      thickness and the box width (a count times a cube width). Export, then in Paramability set the wall thickness
+      and the cube width to their ends: the rail still meets the wall and the part matches Fusion; only the ribs may
+      differ.
+- [ ] **K23 A different outline stops the range.** The lid of the filter box, with the wall thickness and the box
+      depth ticked (the lid rail is drawn around the box, and a lid chamfer fails when the box gets small). Export.
+      The progress window shows "(max, nearer)" tries of the wall thickness between its value and the first value
+      where the rail took another outline. Expect: the wall thickness is a size (or "not used" with the values it
+      was followed between and the value where the outline changes), never "not a size" only because of the
+      outline; its range stops at the last value that kept the rail outline and the result window has a "range cut"
+      line that names the rail sketch and that value. `report.json`: `probe.motion.spans` has `kept` and `changed`
+      for it, and `sizes.cut` the same reason. The box depth, when nothing below its value rebuilds, starts at its
+      value and is not dropped for the wall's outline. In Paramability, set the wall thickness inside the cut range:
+      the lid matches Fusion. A size that changes the outline on both sides is "not a size" with "no value other
+      than ... could be copied" and names the nearest failure or outline on each side. Note the number of tries and
+      the export time.
+- [ ] **K24 Plane offset from a face.** A plate whose thickness `plate_mm` is the extrude distance (not a sketch
+      dimension). Add Plane1 offset 2 mm below its top face and Plane2 offset 1 mm from Plane1. Draw a circle on Plane1
+      and cut it 4 mm down; extrude a post from the base sketch "to" Plane2. Tick only `plate_mm` and export. Expect:
+      the progress window tries `plate_mm`; in `report.json` the pocket profile's `reference` has `definition` and
+      `built_on` (the top face), and the post's `side_one` has the chain (Plane2 built on Plane1 built on the face);
+      `recipe.json` writes the pocket's `sketch.on.origin` and the post's distance as formulas of `plate_mm`, and
+      nothing is marked. In Paramability change `plate_mm`: the pocket stays 2 mm under the top face and the post ends
+      1 mm under it, as in Fusion. Then set Plane1's offset to a user parameter `gap_mm`, tick it and export again:
+      both follow `gap_mm` too. Then replace Plane1 by a plane at an angle to the top face: the pocket follows (or is
+      marked "turns" when the angle is a size), and the post's reach is marked with "a plane built on part geometry".
+- [ ] **K25 Reach to a face the steps cannot place.** A plate 40 x 20 with its thickness `plate_mm` and a second
+      size `width_mm` (the plate's width in the base sketch). Draw a rectangle on a side sketch and cut a slot into
+      the plate whose top wall sits `slot_mm` under the top face (a sketch dimension). Add a plane offset 1 mm from
+      the slot's top wall, then extrude a peg from the base sketch "to" that plane, as a new body that a Combine cuts
+      from the plate. Tick all three sizes and export. Expect: `report.json` has `token` on the face under the plane,
+      `probe.request.refs` holds the peg's `side_one` with `"own": true`, and `probe.motion.refs` gives it `""`;
+      `recipe.json` writes the peg's distance as a formula of `plate_mm` and `slot_mm`, and `width_mm` is not marked.
+      In Paramability change `plate_mm` and `slot_mm`: the peg still ends 1 mm under the slot's top wall. Then reach
+      "to" the slot's top wall itself instead of the plane: the same holds (Fusion finds the face again by its token
+      at every try; when it does not, `motion.refs` names why and the sizes stay marked as before).
+- [ ] **K26 Sketch that flips during the tries.** A lid sketch drawn around a projected point of another component,
+      with a distance dimension from a sketch point to that projected point (a distance has no side), and sizes that
+      make the box shallower. Export with those sizes ticked. `report.json`: `probe.recovery` counts the put backs;
+      every state with a `start` on the other outline has a `put_back` read on the first one; the rows after it do not
+      fail in steps of another component; a row listed again carries `again`. `probe.motion.flipped` is empty, and
+      the result window has no line about a sketch that stayed on its other outline. Check in Fusion that the sketch
+      is on its first solution after the export, and note the export time (each put back is one more rebuild).
+- [ ] **K27 Outline face read before its step.** A plate whose width `width_mm` and thickness `plate_mm` are sizes,
+      with a tapered join extruded from its top face (the face itself as the outline), then a fillet on a plate edge.
+      Tick both and export. Expect: `probe.request.faces` holds the join's key with the face `token` and `before`, the
+      states have `faces` with that key, `probe.motion.faces` names it, and neither size is marked; in Paramability
+      change both and the join stays on the top face with its outline. Repeat with an emboss whose outline runs over
+      a hole of its face (E8): the `within` outline follows the sizes. Then make the face take another outline at a
+      large width (a hole that appears there): the width's range stops before it, "the face ... starts on makes a
+      different outline". Then let an earlier two sided extrude reach past its start at a low size value, so the face
+      faces the other way there: that size's range stops before the value with the same reason, and it is not marked
+      "turns the plane". Check in Fusion that the marker is back where it was after the export, and note the export
+      time (each read moves the marker before the step and back).
+      Seen with 0.10.5 (Fusion 2706.1.17, 2026-11-12): a tapered join from the plate's top face copies, matches, and
+      follows width and thickness with neither marked (no fillet in that test).
 
 ## 10. Emboss
 
@@ -642,6 +890,15 @@ the Fusion part. The calls behind these tests are listed under "Capture reader c
 - [ ] **E6 Tangent Chain.** Emboss an outline near the edge of a face that has a fillet along that edge, with Tangent
       Chain on. The copy stops with "Tangent Chain" and the part saves as a fixed shape. With Tangent Chain off, or on
       a face with no rounded edge, it is copied.
+- [ ] **E7 Face as the outline.** If the Emboss dialog takes a flat face as its profile, emboss the top face of a small
+      pad onto the face around it. The emboss item's `profiles` holds a record with `face` true and, when an extrude
+      made that face, `made_by`. The copy matches; with `made_by` the pad's sizes stay free, without it they are
+      marked loose. If the dialog takes no faces, note that here.
+- [ ] **E8 Outline past its face.** Emboss a raised outline that reaches over a hole or a chamfered edge in its face.
+      Fusion raises only the part on the face. `end_area` times `depth` equals `volume_after` minus `volume_before`, and
+      `faces[0].outline` holds the edges of the face, holes included. The copy writes the extrude with a `within`
+      outline of that face and matches. Repeat with a sunk outline (a deboss) and with an outline that runs off the
+      face's edge. An older export without `outline` stops with "the edges of the face could not be read".
 
 ## 11. Spline outlines and sketch text
 
@@ -750,6 +1007,140 @@ Send `report.json` after each of these; the capture and `probe` are what is chec
       their normal look (they are rebuilt once at the end). Then pull the marker back by hand before exporting and check
       the same.
 
+## 13. Sweeps and lofts
+
+A sweep along a straight path is copied as an extrude, a sweep along one arc or a full circle as a revolve, and a sweep
+along a flat chain of lines, arcs and spline curves (or a 3D chain of lines and tangent arcs) as a sweep step. A loft
+between two closed outlines with free ends is copied as a loft with straight faces. Everything else is left out with a
+reason. "Matches" means the part Paramability builds agrees with the Fusion part. The calls behind these tests are
+listed under "Capture reader calls to watch (sweep and loft)". Send `report.json` from any sweep or loft that
+surprises.
+
+- [ ] **SW1 Straight sweep.** A rectangle swept along one sketch line, profile at the line start. The recipe holds an
+      `extrude`, the part matches, and a size behind the profile resizes it in Paramability. A size behind the length
+      of the line is the extrude's distance and resizes the part the same way (see SW19).
+- [ ] **SW2 Pipe with bends.** A circle swept along a flat path of lines joined by tangent arcs. The recipe holds a
+      `sweep` step with a flat path, the part matches, and `volume_after` minus `volume_before` is the circle area
+      times the path length. Sizes behind the path sketch follow in the path (see SW19).
+      `faces_after.end` holds a point on the end cap and its normal; both lie at the far end of the path, square to
+      it. Then draw the same path from the far end, or use Join and Cut: the cap must still be at the far end, or the
+      sweep is left out as not matching.
+- [ ] **SW3 Ring.** A triangle swept along a full sketch circle. The recipe holds a full turn `revolve` and the part
+      matches. `path.closed` is true. With a twist of 360 degrees the same ring becomes a `sweep` step along a closed
+      flat path of two half arcs (see SW18).
+      A triangle drawn on the outer side of a small arc (an arc of radius 3 mm, the triangle 4 mm wide beside it) is
+      copied too; one that reaches across the arc's axis is left out.
+- [ ] **SW4 Profile at the far end.** Draw the path from the far end towards the profile. Note the order of
+      `path.curves` and the `opposed` flags. The copy turns the path round and the part matches.
+- [ ] **SW5 Profile in the middle.** Put the profile plane through the middle of the path. Note `distance_one` and
+      `distance_two` and what Fusion builds. The sweep is left out with "This sweep runs to both sides of its
+      outline".
+- [ ] **SW6 Sharp corner.** Two sketch lines at 90 degrees, no arc between them. The sweep is left out with "The path
+      of this sweep has a sharp corner". Note what Fusion builds (a mitre, a rounded corner or an error) and measure
+      the outer corner, so a later version can copy it.
+- [ ] **SW7 Taper and twist.** On a straight path, a 20 by 10 mm rectangle with taper 5 degrees, then with twist 90
+      degrees. Each is copied as a `sweep` step with `taperDeg` or `twistDeg` (recipe version 16) and a note "check the
+      shape"; the sizes behind the angle and the outline are marked. Note `taper_deg` and `twist_deg` in degrees with
+      the dialog's sign; whether the far end of the rectangle is offset (both sides shrink by the same mm) or scaled
+      (both shrink by the same share, then the taper is left out as "scales its outline"); which way the taper leans
+      for a positive angle; and which way the twist turns, seen along the path. A taper steep enough to close the
+      rectangle (more than 5.7 degrees on 20 mm) is left out. Then set `TAPER_MEANING_CONFIRMED`,
+      `TWIST_SIGN_CONFIRMED` and the two signs in `lib/translator/sweep.py` and drop the note.
+- [ ] **SW8 Parallel orientation.** The SW2 path with orientation parallel is left out ("The outline keeps one
+      direction along a path that turns back past its plane"). Along a path that keeps moving away from the outline's
+      plane (one arc of 60 degrees) it is copied as a `sweep` step with `orientation: "fixed"`, and the part matches.
+      On a straight path it is copied as an extrude. An arc turning 88 degrees is left out (the path must keep rising). A twist or taper together with parallel is left out, and so is
+      parallel along a closed path ("along a closed path").
+- [ ] **SW9 Guide rail.** A sweep with a guide rail is left out ("Sweeps with a guide rail"). `rail` holds the rail
+      curves and `scaling` holds the dialog's choice. If a build cannot read the rail, `rail` is `{ "kind": "unread" }`
+      and the reason says the rail could not be read.
+- [ ] **SW10 Path of edges.** Sweep a small circle along two edges of an extruded box. It is copied as measured, the
+      sizes behind the box are marked "may give unexpected results", and `path.edges` lists the two edges with
+      tokens and `body`. A pattern of that sweep is left out. Then do the same on an edge of another component: the
+      sweep is left out as a step in another component. Edges of a second body of the same component mark every
+      ticked size.
+- [ ] **SW11 Tilted profile.** A profile at 30 degrees to the path at its start. The sweep is left out ("The outline is
+      not square to the path at its start"). Note what Fusion builds.
+- [ ] **SW12 3D path.** A 3D sketch of three lines with sketch fillets at the two corners. The recipe holds a sweep
+      step with a 3D path with two bends and the part matches. With a spline or an arc that is not tangent to its
+      neighbours the sweep is left out ("bends in 3D in a way that is not copied yet").
+- [ ] **SW13 Space of the path curves.** In a design where the sweep's component is moved in the assembly, check that
+      `path.curves` and `check` (read from `PathEntity.curve`) agree in the component's frame, not the root frame.
+- [ ] **SW15 Twist on a bent path.** The SW2 path with twist 90 degrees. Copied as a `sweep` step with `twistDeg`
+      and a note; the end of the part is turned the same way as in Fusion. With a taper too it is left out
+      ("both twist and taper").
+- [ ] **SW16 Taper on an arc.** A rectangle along one arc with taper 3 degrees. Copied with the note. Compare the sizes
+      at the far end with Fusion. A taper along a path with a spline curve is left out ("along curves").
+- [ ] **SW17 Closed rim.** A 2 by 2 mm rectangle swept once round a rounded rectangle sketch (40 by 20 mm, corner
+      radius 5 mm), the rectangle inside the loop at the middle of a long side. The recipe holds a `sweep` step with a
+      flat path that has `closed: true`, starts at the profile plane and ends on its start (version 16), and the part
+      matches. `volume_after` is the area times the length the centre travels: the path length minus 2 pi times how
+      far the centre sits inside the loop. Then put the rectangle on a corner of a rectangle sketch with sharp
+      corners: the sweep is left out ("sits on a sharp corner of its closed path"). A closed sketch with a spline side
+      is copied when the profile sits on the spline too; note whether the two halves of the spline meet smoothly in
+      the recipe.
+- [ ] **SW18 Twist along a closed path.** The SW17 path with a bar centred on it and a twist of 360 degrees. Copied
+      with the note; whether the end of the part meets its start, and the handedness of the twist, are the same as
+      in Fusion. Draw the same loop from the other end (or flip its direction) and repeat: the twist must turn the same
+      way as Fusion's, so the copy mirrors the first one. A twist of 90 degrees is left out ("not whole turns"). A taper
+      on a closed path is left out ("Tapered sweeps along a closed path").
+- [ ] **SW19 Path sizes on the form.** The SW2 pipe with a user parameter behind each of the first line's length, the
+      arc's radius and the last line's length, and the profile's plane tied to the start of the path with a sketch
+      dimension. Tick the three sizes and export. The flat path holds formulas for them (such as `bend_mm + 20`), the
+      sizes are not marked "may give unexpected results", and in Paramability each one moves the pipe the way the same
+      change moves it in Fusion (compare the end point and `volume_after`). Make the circle wider than the smallest
+      arc radius the form allows: the range of the size behind the circle stops before the value where the circle
+      would reach the centre of the bend, and the note says so ("past ..."). Then move the profile plane with a size
+      that does not move the start of the path (a plane on an offset plane): that size is marked "starts its path on
+      the plane of its outline". Repeat on the SW17 rim with a size behind its width: it follows, and its range
+      stops where the long side would end before the profile plane. A path with a spline curve, a full circle, 3D
+      corner points, or a taper keeps its sizes marked, as before. Give the profile a rounded corner or a slot shape
+      (arcs): the range of the size behind it stops where the arc, not only its corners, would reach the centre of
+      the bend. Add a twist to a straight path with a size behind its length: the path follows the size like the
+      untwisted one. A sweep with many sizes behind its path (seven or more) and a long path may not be checked at every
+      value: then its sizes are marked ("too many settings to check them all in a reasonable time") and no range is
+      cut; the export must not stay busy for more than about twenty seconds on it. Send `report.json` from a sweep
+      whose path sizes do not follow or whose range stops too early.
+- [ ] **SW14 Round on a sweep end.** After SW2 (a circle of a user parameter `wire_mm` swept along a bent path), add
+      a fillet on the whole edge of the end cap and tick `wire_mm`. The `round` step picks `featureEdges` of the sweep
+      with `which: "end"`, `wire_mm` is not marked "may give unexpected results", and in Paramability the round
+      follows the end of the pipe when `wire_mm` changes. Do the same on the edge of the start cap (`which: "start"`).
+      After SW1 (the extrude form) the fillet follows sizes like a round on an extrude.
+- [ ] **SW20 Faces of a sweep that stay as measured.** On the SW14 part, pick one edge of the end cap of a square
+      wire instead of all four: the round holds a point, `wire_mm` is marked, and a size of an earlier step (a plate
+      the wire sits on) is not. A fillet on an edge along the wire at a corner of the square does the same. A fillet on
+      a round wire's side edge, or on the end of a twisted, tapered or hollow wire, or of a closed path, marks every
+      size written before it. A twisted sweep names its start cap but not its end cap. Send `report.json` when
+      Paramability picks another edge than Fusion after a size changes.
+- [ ] **SW21 Chamfer where three edges meet.** Make a 20 mm cube. Chamfer the three edges that meet at one corner
+      with the same distance (2 mm), in one Chamfer feature, and export. The app kernel and its wedge fallback give
+      different shapes at such a corner, and the app refuses the wedge there, so we need to learn which shape Fusion
+      makes. Send a photo of the corner (from outside, close up) or the `report.json`, and say whether the corner is a
+      small triangle where the three chamfer faces meet, a flat patch with more sides, or something else.
+- [ ] **LF1 Two squares.** A loft from a 20 mm square to a 10 mm square, 30 mm apart, free ends. The recipe holds a
+      loft with `ruled` set and `volume_after` is the frustum volume (7000 mm3). Note whether Fusion builds straight
+      faces between the two outlines (a curved side would show in the volume).
+      Then turn the top square 45 degrees (turn its sketch, not its outline) and export: the copy is accepted when
+      the part's volume is 6414 mm3, and left out ("joins the corners ... another way") when it is 3586 mm3. Note which
+      volume Fusion gives; with a Join or Cut instead of a new body the copy carries a note that the outlines are
+      turned against each other.
+- [ ] **LF2 Circle to square.** A loft from a circle to a square. It is copied with a note that the outlines have
+      different shapes. Compare the part's volume in Paramability with Fusion's, and note how the corners are
+      paired.
+- [ ] **LF3 Three sections.** Left out with "Lofts through more than two outlines".
+- [ ] **LF4 Loft options.** One loft each with a tangent end, a point end, two rails, a centre line and Closed on.
+      Each is left out with its own reason, and `sections[].end`, `rails`, `centerline` and `closed` read as set.
+- [ ] **LF5 Tube loft.** Two rings (circle with a circle hole) of different sizes. The recipe holds a loft with one
+      hole key and the part matches. A ring and a plain circle are left out ("different numbers of openings").
+- [ ] **LF6 Round on a loft end.** After LF1 with its sizes on the form, add a fillet on all four edges of the top
+      outline and tick the sizes. The round picks `featureEdges` of the loft with `which: "end"` and no size is marked;
+      the bottom outline gives `which: "start"`. A fillet on one edge of an outline marks the sizes the loft reads, and
+      one on the loft's side marks every size before it. A tube loft (LF5) has no end faces to name.
+
+Members of the running Fusion build to note in the same exports: whether `SweepFeature.extent`, the guide surface
+sweep type and the loft end condition classes exist (an absent one reads as null or `other` and the step is left
+out).
+
 ## Thin extrudes
 
 A thin extrude of one closed outline is copied as an extrude with a wall. Send `report.json` from any thin extrude
@@ -779,6 +1170,80 @@ calls to watch (thin extrude)".
       side can go negative (for example `(width - 120 mm) % 7 mm` with width from 65 to 260), the sizes it reads are
       loose with the reason. Also note what Fusion shows for a negative left side, such as `-20 mm % 7 mm`: the app
       gives 1 (the result takes the sign of the right side). If Fusion gives 1 as well, the check can be dropped.
+
+## Tool bodies
+
+A Combine takes its tool bodies as they stand at the Combine. A tool made only by steps that add material is written
+step by step. Any other tool is written as one tool step that holds the steps that made it (cuts, rounds, chamfers,
+holes, shells, a Combine of its own, Copy Paste Body, Move, patterns and mirrors of bodies). Look in `report.json` at
+the Combine's verdict: `tool_steps` holds the verdicts of the items inside the tools, and the recipe shows a `toolBody`
+step with its own `features`. A step that cannot be copied is left out as a gap (inside the tool, or the whole Combine when the tool cannot be built) and the reason names it, for example "The
+tool body Body3 cannot be copied: Coil1 (coil)". The calls behind these tests are listed under "Capture reader calls
+to watch (tool bodies)". Use a design with a user parameter behind a tool's size, and check each result in
+Paramability against the STEP, at the current sizes and at one other size.
+
+- [ ] **B1 Tool with a chamfer.** A separate body (an extrude with a chamfer on one edge), cut from the main body with
+      Combine. Export: the Combine is one tool step that holds the extrude and the chamfer, and the pocket has the
+      chamfer. Change the tool's size (a parameter behind the extrude or the chamfer) in Paramability: the pocket
+      follows. Do the same with a cut and a hole made in the tool before the Combine.
+- [ ] **B2 Copy Paste Body.** Paste a copy of a body (a bracket) and Combine it into another body. Export: copied.
+      The capture item has `data.sources` (the source body, with `points`) and `data.result_bodies`; the tool step
+      holds the steps of the source, written again with their own ids, and the verdict is "translated". A paste that
+      sits on its source has no `move`; a paste moved afterwards has one. Change a size of the source: both the
+      source and the pasted tool follow. A paste onto a body that already has steps stops with "lands on a body that
+      already has steps". Fusion documents `sourceBody` as a collection: check that `data.sources` is filled. Also
+      paste two bodies at once: `data.sources` has both, and each pasted body gets the steps of its own source.
+- [ ] **B3 Free Move.** Move a tool body by hand (Move/Copy, Free Move, a turn and a shift) before the Combine. The cut
+      sits where Fusion shows it. The capture item has `data.move_type` `free`, `points_before` and `points_after`
+      (up to 8 corner points of the body each); the recipe has a `move` step with numbers. Also try Point to Point,
+      Point to Position and Translate Along Entity: the same result, and every ticked size is marked "may give
+      unexpected results" ("follows a point or an edge that may move with it") or left out with that reason. A Move of
+      faces stops with "moves faces of the
+      body".
+- [ ] **B4 Move by X, Y, Z.** Move a tool by distances that read user parameters, in a component that is not at the
+      origin and is turned. Do it once with the Move in component space and once in design space (the option in the
+      Move dialog). The `move` step reads the sizes: change one, and the tool moves in Paramability the way it moves
+      in Fusion. Note any sign or space that comes out wrong (`data.is_design_space`).
+- [ ] **B5 Move by Rotate.** Rotate a tool about a sketch line with an angle parameter. The tool turns the same way as
+      in Fusion, and follows the angle. Rotate about a construction axis and an edge too. If the corners of the body
+      cannot tell the turn from its opposite, the angle stays a fixed number with the reason "the corners of the body
+      do not tell which way ... turns"; note which axis kind gave that.
+- [ ] **B6 Pattern of bodies.** Make a circular pattern of bodies (a tool with a count parameter), then Combine join
+      all copies with the part. Export: one `pattern` step that repeats the tool steps, not one tool per copy, and the
+      verdict of the pattern item is "translated". The size behind the count is marked "may give unexpected results";
+      spacing and angle are not. Change the count in Paramability. Then answer this in Fusion: change the count there
+      and edit the Combine. Does the Combine take the new copies? The recipe repeats the tools for any count. Once
+      Fusion is confirmed to take the new copies, the mark can go. If Fusion leaves them out, say so: the app and
+      Fusion then differ for a changed count. Copies are matched on their first 8 vertices: on a body with more than 8,
+      a copy that lists its vertices in another order is not matched, and the pattern stops with "could not be matched
+      to the bodies it made" or falls back to one tool per copy; note if that happens on a real pattern. Also try a
+      rectangular pattern, a mirror of bodies (with "Combine" off), a Combine that takes only some of the copies (each
+      copy becomes a tool with its place in numbers, and the sizes behind the layout are marked), and a cut instead of
+      a join.
+- [ ] **B7 Intersect of several tools.** Two tool bodies that overlap each other only partly and both overlap the part,
+      then Combine intersect with both. In the capture item read `data.intersect_volumes` (`every` and `any`, mm3) and
+      `data.intersect_model`. Compare with the shape Fusion made: `every` means the part keeps only what lies in the
+      part and in all tools; `any` means what lies in the part and in at least one tool. Write down which one Fusion
+      made, and whether `intersect_model` says the same. With `every` the recipe has one tool step per tool, each
+      with `combine` intersect. With `any` it has one intersect step that holds the tools. When the two volumes are
+      equal the sizes the tools read are marked "may give unexpected results"; once the rule is known, that mark can
+      go. Also try two tools that do not overlap each other at all: `every` should be 0. An intersect of one tool
+      with several steps is a tool step too. An intersect with a tool from another component, or where the two
+      volumes fit neither way, stops with "keeps a shared part that the copy could not work out".
+- [ ] **B8 The whole chain.** In component `Rod`, paste a body from another component, Move it, Offset Faces on it,
+      make a pattern of it, then Combine the copies into the part. Export: copied, the cut sits where Fusion shows it,
+      and a size of the source follows through every step.
+- [ ] **B9 Kept tool.** A Combine with "Keep tools" on, then a fillet and two extrudes on the kept tool, then a second
+      Combine that uses it. Export the part: the second Combine gets the tool with the later steps, and a note says
+      Fusion kept the first tool. A tool the first Combine used up (no "Keep tools") cannot serve a second one: it
+      stops with "was used up by an earlier combine".
+- [ ] **B10 Export the kept tool.** Export the kept tool body itself. The Combine that kept it is skipped (its target
+      is another body) and the tool is copied with its own steps.
+- [ ] **B11 Coil in a tool.** A tool made by a coil. The Combine is left out as a gap, naming the coil and the tool body.
+      Nothing is guessed.
+- [ ] **B12 Time and a real design.** A design with about 20 tool steps: note the export time with and without the
+      tools (a tool is walked once per pass of the sizes). Then export the body of the real design that has Combines
+      and send `report.json`: it is the first real input for all of the above.
 
 ## Fusion calls to watch
 
@@ -965,6 +1430,14 @@ These were written from the API reference and never run:
 Written from the API reference and never run (sections: "Sketch graphs" in `docs/capture-format.md`, hand tests D1 and
 D5 to D13). Every read is guarded: a member that raises is listed in the record's `unread` or leaves the old behaviour.
 
+- Outline faces at each state (`lib/fusion_reader/read_face.py` `read_faces`, hand test K27): `Timeline.markerPosition`
+  set to the step's index, `Design.findEntityByToken` of the face with the marker there (one face, not a split one),
+  its loops read as at the capture, and the marker set back, which rebuilds the steps after it with the values tried.
+- Sketch put back (`lib/fusion_reader/sketch_keep.py`, hand test K26): `SketchPoint.geometry` in sketch space,
+  `isReference`, `isFixed`, `SketchPoint.move(Vector3D)` while `Sketch.isComputeDeferred` is true, and whether
+  Fusion solves the sketch from the moved points (back on its first solution) once compute is turned on again and
+  the design is recomputed. If it solves to the other solution again, the put back counts as a miss and the probe
+  stops after two.
 - Sketch graph (`lib/fusion_reader/read_constraints.py`): `Sketch.sketchPoints`, `sketchCurves`, `sketchDimensions`,
   `geometricConstraints`, `isFullyConstrained`, `originPoint`; `SketchEntity.isFixed`, `isFullyConstrained`, `isLinked`,
   `isReference`, `referencedEntity`, `entityToken`; `SketchPoint.geometry` (sketch space, cm); `SketchLine.startSketchPoint`,
@@ -986,6 +1459,15 @@ D5 to D13). Every read is guarded: a member that raises is listed in the record'
   read of sketches, points, lines, references and the body box at that marker equals the read at the full marker (the
   export checks this once and does not roll when it differs); moving the marker forward again and calling
   `computeAll` builds the later items with the restored parameter values and leaves no entry in Undo.
+- One change per try (`fusion_reader/rows.py` `set_expressions`, hand tests SP2 and SP4): `Design.modifyParameters`
+  with `ValueInput.createByString` sets every expression or none and rebuilds once; `TimelineObject.healthState` is
+  up to date after it without `computeAll` (a step in error then is judged after one `computeAll`); the marker stays
+  where it was; `UserParameter.expression` reads back the text that was set, which the restore compares. Export size
+  choices runs `computeAll` after the change before it writes each STEP.
+- Faster tries (`fusion_reader/rows.py` `suppress_items`, `unsuppress_items`; `export_plan/timeline_trim.py`, hand
+  test U1): `Timeline.item(index)`, `TimelineObject.name`, `isGroup`, and `isSuppressed` get and set on items before
+  the rolled marker; `computeAll` then rebuilds without them and leaves the marker in place; setting `isSuppressed`
+  back to false restores the items exactly.
 - Progress window (`fusion_ui/progress.py`): `ProgressDialog.message` with a line break (`\n`) shows two lines, and
   `show` with the text "Try %v of %m" accepts the placeholders as "Size %v of %m" did. If it shows one line only, move
   the explanation (`export_plan/messages.TRY_INTRO`) to the title passed to `show`.
@@ -1020,6 +1502,13 @@ read the capture in `report.json`.
   "ambiguous"` is refused.
 - `Timeline.timelineGroups`, `TimelineGroup.startIndex` and `endIndex`: a design with a collapsed group must export;
   a group whose children `Timeline.item` does not list makes the capture fail and the export a fixed shape.
+- Face outlines (`read_face.py`, hand test F1): `ExtrudeFeature.profile` gives a `BRepFace` with the marker before
+  the step; `BRepFace.geometry` (a `Plane`: `origin`, `uDirection`), `BRepFace.evaluator.getNormalAtPoint` at
+  `pointOnFace` points out of the body, `BRepFace.loops`, `BRepLoop.isOuter`, `BRepLoop.edges`, `BRepEdge.geometry`
+  (`Line3D`, `Arc3D`, `Circle3D`, `Ellipse3D`, else sampled through `BRepEdge.evaluator`, which must cover only the
+  edge), `BRepFace.area`, `BRepFace.body`, `BRepFace.entityToken`; `Component.features.extrudeFeatures`,
+  `Feature.timelineObject.index`, and `startFaces`, `endFaces`, `sideFaces` of the earlier extrudes holding the same
+  face. A positive distance must go along the outward normal: `end_offset` of the face extrude is positive.
 - `BRepFace.geometry` type of the hole end faces (`plane` flat, `cone` tipped; anything else gives null), compared with `tipAngle`.
 - `HoleFeature.holeType` names that do not match fall to `other`; the same for `FeatureExtentTypes` on extrudes.
 - `Matrix3D.getAsCoordinateSystem()` returning `(origin, xAxis, yAxis, zAxis)` in Python.
@@ -1161,6 +1650,30 @@ Written from the API reference and the owner's 0.7.2 export, never run on the ne
       `CircularPatternFeature.isSymmetric` (a flag that fails reads as not symmetric, then the measured copies are
       refused). Which element is the identity (not always the first).
 
+## Capture reader calls to watch (tool bodies)
+
+These members were written from the API reference and never run. A member that cannot be read gives `null` or `other`,
+and the translator refuses the item, so a wrong guess shows up in `report.json` as a refusal. Run B1 to B12.
+
+- `CopyPasteBody.sourceBody` (a collection in the API stubs) with the marker before the item (empty or shorter when a source was consumed), `CopyPasteBody.bodies`
+  after it, also for a source in another component (`read_paste.py`).
+- `MoveFeature.inputEntities` (bodies, or faces: a mix is `other`), `MoveFeature.definition` and the class it names
+  (`TranslateXYZ`, `Rotate`, `FreeMove`, `PointToPoint`, `PointToPosition`, `TranslateAlongEntity`),
+  `xDistance`, `yDistance`, `zDistance`, `isDesignSpace`, `angle`, `axisEntity`, `distance` (along an entity) and
+  `transform` of the free move definition (when it cannot be read, the fit against the points decides alone)
+  (`read_move.py`).
+- The first 8 vertices of a body (`BRepBody.vertices`, `BRepVertex.geometry`) in a stable order: with the marker before
+  a Paste, a Move or a pattern, and again after it for the same body found by its token. A gap in the list gives an
+  empty list, which refuses the fit.
+- `inputEntities` of a rectangular, circular or mirror pattern of bodies (`entity_type` `bodies`) with the marker before
+  the item, and `bodies` after it: all the copies, not the sources. `PatternElement` has no bodies, so copies are matched
+  to elements by their corner points (`body_copies.match`).
+- `BRepBody.volume` of each tool with the marker before the Combine, and of the bodies the second pass finds by token
+  (`body_states`).
+- `TemporaryBRepManager.get()`, `copy`, `booleanOperation` and `BooleanTypes` (`IntersectionBooleanType`,
+  `UnionBooleanType`), and the `volume` of a temporary body, for an intersect of several tools
+  (`read_intersect.py`). Nothing is added to the design: check that the timeline and the bodies are the same after.
+
 ## Capture reader calls to watch (emboss)
 
 These members and values were written from the API reference and never run. A member that cannot be read gives
@@ -1169,10 +1682,12 @@ Emboss tests of section 10 and read the capture in `report.json`.
 
 - `adsk.fusion.EmbossFeature` itself: it came with the September 2025 release and the API reference marks it as
   preview, so members may change. A Fusion build without it cannot hold the step (E5).
-- `EmbossFeature.profiles` with the marker just before the item: a collection of `Profile` and `SketchText` items on
-  one plane. A text item is read as outlines (X1).
-- `EmbossFeature.inputFaces` with the marker just before the item: a list or a collection of `BRepFace`. The reader
-  accepts both and raises when it cannot list them.
+- `EmbossFeature.profiles` with the marker just before the item: `Profile` and `SketchText` items on one plane (a
+  flat face, if the dialog takes one: E7). Fusion 2706 gives them without `count` and `item` (a list or a vector);
+  the reader takes lists, collections and vectors. A text item is read as outlines (X1).
+- `EmbossFeature.inputFaces` with the marker just before the item: Fusion 2706 gives a `BRepFaceVector`, which has
+  only len and indexing, no `count` or `item`. Every collection reader accepts lists, collections and such vectors,
+  and raises when it cannot list them. A lone input face also gets its loops read as for an extrude face (`outline`).
 - `EmbossFeature.faces` with the marker just after the item: the faces the feature made. The reader takes the flat
   face parallel to the input face that lies farthest from the sketch plane (`end_offset`, `end_area`); check that it
   is the top of a raised outline and the floor of a sunk one.
@@ -1190,6 +1705,39 @@ Emboss tests of section 10 and read the capture in `report.json`.
 - `Profile.areaProperties().area` for each emboss profile (cm2, read as `areas`), and `BRepBody.volume` of the target
   at the marker before and after the item.
 - `SketchText.parentSketch` for the sketch of a text item (X1).
+
+## Capture reader calls to watch (sweep and loft)
+
+These members were written from the API reference and never run. A member that cannot be read, or that the running
+Fusion build does not have, gives `null` in the capture of the step, so a wrong guess shows up in `report.json` and
+the step is left out as a gap. Export a design with a sweep (straight path, a path of lines and arcs, a closed circle, a path
+of body edges, a guide rail) and one with a loft (two outlines, a point end, a tangent end, rails, a centre line,
+Closed on), and read the `data` of each step.
+
+- `SweepFeature.path` and `guideRail` as `Path` objects: `Path.count`, `Path.item(i)` and `Path.isClosed`. Note the
+  order of `curves` and the `opposed` flags for a path drawn from the far end towards the outline.
+- `PathEntity.entity` is a sketch curve or a `BRepEdge`. The reader maps `SketchCurve.geometry` (assumed to be in
+  sketch space) with the sketch's `transform` into the component frame. `PathEntity.curve` is read only as `check`
+  (its start and end). In a design where the component is moved in the assembly, `check` and `curves[].start` and `end`
+  must agree in the component's frame. A 3D sketch path must keep `flat` null for curves off the plane.
+- `BRepEdge.geometry` (native object, component frame) for path edges, and the edge records in `path.edges`. An edge
+  of another component must be marked `foreign`.
+- `SweepFeature.orientation` (`SweepOrientationTypes`, read as `perpendicular` or `parallel`), `profileScaling`
+  (`SweepProfileScalingOptions`, read as `scale`, `stretch` or `none`) and `extent`. Check which of these exist in the
+  running Fusion build: `extent` in particular may be missing and then reads as null.
+- `distanceOne`, `distanceTwo`, `taperAngle` and `twistAngle` as `ModelParameter`s: `distance_one` and `distance_two`
+  are assumed to be the share of the path (1 and 0 for a full sweep). Note the values for an outline at one end and in
+  the middle of the path, and the sign of the taper and the twist.
+- `SweepFeature.startFaces` and `endFaces`, and `LoftFeature.startFace` and `endFace`, with the marker after the item
+  (`faces_after`): a point on each made end cap and its outward normal.
+- `LoftFeature.loftSections` and `LoftSection.entity`: the entity type decides the section kind (`Profile`, a sketch
+  or construction point, `BRepVertex`, `BRepFace`, a `Path`). Note which type a point end gives.
+- `LoftSection.endCondition` type names (`LoftFreeEndCondition`, `LoftDirectionEndCondition`,
+  `LoftTangentEndCondition`, `LoftSmoothEndCondition`, `LoftPointSharpEndCondition`,
+  `LoftPointTangentEndCondition`) and their `angle` and `weight` members (read as model parameters when they are).
+  A name that does not match reads as `other`.
+- `LoftFeature.centerLineOrRails` (`count`, `isCenterLine`, `item(i)`): what it returns when the loft has neither
+  (assumed null or an empty collection, read as no rails), and `isClosed`, `isTangentEdgesMerged`.
 
 ## Capture reader calls to watch (thin extrude)
 
@@ -1238,3 +1786,26 @@ as a marker, which the translator refuses, so a wrong guess shows up as a refusa
   `created_by.kind` should read `sketchText` with the sketch name in the report. When the name cannot be read the
   record says `text_params_unknown` and every size that reaches a parameter with an unknown maker is treated as
   reaching the text.
+
+## Capture reader calls to watch (reach)
+
+Written from the API reference and never run (`lib/fusion_reader/read_gap_reach.py`, used only when the first
+translation left steps out). A read that fails gives `reach: { read: false, error }` and the translator leaves out
+every later step that picks geometry, so a wrong guess shows up as too many left out steps and not as a wrong part
+(L2, L3).
+
+- `Timeline.item(index).entity.faces` (`Feature.faces`) with the marker just before a later step: the faces that step
+  created, as `BRepFace` objects. A feature type that has no `faces`, or whose faces cannot be read, counts as a
+  maker of every pick. Check it for an extrude, a revolve, a sweep, a loft, a fillet, a chamfer, a shell, a pattern,
+  a combine and a move, and that the faces of an earlier feature that a later round cut into are still found.
+- `BRepEdge.faces`: the faces an edge joins (a picked edge is traced to the faces it touches).
+- `Design.findEntityByToken(token)` for a picked edge or face: a list of entities (a split face gives several); the
+  reader takes the native object of each. A face is also found with `Component.findBRepUsingPoint(point,
+  BRepEntityTypes.BRepFaceEntityType)` at the recorded point.
+- Two entities are the same face when `entityToken` matches or `geo.same_entity` says so.
+- `Timeline.markerPosition = index` for each tested step, and back to the start marker at the end: after a read the
+  marker must be where it was (`MarkerError` stops the export otherwise). The marker visits each position once, so
+  the read moves it about once per tested step. Measure it on L2 and on a part with a run of rounds after the coil:
+  `reach.moves` in `report.json` is the number of moves (the move back is not counted); note it with the
+  seconds the export waits before the result window. A move that takes long in Fusion (a design that rebuilds
+  slowly) is the number to report.

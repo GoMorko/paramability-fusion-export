@@ -1,16 +1,25 @@
-"""Volume check for a Combine whose tool steps are written one by one.
+"""Volume checks for a Combine.
 
-The capture can hold the volume of the exported body before and after the Combine (`volume_before`,
+For tool steps written one by one, the capture can hold the volume of the exported body before and after the Combine (`volume_before`,
 `volume_after`). A cut can remove, and a join can add, at most what the written tool steps fill together, so a
 change bigger than the sum of the step volumes shows a tool the steps do not reproduce. The sum is an upper bound
 (overlapping steps count twice), so this catches a missing or too small tool, never a too big one. A tool whose
 volume cannot be worked out exactly (revolve, taper, thin wall, curves other than lines, arcs and circles) skips the
 check.
+
+For a tool built in a step of its own, the reader measured each tool body (`volume`), so the change is compared with
+those volumes (`exceeds_tools`).
+
+An intersect of several tools keeps what every tool holds or what any tool holds. `intersect_model` matches the volume
+after the Combine to the two measured candidates.
 """
 import math
 
 REL_TOL = 2e-3
 ABS_TOL_MM3 = 1.0
+# Two measured volumes are the same when they differ by less than this (mm3) or by this share of the larger one.
+SAME_VOLUME_MM3 = 1e-3
+SAME_VOLUME_RELATIVE = 1e-6
 
 
 def _loop_area(loop):
@@ -106,3 +115,41 @@ def exceeds(data, items):
         return False
     change = abs(after - before)
     return change > filled + max(ABS_TOL_MM3, REL_TOL * max(filled, change))
+
+
+def _over(value, limit):
+    return value > limit + max(ABS_TOL_MM3, REL_TOL * max(limit, value))
+
+
+def exceeds_tools(combine, data):
+    """True when the part after the Combine cannot come from its measured tool bodies: a cut or a join changes the
+    part by at most the sum of the tools, and an intersect ends at most as big as the smallest tool (the sum of them
+    when it keeps what any tool holds). False when a volume it needs was not measured."""
+    before, after = data.get("volume_before"), data.get("volume_after")
+    volumes = [tool.get("volume") for tool in data.get("tools") or []]
+    if after is None or not volumes or None in volumes:
+        return False
+    if combine == "intersect":
+        return _over(after, sum(volumes) if data.get("intersect_model") == "any" else min(volumes))
+    return before is not None and _over(abs(after - before), sum(volumes))
+
+
+def same_volume(a, b):
+    return abs(a - b) <= max(SAME_VOLUME_MM3, SAME_VOLUME_RELATIVE * max(abs(a), abs(b)))
+
+
+def intersect_model(measured, volume_after):
+    """"every", "any" or "unknown": which candidate of `measured` the volume after the Combine matches. When both match
+    it is "every". A candidate that was not measured is null and matches nothing."""
+    if not measured or volume_after is None:
+        return "unknown"
+    for name in ("every", "any"):
+        if measured.get(name) is not None and same_volume(measured[name], volume_after):
+            return name
+    return "unknown"
+
+
+def rule_unproven(measured):
+    """True when the measured candidates cannot show which rule Fusion used: they are equal, or one is missing."""
+    every, some = (measured or {}).get("every"), (measured or {}).get("any")
+    return every is None or some is None or same_volume(every, some)
