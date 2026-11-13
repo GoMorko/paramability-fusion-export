@@ -11,7 +11,7 @@ from tests.translator_helpers import assert_schema_ok, left_out, load_capture, s
 
 from lib.params import size_table
 from lib.sketch_values.motion import Affine, Motion, Stuck, Terms
-from lib.translator import path_limits, sweep, sweep_limits, sweep_rules, sweep_settings, translate
+from lib.translator import gap_hints, path_limits, sweep, sweep_limits, sweep_rules, sweep_settings, translate
 from lib.translator.translate import _sweep_version
 
 PIPE = "sweep_pipe"
@@ -464,6 +464,22 @@ class RefusalTest(unittest.TestCase):
         for words in ("orientation, twist and taper", "RuntimeError: 3 : invalid"):
             self.assertIn(words, reason)
 
+    def test_a_guide_surface_is_left_out_with_its_hint_and_inferred_when_fusion_hides_it(self):
+        said = {"orientation": "2 : InternalValidationError : false", "taper_deg": "none", "twist_deg": "none"}
+        hidden = dict(orientation=None, taper_deg=None, twist_deg=None, unread=said)
+        for label, edit, reason in (
+                ("listed", dict(guide_surfaces=[{"token": "g1", "surface": "Plane", "body": None}]),
+                 sweep_limits.GUIDE_SURFACE),
+                ("inferred", hidden, sweep_limits.GUIDE_SURFACE_LIKELY),
+                ("unread and inferred", dict(hidden, guide_surfaces={"kind": "unread", "said": "x"}),
+                 sweep_limits.GUIDE_SURFACE_LIKELY)):
+            with self.subTest(label):
+                result = on_plate(lambda d, edit=edit: d.update(**edit))
+                self.assertEqual(gap_reason(result), reason)
+                self.assertEqual([gap["hint"] for gap in result.gaps], [gap_hints.HINTS[gap_hints.GUIDE_SURFACE]])
+        read_none = gap_reason(on_plate(lambda d: d.update(guide_surfaces=[], **hidden)))
+        self.assertTrue(read_none.startswith("Fusion did not give the orientation"))
+
     def test_part_of_the_path(self):
         self.reasons([
             ("distance one", lambda d: d.update(distance_one=0.5), sweep_limits.PART_OF_PATH),
@@ -493,14 +509,20 @@ class PathShapeTest(unittest.TestCase):
     """Paths the recipe cannot hold leave the sweep out as a gap after the block."""
 
     def test_each_path_the_recipe_cannot_hold_leaves_the_sweep_out_with_its_reason(self):
-        cases = (("sweep_sharp_corner", path_limits.SHARP_CORNER),
-                 ("sweep_middle_outline", path_limits.BOTH_SIDES), ("sweep_tilted_outline", path_limits.NOT_SQUARE),
+        cases = (("sweep_middle_outline", path_limits.BOTH_SIDES), ("sweep_tilted_outline", path_limits.NOT_SQUARE),
                  ("sweep_bend_3d", path_limits.BENDS_3D))
         for name, reason in cases:
             with self.subTest(name):
                 result = translate(load_capture(name))
                 self.assertEqual(left_out(result, 4)["reason"], reason)
                 self.assertEqual(len(steps_of(result.recipe, "extrude")), 1)
+
+    def test_a_sharp_corner_between_two_lines_is_mitred_unless_the_outline_twists(self):
+        step = only_sweep(self, translate(load_capture("sweep_sharp_corner")))
+        self.assertEqual([s["kind"] for s in step["path"]["segments"]], ["line", "line"])
+        twisted = translate(edited("sweep_sharp_corner", 4, lambda d: d.update(twist_deg=90.0)))
+        self.assertEqual(left_out(twisted, 4)["reason"], path_limits.SHARP_CORNER)
+        self.assertEqual([gap["hint"] for gap in twisted.gaps], [gap_hints.HINTS[gap_hints.SHARP_CORNER]])
 
     def test_an_outline_wider_than_the_bend_is_refused(self):
         capture = edited(PIPE, PIPE_ITEM, lambda d: d["profiles"][0]["loops"][0]["curves"][0].update(radius=12.0))
@@ -740,6 +762,23 @@ class ClosedTest(unittest.TestCase):
         self.assertEqual(step["sketch"]["on"]["origin"], [20.0, 0.0, 0.0])
         pappus = 4 * (120 - 2 * math.pi)
         self.assertEqual(stopped(square(pappus))["reason"], sweep_limits.NOT_MATCHING)
+
+    def test_an_open_corner_path_counts_the_mitre_for_an_outline_off_the_path(self):
+        def corner(volume):
+            def edit(data):
+                corners = [(0, 0, 0), (30, 0, 0), (30, 30, 0)]
+                data["path"]["curves"] = [{"kind": "line", "start": list(a), "end": list(b), "opposed": False}
+                                          for a, b in zip(corners, corners[1:])]
+                data["path"]["closed"] = False
+                data["profiles"][0]["frame"]["origin"] = [0, 0, 0]
+            capture = edited(RIM, RIM_ITEM, edit)
+            # The 2 by 2 outline's centre is 1 mm left of the path: 4 * (60 - 1 * 2 tan 45).
+            capture["items"][RIM_ITEM]["target_after"]["volume_mm3"] = volume
+            return translate(capture)
+
+        step = only_sweep(self, corner(232.0))
+        self.assertEqual([s["kind"] for s in step["path"]["segments"]], ["line", "line"])
+        self.assertEqual(stopped(corner(240.0))["reason"], sweep_limits.NOT_MATCHING)
 
     def test_a_volume_that_does_not_match_the_rim_is_refused(self):
         capture = edited(RIM, RIM_ITEM, lambda d: None)

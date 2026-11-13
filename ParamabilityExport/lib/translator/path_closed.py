@@ -5,12 +5,12 @@ import math
 
 from ..package.numbers import round9
 
-from . import vec
-from .path_checks import off_square, outline_reach
+from . import gap_hints, vec
+from .path_checks import corners_refusal, off_square, outline_reach
 from .path_curves import (arc_of, curve_length, joined_lines, polyline, round_point, tangents, turn_deg,
                           turned_round)
-from .path_limits import (CLOSED_3D, CLOSED_AT_CORNER, CLOSED_PARALLEL, CLOSED_TAPER, CORNER_TOO_TIGHT, MAX_MITRE_DEG,
-                          NOT_SQUARE, OFF_PLANE, PLANE_TOL, SHARP_CORNER, SMOOTH_JOIN_DEG, STRAIGHT_DEG)
+from .path_limits import (CLOSED_3D, CLOSED_AT_CORNER, CLOSED_PARALLEL, CLOSED_TAPER, NOT_SQUARE, OFF_PLANE, PLANE_TOL,
+                          SMOOTH_JOIN_DEG, STRAIGHT_DEG)
 from .path_writing import flat_frame, flat_plan
 from .result import Refusal
 
@@ -45,12 +45,13 @@ def closed_plan(path, ordered, profile_frame, profile_points, options, cut=True)
     seam, seam_lines = _junction(ordered[-1], ordered[0])
     if seam > (STRAIGHT_DEG if seam_lines else SMOOTH_JOIN_DEG):
         if options.twisted or not seam_lines:
-            return Refusal(CLOSED_AT_CORNER)
+            return Refusal(CLOSED_AT_CORNER, cause=gap_hints.SHARP_CORNER)
         if off_square(tangents(ordered[0])[0], normal):
             ordered = turned_round(ordered)  # the line the outline is square to arrives at the corner
         ordered, moved = _start_mid_line(ordered)
         profile_points = [vec.add(p, moved) for p in profile_points]
-    refusal = _corners_refusal(ordered, profile_points, frame["z"], options.twisted)
+    reach = outline_reach(profile_points, ordered[0]["start"], frame["z"])
+    refusal = corners_refusal(ordered, reach, not options.twisted, closed=True)
     if refusal is not None:
         return refusal
     start = ordered[0]["start"]
@@ -76,24 +77,6 @@ def _start_mid_line(ordered):
     middle = vec.scale(vec.add(first["start"], first["end"]), 0.5)
     return ([dict(first, start=middle)] + ordered[1:] + [dict(first, end=middle)],
             vec.sub(middle, first["start"]))
-
-
-def _corners_refusal(ordered, profile_points, plane_normal, twisted):
-    """A Refusal for a join of the closed chain the app cannot build: a sharp corner next to a curve or in a twisting
-    path, a corner turning back past `MAX_MITRE_DEG`, or two corners too close for the outline's mitres (each needs
-    the outline's reach across the path's plane times tan(turn / 2) of straight path on both sides)."""
-    reach = outline_reach(profile_points, ordered[0]["start"], plane_normal)
-    for before, after in zip(ordered[-1:] + ordered[:-1], ordered):
-        turn, both_lines = _junction(before, after)
-        if turn <= (STRAIGHT_DEG if both_lines else SMOOTH_JOIN_DEG):
-            continue
-        if twisted or not both_lines or turn > MAX_MITRE_DEG:
-            return Refusal(SHARP_CORNER)
-        needed = reach * math.tan(math.radians(turn) / 2.0)
-        shorter = min(curve_length(before), curve_length(after))
-        if shorter < needed:
-            return Refusal(CORNER_TOO_TIGHT % (needed, shorter))
-    return None
 
 
 def _cut_at_plane(ordered, origin, normal, profile_points):

@@ -118,8 +118,12 @@ except U1 to U3, UM1, L1 to L16, F1, F2, SP1 to SP4 and TH1 to TH6, which are de
       Single path, seen with 0.10.11 (a 3 by 3 mm outline beside one top edge of a 40 by 40 mm box, new body): all
       settings read, `distance_one` and `distance_two` both 1 with `path.closed` true, a path of four edges, and the
       body is the mitred ring (1548 mm3). 0.10.11 left it out as "covers only part of its path"; now it copies as a
-      closed `sweep` that starts in the middle of the first edge (the app replay matches 100%). The guide surface
-      sweep is still to export.
+      closed `sweep` that starts in the middle of the first edge (the app replay matches 100%). Guide surface, seen
+      with 0.10.11 (the same outline along the top loop of a 40 by 40 mm box with 5 mm fillets on its vertical edges,
+      the top face as the guide): `orientation` fails with "InternalValidationError", `twist_deg` and `taper_deg`
+      give nothing, `extent` is null; the capture had no guide surface member yet. The copy now leaves it out as
+      "This sweep likely has a guide surface" with the hint to sweep without the guide surface or use a loft. Still
+      to check with a new export: `guide_surfaces` lists the top face, or holds Fusion's answer as `unread`.
 - [ ] LF3, a loft section of edges. Loft from a closed loop of a body's edges (picked as edges, not a face) to a sketch
       profile above it. Export. Expect: the section shows `kind: "path"` with the edges in `path` (`kind: "edges"`,
       `closed: true`), and the loft is copied as a ruled loft whose first section is the measured loop. Seen with
@@ -1119,10 +1123,13 @@ surprises.
 - [ ] **SW5 Profile in the middle.** Put the profile plane through the middle of the path. Note `distance_one` and
       `distance_two` and what Fusion builds. The sweep is left out with "This sweep runs to both sides of its
       outline".
-- [ ] **SW6 Sharp corner.** Two sketch lines at 90 degrees, no arc between them. The sweep is left out with "The path
-      of this sweep has a sharp corner". Note what Fusion builds (a mitre, a rounded corner or an error) and measure
-      the outer corner, so a later version can copy it. Along a closed loop of edges Fusion mitres (see SW9), and the
-      copy now mitres sharp corners of closed paths; an open path still waits for this test.
+- [x] **SW6 Sharp corner.** Two sketch lines at 90 degrees, no arc between them. Seen with 0.10.11 (two 30 mm lines,
+      a 3 by 3 mm outline at the free end of one, new body): Fusion mitres the corner (the body is 540 mm3, area times
+      path length, and the part file has only flat faces with a vertex on the outer corner of the mitre). The copy now
+      mitres sharp corners between lines on open flat paths too (the app replay matches 100%). With a twist, a taper
+      or parallel orientation the sweep is still left out ("has a sharp corner", hint: round the corner with a
+      sketch fillet). Still to check: an outline off the path (its centre beside the line), where the volume counts
+      2 tan(t / 2) per corner for the centre's offset.
 - [ ] **SW7 Taper and twist.** On a straight path, a 20 by 10 mm rectangle with taper 5 degrees, then with twist 90
       degrees. Each is copied as a `sweep` step with `taperDeg` or `twistDeg` (recipe version 16) and a note "check the
       shape"; the sizes behind the angle and the outline are marked. Note `taper_deg` and `twist_deg` in degrees with

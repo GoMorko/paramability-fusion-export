@@ -21,6 +21,8 @@ REPEAT_FACES = "repeatFaces"
 SWEEP_KIND = "sweepKind"
 TWIST_LONG = "twistLong"
 PART_OF_PATH = "partOfPath"
+GUIDE_SURFACE = "guideSurface"
+SHARP_CORNER = "sharpCorner"
 LOFT_KIND = "loftKind"
 THREAD = "modeledThread"
 COIL = "coil"
@@ -46,6 +48,8 @@ HINTS = {
     SWEEP_KIND: "Use a twist or a taper alone, or a loft between two outlines.",
     TWIST_LONG: "Use a twist of 3600 degrees or less.",
     PART_OF_PATH: "Sweep along the whole path.",
+    GUIDE_SURFACE: "Sweep along the same path without the guide surface, or build the shape with a loft.",
+    SHARP_CORNER: "Round the sharp corner of the path with a sketch fillet.",
     LOFT_KIND: "Build it from lofts of two outlines each, or from extrudes.",
     THREAD: "Use a cosmetic thread, which copies as a plain hole.",
     COIL: "Your AI assistant can add a coil to the copy.",

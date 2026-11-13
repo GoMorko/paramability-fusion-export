@@ -37,23 +37,44 @@ def _closed_volume(area, middle, found, twisted):
     return area * (found.length - left * (found.winding * 2.0 * math.pi + _mitre_excess(found.curves, normal)))
 
 
-def _mitre_excess(curves, normal):
-    """What the sharp corners between lines of a closed path add to its turn when the outline is mitred there:
-    2 tan(t / 2) - t for each corner turning by t, signed by its direction about `normal`."""
-    total = 0.0
-    for before, after in zip(curves[-1:] + curves[:-1], curves):
+def _mitre_turns(curves, normal, closed=True):
+    """`(turn, mitred)` summed over the sharp corners between lines of the path, each signed by its direction about
+    `normal`: the corner's turn t and 2 tan(t / 2), what the outline's centre travels per mm of its offset to the
+    left of the path when the outline is mitred there. On a closed path the last line meets the first."""
+    turns, mitred = 0.0, 0.0
+    pairs = zip(curves[-1:] + curves[:-1], curves) if closed else zip(curves, curves[1:])
+    for before, after in pairs:
         if before["kind"] != "line" or after["kind"] != "line":
             continue
         a, b = vec.unit(vec.sub(before["end"], before["start"])), vec.unit(vec.sub(after["end"], after["start"]))
         turn = math.atan2(vec.length(vec.cross(a, b)), vec.dot(a, b))
         if math.degrees(turn) > STRAIGHT_DEG:
-            total += math.copysign(2.0 * math.tan(turn / 2.0) - turn, vec.dot(vec.cross(a, b), normal))
-    return total
+            sign = math.copysign(1.0, vec.dot(vec.cross(a, b), normal))
+            turns += sign * turn
+            mitred += sign * 2.0 * math.tan(turn / 2.0)
+    return turns, mitred
+
+
+def _mitre_excess(curves, normal):
+    """What the sharp corners between lines of a closed path add to its turn when the outline is mitred there:
+    2 tan(t / 2) - t for each corner turning by t, signed by its direction about `normal`."""
+    turns, mitred = _mitre_turns(curves, normal)
+    return mitred - turns
+
+
+def _open_lines_volume(area, middle, found):
+    """The volume of an outline swept along an open flat chain of lines with mitred corners: the area times the length
+    its centre travels, the path's length less the centre's offset to the left of the path times 2 tan(t / 2) for
+    each corner turning by t."""
+    normal = found.recipe["on"]["normal"]
+    left = vec.dot(vec.sub(middle, found.start), vec.cross(normal, found.direction))
+    return area * (found.length - left * _mitre_turns(found.curves, normal, closed=False)[1])
 
 
 def _expected_volume(profile, area, found, twisted):
     """The volume the outline sweeps along the path (area times the length its centre travels), or None when that is
-    not known: a bent path counts only when it runs through the centre of the outline."""
+    not known: a bent path counts only when it runs through the centre of the outline or, untwisted, is a chain of
+    lines in one plane."""
     centre = centroid(profile)
     if centre is None:
         return None
@@ -66,6 +87,8 @@ def _expected_volume(profile, area, found, twisted):
         return area * math.radians(found.angle_deg) * _axis_distance(middle, found.axis)
     if vec.length(vec.sub(middle, found.start)) <= CENTROID_ON_PATH_TOL:
         return area * found.length
+    if found.kind == "flat" and not twisted and all(c["kind"] == "line" for c in found.curves):
+        return _open_lines_volume(area, middle, found)
     return None
 
 

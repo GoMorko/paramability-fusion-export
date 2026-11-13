@@ -5,7 +5,7 @@ import math
 from . import gap_hints, sweep_taper, values
 from .extrude import MAX_TAPER_DEG, keep_angle_within
 from .result import Refusal
-from .sweep_limits import (BOTH_WAYS_TWIST, MAX_TAPER_STATIONS, MAX_TWIST_DEG, OTHER_KIND, PARALLEL_AND_SHAPE,
+from .sweep_limits import (BOTH_WAYS_TWIST, GUIDE_SURFACE, GUIDE_SURFACE_LIKELY, MAX_TAPER_STATIONS, MAX_TWIST_DEG, OTHER_KIND, PARALLEL_AND_SHAPE,
                            PART_OF_PATH, RAIL, RAIL_UNREADABLE, TAPER_CURVES, TAPER_STATIONS, TAPER_STEEP,
                            TWIST_AND_TAPER, TWIST_LONG, UNREADABLE, ZERO_TOL)
 from .sweep_outline import loop_polygon
@@ -18,7 +18,10 @@ def is_number(value):
 
 def settings_refusal(data):
     """A Refusal for a setting the copy does not follow (a twist with a taper or a fixed direction, a taper that is
-    too steep, guide rail, other kinds, part of the path)."""
+    too steep, guide rail or guide surface, other kinds, part of the path)."""
+    guided = _guide_surface_refusal(data)
+    if guided is not None:
+        return guided
     rail = data.get("rail")
     if isinstance(rail, dict) and rail.get("kind") == "unread":
         return Refusal(RAIL_UNREADABLE)
@@ -39,6 +42,20 @@ def settings_refusal(data):
     if abs(twist) > MAX_TWIST_DEG:
         return Refusal(TWIST_LONG, cause=gap_hints.TWIST_LONG)
     return _coverage_refusal(data, one, two, twist)
+
+
+def _guide_surface_refusal(data):
+    """A Refusal for a sweep with a guide surface. When the capture does not say (an older capture, or Fusion would
+    not give the guide surfaces), Fusion's answer for the other settings tells: on such a sweep it fails the
+    orientation with an InternalValidationError and gives no twist and no taper."""
+    guide = data.get("guide_surfaces")
+    if isinstance(guide, list):
+        return Refusal(GUIDE_SURFACE, cause=gap_hints.GUIDE_SURFACE) if guide else None
+    said = data.get("unread") or {}
+    if (all(key in said for key in ("orientation", "twist_deg", "taper_deg"))
+            and "InternalValidationError" in str(said["orientation"])):
+        return Refusal(GUIDE_SURFACE_LIKELY, cause=gap_hints.GUIDE_SURFACE)
+    return None
 
 
 def _coverage_refusal(data, one, two, twist):

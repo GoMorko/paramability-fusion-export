@@ -397,17 +397,20 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   outline's plane becomes a sweep step too (recipe version 16); a twist or taper is copied with a note to check the
   shape, since Fusion does not document how it measures them. A closed chain of lines, arcs and spline curves in one
   plane becomes a sweep step along a closed flat path (version 16), cut open where the path meets the outline's plane;
-  a full circle stays a revolve unless a twist needs the sweep step. Sharp corners between lines of a closed path are
-  mitred, as Fusion builds them; an outline sitting on such a corner is moved to the middle of the next side, where the
-  copied path starts. A twist along a closed path must be whole turns
+  a full circle stays a revolve unless a twist needs the sweep step. Sharp corners between lines of a flat path, closed
+  or open, are mitred, as Fusion builds them, unless the sweep twists, tapers or keeps the outline in one direction;
+  each line next to such corners needs room for their mitres. On a closed path an outline sitting on such a corner is
+  moved to the middle of the next side, where the copied path starts. A twist along a closed path must be whole turns
   and is copied as a number, not as a size. These sweeps are left out of the copy: a twist together
   with a taper or parallel orientation, a taper along spline curves or along a scaled outline, a taper that would close part of the outline
   or a hole, a taper of 45 degrees
-  or more, a twist over 3600 degrees, a guide rail, parallel orientation on a path that turns back (the path's direction
+  or more, a twist over 3600 degrees, a guide rail, a guide surface (when Fusion does not list the guide surfaces,
+  a sweep whose orientation Fusion fails with an InternalValidationError and whose twist and taper it does not give is
+  taken as one, "likely"), parallel orientation on a path that turns back (the path's direction
   must keep a rise of 0.05 along the outline's normal at every point, ends and arc points included), several outlines at once that intersect the part or taper, an outline that is a face of the part, a path of
   sketch curves mixed with edges, a closed path that bends in 3D or that tapers or keeps the outline in one direction,
-  a twist along a closed path that is not whole turns or that has a sharp corner, a sharp corner in an open path or
-  next to a curve, corners of a closed path too close together for the outline, a path that
+  a twist along a closed path that is not whole turns, a sharp corner in a path that twists, tapers or keeps the
+  outline's direction, or next to a curve, or in a 3D path, corners too close together for the outline, a path that
   crosses itself or bends tighter than the outline allows, a path in 3D with splines or arcs that are not tangent, an
   outline in the middle of the path or not square to it, a sweep along only part of the path, a surface sweep and a
   sweep that makes a new component. A new body must have the volume the outline and path give (a parallel outline: its area times the rise of the

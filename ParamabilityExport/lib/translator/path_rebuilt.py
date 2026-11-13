@@ -1,10 +1,10 @@
 """A path read back from written numbers: its curves, and the check of the app's rules for it that is run over the
 range of every size the path follows (`path_motion`). Pure."""
 from . import vec
-from .path_checks import bend_refusal, off_square, overlap_refusal, rise_refusal, self_touch
-from .path_curves import near, polyline, tangents, tightest_radius, turn_deg
-from .path_limits import (CLOSED_AT_CORNER, CROSSES, NOT_SQUARE, SHARP_CORNER, SMOOTH_JOIN_DEG, STRAIGHT_DEG,
-                          TURNED_ROUND, UNREADABLE)
+from .path_checks import (bend_refusal, corners_refusal, off_square, overlap_refusal, rise_refusal, self_touch,
+                          sharp_corner)
+from .path_curves import near, polyline, tangents, tightest_radius
+from .path_limits import CLOSED_AT_CORNER, CROSSES, NOT_SQUARE, TURNED_ROUND, UNREADABLE
 from .result import Refusal
 
 
@@ -31,9 +31,10 @@ def flat_curves(recipe):
     return out
 
 
-def rebuilt_refusal(curves, closed, normal, reach, fixed=False, extra=0.0, leaves=None):
+def rebuilt_refusal(curves, closed, normal, reach, fixed=False, extra=0.0, leaves=None, mitres=False):
     """A Refusal when a chain of lines and arcs read back from written numbers (the first curve starts on the
-    outline's plane) breaks a rule the app checks: it does not leave the plane square, it has a sharp corner, the
+    outline's plane) breaks a rule the app checks: it does not leave the plane square, it has a sharp corner (one
+    between two lines passes when `mitres` is true and the app can mitre it, `corners_refusal`), the
     outline reaches past its tightest bend, it touches itself, or (for an outline kept in one direction) it stops
     rising. `reach` is how far the outline reaches across the path's plane, `extra` how far a taper can grow it, and
     `normal` the unit normal of the outline's plane, `leaves` the direction the path leaves it (when given, the path
@@ -46,11 +47,11 @@ def rebuilt_refusal(curves, closed, normal, reach, fixed=False, extra=0.0, leave
             return Refusal(NOT_SQUARE)
         if leaves is not None and vec.dot(first, leaves) <= 0:
             return Refusal(TURNED_ROUND)
-        ring = list(zip(curves, curves[1:] + curves[:1] if closed else curves[1:]))
-        for number, (a, b) in enumerate(ring):
-            limit = STRAIGHT_DEG if a["kind"] == b["kind"] == "line" else SMOOTH_JOIN_DEG
-            if turn_deg(tangents(a)[1], tangents(b)[0]) > limit:
-                return Refusal(CLOSED_AT_CORNER if closed and number == len(ring) - 1 else SHARP_CORNER)
+        if closed and sharp_corner(curves[-1], curves[0]) is not None:
+            return Refusal(CLOSED_AT_CORNER)
+        refusal = corners_refusal(curves, reach + extra, mitres, closed)
+        if refusal:
+            return refusal
         refusal = bend_refusal(reach + extra, tightest_radius(curves))
         if refusal:
             return refusal

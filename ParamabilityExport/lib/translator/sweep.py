@@ -5,8 +5,9 @@ The path decides what is written (`paths.plan` orders it and checks the limits o
 - one arc or a full circle is a revolve of the outline about the arc's axis (`revolve.handle`);
 - a chain of lines, arcs and free curves in one plane, or of lines and tangent arcs in 3D, is a `sweep` step; a closed
   chain in one plane is a `sweep` step along a closed flat path (a full circle stays a revolve unless it twists),
-  with sharp corners between lines mitred as Fusion builds them and an outline on such a corner moved along the path
-  to the middle of the line it is square to (`path_closed`);
+  with an outline on a sharp corner moved along the path to the middle of the line it is square to (`path_closed`);
+  in one plane, sharp corners between lines are mitred as Fusion builds them, unless the outline twists, tapers or
+  keeps its direction;
 - a twist, a taper, or an outline kept in one direction (parallel) along a path that turns, also makes a `sweep` step
   (a line becomes a path of two points, an arc a flat path), with `twistDeg`, `taperDeg` and `orientation`.
 
@@ -16,7 +17,7 @@ ranges, which are cut where they stop holding. Any other path (a free curve, cor
 sweep) is written as measured, so the sizes behind its sketch are marked. A new body must have the volume the outline
 area and the path give (along a closed path that is Pappus' volume), and the end face Fusion made must lie where the
 path ends (`sweep_ends`). Twist together with taper or parallel, tapers along
-free curves, guide rails, a path that is not square to the outline, closed paths that bend in 3D or that taper or keep
+free curves, guide rails and guide surfaces, a path that is not square to the outline, closed paths that bend in 3D or that taper or keep
 the outline's direction, a twist along a closed path that is not whole turns, and sweeps along part of a path are
 refused.
 
