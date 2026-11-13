@@ -39,6 +39,21 @@ class Sketch:
         self.deferred.append(value)
 
 
+class StubbornSketch(Sketch):
+    """A sketch whose compute flag ignores the first `ignored` sets to False."""
+
+    def __init__(self, points, ignored):
+        super().__init__(points)
+        self.name, self.ignored = "Stubborn", ignored
+
+    @Sketch.isComputeDeferred.setter
+    def isComputeDeferred(self, value):
+        if value is False and self.ignored:
+            self.ignored -= 1
+            return
+        self.deferred.append(value)
+
+
 class Design:
     def __init__(self, sketches):
         self.sketches = sketches
@@ -69,6 +84,27 @@ class SketchKeeperTest(unittest.TestCase):
         sketch.sketchPoints = [own, other, Point(0.0, 0.0)]
         self.assertEqual(keeper.put_back(), 2)
         self.assertEqual((own.at, other.at), ([1.0, 2.0, 0.0], [4.0, 4.0, 0.0]))
+
+    def test_a_point_a_hair_from_its_place_is_not_moved(self):
+        own = Point(1.0, 2.0)
+        sketch = Sketch([own])
+        keeper = SketchKeeper(Design({"sk": sketch}), ["sk"], vector=lambda *d: d)
+        own.at = [1.0 + 5e-6, 2.0, 0.0]
+        self.assertEqual(keeper.put_back(), 0)
+        self.assertEqual(sketch.deferred, [])
+
+    def test_the_compute_flag_ends_as_it_was_kept_and_one_that_will_not_is_named(self):
+        own, other = Point(1.0, 2.0), Point(3.0, 3.0)
+        stubborn, deferred = StubbornSketch([own], ignored=1), Sketch([other])
+        deferred.deferred.append(True)  # the person's own deferred sketch
+        keeper = SketchKeeper(Design({"a": stubborn, "b": deferred}), ["a", "b"], vector=lambda *d: d)
+        own.at, other.at = [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]
+        keeper.put_back()
+        self.assertEqual((stubborn.isComputeDeferred, deferred.isComputeDeferred), (False, True))
+        self.assertEqual(keeper.deferred_left, [])
+        stubborn.ignored, own.at = 5, [0.0, 0.0, 0.0]
+        keeper.put_back()
+        self.assertEqual(keeper.deferred_left, ["Stubborn"])
 
 
 if __name__ == "__main__":
