@@ -1,6 +1,7 @@
 """The try runner: runs the probe rows in one job, reads each state and puts the followed sketches back."""
 from ...design_edit.marker import MARKER_LOST
-from ...design_edit.runner import ExportCancelled, RowExport
+from ...design_edit.runner import ExportCancelled, RowExport, row_key
+from ...design_edit.store import timeline_control
 from ...probe.plan.nearer import BISECT_STEPS, NEARER_STEPS
 from ...probe.plan.rows import MAX_PROBE_ROWS
 from ...timing.timer import Timer, rounded
@@ -42,9 +43,9 @@ def _row_values(row):
 
 class ProbeRun:
     """Runs the probe's rows in one job: one baseline, and the parameters put back after every row. The rows only
-    recompute (no STEP). It keeps the probe state read at every row that built, by row key, and `rows` lists
-    (row, result) of every row run. `read_failure` holds the first probe read that failed: the probe is then not
-    used.
+    recompute (no STEP). `probe` is a `probe_flow.Probe` (one part, or a group of parts over shared rows). It keeps
+    the probe state read at every row that built, by row key, and `rows` lists (row, result) of every row run.
+    `read_failure` holds the first probe read that failed: the probe is then not used.
 
     A row that did not build, or left a followed sketch on another outline, may leave that sketch there after the
     parameters are put back: a sketch with two solutions keeps the one it was last solved to. The design is then read
@@ -86,22 +87,19 @@ class ProbeRun:
         self._misses = 0
         self._previous = None  # key of the row run last
         self.keeper = self._keeper()
-        self.undo = getattr(port, "undo_steps", None)  # `undo_steps.UndoSteps` when the person turned it on
+        self.undo = port.undo_steps
         self.job = RowExport(port.store, port.units, self._export, self._before_row)
 
     def _keeper(self):
-        """The port's keeper of the followed sketches as they are now, or None when the port has none."""
-        make = getattr(self.port, "sketch_keeper", None)
-        if make is None:
-            return None
+        """The port's keeper of the followed sketches as they are now, or None when the port keeps none."""
         try:
-            return make(self.probe.followed_sketches())
+            return self.port.sketch_keeper(self.probe.followed_sketches())
         except Exception as exc:
             self.port.log(f"keeping the sketches failed: {exc!r}")
             return None
 
     def _can_park(self):
-        return callable(getattr(self.port.store, "keep_marker", None))
+        return timeline_control(self.port.store, "keep_marker") is not None
 
     def _home(self):
         """Bring the marker back where the tries hold it after a row read that may have left it before an outline face's
@@ -122,8 +120,7 @@ class ProbeRun:
         Raises when the timeline marker is not where the tries keep it, before or after the read: a read before it
         would miss items the sketches need, so the row counts as not read and the probe stops."""
         self._home()
-        holds = getattr(self.port.store, "marker_holds", None)
-        if holds is not None and not holds():
+        if not self.port.store.marker_holds():
             raise MarkerNotHeld("The timeline marker was not where the tries keep it.")
         with self.timer.span("read"):
             with self.timer.span("read_in_rows" if self.timer.is_open("rows") else "read_outside"):
@@ -152,7 +149,7 @@ class ProbeRun:
         each such row reads its own start, also once put backs are given up."""
         self._home()
         self._drop_undo()
-        key = row.get("key", row["name"])
+        key = row_key(row)
         previous, self._previous = self._previous, key
         if self.read_failure is not None or (previous is None and not row.get("again")):
             return
@@ -233,7 +230,7 @@ class ProbeRun:
     def try_rows(self, rows):
         """Run the probe's rows. Returns their results."""
         done = len(self.rows)
-        self._values.update((row.get("key", row["name"]), _row_values(row)) for row in rows)
+        self._values.update((row_key(row), _row_values(row)) for row in rows)
         with self.port.progress(messages.TRY_VERB) as progress:
             def step(index, total, label):
                 # The window counts the tries of the whole export, not of this batch.
@@ -275,7 +272,7 @@ class ProbeRun:
         a row run again replaces its first run."""
         out = []
         for row, result in self.rows[since:]:
-            key = row.get("key", row["name"])
+            key = row_key(row)
             if key in self.redone:
                 continue
             more = {"put_back": self.backs.get(key), "again": bool(row.get("again"))}
@@ -290,7 +287,7 @@ class ProbeRun:
         """True when row number `at` did not start from a checked read (its start was not read, and it is not the
         first row) and did not end on the first solution: it read another outline or did not build."""
         row, result = self.rows[at]
-        key = row.get("key", row["name"])
+        key = row_key(row)
         if at == 0 or row.get("again") or key in self.starts:
             return False
         read = self.reads.get(key)
@@ -299,7 +296,7 @@ class ProbeRun:
     def _again(self, since):
         """`(key, copy)` of the rows run from number `since` on that may have started on another solution (`_suspect`,
         and the next read with the values back shows a sketch there), within the rows left."""
-        keys = [row.get("key", row["name"]) for row, _ in self.rows]
+        keys = [row_key(row) for row, _ in self.rows]
         out = []
         for at in range(since, len(self.rows)):
             if not self._suspect(at):
@@ -317,7 +314,7 @@ class ProbeRun:
         self._check_reads()
         if self.rows and self.job.not_back is None and self._suspect(len(self.rows) - 1):
             last = self.rows[-1][0]
-            self._tails[last.get("key", last["name"])] = self._try_read()
+            self._tails[row_key(last)] = self._try_read()
             self._check_reads()
         again = self._again(done)
         if again:
@@ -389,6 +386,6 @@ class ProbeRun:
         self.try_rows(found)
         if self.read_failure is not None:
             raise self.read_failure
-        self.probe.discover([(row, result, self.reads.get(row.get("key", row["name"])))
+        self.probe.discover([(row, result, self.reads.get(row_key(row)))
                              for row, result in self.rows[done:]])
         return self.probe.also_changes

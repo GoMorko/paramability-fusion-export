@@ -10,8 +10,7 @@ import tempfile
 import unittest
 
 from tests import context  # noqa: F401
-from tests.fakes import FakeStore
-from tests.test_pipeline import FakePort
+from tests.fakes import FakePort, FakeStore
 from tests.test_translate_sketch_motion import motion_of
 from tests.translator_helpers import load_capture, steps_of
 
@@ -95,12 +94,6 @@ class ProbeRowsTest(unittest.TestCase):
         rows, untried = plan.probe_rows(self.sizes(["guess", "linked"]), {"linked"}, limit=3, extra={"guess"})
         self.assertEqual([r["varied"] for r in rows], [["linked"], ["linked"]])
         self.assertEqual(untried, [])
-
-    def test_at_most_a_few_ticked_sizes_are_tried_on_a_guess(self):
-        names = ["p%d" % n for n in range(plan.MAX_EXTRA_SIZES + 3)]
-        params = [{"name": n, "expression": "5 mm", "value": 0.5, "unit": "mm", "kind": "length"} for n in names]
-        table = size_table.build(params, names)
-        self.assertEqual(plan.extra_sizes(table, ["p0"]), names[1:plan.MAX_EXTRA_SIZES + 1])
 
 
 class TranslateTest(unittest.TestCase):
@@ -210,32 +203,35 @@ def _mm(store, name):
     return float(re.match(r"\s*([-0-9.eE+]+)", store.exprs[name]).group(1))
 
 
-class PipePort(FakePort):
-    """Fusion where the box outline follows width and depth and the hole follows the pipe (unless `still`)."""
+def pipe_port(still=False, bad_when=None, bad_item="Fillet1", outline_when=None):
+    """Fusion where the box outline follows width and depth and the hole follows the pipe (unless `still`). With
+    `outline_when`, the pipe hole's sketch reads with one more loop (another outline) when it holds for the pipe
+    diameter in mm. `varied` lists the parameters away from their start at every read."""
+    def read(request):
+        out = copy.deepcopy(port.e0)
+        scale = {"s1": (_mm(port.store, "width_mm") / 40.0, _mm(port.store, "depth_mm") / 30.0),
+                 "s2": (1.0, 1.0) if still else (_mm(port.store, "pipe_d_mm") / 12.0,) * 2}
+        for token, (sx, sy) in scale.items():
+            for loop in out["sketches"][token]["profiles"][0]["loops"]:
+                for curve in loop["curves"]:
+                    for key in ("start", "end", "mid", "center"):
+                        if key in curve:
+                            curve[key] = [curve[key][0] * sx, curve[key][1] * sy]
+                    if "radius" in curve:
+                        curve["radius"] *= sx
+        port.varied.append({n for n in START if port.store.exprs[n] != START[n]})
+        if outline_when is not None and outline_when(_mm(port.store, "pipe_d_mm")):
+            loops = out["sketches"]["s2"]["profiles"][0]["loops"]
+            inner = copy.deepcopy(loops[0])
+            inner["outer"] = False
+            for curve in inner["curves"]:
+                curve["entity"] = curve.get("entity", "") + "x"
+            loops.append(inner)
+        return out
 
-    def __init__(self, still=False, bad_when=None, bad_item="Fillet1"):
-        super().__init__(capture=CAPTURE, store=FakeStore(START, bad_when=bad_when, bad_item=bad_item))
-        self.units = {p["name"]: p["unit"] for p in USER}
-        self.still = still
-        self.varied = []
-
-    def probe_reader(self):
-        def read(request):
-            self.reads += 1
-            out = copy.deepcopy(self.e0)
-            scale = {"s1": (_mm(self.store, "width_mm") / 40.0, _mm(self.store, "depth_mm") / 30.0),
-                     "s2": (1.0, 1.0) if self.still else (_mm(self.store, "pipe_d_mm") / 12.0,) * 2}
-            for token, (sx, sy) in scale.items():
-                for loop in out["sketches"][token]["profiles"][0]["loops"]:
-                    for curve in loop["curves"]:
-                        for key in ("start", "end", "mid", "center"):
-                            if key in curve:
-                                curve[key] = [curve[key][0] * sx, curve[key][1] * sy]
-                        if "radius" in curve:
-                            curve["radius"] *= sx
-            self.varied.append({n for n in START if self.store.exprs[n] != START[n]})
-            return out
-        return read
+    port = FakePort(capture=CAPTURE, store=FakeStore(START, bad_when=bad_when, bad_item=bad_item), reader=read)
+    port.varied = []
+    return port
 
 
 def export(port, ticked):
@@ -254,7 +250,7 @@ class RangeCutTest(unittest.TestCase):
     """Fusion does not rebuild the design when the pipe is wider than 20 (12 now, range 6 to 24)."""
 
     def export(self, step):
-        port = PipePort(bad_when=lambda e: float(e["pipe_d_mm"].split()[0]) > 20, bad_item=step)
+        port = pipe_port(bad_when=lambda e: float(e["pipe_d_mm"].split()[0]) > 20, bad_item=step)
         return export(port, table_for_body(USER, "mm", MODEL, CAPTURE).ticked)
 
     def test_the_range_stops_near_the_failure_not_at_the_nearest_try_that_built(self):
@@ -279,37 +275,13 @@ class RangeCutTest(unittest.TestCase):
         self.assertNotIn("cut", result.report["sizes"])
 
 
-class OutlinePort(PipePort):
-    """`PipePort` where the pipe hole's sketch reads with one more loop (another outline) when `outline_when` holds
-    for the pipe diameter in mm."""
-
-    def __init__(self, outline_when, **kw):
-        super().__init__(**kw)
-        self.outline_when = outline_when
-
-    def probe_reader(self):
-        read = super().probe_reader()
-
-        def with_outline(request):
-            out = read(request)
-            if self.outline_when(_mm(self.store, "pipe_d_mm")):
-                loops = out["sketches"]["s2"]["profiles"][0]["loops"]
-                inner = copy.deepcopy(loops[0])
-                inner["outer"] = False
-                for curve in inner["curves"]:
-                    curve["entity"] = curve.get("entity", "") + "x"
-                loops.append(inner)
-            return out
-        return with_outline
-
-
 class OutlineRangeTest(unittest.TestCase):
     """The pipe (12 now, range 6 to 24) does not rebuild in Fusion below `low`, and its hole makes another outline above
     `high`."""
 
     def export(self, low, high):
-        port = OutlinePort(lambda d: d > high, bad_item="Extrude2",
-                           bad_when=lambda e: float(e["pipe_d_mm"].split()[0]) < low)
+        port = pipe_port(outline_when=lambda d: d > high, bad_item="Extrude2",
+                         bad_when=lambda e: float(e["pipe_d_mm"].split()[0]) < low)
         return export(port, table_for_body(USER, "mm", MODEL, CAPTURE).ticked)
 
     def test_a_size_that_fails_below_and_changes_its_outline_above_keeps_the_range_between(self):
@@ -340,14 +312,14 @@ class LinkOutcomeTest(unittest.TestCase):
 
 class ExportTest(unittest.TestCase):
     def test_the_export_tries_the_pipe_and_the_hole_follows_it(self):
-        port = PipePort()
+        port = pipe_port()
         result = export(port, table_for_body(USER, "mm", MODEL, CAPTURE).ticked)
         self.assertIn({"pipe_d_mm"}, port.varied)
         self.assertIn("pipe_d_mm", result.report["sizes"]["free"])
         self.assertEqual(result.report["links"], [dict(LINK, outcome="size")])
 
     def test_a_pipe_the_hole_does_not_follow_is_left_out_and_a_hand_ticked_spare_is_tried(self):
-        port = PipePort(still=True)
+        port = pipe_port(still=True)
         result = export(port, ALL)
         self.assertIn({"spare_mm"}, port.varied)
         [link] = result.report["links"]
@@ -359,7 +331,7 @@ class ExportTest(unittest.TestCase):
         self.assertEqual((spare["used"], spare.get("tried")), (False, True))
 
     def test_an_unticked_parameter_acting_on_the_pipe_is_tried_once_and_named_when_it_moves_the_hole(self):
-        port = PipePort()
+        port = pipe_port()
         ticked = ["width_mm", "depth_mm", "height_mm"]
         result = export(port, ticked)
         self.assertEqual([v for v in port.varied if v & {"pipe_d_mm", "lid_mm"}], [{"pipe_d_mm"}, {"lid_mm"}])

@@ -4,8 +4,8 @@ import tempfile
 import unittest
 
 from tests import context  # noqa: F401
-from tests.fakes import FakeDesign, FakeStore
-from tests.test_pipeline import START, FakePort, FlipPort, request, shifted, view
+from tests.fakes import FakeDesign, FakePort, FakeStore, shifted
+from tests.test_pipeline import START, flip_port, request, view
 
 from lib.design_edit import timeline_health as steps
 from lib.design_edit.runner import ExportCancelled
@@ -22,8 +22,8 @@ class StepStore(FakeStore):
 
     START_STEPS = {"Sketch1": "ok", "Extrude1": "ok", "Fillet1": "ok"}
 
-    def __init__(self, after_tries=None, heals=None, suppressed=(), marker_moved=False):
-        super().__init__(START)
+    def __init__(self, after_tries=None, heals=None, suppressed=(), marker_moved=False, **options):
+        super().__init__(START, **options)
         self.saved = dict(START)
         self.health = dict(self.START_STEPS)
         self.after_tries, self.heals = dict(after_tries or {}), dict(heals or {})
@@ -48,7 +48,7 @@ class StepStore(FakeStore):
         return True
 
     def recompute(self):
-        self.recomputes += 1
+        super().recompute()
         if self.exprs == self.saved:
             self._heal("compute")
         return True
@@ -147,7 +147,8 @@ class RecordTest(unittest.TestCase):
     def test_a_long_list_is_capped_and_counted(self):
         changed = [{"index": i, "name": "Fillet%d" % i, "type": "FilletFeature", "before": "ok", "after": "warning",
                     "message": ""} for i in range(steps.MAX_STEPS + 3)]
-        health = health_module.make_health(steps=steps.TimelineSettle(changed, actions=[steps.FULL_COMPUTE]))
+        health = health_module.make_health(health_module.HealthInputs(
+            steps=steps.TimelineSettle(changed, actions=[steps.FULL_COMPUTE])))
         self.assertEqual(len(health["steps_changed"]), steps.MAX_STEPS)
         self.assertEqual(health["steps_more"], 3)
         self.assertTrue(health_module.design_changed(health))
@@ -159,7 +160,7 @@ class RecordTest(unittest.TestCase):
         better = [{"index": i, "name": "Fillet%d" % i, "type": "FilletFeature", "before": "warning", "after": "ok",
                    "message": ""} for i in range(steps.MAX_STEPS)]
         worse = {"index": 99, "name": "Shell1", "type": "ShellFeature", "before": "ok", "after": "warning", "message": ""}
-        health = health_module.make_health(steps=steps.TimelineSettle(better + [worse]))
+        health = health_module.make_health(health_module.HealthInputs(steps=steps.TimelineSettle(better + [worse])))
         self.assertTrue(health_module.design_changed(health))
         self.assertIn("Undo in Fusion until", health_module.health_lines(health)[0])
 
@@ -211,17 +212,6 @@ class StoreTest(unittest.TestCase):
         self.assertEqual([i.isSuppressed for i in design.timeline.items], [True, False])
 
 
-class Port(FakePort):
-    """A pipeline port over a `StepStore`; `warned_steps` keeps the lines given when the export stops."""
-
-    def __init__(self, store, **options):
-        super().__init__(store=store, **options)
-        self.warned_steps = []
-
-    def warn_steps(self, lines):
-        self.warned_steps.append(list(lines))
-
-
 def export(port):
     with tempfile.TemporaryDirectory() as tmp:
         return run_pipeline(port, request(), tmp)
@@ -229,7 +219,7 @@ def export(port):
 
 class PipelineTest(unittest.TestCase):
     def test_a_step_left_in_a_warning_is_recorded_and_the_person_told_to_use_undo(self):
-        result = export(Port(StepStore({"Fillet1": "warning"})))
+        result = export(FakePort(store=StepStore({"Fillet1": "warning"})))
         changed = result.health["steps_changed"]
         self.assertEqual([(c["name"], c["before"], c["after"]) for c in changed], [("Fillet1", "ok", "warning")])
         self.assertEqual(result.health["end_actions"], [steps.FULL_COMPUTE, steps.VALUES_AGAIN])
@@ -237,7 +227,7 @@ class PipelineTest(unittest.TestCase):
         self.assertTrue(any("Fillet1" in line and "Undo" in line for line in lines))
 
     def test_a_step_a_rebuild_brings_back_is_recorded_as_recovered_and_not_shown(self):
-        result = export(Port(StepStore({"Fillet1": "warning"}, heals={"Fillet1": "compute"})))
+        result = export(FakePort(store=StepStore({"Fillet1": "warning"}, heals={"Fillet1": "compute"})))
         self.assertNotIn("steps_changed", result.health)
         self.assertEqual(result.health["steps_recovered"], ["Fillet1"])
         self.assertEqual(section_lines(view(result), "check"), [])
@@ -246,7 +236,7 @@ class PipelineTest(unittest.TestCase):
         store = StepStore()
         start = steps.read_timeline(store)
         store.health["Fillet1"] = "warning"  # the dialog's read of the design left the fillet in a warning
-        port = Port(store)
+        port = FakePort(store=store)
         with tempfile.TemporaryDirectory() as tmp:
             req = request()
             req.timeline_start = start
@@ -254,14 +244,14 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual([c["name"] for c in result.health["steps_changed"]], ["Fillet1"])
 
     def test_a_cancelled_export_checks_the_steps_and_tells_the_person(self):
-        port = Port(StepStore({"Fillet1": "error"}), cancel_at=2)
+        port = FakePort(store=StepStore({"Fillet1": "error"}), cancel_at=2)
         with self.assertRaises(ExportCancelled):
             export(port)
         self.assertEqual(len(port.warned_steps), 1)
         self.assertTrue(any("Fillet1" in line for line in port.warned_steps[0]))
 
     def test_a_sketch_left_with_its_compute_deferred_is_recorded_as_a_change(self):
-        port = FlipPort()
+        port = flip_port()
         make = port.sketch_keeper
 
         def keeper(tokens):
@@ -275,17 +265,14 @@ class PipelineTest(unittest.TestCase):
         self.assertTrue(health_module.design_changed(result.health))
 
     def test_a_sketch_the_end_rebuild_moves_is_reported_as_drift(self):
-        class MovingStore(StepStore):
-            """The full rebuild of the end check, with every value back and a step changed, moves the sketch."""
-            moved = False
+        moved = []  # the full rebuild of the end check, with every value back and a step changed, moves the sketch
 
-            def recompute(self):
-                self.moved = self.moved or (self.exprs == self.saved and self.health != self.START_STEPS)
-                return super().recompute()
+        def rebuilt(store):
+            if store.exprs == store.saved and store.health != store.START_STEPS:
+                moved.append(True)
 
-        store = MovingStore({"Fillet1": "warning"}, heals={"Fillet1": "compute"})
-        port = Port(store)
-        port.probe_reader = lambda: lambda request: shifted(port.e0, 0.5) if store.moved else port.e0
+        store = StepStore({"Fillet1": "warning"}, heals={"Fillet1": "compute"}, on_recompute=rebuilt)
+        port = FakePort(store=store, reader=lambda request: shifted(port.e0, 0.5) if moved else port.e0)
         result = export(port)
         self.assertTrue(result.health["sketch_drift"])
         self.assertTrue(health_module.design_changed(result.health))

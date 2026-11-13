@@ -14,6 +14,7 @@ from lib.design_edit.runner import RowExport
 from lib.export_plan.probe_flow import SizeProbe, covers_a_sketch
 from lib.probe import plan
 from lib.sketch_values.motion import Motion
+from lib.translator.sizes import probed_sizes
 
 UNITS = {"count": "", "cube": "mm", "off": "mm", "height": "mm", "gap": "mm"}
 LINK = {"param": "gap", "sketch": "", "component": "Cover", "via": "reference", "step": "Mirror1", "ref": "8.plane"}
@@ -64,7 +65,7 @@ class RefProbeTest(unittest.TestCase):
     def test_a_size_that_acts_on_the_reference_gets_rows_and_the_plane_a_formula(self):
         fusion = Cover()
         probe = self.start(fusion)
-        self.assertIn("gap", plan.sketch_driven(self.table))
+        self.assertIn("gap", probed_sizes(self.table))
         rows = run(fusion, probe, self.sizes)
         self.assertIn("gap (max)", [r["name"] for r in rows])
         self.assertEqual(probe.finish(probe.read_now(), {}), [])

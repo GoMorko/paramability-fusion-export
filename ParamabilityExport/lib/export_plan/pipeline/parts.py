@@ -10,13 +10,13 @@ A size is one size for every body that reads it. A size that must be fixed for o
 are translated again with it fixed until no body asks for more. A size that is loose for one body is loose for the
 file (`recipe_export.plan_parts_export`).
 
-Fusion is reached only through `PartsPort`. Parameters are put back on every way out, as in the single body export.
+Fusion is reached only through `PartsPort`. The design is put back on every way out by the same `put_back.PutBack` as
+in the single body export.
 """
 import os
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from ...design_edit.restore import restore_parameters
 from ...design_edit.runner import ExportCancelled
 from ...params import size_table as size_tables
 from ...params.listing import list_parameters
@@ -26,15 +26,12 @@ from ...translator.ranges.kept_ranges import built_ranges
 from .. import health as health_module
 from ..body_scope import body_links, scope_inputs
 from ..part_names import tagged, unique_names
-from ..probe_flow import ProbeGroup, SizeProbe, covers_a_sketch, extra_size_params, kept_size_names
+from ..probe_flow import ProbeGroup, SizeProbe, covers_a_sketch, sizes_to_try
 from ..reach_pass import needs_reach, with_reach
 from ..recipe_export import PartInput, free_sizes, plan_parts_export, translate_capture
-from ..size_offers import discovery_sizes, labels, probe_sizes
-from ..timeline_trim import TryTimeline
-from .probe_run import ProbeRun, with_try_seconds
-from .settle import (deferred_left, gap_after_settle, left_off, settle_after_tries, settle_steps, start_steps,
-                     undo_dropped)
-from .warn import warn_left_off, warn_steps
+from ..size_offers import discovery_sizes, labels
+from .probe_run import ProbeRun
+from .put_back import PutBack
 
 # How many times the bodies are translated again because one more size had to be fixed for all.
 MAX_SHARE_ROUNDS = 3
@@ -43,7 +40,8 @@ MAX_SHARE_ROUNDS = 3
 class PartsPort(Protocol):
     """What the parts pipeline needs from Fusion: `ExportPort` for `count` bodies.
 
-    store, units, progress, warn_unrestored, log: as in `ExportPort`.
+    store, units, timing, undo_steps, read_timer, progress, warn_unrestored, warn_left_off, warn_steps, sketch_keeper,
+    log: as in `ExportPort`.
     count: how many bodies are picked.
     body_names(): a name per body, for the file.
     export_step(index, path): write the STEP of body `index` as the design is now.
@@ -51,12 +49,14 @@ class PartsPort(Protocol):
     read_reach(index, capture, gaps): the `reach` of body `index` when the steps at the timeline indexes `gaps` are
       left out of its copy (`ExportPort.read_reach`).
     probe_reader(index): a callable `read(request)` giving one probe state of body `index`, or raising.
-    sketch_keeper(tokens): optional, as `ExportPort.sketch_keeper`.
     """
 
     store: object
     units: dict
     count: int
+    timing: object
+    undo_steps: object
+    read_timer: object
 
     def body_names(self): ...
 
@@ -68,9 +68,15 @@ class PartsPort(Protocol):
 
     def probe_reader(self, index): ...
 
+    def sketch_keeper(self, tokens): ...
+
     def progress(self, verb): ...
 
     def warn_unrestored(self, names): ...
+
+    def warn_left_off(self, names, undo_dropped=False): ...
+
+    def warn_steps(self, lines): ...
 
     def log(self, text): ...
 
@@ -93,63 +99,44 @@ def run_parts_pipeline(port, request, tmp):
     return PartsPipeline(port, request, tmp).run()
 
 
+def shared_cuts(table, probed):
+    """`table` with the range of each size cut to the narrowest cut over `probed`, the `(part table, motion, capture)`
+    of each part that was probed, so every part writes the same range: the form takes one range for a size, from the
+    first part that has it."""
+    shared = {}
+    for part_table, motion, capture in probed:
+        for name, cut in built_ranges(part_table, motion, capture).items():
+            shared[name] = shared[name].meet(cut) if name in shared else cut
+    return table.with_narrowed(shared)
+
+
 class PartsPipeline:
     def __init__(self, port, request, tmp):
         self.port, self.request, self.tmp = port, request, tmp
         self.names = unique_names(port.body_names())
         self.captures = []
         self.steps = []
-        self.saved = None
-        self.unrestored = []
+        self.put_back = None  # `PutBack` of this export, from the start of `run`
         self.table = None
         self.part_links = []  # the geometry links of each part's body, by part index
         self.group = None
-        self.roll = None
         self.probed = []  # part indexes that have a probe, in the group's order
         self.probe_status = health_module.NOT_NEEDED
         self.probe_error = ""
         self.motions = {}
         self.doubtful = []
         self.also = []
-        self.stopped = None  # `ProbeRun.stopped`
-        self.keeper = None  # the sketch keeper of the tries (`settle_after_tries`)
-        self.steps_start = None  # the timeline steps at the start (`start_steps`)
-        self.settled = None  # `settle_steps`
-        self.timing = getattr(port, "timing", None) or ExportTiming()
+        self.timing = port.timing or ExportTiming()
 
     def run(self):
-        self.saved = self.port.store.saved_expressions()
-        self.steps_start = start_steps(self)
-        done = False
+        self.put_back = PutBack.start(self.port, self.request, self.timing)
         try:
             result = self._run()
-            done = True
-            return result
-        finally:
-            failed = self._restore()
-            self._end_roll()
-            if not done:
-                if failed:
-                    self.port.warn_unrestored(failed)
-                warn_steps(self)
-            warn_left_off(self.port, self.roll, self.settled, undo_dropped(self))
-
-    def _end_trim(self):
-        """Turn back on the timeline items suppressed for the tries (a no-op when none were)."""
-        if self.roll is not None:
-            self.roll.end_trim()
-
-    def _end_roll(self):
-        """Turn the suppressed items back on and put the timeline marker back where the export found it (a no-op
-        when nothing was changed)."""
-        if self.roll is not None:
-            self.roll.end()
-
-    def _restore(self):
-        """Put every parameter back to its saved expression. Returns the names that would not go back and keeps them for
-        the health record. Safe to call at any time."""
-        self.unrestored = restore_parameters(self.port.store, self.saved)
-        return self.unrestored
+        except BaseException:
+            self.put_back.close_failed()
+            raise
+        self.put_back.close(result.health)
+        return result
 
     # ---- stages -----------------------------------------------------------------------------------------------
 
@@ -168,20 +155,12 @@ class PartsPipeline:
 
         finals = self._translate_and_measure()
 
-        with timing.span("restore"):
-            self._restore()
-            self._end_trim()
-        with timing.span("probe"):
-            gap = self._restore_gap()
-        with timing.span("restore"):
-            self._end_roll()
-            settled = settle_steps(self)
-        with timing.span("probe"):
-            gap, gap_after = gap_after_settle(self, gap, self._outline_gap)
+        self.put_back.settle(self._restore_gap, self._outline_gap)
         reports = self.group.reports() if self.group is not None and self._measured() else []
-        if self.roll is not None and self.roll.record is not None:
+        timeline = self.put_back.timeline_record
+        if timeline is not None:
             for report in reports:
-                report["timeline"] = self.roll.record
+                report["timeline"] = timeline
         probe_of = dict(zip(self.probed, reports))
         with timing.span("probe"):
             shadows = self.group.derived_records(port.log) if self.group is not None else []
@@ -189,10 +168,8 @@ class PartsPipeline:
         unchecked = self.group.restore_unchecked if self.group is not None else []
         flipped = ["%s (%s)" % (name, self.names[i]) for i, motion in self.motions.items() if motion is not None
                    for name in motion.flipped]
-        health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error, unchecked,
-                                           flipped, self.stopped, steps=settled,
-                                           deferred_left=deferred_left(self), gap_after_mm=gap_after,
-                                           left_off=left_off(self), undo_dropped=undo_dropped(self))
+        health = health_module.make_health(self.put_back.health_inputs(
+            self.probe_status, self.probe_error, unchecked, flipped))
         inputs = [PartInput(self.names[i], self.steps[i], self.captures[i], finals.get(i), self.motions.get(i),
                             probe_of.get(i), derived_of.get(i)) for i in range(port.count)]
         manifest, files, report = plan_parts_export(
@@ -237,9 +214,7 @@ class PartsPipeline:
             return finals
 
         free = list(dict.fromkeys(name for first in firsts.values() for name in free_sizes(first.recipe)))
-        extra = extra_size_params(self.table, free)
-        keep = kept_size_names(self.table, free) | {self.table.size_name(n) for n in extra}
-        sizes = probe_sizes(self.table, self.request.parameters, keep=keep)
+        sizes, extra = sizes_to_try(self.table, self.request.parameters, free)
         with self.timing.span("probe"):
             self._start_probes(list(firsts))
             if self.group is not None:
@@ -281,13 +256,9 @@ class PartsPipeline:
         return self._translation(index, motion, "translate_first")
 
     def _share_cuts(self):
-        """Cut the ranges of a size that several parts read to the narrowest cut over the parts that were probed, so
-        every part writes the same range: the form takes one range for a size, from the first part that has it."""
-        shared = {}
-        for index, motion in self.motions.items():
-            for name, cut in built_ranges(self._part_table(index), motion, self.captures[index]).items():
-                shared[name] = shared[name].meet(cut) if name in shared else cut
-        self.table = self.table.with_narrowed(shared)
+        """Cut the ranges of a size that several parts read to the narrowest cut over the parts that were probed."""
+        self.table = shared_cuts(self.table, [(self._part_table(index), motion, self.captures[index])
+                                              for index, motion in self.motions.items()])
 
     def _share_fixed(self, finals):
         """Translate the parts again with the sizes that one part had to fix fixed in all, until no part asks for more
@@ -356,20 +327,17 @@ class PartsPipeline:
 
         The rows are the ones of `SizeProbe.probe_rows` for all sizes of all parts together, so the row limit is for
         the whole export. A failure other than a cancel leaves every part without a motion and is noted for the person.
-        The parameters are put back, the suppressed items turned back on and a sketch left on another solution put
-        back (`ProbeRun.settle`) before the last read, also when the tries fail or are cancelled."""
+        The design is put back before the last read, also when the tries fail or are cancelled (`PutBack.tries_done`,
+        `PutBack.tries_ended`)."""
         group = self.group
-        self.roll = TryTimeline(self.port.store, self.port.log, self.request.faster_tries)
-        self.roll.begin([self.captures[i] for i in self.probed], lambda: group.matches_start(group.read_now()))
-        run = ProbeRun(self.port, self.tmp, group, before_discovery=self._end_trim)
+        self.put_back.hold_timeline([self.captures[i] for i in self.probed],
+                                    lambda: group.matches_start(group.read_now()))
+        run = ProbeRun(self.port, self.tmp, group, before_discovery=self.put_back.end_trim)
         tries = self._tries()
-        settled = False
         try:
             run.measure(group.probe_rows(sizes, extra), sizes)
             self.also = run.discover(tries)
-            self.roll.tries_done()
-            settled = True
-            settle_after_tries(self, run)
+            self.put_back.tries_done(run)
             found = group.finish(group.read_now(), labels(self.table))
         except ExportCancelled:
             raise
@@ -379,10 +347,7 @@ class PartsPipeline:
             self.motions = {}
             return
         finally:
-            if not settled:
-                settle_after_tries(self, run)
-            self.stopped = run.stopped
-            self.timing.note_probe(with_try_seconds(run.summary(), self.roll))
+            self.put_back.tries_ended(run)
         self.motions = dict(zip(self.probed, group.motions))
         self.doubtful.extend(found)
 

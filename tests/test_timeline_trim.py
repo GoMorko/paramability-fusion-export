@@ -7,13 +7,12 @@ import unittest
 from unittest import mock
 
 from tests import context  # noqa: F401
-from tests.test_marker_roll import LID, OWN, PIPE, RollingStore, box_capture, capture, item, profile_record
-from tests.test_parts_pipeline import FakePartsPort
+from tests.fakes import FakeDesign, FakePartsPort, FakePort, TrimStore, shifted
+from tests.test_marker_roll import LID, OWN, PIPE, box_capture, capture, item, profile_record
 from tests.test_parts_pipeline import request as parts_request
-from tests.test_pipeline import START, FakePort, shifted
+from tests.test_pipeline import START
 from tests.test_pipeline import request as single_request
 from tests.test_timeline_marker import Item, Timeline
-from tests.fakes import FakeDesign
 
 from lib.design_edit.runner import ExportCancelled
 from lib.export_plan import health as health_module
@@ -133,33 +132,6 @@ class StoreSuppressTest(unittest.TestCase):
         self.assertEqual(store.unsuppress_items(), ["Lid1"])
 
 
-class TrimStore(RollingStore):
-    """A rolling store that also suppresses timeline items and rebuilds once after each change, like the real one;
-    `events` lists every roll and suppression in order and `off_at` the suppressed indexes at each recompute."""
-
-    def __init__(self, expressions, refuse=False, stuck=()):
-        super().__init__(expressions)
-        self.off, self.off_at, self.refuse, self.stuck = (), [], refuse, list(stuck)
-
-    def suppress_items(self, items):
-        self.events.append(("suppress", [i for i, _ in items]))
-        if self.refuse:
-            return 0
-        self.off = tuple(i for i, _ in items)
-        self.recompute()
-        return len(self.off)
-
-    def unsuppress_items(self):
-        self.events.append(("unsuppress", list(self.off)))
-        self.off = ()
-        self.recompute()
-        return self.stuck
-
-    def recompute(self):
-        self.off_at.append(self.off)
-        return super().recompute()
-
-
 def trim_capture():
     """The sketch fixture, two unused items of another component, a sketch of the body that a link names and two
     items after it: the marker rolls to 9 of 11 and items 6 and 7 can be suppressed."""
@@ -173,29 +145,11 @@ def trim_capture():
     return out
 
 
-class LeftOffPort(FakePort):
-    def __init__(self, **options):
-        super().__init__(**options)
-        self.left_off = []
-
-    def warn_left_off(self, names, undo_dropped=False):
-        self.left_off.append(list(names))
-        self.undo_dropped = undo_dropped
-
-
 def export(port, faster=None):
     """Run the export; `faster` sets the dialog box, None leaves the request as the dialog makes it by default."""
     asked = single_request() if faster is None else dataclasses.replace(single_request(), faster_tries=faster)
     with tempfile.TemporaryDirectory() as tmp:
         return run_pipeline(port, asked, tmp)
-
-
-class SettingStore(TrimStore):
-    """A trim store that also lists each parameter change in `events`."""
-
-    def set_expression(self, name, expression):
-        self.events.append(("set", name))
-        super().set_expression(name, expression)
 
 
 # An unticked parameter of the sketch fixture as a discovery candidate (`size_offers.discovery_sizes`).
@@ -205,7 +159,7 @@ PIPE_TRY = {"param": "pipe_offset_mm", "size": "pipe_offset_mm", "unit": "mm", "
 
 class PipelineTrimTest(unittest.TestCase):
     def port(self, store=None, **options):
-        return LeftOffPort(capture=trim_capture(), store=store or TrimStore(START), **options)
+        return FakePort(capture=trim_capture(), store=store or TrimStore(START), **options)
 
     def test_the_tries_run_with_the_unused_items_off_without_being_asked_and_they_come_back_before_the_marker(self):
         port = self.port()
@@ -256,7 +210,7 @@ class PipelineTrimTest(unittest.TestCase):
             self.assertEqual(port.store.exprs, START)
 
     def test_the_discovery_tries_run_with_every_item_back_on(self):
-        port = self.port(store=SettingStore(START))
+        port = self.port(store=TrimStore(START, note_sets=True))
         with mock.patch("lib.export_plan.pipeline.run.discovery_sizes", return_value=[dict(PIPE_TRY)]):
             result = export(port)
         events = port.store.events
@@ -279,13 +233,13 @@ class PipelineTrimTest(unittest.TestCase):
         self.assertEqual(port.store.off_at[-1], ())
 
     def test_items_that_will_not_turn_back_on_are_named_to_the_person(self):
-        port = self.port(store=TrimStore(START, stuck=["Lid sketch"]))
+        port = self.port(store=TrimStore(START, stays_off=["Lid sketch"]))
         export(port)
         self.assertEqual(port.left_off, [["Lid sketch"]])
         self.assertFalse(port.undo_dropped)
 
     def test_with_undo_data_dropped_the_left_off_box_sends_to_the_saved_version_not_to_undo(self):
-        port = self.port(store=TrimStore(START, stuck=["Lid sketch"]))
+        port = self.port(store=TrimStore(START, stays_off=["Lid sketch"]))
         undo_steps.attach(port, undo_steps.UndoSteps(lambda non_undoable: True, port.log))
         export(port)
         self.assertEqual(port.left_off, [["Lid sketch"]])
@@ -298,7 +252,7 @@ class PipelineTrimTest(unittest.TestCase):
             trimmed = False
 
             def __init__(self, turns_on):
-                super().__init__(START, stuck=["Lid sketch"])
+                super().__init__(START, stays_off=["Lid sketch"])
                 self.turns_on = turns_on
 
             def suppress_items(self, items):
@@ -306,12 +260,12 @@ class PipelineTrimTest(unittest.TestCase):
                 return super().suppress_items(items)
 
             def timeline_health(self):
-                off = self.trimmed and "Lid sketch" in self.stuck
+                off = self.trimmed and "Lid sketch" in self.stays_off
                 return [{"index": 6, "name": "Lid sketch", "type": "Sketch", "health": "ok", "suppressed": off}]
 
             def turn_on(self, items):
                 if self.turns_on:
-                    self.stuck = []
+                    self.stays_off = []
 
         for turns_on, left in ((True, None), (False, ["Lid sketch"])):
             with self.subTest(turns_on=turns_on):

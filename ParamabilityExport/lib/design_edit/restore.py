@@ -16,9 +16,8 @@ def restore_order(saved):
 def restore_parameters(store, saved):
     """Set back every parameter whose expression changed, with one rebuild. Never raises.
 
-    store needs current_expressions(), set_expression(name, text) and recompute(); set_expressions is used when it
-    has one (`apply.set_all`): all of them go back in one change and Fusion rebuilds once, with no full recompute.
-    The expressions are then read back, as text, and those that did not take go back one at a time as below.
+    store is a `store.ParameterStore`. The changed ones go back in one change when it can (`apply.set_all`): Fusion
+    rebuilds once, with no full recompute. The expressions are then read back, as text, and those that did not take go back one at a time as below.
     Else they are set one at a time and the design is recomputed; a parameter that refuses is then retried once after
     the others. Returns the names that could not be restored.
     """

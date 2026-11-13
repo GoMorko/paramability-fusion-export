@@ -10,8 +10,6 @@ import math
 from ..geometry import tolerances
 from ..sketch_values.motion import CURVE, UNTRIED
 
-# The name the export code reads the fit tolerance by.
-TOLERANCE = tolerances.FIT_TOLERANCE
 MAX_COLUMNS = 4
 MAX_CANDIDATES = 12
 SNAP_DENOMINATOR = 24

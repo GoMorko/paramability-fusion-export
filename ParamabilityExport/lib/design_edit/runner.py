@@ -11,6 +11,11 @@ class ExportCancelled(Exception):
     """The person cancelled during the export."""
 
 
+def row_key(row):
+    """The key of a row: its `key`, or its name when it has none."""
+    return row.get("key", row["name"])
+
+
 class RowExport:
     """Runs of size rows over one design.
 
@@ -104,7 +109,7 @@ class RowExport:
                         continue
                     raise RowBuildError(f"Size \"{row['name']}\": {exc}", exc.detail) from exc
                 self.current_row = row["name"]
-                self.current_key = row.get("key", row["name"])
+                self.current_key = row_key(row)
                 if row.get("step") is False:
                     self.export_step(None)
                     results.append({"name": row["name"], "values": values, "step_file": None})

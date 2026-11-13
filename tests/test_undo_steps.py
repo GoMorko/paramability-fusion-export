@@ -4,7 +4,8 @@ import tempfile
 import unittest
 
 from tests import context  # noqa: F401
-from tests.test_pipeline import START, FakePort, request
+from tests.fakes import FakePort
+from tests.test_pipeline import START, request
 
 from lib.design_edit import timeline_health as steps_module
 from lib.export_plan import health as health_module
@@ -48,8 +49,10 @@ class UndoStepsTest(unittest.TestCase):
         calls = made[0].calls
         self.assertGreater(len(calls), 2)
         self.assertTrue(all(non_undoable and values == START for non_undoable, values in calls))
+        # The last drop comes once the design is back and the report is made.
         self.assertEqual(result.report["timing"]["undo"],
-                         {"on": True, "applied": True, "steps": len(calls), "error": ""})
+                         {"on": True, "applied": True, "steps": len(calls) - 1, "error": ""})
+        self.assertEqual(steps.record["steps"], len(calls))
         self.assertEqual(port.store.exprs, START)
 
     def test_a_missing_or_failing_call_leaves_the_export_as_without_the_box(self):
@@ -71,7 +74,7 @@ class UndoStepsTest(unittest.TestCase):
                 self.assertEqual(port.store.exprs, START)
 
     def test_the_last_part_of_the_export_is_dropped_only_when_the_end_check_confirms_the_design_is_back(self):
-        back = health_module.make_health(gap_mm=0.0, probe=health_module.MEASURED)
+        back = health_module.make_health(health_module.HealthInputs(gap_mm=0.0, probe=health_module.MEASURED))
         cases = (("back", back, True, 1), ("never applied", back, False, 0),
                  ("a value not back", dict(back, unrestored=["Width"]), True, 0),
                  ("a worse step past the listed ones", dict(back, steps_worse=True), True, 0),

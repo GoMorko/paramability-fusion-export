@@ -1,6 +1,7 @@
 """Comparing probe states: the body's box and volume, the numbers of a read and the states a try marked."""
-from ...geometry.tolerances import BODY_TOLERANCE_MM
-from ...probe import fit
+from dataclasses import replace
+
+from ...geometry.tolerances import BODY_TOLERANCE_MM, FIT_TOLERANCE
 
 VOLUME_TOLERANCE_MM3 = 1e-4
 VOLUME_RELATIVE = 1e-6
@@ -37,7 +38,7 @@ def _numbers(node, out):
 def same_numbers(a, b):
     """True when two records hold the same numbers in the same places, within the fit tolerance."""
     x, y = _numbers(a, []), _numbers(b, [])
-    return len(x) == len(y) and all(abs(p - q) <= fit.TOLERANCE for p, q in zip(x, y))
+    return len(x) == len(y) and all(abs(p - q) <= FIT_TOLERANCE for p, q in zip(x, y))
 
 
 def body_changed(before, now):
@@ -52,4 +53,4 @@ def body_changed(before, now):
 
 def marked_states(states, changed):
     """The states after E0, each one whose number is in `changed` marked `changed` for `plan.nearer_rows`."""
-    return [dict(state, changed=True) if at in changed else state for at, state in enumerate(states) if at]
+    return [replace(state, changed=True) if at in changed else state for at, state in enumerate(states) if at]

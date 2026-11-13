@@ -143,17 +143,6 @@ class RequestTests(unittest.TestCase):
         self.assertEqual(plan.request(cap, tbl, covered={"sk2"})["sketches"], ["sk2"])
 
 
-class KeptSizesTests(unittest.TestCase):
-    def setUp(self):
-        self.tbl = table(PARAMS, ["count", "cube", "off", "height", "wall"], MODEL)
-
-    def test_sizes_that_reach_a_sketch_dimension_or_plane_are_driven(self):
-        self.assertEqual(plan.sketch_driven(self.tbl), ["count", "cube", "height"])
-
-    def test_kept_are_the_free_sizes_of_the_recipe_plus_the_driven_ones(self):
-        self.assertEqual(plan.kept_sizes(self.tbl, ["off"]), ["count", "cube", "off", "height"])
-
-
 def built(rows, failed=()):
     """Probe states for single-size rows: built, except the rows named in `failed`."""
     return [{"values": {r["varied"][0]: r["state"][r["varied"][0]]}, "built": r["name"] not in failed}

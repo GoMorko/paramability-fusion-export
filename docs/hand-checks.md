@@ -31,6 +31,13 @@ results", no narrower cut range, and the copy in Paramability still matches the 
   regression.
 - Cut ranges and match: ranges are not narrower; the copy matches the STEP at the default size.
 
+### The put back, one body and several bodies
+
+When a release changes how an export ends (the put back of values, steps, sketches and the timeline marker), export
+one single body and one design with several bodies picked, each with sizes that move a sketch. Compare `report.json`
+with the last release: `health` and `probe.timeline` hold the same keys and values (times aside). Then do the
+10-second check below on both designs.
+
 ### The 10-second check in Fusion after each export
 
 - The timeline marker is back at the end (or where you left it).

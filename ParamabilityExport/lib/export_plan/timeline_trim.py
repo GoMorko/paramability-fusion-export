@@ -25,6 +25,7 @@ record goes to `report.json` under `probe.timeline`.
 import time
 
 from ..capture_model import step_kinds
+from ..design_edit.store import timeline_control
 from .marker_roll import NO_ROLL_WHY, MarkerRoll, marker_end, is_feature, needed_items, unbounded_link
 
 NO_TRIM_WHY = dict(NO_ROLL_WHY, **{
@@ -124,7 +125,7 @@ class TimelineTrim:
         if not picked:
             self.record["reason"] = NO_TRIM_WHY[why]
             return
-        suppress = getattr(self.store, "suppress_items", None)
+        suppress = timeline_control(self.store, "suppress_items")
         if suppress is None:
             self.record["reason"] = "the design has no timeline steps to turn off"
             return

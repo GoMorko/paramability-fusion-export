@@ -98,13 +98,16 @@ def _timed_reader(port, ctx):
     """`read(request)` of one probe state; a read times its parts on the port's `read_timer`, which
     `pipeline.ProbeRun` sets only while it reads."""
     def read(request):
-        ctx.timer = getattr(port, "read_timer", None)
+        ctx.timer = port.read_timer
         return read_state(port.design, request, ctx)
     return read
 
 
 class FusionPort:
     """The pipeline's door to Fusion (`export_plan.pipeline.ExportPort`) for one picked body."""
+
+    undo_steps = None  # set by `undo_steps.attach`
+    read_timer = None  # lent by `pipeline.ProbeRun` while it reads
 
     def __init__(self, design, body, units, captures=None):
         self.design, self.body, self.token, self.units = design, body, body.entityToken, units
@@ -150,6 +153,9 @@ class FusionPort:
 
 class FusionPartsPort:
     """The parts pipeline's door to Fusion (`export_plan.pipeline.PartsPort`) for several picked bodies."""
+
+    undo_steps = None  # set by `undo_steps.attach`
+    read_timer = None  # lent by `pipeline.ProbeRun` while it reads
 
     def __init__(self, design, bodies, units, captures=None):
         self.design, self.bodies, self.units = design, list(bodies), units
@@ -298,7 +304,6 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
             else:
                 result = run_parts_pipeline(
                     undo_steps.attach(FusionPartsPort(design, bodies, units, captures), steps), request, tmp)
-            undo_steps.drop_after(steps, result.health)
             written = time.perf_counter()
             write_package(out_path, result.manifest, result.files)
             log("package written in %.2f s" % (time.perf_counter() - written))

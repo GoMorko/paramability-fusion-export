@@ -1,52 +1,15 @@
-"""Fake parameter store and fake Fusion design for tests."""
+"""Fake Fusion objects for the reader tests: the design and its user parameters, timelines, occurrences and
+matrices, solids and the B-rep tools, and the faces, edges and features of the reach read."""
 import math
 import re
 
 
-class FakeStore:
-    """Parameter store holding expressions as text. Values are the leading number as Fusion stores it (mm to cm, deg to rad)."""
-
-    def __init__(self, expressions, bad_when=None, reject=(), flaky=(), bad_item="Fillet1"):
-        self.exprs = dict(expressions)
-        self.bad_when = bad_when or (lambda exprs: False)
-        self.bad_item = bad_item  # the timeline item that goes into error when `bad_when` holds
-        self.reject = set(reject)  # values that set_expression always refuses
-        self.flaky = set(flaky)  # names refused once, then accepted
-        self.recomputes = 0
-
-    def saved_expressions(self):
-        return dict(self.exprs)
-
-    current_expressions = saved_expressions
-
-    def set_expression(self, name, expression):
-        if expression in self.reject:
-            raise RuntimeError("refused")
-        if name in self.flaky:
-            self.flaky.discard(name)
-            raise RuntimeError("busy")
-        self.exprs[name] = expression
-
-    def recompute(self):
-        self.recomputes += 1
-        return True
-
-    def read_value(self, name):
-        number = float(re.match(r"\s*([-0-9.eE+]+)", self.exprs[name]).group(1))
-        if "deg" in self.exprs[name]:
-            return math.radians(number)
-        return number / 10.0  # lengths are mm, stored as cm
-
-    def error_items(self):
-        return [self.bad_item] if self.bad_when(self.exprs) else []
-
-
-class _Item:
+class FakeItem:
     def __init__(self, **kw):
         self.__dict__.update(kw)
 
 
-class _Param(_Item):
+class FakeParam(FakeItem):
     """A user parameter whose value follows a plain "<number> mm" expression."""
 
     def __setattr__(self, key, val):
@@ -57,7 +20,7 @@ class _Param(_Item):
                 object.__setattr__(self, "value", float(match.group(1)) / 10.0)
 
 
-class _Collection:
+class FakeCollection:
     def __init__(self, items):
         self._items = items
         self.count = len(items)
@@ -71,9 +34,9 @@ class _Collection:
 
 class FakeDesign:
     def __init__(self, params, timeline=()):
-        self._params = [_Param(**p) for p in params]
-        self.userParameters = _Collection(self._params)
-        self.timeline = _Collection([_Item(**t) for t in timeline])
+        self._params = [FakeParam(**p) for p in params]
+        self.userParameters = FakeCollection(self._params)
+        self.timeline = FakeCollection([FakeItem(**t) for t in timeline])
         self.computed = 0
 
     def computeAll(self):
@@ -270,181 +233,6 @@ def fake_brep_tools(failing=False, empty_fails=False):
     return FakeBRepManager(failing, empty_fails), FakeBooleanTypes
 
 
-# Fake command inputs for the dialog tests. They keep what the code sets, like Fusion's inputs do.
-
-
-class FakeInput:
-    def __init__(self, input_id, **kw):
-        self.id = input_id
-        self.isEnabled = True
-        self.isVisible = True
-        self.__dict__.update(kw)
-
-
-class FakeCheckbox(FakeInput):
-    """Like Fusion's check box: its label cannot be set after creation."""
-
-    def __init__(self, input_id, text="", value=False, **kw):
-        super().__init__(input_id, value=value, **kw)
-        self._text = text
-
-    @property
-    def text(self):
-        return self._text
-
-    @text.setter
-    def text(self, _):
-        raise RuntimeError("2 : InternalValidationError : button")
-
-
-class FakeTextBox(FakeInput):
-    def __init__(self, input_id, formattedText="", numRows=1, **kw):
-        super().__init__(input_id, formattedText=formattedText, numRows=numRows, **kw)
-
-
-class FakeStringInput(FakeInput):
-    def __init__(self, input_id, value="", **kw):
-        super().__init__(input_id, value=value, **kw)
-
-
-class FakeListItems:
-    def __init__(self):
-        self.items = []
-
-    def add(self, name, selected):
-        self.items.append(_Item(name=name, isSelected=selected))
-
-
-class FakeDropDown(FakeInput):
-    def __init__(self, input_id, **kw):
-        super().__init__(input_id, **kw)
-        self.listItems = FakeListItems()
-
-    @property
-    def selectedItem(self):
-        return next((i for i in self.listItems.items if i.isSelected), None)
-
-
-class FakeSelection(FakeInput):
-    def __init__(self, input_id, **kw):
-        super().__init__(input_id, **kw)
-        self.picked = []
-        self.filters = []
-
-    def addSelectionFilter(self, name):
-        self.filters.append(name)
-
-    def setSelectionLimits(self, low, high):
-        self.limits = (low, high)
-
-    def addSelection(self, entity):
-        self.picked.append(entity)
-
-    def clearSelection(self):
-        self.picked.clear()
-
-    @property
-    def selectionCount(self):
-        return len(self.picked)
-
-    def selection(self, index):
-        return _Item(entity=self.picked[index])
-
-
-class FakeTable(FakeInput):
-    """Cells by (row, column). selectedRow is -1 when nothing is selected, like Fusion."""
-
-    def __init__(self, input_id, columns, ratio, **kw):
-        super().__init__(input_id, **kw)
-        self.columns, self.ratio, self.selectedRow = columns, ratio, -1
-        self.cells, self.toolbar = {}, []
-
-    def addCommandInput(self, item, row, column):
-        self.cells[(row, column)] = item
-
-    def addToolbarCommandInput(self, item):
-        self.toolbar.append(item)
-
-    def getInputAtPosition(self, row, column):
-        return self.cells.get((row, column))
-
-    @property
-    def rowCount(self):
-        return 1 + max((r for r, _ in self.cells), default=-1)
-
-
-class FakeInputs:
-    """A command's inputs (or a group's children): add* methods register inputs by id."""
-
-    def __init__(self):
-        self.items = {}
-
-    def _add(self, item):
-        self.items[item.id] = item
-        return item
-
-    def itemById(self, input_id):
-        return self.items.get(input_id)
-
-    def addSelectionInput(self, input_id, name, prompt):
-        return self._add(FakeSelection(input_id))
-
-    def addDropDownCommandInput(self, input_id, name, style):
-        return self._add(FakeDropDown(input_id))
-
-    def addTextBoxCommandInput(self, input_id, name, text, rows, read_only):
-        return self._add(FakeTextBox(input_id, text, rows))
-
-    def addStringValueInput(self, input_id, name, value):
-        return self._add(FakeStringInput(input_id, value))
-
-    def addBoolValueInput(self, input_id, name, is_check_box, resources, value):
-        return self._add(FakeCheckbox(input_id, name, value, isCheckBox=is_check_box))
-
-    def addTableCommandInput(self, input_id, name, columns, ratio):
-        return self._add(FakeTable(input_id, columns, ratio))
-
-    def addGroupCommandInput(self, input_id, name):
-        group = self._add(FakeInput(input_id, name=name, isExpanded=False))
-        group.children = FakeInputs()
-        self.items.update(group.children.items)
-        group.children.items = self.items
-        return group
-
-
-class FakeCommand:
-    def __init__(self):
-        self.commandInputs = FakeInputs()
-        self.isOKButtonVisible = True
-        self.cancelButtonText = "Cancel"
-
-    def setDialogInitialSize(self, width, height):
-        self.size = (width, height)
-
-
-def install_adsk_core():
-    """Make `import adsk.core` work and give the dialog code the Fusion classes it casts to. Safe to call twice."""
-    import sys
-    import types
-
-    if "adsk" not in sys.modules:
-        sys.modules["adsk"] = types.ModuleType("adsk")
-        sys.modules["adsk.core"] = types.ModuleType("adsk.core")
-        sys.modules["adsk"].core = sys.modules["adsk.core"]
-    core = sys.modules["adsk.core"]
-
-    def caster(kind):
-        return type(kind, (), {"cast": staticmethod(lambda item: item)})
-
-    for kind in ("BoolValueCommandInput", "StringValueCommandInput", "TableCommandInput", "TextBoxCommandInput"):
-        setattr(core, kind, caster(kind))
-    for kind in ("CommandCreatedEventHandler", "CommandEventHandler", "InputChangedEventHandler",
-                 "ValidateInputsEventHandler", "SelectionEventHandler", "CustomEventHandler"):
-        setattr(core, kind, type(kind, (), {}))
-    core.DropDownStyles = types.SimpleNamespace(TextListDropDownStyle=0)
-    return core
-
-
 # Faces, edges, features and a timeline for the reach read (`lib/fusion_reader/read_gap_reach.py`).
 
 
@@ -457,7 +245,7 @@ class FakeFace:
 class FakeEdge:
     def __init__(self, token, faces):
         self.entityToken = token
-        self.faces = _Collection(list(faces))
+        self.faces = FakeCollection(list(faces))
 
 
 class FakeMadeFeature:
@@ -475,7 +263,7 @@ class FakeMadeFeature:
         found = self._complete if right_after and self._complete is not None else self._faces
         if found is None:
             raise RuntimeError("faces unreadable")
-        return _Collection(list(found))
+        return FakeCollection(list(found))
 
 
 class FakeSolidBody:
@@ -487,7 +275,7 @@ class FakeSolidBody:
         self._faces_at = faces_at
 
     def findBRepUsingPoint(self, point, entity_type, *rest):
-        return _Collection(list(self._faces_at.get(tuple(point), ())))
+        return FakeCollection(list(self._faces_at.get(tuple(point), ())))
 
 
 class FakeMarkerTimeline:
@@ -526,7 +314,7 @@ class FakeMarkerTimeline:
         return True
 
     def item(self, i):
-        return _Item(entity=self._features[i])
+        return FakeItem(entity=self._features[i])
 
 
 class FakeReachDesign:

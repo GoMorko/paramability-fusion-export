@@ -1,5 +1,4 @@
 """An export whose translation leaves steps out: the package with a gaps file, the reach pass and the result window."""
-import contextlib
 import copy
 import json
 import tempfile
@@ -8,10 +7,11 @@ from unittest import mock
 
 from tests import context  # noqa: F401
 from tests import fakes
-from tests.fakes import FakeEdge, FakeFace, FakeMadeFeature, FakeMarkerTimeline, FakeReachDesign, FakeStore
+from tests.fakes import (FakeEdge, FakeFace, FakeMadeFeature, FakeMarkerTimeline, FakePartsPort, FakePort,
+                         FakeReachDesign)
 from tests.schema_check import load_schema, validate
 from tests.test_manifest import GAPS_SCHEMA, GAPS_SCHEMA_V2, PACKAGE_SCHEMA, PACKAGE_SCHEMA_V2
-from tests.test_parts_pipeline import FakePartsPort, renamed
+from tests.test_parts_pipeline import renamed
 from tests.translator_helpers import load_capture
 
 from lib.design_edit.errors import StepExportError
@@ -59,43 +59,20 @@ def tray_design(fillet_on_the_sweep=False):
     return FakeReachDesign(FakeMarkerTimeline(features), edges + walls + inner)
 
 
-class ReachPort:
+def reach_port(capture, reach=None, answer=None, design=None):
     """Fusion for one body without a sketch to measure. The reach read is the real one on `design`, else it answers
     `reach`, or `answer(capture, gaps)`; `asked` keeps what it was asked."""
+    def read(capture, gaps):
+        port.asked.append((sorted(gaps), "reach" in capture))
+        if design is not None:
+            return read_reach(design, capture, gaps)
+        if answer is not None:
+            return answer(capture, gaps)
+        return reach
 
-    def __init__(self, capture, reach=None, answer=None, design=None):
-        self.capture, self.reach, self.answer, self.asked = capture, reach, answer, []
-        self.design = design
-        self.store = FakeStore(START)
-        self.units = {p["name"]: p["unit"] for p in USER}
-        self.logs = []
-
-    def export_step(self, path):
-        with open(path, "wb") as f:
-            f.write(b"ISO-10303-21;")
-
-    def read_capture(self):
-        return self.capture
-
-    def probe_reader(self):
-        raise AssertionError("This body has no sketch to measure.")
-
-    def progress(self, verb):
-        return contextlib.nullcontext()
-
-    def warn_unrestored(self, names):
-        pass
-
-    def log(self, text):
-        self.logs.append(text)
-
-    def read_reach(self, capture, gaps):
-        self.asked.append((sorted(gaps), "reach" in capture))
-        if self.design is not None:
-            return read_reach(self.design, capture, gaps)
-        if self.answer is not None:
-            return self.answer(capture, gaps)
-        return self.reach
+    port = FakePort(capture, reach=read)
+    port.asked = []
+    return port
 
 
 def request():
@@ -118,7 +95,7 @@ def recipe_ids(features):
 
 class GapPackageTest(unittest.TestCase):
     def test_a_translation_with_gaps_is_a_version_2_package_with_its_gaps_file(self):
-        port = ReachPort(tray(), design=tray_design())
+        port = reach_port(tray(), design=tray_design())
         result = export(port)
         manifest, files = result.manifest, result.files
         self.assertEqual((manifest["version"], manifest["kind"], manifest["gaps"]), (2, "recipe", "gaps.json"))
@@ -136,13 +113,13 @@ class GapPackageTest(unittest.TestCase):
         self.assertEqual(result.report["outcome"], "recipe")
 
     def test_the_reach_is_read_once_for_the_steps_left_out_for_their_own_reason_and_the_second_look_uses_it(self):
-        port = ReachPort(tray(), design=tray_design())
+        port = reach_port(tray(), design=tray_design())
         result = export(port)
         self.assertEqual(port.asked, [([SHELL], False)])
         self.assertEqual(result.report["reach"], {"read": True, "gaps": [SHELL], "makers": {str(FILLET): []}, "moves": 1})
 
     def test_a_fillet_on_edges_the_left_out_step_made_is_left_out_by_the_real_reach_read(self):
-        result = export(ReachPort(tray(), design=tray_design(fillet_on_the_sweep=True)))
+        result = export(reach_port(tray(), design=tray_design(fillet_on_the_sweep=True)))
         self.assertEqual(result.report["reach"]["makers"], {str(FILLET): [SHELL]})
         self.assertEqual([(g["name"], g["dependsOn"]) for g in result.report["gaps"]],
                          [("Shell1", []), ("Fillet1", ["gap_%d" % SHELL])])
@@ -150,9 +127,9 @@ class GapPackageTest(unittest.TestCase):
     def test_a_part_over_the_gap_cap_only_because_of_later_picks_is_read_and_translated_again(self):
         # The cap is one gap: the fillet that may pick the left out shell is the second, until the reach clears it.
         with mock.patch.object(translator_gaps, "MAX_GAPS", 1):
-            port = ReachPort(tray(), design=tray_design())
+            port = reach_port(tray(), design=tray_design())
             result = export(port)
-            parts = PartsPort([tray(name=("t2", "Lid"))], {0: {"read": True, "gaps": [SHELL],
+            parts = parts_port([tray(name=("t2", "Lid"))], {0: {"read": True, "gaps": [SHELL],
                                                                "makers": {str(FILLET): []}}})
             with tempfile.TemporaryDirectory() as tmp:
                 parts_result = run_parts_pipeline(parts, request(), tmp)
@@ -162,7 +139,7 @@ class GapPackageTest(unittest.TestCase):
         self.assertEqual([g["name"] for g in parts_result.report["parts"][0]["gaps"]], ["Shell1"])
 
     def test_a_reach_that_could_not_be_read_leaves_out_every_later_step_that_picks(self):
-        port = ReachPort(tray(), reach={"read": False, "error": "no"})
+        port = reach_port(tray(), reach={"read": False, "error": "no"})
         result = export(port)
         self.assertEqual([g["name"] for g in result.report["gaps"]], ["Shell1", "Fillet1"])
         self.assertEqual(result.manifest["version"], 2)
@@ -170,13 +147,13 @@ class GapPackageTest(unittest.TestCase):
     def test_a_marker_that_cannot_go_back_stops_the_export(self):
         def refuse(capture, gaps):
             raise MarkerError("The timeline marker did not go back.")
-        port = ReachPort(tray(), answer=refuse)
+        port = reach_port(tray(), answer=refuse)
         with self.assertRaises(MarkerError):
             export(port)
         self.assertEqual(port.store.exprs, START)
 
     def test_nothing_is_asked_and_the_package_is_the_same_as_before_when_no_step_is_left_out(self):
-        port = ReachPort(tray(leave_out=False))
+        port = reach_port(tray(leave_out=False))
         result = export(port)
         self.assertEqual(port.asked, [])
         self.assertEqual(result.manifest["version"], 1)
@@ -187,23 +164,23 @@ class GapPackageTest(unittest.TestCase):
         self.assertEqual(validate(result.manifest, load_schema(PACKAGE_SCHEMA)), [])
 
     def test_a_gaps_file_with_more_gaps_than_version_1_holds_is_version_2(self):
-        gap = export(ReachPort(tray(), design=tray_design())).report["gaps"][0]
+        gap = export(reach_port(tray(), design=tray_design())).report["gaps"][0]
         many = [dict(gap, id="gap_%d" % n) for n in range(gaps_file.VERSION_ONE_GAPS + 1)]
         written = json.loads(gaps_file.gaps_file_bytes(many, [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]))
         self.assertEqual((written["version"], len(written["gaps"])), (2, gaps_file.VERSION_ONE_GAPS + 1))
         self.assertEqual(validate(written, load_schema(GAPS_SCHEMA_V2)), [])
 
     def test_a_gaps_file_over_the_cap_is_written_without_the_fusion_data(self):
-        full = len(gaps_file.gaps_file_bytes(export(ReachPort(tray(), design=tray_design())).report["gaps"],
+        full = len(gaps_file.gaps_file_bytes(export(reach_port(tray(), design=tray_design())).report["gaps"],
                                              [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]))
         with mock.patch.object(gaps_file, "MAX_GAPS_BYTES", full - 1):
-            result = export(ReachPort(tray(), design=tray_design()))
+            result = export(reach_port(tray(), design=tray_design()))
         gap = json.loads(result.files["gaps.json"])["gaps"][0]
         self.assertEqual((gap["data"], gap["trimmed"]), ({}, True))
 
     def test_a_gaps_file_that_cannot_fit_makes_the_part_a_fixed_shape(self):
         with mock.patch.object(gaps_file, "MAX_GAPS_BYTES", 10):
-            result = export(ReachPort(tray(), design=tray_design()))
+            result = export(reach_port(tray(), design=tray_design()))
         self.assertEqual(result.manifest["kind"], "stepOnly")
         self.assertNotIn("gaps", result.manifest)
         self.assertEqual(result.manifest["version"], 1)
@@ -236,7 +213,7 @@ class ReachPassTest(unittest.TestCase):
 
 class ResultWindowTest(unittest.TestCase):
     def view(self, reach):
-        result = export(ReachPort(tray(), reach=reach))
+        result = export(reach_port(tray(), reach=reach))
         return result_view("tray.paramability", result.manifest, result.report, result.table, TICKED)
 
     def test_the_view_lists_each_left_out_step_and_the_dialog_shows_the_section(self):
@@ -251,28 +228,25 @@ class ResultWindowTest(unittest.TestCase):
     def test_a_list_longer_than_the_window_shows_is_cut_and_points_to_the_report(self):
         gaps = [{"name": "Step%d" % n, "reason": "No."} for n in range(8)]
         view = result_view("tray.paramability", {"kind": "recipe", "notes": []}, {"sizes": {"free": []}, "gaps": gaps},
-                           export(ReachPort(tray(leave_out=False))).table, [])
+                           export(reach_port(tray(leave_out=False))).table, [])
         lines = section_lines(view, "left_out")
         self.assertIn("report.json", lines[-2])
 
 
-class PartsPort(FakePartsPort):
-    def __init__(self, captures, reaches):
-        super().__init__(captures, store=FakeStore(START))
-        self.units = {p["name"]: p["unit"] for p in USER}
-        self.reaches, self.asked = reaches, []
+def parts_port(captures, reaches):
+    """Fusion for several bodies whose reach reads answer `reaches` by body; `asked` keeps what it was asked."""
+    def read(index, capture, gaps):
+        port.asked.append((index, sorted(gaps)))
+        return reaches[index]
 
-    def body_names(self):
-        return [c["target"]["name"] for c in self.captures]
-
-    def read_reach(self, index, capture, gaps):
-        self.asked.append((index, sorted(gaps)))
-        return self.reaches[index]
+    port = FakePartsPort(captures, reach=read)
+    port.asked = []
+    return port
 
 
 class PartsGapsTest(unittest.TestCase):
     def run_parts(self, captures, reaches):
-        port = PartsPort(captures, reaches)
+        port = parts_port(captures, reaches)
         with tempfile.TemporaryDirectory() as tmp:
             return port, run_parts_pipeline(port, request(), tmp)
 
@@ -312,7 +286,7 @@ class PartsGapsTest(unittest.TestCase):
         self.assertTrue(all(line.startswith("Lid, ") for line in lines[:2]))
 
     def test_a_part_that_fails_its_step_file_still_restores_the_parameters(self):
-        port = PartsPort([tray(name=("t2", "Lid"))], {0: {"read": False, "error": "no"}})
+        port = parts_port([tray(name=("t2", "Lid"))], {0: {"read": False, "error": "no"}})
         port.fail_step_at = 1
         with tempfile.TemporaryDirectory() as tmp, self.assertRaises(StepExportError):
             run_parts_pipeline(port, request(), tmp)

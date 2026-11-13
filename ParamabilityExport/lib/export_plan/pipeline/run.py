@@ -1,7 +1,6 @@
 """One export of one body: the stages from the capture to the manifest."""
 import os
 
-from ...design_edit.restore import restore_parameters
 from ...design_edit.runner import ExportCancelled
 from ...params import size_table as size_tables
 from ...params.listing import list_parameters
@@ -9,79 +8,47 @@ from ...sketch_values.motion import OPTIMISTIC
 from ...timing.export_timing import ExportTiming
 from .. import health as health_module
 from ..body_scope import body_links, scope_inputs
-from ..probe_flow import SizeProbe, covers_a_sketch, extra_size_params, kept_size_names, shadow_of
+from ..probe_flow import SizeProbe, covers_a_sketch, shadow_of, sizes_to_try
 from ..reach_pass import needs_reach, with_reach
 from ..recipe_export import free_sizes, plan_single_export, translate_capture
-from ..size_offers import discovery_sizes, labels, probe_sizes
-from ..timeline_trim import TryTimeline
+from ..size_offers import discovery_sizes, labels
 from .port import PipelineResult
-from .probe_run import ProbeRun, with_try_seconds
-from .settle import (deferred_left, gap_after_settle, left_off, settle_after_tries, settle_steps, start_steps,
-                     undo_dropped)
-from .warn import warn_left_off, warn_steps
+from .probe_run import ProbeRun
+from .put_back import PutBack
 
 
 def run_pipeline(port, request, tmp):
     """The package of one export. `tmp` is a folder that holds the STEP file of the part until the package is written.
 
     Raises what a failing step raises (`RowBuildError`, `StepExportError`, `PackageCapError`, `ExportCancelled`,
-    `MarkerError`); the parameters are back by then and `port.warn_unrestored` has named any that are not."""
+    `MarkerError`); the parameters are back by then and `port.warn_unrestored` has named any that are not
+    (`put_back.PutBack`)."""
     return _Pipeline(port, request, tmp).run()
 
 
 class _Pipeline:
     def __init__(self, port, request, tmp):
         self.port, self.request, self.tmp = port, request, tmp
-        self.saved = None
-        self.unrestored = []
+        self.put_back = None  # `PutBack` of this export, from the start of `run`
         self.table = None
         self.capture = None  # the capture the translations used, with `reach` when steps were left out
         self.probe = None
-        self.roll = None
         self.probe_status = health_module.NOT_NEEDED
         self.probe_error = ""
         self.motion = None
         self.doubtful = []
         self.also = []
-        self.stopped = None  # `ProbeRun.stopped`
-        self.keeper = None  # the sketch keeper of the tries (`settle_after_tries`)
-        self.steps_start = None  # the timeline steps at the start (`start_steps`)
-        self.settled = None  # `settle_steps`
-        self.timing = getattr(port, "timing", None) or ExportTiming()
+        self.timing = port.timing or ExportTiming()
 
     def run(self):
-        self.saved = self.port.store.saved_expressions()
-        self.steps_start = start_steps(self)
-        done = False
+        self.put_back = PutBack.start(self.port, self.request, self.timing)
         try:
             result = self._run()
-            done = True
-            return result
-        finally:
-            failed = self._restore()
-            self._end_roll()
-            if not done:
-                if failed:
-                    self.port.warn_unrestored(failed)
-                warn_steps(self)
-            warn_left_off(self.port, self.roll, self.settled, undo_dropped(self))
-
-    def _end_trim(self):
-        """Turn back on the timeline items suppressed for the tries (a no-op when none were)."""
-        if self.roll is not None:
-            self.roll.end_trim()
-
-    def _end_roll(self):
-        """Turn the suppressed items back on and put the timeline marker back where the export found it (a no-op
-        when nothing was changed)."""
-        if self.roll is not None:
-            self.roll.end()
-
-    def _restore(self):
-        """Put every parameter back to its saved expression. Returns the names that would not go back, and keeps
-        them for the health record. Safe to call at any time."""
-        self.unrestored = restore_parameters(self.port.store, self.saved)
-        return self.unrestored
+        except BaseException:
+            self.put_back.close_failed()
+            raise
+        self.put_back.close(result.health)
+        return result
 
     # ---- stages -----------------------------------------------------------------------------------------------
 
@@ -101,23 +68,13 @@ class _Pipeline:
 
         final = self._translate_and_measure(capture) if isinstance(capture, dict) else None
 
-        with timing.span("restore"):
-            self._restore()
-            self._end_trim()
+        self.put_back.settle(self._restore_gap, self._outline_gap)
         with timing.span("probe"):
-            gap = self._restore_gap()
-        with timing.span("restore"):
-            self._end_roll()
-            settled = settle_steps(self)
-        with timing.span("probe"):
-            gap, gap_after = gap_after_settle(self, gap, self._outline_gap)
             probe_report = self._close_probe()
             shadow = shadow_of(self.probe, port.log) if self.probe is not None else None
-        health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error,
-                                           self._unchecked(), self.motion.flipped if self.motion is not None else (),
-                                           self.stopped, steps=settled, deferred_left=deferred_left(self),
-                                           gap_after_mm=gap_after, left_off=left_off(self),
-                                           undo_dropped=undo_dropped(self))
+        flipped = self.motion.flipped if self.motion is not None else ()
+        health = health_module.make_health(self.put_back.health_inputs(
+            self.probe_status, self.probe_error, self._unchecked(), flipped))
         capture = self.capture if self.capture is not None else capture
         manifest, files, report = plan_single_export(
             capture if capture is not None else RuntimeError("The steps were not read."),
@@ -146,18 +103,15 @@ class _Pipeline:
             # when the first look had none either.
             return first if first_motion is None else None
         free = free_sizes(first.recipe)
-        extra = extra_size_params(self.table, free)
-        keep = kept_size_names(self.table, free) | {self.table.size_name(n) for n in extra}
-        sizes = probe_sizes(self.table, self.request.parameters, keep=keep)
+        sizes, extra = sizes_to_try(self.table, self.request.parameters, free)
 
         with self.timing.span("probe"):
             self.probe = self._start_probe(capture)
             if self.probe is not None:
-                self.roll = TryTimeline(self.port.store, self.port.log, self.request.faster_tries)
                 probe = self.probe
-                self.roll.begin([capture], lambda: probe.matches_start(probe.read_now()))
+                self.put_back.hold_timeline([capture], lambda: probe.matches_start(probe.read_now()))
                 tries = discovery_sizes(self.table, self.request.parameters, capture)
-                run = ProbeRun(self.port, self.tmp, self.probe, before_discovery=self._end_trim)
+                run = ProbeRun(self.port, self.tmp, self.probe, before_discovery=self.put_back.end_trim)
                 found = self._measure(run, sizes, extra, tries)
                 if found is not None:
                     self.doubtful.extend(found)
@@ -208,23 +162,18 @@ class _Pipeline:
         """The probe's rows and its result: the sizes the probe cannot follow, or None when the probe failed.
 
         The rows put every size at the ends of its range where a size moves a sketch, then the sizes in `extra` (tried
-        on a guess, `probe_flow.extra_size_params`) while rows are left. A row that does not build is tried again
+        on a guess, `probe_flow.sizes_to_try`) while rows are left. A row that does not build is tried again
         nearer to the value now (`ProbeRun.measure`). Rows still left try the unticked parameters
         in `tries` once each (`size_offers.discovery_sizes`); they only find which of them also change the part
         (`self.also`) and are not used for the motion. A failure other than a cancel
         leaves the translation without a motion (no size behind a sketch is then followed, by the translator's own
-        rule) and is noted for the person. The parameters are put back, the suppressed items turned back on and
-        a sketch left on another solution put back (`ProbeRun.settle`) before the last read, also when the tries fail
-        or are cancelled."""
+        rule) and is noted for the person. The design is put back before the last read, also when the tries fail or
+        are cancelled (`PutBack.tries_done`, `PutBack.tries_ended`)."""
         probe = self.probe
-        settled = False
         try:
             run.measure(probe.probe_rows(sizes, extra), sizes)
             self.also = run.discover(tries)
-            if self.roll is not None:
-                self.roll.tries_done()
-            settled = True
-            settle_after_tries(self, run)
+            self.put_back.tries_done(run)
             found = probe.finish(probe.read_now(), labels(self.table))
         except ExportCancelled:
             raise
@@ -234,10 +183,7 @@ class _Pipeline:
             self.motion = None
             return None
         finally:
-            if not settled:
-                settle_after_tries(self, run)
-            self.stopped = run.stopped
-            self.timing.note_probe(with_try_seconds(run.summary(), self.roll))
+            self.put_back.tries_ended(run)
         self.motion = probe.motion
         return found
 
@@ -268,6 +214,7 @@ class _Pipeline:
         if self.probe is None or self.probe_status != health_module.MEASURED:
             return None
         report = self.probe.report()
-        if self.roll is not None and self.roll.record is not None:
-            report["timeline"] = self.roll.record
+        timeline = self.put_back.timeline_record
+        if timeline is not None:
+            report["timeline"] = timeline
         return report

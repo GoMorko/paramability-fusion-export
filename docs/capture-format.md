@@ -1669,7 +1669,7 @@ The probe tries (`lib/probe/plan/`, at most 64 rows), in this order:
    plane a covered sketch sits on (`probe/plane_sizes.py`), at 25 percent of its
    value below and above (`NEAR_SHARE`), inside its range; a count moves by whole numbers, a value of zero by that
    share of the way to the range ends. Then up to 8 ticked sizes that nothing ties to a sketch (`MAX_EXTRA_SIZES`, in
-   table order) while rows are left: the person ticked them, so a sketch may follow them in a way the capture cannot
+   `export_plan/probe_flow/sizes.py`, in table order) while rows are left: the person ticked them, so a sketch may follow them in a way the capture cannot
    show. Such a size left without rows is not listed as untried.
 2. Near pair rows (`plan.pair_rows`), once the near rows have run: with two or more sizes tried, one row puts every
    tried size at its lower near value and one at its higher. A size whose own near row on that side did not build (or
@@ -2167,7 +2167,7 @@ when it has something to say:
 | `deferred_left` | Sketches whose compute stayed deferred after the keeper moved their points (`SketchKeeper.deferred_left`). |
 | `left_off` | Items turned off for the tries that are still off (`TryTimeline.left_off`, at most 5). |
 | `undo_dropped` | True when Fusion forgot Undo data during the export (Lighter on memory, `timing.undo.applied`). The lines about a changed design then say to close the design without saving and open the saved version instead of using Undo. |
-| `sketch_gap_after_rebuild_mm` | When `full_compute` or `values_again` ran and the sketches were followed: the gap of a read of the outlines after those rebuilds (`pipeline.settle.gap_after_settle`). `sketch_gap_mm` and `sketch_drift` take the larger of this and the gap read before, so a sketch the end rebuild moved counts as a changed design. |
+| `sketch_gap_after_rebuild_mm` | When `full_compute` or `values_again` ran and the sketches were followed: the gap of a read of the outlines after those rebuilds (`pipeline.put_back.PutBack.settle`). `sketch_gap_mm` and `sketch_drift` take the larger of this and the gap read before, so a sketch the end rebuild moved counts as a changed design. |
 
 A step that is worse than at the start (`steps_worse`), or a sketch in `deferred_left`, counts as a changed design:
 the person gets a message box first and the result window says which steps and to use Undo. A step that is only better

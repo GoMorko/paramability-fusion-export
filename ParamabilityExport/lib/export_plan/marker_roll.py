@@ -25,6 +25,7 @@ tries keep the person's marker. The caller also checks that the design reads the
 back (`unroll_marker`). The record it keeps goes to `report.json` under `probe.timeline`.
 """
 from ..capture_model import step_kinds
+from ..design_edit.store import timeline_control
 from ..params import geometry_links
 
 NO_ROLL_WHY = {
@@ -230,7 +231,7 @@ class MarkerRoll:
         position, why = needed_position(captures)
         end = marker_end(captures)
         self.record = {"rolled": False, "items": end, "of": end}
-        roll = getattr(self.store, "roll_marker", None)
+        roll = timeline_control(self.store, "roll_marker")
         if position is None:
             self.record["reason"] = NO_ROLL_WHY[why]
             return

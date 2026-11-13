@@ -139,7 +139,7 @@ class _Context:
     def size_env(self, at):
         """Size values by recipe name at probe state `at`."""
         if at not in self._envs:
-            self._envs[at] = sizes.size_env(self.table, self.run.states[at].get("values") or {})
+            self._envs[at] = sizes.size_env(self.table, self.run.states[at].values)
         return self._envs[at]
 
     def frame_of(self, token):
@@ -370,7 +370,7 @@ class _Compare:
             measured, _ = run.values_at(derivation.target, at)
             if measured is None:
                 continue
-            overrides = run.states[at].get("values") or {}
+            overrides = run.states[at].values
             direct = derivation.direct(self.sketch.leaf_env(overrides))
             env = dict(self.ctx.size_env(at), **{n: l.value for n, l in solution.leaves.items()
                                                   if l.kind == "input" or not overrides})

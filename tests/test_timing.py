@@ -4,10 +4,11 @@ import unittest
 from unittest import mock
 
 from tests import context  # noqa: F401
+from tests.fakes import FakePartsPort, FakePort
 from tests.test_capture_reader import FakeDesign, body, extrude, rect_profile, sketch_entry
-from tests.test_parts_pipeline import FakePartsPort, export as export_parts
+from tests.test_parts_pipeline import export as export_parts
 from tests.test_parts_pipeline import BASE
-from tests.test_pipeline import FakePort, export
+from tests.test_pipeline import export
 
 from lib.fusion_reader import placement
 from lib.fusion_reader.capture import read_capture

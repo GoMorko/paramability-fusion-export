@@ -4,6 +4,9 @@ An export changes parameters many times and puts them back. After that the desig
 measuring must have worked. `make_health` records what is known, `health_lines` says in plain words what is wrong and
 what to do, and `measuring_doubtful` tells when the recipe rests on measurements that cannot be trusted.
 """
+from dataclasses import dataclass
+from typing import Optional, Sequence
+
 from ..design_edit import timeline_health as steps_module
 from ..geometry.tolerances import RESTORE_TOLERANCE_MM
 from ..package.text import clip
@@ -22,13 +25,14 @@ NO_UNDO_ADVICE = (
     "it without saving and open the version you saved before the export.")
 
 
-def make_health(unrestored=(), gap_mm=None, probe=NOT_NEEDED, probe_error="", unchecked=(), flipped=(), stopped=None,
-                broken=(), steps=None, deferred_left=(), gap_after_mm=None, left_off=(), undo_dropped=False):
-    """The record kept in `report.json` under `health`.
+@dataclass
+class HealthInputs:
+    """What an export knows at its end about how the design came out (`pipeline.put_back.PutBack.health_inputs`).
 
     unrestored: Fusion names of the parameters that could not be put back.
     gap_mm: how far the sketches are from their start after the restore, None when that was not measured.
     probe: MEASURED, NOT_NEEDED (no sketch to follow) or FAILED (sketches exist but could not be measured).
+    probe_error: why the probe failed, else empty.
     unchecked: why the restore could not be checked, one text per sketch ("Sketch3 reads another outline").
     flipped: names of the sketches that stayed on another outline for a while after the values were put back
       (`Motion.flipped`); the tries made then blamed no size.
@@ -40,11 +44,33 @@ def make_health(unrestored=(), gap_mm=None, probe=NOT_NEEDED, probe_error="", un
       start, and what was done to bring them back (`timeline_health.record` gives its keys).
     deferred_left: sketches whose compute flag would not go back after their points were moved
       (`SketchKeeper.deferred_left`).
-    gap_after_mm: the gap read again after the end check rebuilt the design (`pipeline.settle.gap_after_settle`), already
-      counted in `gap_mm`; None when there was no such rebuild or read.
+    gap_after_mm: the gap read again after the end check rebuilt the design, already counted in `gap_mm`; None when
+      there was no such rebuild or read.
     left_off: timeline items turned off for the tries that are still off (`TryTimeline.left_off`).
     undo_dropped: True when Fusion forgot Undo data during the export (Lighter on memory, `undo_steps`).
     """
+
+    unrestored: Sequence = ()
+    gap_mm: Optional[float] = None
+    probe: str = NOT_NEEDED
+    probe_error: str = ""
+    unchecked: Sequence = ()
+    flipped: Sequence = ()
+    stopped: Optional[dict] = None
+    broken: Sequence = ()
+    steps: Optional[object] = None
+    deferred_left: Sequence = ()
+    gap_after_mm: Optional[float] = None
+    left_off: Sequence = ()
+    undo_dropped: bool = False
+
+
+def make_health(inputs):
+    """The record kept in `report.json` under `health`, from the `HealthInputs` of the export."""
+    unrestored, gap_mm, probe, probe_error = inputs.unrestored, inputs.gap_mm, inputs.probe, inputs.probe_error
+    unchecked, flipped, stopped, broken = inputs.unchecked, inputs.flipped, inputs.stopped, inputs.broken
+    steps, deferred_left, gap_after_mm = inputs.steps, inputs.deferred_left, inputs.gap_after_mm
+    left_off, undo_dropped = inputs.left_off, inputs.undo_dropped
     measured = probe == MEASURED
     out = {
         "unrestored": list(unrestored),
@@ -218,7 +244,8 @@ def left_off_line(names, undo_dropped=False):
 def steps_lines(settled, deferred_left=(), undo_dropped=False):
     """The lines about the timeline steps (`timeline_health.TimelineSettle`) and the sketches left deferred alone, for
     an export that stopped or keeps no other health record."""
-    return health_lines(make_health(steps=settled, deferred_left=deferred_left, undo_dropped=undo_dropped))
+    return health_lines(make_health(HealthInputs(steps=settled, deferred_left=deferred_left,
+                                                 undo_dropped=undo_dropped)))
 
 
 def measuring_note(health):

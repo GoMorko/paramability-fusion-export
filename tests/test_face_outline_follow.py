@@ -1,12 +1,11 @@
 """A flat face a step uses as its outline, read again by the size probe before that step (keys `<item>/face`): the
 outline follows the sizes that move the face, and only a size the copy cannot follow, or that was not tried, is
 marked (lib/translator/sketch/face_outline.py, lib/probe/match.py, lib/fusion_reader/read_face.py)."""
-import contextlib
 import tempfile
 import unittest
 
 from tests import context  # noqa: F401
-from tests.fakes import FakeMarkerTimeline, FakeStore
+from tests.fakes import FakeMarkerTimeline, FakePort, FakeStore
 from tests.probe_helpers import size
 from tests.test_capture_reader import Obj
 from tests.test_capture_reader_offset import plane_face, side, with_outline
@@ -203,18 +202,6 @@ class ParkStore(FakeStore):
         return self.at >= self.HELD
 
 
-class ParkPort:
-    def __init__(self, capture, store):
-        self.store, self.logs = store, []
-        self.units = {p["name"]: p["unit"] for p in capture["parameters"]["user"]}
-
-    def progress(self, verb):
-        return contextlib.nullcontext(type("Step", (), {"step": lambda self, *args: True})())
-
-    def log(self, text):
-        self.logs.append(text)
-
-
 def face_reader(store):
     """A read that moves the marker to the face's step and back, as `read_faces` does, unless asked to `park` it."""
     def read(request):
@@ -232,7 +219,7 @@ class ParkedFaceReadTest(unittest.TestCase):
         table = table_of(capture, [H, CUBE])
         probe = SizeProbe.start(capture, table, face_reader(store))
         store.tail_builds = 0  # the first read is not a try
-        run = ProbeRun(ParkPort(capture, store), tempfile.gettempdir(), probe)
+        run = ProbeRun(FakePort(capture, store), tempfile.gettempdir(), probe)
         rows = probe.probe_rows([size(table, H, "count"), size(table, CUBE)])
         run.run_rows(rows)
         return rows
