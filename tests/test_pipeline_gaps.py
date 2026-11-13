@@ -16,7 +16,7 @@ from tests.translator_helpers import load_capture
 
 from lib.design_edit.errors import StepExportError
 from lib.dialog_model.result_rows import parts_result_view, result_view, section_lines
-from lib.export_plan.parts_pipeline import run_parts_pipeline
+from lib.export_plan.pipeline.parts import run_parts_pipeline
 from lib.translator.gap_hints import COIL, HINTS
 from lib.export_plan.pipeline import ExportRequest, run_pipeline
 from lib.export_plan.reach_pass import left_out_indexes, needs_reach

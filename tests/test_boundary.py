@@ -6,8 +6,8 @@ import unittest
 from tests import context
 
 # The packages of the add-in and the packages each one may import, bottom to top. A new import between packages must
-# fit this table, so a cycle or an upward import fails here. `fusion_reader` and `fusion_ui` are the only packages
-# that use Fusion; `commands` sits on top.
+# fit this table, so a cycle or an upward import fails here. `fusion_reader`, `fusion_ui` and `commands` are the only
+# places that use Fusion (`adsk`); `commands` sits on top.
 ALLOWED_IMPORTS = {
     "package": set(),
     "timing": set(),
@@ -29,7 +29,6 @@ ALLOWED_IMPORTS = {
 PRIVATE_REACHES_IN_TESTS = {
     "test_capture_reader.py": {"_target_state"},
     "test_capture_reader_helpers.py": {"_Pass"},
-    "test_parts_pipeline.py": {"_PartsPipeline"},
     "test_recipe_export.py": {"_parts_notes"},
     "test_step_export_copy_guard.py": {"_require_copy_in_place"},
     "test_translate_crossings.py": {"_from_anchors", "_joined"},

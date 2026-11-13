@@ -1614,7 +1614,7 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   reads (`Context.cut`). `TranslateResult.cuts` lists each cut size as `{ name, reason, words, why, min, max }`
   (`translate._cut_notes`, `notes.cut_reason`: "Slope: the range stops at 0.5, since Fusion did not rebuild the
   design at 5 (Chamfer3)."). In a file with several bodies the table is cut once for all of them, to the narrowest
-  cut over the probed bodies (`parts_pipeline._share_cuts`), so every body writes the same range. A rule that may give
+  cut over the probed bodies (`PartsPipeline._share_cuts` in `export_plan/pipeline/parts.py`), so every body writes the same range. A rule that may give
   a wrong shape inside a range (a count that a pick needs, a step that must keep meeting the part) marks the sizes it
   reads, with the value past which it fails where `kept_ranges` gives one. Only `TranslateResult.fixed` holds sizes that became
   numbers: a formula too long to copy (`Context.doubt` with `fixed`). Without a motion (`motion=None`) every size behind

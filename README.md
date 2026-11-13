@@ -529,21 +529,23 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 
 ## Code layout
 
-The add-in code is in `ParamabilityExport/lib/`, one package per job. A package imports only packages above it in this
-list (lowest first); `tests/test_boundary.py` holds the exact table.
+The add-in code is in `ParamabilityExport/lib/`, one package per job. The table `ALLOWED_IMPORTS` in
+`tests/test_boundary.py` says which packages each one may import; the list below follows its order, lowest first, and a
+package may import only packages above it in this list (not every one of them). `commands/` sits on top.
 
 - `package`: the `.paramability` file: units, rows, manifest, caps, file names, zip writer.
+- `timing`: stopwatch helpers and the `timing` block of `report.json` (where an export spends its time).
 - `params`: Fusion parameters as sizes: names, defaults, expression to formula, the size table.
 - `sketch_values`: the motion file of sketch values and measured references that follow sizes, its keys and coverage.
-- `timing`: stopwatch helpers and the `timing` block of `report.json` (where an export spends its time).
+- `sketch_solve`: reads a sketch's dimensions and constraints from the capture into formulas for its points, without Fusion.
 - `design_edit`: setting parameter values row by row, restoring them, the timeline marker, the temporary copy.
 - `translator`: a capture dict in, a recipe plus verdicts out (one handler per step kind).
 - `probe`: measures sketches and the places of other components' planes, axes and points at other size values and fits the motion file.
-- `export_plan`: the export itself: the pipeline, the recipe and its notes, the probe run, size offers.
+- `export_plan`: the export itself: the pipeline (one body or several), the recipe and its notes, the probe run, size offers.
 - `dialog_model`: what the dialogs show, as plain data (rows, Sizes table, result view, stop warning).
-- `fusion_reader`: reads the design with `adsk` into a capture (one of two packages that use `adsk`).
+- `fusion_reader`: reads the design with `adsk` into a capture.
 - `fusion_ui`: draws the dialogs and handles their events with `adsk`.
-- `commands/`: the two buttons, their flows and the panel; the top of the tree.
+- `commands/`: the two buttons, their flows and the panel; also uses `adsk`.
 
 ## Tests
 
@@ -551,7 +553,8 @@ For a quick check of a release by hand, with your own projects and a few small t
 
 Everything under `lib/` except `fusion_reader/` and `fusion_ui/` is pure Python and runs without Fusion. The Fusion
 reading code is tested with fakes. Anything that touches `adsk` stays in `lib/fusion_reader/`, `lib/fusion_ui/` and
-`commands/`. `tests/test_boundary.py` checks that and which package may import which, so imports only go one way.
+`commands/`. `tests/test_boundary.py` checks that, which package may import which (so imports only go one way), and
+that no module imports an underscore name from another module.
 From this folder:
 
 ```

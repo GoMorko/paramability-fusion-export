@@ -1,7 +1,7 @@
 """The export of several bodies of one design into one parts package, from the captures to the manifest. Pure: no
 Fusion imports.
 
-The sequence is the one of `pipeline.run_pipeline`, for a list of bodies: a STEP and a capture per body, one size table
+The sequence is the one of `run_pipeline`, for a list of bodies: a STEP and a capture per body, one size table
 over all of them (`size_table.merged`), a first translation per body, one sketch scan whose rows are shared by all
 bodies (`probe_flow.ProbeGroup`), a translation per body with its own motion, and the package. A body that cannot be
 copied becomes a fixed shape; the others keep their recipes.
@@ -16,32 +16,32 @@ import os
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from ..params import size_table as size_tables
-from ..params.listing import list_parameters
-from ..sketch_values.motion import OPTIMISTIC
-from ..timing.export_timing import ExportTiming
-from ..translator.kept_ranges import built_ranges
-from ..design_edit.restore import restore_parameters
-from ..design_edit.runner import ExportCancelled
-from . import health as health_module
-from .body_scope import body_links, scope_inputs
-from .part_names import tagged, unique_names
-from .pipeline.probe_run import ProbeRun, with_try_seconds
-from .pipeline.settle import (deferred_left, gap_after_settle, left_off, settle_after_tries, settle_steps, start_steps,
-                              undo_dropped)
-from .pipeline.warn import warn_left_off, warn_steps
-from .reach_pass import needs_reach, with_reach
-from .probe_flow import ProbeGroup, SizeProbe, covers_a_sketch, extra_size_params, kept_size_names
-from .recipe_export import PartInput, free_sizes, plan_parts_export, translate_capture
-from .size_offers import discovery_sizes, labels, probe_sizes
-from .timeline_trim import TryTimeline
+from ...design_edit.restore import restore_parameters
+from ...design_edit.runner import ExportCancelled
+from ...params import size_table as size_tables
+from ...params.listing import list_parameters
+from ...sketch_values.motion import OPTIMISTIC
+from ...timing.export_timing import ExportTiming
+from ...translator.kept_ranges import built_ranges
+from .. import health as health_module
+from ..body_scope import body_links, scope_inputs
+from ..part_names import tagged, unique_names
+from ..probe_flow import ProbeGroup, SizeProbe, covers_a_sketch, extra_size_params, kept_size_names
+from ..reach_pass import needs_reach, with_reach
+from ..recipe_export import PartInput, free_sizes, plan_parts_export, translate_capture
+from ..size_offers import discovery_sizes, labels, probe_sizes
+from ..timeline_trim import TryTimeline
+from .probe_run import ProbeRun, with_try_seconds
+from .settle import (deferred_left, gap_after_settle, left_off, settle_after_tries, settle_steps, start_steps,
+                     undo_dropped)
+from .warn import warn_left_off, warn_steps
 
 # How many times the bodies are translated again because one more size had to be fixed for all.
 MAX_SHARE_ROUNDS = 3
 
 
 class PartsPort(Protocol):
-    """What the parts pipeline needs from Fusion: `pipeline.ExportPort` for `count` bodies.
+    """What the parts pipeline needs from Fusion: `ExportPort` for `count` bodies.
 
     store, units, progress, warn_unrestored, log: as in `ExportPort`.
     count: how many bodies are picked.
@@ -49,9 +49,9 @@ class PartsPort(Protocol):
     export_step(index, path): write the STEP of body `index` as the design is now.
     read_capture(index): the capture dict of body `index`, or the exception that stopped the read.
     read_reach(index, capture, gaps): the `reach` of body `index` when the steps at the timeline indexes `gaps` are
-      left out of its copy (`pipeline.ExportPort.read_reach`).
+      left out of its copy (`ExportPort.read_reach`).
     probe_reader(index): a callable `read(request)` giving one probe state of body `index`, or raising.
-    sketch_keeper(tokens): optional, as `pipeline.ExportPort.sketch_keeper`.
+    sketch_keeper(tokens): optional, as `ExportPort.sketch_keeper`.
     """
 
     store: object
@@ -90,10 +90,10 @@ def run_parts_pipeline(port, request, tmp):
     """The package of one export of several bodies. `tmp` is a folder that holds the STEP files until the package is
     written. Raises what a failing step raises; the parameters are back by then and `port.warn_unrestored` has named
     any that are not."""
-    return _PartsPipeline(port, request, tmp).run()
+    return PartsPipeline(port, request, tmp).run()
 
 
-class _PartsPipeline:
+class PartsPipeline:
     def __init__(self, port, request, tmp):
         self.port, self.request, self.tmp = port, request, tmp
         self.names = unique_names(port.body_names())
@@ -112,9 +112,9 @@ class _PartsPipeline:
         self.doubtful = []
         self.also = []
         self.stopped = None  # `ProbeRun.stopped`
-        self.keeper = None  # the sketch keeper of the tries (`pipeline.settle_after_tries`)
-        self.steps_start = None  # the timeline steps at the start (`pipeline.start_steps`)
-        self.settled = None  # `pipeline.settle_steps`
+        self.keeper = None  # the sketch keeper of the tries (`settle_after_tries`)
+        self.steps_start = None  # the timeline steps at the start (`start_steps`)
+        self.settled = None  # `settle_steps`
         self.timing = getattr(port, "timing", None) or ExportTiming()
 
     def run(self):

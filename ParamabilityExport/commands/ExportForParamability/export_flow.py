@@ -14,8 +14,7 @@ import time
 from ...lib.export_plan import health as health_module
 from ...lib.design_edit.marker import read_marker
 from ...lib.package.naming import body_file_title, component_names, design_title, package_file_name
-from ...lib.export_plan.pipeline import ExportRequest, run_pipeline
-from ...lib.export_plan.parts_pipeline import run_parts_pipeline
+from ...lib.export_plan.pipeline import ExportRequest, run_parts_pipeline, run_pipeline
 from ...lib.export_plan import undo_steps
 from ...lib.dialog_model.result_rows import parts_result_view, result_view
 from ...lib.dialog_model.stop_warning import saved_message, status_text
@@ -150,7 +149,7 @@ class FusionPort:
 
 
 class FusionPartsPort:
-    """The parts pipeline's door to Fusion (`export_plan.parts_pipeline.PartsPort`) for several picked bodies."""
+    """The parts pipeline's door to Fusion (`export_plan.pipeline.PartsPort`) for several picked bodies."""
 
     def __init__(self, design, bodies, units, captures=None):
         self.design, self.bodies, self.units = design, list(bodies), units

@@ -18,7 +18,7 @@ from tests.fakes import FakeDesign
 from lib.design_edit.runner import ExportCancelled
 from lib.export_plan import health as health_module
 from lib.export_plan import undo_steps
-from lib.export_plan.parts_pipeline import run_parts_pipeline
+from lib.export_plan.pipeline.parts import run_parts_pipeline
 from lib.export_plan.pipeline import run_pipeline
 from lib.export_plan.timeline_trim import unused_items
 from lib.fusion_reader.rows import DesignParameterStore

@@ -1,7 +1,7 @@
 """The timing of one export: the phases of the export flow, the capture read and the size probe. `report()` is the
 `timing` block of `report.json` (docs/capture-format.md).
 
-Phases are spans of the pipeline (`export_plan.pipeline`, `parts_pipeline`); one that runs more than once (a
+Phases are spans of the pipeline (`export_plan.pipeline`); one that runs more than once (a
 translation per body, the probe's start and its tries) adds up. `after_stop` is the time of the second walk after a
 stop (`translator.translate`), and it is inside the translate phases. The write of the package file comes after
 `report.json` is made, so it is not in it (the add-in logs it).

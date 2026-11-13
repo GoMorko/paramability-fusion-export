@@ -19,7 +19,7 @@ from lib.design_edit.runner import ExportCancelled
 from lib.dialog_model.result_rows import also_lines, not_tried_lines, parts_result_view, section, section_lines
 from lib.export_plan import recipe_export
 from lib.export_plan.recipe_export import PartInput, translate_capture
-from lib.export_plan.parts_pipeline import _PartsPipeline, run_parts_pipeline
+from lib.export_plan.pipeline.parts import PartsPipeline, run_parts_pipeline
 from lib.export_plan.probe_flow import ProbeGroup
 from lib.export_plan.part_names import unique_names
 from lib.export_plan.pipeline import ExportRequest
@@ -197,7 +197,7 @@ class SharedCutTest(unittest.TestCase):
         motion = motion_of("linked_pipe_hole", lambda values: None)
         motion.spans = {"height_mm": {"low": 20.0, "high": 30.0, "failed": [[40.0, "Extrude2"]]}}
         with tempfile.TemporaryDirectory() as tmp:
-            pipeline = _PartsPipeline(FakePartsPort([capture, capture]), request(["height_mm"]), tmp)
+            pipeline = PartsPipeline(FakePartsPort([capture, capture]), request(["height_mm"]), tmp)
         pipeline.captures, pipeline.part_links, pipeline.table = [capture, capture], [[], []], self.table
         pipeline.motions = {0: motion}
         pipeline._share_cuts()
@@ -381,8 +381,8 @@ class LinksPerPartTest(unittest.TestCase):
             seen[capture["target"]["name"]] = table.links
             return recipe_export.translate_capture(capture, up_axis, table, motion)
 
-        with mock.patch("lib.export_plan.parts_pipeline.body_links", lambda c: own.get(c["target"]["name"], [])), \
-                mock.patch("lib.export_plan.parts_pipeline.translate_capture", translate):
+        with mock.patch("lib.export_plan.pipeline.parts.body_links", lambda c: own.get(c["target"]["name"], [])), \
+                mock.patch("lib.export_plan.pipeline.parts.translate_capture", translate):
             export(FakePartsPort([BASE, renamed(BASE, ("t1", "Body1"), ("t2", "Body2"))]))
         self.assertEqual({name: [l["param"] for l in links] for name, links in seen.items()},
                          {"Body1": ["pipe_d"], "Body2": ["cover_h"]})

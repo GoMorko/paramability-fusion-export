@@ -1,4 +1,5 @@
-"""The export of one body into a recipe package, from the capture to the manifest. Pure: no Fusion imports.
+"""The export of one body, or of several bodies in one file, into a recipe package, from the capture to the manifest.
+Pure: no Fusion imports.
 
 The sequence asks Fusion for the capture, the STEP of the part as it is and the sketch measuring. A size that a value
 cannot follow is left free with a warning, and the ranges are the ones in the dialog table.
@@ -18,13 +19,19 @@ before the timeline marker goes back, and before the discovery tries. Last, on e
 timeline step is compared with the start of the export and the design rebuilt when a step differs
 (`design_edit.timeline_health`).
 
+Several bodies follow the same sequence with one size table and one probe scan for all of them (`parts`).
+
 The modules: `port` (`ExportPort`, `ExportRequest`, `PipelineResult`), `run` (`run_pipeline` and the stages of one
-export), `probe_run` (`ProbeRun`, the try runner), `settle` (the end check of the design after the tries) and `warn`
-(the messages for what could not be put back). This package re-exports what the rest of the add-in reads as
+export), `parts` (`run_parts_pipeline`, `PartsPort`: the same for several bodies), `probe_run` (`ProbeRun`, the try
+runner), `settle` (the end check of the design after the tries) and `warn` (the messages for what could not be put
+back). This package re-exports what the rest of the add-in reads as
 `pipeline.<name>`.
 """
+from .parts import PartsPort, PartsResult, run_parts_pipeline
 from .port import ExportPort, ExportRequest, PipelineResult
 from .probe_run import MarkerNotHeld, ProbeRun
 from .run import run_pipeline
 
-__all__ = ["ExportPort", "ExportRequest", "MarkerNotHeld", "PipelineResult", "ProbeRun", "run_pipeline"]
+__all__ = [
+    "ExportPort", "ExportRequest", "MarkerNotHeld", "PartsPort", "PartsResult", "PipelineResult", "ProbeRun",
+    "run_parts_pipeline", "run_pipeline"]
