@@ -1,4 +1,4 @@
-"""Steps left out of the copy as gaps (lib/translator/gaps.py, walk.py)."""
+"""Steps left out of the copy as gaps (lib/translator/gaps/stops.py, walk.py)."""
 import copy
 import json
 import math
@@ -10,10 +10,11 @@ from tests.schema_check import check_recipe
 from tests.test_translate_sized import H, run
 from tests.translator_helpers import load_capture, steps_of, stopped, verdict_of
 
-from lib.translator import CaptureError, Refusal, gaps as gaps_module, translate
-from lib.translator.gap_file import MAX_DATA_BYTES, MAX_DATA_DEPTH
+from lib.translator import CaptureError, Refusal, translate
+from lib.translator.gaps import stops as gaps_module
+from lib.translator.gaps.gap_file import MAX_DATA_BYTES, MAX_DATA_DEPTH
 from lib.capture_model.gap_picks import pick_records
-from lib.translator.gaps import MAX_GAPS
+from lib.translator.gaps.stops import MAX_GAPS
 
 TRAY = "filter_tray_sized"  # Extrude1, Shell1, Fillet1 (picks edges), Hole1, a pattern of Hole1
 SHELL, FILLET, HOLE, PATTERN = 2, 3, 5, 6

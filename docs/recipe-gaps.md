@@ -7,7 +7,7 @@ version 1 or 2 (`schemas/paramability.recipeGaps.v1.schema.json` and `v2`, in th
 16), so the add-in writes version 1 when a part has 16 gaps or fewer (an older app still opens it) and version 2 above
 (`package/gaps_file.py`). This page says what the add-in puts in each field and why.
 
-Code: `lib/translator/gap*.py` (the records, the picked gaps, where a gap belongs, the file data, the hints), `lib/translator/walk.py` (what becomes a gap),
+Code: `lib/translator/gaps/` (the records, the picked gaps, where a gap belongs, the file data, the hints), `lib/translator/walk.py` (what becomes a gap),
 `lib/export_plan/reach_pass.py` and `lib/fusion_reader/read_gap_reach.py` (later steps that pick faces of a gap),
 `lib/package/gaps_file.py` (the file), `lib/package/manifest.py` (the package version).
 
@@ -23,7 +23,7 @@ leaves out when the effect stays on the body and the rest of the timeline still 
   tool cannot be built, a pattern whose sources it cannot repeat);
 - a step that reaches into another component (`foreign` records in its data);
 - a step that picks faces of a gap (see "Later steps that pick faces of a gap"), and a pattern or mirror of a gap;
-- an extrude join whose material meets only material of earlier gaps of its walk (`floating.py`, reason "It sits on a
+- an extrude join whose material meets only material of earlier gaps of its walk (`faces/floating.py`, reason "It sits on a
   step that was left out, so it would float apart from the copy."). The app's kernel refuses a step that leaves the
   part in separate pieces, so such a join would stop the whole copy. The translator's model of the copied part (the
   placers, `follow.inside`) must hold no material on, around and inside the join, out to the size of the largest
@@ -44,8 +44,8 @@ the assembly, a step of another component or an assembly item that changes the p
 a step or its bodies that cannot be read (also a step type with no handler whose data could not be read), a step Fusion
 marks as an error, a step that splits the part or makes another body (whether or not it has a handler or reaches into
 another component; one that the reader saw leave the exported body as it was, `target_changed` false, is passed by
-instead), a Split Body the copy cannot write as the removal of the other side (`split.py` answers a `Refusal` with
-`stops`; a split that keeps the body as one piece apart from the others is copied, `split_rules.py`), a gap before the copy has written its first step (a gap needs a body to add to), a gap inside a
+instead), a Split Body the copy cannot write as the removal of the other side (`bodies/split.py` answers a `Refusal` with
+`stops`; a split that keeps the body as one piece apart from the others is copied, `bodies/split_rules.py`), a gap before the copy has written its first step (a gap needs a body to add to), a gap inside a
 walk of another component's body, more than 256 gaps in one part (`gaps.MAX_GAPS`, the count a version 2 gaps file holds; the gaps inside
 the tool bodies count, and a tool that meets the cap stops the whole copy), and the size caps of the recipe.
 
@@ -166,7 +166,7 @@ a face used as an outline are not such picks: the copy writes them as measured n
 and marks the sizes it cannot follow, so they do not make a step a gap.
 
 A mirror of the whole body after a gap gathers every step written so far, the gap's place among them, into one tool
-step and mirrors that (`repeat_mirror.py`), so the gap stays one missing step inside the tool.
+step and mirrors that (`repeat/repeat_mirror.py`), so the gap stays one missing step inside the tool.
 
 ## Sizes
 

@@ -1,4 +1,4 @@
-"""Copy Paste Body: the steps of the source written again (lib/translator/paste.py)."""
+"""Copy Paste Body: the steps of the source written again (lib/translator/bodies/paste.py)."""
 import copy
 import unittest
 

@@ -1,4 +1,4 @@
-"""Corners where sketch curves cross follow sizes exactly (sketch_crossings.py, curved.py, outlines.py)."""
+"""Corners where sketch curves cross follow sizes exactly (sketch/sketch_crossings.py, sketch/curved.py, outlines.py)."""
 import math
 import unittest
 
@@ -10,8 +10,8 @@ from lib.geometry.outlines import _joined, merge_touching
 from lib.params import size_table
 from lib.sketch_values.motion import Affine, Motion, Stuck
 from lib.translator import translate
-from lib.translator.sketch_crossings import Sources
-from lib.translator.sketch_motion import Anchors, _from_anchors
+from lib.translator.sketch.sketch_crossings import Sources
+from lib.translator.sketch.sketch_motion import Anchors, _from_anchors
 
 R = 10.0
 

@@ -13,7 +13,7 @@ A size is read by a copied step through the model parameters in its `data.params
 sketches it draws on or the geometry of another component those sketches are drawn around (`table.links`), and
 through the construction geometry it uses.
 
-The steps left out of the copy (gaps.py) read sizes the same ways. `Audit.gap_reads` lists them per gap, so the driver
+The steps left out of the copy (gaps/stops.py) read sizes the same ways. `Audit.gap_reads` lists them per gap, so the driver
 can keep a size that only such a step reads and say why it changes nothing yet.
 """
 from ..sketch_values.coverage import MOVED, STILL, ref_answer

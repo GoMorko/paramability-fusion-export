@@ -18,8 +18,8 @@ import re
 from ..package.numbers import round9
 from ..params.expressions.formula import tokenize_formula
 from ..params.expressions.text import MAX_FORMULA_LENGTH
-from . import kept_ranges, range_check
-from .range_check import size_env as _env  # noqa: F401  (the size values at a setting; tests read it from here)
+from .ranges import kept_ranges, range_check
+from .ranges.range_check import size_env as _env  # noqa: F401  (the size values at a setting; tests read it from here)
 
 TOLERANCE = 1e-6
 # How far above zero (degrees) an angle the step needs positive stays when the size ranges are cut for it: half the

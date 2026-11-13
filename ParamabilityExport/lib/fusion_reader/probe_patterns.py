@@ -2,7 +2,7 @@
 
 A pattern that spreads copies to both sides of the original and whose count follows sizes is read again at each state:
 how many copies Fusion makes and where, as the capture holds them (`elements`). The translator compares the places at
-the counts the tries reached with the rule it writes (`translator/symmetric.py`). The feature is read through its
+the counts the tries reached with the rule it writes (`translator/repeat/symmetric.py`). The feature is read through its
 timeline item with the marker where the tries leave it (after the pattern). Nothing raises: a pattern that cannot be
 read is named in the second result.
 """

@@ -1,4 +1,4 @@
-"""A Combine written as a step that builds its tool on its own (lib/translator/combine.py, tool_placer.py)."""
+"""A Combine written as a step that builds its tool on its own (lib/translator/combine/step.py, faces/tool_placer.py)."""
 import copy
 import importlib
 import unittest
@@ -17,13 +17,16 @@ from lib.geometry.rigid import Move
 from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.sketch_values.motion import Motion
-from lib.translator import body_states, follow, tool_walk, translate
+from lib.translator.bodies import body_states
+from lib.translator.faces import follow
+from lib.translator.combine import tool_walk
+from lib.translator import translate
 from lib.translator.context import Context
 from lib.translator.place import place
-from lib.translator.placer import ADD, CUT, Placer
-from lib.translator.slabs import Motion as CopyMotion, Slab
+from lib.translator.faces.placer import ADD, CUT, Placer
+from lib.translator.faces.slabs import Motion as CopyMotion, Slab
 from lib.translator.step_walk import all_steps
-from lib.translator.tool_placer import ToolPlacer
+from lib.translator.faces.tool_placer import ToolPlacer
 from lib.translator.translate import _over_caps as over_caps
 
 translate_module = importlib.import_module("lib.translator.translate")

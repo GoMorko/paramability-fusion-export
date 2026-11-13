@@ -2,8 +2,10 @@
 from ...capture_model import gap_hints
 from ...geometry import vec
 from ...package.numbers import round9
-from .. import face_outline, loops, placement, sketch_motion, thin_wall
-from ..placer_makers import SlabMaker, ThinWallMaker
+from ..sketch import face_outline, loops, sketch_motion
+from .. import placement
+from ..faces import thin_wall
+from ..faces.placer_makers import SlabMaker, ThinWallMaker
 from ..result import Refusal, StepResult
 from ..values import Quantity
 from .built import outlines_built, thin_wall_step

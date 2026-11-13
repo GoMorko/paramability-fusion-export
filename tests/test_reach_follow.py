@@ -1,5 +1,5 @@
 """Extrudes that start from or reach to a face or construction plane of the part that no written step places
-(lib/translator/reach_motion.py): the probe reads the face or plane at every try, the length follows its measured
+(lib/translator/extrude/reach_motion.py): the probe reads the face or plane at every try, the length follows its measured
 move, and only a size that moves it in a way the copy cannot follow is marked."""
 import copy
 import unittest

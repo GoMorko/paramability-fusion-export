@@ -6,7 +6,8 @@ from tests.test_translate_sized import TRAY, run
 from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of
 
 from lib.geometry.footprint import Footprint
-from lib.translator import offset, translate
+from lib.translator.finishes import offset
+from lib.translator import translate
 
 TOP = {"origin": [0, 0, 10], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
 

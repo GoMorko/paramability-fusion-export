@@ -8,9 +8,10 @@ from tests import context  # noqa: F401
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
 
 from lib.params import size_table
-from lib.translator import meets_part, translate
-from lib.translator.placer import ADD
-from lib.translator.thin_wall import ThinWall
+from lib.translator.faces import meets_part
+from lib.translator import translate
+from lib.translator.faces.placer import ADD
+from lib.translator.faces.thin_wall import ThinWall
 from lib.translator.values import Quantity
 
 BOX = "thin_wall_box"

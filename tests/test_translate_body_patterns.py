@@ -1,4 +1,4 @@
-"""Patterns of bodies, and Combines that take them (lib/translator/body_copies.py)."""
+"""Patterns of bodies, and Combines that take them (lib/translator/repeat/body_copies.py)."""
 import unittest
 
 from tests import context  # noqa: F401
@@ -9,7 +9,8 @@ from tests.translator_helpers import load_capture, steps_of
 from lib.geometry import vec
 from lib.params import size_table
 from lib.params.expressions import evaluate
-from lib.translator import body_copies, translate
+from lib.translator.repeat import body_copies
+from lib.translator import translate
 from lib.translator.step_walk import all_steps
 
 ROW = "pattern_bodies_combine"

@@ -2,15 +2,15 @@
 
 This guide is for a developer who wants the export to copy one more kind of Fusion timeline step (for example a
 modeled thread or a coil). Read `docs/capture-format.md` sections 1 and 5 first. The Emboss
-step (`read_emboss.py`, `emboss.py`, `tests/test_translate_emboss.py`) is a small worked example of every part below,
-and of a step that reuses another handler. The sweep handler (`sweep.py`, `paths.py` and the `sweep_*.py` and `path_*.py` modules next to them) is a second example
+step (`read_emboss.py`, `extrude/emboss.py`, `tests/test_translate_emboss.py`) is a small worked example of every part below,
+and of a step that reuses another handler. The sweep handler (`sweep/step.py`, the `sweep_*.py` modules next to it and the `paths/` package) is a second example
 of that.
 
 ## What a new step type touches
 
 1. One entry in the step kind table, `ParamabilityExport/lib/capture_model/step_kinds.py`.
 2. One reader pair in a `lib/fusion_reader/read_*.py` module, registered in that module's `READERS` dict.
-3. One handler function in a `lib/translator/` module.
+3. One handler function in a `lib/translator/` module, in the folder of its family (`extrude/`, `finishes/`, `bodies/` and so on).
 4. When the step writes a recipe kind the translator does not write yet: one `RecipeKind` entry in the same table,
    plus the recipe schema copy in `tests/schema/` and support for the kind in the Paramability app.
 5. Tests: a capture fixture, handler tests, and a hand test entry for every new Fusion call.
@@ -23,7 +23,7 @@ type that the table does not give to that reader module.
 ## 1. The table entry
 
 ```python
-StepType("EmbossFeature", "emboss", reader="read_emboss", handler="emboss:handle", sketches=(PROFILES,)),
+StepType("EmbossFeature", "emboss", reader="read_emboss", handler="extrude.emboss:handle", sketches=(PROFILES,)),
 ```
 
 - `name`: the capture `type`, the Fusion object type name (`objectType` after the last `::`).
@@ -31,7 +31,7 @@ StepType("EmbossFeature", "emboss", reader="read_emboss", handler="emboss:handle
 - `role`: `MODELING` for a step that can make or change a body (the default). Sketches, construction geometry and
   assembly items have their own roles and are never copied.
 - `reader`: the name of the `lib/fusion_reader` module that reads it.
-- `handler`: `"module:function"` in `lib/translator`. Leave it out while the step cannot be copied; then give
+- `handler`: `"module:function"` in `lib/translator`; the module may be dotted (`"extrude.emboss:handle"`). Leave it out while the step cannot be copied; then give
   `unsupported`, the plain reason the step is left out of the copy (it becomes the gap's reason). Once a handler
   exists, drop `unsupported`: the handler gives its own reasons.
 - `sketches`: the sketch records in the step data that the size probe can follow (`PROFILES`, `AXIS`, `HOLE_POINTS`, `PATH`).
@@ -89,15 +89,15 @@ A handler is `handle(item, ctx) -> StepResult | Refusal` (`lib/translator/result
 - `StepResult`: the recipe steps the item writes, in order. `out.add(step, placers=..., picks=..., repeatable=...)`
   writes one step; `StepResult.of(steps)` makes a result of plain steps. An empty result means the item makes no step
   on purpose (a cosmetic thread); its notes become the verdict note.
-- `placers`: placer makers (`lib/translator/placer_makers.py`). Without one, a later round, chamfer or offset that
+- `placers`: placer makers (`lib/translator/faces/placer_makers.py`). Without one, a later round, chamfer or offset that
   picks a face of this step cannot follow sizes, so it marks every size written so far. A maker builds placers
-  (`lib/translator/placer.py`) once the step has its id: `place(p, edge)` places a measured point on the step's faces,
+  (`lib/translator/faces/placer.py`) once the step has its id: `place(p, edge)` places a measured point on the step's faces,
   `material_at(p)` says whether the step adds or removes material at a point. Add a maker class when the existing
   slab, shell, moved faces and copies makers do not describe the new faces. A step that leaves material whose faces
   the copy cannot place (a thin wall, `thin_wall.ThinWall`) gives a placer whose `place` returns None and whose
   `material_at` answers for the material; it sets `opaque = True`, so a step on another part's sketch (`meets_part`)
   says it cannot check that it still meets the material. A sweep or loft gives `EndCapsMaker`
-  (`lib/translator/end_caps.py`): its start and end faces are named by a later pick of all their edges, and any other
+  (`lib/translator/faces/end_caps.py`): its start and end faces are named by a later pick of all their edges, and any other
   pick on them keeps its points and marks the sizes the step reads.
 - `picks`: for a round or bevel, the measured edge points, so a later pattern or mirror can copy them.
 - `repeatable=False`: Fusion recomputes the step for each copy of a pattern (it reaches to a face or through the
@@ -120,7 +120,7 @@ sketches. A value the other handler asks for under another path is mapped back w
 `values.handled(ctx, item, "depth", same_as="side_one.distance")`. A key that only the new step needs (a fixed direction of travel, for instance) goes into the other handler as
 an optional field of its data, and must not change what that handler writes without it.
 
-A sweep hands over in two ways (`sweep.py`). `paths.plan` orders the path and names it. A straight path builds the data
+A sweep hands over in two ways (`sweep/step.py`). `paths.plan` orders the path and names it. A straight path builds the data
 of an extrude (`start` on the profile plane, one `side_one` distance as long as the path, no taper) and returns
 `extrude.handle(...)`, so the sweep gets the extrude's slab placer and later rounds follow sizes. One arc or a full
 circle builds the data of a revolve (the arc's axis, the arc's angle, the direction the start face looks) and returns
@@ -129,13 +129,13 @@ circle builds the data of a revolve (the arc's axis, the arc's angle, the direct
 taper, rail, part of the path, a path that is not square to the outline) before it hands over, and refuses with a
 plain reason. A size the written path cannot follow is marked on the sweep's side, whichever form is written: the
 sizes behind the path sketch (its plane, face or projected curves), behind a plane that moves the outline away from
-the path, and behind an outline that could reach past the tightest bend (`sweep_reach.py`).
+the path, and behind an outline that could reach past the tightest bend (`sweep/sweep_reach.py`).
 
-The sweep code is split by concern. `sweep.py` is the handler. `sweep_settings` (twist, taper, direction, rail),
+The sweep code is split by concern. `sweep/step.py` is the handler. `sweep_settings` (twist, taper, direction, rail),
 `sweep_outline`, `sweep_volume` (volume checks), `sweep_ends` (the made end face against the path end), `sweep_marks` (sizes the copy cannot follow), `sweep_rules` (the path's
 rules held over the size ranges) and `sweep_write` (the extrude, revolve or `sweep` step written) each hold one part, and
-`sweep_limits` holds the refusal texts. `loft.py` is the loft handler; `loft_volume` pairs the corners of two
-straight outlines as the kernel does, for a volume check of a new body. The path side follows the same pattern: `paths.py` orders and classifies the path,
+`sweep_limits` holds the refusal texts. `loft/step.py` is the loft handler; `loft_volume` pairs the corners of two
+straight outlines as the kernel does, for a volume check of a new body. The path side follows the same pattern: `paths/paths.py` orders and classifies the path,
 `path_curves` (curve geometry, chaining), `path_checks` (the app's limits as refusals), `path_writing` (arc, circle, flat
 and corners forms), `path_closed` (closed chains), `path_rebuilt` (a path read back from numbers, for the range rules),
 `path_model` (`PathOptions`, `PathPlan`) and `path_limits` (tolerances, caps, refusal texts). A new refusal text goes into
@@ -148,12 +148,12 @@ reads them with `read_sketch.read_outlines(raw, ctx)`, which gives the profile r
 sketch text becomes one record per outer outline, so the list can be longer than the feature's own list of profiles.
 Records are expanded in the reader, never in the handler, so the position of a profile in `data.profiles` (the key of
 its motion values) is the same in the capture, the probe and the translator. A free curve (a spline) is a `kind:
-other` curve with dense `samples`, which `loops.loop_of` fits with spline segments (`spline_fit.py`); a sketch that
+other` curve with dense `samples`, which `loops.loop_of` fits with spline segments (`sketch/spline_fit.py`); a sketch that
 holds free curves or text is not followed by the size probe, so the sizes behind it stay loose or are left out.
 
 Write every value through `lib/translator/values.py`: `values.quantity` turns a Fusion expression into a formula of
 the sizes, with the right dimension and sign rules, or writes it as a number and records why. Points, faces and planes
-that later steps or this step pick go through `lib/translator/follow.py`.
+that later steps or this step pick go through `lib/translator/faces/follow.py`.
 
 A handler reports what it cannot follow in one way: `ctx.doubt(names, why)`. It says that a value is written as its
 number although the sizes `names` move it in Fusion. The export then keeps those sizes free and marks them "may give
@@ -169,7 +169,7 @@ state outside `ctx`. Work that depends on the capture alone can be kept in `ctx.
 
 A Combine takes tool bodies, and a tool that is more than steps that add material is written as one `toolBody` step
 that holds the steps that made the tool (`features`). A handler does not need to know about this: the tool is walked
-on its own (`lib/translator/tool_walk.py`) by the same item loop, in a child context (`Context.child`) whose
+on its own (`lib/translator/combine/tool_walk.py`) by the same item loop, in a child context (`Context.child`) whose
 `target` is the tool body. So a handler that tests `ctx.is_target(body)`, reads `data["target_box_before"]` and
 `data["volume_before"]`, and writes steps with `out.add(...)` works unchanged for a tool.
 
@@ -181,7 +181,7 @@ on its own (`lib/translator/tool_walk.py`) by the same item loop, in a child con
 - What a handler may not assume: that the part is its target's whole world. A child walk cannot see the part. A step
   that reaches to a face of the part has no place for it in the child; `tool_walk.on_part` works such steps out again
   against the part when a Combine writes them one by one, and a tool step that holds them marks the sizes it cannot
-  follow. Put every pick, plane and axis through `follow.py`, as for any step, and the audit says when one is missed.
+  follow. Put every pick, plane and axis through `faces/follow.py`, as for any step, and the audit says when one is missed.
 - `combine_tool` on the `RecipeKind`: the step can be one of the steps that a tool made only of such steps is written
   with, one by one, onto the part (`combine.adds_only`). Set it only for a kind that adds material and nothing else
   (extrude and revolve do). A kind without it is still copied inside a `toolBody`; it just stops the flat form.

@@ -22,7 +22,8 @@ from lib.export_plan.pipeline import ExportRequest, run_pipeline
 from lib.export_plan.reach_pass import left_out_indexes, needs_reach
 from lib.fusion_reader.capture import MarkerError
 from lib.fusion_reader.read_gap_reach import read_reach
-from lib.translator import gaps as translator_gaps, translate
+from lib.translator.gaps import stops as translator_gaps
+from lib.translator import translate
 from lib.translator.result import TranslateResult
 from lib.package import gaps_file
 from lib.package.caps import PackageCapError, check_package_caps

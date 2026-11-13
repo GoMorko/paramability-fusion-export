@@ -6,7 +6,7 @@ made it are needed, and so are the steps behind it: the bodies a Paste or a body
 `source_bodies`) and the tools of a Combine that changed the tool. The reader records every such body with its
 component (`foreign`, `component`) and reads the steps that made it: `body_states` for all of them, and the feature
 data too for steps of another component (`helper_of`). The same rules (`makers`, `built_by`) pick those items for the
-reader, for the translator's patterns of a Combine (`repeat.py`) and for the reach read (`read_gap_reach.py`).
+reader, for the translator's patterns of a Combine (`translator/repeat/`) and for the reach read (`read_gap_reach.py`).
 
 `plan` is a pure function of the items read so far. The reader calls it again after each round of reading, since the
 steps it reads name more source bodies. A body held by several items (a kept tool used again, a source pasted later)

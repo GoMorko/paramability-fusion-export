@@ -6,9 +6,10 @@ from tests.translator_helpers import left_out
 from tests.translator_helpers import assert_schema_ok, edited, load_capture, steps_of, translate_fixture, verdict_of
 
 from lib.params import size_table
-from lib.translator import translate, tool_walk
+from lib.translator import translate
+from lib.translator.combine import tool_walk
 from lib.translator.context import Context
-from lib.translator.finish import fillet
+from lib.translator.finishes.finish import fillet
 from lib.translator.result import Refusal
 
 

@@ -23,8 +23,8 @@ from ..geometry import vec
 from ..params import geometry_links
 from ..sketch_values import coverage, keys
 from ..sketch_values.motion import Affine, Stuck
-from . import sketch_motion
-from .curved import Curved, Poly
+from .sketch import sketch_motion
+from .sketch.curved import Curved, Poly
 from .values import Quantity
 
 PLANE, AXIS, POINT, DIRECTION = "plane", "axis", "point", "direction"

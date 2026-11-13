@@ -1,4 +1,4 @@
-"""An extrude whose outline is a flat face of the part (lib/translator/face_outline.py)."""
+"""An extrude whose outline is a flat face of the part (lib/translator/sketch/face_outline.py)."""
 import math
 import unittest
 

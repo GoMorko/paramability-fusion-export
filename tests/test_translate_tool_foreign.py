@@ -1,4 +1,4 @@
-"""A Combine whose tool body is made in another component (lib/translator/combine.py, tool_move).
+"""A Combine whose tool body is made in another component (lib/translator/combine/step.py, tool_move).
 
 The fixture `component_tool_foreign`: a box in the root cut by a tool of two joined cylinders made in the component
 Rod. Rod sits at (30, 10, 0) turned a quarter about z. box_h is read by the box, tool_len by both tool steps, and
@@ -15,8 +15,8 @@ from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.sketch_values.motion import Motion
 from lib.translator import translate
-from lib.translator.moved_placer import MovedPlacer
-from lib.translator.slabs import Motion as CopyMotion
+from lib.translator.faces.moved_placer import MovedPlacer
+from lib.translator.faces.slabs import Motion as CopyMotion
 
 NAME = "component_tool_foreign"
 SIZES = ["box_h", "tool_len", "rod_x"]

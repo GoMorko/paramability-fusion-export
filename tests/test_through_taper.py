@@ -1,11 +1,11 @@
 """The room left inside a written outline at other sizes, which a tapered cut through all needs to stay open
-(lib/translator/through_taper.py, lib/translator/written_loops.py)."""
+(lib/translator/extrude/through_taper.py, lib/translator/sketch/written_loops.py)."""
 import unittest
 
 from tests import context  # noqa: F401
 
-from lib.translator.through_taper import inner_reach
-from lib.translator.written_loops import profile_at
+from lib.translator.extrude.through_taper import inner_reach
+from lib.translator.sketch.written_loops import profile_at
 
 
 def slot(width):

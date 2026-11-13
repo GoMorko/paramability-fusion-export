@@ -1,4 +1,4 @@
-"""A pattern whose sources are a Combine and the steps that built its tool (lib/translator/repeat.py)."""
+"""A pattern whose sources are a Combine and the steps that built its tool (lib/translator/repeat/)."""
 import unittest
 
 from tests import context  # noqa: F401

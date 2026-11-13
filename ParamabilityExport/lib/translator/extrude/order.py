@@ -1,7 +1,7 @@
 """The order the outlines of one extrude are written in, so that each one joins what is built."""
 import heapq
 
-from .. import follow
+from ..faces import follow
 from ...geometry import vec
 from ...geometry.footprint import Footprint, polyline
 from .common import SAMPLE_INSET

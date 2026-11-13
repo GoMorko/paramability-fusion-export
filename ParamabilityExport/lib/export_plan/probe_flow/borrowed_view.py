@@ -1,6 +1,6 @@
 """The borrowed sketches of a capture and the view of it the probe works on."""
 from ...probe import plan
-from ...translator import borrowed
+from ...translator.sketch import borrowed
 
 
 def _profile_lists(capture):

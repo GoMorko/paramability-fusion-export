@@ -1,7 +1,7 @@
 """The bodies the exported body comes from, through splits.
 
 A body that a Split Body makes is new in Fusion: the steps before the split built the body it was split from. So the
-walk follows that body up to the split, and the split writes the removal of the other side (split.py). A body split
+walk follows that body up to the split, and the split writes the removal of the other side (bodies/split.py). A body split
 off from a body that was itself split off is followed back the same way, step by step.
 
 `of(capture)` lists each such split as `(index, parent)`: the timeline index of the split that made the next body of

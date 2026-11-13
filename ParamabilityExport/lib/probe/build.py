@@ -34,7 +34,7 @@ from .series import fit_series, moved as _moved
 from ..geometry.tolerances import SAME_SIZE
 from ..sketch_values import coverage
 from ..sketch_values.motion import SHAPE, UNREAD, Motion
-from ..translator import kept_ranges
+from ..translator.ranges import kept_ranges
 
 
 class StateRun:

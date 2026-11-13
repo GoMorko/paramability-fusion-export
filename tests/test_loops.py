@@ -4,7 +4,7 @@ import unittest
 from tests import context  # noqa: F401
 from tests.translator_helpers import close
 
-from lib.translator import loops
+from lib.translator.sketch import loops
 from lib.translator.result import Refusal
 
 

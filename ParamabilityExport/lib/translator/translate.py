@@ -1,11 +1,13 @@
 """The driver: walks a capture's items, calls one handler per feature type, builds the recipe."""
 import importlib
 
-from . import gap_file, gap_measures, gap_place, gaps, kept_ranges, range_check, repeat
+from .gaps import gap_file, gap_measures, gap_place, stops
+from .ranges import kept_ranges, range_check
+from . import repeat
 from .audit import audit
 from .sizes import joint_reasons, probed_sizes, text_reasons, untried_reasons, used_sizes
 from . import notes as wording, place
-from .picks import MAX_NEAR_POINTS
+from .faces.picks import MAX_NEAR_POINTS
 from .notes import (
     BODY_MOVED_WHY, dropped_reason, fixed_reason, loose_reason, tried_unmoved_reason, unmoved_link_reason,
     unmoved_reason, unused_reason)
@@ -14,7 +16,7 @@ from ..capture_model.capture import validate_capture
 from .context import Context
 from .result import TranslateResult
 from .step_walk import all_steps, nesting
-from .tool_walk import MAX_DEPTH as MAX_TOOL_DEPTH
+from .combine.tool_walk import MAX_DEPTH as MAX_TOOL_DEPTH
 from ..geometry import rigid
 from ..params import geometry_links
 from ..params.expressions.formula import tokenize_formula
@@ -196,7 +198,7 @@ def _translate(capture, handlers=None, size_table=None, motion=None):
     The walk runs twice when some value cannot follow. The first walk fixes every size such a value reads, to learn
     which sizes and reasons there are. The second keeps them free.
 
-    A step the copy cannot hold but whose effect stays on the body is left out as a gap (gaps.py, walk.py): the recipe
+    A step the copy cannot hold but whose effect stays on the body is left out as a gap (gaps/stops.py, walk.py): the recipe
     is written without it and `result.gaps` describes it, with where it belongs. A size that only such steps read stays
     a size, loose, with a reason that holds once the steps are added.
 
@@ -505,8 +507,8 @@ def _walk(capture, table, size_table, motion=None, cache=None):
     recipe = place.place(recipe, move)
     _fix_long_formulas(recipe, ctx)
     if ctx.gaps:
-        result.over_gap_cap = len(ctx.gaps) > gaps.MAX_GAPS
-        problem = (wording.too_many_gaps_reason(gaps.MAX_GAPS) if result.over_gap_cap
+        result.over_gap_cap = len(ctx.gaps) > stops.MAX_GAPS
+        problem = (wording.too_many_gaps_reason(stops.MAX_GAPS) if result.over_gap_cap
                    else gap_place.place_all(ctx.gaps, recipe["features"]))
         if problem:
             result.refusal = {"index": None, "name": "", "type": "", "reason": problem}

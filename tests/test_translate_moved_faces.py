@@ -1,4 +1,4 @@
-"""Picks on a face that an offsetFaces step moved follow the extrude and the offset distance (offset_faces.py)."""
+"""Picks on a face that an offsetFaces step moved follow the extrude and the offset distance (faces/offset_faces.py)."""
 import copy
 import unittest
 
@@ -7,7 +7,7 @@ from tests.test_translate_offset import plate_with_offset
 from tests.test_translate_sized import TRAY, run
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
 
-from lib.translator import follow
+from lib.translator.faces import follow
 from lib.translator.translate import HANDLERS, _walk
 
 CHAMFER = load_capture("chamfer_equal")["items"][2]

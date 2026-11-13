@@ -502,7 +502,7 @@ The area of the face (`BRepFace.area`, mm2) is the record's entry in `areas` and
 `end_offset` and `side_leans` are measured along the face's `z`. A capture made before add-in 0.8.1 has
 `{ "face": true, "type": "BRepFace" }` only; the translator refuses it and asks for a new export.
 
-The translator (`lib/translator/face_outline.py`) copies an extrude or emboss of one such face. When the size probe
+The translator (`lib/translator/sketch/face_outline.py`) copies an extrude or emboss of one such face. When the size probe
 read the face before its step at every try (`Motion.faces` names its `token` under `<item>/face`, "Probe states"), its
 loops and plane are written as formulas of the sizes from the keys `<item>/face/l<loop>/<field path>` and
 `<item>/face/plane`; a size whose move no formula fits (stuck, or an edge along a curve) is marked by the value it
@@ -559,18 +559,18 @@ A profile of another component's sketch (Fusion hands it over through that compo
   (`dependencyParameters`).
 
 The translator copies such a profile like its own when `frame`, `native_frame` and `placement.frame` are present
-(`lib/translator/borrowed.py`). The size probe reads the sketch at every state (section 5, "Probe states"), so the
+(`lib/translator/sketch/borrowed.py`). The size probe reads the sketch at every state (section 5, "Probe states"), so the
 outline follows the sizes through the motion file under the usual keys (`<item>/p<profile>/...`). Where the motion
 holds no value for the profile, the outline is written as numbers and every size that `sketch_params` read becomes a
 fixed number; the first translation of an export (no sizes fixed for sketches) skips that. The step gets a note that
 names the sketch and its component. Without the frames and the place the step is refused as before.
 
 Nothing ties such a step to the walls of the part, so it must keep meeting the part as measured
-(`lib/translator/meets_part.py`): along the normal of each of its faces, the nearest flat parallel faces of the part
+(`lib/translator/faces/meets_part.py`): along the normal of each of its faces, the nearest flat parallel faces of the part
 within 2 mm keep their side of the face at every size setting of the range (every mix of the ends for up to 6
 sizes, a bounded sample past that), and a face that lies on a wall stays on it. Where a gap would close or open, the sizes it reads stay free over
 their ranges and are listed in `loose`, with the values past which the step may stop meeting the part ("past 2.05",
-"below 0.98"). Those values come from `lib/translator/kept_ranges.py`, which finds, without changing any range, the
+"below 0.98"). Those values come from `lib/translator/ranges/kept_ranges.py`, which finds, without changing any range, the
 values up to which the gaps keep their side (each size alone first, then all together); when that value would be the
 size's own value or the person typed the range, no value is given and the size cannot follow (`Context.doubt`, listed
 in `loose` without one).
@@ -590,7 +590,7 @@ point lies within 0.0005 mm of the chord, at most 800 points (`truncated: true` 
 when the chords do not add up to the curve's own length, and the translator then refuses the curve). `start`, `end` and `mid` are samples. `tangent_start` and `tangent_end` are unit
 directions of the curve at its ends (`CurveEvaluator3D.getTangent`), left out when they cannot be read; the recipe's
 spline segment has no tangent field, so they are for checks only. A curve that cannot be evaluated has `samples: []`.
-The translator fits the app's spline through points chosen from the samples (`lib/translator/spline_fit.py`, tolerance
+The translator fits the app's spline through points chosen from the samples (`lib/translator/sketch/spline_fit.py`, tolerance
 0.005 mm between the points, also where the curve runs between two samples, at most 64 points inside one segment, split into several segments past that, at most 1000 points in a loop).
 
 ## 5. Feature data
@@ -828,7 +828,7 @@ neither way, refuses an uneven chamfer.
   `params` holds `angle_deg` and `angle_two_deg`.
 - `volume_before` and `volume_after`: the target's volume around the item.
 
-The translator (`lib/translator/draft.py`) writes the recipe's `draft` step with the faces as `near` points, the
+The translator (`lib/translator/finishes/draft.py`) writes the recipe's `draft` step with the faces as `near` points, the
 plane as `neutral` (its normal is the pull direction) and the angle as a size; the size ranges are cut where the
 angle would reach 30 degrees, and two angles from different formulas stay a number with their sizes marked. Fusion's sign and flip are not
 documented, so the sign is read from the part: with every face on one side of the plane, a draft that removes
@@ -869,7 +869,7 @@ sides of its plane, two different angles, an angle of 30 degrees or more, or no 
   part placed in the assembly the translator carries them into the component's frame first
   (`repeat_elements.in_component`, using the target's `placement`). In a symmetric circular pattern the frames of the
   copies behind the original have been seen as unturned and the one ahead as turned too far, while the part itself
-  had them centred; an odd count with every copy listed is therefore taken as centred (`repeat_circular.py`), but
+  had them centred; an odd count with every copy listed is therefore taken as centred (`repeat/repeat_circular.py`), but
   only when no copy is suppressed or left out by number (`suppressed_ids`), the original is among the copies and every
   copy turns by a whole number of steps. Otherwise the pattern is refused.
 - `symmetric_one`, `symmetric_two`: the copies spread to both sides of the original along that direction (false when
@@ -925,7 +925,7 @@ for extrudes).
 
 A mirror of the whole body joined to it (`combine` true) repeats every earlier step when the body lies on one side of
 the plane and no cut reaches across it; otherwise (a round, chamfer, shell or Move among the steps, a gap, no
-`target_box_before`) the translator gathers the steps into one `toolBody` and mirrors that (`repeat_mirror.py`).
+`target_box_before`) the translator gathers the steps into one `toolBody` and mirrors that (`repeat/repeat_mirror.py`).
 
 `plane` from a `ConstructionPlane` (`geometry`, a `Plane`: `origin`, `normal`) or a planar `BRepFace`
 (`geometry`). A construction plane adds `token`.
@@ -952,12 +952,12 @@ the plane and no cut reaches across it; otherwise (a round, chamfer, shell or Mo
 
 The translator follows a body that a split made back to the body it was split from (`lib/capture_model/lineage.py`),
 for the exported body and for a Combine tool body of its own component (`tool_walk.lineage_chain`): a piece belongs to the only split body, or to the one whose box holds its box. A split of the body it builds becomes the
-removal of the other side (`lib/translator/split.py`): a cut by a large box beyond the plane, or a cut or intersect with
+removal of the other side (`lib/translator/bodies/split.py`): a cut by a large box beyond the plane, or a cut or intersect with
 the tool body. The box reaches four half diagonals of the body plus 100 mm past it, times the largest ratio of a free
 size's range end to its value (up to 25; a size past that is marked), so a part the sizes grow is still cut. It stops the copy unless the capture shows the piece is the whole of its side (one side of the plane, or
 inside or outside the tool body, with every other piece of that body on the other side), the pieces add up to the
 body's volume (within a thousandth: Fusion measures each curved piece on its own, to a few parts in 100 000), and no
-later step changes another piece together with the part (`lib/translator/split_rules.py`).
+later step changes another piece together with the part (`lib/translator/bodies/split_rules.py`).
 
 **CombineFeature** (`targetBody`, `toolBodies`, `operation`, `isKeepToolBodies`):
 
@@ -1000,7 +1000,7 @@ copied stops that walk, and the Combine is refused with the reason naming the to
 - An intersect with several tools has the model `every` (one `toolBody` per tool, each `intersect`) or `any` (one
   `intersect` step that holds the tools as inner steps, the first `new` and the rest `add`); `unknown` refuses.
 - A pattern or mirror of bodies that the Combine takes whole is written as a `pattern` or `mirror` step over the tool
-  steps (`body_copies.groups`, `write`); a subset of the copies, or a layout `repeat.py` refuses, is one tool per copy
+  steps (`body_copies.groups`, `write`); a subset of the copies, or a layout the `repeat` package refuses, is one tool per copy
   with a `move`. An intersect never uses the pattern form. A size the count reads is marked, since it is not known
   whether Fusion adds new copies to the Combine (hand test B6); spacing and angle follow without a mark.
 - A later pattern or mirror of features may hold the Combine and the items that built its tools as sources; it then
@@ -1072,7 +1072,7 @@ another body of the target's component. The Combine moves them by the tool's fra
 (`combine.tool_move`), plus a move that follows sizes: the offsets of the three origin planes along their normals
 (`ref_motion.moves`, formulas of the sizes, or sizes marked loose where the probe could not follow, as for any
 reference). A frame that is scaled or mirrored refuses the Combine, naming the component. Slabs of the moved steps are
-copied with that move, so picks on them follow sizes; other placers (`moved_placer.py`) answer `material_at` for the
+copied with that move, so picks on them follow sizes; other placers (`faces/moved_placer.py`) answer `material_at` for the
 moved points and cannot place a pick on their faces.
 
 **CopyPasteBody** (`sourceBody` with the marker before the item, `bodies` after it):
@@ -1085,7 +1085,7 @@ moved points and cannot place a pick on their faces.
 is empty or shorter when a source is gone or cannot be read. A source of another component is `foreign` and has the
 identity keys of a foreign tool. `result_bodies` is null when `bodies` cannot be read.
 
-The handler (`translator/paste.py`) walks the source up to the paste (`tool_walk.build`) and writes its steps again,
+The handler (`translator/bodies/paste.py`) walks the source up to the paste (`tool_walk.build`) and writes its steps again,
 with ids of their own, in the list of the pasted body. It needs as many sources as results, a result among
 `result_bodies`, and a pasted body that has no steps yet. Several sources are paired with the results by their points:
 one at the same place first, else one rigid move apart; a result with no single source refuses. The first vertices of source and result must be the same points (a paste in place) or one
@@ -1117,7 +1117,7 @@ are marked.
   `translate.0`, `translate.1`, `translate.2`).
 - `pointToPoint` carries only the points.
 
-The handler (`translator/move.py`) writes a `move` step in the walk of the body it moves, and refuses a Move of faces
+The handler (`translator/bodies/move.py`) writes a `move` step in the walk of the body it moves, and refuses a Move of faces
 and one that does not map the measured points rigidly (a mirror or a scale). `translateXYZ`, `rotate` and `free` must
 agree with the measured points, and `translateXYZ` and `rotate` write their distances and angle through the sizes. The
 other types are written as the numbers of the fit. What they follow can move with any size, so every ticked size is
@@ -1201,10 +1201,10 @@ order (empty when one cannot be read, since a gap would shift the order).
   area (mm2) of the farthest flat face of `feature.faces` that is parallel to the input face (the top of a raised
   outline or the floor of a sunk one); null when none is found.
 
-The translator (`lib/translator/emboss.py`) copies a flat face emboss as an extrude that starts on the face
+The translator (`lib/translator/extrude/emboss.py`) copies a flat face emboss as an extrude that starts on the face
 (`start.kind` is `fromEntity`): `join` for a positive depth, `cut` for a negative one, going out of the face or into
 it. The measured `end_offset` decides the direction when it is known. A flat face used as the outline follows the
-rules of an extrude from a face (`face_outline.py`). It refuses a curved face, faces that are not on
+rules of an extrude from a face (`sketch/face_outline.py`). It refuses a curved face, faces that are not on
 one plane, a moved or turned outline, text, a sketch plane tilted to the face, Tangent Chain on (or unreadable) with a
 tangent neighbour that is curved or not on the input plane (when the neighbours could not be listed: any curved made
 face), and a measured volume change that is not
@@ -1214,8 +1214,8 @@ it there: the step is written with `within`, the face's `outline` (holes include
 so the extrude acts only on the face. That needs a lone input face with its `outline`, no flat tangent neighbour while
 Tangent Chain is on, and edges the copy can write; otherwise the refusal says why ("reaches past the face it sits on").
 
-**SweepFeature** and **LoftFeature** (`lib/fusion_reader/read_sweep.py`; the handlers `lib/translator/sweep.py` and
-`lib/translator/loft.py` copy the simple cases, and a step they refuse becomes a gap that holds this data):
+**SweepFeature** and **LoftFeature** (`lib/fusion_reader/read_sweep.py`; the handlers `lib/translator/sweep/step.py` and
+`lib/translator/loft/step.py` copy the simple cases, and a step they refuse becomes a gap that holds this data):
 
 ```json
 {
@@ -1253,18 +1253,18 @@ Tangent Chain is on, and edges the copy can write; otherwise the refusal says wh
   says per key of `orientation`, `taper_deg` and `twist_deg` what Fusion gave instead: the error text of the member,
   `none`, or `unusable <type>`; the sweep's reason names the missing settings and quotes it. `params` follows the usual rules (the
   scalar ones have kind `scalar`).
-- Twist and taper (`lib/translator/sweep.py`): a twist, a taper or `parallel` along a path that turns makes a `sweep`
+- Twist and taper (`lib/translator/sweep/step.py`): a twist, a taper or `parallel` along a path that turns makes a `sweep`
   step with `twistDeg`, `taperDeg` and `orientation: "fixed"` (a line becomes a corners path of its two points, an
   arc a flat path). `taperDeg` is Fusion's angle times `TAPER_SIGN` (-1, as for the extrude); `twistDeg` is Fusion's
   angle times `TWIST_SIGN` (1). Fusion does not document either convention, so while `TAPER_MEANING_CONFIRMED` and
   `TWIST_SIGN_CONFIRMED` are false every written twist or taper marks the sizes behind the angle and the outline and
   adds a note. For a new body along a straight path the made volume is compared with the offset and the scaled
-  models (`translator/sweep_taper.py`): a match with the opposite lean flips the sign, a match with the scaled model
+  models (`translator/sweep/sweep_taper.py`): a match with the opposite lean flips the sign, a match with the scaled model
   only leaves the step out. Left out: a twist with a taper or `parallel`, a taper with `parallel`, a taper along
   free curves or more than 64 parts, a taper of 45 degrees or more, a twist over 3600 degrees, and a parallel
   outline along a path that turns back past its plane (every tangent must rise at least 0.05 along the outline's
   normal).
-- Closed paths (`lib/translator/paths.py`): a closed chain in one plane becomes a flat path with `closed: true`. The
+- Closed paths (`lib/translator/paths/paths.py`): a closed chain in one plane becomes a flat path with `closed: true`. The
   chain is cut where it meets the outline's plane nearest to the outline (a line, an arc or a spline sample is split
   in two; a joint is used as it is), turned to start there, and its last segment ends exactly on the start. A sharp
   corner between two lines is mitred, as Fusion builds it (a 3 by 3 mm outline round the 40 by 40 mm top edges of a
@@ -1279,10 +1279,10 @@ Tangent Chain is on, and edges the copy can write; otherwise the refusal says wh
   new body must have the volume of Pappus: the area times the path length less the offset of the outline's centre
   towards the inside times the turn of the path (2 pi, where each mitred corner turning by t counts 2 tan(t / 2)); a
   twisting outline is checked only when its centre sits on the path.
-- Arc and circle paths (`lib/translator/path_writing.py`): the revolve about the arc's axis builds an outline on the
+- Arc and circle paths (`lib/translator/paths/path_writing.py`): the revolve about the arc's axis builds an outline on the
   outer side of the arc however wide it is; only an outline that reaches the axis is left out (the reach toward the
-  centre counts, along the radius). The check over the size ranges (`sweep_rules.py`) uses the same rule.
-- Path sizes (`lib/translator/path_motion.py`). A path of sketch lines and arcs that the probe measured (its
+  centre counts, along the radius). The check over the size ranges (`sweep/sweep_rules.py`) uses the same rule.
+- Path sizes (`lib/translator/paths/path_motion.py`). A path of sketch lines and arcs that the probe measured (its
   `<item>/path` is in `Motion.curves`) follows the sizes. The probe covers such a path when every entity is a line,
   arc or circle of one sketch with a token and a `flat` record (`probe.plan`, kind `path`, and the request's
   `curves`); it keeps `<item>/path/c<n>/<field>` per entity in path order as captured (a line's `start.0`, `start.1`,
@@ -1309,7 +1309,7 @@ Tangent Chain is on, and edges the copy can write; otherwise the refusal says wh
 - `faces_after`: a point and the outward normal of the made start and end faces (`startFaces` and `endFaces` of a
   sweep, `startFace` and `endFace` of a loft), read with the marker after the item. Each side is null when the member
   cannot be read. The key is not a pick.
-  The translator checks a sweep's `end` faces against the planned path end (`lib/translator/sweep_ends.py`): each
+  The translator checks a sweep's `end` faces against the planned path end (`lib/translator/sweep/sweep_ends.py`): each
   must lie on the plane through the path end that is square to the path's end direction (square to the outline's own
   normal when the outline keeps its direction) and face along it, and a new body's one end face must lie within the
   outline's reach of the path end (not checked with a taper). A mismatch leaves the sweep out; unreadable faces add a
@@ -1383,7 +1383,7 @@ Loft `data`:
   (with the entity `type`). A section Fusion gives as a collection is the profile it holds when it holds one profile;
   otherwise it is `other` with `items` (the type names of up to 16 entries) and `count`, as is a `Path` that cannot
   be read.
-- Loops of the part as sections (`lib/translator/loft_sections.py`): a `path` section that is one closed chain of
+- Loops of the part as sections (`lib/translator/loft/loft_sections.py`): a `path` section that is one closed chain of
   lines and arcs in one plane (or one circle), and a flat `face` section, are written as outlines measured where they
   are, the sizes that may move them marked (those the steps written so far read; any size for edges or a face of
   another body). The chain gets a frame on its plane turned like the other section's sketch. An open chain, a chain
@@ -1394,7 +1394,7 @@ Loft `data`:
 - `rails` and `centerline` come from `centerLineOrRails`: `rails` is the list of rail paths (empty when there are
   none), `centerline` the path when `isCenterLine` is true (then `rails` is empty). Both are null when the member
   cannot be read. `closed` is `isClosed`, `merge_tangent` is `isTangentEdgesMerged`.
-- Pairing check (`lib/translator/loft_volume.py`): for a new body between two parallel outlines of straight lines of
+- Pairing check (`lib/translator/loft/loft_volume.py`): for a new body between two parallel outlines of straight lines of
   the same corner count, the measured volume must equal the volume of the loft the copy builds, with the corners
   paired as the app kernel pairs them (nearest corners about each outline's centre); another volume means Fusion
   paired them another way and the loft is left out. Where this cannot be told, corner outlines whose sketch frames
@@ -1527,7 +1527,7 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   distance of an offset plane an extrude starts from or reaches to), the "up to" offset, a tip angle, a countersink angle, a full circular turn, a revolve that is not a plain
   part turn, and a pattern whose copies are left out by number or are rounds copied one by one. The sizes behind
   them are fixed.
-- Picks and reaches that follow sizes (`lib/translator/follow.py`). Every extrude step is kept with its placement,
+- Picks and reaches that follow sizes (`lib/translator/faces/follow.py`). Every extrude step is kept with its placement,
   profile and length. A pick point (fillet and chamfer edge points, shell face points) or a TARGET `face_point` that
   lies on an end face of an earlier extrude (inside its profile), or on its side at a profile corner (any outline
   point for a face), moves with that extrude's length:
@@ -1549,7 +1549,7 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
     path) marks the sizes read before the step, and so does a plane the capture does not describe (an older add-in).
     When the steps cannot place the face or plane (a side wall whose sketch line moves, a face of a step the copy
     does not model, a plane built on such a face), the probe's measure of it decides instead
-    (`lib/translator/reach_motion.py`, "Measured references in the motion file"): its move is written as a formula, a
+    (`lib/translator/extrude/reach_motion.py`, "Measured references in the motion file"): its move is written as a formula, a
     size that does not move it is not marked, and only a size it cannot follow is marked;
   - a start offset that follows sizes, or a "from entity" start on a moving end face, moves the sketch placement
     along its normal (`sketch.on.origin` as formulas), and the picks on that extrude follow it too. A side that
@@ -1558,9 +1558,9 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
     linear spacing that follows sizes moves the point with it, a turn or a mirror moves it by numbers. A pick on a
     copy fixes the sizes behind that pattern's count (and a circular angle), since the list of points cannot grow.
     A copy has no `featureEdges` or `featureFace`: the app traces only extrudes, so copies are picked by points.
-  - a point on the inner wall of a shell (`lib/translator/shells.py`) is moved back out by the thickness and placed
+  - a point on the inner wall of a shell (`lib/translator/faces/shells.py`) is moved back out by the thickness and placed
     on the extrude whose outer wall it came from; its coordinates follow that extrude and the thickness.
-  - an edge where the flat walls of two steps cross (`lib/translator/crossings.py`), for example a cut's floor
+  - an edge where the flat walls of two steps cross (`lib/translator/faces/crossings.py`), for example a cut's floor
     running into a rib, stays on both walls as they move; along the edge it follows the shorter wall.
   - a point on the far outline of a tapered extrude follows its length; a taper that follows a size is fixed.
   A point or face that no extrude explains may sit on geometry that moves, so every size read by the steps written
@@ -1650,7 +1650,7 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   formula reads, plus the sizes those formulas read. A ticked size that nothing reads is left out (see `dropped`).
   Without a table the recipe has no `sizes`, and no marker.
 
-### Sketch values that follow sizes (`lib/translator/sketch_motion.py`)
+### Sketch values that follow sizes (`lib/translator/sketch/sketch_motion.py`)
 
 The export measures the sketches at other size values (probe states, next section) and fits each value the translator
 writes as a sum over Fusion parameters, or marks it stuck (`lib/probe/`). That is the motion file, `sketch_values.motion`:
@@ -1920,7 +1920,7 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   distance, then follows what made the face).
 - A pick on a tapered wall follows the taper and the length: the wall leans in by `tan(taper)` times the height along
   the extrude, also when the taper is a size.
-- Symmetric patterns (`lib/translator/symmetric.py`, `repeat.py`). A symmetric direction is written as a forward and a
+- Symmetric patterns (`lib/translator/repeat/symmetric.py`, `lib/translator/repeat/`). A symmetric direction is written as a forward and a
   backward pattern that both start at the original; the grids that result (one per choice of a part in each direction)
   skip the places another grid already makes when their counts are numbers. The copies follow this rule, and the
   measured copies must match it or the pattern is refused: for `n` copies, an odd `n` has `n // 2` steps each way and
@@ -1939,7 +1939,7 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   a fixed count in the app, so the count is written as a number and its size is dropped with the reason.
 - A pick on a copy of a rectangular pattern needs that copy at every size: copy n needs a count of n or more over
   the size range (count formulas such as `ceil(width_count) * 2` are evaluated at the range ends, `lib/translator/
-  copy_counts.py`). When the count can drop below that, the sizes it reads are marked ("a smaller value would leave
+  faces/copy_counts.py`). When the count can drop below that, the sizes it reads are marked ("a smaller value would leave
   that copy out"); the range stays. Copies of a circular pattern keep their count and angle.
 - A taper that follows sizes should stay under 45 degrees either way, since Paramability refuses a steeper one: the
   ranges of the untyped sizes it reads are cut where it reaches 45 (`Context.cut`, `kept_ranges.holding_ranges`).
@@ -2082,7 +2082,7 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
   (`quantityOne` and `quantityTwo`, or `quantity`) and the `patternElements` as the capture reads them
   (`probe_patterns.read_patterns`). A pattern that cannot be read gives `unread` `{ key: reason }`. Built states keep
   these reads in `Motion.states[n].patterns`. The translator uses them to learn where Fusion puts the copies for an
-  even count (`translator/symmetric.py`, "Symmetric patterns"). Like the captured copies, their frames are in assembly
+  even count (`translator/repeat/symmetric.py`, "Symmetric patterns"). Like the captured copies, their frames are in assembly
   space; the translator carries them into the frame of the part (`repeat_elements.read_in_component`) before it
   compares them, so a part turned in the assembly reads the extra copy on its own side. The start reads of a flipped
   sketch skip them.

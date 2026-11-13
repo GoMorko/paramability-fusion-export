@@ -7,7 +7,7 @@ from unittest import mock
 
 from tests import context  # noqa: F401
 
-from lib.translator import spline_fit
+from lib.translator.sketch import spline_fit
 
 VECTORS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "spline_vectors.json")
 

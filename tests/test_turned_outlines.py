@@ -1,6 +1,6 @@
 """Outlines whose corners turn with an angle size: the range is cut where the outline would cross itself
 (sketch_crossings.order_ranges), and a point picked inside an end face moves with one corner, not the centre of all
-of them (inner_pick.py)."""
+of them (sketch/inner_pick.py)."""
 import copy
 import math
 import unittest
@@ -14,8 +14,9 @@ from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
 from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.sketch_values.motion import Motion, Terms
-from lib.translator import sketch_crossings, translate
-from lib.translator.loops import profile_loops
+from lib.translator.sketch import sketch_crossings
+from lib.translator import translate
+from lib.translator.sketch.loops import profile_loops
 from lib.translator.values import Quantity
 
 

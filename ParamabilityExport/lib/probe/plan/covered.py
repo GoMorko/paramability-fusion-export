@@ -1,7 +1,8 @@
 """The sketches and flat faces the probe can follow: which capture records name them, and which it leaves alone."""
 from ...sketch_values import keys
-from ...translator import emboss, face_outline
-from ...translator.loops import profile_loops
+from ...translator.extrude import emboss
+from ...translator.sketch import face_outline
+from ...translator.sketch.loops import profile_loops
 from ...translator.result import Refusal
 from ...capture_model.step_kinds import AXIS, HOLE_POINTS, OUTLINE_FACE, PATH, PROFILES, step_type
 

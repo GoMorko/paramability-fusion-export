@@ -1,5 +1,7 @@
 """The outlines of an extrude as the recipe writes them: sketch outlines and flat faces, merged and checked."""
-from .. import loops, notes, sketch_motion, thin_wall, values
+from ..sketch import loops, sketch_motion
+from .. import notes, values
+from ..faces import thin_wall
 from ...capture_model import gap_hints
 from ...geometry import outlines, vec
 from ..result import Refusal
@@ -61,7 +63,7 @@ def _sketch_built(ctx, item, profiles, thin):
 
 
 def _face_built(face, thin):
-    """The one outline of a flat face (face_outline.py), as `_sketch_built` gives it, or a Refusal."""
+    """The one outline of a flat face (sketch/face_outline.py), as `_sketch_built` gives it, or a Refusal."""
     if thin and face.loops[1]:
         return Refusal("A thin extrude of an outline with holes is not copied yet.", cause=gap_hints.THIN_OUTLINE)
     return [(face.profile, face.loops, face.drawn)]

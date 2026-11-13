@@ -369,7 +369,7 @@ class MirrorReachTest(unittest.TestCase):
 
     @staticmethod
     def problem(through):
-        from lib.translator.repeat_mirror_reach import body_mirror_problem
+        from lib.translator.repeat.repeat_mirror_reach import body_mirror_problem
         outline = {"kind": "profile", "start": [0.0, 0.0],
                    "segments": [{"kind": "spline", "through": through, "to": [6.0, 0.0]},
                                 {"kind": "line", "to": [0.0, 0.0]}]}

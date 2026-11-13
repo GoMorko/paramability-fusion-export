@@ -6,7 +6,7 @@ from tests import context  # noqa: F401
 from tests.test_translate_sketch_motion import motion_of, run
 from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of, stopped, translate, verdict_of
 
-from lib.translator import loft, loft_sections
+from lib.translator.loft import step as loft, loft_sections
 
 SQUARES = "loft_two_squares"
 ROUND_TO_SQUARE = "loft_circle_to_square"

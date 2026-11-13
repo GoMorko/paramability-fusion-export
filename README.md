@@ -541,7 +541,7 @@ package may import only packages above it in this list (not every one of them). 
 - `sketch_values`: the motion file of sketch values and measured references that follow sizes, its keys and coverage.
 - `sketch_solve`: reads a sketch's dimensions and constraints from the capture into formulas for its points, without Fusion.
 - `design_edit`: setting parameter values row by row, restoring them, the timeline marker, the temporary copy.
-- `translator`: a capture dict in, a recipe plus verdicts out (one handler per step kind).
+- `translator`: a capture dict in, a recipe plus verdicts out (one handler per step kind). `translate.py`, `walk.py`, `context.py`, `result.py`, `values.py` and `sizes.py` are the driver; the rest sits in folders by job: `extrude/` (also emboss), `sweep/` and `paths/`, `loft/`, `revolve/`, `hole/`, `repeat/` (patterns and mirrors), `combine/` (also tool bodies), `finishes/` (fillet, chamfer, shell, draft, offset faces), `bodies/` (move, paste, split), `faces/` (the faces steps make and the picks that follow sizes), `sketch/` (outlines and sketch values), `ranges/` (formulas over the size ranges) and `gaps/`.
 - `probe`: measures sketches and the places of other components' planes, axes and points at other size values and fits the motion file.
 - `export_plan`: the export itself: the pipeline (one body or several), the recipe and its notes, the probe run, size offers.
 - `dialog_model`: what the dialogs show, as plain data (rows, Sizes table, result view, stop warning).
