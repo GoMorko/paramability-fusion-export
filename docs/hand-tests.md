@@ -8,7 +8,7 @@ note the Fusion version and system.
 ## Check first in this version
 
 What 0.6.0 to 0.8.0 added, and what this version adds, in this order. Each id is described in the section named,
-except U1 to U3, UM1, L1 to L15, F1, F2, SP1 to SP4 and TH1 to TH6, which are described here.
+except U1 to U3, UM1, L1 to L16, F1, F2, SP1 to SP4 and TH1 to TH6, which are described here.
 
 - [ ] SP1, the marker roll past other components. Make component Cup: a sketch with a 60 mm square whose side is the
       user parameter `Width`, extruded 40 mm. In that sketch project an edge of a body of an earlier component (once

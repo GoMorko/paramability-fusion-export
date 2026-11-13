@@ -119,6 +119,12 @@
             "maxItems": 256,
             "type": "array"
           },
+          "hint": {
+            "description": "What to change in the source design so the step copies, when the writer has advice.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
           "id": {
             "description": "Letters, digits and underscores, unique in the file and not the id of a step of the recipe. The first step added for the gap takes this id.",
             "maxLength": 64,
