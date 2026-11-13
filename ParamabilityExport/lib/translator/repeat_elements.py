@@ -4,8 +4,8 @@ An element frame is the transform of one copy from the original (`origin` and th
 assembly space; `in_component` carries the frames into the frame of the component the recipe is written in, and drops
 copies that sit exactly on an earlier one. `read_in_component` does the same for the copies a probe state read.
 """
+from ..capture_model import tool_items
 from ..geometry import vec
-from . import tool_items
 
 FIT_TOL_MM = 1e-4
 ROTATION_TOL = 1e-9

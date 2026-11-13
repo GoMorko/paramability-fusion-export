@@ -6,8 +6,8 @@ apart from it: nothing after the split puts them back into it or changes them to
 still take one as a tool, which its own handler checks). The split then becomes the removal of the other side
 (split.py). Pure: it reads the capture dict only.
 """
-from . import lineage
-from .capture import outside_component, same_body
+from ..capture_model import lineage
+from ..capture_model.capture import outside_component, same_body
 
 ANOTHER_BODY = "This step splits the part or makes another body, which is not copied yet."
 NOT_READ = ("What this split cuts with was not read. Exporting again with this version of the add-in reads it.")

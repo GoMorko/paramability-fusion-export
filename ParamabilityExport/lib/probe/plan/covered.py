@@ -3,7 +3,7 @@ from ...sketch_values import keys
 from ...translator import emboss, face_outline
 from ...translator.loops import profile_loops
 from ...translator.result import Refusal
-from ...translator.step_kinds import AXIS, HOLE_POINTS, OUTLINE_FACE, PATH, PROFILES, step_type
+from ...capture_model.step_kinds import AXIS, HOLE_POINTS, OUTLINE_FACE, PATH, PROFILES, step_type
 
 _CURVES = ("line", "arc", "circle", "ellipse")
 _PATH_CURVES = ("line", "arc", "circle")

@@ -11,7 +11,7 @@ from . import follow, values
 from .picks import MAX_NEAR_POINTS
 from .placer_makers import CopiesMaker
 from .result import Refusal, StepResult
-from .step_kinds import recipe_kind
+from ..capture_model.step_kinds import recipe_kind
 from .values import number
 
 MAX_COPIED_BODIES = 256

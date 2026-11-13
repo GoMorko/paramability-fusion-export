@@ -53,7 +53,7 @@ class StepType:
     makes_bodies: it can make bodies that copy others (a Paste, a pattern or mirror of bodies). Its other results are
       expected, so the walk of one body does not refuse them.
     moves_bodies: it carries the bodies its data names to another place.
-    splits_bodies: it cuts bodies into pieces, and a piece may come out as a new body (translator/lineage.py).
+    splits_bodies: it cuts bodies into pieces, and a piece may come out as a new body (capture_model/lineage.py).
     reaches_bodies: it can change or take bodies of another component than its own (a Combine's tool bodies, a Move,
       a split), so the capture walk measures the target around it also when it lives in another component.
     pattern: `rectangular` or `circular` for the patterns whose copies the probe reads again at each state.

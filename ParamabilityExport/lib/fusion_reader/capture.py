@@ -18,15 +18,15 @@ the component sits in the assembly. Feature readers run only for items of the ta
 components (`helper_pass`).
 
 Feature readers come in pairs `(before, after)` (see read_solid). Each reader module registers its pairs in a module
-level READERS dict keyed by capture type, and the step kind table (`translator/step_kinds.py`) names the module for
+level READERS dict keyed by capture type, and the step kind table (`capture_model/step_kinds.py`) names the module for
 each type.
 """
 import importlib
 
+from ..capture_model import step_kinds
 from ..design_edit.marker import put_back, read_marker
 from ..timing.capture_timer import CaptureTimer
 from ..timing.timer import span_on
-from ..translator import step_kinds
 from . import helper_pass
 from . import read_geometry as geo
 from .parameters import list_model_parameters, list_user_parameters

@@ -20,11 +20,11 @@ from dataclasses import dataclass
 from ..geometry import vec
 from ..geometry.rigid import move_from_frame
 from . import move, paste, ref_motion, repeat, tool_walk, values, walk
-from .capture import outside_component, same_body
+from ..capture_model.capture import outside_component, same_body
 from .moved_placer import MoveMaker
 from .result import Refusal, StepResult, make_verdict
 from .slabs import Motion
-from .step_kinds import SOLID, recipe_kind
+from ..capture_model.step_kinds import SOLID, recipe_kind
 from .step_walk import nesting
 from .tool_placer import ToolMaker, WrittenFor, wrap_body
 

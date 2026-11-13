@@ -25,9 +25,10 @@ them.
 """
 import copy
 
+from ..capture_model import step_kinds, tool_items
 from ..geometry import rigid
 from ..geometry.combine_volume import exceeds, exceeds_tools, rule_unproven
-from . import body_copies, place, ref_motion, step_kinds, tool_items, tool_walk
+from . import body_copies, place, ref_motion, tool_walk
 from .moved_placer import MovedMaker, motion_of
 from .result import Refusal, StepResult
 from .tool_placer import ToolMaker

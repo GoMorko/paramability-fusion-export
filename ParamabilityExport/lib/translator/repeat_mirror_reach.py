@@ -11,7 +11,7 @@ from ..geometry import vec
 from ..params.expressions.errors import ExpressionError
 from ..params.expressions.evaluation import evaluate
 from . import range_check
-from .step_kinds import recipe_kind
+from ..capture_model.step_kinds import recipe_kind
 from .values import Sized, number, numbers_of, reads_in
 from .written_loops import spline_points
 

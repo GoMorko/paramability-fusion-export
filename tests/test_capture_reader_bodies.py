@@ -10,8 +10,8 @@ from tests.test_capture_reader import (Coll, FakeDesign, Obj, P, body, entry, ex
                                        sketch_entry)
 from tests.test_capture_reader_helpers import Design, Rod, read
 
+from lib.capture_model import tool_items
 from lib.fusion_reader import read_intersect
-from lib.translator import tool_items
 
 SQUARE = [(0, 0, 0), (10, 0, 0), (10, 10, 0), (0, 10, 0)]
 BRICK = "lib.fusion_reader.read_intersect._brep_tools"

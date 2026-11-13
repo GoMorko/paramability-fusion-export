@@ -7,9 +7,9 @@ from tests import context  # noqa: F401
 from tests.fakes import FakeOccurrence, FakeSolid, Vec, apply_matrix, turn_z
 from tests.test_capture_reader import Coll, FakeDesign, Obj, P, entry, extrude, feature, rect_profile, sketch_entry, body
 
+from lib.capture_model import tool_items
 from lib.fusion_reader import helper_pass
 from lib.fusion_reader.capture import read_capture
-from lib.translator import tool_items
 
 PLACE = turn_z(90, (100, 50, 0))
 AXES = {"xy": (0, 0, 1), "xz": (0, 1, 0), "yz": (1, 0, 0)}

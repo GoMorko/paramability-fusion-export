@@ -151,7 +151,7 @@ ITEM:
   not by token text. When the component cannot be read it is true for a feature (so the translator still refuses a
   feature of the target it cannot read) and false for the items that are not modeling steps (sketches, construction
   geometry, occurrences, joints and the like: the roles `sketch` and `assembly` in the step kind table,
-  `lib/translator/step_kinds.py`). Feature readers run only for items in the target's component, plus the second pass
+  `lib/capture_model/step_kinds.py`). Feature readers run only for items in the target's component, plus the second pass
   below for the steps of a Combine's tool bodies from other components; the other items keep `"data": {}` with their
   `bodies_after`, health and message.
 - `helper_of`, `helper_unread`, `body_states`: only on items that made a body a Combine of the target (or of a body
@@ -389,7 +389,7 @@ or `{ "read": false, "error": "<reason>" }` when the read failed.
   reported under the index of that step of `gaps`), and every later step that picks geometry, without items that make
   no body (sketches, construction geometry). Only steps after the first
   step of `gaps` are tested, and a step of `gaps` is not tested.
-- Which items pick geometry is decided by `translator.gap_picks.pick_records(item)`: the edge records of rounds and
+- Which items pick geometry is decided by `capture_model.gap_picks.pick_records(item)`: the edge records of rounds and
   bevels, and face records with a token, a point or loops (shell and offset faces, the face inputs of a round). These
   are the picks the copy writes as measured points. A face given only by a `face_point` (an emboss face, a face an
   extrude starts from or reaches to) and a face used as an outline are not picks: the copy writes them as numbers or
@@ -950,7 +950,7 @@ the plane and no cut reaches across it; otherwise (a round, chamfer, shell or Mo
   tells or the tool body is not found. It is read with the marker after the item, where Fusion no longer gives
   `splittingTool`, so the tool body is found by the token read before the item.
 
-The translator follows a body that a split made back to the body it was split from (`lib/translator/lineage.py`),
+The translator follows a body that a split made back to the body it was split from (`lib/capture_model/lineage.py`),
 for the exported body and for a Combine tool body of its own component (`tool_walk.lineage_chain`): a piece belongs to the only split body, or to the one whose box holds its box. A split of the body it builds becomes the
 removal of the other side (`lib/translator/split.py`): a cut by a large box beyond the plane, or a cut or intersect with
 the tool body. The box reaches four half diagonals of the body plus 100 mm past it, times the largest ratio of a free
@@ -1048,7 +1048,7 @@ components at that moment shape the result):
 The steps that made a foreign tool are read in a second pass (`lib/fusion_reader/helper_pass.py`) after the main walk,
 with the same feature readers and a `ReadContext` whose target is the tool body, so the tool component's own sketches,
 planes and faces are not `foreign` and every value is in that component's coordinates. Only the items that
-`translator/tool_items.py` picks are rolled to: the modeling steps before the Combine whose `bodies_after` list the tool
+`capture_model/tool_items.py` picks are rolled to: the modeling steps before the Combine whose `bodies_after` list the tool
 and that sit in the tool's component (the component a foreign body names, else the one of the item that holds the
 body). Tools of the target's own component are planned the same way: their items are
 already read, and only `body_states` is added. The Combines of a body the target was split from count like the

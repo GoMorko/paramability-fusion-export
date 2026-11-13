@@ -23,9 +23,9 @@ moves }`, with `gaps` the left out steps the read was asked about, an entry for 
 index of that left out step. A pick that cannot be found, or a candidate whose faces cannot be read, counts as reached: the safe
 side for the translator.
 """
+from ..capture_model import step_kinds, tool_items
 from ..design_edit.marker import read_marker
-from ..translator import step_kinds, tool_items
-from ..translator.gap_picks import pick_records
+from ..capture_model.gap_picks import pick_records
 from . import read_geometry as geo
 from .capture import MarkerError, restore_marker
 

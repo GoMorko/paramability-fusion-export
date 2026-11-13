@@ -8,7 +8,7 @@ of that.
 
 ## What a new step type touches
 
-1. One entry in the step kind table, `ParamabilityExport/lib/translator/step_kinds.py`.
+1. One entry in the step kind table, `ParamabilityExport/lib/capture_model/step_kinds.py`.
 2. One reader pair in a `lib/fusion_reader/read_*.py` module, registered in that module's `READERS` dict.
 3. One handler function in a `lib/translator/` module.
 4. When the step writes a recipe kind the translator does not write yet: one `RecipeKind` entry in the same table,
@@ -223,7 +223,7 @@ added later (by hand or by an AI assistant connected to Paramability) from the g
 - Picks as records the capture already uses (`edges` lists with `token` or `points`, `faces` lists with `token`,
   `point` or `loops`), so `gap_picks.pick_records` sees them: a later round or shell that picks faces of a gap is then left
   out too, instead of landing on another edge of the copy. A face given only by a `face_point` is not a pick. A list of faces the step made, or of bodies, goes under one of the names
-  `gap_picks.pick_records` skips (the `_NOT_PICKS` list in `lib/translator/gap_picks.py`); add a new name there so it is not
+  `gap_picks.pick_records` skips (the `_NOT_PICKS` list in `lib/capture_model/gap_picks.py`); add a new name there so it is not
   taken for a pick.
 - Marked `foreign` records for inputs of another component, as for a copied step. A step with such an input is left
   out as a gap, with the reason of `ref_motion.why_foreign` when there is one.

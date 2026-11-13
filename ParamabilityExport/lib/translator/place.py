@@ -10,7 +10,7 @@ are zero or plus or minus one are snapped, so a part that is only moved keeps pl
 """
 import copy
 
-from .step_kinds import RECIPE_KINDS
+from ..capture_model.step_kinds import RECIPE_KINDS
 from .step_walk import all_steps
 from .values import Quantity, Sized
 

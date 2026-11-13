@@ -1,4 +1,4 @@
-"""The step kind table (lib/translator/step_kinds.py) is the one list of step types and recipe kinds."""
+"""The step kind table (lib/capture_model/step_kinds.py) is the one list of step types and recipe kinds."""
 import ast
 import importlib
 import os
@@ -7,12 +7,12 @@ import unittest
 
 from tests import context  # noqa: F401
 
+from lib.capture_model import step_kinds
 from lib.probe import plan
-from lib.translator import step_kinds
 from lib.translator.translate import HANDLERS
 
 LIB = os.path.join(context.ADDIN_DIR, "lib")
-TABLE = os.path.join(LIB, "translator", "step_kinds.py")
+TABLE = os.path.join(LIB, "capture_model", "step_kinds.py")
 READER_DIR = os.path.join(LIB, "fusion_reader")
 FEATURE_NAME = re.compile(r"[A-Z][A-Za-z]*Feature")
 

@@ -9,9 +9,10 @@ import unittest.mock
 from tests import context  # noqa: F401
 from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of, stopped, verdict_of
 
+from lib.capture_model import gap_hints
 from lib.params import size_table
 from lib.sketch_values.motion import Affine, Motion, Stuck, Terms
-from lib.translator import gap_hints, path_limits, sweep, sweep_limits, sweep_rules, sweep_settings, translate
+from lib.translator import path_limits, sweep, sweep_limits, sweep_rules, sweep_settings, translate
 from lib.translator.translate import _sweep_version
 
 PIPE = "sweep_pipe"

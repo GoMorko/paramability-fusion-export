@@ -5,7 +5,7 @@ The app refuses a whole gaps file that breaks one of the caps (`RECIPE_GAPS_CAPS
 import json
 import math
 
-from .gap_hints import hint as gap_hint
+from ..capture_model.gap_hints import hint as gap_hint
 from .gap_measures import moved_measure
 from .words import type_words
 

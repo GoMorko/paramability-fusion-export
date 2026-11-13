@@ -14,8 +14,9 @@ Two parallel outlines of straight lines make a ruled loft whose volume follows f
 corners (`loft_volume`). A new body that has another volume is refused, since Fusion paired the corners another way.
 Where the volume cannot be told, outlines of the same corners that are turned against each other get a note.
 """
-from . import borrowed, gap_hints, loft_sections, loft_volume, loops, placement, sketch_motion
+from . import borrowed, loft_sections, loft_volume, loops, placement, sketch_motion
 from .extrude import COMBINE
+from ..capture_model import gap_hints
 from ..geometry import vec
 from ..geometry.footprint import polyline
 from .placer_makers import EndCapsMaker

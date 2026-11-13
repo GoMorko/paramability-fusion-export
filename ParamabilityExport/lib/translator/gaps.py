@@ -5,8 +5,8 @@ right without it. The record names the step, says why it is missing and where it
 step's Fusion data, so the missing step can be added to the copy later.
 
 The walk records a `Gap` with the ids of the steps it wrote before it. The rest of the gap's handling sits in
-`gap_picks.py` (which gaps a step picks faces of), `gap_measures.py` (the body around a gap), `gap_place.py` (where a
-gap belongs once the recipe is final) and `gap_file.py` (the gap as written for the package).
+`capture_model/gap_picks.py` (which gaps a step picks faces of), `gap_measures.py` (the body around a gap),
+`gap_place.py` (where a gap belongs once the recipe is final) and `gap_file.py` (the gap as written for the package).
 """
 from ..package.text import clip
 from . import notes as wording

@@ -4,9 +4,10 @@ The sources split into solid steps, which one `pattern` or `mirror` step repeats
 their own copies. A Combine among the sources is repeated by the steps it wrote, with every item that built its tools.
 Sources the copy cannot repeat give a Refusal.
 """
-from . import gap_hints, notes as wording, tool_items, tool_walk
+from . import notes as wording, tool_walk
 from .result import Refusal
-from .step_kinds import FINISH, SOLID, recipe_kind
+from ..capture_model import gap_hints, tool_items
+from ..capture_model.step_kinds import FINISH, SOLID, recipe_kind
 from .step_walk import moved_later
 
 MAX_REFERENCES = 64

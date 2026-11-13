@@ -12,9 +12,10 @@ After the step, the walk's placers stand where the Move put them (`moved_placer.
 """
 import math
 
+from ..capture_model import tool_items
 from ..geometry import rigid, vec
 from ..package.numbers import round9
-from . import repeat, tool_items, values
+from . import repeat, values
 from .moved_placer import MoveMaker
 from .result import Refusal, StepResult
 from .slabs import IDENTITY_ROWS, Motion

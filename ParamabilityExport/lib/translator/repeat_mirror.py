@@ -13,7 +13,7 @@ from .repeat_build import build, round_vec
 from .repeat_mirror_reach import body_mirror_problem, keep_one_side, side_of_plane
 from .repeat_sources import MAX_REFERENCES, split_sources
 from .result import Refusal
-from .step_kinds import SOLID, recipe_kind
+from ..capture_model.step_kinds import SOLID, recipe_kind
 from .step_walk import nesting
 from .tool_placer import wrap_body
 from .values import Quantity

@@ -6,10 +6,11 @@ only when the walk writes its steps.
 """
 from contextlib import contextmanager
 
-from . import gap_measures, gaps as gap_records, lineage as body_lineage, tool_items
-from .capture import same_body
+from . import gap_measures, gaps as gap_records
+from ..capture_model import lineage as body_lineage, tool_items
+from ..capture_model.capture import same_body
 from .result import Doubt, StepResult
-from .step_kinds import recipe_kind
+from ..capture_model.step_kinds import recipe_kind
 from .values import reads_in
 
 MAX_ID = 64

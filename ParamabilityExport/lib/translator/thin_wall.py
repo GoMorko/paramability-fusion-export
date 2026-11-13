@@ -15,8 +15,9 @@ has rounded corners and says so in a note.
 """
 import math
 
+from ..capture_model import gap_hints
 from ..package.numbers import is_number
-from . import gap_hints, loops
+from . import loops
 from ..geometry.footprint import arc_span, curve_length, is_full, polyline
 from .placer import ADD, CUT, Placer
 from .result import Refusal

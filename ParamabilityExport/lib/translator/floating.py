@@ -15,8 +15,9 @@ the copy.
 """
 import math
 
-from . import follow, step_kinds
+from . import follow
 from .end_caps import EndCaps
+from ..capture_model import step_kinds
 from ..geometry import vec
 from ..geometry.footprint import polyline
 from .moved_placer import MovedPlacer

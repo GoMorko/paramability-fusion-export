@@ -1,7 +1,7 @@
 """The driver: walks a capture's items, calls one handler per feature type, builds the recipe."""
 import importlib
 
-from . import gap_file, gap_measures, gap_place, gaps, kept_ranges, lineage, range_check, repeat, step_kinds
+from . import gap_file, gap_measures, gap_place, gaps, kept_ranges, range_check, repeat
 from .audit import audit
 from .sizes import joint_reasons, probed_sizes, text_reasons, untried_reasons, used_sizes
 from . import notes as wording, place
@@ -9,7 +9,8 @@ from .picks import MAX_NEAR_POINTS
 from .notes import (
     BODY_MOVED_WHY, dropped_reason, fixed_reason, loose_reason, tried_unmoved_reason, unmoved_link_reason,
     unmoved_reason, unused_reason)
-from .capture import validate_capture
+from ..capture_model import lineage, step_kinds
+from ..capture_model.capture import validate_capture
 from .context import Context
 from .result import TranslateResult
 from .step_walk import all_steps, nesting

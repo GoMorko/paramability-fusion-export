@@ -12,7 +12,7 @@ from tests.translator_helpers import load_capture, steps_of, stopped, verdict_of
 
 from lib.translator import CaptureError, Refusal, gaps as gaps_module, translate
 from lib.translator.gap_file import MAX_DATA_BYTES, MAX_DATA_DEPTH
-from lib.translator.gap_picks import pick_records
+from lib.capture_model.gap_picks import pick_records
 from lib.translator.gaps import MAX_GAPS
 
 TRAY = "filter_tray_sized"  # Extrude1, Shell1, Fillet1 (picks edges), Hole1, a pattern of Hole1

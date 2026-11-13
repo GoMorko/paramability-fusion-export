@@ -4,7 +4,8 @@ import unittest
 
 from tests import context
 from tests.test_translate_gaps import FILLET, HOLE, SHELL, tray, unsupported
-from lib.translator import gap_hints, step_kinds, translate
+from lib.capture_model import gap_hints, step_kinds
+from lib.translator import translate
 
 TRANSLATOR_DIR = os.path.join(context.ADDIN_DIR, "lib", "translator")
 NO_HINT = {gap_hints.REFUSED, gap_hints.UNSUPPORTED}

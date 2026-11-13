@@ -3,8 +3,9 @@ reaching past a bend, a sharp corner it cannot mitre, a path that stops rising, 
 Pure."""
 import math
 
+from ..capture_model import gap_hints
 from ..geometry import vec
-from . import gap_hints, spline_fit
+from . import spline_fit
 from .path_curves import arc_of, curve_length, polyline, tangents, turn_deg
 from .path_limits import (CORNER_TOO_TIGHT, MAX_MITRE_DEG, MAX_OVERLAP_SAMPLES, MIN_RISE, OVERLAP, OVERLAP_CLEAR_SHARE, OVERLAP_CORNER_DEG,
                           OVERLAP_MAX_CORNER_DEG, OVERLAP_STEP_SHARE, REACH_SHARE, SHARP_CORNER, SMOOTH_JOIN_DEG,

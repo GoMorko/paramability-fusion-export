@@ -8,9 +8,9 @@ still reads right, is left out as a gap (gaps.py). A gap is a step type with no 
 that reaches into another component, and a step that picks faces a gap made. What a left out item would have recorded
 (doubts, notes) is dropped with it. Anything that leaves the body unknown still stops the copy.
 """
-from . import (body_states, borrowed, floating, gap_hints, gap_picks, gaps, notes as wording, ref_motion, split_rules,
-               step_kinds)
-from .capture import outside_component, renamed_target, same_body
+from ..capture_model import gap_hints, gap_picks, step_kinds
+from ..capture_model.capture import outside_component, renamed_target, same_body
+from . import body_states, borrowed, floating, gaps, notes as wording, ref_motion, split_rules
 from .result import Refusal, StepResult, make_verdict
 from .sizes import construction_fixes
 from .words import type_words

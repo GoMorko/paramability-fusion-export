@@ -6,7 +6,8 @@ several results, paired with their sources by their points. The first vertices o
 where the result sits. In one component that is the same place; any other place is written as a
 `move` in plain numbers, and the sizes that could change it are marked.
 """
-from . import follow, move, ref_motion, tool_items, tool_walk
+from ..capture_model import tool_items
+from . import follow, move, ref_motion, tool_walk
 from .moved_placer import MoveMaker
 from .result import Refusal, StepResult
 from .slabs import Motion

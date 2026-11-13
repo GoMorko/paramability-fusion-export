@@ -2,10 +2,11 @@
 fitted by `spline_fit`) and a 3D corners path, each with the limit checks that apply to it. Pure."""
 import math
 
+from ..capture_model import gap_hints
 from ..geometry import vec
 from ..package.numbers import round9
 
-from . import gap_hints, spline_fit
+from . import spline_fit
 from .path_checks import (axis_reach_refusal, carried_reach_refusal, off_square, outline_reach, overlap_refusal,
                           reach_refusal, seam_turn, self_touch)
 from .path_curves import arc_of, near, polyline, round_point, round_point2, tangents

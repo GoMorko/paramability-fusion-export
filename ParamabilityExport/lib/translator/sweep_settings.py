@@ -2,7 +2,8 @@
 and the sizes it pins."""
 import math
 
-from . import gap_hints, sweep_taper, values
+from ..capture_model import gap_hints
+from . import sweep_taper, values
 from .extrude import MAX_TAPER_DEG, keep_angle_within
 from .result import Refusal
 from .sweep_limits import (BOTH_WAYS_TWIST, GUIDE_SURFACE, GUIDE_SURFACE_LIKELY, MAX_TAPER_STATIONS, MAX_TWIST_DEG, OTHER_KIND, PARALLEL_AND_SHAPE,

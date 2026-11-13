@@ -535,6 +535,7 @@ package may import only packages above it in this list (not every one of them). 
 
 - `package`: the `.paramability` file: units, rows, manifest, caps, file names, zip writer.
 - `geometry`: vector helpers, the rigid map of a frame, sketch outlines and volume checks that the translator, the probe and the reader share.
+- `capture_model`: what a capture and a recipe step are made of: the step kind table, capture checks, body lineage, gap causes and hints.
 - `timing`: stopwatch helpers and the `timing` block of `report.json` (where an export spends its time).
 - `params`: Fusion parameters as sizes: names, defaults, expression to formula, the size table.
 - `sketch_values`: the motion file of sketch values and measured references that follow sizes, its keys and coverage.
