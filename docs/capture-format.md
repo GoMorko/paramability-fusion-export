@@ -2070,8 +2070,8 @@ a sketch from where its points are. So the export keeps the places of the follow
 sketch otherwise than at E0 (another outline, or a value more than 0.05 mm or degrees off, `FLIP_TOLERANCE`; Fusion's
 own restore leaves about a hundredth), every kept point that left its place is moved back, with its sketch's compute
 deferred (a sketch whose points are all in place is not touched), and the design is rebuilt once, also when no point
-moved (the keeper leaves alone a sketch whose points were added or removed); the read after that is the state's
-`put_back`. After two put backs in a row that do not bring the sketch back, no more are tried; a row that needs its
+moved (the keeper matches the points by their entity token and skips a point that is gone); the read after that is
+the state's `put_back`. After two put backs in a row that do not bring the sketch back, no more are tried; a row that needs its
 start still reads it, since a try can bring the sketch back too. A start read and a put back read hold only the outlines
 (sketches, points, lines and outline faces), not `params`, `refs` or `box`. A row whose start was not read (the row
 before it ended right) and after which the sketch was found on its other solution (the row read another outline or did not build, and the next read with the values back shows

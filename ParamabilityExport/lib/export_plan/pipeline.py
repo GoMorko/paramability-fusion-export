@@ -295,7 +295,7 @@ class ProbeRun:
     def _put_back(self, key=None, last=False, full=False):
         """Move every point of the kept sketches that left its place back to it and rebuild once, then read the
         outlines again (the whole state with `full`); the read is kept in `backs` under `key`. The rebuild runs also
-        when no point moved: the keeper cannot move a sketch whose points were added or removed, and a rebuild may
+        when no point moved: the keeper cannot move a point that is gone or a sketch it does not keep, and a rebuild may
         still bring it back. `last` tries even after `MAX_PUT_BACK_MISSES`. Returns the read, or None."""
         if self.keeper is None or (self._misses >= self.MAX_PUT_BACK_MISSES and not last):
             return None

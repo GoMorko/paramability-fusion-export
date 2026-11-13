@@ -347,7 +347,7 @@ class PutBackTest(unittest.TestCase):
 
         class Port(_Port):
             def sketch_keeper(self, tokens):
-                class Keeper:  # the sketch's points were added or removed: nothing to move
+                class Keeper:  # the sketch's own points are gone: nothing to move
                     @staticmethod
                     def put_back():
                         return 0

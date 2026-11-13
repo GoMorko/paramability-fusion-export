@@ -7,9 +7,13 @@ from lib.fusion_reader.sketch_keep import SketchKeeper
 
 
 class Point:
+    count = 0
+
     def __init__(self, x, y, reference=False, fixed=False):
         self.at = [x, y, 0.0]
         self.isReference, self.isFixed = reference, fixed
+        Point.count += 1
+        self.entityToken = "pt%d" % Point.count
 
     @property
     def geometry(self):
@@ -40,7 +44,9 @@ class Design:
         self.sketches = sketches
 
     def findEntityByToken(self, token):
-        return [self.sketches[token]] if token in self.sketches else []
+        if token in self.sketches:
+            return [self.sketches[token]]
+        return [p for sketch in self.sketches.values() for p in sketch.sketchPoints if p.entityToken == token]
 
 
 class SketchKeeperTest(unittest.TestCase):
@@ -55,14 +61,14 @@ class SketchKeeperTest(unittest.TestCase):
         self.assertEqual(keeper.put_back(), 0)
         self.assertEqual(sketch.deferred, [True, False])  # a sketch with every point in place is not touched
 
-    def test_a_sketch_whose_points_changed_is_left_alone(self):
-        own = Point(1.0, 2.0)
-        sketch = Sketch([own])
+    def test_points_are_matched_by_token_so_a_point_that_is_gone_leaves_the_others_their_place(self):
+        gone, own, other = Point(9.0, 9.0), Point(1.0, 2.0), Point(4.0, 4.0)
+        sketch = Sketch([gone, own, other])
         keeper = SketchKeeper(Design({"sk": sketch}), ["sk"], vector=lambda *d: d)
-        own.at = [3.0, 3.0, 0.0]
-        sketch.sketchPoints = [own, Point(0.0, 0.0)]
-        self.assertEqual(keeper.put_back(), 0)
-        self.assertEqual(own.at, [3.0, 3.0, 0.0])
+        own.at, other.at = [3.0, 3.0, 0.0], [5.0, 4.0, 0.0]
+        sketch.sketchPoints = [own, other, Point(0.0, 0.0)]
+        self.assertEqual(keeper.put_back(), 2)
+        self.assertEqual((own.at, other.at), ([1.0, 2.0, 0.0], [4.0, 4.0, 0.0]))
 
 
 if __name__ == "__main__":
