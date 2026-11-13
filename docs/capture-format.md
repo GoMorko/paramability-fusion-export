@@ -2068,17 +2068,16 @@ Solver flips. Putting the values back does not bring back a sketch that a try mo
 a sketch from where its points are. So the export keeps the places of the followed sketches' own points at E0
 (`fusion_reader.sketch_keep.SketchKeeper`; projected and fixed points stay). When the `start` read shows a followed
 sketch otherwise than at E0 (another outline, or a value more than 0.05 mm or degrees off, `FLIP_TOLERANCE`; Fusion's
-own restore leaves about a hundredth), the points of the sketches that read so are moved back with each sketch's compute
-deferred (a sketch whose points are all in place is not touched) and the design is rebuilt once; the read after that
-is the state's `put_back`. When no point had to move, nothing is rebuilt or read and the put back counts as one that did
-not help. After two put backs in a row that do not bring the sketch back, no more are tried; from then on, while the
-last start still shows a sketch off its first solution, a row takes that start as its own (the same object in
-`probe.states`) and the design is not read again, since nothing can bring the sketch back. A start read and a put back
-read hold only the outlines (sketches, points, lines and outline faces), not `params`, `refs` or `box`. A row whose start was not read (the row before it ended right) and after which the sketch was
-found on its other solution (the row read another outline or did not build, and the next read with the values back shows
+own restore leaves about a hundredth), every kept point that left its place is moved back, with its sketch's compute
+deferred (a sketch whose points are all in place is not touched), and the design is rebuilt once, also when no point
+moved (the keeper leaves alone a sketch whose points were added or removed); the read after that is the state's
+`put_back`. After two put backs in a row that do not bring the sketch back, no more are tried; a row that needs its
+start still reads it, since a try can bring the sketch back too. A start read and a put back read hold only the outlines
+(sketches, points, lines and outline faces), not `params`, `refs` or `box`. A row whose start was not read (the row
+before it ended right) and after which the sketch was found on its other solution (the row read another outline or did not build, and the next read with the values back shows
 the flip) may have started there: it runs once more right after its batch, from a checked start, and its first run is
 left out of the states. The second run carries `again`; another outline there is a range limit of its own size. Rows run
-again count in the 64 rows. The sketch is also put back before the discovery rows (their base is the read after it) and
+again count in the 64 rows. The sketch is also put back before the discovery rows (their base is the read after it, a full read) and
 once after the tries, so the design is left on the solution it had. `probe.recovery` (`{ put_backs, again }`, only when
 either happened) counts the extra rebuilds: one per put back and two per row run again (the row and its restore).
 
@@ -2111,7 +2110,7 @@ export, the recipe and the notes do not depend on it.
                               "seconds": 1.9 } ] },
   "probe": { "tries": 9, "tries_seconds": 12.0, "rebuild": 10.5, "read": { "count": 14, "seconds": 3.1 },
              "read_parts": { "sketches": { "count": 14, "seconds": 2.2 }, "params": { "count": 9, "seconds": 0.4 } },
-             "put_back": { "count": 0, "seconds": 0.0 }, "starts_reused": 0, "try_seconds": 13.2 } }
+             "put_back": { "count": 0, "seconds": 0.0 }, "try_seconds": 13.2 } }
 ```
 
 - `total`: from the start of the pipeline to the moment `report.json` is made. The dialog's own reading before the OK
@@ -2133,10 +2132,10 @@ export, the recipe and the notes do not depend on it.
   again; `tail` is what is read after the walk (links, graphs, parameters). `by_type` and `by_component` sum the time
   of the steps, slowest first (a component is named by its name, or its token); `slowest` lists the 10 slowest steps.
 - `probe`: `tries` is the rows run (rows run again included), `tries_seconds` the time inside them, `rebuild` that time
-  without the state reads made inside it (setting sizes, Fusion rebuilding, putting them back), `read` every state read
-  of the probe with `read_parts`, the time of each part of those reads (`sketches`, `points` with the lines, `params`,
-  `refs`, `box`, `faces`; a part no read held is left out), `put_back` the sketch put backs (`probe.recovery`) and
-  `starts_reused` the rows that took the last start read instead of a new one. `try_seconds` is the same value as in
+  without the state reads made inside it (setting sizes, Fusion rebuilding, putting them back), `read` the state reads of
+  the tries (rows, starts, put backs, the discovery base; not the marker roll check or the read after the tries) with
+  `read_parts`, the time of each part of those reads (`sketches`, `points` with the lines, `params`, `refs`, `box`,
+  `faces`; a part no read held is left out), and `put_back` the sketch put backs (`probe.recovery`). `try_seconds` is the same value as in
   `probe.timeline` (from the first try to the end of the discovery rows).
 
 ### Derived values (`derived`)

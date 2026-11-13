@@ -243,9 +243,10 @@ def on_other_solution(found):
 
 class TwoSolutionFusion(Fusion):
     """The lid sketch has a second solution. A recompute moves it there when `flips(before, now)` holds for the
-    expressions of the recompute before and of this one; it stays there until the keeper puts its points back."""
+    expressions of the recompute before and of this one, and back when `settles(before, now)` holds; else it stays
+    until the keeper puts its points back."""
 
-    def __init__(self, flips):
+    def __init__(self, flips, settles=lambda before, now: False, bad_when=None):
         super().__init__()
         self.flipped = False
         fusion, last = self, [dict(START)]
@@ -254,10 +255,12 @@ class TwoSolutionFusion(Fusion):
             def recompute(self):
                 if flips(last[0], self.exprs):
                     fusion.flipped = True
+                elif settles(last[0], self.exprs):
+                    fusion.flipped = False
                 last[0] = dict(self.exprs)
                 return super().recompute()
 
-        self.store = Store(START)
+        self.store = Store(START, bad_when=bad_when)
 
     def read(self, request):
         found = super().read(request)
@@ -270,7 +273,7 @@ class _KeeperPort(_Port):
 
         class Keeper:
             @staticmethod
-            def put_back(tokens=None):
+            def put_back():
                 fusion.flipped = False
 
         return Keeper()
@@ -285,41 +288,134 @@ def size_row(name, value):
             "step": False}
 
 
-class StuckFlipTest(unittest.TestCase):
-    """A sketch that no put back brings back: once put backs are given up, the rows take the last start read."""
+def keyed(*rows):
+    for n, row in enumerate(rows):
+        row["key"] = "r%d" % n
+    return list(rows)
 
-    def run_rows(self, moved):
+
+class _InertKeeperPort(_Port):
+    """A keeper that finds points to move but whose moves do not bring the sketch back."""
+
+    def sketch_keeper(self, tokens):
+        class Keeper:
+            @staticmethod
+            def put_back():
+                return 3
+
+        return Keeper()
+
+
+class StartAfterGivingUpTest(unittest.TestCase):
+    """Once put backs are given up (or there is no keeper), a row may still bring the sketch back, so a row that
+    needs its start reads it again."""
+
+    def start_of_last_row(self, port_class):
         from lib.export_plan.pipeline import ProbeRun
-        fusion = TwoSolutionFusion(lambda before, now: now != START)
+
+        def leaves_after_height(before, now):
+            return number(before["height"]) != 20 and now == START
+
+        def back_after_cube(before, now):
+            return number(before["cube"]) != 10 and now == START
+
+        fusion = TwoSolutionFusion(leaves_after_height, back_after_cube)
+        probe = SizeProbe.start(CAPTURE, table(PARAMS, TICKED, MODEL), fusion.read)
+        run = ProbeRun(port_class(fusion), "", probe)
+        run.run_rows(keyed(size_row("height", 40.0), size_row("off", 10.0), size_row("height", 30.0),
+                           size_row("cube", 20.0), size_row("off", 8.0)))
+        return probe, next(s for s in probe.states if s["values"] == {"off": 8.0})["start"]
+
+    def test_with_a_keeper_that_cannot_bring_the_sketch_back(self):
+        probe, start = self.start_of_last_row(_InertKeeperPort)
+        self.assertFalse(probe.left_start(start))
+
+    def test_without_a_keeper(self):
+        probe, start = self.start_of_last_row(_Port)
+        self.assertFalse(probe.left_start(start))
+
+
+class PutBackTest(unittest.TestCase):
+    def test_a_put_back_that_moves_no_point_still_rebuilds_and_reads(self):
+        from lib.export_plan.pipeline import ProbeRun
+
+        def leaves_after_a_failed_row(before, now):
+            return number(before["off"]) == 10 and now == START
+
+        fusion = TwoSolutionFusion(leaves_after_a_failed_row, lambda before, now: before == now,
+                                   bad_when=lambda e: number(e["off"]) == 10)
+
+        class Port(_Port):
+            def sketch_keeper(self, tokens):
+                class Keeper:  # the sketch's points were added or removed: nothing to move
+                    @staticmethod
+                    def put_back():
+                        return 0
+
+                return Keeper()
+
+        probe = SizeProbe.start(CAPTURE, table(PARAMS, TICKED, MODEL), fusion.read)
+        run = ProbeRun(Port(fusion), "", probe)
+        run.run_rows(keyed(size_row("off", 10.0), size_row("height", 40.0)))
+        back = probe.states[2].get("put_back")
+        self.assertTrue(isinstance(back, dict) and not probe.left_start(back))
+
+    def test_after_the_tries_every_kept_sketch_goes_back_also_one_whose_move_reads_within_tolerance(self):
+        from lib.export_plan.pipeline import ProbeRun
+        fusion = Fusion()
+        left = set()
 
         class Port(_Port):
             def sketch_keeper(self, tokens):
                 class Keeper:
                     @staticmethod
-                    def put_back(tokens=None):
+                    def put_back():
+                        moved = len(left)
+                        left.clear()
                         return moved
+
                 return Keeper()
 
+        read = fusion.read
+        fusion.read = lambda request: on_other_solution(read(request)) if "sk2" in left else read(request)
         probe = SizeProbe.start(CAPTURE, table(PARAMS, TICKED, MODEL), fusion.read)
-        run = ProbeRun(Port(fusion), "", probe)
-        rows = [size_row("height", 40.0), size_row("off", 10.0), size_row("cube", 20.0), size_row("height", 30.0),
-                size_row("off", 8.0)]
-        for n, row in enumerate(rows):
-            row["key"] = "r%d" % n
-        before = len(fusion.requests)
-        run.run_rows(rows)
-        return run, probe, len(fusion.requests) - before
+        left.update({"sk1", "sk2"})  # sk1 moved too little to read as moved
+        ProbeRun(Port(fusion), "", probe).settle()
+        self.assertEqual(left, set())
 
-    def test_rows_after_put_backs_are_given_up_take_the_last_start_read(self):
-        run, probe, reads = self.run_rows(moved=3)
-        self.assertEqual(run.put_backs, 2)
-        self.assertEqual(run.reused, 2)
-        self.assertIs(probe.states[5]["start"], probe.states[4]["start"])
-        self.assertEqual(reads, 5 + 2 + 2)  # each row, the starts before rows 2 and 3, a read after each put back
+    def test_the_discovery_base_after_a_put_back_holds_the_whole_state(self):
+        from lib.export_plan.pipeline import ProbeRun
+        fusion = TwoSolutionFusion(lambda before, now: False)
+        read = fusion.read
 
-    def test_a_put_back_that_moves_no_point_rebuilds_and_reads_nothing(self):
-        run, probe, _ = self.run_rows(moved=0)
-        self.assertEqual((run.put_backs, run.backs), (0, {}))
+        def asked_only(request):
+            found = read(request)
+            return {k: v for k, v in found.items() if (k != "params" or "params" in request)
+                    and (k != "box" or request.get("target"))}
+
+        probe = SizeProbe.start(CAPTURE, table(PARAMS, TICKED, MODEL), asked_only)
+        fusion.flipped = True
+        ProbeRun(_KeeperPort(fusion), "", probe).discover([])
+        self.assertEqual(set(probe.discovery_base) & {"params", "box"}, set(probe.e0) & {"params", "box"})
+        self.assertTrue(set(probe.e0) & {"params", "box"})
+
+
+class ReadTimerTest(unittest.TestCase):
+    def test_only_the_probe_runs_own_reads_time_their_parts(self):
+        from lib.export_plan.pipeline import ProbeRun
+        fusion = Fusion(bad_when=lambda e: number(e["off"]) == 10)
+        port, lent = _Port(fusion), []
+        read = fusion.read
+
+        def timed(request):
+            lent.append(getattr(port, "read_timer", None) is not None)
+            return read(request)
+
+        probe = SizeProbe.start(CAPTURE, table(PARAMS, TICKED, MODEL), timed)
+        run = ProbeRun(port, "", probe)
+        run.run_rows(keyed(size_row("off", 10.0), size_row("height", 40.0)))
+        probe.read_now()
+        self.assertEqual(lent, [False] + [True] * run.timer.count("read") + [False])
 
 
 class SolverFlipTest(unittest.TestCase):

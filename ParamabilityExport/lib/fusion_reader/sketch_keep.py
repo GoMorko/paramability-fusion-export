@@ -50,14 +50,12 @@ class SketchKeeper:
             places = [(index, _place(point)) for index, point in _free_points(sketch)]
             self.kept[token] = (count, [(index, at) for index, at in places if at is not None])
 
-    def put_back(self, tokens=None):
-        """Move every kept point that left its place back to it, for the sketches `tokens` (all kept ones when None).
-        Returns how many points moved. A sketch whose points were added or removed since is left alone, and one whose
-        points are all in place is not touched: its compute is deferred only while points move."""
+    def put_back(self):
+        """Move every kept point that left its place back to it. Returns how many points moved. A sketch whose points
+        were added or removed since is left alone, and one whose points are all in place is not touched: its compute
+        is deferred only while points move."""
         moved = 0
         for token, (count, places) in self.kept.items():
-            if tokens is not None and token not in tokens:
-                continue
             sketch = geo.find_native(self.design, token)
             points = geo.collection_items(geo.safe(lambda: sketch.sketchPoints, None)) if sketch is not None else []
             if len(points) != count:

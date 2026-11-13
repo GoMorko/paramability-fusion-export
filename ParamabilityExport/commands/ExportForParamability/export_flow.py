@@ -95,8 +95,8 @@ class CaptureCache:
 
 
 def _timed_reader(port, ctx):
-    """`read(request)` of one probe state; each read times its parts on the port's `read_timer` (set by
-    `pipeline.ProbeRun`) when it has one."""
+    """`read(request)` of one probe state; a read times its parts on the port's `read_timer`, which
+    `pipeline.ProbeRun` sets only while it reads."""
     def read(request):
         ctx.timer = getattr(port, "read_timer", None)
         return read_state(port.design, request, ctx)

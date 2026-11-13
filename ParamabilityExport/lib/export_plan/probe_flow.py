@@ -333,13 +333,8 @@ class SizeProbe:
         """True when a followed sketch reads otherwise than at E0 in `read`, a read taken with every value back: the
         sketch stayed on another solution (another outline, or the same outline more than `FLIP_TOLERANCE` away). A
         sketch that could not be read does not count."""
-        return bool(self.left_sketches(read))
-
-    def left_sketches(self, read):
-        """Tokens of the followed sketches that read otherwise than at E0 in `read` (`left_start`)."""
-        found = []
         if not isinstance(read, dict):
-            return found
+            return False
         for target in self._followed_targets():
             before, _ = match.state_values(target, self.e0, self.e0)
             now, cause = match.state_values(target, read, self.e0)
@@ -347,9 +342,8 @@ class SizeProbe:
                 continue
             if now is None or now.keys() != before.keys() or any(
                     abs(now[k] - v) > FLIP_TOLERANCE for k, v in before.items()):
-                if target["sketch_token"] not in found:
-                    found.append(target["sketch_token"])
-        return found
+                return True
+        return False
 
     def note_recovery(self, record):
         """Keep what `pipeline.ProbeRun` did when a sketch stayed on another solution, for `report`."""
@@ -825,11 +819,6 @@ class ProbeGroup:
     def left_start(self, reads):
         """True when a part's followed sketch reads otherwise than at its E0 (`SizeProbe.left_start`)."""
         return any(probe.left_start(read) for probe, read in zip(self.probes, reads or []))
-
-    def left_sketches(self, reads):
-        """Tokens of the followed sketches of any part that read otherwise than at its E0."""
-        return list(dict.fromkeys(t for probe, read in zip(self.probes, reads or [])
-                                  for t in probe.left_sketches(read)))
 
     def note_recovery(self, record):
         for probe in self.probes:
