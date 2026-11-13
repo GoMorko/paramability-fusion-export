@@ -162,6 +162,15 @@ class TimelineTrim:
             self.log("steps still turned off: " + ", ".join(self.left_off))
             self.record["left_off"] = list(self.left_off)
 
+    def back_on(self, names):
+        """Drop from `left_off` the items a later step turned back on (`names`, the end check's recovered steps)."""
+        names = set(names)
+        self.left_off = [name for name in self.left_off if name not in names]
+        if self.left_off:
+            self.record["left_off"] = list(self.left_off)
+        else:
+            self.record.pop("left_off", None)
+
 
 class TryTimeline:
     """The timeline as the tries of one export keep it: the marker held early (`MarkerRoll`), the unused items
@@ -193,6 +202,9 @@ class TryTimeline:
         """Turn the items back on, then put the marker back. Safe to call at any time and more than once."""
         self.trim.end()
         self.roll.end()
+
+    def back_on(self, names):
+        self.trim.back_on(names)
 
     @property
     def left_off(self):

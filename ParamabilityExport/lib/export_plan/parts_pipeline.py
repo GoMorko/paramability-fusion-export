@@ -26,8 +26,8 @@ from ..design_edit.runner import ExportCancelled
 from . import health as health_module
 from .body_scope import body_links, scope_inputs
 from .part_names import tagged, unique_names
-from .pipeline import (ProbeRun, deferred_left, gap_after_settle, settle_after_tries, settle_steps, start_steps, warn_left_off,
-                       warn_steps, with_try_seconds)
+from .pipeline import (ProbeRun, deferred_left, gap_after_settle, settle_after_tries, settle_steps, start_steps,
+                       warn_left_off, warn_steps, with_try_seconds)
 from .reach_pass import needs_reach, with_reach
 from .probe_flow import ProbeGroup, SizeProbe, covers_a_sketch, extra_size_params, kept_size_names
 from .recipe_export import PartInput, free_sizes, plan_parts_export, translate_capture
@@ -130,7 +130,7 @@ class _PartsPipeline:
                 if failed:
                     self.port.warn_unrestored(failed)
                 warn_steps(self)
-            warn_left_off(self.port, self.roll)
+            warn_left_off(self.port, self.roll, self.settled)
 
     def _end_trim(self):
         """Turn back on the timeline items suppressed for the tries (a no-op when none were)."""

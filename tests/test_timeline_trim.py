@@ -280,6 +280,34 @@ class PipelineTrimTest(unittest.TestCase):
         export(port)
         self.assertEqual(port.left_off, [["Lid sketch"]])
 
+    def test_items_the_end_check_turns_back_on_or_names_get_no_box_of_their_own(self):
+        class Settling(TrimStore):
+            """A store whose timeline reads "Lid sketch" turned off after the tries until `turn_on` works."""
+            trimmed = False
+
+            def __init__(self, turns_on):
+                super().__init__(START, stuck=["Lid sketch"])
+                self.turns_on = turns_on
+
+            def suppress_items(self, items):
+                self.trimmed = True
+                return super().suppress_items(items)
+
+            def timeline_health(self):
+                off = self.trimmed and "Lid sketch" in self.stuck
+                return [{"index": 6, "name": "Lid sketch", "type": "Sketch", "health": "ok", "suppressed": off}]
+
+            def turn_on(self, items):
+                if self.turns_on:
+                    self.stuck = []
+
+        for turns_on, left in ((True, None), (False, ["Lid sketch"])):
+            with self.subTest(turns_on=turns_on):
+                port = self.port(store=Settling(turns_on))
+                result = export(port)
+                self.assertEqual(port.left_off, [])
+                self.assertEqual(result.report["probe"]["timeline"]["suppressed"].get("left_off"), left)
+
 
 class PartsTrimTest(unittest.TestCase):
     def test_the_shared_tries_of_several_bodies_turn_the_items_off_and_back_on(self):

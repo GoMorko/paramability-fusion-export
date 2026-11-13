@@ -145,9 +145,11 @@ def run_pipeline(port, request, tmp):
     return _Pipeline(port, request, tmp).run()
 
 
-def warn_left_off(port, timeline):
-    """Tell the person about timeline items that would not turn back on after the tries (`TryTimeline.left_off`)."""
-    names = timeline.left_off if timeline is not None else []
+def warn_left_off(port, timeline, settled=None):
+    """Tell the person about timeline items that would not turn back on after the tries (`TryTimeline.left_off`),
+    leaving out the steps the end check (`settle_steps`) still lists as changed: its own lines name them."""
+    told = {c["name"] for c in settled.changed} if settled is not None else set()
+    names = [name for name in (timeline.left_off if timeline is not None else []) if name not in told]
     warn = getattr(port, "warn_left_off", None)
     if names and warn is not None:
         warn(names)
@@ -167,9 +169,13 @@ def start_steps(owner):
 
 def settle_steps(owner):
     """Compare the timeline steps with the start and bring back what differs (`timeline_health.settle_timeline`), once
-    per export, after the parameters, the suppressed items, the sketches and the marker are back."""
+    per export, after the parameters, the suppressed items, the sketches and the marker are back. Items of the tries
+    that would not turn back on and that this turned on leave `TryTimeline.left_off`."""
     if owner.settled is None:
         owner.settled = settle_timeline(owner.port.store, owner.steps_start, owner.saved, owner.port.log)
+        roll = getattr(owner, "roll", None)
+        if roll is not None and owner.settled.recovered:
+            roll.back_on(owner.settled.recovered)
     return owner.settled
 
 
@@ -616,7 +622,7 @@ class _Pipeline:
                 if failed:
                     self.port.warn_unrestored(failed)
                 warn_steps(self)
-            warn_left_off(self.port, self.roll)
+            warn_left_off(self.port, self.roll, self.settled)
 
     def _end_trim(self):
         """Turn back on the timeline items suppressed for the tries (a no-op when none were)."""

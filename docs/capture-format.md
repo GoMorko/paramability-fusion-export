@@ -1716,7 +1716,10 @@ the capture cannot show, so every component must be built), and else after the p
 last read, the restore check and the marker unroll, on every way out; every item the store tried to turn off goes back
 on, also one whose state could not be read after.
 `suppressed`: `{ asked, on, items, reason?, left_off? }`: whether the box was ticked, whether the tries ran with items
-suppressed, how many, why not, and the names of items that would not turn back on (the person is told about those).
+suppressed, how many, why not, and the names of items that would not turn back on. The end check of the timeline
+steps (see "Timeline steps after the export") turns on again a step it reads off that was on at the start; an item it
+brought back leaves `left_off`. The person gets a box of its own only for items the end check does not already name in
+its own lines (`health.steps_changed`).
 
 A row that Fusion cannot build is tried again nearer to the value now (`plan.nearer_rows`, `NEARER_STEPS`): half way
 to that range end, then a quarter, then a tenth, one step per batch and per side, until a row on that side builds.
