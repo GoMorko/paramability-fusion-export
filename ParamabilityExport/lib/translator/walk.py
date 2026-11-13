@@ -164,9 +164,10 @@ def walk_items(ctx, result):
     """Walk the items of `ctx.capture`: True when every item was dealt with, False when one stops the copy (then
     `result.refusal` says why). Verdicts and notes go to `result`, steps and doubts to `ctx`."""
 
-    def refuse(item, reason, note=None):
+    def refuse(item, reason, note=None, cause=None):
         """Stop the copy at `item`: False. A diagnosing walk (`Context.diagnose`) records the stop as a gap and goes
-        on instead: True, unless there is no body to add the gap to yet."""
+        on instead: True, unless there is no body to add the gap to yet. `cause` is the `gap_hints` cause, when the
+        reason has one."""
         if ctx.diagnose and not gaps.first_body_stop(ctx):
             gap = ctx.leave_out(item, reason, ())
             verdict = make_verdict(item, "leftOut", note=gap.reason)
@@ -175,6 +176,7 @@ def walk_items(ctx, result):
             return True
         result.items.append(make_verdict(item, "unsupported", note=reason))
         result.refusal = _refusal(item, reason, note)
+        result.refusal_cause = cause
         return False
 
     def leave_out(item, reason, depends_on=(), note=None, picks=False, cause=None):
@@ -183,7 +185,9 @@ def walk_items(ctx, result):
         stop = gaps.stop_reason(ctx, reason)
         if stop is not None:
             result.over_gap_cap = gaps.at_cap(ctx)
-            return refuse(item, stop, note if stop == reason else None)
+            if stop != reason:
+                return refuse(item, stop)
+            return refuse(item, stop, note, cause)
         gap = ctx.leave_out(item, reason, depends_on, picks, cause)
         verdict = make_verdict(item, "leftOut", note=gap.reason)
         verdict["gap"] = gap.id
@@ -306,7 +310,7 @@ def walk_items(ctx, result):
         outcome = run_handler(handler, item, ctx)
         if isinstance(outcome, Refusal):
             if outcome.stops:
-                return refuse(item, outcome.reason)
+                return refuse(item, outcome.reason, cause=outcome.cause)
             if outcome.over_gap_cap:
                 result.over_gap_cap = True
                 refuse(item, outcome.reason)
