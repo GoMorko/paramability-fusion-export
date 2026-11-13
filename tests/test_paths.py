@@ -354,11 +354,26 @@ class ClosedTest(unittest.TestCase):
     SQUARE_LOOP = [line((0, 0, 0), (10, 0, 0)), line((10, 0, 0), (10, 10, 0)), line((10, 10, 0), (0, 10, 0)),
                    line((0, 10, 0), (0, 0, 0))]
 
-    def test_a_cut_at_a_sharp_corner_is_refused(self):
-        self.assertEqual(self.closed_at((10, 0, 0), [1, 0, 0], self.SQUARE_LOOP).reason, path_limits.CLOSED_AT_CORNER)
+    def test_sharp_corners_between_lines_are_mitred(self):
+        found = self.closed_at((5, 0, 0), [1, 0, 0], self.SQUARE_LOOP)
+        self.assertEqual(self.kinds(found), ["line"] * 5)
+        self.assertIsNone(found.moved)
+        self.assertEqual(self.closed_at((5, 0, 0), [1, 0, 0], self.SQUARE_LOOP, twisted=True).reason,
+                         path_limits.SHARP_CORNER)
 
-    def test_a_sharp_corner_elsewhere_is_refused(self):
-        self.assertEqual(self.closed_at((5, 0, 0), [1, 0, 0], self.SQUARE_LOOP).reason, path_limits.SHARP_CORNER)
+    def test_an_outline_on_a_corner_is_carried_to_the_middle_of_the_line_it_is_square_to(self):
+        found = self.closed_at((10, 0, 0), [1, 0, 0], self.SQUARE_LOOP)
+        self.assertTrue(close(found.start, [5, 0, 0]) and close(found.moved, [-5, 0, 0]))
+        self.assertTrue(close(found.direction, [-1, 0, 0]))
+        self.assertAlmostEqual(found.length, 40.0)
+        self.assertEqual(self.closed_at((10, 0, 0), [1, 0, 0], self.SQUARE_LOOP, twisted=True).reason,
+                         path_limits.CLOSED_AT_CORNER)
+
+    def test_corners_closer_than_the_outline_needs_are_refused(self):
+        plane, points = at_point((5, 0, 0), [1, 0, 0])
+        wide = [vec.add(p, vec.scale(vec.sub(p, [5, 0, 0]), 5.0)) for p in points]
+        found = paths.plan(path_of(self.SQUARE_LOOP, frame=XY_SKETCH), plane, wide)
+        self.assertTrue(found.reason.startswith("A sharp corner of the path of this sweep is too close"))
 
     def test_a_closed_chain_that_bends_in_3d_is_refused(self):
         skew = [line((0, 0, 0), (10, 0, 0)), line((10, 0, 0), (10, 10, 0)), line((10, 10, 0), (0, 10, 5)),

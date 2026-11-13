@@ -3,6 +3,7 @@ straight sweep tells how Fusion measures the taper from the volume it made."""
 import math
 
 from . import sweep_taper, vec
+from .path_limits import STRAIGHT_DEG
 from .result import Refusal
 from .sweep_limits import CENTROID_ON_PATH_TOL, NOT_MATCHING, VOLUME_ABSOLUTE_TOL, VOLUME_RELATIVE_TOL, ZERO_TOL
 from .sweep_outline import centroid
@@ -25,13 +26,29 @@ def _axis_distance(point, axis):
 
 def _closed_volume(area, middle, found, twisted):
     """The volume of an outline swept once round a closed flat path (Pappus): the area times the length its centre
-    travels, which is the path's length less the centre's offset towards the inside times the turn of the path. A
-    twisting outline turns its centre about the path, so that counts only when the centre sits on the path."""
+    travels, which is the path's length less the centre's offset to the left of the path times the turn of the path.
+    A mitred corner turning by t counts 2 tan(t / 2) instead of t. A twisting outline turns its centre about the path,
+    so that counts only when the centre sits on the path."""
     offset = vec.sub(middle, found.start)
     if twisted:
         return area * found.length if vec.length(offset) <= CENTROID_ON_PATH_TOL else None
-    inward = vec.dot(offset, vec.cross(found.recipe["on"]["normal"], found.direction)) * found.winding
-    return area * (found.length - inward * 2.0 * math.pi)
+    normal = found.recipe["on"]["normal"]
+    left = vec.dot(offset, vec.cross(normal, found.direction))
+    return area * (found.length - left * (found.winding * 2.0 * math.pi + _mitre_excess(found.curves, normal)))
+
+
+def _mitre_excess(curves, normal):
+    """What the sharp corners between lines of a closed path add to its turn when the outline is mitred there:
+    2 tan(t / 2) - t for each corner turning by t, signed by its direction about `normal`."""
+    total = 0.0
+    for before, after in zip(curves[-1:] + curves[:-1], curves):
+        if before["kind"] != "line" or after["kind"] != "line":
+            continue
+        a, b = vec.unit(vec.sub(before["end"], before["start"])), vec.unit(vec.sub(after["end"], after["start"]))
+        turn = math.atan2(vec.length(vec.cross(a, b)), vec.dot(a, b))
+        if math.degrees(turn) > STRAIGHT_DEG:
+            total += math.copysign(2.0 * math.tan(turn / 2.0) - turn, vec.dot(vec.cross(a, b), normal))
+    return total
 
 
 def _expected_volume(profile, area, found, twisted):

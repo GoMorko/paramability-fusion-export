@@ -40,6 +40,8 @@ class PathPlan:
     tightest: for a `flat` or `corners` path, the radius of its tightest bend (infinity when it has none).
     closed: a flat path that ends where it starts (`end` is `start`, there are no end faces).
     winding: for a closed path, 1 when it runs counter clockwise about the normal of its plane, else -1.
+    moved: for a closed path that met the outline at a sharp corner, the move (3D) that carries the outline along the
+      first line to the path's start, which is the middle of that line; None otherwise.
     """
 
     kind: str
@@ -56,3 +58,4 @@ class PathPlan:
     tightest: float = math.inf
     closed: bool = False
     winding: int = 0
+    moved: Optional[list] = None

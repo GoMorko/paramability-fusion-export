@@ -467,6 +467,7 @@ class RefusalTest(unittest.TestCase):
     def test_part_of_the_path(self):
         self.reasons([
             ("distance one", lambda d: d.update(distance_one=0.5), sweep_limits.PART_OF_PATH),
+            ("second side on an open path", lambda d: d.update(distance_two=1.0), sweep_limits.PART_OF_PATH),
         ])
 
     def test_a_parallel_outline_on_a_bent_path(self):
@@ -492,7 +493,7 @@ class PathShapeTest(unittest.TestCase):
     """Paths the recipe cannot hold leave the sweep out as a gap after the block."""
 
     def test_each_path_the_recipe_cannot_hold_leaves_the_sweep_out_with_its_reason(self):
-        cases = (("sweep_closed_outline", path_limits.CLOSED_AT_CORNER), ("sweep_sharp_corner", path_limits.SHARP_CORNER),
+        cases = (("sweep_sharp_corner", path_limits.SHARP_CORNER),
                  ("sweep_middle_outline", path_limits.BOTH_SIDES), ("sweep_tilted_outline", path_limits.NOT_SQUARE),
                  ("sweep_bend_3d", path_limits.BENDS_3D))
         for name, reason in cases:
@@ -715,6 +716,30 @@ class ClosedTest(unittest.TestCase):
         capture = edited(RIM, RIM_ITEM, reversed_path)
         step = only_sweep(self, translate(capture))
         self.assertEqual(step["path"]["segments"][0], {"kind": "line", "to": [5.0, 0.0]})
+
+    def test_a_second_side_running_the_whole_closed_path_makes_the_same_ring(self):
+        self.assertEqual(only_sweep(self, translate(edited(RIM, RIM_ITEM, lambda d: d.update(distance_two=1.0))))
+                         ["path"]["closed"], True)
+        twisted = edited_after(load_capture(RIM), distance_two=1.0, twist_deg=360.0)
+        self.assertEqual(stopped(translate(twisted))["reason"], sweep_limits.BOTH_WAYS_TWIST)
+
+    def test_a_square_loop_is_mitred_and_an_outline_on_its_corner_starts_in_the_middle_of_the_line(self):
+        def square(volume):
+            def edit(data):
+                corners = [(0, 0, 0), (40, 0, 0), (40, 20, 0), (0, 20, 0)]
+                data["path"]["curves"] = [{"kind": "line", "start": list(a), "end": list(b), "opposed": False}
+                                          for a, b in zip(corners, corners[1:] + corners[:1])]
+                data["profiles"][0]["frame"]["origin"] = [0, 0, 0]
+            capture = edited(RIM, RIM_ITEM, edit)
+            # The 2 by 2 outline sits 1 mm inside the loop: 4 * (120 - 1 * 4 * 2 tan 45), mitred corners.
+            capture["items"][RIM_ITEM]["target_after"]["volume_mm3"] = volume
+            return translate(capture)
+
+        step = only_sweep(self, square(448.0))
+        self.assertEqual((step["path"]["start"], step["path"]["segments"][-1]["to"]), ([20.0, 0.0], [20.0, 0.0]))
+        self.assertEqual(step["sketch"]["on"]["origin"], [20.0, 0.0, 0.0])
+        pappus = 4 * (120 - 2 * math.pi)
+        self.assertEqual(stopped(square(pappus))["reason"], sweep_limits.NOT_MATCHING)
 
     def test_a_volume_that_does_not_match_the_rim_is_refused(self):
         capture = edited(RIM, RIM_ITEM, lambda d: None)

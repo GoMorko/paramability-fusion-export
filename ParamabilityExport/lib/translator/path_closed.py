@@ -1,14 +1,16 @@
 """Closed sweep paths: a closed chain cut open where it meets the outline's plane, then written as a closed flat
-path. A full circle that has to be a sweep step becomes two half arcs. Pure."""
+path. Sharp corners between lines are mitred; an outline on such a corner is carried to the middle of the next line,
+since the app needs a smooth start. A full circle that has to be a sweep step becomes two half arcs. Pure."""
 import math
 
 from ..package.numbers import round9
 
 from . import vec
-from .path_checks import off_square
-from .path_curves import arc_of, curve_length, joined_lines, polyline, round_point, tangents, turn_deg
-from .path_limits import (CLOSED_3D, CLOSED_AT_CORNER, CLOSED_PARALLEL, CLOSED_TAPER, NOT_SQUARE, OFF_PLANE, PLANE_TOL,
-                          SHARP_CORNER, SMOOTH_JOIN_DEG, STRAIGHT_DEG)
+from .path_checks import off_square, outline_reach
+from .path_curves import (arc_of, curve_length, joined_lines, polyline, round_point, tangents, turn_deg,
+                          turned_round)
+from .path_limits import (CLOSED_3D, CLOSED_AT_CORNER, CLOSED_PARALLEL, CLOSED_TAPER, CORNER_TOO_TIGHT, MAX_MITRE_DEG,
+                          NOT_SQUARE, OFF_PLANE, PLANE_TOL, SHARP_CORNER, SMOOTH_JOIN_DEG, STRAIGHT_DEG)
 from .path_writing import flat_frame, flat_plan
 from .result import Refusal
 
@@ -23,7 +25,9 @@ def half_circles(ring):
 
 def closed_plan(path, ordered, profile_frame, profile_points, options, cut=True):
     """A closed chain as a closed flat path starting where the chain meets the outline's plane. `cut` is false for a
-    chain that already starts there."""
+    chain that already starts there. A sharp corner between two lines is mitred, as Fusion and the app build it; where
+    the outline sits on such a corner, the path starts in the middle of the first line instead and `moved` carries
+    the outline there. A twisting outline needs a smooth path."""
     if options.tapered:
         return Refusal(CLOSED_TAPER)
     if options.fixed:
@@ -37,20 +41,59 @@ def closed_plan(path, ordered, profile_frame, profile_points, options, cut=True)
         ordered = _cut_at_plane(ordered, origin, normal, profile_points)
         if isinstance(ordered, Refusal):
             return ordered
-    junctions = [(turn_deg(tangents(a)[1], tangents(b)[0]), a["kind"] == b["kind"] == "line")
-                 for a, b in zip(ordered, ordered[1:] + ordered[:1])]
-    seam = junctions.pop()
-    if seam[0] > (STRAIGHT_DEG if seam[1] else SMOOTH_JOIN_DEG):
-        return Refusal(CLOSED_AT_CORNER)
-    if any(turn > (STRAIGHT_DEG if both_lines else SMOOTH_JOIN_DEG) for turn, both_lines in junctions):
-        return Refusal(SHARP_CORNER)
+    moved = None
+    seam, seam_lines = _junction(ordered[-1], ordered[0])
+    if seam > (STRAIGHT_DEG if seam_lines else SMOOTH_JOIN_DEG):
+        if options.twisted or not seam_lines:
+            return Refusal(CLOSED_AT_CORNER)
+        if off_square(tangents(ordered[0])[0], normal):
+            ordered = turned_round(ordered)  # the line the outline is square to arrives at the corner
+        ordered, moved = _start_mid_line(ordered)
+        profile_points = [vec.add(p, moved) for p in profile_points]
+    refusal = _corners_refusal(ordered, profile_points, frame["z"], options.twisted)
+    if refusal is not None:
+        return refusal
     start = ordered[0]["start"]
     direction = tangents(ordered[0])[0]
     if off_square(direction, normal):
         return Refusal(NOT_SQUARE)
     base = dict(curves=ordered, start=round_point(start), end=round_point(start), direction=round_point(direction),
                 length=round9(sum(curve_length(c) for c in ordered)))
-    return flat_plan(base, ordered, frame, profile_points, options, closed=True)
+    found = flat_plan(base, ordered, frame, profile_points, options, closed=True)
+    if moved is not None and not isinstance(found, Refusal):
+        found.moved = round_point(moved)
+    return found
+
+
+def _junction(before, after):
+    """(turn in degrees, both lines) where `before` meets `after`."""
+    return turn_deg(tangents(before)[1], tangents(after)[0]), before["kind"] == after["kind"] == "line"
+
+
+def _start_mid_line(ordered):
+    """The closed chain started in the middle of its first curve, a line, and the move from the old start to it."""
+    first = ordered[0]
+    middle = vec.scale(vec.add(first["start"], first["end"]), 0.5)
+    return ([dict(first, start=middle)] + ordered[1:] + [dict(first, end=middle)],
+            vec.sub(middle, first["start"]))
+
+
+def _corners_refusal(ordered, profile_points, plane_normal, twisted):
+    """A Refusal for a join of the closed chain the app cannot build: a sharp corner next to a curve or in a twisting
+    path, a corner turning back past `MAX_MITRE_DEG`, or two corners too close for the outline's mitres (each needs
+    the outline's reach across the path's plane times tan(turn / 2) of straight path on both sides)."""
+    reach = outline_reach(profile_points, ordered[0]["start"], plane_normal)
+    for before, after in zip(ordered[-1:] + ordered[:-1], ordered):
+        turn, both_lines = _junction(before, after)
+        if turn <= (STRAIGHT_DEG if both_lines else SMOOTH_JOIN_DEG):
+            continue
+        if twisted or not both_lines or turn > MAX_MITRE_DEG:
+            return Refusal(SHARP_CORNER)
+        needed = reach * math.tan(math.radians(turn) / 2.0)
+        shorter = min(curve_length(before), curve_length(after))
+        if shorter < needed:
+            return Refusal(CORNER_TOO_TIGHT % (needed, shorter))
+    return None
 
 
 def _cut_at_plane(ordered, origin, normal, profile_points):
