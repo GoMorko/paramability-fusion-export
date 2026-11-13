@@ -71,13 +71,22 @@ except U1, L1 to L15, F1, F2 and SP1 to SP4, which are described here.
       edges of a box's top face, once as "Single path" and once as "Path + Guide Surface" with the top face as the
       guide. Export each. Expect: the single path sweep has `orientation`, `taper_deg` and `twist_deg`; for the other,
       the ones that are null are listed in `data.unread` with Fusion's answer, and the gap reason names them.
+      Single path, seen with 0.10.11 (a 3 by 3 mm outline beside one top edge of a 40 by 40 mm box, new body): all
+      settings read, `distance_one` and `distance_two` both 1 with `path.closed` true, a path of four edges, and the
+      body is the mitred ring (1548 mm3). 0.10.11 left it out as "covers only part of its path"; now it copies as a
+      closed `sweep` that starts in the middle of the first edge (the app replay matches 100%). The guide surface
+      sweep is still to export.
 - [ ] LF3, a loft section of edges. Loft from a closed loop of a body's edges (picked as edges, not a face) to a sketch
-      profile above it. Export. Expect: the section shows `kind: "other"` with `items` naming what Fusion gave
-      (`BRepEdge` or another type) and `count`.
+      profile above it. Export. Expect: the section shows `kind: "path"` with the edges in `path` (`kind: "edges"`,
+      `closed: true`), and the loft is copied as a ruled loft whose first section is the measured loop. Seen with
+      0.10.11: Fusion gives the section as a `Path` of four `PathEntity` items (read then as `kind: "other"`); export
+      again with this version to confirm the copy.
 - [ ] AS1, the steps after a stop. Extrude a box, split it with the curved face of a cylinder body (not extended)
       and remove the outer piece (this stops the copy), then add a coil joined to the box. Export the box. Expect: a
       fixed shape with the split in `refusal`, `report.json` `after_stop` with `steps` naming the split and the coil,
-      and a second note "Not copied either: Coil1".
+      and a second note "Not copied either: Coil1". Seen with 0.10.11 without the coil (the design had none): the
+      split tool reads as `{ "kind": "surface", "type": "Cylinder" }`, `after_stop` names only the split and the
+      Remove ("Does not change the exported body"), and there is no second note. The coil part is still to check.
 - [ ] U1, faster tries (0.9.1, experimental). Use a design with a body in one component and two or more other
       components the body does not use (no joints), with a ticked size that moves a sketch. Suppress one step of an
       unused component by hand first. Export for Paramability twice, once with "Faster tries" off and once with it
@@ -1037,7 +1046,8 @@ surprises.
       outline".
 - [ ] **SW6 Sharp corner.** Two sketch lines at 90 degrees, no arc between them. The sweep is left out with "The path
       of this sweep has a sharp corner". Note what Fusion builds (a mitre, a rounded corner or an error) and measure
-      the outer corner, so a later version can copy it.
+      the outer corner, so a later version can copy it. Along a closed loop of edges Fusion mitres (see SW9), and the
+      copy now mitres sharp corners of closed paths; an open path still waits for this test.
 - [ ] **SW7 Taper and twist.** On a straight path, a 20 by 10 mm rectangle with taper 5 degrees, then with twist 90
       degrees. Each is copied as a `sweep` step with `taperDeg` or `twistDeg` (recipe version 16) and a note "check the
       shape"; the sizes behind the angle and the outline are marked. Note `taper_deg` and `twist_deg` in degrees with
@@ -1076,7 +1086,9 @@ surprises.
       flat path that has `closed: true`, starts at the profile plane and ends on its start (version 16), and the part
       matches. `volume_after` is the area times the length the centre travels: the path length minus 2 pi times how
       far the centre sits inside the loop. Then put the rectangle on a corner of a rectangle sketch with sharp
-      corners: the sweep is left out ("sits on a sharp corner of its closed path"). A closed sketch with a spline side
+      corners: the sweep is copied with mitred corners, its path starting in the middle of the side the outline is
+      square to and the outline moved there; with a twist of 360 degrees it is left out ("sits on a sharp corner of
+      its closed path"). A closed sketch with a spline side
       is copied when the profile sits on the spline too; note whether the two halves of the spline meet smoothly in
       the recipe.
 - [ ] **SW18 Twist along a closed path.** The SW17 path with a bar centred on it and a twist of 360 degrees. Copied
