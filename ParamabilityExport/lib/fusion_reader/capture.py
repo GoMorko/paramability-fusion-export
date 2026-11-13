@@ -5,10 +5,13 @@ after the marker are left out. Per position k the marker is set to k once. At th
 k - 1 (bodies, health, what the feature produced, whether the target changed) and starts item k (its inputs). The
 marker always goes back to where it was.
 
-The target is measured at each position, except inside a run of steps of other components: a step of another
-component works on its own bodies, so the walk measures the target once before the run and once after it. When the
-two agree, no step of the run changed the target; when they do not, the walk goes back over the run and measures the
-target at each of its steps (`_measure_run`), so every step gets the numbers a full walk would give.
+The target is measured at each position, except inside a run of quiet steps of other components (`_quiet`): such a
+step works on bodies of its own component, so the walk measures the target once before the run and once after it.
+When the two agree, no step of the run changed the target; when they do not, the walk goes back over the run and
+measures the target at each of its steps (`_measure_run`). A step that can reach bodies of another component (a type
+with `reaches_bodies` in the step kind table, a type the table does not know, or a step of the root component) is
+never quiet: the target is measured on both sides of it, so a change it makes is seen even when a later step of
+the run undoes it.
 
 The target is the native body of its component, so every value is in component coordinates; `placement` says where
 the component sits in the assembly. Feature readers run only for items of the target's component, and then for the steps of tool bodies from other
@@ -205,24 +208,33 @@ def _set_target(item, before, after):
     item["target_before"], item["target_after"] = _measure(before), _measure(after)
 
 
-def _other_step(item):
-    """True for a started item of another named component than the target's: rebuilding it cannot reshape the
-    target."""
-    return isinstance(item, dict) and item.get("in_target_component") is False and bool(item.get("component"))
+def _quiet(type_name, component, ctx):
+    """True for a step of a type that cannot reach other components' bodies (`step_kinds.keeps_to_own_bodies`), of
+    the named component token `component`, which is neither the target's nor the root."""
+    root = geo.safe(lambda: ctx.root.entityToken, "") or ""
+    return (bool(component) and component != ctx.component_token and component != root
+            and step_kinds.keeps_to_own_bodies(type_name))
+
+
+def _other_step(item, ctx):
+    """True for a started item that is a quiet step of another component (`_quiet`)."""
+    return (isinstance(item, dict) and item.get("in_target_component") is False
+            and _quiet(item.get("type"), item.get("component"), ctx))
 
 
 def _other_at(timeline, ctx, index):
-    """True when timeline item `index` is a step of another named component than the target's (`_other_step`), read
-    without starting it. Unsure (a group, an unreadable item) is False."""
+    """True when timeline item `index` is a quiet step of another component (`_quiet`), read without starting it.
+    Unsure (a group, an unreadable item) is False."""
     obj = geo.safe(lambda: timeline.item(index), None)
     if obj is None or _is_group(obj):
         return False
     entity, _ = _native_entity(obj)
     if entity is None:
         return False
-    component = _owner_component(geo.safe(lambda: obj.entity, None), entity, geo.type_name(entity))
+    type_name = geo.type_name(entity)
+    component = _owner_component(geo.safe(lambda: obj.entity, None), entity, type_name)
     token = geo.safe(lambda: component.entityToken, "") if component is not None else ""
-    return bool(token) and not geo.same_entity(component, ctx.component)
+    return not geo.same_entity(component, ctx.component) and _quiet(type_name, token, ctx)
 
 
 def _measure_run(timeline, ctx, items, run, start, end_state, position):
@@ -407,7 +419,7 @@ def _read_capture(design, body, fusion, name, up_axis, extra_readers, timer):
                 with timer.span("marker_moves"):
                     timeline.markerPosition = k
                 # Between two steps of other components the target is not measured (see the module docstring).
-                measure = not (0 < k < end and _other_step(items.get(k - 1)) and _other_at(timeline, ctx, k))
+                measure = not (0 < k < end and _other_step(items.get(k - 1), ctx) and _other_at(timeline, ctx, k))
                 if measure:
                     with timer.span("target_state"):
                         state = _target_state(ctx)

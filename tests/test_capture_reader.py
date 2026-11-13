@@ -306,6 +306,19 @@ class WalkTest(unittest.TestCase):
         self.assertEqual([i["target_changed"] for i in items[1:4]], [False, True, None])
         self.assertEqual(design.timeline.markerPosition, 5)
 
+    def test_a_move_of_another_component_that_is_undone_later_in_the_run_is_still_seen(self):
+        moves = [(Obj("fusion::MoveFeature", parentComponent=Obj(entityToken="child"), bodies=Coll([])), "Move%d" % n,
+                  {}) for n in range(2)]
+        other = (Obj("fusion::ExtrudeFeature", parentComponent=Obj(entityToken="child"), bodies=Coll([])), "Other", {})
+        entries = [extrude(rect_profile(), target=self.target), other] + moves + [
+            extrude(rect_profile(), name="Extrude2", target=self.target, operation="JoinFeatureOperation")]
+        design = FakeDesign(entries, self.target)
+        moved = body(lo=(5, 0, 0), hi=(45, 20, 10))
+        found = design.findEntityByToken
+        design.findEntityByToken = lambda token: [moved] if design.timeline.markerPosition == 3 else found(token)
+        items = read_capture(design, self.target, fusion="", name="", up_axis="z")["items"]
+        self.assertEqual([i["target_changed"] for i in items[1:4]], [False, True, True])
+
     def test_extra_readers_plug_in_before_and_after(self):
         fillet = entry(feature("FilletFeature", "Fillet1"))
         design = FakeDesign([fillet], self.target)

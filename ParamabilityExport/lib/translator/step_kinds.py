@@ -50,6 +50,8 @@ class StepType:
       expected, so the walk of one body does not refuse them.
     moves_bodies: it carries the bodies its data names to another place.
     splits_bodies: it cuts bodies into pieces, and a piece may come out as a new body (translator/lineage.py).
+    reaches_bodies: it can change or take bodies of another component than its own (a Combine's tool bodies, a Move,
+      a split), so the capture walk measures the target around it also when it lives in another component.
     """
 
     name: str
@@ -63,6 +65,7 @@ class StepType:
     makes_bodies: bool = False
     moves_bodies: bool = False
     splits_bodies: bool = False
+    reaches_bodies: bool = False
 
 
 @dataclass(frozen=True)
@@ -97,7 +100,7 @@ STEP_TYPES = (
     StepType("RevolveFeature", "revolve", reader="read_solid", handler="revolve:handle", sketches=(PROFILES, AXIS)),
     StepType("HoleFeature", "hole", reader="read_solid", handler="hole:hole", sketches=(HOLE_POINTS,)),
     StepType("ThreadFeature", "thread", reader="read_solid", handler="hole:thread"),
-    StepType("CombineFeature", "combine", reader="read_solid", handler="combine:handle"),
+    StepType("CombineFeature", "combine", reader="read_solid", handler="combine:handle", reaches_bodies=True),
     StepType("FilletFeature", "fillet", reader="read_finish", handler="finish:fillet"),
     StepType("ChamferFeature", "chamfer", reader="read_finish", handler="finish:chamfer"),
     StepType("ShellFeature", "shell", reader="read_finish", handler="finish:shell"),
@@ -110,9 +113,10 @@ STEP_TYPES = (
     StepType("MirrorFeature", "mirror", reader="read_repeat", handler="body_copies:mirror", makes_bodies=True),
     StepType("SplitFaceFeature", "split face", splits_faces=True),
     StepType("SplitBodyFeature", "split body", reader="read_split", handler="split:handle",
-             splits_bodies=True),
+             splits_bodies=True, reaches_bodies=True),
     StepType("CopyPasteBody", "pasted body", reader="read_paste", handler="paste:handle", makes_bodies=True),
-    StepType("MoveFeature", "move", reader="read_move", handler="move:handle", moves_bodies=True),
+    StepType("MoveFeature", "move", reader="read_move", handler="move:handle", moves_bodies=True,
+             reaches_bodies=True),
     StepType("EmbossFeature", "emboss", reader="read_emboss", handler="emboss:handle",
              sketches=(PROFILES, OUTLINE_FACE)),
     StepType("SweepFeature", "sweep", reader="read_sweep", handler="sweep:handle", sketches=(PROFILES, PATH)),
@@ -191,6 +195,13 @@ def skipped(name):
 
 def is_assembly(name):
     return role(name) == ASSEMBLY
+
+
+def keeps_to_own_bodies(name):
+    """True for a listed type that cannot change bodies of another component than its own (`reaches_bodies`). A type
+    the table does not list may, so it gives False."""
+    found = _TYPES.get(name)
+    return found is not None and not found.reaches_bodies
 
 
 def makes_no_body(name):
