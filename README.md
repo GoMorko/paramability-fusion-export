@@ -518,5 +518,8 @@ python3 -m unittest discover -s tests -t .
 
 Python 3.10 or newer, standard library only.
 
+The owner-capture checks (`tests/test_owner_captures.py`) need a local `tests/local/owner_captures.json` (git-ignored); without it they skip.
+Set `PARAMABILITY_OWNER_CAPTURES` to use another path and `PARAMABILITY_OWNER_REPORTS` for the folder with the packages.
+
 To make the export copy one more kind of Fusion step, follow `docs/adding-a-step-type.md`.
 The file that lists the steps left out of a copy is described in `docs/recipe-gaps.md`.
