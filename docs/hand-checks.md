@@ -38,7 +38,7 @@ results", no narrower cut range, and the copy in Paramability still matches the 
 - The sketches look the same: same outline, not flipped, not moved.
 - Open the parameters table: the user parameters show their formulas, not plain numbers, and the same values as
   before the export.
-- If something is off, use Edit, Undo once and see "When something looks wrong".
+- If something is off, use Edit, Undo once and see "When something looks wrong". With "Lighter on memory" ticked, Undo may not step back through the export: close the design without saving and open the version you saved before.
 
 ## When something looks wrong
 
@@ -46,7 +46,7 @@ Open `report.json` from the export. The field layout is in `docs/capture-format.
 capture file"). Open these first:
 
 1. `health`: whether the design was put back (`restore_unverified`, `flipped`, `broken`, `tries_stopped`) and how
-   far sketches drifted (`sketch_gap_mm`, `sketch_drift`). Any `broken` entry means the design changed: use Undo.
+   far sketches drifted (`sketch_gap_mm`, `sketch_drift`). Any `broken` entry means the design changed: use Undo, or reopen the saved version when `undo_dropped` is true.
 2. `timing`: where the time went (section 6, "Timing"). A slow export shows up as one large entry, often the tries.
 3. `refusal` (on a body saved as a fixed shape): the step that stopped the copy and why.
 4. `after_stop`: what a walk past that stop finds, so you see which later steps were not copied either.

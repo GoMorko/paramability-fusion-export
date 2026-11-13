@@ -37,7 +37,7 @@ UNSUPPORTED = "unsupported"
 HINTS = {
     DELETE_FACE: "Cut the shape away with an extrude cut, or change the step that made the face.",
     SURFACE: "Build the solid with an extrude, sweep, loft or shell.",
-    DRAFT_STEEP: "Use a draft under 30 degrees, or give the extrude a taper.",
+    DRAFT_STEEP: "Draw the sloped wall in the sketch, or give the extrude a taper.",
     TAPER_STEEP: "Use a taper under 45 degrees, or draw the sloped wall in the sketch.",
     TAPER_CUT_BOTH: "Make two tapered cuts through all, one for each way, or give the cut a distance.",
     EXTRUDE_END_FACE: "Start and end on flat faces or planes, or give a distance.",
