@@ -138,6 +138,12 @@ class KeptSizesTests(unittest.TestCase):
         self.assertEqual(plan.kept_sizes(self.tbl, ["off"]), ["count", "cube", "off", "height"])
 
 
+def built(rows, failed=()):
+    """Probe states for single-size rows: built, except the rows named in `failed`."""
+    return [{"values": {r["varied"][0]: r["state"][r["varied"][0]]}, "built": r["name"] not in failed}
+            for r in rows if len(r["varied"]) == 1]
+
+
 class ProbeRowTests(unittest.TestCase):
     def setUp(self):
         self.tbl = table(PARAMS, ["count", "cube", "off"], MODEL)
@@ -166,16 +172,34 @@ class ProbeRowTests(unittest.TestCase):
         self.assertEqual({r["name"]: r["values"]["cube"] for r in far}, {"cube (min)": 5, "cube (max)": 20})
 
     def test_two_moved_sizes_add_near_pair_rows_and_later_far_rows_with_all_at_min_and_at_max(self):
-        rows, _ = plan.probe_rows(self.sizes, {"count", "cube"})
+        moved = {"count", "cube"}
+        rows, _ = plan.probe_rows(self.sizes, moved)
         self.assertEqual([r["name"] for r in rows], ["count (near min)", "count (near max)", "cube (near min)",
-                                                     "cube (near max)", "all lower", "all higher"])
-        self.assertEqual(rows[-2]["state"], {"count": 2.25, "cube": 7.5, "off": 5.0})
-        self.assertEqual(rows[-1]["state"], {"count": 3.75, "cube": 12.5, "off": 5.0})
-        far = plan.far_rows(self.sizes, {"count", "cube"}, 20)
-        self.assertEqual([r["name"] for r in far],
-                         ["count (min)", "count (max)", "cube (min)", "cube (max)", "all min", "all max"])
-        self.assertEqual(far[-2]["state"], {"count": 1.5, "cube": 5, "off": 2.5})
-        self.assertEqual(far[-1]["state"], {"count": 6, "cube": 20, "off": 10})
+                                                     "cube (near max)"])
+        pairs = plan.pair_rows(self.sizes, moved, built(rows), 2)
+        self.assertEqual([r["name"] for r in pairs], ["all lower", "all higher"])
+        self.assertEqual(pairs[0]["state"], {"count": 2.25, "cube": 7.5, "off": 5.0})
+        self.assertEqual(pairs[1]["state"], {"count": 3.75, "cube": 12.5, "off": 5.0})
+        far = plan.far_rows(self.sizes, moved, 20)
+        self.assertEqual([r["name"] for r in far], ["count (min)", "count (max)", "cube (min)", "cube (max)"])
+        ends = plan.far_pair_rows(self.sizes, moved, built(rows + far), 2)
+        self.assertEqual([r["name"] for r in ends], ["all min", "all max"])
+        self.assertEqual(ends[0]["state"], {"count": 1.5, "cube": 5, "off": 2.5})
+        self.assertEqual(ends[1]["state"], {"count": 6, "cube": 20, "off": 10})
+
+    def test_rows_past_a_value_that_did_not_build_are_not_planned(self):
+        moved = {"count", "cube"}
+        rows, _ = plan.probe_rows(self.sizes, moved)
+        states = built(rows, failed={"cube (near min)"})
+        # cube did not build at 7.5: the lower pair would vary count alone, so it is left out, and the minimum of
+        # cube is not tried.
+        pairs = plan.pair_rows(self.sizes, moved, states, 2)
+        self.assertEqual([r["name"] for r in pairs], ["all higher"])
+        far = plan.far_rows(self.sizes, moved, 20, states=states)
+        self.assertEqual([r["name"] for r in far], ["count (min)", "count (max)", "cube (max)"])
+        ends = plan.far_pair_rows(self.sizes, moved, built(rows + far, failed={"cube (near min)"}), 2)
+        # All sizes at their minimum keep cube at its value, since it did not build below it.
+        self.assertEqual([r["state"]["cube"] for r in ends], [10.0, 20])
 
     def test_the_far_ends_only_take_the_rows_that_are_left(self):
         self.assertEqual([r["name"] for r in plan.far_rows(self.sizes, {"count", "cube"}, 2)],
@@ -202,6 +226,7 @@ class ProbeRowTests(unittest.TestCase):
 
     def test_rows_carry_the_line_the_progress_window_shows(self):
         rows, _ = plan.probe_rows(self.sizes, {"cube", "count"})
+        rows += plan.pair_rows(self.sizes, {"cube", "count"}, built(rows), 2)
         self.assertEqual([r["label"] for r in rows],
                          ["count at 2.25", "count at 3.75", "cube at 7.5 mm", "cube at 12.5 mm",
                           "several sizes together", "several sizes together"])

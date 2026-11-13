@@ -416,16 +416,23 @@ class ProbeRun:
             self.run_rows(nearer)
 
     def measure(self, rows, sizes):
-        """The near rows, rows nearer still for the sizes whose rows did not build, then the far range ends while
-        rows are left (and nearer rows for those that did not build), then the rows that check the other sizes of a
-        value that one size moves along a curve (`SizeProbe.check_rows`)."""
+        """The near rows, then the near pair rows, rows nearer still for the sizes whose rows did not build, then the
+        far range ends while rows are left (and nearer rows for those that did not build) and the far pair rows, then
+        the rows that check the other sizes of a value that one size moves along a curve (`SizeProbe.check_rows`).
+        Each batch is planned once the batch before it has run, so no row repeats a value known not to build."""
         if rows:
             self.run_rows(rows)
+        pairs = self.probe.pair_rows(sizes, self._left())
+        if pairs:
+            self.run_rows(pairs)
         self._retry(sizes)
         far = self.probe.far_rows(sizes, self._left())
         if far:
             self.run_rows(far)
             self._retry(sizes)
+        far_pairs = self.probe.far_pair_rows(sizes, self._left())
+        if far_pairs:
+            self.run_rows(far_pairs)
         check = self.probe.check_rows(sizes, self._left())
         if check:
             self.run_rows(check)

@@ -204,6 +204,7 @@ class SizeProbe:
         self.nearer_count = 0
         self.checked = False
         self._far = None  # (moved, extra) of the near rows, until the far rows are asked for
+        self._pairs = None  # the same, from the far rows until the far pair rows are asked for
         self.discovery_base = None  # the read the discovery rows are compared with
         self.rows_end = None  # the read once the measured rows were done and the parameters back
         self.after_rows = None  # what read differently from E0 once the parameters were put back after the rows
@@ -339,13 +340,34 @@ class SizeProbe:
         self._far = (moved, set(extra))
         return rows
 
-    def far_rows(self, sizes, room):
-        """The rows at the far range ends of the sizes `probe_rows` tried, within `room` rows (`plan.far_rows`)."""
+    def _marked(self):
+        """The states after E0, those whose own size changed a followed outline marked (`marked_states`)."""
+        return marked_states(self.states, self.outline_changes())
+
+    def pair_rows(self, sizes, room, states=None):
+        """The near pair rows of the sizes `probe_rows` tried, within `room` rows (`plan.pair_rows`). `states` are the
+        marked states to judge by, this probe's own by default."""
         if self._far is None:
             return []
         moved, extra = self._far
-        self._far = None
-        return plan.far_rows(sizes, moved, room, extra=extra)
+        return plan.pair_rows(sizes, moved, self._marked() if states is None else states, room, extra=extra)
+
+    def far_rows(self, sizes, room, states=None):
+        """The rows at the far range ends of the sizes `probe_rows` tried, within `room` rows (`plan.far_rows`), and
+        then the far pair rows (`far_pair_rows`) once."""
+        if self._far is None:
+            return []
+        moved, extra = self._far
+        self._pairs, self._far = self._far, None
+        return plan.far_rows(sizes, moved, room, extra=extra, states=self._marked() if states is None else states)
+
+    def far_pair_rows(self, sizes, room, states=None):
+        """Once, after the far rows: all sizes at their minimum, then at their maximum (`plan.far_pair_rows`)."""
+        if self._pairs is None:
+            return []
+        moved, extra = self._pairs
+        self._pairs = None
+        return plan.far_pair_rows(sizes, moved, self._marked() if states is None else states, room, extra=extra)
 
     def nearer_rows(self, sizes, room):
         """The next rows that try the sizes nearer to their value now where rows did not build or changed a followed
@@ -697,9 +719,25 @@ class ProbeGroup:
         """The extra rows. Every probe plans them (that sets what it leaves untried); they are the same for all."""
         return [probe.probe_rows(sizes, extra) for probe in self.probes][0]
 
+    def _marked(self):
+        """The first probe's states with the outline changes of every part marked: the rows are shared."""
+        changed = set().union(*(probe.outline_changes() for probe in self.probes))
+        return marked_states(self.probes[0].states, changed)
+
+    def pair_rows(self, sizes, room):
+        """The near pair rows, the same for all parts."""
+        states = self._marked()
+        return [probe.pair_rows(sizes, room, states) for probe in self.probes][0]
+
     def far_rows(self, sizes, room):
         """The far rows: every probe plans them (that clears what it holds); they are the same for all."""
-        return [probe.far_rows(sizes, room) for probe in self.probes][0]
+        states = self._marked()
+        return [probe.far_rows(sizes, room, states) for probe in self.probes][0]
+
+    def far_pair_rows(self, sizes, room):
+        """The far pair rows: every probe plans them (that clears what it holds); they are the same for all."""
+        states = self._marked()
+        return [probe.far_pair_rows(sizes, room, states) for probe in self.probes][0]
 
     def add_states(self, entries):
         """Give each probe its own state per `(values, result, reads)`, `(values, result, reads, starts)` or

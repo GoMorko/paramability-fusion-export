@@ -13,13 +13,18 @@ try.
 Sizes are dicts as in `export_plan.size_offers.probe_sizes`: param (Fusion name), size (recipe name), unit, value,
 min, max (manifest numbers).
 
-Row order, each step only while rows are left under `MAX_PROBE_ROWS` (64), steps 1 and 2 in `probe_rows`:
-1. Near rows: every size that moves a sketch, then the sizes tried on a guess, gets one row `NEAR_SHARE` (25 percent)
-   of its value below and one above, kept inside its range (a count is a whole number, at least one step away).
-2. When two or more sizes are tried, one row with all of them at their lower near value and one at the higher.
+Row order, each step only while rows are left under `MAX_PROBE_ROWS` (64):
+1. Near rows (`probe_rows`): every size that moves a sketch, then the sizes tried on a guess, gets one row
+   `NEAR_SHARE` (25 percent) of its value below and one above, kept inside its range (a count is a whole number, at
+   least one step away).
+2. Near pair rows (`pair_rows`, run after the near rows): when two or more sizes are tried, one row with all of them at
+   their lower near value and one at the higher. A size whose own near row on that side did not build stays at its
+   value: the pair would fail for it alone.
 3. Far rows (`far_rows`, run after the nearer tries of step 1 and 2): the range ends that differ from the value and
-   from the near values, so the measured span grows.
-4. When two or more sizes are tried, all sizes at their minimum, then all at their maximum.
+   from the near values, so the measured span grows. An end past a value of the size that did not build on its own is
+   not tried: the range stops before that value anyway.
+4. Far pair rows (`far_pair_rows`, after the nearer tries of step 3): when two or more sizes are tried, all sizes at
+   their minimum, then all at their maximum, a tried size at the farthest value it built at on its own on that side.
 A row that does not build is tried again nearer (`nearer_rows`, `NEARER_STEPS`: 50, 25 and 10 percent of the way to
 the range end, the first one nearer than the value tried). On a side where some value built and a farther one did
 not, the values between them are halved (`BISECT_STEPS` times at most) so the last value that builds is found closely.
@@ -459,8 +464,7 @@ def _tried_sizes(sizes, moved, extra):
 
 
 def probe_rows(sizes, moved, limit=MAX_PROBE_ROWS, extra=()):
-    """The first states to try, as `(rows, untried)`: the near rows, then the near pair rows (steps 1 and 2 of the
-    module docstring).
+    """The first states to try, as `(rows, untried)`: the near rows (step 1 of the module docstring).
 
     sizes: the kept sizes. moved: the params that move covered sketch values. A row has no STEP (`"step": False`);
     `state` holds the manifest values, `varied` the params that differ, `label` the progress line. `untried` lists
@@ -479,32 +483,95 @@ def probe_rows(sizes, moved, limit=MAX_PROBE_ROWS, extra=()):
         for label, value in wanted:
             rows.append(_row(sizes, "%s (%s)" % (size["size"][:MAX_NAME_CHARS - 11], label), {size["param"]: value},
                              "%s (%s)" % (size["param"], label)))
-    if len(tried) >= 2 and len(rows) + 2 <= limit:
-        for label, side in (("all lower", 0), ("all higher", 1)):
-            overrides = {s["param"]: near[s["param"]][side] for s in tried if near[s["param"]][side] is not None}
-            if len(overrides) >= 2:
-                rows.append(_row(sizes, label, overrides, "all near %d" % side))
     return rows, untried
 
 
-def far_rows(sizes, moved, room, extra=()):
-    """The far rows, then the far pair rows (steps 3 and 4 of the module docstring), at most `room` of them: every
-    tried size at the range ends that differ from its value and from its near values, so the measured span grows.
-    Sizes and arguments as in `probe_rows`; the export asks for these after the near rows and their nearer tries."""
+def pair_rows(sizes, moved, states, room, extra=()):
+    """The near pair rows (step 2 of the module docstring), at most `room`: all tried sizes at their lower near value,
+    then at the higher. `states` are the probe states so far, marked as for `nearer_rows`: a size whose own row did
+    not build at its near value on that side, or nearer, stays at its value. A row needs two sizes that differ."""
+    tried = _tried_sizes(sizes, moved, extra)
+    if len(tried) < 2:
+        return []
+    rows = []
+    for label, side in (("all lower", 0), ("all higher", 1)):
+        overrides = {}
+        for size in tried:
+            value = near_values(size)[side]
+            if value is not None and not _fails_by(states, size, value):
+                overrides[size["param"]] = value
+        if len(overrides) >= 2 and len(rows) < room:
+            rows.append(_row(sizes, label, overrides, "all near %d" % side))
+    return rows
+
+
+def far_rows(sizes, moved, room, extra=(), states=()):
+    """The far rows (step 3 of the module docstring), at most `room` of them: every tried size at the range ends that
+    differ from its value and from its near values, so the measured span grows. An end is left out when `states` (the
+    probe states so far, marked as for `nearer_rows`) hold a row of that size alone that did not build at a value on
+    that side. Sizes and arguments as in `probe_rows`; the export asks for these after the near rows and their nearer
+    tries."""
     rows = []
     tried = _tried_sizes(sizes, moved, extra)
     for size in tried:
-        wanted = _far_ends(size, near_values(size))
+        wanted = [end for end in _far_ends(size, near_values(size)) if not _fails_by(states, size, end)]
         if len(rows) + len(wanted) > room:
             continue
         for end in wanted:
             label = "min" if end == size["min"] else "max"
             rows.append(_row(sizes, "%s (%s)" % (size["size"][:MAX_NAME_CHARS - 6], label), {size["param"]: end},
                              "%s (%s)" % (size["param"], label)))
-    if len(tried) >= 2 and rows and len(rows) + 2 <= room:
-        for label, key in (("all min", "min"), ("all max", "max")):
-            rows.append(_row(sizes, label, {s["param"]: s[key] for s in sizes}))
     return rows
+
+
+def far_pair_rows(sizes, moved, states, room, extra=()):
+    """The far pair rows (step 4 of the module docstring), at most `room`: all sizes at their minimum, then at their
+    maximum, when two or more sizes are tried. A tried size goes to the farthest value on that side that built on its
+    own and kept every outline (`states` marked as for `nearer_rows`), or stays at its value when none did; a size
+    without rows goes to its range end. A row needs two sizes that differ from their value, and one tried size past
+    its near value (else the near pair row has measured it already)."""
+    tried = {s["param"] for s in _tried_sizes(sizes, moved, extra)}
+    if len(tried) < 2:
+        return []
+    rows = []
+    for label, key, side in (("all min", "min", 0), ("all max", "max", 1)):
+        overrides, past = {}, False
+        for size in sizes:
+            value = _farthest_built(states, size, size[key]) if size["param"] in tried else size[key]
+            if value is not None and abs(value - size["value"]) > _SAME:
+                overrides[size["param"]] = value
+                near = near_values(size)[side]
+                past = past or (size["param"] in tried and (near is None or abs(value - size["value"])
+                                                            > abs(near - size["value"]) + _SAME))
+        if len(overrides) >= 2 and past and len(rows) < room:
+            rows.append(_row(sizes, label, overrides))
+    return rows
+
+
+def _side(size, value):
+    """1 or -1: the side of the size's value `value` lies on (0 for the value itself)."""
+    delta = value - size["value"]
+    return 0 if abs(delta) <= _SAME else (1 if delta > 0 else -1)
+
+
+def _fails_by(states, size, value):
+    """True when a state that set only this size, on the side of `value` and not farther, did not build or changed
+    an outline: a row at `value` would end past the range the size keeps."""
+    side, reach = _side(size, value), abs(value - size["value"])
+    return side != 0 and any(not ok and _side(size, v) == side and abs(v - size["value"]) <= reach + _SAME
+                             for v, ok in _tried_alone(states, size["param"], size["value"]))
+
+
+def _farthest_built(states, size, end):
+    """The farthest value toward `end` at which a state that set only this size built and kept every outline, nearer
+    than any value that did not, or None."""
+    side = _side(size, end)
+    if side == 0:
+        return None
+    tried = [(v, ok) for v, ok in _tried_alone(states, size["param"], size["value"]) if _side(size, v) == side]
+    bad = min((abs(v - size["value"]) for v, ok in tried if not ok), default=None)
+    good = [v for v, ok in tried if ok and (bad is None or abs(v - size["value"]) < bad - _SAME)]
+    return max(good, key=lambda v: abs(v - size["value"])) if good else None
 
 
 def _tried_alone(states, name, value):

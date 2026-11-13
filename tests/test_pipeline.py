@@ -195,7 +195,10 @@ class SizeRangeTest(unittest.TestCase):
         port = FakePort(bad_when=lambda e: float(e["depth_mm"].split()[0]) > 90)
         result = export(port, ranges={"depth_mm": (30, 120)})
         self.assertEqual(result.manifest["kind"], "recipe")
-        self.assertEqual([d["name"] for d in result.report["probe"]["dropped"]][:2], ["depth_mm (max)", "all max"])
+        dropped = [d["name"] for d in result.report["probe"]["dropped"]]
+        self.assertEqual(dropped[0], "depth_mm (max)")
+        # All sizes at their maximum take depth_mm only as far as it built on its own, so that row builds.
+        self.assertNotIn("all max", dropped)
         # 75 builds and 120 does not: the values between are halved, so the size is measured up to the last of them
         # that builds, not just to 75. (The cut itself is in `test_geometry_links`.)
         span = result.report["probe"]["motion"]["spans"]["depth_mm"]
@@ -216,13 +219,14 @@ class RowOrderTest(unittest.TestCase):
         # 60 is the value: a quarter below and above first, then the range ends.
         self.assertEqual(self.depth_values(result), [45.0, 75.0, 30, 120])
 
-    def test_a_near_value_that_does_not_build_is_tried_nearer_before_the_far_ends(self):
+    def test_a_near_value_that_does_not_build_is_tried_nearer_and_the_far_end_past_it_is_not_tried(self):
         port = FakePort(bad_when=lambda e: float(e["depth_mm"].split()[0]) > 70)
         result = export(port, ranges={"depth_mm": (30, 120)})
         values = self.depth_values(result)
         self.assertEqual(values[:2], [45.0, 75.0])
-        # 75 does not build: a value between 60 and 75 is tried before the far end.
-        self.assertTrue(any(60 < v < 75 for v in values[2:values.index(120)]))
+        # 75 does not build: a value between 60 and 75 is tried before the far end, and 120 is never tried.
+        self.assertTrue(any(60 < v < 75 for v in values[2:values.index(30)]))
+        self.assertNotIn(120, values)
 
 
 class ProbeFailureTest(unittest.TestCase):
