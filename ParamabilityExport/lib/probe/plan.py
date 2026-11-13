@@ -44,7 +44,7 @@ from ..translator import emboss, face_outline
 from ..translator.loops import profile_loops
 from ..translator.result import Refusal
 from ..translator.sizes import moving_reaches, probed_sizes
-from ..translator.step_kinds import AXIS, HOLE_POINTS, OUTLINE_FACE, PATH, PROFILES, step_type
+from ..translator.step_kinds import AXIS, HOLE_POINTS, OUTLINE_FACE, PATH, PROFILES, pattern_kind, step_type
 
 MAX_PROBE_ROWS = 64
 # How far from its value a size is first tried, as a share of the value, below and above.
@@ -313,6 +313,35 @@ def _numeric_model(table):
     return [m for m in table.model_params.values() if defaults.dim_of_unit(m.get("unit")) is not None]
 
 
+def _plain_number(text):
+    try:
+        float(text)
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def symmetric_patterns(capture):
+    """`{ key: { "index", "kind" } }` of the patterns whose copies the reader reads again at every state: a pattern that
+    spreads copies to both sides of the original and has a count that follows a parameter. The tries tell where
+    Fusion puts the copies for the counts it can reach (`translator/symmetric.py`). `kind` is `rectangular` or
+    `circular`; `key` is the timeline index as text."""
+    out = {}
+    for item in capture.get("items") or []:
+        kind = pattern_kind(item.get("type"))
+        data = item.get("data") if isinstance(item.get("data"), dict) else {}
+        if kind is None or item.get("suppressed") or not item.get("in_target_component", True):
+            continue
+        names = ("quantity_one", "quantity_two") if kind == "rectangular" else ("quantity",)
+        sides = ("symmetric_one", "symmetric_two") if kind == "rectangular" else ("symmetric",)
+        if not any(data.get(side) for side in sides):
+            continue
+        params = data.get("params") if isinstance(data.get("params"), dict) else {}
+        if any(not _plain_number((params.get(name) or {}).get("expression")) for name in names if name in params):
+            out[str(item["index"])] = {"index": item["index"], "kind": kind}
+    return out
+
+
 def request(capture, table, covered=None, wanted=None):
     """What the reader reads at each state, or None when no sketch is covered and no reference can be followed.
 
@@ -325,7 +354,7 @@ def request(capture, table, covered=None, wanted=None):
        (left out when empty), `refs` is left out when empty (a face or plane of the part adds `"own": true`). `native`
        lists the sketches of tool bodies from other components, and is left out when there are none. `faces` are the
        flat faces steps use as outlines, read with the timeline marker at `before` (the step's timeline index), and is
-       left out when empty.
+       left out when empty. `patterns` are the symmetric patterns with a sized count (`symmetric_patterns`).
     """
     found = scan(capture)
     tokens = [t for t in found.covered if covered is None or t in covered]
@@ -360,6 +389,9 @@ def request(capture, table, covered=None, wanted=None):
         out["refs"] = followed
     if faces:
         out["faces"] = faces
+    patterns = symmetric_patterns(capture)
+    if patterns:
+        out["patterns"] = patterns
     return out
 
 

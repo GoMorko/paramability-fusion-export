@@ -118,6 +118,22 @@ class RequestTests(unittest.TestCase):
         self.assertTrue(asked["target"])
         self.assertTrue({"count", "cube", "W", "d1", "d2"} <= set(asked["params"]))
 
+    def test_a_symmetric_pattern_with_a_sized_count_is_read_at_every_state(self):
+        def pattern(index, kind, flags, quantity="count", suppressed=False):
+            params = {"quantity_one": {"expression": quantity}, "quantity_two": {"expression": "1"},
+                      "quantity": {"expression": quantity}}
+            return {"index": index, "type": kind, "suppressed": suppressed, "data": dict(flags, params=params)}
+
+        rows = (pattern(2, "RectangularPatternFeature", {"symmetric_one": True}),
+                pattern(3, "CircularPatternFeature", {"symmetric": True}),
+                pattern(4, "RectangularPatternFeature", {"symmetric_one": True}, quantity="5"),
+                pattern(5, "RectangularPatternFeature", {"symmetric_one": False}),
+                pattern(6, "RectangularPatternFeature", {"symmetric_one": True}, suppressed=True))
+        asked = plan.request(capture(extrude(1, square()), *rows), table(PARAMS, ["count"], MODEL))
+        self.assertEqual(asked["patterns"], {"2": {"index": 2, "kind": "rectangular"},
+                                             "3": {"index": 3, "kind": "circular"}})
+        self.assertNotIn("patterns", plan.request(capture(extrude(1, square())), table(PARAMS, ["count"], MODEL)))
+
     def test_no_covered_sketch_gives_no_request(self):
         self.assertIsNone(plan.request(capture(), table(PARAMS, ["count"], MODEL)))
 

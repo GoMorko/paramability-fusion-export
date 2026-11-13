@@ -38,6 +38,16 @@ def is_foreign_tool(tool):
     return isinstance(tool, dict) and tool.get("foreign") is True and bool(component_token(tool))
 
 
+def component_frame(ctx):
+    """The place of the component this walk builds in (component to assembly frame), or None when it has none on
+    record. A tool of the same component as the walk that holds it has that walk's place."""
+    while ctx.outer is not None:
+        if is_foreign_tool(ctx.target):
+            return (ctx.target.get("place") or {}).get("frame")
+        ctx = ctx.outer
+    return (ctx.capture["target"].get("placement") or {}).get("frame")
+
+
 def _readable(item):
     data = item.get("data")
     return isinstance(data, dict) and "read_error" not in data

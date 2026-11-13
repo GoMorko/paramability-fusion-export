@@ -109,6 +109,15 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(self.terms(motion, "4/p0/l1/center.0"), {W: 1.0, "off": -1.0})
         self.assertEqual(motion.states[-1], {"values": {"count": 5}, "built": False})
 
+    def test_the_copies_a_pattern_made_in_a_built_state_are_kept_with_the_state(self):
+        copies = {"4": {"count": [4, 1], "elements": [{"id": 1, "suppressed": False, "frame": IDENT}]}}
+        tried = state({"count": 5}, dict(read_at(count=5), patterns=copies))
+        unbuilt = state({"count": 6}, dict(read_at(count=6), patterns=copies), built=False)
+        motion = self.motion(states([tried, unbuilt]))
+        self.assertEqual(motion.states[-2]["patterns"], copies)
+        self.assertNotIn("patterns", motion.states[-1])
+        self.assertEqual(Motion.from_json(motion.json()).states[-2]["patterns"], copies)
+
     def test_json_round_trip(self):
         motion = self.motion()
         again = Motion.from_json(motion.json())

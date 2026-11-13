@@ -338,6 +338,9 @@ def _state_record(state):
     out = {"values": state.get("values") or {}, "built": state.get("built") is not False}
     if state.get("failed"):
         out["failed"] = state["failed"]
+    patterns = (state.get("read") or {}).get("patterns")
+    if state.get("built") is not False and isinstance(patterns, dict) and patterns:
+        out["patterns"] = patterns
     return out
 
 

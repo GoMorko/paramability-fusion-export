@@ -14,6 +14,7 @@ from ..timing.timer import span_on
 from . import placement, probe_refs
 from . import read_geometry as geo
 from .read_sketch import into_target, read_profile
+from .probe_patterns import read_patterns
 from .read_face import read_faces
 from .read_solid import line_axis
 from .read_sweep import flat_record
@@ -101,9 +102,10 @@ def read_state(design, request, ctx):
     sweep paths to read, and `borrowed`: { sketch token: { path } } for sketches of other
     components, with the occurrence path the capture recorded, `native`: sketch tokens of tool bodies from other
     components, read in their own component's frame like the target's sketches, `refs`: { reference key: { token,
-    path, shape } }, `faces`: { key: { token, before } } of flat faces steps use as outlines, and `park`: true to
-    leave the marker at the last face's position after the face reads (the caller's next parameter change or
-    `keep_marker` brings it back, so Fusion rebuilds the later items once, with those values).
+    path, shape } }, `faces`: { key: { token, before } } of flat faces steps use as outlines, `patterns`:
+    { key: { index, kind } } of patterns whose copies to read, and `park`: true to leave the marker at the last face's
+    position after the face reads (the caller's next parameter change or `keep_marker` brings it back, so Fusion
+    rebuilds the later items once, with those values).
 
     `sketches` maps a token to { frame, profiles } (profiles as in the capture, each curve with `entity`) and, for a
     sketch in `curves`, `curves`: { curve token: flat curve }; a borrowed one also has `native_frame` and `placement`.
@@ -111,8 +113,10 @@ def read_state(design, request, ctx):
     `params` a name to its value in cm or radians; `box` is the target's { min, max } and absent when it cannot be
     read. `refs` maps a reference key to its place in the target's coordinates, in mm: { point, normal },
     { point, dir }, { dir } or { point }. `faces` maps a face key to { frame, loops } as the capture holds a face used
-    as an outline; it is read last, since it moves the timeline marker for a while. `unread` gives a reason per borrowed
-    sketch token that could not be read or placed, and per reference or face key that could not be read.
+    as an outline; it is read last, since it moves the timeline marker for a while. `patterns` maps a key to
+    { count, elements }, the copies a pattern makes at this state (`probe_patterns`). `unread` gives a reason per
+    borrowed sketch token that could not be read or placed, and per reference, face or pattern key that could not be
+    read.
     """
     request = request or {}
     hints = request.get("borrowed") if isinstance(request.get("borrowed"), dict) else {}
@@ -163,6 +167,11 @@ def read_state(design, request, ctx):
             box = geo.safe(ctx.target_box, None)
         if box is not None:
             state["box"] = box
+    patterns = request.get("patterns") if isinstance(request.get("patterns"), dict) else {}
+    if patterns:
+        with span_on(ctx, "read_patterns"):
+            state["patterns"], missed = read_patterns(design, patterns)
+        unread.update(missed)
     faces = request.get("faces") if isinstance(request.get("faces"), dict) else {}
     if faces:
         with span_on(ctx, "read_faces"):

@@ -1725,6 +1725,24 @@ Written from the API reference and the owner's 0.7.2 export, never run on the ne
       `report.json` `elements` shows each origin. The export expects the original to be one of the two middle copies.
       If the original is not among the elements, the export stops with "sits between two copies"; note which Fusion
       version did that.
+- [x] Even counts seen (4 and 6 by spacing, 8 by extent): the original is the middle copy of the odd count and, for an
+      even count, the extra copy sits ahead of it along the direction. An extent of D gives a step of `D / (count // 2)`.
+      Still to check: a rectangular pattern whose direction is flipped or points along -x, and a part turned in the
+      assembly (the direction and the copies may then be in different spaces).
+- [ ] Circular pattern with an even count and Symmetric on (for example 6 copies over 120 degrees): note the turns of
+      the elements and where the copies really are on the part. In an odd export the elements of the copies behind the
+      original read as unturned.
+- [ ] Odd count that becomes even in the tries. Model a plate with a post (or a slot cut) and a rectangular pattern of
+      it with **Symmetric** on, the count a parameter `Count = floor(Width / 10 mm)` (a user parameter of 7 at
+      `Width = 80 mm`, range 30 to 100 mm) and an `Extent` distance of `Width / 2 - 10 mm`. Tick `Width` and `Count`,
+      with `Width` driving a sketch dimension of the plate so that the tries move it. Export. `report.json`
+      `probe.states[n].read.patterns` holds the count and the copy origins of each try: at `Width = 60` (count 6)
+      check which side has the extra copy (`elements` origins `-3..2` or `-2..3` times the spacing) and that the
+      original (origin 0) is among them. The size is marked only when a try broke the rule or the tries disagree on
+      the side. In Paramability, move `Width` over its range: the copies stay centred like
+      Fusion's.
+- [ ] Same on a circular pattern: **Symmetric** on, a total angle of 120 degrees and `Count` as above. At an even count
+      the `elements` turns are multiples of `total / (count - 1)` with the original among them.
 - [ ] Symmetric in both directions (3 by 3). The copies fill the grid once.
 - [ ] A circular pattern over 90 degrees with **Symmetric** on and 5 copies: the copies sit at -45, -22.5, 0, 22.5, 45
       degrees from the original.

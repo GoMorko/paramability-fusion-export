@@ -23,11 +23,10 @@ def _distance_kind(data):
         for which in ("one", "two"):
             count = int(data.get("quantity_" + which) or 1)
             direction = data.get("direction_" + which)
-            if count > 1 and direction and vec.length(direction) > 1e-9:
-                distance = abs(float(data.get("distance_" + which) or 0.0))
-                reach = _extent_sides(data, which)
-                axes.append((vec.unit(direction), distance if guess == "spacing" else distance * reach / (count - 1),
-                             count))
+            distance = abs(float(data.get("distance_" + which) or 0.0))
+            if count > 1 and direction and vec.length(direction) > 1e-9 and distance > 1e-9:
+                step = distance if guess == "spacing" else distance / _extent_gaps(data, which, count)
+                axes.append((vec.unit(direction), step, count))
         if not axes or not all(step > 1e-9 for _, step, _ in axes):
             return None
         if len(axes) == 2 and 1.0 - vec.dot(axes[0][0], axes[1][0]) ** 2 < 1e-9:
@@ -43,10 +42,22 @@ def _distance_kind(data):
     return None
 
 
-def _extent_sides(data, which):
-    """How many times the extent distance is spanned by a direction: a symmetric direction reaches the distance on
-    both sides of the original (2), an ordinary one runs from the first copy to the last (1)."""
-    return 2 if data.get("symmetric_" + which) else 1
+def _extent_gaps(data, which, count):
+    """How many gaps the extent distance holds. An ordinary direction runs from the first copy to the last
+    (`count - 1`). A symmetric direction reaches the distance ahead of the original, and behind it too for an odd
+    count (`count // 2` gaps each way); for an even count Fusion keeps the copy ahead at the distance and puts the
+    extra copy on that side, so the one behind stops a gap short."""
+    return max(count // 2, 1) if data.get("symmetric_" + which) else count - 1
+
+
+def _extent_step_q(data, which, distance, count_q):
+    """The spacing of an extent distance as a Quantity (`_extent_gaps`)."""
+    if not data.get("symmetric_" + which):
+        return distance.divided_by(gaps_between(count_q))
+    if not count_q.sized:
+        return distance.divided_by(Quantity(float(max(int(count_q.n) // 2, 1))))
+    text = "max(floor(%s / 2), 1)" % values.wrapped(count_q.text)
+    return distance.divided_by(Quantity(float(max(int(count_q.n) // 2, 1)), text, count_q.reads))
 
 
 def _axis_step(item, ctx, which, quantity, count_q, kind):
@@ -57,7 +68,7 @@ def _axis_step(item, ctx, which, quantity, count_q, kind):
         return Refusal("The spacing of this pattern could not be read.")
     distance = values.quantity(ctx, item, "distance_" + which, abs(raw), sign=-1 if raw < 0 else 1, absolute=True)
     if kind == "extent":
-        step = distance.scaled(_extent_sides(data, which)).divided_by(gaps_between(count_q))
+        step = _extent_step_q(data, which, distance, count_q)
     else:
         step = distance
     if not step.n > 1e-9:
@@ -104,6 +115,11 @@ def lattice_axes(item, ctx):
         if quantity == 1:
             values.pin(ctx, item, "quantity_" + which, "a count of one copy cannot follow it")
             values.handled(ctx, item, "distance_" + which)
+            continue
+        if abs(float(data.get("distance_" + which) or 0.0)) < 1e-9:
+            # Copies spaced 0 apart sit on one another, so the direction adds no place.
+            values.pin(ctx, item, "quantity_" + which, "copies spaced 0 apart add no place")
+            values.pin(ctx, item, "distance_" + which, "copies spaced 0 apart add no place")
             continue
         direction = data.get(dir_key)
         if not direction or vec.length(direction) < 1e-9:

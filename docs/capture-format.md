@@ -865,10 +865,18 @@ sides of its plane, two different angles, an angle of 30 degrees or more, or no 
 - `distance_type`: `spacing` or `extent` (enum `PatternDistanceType`), `other` when unreadable. The translator then
   takes the kind whose grid holds every kept element.
 - `elements`: every `PatternElement` (`id`, `isSuppressed`, `transform` as a frame). The original is the element with
-  the identity frame; in a symmetric direction it is not the first one.
+  the identity frame; in a symmetric direction it is not the first one. The frames are in assembly space, so for a
+  part placed in the assembly the translator carries them into the component's frame first
+  (`repeat_elements.in_component`, using the target's `placement`). In a symmetric circular pattern the frames of the
+  copies behind the original have been seen as unturned and the one ahead as turned too far, while the part itself
+  had them centred; an odd count with every copy listed is therefore taken as centred (`repeat_circular.py`).
 - `symmetric_one`, `symmetric_two`: the copies spread to both sides of the original along that direction (false when
-  the flag cannot be read). In a symmetric direction an `extent` distance is the reach to each side, so the step is
-  `2 * distance / (count - 1)`; a `spacing` distance is the step as usual.
+  the flag cannot be read). In a symmetric direction an `extent` distance is the reach ahead of the original, and
+  behind it too for an odd count, so the step is `distance / (count // 2)` (`2 * distance / (count - 1)` for an odd
+  count); for an even count the copy behind stops one step short. A `spacing` distance is the step as usual. Seen in
+  Fusion exports: with an even count the extra copy sits ahead of the original, along `direction_*` (counts 4 and 6 by
+  spacing, 8 by extent). A direction whose distance is 0 (Fusion keeps a quantity of 3 in an unused second direction)
+  makes copies on top of one another; the translator ignores that direction and merges such copies.
 - `direction_one_sketch`, `direction_two_sketch` (optional): `{ "sketch_token", "sketch" }` when that direction is a
   sketch line, so the sketch is known to feed a pattern.
 - `direction_one_place`, `direction_two_place` (optional): a direction taken from an axis, edge or face of another
@@ -1872,7 +1880,12 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   measured copies must match it or the pattern is refused: for `n` copies, an odd `n` has `n // 2` steps each way and
   an even `n` has `n // 2` on one side and one less on the other, the longer side being the one measured. The two part
   counts are `floor(n / 2) + 1` and `floor((n - 1) / 2) + 1`, so a count formula keeps the pattern centred. A count
-  measured odd that can be even inside its range marks its sizes (the even places were not seen). A pick on a copy
+  measured odd that can be even inside its range takes the side of the extra step from the tries: each built state
+  that read the pattern (`Motion.states[n].patterns`) is checked against the rule at the counts and spacing the sizes
+  give there, and the even ones must agree on the side. Without an even try a rectangular pattern takes the side Fusion
+  was seen to use (ahead of the original). The sizes are marked when a try breaks the rule or the even ones disagree,
+  and for a circular pattern without an even try (Fusion's even circular places were not seen). The two part counts
+  use the longer formula on that side. A pick on a copy
   off the middle of a symmetric direction fixes the sizes behind the count, since Fusion moves its copies when the
   count changes. A pattern whose original is not among the copies (it sits between two) is refused. The circular
   case turns the copies back and forth from the original by `k * total / (count - 1)`. Copies left out by number need
@@ -1948,7 +1961,7 @@ rows, `NOT_LOOKED` for a key not in `refs`).
 
 The size probe sets other size values, recomputes and reads a state with `read_state(design, request, ctx)`.
 `request` is `{ "sketches": [token], "points": [token], "lines": [token], "params": [name], "target": true }`, plus
-`curves`, `borrowed`, `native`, `refs` and `faces` below. Every
+`curves`, `borrowed`, `native`, `refs`, `faces` and `patterns` below. Every
 entity is found with `Design.findEntityByToken` (the match without `assemblyContext`; for a proxy only, its
 `nativeObject`), so values are in component coordinates like the capture. The result, mm and degrees except `params`:
 
@@ -1960,7 +1973,8 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
   "params": { "d12": 2.0 },
   "box": { "min": [..], "max": [..] },
   "refs": { "57.plane": { "point": [x, y, z], "normal": [x, y, z] } },
-  "faces": { "15/face": { "frame": FRAME, "loops": [LOOP, ...] } }
+  "faces": { "15/face": { "frame": FRAME, "loops": [LOOP, ...] } },
+  "patterns": { "17": { "count": [7, 1], "elements": [{ "id": 3, "suppressed": false, "frame": FRAME }, ...] } }
 }
 ```
 
@@ -2015,6 +2029,13 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
   body behind it lies on its other side (an earlier extrude reached past its start), so the step goes the other way.
   A face whose first read does not match the capture is not read again; the motion file lists the measured ones in
   `faces`.
+- A pattern that spreads copies to both sides of the original and whose count follows a parameter
+  (`plan.symmetric_patterns`) is requested with `patterns`: `{ "<timeline index>": { "index", "kind" } }`, `kind`
+  `rectangular` or `circular`. The reader finds the feature through `Timeline.item(index).entity` and gives the counts
+  (`quantityOne` and `quantityTwo`, or `quantity`) and the `patternElements` as the capture reads them
+  (`probe_patterns.read_patterns`). A pattern that cannot be read gives `unread` `{ key: reason }`. Built states keep
+  these reads in `Motion.states[n].patterns`. The translator uses them to learn where Fusion puts the copies for an
+  even count (`translator/symmetric.py`, "Symmetric patterns"). The start reads of a flipped sketch skip them.
 - Nothing raises. A part that cannot be read has no key, which the fit treats as unread.
 
 ## 6. Report and capture file

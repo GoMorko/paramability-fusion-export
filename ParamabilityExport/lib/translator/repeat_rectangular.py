@@ -12,7 +12,7 @@ from ..package.numbers import round9
 from . import range_check, symmetric, values, vec
 from .follow import Motion
 from .repeat_build import build, finish_copies, keep_pattern_fixed, round_vec
-from .repeat_elements import FIT_TOL_MM, is_identity, is_identity_rotation, kept_elements
+from .repeat_elements import FIT_TOL_MM, in_component, is_identity, is_identity_rotation, kept_elements
 from .repeat_lattice import lattice_axes, solve_lattice
 from .repeat_sources import split_sources
 from .result import Refusal, StepResult
@@ -58,7 +58,8 @@ def _parts(axes):
         if not axis["symmetric"]:
             axis["parts"] = [dict(step, dir=axis["dir"], sign=1, count=axis["count"], count_q=axis["count_q"])]
             continue
-        back_q, forward_q = symmetric.part_counts(axis["count_q"], axis["back"], axis["forward"])
+        back_q, forward_q = symmetric.part_counts(axis["count_q"], axis["back"], axis["forward"],
+                                                    axis.get("side", 0))
         axis["parts"] = [dict(step, dir=axis["dir"], sign=1, count=axis["forward"] + 1, count_q=forward_q),
                          dict(step, dir=vec.scale(axis["dir"], -1), sign=-1, count=axis["back"] + 1, count_q=back_q)]
 
@@ -174,8 +175,33 @@ def _symmetric_reach(axes, data):
     return None
 
 
+def _tried_places(axes, axis):
+    """`places_at` of `symmetric.extra_side` for a direction: the signed steps of the copies the probe read at a try,
+    on the grid that the sizes of that try give. None when the copies do not sit on that grid or the count read differs
+    from the one the formulas give."""
+    def places_at(env, read, count):
+        steps = [symmetric.value_at(a["step_q"], env) for a in axes]
+        counts = read.get("count") or []
+        if None in steps or any(s <= 1e-9 for s in steps) or len(counts) < 2:
+            return None
+        if counts[0 if axis["which"] == "one" else 1] != count:
+            return None
+        found = []
+        for element in read.get("elements") or []:
+            frame = element["frame"]
+            if not is_identity_rotation(frame):
+                return None
+            indexes, residual = solve_lattice(frame["origin"], [(a["dir"], s) for a, s in zip(axes, steps)])
+            if residual > FIT_TOL_MM:
+                return None
+            found.append(indexes[axes.index(axis)])
+        return found
+    return places_at
+
+
 def rectangular(item, ctx, sources=None):
     """`sources` is `(solid step ids, finish steps)` when the caller wrote what the pattern repeats."""
+    item = in_component(item, ctx, merge=True)
     data = item.get("data") or {}
     sources = split_sources(data, ctx, "pattern") if sources is None else sources
     if isinstance(sources, Refusal):
@@ -222,7 +248,9 @@ def rectangular(item, ctx, sources=None):
             return Refusal("The copies of this pattern do not match its count.")
     for axis in axes:
         if axis["symmetric"]:
-            symmetric.check_even_unseen(ctx, item, axis["count_q"], axis["count"])
+            axis["side"] = symmetric.extra_side(ctx, item, axis["count_q"], axis["count"],
+                                                (axis["back"], axis["forward"]), _tried_places(axes, axis),
+                                                default=symmetric.FUSION_EXTRA_SIDE)
     _parts(axes)
 
     grids = _grids(axes, {tuple(indexes) for _, indexes in placed})
