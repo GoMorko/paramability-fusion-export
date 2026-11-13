@@ -16,7 +16,7 @@ has rounded corners and says so in a note.
 import math
 
 from ..package.numbers import is_number
-from . import loops
+from . import gap_hints, loops
 from .footprint import arc_span, curve_length, is_full, polyline
 from .placer import ADD, CUT, Placer
 from .result import Refusal
@@ -70,7 +70,7 @@ def prepare(data):
 def open_line_refusal(profiles):
     """A Refusal for a profile input that is not a closed sketch outline (an open line comes back this way)."""
     if any(p.get("kind") == "other" and "loops" not in p for p in profiles):
-        return Refusal("A thin extrude of an open line is not copied yet.")
+        return Refusal("A thin extrude of an open line is not copied yet.", cause=gap_hints.THIN_OUTLINE)
     return None
 
 

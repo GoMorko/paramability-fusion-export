@@ -17,6 +17,7 @@ from tests.translator_helpers import load_capture
 from lib.design_edit.errors import StepExportError
 from lib.dialog_model.result_rows import parts_result_view, result_view, section_lines
 from lib.export_plan.parts_pipeline import run_parts_pipeline
+from lib.translator.gap_hints import COIL, HINTS
 from lib.export_plan.pipeline import ExportRequest, run_pipeline
 from lib.export_plan.reach_pass import left_out_indexes, needs_reach
 from lib.fusion_reader.capture import MarkerError
@@ -125,6 +126,7 @@ class GapPackageTest(unittest.TestCase):
         gaps = json.loads(files["gaps.json"])
         self.assertEqual(validate(gaps, load_schema(GAPS_SCHEMA)), [])
         self.assertEqual([g["name"] for g in gaps["gaps"]], ["Shell1"])
+        self.assertEqual(gaps["gaps"][0]["hint"], HINTS[COIL])
         ids = recipe_ids(json.loads(files["recipe.json"])["features"])
         for gap in gaps["gaps"]:
             self.assertIn(gap["after"], ids)

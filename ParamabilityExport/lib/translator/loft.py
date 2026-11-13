@@ -12,7 +12,7 @@ Two parallel outlines of straight lines make a ruled loft whose volume follows f
 corners (`loft_volume`). A new body that has another volume is refused, since Fusion paired the corners another way.
 Where the volume cannot be told, outlines of the same corners that are turned against each other get a note.
 """
-from . import borrowed, loft_volume, loops, placement, sketch_motion, vec
+from . import borrowed, gap_hints, loft_volume, loops, placement, sketch_motion, vec
 from .extrude import COMBINE
 from .footprint import polyline
 from .placer_makers import EndCapsMaker
@@ -36,20 +36,20 @@ def _settings_refusal(data):
     """A Refusal for a loft setting the copy does not follow, else None."""
     operation = data.get("operation")
     if operation == "newComponent":
-        return Refusal("Lofts that make a new component are not copied.")
+        return Refusal("Lofts that make a new component are not copied.", cause=gap_hints.NEW_COMPONENT)
     if operation not in COMBINE:
         return Refusal("This loft combines with the part in a way that is not copied yet.")
     if data.get("solid") is False:
-        return Refusal("Surface lofts are not copied.")
+        return Refusal("Surface lofts are not copied.", cause=gap_hints.SURFACE)
     flags = (data.get("solid"), data.get("closed"), data.get("rails"), data.get("sections"), data.get("profiles"))
     if any(flag is None for flag in flags):
         return Refusal(UNREADABLE)
     if data["closed"]:
         return Refusal("Closed lofts are not copied yet.")
     if data.get("centerline"):
-        return Refusal("Lofts along a centre line are not copied yet.")
+        return Refusal("Lofts along a centre line are not copied yet.", cause=gap_hints.LOFT_KIND)
     if data["rails"]:
-        return Refusal("Lofts with rails are not copied yet.")
+        return Refusal("Lofts with rails are not copied yet.", cause=gap_hints.LOFT_KIND)
     return None
 
 
@@ -69,7 +69,7 @@ def _sections_refusal(sections):
         if section["end"] != "free":
             return Refusal("This loft shapes its ends (tangent or direction), which is not copied yet.")
     if len(sections) > 2:
-        return Refusal("Lofts through more than two outlines are not copied yet.")
+        return Refusal("Lofts through more than two outlines are not copied yet.", cause=gap_hints.LOFT_KIND)
     if len(sections) < 2:
         return Refusal("This loft has fewer than two outlines.")
     return None

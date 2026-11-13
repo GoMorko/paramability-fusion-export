@@ -5,6 +5,7 @@ The app refuses a whole gaps file that breaks one of the caps (`RECIPE_GAPS_CAPS
 import json
 import math
 
+from .gap_hints import hint as gap_hint
 from .gap_measures import moved_measure
 from .words import type_words
 
@@ -112,7 +113,8 @@ def trimmed_data(data):
 
 def record(gap, table, move):
     """The gap as written for the package. `sizes` and `looseSizes` start empty; the driver fills them once it knows
-    the sizes of the recipe."""
+    the sizes of the recipe. `hint`, what to change in Fusion so the step copies, is there only when its cause has
+    one (`gap_hints`)."""
     after, before, owner = gap.place
     data, trimmed = trimmed_data(gap.item.get("data"))
     out = {
@@ -129,6 +131,9 @@ def record(gap, table, move):
         "looseSizes": [],
         "values": _values(gap.item, table),
     }
+    found = gap_hint(gap.cause)
+    if found:
+        out["hint"] = found
     for key, measure in (("bodyBefore", gap.before), ("bodyAfter", gap.after)):
         moved = moved_measure(measure, move)
         if moved is not None:

@@ -10,7 +10,7 @@ import math
 
 from ..package.numbers import round9
 
-from . import range_check, ref_motion, sketch_motion, values, vec
+from . import gap_hints, range_check, ref_motion, sketch_motion, values, vec
 from .values import Quantity
 from .result import Refusal, StepResult
 
@@ -83,7 +83,7 @@ def _diameter(data, ctx):
     if data.get("thread_modeled") is None:
         return Refusal("The thread of this hole could not be read.")
     if data["thread_modeled"]:
-        return Refusal("Modeled threads are not copied yet.")
+        return Refusal("Modeled threads are not copied yet.", cause=gap_hints.THREAD)
     drilled = _drill_diameter(data)
     if not isinstance(drilled, Refusal):
         ctx.note("The thread of this hole is not copied; it was cut as a plain hole.")
@@ -308,6 +308,6 @@ def _moved_points(ctx, item, rows, moved):
 def thread(item, ctx):
     """A cosmetic thread changes no solid: it makes no step. A modeled one is refused."""
     if (item.get("data") or {}).get("modeled"):
-        return Refusal("Modeled threads are not copied yet.")
+        return Refusal("Modeled threads are not copied yet.", cause=gap_hints.THREAD)
     ctx.note("The thread is not copied; the exported shape has none either.")
     return StepResult()

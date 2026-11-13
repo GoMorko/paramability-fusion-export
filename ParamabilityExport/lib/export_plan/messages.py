@@ -98,11 +98,13 @@ def left_out_parts_note(counts):
 
 
 def left_out_lines(entries):
-    """"Extrude5: the reason" for each `(part name or None, gap record)`. A parts file puts the part first. A long
-    list is cut and points to the report."""
+    """"Extrude5: the reason" for each `(part name or None, gap record)`, then "Tip: " and the gap's hint when it has
+    one. A parts file puts the part first. A long list is cut and points to the report."""
     lines = []
     for part, gap in entries[:MAX_LISTED_FIXED]:
         text = "%s: %s" % (gap["name"], gap["reason"])
+        if gap.get("hint"):
+            text += " Tip: %s" % gap["hint"]
         lines.append("%s, %s" % (part, text) if part else text)
     if len(entries) > MAX_LISTED_FIXED:
         lines.append("and %d more (see report.json)." % (len(entries) - MAX_LISTED_FIXED))

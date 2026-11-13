@@ -10,7 +10,7 @@ The angle follows its sizes, and the size ranges are cut where it would reach ze
 follows them only when both come from the same formula. The faces are picked by points on them, like the open faces of a shell, and the plane
 follows sizes like a mirror plane.
 """
-from . import follow, picks, values, vec
+from . import follow, gap_hints, picks, values, vec
 from .extrude import keep_angle_within
 from .repeat_build import round_vec
 from .result import Refusal, StepResult
@@ -68,7 +68,7 @@ def handle(item, ctx):
     if data.get("two_angles") and not (isinstance(second, (int, float)) and abs(abs(second) - abs(angle)) < 1e-9):
         return Refusal("This draft leans the two sides of its plane by different angles, which is not copied yet.")
     if abs(angle) >= MAX_ANGLE_DEG:
-        return Refusal("Drafts of %g degrees or more are not copied." % MAX_ANGLE_DEG)
+        return Refusal("Drafts of %g degrees or more are not copied." % MAX_ANGLE_DEG, cause=gap_hints.DRAFT_STEEP)
     side = _faces_side(faces, point, normal)
     if not side:
         return Refusal("This draft leans faces on both sides of its plane, so the way it leans cannot be checked.")
