@@ -448,13 +448,15 @@ def _box_union(box, other):
             "max": [max(a, b) for a, b in zip(box["max"], other["max"])]}
 
 
-def _resolve_through(ctx, plan, data, origin, z, combine, box_max=None, profiles=()):
+def _resolve_through(ctx, plan, data, origin, z, combine, box_max=None, profiles=(), item=None):
     """Give a one sided through all its distance, or a Refusal. `box_max` holds the part at every size the probe
     tried, so the cut still clears it when sizes grow.
 
     A tapered side keeps the same outline at each height whatever its length, so any length past the part cuts what
     Fusion's through all cuts. One whose walls can lean in, at the taper or at any size its taper follows, ends just
-    past the part, and only while its outlines stay open there at the steepest such lean (`_lean_in`)."""
+    past the part, and only while its outlines stay open there at the steepest such lean (`_lean_in`). When they close
+    only at a lean the sizes reach and not at the taper now, the ranges of those sizes are cut to the steepest lean
+    that keeps them open (`_keep_open`) and the step is copied."""
     for entry in plan:
         if entry["extent"] == "through" and combine not in ("cut", "intersect"):
             return Refusal("Extruding through all is only copied for cuts.")
@@ -469,13 +471,44 @@ def _resolve_through(ctx, plan, data, origin, z, combine, box_max=None, profiles
             lean = _lean_in(ctx, entry)
             if lean > 0:
                 entry["distance"] = _farthest(box, origin, direction) + THROUGH_TAPER_MARGIN_MM
-                shrink = entry["distance"] * math.tan(math.radians(lean))
-                if any(inner_reach(profile, 2.0 * shrink) < 2.0 * shrink for profile in profiles):
+                if not _stays_open(profiles, entry["distance"], lean) and not _keep_open(
+                        ctx, item, entry, profiles, lean):
                     return Refusal("This tapered cut through all closes before it passes the part, which is not "
                                    "copied.")
             else:
                 entry["distance"] = _reach_through(box, origin, direction)
     return None
+
+
+def _stays_open(profiles, distance, lean):
+    """True when every outline, its walls leaning in by `lean` degrees, still has room left after `distance`."""
+    shrink = distance * math.tan(math.radians(lean))
+    return all(inner_reach(profile, 2.0 * shrink) >= 2.0 * shrink for profile in profiles)
+
+
+# Halvings of the lean between the taper now and the steepest one the sizes reach (`_keep_open`).
+OPEN_LEAN_STEPS = 12
+
+
+def _keep_open(ctx, item, entry, profiles, lean):
+    """For a taper that follows sizes and keeps the outlines open now: cut the ranges of its sizes so it stays under
+    the steepest lean at which they stay open, found by halving between the taper now and `lean`. True when that
+    holds the taper (the ranges are cut as needed); False when the taper is fixed, closes already, or no cut keeps
+    it."""
+    q = entry.get("taper_q")
+    now = max(entry["taper"] or 0.0, 0.0)
+    if q is None or not q.sized or not _stays_open(profiles, entry["distance"], now):
+        return False
+    low, high = now, lean
+    for _ in range(OPEN_LEAN_STEPS):
+        middle = (low + high) / 2.0
+        low, high = (middle, high) if _stays_open(profiles, entry["distance"], middle) else (low, middle)
+    found = kept_ranges.holding_ranges(ctx.table, [(Quantity(low).plus(q.scaled(-1.0)), 1)], TAPER_MARGIN_DEG)
+    if found is None:
+        return False
+    if found:
+        ctx.cut(found, "%s would close before it passes the part" % ((item or {}).get("name") or "a tapered cut"))
+    return True
 
 
 def _lean_in(ctx, entry):
@@ -914,7 +947,7 @@ def handle(item, ctx):
     if isinstance(thin_step, Refusal):
         return thin_step
     box_max = ctx.motion.box_max if sketch_motion.active(ctx) else None
-    refusal = _resolve_through(ctx, plan, data, start, z0, combine, box_max, profiles)
+    refusal = _resolve_through(ctx, plan, data, start, z0, combine, box_max, profiles, item)
     if refusal:
         return refusal
     if combine == "intersect" and (len(plan) * len(built) > 1):

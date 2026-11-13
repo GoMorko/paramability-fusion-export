@@ -250,9 +250,13 @@ class ValueKindsTest(unittest.TestCase):
                         params={"side_one.taper_deg": param("d4", formula, fusion_deg)})
         return run(*on_fixture("extrude_cut_through_one", edit, TICKED + ["turn_deg"]))[0]
 
-    def test_a_cut_through_all_that_widens_but_leans_in_at_other_sizes_is_left_out_when_it_would_close(self):
+    def test_a_cut_through_all_that_widens_but_would_close_at_other_sizes_cuts_their_range_and_is_copied(self):
         result = self.tapered_through("turn_deg - 89", 1.0)
-        self.assertIn("closes before it passes the part", left_out(result, 3)["reason"])
+        self.assertIsNotNone(result.recipe, result.refusal)
+        self.assertEqual(steps_of(result.recipe, "extrude")[-1]["taperDeg"], {"expr": "-(turn_deg - 89)"})
+        cut = next(c for c in result.cuts if c["name"] == "turn_deg")
+        self.assertIn("would close before it passes the part", cut["reason"])
+        self.assertLess(cut["max"], 89 + 45)
 
     def test_a_cut_through_all_with_a_small_sized_taper_follows_it(self):
         result = self.tapered_through("-(turn_deg / 180)", -0.5)
