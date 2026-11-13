@@ -9,7 +9,7 @@ from ..package.numbers import round9
 from . import follow, ref_motion, symmetric, values, vec
 from .follow import Motion
 from .repeat_build import build, keep_pattern_fixed, round_vec
-from .repeat_elements import FIT_TOL_MM, kept_elements
+from .repeat_elements import FIT_TOL_MM, in_component, kept_elements
 from .repeat_lattice import gaps_between
 from .repeat_sources import split_sources
 from .result import Refusal
@@ -120,13 +120,13 @@ def _tried_turns(direction, point, angle_q):
     return places_at
 
 
-def _symmetric_circular(item, ctx, setup):
-    """A circular pattern that turns copies to both sides of the original: a part turning one way and a part turning
-    the other, both from the original (`symmetric.py`). `setup` holds what `circular` has read."""
+def _measured_places(setup):
+    """`(steps, every)`: `steps` pairs each kept element with its signed copy number and `every` lists the copy numbers
+    of all elements, when the measured copies follow the rule of `symmetric.py`. Else `(None, reason)`."""
     count, delta, point, direction, turns = (setup[key] for key in ("count", "delta", "point", "direction", "turns"))
     steps = [(element, _signed_copy(turn, delta, count)) for element, turn in turns]
     if any(k is None for _, k in steps):
-        return Refusal("The copies of this pattern are not spread evenly round the axis.")
+        return None, "The copies of this pattern are not spread evenly round the axis."
     every = []
     for element in setup["data"]["elements"]:
         turn = _turn_about(element["frame"], direction)
@@ -135,11 +135,27 @@ def _symmetric_circular(item, ctx, setup):
             if k is not None:
                 every.append(k)
     if 0 not in every:
-        return Refusal("The original sits between two copies of this pattern, which is not copied yet.")
+        return None, "The original sits between two copies of this pattern, which is not copied yet."
+    if symmetric.reach(every, count) is None:
+        return None, ("The copies of this pattern do not spread to both sides of the first one by the rule that was "
+                      "expected.")
+    return steps, every
+
+
+def _symmetric_circular(item, ctx, setup):
+    """A circular pattern that turns copies to both sides of the original: a part turning one way and a part turning
+    the other, both from the original (`symmetric.py`). `setup` holds what `circular` has read."""
+    count, delta, point, direction, turns = (setup[key] for key in ("count", "delta", "point", "direction", "turns"))
+    steps, every = _measured_places(setup)
+    if steps is None:
+        # Fusion's own transforms of a symmetric turn do not always show the copies behind the original, so an odd
+        # count with every copy listed is taken as centred on the original.
+        if count % 2 == 0 or len(setup["data"]["elements"]) != count or any(
+                e.get("suppressed") for e in setup["data"]["elements"]):
+            return Refusal(every)
+        every = list(range(-(count // 2), count // 2 + 1))
+        steps = [(None, k) for k in every]
     reach = symmetric.reach(every, count)
-    if reach is None:
-        return Refusal("The copies of this pattern do not spread to both sides of the first one by the rule that was "
-                       "expected.")
     back, forward = reach
     count_q, angle_q = setup["count_q"], setup["angle_q"]
     side = symmetric.extra_side(ctx, item, count_q, count, (back, forward),
@@ -181,6 +197,7 @@ def _symmetric_circular(item, ctx, setup):
 
 def circular(item, ctx, sources=None):
     """`sources` is `(solid step ids, finish steps)` when the caller wrote what the pattern repeats."""
+    item = in_component(item, ctx)
     data = item.get("data") or {}
     sources = split_sources(data, ctx, "pattern") if sources is None else sources
     if isinstance(sources, Refusal):

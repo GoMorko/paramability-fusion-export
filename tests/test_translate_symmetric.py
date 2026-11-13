@@ -16,9 +16,9 @@ PITCH = {"distance_one": param("d21", CUBE + " + 4 mm", 24.0)}
 
 
 def places_of(n):
-    """Signed steps from the original of `n` symmetric copies: the original in the middle, an even count with the
-    extra step behind it."""
-    return list(range(-(n // 2), n // 2 + (n % 2)))
+    """Signed steps from the original of `n` symmetric copies as Fusion puts them: the original in the middle, an even
+    count with the extra step ahead of it."""
+    return list(range(-((n - 1) // 2), n // 2 + 1))
 
 
 def centred(*later):
@@ -34,7 +34,7 @@ def row(index, sources, count, step, kind="spacing", params=None, symmetric=True
     """A rectangular pattern along x with `count` copies spread to both sides of the original."""
     elements = [{"id": n + 1, "suppressed": False, "frame": dict(FLAT, origin=[k * step, 0, 0])}
                 for n, k in enumerate(places_of(count))]
-    distance = step if kind == "spacing" else step * (count - 1) / 2.0
+    distance = step if kind == "spacing" else step * max(count // 2, 1)
     return _item(index, name, "RectangularPatternFeature", {
         "entity_type": "features", "sources": sources, "direction_one": [1, 0, 0], "quantity_one": count,
         "distance_one": distance, "direction_two": None, "quantity_two": 1, "distance_two": 0.0,
@@ -158,22 +158,44 @@ class SymmetricRowTest(unittest.TestCase):
         self.assertEqual(left_out(result)["index"], 4)
 
 
+class UnusedDirectionTest(unittest.TestCase):
+    def test_a_second_direction_with_a_distance_of_zero_adds_no_place(self):
+        # Fusion keeps a quantity of 3 in the second direction, and makes the copies one on another.
+        def edit(capture):
+            data = capture["items"][-1]["data"]
+            data.update(direction_two=[0, 1, 0], quantity_two=3, distance_two=0.0)
+            data["elements"] = [dict(e, id=3 * n + k) for n, e in enumerate(data["elements"]) for k in range(3)]
+        result = edited("rpattern_symmetric_odd", edit)
+        self.assertIsNone(left_out(result))
+        self.assertEqual(offsets(result.recipe), [-20, -10, 0, 10, 20])
+        self.assertEqual(len(steps_of(result.recipe, "pattern")), 2)
+        assert_schema_ok(self, result.recipe)
+
+
 class SymmetricSizedTest(unittest.TestCase):
     def test_an_even_count_from_a_ceil_formula_and_a_spacing_follow_the_size(self):
         count = {"quantity_one": param("d22", "ceil(%s / 5)" % CUBE, 4.0)}
         result, table = sized(centred(row(3, [2], 4, 24.0, params=dict(PITCH, **count))))
         self.assertEqual((result.fixed, result.loose), ([], []))
-        self.assertEqual(offsets(result.recipe, at(table)), [-48, -24, 0, 24])
-        self.assertEqual(offsets(result.recipe, at(table, **{CUBE: 30})), [-102, -68, -34, 0, 34, 68])
+        self.assertEqual(offsets(result.recipe, at(table)), [-24, 0, 24, 48])
+        self.assertEqual(offsets(result.recipe, at(table, **{CUBE: 30})), [-68, -34, 0, 34, 68, 102])
         self.assertEqual(offsets(result.recipe, at(table, **{CUBE: 25})), [-58, -29, 0, 29, 58])
         assert_schema_ok(self, result.recipe)
 
-    def test_an_odd_count_that_can_turn_even_is_marked(self):
+    def test_an_odd_count_that_can_turn_even_puts_the_extra_copy_ahead_like_fusion(self):
         count = {"quantity_one": param("d22", "ceil(%s / 5) + 1" % CUBE, 5.0)}
         result, table = sized(centred(row(3, [2], 5, 24.0, params=dict(PITCH, **count))))
-        self.assertEqual([f["name"] for f in result.loose], [CUBE])
-        self.assertIn("even count", result.loose[0]["reason"])
+        self.assertEqual(result.loose, [])
         self.assertEqual(offsets(result.recipe, at(table, **{CUBE: 30})), [-102, -68, -34, 0, 34, 68, 102])
+        self.assertEqual(offsets(result.recipe, at(table, **{CUBE: 25})), [-58, -29, 0, 29, 58, 87])
+
+    def test_an_even_extent_reaches_the_distance_ahead_and_a_gap_short_behind(self):
+        # 8 copies, extent 30: Fusion spaces them 7.5 apart, from 22.5 behind the original to 30 ahead.
+        params = {"distance_one": param("d21", "%s / 2 - 10 mm" % CUBE, 30.0)}
+        result, table = sized(centred(row(3, [2], 8, 7.5, kind="extent", params=params)))
+        self.assertEqual(offsets(result.recipe, at(table, **{CUBE: 80})), [-22.5, -15, -7.5, 0, 7.5, 15, 22.5, 30])
+        self.assertEqual(result.fixed, [])
+        assert_schema_ok(self, result.recipe)
 
     def test_an_odd_count_that_can_turn_even_follows_the_places_the_tries_read(self):
         count = {"quantity_one": param("d22", "ceil(%s / 5) + 1" % CUBE, 5.0)}
@@ -189,21 +211,28 @@ class SymmetricSizedTest(unittest.TestCase):
                 self.assertEqual(offsets(result.recipe, at(table)), [-48, -24, 0, 24, 48])
                 assert_schema_ok(self, result.recipe)
 
-    def test_tries_that_break_the_rule_or_never_made_an_even_count_leave_the_mark(self):
+    def test_tries_that_break_the_rule_leave_the_mark(self):
         count = {"quantity_one": param("d22", "ceil(%s / 5) + 1" % CUBE, 5.0)}
         centred_even = along_x(29.0, [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5])
-        for label, tries in (("no try with an even count", [tried(CUBE, 30.0, 3, 7, along_x(34.0, range(-3, 4)))]),
-                             ("the original is not a copy", [tried(CUBE, 25.0, 3, 6, centred_even)]),
+        for label, tries in (("the original is not a copy", [tried(CUBE, 25.0, 3, 6, centred_even)]),
                              ("the copies do not fill the count",
                               [tried(CUBE, 25.0, 3, 6, along_x(29.0, [-2, 0, 1, 2]))]),
-                             ("the try did not build",
-                              [tried(CUBE, 25.0, 3, 6, along_x(29.0, range(-3, 3)), built=False)]),
                              ("the tries disagree on the side",
                               [tried(CUBE, 25.0, 3, 6, along_x(29.0, range(-3, 3))),
                                tried(CUBE, 15.0, 3, 4, along_x(19.0, range(-1, 3)))])):
             with self.subTest(label):
                 result, _ = sized(centred(row(3, [2], 5, 24.0, params=dict(PITCH, **count))), tries=tries)
                 self.assertEqual([f["name"] for f in result.loose], [CUBE])
+
+    def test_tries_with_no_even_count_or_that_did_not_build_leave_the_side_fusion_uses(self):
+        count = {"quantity_one": param("d22", "ceil(%s / 5) + 1" % CUBE, 5.0)}
+        for label, tries in (("no try with an even count", [tried(CUBE, 30.0, 3, 7, along_x(34.0, range(-3, 4)))]),
+                             ("the try did not build",
+                              [tried(CUBE, 25.0, 3, 6, along_x(29.0, range(-3, 3)), built=False)])):
+            with self.subTest(label):
+                result, table = sized(centred(row(3, [2], 5, 24.0, params=dict(PITCH, **count))), tries=tries)
+                self.assertEqual(result.loose, [])
+                self.assertEqual(offsets(result.recipe, at(table, **{CUBE: 25})), [-58, -29, 0, 29, 58, 87])
 
     def test_an_odd_count_that_never_changes_is_not_marked(self):
         count = {"quantity_one": param("d22", "5", 5.0)}
@@ -295,6 +324,32 @@ class SymmetricCircularTest(unittest.TestCase):
         other = [_turned([6, 6, 0], a, True) for a in (-60, -36, -12, 12, 36, 60)]
         result, _ = sized(base, tries=[tried(CUBE, 25.0, 3, 6, other)])
         self.assertEqual([f["name"] for f in result.loose], [CUBE])
+
+    def test_a_part_that_sits_in_the_assembly_has_its_copies_turned_back_into_its_own_frame(self):
+        # Fusion gives the copies in assembly space: here the part sits 180 mm along y, so the axis through its own
+        # point (6, 6) turns about (6, 186) in the frames.
+        capture = centred(circular(3, 5, 120.0, [0, 0, 0, 0, 0]))
+        capture["target"]["placement"] = {"frame": {"origin": [0, 180, 0], "x": [1, 0, 0], "y": [0, 1, 0],
+                                                    "z": [0, 0, 1]}}
+        elements = capture["items"][-1]["data"]["elements"]
+        for element, angle in zip(elements, (-60, -30, 0, 30, 60)):
+            element["frame"] = _turned([6, 186, 0], angle, True)
+        result = translate(capture)
+        self.assertIsNone(left_out(result))
+        forward, backward = steps_of(result.recipe, "pattern")
+        self.assertEqual((forward["polar"]["count"], forward["polar"]["angleDeg"]), (3, 60))
+        self.assertEqual((backward["polar"]["count"], backward["polar"]["angleDeg"]), (3, 60))
+
+    def test_an_odd_count_is_centred_when_the_copies_behind_the_original_read_as_not_turned(self):
+        # Fusion's transforms of a symmetric turn can show the copies behind the original as unturned (a 60, a 0, a
+        # 0, a 30 and a 90 here), while the part has them at -60, -30, 0, 30 and 60.
+        turns = [60, 0, 0, 30, 90]
+        capture = centred(circular(3, 5, 120.0, turns))
+        forward, backward = steps_of(translate(capture).recipe, "pattern")
+        self.assertEqual((forward["polar"]["count"], forward["polar"]["angleDeg"]), (3, 60))
+        self.assertEqual((backward["polar"]["count"], backward["polar"]["angleDeg"]), (3, 60))
+        capture["items"][-1]["data"]["elements"][0]["suppressed"] = True
+        self.assertIsNotNone(left_out(translate(capture)))
 
     def test_a_full_circle_ignores_the_flag(self):
         (step,) = steps_of(translate_fixture("cpattern_symmetric").recipe, "pattern")

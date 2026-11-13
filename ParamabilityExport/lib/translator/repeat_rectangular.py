@@ -12,7 +12,7 @@ from ..package.numbers import round9
 from . import range_check, symmetric, values, vec
 from .follow import Motion
 from .repeat_build import build, finish_copies, keep_pattern_fixed, round_vec
-from .repeat_elements import FIT_TOL_MM, is_identity, is_identity_rotation, kept_elements
+from .repeat_elements import FIT_TOL_MM, in_component, is_identity, is_identity_rotation, kept_elements
 from .repeat_lattice import lattice_axes, solve_lattice
 from .repeat_sources import split_sources
 from .result import Refusal, StepResult
@@ -201,6 +201,7 @@ def _tried_places(axes, axis):
 
 def rectangular(item, ctx, sources=None):
     """`sources` is `(solid step ids, finish steps)` when the caller wrote what the pattern repeats."""
+    item = in_component(item, ctx, merge=True)
     data = item.get("data") or {}
     sources = split_sources(data, ctx, "pattern") if sources is None else sources
     if isinstance(sources, Refusal):
@@ -248,7 +249,8 @@ def rectangular(item, ctx, sources=None):
     for axis in axes:
         if axis["symmetric"]:
             axis["side"] = symmetric.extra_side(ctx, item, axis["count_q"], axis["count"],
-                                                (axis["back"], axis["forward"]), _tried_places(axes, axis))
+                                                (axis["back"], axis["forward"]), _tried_places(axes, axis),
+                                                default=symmetric.FUSION_EXTRA_SIDE)
     _parts(axes)
 
     grids = _grids(axes, {tuple(indexes) for _, indexes in placed})

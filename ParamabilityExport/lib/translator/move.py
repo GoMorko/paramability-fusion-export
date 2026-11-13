@@ -113,21 +113,11 @@ def _is_vector(value):
         isinstance(c, (int, float)) and not isinstance(c, bool) for c in value)
 
 
-def _component_frame(ctx):
-    """The place of the component this walk builds in, or None when it has none on record. A tool of the same
-    component as the walk that holds it has that walk's place."""
-    while ctx.outer is not None:
-        if tool_items.is_foreign_tool(ctx.target):
-            return (ctx.target.get("place") or {}).get("frame")
-        ctx = ctx.outer
-    return (ctx.capture["target"].get("placement") or {}).get("frame")
-
-
 def _space_rows(ctx, data):
     """The rows that turn the Move's distances into the frame the steps are written in, or None when that cannot be
     told. Distances in design space are turned by the place of the component."""
     space = data.get("is_design_space")
-    frame = _component_frame(ctx) if space is not False else None
+    frame = tool_items.component_frame(ctx) if space is not False else None
     if frame is None:
         return IDENTITY_ROWS
     rows = place.move_from_frame(frame).inverse().rows
