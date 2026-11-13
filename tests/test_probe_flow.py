@@ -400,6 +400,17 @@ class PutBackTest(unittest.TestCase):
         self.assertTrue(set(probe.e0) & {"params", "box"})
 
 
+class StartCheckTest(unittest.TestCase):
+    def test_checking_where_a_try_starts_does_not_scan_the_capture_again(self):
+        from unittest import mock
+        probe = SizeProbe.start(CAPTURE, table(PARAMS, TICKED, MODEL), Fusion().read)
+        probe.left_start(read_at())
+        with mock.patch.object(plan, "scan", side_effect=AssertionError("scanned again")):
+            self.assertFalse(probe.left_start(read_at()))
+            self.assertTrue(probe.left_start(on_other_solution(read_at())))
+            self.assertTrue(probe.off_outline(on_other_solution(read_at())))
+
+
 class ReadTimerTest(unittest.TestCase):
     def test_only_the_probe_runs_own_reads_time_their_parts(self):
         from lib.export_plan.pipeline import ProbeRun

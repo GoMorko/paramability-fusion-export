@@ -258,6 +258,8 @@ class SizeProbe:
         self.face_sizes = plane_sizes.face_sizes(self.capture, table)  # face key to the sizes that may change it
         self.shared = SharedReads()
         self.shared.share(e0)
+        self._targets = None  # the followed targets (`_followed_targets`), worked out once
+        self._e0_values = None  # (target, its E0 values) of each followed target (`left_start`), worked out once
 
     @classmethod
     def start(cls, capture, table, read):
@@ -335,8 +337,9 @@ class SizeProbe:
         sketch that could not be read does not count."""
         if not isinstance(read, dict):
             return False
-        for target in self._followed_targets():
-            before, _ = match.state_values(target, self.e0, self.e0)
+        if self._e0_values is None:
+            self._e0_values = [(t, match.state_values(t, self.e0, self.e0)[0]) for t in self._followed_targets()]
+        for target, before in self._e0_values:
             now, cause = match.state_values(target, read, self.e0)
             if before is None or (now is None and cause != SHAPE):
                 continue
@@ -574,8 +577,12 @@ class SizeProbe:
         return list(dict.fromkeys(changed)), list(dict.fromkeys(n for n in unread if n not in changed))
 
     def _followed_targets(self):
-        return [t for t in plan.scan(self.capture).targets if t["sketch_token"] in self.request["sketches"]
-                and (t["kind"] != "path" or match.matches_capture(t, self.e0))]
+        """The targets of the followed sketches (a sweep path only when it read as captured at E0). The capture, the
+        request and E0 do not change after `start`, so they are worked out once."""
+        if self._targets is None:
+            self._targets = [t for t in plan.scan(self.capture).targets if t["sketch_token"] in self.request["sketches"]
+                             and (t["kind"] != "path" or match.matches_capture(t, self.e0))]
+        return list(self._targets)
 
     def _followed_moved(self, targets, read):
         """True when a sketch or a measured reference the probe follows reads differently in `read` than at E0."""
