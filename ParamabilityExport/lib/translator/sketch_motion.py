@@ -13,7 +13,7 @@ import math
 
 from ..sketch_values import keys
 from ..sketch_values.motion import CURVE, UNREAD, UNTRIED, Affine, Stuck, Terms
-from . import notes
+from . import inner_pick, notes
 from .curved import Curved, combine, from_terms, names_of, render
 from .footprint import nearest_point
 from .loops import profile_loops
@@ -294,8 +294,10 @@ class Outline:
     """The written loops of one profile (outer first) as numbers and raw values, and the raw sketch plane: its
     position along the frame normal, measured from the component origin (`plane0` at the captured sizes)."""
 
-    def __init__(self, ctx, frame, loops, raw_loops, plane, sketch=""):
+    def __init__(self, ctx, frame, loops, raw_loops, plane, sketch="", bounds=None):
         self.table = ctx.table
+        self.bounds = bounds
+        self._samples = None
         self.frame = frame
         self.loops, self.raw_loops = loops, raw_loops
         self.plane, self.plane0 = plane, _dot(frame["origin"], frame["z"])
@@ -343,18 +345,19 @@ class Outline:
 
     # ---- points picked on the outline
 
-    def _centre(self):
+    def samples(self):
+        """The written outline at the size settings over its ranges (`inner_pick.Samples`), worked out once."""
+        if self._samples is None:
+            self._samples = inner_pick.Samples(self.table, self.preview(), self.bounds)
+        return self._samples
+
+    def _inner(self, footprint, uv):
+        """`(uv, raw xy)` of the place a point inside the outline moves with: the centre of a round or a rect, else
+        a corner or the centre of the corners (`inner_pick.anchor`)."""
         loop, raw_loop = self.loops[0], self.raw_loops[0]
         if loop["kind"] in ("circle", "ellipse", "rect"):
             return loop["center"], raw_loop["center"]
-        if loop["kind"] == "polygon":
-            pairs = list(zip(loop["points"], raw_loop["points"]))
-        else:
-            pairs = [(loop["start"], raw_loop["start"])] + [(s["to"], r["to"]) for s, r in
-                                                             zip(loop["segments"], raw_loop["segments"])][:-1]
-        k = 1.0 / len(pairs)
-        uv = [sum(p[i] for p, _ in pairs) * k for i in range(2)]
-        return uv, [combine([(k, r[i]) for _, r in pairs], self.sketch) for i in range(2)]
+        return inner_pick.anchor(self, footprint, uv)
 
     def _shifted(self, uv, base_uv, base):
         """`uv` moved like the point `base_uv` whose raw values are `base`."""
@@ -401,7 +404,8 @@ class Outline:
 
     def follow(self, footprint, which, curve, corner, uv):
         """The raw (x, y) a point at `uv` moves to: a corner, a point on an outline curve, or a point inside an end
-        face (it moves with the outline's centre). None when nothing moves it; a Stuck when it cannot follow."""
+        face (it moves with one place of the outline, `_inner`). None when nothing moves it; a Stuck when it cannot
+        follow."""
         if not self.moves:
             return None
         if corner is not None:
@@ -417,8 +421,8 @@ class Outline:
             if found is None:
                 return _unread(self.anchors, self.sketch)
             return found if isinstance(found, Stuck) else self._shifted(uv, near, found)
-        centre_uv, centre = self._centre()
-        return self._shifted(uv, centre_uv, centre)
+        base_uv, base = self._inner(footprint, uv)
+        return self._shifted(uv, base_uv, base)
 
 
 def _sources(ctx, item, parts, sketch):
@@ -482,6 +486,7 @@ def outline(ctx, item, profile, outer, inners, parts):
     loops = [outer] + list(inners)
     prefix = keys.profile(item.get("index"), parts[0][0])
     sources = _sources(ctx, item, parts, sketch)
+    bounds = None
     if len(parts) == 1:
         raw_loops = [_mend(loop, r, sources) for loop, r in zip(loops, _keyed_loops(ctx, prefix, loops, sketch))]
     else:
@@ -498,12 +503,13 @@ def outline(ctx, item, profile, outer, inners, parts):
         kept = order_ranges(ctx.table, loops, raw_loops, sketch)
         if kept:
             ctx.cut(kept, notes.crosses_reason(sketch))
+            bounds = {ctx.table.size_name(name): ends for name, ends in kept.items()}
         else:
             raw_loops = _stuck_curves(raw_loops, sketch)
     # Merged parts share one frame, so the first part's plane stands for all of them.
     plane = raw(ctx, keys.plane(prefix), _dot(profile["frame"]["origin"], profile["frame"]["z"]), sketch)
     placement_doubts(ctx, item, profile, plane)
-    return Outline(ctx, profile["frame"], loops, raw_loops, plane, sketch)
+    return Outline(ctx, profile["frame"], loops, raw_loops, plane, sketch, bounds)
 
 
 def measured_outline(ctx, prefix, frame, loops, sketch):
