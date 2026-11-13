@@ -66,9 +66,9 @@ def along_x(step, places):
     return [dict(FLAT, origin=[k * step, 0, 0]) for k in places]
 
 
-def offsets(recipe, env=None):
-    """Distances from the original, along x, of every place the pattern steps fill, the original included.
-    Formulas are worked out at the sizes `env`."""
+def offsets(recipe, env=None, axis=0):
+    """Distances from the original, along x (or the plate axis `axis`), of every place the pattern steps fill, the
+    original included. Formulas are worked out at the sizes `env`."""
     def value(v):
         return evaluate(v["expr"], env) if isinstance(v, dict) else v
 
@@ -78,13 +78,36 @@ def offsets(recipe, env=None):
         skip = set(step.get("skip", ()))
         for n in range(1, int(value(linear["count"]))):
             if n not in skip:
-                found.add(round(linear["dir"][0] * n * value(linear["step"]), 6))
+                found.add(round(linear["dir"][axis] * n * value(linear["step"]), 6))
     return sorted(found)
 
 
 def at(table, **overrides):
     """The sizes of a table with some recipe sizes changed."""
     return range_check.size_env(table, {table.size_name(name): v for name, v in overrides.items()})
+
+
+def in_assembly(place, frame):
+    """The component transform `frame` as Fusion gives it for a part placed at `place` (component to assembly)."""
+    def apply(m, v):
+        return [sum(m[name][i] * v[k] for k, name in enumerate("xyz")) for i in range(3)]
+
+    def back(w):
+        return [sum(place[name][i] * w[i] for i in range(3)) for name in "xyz"]
+
+    units = {"x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
+    axes = {name: apply(place, apply(frame, back(unit))) for name, unit in units.items()}
+    moved = apply(place, apply(frame, back([-c for c in place["origin"]])))
+    origin = [a + b + c for a, b, c in zip(moved, apply(place, frame["origin"]), place["origin"])]
+    return dict(axes, origin=origin)
+
+
+def placed_at(capture, place):
+    """`capture` with its part placed at `place`: the pattern copies read in assembly space."""
+    capture["target"]["placement"] = {"frame": place}
+    for element in capture["items"][-1]["data"]["elements"]:
+        element["frame"] = in_assembly(place, element["frame"])
+    return capture
 
 
 class SymmetricRowTest(unittest.TestCase):
@@ -210,6 +233,16 @@ class SymmetricSizedTest(unittest.TestCase):
                 self.assertEqual(offsets(result.recipe, at(table, **{CUBE: 25})), offsets_at_25)
                 self.assertEqual(offsets(result.recipe, at(table)), [-48, -24, 0, 24, 48])
                 assert_schema_ok(self, result.recipe)
+
+    def test_tries_of_a_part_turned_in_the_assembly_are_read_in_its_own_frame(self):
+        count = {"quantity_one": param("d22", "ceil(%s / 5) + 1" % CUBE, 5.0)}
+        # A quarter turn about z: the copies run along y in assembly space and in the recipe.
+        place = {"origin": [200, 0, 0], "x": [0, 1, 0], "y": [-1, 0, 0], "z": [0, 0, 1]}
+        frames = [in_assembly(place, f) for f in along_x(29.0, [-3, -2, -1, 0, 1, 2])]
+        capture = placed_at(centred(row(3, [2], 5, 24.0, params=dict(PITCH, **count))), place)
+        result, table = sized(capture, tries=[tried(CUBE, 25.0, 3, 6, frames)])
+        self.assertEqual(result.loose, [])
+        self.assertEqual(offsets(result.recipe, at(table, **{CUBE: 25}), axis=1), [-87, -58, -29, 0, 29, 58])
 
     def test_tries_that_break_the_rule_leave_the_mark(self):
         count = {"quantity_one": param("d22", "ceil(%s / 5) + 1" % CUBE, 5.0)}
@@ -339,6 +372,20 @@ class SymmetricCircularTest(unittest.TestCase):
         forward, backward = steps_of(result.recipe, "pattern")
         self.assertEqual((forward["polar"]["count"], forward["polar"]["angleDeg"]), (3, 60))
         self.assertEqual((backward["polar"]["count"], backward["polar"]["angleDeg"]), (3, 60))
+
+    def test_tries_of_a_part_turned_over_read_the_extra_turn_on_its_own_side(self):
+        # Half a turn about a line along x through the axis point: a turn one way in the part reads the other way in
+        # assembly space.
+        place = {"origin": [0, 12, 0], "x": [1, 0, 0], "y": [0, -1, 0], "z": [0, 0, -1]}
+        count = {"quantity": param("d22", "ceil(%s / 5) + 1" % CUBE, 5.0)}
+        capture = placed_at(centred(circular(3, 5, 120.0, [-60, -30, 0, 30, 60], params=count)), place)
+        frames = [in_assembly(place, _turned([6, 6, 0], a, True)) for a in (-48, -24, 0, 24, 48, 72)]
+        result, table = sized(capture, tries=[tried(CUBE, 25.0, 3, 6, frames)])
+        self.assertEqual(result.loose, [])
+        forward, backward = steps_of(result.recipe, "pattern")
+        env = at(table, **{CUBE: 25})
+        self.assertEqual(evaluate(forward["polar"]["count"]["expr"], env), 4)
+        self.assertEqual(evaluate(backward["polar"]["count"]["expr"], env), 3)
 
     def test_an_odd_count_is_centred_when_the_copies_behind_the_original_read_as_not_turned(self):
         # Fusion's transforms of a symmetric turn can show the copies behind the original as unturned (a 60, a 0, a

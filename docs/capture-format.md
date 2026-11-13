@@ -2067,7 +2067,10 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
   (`quantityOne` and `quantityTwo`, or `quantity`) and the `patternElements` as the capture reads them
   (`probe_patterns.read_patterns`). A pattern that cannot be read gives `unread` `{ key: reason }`. Built states keep
   these reads in `Motion.states[n].patterns`. The translator uses them to learn where Fusion puts the copies for an
-  even count (`translator/symmetric.py`, "Symmetric patterns"). The start reads of a flipped sketch skip them.
+  even count (`translator/symmetric.py`, "Symmetric patterns"). Like the captured copies, their frames are in assembly
+  space; the translator carries them into the frame of the part (`repeat_elements.read_in_component`) before it
+  compares them, so a part turned in the assembly reads the extra copy on its own side. The start reads of a flipped
+  sketch skip them.
 - Nothing raises. A part that cannot be read has no key, which the fit treats as unread.
 
 ## 6. Report and capture file

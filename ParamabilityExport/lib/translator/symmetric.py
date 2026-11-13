@@ -16,6 +16,7 @@ patterns only), and when the copies at a try break the rule the sizes that can m
 """
 from ..params.expressions import ExpressionError, evaluate
 from . import range_check
+from .repeat_elements import read_in_component
 from .values import Quantity, wrapped
 
 
@@ -87,6 +88,7 @@ def _tried_side(ctx, item, count_q, places_at):
         read = (state.get("patterns") or {}).get(key)
         if read is None or state.get("built") is False:
             continue
+        read = read_in_component(read, ctx)
         env = _setting(ctx.table, state.get("values"))
         count = None if env is None else value_at(count_q, env)
         if count is None or abs(count - round(count)) > 1e-9 or count < 2:
