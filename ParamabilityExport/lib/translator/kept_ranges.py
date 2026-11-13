@@ -108,7 +108,8 @@ def built_ranges(table, motion, capture=None):
         if not span or not size or "min" not in size:
             continue
         low, high, found = failure_cut(table, e, span, mine)
-        cut = Cut(low, high, found).meet(Cut(*outline_cut(table, e, span)[:2], changed=outline_cut(table, e, span)[2]))
+        kept_low, kept_high, changed = outline_cut(table, e, span)
+        cut = Cut(low, high, found).meet(Cut(kept_low, kept_high, changed=changed))
         if (cut[0], cut[1]) != (size["min"], size["max"]) and cut[1] - cut[0] > _SAME:
             out[e.name] = cut
     return out
