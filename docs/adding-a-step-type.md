@@ -10,20 +10,22 @@ of that.
 
 1. One entry in the step kind table, `ParamabilityExport/lib/capture_model/step_kinds.py`.
 2. One reader pair in a `lib/fusion_reader/read_*.py` module, registered in that module's `READERS` dict.
-3. One handler function in a `lib/translator/` module, in the folder of its family (`extrude/`, `finishes/`, `bodies/` and so on).
+3. One handler function in a `lib/translator/` module, in the folder of its family (`extrude/`, `finishes/`, `bodies/` and so on),
+   registered in the translator's `HANDLERS` map (`lib/translator/handlers.py`).
 4. When the step writes a recipe kind the translator does not write yet: one `RecipeKind` entry in the same table,
    plus the recipe schema copy in `tests/schema/` and support for the kind in the Paramability app.
 5. Tests: a capture fixture, handler tests, and a hand test entry for every new Fusion call.
 6. The README limits list and `docs/capture-format.md` section 5, where the reader data is described.
 
 Nothing else holds a list of step types. `tests/test_step_kinds.py` fails when a type name or a list of recipe kinds
-shows up in another module, when a table entry names a handler that does not exist, and when a reader registers a
-type that the table does not give to that reader module.
+shows up in another module, when a reader registers a type that the table does not give to that reader module, when
+the handler map registers a type that is not a modeling type of the table, and when a modeling type has neither a
+handler nor an `unsupported` reason.
 
 ## 1. The table entry
 
 ```python
-StepType("EmbossFeature", "emboss", reader="read_emboss", handler="extrude.emboss:handle", sketches=(PROFILES,)),
+StepType("EmbossFeature", "emboss", reader="read_emboss", sketches=(PROFILES, OUTLINE_FACE)),
 ```
 
 - `name`: the capture `type`, the Fusion object type name (`objectType` after the last `::`).
@@ -31,13 +33,15 @@ StepType("EmbossFeature", "emboss", reader="read_emboss", handler="extrude.embos
 - `role`: `MODELING` for a step that can make or change a body (the default). Sketches, construction geometry and
   assembly items have their own roles and are never copied.
 - `reader`: the name of the `lib/fusion_reader` module that reads it.
-- `handler`: `"module:function"` in `lib/translator`; the module may be dotted (`"extrude.emboss:handle"`). Leave it out while the step cannot be copied; then give
-  `unsupported`, the plain reason the step is left out of the copy (it becomes the gap's reason). Once a handler
-  exists, drop `unsupported`: the handler gives its own reasons.
-- `sketches`: the sketch records in the step data that the size probe can follow (`PROFILES`, `AXIS`, `HOLE_POINTS`, `PATH`).
+- `unsupported`: while the step has no handler, the plain reason the step is left out of the copy (it becomes the
+  gap's reason). Once a handler exists, drop `unsupported`: the handler gives its own reasons.
+- `sketches`: the sketch records in the step data that the size probe can follow (`PROFILES`, `AXIS`, `HOLE_POINTS`, `PATH`),
+  and `OUTLINE_FACE` when the probe reads a flat face the step uses as its outline.
   The probe (`lib/probe/plan/`) tries other size values only for sketches it can follow. A sketch token anywhere
   else in the data leaves that sketch unfollowed for every step that uses it, so its sizes end up loose. Name a
   record only when the probe fits it the same way it fits extrude profiles, revolve axes or hole points.
+- `repeats_sources`: for a pattern or mirror whose data names the items it repeats (`data.sources`); a round or
+  chamfer checks it to see whether a later step repeats its edges.
 
 A step that writes a recipe kind the table does not have needs a `RecipeKind` too: the recipe version that brought
 the kind, the paths to its points and directions (so `place.place` can move the part into the assembly), and how
@@ -84,7 +88,8 @@ def handle(item, ctx):
     return out
 ```
 
-A handler is `handle(item, ctx) -> StepResult | Refusal` (`lib/translator/result.py`).
+A handler is `handle(item, ctx) -> StepResult | Refusal` (`lib/translator/result.py`). Register it under the capture
+type in `lib/translator/handlers.py` (`"EmbossFeature": emboss.handle`); the walk looks handlers up there.
 
 - `StepResult`: the recipe steps the item writes, in order. `out.add(step, placers=..., picks=..., repeatable=...)`
   writes one step; `StepResult.of(steps)` makes a result of plain steps. An empty result means the item makes no step
@@ -248,7 +253,7 @@ added later (by hand or by an AI assistant connected to Paramability) from the g
   written formula can reach zero inside the size ranges. A new fixture is picked up on its own, but only when it has
   `parameters.user` and the model parameters behind the step's `data.params`: give the fixture of a new step type
   user parameters that drive its sizes.
-- `tests/test_step_kinds.py` keeps the table and the readers in step.
+- `tests/test_step_kinds.py` keeps the table, the readers and the handler map in step.
 
 ## 5. Tests to write
 

@@ -1,14 +1,14 @@
 """The step kind table: one entry per Fusion timeline item type and one per recipe step kind. Pure: no Fusion imports.
 
-`STEP_TYPES` lists what the add-in knows about each capture `type`: its plain words, its role in the timeline, the
-reader module that reads it in Fusion, the translator handler that copies it, and which sketch records the size
-probe follows for it. `RECIPE_KINDS` lists what the translator knows about each recipe step kind it writes: the
+`STEP_TYPES` lists what the reader and the translator both know about each capture `type`: its plain words, its role
+in the timeline, the reader module that reads it in Fusion, and which sketch records the size probe follows for it.
+The translator keeps its own map from type to handler (`translator/handlers.py`). `RECIPE_KINDS` lists what the translator knows about each recipe step kind it writes: the
 recipe version that brought it, its positions and directions, and how patterns, mirrors and combines treat it.
 
-Handlers and readers are named by text ("module:function", "module") and resolved by the code that runs them, so
-this module never imports Fusion code and the walk never imports a reader. `tests/test_step_kinds.py` checks that
-every name resolves, that every reader registers only types listed here, and that no other module keeps its own list
-of step types or kinds.
+Readers are named by module and resolved by the capture code, so this module never imports Fusion code and the walk
+never imports a reader. `tests/test_step_kinds.py` checks that every reader and every handler registers only types
+listed here, that every modeling type has a handler or a reason it is not copied, and that no other module keeps its
+own list of step types or kinds.
 """
 from dataclasses import dataclass
 
@@ -40,12 +40,11 @@ class StepType:
     words: the type in plain words, for messages ("rectangular pattern").
     role: MODELING, SKETCH, ASSEMBLY or UNREAD.
     reader: the `lib/fusion_reader` module whose `READERS` dict gives its (before, after) reader pair, or None.
-    handler: "module:function" in `lib/translator` that copies it (`handle(item, ctx) -> StepResult | Refusal`),
-      or None when the recipe has no step for it.
     sketches: the sketch records it carries that the size probe follows (PROFILES, AXIS, HOLE_POINTS, PATH), and
       OUTLINE_FACE when the probe reads a flat face it uses as its outline. A sketch token anywhere else in its data
       leaves that sketch unfollowed.
-    unsupported: for a modeling type without a handler, the plain reason the copy stops at it.
+    unsupported: for a modeling type without a handler (`translator/handlers.py`), the plain reason the copy stops at
+      it.
     gap_cause: for a modeling type without a handler, the `gap_hints` cause of the gap it leaves, when that cause
       has a hint for the person.
     splits_faces: it cuts faces of a body without changing its solid, so it is skipped when the capture shows the
@@ -57,13 +56,14 @@ class StepType:
     reaches_bodies: it can change or take bodies of another component than its own (a Combine's tool bodies, a Move,
       a split), so the capture walk measures the target around it also when it lives in another component.
     pattern: `rectangular` or `circular` for the patterns whose copies the probe reads again at each state.
+    repeats_sources: it repeats the items its data names (`data.sources`) as copies of their bodies: a pattern or a
+      mirror.
     """
 
     name: str
     words: str
     role: str = MODELING
     reader: str = None
-    handler: str = None
     sketches: tuple = ()
     unsupported: str = None
     gap_cause: str = None
@@ -73,6 +73,7 @@ class StepType:
     splits_bodies: bool = False
     reaches_bodies: bool = False
     pattern: str = None
+    repeats_sources: bool = False
 
 
 @dataclass(frozen=True)
@@ -102,22 +103,21 @@ class RecipeKind:
 
 
 STEP_TYPES = (
-    StepType("ExtrudeFeature", "extrude", reader="read_solid", handler="extrude:handle",
-             sketches=(PROFILES, OUTLINE_FACE)),
-    StepType("RevolveFeature", "revolve", reader="read_solid", handler="revolve.step:handle", sketches=(PROFILES, AXIS)),
-    StepType("HoleFeature", "hole", reader="read_solid", handler="hole.step:hole", sketches=(HOLE_POINTS,)),
-    StepType("ThreadFeature", "thread", reader="read_solid", handler="hole.step:thread"),
-    StepType("CombineFeature", "combine", reader="read_solid", handler="combine.step:handle", reaches_bodies=True),
-    StepType("FilletFeature", "fillet", reader="read_finish", handler="finishes.finish:fillet"),
-    StepType("ChamferFeature", "chamfer", reader="read_finish", handler="finishes.finish:chamfer"),
-    StepType("ShellFeature", "shell", reader="read_finish", handler="finishes.finish:shell"),
-    StepType("DraftFeature", "draft", reader="read_finish", handler="finishes.draft:handle"),
-    StepType("OffsetFacesFeature", "offset faces", reader="read_offset", handler="finishes.offset:handle"),
-    StepType("RectangularPatternFeature", "rectangular pattern", reader="read_repeat",
-             handler="repeat.body_copies:rectangular", makes_bodies=True, pattern="rectangular"),
-    StepType("CircularPatternFeature", "circular pattern", reader="read_repeat", handler="repeat.body_copies:circular",
-             makes_bodies=True, pattern="circular"),
-    StepType("MirrorFeature", "mirror", reader="read_repeat", handler="repeat.body_copies:mirror", makes_bodies=True),
+    StepType("ExtrudeFeature", "extrude", reader="read_solid", sketches=(PROFILES, OUTLINE_FACE)),
+    StepType("RevolveFeature", "revolve", reader="read_solid", sketches=(PROFILES, AXIS)),
+    StepType("HoleFeature", "hole", reader="read_solid", sketches=(HOLE_POINTS,)),
+    StepType("ThreadFeature", "thread", reader="read_solid"),
+    StepType("CombineFeature", "combine", reader="read_solid", reaches_bodies=True),
+    StepType("FilletFeature", "fillet", reader="read_finish"),
+    StepType("ChamferFeature", "chamfer", reader="read_finish"),
+    StepType("ShellFeature", "shell", reader="read_finish"),
+    StepType("DraftFeature", "draft", reader="read_finish"),
+    StepType("OffsetFacesFeature", "offset faces", reader="read_offset"),
+    StepType("RectangularPatternFeature", "rectangular pattern", reader="read_repeat", makes_bodies=True,
+             pattern="rectangular", repeats_sources=True),
+    StepType("CircularPatternFeature", "circular pattern", reader="read_repeat", makes_bodies=True, pattern="circular",
+             repeats_sources=True),
+    StepType("MirrorFeature", "mirror", reader="read_repeat", makes_bodies=True, repeats_sources=True),
     StepType("SplitFaceFeature", "split face", splits_faces=True),
     StepType("DeleteFaceFeature", "delete face", unsupported="Steps of type delete face are not copied yet.",
              gap_cause=gap_hints.DELETE_FACE),
@@ -129,15 +129,12 @@ STEP_TYPES = (
              gap_cause=gap_hints.SURFACE),
     StepType("CoilFeature", "coil", unsupported="Steps of type coil are not copied yet.",
              gap_cause=gap_hints.COIL),
-    StepType("SplitBodyFeature", "split body", reader="read_split", handler="bodies.split:handle",
-             splits_bodies=True, reaches_bodies=True),
-    StepType("CopyPasteBody", "pasted body", reader="read_paste", handler="bodies.paste:handle", makes_bodies=True),
-    StepType("MoveFeature", "move", reader="read_move", handler="bodies.move:handle", moves_bodies=True,
-             reaches_bodies=True),
-    StepType("EmbossFeature", "emboss", reader="read_emboss", handler="extrude.emboss:handle",
-             sketches=(PROFILES, OUTLINE_FACE)),
-    StepType("SweepFeature", "sweep", reader="read_sweep", handler="sweep.step:handle", sketches=(PROFILES, PATH)),
-    StepType("LoftFeature", "loft", reader="read_sweep", handler="loft.step:handle", sketches=(PROFILES,)),
+    StepType("SplitBodyFeature", "split body", reader="read_split", splits_bodies=True, reaches_bodies=True),
+    StepType("CopyPasteBody", "pasted body", reader="read_paste", makes_bodies=True),
+    StepType("MoveFeature", "move", reader="read_move", moves_bodies=True, reaches_bodies=True),
+    StepType("EmbossFeature", "emboss", reader="read_emboss", sketches=(PROFILES, OUTLINE_FACE)),
+    StepType("SweepFeature", "sweep", reader="read_sweep", sketches=(PROFILES, PATH)),
+    StepType("LoftFeature", "loft", reader="read_sweep", sketches=(PROFILES,)),
     StepType("Sketch", "sketch", role=SKETCH),
     StepType("ConstructionPlane", "construction plane", role=SKETCH),
     StepType("ConstructionAxis", "construction axis", role=SKETCH),

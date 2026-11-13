@@ -37,22 +37,24 @@ def _registrations(tree, name="READERS"):
 
 
 class StepKindTableTest(unittest.TestCase):
-    def test_the_handler_map_gives_every_type_the_handler_the_table_named(self):
-        def named(text):
-            module, function = text.split(":")
-            return getattr(importlib.import_module("lib.translator." + module), function)
-        for spec in step_kinds.STEP_TYPES:
-            self.assertIs(HANDLERS.get(spec.name), named(spec.handler) if spec.handler else None, spec.name)
-
-    def test_every_entry_has_words_and_a_resolvable_handler(self):
+    def test_every_entry_has_words_and_a_modeling_type_a_handler_or_a_reason(self):
         for spec in step_kinds.STEP_TYPES:
             with self.subTest(spec.name):
                 self.assertTrue(spec.words)
-                if spec.handler:
+                if spec.name in HANDLERS:
                     self.assertTrue(callable(HANDLERS[spec.name]))
+                    self.assertIsNone(spec.unsupported)
                 elif spec.role == step_kinds.MODELING:
                     self.assertTrue(spec.unsupported or spec.splits_faces)
-        self.assertEqual(set(HANDLERS), {t.name for t in step_kinds.STEP_TYPES if t.handler})
+
+    def test_the_handler_map_registers_only_modeling_types_of_the_table(self):
+        modeling = {t.name for t in step_kinds.STEP_TYPES if t.role == step_kinds.MODELING}
+        self.assertLessEqual(set(HANDLERS), modeling)
+
+    def test_the_types_that_repeat_their_sources_have_the_body_copy_handlers(self):
+        repeating = {t.name for t in step_kinds.STEP_TYPES if t.repeats_sources}
+        self.assertEqual(repeating, {name for name, handler in HANDLERS.items()
+                                     if handler.__module__ == "lib.translator.repeat.body_copies"})
 
     def test_every_reader_registers_only_types_the_table_gives_it(self):
         named = {t.name: t.reader for t in step_kinds.STEP_TYPES if t.reader}
