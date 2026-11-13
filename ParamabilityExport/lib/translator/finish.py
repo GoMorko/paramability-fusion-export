@@ -13,7 +13,7 @@ import math
 
 from ..package.numbers import is_number
 
-from . import follow, picks, range_check, step_kinds, values, vec
+from . import follow, gap_hints, picks, range_check, step_kinds, values, vec
 from .placer_makers import ShellMaker
 from .result import Entry, Refusal, StepResult
 from .values import Sized
@@ -219,7 +219,8 @@ def fillet(item, ctx):
     for entry in sets:
         kind = entry.get("kind")
         if kind != "constant":
-            return Refusal(_FILLET_SET_REFUSALS.get(kind, "This kind of round is not copied yet."))
+            return Refusal(_FILLET_SET_REFUSALS.get(kind, "This kind of round is not copied yet."),
+                           cause=gap_hints.ROUND_KIND if kind in _FILLET_SET_REFUSALS else None)
         if "feature" in (entry.get("input_kinds") or []):
             return Refusal("A round that follows another step's edges is not copied yet.")
         if entry.get("continuity") == "curvature":
@@ -421,9 +422,9 @@ def _same_extra(a, b):
 def shell(item, ctx):
     data = item.get("data") or {}
     if (data.get("outside") or 0) > 0:
-        return Refusal("Shells that grow outward are not copied yet.")
+        return Refusal("Shells that grow outward are not copied yet.", cause=gap_hints.SHELL_KIND)
     if data.get("bodies_input"):
-        return Refusal("Closed hollow shells are not copied yet.")
+        return Refusal("Closed hollow shells are not copied yet.", cause=gap_hints.SHELL_KIND)
     if data.get("shell_type", "sharp") != "sharp":
         return Refusal("Shells with rounded corners are not copied yet.")
     thickness = data.get("inside")

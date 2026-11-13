@@ -39,7 +39,7 @@ taper marks the sizes behind it and the outline, and adds a note asking the pers
 """
 import math
 
-from . import borrowed, path_model, paths, sweep_taper, vec
+from . import borrowed, gap_hints, path_model, paths, sweep_taper, vec
 from .extrude import COMBINE
 from .result import Refusal, StepResult
 from .sweep_limits import (MIXED_PATH, NOT_MATCHING, PATH_TOO_LONG, PATH_UNREADABLE, SCALED_OUTLINE,
@@ -90,11 +90,13 @@ def handle(item, ctx):
     data = item.get("data") or {}
     operation = data.get("operation")
     if operation == "newComponent":
-        return Refusal("Sweeps that make a new component are not copied.")
+        return Refusal("Sweeps that make a new component are not copied.", cause=gap_hints.NEW_COMPONENT)
     if operation not in COMBINE:
         return Refusal("This sweep combines with the part in a way that is not copied yet.")
     if data.get("solid") is not True:
-        return Refusal("Surface sweeps are not copied." if data.get("solid") is False else UNREADABLE)
+        if data.get("solid") is False:
+            return Refusal("Surface sweeps are not copied.", cause=gap_hints.SURFACE)
+        return Refusal(UNREADABLE)
     profiles = data.get("profiles")
     if isinstance(profiles, list) and len(profiles) > 1:
         return _each_outline(item, ctx, data, profiles)

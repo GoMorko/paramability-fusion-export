@@ -26,9 +26,11 @@ class Gap:
     faces it picks or repeats. written_before: ids of the steps of its walk's list written before it. before, after:
     `{ box, volume }` of the walk's body around the step, in the capture's coordinates, or None when not measured.
     picks: True when the step is a gap only because it picks, or may pick, faces of earlier gaps.
+    cause: why the step is left out, a cause of `gap_hints` (which gives the hint), or None.
     """
 
-    def __init__(self, gap_id, item, reason, depends_on, written_before, before=None, after=None, picks=False):
+    def __init__(self, gap_id, item, reason, depends_on, written_before, before=None, after=None, picks=False,
+                 cause=None):
         self.id = gap_id
         self.item = item
         self.reason = clip(reason, wording.MAX_NOTE) or "This step cannot be copied."
@@ -36,6 +38,7 @@ class Gap:
         self.written_before = list(written_before)
         self.before, self.after = before, after
         self.picks = picks
+        self.cause = cause
         self.place = None  # (after, before, list) once placed in the final recipe
 
     @property

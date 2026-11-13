@@ -4,7 +4,7 @@ The sources split into solid steps, which one `pattern` or `mirror` step repeats
 their own copies. A Combine among the sources is repeated by the steps it wrote, with every item that built its tools.
 Sources the copy cannot repeat give a Refusal.
 """
-from . import notes as wording, tool_items, tool_walk
+from . import gap_hints, notes as wording, tool_items, tool_walk
 from .result import Refusal
 from .step_kinds import FINISH, SOLID, recipe_kind
 from .step_walk import moved_later
@@ -69,7 +69,8 @@ def _combined_tools(indexes, ctx, what):
 def split_sources(data, ctx, what):
     """Split the source items into (solid step ids, finish steps), or a Refusal."""
     if data.get("entity_type") != "features":
-        return Refusal("Patterns of faces or bodies are not copied yet.")
+        return Refusal("Patterns of faces or bodies are not copied yet.",
+                       cause=gap_hints.REPEAT_FACES if data.get("entity_type") == "faces" else None)
     indexes = data.get("sources") or []
     if not indexes:
         return Refusal("This %s has no features to copy." % what)

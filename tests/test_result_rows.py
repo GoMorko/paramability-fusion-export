@@ -98,8 +98,9 @@ class ResultViewTest(unittest.TestCase):
         self.assertNotIn("check", keys(view()))
 
     def test_steps_left_out_get_their_own_section_and_show_in_the_result_kind(self):
-        shown = view(extra={"gaps": [{"name": "Extrude5", "reason": "No."}]})
-        self.assertEqual(section_lines(shown, "left_out")[0], "Extrude5: No.")
+        shown = view(extra={"gaps": [{"name": "Extrude5", "reason": "No."}, {"name": "Draft1", "reason": "Steep.",
+                                                                              "hint": "Use less."}]})
+        self.assertEqual(section_lines(shown, "left_out")[:2], ["Extrude5: No.", "Draft1: Steep. Tip: Use less."])
         self.assertIn("left out", section_lines(shown, "result")[1])
 
     def test_a_formula_kept_as_a_number_gets_a_line_after_the_sizes(self):

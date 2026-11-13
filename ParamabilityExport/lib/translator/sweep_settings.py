@@ -2,7 +2,7 @@
 and the sizes it pins."""
 import math
 
-from . import sweep_taper, values
+from . import gap_hints, sweep_taper, values
 from .extrude import MAX_TAPER_DEG, keep_angle_within
 from .result import Refusal
 from .sweep_limits import (BOTH_WAYS_TWIST, MAX_TAPER_STATIONS, MAX_TWIST_DEG, OTHER_KIND, PARALLEL_AND_SHAPE,
@@ -23,7 +23,7 @@ def settings_refusal(data):
     if isinstance(rail, dict) and rail.get("kind") == "unread":
         return Refusal(RAIL_UNREADABLE)
     if rail is not None:
-        return Refusal(RAIL)
+        return Refusal(RAIL, cause=gap_hints.SWEEP_KIND)
     twist, taper = data.get("twist_deg"), data.get("taper_deg")
     one, two = data.get("distance_one"), data.get("distance_two")
     if not (is_number(twist) and is_number(taper) and is_number(one)) or data.get("orientation") is None:
@@ -31,13 +31,13 @@ def settings_refusal(data):
     if data["orientation"] not in ("perpendicular", "parallel"):
         return Refusal(OTHER_KIND)
     if abs(twist) > ZERO_TOL and abs(taper) > ZERO_TOL:
-        return Refusal(TWIST_AND_TAPER)
+        return Refusal(TWIST_AND_TAPER, cause=gap_hints.SWEEP_KIND)
     if data["orientation"] == "parallel" and (abs(twist) > ZERO_TOL or abs(taper) > ZERO_TOL):
         return Refusal(PARALLEL_AND_SHAPE)
     if abs(taper) >= MAX_TAPER_DEG:
-        return Refusal(TAPER_STEEP)
+        return Refusal(TAPER_STEEP, cause=gap_hints.TAPER_STEEP)
     if abs(twist) > MAX_TWIST_DEG:
-        return Refusal(TWIST_LONG)
+        return Refusal(TWIST_LONG, cause=gap_hints.TWIST_LONG)
     return _coverage_refusal(data, one, two, twist)
 
 
@@ -45,11 +45,11 @@ def _coverage_refusal(data, one, two, twist):
     """A Refusal unless the sweep covers its whole path once. Along a closed path a second side that also runs the
     whole way (`distance_two` 1, Fusion's default there) makes the same ring, unless it twists."""
     if abs(one - 1.0) > ZERO_TOL:
-        return Refusal(PART_OF_PATH)
+        return Refusal(PART_OF_PATH, cause=gap_hints.PART_OF_PATH)
     if not is_number(two) or abs(two) <= ZERO_TOL:
         return None
     if abs(two - 1.0) > ZERO_TOL or (data.get("path") or {}).get("closed") is not True:
-        return Refusal(PART_OF_PATH)
+        return Refusal(PART_OF_PATH, cause=gap_hints.PART_OF_PATH)
     return Refusal(BOTH_WAYS_TWIST) if abs(twist) > ZERO_TOL else None
 
 

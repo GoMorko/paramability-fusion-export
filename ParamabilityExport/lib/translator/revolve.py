@@ -13,7 +13,7 @@ import math
 
 from ..package.numbers import round9
 
-from . import loops, notes, placement, ref_motion, sketch_motion, values, vec
+from . import gap_hints, loops, notes, placement, ref_motion, sketch_motion, values, vec
 from .extrude import COMBINE
 from .result import Refusal, StepResult
 
@@ -242,7 +242,7 @@ def handle(item, ctx):
     data = item.get("data") or {}
     operation = data.get("operation")
     if operation == "newComponent":
-        return Refusal("Revolves that make a new component are not copied.")
+        return Refusal("Revolves that make a new component are not copied.", cause=gap_hints.NEW_COMPONENT)
     if operation not in COMBINE:
         return Refusal("This revolve combines with the part in a way that is not copied yet.")
     combine = COMBINE[operation]

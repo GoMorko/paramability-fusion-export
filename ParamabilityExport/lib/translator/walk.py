@@ -8,7 +8,7 @@ still reads right, is left out as a gap (gaps.py). A gap is a step type with no 
 that reaches into another component, and a step that picks faces a gap made. What a left out item would have recorded
 (doubts, notes) is dropped with it. Anything that leaves the body unknown still stops the copy.
 """
-from . import body_states, borrowed, gap_picks, gaps, notes as wording, ref_motion, split_rules, step_kinds
+from . import body_states, borrowed, gap_hints, gap_picks, gaps, notes as wording, ref_motion, split_rules, step_kinds
 from .capture import outside_component, renamed_target, same_body
 from .result import Refusal, StepResult, make_verdict
 from .sizes import construction_fixes
@@ -137,6 +137,12 @@ def run_handler(handler, item, ctx):
     return outcome
 
 
+def _type_cause(item):
+    """The `gap_hints` cause of an item whose type the copy has no handler for."""
+    spec = step_kinds.step_type(item.get("type"))
+    return (spec and spec.gap_cause) or gap_hints.UNSUPPORTED
+
+
 def _gap_ids(ctx, item):
     """Ids of the gaps whose faces `item` picks, or may pick."""
     return [gap.id for gap in gap_picks.picked_gaps(ctx, item)[0]]
@@ -170,14 +176,14 @@ def walk_items(ctx, result):
         result.refusal = _refusal(item, reason, note)
         return False
 
-    def leave_out(item, reason, depends_on=(), note=None, picks=False):
+    def leave_out(item, reason, depends_on=(), note=None, picks=False, cause=None):
         """Leave the item out as a gap: True, or False when the copy stops here instead. `picks` says the item is a
-        gap only because it picks, or may pick, faces of earlier gaps."""
+        gap only because it picks, or may pick, faces of earlier gaps. `cause` is the `gap_hints` cause."""
         stop = gaps.stop_reason(ctx, reason)
         if stop is not None:
             result.over_gap_cap = gaps.at_cap(ctx)
             return refuse(item, stop, note if stop == reason else None)
-        gap = ctx.leave_out(item, reason, depends_on, picks)
+        gap = ctx.leave_out(item, reason, depends_on, picks, cause)
         verdict = make_verdict(item, "leftOut", note=gap.reason)
         verdict["gap"] = gap.id
         verdict["cause"] = "picks" if picks else "own"
@@ -241,7 +247,7 @@ def walk_items(ctx, result):
                 # Only a step the reader saw change the body is a gap: one that may have done anything stops.
                 return refuse(item, "The bodies this %s changes could not be read." % type_words(item["type"]))
             if not leave_out(item, "Steps of type %s are not copied yet." % type_words(item["type"]),
-                             _gap_ids(ctx, item)):
+                             _gap_ids(ctx, item), cause=_type_cause(item)):
                 return False
             made_in_component = True
             return None
@@ -273,7 +279,7 @@ def walk_items(ctx, result):
             spec = step_kinds.step_type(item["type"])
             if not leave_out(item, (spec and spec.unsupported)
                              or "Steps of type %s are not copied yet." % type_words(item["type"]),
-                             _gap_ids(ctx, item)):
+                             _gap_ids(ctx, item), cause=_type_cause(item)):
                 return False
             made_in_component = True
             return None
@@ -283,7 +289,8 @@ def walk_items(ctx, result):
         if is_foreign(_data(item)):
             if not leave_out(item, ref_motion.why_foreign(item)
                              or "This step reaches into another component, which is not copied yet.",
-                             [gap.id for gap in picked], wording.reaches_component_note(_label(item))):
+                             [gap.id for gap in picked], wording.reaches_component_note(_label(item)),
+                             cause=gap_hints.OTHER_COMPONENT):
                 return False
             made_in_component = True
             return None
@@ -292,7 +299,7 @@ def walk_items(ctx, result):
             fix_construction(ctx, item)
         if picked:
             if not leave_out(item, wording.picks_gap_reason([gap.name for gap in picked], sure),
-                             [gap.id for gap in picked], picks=True):
+                             [gap.id for gap in picked], picks=True, cause=gap_hints.AFTER_GAP):
                 return False
             return None
         outcome = run_handler(handler, item, ctx)
@@ -305,7 +312,7 @@ def walk_items(ctx, result):
                 if outcome.tool_steps:
                     result.items[-1]["tool_steps"] = outcome.tool_steps
                 return False
-            if not leave_out(item, outcome.reason, outcome.depends_on):
+            if not leave_out(item, outcome.reason, outcome.depends_on, cause=gap_hints.refusal_cause(outcome)):
                 return False
             return None
         ctx.doubts.extend(brought.doubts + construction.doubts)

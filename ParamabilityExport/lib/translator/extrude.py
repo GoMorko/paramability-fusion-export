@@ -22,8 +22,8 @@ import math
 
 from ..package.numbers import round9
 
-from . import (face_outline, follow, kept_ranges, loops, notes, outlines, placement, range_check, reach_motion,
-               sketch_motion, thin_wall, through_taper, values, vec)
+from . import (face_outline, follow, gap_hints, kept_ranges, loops, notes, outlines, placement, range_check,
+               reach_motion, sketch_motion, thin_wall, through_taper, values, vec)
 from .footprint import Footprint, polyline
 from .placer_makers import SlabMaker, ThinWallMaker
 from .result import Refusal, StepResult
@@ -92,7 +92,7 @@ def _taper(deg):
         return 0.0
     value = FUSION_TAPER_SIGN * deg
     if abs(value) >= MAX_TAPER_DEG:
-        return Refusal("The taper of this extrude is too steep to copy.")
+        return Refusal("The taper of this extrude is too steep to copy.", cause=gap_hints.TAPER_STEEP)
     return value
 
 
@@ -151,9 +151,11 @@ def _start_shift(start, frame, ctx, item, plane_q):
         values.pin(ctx, item, "start.offset", "it sets how far %s starts from its face" % item.get("name", "a step"))
         plane = start.get("plane")
         if not plane:
-            return Refusal("This extrude starts from a surface that is not flat, which is not copied yet.")
+            return Refusal("This extrude starts from a surface that is not flat, which is not copied yet.",
+                           cause=gap_hints.EXTRUDE_END_FACE)
         if not _parallel(plane["normal"], frame["z"]):
-            return Refusal("This extrude starts from a tilted surface, which is not copied yet.")
+            return Refusal("This extrude starts from a tilted surface, which is not copied yet.",
+                           cause=gap_hints.EXTRUDE_END_FACE)
         shift = vec.dot(vec.sub(plane["point"], frame["origin"]), vec.unit(frame["z"]))
         moved = reach_motion.target_shift(ctx, item, "start", start, vec.unit(frame["z"]), "starts from")
         face = Quantity(shift) if moved is None or not moved.sized else moved.plus(shift - moved.n)
@@ -247,7 +249,7 @@ def _through_both(ctx, item, sides):
         if taper is None:
             return Refusal(UNREADABLE)
         if taper:
-            return Refusal("A tapered cut through all both ways is not copied yet.")
+            return Refusal("A tapered cut through all both ways is not copied yet.", cause=gap_hints.TAPER_CUT_BOTH)
         values.pin(ctx, item, path, "a taper of zero cannot follow it")
     return [{"extent": "through", "sign": 1, "distance": None, "taper": 0.0}]
 
@@ -298,9 +300,11 @@ def _plan(item, data, frame, shift_q, combine, ctx, plane_q):
         if kind == "toEntity":
             plane = side.get("plane")
             if not plane:
-                return Refusal("This extrude ends on a surface that is not flat, which is not copied yet.")
+                return Refusal("This extrude ends on a surface that is not flat, which is not copied yet.",
+                               cause=gap_hints.EXTRUDE_END_FACE)
             if not _parallel(plane["normal"], z):
-                return Refusal("This extrude ends on a tilted surface, which is not copied yet.")
+                return Refusal("This extrude ends on a tilted surface, which is not copied yet.",
+                               cause=gap_hints.EXTRUDE_END_FACE)
             reach = vec.dot(vec.sub(plane["point"], origin), z)
             if abs(reach) < SIGN_TOL:
                 return Refusal("This extrude ends on the surface it starts from.")
@@ -792,7 +796,7 @@ def _sketch_built(ctx, item, profiles, thin):
         if isinstance(outcome, Refusal):
             return outcome
         if thin and outcome[1]:
-            return Refusal("A thin extrude of an outline with holes is not copied yet.")
+            return Refusal("A thin extrude of an outline with holes is not copied yet.", cause=gap_hints.THIN_OUTLINE)
         drawn = sketch_motion.outline(ctx, item, profile, outcome[0], outcome[1], _parts(profile, profiles))
         built.append((profile, outcome, drawn))
     sketch_motion.planes_apart(ctx, [drawn for _, _, drawn in built], item)
@@ -802,7 +806,7 @@ def _sketch_built(ctx, item, profiles, thin):
 def _face_built(face, thin):
     """The one outline of a flat face (face_outline.py), as `_sketch_built` gives it, or a Refusal."""
     if thin and face.loops[1]:
-        return Refusal("A thin extrude of an outline with holes is not copied yet.")
+        return Refusal("A thin extrude of an outline with holes is not copied yet.", cause=gap_hints.THIN_OUTLINE)
     return [(face.profile, face.loops, face.drawn)]
 
 
@@ -830,7 +834,7 @@ def handle(item, ctx):
     data = item.get("data") or {}
     operation = data.get("operation")
     if operation == "newComponent":
-        return Refusal("Extrudes that make a new component are not copied.")
+        return Refusal("Extrudes that make a new component are not copied.", cause=gap_hints.NEW_COMPONENT)
     if operation not in COMBINE:
         return Refusal("This extrude combines with the part in a way that is not copied yet.")
     thin = data.get("thin", False)
@@ -847,7 +851,7 @@ def handle(item, ctx):
     if thin:
         refusal = thin_wall.open_line_refusal(profiles)
         if refusal is None and len(profiles) > 1:
-            refusal = Refusal("A thin extrude of several outlines is not copied yet.")
+            refusal = Refusal("A thin extrude of several outlines is not copied yet.", cause=gap_hints.THIN_OUTLINE)
         if refusal is not None:
             return refusal
     face = face_outline.prepare(ctx, item, profiles)

@@ -12,6 +12,8 @@ of step types or kinds.
 """
 from dataclasses import dataclass
 
+from . import gap_hints
+
 # Roles of a timeline item.
 MODELING = "modeling"   # a step that can make or change a body
 SKETCH = "sketch"       # sketches and construction geometry: never a modeling step, skipped by the walk
@@ -44,6 +46,8 @@ class StepType:
       OUTLINE_FACE when the probe reads a flat face it uses as its outline. A sketch token anywhere else in its data
       leaves that sketch unfollowed.
     unsupported: for a modeling type without a handler, the plain reason the copy stops at it.
+    gap_cause: for a modeling type without a handler, the `gap_hints` cause of the gap it leaves, when that cause
+      has a hint for the person.
     splits_faces: it cuts faces of a body without changing its solid, so it is skipped when the capture shows the
       body unchanged.
     makes_bodies: it can make bodies that copy others (a Paste, a pattern or mirror of bodies). Its other results are
@@ -62,6 +66,7 @@ class StepType:
     handler: str = None
     sketches: tuple = ()
     unsupported: str = None
+    gap_cause: str = None
     splits_faces: bool = False
     makes_bodies: bool = False
     moves_bodies: bool = False
@@ -114,6 +119,16 @@ STEP_TYPES = (
              makes_bodies=True, pattern="circular"),
     StepType("MirrorFeature", "mirror", reader="read_repeat", handler="body_copies:mirror", makes_bodies=True),
     StepType("SplitFaceFeature", "split face", splits_faces=True),
+    StepType("DeleteFaceFeature", "delete face", unsupported="Steps of type delete face are not copied yet.",
+             gap_cause=gap_hints.DELETE_FACE),
+    StepType("ThickenFeature", "thicken", unsupported="Steps of type thicken are not copied yet.",
+             gap_cause=gap_hints.SURFACE),
+    StepType("StitchFeature", "stitch", unsupported="Steps of type stitch are not copied yet.",
+             gap_cause=gap_hints.SURFACE),
+    StepType("BoundaryFillFeature", "boundary fill", unsupported="Steps of type boundary fill are not copied yet.",
+             gap_cause=gap_hints.SURFACE),
+    StepType("CoilFeature", "coil", unsupported="Steps of type coil are not copied yet.",
+             gap_cause=gap_hints.COIL),
     StepType("SplitBodyFeature", "split body", reader="read_split", handler="split:handle",
              splits_bodies=True, reaches_bodies=True),
     StepType("CopyPasteBody", "pasted body", reader="read_paste", handler="paste:handle", makes_bodies=True),

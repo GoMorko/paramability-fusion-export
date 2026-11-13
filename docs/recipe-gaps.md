@@ -5,7 +5,7 @@ add-in writes next to the recipe. The format is published by the Paramability ap
 version 1 (`schemas/paramability.recipeGaps.v1.schema.json` in the app repository; a copy is in `tests/schema/`). That
 schema is the contract: it holds every limit. This page says what the add-in puts in each field and why.
 
-Code: `lib/translator/gap*.py` (the records, the picked gaps, where a gap belongs, the file data), `lib/translator/walk.py` (what becomes a gap),
+Code: `lib/translator/gap*.py` (the records, the picked gaps, where a gap belongs, the file data, the hints), `lib/translator/walk.py` (what becomes a gap),
 `lib/export_plan/reach_pass.py` and `lib/fusion_reader/read_gap_reach.py` (later steps that pick faces of a gap),
 `lib/package/gaps_file.py` (the file), `lib/package/manifest.py` (the package version).
 
@@ -79,7 +79,8 @@ GAP:
   "name": "Extrude5",
   "type": "ExtrudeFeature",
   "words": "extrude",
-  "reason": "The outline is a face of the part, with a taper.",
+  "reason": "The taper of this extrude is too steep to copy.",
+  "hint": "Use a taper under 45 degrees, or draw the sloped wall in the sketch.",
   "after": "extrude_3",
   "before": "round_9",
   "list": null,
@@ -99,6 +100,7 @@ GAP:
 | `id` | `gap_<timeline index>`; inside a tool body the walk's id prefix comes first, the way step ids are made. The step added for the gap takes this id, so the app can tell which gaps were filled |
 | `name`, `type`, `words` | The Fusion name and type of the step, and the type in plain words (`step_kinds`). A name that is empty or only spaces is the type in words |
 | `reason` | The refusal sentence, at most 200 characters. For a step that picks faces of a gap, a pattern of a gap, or a Combine with a tool that failed, it names the gap or the step |
+| `hint` | What to change in Fusion so the step copies, from the gap's cause (below). Left out when the cause has no useful advice |
 | `after`, `before`, `list` | Where the step belongs (above) |
 | `dependsOn` | Ids of earlier gaps whose faces the step picks, or whose steps it repeats |
 | `sizes` | Names of the recipe sizes the step reads: through its values, the sketches it names (unless the probe measured that the size does not move the sketch), its construction geometry and its measured references; at most 64 |
@@ -112,6 +114,16 @@ Trimming goes in this order until `data` fits: free curve `samples` cut to 200 p
 an outline dropped, `profiles` dropped, and as a last resort `data` is left empty. When the whole file is over 1 MiB it
 is written again with every `data` empty. When it still does not fit, or cannot be encoded, the part is not a recipe:
 it is saved as a fixed shape with the note "The list of steps left out could not be written."
+
+## Hints
+
+Each gap has a cause (`gap_hints.py`), and the cause gives the hint: one short sentence per cause, from one table. A
+handler names the cause with its `Refusal(..., cause=...)`; a step type with no handler names it in the step kind table
+(`StepType.gap_cause`); a step that reaches into another component, a step that picks faces of a gap and a refusal
+that names the gaps it depends on (a pattern of a gap) get theirs in the walk. A refusal without a cause and a step
+type without one have no hint. The wording follows the app's user guide page "Steps that do not copy yet" (chapter
+"Designing in Fusion (experimental)"): when they disagree, the guide is right and the hint changes.
+`tests/test_gap_hints.py` checks that every cause the translator gives has a hint and every hint is given.
 
 ## Later steps that pick faces of a gap
 
@@ -148,7 +160,8 @@ another reason keeps that state.
 ## report.json and the result window
 
 `report.json` holds the same records under `gaps` (and `reach`) with the item verdict `leftOut` (section 6 of
-`docs/capture-format.md`). The result window lists each gap as "name: reason" under "N steps left out", with one line
+`docs/capture-format.md`). The result window lists each gap as "name: reason", then "Tip: " and the hint when it has
+one, under "N steps left out", with one line
 saying that Paramability keeps the original shape and an unfinished copy. A parts file puts the part name first and
 names its own gaps file per part.
 
