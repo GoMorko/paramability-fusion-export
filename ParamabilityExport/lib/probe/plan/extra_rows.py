@@ -1,6 +1,7 @@
 """Rows after the first tries: check rows for a fit along a curve and discovery rows for unticked parameters."""
+from ...geometry.tolerances import SAME_SIZE
 from ...package.manifest import MAX_NAME_CHARS
-from .rows import SAME_VALUE, probe_row, value_toward
+from .rows import probe_row, value_toward
 
 # Unticked parameters that act on another component, tried once each to find links the reader cannot see.
 MAX_DISCOVERY = 12
@@ -29,7 +30,7 @@ def check_rows(sizes, curved, spans, room, partners=()):
         size = by_name[name]
         for end in _span_ends(spans, size):
             middle = value_toward(size, end, 0.5)
-            if abs(middle - size["value"]) > SAME_VALUE and abs(middle - end) > SAME_VALUE:
+            if abs(middle - size["value"]) > SAME_SIZE and abs(middle - end) > SAME_SIZE:
                 wanted.append(("%s (half way)" % size["size"][:MAX_NAME_CHARS - 11], {name: middle},
                                "%s (half way to %r)" % (name, end)))
     for name in (n for n in curved if n in by_name):
@@ -37,12 +38,12 @@ def check_rows(sizes, curved, spans, room, partners=()):
             ends = list(zip(_span_ends(spans, by_name[name]), _span_ends(spans, by_name[other])))
             for label, (mine, theirs) in zip(("low", "high"), ends):
                 overrides = {n: v for n, v in ((name, mine), (other, theirs))
-                             if abs(v - by_name[n]["value"]) > SAME_VALUE}
+                             if abs(v - by_name[n]["value"]) > SAME_SIZE}
                 if len(overrides) == 2:
                     wanted.append(("%s and %s (%s)" % (name, other, label), overrides, None))
     for label, at in (("all low but curved", 0), ("all high but curved", 1)):
         overrides = {s["param"]: _span_ends(spans, s)[at] for s in sizes
-                     if s["param"] not in curved and abs(_span_ends(spans, s)[at] - s["value"]) > SAME_VALUE}
+                     if s["param"] not in curved and abs(_span_ends(spans, s)[at] - s["value"]) > SAME_SIZE}
         if len(overrides) >= 2:
             wanted.append((label, overrides, None))
     # Each row has its own key: the reads of the rows are kept by key, so two rows under one key would share a read.

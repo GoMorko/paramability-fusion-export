@@ -5,7 +5,8 @@ from tests import context  # noqa: F401
 from tests.translator_helpers import left_out
 from tests.translator_helpers import assert_schema_ok, close, load_capture, steps_of, translate_fixture, verdict_of
 
-from lib.translator import translate, vec
+from lib.geometry import vec
+from lib.translator import translate
 from tests.test_translate_sized import TICKED, on_fixture, param, run
 
 

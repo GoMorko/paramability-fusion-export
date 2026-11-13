@@ -5,7 +5,7 @@ from typing import Optional
 
 class Refusal:
     """Returned by a handler instead of a `StepResult` when its item cannot be copied. `reason` is one plain
-    sentence. `depends_on` names the gaps (gaps.py) that make the item impossible to copy, when that is the cause.
+    sentence. `depends_on` names the gaps (gaps/stops.py) that make the item impossible to copy, when that is the cause.
     `over_gap_cap` says a tool body walk met more gaps than a part may hold: the whole copy stops, the item does not
     become a gap. `tool_steps` are then the verdicts of that walk, so its own gaps are known. `stops` says the body
     after the item cannot be known without it, so the copy stops there instead of leaving the item out. `cause` is the
@@ -48,7 +48,7 @@ class Doubt:
 class Entry:
     """One recipe step a handler writes, with what the walk keeps about it once the step has its id.
 
-    placers: placer makers (`placer_makers.py`): each makes the placers that let later picks on the faces this step
+    placers: placer makers (`faces/placer_makers.py`): each makes the placers that let later picks on the faces this step
       makes follow sizes (`make(ctx, step_id, step)`).
     picks: for a round or bevel step, { near, reads, written }: its edges as measured points, the sizes its pick
       follows and the written points (None when the pick names a step). Patterns and mirrors copy these points.
@@ -120,7 +120,7 @@ class StepResult:
         self.gaps.extend(other.gaps)
 
 
-# `leftOut`: the step is a gap (gaps.py); its verdict also has `gap`, the gap's id, and `cause`: `picks` when the step
+# `leftOut`: the step is a gap (gaps/stops.py); its verdict also has `gap`, the gap's id, and `cause`: `picks` when the step
 # is a gap only because it picks, or may pick, faces of earlier gaps, else `own`.
 VERDICTS = ("translated", "translatedWithNote", "skipped", "unsupported", "leftOut")
 
@@ -152,7 +152,7 @@ class TranslateResult:
     # [{ name, reason, used }]: ticked parameters that are not sizes of the recipe, with the plain reason. `used` is
     # True when a copied step reads the parameter and the copy cannot follow it, False when nothing copied depends on it.
     dropped: list = field(default_factory=list)
-    # The steps left out of the recipe (gaps.py, `gap_file.record`), in timeline order; empty when the copy stops.
+    # The steps left out of the recipe (gaps/stops.py, `gap_file.record`), in timeline order; empty when the copy stops.
     gaps: list = field(default_factory=list)
     # The 12 numbers that map the capture's coordinates to the recipe's (`gaps.to_recipe`), when there are gaps.
     to_recipe: Optional[list] = None

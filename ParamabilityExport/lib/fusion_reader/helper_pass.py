@@ -2,14 +2,14 @@
 
 The main walk reads feature data only for items of the target's component, and only for the exported body. A Combine
 there can take tool bodies made by other steps, in its own component or another, and the steps that made a tool can
-take bodies from further steps (a Paste of a body, a pattern of bodies, a Combine on the tool). `translator/tool_items.py`
+take bodies from further steps (a Paste of a body, a pattern of bodies, a Combine on the tool). `capture_model/tool_items.py`
 picks the items that made those bodies. This pass rolls the timeline to each of them and records, for every body an item
 serves, `body_states[token]`: its box and volume before the item, its volume after. A step of another component is also
 read with the same feature readers, in the tool component's own frame: a `ReadContext` whose target is the body, so that
 component's sketches, planes and faces are not foreign. A body of another component gets `place`
 (`placement.tool_place`), read with the marker just before the item that holds it.
 
-The same pass measures the bodies the exported body was split from (`translator/lineage.py`) on the steps that built
+The same pass measures the bodies the exported body was split from (`capture_model/lineage.py`) on the steps that built
 them up to each split, so the translator reads those steps with measures as it reads steps of the target.
 
 Reading comes in rounds: each round reads what the plan names, and the steps it reads name the next bodies. At most
@@ -17,8 +17,8 @@ Reading comes in rounds: each round reads what the plan names, and the steps it 
 cannot be read keeps `read_error`, and items past a limit keep `helper_unread` with the reason. The caller restores the
 timeline marker.
 """
+from ..capture_model import lineage, tool_items
 from ..timing.timer import span_on
-from ..translator import lineage, tool_items
 from . import read_geometry as geo
 from .parameters import list_model_parameters
 from .placement import find_occurrence, tool_place
@@ -190,7 +190,7 @@ def read_helpers(design, ctx, timeline, items, readers, native_entity, component
 
 
 def _lineage_jobs(run, items, ctx):
-    """The jobs that measure the bodies the exported body was split from (`translator/lineage.py`) on the items that
+    """The jobs that measure the bodies the exported body was split from (`capture_model/lineage.py`) on the items that
     built them, up to each split: the translator reads those steps with these measures, like steps of the target."""
     ordered = [items[i] for i in sorted(items)]
     jobs, start = {}, -1

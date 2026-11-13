@@ -4,7 +4,7 @@ import unittest
 
 from tests import context  # noqa: F401
 
-from lib.translator import sweep_reach
+from lib.translator.sweep import sweep_reach
 
 
 def arc_loop(start_deg, through_deg, end_deg, radius=10.0):

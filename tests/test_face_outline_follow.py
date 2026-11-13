@@ -1,6 +1,6 @@
 """A flat face a step uses as its outline, read again by the size probe before that step (keys `<item>/face`): the
 outline follows the sizes that move the face, and only a size the copy cannot follow, or that was not tried, is
-marked (lib/translator/face_outline.py, lib/probe/match.py, lib/fusion_reader/read_face.py)."""
+marked (lib/translator/sketch/face_outline.py, lib/probe/match.py, lib/fusion_reader/read_face.py)."""
 import contextlib
 import tempfile
 import unittest

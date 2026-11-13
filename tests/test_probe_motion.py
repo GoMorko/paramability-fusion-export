@@ -7,7 +7,7 @@ from tests.probe_helpers import (
 from lib.probe import build as probe_build
 from lib.probe.build import build
 from lib.sketch_values.motion import Affine, Motion, Stuck
-from lib.translator.curved import render
+from lib.translator.sketch.curved import render
 
 W = "FilterBox_width_mm"
 PARAMS = [user("count", "3", 3, ""), user("cube", "10 mm", 10), user(W, "count * cube + 2 mm", 32),

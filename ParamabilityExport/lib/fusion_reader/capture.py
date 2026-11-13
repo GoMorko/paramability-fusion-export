@@ -18,15 +18,16 @@ the component sits in the assembly. Feature readers run only for items of the ta
 components (`helper_pass`).
 
 Feature readers come in pairs `(before, after)` (see read_solid). Each reader module registers its pairs in a module
-level READERS dict keyed by capture type, and the step kind table (`translator/step_kinds.py`) names the module for
+level READERS dict keyed by capture type, and the step kind table (`capture_model/step_kinds.py`) names the module for
 each type.
 """
 import importlib
 
+from ..capture_model import step_kinds
 from ..design_edit.marker import put_back, read_marker
+from ..geometry.tolerances import BODY_TOLERANCE_MM
 from ..timing.capture_timer import CaptureTimer
 from ..timing.timer import span_on
-from ..translator import step_kinds
 from . import helper_pass
 from . import read_geometry as geo
 from .parameters import list_model_parameters, list_user_parameters
@@ -38,7 +39,6 @@ CAPTURE_VERSION = 3
 
 # A target counts as changed by an item when its box moves by more than this (mm) or its volume by more than the
 # larger of VOLUME_TOLERANCE_MM3 and VOLUME_RELATIVE of it.
-BOX_TOLERANCE_MM = 1e-4
 VOLUME_TOLERANCE_MM3 = 1e-4
 VOLUME_RELATIVE = 1e-9
 
@@ -112,7 +112,7 @@ def _target_changed(before, after):
     a, b = before[1], after[1]
     if a is None or b is None:
         return None
-    if any(abs(x - y) > BOX_TOLERANCE_MM for x, y in zip(_box_numbers(a["box"]), _box_numbers(b["box"]))):
+    if any(abs(x - y) > BODY_TOLERANCE_MM for x, y in zip(_box_numbers(a["box"]), _box_numbers(b["box"]))):
         return True
     tolerance = max(VOLUME_TOLERANCE_MM3, VOLUME_RELATIVE * abs(a["volume_mm3"]))
     return abs(a["volume_mm3"] - b["volume_mm3"]) > tolerance

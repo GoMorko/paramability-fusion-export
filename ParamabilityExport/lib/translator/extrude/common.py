@@ -1,5 +1,5 @@
 """The tolerances, the combine table and the small sign helpers that the extrude modules share."""
-from .. import vec
+from ...geometry import vec
 
 
 PARALLEL_TOL = 1e-9

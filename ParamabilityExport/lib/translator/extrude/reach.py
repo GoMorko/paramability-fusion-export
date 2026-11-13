@@ -1,5 +1,9 @@
 """How far an extrude goes: the distance of a side, where it starts and the length of a side that reaches to a face."""
-from .. import gap_hints, kept_ranges, placement, reach_motion, values, vec
+from ..ranges import kept_ranges
+from .. import placement, values
+from . import reach_motion
+from ...capture_model import gap_hints
+from ...geometry import vec
 from ..result import Refusal
 from ..values import Quantity
 from .common import LENGTH_TOL, UNREADABLE, parallel, sign_of
@@ -77,15 +81,15 @@ def keep_reaches_positive(ctx, item, sides):
     """The lengths of the `sides` that follow a moving face must stay above zero. Where one would pass zero, the ranges
     are cut to where all of them stay positive, in one search, so the cut for one side does not shorten a range only
     the other side would need; their sizes are marked only when no cut keeps them."""
-    reaching = [s for s in sides if s.get("reaches") and s["q"].sized]
-    if all(values.stays_positive(ctx.table, s["q"]) for s in reaching):
+    reaching = [s for s in sides if s.reaches and s.q.sized]
+    if all(values.stays_positive(ctx.table, s.q) for s in reaching):
         return
     why = "%s would reach past the face it starts from" % item.get("name", "a step")
-    found = kept_ranges.holding_ranges(ctx.table, [(s["q"], 1) for s in reaching], LENGTH_TOL)
+    found = kept_ranges.holding_ranges(ctx.table, [(s.q, 1) for s in reaching], LENGTH_TOL)
     if found:
         ctx.cut(found, why)
         return
     for side in reaching:
-        if not values.stays_positive(ctx.table, side["q"]):
-            ctx.doubt(side["q"].reads, why)
-            side["q"] = Quantity(side["distance"])
+        if not values.stays_positive(ctx.table, side.q):
+            ctx.doubt(side.q.reads, why)
+            side.q = Quantity(side.distance)

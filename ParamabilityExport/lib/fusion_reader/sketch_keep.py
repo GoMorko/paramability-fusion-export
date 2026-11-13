@@ -13,7 +13,7 @@ objects. No adsk import at module level.
 """
 from . import read_geometry as geo
 
-# Smaller moves are solver noise (0.0001 mm, as `export_plan.health.RESTORE_TOLERANCE_MM`).
+# Smaller moves are solver noise (0.0001 mm, as `geometry.tolerances.RESTORE_TOLERANCE_MM`).
 MOVE_TOL_CM = 1e-5
 
 

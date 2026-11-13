@@ -8,7 +8,7 @@ from tests.test_probe_motion import CAPTURE, MODEL, PARAMS, TICKED, W, read_at
 
 from lib.export_plan.probe_flow import SizeProbe, borrowed_sketches, covers_a_sketch, probe_view
 from lib.sketch_values.motion import Affine
-from lib.translator import borrowed
+from lib.translator.sketch import borrowed
 
 LID_FRAME = {"origin": [0, 0, 20], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
 PLACE = {"path": "BoxLid:1", "frame": LID_FRAME, "source": "transform2", "checked_points": 3}

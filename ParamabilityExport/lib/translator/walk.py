@@ -4,13 +4,17 @@ The same loop copies the exported body and each tool body of a Combine. The cont
 (`Context.target`, `Context.capture`, `Context.handlers`), so a handler always sees the body it works on as its target.
 
 An item the copy cannot hold either stops the copy or, when its effect stays on the body and the rest of the timeline
-still reads right, is left out as a gap (gaps.py). A gap is a step type with no handler, a handler's Refusal, a step
+still reads right, is left out as a gap (gaps/stops.py). A gap is a step type with no handler, a handler's Refusal, a step
 that reaches into another component, and a step that picks faces a gap made. What a left out item would have recorded
 (doubts, notes) is dropped with it. Anything that leaves the body unknown still stops the copy.
 """
-from . import (body_states, borrowed, floating, gap_hints, gap_picks, gaps, notes as wording, ref_motion, split_rules,
-               step_kinds)
-from .capture import outside_component, renamed_target, same_body
+from ..capture_model import gap_hints, gap_picks, step_kinds
+from ..capture_model.capture import outside_component, renamed_target, same_body
+from .bodies import body_states, split_rules
+from .sketch import borrowed
+from .faces import floating
+from .gaps import stops
+from . import notes as wording, ref_motion
 from .result import Refusal, StepResult, make_verdict
 from .sizes import construction_fixes
 from .words import type_words
@@ -168,7 +172,7 @@ def walk_items(ctx, result):
         """Stop the copy at `item`: False. A diagnosing walk (`Context.diagnose`) records the stop as a gap and goes
         on instead: True, unless there is no body to add the gap to yet. `cause` is the `gap_hints` cause, when the
         reason has one."""
-        if ctx.diagnose and not gaps.first_body_stop(ctx):
+        if ctx.diagnose and not stops.first_body_stop(ctx):
             gap = ctx.leave_out(item, reason, ())
             verdict = make_verdict(item, "leftOut", note=gap.reason)
             verdict.update(gap=gap.id, cause="stop")
@@ -182,9 +186,9 @@ def walk_items(ctx, result):
     def leave_out(item, reason, depends_on=(), note=None, picks=False, cause=None):
         """Leave the item out as a gap: True, or False when the copy stops here instead. `picks` says the item is a
         gap only because it picks, or may pick, faces of earlier gaps. `cause` is the `gap_hints` cause."""
-        stop = gaps.stop_reason(ctx, reason)
+        stop = stops.stop_reason(ctx, reason)
         if stop is not None:
-            result.over_gap_cap = gaps.at_cap(ctx)
+            result.over_gap_cap = stops.at_cap(ctx)
             if stop != reason:
                 return refuse(item, stop)
             return refuse(item, stop, note, cause)
@@ -268,7 +272,7 @@ def walk_items(ctx, result):
             return None
         if makes_other or split_rules.is_split(item):
             # Later steps may belong to the other body, so no single missing step can stand for this one. A split
-            # that keeps the body as one piece apart from the others is copied (split_rules.py), whichever piece
+            # that keeps the body as one piece apart from the others is copied (bodies/split_rules.py), whichever piece
             # keeps the name of the body it split.
             stop = split_rules.stop_reason(item, ctx)
             if stop is not None:

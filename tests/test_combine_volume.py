@@ -3,7 +3,7 @@ import unittest
 
 from tests import context  # noqa: F401
 
-from lib.translator.combine_volume import exceeds, step_volume
+from lib.geometry.combine_volume import exceeds, step_volume
 
 
 def extrude(loops, distance=10.0, **more):

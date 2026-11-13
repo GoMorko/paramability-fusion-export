@@ -7,6 +7,7 @@ A member that is missing or retired never stops the walk and never becomes a pla
 an `other` entry (which the translator refuses), or the reader raises and the item gets a `read_error`. Only members
 that feed a note, such as the participant bodies, fall back to an empty list.
 """
+from ..geometry import vec
 from . import read_geometry as geo
 from . import read_intersect
 from .param_refs import Params, with_params
@@ -230,10 +231,6 @@ def extrude_before(feature, ctx):
     return with_params(data, _extrude_params(feature, extent_type, thin))
 
 
-def _dot(a, b):
-    return sum(x * y for x, y in zip(a, b))
-
-
 MAX_SIDE_FACES = 256
 
 
@@ -245,7 +242,7 @@ def _side_leans(feature, z):
         ok, normal = face.evaluator.getNormalAtPoint(face.pointOnFace)
         if not ok:
             return None
-        leans.append(round(_dot(geo.unit_vector(normal), z), 9) + 0.0)
+        leans.append(round(vec.dot(geo.unit_vector(normal), z), 9) + 0.0)
     return leans or None
 
 
@@ -276,7 +273,7 @@ def extrude_after(feature, ctx, data):
     p = geo.safe(lambda: geo.point(faces[0].pointOnFace), None)
     if p is None:
         return out
-    offset = _dot([a - b for a, b in zip(p, frame["origin"])], frame["z"])
+    offset = vec.dot([a - b for a, b in zip(p, frame["origin"])], frame["z"])
     out["end_offset"] = round(offset, 6) + 0.0
     return out
 

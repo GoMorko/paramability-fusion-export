@@ -1,5 +1,5 @@
 """Feature type names in plain words."""
-from .step_kinds import step_type
+from ..capture_model.step_kinds import step_type
 
 
 def type_words(type_name):

@@ -1,4 +1,4 @@
-"""A join that would float in the copy because it sits only on material of left out steps (lib/translator/floating.py)."""
+"""A join that would float in the copy because it sits only on material of left out steps (lib/translator/faces/floating.py)."""
 import copy
 import unittest
 

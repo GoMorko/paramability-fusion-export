@@ -6,10 +6,11 @@ only when the walk writes its steps.
 """
 from contextlib import contextmanager
 
-from . import gap_measures, gaps as gap_records, lineage as body_lineage, tool_items
-from .capture import same_body
+from .gaps import gap_measures, stops as gap_records
+from ..capture_model import lineage as body_lineage, tool_items
+from ..capture_model.capture import same_body
 from .result import Doubt, StepResult
-from .step_kinds import recipe_kind
+from ..capture_model.step_kinds import recipe_kind
 from .values import reads_in
 
 MAX_ID = 64
@@ -40,14 +41,14 @@ class Context:
       `must_fix` read them by size; the driver turns the sizes of `must_fix` into fixed numbers and walks again.
     copied_items: the capture items whose steps are part of the recipe (the audit reads the sizes behind them).
     asked: `(item index, params path)` of every value the handlers of the copied items dealt with (`ask`).
-    placers: the placers of the steps written so far, in the order they were made (placer.py), for picks and reaches
+    placers: the placers of the steps written so far, in the order they were made (faces/placer.py), for picks and reaches
       that follow sizes. The placer makers of each step's `Entry` add them (`add_placer`).
     slabs: the extrude slabs among them (slabs.Slab), the originals and the pattern or mirror copies (`add_slab`).
     written_reads: Fusion names of the sizes that the steps written so far read.
     motion: the probe's motion file (`sketch_values.motion.Motion`), `sketch_values.motion.OPTIMISTIC`, or None. With a motion file the
-      sketch values follow sizes (sketch_motion.py); otherwise they are written as numbers.
+      sketch values follow sizes (sketch/sketch_motion.py); otherwise they are written as numbers.
     plain_picks: round or bevel step id -> `Entry.picks`; patterns and mirrors copy these points.
-    gaps: the steps this walk left out (`gaps.Gap`), in order, with those of the tools it wrote (`commit`).
+    gaps: the steps this walk left out (`stops.Gap`), in order, with those of the tools it wrote (`commit`).
     cache: results that depend on the capture alone, shared by every walk of one translation (one translation walks
       the capture many times). Handlers keep their own entry under their module name.
     lineage: `[(index, parent)]` of the splits the target comes through (lineage.py), for the walk of the exported

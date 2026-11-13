@@ -24,8 +24,8 @@ tries keep the person's marker. The caller also checks that the design reads the
 `MarkerRoll` moves the marker through the parameter store (`DesignParameterStore.roll_marker`) for the tries and puts it
 back (`unroll_marker`). The record it keeps goes to `report.json` under `probe.timeline`.
 """
+from ..capture_model import step_kinds
 from ..params import geometry_links
-from ..translator import step_kinds
 
 NO_ROLL_WHY = {
     "no_marker": "the capture does not say where the timeline marker was",

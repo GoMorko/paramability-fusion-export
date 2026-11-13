@@ -534,12 +534,14 @@ The add-in code is in `ParamabilityExport/lib/`, one package per job. The table 
 package may import only packages above it in this list (not every one of them). `commands/` sits on top.
 
 - `package`: the `.paramability` file: units, rows, manifest, caps, file names, zip writer.
+- `geometry`: vector helpers, the rigid map of a frame, sketch outlines, volume checks and the tolerances for comparing two reads of the design (`tolerances.py`) that the translator, the probe and the reader share.
+- `capture_model`: what a capture and a recipe step are made of: the step kind table, capture checks, body lineage, gap causes and hints.
 - `timing`: stopwatch helpers and the `timing` block of `report.json` (where an export spends its time).
 - `params`: Fusion parameters as sizes: names, defaults, expression to formula, the size table.
 - `sketch_values`: the motion file of sketch values and measured references that follow sizes, its keys and coverage.
 - `sketch_solve`: reads a sketch's dimensions and constraints from the capture into formulas for its points, without Fusion.
 - `design_edit`: setting parameter values row by row, restoring them, the timeline marker, the temporary copy.
-- `translator`: a capture dict in, a recipe plus verdicts out (one handler per step kind).
+- `translator`: a capture dict in, a recipe plus verdicts out (one handler per step kind). `translate.py`, `walk.py`, `context.py`, `result.py`, `values.py` and `sizes.py` are the driver; the rest sits in folders by job: `extrude/` (also emboss), `sweep/` and `paths/`, `loft/`, `revolve/`, `hole/`, `repeat/` (patterns and mirrors), `combine/` (also tool bodies), `finishes/` (fillet, chamfer, shell, draft, offset faces), `bodies/` (move, paste, split), `faces/` (the faces steps make and the picks that follow sizes), `sketch/` (outlines and sketch values), `ranges/` (formulas over the size ranges) and `gaps/`.
 - `probe`: measures sketches and the places of other components' planes, axes and points at other size values and fits the motion file.
 - `export_plan`: the export itself: the pipeline (one body or several), the recipe and its notes, the probe run, size offers.
 - `dialog_model`: what the dialogs show, as plain data (rows, Sizes table, result view, stop warning).

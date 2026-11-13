@@ -7,8 +7,9 @@ No adsk import: it works on the objects it is given. Frames are `{ origin, x, y,
 """
 import math
 
+from ..geometry import vec
+from ..geometry.rigid import IDENTITY_ROWS, RIGID_TOLERANCE, Move, move_from_frame
 from ..package.units import cm_to_mm
-from ..translator.place import IDENTITY_ROWS, RIGID_TOLERANCE, Move, move_from_frame
 from . import read_geometry as geo
 
 POINT_TOLERANCE_MM = 1e-3
@@ -71,27 +72,23 @@ def _compose(outer, inner):
     }
 
 
-def _dot(a, b):
-    return sum(u * v for u, v in zip(a, b))
-
-
 def _rigid(frame):
     """True for a rotation plus a move: unit, perpendicular axes, right handed (no scale, no mirror)."""
     axes = [frame["x"], frame["y"], frame["z"]]
-    if any(abs(_dot(a, a) - 1.0) > RIGID_TOLERANCE for a in axes):
+    if any(abs(vec.dot(a, a) - 1.0) > RIGID_TOLERANCE for a in axes):
         return False
-    if any(abs(_dot(axes[i], axes[j])) > RIGID_TOLERANCE for i, j in ((0, 1), (0, 2), (1, 2))):
+    if any(abs(vec.dot(axes[i], axes[j])) > RIGID_TOLERANCE for i, j in ((0, 1), (0, 2), (1, 2))):
         return False
     cross = [frame["x"][1] * frame["y"][2] - frame["x"][2] * frame["y"][1],
              frame["x"][2] * frame["y"][0] - frame["x"][0] * frame["y"][2],
              frame["x"][0] * frame["y"][1] - frame["x"][1] * frame["y"][0]]
-    return _dot(cross, frame["z"]) > 0
+    return vec.dot(cross, frame["z"]) > 0
 
 
 def _rounded(frame):
     """The capture form: origin to 6 digits, unit axes to 9."""
     def unit(v):
-        n = math.sqrt(_dot(v, v)) or 1.0
+        n = math.sqrt(vec.dot(v, v)) or 1.0
         return [round(c / n, 9) + 0.0 for c in v]
     return {"origin": [round(c, 6) + 0.0 for c in frame["origin"]],
             "x": unit(frame["x"]), "y": unit(frame["y"]), "z": unit(frame["z"])}

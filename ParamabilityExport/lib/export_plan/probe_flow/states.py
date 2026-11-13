@@ -1,7 +1,7 @@
 """Comparing probe states: the body's box and volume, the numbers of a read and the states a try marked."""
+from ...geometry.tolerances import BODY_TOLERANCE_MM
 from ...probe import fit
 
-BODY_TOLERANCE_MM = 1e-4
 VOLUME_TOLERANCE_MM3 = 1e-4
 VOLUME_RELATIVE = 1e-6
 

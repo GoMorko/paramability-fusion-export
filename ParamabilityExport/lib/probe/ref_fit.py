@@ -18,28 +18,21 @@ import math
 
 from . import plan
 from .series import fit_series
+from ..geometry import vec
+from ..geometry.tolerances import POINT_TOLERANCE_MM
 from ..sketch_values import keys
 from ..sketch_values.motion import TURNS, UNREAD
 
-POINT_TOLERANCE = 1e-4
 TURN_TOLERANCE = 1e-6
 NOT_MATCHED = "its first read did not match the capture"
 NOT_READ = "it could not be read at the current sizes"
 NOT_LOOKED_AT = "the design could not be read at its current sizes"
 
 
-def _dot(a, b):
-    return sum(x * y for x, y in zip(a, b))
-
-
-def _sub(a, b):
-    return [x - y for x, y in zip(a, b)]
-
-
 def _turned(now, was):
     """True when the unit vector `now` is not the unit vector `was` (a change, or the opposite way)."""
-    cross = [now[1] * was[2] - now[2] * was[1], now[2] * was[0] - now[0] * was[2], now[0] * was[1] - now[1] * was[0]]
-    return math.sqrt(_dot(cross, cross)) > TURN_TOLERANCE or _dot(now, was) < 0
+    cross = vec.cross(now, was)
+    return math.sqrt(vec.dot(cross, cross)) > TURN_TOLERANCE or vec.dot(now, was) < 0
 
 
 def key_names(ref):
@@ -73,7 +66,7 @@ def state_values(ref, read):
             return None, UNREAD
         if _turned(normal, want["normal"]):
             return None, TURNS
-        return {names[0]: _dot(_sub(point, want["point"]), want["normal"])}, None
+        return {names[0]: vec.dot(vec.sub(point, want["point"]), want["normal"])}, None
     if shape in (plan.SHAPE_AXIS, plan.SHAPE_DIRECTION):
         if not plan.is_vector(direction):
             return None, UNREAD
@@ -81,11 +74,11 @@ def state_values(ref, read):
             return None, TURNS
         if shape == plan.SHAPE_DIRECTION:
             return {names[0]: 0.0}, None
-        move = _sub(point, want["point"])
-        along = _dot(move, want["dir"])
+        move = vec.sub(point, want["point"])
+        along = vec.dot(move, want["dir"])
         move = [m - along * d for m, d in zip(move, want["dir"])]
     else:
-        move = _sub(point, want["point"])
+        move = vec.sub(point, want["point"])
     return dict(zip(names, move)), None
 
 
@@ -107,7 +100,7 @@ def check_start(ref, read):
         reason = ((read.get("unread") or {}).get(ref["key"]))
         return reason if cause == UNREAD and isinstance(reason, str) and reason else (
             NOT_READ if cause == UNREAD else NOT_MATCHED)
-    return "" if all(abs(v) <= POINT_TOLERANCE for v in values.values()) else NOT_MATCHED
+    return "" if all(abs(v) <= POINT_TOLERANCE_MM for v in values.values()) else NOT_MATCHED
 
 
 def measurable(refs, first):
@@ -124,7 +117,7 @@ def measurable(refs, first):
 def moved_in(ref, read):
     """True when the reference reads differently in `read` than in the capture: it moved, turned or cannot be read."""
     values, _ = state_values(ref, read)
-    return values is None or any(abs(v) > POINT_TOLERANCE for v in values.values())
+    return values is None or any(abs(v) > POINT_TOLERANCE_MM for v in values.values())
 
 
 def fit_ref(out, ref, reads, built, shared, models, varied):

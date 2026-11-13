@@ -1,4 +1,4 @@
-"""Sketch values that follow sizes through the probe's motion file (lib/translator/sketch_motion.py)."""
+"""Sketch values that follow sizes through the probe's motion file (lib/translator/sketch/sketch_motion.py)."""
 import copy
 import json
 import os

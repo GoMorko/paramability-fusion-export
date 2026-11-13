@@ -1,7 +1,7 @@
 """What the reader reads at each probe state."""
 from ...params import defaults
 from ...params.size_table import DERIVED, FREE
-from ...translator.step_kinds import pattern_kind
+from ...capture_model.step_kinds import pattern_kind
 from .covered import FACE, scan
 from .references import refs
 
@@ -21,7 +21,7 @@ def _plain_number(text):
 def symmetric_patterns(capture):
     """`{ key: { "index", "kind" } }` of the patterns whose copies the reader reads again at every state: a pattern that
     spreads copies to both sides of the original and has a count that follows a parameter. The tries tell where
-    Fusion puts the copies for the counts it can reach (`translator/symmetric.py`). `kind` is `rectangular` or
+    Fusion puts the copies for the counts it can reach (`translator/repeat/symmetric.py`). `kind` is `rectangular` or
     `circular`; `key` is the timeline index as text."""
     out = {}
     for item in capture.get("items") or []:

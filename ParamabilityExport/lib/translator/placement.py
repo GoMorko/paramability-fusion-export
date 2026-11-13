@@ -3,7 +3,7 @@
 A recipe placement is `{ origin, normal, xDir }`; the sketch y axis is `normal x xDir`. Flipping the normal while
 keeping `xDir` mirrors the sketch y axis, so the loops of a flipped placement go through `loops.flip_y`.
 """
-from . import vec
+from ..geometry import vec
 
 
 def _clean(values):

@@ -6,7 +6,8 @@ from tests.translator_helpers import left_out
 from tests.translator_helpers import (
     assert_schema_ok, edited, load_capture, steps_of, translate_fixture, variant, verdict_of)
 
-from lib.translator import translate, vec
+from lib.geometry import vec
+from lib.translator import translate
 
 
 class FilletTest(unittest.TestCase):

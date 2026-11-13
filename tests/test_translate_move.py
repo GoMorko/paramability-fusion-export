@@ -1,4 +1,4 @@
-"""Move features written as `move` steps (lib/translator/move.py)."""
+"""Move features written as `move` steps (lib/translator/bodies/move.py)."""
 import copy
 import unittest
 
@@ -6,9 +6,11 @@ from tests import context  # noqa: F401
 from tests.schema_check import check_recipe
 from tests.translator_helpers import left_out, load_capture, steps_of, verdict_of
 
+from lib.geometry import vec
 from lib.params import size_table
 from lib.params.expressions import evaluate
-from lib.translator import move, translate, vec
+from lib.translator.bodies import move
+from lib.translator import translate
 
 FLAT = {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
 

@@ -1,7 +1,7 @@
 """Checks of the planned extrude against what Fusion measured: its length, its side walls and the volume it made."""
 import math
 
-from .. import vec
+from ...geometry import vec
 from ..result import Refusal
 from .common import LENGTH_TOL
 
@@ -32,14 +32,14 @@ def check_measured_length(plan, data, shift, start, z, combine):
     if end is None or not plan:
         return None
     first = plan[0]
-    if first["extent"] == "through" or first["distance"] is None:
+    if first.extent == "through" or first.distance is None:
         return None
-    planned = first["distance"] / 2.0 if first["extent"] == "symmetric" else first["distance"]
+    planned = first.distance / 2.0 if first.extent == "symmetric" else first.distance
     measured = abs(end - shift)
     if abs(measured - planned) <= LENGTH_TOL:
         return None
-    if (combine == "cut" and first["extent"] == "oneSide" and measured < planned
-            and _beyond_part(data.get("target_box_before"), start, vec.scale(z, first["sign"]), planned)):
+    if (combine == "cut" and first.extent == "oneSide" and measured < planned
+            and _beyond_part(data.get("target_box_before"), start, vec.scale(z, first.sign), planned)):
         return None
     return Refusal("The measured end of this extrude does not match its length, so it is not copied.")
 
@@ -48,8 +48,8 @@ def _expected_leans(plan, combine):
     """Per plan entry, the leans its side walls can show along the sketch normal (see `check_taper`)."""
     out = []
     for entry in plan:
-        lean = math.sin(math.radians(entry["taper"] or 0.0)) * (-1 if combine == "cut" else 1)
-        out.append([-lean, lean] if entry["extent"] == "symmetric" else [entry["sign"] * lean])
+        lean = math.sin(math.radians(entry.taper or 0.0)) * (-1 if combine == "cut" else 1)
+        out.append([-lean, lean] if entry.extent == "symmetric" else [entry.sign * lean])
     return out
 
 
@@ -62,7 +62,7 @@ def check_leans(plan, leans, combine):
     if any(not any(abs(lean - value) <= LEAN_TOL for value in flat) for lean in leans):
         return Refusal("The taper direction does not match what was measured, so it is not copied.")
     for entry, values in zip(plan, expected):
-        if entry["taper"] and not any(abs(lean - value) <= LEAN_TOL for lean in leans for value in values):
+        if entry.taper and not any(abs(lean - value) <= LEAN_TOL for lean in leans for value in values):
             return Refusal("The taper of this extrude could not be measured.")
     return None
 
@@ -70,20 +70,20 @@ def check_leans(plan, leans, combine):
 def check_taper(plan, data, combine, outlines):
     """Refuse a taper whose sign disagrees with the measured side walls (or, for one outline, the end face area),
     or that cannot be measured."""
-    tapered = [entry for entry in plan if entry["taper"]]
+    tapered = [entry for entry in plan if entry.taper]
     if not tapered:
         return None
     leans = data.get("side_leans")
     if isinstance(leans, list) and leans:
         return check_leans(plan, leans, combine)
-    if not plan[0]["taper"] or outlines != 1:
+    if not plan[0].taper or outlines != 1:
         return Refusal("The taper of this extrude could not be measured.")
     start, end = data.get("profile_area"), data.get("end_area")
     if not start or end is None or start <= 0:
         return Refusal("The direction of the taper could not be measured.")
     if abs(end - start) <= AREA_RELATIVE_TOL * start:
         return Refusal("The taper of this extrude shows no change in size, so it is not copied.")
-    if (plan[0]["taper"] > 0) != (end < start):
+    if (plan[0].taper > 0) != (end < start):
         return Refusal("The taper direction does not match what was measured, so it is not copied.")
     return None
 
@@ -104,13 +104,13 @@ def volume_refusal(data, plan, combine, profiles, thin):
     values (made before they were read) is not checked either."""
     if "areas" not in data or not _holds_free_outline(profiles):
         return None
-    if thin or combine == "intersect" or any(e["taper"] or e["distance"] is None for e in plan):
+    if thin or combine == "intersect" or any(e.taper or e.distance is None for e in plan):
         return None
     areas, before, after = data["areas"], data.get("volume_before"), data.get("volume_after")
     if (not isinstance(areas, list) or len(areas) != len(profiles) or any(a is None for a in areas)
             or before is None or after is None):
         return Refusal("The change this extrude makes to the part could not be measured, so it is not copied.")
-    expected = sum(areas) * sum(entry["distance"] for entry in plan)
+    expected = sum(areas) * sum(entry.distance for entry in plan)
     change = after - before
     tolerance = VOLUME_RELATIVE_TOL * expected + VOLUME_ABSOLUTE_TOL
     if combine == "new":

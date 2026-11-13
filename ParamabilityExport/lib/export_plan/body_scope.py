@@ -9,10 +9,10 @@ Sketch and feature names repeat across components (each has its own `Sketch1`), 
 the component token the capture records (`item.component`, `created_by.component`). Those tokens come from one read
 and are only compared with each other. Captures without component tokens match by name alone.
 """
+from ..capture_model import lineage
 from ..params import geometry_links
 from ..params.defaults import reads_of
-from ..translator import lineage
-from ..translator.capture import same_body
+from ..capture_model.capture import same_body
 
 QUANTITY_PATHS = ("quantity", "quantity_one", "quantity_two")
 

@@ -1,9 +1,9 @@
-"""Which side of a plane a box lies on (lib/translator/vec.py `box_side`), shared by mirrors, splits and drafts."""
+"""Which side of a plane a box lies on (lib/geometry/vec.py `box_side`), shared by mirrors, splits and drafts."""
 import unittest
 
 from tests import context  # noqa: F401
 
-from lib.translator.vec import box_side
+from lib.geometry.vec import box_side
 
 
 def box(lo_z, hi_z):

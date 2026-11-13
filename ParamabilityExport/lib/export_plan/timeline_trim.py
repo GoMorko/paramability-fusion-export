@@ -24,7 +24,7 @@ record goes to `report.json` under `probe.timeline`.
 """
 import time
 
-from ..translator import step_kinds
+from ..capture_model import step_kinds
 from .marker_roll import NO_ROLL_WHY, MarkerRoll, marker_end, is_feature, needed_items, unbounded_link
 
 NO_TRIM_WHY = dict(NO_ROLL_WHY, **{

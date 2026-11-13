@@ -4,13 +4,14 @@ A series is one number per state, index 0 the state the export started from, Non
 lists why states gave none: `(cause, sizes)` for each state, `sizes` the Fusion names that state changes.
 """
 from . import fit, terms
+from ..geometry import tolerances
 from ..sketch_values.motion import CURVE, SHAPE, TURNS, UNREAD, Affine, Stuck, Terms
 
 _PRIORITY = (TURNS, SHAPE, UNREAD)
 
 
 def moved(a, b):
-    return abs(a - b) > fit.TOLERANCE
+    return abs(a - b) > tolerances.FIT_TOLERANCE
 
 
 def movers(varied, series):
@@ -117,7 +118,7 @@ def _on_a_line(points):
     (s0, v0), rest = points[0], points[1:]
     slopes = [(v - v0) / (s - s0) for s, v in rest if abs(s - s0) > 1e-12]
     reach = max(abs(s - s0) for s, _ in rest)
-    return max(slopes) - min(slopes) <= fit.TOLERANCE / max(reach, 1e-12) * 2
+    return max(slopes) - min(slopes) <= tolerances.FIT_TOLERANCE / max(reach, 1e-12) * 2
 
 
 def curved_sizes(x, candidates, varied, found):

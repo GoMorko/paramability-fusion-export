@@ -1,7 +1,8 @@
 """Rows that try a size nearer to its value after a row that did not build, or between values that built and failed."""
+from ...geometry.tolerances import SAME_SIZE
 from ...package.manifest import MAX_NAME_CHARS
 from .history import changed_alone, tried_alone
-from .rows import SAME_VALUE, probe_row, value_toward
+from .rows import probe_row, value_toward
 
 # A row that does not build is tried again nearer to the value now: this share of the way to the range end, in turn.
 # Each try is one more Fusion recompute; a nearer value that builds is enough for the fit, which then holds between
@@ -21,10 +22,10 @@ def _next_nearer(size, end, tried):
     span = end - size["value"]
     nearest = min(abs((v - size["value"]) / span) for v in tried)
     for share in NEARER_STEPS:
-        if share >= nearest - SAME_VALUE:
+        if share >= nearest - SAME_SIZE:
             continue
         value = value_toward(size, end, share)
-        if abs(value - size["value"]) > SAME_VALUE and all(abs(value - v) > SAME_VALUE for v in tried):
+        if abs(value - size["value"]) > SAME_SIZE and all(abs(value - v) > SAME_SIZE for v in tried):
             return value
     return None
 
@@ -34,16 +35,16 @@ def _between(size, end, tried):
     that did not, or None when no value failed past the last that built, or the two are already close
     (`BISECT_GAP`)."""
     now, span = size["value"], end - size["value"]
-    if abs(span) <= SAME_VALUE:
+    if abs(span) <= SAME_SIZE:
         return None
-    side = [((v - now) / span, ok) for v, ok in tried if (v - now) / span > SAME_VALUE]
+    side = [((v - now) / span, ok) for v, ok in tried if (v - now) / span > SAME_SIZE]
     built = max((share for share, ok in side if ok), default=None)
-    failed = [share for share, ok in side if not ok and built is not None and share > built + SAME_VALUE]
-    if not failed or min(failed) - built <= BISECT_GAP + SAME_VALUE:
+    failed = [share for share, ok in side if not ok and built is not None and share > built + SAME_SIZE]
+    if not failed or min(failed) - built <= BISECT_GAP + SAME_SIZE:
         return None
     value = value_toward(size, end, (built + min(failed)) / 2)
     shares = [share for share, _ in side]
-    if abs(value - now) <= SAME_VALUE or any(abs((value - now) / span - share) <= SAME_VALUE for share in shares):
+    if abs(value - now) <= SAME_SIZE or any(abs((value - now) / span - share) <= SAME_SIZE for share in shares):
         return None
     return value
 
@@ -58,7 +59,7 @@ def _nearer_for(size, states, moved):
     for label, end in (("min", size["min"]), ("max", size["max"])):
         side = [(v, ok) for v, ok in tried if (v - now) * (end - now) > 0]
         stops = [abs(v - now) for v in changed if (v - now) * (end - now) > 0]
-        inside = [(v, ok) for v, ok in side if not stops or abs(v - now) < min(stops) - SAME_VALUE]
+        inside = [(v, ok) for v, ok in side if not stops or abs(v - now) < min(stops) - SAME_SIZE]
         if side and not any(ok for _, ok in inside):
             value = _next_nearer(size, end, [v for v, _ in side])
         elif stops:
@@ -70,7 +71,7 @@ def _nearer_for(size, states, moved):
     built = [v for v, ok in tried if ok]
     if not out and size["param"] in moved and len(built) == 1:
         value = value_toward(size, built[0], 0.5)
-        if abs(value - size["value"]) > SAME_VALUE and all(abs(value - v) > SAME_VALUE for v, _ in tried):
+        if abs(value - size["value"]) > SAME_SIZE and all(abs(value - v) > SAME_SIZE for v, _ in tried):
             out.append(("check", value))
     return out
 

@@ -1141,7 +1141,7 @@ surprises.
       (both shrink by the same share, then the taper is left out as "scales its outline"); which way the taper leans
       for a positive angle; and which way the twist turns, seen along the path. A taper steep enough to close the
       rectangle (more than 5.7 degrees on 20 mm) is left out. Then set `TAPER_MEANING_CONFIRMED`,
-      `TWIST_SIGN_CONFIRMED` and the two signs in `lib/translator/sweep.py` and drop the note.
+      `TWIST_SIGN_CONFIRMED` and the two signs in `lib/translator/sweep/step.py` and drop the note.
 - [ ] **SW8 Parallel orientation.** The SW2 path with orientation parallel is left out ("The outline keeps one
       direction along a path that turns back past its plane"). Along a path that keeps moving away from the outline's
       plane (one arc of 60 degrees) it is copied as a `sweep` step with `orientation: "fixed"`, and the part matches.

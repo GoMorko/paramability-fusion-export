@@ -6,10 +6,11 @@ from tests import context  # noqa: F401
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
 from tests.test_translate_sized import CUBE, TICKED, param, table_of
 
+from lib.geometry import vec
 from lib.params import size_table
 from lib.params.expressions import evaluate
-from lib.translator import translate, vec
-from lib.translator.copy_counts import stays_at_least
+from lib.translator import translate
+from lib.translator.faces.copy_counts import stays_at_least
 from lib.translator.values import Quantity
 
 FLAT = {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}

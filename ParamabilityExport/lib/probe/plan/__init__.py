@@ -2,7 +2,7 @@
 
 `scan` finds the sketches whose numbers the probe can follow ("covered" ones): every capture record that names them
 is a profile, a hole point set, a revolve axis line or a sweep path of lines and arcs that the reader gave tokens
-for. Which records a step type carries comes from the step kind table (`translator/step_kinds.py`, `sketches`).
+for. Which records a step type carries comes from the step kind table (`capture_model/step_kinds.py`, `sketches`).
 `refs` finds the measured references (a plane, axis, direction or point of another component that a step uses, and
 a face or plane of the part that an extrude starts from or reaches to) that the probe reads again at every state. A
 flat face a step uses as its outline (`outline_face`) is a target of its own (`kind` "face"): the reader reads its

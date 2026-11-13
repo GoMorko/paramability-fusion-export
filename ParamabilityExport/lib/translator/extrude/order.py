@@ -1,8 +1,9 @@
 """The order the outlines of one extrude are written in, so that each one joins what is built."""
 import heapq
 
-from .. import follow, vec
-from ..footprint import Footprint, polyline
+from ..faces import follow
+from ...geometry import vec
+from ...geometry.footprint import Footprint, polyline
 from .common import SAMPLE_INSET
 
 
@@ -71,11 +72,11 @@ class _Outline:
 def _heights(entry, shift, join=False):
     """Heights (along the sketch normal) to test for material: inside the side. A join also tests just outside both
     ends, since a tool that stands on the part's face joins it."""
-    reach = entry["distance"] or 0.0
-    if entry["extent"] == "symmetric":
+    reach = entry.distance or 0.0
+    if entry.extent == "symmetric":
         ends = (-reach / 2.0, reach / 2.0)
     else:
-        ends = (0.0, entry["sign"] * reach)
+        ends = (0.0, entry.sign * reach)
     low, high = min(ends), max(ends)
     inset = min(SAMPLE_INSET, (high - low) / 4.0)
     found = [low + inset, (low + high) / 2.0, high - inset]

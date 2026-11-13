@@ -4,8 +4,8 @@ import unittest.mock
 
 from tests import context  # noqa: F401
 
-from lib.translator import kept_ranges, range_check
-from lib.translator.range_check import MAX_CORNER_SIZES, MAX_SETTINGS, largest_share, sweep
+from lib.translator.ranges import kept_ranges, range_check
+from lib.translator.ranges.range_check import MAX_CORNER_SIZES, MAX_SETTINGS, largest_share, sweep
 
 
 class Table:

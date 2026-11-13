@@ -1,7 +1,11 @@
 """The handler of an extrude feature: checks it and writes one recipe extrude step per outline and side."""
+from ...capture_model import gap_hints
+from ...geometry import vec
 from ...package.numbers import round9
-from .. import face_outline, gap_hints, loops, placement, sketch_motion, thin_wall, vec
-from ..placer_makers import SlabMaker, ThinWallMaker
+from ..sketch import face_outline, loops, sketch_motion
+from .. import placement
+from ..faces import thin_wall
+from ..faces.placer_makers import SlabMaker, ThinWallMaker
 from ..result import Refusal, StepResult
 from ..values import Quantity
 from .built import outlines_built, thin_wall_step
@@ -97,7 +101,7 @@ def handle(item, ctx):
         base["origin"] = drawn.origin(ctx, shift_q) if drawn is not None else sketch_origin(frame, shift_q)
         if drawn is not None:
             outer, inner = drawn.written(ctx)
-        reverse = entry["sign"] < 0
+        reverse = entry.sign < 0
         on = placement.reversed_of(base) if reverse else base
         pick = (lambda loop: loops.flip_y(loop)) if reverse else (lambda loop: loop)
         sketch = {"on": on, "outer": pick(outer)}
@@ -107,22 +111,22 @@ def handle(item, ctx):
             "kind": "extrude",
             "sketch": sketch,
             "combine": combine if not out.entries else ("add" if combine == "new" else combine),
-            "extent": entry["extent"],
+            "extent": entry.extent,
         }
-        if entry["distance"] is not None:
-            step["distance"] = entry["q"].json() if entry.get("q") else round9(entry["distance"])
-        if entry["taper"]:
-            step["taperDeg"] = entry["taper_q"].json() if entry.get("taper_q") else round9(entry["taper"])
+        if entry.distance is not None:
+            step["distance"] = entry.q.json() if entry.q else round9(entry.distance)
+        if entry.taper:
+            step["taperDeg"] = entry.taper_q.json() if entry.taper_q else round9(entry.taper)
         placers = []
         if thin_step is not None:
             side, thickness_q = thin_step
             step["thin"] = {"thickness": thickness_q.json(), "side": side}
-            placers.append(ThinWallMaker(on, entry["extent"], entry.get("q") or Quantity(entry["distance"]), profile,
+            placers.append(ThinWallMaker(on, entry.extent, entry.q or Quantity(entry.distance), profile,
                                          side, thickness_q.n))
             out.add(step, placers, repeatable=False)
             continue
-        if entry["extent"] in ("oneSide", "symmetric"):
-            placers.append(SlabMaker(on, entry["extent"], entry.get("q") or Quantity(entry["distance"]), profile,
-                                     entry.get("taper_q") or Quantity(entry["taper"] or 0.0), drawn))
-        out.add(step, placers, repeatable=not entry.get("adjusts"))
+        if entry.extent in ("oneSide", "symmetric"):
+            placers.append(SlabMaker(on, entry.extent, entry.q or Quantity(entry.distance), profile,
+                                     entry.taper_q or Quantity(entry.taper or 0.0), drawn))
+        out.add(step, placers, repeatable=not entry.adjusts)
     return out

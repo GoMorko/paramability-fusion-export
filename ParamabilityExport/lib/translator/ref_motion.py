@@ -19,11 +19,12 @@ The first translation of an export (`OPTIMISTIC`) writes the measured place and 
 a hole is placed on, into records the handlers read like their own (`assembly: true`, geometry in the part's
 coordinates). Anything it cannot bring in stays `foreign`, and `why_foreign` says why.
 """
+from ..geometry import vec
 from ..params import geometry_links
 from ..sketch_values import coverage, keys
 from ..sketch_values.motion import Affine, Stuck
-from . import sketch_motion, vec
-from .curved import Curved, Poly
+from .sketch import sketch_motion
+from .sketch.curved import Curved, Poly
 from .values import Quantity
 
 PLANE, AXIS, POINT, DIRECTION = "plane", "axis", "point", "direction"
