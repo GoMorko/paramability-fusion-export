@@ -4,6 +4,7 @@ import unittest
 from unittest import mock
 
 from tests import context  # noqa: F401
+from lib.fusion_reader import capture as capture_module
 from lib.fusion_reader import read_sketch
 from lib.fusion_reader.capture import CaptureReadError, read_capture
 from lib.fusion_reader.read_geometry import edge_record
@@ -275,6 +276,35 @@ class WalkTest(unittest.TestCase):
         items = read_capture(design, self.target, fusion="", name="", up_axis="z")["items"]
         self.assertEqual((items[0]["component"], items[0]["in_target_component"], items[0]["data"]),
                          ("child", False, {}))
+
+    def other_run_design(self, gone_at=None):
+        """Own extrude, three steps of another component, own extrude. With `gone_at`, the target is gone from that
+        marker position on, as when a step of the other component takes it as a tool body."""
+        others = [(Obj("fusion::ExtrudeFeature", parentComponent=Obj(entityToken="child"), bodies=Coll([])),
+                   "Other%d" % n, {}) for n in range(3)]
+        entries = [extrude(rect_profile(), target=self.target)] + others + [
+            extrude(rect_profile(), name="Extrude2", target=self.target, operation="JoinFeatureOperation")]
+        design = FakeDesign(entries, self.target)
+        if gone_at is not None:
+            found = design.findEntityByToken
+            design.findEntityByToken = lambda token: [] if design.timeline.markerPosition >= gone_at else found(token)
+        return design
+
+    def test_the_target_is_not_measured_between_steps_of_another_component(self):
+        design = self.other_run_design()
+        with mock.patch.object(capture_module, "_target_state", wraps=capture_module._target_state) as measured:
+            items = read_capture(design, self.target, fusion="", name="", up_axis="z")["items"]
+        # Positions 2 and 3 lie between steps of the other component; the other four are measured.
+        self.assertEqual(measured.call_count, 4)
+        self.assertEqual([i["target_changed"] for i in items[1:4]], [False, False, False])
+        self.assertEqual(items[2]["target_before"], items[1]["target_after"])
+        self.assertNotIn("target_measured", items[2])
+
+    def test_a_run_that_changed_the_target_is_measured_again_step_by_step(self):
+        design = self.other_run_design(gone_at=3)
+        items = read_capture(design, self.target, fusion="", name="", up_axis="z")["items"]
+        self.assertEqual([i["target_changed"] for i in items[1:4]], [False, True, None])
+        self.assertEqual(design.timeline.markerPosition, 5)
 
     def test_extra_readers_plug_in_before_and_after(self):
         fillet = entry(feature("FilletFeature", "Fillet1"))

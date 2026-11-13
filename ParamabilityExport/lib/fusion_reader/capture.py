@@ -5,6 +5,11 @@ after the marker are left out. Per position k the marker is set to k once. At th
 k - 1 (bodies, health, what the feature produced, whether the target changed) and starts item k (its inputs). The
 marker always goes back to where it was.
 
+The target is measured at each position, except inside a run of steps of other components: a step of another
+component works on its own bodies, so the walk measures the target once before the run and once after it. When the
+two agree, no step of the run changed the target; when they do not, the walk goes back over the run and measures the
+target at each of its steps (`_measure_run`), so every step gets the numbers a full walk would give.
+
 The target is the native body of its component, so every value is in component coordinates; `placement` says where
 the component sits in the assembly. Feature readers run only for items of the target's component, and then for the steps of tool bodies from other
 components (`helper_pass`).
@@ -194,11 +199,60 @@ def _bodies_after(item, entity):
         return None
 
 
+def _set_target(item, before, after):
+    """The target's numbers of an item from the target states before and after it (`_target_state`)."""
+    item["target_changed"] = _target_changed(before, after)
+    item["target_before"], item["target_after"] = _measure(before), _measure(after)
+
+
+def _other_step(item):
+    """True for a started item of another named component than the target's: rebuilding it cannot reshape the
+    target."""
+    return isinstance(item, dict) and item.get("in_target_component") is False and bool(item.get("component"))
+
+
+def _other_at(timeline, ctx, index):
+    """True when timeline item `index` is a step of another named component than the target's (`_other_step`), read
+    without starting it. Unsure (a group, an unreadable item) is False."""
+    obj = geo.safe(lambda: timeline.item(index), None)
+    if obj is None or _is_group(obj):
+        return False
+    entity, _ = _native_entity(obj)
+    if entity is None:
+        return False
+    component = _owner_component(geo.safe(lambda: obj.entity, None), entity, geo.type_name(entity))
+    token = geo.safe(lambda: component.entityToken, "") if component is not None else ""
+    return bool(token) and not geo.same_entity(component, ctx.component)
+
+
+def _measure_run(timeline, ctx, items, run, start, end_state, position):
+    """Set the target's numbers of the items `run` (consecutive indexes) whose target was not measured around them:
+    `start` is the state before the first, `end_state` the state after the last, read with the marker at `position`.
+    When the two agree no step of the run changed the target; else (or when a measure failed) the marker goes back
+    over the run to measure it at each step, and returns to `position`."""
+    if not run:
+        return
+    states = [start] * len(run) + [end_state]
+    changed = _target_changed(start, end_state)
+    # None with the target on neither side: it did not exist yet, and a step of another component cannot make it.
+    if len(run) > 1 and (changed or (changed is None and (start[0] or end_state[0]))):
+        for n, index in enumerate(run[1:], start=1):
+            timeline.markerPosition = index
+            states[n] = _target_state(ctx)
+        timeline.markerPosition = position
+    for n, index in enumerate(run):
+        item = items.get(index)
+        if item is not None and "target_measured" in item:
+            del item["target_measured"]
+            _set_target(item, states[n], states[n + 1])
+
+
 def _finish_item(timeline, ctx, readers, index, items, states):
     """Marker is just after `index`: read bodies, health, whether the target changed and what the feature produced.
 
     `states` is the target state before and after the item (see `_target_state`). They also go to the item as
-    `target_before` and `target_after`, so a step with no reader still says where it changed the part.
+    `target_before` and `target_after`, so a step with no reader still says where it changed the part. None leaves
+    them for `_measure_run`.
     """
     item = items.get(index)
     if item is None:
@@ -209,8 +263,10 @@ def _finish_item(timeline, ctx, readers, index, items, states):
     entity, _ = _native_entity(obj)
     if entity is None or item["suppressed"]:
         return
-    item["target_changed"] = _target_changed(*states)
-    item["target_before"], item["target_after"] = _measure(states[0]), _measure(states[1])
+    if states is None:
+        item["target_measured"] = False  # set by `_measure_run` once the target is measured after the run
+    else:
+        _set_target(item, *states)
     item["bodies_after"] = [] if step_kinds.makes_no_body(item["type"]) else _bodies_after(item, entity)
     after = (readers.get(item["type"]) or (None, None))[1]
     if after is not None and item["in_target_component"] and "read_error" not in item["data"]:
@@ -347,18 +403,26 @@ def _read_capture(design, body, fusion, name, up_axis, extra_readers, timer):
     readers.update(extra_readers or {})
     items = {}
     group_indices = set()
-    previous = (False, None)
+    previous = (False, None)  # the target state at the last position it was measured
+    run = []  # items finished without a measure since then
     try:
         for k in range(end + 1):
             # Moving the marker to k builds step k - 1, so its cost counts for that step.
             with timer.step(k - 1):
                 with timer.span("marker_moves"):
                     timeline.markerPosition = k
-                with timer.span("target_state"):
-                    state = _target_state(ctx)
+                # Between two steps of other components the target is not measured (see the module docstring).
+                measure = not (0 < k < end and _other_step(items.get(k - 1)) and _other_at(timeline, ctx, k))
+                if measure:
+                    with timer.span("target_state"):
+                        state = _target_state(ctx)
                 if k > 0:
-                    _finish_item(timeline, ctx, readers, k - 1, items, (previous, state))
-            previous = state
+                    _finish_item(timeline, ctx, readers, k - 1, items, None)
+                    run.append(k - 1)
+                if measure:
+                    with timer.span("target_state"):
+                        _measure_run(timeline, ctx, items, run, previous, state, k)
+                    previous, run = state, []
             if k < end:
                 with timer.step(k):
                     _start_item(timeline, ctx, readers, k, items, group_indices)
