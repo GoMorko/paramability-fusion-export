@@ -42,15 +42,21 @@ class UnusedItemsTest(unittest.TestCase):
 
     def test_a_component_the_body_needs_keeps_all_its_items(self):
         link = {"sketch": "Base", "token": "t", "unknown": 0, "links": [{"token": PIPE, "name": "Pipe", "sketches": []}]}
-        pipe = [item(2, "Sketch", "Pipe sketch", own=False, component=PIPE),
-                item(3, "ExtrudeFeature", own=False, component=PIPE)]
+        pipe = [item(0, "Sketch", "Pipe sketch", own=False, component=PIPE),
+                item(1, "ExtrudeFeature", own=False, component=PIPE)]
+        own = [item(2, "Sketch", "Base"),
+               item(3, "ExtrudeFeature", target_changed=True, data={"profiles": [profile_record("Base")]})]
         lid = [item(4, "ExtrudeFeature", own=False)]
-        tool = copy.deepcopy(pipe)
-        tool[1]["helper_of"] = "tool"
-        for name, captured in (("link", capture(base() + pipe + lid, links=[link])),
+        tool = [item(2, "Sketch", "Pipe sketch", own=False, component=PIPE),
+                item(3, "ExtrudeFeature", own=False, component=PIPE, helper_of="tool")]
+        for name, captured in (("link", capture(pipe + own + lid, links=[link])),
                                ("tool body", capture(base() + tool + lid))):
             with self.subTest(name):
                 self.assertEqual(picked(captured), [4])
+
+    def test_an_unknown_feature_type_of_the_body_does_not_stop_the_list(self):
+        items = base() + [item(2, "BrandNewFeature", target_changed=True), item(3, "ExtrudeFeature", own=False)]
+        self.assertEqual(picked(capture(items)), [3])
 
     def test_an_occurrence_is_never_listed(self):
         items = base() + [item(2, "Occurrence", own=False), item(3, "ExtrudeFeature", own=False)]
@@ -62,16 +68,20 @@ class UnusedItemsTest(unittest.TestCase):
                             data={"ref": {"slot": "plane", "token": "r", "component": {"name": "Pipe"}}})
         cases = {
             "joint": base() + [item(2, "Joint", own=False)] + lid,
-            "unknown type": base() + [item(2, "BrandNewFeature", own=False)] + lid,
+            "unknown type": base() + [item(2, "BrandNewThing", own=False)] + lid,
             "unmatched sketch": [item(0, "ExtrudeFeature", target_changed=True,
                                       data={"profiles": [{"sketch_token": "tok"}]})] + lid,
-            "unnamed reference": [base()[0], nameless_ref] + lid,
+            "unnamed link of an unknown sketch": base() + [item(2, "ExtrudeFeature", own=False)] + lid,
             "needed item without a component": base() + [item(2, "ExtrudeFeature", own=False, component="",
                                                               target_changed=None)] + lid,
         }
+        unknown = {"sketch": "Missing", "token": "t", "unknown": 1, "links": []}
         for name, items in cases.items():
             with self.subTest(name):
-                self.assertEqual(picked(capture(items)), [])
+                links = [unknown] if name.startswith("unnamed link") else []
+                self.assertEqual(picked(capture(items, links=links)), [])
+        after_ref = [base()[0], nameless_ref, item(2, "ExtrudeFeature", own=False)]
+        self.assertEqual(picked(capture(after_ref)), [2])
         no_target_component = capture(base() + lid)
         no_target_component["target"].pop("component")
         self.assertEqual(picked(no_target_component), [])

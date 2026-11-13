@@ -12,8 +12,9 @@ evidence the marker roll uses). An item is suppressed when all of these hold:
 - no item of its component is needed by the tries;
 - it is not an assembly item (an occurrence, a joint and the like) and it has a name to check it by.
 Nothing is suppressed when the evidence cannot be matched (as in `needed_position`), when a link or reference leaves
-the component it depends on unnamed, when a needed item has no component, when an item before the stop point has a
-type the step kind table does not know, or when an assembly item other than an occurrence comes before the stop point
+the component it depends on unnamed and its step cannot be found, when a needed item has no component, when an item
+before the stop point has a type the step kind table does not know and that does not read as a body feature
+(`marker_roll.is_feature`), or when an assembly item other than an occurrence comes before the stop point
 (a joint or a rigid group can hang on geometry of any component).
 
 `TryTimeline` holds the marker roll and the suppression together for one export, with the time the tries took. Its
@@ -22,7 +23,7 @@ record goes to `report.json` under `probe.timeline`.
 import time
 
 from ..translator import step_kinds
-from .marker_roll import NO_ROLL_WHY, MarkerRoll, linked_components, marker_end, needed_items
+from .marker_roll import NO_ROLL_WHY, MarkerRoll, marker_end, is_feature, needed_items, unbounded_link
 
 NO_TRIM_WHY = dict(NO_ROLL_WHY, **{
     "unlinked": "a link or reference does not name the component it depends on",
@@ -42,13 +43,15 @@ def _capture_unused(capture, stop):
     needed, why = needed_items(capture)
     if needed is None:
         return None, why
-    if linked_components(capture)[1]:
+    if unbounded_link(capture):
         return None, "unlinked"
     own = _token(((capture.get("target") or {}).get("component") or {}).get("token"))
     if own is None:
         return None, "no_component"
     kept = {own}
     for item in needed:
+        if item.get("type") == "Occurrence":
+            continue  # never suppressed, and it makes no item of its component needed
         token = _token(item.get("component"))
         if token is None:
             return None, "no_component"
@@ -59,9 +62,9 @@ def _capture_unused(capture, stop):
     found = {}
     for item in active:
         spec = step_kinds.step_type(item.get("type"))
-        if spec is None or spec.role == step_kinds.UNREAD:
+        if (spec is None and not is_feature(item)) or (spec is not None and spec.role == step_kinds.UNREAD):
             return None, "unknown_type"
-        if spec.role == step_kinds.ASSEMBLY:
+        if spec is not None and spec.role == step_kinds.ASSEMBLY:
             if item.get("type") != "Occurrence":
                 return None, "assembly"
             continue
