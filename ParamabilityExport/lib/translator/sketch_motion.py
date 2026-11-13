@@ -463,6 +463,12 @@ def _stuck_curves(node, sketch):
     return Stuck(node.names(), CURVE, sketch) if isinstance(node, Curved) else node
 
 
+def profile_number(profile, at=0):
+    """The number the probe keys `profile` by (`keys.profile`): `at`, its place among the step's profiles, or the
+    `profile_index` a step that copies each of its profiles on its own gave it."""
+    return profile.get("profile_index", at)
+
+
 def outline(ctx, item, profile, outer, inners, parts):
     """The `Outline` of one written profile, or None when sketch values do not follow sizes in this walk.
 

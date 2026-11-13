@@ -68,7 +68,8 @@ def _each_outline(item, ctx, data, profiles):
     out = StepResult()
     for n, profile in enumerate(profiles):
         operation = "join" if n and COMBINE[data["operation"]] == "new" else data["operation"]
-        found = handle(dict(item, data=dict(data, profiles=[profile], areas=None, operation=operation)), ctx)
+        one = dict(profile, profile_index=n) if isinstance(profile, dict) else profile
+        found = handle(dict(item, data=dict(data, profiles=[one], areas=None, operation=operation)), ctx)
         if isinstance(found, Refusal):
             return found
         out.extend(found.entries)

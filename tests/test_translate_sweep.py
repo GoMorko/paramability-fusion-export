@@ -224,6 +224,18 @@ class SizesTest(unittest.TestCase):
         self.assertEqual(sorted(d["name"] for d in result.dropped), ["bend_mm", "run_mm"])
         self.assertEqual(result.fixed, [])
 
+    def test_each_of_several_outlines_follows_its_own_values(self):
+        def two(data):
+            second = copy.deepcopy(data["profiles"][0])
+            second["loops"][0]["curves"][0]["center"] = [0.0, 8.0]
+            data["profiles"].append(second)
+            data["areas"] = data["areas"] * 2
+        radius = sweep_of(load_capture(PIPE), PIPE_ITEM)["profiles"][0]["loops"][0]["curves"][0]["radius"]
+        result = sized(edited(PIPE, PIPE_ITEM, two), Motion({"2/p0/l0/radius": self.OUTLINE}))
+        first, second = steps_of(result.recipe, "sweep")
+        self.assertEqual(first["sketch"]["outer"]["radius"], {"expr": "0.5 * wire_mm"})
+        self.assertEqual(second["sketch"]["outer"]["radius"], radius)
+
     def test_the_path_sizes_of_a_straight_sweep_are_left_out_too(self):
         width = Motion({"2/p0/l0/width": Affine(0, {"width_mm": 1.0}, "Sketch1")})
         result = sized(load_capture("sweep_straight"), width)

@@ -765,7 +765,7 @@ def _parts(profile, sources):
     """(index, capture profile) of the item's profiles that make `profile`: its merged parts, or itself."""
     if "merged_from" in profile:
         return [(n, sources[n]) for n in profile["merged_from"]]
-    return [(next(n for n, p in enumerate(sources) if p is profile), profile)]
+    return [(sketch_motion.profile_number(profile, next(n for n, p in enumerate(sources) if p is profile)), profile)]
 
 
 def _thin_step(ctx, item, data, wall, profile):

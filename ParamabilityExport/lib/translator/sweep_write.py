@@ -65,7 +65,7 @@ def as_sweep(item, combine, profile, found, ctx, angles=(), fixed=False, growth=
     if isinstance(outcome, Refusal):
         return outcome
     outer, inners = outcome
-    drawn = sketch_motion.outline(ctx, item, profile, outer, inners, [(0, profile)])
+    drawn = sketch_motion.outline(ctx, item, profile, outer, inners, [(sketch_motion.profile_number(profile), profile)])
     on = placement.from_frame(profile["frame"])
     if drawn is not None:
         on["origin"] = drawn.origin(ctx, Quantity(0.0))

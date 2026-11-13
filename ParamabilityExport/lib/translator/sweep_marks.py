@@ -57,7 +57,7 @@ def drawn_outline(ctx, item, profile):
     outcome = loops.profile_loops(profile)
     if isinstance(outcome, Refusal):
         return None
-    return sketch_motion.outline(ctx, item, profile, outcome[0], outcome[1], [(0, profile)])
+    return sketch_motion.outline(ctx, item, profile, outcome[0], outcome[1], [(sketch_motion.profile_number(profile), profile)])
 
 
 def keep_path_on_plane(ctx, item, profile):

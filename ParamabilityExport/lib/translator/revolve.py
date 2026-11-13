@@ -268,7 +268,7 @@ def handle(item, ctx):
         located = _axis_in(profile["frame"], axis, bool(data.get("project_axis")))
         if isinstance(located, Refusal):
             return located
-        drawn = sketch_motion.outline(ctx, item, profile, outline[0], outline[1], [(at, profile)])
+        drawn = sketch_motion.outline(ctx, item, profile, outline[0], outline[1], [(sketch_motion.profile_number(profile, at), profile)])
         built.append((profile, outline, located, drawn))
     sketch_motion.planes_apart(ctx, [drawn for _, _, _, drawn in built], item)
     if coords is not None and not data.get("project_axis"):
