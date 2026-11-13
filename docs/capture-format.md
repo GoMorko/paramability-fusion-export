@@ -2062,15 +2062,42 @@ the broken design is not read again (no start read, no sketch put back, no disco
 as not tried). A size that moves a sketch and whose own tries were planned but did not run is listed in
 `probe.untried` and the motion's `untried`, so it is not taken as one that changes nothing. `probe.stopped` (`{ after, items }`: the label of the try run last and the
 steps in error) and `health.tries_stopped` (the same) say so, and the motion is built from the tries before. At the end
-of every export the steps in error are compared with the ones in error when it started (again after one full recompute
-when some read in error); `health.broken` names those that were fine before (at most 5), and the result window tells the person that the design is changed and to use Undo.
+of every export the timeline steps are compared with the start (`design_edit.timeline_health`), see "Timeline steps
+after the export" below; `health.broken` names the steps in error that were fine before (at most 5).
+
+Timeline steps after the export. Before anything is read (when the Export for Paramability dialog opens, before its
+capture moves the marker; for Export size choices when OK is clicked) the add-in reads, for every timeline item before
+the marker (groups left out), its name, type, `healthState` (`ok`, `warning`, `error`), `errorOrWarningMessage` and
+whether it is suppressed. On every way out (saved, failed, cancelled), once the parameters, the suppressed items, the
+sketches and the marker are back, it reads them again. When a step differs: steps that were on at the start and read
+off are turned back on, and the whole design is recomputed once (the last rebuild may have been one change that rebuilt
+only the steps it touched). When a step is then still worse than at the start (a higher level, turned off, gone, or new
+and not fine), every parameter is set to its start expression once more, in one change, and the design is recomputed
+again. A step that is only better (a warning gone) asks for no more. These `health` keys say what was found, each only
+when it has something to say:
+
+| Key | Meaning |
+| --- | --- |
+| `steps_changed` | The steps still not as at the start: `{ name, type, before, after, message, was_message?, suppressed? }`, at most 8. `before` is `new` for a step that was not there, `after` is `gone` for one that is not there now; `message` is Fusion's text now, `was_message` the text at the start when it differs; `suppressed` is the state now when it differs. |
+| `steps_more` | How many more steps differ than `steps_changed` lists. |
+| `steps_recovered` | Steps that differed and came back by the actions below (at most 8). |
+| `end_actions` | What was done, in order: `marker_back` (the marker read elsewhere and was put back), `marker_lost` (it would not go back), `turned_back_on`, `full_compute`, `values_again`. |
+| `steps_unread` | True when the steps could not be compared (the timeline could not be read). |
+| `deferred_left` | Sketches whose compute stayed deferred after the keeper moved their points (`SketchKeeper.deferred_left`). |
+
+A step in `steps_changed` that is worse than at the start, or a sketch in `deferred_left`, counts as a changed design:
+the person gets a message box first and the result window says which steps and to use Undo. A step that is only better
+gets the line without the message box. When the export stops (an error or a cancel) the same lines come in a message
+box. A step can read worse at the end only because Fusion shows some warnings only after a full recompute: the
+add-in cannot tell this from a change it made, so the line says the design may be changed.
 
 Solver flips. Putting the values back does not bring back a sketch that a try moved to its other solution: Fusion solves
 a sketch from where its points are. So the export keeps the places of the followed sketches' own points at E0
 (`fusion_reader.sketch_keep.SketchKeeper`; projected and fixed points stay). When the `start` read shows a followed
 sketch otherwise than at E0 (another outline, or a value more than 0.05 mm or degrees off, `FLIP_TOLERANCE`; Fusion's
-own restore leaves about a hundredth), every kept point that left its place is moved back, with its sketch's compute
-deferred (a sketch whose points are all in place is not touched), and the design is rebuilt once, also when no point
+own restore leaves about a hundredth), every kept point more than 0.0001 mm from its place (`MOVE_TOL_CM`) is moved back,
+with its sketch's compute deferred and then set back to what it was when kept, and read again (a sketch whose points
+are all in place is not touched), and the design is rebuilt once, also when no point
 moved (the keeper matches the points by their entity token and skips a point that is gone); the read after that is
 the state's `put_back`. After two put backs in a row that do not bring the sketch back, no more are tried; a row that needs its
 start still reads it, since a try can bring the sketch back too. A start read and a put back read hold only the outlines

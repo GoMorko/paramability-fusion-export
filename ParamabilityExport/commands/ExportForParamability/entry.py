@@ -5,10 +5,12 @@ import adsk.core
 
 from ... import config
 from ...lib.design_edit.marker import marker_note, read_marker
+from ...lib.design_edit.timeline_health import read_timeline
 from ...lib.dialog_model.stop_warning import summarize as summarize_stop, summarize_many as summarize_stops
 from ...lib.export_plan.size_offers import offers as size_offers, table_for_bodies, table_for_body
 from ...lib.fusion_reader.design_info import default_length_unit, detect_up_axis
 from ...lib.fusion_reader.parameters import list_model_parameters, list_user_parameters
+from ...lib.fusion_reader.rows import DesignParameterStore
 from ...lib.fusion_reader.step_export import count_solid_bodies
 from ...lib.fusion_ui.log import log, message_box
 from ...lib.fusion_ui import handlers, recipe_dialog, result_dialog, timeline_select
@@ -45,6 +47,8 @@ def _on_created(args):
         recipe_dialog.build_blocked(command, export_flow.PENDING_POSITION_MESSAGE)
         return
 
+    # Read before the capture below moves the marker: the export compares the steps with this at its end.
+    timeline_start = read_timeline(DesignParameterStore(design))
     root = design.rootComponent
     note = marker_note(read_marker(design.timeline))
     parameters = list_user_parameters(design)
@@ -129,6 +133,6 @@ def _on_created(args):
         command.execute,
         lambda a: export_flow.run_export(
             design, parameters, model_params, design_unit,
-            recipe_dialog.read_form(a.command.commandInputs, offers), captures),
+            recipe_dialog.read_form(a.command.commandInputs, offers), captures, timeline_start),
         _command_handlers)
     handlers.on_destroy(command.destroy, lambda a: captures.clear(), _command_handlers)

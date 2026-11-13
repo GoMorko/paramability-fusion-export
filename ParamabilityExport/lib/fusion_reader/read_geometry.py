@@ -82,6 +82,16 @@ def enum_name(value, *enum_classes):
     return ""
 
 
+def health_name(state):
+    """'ok', 'warning' or 'error' for a Fusion `FeatureHealthStates` value (2 is error, 1 warning, as in Fusion)."""
+    name = enum_name(state, "FeatureHealthStates").lower()
+    if "error" in name or state == 2:
+        return "error"
+    if "warning" in name or state == 1:
+        return "warning"
+    return "ok"
+
+
 def pick_by_text(name, table, default):
     """First table value whose key text is inside the lower case name. Enum value names are not all verified."""
     text = (name or "").lower()

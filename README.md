@@ -133,8 +133,7 @@ file's `cuts` list, where Paramability shows it as a quiet note next to the size
 reads has the narrowest cut over the bodies that were probed, and its reason says so. A size that did not rebuild at
 any value tried is not a size, and the reason names the values and the step Fusion stopped at. When a try leaves the
 design broken (a step stays in error even with your values back), the tries stop there, since every later try would
-fail for that reason; the result window says so, and if a step is still in error after the export it tells you to use
-Undo. A taper that follows
+fail for that reason; the result window says so. A taper that follows
 sizes gets the same kind of range: it stops before the taper reaches 45 degrees, the steepest Paramability builds. A
 tapered cut through all whose walls would meet before it passes the part at some sizes is checked over the ranges of
 the sizes behind its taper and its outline, and those ranges stop where the cut would close.
@@ -173,6 +172,13 @@ description of the variable.
 
 A copy of what the add-in read is saved inside the file as `report.json`; its `probe` record holds the tries
 for the sketches, and its `health` record says whether the design came back to its start.
+
+The add-in notes the state of every timeline step (fine, warning or error, with Fusion's message) before it reads
+the design, and checks it again at the end of every export, also a failed or cancelled one. When a step differs, it
+turns back on any step it turned off and rebuilds the whole design once; when a step is still worse, it sets your
+values once more and rebuilds again. A step that still differs after that is named in the result window (and in a
+message box when the export stopped), with the advice to use Undo, and `report.json` keeps it under
+`health.steps_changed`.
 
 ### When a step cannot be copied
 

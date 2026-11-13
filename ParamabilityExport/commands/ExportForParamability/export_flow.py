@@ -141,6 +141,9 @@ class FusionPort:
     def warn_left_off(self, names):
         export_common.warn_left_off(names)
 
+    def warn_steps(self, lines):
+        export_common.warn_steps(lines)
+
     def log(self, text):
         log(text)
 
@@ -189,6 +192,9 @@ class FusionPartsPort:
 
     def warn_left_off(self, names):
         export_common.warn_left_off(names)
+
+    def warn_steps(self, lines):
+        export_common.warn_steps(lines)
 
     def log(self, text):
         log(text)
@@ -254,10 +260,12 @@ def _show_result(file_name, result, ticked, parts=False):
         result_dialog.show(view)
 
 
-def run_export(design, parameters, model_params, design_unit, form, captures=None):
+def run_export(design, parameters, model_params, design_unit, form, captures=None, timeline_start=None):
     """Run one export. Parameters are always put back before this returns.
 
-    `captures` is the dialog's CaptureCache; a capture it already holds for the picked body is not read again."""
+    `captures` is the dialog's CaptureCache; a capture it already holds for the picked body is not read again.
+    `timeline_start` is the timeline steps read when the dialog opened (`timeline_health.read_timeline`), before the
+    dialog's capture moved the marker; the export compares the steps with it at the end."""
     app = export_common.app()
     bodies = form["bodies"]
     body = form["body"]
@@ -276,7 +284,7 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
     request = ExportRequest(
         title=title, writer=export_common.writer_for(app), up_axis=form["up_axis"], parameters=parameters,
         model_params=model_params, design_unit=design_unit, ticked=form["ticked"], ranges=form["ranges"],
-        marker=marker, faster_tries=bool(form.get("faster_tries")))
+        marker=marker, faster_tries=bool(form.get("faster_tries")), timeline_start=timeline_start)
 
     units = {p["name"]: p["unit"] for p in parameters}
 

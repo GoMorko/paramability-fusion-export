@@ -4,6 +4,7 @@ An export changes parameters many times and puts them back. After that the desig
 measuring must have worked. `make_health` records what is known, `health_lines` says in plain words what is wrong and
 what to do, and `measuring_doubtful` tells when the recipe rests on measurements that cannot be trusted.
 """
+from ..design_edit import timeline_health as steps_module
 from ..package.text import clip
 
 # Largest gap in mm between the sketches at the start and after the parameters were put back.
@@ -20,7 +21,7 @@ UNDO_ADVICE = (
 
 
 def make_health(unrestored=(), gap_mm=None, probe=NOT_NEEDED, probe_error="", unchecked=(), flipped=(), stopped=None,
-                broken=()):
+                broken=(), steps=None, deferred_left=()):
     """The record kept in `report.json` under `health`.
 
     unrestored: Fusion names of the parameters that could not be put back.
@@ -31,7 +32,12 @@ def make_health(unrestored=(), gap_mm=None, probe=NOT_NEEDED, probe_error="", un
       (`Motion.flipped`); the tries made then blamed no size.
     stopped: `{ after, items }` when a try left the design broken with the values back and the tries stopped there
       (`RowExport.not_back`).
-    broken: names of the timeline steps in error after the export that were not in error before it.
+    broken: names of the timeline steps in error after the export that were not in error before it; taken from
+      `steps` when that could compare the steps.
+    steps: the `design_edit.timeline_health.TimelineSettle` of the export: the steps whose health differs from the
+      start, and what was done to bring them back (`timeline_health.record` gives its keys).
+    deferred_left: sketches whose compute flag would not go back after their points were moved
+      (`SketchKeeper.deferred_left`).
     """
     measured = probe == MEASURED
     out = {
@@ -48,15 +54,26 @@ def make_health(unrestored=(), gap_mm=None, probe=NOT_NEEDED, probe_error="", un
         out["flipped"] = list(dict.fromkeys(flipped))[:MAX_LISTED]
     if stopped:
         out["tries_stopped"] = {"after": stopped.get("after") or "", "items": list(stopped.get("items") or [])[:MAX_LISTED]}
+    if steps is not None and not steps.unread:
+        broken = steps.broken
     if broken:
         out["broken"] = list(dict.fromkeys(broken))[:MAX_LISTED]
+    out.update(steps_module.record(steps))
+    if deferred_left:
+        out["deferred_left"] = list(dict.fromkeys(deferred_left))[:MAX_LISTED]
     return out
 
 
+def worse_steps(health):
+    """The `steps_changed` records of the steps in a worse state than at the start (`timeline_health.is_worse`)."""
+    return [c for c in (health or {}).get("steps_changed") or [] if steps_module.is_worse(c)]
+
+
 def design_changed(health):
-    """True when the design may differ from before the export: a parameter not put back, sketches that moved, or steps
-    in error that were fine before."""
-    return bool(health and (health.get("unrestored") or health.get("sketch_drift") or health.get("broken")))
+    """True when the design may differ from before the export: a parameter not put back, sketches that moved, steps in
+    a worse state than before, or a sketch left with its compute deferred."""
+    return bool(health and (health.get("unrestored") or health.get("sketch_drift") or health.get("broken")
+                            or worse_steps(health) or health.get("deferred_left")))
 
 
 def measuring_doubtful(health):
@@ -69,6 +86,46 @@ def _names(names):
     return shown + (" and %d more" % (len(names) - MAX_LISTED) if len(names) > MAX_LISTED else "")
 
 
+def _step_text(change):
+    """One changed step for a line: "Fillet3 (now a warning)", "Sketch2 (warning gone)"."""
+    before, after, name = change.get("before"), change.get("after"), change.get("name") or "a step"
+    level = {"warning": "a warning", "error": "an error"}
+    if after == steps_module.GONE:
+        what = "gone"
+    elif change.get("suppressed") is True:
+        what = "turned off"
+    elif change.get("suppressed") is False:
+        what = "turned back on"
+    elif before == steps_module.NEW:
+        what = "new" if after == steps_module.OK else "new, with %s" % level.get(after, after)
+    elif after == steps_module.OK:
+        what = "%s gone" % before
+    elif after == before:
+        what = "another %s" % after
+    else:
+        what = "now %s" % level.get(after, after)
+    return "%s (%s)" % (name, what)
+
+
+def steps_line(health):
+    """The line about steps whose health differs from the start of the export, or None."""
+    changed = (health or {}).get("steps_changed") or []
+    if not changed:
+        return None
+    shown = ", ".join(_step_text(c) for c in changed[:MAX_LISTED])
+    more = len(changed) - MAX_LISTED + (health.get("steps_more") or 0)
+    if more > 0:
+        shown += " and %d more" % more
+    if worse_steps(health):
+        tail = ("Fusion rebuilt the design with your values and they stayed so, so your design may be changed. "
+                + UNDO_ADVICE)
+    else:
+        tail = "Check them in the timeline, and use Undo in Fusion if they look wrong."
+    text = "After the export these steps differ from before: %s. " + tail
+    # The list is cut, not the advice after it.
+    return text % clip(shown, max(40, MAX_LINE - len(text) + 2))
+
+
 def health_lines(health):
     """Plain sentences for the result window, most important first. Empty when all is well."""
     if not health:
@@ -78,7 +135,10 @@ def health_lines(health):
         lines.append(
             "These parameters could not be set back to their values: %s. Your design is changed. %s"
             % (_names(health["unrestored"]), UNDO_ADVICE))
-    if health.get("broken"):
+    line = steps_line(health)
+    if line:
+        lines.append(line)
+    elif health.get("broken"):
         lines.append(clip(
             "After the export these steps of your design show an error they did not have before: %s. Your design is "
             "changed. %s" % (_names(health["broken"]), UNDO_ADVICE), MAX_LINE))
@@ -93,6 +153,9 @@ def health_lines(health):
                                           "it" if len(health["unchecked"]) == 1 else "them"), MAX_LINE))
     elif health.get("restore_unverified"):
         lines.append("Could not check that the sketches came back to their first shape. Please look at them.")
+    if health.get("deferred_left"):
+        lines.append(clip("These sketches may not update until you edit them: %s. Open each one and finish it, or use "
+                          "Undo in Fusion." % _names(health["deferred_left"]), MAX_LINE))
     if health.get("flipped"):
         lines.append(clip("During the tries Fusion left %s on its other solution after a value was put back. The "
                           "tries made while it stayed there were not used to judge any size." % _names(health["flipped"]),
@@ -107,6 +170,12 @@ def health_lines(health):
         lines.append(
             "The sketches could not be measured, so sizes that move a sketch may give unexpected results.")
     return lines
+
+
+def steps_lines(settled, deferred_left=()):
+    """The lines about the timeline steps (`timeline_health.TimelineSettle`) and the sketches left deferred alone, for
+    an export that stopped or keeps no other health record."""
+    return health_lines(make_health(steps=settled, deferred_left=deferred_left))
 
 
 def measuring_note(health):
