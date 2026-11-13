@@ -1461,7 +1461,9 @@ D5 to D13). Every read is guarded: a member that raises is listed in the record'
   `computeAll` builds the later items with the restored parameter values and leaves no entry in Undo.
 - One change per try (`fusion_reader/rows.py` `set_expressions`, hand tests SP2 and SP4): `Design.modifyParameters`
   with `ValueInput.createByString` sets every expression or none and rebuilds once; `TimelineObject.healthState` is
-  up to date after it without `computeAll`; the marker stays where it was.
+  up to date after it without `computeAll` (a step in error then is judged after one `computeAll`); the marker stays
+  where it was; `UserParameter.expression` reads back the text that was set, which the restore compares. Export size
+  choices runs `computeAll` after the change before it writes each STEP.
 - Faster tries (`fusion_reader/rows.py` `suppress_items`, `unsuppress_items`; `export_plan/timeline_trim.py`, hand
   test U1): `Timeline.item(index)`, `TimelineObject.name`, `isGroup`, and `isSuppressed` get and set on items before
   the rolled marker; `computeAll` then rebuilds without them and leaves the marker in place; setting `isSuppressed`

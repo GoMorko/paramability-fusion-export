@@ -1684,7 +1684,8 @@ feature (a type ending in `Feature` of a named component), or when an assembly i
 before the stop point. The store checks that each item still has the name the capture saw at its index before it
 touches any. With the items suppressed, a read must give the same state as E0 and no step may show a new error;
 otherwise every item is turned back on and the tries run as without the option. The items are turned back on after the
-parameters are put back and before the last read, the restore check and the marker unroll, on every way out.
+parameters are put back and before the last read, the restore check and the marker unroll, on every way out; every
+item the store tried to turn off goes back on, also one whose state could not be read after.
 `suppressed`: `{ asked, on, items, reason?, left_off? }`: whether the box was ticked, whether the tries ran with items
 suppressed, how many, why not, and the names of items that would not turn back on (the person is told about those).
 
@@ -2056,7 +2057,7 @@ A try can leave the design broken: a step that lost its input stays in error aft
 later try would then fail for that reason, not for its own values, and cut ranges it does not own. So after a try that
 did not build, with the values back and before the design is read again, the steps in error are compared with the
 baseline (`RowExport`). A step in error after the change that put the values back is first given one full recompute
-(that change rebuilds only the steps it touches); when a step is still in error that was not, the tries stop there and
+(that change rebuilds only the steps it touches; a try's own change is judged the same way); when a step is still in error that was not, the tries stop there and
 the broken design is not read again (no start read, no sketch put back, no discovery tries, whose parameters are kept
 as not tried). A size that moves a sketch and whose own tries were planned but did not run is listed in
 `probe.untried` and the motion's `untried`, so it is not taken as one that changes nothing. `probe.stopped` (`{ after, items }`: the label of the try run last and the
@@ -2078,7 +2079,9 @@ before it ended right) and after which the sketch was found on its other solutio
 the flip) may have started there: it runs once more right after its batch, from a checked start, and its first run is
 left out of the states. The second run carries `again`; another outline there is a range limit of its own size. Rows run
 again count in the 64 rows. The sketch is also put back before the discovery rows (their base is the read after it, a full read) and
-once after the tries, so the design is left on the solution it had. `probe.recovery` (`{ put_backs, again }`, only when
+once after the tries, so the design is left on the solution it had; that last put back also runs when the tries fail or
+are cancelled, and after tries that failed `health.sketch_gap_mm` and `health.sketch_drift` still say whether a sketch
+stayed away from its first read. `probe.recovery` (`{ put_backs, again }`, only when
 either happened) counts the extra rebuilds: one per put back and two per row run again (the row and its restore).
 
 A file with several bodies (package kind `parts`) has one `report.json` with a `parts` list, one record per body:

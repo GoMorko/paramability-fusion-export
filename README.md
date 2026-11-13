@@ -109,7 +109,8 @@ the same at the current values. The result window lists these loose sizes.
 
 A size can also move a sketch: a rectangle width, a hole position, or a plane that a sketch sits on. The add-in then
 sets the size to other values, lets Fusion rebuild, and reads the sketch each time. The values of one try go in as
-one change, so Fusion rebuilds once per try, as when you edit the parameters yourself. From these
+one change, so Fusion rebuilds once per try, as when you edit the parameters yourself (Export size choices also
+recomputes the whole design before it saves each size). From these
 readings it writes the sketch value as a formula of your parameters, such as `0.5 * FilterBox_width_mm`, so the
 sketch follows the size in Paramability. Each size that moves a sketch is first tried a quarter below and a quarter
 above its value (inside its range), then, while tries are left, at the ends of its range. A size that only feeds step
