@@ -22,7 +22,12 @@ OUTLINE_SKIPS = ("params", "refs", "target", "patterns")
 
 class SizeProbe:
     """One export's sketch states and what they gave. Build it with `start`, which returns None when there is
-    nothing to follow."""
+    nothing to follow.
+
+    The states, the rows, the discovery and the findings stay in one class: all four read the same E0, request,
+    followed references and states, and the try runner and the pipelines ask each of them of the probe
+    (`interface.Probe`). Collaborators for discovery and findings would need that state handed in and a forwarding
+    method on the probe for most of their members."""
 
     def __init__(self, capture, table, read, request, e0, watch=None, refs=()):
         self.capture = probe_view(capture)
