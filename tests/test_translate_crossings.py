@@ -74,10 +74,13 @@ class CrossingTest(unittest.TestCase):
         self.assertEqual([expr(c) for c in outer["start"]],
                          ["-0.5 * w_mm", "-(sqrt(-0.25 * (w_mm * w_mm) + 100))"])
 
-    def test_a_crossing_that_disappears_inside_the_range_marks_its_size(self):
+    def test_a_crossing_that_disappears_at_a_range_end_cuts_the_range_before_it(self):
         result = run(capture_with(d_shape(), "w_mm", 10.0), "w_mm", d_motion())  # w_mm reaches 20: the line only touches
-        self.assertEqual([f["name"] for f in result.loose], ["w_mm"])
-        self.assertIn("along a curve", result.loose[0]["reason"])
+        self.assertEqual((result.loose, [c["max"] for c in result.cuts]), ([], [19.99]))
+        # A range the person typed is never cut, so the size is marked instead.
+        typed = run(capture_with(d_shape(), "w_mm", 10.0), "w_mm", d_motion(), {"w_mm": (4.0, 20.0)})
+        self.assertEqual([f["name"] for f in typed.loose], ["w_mm"])
+        self.assertIn("along a curve", typed.loose[0]["reason"])
 
     def test_two_circles_cross_where_their_offset_puts_them(self):
         off, half = 4.0, math.sqrt(R * R - 4.0)

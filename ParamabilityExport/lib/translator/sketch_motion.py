@@ -19,7 +19,7 @@ from .footprint import nearest_point
 from .loops import profile_loops
 from .result import Refusal
 from .sizes import placement_sizes, unmeasured_sizes
-from .sketch_crossings import Sources, keeps_order
+from .sketch_crossings import Sources, keeps_order, order_ranges
 from .values import Quantity, stays_positive
 
 POSITIVE_FIELDS = ("width", "height", "radius", "radiusX", "radiusY")
@@ -495,7 +495,11 @@ def outline(ctx, item, profile, outer, inners, parts):
         raw_loops = [_from_anchors(loop, anchors, sketch, sources) for loop in loops]
     if any(isinstance(v, Curved) for v in _raw_values(raw_loops)) and not keeps_order(
             ctx.table, ctx.motion, loops, raw_loops, sketch):
-        raw_loops = _stuck_curves(raw_loops, sketch)
+        kept = order_ranges(ctx.table, loops, raw_loops, sketch)
+        if kept:
+            ctx.cut(kept, notes.crosses_reason(sketch))
+        else:
+            raw_loops = _stuck_curves(raw_loops, sketch)
     # Merged parts share one frame, so the first part's plane stands for all of them.
     plane = raw(ctx, keys.plane(prefix), _dot(profile["frame"]["origin"], profile["frame"]["z"]), sketch)
     placement_doubts(ctx, item, profile, plane)

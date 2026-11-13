@@ -312,6 +312,10 @@ def stuck_reason(cause, sketch):
     return _STUCK.get(cause, _STUCK["unread"]) % (clip(sketch, MAX_NAME) if sketch else "a sketch")
 
 
+def crosses_reason(sketch):
+    return "the outline of %s would cross itself or lose a corner" % (clip(sketch, MAX_NAME) if sketch else "a sketch")
+
+
 def shrinks_reason(sketch):
     return "an outline in %s would shrink to nothing" % (clip(sketch, MAX_NAME) if sketch else "a sketch")
 

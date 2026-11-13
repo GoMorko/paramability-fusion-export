@@ -199,7 +199,8 @@ def _reads(node):
         any(_reads(x) for c in node[1:] if isinstance(c, list) for x in c)
 
 
-def _value(tree, env):
+def value_of(tree, env):
+    """The number of a parsed formula (`parse_formula`) at `env`, for a rule worked out at many settings."""
     value = _eval(tree, env)
     if value != value or value in (float("inf"), float("-inf")):
         raise ExpressionError("The formula does not give a number.")
@@ -240,7 +241,7 @@ def _crossings(table, tree_terms, ends):
             xs = [lo] + [lo + f * (hi - lo) for f in INNER_FRACTIONS] + [hi]
             for rest in ({}, low, high):
                 try:
-                    signs = [_sign(_value(term, size_env(table, dict(rest, **{n: x})))) for x in xs]
+                    signs = [_sign(value_of(term, size_env(table, dict(rest, **{n: x})))) for x in xs]
                 except _FAILURES:
                     continue
                 for (x0, s0), (x1, s1) in zip(zip(xs, signs), zip(xs[1:], signs[1:])):
@@ -263,7 +264,7 @@ def _bisect(table, term, rest, name, x0, x1, s0):
     for _ in range(STEPS):
         mid = (x0 + x1) / 2.0
         try:
-            s = _sign(_value(term, size_env(table, dict(rest, **{name: mid}))))
+            s = _sign(value_of(term, size_env(table, dict(rest, **{name: mid}))))
         except _FAILURES:
             break
         if s == 0:
@@ -296,7 +297,7 @@ def sweep(table, formula, reads, bounds=None, extra=()):
     low = high = None
     for setting in settings + list(extra):
         try:
-            value = _value(tree, size_env(table, setting))
+            value = value_of(tree, size_env(table, setting))
         except _FAILURES:
             failed = True
             continue
