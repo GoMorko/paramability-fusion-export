@@ -26,12 +26,21 @@ class Baseline:
         self.errors = dict(errors or {})
 
 
-def _error_entries(store):
+def error_entries(store):
     """{key: name} of the timeline items in error. The key tells apart items that share a name."""
     entries = getattr(store, "error_entries", None)
     if callable(entries):
         return dict(entries())
     return {name: name for name in store.error_items()}
+
+
+def new_errors(store, baseline):
+    """Names of the timeline items in error now that were not in error in `baseline`. Never raises: an unreadable
+    timeline gives none."""
+    try:
+        return [name for key, name in error_entries(store).items() if key not in baseline.errors]
+    except Exception:
+        return []
 
 
 def measure_baseline(store):
@@ -41,7 +50,7 @@ def measure_baseline(store):
     except Exception:
         ok = False
     try:
-        errors = _error_entries(store)
+        errors = error_entries(store)
     except Exception:
         errors = {}
     return Baseline(ok, errors)
@@ -72,7 +81,7 @@ def apply_row_values(store, units, values, baseline=None):
         raise RowBuildError(
             "Fusion could not rebuild the design for this size.",
             {"reason": "recompute_raised", "error": f"{type(exc).__name__}: {exc}"[:200]}) from exc
-    new_errors = [n for key, n in _error_entries(store).items() if key not in baseline.errors]
+    new_errors = [n for key, n in error_entries(store).items() if key not in baseline.errors]
     if new_errors:
         raise RowBuildError(
             f"This size does not build in Fusion: {new_errors[0]}",

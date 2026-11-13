@@ -26,7 +26,7 @@ from ..design_edit.runner import ExportCancelled
 from . import health as health_module
 from .body_scope import body_links, scope_inputs
 from .part_names import tagged, unique_names
-from .pipeline import ProbeRun, warn_left_off, with_try_seconds
+from .pipeline import ProbeRun, broken_since, read_errors, warn_left_off, with_try_seconds
 from .reach_pass import needs_reach, with_reach
 from .probe_flow import ProbeGroup, SizeProbe, covers_a_sketch, extra_size_params, kept_size_names
 from .recipe_export import PartInput, free_sizes, plan_parts_export, translate_capture
@@ -108,10 +108,13 @@ class _PartsPipeline:
         self.motions = {}
         self.doubtful = []
         self.also = []
+        self.stopped = None  # `ProbeRun.stopped`
+        self.errors_before = None  # the timeline items in error when the export started (`pipeline.read_errors`)
         self.timing = getattr(port, "timing", None) or ExportTiming()
 
     def run(self):
         self.saved = self.port.store.saved_expressions()
+        self.errors_before = read_errors(self.port.store)
         done = False
         try:
             result = self._run()
@@ -165,6 +168,7 @@ class _PartsPipeline:
             gap = self._restore_gap()
         with timing.span("restore"):
             self._end_roll()
+            broken = broken_since(port.store, self.errors_before)
         reports = self.group.reports() if self.group is not None and self._measured() else []
         if self.roll is not None and self.roll.record is not None:
             for report in reports:
@@ -177,7 +181,7 @@ class _PartsPipeline:
         flipped = ["%s (%s)" % (name, self.names[i]) for i, motion in self.motions.items() if motion is not None
                    for name in motion.flipped]
         health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error, unchecked,
-                                           flipped)
+                                           flipped, self.stopped, broken)
         inputs = [PartInput(self.names[i], self.steps[i], self.captures[i], finals.get(i), self.motions.get(i),
                             probe_of.get(i), derived_of.get(i)) for i in range(port.count)]
         manifest, files, report = plan_parts_export(
@@ -364,6 +368,7 @@ class _PartsPipeline:
             self.motions = {}
             return
         finally:
+            self.stopped = run.stopped
             self.timing.note_probe(with_try_seconds(run.summary(), self.roll))
         self.motions = dict(zip(self.probed, group.motions))
         self.doubtful.extend(found)

@@ -56,6 +56,22 @@ class StuckStore(FakeStore):
         super().set_expression(name, expression)
 
 
+class BreakingStore(FakeStore):
+    """A store where a value of `depth_mm` above 70 breaks a step for good: it stays in error after the values are back,
+    as Fusion can leave a step that lost its input."""
+
+    def __init__(self, expressions):
+        super().__init__(expressions)
+        self.broken = False
+
+    def set_expression(self, name, expression):
+        super().set_expression(name, expression)
+        self.broken = self.broken or (name == "depth_mm" and float(expression.split()[0]) > 70)
+
+    def error_items(self):
+        return ["RemoveBody1"] if self.broken else []
+
+
 class FakePort:
     """Fusion as the pipeline sees it. `reads` counts probe reads; `fail_read_from` makes the n-th read and the ones
     after it raise; `drift` makes every read at the start values after the first come back moved."""
@@ -234,6 +250,21 @@ class ProbeFailureTest(unittest.TestCase):
         self.assertEqual(result.health["probe"], "failed")
         self.assertTrue(section_lines(view(result), "check"))
         self.assertEqual(port.store.exprs, START)
+
+
+class BrokenDesignTest(unittest.TestCase):
+    def test_the_tries_stop_once_a_try_leaves_the_design_broken_and_the_person_is_told(self):
+        port = FakePort(store=BreakingStore(START))
+        result = export(port, ranges={"depth_mm": (30, 120)})
+        states = result.report["probe"]["states"]
+        failed = [n for n, s in enumerate(states) if not s["built"]]
+        self.assertEqual(len(states) - 1, failed[0])  # nothing ran after the try that broke the design
+        self.assertEqual(result.report["probe"]["stopped"]["items"], ["RemoveBody1"])
+        self.assertEqual(result.health["tries_stopped"]["items"], ["RemoveBody1"])
+        self.assertEqual(result.health["broken"], ["RemoveBody1"])
+        lines = section_lines(view(result), "check")
+        self.assertTrue(any("stopped early" in line for line in lines))
+        self.assertTrue(any("RemoveBody1" in line and "Undo" in line for line in lines))
 
 
 class RestoreTest(unittest.TestCase):

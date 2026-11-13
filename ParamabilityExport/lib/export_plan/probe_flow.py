@@ -209,6 +209,7 @@ class SizeProbe:
         self.after_rows = None  # what read differently from E0 once the parameters were put back after the rows
         self.restore_unchecked = []  # "<sketch>: <why>" for each sketch the restore check could not compare
         self.recovery = None  # what was done when a sketch stayed on another solution (`note_recovery`)
+        self.stopped = None  # `{ after, items }` when a try left the design broken and the tries stopped (`note_stop`)
         self.face_sizes = plane_sizes.face_sizes(self.capture, table)  # face key to the sizes that may change it
 
     @classmethod
@@ -298,6 +299,11 @@ class SizeProbe:
     def note_recovery(self, record):
         """Keep what `pipeline.ProbeRun` did when a sketch stayed on another solution, for `report`."""
         self.recovery = dict(record)
+
+    def note_stop(self, record):
+        """Keep the try after which the design did not rebuild with the values back, and the steps in error, for
+        `report`: the tries stopped there."""
+        self.stopped = {"after": record.get("after"), "items": list(record.get("items") or [])}
 
     def matches_start(self, read):
         """True when `read` has the same sketches, points, lines, references and body box as the first read (E0), within
@@ -650,6 +656,8 @@ class SizeProbe:
             out["restore_unchecked"] = list(self.restore_unchecked)
         if self.recovery:
             out["recovery"] = dict(self.recovery)
+        if self.stopped:
+            out["stopped"] = dict(self.stopped)
         return out
 
     @staticmethod
@@ -718,6 +726,10 @@ class ProbeGroup:
     def note_recovery(self, record):
         for probe in self.probes:
             probe.note_recovery(record)
+
+    def note_stop(self, record):
+        for probe in self.probes:
+            probe.note_stop(record)
 
     def matches_start(self, reads):
         """True when every part's read equals its first read (`SizeProbe.matches_start`)."""

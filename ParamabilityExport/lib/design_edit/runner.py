@@ -2,7 +2,7 @@
 import os
 
 from ..package.caps import check_step_size, check_total_size
-from .apply import RowBuildError, apply_row_values, measure_baseline
+from .apply import RowBuildError, apply_row_values, measure_baseline, new_errors
 from .errors import StepExportError
 from .restore import restore_parameters
 
@@ -27,6 +27,10 @@ class RowExport:
     the parameters that could not be put back by any run, whatever the outcome.
     before_row(row), when given, is called just before each row's values are set, once the parameters are back: the
     place to read the design the row starts from.
+    With build errors tolerated, every row after the first also checks that the design rebuilds as in the baseline with
+    the parameters back. When a step is still in error there, a failed row has left the design broken, so every later
+    row would fail for that reason and not for its own values: the run stops and `not_back` says
+    `{ after, items }`, the row run last and the steps in error. No later run of the job runs a row.
     """
 
     def __init__(self, store, units, export_step, before_row=None):
@@ -37,6 +41,8 @@ class RowExport:
         self.current_row = ""
         self.current_key = ""
         self.restore_failures = []
+        self.not_back = None
+        self._last = None  # the label of the row run last
         self._saved = None
         self._baseline = None
         self._total = 0
@@ -47,6 +53,14 @@ class RowExport:
         A parameter that cannot be put back is listed in restore_failures, and the run goes on."""
         failed = restore_parameters(self.store, self._saved)
         self.restore_failures = list(dict.fromkeys(self.restore_failures + failed))
+
+    def _stopped(self):
+        """True when an earlier row left the design broken with the parameters back (`not_back`)."""
+        if self.not_back is None and self._last is not None:
+            broken = new_errors(self.store, self._baseline)
+            if broken:
+                self.not_back = {"after": self._last, "items": broken}
+        return self.not_back is not None
 
     def run(self, rows, tmpdir, progress, tolerate_build_errors=False):
         """Return [{'name', 'values', 'step_file'}]. progress(index, total, text) returns False to cancel; `text` is
@@ -71,6 +85,9 @@ class RowExport:
                     self._back_to_current()
                 if self.before_row is not None:
                     self.before_row(row)
+                if tolerate_build_errors and self._stopped():
+                    break
+                self._last = row.get("label") or row["name"]
                 try:
                     values = apply_row_values(self.store, self.units, row["values"], self._baseline)
                 except RowBuildError as exc:

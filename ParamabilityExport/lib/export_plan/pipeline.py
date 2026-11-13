@@ -32,6 +32,7 @@ from .body_scope import body_links, scope_inputs
 from .reach_pass import needs_reach, with_reach
 from .probe_flow import SizeProbe, covers_a_sketch, extra_size_params, kept_size_names, shadow_of
 from .recipe_export import free_sizes, plan_single_export, translate_capture
+from ..design_edit.apply import error_entries
 from ..design_edit.marker import MARKER_LOST
 from ..design_edit.restore import restore_parameters
 from ..design_edit.runner import ExportCancelled, RowExport
@@ -133,6 +134,21 @@ class MarkerNotHeld(Exception):
     the marker and could not put it back."""
 
 
+def read_errors(store):
+    """{key: name} of the timeline items in error now (`apply.error_entries`), or {} when that cannot be read."""
+    try:
+        return error_entries(store)
+    except Exception:
+        return {}
+
+
+def broken_since(store, before):
+    """Names of the timeline items in error now that were not in error in `before` (`read_errors`)."""
+    if before is None:
+        return []
+    return [name for key, name in read_errors(store).items() if key not in before]
+
+
 def with_try_seconds(summary, roll):
     """The probe's timing summary with the time the tries took as `TryTimeline` counted it (`probe.timeline`)."""
     try:
@@ -165,6 +181,9 @@ class ProbeRun:
     port's sketch keeper (`port.sketch_keeper(tokens)`, kept at E0) moves its points back to where they were and the
     design is rebuilt once (`backs`, by row key), so the row starts from the first solution. After
     `MAX_PUT_BACK_MISSES` put backs in a row that do not bring the sketch back, no more are tried.
+
+    A row that leaves the design broken with the parameters back stops the tries (`RowExport.not_back`): no later
+    batch runs, and the probe keeps the states read before (`stopped`).
 
     A row whose start was not read, and after which the sketch was found on another solution (it read another outline
     or did not build, and the next read with the values back shows it), may itself have started there. It runs once
@@ -277,6 +296,15 @@ class ProbeRun:
                 self.read_failure = exc
                 self.port.log(f"size probe read failed: {exc!r}")
 
+    def _left(self):
+        """How many rows the cap leaves; none once a row left the design broken (`RowExport.not_back`)."""
+        return 0 if self.job.not_back is not None else plan_rows_left(self.rows)
+
+    @property
+    def stopped(self):
+        """`{ after, items }` when the tries stopped because a row left the design broken, else None."""
+        return self.job.not_back
+
     def try_rows(self, rows):
         """Run the probe's rows. Returns their results."""
         done = len(self.rows)
@@ -289,6 +317,10 @@ class ProbeRun:
             with self.timer.span("rows"):
                 results = self.job.run(rows, self.tmp, step, tolerate_build_errors=True)
         self.rows.extend(zip(rows, results))
+        if self.job.not_back is not None:
+            self.port.log("tries stopped: the design did not rebuild with the values back after %s"
+                          % self.job.not_back["after"])
+            self.probe.note_stop(self.job.not_back)
         return results
 
     def summary(self):
@@ -344,7 +376,7 @@ class ProbeRun:
             after = self.starts.get(keys[at + 1]) if at + 1 < len(keys) else self._tails.get(keys[at])
             if after is not None and self.probe.left_start(after):
                 out.append((keys[at], dict(self.rows[at][0], key=keys[at] + " (again)", again=True)))
-        return out[:plan_rows_left(self.rows)]
+        return out[:self._left()]
 
     def run_rows(self, rows):
         """Run `rows`, run again those that may have started on another solution (`_again`), and give the probe the
@@ -378,7 +410,7 @@ class ProbeRun:
         batch, while rows and steps are left (the steps toward the value, then the halving between a value that built
         and one that did not)."""
         for _ in range(len(NEARER_STEPS) + BISECT_STEPS + 1):
-            nearer = self.probe.nearer_rows(sizes, plan_rows_left(self.rows))
+            nearer = self.probe.nearer_rows(sizes, self._left())
             if not nearer:
                 break
             self.run_rows(nearer)
@@ -390,11 +422,11 @@ class ProbeRun:
         if rows:
             self.run_rows(rows)
         self._retry(sizes)
-        far = self.probe.far_rows(sizes, plan_rows_left(self.rows))
+        far = self.probe.far_rows(sizes, self._left())
         if far:
             self.run_rows(far)
             self._retry(sizes)
-        check = self.probe.check_rows(sizes, plan_rows_left(self.rows))
+        check = self.probe.check_rows(sizes, self._left())
         if check:
             self.run_rows(check)
 
@@ -404,7 +436,7 @@ class ProbeRun:
         base = self._read_now({})
         back = self._put_back() if self.probe.left_start(base) else None
         self.probe.set_discovery_base(base, back)
-        found = self.probe.discovery_rows(list(tries), plan_rows_left(self.rows))
+        found = self.probe.discovery_rows(list(tries), self._left())
         if not found:
             return []
         done = len(self.rows)
@@ -430,10 +462,13 @@ class _Pipeline:
         self.motion = None
         self.doubtful = []
         self.also = []
+        self.stopped = None  # `ProbeRun.stopped`
+        self.errors_before = None  # the timeline items in error when the export started (`read_errors`)
         self.timing = getattr(port, "timing", None) or ExportTiming()
 
     def run(self):
         self.saved = self.port.store.saved_expressions()
+        self.errors_before = read_errors(self.port.store)
         done = False
         try:
             result = self._run()
@@ -488,11 +523,13 @@ class _Pipeline:
             gap = self._restore_gap()
         with timing.span("restore"):
             self._end_roll()
+            broken = broken_since(port.store, self.errors_before)
         with timing.span("probe"):
             probe_report = self._close_probe()
             shadow = shadow_of(self.probe, port.log) if self.probe is not None else None
         health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error,
-                                           self._unchecked(), self.motion.flipped if self.motion is not None else ())
+                                           self._unchecked(), self.motion.flipped if self.motion is not None else (),
+                                           self.stopped, broken)
         capture = self.capture if self.capture is not None else capture
         manifest, files, report = plan_single_export(
             capture if capture is not None else RuntimeError("The steps were not read."),
@@ -607,6 +644,7 @@ class _Pipeline:
             self.motion = None
             return None
         finally:
+            self.stopped = run.stopped
             self.timing.note_probe(with_try_seconds(run.summary(), self.roll))
         self.motion = probe.motion
         return found
