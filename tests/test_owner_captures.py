@@ -271,10 +271,12 @@ class OwnerCaptureTest(unittest.TestCase):
             steps = {f["id"]: f for f in result.recipe["features"]}
             self.assertEqual(steps[case["step_id"]]["sketch"]["outer"]["kind"], case["outer_kind"])
             self.assertNotIn(case["absent_id"], steps)
-            (count,) = {s["linear"]["count"]["expr"] for s in steps.values() if s["kind"] == "pattern"}
+            # A symmetric pattern is written as one part per side, each with its own count formula.
+            counts = {s["linear"]["count"]["expr"] for s in steps.values() if s["kind"] == "pattern"}
+            self.assertTrue(counts)
             copies = [s for s in steps.values() if s.get("when")]
             self.assertEqual(len(copies), case["copies"])
-            self.assertTrue(all(count in s["when"] for s in copies))
+            self.assertTrue(all(any(count in s["when"] for count in counts) for s in copies))
             self.assertFalse([f for f in result.loose if "different outline" in f["reason"]])
             # A size that moves an outline along a curve stays loose because another step still follows it.
             curved = {n for v in motion.values.values() if isinstance(v, Stuck) and v.cause == "curve"
