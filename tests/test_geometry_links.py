@@ -96,12 +96,6 @@ class ProbeRowsTest(unittest.TestCase):
         self.assertEqual([r["varied"] for r in rows], [["linked"], ["linked"]])
         self.assertEqual(untried, [])
 
-    def test_at_most_a_few_ticked_sizes_are_tried_on_a_guess(self):
-        names = ["p%d" % n for n in range(plan.MAX_EXTRA_SIZES + 3)]
-        params = [{"name": n, "expression": "5 mm", "value": 0.5, "unit": "mm", "kind": "length"} for n in names]
-        table = size_table.build(params, names)
-        self.assertEqual(plan.extra_sizes(table, ["p0"]), names[1:plan.MAX_EXTRA_SIZES + 1])
-
 
 class TranslateTest(unittest.TestCase):
     def test_a_hole_that_follows_the_pipe_makes_the_pipe_a_size_its_arcs_read(self):

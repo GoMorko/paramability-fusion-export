@@ -26,10 +26,10 @@ from ...translator.kept_ranges import built_ranges
 from .. import health as health_module
 from ..body_scope import body_links, scope_inputs
 from ..part_names import tagged, unique_names
-from ..probe_flow import ProbeGroup, SizeProbe, covers_a_sketch, extra_size_params, kept_size_names
+from ..probe_flow import ProbeGroup, SizeProbe, covers_a_sketch, sizes_to_try
 from ..reach_pass import needs_reach, with_reach
 from ..recipe_export import PartInput, free_sizes, plan_parts_export, translate_capture
-from ..size_offers import discovery_sizes, labels, probe_sizes
+from ..size_offers import discovery_sizes, labels
 from ..timeline_trim import TryTimeline
 from .probe_run import ProbeRun, with_try_seconds
 from .settle import (deferred_left, gap_after_settle, left_off, settle_after_tries, settle_steps, start_steps,
@@ -246,9 +246,7 @@ class PartsPipeline:
             return finals
 
         free = list(dict.fromkeys(name for first in firsts.values() for name in free_sizes(first.recipe)))
-        extra = extra_size_params(self.table, free)
-        keep = kept_size_names(self.table, free) | {self.table.size_name(n) for n in extra}
-        sizes = probe_sizes(self.table, self.request.parameters, keep=keep)
+        sizes, extra = sizes_to_try(self.table, self.request.parameters, free)
         with self.timing.span("probe"):
             self._start_probes(list(firsts))
             if self.group is not None:

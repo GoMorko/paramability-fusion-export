@@ -1669,7 +1669,7 @@ The probe tries (`lib/probe/plan/`, at most 64 rows), in this order:
    plane a covered sketch sits on (`probe/plane_sizes.py`), at 25 percent of its
    value below and above (`NEAR_SHARE`), inside its range; a count moves by whole numbers, a value of zero by that
    share of the way to the range ends. Then up to 8 ticked sizes that nothing ties to a sketch (`MAX_EXTRA_SIZES`, in
-   table order) while rows are left: the person ticked them, so a sketch may follow them in a way the capture cannot
+   `export_plan/probe_flow/sizes.py`, in table order) while rows are left: the person ticked them, so a sketch may follow them in a way the capture cannot
    show. Such a size left without rows is not listed as untried.
 2. Near pair rows (`plan.pair_rows`), once the near rows have run: with two or more sizes tried, one row puts every
    tried size at its lower near value and one at its higher. A size whose own near row on that side did not build (or

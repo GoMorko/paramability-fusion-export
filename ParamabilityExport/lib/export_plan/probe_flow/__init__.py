@@ -17,14 +17,13 @@ motion file says so (`Motion.refs`).
 The modules: `size_probe` (`SizeProbe`: the states and the calls of the try runner), `row_planning`, `discovery` and
 `findings` (the parts of `SizeProbe` that plan rows, read the discovery rows and build the result), `probe_group`
 (`ProbeGroup`), `borrowed_view` (the borrowed sketches and the view of the capture), `shared_reads`, `states` (comparing
-states), `sizes` (which sizes to probe), `reasons` (the texts of untried sizes) and `shadow` (the `derived` block).
+states), `sizes` (`sizes_to_try`: which sizes to probe), `reasons` (the texts of untried sizes) and `shadow` (the `derived` block).
 This package re-exports what the rest of the add-in reads as `probe_flow.<name>`.
 """
 from .borrowed_view import borrowed_sketches, covers_a_sketch, probe_view
 from .probe_group import ProbeGroup
 from .shadow import shadow_of
 from .size_probe import SizeProbe
-from .sizes import extra_size_params, kept_size_names
+from .sizes import sizes_to_try
 
-__all__ = ["ProbeGroup", "SizeProbe", "borrowed_sketches", "covers_a_sketch", "extra_size_params", "kept_size_names",
-           "probe_view", "shadow_of"]
+__all__ = ["ProbeGroup", "SizeProbe", "borrowed_sketches", "covers_a_sketch", "probe_view", "shadow_of", "sizes_to_try"]

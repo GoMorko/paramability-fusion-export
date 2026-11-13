@@ -9,10 +9,10 @@ from ...sketch_values.motion import OPTIMISTIC
 from ...timing.export_timing import ExportTiming
 from .. import health as health_module
 from ..body_scope import body_links, scope_inputs
-from ..probe_flow import SizeProbe, covers_a_sketch, extra_size_params, kept_size_names, shadow_of
+from ..probe_flow import SizeProbe, covers_a_sketch, shadow_of, sizes_to_try
 from ..reach_pass import needs_reach, with_reach
 from ..recipe_export import free_sizes, plan_single_export, translate_capture
-from ..size_offers import discovery_sizes, labels, probe_sizes
+from ..size_offers import discovery_sizes, labels
 from ..timeline_trim import TryTimeline
 from .port import PipelineResult
 from .probe_run import ProbeRun, with_try_seconds
@@ -146,9 +146,7 @@ class _Pipeline:
             # when the first look had none either.
             return first if first_motion is None else None
         free = free_sizes(first.recipe)
-        extra = extra_size_params(self.table, free)
-        keep = kept_size_names(self.table, free) | {self.table.size_name(n) for n in extra}
-        sizes = probe_sizes(self.table, self.request.parameters, keep=keep)
+        sizes, extra = sizes_to_try(self.table, self.request.parameters, free)
 
         with self.timing.span("probe"):
             self.probe = self._start_probe(capture)
@@ -208,7 +206,7 @@ class _Pipeline:
         """The probe's rows and its result: the sizes the probe cannot follow, or None when the probe failed.
 
         The rows put every size at the ends of its range where a size moves a sketch, then the sizes in `extra` (tried
-        on a guess, `probe_flow.extra_size_params`) while rows are left. A row that does not build is tried again
+        on a guess, `probe_flow.sizes_to_try`) while rows are left. A row that does not build is tried again
         nearer to the value now (`ProbeRun.measure`). Rows still left try the unticked parameters
         in `tries` once each (`size_offers.discovery_sizes`); they only find which of them also change the part
         (`self.also`) and are not used for the motion. A failure other than a cancel

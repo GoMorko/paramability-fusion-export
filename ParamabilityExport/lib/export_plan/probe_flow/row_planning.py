@@ -1,5 +1,6 @@
 """The rows a probe plans: near, pair, far, nearer and check rows."""
 from ...probe import build, plan, plane_sizes, series
+from ...translator.sizes import probed_sizes
 from .states import marked_states
 
 
@@ -9,11 +10,11 @@ class RowPlanning:
     def probe_rows(self, sizes, extra=()):
         """The first extra rows, near the value of each size that moves a sketch: the sizes the states already show
         moving one, every size that reaches a sketch, and every size that may move the plane a sketch sits on
-        (`plane_sizes`). Then the sizes in `extra` (Fusion names tried on a guess, `extra_size_params`) while rows are
+        (`plane_sizes`). Then the sizes in `extra` (Fusion names tried on a guess, `sizes_to_try`) while rows are
         left. Any other size that only feeds step values has no row. The far range ends come later (`far_rows`)."""
         current = {e.name: e.value for e in self.table.entries}
         self.moved = build.moved_sizes(self.capture, self.states, current)
-        reach = set(plan.sketch_driven(self.table)) | set(plane_sizes.plane_driven(self.capture, self.table))
+        reach = set(probed_sizes(self.table)) | set(plane_sizes.plane_driven(self.capture, self.table))
         moved = set(self.moved) | {s["param"] for s in sizes if s["param"] in reach}
         rows, self.untried = plan.probe_rows(sizes, moved, extra=set(extra))
         self._moving = set(moved)

@@ -4,7 +4,7 @@ from ...package.text import clip
 from ...probe import build, derived, match, plan, plane_sizes, ref_fit
 from ...sketch_values.motion import SHAPE
 from ...translator.notes import loose_reason
-from ...translator.sizes import construction_only
+from ...translator.sizes import construction_only, probed_sizes
 from .reasons import RESTORE_WHY, UNREADABLE, UNTRIED, watched_why
 from .states import body_changed
 
@@ -166,6 +166,6 @@ class Findings:
                 body.append(varied[0])
         # A size tried only for a sketch plane, or only for the distance of an offset plane a step places, feeds
         # step values: those follow it (or mark it), so its body change is explained.
-        placed = (set(plane_sizes.plane_driven(self.capture, self.table)) - set(plan.sketch_driven(self.table))
+        placed = (set(plane_sizes.plane_driven(self.capture, self.table)) - set(probed_sizes(self.table))
                   | set(construction_only(self.table, self.capture)))
         return [n for n in body if n not in followed and n not in skip and n not in placed]

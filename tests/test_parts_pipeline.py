@@ -28,6 +28,7 @@ from lib.package.manifest import validate_manifest
 from lib.params import size_table as size_tables
 
 BASE = load_capture("sketch_rect_centred")
+PIPE = load_capture("linked_pipe_hole")
 
 
 def renamed(capture, old, new):
@@ -335,6 +336,31 @@ class MeasuringTest(unittest.TestCase):
         self.assertEqual(result.manifest["kind"], "parts")
         self.assertTrue(all("recipe" in p for p in result.manifest["parts"]))
         self.assertEqual(port.store.exprs, START)
+
+
+class RecordingStore(FakeStore):
+    """A store that notes, at every rebuild, which parameters stand at another value than at the start."""
+
+    def __init__(self, expressions):
+        super().__init__(expressions)
+        self.start = dict(expressions)
+        self.rebuilt_with = []
+
+    def recompute(self):
+        self.rebuilt_with.append({n for n, e in self.exprs.items() if e != self.start[n]})
+        return super().recompute()
+
+
+class GuessedSizesTest(unittest.TestCase):
+    def test_a_ticked_size_that_nothing_ties_to_a_sketch_gets_its_own_tries_in_a_several_body_export(self):
+        user = PIPE["parameters"]["user"]
+        port = FakePartsPort([PIPE], store=RecordingStore({p["name"]: p["expression"] for p in user}))
+        port.units = {p["name"]: p["unit"] for p in user}
+        with tempfile.TemporaryDirectory() as tmp:
+            run_parts_pipeline(port, ExportRequest(
+                title="Box", writer="test", up_axis="z", parameters=user, model_params=PIPE["parameters"]["model"],
+                design_unit="mm", ticked=[p["name"] for p in user], ranges={}), tmp)
+        self.assertIn({"spare_mm"}, port.store.rebuilt_with)
 
 
 class RestoreTest(unittest.TestCase):

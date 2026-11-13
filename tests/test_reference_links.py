@@ -8,7 +8,7 @@ from tests.translator_helpers import load_capture
 from lib.export_plan import size_offers
 from lib.export_plan.body_scope import body_links, body_outside
 from lib.params import geometry_links
-from lib.probe import plan
+from lib.translator.sizes import probed_sizes
 
 LINK = {"param": "gap_mm", "sketch": "", "component": "Cover", "via": "reference", "step": "Mirror1",
         "ref": "4.plane"}
@@ -77,7 +77,7 @@ class ReferenceLinksTest(unittest.TestCase):
         table = size_offers.table_for_body(capture["parameters"]["user"], "mm", [], capture)
         self.assertEqual(table.ticked, ["gap_mm"])
         self.assertEqual(table.links_of("gap_mm"), [LINK])
-        self.assertIn("gap_mm", plan.sketch_driven(table))
+        self.assertIn("gap_mm", probed_sizes(table))
 
     def test_the_offer_says_which_step_uses_which_component(self):
         capture = mirror_capture()

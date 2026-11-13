@@ -7,7 +7,7 @@ from tests.fakes import FakePortExtras, FakeStore
 from tests.probe_helpers import circle, loop, size, table, user
 from tests.test_probe_motion import CAPTURE, MODEL, PARAMS, TICKED, W, read_at
 
-from lib.export_plan.probe_flow import SizeProbe, covers_a_sketch, kept_size_names
+from lib.export_plan.probe_flow import SizeProbe, covers_a_sketch
 from lib.design_edit.runner import RowExport
 from lib.probe import plan
 from lib.sketch_values import coverage
@@ -138,9 +138,6 @@ class SizeProbeTest(unittest.TestCase):
         self.assertEqual(report["request"]["sketches"], ["sk1", "sk2"])
         self.assertTrue(report["states"][0]["e0"])
         self.assertIn("4/p0/l0/width", report["motion"]["values"])
-
-    def test_kept_sizes_include_the_ones_that_only_reach_a_sketch(self):
-        self.assertEqual(kept_size_names(self.table, []), {self.table.size_name(n) for n in ("count", "cube", "off", "height")})
 
 
 class DiscoveryTest(unittest.TestCase):

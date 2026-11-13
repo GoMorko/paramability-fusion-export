@@ -7,7 +7,7 @@ for. Which records a step type carries comes from the step kind table (`translat
 a face or plane of the part that an extrude starts from or reaches to) that the probe reads again at every state. A
 flat face a step uses as its outline (`outline_face`) is a target of its own (`kind` "face"): the reader reads its
 loops again at every state with the timeline marker before that step, since the step itself changes the face.
-`request` is what the reader reads per state, `kept_sizes` the sizes worth probing, `probe_rows` the size settings to
+`request` is what the reader reads per state, `probe_rows` the size settings to
 try.
 
 Sizes are dicts as in `export_plan.size_offers.probe_sizes`: param (Fusion name), size (recipe name), unit, value,
@@ -34,7 +34,7 @@ A size that only feeds step values is exact from its
 formula and gets no row: rows go to the sizes that move a sketch or a measured reference (`moved`) and to the
 guessed ones, and only a size left without a near row because of the limit is reported as untried.
 
-The modules: `covered` (`scan`), `references` (`refs`), `request` (`request`), `sizes` (which sizes to probe), `rows`
+The modules: `covered` (`scan`), `references` (`refs`), `request` (`request`), `rows`
 (one row), `history` (what earlier states show), `near_far`, `nearer` and `extra_rows` (the row kinds). This package
 re-exports what the rest of the add-in reads as `plan.<name>`.
 """
@@ -45,11 +45,10 @@ from .nearer import BISECT_STEPS, MAX_NEARER_ROWS, NEARER_STEPS, nearer_rows
 from .references import NO_PLACE, NO_TOKEN, SHAPE_AXIS, SHAPE_DIRECTION, SHAPE_PLANE, SHAPE_POINT, is_vector, refs
 from .request import request, symmetric_patterns
 from .rows import MAX_PROBE_ROWS, RETRY_NOTE, state_values
-from .sizes import MAX_EXTRA_SIZES, extra_sizes, kept_sizes, sketch_driven
 
 __all__ = [
-    "BISECT_STEPS", "FACE", "MAX_DISCOVERY", "MAX_EXTRA_SIZES", "MAX_NEARER_ROWS", "MAX_PROBE_ROWS", "NEARER_STEPS",
-    "NO_PLACE", "NO_TOKEN", "RETRY_NOTE", "SHAPE_AXIS", "SHAPE_DIRECTION", "SHAPE_PLANE", "SHAPE_POINT", "SCANNERS",
-    "Scan", "check_rows", "discovery_left", "discovery_rows", "extra_sizes", "far_pair_rows", "far_rows",
-    "is_vector", "kept_sizes", "near_values", "nearer_rows", "outline_face", "pair_rows", "probe_rows", "refs",
-    "request", "scan", "sketch_driven", "state_values", "symmetric_patterns"]
+    "BISECT_STEPS", "FACE", "MAX_DISCOVERY", "MAX_NEARER_ROWS", "MAX_PROBE_ROWS", "NEARER_STEPS", "NO_PLACE",
+    "NO_TOKEN", "RETRY_NOTE", "SHAPE_AXIS", "SHAPE_DIRECTION", "SHAPE_PLANE", "SHAPE_POINT", "SCANNERS", "Scan",
+    "check_rows", "discovery_left", "discovery_rows", "far_pair_rows", "far_rows", "is_vector", "near_values",
+    "nearer_rows", "outline_face", "pair_rows", "probe_rows", "refs", "request", "scan", "state_values",
+    "symmetric_patterns"]
