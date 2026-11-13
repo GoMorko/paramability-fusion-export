@@ -2151,13 +2151,14 @@ when it has something to say:
 | --- | --- |
 | `steps_changed` | The steps still not as at the start: `{ name, type, before, after, message, was_message?, suppressed? }`, at most 8. `before` is `new` for a step that was not there, `after` is `gone` for one that is not there now; `message` is Fusion's text now, `was_message` the text at the start when it differs; `suppressed` is the state now when it differs. |
 | `steps_more` | How many more steps differ than `steps_changed` lists. |
+| `steps_worse` | True when any step that differs is worse than at the start, also one past the steps `steps_changed` lists. |
 | `steps_recovered` | Steps that differed and came back by the actions below (at most 8). |
 | `end_actions` | What was done, in order: `marker_back` (the marker read elsewhere and was put back), `marker_lost` (it would not go back), `turned_back_on`, `full_compute`, `values_again`. |
 | `steps_unread` | True when the steps could not be compared (the timeline could not be read). |
 | `deferred_left` | Sketches whose compute stayed deferred after the keeper moved their points (`SketchKeeper.deferred_left`). |
 | `sketch_gap_after_rebuild_mm` | When `full_compute` or `values_again` ran and the sketches were followed: the gap of a read of the outlines after those rebuilds (`pipeline.gap_after_settle`). `sketch_gap_mm` and `sketch_drift` take the larger of this and the gap read before, so a sketch the end rebuild moved counts as a changed design. |
 
-A step in `steps_changed` that is worse than at the start, or a sketch in `deferred_left`, counts as a changed design:
+A step that is worse than at the start (`steps_worse`), or a sketch in `deferred_left`, counts as a changed design:
 the person gets a message box first and the result window says which steps and to use Undo. A step that is only better
 gets the line without the message box. When the export stops (an error or a cancel) the same lines come in a message
 box. A step can read worse at the end only because Fusion shows some warnings only after a full recompute: the

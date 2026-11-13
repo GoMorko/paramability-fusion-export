@@ -220,7 +220,8 @@ def settle_timeline(store, start, saved, log=lambda text: None):
 
 def record(settled):
     """The `health` keys of a `TimelineSettle` for `report.json`: `steps_changed` (at most `MAX_STEPS`, the rest
-    counted in `steps_more`), `steps_recovered`, `end_actions` and `steps_unread`. Only keys with something to say."""
+    counted in `steps_more`), `steps_worse` (true when any changed step is worse, listed or not), `steps_recovered`,
+    `end_actions` and `steps_unread`. Only keys with something to say."""
     out = {}
     if settled is None:
         return out
@@ -228,6 +229,8 @@ def record(settled):
         out["steps_changed"] = [{k: v for k, v in c.items() if k != "index"} for c in settled.changed[:MAX_STEPS]]
         if len(settled.changed) > MAX_STEPS:
             out["steps_more"] = len(settled.changed) - MAX_STEPS
+        if any(is_worse(c) for c in settled.changed):
+            out["steps_worse"] = True
     if settled.recovered:
         out["steps_recovered"] = settled.recovered[:MAX_STEPS]
     if settled.actions:

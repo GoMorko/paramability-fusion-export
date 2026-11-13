@@ -68,16 +68,19 @@ def make_health(unrestored=(), gap_mm=None, probe=NOT_NEEDED, probe_error="", un
     return out
 
 
-def worse_steps(health):
-    """The `steps_changed` records of the steps in a worse state than at the start (`timeline_health.is_worse`)."""
-    return [c for c in (health or {}).get("steps_changed") or [] if steps_module.is_worse(c)]
+def any_worse(health):
+    """True when a step is in a worse state than at the start (`timeline_health.is_worse`), also one past the steps
+    `steps_changed` lists (`steps_worse`)."""
+    health = health or {}
+    return bool(health.get("steps_worse")) or any(
+        steps_module.is_worse(c) for c in health.get("steps_changed") or [])
 
 
 def design_changed(health):
     """True when the design may differ from before the export: a parameter not put back, sketches that moved, steps in
     a worse state than before, or a sketch left with its compute deferred."""
     return bool(health and (health.get("unrestored") or health.get("sketch_drift") or health.get("broken")
-                            or worse_steps(health) or health.get("deferred_left")))
+                            or any_worse(health) or health.get("deferred_left")))
 
 
 def measuring_doubtful(health):
@@ -120,7 +123,7 @@ def steps_line(health):
     more = len(changed) - MAX_LISTED + (health.get("steps_more") or 0)
     if more > 0:
         shown += " and %d more" % more
-    if worse_steps(health):
+    if any_worse(health):
         tail = ("Fusion rebuilt the design with your values and they stayed so, so your design may be changed. "
                 + UNDO_ADVICE)
     else:

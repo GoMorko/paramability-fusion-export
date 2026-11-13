@@ -155,6 +155,14 @@ class RecordTest(unittest.TestCase):
         self.assertLessEqual(len(line), health_module.MAX_LINE)
         self.assertIn("Undo", line)
 
+    def test_a_worse_step_past_the_listed_ones_still_counts_as_a_changed_design(self):
+        better = [{"index": i, "name": "Fillet%d" % i, "type": "FilletFeature", "before": "warning", "after": "ok",
+                   "message": ""} for i in range(steps.MAX_STEPS)]
+        worse = {"index": 99, "name": "Shell1", "type": "ShellFeature", "before": "ok", "after": "warning", "message": ""}
+        health = health_module.make_health(steps=steps.TimelineSettle(better + [worse]))
+        self.assertTrue(health_module.design_changed(health))
+        self.assertIn("Undo in Fusion until", health_module.health_lines(health)[0])
+
 
 class Timeline:
     def __init__(self, items, marker):
