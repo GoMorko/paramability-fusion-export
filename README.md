@@ -134,7 +134,9 @@ any value tried is not a size, and the reason names the values and the step Fusi
 design broken (a step stays in error even with your values back), the tries stop there, since every later try would
 fail for that reason; the result window says so, and if a step is still in error after the export it tells you to use
 Undo. A taper that follows
-sizes gets the same kind of range: it stops before the taper reaches 45 degrees, the steepest Paramability builds.
+sizes gets the same kind of range: it stops before the taper reaches 45 degrees, the steepest Paramability builds. A
+tapered cut through all whose walls would meet before it passes the part at some sizes keeps the range up to the
+steepest taper that stays open.
 
 The box "Faster tries" under the body picker is off to start with. When you tick it, the tries also turn off the
 timeline steps of other components that the body does not use, so each try rebuilds less. Every step is turned back
