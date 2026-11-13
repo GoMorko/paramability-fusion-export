@@ -351,12 +351,16 @@ class Outline:
             self._samples = inner_pick.Samples(self.table, self.preview(), self.bounds)
         return self._samples
 
-    def _inner(self, footprint, uv):
+    def _inner(self, footprint, uv, edge):
         """`(uv, raw xy)` of the place a point inside the outline moves with: the centre of a round or a rect, else
-        a corner or the centre of the corners (`inner_pick.anchor`)."""
+        for a face pick a corner or the centre of the corners (`inner_pick.anchor`). An edge inside the face comes
+        from another step, so it keeps the centre of the corners: staying inside the face does not keep it on that
+        edge."""
         loop, raw_loop = self.loops[0], self.raw_loops[0]
         if loop["kind"] in ("circle", "ellipse", "rect"):
             return loop["center"], raw_loop["center"]
+        if edge:
+            return inner_pick.centre(inner_pick.corners(loop, raw_loop), self.sketch)
         return inner_pick.anchor(self, footprint, uv)
 
     def _shifted(self, uv, base_uv, base):
@@ -402,10 +406,10 @@ class Outline:
                                  raw_loop["radiusY"]]), BENDS, self.sketch)
         return None
 
-    def follow(self, footprint, which, curve, corner, uv):
+    def follow(self, footprint, which, curve, corner, uv, edge=False):
         """The raw (x, y) a point at `uv` moves to: a corner, a point on an outline curve, or a point inside an end
-        face (it moves with one place of the outline, `_inner`). None when nothing moves it; a Stuck when it cannot
-        follow."""
+        face (it moves with one place of the outline, `_inner`; `edge` when the point is on an edge there). None when
+        nothing moves it; a Stuck when it cannot follow."""
         if not self.moves:
             return None
         if corner is not None:
@@ -421,7 +425,7 @@ class Outline:
             if found is None:
                 return _unread(self.anchors, self.sketch)
             return found if isinstance(found, Stuck) else self._shifted(uv, near, found)
-        base_uv, base = self._inner(footprint, uv)
+        base_uv, base = self._inner(footprint, uv, edge)
         return self._shifted(uv, base_uv, base)
 
 

@@ -115,3 +115,27 @@ class InnerPickTest(unittest.TestCase):
         for point in step["edges"]["faceEdges"]["near"]:
             at = [evaluate(c["expr"], dict(env, a_deg=135.0)) if isinstance(c, dict) else c for c in point]
             self.assertAlmostEqual(math.dist(at[:2], (15.0, -1.5)), 0.0, places=6)
+
+    def test_an_edge_picked_inside_an_end_face_moves_with_the_centre_of_the_corners(self):
+        # A six-sided outline that widens evenly both ways with w: its centre stays, its corners move with w / 2.
+        # The picked edge comes from another step, so moving with the nearest corner would carry the point off it.
+        capture = copy.deepcopy(load_capture("chamfer_equal"))
+        corners = [(-10.0, -5.0), (10.0, -5.0), (12.0, 0.0), (10.0, 5.0), (-10.0, 5.0), (-12.0, 0.0)]
+        profile = capture["items"][1]["data"]["profiles"][0]
+        profile.update(sketch="Sketch1", sketch_token="s1", loops=[{"outer": True, "curves": [
+            line(corners[i], corners[(i + 1) % len(corners)], "e%d" % i) for i in range(len(corners))]}])
+        capture["capture"] = 3
+        capture["parameters"] = {"user": [user("w_mm", 20.0)], "model": []}
+        capture["target"]["box"] = {"min": [-12.0, -5.0, 0.0], "max": [12.0, 5.0, 10.0]}
+        capture["items"][2]["data"]["sets"][0]["edges"] = [{"token": "t0", "closed": False, "points": [[7.0, 0.0, 10.0]]}]
+        values = {}
+        for at, point in enumerate(profile_loops(profile)[0]["points"]):
+            x = min(corners, key=lambda c: math.dist(c, point))[0]
+            side = 1.0 if x > 0 else -1.0
+            values["1/p0/l0/points.%d.0" % at] = Terms(x - side * 10.0, [(side * 0.5, [("", "w_mm", 1.0)])], "Sketch1")
+        result = run(capture, Motion(values))
+        assert_schema_ok(self, result.recipe)
+        (step,) = steps_of(result.recipe, "bevel")
+        (point,) = step["edges"]["near"]
+        at = [evaluate(c["expr"], {"w_mm": 30.0}) if isinstance(c, dict) else c for c in point]
+        self.assertAlmostEqual(math.dist(at, (7.0, 0.0, 10.0)), 0.0, places=6)

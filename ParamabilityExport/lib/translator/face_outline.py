@@ -260,11 +260,12 @@ class CapOutline:
                 total = total.plus(q.scaled(d))
         return total.plus(-total.n)
 
-    def follow(self, footprint, which, curve, corner, uv):
+    def follow(self, footprint, which, curve, corner, uv, edge=False):
         """Where a point of the new step moves: the earlier outline's answer for the same point."""
         if self.outline is None:
             return None
-        found = self.outline.follow(self.footprint, which, curve, corner, [uv[0], -uv[1]] if self.turned else uv)
+        found = self.outline.follow(self.footprint, which, curve, corner, [uv[0], -uv[1]] if self.turned else uv,
+                                    edge)
         if found is None or isinstance(found, Stuck) or not self.turned:
             return found
         return found[0], combine([(-1.0, found[1])], self.sketch)

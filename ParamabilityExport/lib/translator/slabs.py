@@ -266,7 +266,7 @@ class Slab(Placer):
             inset = self.inset(at)
             on_outline = abs(depth - inset) <= LATERAL_TOL
             if on_outline or depth > inset:
-                return Place(self, which, at / full, curve if on_outline else None, uv=uv)
+                return Place(self, which, at / full, curve if on_outline else None, uv=uv, edge=edge)
         if low + AXIAL_TOL < h < high - AXIAL_TOL and abs(depth - self.inset(h)) <= LATERAL_TOL:
             corner = None if self.taper is not None else self.footprint.corner_at(uv, LATERAL_TOL)
             if edge and corner is None:
@@ -291,18 +291,18 @@ class Place:
     followed.
     """
 
-    def __init__(self, slab, which, factor, curve=None, corner=None, uv=None):
+    def __init__(self, slab, which, factor, curve=None, corner=None, uv=None, edge=False):
         self.slab, self.which, self.factor = slab, which, factor
         self.curve, self.corner = curve, corner
         self.slabs = [slab]
         self.lateral = None
         self.blocked = []
         if uv is not None and slab.outline is not None:
-            self._follow_outline(uv)
+            self._follow_outline(uv, edge)
 
-    def _follow_outline(self, uv):
+    def _follow_outline(self, uv, edge):
         slab = self.slab
-        found = slab.outline.follow(slab.footprint, self.which, self.curve, self.corner, uv)
+        found = slab.outline.follow(slab.footprint, self.which, self.curve, self.corner, uv, edge)
         if isinstance(found, Stuck):
             self.blocked.append(found)
             return
