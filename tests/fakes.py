@@ -40,6 +40,36 @@ class FakeStore:
     def error_items(self):
         return [self.bad_item] if self.bad_when(self.exprs) else []
 
+    def error_entries(self):
+        return {name: name for name in self.error_items()}
+
+    def set_expressions(self, expressions):
+        return False
+
+    def return_marker(self):
+        return ""
+
+    def marker_holds(self):
+        return True
+
+
+class FakePortExtras:
+    """The members of an export port that a fake port rarely needs: no timing of its own, no undo steps, no sketch
+    keeper, and warnings that go nowhere. A fake port inherits it and defines what its test looks at."""
+
+    timing = None
+    undo_steps = None
+    read_timer = None
+
+    def sketch_keeper(self, tokens):
+        return None
+
+    def warn_left_off(self, names, undo_dropped=False):
+        pass
+
+    def warn_steps(self, lines):
+        pass
+
 
 class _Item:
     def __init__(self, **kw):

@@ -7,7 +7,7 @@ import unittest
 from unittest import mock
 
 from tests import context  # noqa: F401
-from tests.fakes import FakeStore
+from tests.fakes import FakePortExtras, FakeStore
 from tests.schema_check import load_schema, validate
 from tests.test_manifest import PACKAGE_SCHEMA
 from tests.test_pipeline import MODEL, START, TICKED, USER, StuckStore
@@ -55,7 +55,7 @@ def stuck_body():
     return capture
 
 
-class FakePartsPort:
+class FakePartsPort(FakePortExtras):
     """Fusion as the parts pipeline sees it: one capture per body, one design with one parameter store.
     `fail_step_at` is the number of the STEP export that fails; `cancel_at` the number of the progress step that is
     cancelled; `fail_read_from` makes the n-th probe read of any body, and the ones after it, raise."""
@@ -71,6 +71,9 @@ class FakePartsPort:
 
     def body_names(self):
         return [c["target"]["name"] if isinstance(c, dict) else "Broken" for c in self.captures]
+
+    def read_reach(self, index, capture, gaps):
+        raise AssertionError("this fake port reads no reach")
 
     def export_step(self, index, path):
         self.steps += 1

@@ -7,7 +7,7 @@ import unittest
 from unittest import mock
 
 from tests import context  # noqa: F401
-from tests.fakes import FakeStore
+from tests.fakes import FakePortExtras, FakeStore
 from tests.translator_helpers import load_capture
 
 from lib.design_edit.errors import StepExportError
@@ -74,7 +74,7 @@ class BreakingStore(FakeStore):
         return ["RemoveBody1"] if self.broken else []
 
 
-class FakePort:
+class FakePort(FakePortExtras):
     """Fusion as the pipeline sees it. `reads` counts probe reads; `fail_read_from` makes the n-th read and the ones
     after it raise; `drift` makes every read at the start values after the first come back moved."""
 
@@ -92,6 +92,9 @@ class FakePort:
             for profile in (item.get("data") or {}).get("profiles") or []:
                 self.e0["sketches"][profile["sketch_token"]] = {
                     "frame": profile["frame"], "profiles": [{"loops": profile["loops"]}]}
+
+    def read_reach(self, capture, gaps):
+        raise AssertionError("this fake port reads no reach")
 
     def export_step(self, path):
         self.steps += 1

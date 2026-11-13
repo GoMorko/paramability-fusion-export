@@ -28,10 +28,7 @@ class Baseline:
 
 def error_entries(store):
     """{key: name} of the timeline items in error. The key tells apart items that share a name."""
-    entries = getattr(store, "error_entries", None)
-    if callable(entries):
-        return dict(entries())
-    return {name: name for name in store.error_items()}
+    return dict(store.error_entries())
 
 
 def new_errors(store, before):
@@ -95,11 +92,10 @@ def set_all(store, expressions):
     """Set every expression of `expressions` ({name: text}) in one change with one rebuild, when the store can
     (`set_expressions`, Fusion's `Design.modifyParameters`). True when it did; False, with nothing changed, when the
     store cannot or refused one of them: the caller then sets them one at a time. Never raises."""
-    batch = getattr(store, "set_expressions", None)
-    if not callable(batch) or not expressions:
+    if not expressions:
         return False
     try:
-        return batch(dict(expressions)) is True
+        return store.set_expressions(dict(expressions)) is True
     except Exception:
         return False
 
@@ -107,9 +103,8 @@ def set_all(store, expressions):
 def apply_row_values(store, units, values, baseline=None, full=False):
     """Set the row's values, rebuild, and return {name: number in mm or deg}.
 
-    store needs set_expression, recompute, error_items and read_value (internal cm or rad); error_entries
-    (pairs of item key and name) is used when it has one, and set_expressions (`set_all`) when it has one. units maps
-    parameter name to the Fusion unit string. baseline is `measure_baseline`'s result from before the first row; None
+    store is a `store.ParameterStore` (values in internal cm or rad). units maps parameter name to the Fusion unit
+    string. baseline is `measure_baseline`'s result from before the first row; None
     means a clean design.
 
     The values go in as one change when the store can: Fusion rebuilds the steps they change once, as when the person

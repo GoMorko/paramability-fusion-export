@@ -1,5 +1,5 @@
 """The health of every timeline step at the start of an export, compared with the end, and what is done when they
-differ. Pure: the store is passed in and used by name only.
+differ. Pure: the store (`store.ParameterStore`) is passed in.
 
 An export sets other values, rebuilds, moves the timeline marker and puts all of it back. A step that only just
 builds (a fillet that barely fits, a sketch with two solutions) can come out of that in another state than before,
@@ -8,12 +8,13 @@ rebuilt. `settle_timeline` reads the steps again once everything else is back, a
 rebuilds the whole design once; when a step is still worse, it sets the start values once more and rebuilds again.
 What is left is recorded for `report.json` (`health`) and told to the person.
 
-A store gives the steps through `timeline_health()` (`DesignParameterStore`): a list of
+A store gives the steps through its `timeline_health()` control (`DesignParameterStore`): a list of
 `{ index, name, type, health, message, suppressed }` for the steps before the marker. A store without it gives only
 the steps in error (`apply.error_entries`); the other steps then count as fine.
 """
 from .apply import error_entries, set_all
 from .restore import restore_parameters
+from .store import timeline_control
 
 OK, WARNING, ERROR = "ok", "warning", "error"
 NEW, GONE = "new", "gone"  # a step that was not there at the start, or is not there at the end
@@ -52,9 +53,9 @@ def _step(entry):
 
 def read_timeline(store):
     """The steps as they are now (`TimelineRead`), or None when they cannot be read. Never raises."""
-    full = getattr(store, "timeline_health", None)
+    full = timeline_control(store, "timeline_health")
     try:
-        if callable(full):
+        if full is not None:
             found = [_step(entry) for entry in full() or []]
             return TimelineRead({(s["index"], s["name"]): s for s in found})
         steps = {}
@@ -140,8 +141,8 @@ def _turn_on(store, found, log):
     """Turn back on the steps that were on at the start and read turned off now (`store.turn_on`). True when there
     were any."""
     off = [(c["index"], c["name"]) for c in found if c.get("suppressed") is True and isinstance(c["index"], int)]
-    turn_on = getattr(store, "turn_on", None)
-    if not off or not callable(turn_on):
+    turn_on = timeline_control(store, "turn_on")
+    if not off or turn_on is None:
         return False
     try:
         turn_on(off)
@@ -152,11 +153,8 @@ def _turn_on(store, found, log):
 
 def _marker_home(store, log):
     """`MARKER_BACK` or `MARKER_LOST` when the marker read away from where the store keeps it, else None."""
-    home = getattr(store, "return_marker", None)
-    if not callable(home):
-        return None
     try:
-        moved = home()
+        moved = store.return_marker()
     except Exception as exc:
         log(f"checking the timeline marker failed: {exc!r}")
         return None

@@ -47,7 +47,7 @@ class _Pipeline:
         self.keeper = None  # the sketch keeper of the tries (`settle_after_tries`)
         self.steps_start = None  # the timeline steps at the start (`start_steps`)
         self.settled = None  # `settle_steps`
-        self.timing = getattr(port, "timing", None) or ExportTiming()
+        self.timing = port.timing or ExportTiming()
 
     def run(self):
         self.saved = self.port.store.saved_expressions()

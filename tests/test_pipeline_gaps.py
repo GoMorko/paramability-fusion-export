@@ -8,7 +8,8 @@ from unittest import mock
 
 from tests import context  # noqa: F401
 from tests import fakes
-from tests.fakes import FakeEdge, FakeFace, FakeMadeFeature, FakeMarkerTimeline, FakeReachDesign, FakeStore
+from tests.fakes import (FakeEdge, FakeFace, FakeMadeFeature, FakeMarkerTimeline, FakePortExtras, FakeReachDesign,
+                         FakeStore)
 from tests.schema_check import load_schema, validate
 from tests.test_manifest import GAPS_SCHEMA, GAPS_SCHEMA_V2, PACKAGE_SCHEMA, PACKAGE_SCHEMA_V2
 from tests.test_parts_pipeline import FakePartsPort, renamed
@@ -58,7 +59,7 @@ def tray_design(fillet_on_the_sweep=False):
     return FakeReachDesign(FakeMarkerTimeline(features), edges + walls + inner)
 
 
-class ReachPort:
+class ReachPort(FakePortExtras):
     """Fusion for one body without a sketch to measure. The reach read is the real one on `design`, else it answers
     `reach`, or `answer(capture, gaps)`; `asked` keeps what it was asked."""
 

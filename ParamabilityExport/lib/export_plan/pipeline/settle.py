@@ -53,7 +53,7 @@ def gap_after_settle(owner, gap, measure):
 
 def undo_dropped(owner):
     """True when Fusion forgot Undo data during the export (Lighter on memory, `undo_steps.UndoSteps`)."""
-    steps = getattr(owner.port, "undo_steps", None)
+    steps = owner.port.undo_steps
     return bool(steps is not None and steps.record.get("applied"))
 
 

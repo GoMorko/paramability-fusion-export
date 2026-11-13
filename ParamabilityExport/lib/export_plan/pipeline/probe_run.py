@@ -1,6 +1,7 @@
 """The try runner: runs the probe rows in one job, reads each state and puts the followed sketches back."""
 from ...design_edit.marker import MARKER_LOST
 from ...design_edit.runner import ExportCancelled, RowExport
+from ...design_edit.store import timeline_control
 from ...probe.plan.nearer import BISECT_STEPS, NEARER_STEPS
 from ...probe.plan.rows import MAX_PROBE_ROWS
 from ...timing.timer import Timer, rounded
@@ -86,22 +87,19 @@ class ProbeRun:
         self._misses = 0
         self._previous = None  # key of the row run last
         self.keeper = self._keeper()
-        self.undo = getattr(port, "undo_steps", None)  # `undo_steps.UndoSteps` when the person turned it on
+        self.undo = port.undo_steps
         self.job = RowExport(port.store, port.units, self._export, self._before_row)
 
     def _keeper(self):
-        """The port's keeper of the followed sketches as they are now, or None when the port has none."""
-        make = getattr(self.port, "sketch_keeper", None)
-        if make is None:
-            return None
+        """The port's keeper of the followed sketches as they are now, or None when the port keeps none."""
         try:
-            return make(self.probe.followed_sketches())
+            return self.port.sketch_keeper(self.probe.followed_sketches())
         except Exception as exc:
             self.port.log(f"keeping the sketches failed: {exc!r}")
             return None
 
     def _can_park(self):
-        return callable(getattr(self.port.store, "keep_marker", None))
+        return timeline_control(self.port.store, "keep_marker") is not None
 
     def _home(self):
         """Bring the marker back where the tries hold it after a row read that may have left it before an outline face's
@@ -122,8 +120,7 @@ class ProbeRun:
         Raises when the timeline marker is not where the tries keep it, before or after the read: a read before it
         would miss items the sketches need, so the row counts as not read and the probe stops."""
         self._home()
-        holds = getattr(self.port.store, "marker_holds", None)
-        if holds is not None and not holds():
+        if not self.port.store.marker_holds():
             raise MarkerNotHeld("The timeline marker was not where the tries keep it.")
         with self.timer.span("read"):
             with self.timer.span("read_in_rows" if self.timer.is_open("rows") else "read_outside"):

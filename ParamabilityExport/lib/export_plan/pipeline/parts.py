@@ -43,7 +43,8 @@ MAX_SHARE_ROUNDS = 3
 class PartsPort(Protocol):
     """What the parts pipeline needs from Fusion: `ExportPort` for `count` bodies.
 
-    store, units, progress, warn_unrestored, log: as in `ExportPort`.
+    store, units, timing, undo_steps, read_timer, progress, warn_unrestored, warn_left_off, warn_steps, sketch_keeper,
+    log: as in `ExportPort`.
     count: how many bodies are picked.
     body_names(): a name per body, for the file.
     export_step(index, path): write the STEP of body `index` as the design is now.
@@ -51,12 +52,14 @@ class PartsPort(Protocol):
     read_reach(index, capture, gaps): the `reach` of body `index` when the steps at the timeline indexes `gaps` are
       left out of its copy (`ExportPort.read_reach`).
     probe_reader(index): a callable `read(request)` giving one probe state of body `index`, or raising.
-    sketch_keeper(tokens): optional, as `ExportPort.sketch_keeper`.
     """
 
     store: object
     units: dict
     count: int
+    timing: object
+    undo_steps: object
+    read_timer: object
 
     def body_names(self): ...
 
@@ -68,9 +71,15 @@ class PartsPort(Protocol):
 
     def probe_reader(self, index): ...
 
+    def sketch_keeper(self, tokens): ...
+
     def progress(self, verb): ...
 
     def warn_unrestored(self, names): ...
+
+    def warn_left_off(self, names, undo_dropped=False): ...
+
+    def warn_steps(self, lines): ...
 
     def log(self, text): ...
 
@@ -115,7 +124,7 @@ class PartsPipeline:
         self.keeper = None  # the sketch keeper of the tries (`settle_after_tries`)
         self.steps_start = None  # the timeline steps at the start (`start_steps`)
         self.settled = None  # `settle_steps`
-        self.timing = getattr(port, "timing", None) or ExportTiming()
+        self.timing = port.timing or ExportTiming()
 
     def run(self):
         self.saved = self.port.store.saved_expressions()

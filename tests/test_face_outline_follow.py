@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 from tests import context  # noqa: F401
-from tests.fakes import FakeMarkerTimeline, FakeStore
+from tests.fakes import FakeMarkerTimeline, FakePortExtras, FakeStore
 from tests.probe_helpers import size
 from tests.test_capture_reader import Obj
 from tests.test_capture_reader_offset import plane_face, side, with_outline
@@ -203,7 +203,7 @@ class ParkStore(FakeStore):
         return self.at >= self.HELD
 
 
-class ParkPort:
+class ParkPort(FakePortExtras):
     def __init__(self, capture, store):
         self.store, self.logs = store, []
         self.units = {p["name"]: p["unit"] for p in capture["parameters"]["user"]}

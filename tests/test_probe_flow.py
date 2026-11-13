@@ -3,7 +3,7 @@ import re
 import unittest
 
 from tests import context  # noqa: F401
-from tests.fakes import FakeStore
+from tests.fakes import FakePortExtras, FakeStore
 from tests.probe_helpers import circle, loop, size, table, user
 from tests.test_probe_motion import CAPTURE, MODEL, PARAMS, TICKED, W, read_at
 
@@ -188,7 +188,7 @@ class DiscoveryTest(unittest.TestCase):
         self.assertEqual(self.probe.restore_unchecked, [])
 
 
-class _Port:
+class _Port(FakePortExtras):
     """What `ProbeRun` needs of Fusion: the store, the units, a progress window and a log."""
 
     def __init__(self, fusion):

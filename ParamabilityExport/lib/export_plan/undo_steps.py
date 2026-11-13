@@ -53,9 +53,8 @@ def attach(port, steps):
     """Give `port` the `UndoSteps` the tries call (None when the box is off) and note it in the port's timing (the
     record is read when `report.json` is made). Returns the port."""
     port.undo_steps = steps
-    timing = getattr(port, "timing", None)
-    if timing is not None:
-        timing.undo = steps.record if steps is not None else {"on": False}
+    if port.timing is not None:
+        port.timing.undo = steps.record if steps is not None else {"on": False}
     return port
 
 
