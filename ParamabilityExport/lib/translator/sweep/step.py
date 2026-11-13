@@ -2,7 +2,7 @@
 
 The path decides what is written (`paths.plan` orders it and checks the limits of the recipe's sweep step):
 - a straight path is an extrude of the outline (`extrude.handle`);
-- one arc or a full circle is a revolve of the outline about the arc's axis (`revolve.handle`);
+- one arc or a full circle is a revolve of the outline about the arc's axis (`revolve.step.handle`);
 - a chain of lines, arcs and free curves in one plane, or of lines and tangent arcs in 3D, is a `sweep` step; a closed
   chain in one plane is a `sweep` step along a closed flat path (a full circle stays a revolve unless it twists),
   with an outline on a sharp corner moved along the path to the middle of the line it is square to (`path_closed`);

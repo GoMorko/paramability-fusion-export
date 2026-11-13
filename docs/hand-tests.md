@@ -1665,7 +1665,7 @@ read the capture in `report.json`.
   (into the material or out), `tipAngle` for a flat drill point, `participantBodies`, `sideFaces`, `endFaces`.
 - `CombineFeature.targetBody`, `toolBodies`, `isKeepToolBodies`; `ThreadFeature.isModeled`.
 - `CombineFeature.toolBodies` of a body in another component, in the capture of the exported body's component
-  (`tool_identity`, `place.py`): the proxy's `assemblyContext.fullPathName`, `nativeObject.entityToken` (must equal the
+  (`tool_identity`, `fusion_reader/placement.py`): the proxy's `assemblyContext.fullPathName`, `nativeObject.entityToken` (must equal the
   token that `bodies_after` of the tool's steps give) and `parentComponent`. The second reading pass
   (`fusion_reader/helper_pass.py`, G1 to G7) moves the marker to the Combine (`Timeline.markerPosition`), finds the
   native tool body with `Design.findEntityByToken` there, and reads the tool's place: `Component.xYConstructionPlane`,

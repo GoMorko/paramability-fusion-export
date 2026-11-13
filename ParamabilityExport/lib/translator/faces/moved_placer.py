@@ -20,7 +20,8 @@ def carried(placer, owner, motion):
 
 
 def motion_of(move, shift=None):
-    """The `Motion` of a `place.Move`. `shift` is three Quantities added to the offset: a move that follows sizes."""
+    """The `Motion` of a `geometry.rigid.Move`. `shift` is three Quantities added to the offset: a move that follows
+    sizes."""
     offsets = [Quantity(o) if shift is None else shift[i].plus(o) for i, o in enumerate(move.offset)]
     return Motion(move.rows, offsets)
 

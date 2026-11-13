@@ -78,7 +78,7 @@ class StepResult:
     item's `data.params`. `tool_steps` are the verdicts of the items inside the tool steps written here. `wraps_body`,
     when set, is a function of the context that gathers everything written so far into one tool step and gives its
     `Entry`: the walk writes it first (a pattern can then repeat the finished body). `gaps` are the steps of other
-    bodies left out of these steps (`gaps.Gap`); they count once these steps are written.
+    bodies left out of these steps (`gaps.stops.Gap`); they count once these steps are written.
     """
 
     def __init__(self, entries=()):
@@ -154,9 +154,10 @@ class TranslateResult:
     dropped: list = field(default_factory=list)
     # The steps left out of the recipe (gaps/stops.py, `gap_file.record`), in timeline order; empty when the copy stops.
     gaps: list = field(default_factory=list)
-    # The 12 numbers that map the capture's coordinates to the recipe's (`gaps.to_recipe`), when there are gaps.
+    # The 12 numbers that map the capture's coordinates to the recipe's (`gaps.gap_measures.to_recipe`), when there are
+    # gaps.
     to_recipe: Optional[list] = None
-    # True when the walk stopped because the part holds more gaps than `gaps.MAX_GAPS`.
+    # True when the walk stopped because the part holds more gaps than `gaps.stops.MAX_GAPS`.
     over_gap_cap: bool = False
     # When the copy stops: the `gap_hints` cause of the step that stops it, when it has one. A tool body walk passes
     # it on, so the gap its Combine becomes gets that step's hint.

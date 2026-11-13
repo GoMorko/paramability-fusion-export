@@ -4,7 +4,7 @@ One file per recipe (`gaps.json`, or `parts/NN/gaps.json` in a parts package). T
 that names one is version 2 (`manifest.VERSION_WITH_GAPS`).
 
 The file is version 1 when it holds at most VERSION_ONE_GAPS gaps, so it still opens in an app that reads only
-version 1, and version 2 (which allows up to `translator.gaps.MAX_GAPS`) when it holds more.
+version 1, and version 2 (which allows up to `translator.gaps.stops.MAX_GAPS`) when it holds more.
 """
 import json
 

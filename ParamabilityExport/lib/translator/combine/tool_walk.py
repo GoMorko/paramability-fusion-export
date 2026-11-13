@@ -46,7 +46,7 @@ class ToolBuild:
 
     @property
     def gaps(self):
-        """The steps of the tool left out of its copy (`gaps.Gap`)."""
+        """The steps of the tool left out of its copy (`gaps.stops.Gap`)."""
         return self.ctx.gaps
 
     def entries_of(self, item):

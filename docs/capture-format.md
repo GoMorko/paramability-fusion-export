@@ -854,7 +854,7 @@ sides of its plane, two different angles, an angle of 30 degrees or more, or no 
 
 - `entity_type`: `features`, `faces`, `bodies`, `occurrences`. `sources`: `timelineObject.index` of each input
   feature. A Combine of the target among the sources is repeated by the steps it wrote (its `toolBody` step, or its
-  tool's steps written one by one) when every item that built its tools is a source too (`repeat._combined_tools`;
+  tool's steps written one by one) when every item that built its tools is a source too (`repeat.repeat_sources._combined_tools`;
   the same holds for a circular pattern and a mirror of features). Only some of those items, the items of a tool
   without its Combine, or an intersect Combine refuse the pattern.
 - For `entity_type: bodies` (rectangular and circular patterns, and the mirror below) the item also has
@@ -986,7 +986,7 @@ The translator walks each tool body on its own (`tool_walk.build`): the items th
 loop in a child context whose target is the tool, so every handler sees the tool as its body. A step that cannot be
 copied stops that walk, and the Combine is refused with the reason naming the tool, the step and what stops it.
 
-- A tool whose steps only add material (`combine.adds_only`: `ExtrudeFeature` and `RevolveFeature` items whose recipe
+- A tool whose steps only add material (`combine.step.adds_only`: `ExtrudeFeature` and `RevolveFeature` items whose recipe
   steps are `new` for the first and `add` for the rest) is written step by step at the Combine's place with the
   Combine's operation, as long as no tool step reaches to a face when the tool has more than one step or lives in
   another component. An intersect does this only for one tool of one step. The recipe stays at the version it had before tool steps existed.
@@ -1069,7 +1069,7 @@ added to `parameters.model` (names already listed win).
 
 The translator walks the steps of a `helper_of` item when a Combine takes its tool (`tool_walk.build`), like those of
 another body of the target's component. The Combine moves them by the tool's frame and the inverse of the exported body's own
-(`combine.tool_move`), plus a move that follows sizes: the offsets of the three origin planes along their normals
+(`combine.step.tool_move`), plus a move that follows sizes: the offsets of the three origin planes along their normals
 (`ref_motion.moves`, formulas of the sizes, or sizes marked loose where the probe could not follow, as for any
 reference). A frame that is scaled or mirrored refuses the Combine, naming the component. Slabs of the moved steps are
 copied with that move, so picks on them follow sizes; other placers (`faces/moved_placer.py`) answer `material_at` for the
@@ -1570,7 +1570,7 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   sizes the picks stay plain points. A rectangular pattern whose count follows sizes, with no copy left out, writes
   instead one round or chamfer step per copy for every count the size ranges allow (at most 64 copies), each with
   `when: "<count formula> >= n + 1"` for the copy n steps along a part, so the rounds and chamfers follow the count as
-  Fusion repeats them (`repeat._counted_finishes`); the count is not fixed for them. The app recipe cannot repeat a
+  Fusion repeats them (`repeat.repeat_rectangular._counted_finishes`); the count is not fixed for them. The app recipe cannot repeat a
   round or chamfer itself, nor pick the edges of every copy of a step.
 - A round whose edges are exactly the four side edges of an earlier extrude with a plain rectangle outline, with a
   radius equal to half the rectangle's short side at every size setting, is drawn into that extrude: its outline

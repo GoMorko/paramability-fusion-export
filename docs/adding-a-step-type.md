@@ -129,7 +129,7 @@ A sweep hands over in two ways (`sweep/step.py`). `paths.plan` orders the path a
 of an extrude (`start` on the profile plane, one `side_one` distance as long as the path, no taper) and returns
 `extrude.handle(...)`, so the sweep gets the extrude's slab placer and later rounds follow sizes. One arc or a full
 circle builds the data of a revolve (the arc's axis, the arc's angle, the direction the start face looks) and returns
-`revolve.handle(...)`. Only a chain of lines, arcs and free curves, or a 3D chain with tangent arcs, is written as a
+`revolve.step.handle(...)`. Only a chain of lines, arcs and free curves, or a 3D chain with tangent arcs, is written as a
 `sweep` step of its own, with the path as measured. The handler checks every setting it does not follow (twist,
 taper, rail, part of the path, a path that is not square to the outline) before it hands over, and refuses with a
 plain reason. A size the written path cannot follow is marked on the sweep's side, whichever form is written: the
@@ -182,13 +182,13 @@ on its own (`lib/translator/combine/tool_walk.py`) by the same item loop, in a c
   (`tool_walk.chain_of`), in the component that holds it. The reader gave the items of the target's component their
   data; for another component's items (`helper_of`) the second pass in `lib/fusion_reader/helper_pass.py` read them in
   that component's frame. For the numbers measured on the body itself (box and volume before and after), a walk takes
-  `item["body_states"][token]` (`tool_walk._seen_from_tool`), not the exported body's fields.
+  `item["body_states"][token]` (`bodies.body_states.seen_on`), not the exported body's fields.
 - What a handler may not assume: that the part is its target's whole world. A child walk cannot see the part. A step
   that reaches to a face of the part has no place for it in the child; `tool_walk.on_part` works such steps out again
   against the part when a Combine writes them one by one, and a tool step that holds them marks the sizes it cannot
   follow. Put every pick, plane and axis through `faces/follow.py`, as for any step, and the audit says when one is missed.
 - `combine_tool` on the `RecipeKind`: the step can be one of the steps that a tool made only of such steps is written
-  with, one by one, onto the part (`combine.adds_only`). Set it only for a kind that adds material and nothing else
+  with, one by one, onto the part (`combine.step.adds_only`). Set it only for a kind that adds material and nothing else
   (extrude and revolve do). A kind without it is still copied inside a `toolBody`; it just stops the flat form.
 - `RecipeKind.repeat`: `toolBody` is `SOLID`, so a pattern repeats a tool. A step inside a tool is a `features` entry:
   walk steps with `step_walk.all_steps`, never `ctx.steps` alone, when code must see every step (the version, the
@@ -208,7 +208,7 @@ on its own (`lib/translator/combine/tool_walk.py`) by the same item loop, in a c
 - A step type that cannot be copied inside a tool gives `unsupported` as usual, and the Combine becomes one gap whose
   reason names it: "The tool body Body3 cannot be copied: Coil1 (coil): ...". The gaps inside the tool are dropped
   with the failed tool. A tool that is written but has a gap is always a `toolBody` step, never written one by one
-  onto the part (`combine._writes_flat`).
+  onto the part (`combine.step._writes_flat`).
 
 ### What a gap needs from a step type
 

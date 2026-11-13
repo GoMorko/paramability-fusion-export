@@ -46,7 +46,7 @@ def _is_box(box):
 
 
 def to_recipe(move):
-    """The 12 numbers of a `place.Move`: the 3 by 3 rows, then the offset."""
+    """The 12 numbers of a `geometry.rigid.Move`: the 3 by 3 rows, then the offset."""
     return [float(c) for row in move.rows for c in row] + [float(v) for v in move.offset]
 
 

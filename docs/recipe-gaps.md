@@ -46,7 +46,7 @@ marks as an error, a step that splits the part or makes another body (whether or
 another component; one that the reader saw leave the exported body as it was, `target_changed` false, is passed by
 instead), a Split Body the copy cannot write as the removal of the other side (`bodies/split.py` answers a `Refusal` with
 `stops`; a split that keeps the body as one piece apart from the others is copied, `bodies/split_rules.py`), a gap before the copy has written its first step (a gap needs a body to add to), a gap inside a
-walk of another component's body, more than 256 gaps in one part (`gaps.MAX_GAPS`, the count a version 2 gaps file holds; the gaps inside
+walk of another component's body, more than 256 gaps in one part (`gaps.stops.MAX_GAPS`, the count a version 2 gaps file holds; the gaps inside
 the tool bodies count, and a tool that meets the cap stops the whole copy), and the size caps of the recipe.
 
 A tool body of a Combine is walked by the same loop. A gap inside a tool body is kept only when the Combine writes that

@@ -8,7 +8,7 @@ when it keeps its token, else the body the split made.
   one extrude of a square on the plane, sized from the body's box with a wide margin. Its plane follows sizes like a
   mirror plane (`follow.place_plane`).
 - A split by a solid body becomes a cut by that body when the piece lies outside it, or an intersect when it lies
-  inside, written by the Combine machinery (`combine.write_tools`). Fusion keeps the tool body.
+  inside, written by the Combine machinery (`combine.step.write_tools`). Fusion keeps the tool body.
 - A split by anything else (a curved face, a surface body, a sketch curve) stops the copy.
 
 The capture must show that the piece is the whole of its side: it lies on one side of the plane (or inside or outside
