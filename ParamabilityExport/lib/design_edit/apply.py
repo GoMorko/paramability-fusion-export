@@ -34,13 +34,25 @@ def error_entries(store):
     return {name: name for name in store.error_items()}
 
 
-def new_errors(store, baseline):
-    """Names of the timeline items in error now that were not in error in `baseline`. Never raises: an unreadable
+def new_errors(store, before):
+    """Names of the timeline items in error now that were not in error in `before` ({key: name}, as `error_entries`).
+    A rebuild after one change (`set_all`) rebuilds only the steps it changed, so when some step reads in error the
+    design is recomputed in full once and read again: only what stays in error counts. Never raises: an unreadable
     timeline gives none."""
-    try:
-        return [name for key, name in error_entries(store).items() if key not in baseline.errors]
-    except Exception:
-        return []
+    def read():
+        try:
+            return [name for key, name in error_entries(store).items() if key not in before]
+        except Exception:
+            return []
+
+    found = read()
+    if found:
+        try:
+            store.recompute()
+        except Exception:
+            pass
+        found = read()
+    return found
 
 
 def _set_each(store, expressions):
@@ -96,18 +108,20 @@ def apply_row_values(store, units, values, baseline=None):
     means a clean design.
 
     The values go in as one change when the store can: Fusion rebuilds the steps they change once, as when the person
-    edits the parameters, and no full recompute follows. Else each value is set in turn and the design is recomputed.
+    edits the parameters, and no full recompute follows; that rebuild gives no answer of its own, so `recompute_ok`
+    is None and only the steps in error judge the row. Else each value is set in turn and the design is recomputed.
     The row fails when Fusion refuses an expression, the recompute raises, the recompute reports failure while
     the baseline did not, or timeline items went into error that were not in error in the baseline.
     """
     baseline = baseline or Baseline()
     expressions = {name: format_expression(value, units[name]) for name, value in values.items()}
-    ok = set_all(store, expressions) or _set_each(store, expressions)
+    # After one change Fusion gives no answer for the rebuild as a whole (None): the steps in error decide alone.
+    ok = None if set_all(store, expressions) else _set_each(store, expressions)
     broken = [n for key, n in error_entries(store).items() if key not in baseline.errors]
     if broken:
         raise RowBuildError(
             f"This size does not build in Fusion: {broken[0]}",
             {"reason": "new_errors", "items": broken, "recompute_ok": ok})
-    if not ok and baseline.recompute_ok:
+    if ok is False and baseline.recompute_ok:
         raise RowBuildError("Fusion could not rebuild the design for this size.", {"reason": "recompute_failed"})
     return {name: to_manifest_value(store.read_value(name), units[name]) for name in values}

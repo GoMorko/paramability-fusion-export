@@ -27,9 +27,10 @@ class RowExport:
     the parameters that could not be put back by any run, whatever the outcome.
     before_row(row), when given, is called just before each row's values are set, once the parameters are back: the
     place to read the design the row starts from.
-    With build errors tolerated, every row after the first also checks that the design rebuilds as in the baseline with
-    the parameters back. When a step is still in error there, a failed row has left the design broken, so every later
-    row would fail for that reason and not for its own values: the run stops and `not_back` says
+    With build errors tolerated, every row after a row that did not build first checks, with the parameters back and
+    before `before_row`, that the design rebuilds as in the baseline (`apply.new_errors`, which recomputes in full once
+    when a step reads in error). When a step is still in error, the failed row has left the design broken, so every
+    later row would fail for that reason and not for its own values: the run stops and `not_back` says
     `{ after, items }`, the row run last and the steps in error. No later run of the job runs a row.
     """
 
@@ -43,6 +44,7 @@ class RowExport:
         self.restore_failures = []
         self.not_back = None
         self._last = None  # the label of the row run last
+        self._last_failed = False  # whether that row did not build
         self._saved = None
         self._baseline = None
         self._total = 0
@@ -55,9 +57,11 @@ class RowExport:
         self.restore_failures = list(dict.fromkeys(self.restore_failures + failed))
 
     def _stopped(self):
-        """True when an earlier row left the design broken with the parameters back (`not_back`)."""
-        if self.not_back is None and self._last is not None:
-            broken = new_errors(self.store, self._baseline)
+        """True when an earlier row left the design broken with the parameters back (`not_back`). Only a row that did
+        not build is followed by the check."""
+        if self.not_back is None and self._last_failed:
+            self._last_failed = False
+            broken = new_errors(self.store, self._baseline.errors)
             if broken:
                 self.not_back = {"after": self._last, "items": broken}
         return self.not_back is not None
@@ -83,15 +87,16 @@ class RowExport:
                     raise ExportCancelled()
                 if index > 1:
                     self._back_to_current()
-                if self.before_row is not None:
-                    self.before_row(row)
                 if tolerate_build_errors and self._stopped():
                     break
-                self._last = row.get("label") or row["name"]
+                if self.before_row is not None:
+                    self.before_row(row)
+                self._last, self._last_failed = row.get("label") or row["name"], False
                 try:
                     values = apply_row_values(self.store, self.units, row["values"], self._baseline)
                 except RowBuildError as exc:
                     if tolerate_build_errors:
+                        self._last_failed = True
                         results.append({"name": row["name"], "values": None, "step_file": None, "error": str(exc),
                                         "detail": exc.detail})
                         continue

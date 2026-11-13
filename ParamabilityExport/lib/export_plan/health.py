@@ -47,9 +47,9 @@ def make_health(unrestored=(), gap_mm=None, probe=NOT_NEEDED, probe_error="", un
     if measured and flipped:
         out["flipped"] = list(dict.fromkeys(flipped))[:MAX_LISTED]
     if stopped:
-        out["tries_stopped"] = {"after": stopped.get("after") or "", "items": list(stopped.get("items") or [])}
+        out["tries_stopped"] = {"after": stopped.get("after") or "", "items": list(stopped.get("items") or [])[:MAX_LISTED]}
     if broken:
-        out["broken"] = list(dict.fromkeys(broken))
+        out["broken"] = list(dict.fromkeys(broken))[:MAX_LISTED]
     return out
 
 
@@ -79,9 +79,9 @@ def health_lines(health):
             "These parameters could not be set back to their values: %s. Your design is changed. %s"
             % (_names(health["unrestored"]), UNDO_ADVICE))
     if health.get("broken"):
-        lines.append(
+        lines.append(clip(
             "After the export these steps of your design show an error they did not have before: %s. Your design is "
-            "changed. %s" % (_names(health["broken"]), UNDO_ADVICE))
+            "changed. %s" % (_names(health["broken"]), UNDO_ADVICE), MAX_LINE))
     if health.get("sketch_drift"):
         lines.append(
             "The sketches did not come back to their first shape after the tries (largest gap %.4g mm). "

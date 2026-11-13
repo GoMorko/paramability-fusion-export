@@ -11,6 +11,7 @@ from tests.fakes import FakeStore
 from tests.translator_helpers import load_capture
 
 from lib.design_edit.errors import StepExportError
+from lib.export_plan import health as health_module
 from lib.export_plan import recipe_export
 from lib.export_plan.pipeline import ExportRequest, run_pipeline
 from lib.dialog_model.result_rows import NOT_FOLLOWED, NOT_MEASURED, result_view, section, section_lines
@@ -57,16 +58,17 @@ class StuckStore(FakeStore):
 
 
 class BreakingStore(FakeStore):
-    """A store where a value of `depth_mm` above 70 breaks a step for good: it stays in error after the values are back,
+    """A store where a value of `name` above `above` breaks a step for good: it stays in error after the values are back,
     as Fusion can leave a step that lost its input."""
 
-    def __init__(self, expressions):
+    def __init__(self, expressions, name="depth_mm", above=70):
         super().__init__(expressions)
         self.broken = False
+        self.name, self.above = name, above
 
     def set_expression(self, name, expression):
         super().set_expression(name, expression)
-        self.broken = self.broken or (name == "depth_mm" and float(expression.split()[0]) > 70)
+        self.broken = self.broken or (name == self.name and float(expression.split()[0]) > self.above)
 
     def error_items(self):
         return ["RemoveBody1"] if self.broken else []
@@ -269,6 +271,20 @@ class BrokenDesignTest(unittest.TestCase):
         lines = section_lines(view(result), "check")
         self.assertTrue(any("stopped early" in line for line in lines))
         self.assertTrue(any("RemoveBody1" in line and "Undo" in line for line in lines))
+
+    def test_a_long_list_of_broken_steps_is_capped_and_its_line_kept_short(self):
+        names = ["Step%d" % n for n in range(40)]
+        health = health_module.make_health(broken=names)
+        self.assertEqual(len(health["broken"]), health_module.MAX_LISTED)
+        self.assertLessEqual(len(health_module.health_lines(health)[0]), health_module.MAX_LINE)
+
+    def test_sizes_whose_tries_never_ran_after_the_stop_are_untried_not_still(self):
+        result = export(FakePort(store=BreakingStore(START, "box_count", 3.5)))
+        probe = result.report["probe"]
+        self.assertEqual(probe["untried"], ["cube_mm", "depth_mm"])
+        self.assertEqual(probe["motion"]["untried"], ["cube_mm", "depth_mm"])
+        dropped = {d["name"]: d["used"] for d in result.report["sizes"]["dropped"]}
+        self.assertEqual((dropped["cube_mm"], dropped["depth_mm"]), (True, True))
 
 
 class RestoreTest(unittest.TestCase):

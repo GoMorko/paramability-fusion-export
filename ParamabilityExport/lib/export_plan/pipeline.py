@@ -32,7 +32,7 @@ from .body_scope import body_links, scope_inputs
 from .reach_pass import needs_reach, with_reach
 from .probe_flow import SizeProbe, covers_a_sketch, extra_size_params, kept_size_names, shadow_of
 from .recipe_export import free_sizes, plan_single_export, translate_capture
-from ..design_edit.apply import error_entries
+from ..design_edit.apply import error_entries, new_errors
 from ..design_edit.marker import MARKER_LOST
 from ..design_edit.restore import restore_parameters
 from ..design_edit.runner import ExportCancelled, RowExport
@@ -143,10 +143,11 @@ def read_errors(store):
 
 
 def broken_since(store, before):
-    """Names of the timeline items in error now that were not in error in `before` (`read_errors`)."""
+    """Names of the timeline items in error now that were not in error in `before` (`read_errors`), after one full
+    recompute when some read in error (`apply.new_errors`)."""
     if before is None:
         return []
-    return [name for key, name in read_errors(store).items() if key not in before]
+    return new_errors(store, before)
 
 
 def with_try_seconds(summary, roll):
@@ -320,7 +321,7 @@ class ProbeRun:
         if self.job.not_back is not None:
             self.port.log("tries stopped: the design did not rebuild with the values back after %s"
                           % self.job.not_back["after"])
-            self.probe.note_stop(self.job.not_back)
+            self.probe.note_stop(self.job.not_back, rows[len(results):])
         return results
 
     def summary(self):
@@ -384,7 +385,7 @@ class ProbeRun:
         done = len(self.rows)
         self.try_rows(rows)
         self._check_reads()
-        if self.rows and self._suspect(len(self.rows) - 1):
+        if self.rows and self.job.not_back is None and self._suspect(len(self.rows) - 1):
             last = self.rows[-1][0]
             self._tails[last.get("key", last["name"])] = self._try_read()
             self._check_reads()
@@ -439,7 +440,11 @@ class ProbeRun:
 
     def discover(self, tries):
         """Read the design once the parameters are back, then run the discovery rows in the room the other rows left
-        and keep what they found. Returns the parameters that changed the part."""
+        and keep what they found. Returns the parameters that changed the part. After the tries stopped on a broken
+        design (`stopped`) nothing is read: every candidate is kept as not tried."""
+        if self.job.not_back is not None:
+            self.probe.discovery_rows(list(tries), 0)
+            return []
         base = self._read_now({})
         back = self._put_back() if self.probe.left_start(base) else None
         self.probe.set_discovery_base(base, back)

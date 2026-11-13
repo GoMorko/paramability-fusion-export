@@ -38,6 +38,7 @@ VOLUME_RELATIVE = 1e-6
 # Why a parameter of another component got no try; kept in the discovery record of `report.json`.
 NOT_TRIED = "not tried: the export tries only a limited number of parameters of other components"
 NOT_READ_TRY = "not tried: the design could not be read at the value tried"
+NOT_TRIED_STOPPED = "not tried: the tries stopped early, after a try left a step in error"
 
 
 def _box_numbers(read):
@@ -194,7 +195,8 @@ class SharedReads:
     KEYS = ("sketches", "faces", "points", "lines", "refs")
 
     def __init__(self):
-        self._kept = {}
+        self._kept = {}  # (key, name, digest) to the copy kept
+        self._last = {}  # (key, name) to the copy kept or given last: most reads equal it, so it is compared first
 
     def share(self, read):
         if not isinstance(read, dict):
@@ -204,6 +206,10 @@ class SharedReads:
             if not isinstance(part, dict):
                 continue
             for name, value in part.items():
+                last = self._last.get((key, name))
+                if last is not None and (last is value or last == value):
+                    part[name] = last
+                    continue
                 try:
                     text = json.dumps(value, sort_keys=True, separators=(",", ":"))
                 except (TypeError, ValueError):
@@ -211,6 +217,7 @@ class SharedReads:
                 kept = self._kept.setdefault((key, name, hashlib.sha1(text.encode("utf-8")).digest()), value)
                 if kept is not value and kept == value:
                     part[name] = kept
+                self._last[(key, name)] = part[name]
         return read
 
 
@@ -243,6 +250,9 @@ class SizeProbe:
         self.restore_unchecked = []  # "<sketch>: <why>" for each sketch the restore check could not compare
         self.recovery = None  # what was done when a sketch stayed on another solution (`note_recovery`)
         self.stopped = None  # `{ after, items }` when a try left the design broken and the tries stopped (`note_stop`)
+        self._unrun = []  # the sizes of the rows planned that did not run because the tries stopped
+        self._changes = None  # (number of states, `outline_changes`) of the last time it was worked out
+        self._moving = set()  # the sizes `probe_rows` tried because they move a sketch or a measured place
         self.face_sizes = plane_sizes.face_sizes(self.capture, table)  # face key to the sizes that may change it
         self.shared = SharedReads()
         self.shared.share(e0)
@@ -335,10 +345,12 @@ class SizeProbe:
         """Keep what `pipeline.ProbeRun` did when a sketch stayed on another solution, for `report`."""
         self.recovery = dict(record)
 
-    def note_stop(self, record):
+    def note_stop(self, record, unrun=()):
         """Keep the try after which the design did not rebuild with the values back, and the steps in error, for
-        `report`: the tries stopped there."""
+        `report`: the tries stopped there. `unrun` are the rows planned that did not run; `finish` lists a size of
+        theirs that moves a sketch and has no try of its own as untried."""
         self.stopped = {"after": record.get("after"), "items": list(record.get("items") or [])}
+        self._unrun.extend(p for row in unrun for p in row.get("varied") or [] if p not in self._unrun)
 
     def matches_start(self, read):
         """True when `read` has the same sketches, points, lines, references and body box as the first read (E0), within
@@ -371,6 +383,7 @@ class SizeProbe:
         reach = set(plan.sketch_driven(self.table)) | set(plane_sizes.plane_driven(self.capture, self.table))
         moved = set(self.moved) | {s["param"] for s in sizes if s["param"] in reach}
         rows, self.untried = plan.probe_rows(sizes, moved, extra=set(extra))
+        self._moving = set(moved)
         self._far = (moved, set(extra))
         return rows
 
@@ -412,11 +425,15 @@ class SizeProbe:
         return rows
 
     def outline_changes(self):
-        """Numbers in `states` of the rows whose own size changed a followed outline (`build.outline_changes`)."""
-        try:
-            return build.outline_changes(self.capture, self.states, {e.name: e.value for e in self.table.entries})
-        except Exception:
-            return set()
+        """Numbers in `states` of the rows whose own size changed a followed outline (`build.outline_changes`). Worked
+        out once per number of states, since only `add_states` changes them."""
+        if self._changes is None or self._changes[0] != len(self.states):
+            try:
+                found = build.outline_changes(self.capture, self.states, {e.name: e.value for e in self.table.entries})
+            except Exception:
+                found = set()
+            self._changes = (len(self.states), found)
+        return set(self._changes[1])
 
     def curved_sizes(self):
         """`(curved, partners)` from the states so far: the Fusion names of the sizes that move a value along a curve
@@ -467,7 +484,8 @@ class SizeProbe:
         """Rows that try unticked parameters once each (`size_offers.discovery_sizes`), within `room` rows. The
         candidates left without a row are kept in the discovery record as not tried."""
         rows = plan.discovery_rows(candidates, room)
-        self.discovery.extend({"param": c["param"], "moved": None, "tried": False, "reason": NOT_TRIED}
+        why = NOT_TRIED_STOPPED if self.stopped else NOT_TRIED
+        self.discovery.extend({"param": c["param"], "moved": None, "tried": False, "reason": why}
                               for c in plan.discovery_left(candidates, room))
         return rows
 
@@ -608,6 +626,9 @@ class SizeProbe:
         size name to the text for the person.
         """
         found = []
+        alone = {name for state in self.states[1:] for name in (state.get("values") or {})
+                 if len(state.get("values") or {}) == 1}
+        self.untried.extend(p for p in self._unrun if p in self._moving and p not in alone and p not in self.untried)
         for param in self.untried:
             found.append(self._entry(param, _UNTRIED, labels))
         try:
@@ -799,9 +820,9 @@ class ProbeGroup:
         for probe in self.probes:
             probe.note_recovery(record)
 
-    def note_stop(self, record):
+    def note_stop(self, record, unrun=()):
         for probe in self.probes:
-            probe.note_stop(record)
+            probe.note_stop(record, unrun)
 
     def matches_start(self, reads):
         """True when every part's read equals its first read (`SizeProbe.matches_start`)."""

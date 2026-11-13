@@ -424,8 +424,11 @@ or `{ "read": false, "error": "<reason>" }` when the read failed.
    treats it as the end of the timeline: items at `end` and after are left out, never refused.
 2. For `k` from 0 to `end`: set `timeline.markerPosition = k`. Read the target's box and volume once. Read
    `bodies_after` and `target_changed` of item `k - 1` and, for items of the target's component, the inputs of item `k`
-   (profiles, edges, faces, tool bodies, the target box before it). One recompute per item. Between two steps of
-   another named component the target is not measured: a run of such steps is measured once before and once after,
+   (profiles, edges, faces, tool bodies, the target box before it). One recompute per item. Between two quiet steps
+   of another named component the target is not measured (a quiet step is of a type the step kind table lists without
+   `reaches_bodies` and does not belong to the root component; a Combine, a Move or a Split Body is measured on both
+   sides, so a change it makes is seen even when a later step undoes it): a run of quiet steps is measured once before
+   and once after,
    and when the target reads the same on both sides every step of the run gets `target_changed` false with those
    numbers. When it does not (or a measure failed), the walk goes back over the run and measures each step, so the
    capture is the same as with a measure at every position.
@@ -2050,12 +2053,16 @@ whose read showed a followed sketch on another outline, the design is read again
 before the next row (`ProbeRun`); that read is the next state's `start` in `probe.states`. A probe row that Fusion cannot build is listed in `probe.dropped`; no size is fixed for it.
 
 A try can leave the design broken: a step that lost its input stays in error after the values are put back. Every
-later try would then fail for that reason, not for its own values, and cut ranges it does not own. So before each try
-after the first, with the values back, the steps in error are compared with the baseline (`RowExport`); when a step is
-in error that was not, the tries stop there. `probe.stopped` (`{ after, items }`: the label of the try run last and the
+later try would then fail for that reason, not for its own values, and cut ranges it does not own. So after a try that
+did not build, with the values back and before the design is read again, the steps in error are compared with the
+baseline (`RowExport`). A step in error after the change that put the values back is first given one full recompute
+(that change rebuilds only the steps it touches); when a step is still in error that was not, the tries stop there and
+the broken design is not read again (no start read, no sketch put back, no discovery tries, whose parameters are kept
+as not tried). A size that moves a sketch and whose own tries were planned but did not run is listed in
+`probe.untried` and the motion's `untried`, so it is not taken as one that changes nothing. `probe.stopped` (`{ after, items }`: the label of the try run last and the
 steps in error) and `health.tries_stopped` (the same) say so, and the motion is built from the tries before. At the end
-of every export the steps in error are compared with the ones in error when it started; `health.broken` names those
-that were fine before, and the result window tells the person that the design is changed and to use Undo.
+of every export the steps in error are compared with the ones in error when it started (again after one full recompute
+when some read in error); `health.broken` names those that were fine before (at most 5), and the result window tells the person that the design is changed and to use Undo.
 
 Solver flips. Putting the values back does not bring back a sketch that a try moved to its other solution: Fusion solves
 a sketch from where its points are. So the export keeps the places of the followed sketches' own points at E0

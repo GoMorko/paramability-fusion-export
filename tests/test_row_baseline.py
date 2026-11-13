@@ -198,3 +198,52 @@ class BatchedParametersTest(unittest.TestCase):
         store = self.store(design)
         self.assertEqual(apply_row_values(store, self.UNITS, {"w": 6.0, "h": 9.0}), {"w": 6.0, "h": 9.0})
         self.assertEqual((design.batches, design.computed), ([], 1))
+
+
+class BatchStore(FakeStore):
+    """A store that takes a row in one change (`set_expressions`). `errors` are the steps in error after a change;
+    with `cleared_by_recompute` a full recompute clears them, as when only a partial rebuild left them."""
+
+    def __init__(self, errors=(), cleared_by_recompute=False, bad="9 mm"):
+        super().__init__({"w": "5 mm"})
+        self.bad, self.cleared = bad, cleared_by_recompute
+        self.errors, self.stale = list(errors), False
+
+    def set_expressions(self, expressions):
+        self.exprs.update(expressions)
+        self.stale = self.stale or self.bad in expressions.values()
+        return True
+
+    def recompute(self):
+        self.recomputes += 1
+        if self.cleared:
+            self.stale = False
+        return True
+
+    def error_items(self):
+        return list(self.errors) if self.stale else []
+
+
+class StopCheckTest(unittest.TestCase):
+    def run_rows(self, store):
+        starts = []
+        job = RowExport(store, UNITS, lambda path: None, before_row=lambda row: starts.append(row["name"]))
+        rows = [{"name": n, "values": {"w": v}, "step": False} for n, v in (("bad", 9.0), ("next", 6.0))]
+        with tempfile.TemporaryDirectory() as tmp:
+            results = job.run(rows, tmp, lambda *a: True, tolerate_build_errors=True)
+        return job, results, starts
+
+    def test_a_row_judged_after_one_change_says_its_rebuild_is_not_known(self):
+        with self.assertRaises(RowBuildError) as raised:
+            apply_row_values(BatchStore(errors=["Fillet1"]), UNITS, {"w": 9.0})
+        self.assertIsNone(raised.exception.detail["recompute_ok"])
+
+    def test_an_error_a_full_recompute_clears_does_not_stop_the_rows(self):
+        job, results, _ = self.run_rows(BatchStore(errors=["Fillet1"], cleared_by_recompute=True))
+        self.assertIsNone(job.not_back)
+        self.assertEqual([r["name"] for r in results], ["bad", "next"])
+
+    def test_a_stop_comes_before_the_next_row_reads_the_design(self):
+        job, results, starts = self.run_rows(BatchStore(errors=["Fillet1"]))
+        self.assertEqual(job.not_back["items"], ["Fillet1"])
+        self.assertEqual((len(results), starts), (1, ["bad"]))
