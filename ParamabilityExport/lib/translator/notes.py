@@ -197,6 +197,11 @@ def repeats_gap_reason(names):
     return clip("It repeats %s." % _missing(names), MAX_NOTE)
 
 
+def floats_reason():
+    """Why a join whose material meets only material of left out steps is left out too."""
+    return "It sits on a step that was left out, so it would float apart from the copy."
+
+
 def too_many_gaps_reason(limit):
     return "More than %d steps of this part cannot be copied." % limit
 
