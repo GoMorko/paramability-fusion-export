@@ -180,13 +180,20 @@ class PutBack:
     def close_failed(self):
         """The export stopped: values and marker back, then the person is told which parameters did not go back,
         which timeline steps differ from the start (the end check runs here when it has not yet) and which items stayed
-        off."""
+        off. The warnings never raise, so the reason the export stopped is the one that reaches the person."""
         failed = self.restore()
         self._end_roll()
         if failed:
-            self.port.warn_unrestored(failed)
+            self._tell("the parameters that did not go back", lambda: self.port.warn_unrestored(failed))
         self._warn_steps()
-        self._warn_left_off()
+        self._tell("the timeline items left off", self._warn_left_off)
+
+    def _tell(self, what, warn):
+        """Run `warn()`; a failure is logged, not raised."""
+        try:
+            warn()
+        except Exception as exc:
+            self.port.log(f"telling the person about {what} failed: {exc!r}")
 
     def _warn_left_off(self):
         """Tell the person about timeline items that would not turn back on after the tries, leaving out the steps the

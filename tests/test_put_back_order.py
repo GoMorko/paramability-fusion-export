@@ -275,6 +275,20 @@ class SingleBodyOrderTest(unittest.TestCase):
         ])
         self.assertIsNone(health)
 
+    def test_a_failing_warning_does_not_hide_the_cancel(self):
+        store = OrderStore(changed="Fillet1", heals=False, stuck=["Lid sketch"], stuck_param="box_count")
+        port = order_port(store, cancel_at=4)
+
+        def broken(*args):
+            raise RuntimeError("no message box")
+        port.warn_unrestored = port.warn_left_off = broken
+        with tempfile.TemporaryDirectory() as tmp, self.assertRaises(ExportCancelled):
+            run_pipeline(port, dataclasses.replace(single_request(), faster_tries=True), tmp)
+        self.assertEqual(len(port.warned_steps), 1)  # the warning after the failed one still runs
+        failed = [text.split(":")[0] for text in port.logs if text.startswith("telling the person")]
+        self.assertEqual(failed, ["telling the person about the parameters that did not go back failed",
+                                  "telling the person about the timeline items left off failed"])
+
     def test_tries_stopped_on_a_broken_design(self):
         calls, health = export(order_port(OrderStore(broken_above=70)))
         self.assertEqual(calls, START_ONE + [
