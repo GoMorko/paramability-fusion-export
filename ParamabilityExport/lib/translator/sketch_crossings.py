@@ -302,8 +302,9 @@ def _inside(setting, bounds):
 def order_ranges(table, loops, raw_loops, sketch="", motion=None):
     """`{Fusion name: (min, max)}` inside which every rebuilt loop keeps the order of its corners: each check of
     `_checks` stays above zero over the ranges by the same settings as `keeps_order` (`range_check.sweep`, with the
-    middles of the ranges and the probe's built states that fall inside them), the ranges cut by `kept_ranges.holding_ranges_where`. None when no
-    shorter ranges keep it (a check that cannot be written, or one that fails at the values now)."""
+    middles of the ranges and the probe's built states that fall inside them), the ranges cut by
+    `kept_ranges.holding_ranges_where`. None when no shorter ranges keep it (a check that cannot be written, or one
+    that fails at the values now)."""
     texts = {}
     for loop, raw_loop in zip(loops, raw_loops):
         for check in _checks(loop, raw_loop, sketch):
