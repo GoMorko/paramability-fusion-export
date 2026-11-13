@@ -1,6 +1,4 @@
 """The driver: walks a capture's items, calls one handler per feature type, builds the recipe."""
-import importlib
-
 from ..capture_model import lineage, step_kinds
 from ..capture_model.capture import validate_capture
 from ..geometry import rigid
@@ -17,6 +15,7 @@ from .audit import audit
 from .combine.tool_walk import MAX_DEPTH as MAX_TOOL_DEPTH
 from .context import Context
 from .faces.picks import MAX_NEAR_POINTS
+from .handlers import HANDLERS
 from .gaps import gap_file, gap_measures, gap_place, stops
 from .notes import (
     BODY_MOVED_WHY, dropped_reason, fixed_reason, loose_reason, tried_unmoved_reason, unmoved_link_reason,
@@ -40,16 +39,6 @@ MAX_PATTERN_COPIES = 256
 OLD_PATTERN_COPIES = 64
 WIDE_PATTERN_VERSION = 15
 MAX_PASSES = 70
-
-
-def _resolve(handler):
-    """The function a step kind table entry names as "module:function" in this package."""
-    module, function = handler.split(":")
-    return getattr(importlib.import_module("." + module, __package__), function)
-
-
-# Capture type -> handler, from the step kind table.
-HANDLERS = {t.name: _resolve(t.handler) for t in step_kinds.STEP_TYPES if t.handler}
 
 
 def _placement_refusal(capture):

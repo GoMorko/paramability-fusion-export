@@ -14,6 +14,7 @@ from lib.translator.translate import HANDLERS
 LIB = os.path.join(context.ADDIN_DIR, "lib")
 TABLE = os.path.join(LIB, "capture_model", "step_kinds.py")
 READER_DIR = os.path.join(LIB, "fusion_reader")
+HANDLER_MAP = os.path.join(LIB, "translator", "handlers.py")
 FEATURE_NAME = re.compile(r"[A-Z][A-Za-z]*Feature")
 
 
@@ -26,16 +27,23 @@ def _sources():
                     yield path, ast.parse(f.read(), path)
 
 
-def _registrations(tree):
-    """The keys of a module level `READERS = {...}` dict."""
+def _registrations(tree, name="READERS"):
+    """The keys of a module level `<name> = {...}` dict."""
     for node in tree.body:
-        if (isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "READERS" for t in node.targets)
+        if (isinstance(node, ast.Assign) and any(getattr(t, "id", None) == name for t in node.targets)
                 and isinstance(node.value, ast.Dict)):
             return [k.value for k in node.value.keys]
     return []
 
 
 class StepKindTableTest(unittest.TestCase):
+    def test_the_handler_map_gives_every_type_the_handler_the_table_named(self):
+        def named(text):
+            module, function = text.split(":")
+            return getattr(importlib.import_module("lib.translator." + module), function)
+        for spec in step_kinds.STEP_TYPES:
+            self.assertIs(HANDLERS.get(spec.name), named(spec.handler) if spec.handler else None, spec.name)
+
     def test_every_entry_has_words_and_a_resolvable_handler(self):
         for spec in step_kinds.STEP_TYPES:
             with self.subTest(spec.name):
@@ -73,6 +81,8 @@ class StepKindTableTest(unittest.TestCase):
             if path == TABLE:
                 continue
             allowed = set(_registrations(tree)) if os.path.dirname(path) == READER_DIR else set()
+            if path == HANDLER_MAP:
+                allowed = set(_registrations(tree, "HANDLERS"))
             for node in ast.walk(tree):
                 if isinstance(node, ast.Constant) and isinstance(node.value, str):
                     text = node.value
