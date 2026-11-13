@@ -359,7 +359,8 @@ def _point_of(entity, ctx):
 
 def _section(section, number, profiles, areas, params, ctx, before):
     """One loft section as { kind, end, ... }. A profile section adds its outline to `profiles` and `areas` and holds
-    its place in them as `profile`; a face section holds a face record as `face`; a point section holds `point`."""
+    its place in them as `profile`; a face section holds a face record as `face`; a point section holds `point`; a
+    chain of edges or sketch curves that Fusion gives as a path holds its path record as `path`."""
     entity = geo.native_input(geo.safe(lambda: section.entity, None), ctx)
     if geo.is_sequence(entity):
         listed = geo.collection_items(entity)
@@ -382,12 +383,23 @@ def _section(section, number, profiles, areas, params, ctx, before):
         point = geo.safe(lambda: _point_of(entity, ctx), None)
         if point is not None:
             return geo.mark_foreign(dict(record, kind="point", point=point), entity, ctx)
+    elif name == "Path":
+        found = geo.safe(lambda: path_record(entity, ctx), None)
+        if found and found.get("curves"):
+            return dict(record, kind="path", path=found)
+        return _held_types(record, entity, name)
     elif geo.is_sequence(entity):
-        # A collection that is not one profile: the types of what it holds say what Fusion gave.
-        listed = geo.collection_items(entity)
-        return dict(record, kind="other", type=name,
-                    items=[geo.type_name(e) for e in listed[:MAX_COLLECTION_TYPES]], count=len(listed))
+        return _held_types(record, entity, name)
     return dict(record, kind="other", type=name)
+
+
+def _held_types(record, entity, name):
+    """A section Fusion gave as a collection the copy cannot use: the types of what it holds say what Fusion gave."""
+    listed = geo.safe(lambda: geo.collection_items(entity), None)
+    if listed is None:
+        return dict(record, kind="other", type=name)
+    return dict(record, kind="other", type=name,
+                items=[geo.type_name(e) for e in listed[:MAX_COLLECTION_TYPES]], count=len(listed))
 
 
 def _rails(feature, ctx):

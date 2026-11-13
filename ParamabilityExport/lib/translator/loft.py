@@ -1,18 +1,20 @@
-"""Loft feature handler (LoftFeature): a solid through two closed sketch outlines with free ends.
+"""Loft feature handler (LoftFeature): a solid through two closed outlines with free ends.
 
 Fusion joins two outlines with free ends by straight faces, so the copy is a recipe `loft` with `ruled` set. Each
-outline is written like an extrude outline (outline loops, the plane position that follows sizes). Openings are paired
-between the two outlines by the nearest centre and share a key, so the kernel lofts each through both sections.
+sketch outline is written like an extrude outline (outline loops, the plane position that follows sizes); a section
+that is a flat loop of the part (a closed chain of edges or a flat face) is written as measured (`loft_sections`).
+Openings are paired between the two outlines by the nearest centre and share a key, so the kernel lofts each through
+both sections.
 
-Refused, with the step left out as a gap: more than two outlines, a section that is a point, a face or not a closed
-outline, end conditions other than free, rails, a centre line, a closed loft, outlines with different numbers of
+Refused, with the step left out as a gap: more than two outlines, a section that is a point, a curved face or not a
+closed outline, end conditions other than free, rails, a centre line, a closed loft, outlines with different numbers of
 openings, and outlines whose planes cross or touch (the kernel needs the sections in order along the loft).
 
 Two parallel outlines of straight lines make a ruled loft whose volume follows from the way the kernel pairs the
 corners (`loft_volume`). A new body that has another volume is refused, since Fusion paired the corners another way.
 Where the volume cannot be told, outlines of the same corners that are turned against each other get a note.
 """
-from . import borrowed, loft_volume, loops, placement, sketch_motion, vec
+from . import borrowed, loft_sections, loft_volume, loops, placement, sketch_motion, vec
 from .extrude import COMBINE
 from .footprint import polyline
 from .placer_makers import EndCapsMaker
@@ -23,11 +25,6 @@ from .values import Quantity
 PLANE_TOL = 1e-6
 
 UNREADABLE = "A setting of this loft could not be read from Fusion."
-KIND_REASONS = {
-    "point": "Lofts that start or end in a point are not copied yet.",
-    "face": "A loft section that is a face of the part is not copied yet.",
-}
-NOT_AN_OUTLINE = "A loft section is not a closed sketch outline."
 CORNERS_PAIRED = ("Fusion joins the corners of the two outlines of this loft another way than the copy does, so it is "
                   "not copied yet.")
 
@@ -54,15 +51,14 @@ def _settings_refusal(data):
 
 
 def _sections_refusal(sections):
-    """A Refusal for a section that is not a sketch outline with a free end, or a loft of other than two, else None."""
+    """A Refusal for a section that is not an outline (`loft_sections`) with a free end, or a loft of other than two,
+    else None."""
     for section in sections:
         if not isinstance(section, dict):
             return Refusal(UNREADABLE)
-        kind = section.get("kind")
-        if kind in KIND_REASONS:
-            return Refusal(KIND_REASONS[kind])
-        if kind != "profile":
-            return Refusal(NOT_AN_OUTLINE)
+        found = loft_sections.refusal(section)
+        if found is not None:
+            return found
     for section in sections:
         if section.get("end") is None:
             return Refusal(UNREADABLE)
@@ -176,9 +172,12 @@ def handle(item, ctx):
         refusal = _sections_refusal(data["sections"])
     if refusal is not None:
         return refusal
-    profiles = data["profiles"]
-    if len(profiles) != 2 or any(not isinstance(p, dict) for p in profiles):
+    if not isinstance(data["profiles"], list) or any(not isinstance(p, dict) for p in data["profiles"]):
         return Refusal(UNREADABLE)
+    found = loft_sections.outlines(data["sections"], data["profiles"])
+    if isinstance(found, Refusal):
+        return found
+    profiles = [section.profile for section in found]
     for profile in profiles:
         refusal = loops.outline_refusal(profile)
         if refusal is not None:
@@ -206,9 +205,14 @@ def handle(item, ctx):
         keys[1][second_hole] = keys[0][first_hole]
 
     sections = []
-    for number, (profile, (outer, inners)) in enumerate(zip(profiles, built)):
-        borrowed.mark_unchecked(ctx, item, profile)
-        drawn = sketch_motion.outline(ctx, item, profile, outer, inners, [(number, profile)])
+    for number, (part, (outer, inners)) in enumerate(zip(found, built)):
+        profile = part.profile
+        if part.measured:
+            loft_sections.mark_measured(ctx, item, part)
+            drawn = None
+        else:
+            borrowed.mark_unchecked(ctx, item, profile)
+            drawn = sketch_motion.outline(ctx, item, profile, outer, inners, [(part.number, profile)])
         if drawn is not None:
             outer, inners = drawn.written(ctx)
         on = placement.from_frame(profile["frame"])

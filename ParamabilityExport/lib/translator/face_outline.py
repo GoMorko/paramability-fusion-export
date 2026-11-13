@@ -90,7 +90,7 @@ def prepare(ctx, item, profiles):
         # Sketch outlines beside the face keep their own plane, so the face keeps the plane it was measured on.
         return _as_measured(ctx, item, plain, measured, drawn)
     if drawn is not None:
-        _doubt(ctx, item, _untried(ctx, item, _may_change(ctx, plain)))
+        doubt(ctx, item, _untried(ctx, item, may_change(ctx, plain)))
         return FaceOutline(plain, measured, drawn)
     return _same_outline(ctx, item, plain) or _as_measured(ctx, item, plain, measured)
 
@@ -103,7 +103,7 @@ def _followed(ctx, item, face, measured):
                                           [measured[0]] + list(measured[1]), label(item))
 
 
-def _may_change(ctx, face):
+def may_change(ctx, face):
     """Fusion names of the sizes that may change the face: those the steps written so far read, or any size for a
     face of a body this walk does not build."""
     body = face.get("body")
@@ -116,7 +116,8 @@ def _untried(ctx, item, names):
     return [name for name in names if not sketch_motion.tried(ctx.motion, label(item), name)]
 
 
-def _doubt(ctx, item, names):
+def doubt(ctx, item, names):
+    """Mark the sizes `names` as ones that may change the flat face `item` keeps as measured."""
     if names:
         ctx.doubt(names, "%s uses a flat face as its outline that may change with it, and the copy keeps that face "
                   "as it was measured" % item.get("name", "a step"))
@@ -125,11 +126,11 @@ def _doubt(ctx, item, names):
 def _as_measured(ctx, item, face, measured, drawn=None):
     """The face as read, with the sizes that may change it marked; with the probe's reads of it (`drawn`), only the
     sizes that moved it or were not tried."""
-    names = _may_change(ctx, face)
+    names = may_change(ctx, face)
     if drawn is not None:
         moving = set(sketch_motion.outline_movers(ctx.table, drawn))
         names = [name for name in names if name in moving or name in _untried(ctx, item, [name])]
-    _doubt(ctx, item, names)
+    doubt(ctx, item, names)
     return FaceOutline(face, measured)
 
 

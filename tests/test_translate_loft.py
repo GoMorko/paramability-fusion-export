@@ -6,7 +6,7 @@ from tests import context  # noqa: F401
 from tests.test_translate_sketch_motion import motion_of, run
 from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of, stopped, translate, verdict_of
 
-from lib.translator import loft
+from lib.translator import loft, loft_sections
 
 SQUARES = "loft_two_squares"
 ROUND_TO_SQUARE = "loft_circle_to_square"
@@ -110,6 +110,69 @@ class LoftOpeningsTest(unittest.TestCase):
     def test_outlines_with_different_numbers_of_openings_are_refused(self):
         result = edited(TUBE, lambda data, _: data["profiles"][1]["loops"].pop())
         self.assertIsNotNone(result.refusal)
+
+
+def square_loop(half, z, close=True):
+    corners = [(-half, -half, z), (half, -half, z), (half, half, z), (-half, half, z)]
+    ends = corners[1:] + corners[:1] if close else corners[1:]
+    return [{"kind": "line", "start": list(a), "end": list(b), "opposed": False} for a, b in zip(corners, ends)]
+
+
+def edges_section(curves, body="t1"):
+    edges = [{"token": "e%d" % n, "points": [c.get("start") or c["center"]], "body": {"token": body}}
+             for n, c in enumerate(curves)]
+    return {"kind": "path", "end": "free", "path": {"closed": True, "kind": "edges", "curves": curves, "edges": edges}}
+
+
+def first_section(name, section):
+    """`name` translated with its first loft section replaced by `section`."""
+    def edit(data, _):
+        data["sections"][0] = section
+    return edited(name, edit)
+
+
+class LoftLoopSectionTest(unittest.TestCase):
+    """A flat loop of the part as a section: a closed chain of edges or a flat face, written as measured."""
+
+    def test_a_closed_loop_of_edges_is_a_section_on_its_plane(self):
+        result = first_section(PLATE, edges_section(square_loop(10, 5)))
+        low, high = steps_of(result.recipe, "loft")[0]["sections"]
+        self.assertEqual((low["outer"]["kind"], low["outer"]["width"], low["outer"]["height"]), ("rect", 20.0, 20.0))
+        self.assertEqual((low["on"]["normal"], low["on"]["xDir"], low["on"]["origin"][2]), ([0, 0, 1], [1, 0, 0], 5))
+        self.assertEqual(verdict_of(result, 4)["verdict"], "translated")
+        assert_schema_ok(self, result.recipe)
+        rim = [{"kind": "circle", "center": [0, 0, 5], "normal": [0, 0, -1], "radius": 10.0}]
+        low = steps_of(first_section(PLATE, edges_section(rim)).recipe, "loft")[0]["sections"][0]
+        self.assertEqual((low["outer"], low["on"]["origin"], low["on"]["normal"]),
+                         ({"kind": "circle", "center": [0, 0], "radius": 10.0}, [0, 0, 5], [0, 0, 1]))
+
+    def test_a_flat_face_is_a_section_as_it_was_read(self):
+        face = {"face": True, "surface": "Plane", "frame": {"origin": [0, 0, 5], "x": [1, 0, 0], "y": [0, 1, 0],
+                                                         "z": [0, 0, 1]},
+                "loops": [{"outer": True, "curves": [dict(c, start=c["start"][:2], end=c["end"][:2])
+                                                     for c in square_loop(10, 0)]}]}
+        result = first_section(PLATE, {"kind": "face", "end": "free", "face": face})
+        self.assertEqual(steps_of(result.recipe, "loft")[0]["sections"][0]["outer"]["width"], 20.0)
+
+    def test_loops_that_are_not_one_flat_closed_outline_are_left_out_with_their_reason(self):
+        tilted = square_loop(10, 5)
+        tilted[1] = dict(tilted[1], end=[10, 10, 8])
+        tilted[2] = dict(tilted[2], start=[10, 10, 8])
+        cases = ((edges_section(square_loop(10, 5, close=False)), loft_sections.PATH_OPEN),
+                 (edges_section(tilted), loft_sections.PATH_NOT_FLAT),
+                 ({"kind": "face", "end": "free", "face": {"face": True, "surface": "Cylinder"}},
+                  loft_sections.FACE_CURVED))
+        for section, reason in cases:
+            with self.subTest(reason):
+                self.assertEqual(reason_of(first_section(PLATE, section)), reason)
+
+    def test_edges_of_the_part_mark_the_sizes_read_so_far_and_edges_of_another_body_every_size(self):
+        for body, loose in (("t1", []), ("other", ["height_mm", "top_mm"])):
+            with self.subTest(body):
+                capture = load_capture(SQUARES)
+                loft_data(capture)["sections"][0] = edges_section(square_loop(10, 0), body=body)
+                result = run(capture, SIZES, motion_of(SQUARES))
+                self.assertEqual(sorted(f["name"] for f in result.loose), loose)
 
 
 class LoftSizesTest(unittest.TestCase):
