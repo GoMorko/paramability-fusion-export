@@ -19,8 +19,9 @@ class DesignParameterStore:
     (Fusion then rebuilds fewer items per recompute) and `unroll_marker` puts it back. `suppress_items` turns off
     timeline items for a while for the same reason, and `unsuppress_items` turns them back on."""
 
-    def __init__(self, design):
+    def __init__(self, design, value_input=None):
         self.design = design
+        self._value_input = value_input  # text to a Fusion ValueInput; `adsk.core.ValueInput.createByString` if None
         self.marker = read_marker(getattr(design, "timeline", None))
         self._home = None  # the marker the store was made with, while it is rolled
         self._suppressed = []  # (name, timeline object) of the items `suppress_items` turned off
@@ -129,6 +130,32 @@ class DesignParameterStore:
 
     def set_expression(self, name, expression):
         self.design.userParameters.itemByName(name).expression = expression
+
+    def _make_value(self):
+        if self._value_input is None:
+            import adsk.core
+            self._value_input = adsk.core.ValueInput.createByString
+        return self._value_input
+
+    def set_expressions(self, expressions):
+        """Set the user parameters `expressions` ({name: text}) in one change (`Design.modifyParameters`): Fusion sets
+        all or none and rebuilds once, as for the person's own edit. True when it took them all; False, with nothing
+        changed, when this Fusion has no such call, a parameter is missing or Fusion refused one. The marker stays
+        where the store keeps it."""
+        modify = getattr(self.design, "modifyParameters", None)
+        if modify is None or not expressions:
+            return False
+        try:
+            params = self.design.userParameters
+            found = [params.itemByName(name) for name in expressions]
+            if any(p is None for p in found):
+                return False
+            make = self._make_value()
+            done = bool(modify(found, [make(text) for text in expressions.values()]))
+        except Exception:
+            return False
+        self._keep_marker()
+        return done
 
     def read_value(self, name):
         return self.design.userParameters.itemByName(name).value

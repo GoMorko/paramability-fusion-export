@@ -1,5 +1,6 @@
 """Put user parameters back to their saved expressions."""
 from ..params.expressions import is_plain_number
+from .apply import set_all
 
 
 def restore_order(saved):
@@ -13,16 +14,20 @@ def restore_order(saved):
 
 
 def restore_parameters(store, saved):
-    """Set back every parameter whose expression changed, then recompute. Never raises.
+    """Set back every parameter whose expression changed, with one rebuild. Never raises.
 
-    store needs current_expressions(), set_expression(name, text) and recompute().
-    A parameter that refuses is retried once after the others. Returns the names that could not be restored.
+    store needs current_expressions(), set_expression(name, text) and recompute(); set_expressions is used when it
+    has one (`apply.set_all`): all of them go back in one change and Fusion rebuilds once, with no full recompute.
+    Else they are set one at a time and the design is recomputed; a parameter that refuses is then retried once after
+    the others. Returns the names that could not be restored.
     """
     try:
         current = store.current_expressions()
     except Exception:
         current = {}
     pending = [n for n in restore_order(saved) if current.get(n) != saved[n]]
+    if pending and set_all(store, {n: saved[n] for n in pending}):
+        return []
     touched = bool(pending)
     for _ in range(2):
         failed = []

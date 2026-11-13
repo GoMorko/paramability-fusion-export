@@ -7,6 +7,7 @@ from tests import context  # noqa: F401
 from tests.fakes import FakeDesign, FakeStore
 
 from lib.design_edit.apply import RowBuildError, apply_row_values, measure_baseline
+from lib.design_edit.restore import restore_parameters
 from lib.design_edit.runner import RowExport
 from lib.fusion_reader.rows import DesignParameterStore
 from tests.row_helpers import apply_row
@@ -156,3 +157,44 @@ class FusionDesignBaselineTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BatchDesign(FakeDesign):
+    """A design with Fusion's `modifyParameters`: it sets every expression in one change, or none when `refuse` is
+    one of them, and records each call."""
+
+    def __init__(self, refuse=None):
+        super().__init__([dict(name="w", expression="5 mm", value=0.5, unit="mm"),
+                          dict(name="h", expression="8 mm", value=0.8, unit="mm")])
+        self.refuse = refuse
+        self.batches = []
+
+    def modifyParameters(self, parameters, values):
+        if self.refuse in values:
+            return False
+        self.batches.append({p.name: v for p, v in zip(parameters, values)})
+        for parameter, value in zip(parameters, values):
+            parameter.expression = value
+        return True
+
+
+class BatchedParametersTest(unittest.TestCase):
+    UNITS = {"w": "mm", "h": "mm"}
+
+    def store(self, design):
+        return DesignParameterStore(design, value_input=lambda text: text)
+
+    def test_a_row_and_its_restore_set_all_values_in_one_change_without_a_full_recompute(self):
+        design = BatchDesign()
+        store = self.store(design)
+        saved = store.saved_expressions()
+        self.assertEqual(apply_row_values(store, self.UNITS, {"w": 6.0, "h": 9.0}), {"w": 6.0, "h": 9.0})
+        self.assertEqual(restore_parameters(store, saved), [])
+        self.assertEqual(design.batches, [{"w": "6 mm", "h": "9 mm"}, {"w": "5 mm", "h": "8 mm"}])
+        self.assertEqual(design.computed, 0)
+
+    def test_a_change_fusion_refuses_as_a_whole_is_set_one_value_at_a_time(self):
+        design = BatchDesign(refuse="9 mm")
+        store = self.store(design)
+        self.assertEqual(apply_row_values(store, self.UNITS, {"w": 6.0, "h": 9.0}), {"w": 6.0, "h": 9.0})
+        self.assertEqual((design.batches, design.computed), ([], 1))

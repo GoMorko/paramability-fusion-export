@@ -43,6 +43,24 @@ def new_errors(store, baseline):
         return []
 
 
+def _set_each(store, expressions):
+    """Set the expressions one at a time, then recompute; whether Fusion reported the recompute done. Raises
+    RowBuildError when Fusion refuses an expression or the recompute raises."""
+    for name, expression in expressions.items():
+        try:
+            store.set_expression(name, expression)
+        except Exception as exc:
+            raise RowBuildError(
+                f"Fusion did not accept \"{expression}\" for {name}.",
+                {"reason": "expression_refused", "parameter": name, "expression": expression}) from exc
+    try:
+        return store.recompute() is not False
+    except Exception as exc:
+        raise RowBuildError(
+            "Fusion could not rebuild the design for this size.",
+            {"reason": "recompute_raised", "error": f"{type(exc).__name__}: {exc}"[:200]}) from exc
+
+
 def measure_baseline(store):
     """Recompute once with the parameters as they are and note the result and the items in error. Never raises."""
     try:
@@ -56,36 +74,40 @@ def measure_baseline(store):
     return Baseline(ok, errors)
 
 
+def set_all(store, expressions):
+    """Set every expression of `expressions` ({name: text}) in one change with one rebuild, when the store can
+    (`set_expressions`, Fusion's `Design.modifyParameters`). True when it did; False, with nothing changed, when the
+    store cannot or refused one of them: the caller then sets them one at a time. Never raises."""
+    batch = getattr(store, "set_expressions", None)
+    if not callable(batch) or not expressions:
+        return False
+    try:
+        return batch(dict(expressions)) is True
+    except Exception:
+        return False
+
+
 def apply_row_values(store, units, values, baseline=None):
-    """Set the row's values, recompute, and return {name: number in mm or deg}.
+    """Set the row's values, rebuild, and return {name: number in mm or deg}.
 
     store needs set_expression, recompute, error_items and read_value (internal cm or rad); error_entries
-    (pairs of item key and name) is used when it has one. units maps parameter name to the Fusion unit string.
-    baseline is `measure_baseline`'s result from before the first row; None means a clean design.
+    (pairs of item key and name) is used when it has one, and set_expressions (`set_all`) when it has one. units maps
+    parameter name to the Fusion unit string. baseline is `measure_baseline`'s result from before the first row; None
+    means a clean design.
 
+    The values go in as one change when the store can: Fusion rebuilds the steps they change once, as when the person
+    edits the parameters, and no full recompute follows. Else each value is set in turn and the design is recomputed.
     The row fails when Fusion refuses an expression, the recompute raises, the recompute reports failure while
     the baseline did not, or timeline items went into error that were not in error in the baseline.
     """
     baseline = baseline or Baseline()
-    for name, value in values.items():
-        expression = format_expression(value, units[name])
-        try:
-            store.set_expression(name, expression)
-        except Exception as exc:
-            raise RowBuildError(
-                f"Fusion did not accept \"{expression}\" for {name}.",
-                {"reason": "expression_refused", "parameter": name, "expression": expression}) from exc
-    try:
-        ok = store.recompute() is not False
-    except Exception as exc:
+    expressions = {name: format_expression(value, units[name]) for name, value in values.items()}
+    ok = set_all(store, expressions) or _set_each(store, expressions)
+    broken = [n for key, n in error_entries(store).items() if key not in baseline.errors]
+    if broken:
         raise RowBuildError(
-            "Fusion could not rebuild the design for this size.",
-            {"reason": "recompute_raised", "error": f"{type(exc).__name__}: {exc}"[:200]}) from exc
-    new_errors = [n for key, n in error_entries(store).items() if key not in baseline.errors]
-    if new_errors:
-        raise RowBuildError(
-            f"This size does not build in Fusion: {new_errors[0]}",
-            {"reason": "new_errors", "items": new_errors, "recompute_ok": ok})
+            f"This size does not build in Fusion: {broken[0]}",
+            {"reason": "new_errors", "items": broken, "recompute_ok": ok})
     if not ok and baseline.recompute_ok:
         raise RowBuildError("Fusion could not rebuild the design for this size.", {"reason": "recompute_failed"})
     return {name: to_manifest_value(store.read_value(name), units[name]) for name in values}
