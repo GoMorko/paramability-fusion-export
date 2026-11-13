@@ -17,6 +17,7 @@ Reading comes in rounds: each round reads what the plan names, and the steps it 
 cannot be read keeps `read_error`, and items past a limit keep `helper_unread` with the reason. The caller restores the
 timeline marker.
 """
+from ..timing.timer import span_on
 from ..translator import lineage, tool_items
 from . import read_geometry as geo
 from .parameters import list_model_parameters
@@ -25,15 +26,18 @@ from .placement import find_occurrence, tool_place
 UNREADABLE = "the tool body or the place of its component could not be read"
 
 
-def _tool_context(design, timeline, anchor, tool):
-    """`(ReadContext, body)` of the tool body with the marker just before its `anchor` item, or `(None, reason)`."""
-    timeline.markerPosition = anchor["index"]
+def _tool_context(design, timeline, anchor, tool, timer=None):
+    """`(ReadContext, body)` of the tool body with the marker just before its `anchor` item, or `(None, reason)`. The
+    context shares the capture's `timer`."""
+    with span_on(timer, "marker_moves_helper"):
+        timeline.markerPosition = anchor["index"]
     body = geo.safe(lambda: geo.find_native(design, tool.get("token") or ""), None)
     if body is None:
         return None, "The tool body could not be found."
     ctx = geo.safe(lambda: geo.ReadContext(design, body), None)
     if ctx is None or ctx.component is None:
         return None, "The component of the tool body could not be read."
+    ctx.timer = timer
     return ctx, body
 
 
@@ -99,7 +103,7 @@ class _Pass:
         foreign = tool_items.is_foreign_tool(record)
         if not foreign and anchor.get("in_target_component") is not False:
             return
-        hctx, body = _tool_context(self.design, self.timeline, anchor, record)
+        hctx, body = _tool_context(self.design, self.timeline, anchor, record, getattr(self.ctx, "timer", None))
         if hctx is None:
             if foreign:
                 record["place"] = {"error": body}
@@ -130,7 +134,8 @@ class _Pass:
         """Rolls to each item once and reads its feature (steps of other components) and the states of its bodies."""
         starts = set(jobs)
         for position in sorted(starts | {i + 1 for i in starts}):
-            self.timeline.markerPosition = position
+            with span_on(self.ctx, "marker_moves_helper"):
+                self.timeline.markerPosition = position
             if position - 1 in jobs:
                 self._finish(*jobs[position - 1])
             if position in jobs:
@@ -144,7 +149,8 @@ class _Pass:
             else:
                 _read_start(entity, item, hctx, self.readers, self.component_bodies)
         for token in tokens:
-            item.setdefault("body_states", {})[token] = _state_before(self.design, token)
+            with span_on(self.ctx, "body_states"):
+                item.setdefault("body_states", {})[token] = _state_before(self.design, token)
             self.done.add((item["index"], token))
 
     def _finish(self, item, hctx, tokens):
@@ -153,7 +159,8 @@ class _Pass:
             if entity is not None:
                 _read_finish(entity, item, hctx, self.readers)
         for token in tokens:
-            item["body_states"][token]["volume_after"] = _state_after(self.design, token)
+            with span_on(self.ctx, "body_states"):
+                item["body_states"][token]["volume_after"] = _state_after(self.design, token)
 
 
 def read_helpers(design, ctx, timeline, items, readers, native_entity, component_bodies):

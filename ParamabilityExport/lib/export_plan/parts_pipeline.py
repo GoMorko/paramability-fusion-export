@@ -19,13 +19,14 @@ from typing import Protocol
 from ..params import size_table as size_tables
 from ..params.listing import list_parameters
 from ..sketch_values.motion import OPTIMISTIC
+from ..timing.export_timing import ExportTiming
 from ..translator.kept_ranges import built_ranges
 from ..design_edit.restore import restore_parameters
 from ..design_edit.runner import ExportCancelled
 from . import health as health_module
 from .body_scope import body_links, scope_inputs
 from .part_names import tagged, unique_names
-from .pipeline import ProbeRun, warn_left_off
+from .pipeline import ProbeRun, warn_left_off, with_try_seconds
 from .reach_pass import needs_reach, with_reach
 from .probe_flow import ProbeGroup, SizeProbe, covers_a_sketch, extra_size_params, kept_size_names
 from .recipe_export import PartInput, free_sizes, plan_parts_export, translate_capture
@@ -107,6 +108,7 @@ class _PartsPipeline:
         self.motions = {}
         self.doubtful = []
         self.also = []
+        self.timing = getattr(port, "timing", None) or ExportTiming()
 
     def run(self):
         self.saved = self.port.store.saved_expressions()
@@ -143,25 +145,33 @@ class _PartsPipeline:
 
     def _run(self):
         port, request = self.port, self.request
+        timing = self.timing
         for index in range(port.count):
             path = os.path.join(self.tmp, "part_%02d.step" % (index + 1))
-            port.export_step(index, path)
+            with timing.span("step_export"):
+                port.export_step(index, path)
             self.steps.append(path)
-            self.captures.append(port.read_capture(index))
-        self.table = self._merged_table()
+            with timing.span("capture"):
+                self.captures.append(port.read_capture(index))
+        with timing.span("size_table"):
+            self.table = self._merged_table()
 
         finals = self._translate_and_measure()
 
-        self._restore()
-        self._end_trim()
-        gap = self._restore_gap()
-        self._end_roll()
+        with timing.span("restore"):
+            self._restore()
+            self._end_trim()
+        with timing.span("probe"):
+            gap = self._restore_gap()
+        with timing.span("restore"):
+            self._end_roll()
         reports = self.group.reports() if self.group is not None and self._measured() else []
         if self.roll is not None and self.roll.record is not None:
             for report in reports:
                 report["timeline"] = self.roll.record
         probe_of = dict(zip(self.probed, reports))
-        shadows = self.group.derived_records(port.log) if self.group is not None else []
+        with timing.span("probe"):
+            shadows = self.group.derived_records(port.log) if self.group is not None else []
         derived_of = dict(zip(self.probed, shadows))
         unchecked = self.group.restore_unchecked if self.group is not None else []
         flipped = ["%s (%s)" % (name, self.names[i]) for i, motion in self.motions.items() if motion is not None
@@ -173,7 +183,7 @@ class _PartsPipeline:
         manifest, files, report = plan_parts_export(
             inputs, request.title, request.writer, request.up_axis, size_table=self.table, listing=self._listing(),
             marker=request.marker, loose=[{"name": m["name"], "reason": m["reason"]} for m in self.doubtful],
-            health=health, also=self.also)
+            health=health, also=self.also, timing=self.timing)
         return PartsResult(manifest, files, report, self.table, health)
 
     def _merged_table(self):
@@ -198,7 +208,7 @@ class _PartsPipeline:
             if not isinstance(capture, dict):
                 continue
             motion = OPTIMISTIC if covers_a_sketch(capture) else None
-            first = self._translation(index, motion)
+            first = self._translation(index, motion, "translate_first")
             if needs_reach(first):
                 first = self._with_reach(index, first, motion)
             if first is None:
@@ -215,12 +225,13 @@ class _PartsPipeline:
         extra = extra_size_params(self.table, free)
         keep = kept_size_names(self.table, free) | {self.table.size_name(n) for n in extra}
         sizes = probe_sizes(self.table, self.request.parameters, keep=keep)
-        self._start_probes(list(firsts))
-        if self.group is not None:
-            self._measure(sizes, extra)
-            self._share_cuts()
+        with self.timing.span("probe"):
+            self._start_probes(list(firsts))
+            if self.group is not None:
+                self._measure(sizes, extra)
+                self._share_cuts()
         for index in firsts:
-            result = self._translation(index, self.motions.get(index))
+            result = self._translation(index, self.motions.get(index), "translate_final")
             if result is not None:
                 finals[index] = result
         return self._share_fixed(finals)
@@ -233,10 +244,13 @@ class _PartsPipeline:
         links = self.part_links[index] if index < len(self.part_links) else []
         return self.table.with_links(links)
 
-    def _translation(self, index, motion):
-        """The translator's result for part `index`, a refusal included, or None when it failed. Never raises."""
+    def _translation(self, index, motion, phase):
+        """The translator's result for part `index`, a refusal included, or None when it failed. Never raises. `phase`
+        is the timing phase the time is added to."""
         try:
-            return translate_capture(self.captures[index], self.request.up_axis, self._part_table(index), motion)
+            with self.timing.span(phase):
+                return translate_capture(self.captures[index], self.request.up_axis, self._part_table(index), motion,
+                                         timer=self.timing)
         except Exception as exc:
             self.port.log("translation of %s failed: %r" % (self.names[index], exc))
             return None
@@ -247,8 +261,9 @@ class _PartsPipeline:
         def read(capture, gaps):
             return self.port.read_reach(index, capture, gaps)
 
-        self.captures[index] = with_reach(read, self.captures[index], first, self.port.log)
-        return self._translation(index, motion)
+        with self.timing.span("reach"):
+            self.captures[index] = with_reach(read, self.captures[index], first, self.port.log)
+        return self._translation(index, motion, "translate_first")
 
     def _share_cuts(self):
         """Cut the ranges of a size that several parts read to the narrowest cut over the parts that were probed, so
@@ -277,7 +292,7 @@ class _PartsPipeline:
             self.table = self.table.with_fixed(asked)
             for index, result in list(finals.items()):
                 if result is not None and result.recipe is not None:
-                    redone = self._translation(index, self.motions.get(index))
+                    redone = self._translation(index, self.motions.get(index), "translate_final")
                     if redone is not None:
                         finals[index] = redone
         return finals
@@ -348,6 +363,8 @@ class _PartsPipeline:
             self.probe_status, self.probe_error = health_module.FAILED, repr(exc)
             self.motions = {}
             return
+        finally:
+            self.timing.note_probe(with_try_seconds(run.summary(), self.roll))
         self.motions = dict(zip(self.probed, group.motions))
         self.doubtful.extend(found)
 

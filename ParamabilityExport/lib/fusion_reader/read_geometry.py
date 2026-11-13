@@ -344,6 +344,8 @@ class ReadContext:
         self.is_root_component = same_entity(self.component, self.root)
         # Fusion objects a reader keeps from before an item for its reader after it; never written to the capture.
         self.held = {}
+        # The `timing.capture_timer.CaptureTimer` of the read, when it is timed; readers time themselves through it.
+        self.timer = None
 
     def find_target(self):
         """The target body (native) at the current marker position, or None when it does not exist yet.

@@ -170,7 +170,7 @@ class LooseAndFixedTest(unittest.TestCase):
     def test_a_size_that_one_part_has_to_fix_is_fixed_in_every_part(self):
         real = recipe_export.translate
 
-        def fixes_wall_for_the_second_body(capture, size_table=None, motion=None):
+        def fixes_wall_for_the_second_body(capture, size_table=None, motion=None, **_):
             result = real(capture, size_table=size_table, motion=motion)
             if capture["target"]["name"] == "Body2" and "wall_mm" in size_table.ticked:
                 result.fixed = [{"name": "wall_mm", "reason": "wall_mm stays fixed: a formula is too long."}]
@@ -377,7 +377,7 @@ class LinksPerPartTest(unittest.TestCase):
                "Body2": [{"param": "cover_h", "sketch": "Sketch1", "component": "Cover", "via": "sketch"}]}
         seen = {}
 
-        def translate(capture, up_axis, table, motion):
+        def translate(capture, up_axis, table, motion, **_):
             seen[capture["target"]["name"]] = table.links
             return recipe_export.translate_capture(capture, up_axis, table, motion)
 

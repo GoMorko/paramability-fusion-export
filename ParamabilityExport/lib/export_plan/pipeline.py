@@ -24,6 +24,8 @@ from ..params import size_table as size_tables
 from ..params.listing import list_parameters
 from ..probe.plan import BISECT_STEPS, MAX_PROBE_ROWS, NEARER_STEPS
 from ..sketch_values.motion import OPTIMISTIC
+from ..timing.export_timing import ExportTiming
+from ..timing.timer import Timer, rounded
 from . import health as health_module
 from . import messages
 from .body_scope import body_links, scope_inputs
@@ -55,6 +57,8 @@ class ExportPort(Protocol):
     probe_reader(): a callable `read(request)` giving one probe state, or raising.
     sketch_keeper(tokens): optional; an object that keeps the sketches `tokens` as they are now and whose
       `put_back()` moves their points back there (`fusion_reader.sketch_keep.SketchKeeper`, `ProbeRun`).
+    timing: optional; the `timing.export_timing.ExportTiming` of this export. The pipeline makes its own when the port
+      has none; a port that reads the capture with a `CaptureTimer` hands its summary to it (`note_capture`).
     progress(verb): a context manager whose value has `step(index, total, name)`; the step returns False when the
       person cancelled.
     warn_unrestored(names): tell the person that these parameters could not be put back, when the export stops.
@@ -129,6 +133,14 @@ class MarkerNotHeld(Exception):
     the marker and could not put it back."""
 
 
+def with_try_seconds(summary, roll):
+    """The probe's timing summary with the time the tries took as `TryTimeline` counted it (`probe.timeline`)."""
+    try:
+        return dict(summary, try_seconds=roll.seconds) if summary is not None and roll is not None else summary
+    except Exception:
+        return summary
+
+
 def _marker_lost(read):
     """True when a probe read (one state, or one per part) says it could not put the timeline marker back."""
     reads = read if isinstance(read, list) else [read]
@@ -163,6 +175,7 @@ class ProbeRun:
 
     def __init__(self, port, tmp, probe):
         self.port, self.tmp, self.probe = port, tmp, probe
+        self.timer = Timer()  # where the time of the tries goes (`summary`)
         self.reads, self.rows, self.starts, self.backs = {}, [], {}, {}
         self._values = {}  # key of a row to the sizes it sets (`_row_values`)
         self.read_failure = None
@@ -192,7 +205,9 @@ class ProbeRun:
         holds = getattr(self.port.store, "marker_holds", None)
         if holds is not None and not holds():
             raise MarkerNotHeld("The timeline marker was not where the tries keep it.")
-        read = self.probe.read_now(values)
+        with self.timer.span("read"):
+            with self.timer.span("read_in_rows" if self.timer.is_open("rows") else "read_outside"):
+                read = self.probe.read_now(values)
         if _marker_lost(read):
             raise MarkerNotHeld("The timeline marker did not go back after an outline face was read.")
         return read
@@ -233,8 +248,9 @@ class ProbeRun:
             return None
         self.put_backs += 1
         try:
-            self.keeper.put_back()
-            self.port.store.recompute()
+            with self.timer.span("put_back"):
+                self.keeper.put_back()
+                self.port.store.recompute()
         except Exception as exc:
             self.port.log(f"putting a sketch back failed: {exc!r}")
         read = self._try_read()
@@ -270,9 +286,26 @@ class ProbeRun:
                 # The window counts the tries of the whole export, not of this batch.
                 return progress.step(done + index, done + total, label)
 
-            results = self.job.run(rows, self.tmp, step, tolerate_build_errors=True)
+            with self.timer.span("rows"):
+                results = self.job.run(rows, self.tmp, step, tolerate_build_errors=True)
         self.rows.extend(zip(rows, results))
         return results
+
+    def summary(self):
+        """How the time of the tries went, for `report.json` (`timing.probe`): `tries` rows run, `rebuild` (the rows
+        without the reads made inside them: setting the sizes, rebuilding the design, putting them back), the state
+        `read`s and the `put_back` of sketches. Never raises."""
+        try:
+            timer = self.timer
+            return {
+                "tries": len(self.rows),
+                "tries_seconds": rounded(timer.seconds("rows")),
+                "rebuild": rounded(max(0.0, timer.seconds("rows") - timer.seconds("read_in_rows"))),
+                "read": timer.entry("read"),
+                "put_back": timer.entry("put_back"),
+            }
+        except Exception:
+            return None
 
     def probe_states(self, since=0):
         """(values, result, read, start, more) of the rows run from number `since` on, for `SizeProbe.add_states`;
@@ -397,6 +430,7 @@ class _Pipeline:
         self.motion = None
         self.doubtful = []
         self.also = []
+        self.timing = getattr(port, "timing", None) or ExportTiming()
 
     def run(self):
         self.saved = self.port.store.saved_expressions()
@@ -433,22 +467,30 @@ class _Pipeline:
 
     def _run(self):
         port, request = self.port, self.request
+        timing = self.timing
         part_step = os.path.join(self.tmp, "part.step")
-        port.export_step(part_step)
-        capture = port.read_capture()
-        model, quantities = scope_inputs(capture, request.model_params)
-        self.table = size_tables.build(
-            request.parameters, request.ticked, model, request.design_unit, quantity_params=quantities,
-            ranges=request.ranges, links=body_links(capture))
+        with timing.span("step_export"):
+            port.export_step(part_step)
+        with timing.span("capture"):
+            capture = port.read_capture()
+        with timing.span("size_table"):
+            model, quantities = scope_inputs(capture, request.model_params)
+            self.table = size_tables.build(
+                request.parameters, request.ticked, model, request.design_unit, quantity_params=quantities,
+                ranges=request.ranges, links=body_links(capture))
 
         final = self._translate_and_measure(capture) if isinstance(capture, dict) else None
 
-        self._restore()
-        self._end_trim()
-        gap = self._restore_gap()
-        self._end_roll()
-        probe_report = self._close_probe()
-        shadow = shadow_of(self.probe, port.log) if self.probe is not None else None
+        with timing.span("restore"):
+            self._restore()
+            self._end_trim()
+        with timing.span("probe"):
+            gap = self._restore_gap()
+        with timing.span("restore"):
+            self._end_roll()
+        with timing.span("probe"):
+            probe_report = self._close_probe()
+            shadow = shadow_of(self.probe, port.log) if self.probe is not None else None
         health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error,
                                            self._unchecked(), self.motion.flipped if self.motion is not None else ())
         capture = self.capture if self.capture is not None else capture
@@ -457,7 +499,7 @@ class _Pipeline:
             part_step, request.title, request.writer, request.up_axis,
             size_table=self.table, listing=self._listing(), motion=self.motion, probe=probe_report,
             marker=request.marker, loose=[{"name": m["name"], "reason": m["reason"]} for m in self.doubtful],
-            translated=final, health=health, also=self.also, derived=shadow)
+            translated=final, health=health, also=self.also, derived=shadow, timing=self.timing)
         return PipelineResult(manifest, files, report, self.table, health)
 
     def _translate_and_measure(self, capture):
@@ -465,12 +507,13 @@ class _Pipeline:
         motion it found. Returns the final translation (a refusal included), or None when it failed."""
         self.capture = capture
         first_motion = OPTIMISTIC if covers_a_sketch(capture) else None
-        first = self._translation(capture, first_motion)
+        first = self._translation(capture, first_motion, "translate_first")
         if first is None:
             return None
         if needs_reach(first):
-            capture = self.capture = with_reach(self.port.read_reach, capture, first, self.port.log)
-            first = self._translation(capture, first_motion)
+            with self.timing.span("reach"):
+                capture = self.capture = with_reach(self.port.read_reach, capture, first, self.port.log)
+            first = self._translation(capture, first_motion, "translate_first")
             if first is None:
                 return None
         if first.recipe is None:
@@ -482,24 +525,26 @@ class _Pipeline:
         keep = kept_size_names(self.table, free) | {self.table.size_name(n) for n in extra}
         sizes = probe_sizes(self.table, self.request.parameters, keep=keep)
 
-        self.probe = self._start_probe(capture)
-        if self.probe is not None:
-            self.roll = TryTimeline(self.port.store, self.port.log, self.request.faster_tries)
-            probe = self.probe
-            self.roll.begin([capture], lambda: probe.matches_start(probe.read_now()))
-            tries = discovery_sizes(self.table, self.request.parameters, capture)
-            found = self._measure(ProbeRun(self.port, self.tmp, self.probe), sizes, extra, tries)
-            if found is not None:
-                self.doubtful.extend(found)
-        return self._translation(capture, self.motion)
+        with self.timing.span("probe"):
+            self.probe = self._start_probe(capture)
+            if self.probe is not None:
+                self.roll = TryTimeline(self.port.store, self.port.log, self.request.faster_tries)
+                probe = self.probe
+                self.roll.begin([capture], lambda: probe.matches_start(probe.read_now()))
+                tries = discovery_sizes(self.table, self.request.parameters, capture)
+                found = self._measure(ProbeRun(self.port, self.tmp, self.probe), sizes, extra, tries)
+                if found is not None:
+                    self.doubtful.extend(found)
+        return self._translation(capture, self.motion, "translate_final")
 
     # ---- translation ------------------------------------------------------------------------------------------
 
-    def _translation(self, capture, motion):
+    def _translation(self, capture, motion, phase):
         """The translator's result, a refusal included (the plan reports its reason without translating again), or
-        None when the translator failed. Never raises."""
+        None when the translator failed. Never raises. `phase` is the timing phase the time is added to."""
         try:
-            result = translate_capture(capture, self.request.up_axis, self.table, motion)
+            with self.timing.span(phase):
+                result = translate_capture(capture, self.request.up_axis, self.table, motion, timer=self.timing)
         except Exception as exc:
             self.port.log(f"translation failed: {exc!r}")
             return None
@@ -561,6 +606,8 @@ class _Pipeline:
             self.probe_status, self.probe_error = health_module.FAILED, repr(exc)
             self.motion = None
             return None
+        finally:
+            self.timing.note_probe(with_try_seconds(run.summary(), self.roll))
         self.motion = probe.motion
         return found
 

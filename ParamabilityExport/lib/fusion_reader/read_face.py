@@ -10,6 +10,7 @@ is read with the timeline marker moved before its step, and the marker goes back
 import math
 
 from ..design_edit.marker import MARKER_LOST, put_back, read_marker
+from ..timing.timer import span_on
 from . import read_geometry as geo
 from .read_finish import strict_items
 from .read_sketch import read_curve
@@ -106,6 +107,11 @@ def made_by(face, ctx, before):
 def face_loops(face, ctx=None):
     """{ frame, loops } of a flat BRepFace as `face_outline` gives them, or None when it is not flat or does not
     read."""
+    with span_on(ctx, "faces"):
+        return _face_loops(face, ctx)
+
+
+def _face_loops(face, ctx):
     face = geo.native_input(face, ctx)
     if geo.safe(lambda: geo.surface_kind(face), None) != "Plane":
         return None
@@ -157,6 +163,11 @@ def read_faces(design, ctx, wanted):
 
 
 def face_outline(face, ctx=None, before=None):
+    with span_on(ctx, "faces"):
+        return _face_outline(face, ctx, before)
+
+
+def _face_outline(face, ctx, before):
     """(record, area) of a BRepFace used as an outline. A flat face gives { face, type, surface, token, frame, space,
     loops, face_point, body, made_by }; a curved one only { face, type, surface }; a face whose surface, plane or
     edges cannot be read adds `problem: "unread"` instead of the frame and loops (`surface` null when unknown).

@@ -19,6 +19,7 @@ from ..params.expressions import MAX_FORMULA_LENGTH, collected_sum, tokenize_for
 from .values import Sized, number
 from ..sketch_values import coverage, keys
 from ..sketch_values.motion import Motion, Stuck, Terms
+from ..timing.timer import span_on
 from .walk import walk_items
 
 RECIPE_VERSION = 12
@@ -135,12 +136,14 @@ def _over_caps(recipe, ctx):
     return None
 
 
-def translate(capture, handlers=None, size_table=None, motion=None):
+def translate(capture, handlers=None, size_table=None, motion=None, timer=None):
     """`_translate`, and when the copy stops in the walk, `result.after_stop` from a walk that goes on past the stop
-    (`_diagnosis`): the export still lands as a fixed shape, and the report names every step that cannot be copied."""
+    (`_diagnosis`): the export still lands as a fixed shape, and the report names every step that cannot be copied.
+    `timer` (`timing.timer.Timer`) gets the time of that second walk as `after_stop`."""
     result = _translate(capture, handlers, size_table, motion)
     if result.recipe is None and result.refusal is not None and result.items:
-        result.after_stop = _diagnosis(capture, handlers, result.refusal)
+        with span_on(timer, "after_stop"):
+            result.after_stop = _diagnosis(capture, handlers, result.refusal)
     return result
 
 

@@ -9,6 +9,7 @@ is handled the same way: its sketches are read at every measuring row.
 """
 import os
 import tempfile
+import time
 
 from ...lib.export_plan import health as health_module
 from ...lib.design_edit.marker import read_marker
@@ -30,18 +31,29 @@ from ...lib.fusion_ui.file_dialog import ask_save_path
 from ...lib.fusion_ui.log import log, message_box
 from ...lib.fusion_ui.notice import status_notice
 from ...lib.package.writer import write_package
+from ...lib.timing.capture_timer import CaptureTimer
+from ...lib.timing.export_timing import ExportTiming
 from .. import export_common
 
 
-def _read_capture(design, current):
-    """The capture, or the exception that stopped it. Only a lost timeline marker is not swallowed."""
+def _read_capture(design, current, timer=None):
+    """The capture, or the exception that stopped it. Only a lost timeline marker is not swallowed. `timer` is the
+    `CaptureTimer` that gets the time of the read."""
     try:
-        return read_capture(design, current)
+        return read_capture(design, current, timer=timer)
     except MarkerError:
         raise
     except Exception as exc:
         log(f"capture failed: {exc!r}")
         return exc
+
+
+def _timed_capture(design, current, timing, part=None):
+    """`_read_capture`, with the time of the read noted in `timing` (an `ExportTiming`)."""
+    timer = CaptureTimer()
+    capture = _read_capture(design, current, timer)
+    timing.note_capture(timer.summary(), part)
+    return capture
 
 
 def _same_marker(capture, design):
@@ -52,19 +64,27 @@ def _same_marker(capture, design):
 
 class CaptureCache:
     """The capture of each picked body. The dialog reads it to scope the parameters to the body, and the export
-    reuses it when it is still the same dialog and the marker has not moved. A failed read is not kept."""
+    reuses it when it is still the same dialog and the marker has not moved. A failed read is not kept. The time of
+    each read is kept too and goes to the export's timing (`timing`) as the time of a read made earlier."""
 
     def __init__(self, design):
         self._design = design
         self._read = {}
+        self._summaries = {}
 
-    def get(self, body):
+    def get(self, body, timing=None, part=None):
         token = body.entityToken
         cached = self._read.get(token)
         if isinstance(cached, dict) and _same_marker(cached, self._design):
+            if timing is not None:
+                timing.note_capture(self._summaries.get(token), part, cached=True)
             return cached
-        capture = _read_capture(self._design, resolve_body(self._design, token, body))
+        timer = CaptureTimer()
+        capture = _read_capture(self._design, resolve_body(self._design, token, body), timer)
         self._read[token] = capture
+        self._summaries[token] = timer.summary()
+        if timing is not None:
+            timing.note_capture(self._summaries[token], part)
         return capture
 
 
@@ -75,6 +95,7 @@ class FusionPort:
         self.design, self.body, self.token, self.units = design, body, body.entityToken, units
         self.store = DesignParameterStore(design)
         self._captures = captures
+        self.timing = ExportTiming()
 
     def _current(self):
         return resolve_body(self.design, self.token, self.body)
@@ -84,8 +105,8 @@ class FusionPort:
 
     def read_capture(self):
         if self._captures is not None:
-            return self._captures.get(self.body)
-        return _read_capture(self.design, self._current())
+            return self._captures.get(self.body, self.timing)
+        return _timed_capture(self.design, self._current(), self.timing)
 
     def read_reach(self, capture, gaps):
         return read_reach(self.design, capture, gaps)
@@ -119,6 +140,7 @@ class FusionPartsPort:
         self.count = len(self.bodies)
         self.store = DesignParameterStore(design)
         self._captures = captures
+        self.timing = ExportTiming()
 
     def _current(self, index):
         return resolve_body(self.design, self.tokens[index], self.bodies[index])
@@ -131,9 +153,10 @@ class FusionPartsPort:
         export_body_step(self.design, self._current(index), path)
 
     def read_capture(self, index):
+        part = self.body_names()[index]
         if self._captures is not None:
-            return self._captures.get(self.bodies[index])
-        return _read_capture(self.design, self._current(index))
+            return self._captures.get(self.bodies[index], self.timing, part)
+        return _timed_capture(self.design, self._current(index), self.timing, part)
 
     def read_reach(self, index, capture, gaps):
         return read_reach(self.design, capture, gaps)
@@ -250,7 +273,9 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
                 result = run_pipeline(FusionPort(design, body, units, captures), request, tmp)
             else:
                 result = run_parts_pipeline(FusionPartsPort(design, bodies, units, captures), request, tmp)
+            written = time.perf_counter()
             write_package(out_path, result.manifest, result.files)
+            log("package written in %.2f s" % (time.perf_counter() - written))
         return os.path.basename(out_path), result
 
     saved = export_common.run_guarded(design, marker, work)

@@ -16,6 +16,8 @@ each type.
 import importlib
 
 from ..design_edit.marker import put_back, read_marker
+from ..timing.capture_timer import CaptureTimer
+from ..timing.timer import span_on
 from ..translator import step_kinds
 from . import helper_pass
 from . import read_geometry as geo
@@ -117,6 +119,13 @@ def _target_changed(before, after):
     return abs(a["volume_mm3"] - b["volume_mm3"]) > tolerance
 
 
+def _note_component(ctx, component):
+    """Gives the capture timer the name of a component, for its per component totals."""
+    timer = getattr(ctx, "timer", None)
+    if isinstance(timer, CaptureTimer):
+        timer.note_component(geo.safe(lambda: component.entityToken, ""), geo.safe(lambda: component.name, ""))
+
+
 def _start_item(timeline, ctx, readers, index, items, group_indices):
     """Marker is at `index`: create the item and read its inputs."""
     obj = timeline.item(index)
@@ -146,6 +155,7 @@ def _start_item(timeline, ctx, readers, index, items, group_indices):
         return
     component = _owner_component(geo.safe(lambda: obj.entity, None), entity, item["type"])
     if component is not None:
+        _note_component(ctx, component)
         item["component"] = geo.safe(lambda: component.entityToken, "") or ""
         item["in_target_component"] = geo.same_entity(component, ctx.component)
     else:
@@ -163,7 +173,8 @@ def _start_item(timeline, ctx, readers, index, items, group_indices):
     before = (readers.get(item["type"]) or (None, None))[0]
     if before is not None and item["in_target_component"]:
         try:
-            item["data"] = before(entity, ctx)
+            with span_on(ctx, "readers"):
+                item["data"] = before(entity, ctx)
         except Exception as exc:
             item["data"] = {"read_error": str(exc) or type(exc).__name__}
 
@@ -204,7 +215,8 @@ def _finish_item(timeline, ctx, readers, index, items, states):
     after = (readers.get(item["type"]) or (None, None))[1]
     if after is not None and item["in_target_component"] and "read_error" not in item["data"]:
         try:
-            item["data"].update(after(entity, ctx, item["data"]) or {})
+            with span_on(ctx, "readers"):
+                item["data"].update(after(entity, ctx, item["data"]) or {})
         except Exception as exc:
             item["data"] = {"read_error": str(exc) or type(exc).__name__}
 
@@ -309,17 +321,25 @@ def feature_readers():
     return readers
 
 
-def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_readers=None):
+def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_readers=None, timer=None):
     """Capture of `design` for the picked `body` (the occurrence proxy of a body inside a component, or a root body).
 
     Only the items before the timeline marker are read; `marker` records where it was. fusion, name and up_axis
     come from the running app when not given. extra_readers adds feature readers (type name to (before, after)).
+    `timer` (`timing.capture_timer.CaptureTimer`) is given the time of each step and of the parts of the read.
     """
+    timer = timer if timer is not None else CaptureTimer()
+    with timer.span("total"):
+        return _read_capture(design, body, fusion, name, up_axis, extra_readers, timer)
+
+
+def _read_capture(design, body, fusion, name, up_axis, extra_readers, timer):
     timeline = design.timeline
     marker = read_marker(timeline)
     count = timeline.count
     end = count if marker is None else min(marker["position"], count)
     ctx = geo.ReadContext(design, body)
+    ctx.timer = timer
     # The target's place is measured on the picked body, which a later step (a split, for one) may make: it is read
     # here, before the marker moves back, and kept for the readers of the earlier steps.
     target_move(ctx)
@@ -330,18 +350,35 @@ def read_capture(design, body, fusion=None, name=None, up_axis=None, extra_reade
     previous = (False, None)
     try:
         for k in range(end + 1):
-            timeline.markerPosition = k
-            state = _target_state(ctx)
-            if k > 0:
-                _finish_item(timeline, ctx, readers, k - 1, items, (previous, state))
+            # Moving the marker to k builds step k - 1, so its cost counts for that step.
+            with timer.step(k - 1):
+                with timer.span("marker_moves"):
+                    timeline.markerPosition = k
+                with timer.span("target_state"):
+                    state = _target_state(ctx)
+                if k > 0:
+                    _finish_item(timeline, ctx, readers, k - 1, items, (previous, state))
             previous = state
             if k < end:
-                _start_item(timeline, ctx, readers, k, items, group_indices)
-        tool_components = geo.safe(
-            lambda: helper_pass.read_helpers(design, ctx, timeline, items, readers, _native_entity, _component_bodies),
-            [])
+                with timer.step(k):
+                    _start_item(timeline, ctx, readers, k, items, group_indices)
+        with timer.span("helper_pass"):
+            tool_components = geo.safe(
+                lambda: helper_pass.read_helpers(design, ctx, timeline, items, readers, _native_entity,
+                                                 _component_bodies),
+                [])
     finally:
-        restore_marker(timeline, end)
+        with timer.span("restore_marker"):
+            restore_marker(timeline, end)
+    for index, item in items.items():
+        timer.describe(index, item["name"], item["type"], item["component"])
+    with timer.span("tail"):
+        return _finish_capture(design, ctx, timeline, end, count, items, group_indices, tool_components, fusion, name,
+                               up_axis)
+
+
+def _finish_capture(design, ctx, timeline, end, count, items, group_indices, tool_components, fusion, name, up_axis):
+    """The capture dict once the walk is done: the groups are checked, and the parameters, links and graphs read."""
     _check_groups(timeline, end, count, items, group_indices)
     final = ctx.find_target() or ctx.target
     parameters, design_units = _parameters(design, ctx)

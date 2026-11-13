@@ -2054,6 +2054,53 @@ single body report does: what a walk past the stop finds (`docs/recipe-gaps.md`,
 window"). The `sizes` record at the top is shared by all bodies;
 `derived` is per body.
 
+### Timing (`timing`)
+
+Every `report.json` has a `timing` block that says where the export spent its time (`lib/timing/`). It is measured with
+`time.perf_counter`, in seconds rounded to 0.01. A timing failure drops the block and changes nothing else; the
+export, the recipe and the notes do not depend on it.
+
+```json
+{ "total": 61.52,
+  "phases": { "step_export": 1.2, "capture": 40.1, "size_table": 0.0, "translate_first": 0.8, "reach": 0.0,
+              "probe": 15.0, "translate_final": 0.9, "restore": 0.5, "package": 0.1, "after_stop": 0.5 },
+  "capture": { "seconds": 40.1, "steps": 246, "cached": true,
+               "marker_moves": { "count": 250, "seconds": 31.0, "walk": 247, "helper": 3 },
+               "measure": { "target_state": 2.0, "body_states": 0.4 },
+               "readers": { "count": 480, "seconds": 3.1 },
+               "faces": { "count": 12, "seconds": 0.9 }, "split": { "count": 2, "seconds": 0.2 },
+               "helper_pass": 1.5, "restore_marker": 0.8, "tail": 0.4,
+               "by_type": { "ExtrudeFeature": { "steps": 60, "seconds": 12.4 } },
+               "by_component": { "Cup": { "steps": 200, "seconds": 35.0 } },
+               "slowest": [ { "index": 87, "name": "Extrude41", "type": "ExtrudeFeature", "component": "Cup",
+                              "seconds": 1.9 } ] },
+  "probe": { "tries": 9, "tries_seconds": 12.0, "rebuild": 10.5, "read": { "count": 14, "seconds": 3.1 },
+             "put_back": { "count": 0, "seconds": 0.0 }, "try_seconds": 13.2 } }
+```
+
+- `total`: from the start of the pipeline to the moment `report.json` is made. The dialog's own reading before the OK
+  click and the write of the package file are not in it (the add-in logs the write time).
+- `phases`: `step_export` (the STEP of the part), `capture` (reading the timeline), `size_table`, `translate_first`
+  (the first translation, and the one after the reach is known), `reach` (asking Fusion which step made the faces later
+  steps pick), `probe` (its start, tries, close and the `derived` shadow), `translate_final` (with the motion the probe
+  found), `restore` (parameters, suppressed steps and the timeline marker put back), `package` (manifest, recipe and
+  report assembled). `after_stop` is the second walk after a stop and is already inside the translate phases. A phase
+  that did not run is 0.0. A several-body export has one `timing` block at the top of its `report.json`.
+- `capture` (one body) or `captures` (several bodies: the same record plus `part`, the body's name): `seconds` is the
+  whole read, `cached: true` marks a read the dialog made before the export. A step's time is the marker move that
+  built it plus its measures and reads (moving the marker to position k makes Fusion build step k - 1). `marker_moves`
+  counts every assignment of the timeline marker made by the read: `walk` is one per timeline position (steps before
+  the marker + 1), `helper` the moves of the pass over the tool bodies of Combines. `measure.target_state` is the volume
+  and box of the target at every position, `measure.body_states` the measures in the helper pass. `readers` is the sum
+  of all feature readers (before and after each step); `faces` (outline face reads) and `split` (Split Body reads) are
+  inside `readers`. `restore_marker` is the move back to the person's marker, which makes Fusion build the later steps
+  again; `tail` is what is read after the walk (links, graphs, parameters). `by_type` and `by_component` sum the time
+  of the steps, slowest first (a component is named by its name, or its token); `slowest` lists the 10 slowest steps.
+- `probe`: `tries` is the rows run (rows run again included), `tries_seconds` the time inside them, `rebuild` that time
+  without the state reads made inside it (setting sizes, Fusion rebuilding, putting them back), `read` every state read
+  of the probe, `put_back` the sketch put backs (`probe.recovery`). `try_seconds` is the same value as in
+  `probe.timeline` (from the first try to the end of the discovery rows).
+
 ### Derived values (`derived`)
 
 Shadow mode of reading sketches directly (`lib/probe/derived.py`, `derived_keys.py`, `derived_sizes.py`). When the

@@ -14,6 +14,7 @@ from ..package.manifest import (
 from ..package.text import clip
 from ..params.size_table import CONSTANT, DERIVED
 from ..translator import CaptureError, translate
+from ..timing.export_timing import attach as attach_timing, stamp as timing_stamp
 from ..translator.notes import (
     also_failing_note, cut_reason, left_out_note, recipe_note, reader_failure_note, step_only_note,
     translate_failure_note, used_several_times_note)
@@ -82,13 +83,14 @@ def _with_up_axis(capture, up_axis):
     return {**capture, "up_axis": up_axis}
 
 
-def translate_capture(capture, up_axis, size_table=None, motion=None):
+def translate_capture(capture, up_axis, size_table=None, motion=None, timer=None):
     """The translator's result for a capture turned to the dialog's up axis. Raises what the translator raises.
 
     `motion` is what the size probe found about sketch values (`sketch_values.motion`), or `sketch_values.motion.OPTIMISTIC` for a
     first look that fixes nothing for sketches. A size that some value cannot follow stays free with a warning
-    (`TranslateResult.loose`); the ranges are the table's."""
-    return translate(_with_up_axis(capture, up_axis), size_table=size_table, motion=motion)
+    (`TranslateResult.loose`); the ranges are the table's. `timer` gets the time of the walk after a stop
+    (`translator.translate`)."""
+    return translate(_with_up_axis(capture, up_axis), size_table=size_table, motion=motion, timer=timer)
 
 
 def free_sizes(recipe):
@@ -196,7 +198,7 @@ def _uses(capture):
 
 def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
                        size_table=None, listing=None, motion=None, probe=None, marker=None, loose=None,
-                       translated=None, health=None, also=None, derived=None):
+                       translated=None, health=None, also=None, derived=None, timing=None):
     """Return (manifest, files, report) for one body.
 
     A body inside a component is translated like a root body: its capture carries the place of the part in the
@@ -223,9 +225,12 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
     also: Fusion names of unticked parameters the size probe saw changing the part (`report.json` "also_changes").
     derived: the `derived` block (`probe.derived.shadow`) for `report.json`: what reading the sketch graphs gives, kept
       beside the measured result and used for nothing else.
+    timing: the export's `timing.export_timing.ExportTiming`, for the `timing` block of `report.json`. Its time since
+      this call began counts as the package phase.
     files maps entry paths to a file path or bytes, as write_package expects. The manifest `checks` list is empty.
     Raises ValueError when the manifest breaks the package rules.
     """
+    started = timing_stamp(timing)
     capture = capture_or_error if isinstance(capture_or_error, dict) else None
     result = None
     refusal = None
@@ -329,6 +334,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         also = also_failing_note(result.after_stop) if result is not None and note is None else ""
         notes = [note or step_only_note(refusal)] + ([also] if also else [])
         manifest = build_step_only_manifest(title, writer, up_axis=up_axis, notes=notes, parameters=listed)
+    attach_timing(report, timing, started)
     files["report.json"] = _report_bytes(report)
 
     problems = validate_manifest(manifest)
@@ -468,7 +474,7 @@ def _part_record(part, loose, cut=()):
 
 
 def plan_parts_export(inputs, title, writer, up_axis, size_table=None, listing=None, marker=None, loose=None,
-                      health=None, also=None):
+                      health=None, also=None, timing=None):
     """Return (manifest, files, report) for several bodies of one design in one file (package kind `parts`).
 
     inputs: a `PartInput` per picked body, in order. Each part is translated like `plan_single_export` does; one that
@@ -481,10 +487,11 @@ def plan_parts_export(inputs, title, writer, up_axis, size_table=None, listing=N
     in. A size whose range was cut (`TranslateResult.cuts`) is cut alike in every part that reads it, and its reason
     says so; the manifest lists it as loose with that reason. A ticked size that no part writes as a size is listed
     once in `report.json` under "dropped".
-    loose, health, listing, marker, also: as in `plan_single_export`.
+    loose, health, listing, marker, also, timing: as in `plan_single_export`.
     files holds `parts/NN/part.step`, `parts/NN/recipe.json` and one `report.json` with a record per part.
     Raises ValueError when the manifest breaks the package rules.
     """
+    started = timing_stamp(timing)
     parts = [_Part(given, up_axis, size_table) for given in inputs]
     recipes = [p for p in parts if p.is_recipe]
     free = list(dict.fromkeys(name for p in recipes for name in p.free))
@@ -542,6 +549,7 @@ def plan_parts_export(inputs, title, writer, up_axis, size_table=None, listing=N
     manifest = build_parts_manifest(
         title, writer, entries, up_axis=up_axis, notes=_parts_notes(parts, free, all_loose, all_fixed, health, all_cut),
         fixed=all_fixed, parameters=listing.entries if listing is not None else None)
+    attach_timing(report, timing, started, parts=True)
     files["report.json"] = _parts_report_bytes(report)
 
     problems = validate_manifest(manifest)

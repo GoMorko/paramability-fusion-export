@@ -7,6 +7,7 @@ a split by a solid body whether the piece lies inside that body.
 """
 import math
 
+from ..timing.timer import span_on
 from . import read_geometry as geo
 from .read_repeat import plane_record
 
@@ -38,6 +39,11 @@ def _tool(entity, ctx):
 
 
 def split_before(feature, ctx):
+    with span_on(ctx, "split"):
+        return _split_before(feature, ctx)
+
+
+def _split_before(feature, ctx):
     tool = geo.native_input(feature.splittingTool, ctx)
     # A tool body of another component comes through an occurrence: its place is kept for the read after the split.
     ctx.held[("split tool", geo.safe(lambda: tool.entityToken, None))] = geo.safe(lambda: tool.assemblyContext, None)
@@ -95,6 +101,11 @@ def _tool_body(feature, ctx, tool):
 
 
 def split_after(feature, ctx, data):
+    with span_on(ctx, "split"):
+        return _split_after(feature, ctx, data)
+
+
+def _split_after(feature, ctx, data):
     """pieces: every body the feature lists once computed. A split by a solid body says per piece whether it lies
     inside that body (`inside`, null when it cannot tell)."""
     tool = data.get("tool") or {}

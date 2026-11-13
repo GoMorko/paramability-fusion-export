@@ -485,6 +485,7 @@ list (lowest first); `tests/test_boundary.py` holds the exact table.
 - `package`: the `.paramability` file: units, rows, manifest, caps, file names, zip writer.
 - `params`: Fusion parameters as sizes: names, defaults, expression to formula, the size table.
 - `sketch_values`: the motion file of sketch values and measured references that follow sizes, its keys and coverage.
+- `timing`: stopwatch helpers and the `timing` block of `report.json` (where an export spends its time).
 - `design_edit`: setting parameter values row by row, restoring them, the timeline marker, the temporary copy.
 - `translator`: a capture dict in, a recipe plus verdicts out (one handler per step kind).
 - `probe`: measures sketches and the places of other components' planes, axes and points at other size values and fits the motion file.

@@ -10,17 +10,18 @@ from tests import context
 # that use Fusion; `commands` sits on top.
 ALLOWED_IMPORTS = {
     "package": set(),
+    "timing": set(),
     "params": {"package"},
     "sketch_values": {"package"},
     "sketch_solve": {"package", "sketch_values"},
     "design_edit": {"package", "params"},
-    "translator": {"package", "params", "sketch_values"},
+    "translator": {"package", "params", "sketch_values", "timing"},
     "probe": {"package", "params", "sketch_solve", "sketch_values", "translator"},
-    "export_plan": {"design_edit", "package", "params", "probe", "sketch_values", "translator"},
+    "export_plan": {"design_edit", "package", "params", "probe", "sketch_values", "timing", "translator"},
     "dialog_model": {"export_plan", "package", "params", "translator"},
-    "fusion_reader": {"design_edit", "package", "params", "translator"},
+    "fusion_reader": {"design_edit", "package", "params", "timing", "translator"},
     "fusion_ui": {"dialog_model", "export_plan", "fusion_reader", "package"},
-    "commands": {"design_edit", "dialog_model", "export_plan", "fusion_reader", "fusion_ui", "package"},
+    "commands": {"design_edit", "dialog_model", "export_plan", "fusion_reader", "fusion_ui", "package", "timing"},
 }
 
 
