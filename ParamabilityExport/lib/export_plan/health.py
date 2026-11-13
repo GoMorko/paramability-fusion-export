@@ -67,37 +67,34 @@ class HealthInputs:
 
 def make_health(inputs):
     """The record kept in `report.json` under `health`, from the `HealthInputs` of the export."""
-    unrestored, gap_mm, probe, probe_error = inputs.unrestored, inputs.gap_mm, inputs.probe, inputs.probe_error
-    unchecked, flipped, stopped, broken = inputs.unchecked, inputs.flipped, inputs.stopped, inputs.broken
-    steps, deferred_left, gap_after_mm = inputs.steps, inputs.deferred_left, inputs.gap_after_mm
-    left_off, undo_dropped = inputs.left_off, inputs.undo_dropped
-    measured = probe == MEASURED
+    gap_mm, steps = inputs.gap_mm, inputs.steps
+    measured = inputs.probe == MEASURED
     out = {
-        "unrestored": list(unrestored),
+        "unrestored": list(inputs.unrestored),
         "sketch_gap_mm": gap_mm,
         "sketch_drift": gap_mm is not None and gap_mm > RESTORE_TOLERANCE_MM,
         "restore_unverified": measured and gap_mm is None,
-        "probe": probe,
-        "probe_error": probe_error[:200],
+        "probe": inputs.probe,
+        "probe_error": inputs.probe_error[:200],
     }
-    if measured and gap_mm is None and unchecked:
-        out["unchecked"] = list(unchecked)[:MAX_LISTED]
-    if measured and flipped:
-        out["flipped"] = list(dict.fromkeys(flipped))[:MAX_LISTED]
-    if stopped:
+    if measured and gap_mm is None and inputs.unchecked:
+        out["unchecked"] = list(inputs.unchecked)[:MAX_LISTED]
+    if measured and inputs.flipped:
+        out["flipped"] = list(dict.fromkeys(inputs.flipped))[:MAX_LISTED]
+    if inputs.stopped:
+        stopped = inputs.stopped
         out["tries_stopped"] = {"after": stopped.get("after") or "", "items": list(stopped.get("items") or [])[:MAX_LISTED]}
-    if steps is not None and not steps.unread:
-        broken = steps.broken
+    broken = steps.broken if steps is not None and not steps.unread else inputs.broken
     if broken:
         out["broken"] = list(dict.fromkeys(broken))[:MAX_LISTED]
     out.update(steps_module.record(steps))
-    if deferred_left:
-        out["deferred_left"] = list(dict.fromkeys(deferred_left))[:MAX_LISTED]
-    if gap_after_mm is not None:
-        out["sketch_gap_after_rebuild_mm"] = gap_after_mm
-    if left_off:
-        out["left_off"] = list(dict.fromkeys(left_off))[:MAX_LISTED]
-    if undo_dropped:
+    if inputs.deferred_left:
+        out["deferred_left"] = list(dict.fromkeys(inputs.deferred_left))[:MAX_LISTED]
+    if inputs.gap_after_mm is not None:
+        out["sketch_gap_after_rebuild_mm"] = inputs.gap_after_mm
+    if inputs.left_off:
+        out["left_off"] = list(dict.fromkeys(inputs.left_off))[:MAX_LISTED]
+    if inputs.undo_dropped:
         out["undo_dropped"] = True
     return out
 
