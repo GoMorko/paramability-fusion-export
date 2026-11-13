@@ -14,20 +14,20 @@ from tests.test_manifest import GAPS_SCHEMA, GAPS_SCHEMA_V2, PACKAGE_SCHEMA, PAC
 from tests.test_parts_pipeline import renamed
 from tests.translator_helpers import load_capture
 
+from lib.capture_model.gap_hints import COIL, HINTS
 from lib.design_edit.errors import StepExportError
 from lib.dialog_model.result_rows import parts_result_view, result_view, section_lines
-from lib.export_plan.pipeline.parts import run_parts_pipeline
-from lib.capture_model.gap_hints import COIL, HINTS
 from lib.export_plan.pipeline import ExportRequest, run_pipeline
+from lib.export_plan.pipeline.parts import run_parts_pipeline
 from lib.export_plan.reach_pass import left_out_indexes, needs_reach
 from lib.fusion_reader.capture import MarkerError
 from lib.fusion_reader.read_gap_reach import read_reach
-from lib.translator.gaps import stops as translator_gaps
-from lib.translator import translate
-from lib.translator.result import TranslateResult
 from lib.package import gaps_file
 from lib.package.caps import PackageCapError, check_package_caps
 from lib.package.manifest import validate_manifest
+from lib.translator import translate
+from lib.translator.gaps import stops as translator_gaps
+from lib.translator.result import TranslateResult
 
 fakes.install_adsk_core()
 from lib.fusion_ui import result_dialog  # noqa: E402

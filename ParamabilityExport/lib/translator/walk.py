@@ -10,13 +10,13 @@ that reaches into another component, and a step that picks faces a gap made. Wha
 """
 from ..capture_model import gap_hints, gap_picks, step_kinds
 from ..capture_model.capture import outside_component, renamed_target, same_body
+from . import notes as wording, ref_motion
 from .bodies import body_states, split_rules
-from .sketch import borrowed
 from .faces import floating
 from .gaps import stops
-from . import notes as wording, ref_motion
 from .result import Refusal, StepResult, make_verdict
 from .sizes import construction_fixes
+from .sketch import borrowed
 from .words import type_words
 
 

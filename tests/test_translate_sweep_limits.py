@@ -12,8 +12,8 @@ from tests.test_translate_sweep import (PIPE, PIPE_ITEM, arc_xy, edited, edited_
                                         sweep_of, with_options)
 from tests.translator_helpers import load_capture, stopped
 
-from lib.translator.sweep import sweep_limits, sweep_taper
 from lib.translator import translate
+from lib.translator.sweep import sweep_limits, sweep_taper
 
 NO_FIT_VOLUME = 1.1
 

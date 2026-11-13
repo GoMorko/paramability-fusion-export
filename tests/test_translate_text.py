@@ -9,8 +9,8 @@ from tests.translator_helpers import assert_schema_ok, left_out, load_capture, s
 from lib.geometry import text_outlines
 from lib.params import size_table
 from lib.probe import build
-from lib.translator.sketch import loops, spline_fit
 from lib.translator import translate
+from lib.translator.sketch import loops, spline_fit
 
 EMBOSS = "emboss_text"
 EXTRUDE = "extrude_text"

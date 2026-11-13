@@ -12,12 +12,12 @@ follows sizes like a mirror plane.
 """
 from ...capture_model import gap_hints
 from ...geometry import vec
-from ..faces import follow, picks
 from .. import values
+from ..bodies.split import SIDE_TOL_MM
 from ..extrude import keep_angle_within
+from ..faces import follow, picks
 from ..repeat.repeat_build import round_vec
 from ..result import Refusal, StepResult
-from ..bodies.split import SIDE_TOL_MM
 
 # The recipe refuses a draft angle at or past this, either way.
 MAX_ANGLE_DEG = 30.0

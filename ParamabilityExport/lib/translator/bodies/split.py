@@ -16,13 +16,13 @@ the body) and every other piece of the same body on the other side, and the piec
 Anything that cannot be shown stops the copy, since the body after the split would be unknown.
 """
 from ...capture_model import lineage
+from ...capture_model.capture import same_body
 from ...geometry import vec
 from ..combine import step as combine_step
 from ..faces import follow
-from ...capture_model.capture import same_body
+from ..faces.tool_placer import ToolMaker
 from ..repeat.repeat_build import round_vec
 from ..result import Refusal, StepResult
-from ..faces.tool_placer import ToolMaker
 from ..values import Quantity
 
 # A piece's box may reach this far (mm) past the plane on the side it does not lie on.

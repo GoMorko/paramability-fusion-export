@@ -7,13 +7,13 @@ across it. These helpers prove that at the current sizes (`body_mirror_problem`)
 """
 import math
 
+from ...capture_model.step_kinds import recipe_kind
 from ...geometry import vec
 from ...params.expressions.errors import ExpressionError
 from ...params.expressions.evaluation import evaluate
 from ..ranges import range_check
-from ...capture_model.step_kinds import recipe_kind
-from ..values import Sized, number, numbers_of, reads_in
 from ..sketch.written_loops import spline_points
+from ..values import Sized, number, numbers_of, reads_in
 
 SIDE_TOL_MM = 1e-4
 

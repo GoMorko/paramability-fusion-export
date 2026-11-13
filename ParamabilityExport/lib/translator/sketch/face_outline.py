@@ -25,11 +25,11 @@ from ...geometry import vec
 from ...geometry.footprint import Footprint, polyline
 from ...sketch_values import keys
 from ...sketch_values.motion import Stuck
+from ..faces.slabs import cleaned
+from ..result import Refusal
+from ..values import Quantity, numbers_of
 from . import loops, sketch_motion
 from .curved import combine
-from ..result import Refusal
-from ..faces.slabs import cleaned
-from ..values import Quantity, numbers_of
 
 PARALLEL_TOL = 1e-9
 # How far (mm) the face's edges may lie from the earlier step's outline, and that outline from the edges.

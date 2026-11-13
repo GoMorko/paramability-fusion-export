@@ -24,8 +24,8 @@ index of that left out step. A pick that cannot be found, or a candidate whose f
 side for the translator.
 """
 from ..capture_model import step_kinds, tool_items
-from ..design_edit.marker import read_marker
 from ..capture_model.gap_picks import pick_records
+from ..design_edit.marker import read_marker
 from . import read_geometry as geo
 from .capture import MarkerError, restore_marker
 

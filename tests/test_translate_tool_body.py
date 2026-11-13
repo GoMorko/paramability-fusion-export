@@ -17,16 +17,16 @@ from lib.geometry.rigid import Move
 from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.sketch_values.motion import Motion
-from lib.translator.bodies import body_states
-from lib.translator.faces import follow
-from lib.translator.combine import tool_walk
 from lib.translator import translate
+from lib.translator.bodies import body_states
+from lib.translator.combine import tool_walk
 from lib.translator.context import Context
-from lib.translator.place import place
+from lib.translator.faces import follow
 from lib.translator.faces.placer import ADD, CUT, Placer
 from lib.translator.faces.slabs import Motion as CopyMotion, Slab
-from lib.translator.step_walk import all_steps
 from lib.translator.faces.tool_placer import ToolPlacer
+from lib.translator.place import place
+from lib.translator.step_walk import all_steps
 from lib.translator.translate import _over_caps as over_caps
 
 translate_module = importlib.import_module("lib.translator.translate")

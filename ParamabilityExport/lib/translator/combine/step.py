@@ -28,14 +28,14 @@ import copy
 from ...capture_model import step_kinds, tool_items
 from ...geometry import rigid
 from ...geometry.combine_volume import exceeds, exceeds_tools, rule_unproven
-from ..repeat import body_copies
 from .. import place, ref_motion
-from . import tool_walk
 from ..faces.moved_placer import MovedMaker, motion_of
-from ..result import Refusal, StepResult
 from ..faces.tool_placer import ToolMaker
+from ..repeat import body_copies
+from ..result import Refusal, StepResult
 from ..values import Quantity, reads_in
 from ..walk import copies_bodies, is_foreign
+from . import tool_walk
 
 
 COMBINE = {"join": "add", "cut": "cut", "intersect": "intersect"}

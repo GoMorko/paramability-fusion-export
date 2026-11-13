@@ -7,16 +7,16 @@ import math
 
 from ...geometry import vec
 from ...package.numbers import round9
-from ..faces import follow
 from .. import ref_motion, values
-from . import symmetric
+from ..faces import follow
 from ..faces.follow import Motion
+from ..result import Refusal
+from ..values import Quantity
+from . import symmetric
 from .repeat_build import build, keep_pattern_fixed, round_vec
 from .repeat_elements import FIT_TOL_MM, in_component, kept_elements
 from .repeat_lattice import gaps_between
 from .repeat_sources import split_sources
-from ..result import Refusal
-from ..values import Quantity
 
 ANGLE_TOL_DEG = 1e-6
 FULL_TURN_DEG = 360.0

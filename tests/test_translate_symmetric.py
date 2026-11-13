@@ -9,8 +9,8 @@ from tests.translator_helpers import assert_schema_ok, edited, left_out, load_ca
 from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.sketch_values.motion import Motion
-from lib.translator.ranges import range_check
 from lib.translator import translate
+from lib.translator.ranges import range_check
 
 CENTRE = 60.0
 PITCH = {"distance_one": param("d21", CUBE + " + 4 mm", 24.0)}

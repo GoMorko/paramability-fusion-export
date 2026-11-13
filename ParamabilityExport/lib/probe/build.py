@@ -25,8 +25,8 @@ A different outline that a size makes on its own is a limit of its range, not a 
 on that side the range keeps the farthest value tried alone that built and kept every outline, nearer than the nearest
 value that changed one. The states that set a size past such a limit are left out of the fit, and `Motion.spans`
 records the limits (`kept`) and the values that changed an outline (`changed`), so the translator cuts the range there
-(`translator.kept_ranges.built_ranges`). When no value but the value now remains, nothing is left out: the size stays
-stuck, and `kept` is the value now at both ends.
+(`translator.ranges.kept_ranges.built_ranges`). When no value but the value now remains, nothing is left out: the size
+stays stuck, and `kept` is the value now at both ends.
 """
 from . import columns as cols
 from . import match, plan, ref_fit

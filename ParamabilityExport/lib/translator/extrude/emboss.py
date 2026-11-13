@@ -24,8 +24,8 @@ import copy
 
 from ...geometry import vec
 from .. import extrude, placement, values
-from ..sketch import face_outline, loops
 from ..result import Refusal, StepResult
+from ..sketch import face_outline, loops
 from ..values import Quantity
 
 PLANE_TOL = 1e-4

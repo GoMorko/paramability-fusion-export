@@ -9,8 +9,8 @@ from tests.translator_helpers import load_capture, steps_of
 from lib.geometry import vec
 from lib.params import size_table
 from lib.params.expressions import evaluate
-from lib.translator.repeat import body_copies
 from lib.translator import translate
+from lib.translator.repeat import body_copies
 from lib.translator.step_walk import all_steps
 
 ROW = "pattern_bodies_combine"

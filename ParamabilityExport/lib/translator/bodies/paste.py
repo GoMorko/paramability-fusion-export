@@ -7,14 +7,14 @@ where the result sits. In one component that is the same place; any other place 
 `move` in plain numbers, and the sizes that could change it are marked.
 """
 from ...capture_model import tool_items
-from ..faces import follow
-from . import move
 from .. import ref_motion
 from ..combine import tool_walk
+from ..faces import follow
 from ..faces.moved_placer import MoveMaker
-from ..result import Refusal, StepResult
 from ..faces.slabs import Motion
 from ..faces.tool_placer import JoinedWalk
+from ..result import Refusal, StepResult
+from . import move
 
 PLACE = "Place"
 WHAT = "puts its body at"

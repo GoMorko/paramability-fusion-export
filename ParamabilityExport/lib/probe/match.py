@@ -13,11 +13,11 @@ import math
 
 from ..geometry import vec
 from ..geometry.tolerances import POINT_TOLERANCE_MM
-from ..translator.sketch.loops import profile_loops
-from ..translator.paths.path_motion import swept_degrees
-from ..translator.result import Refusal
 from ..sketch_values import keys
 from ..sketch_values.motion import SHAPE, TURNS, UNREAD
+from ..translator.paths.path_motion import swept_degrees
+from ..translator.result import Refusal
+from ..translator.sketch.loops import profile_loops
 
 TURN_TOLERANCE = 1e-6
 ANGLE_TOLERANCE = 1e-6

@@ -10,16 +10,16 @@ from itertools import product
 
 from ...geometry import vec
 from ...package.numbers import round9
-from ..ranges import range_check
-from . import symmetric
 from .. import values
 from ..faces.follow import Motion
+from ..ranges import range_check
+from ..result import Refusal, StepResult
+from ..values import Quantity
+from . import symmetric
 from .repeat_build import build, finish_copies, keep_pattern_fixed, round_vec
 from .repeat_elements import FIT_TOL_MM, in_component, is_identity, is_identity_rotation, kept_elements
 from .repeat_lattice import lattice_axes, solve_lattice
 from .repeat_sources import split_sources
-from ..result import Refusal, StepResult
-from ..values import Quantity
 
 # Most copies whose rounds and chamfers are written one by one for every count a size may give (`_counted_finishes`).
 MAX_COUNTED_COPIES = 64

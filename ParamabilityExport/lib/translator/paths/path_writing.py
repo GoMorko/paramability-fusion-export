@@ -7,6 +7,7 @@ from ...geometry import vec
 from ...geometry.tolerances import CHAIN_TOL
 from ...package.numbers import round9
 
+from ..result import Refusal
 from ..sketch import spline_fit
 from .path_checks import (
     axis_reach_refusal, carried_reach_refusal, off_square, outline_reach, overlap_refusal, reach_refusal, seam_turn,
@@ -19,7 +20,6 @@ from .path_limits import (
     TOO_COMPLEX, TOO_MANY,
 )
 from .path_model import PathPlan
-from ..result import Refusal
 
 
 def arc_plan(base, curve, profile_points):

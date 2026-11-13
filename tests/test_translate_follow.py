@@ -1,5 +1,4 @@
 """Picks and reaches that follow sizes on the sized filter tray."""
-import importlib
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -20,6 +19,7 @@ from lib.sketch_values.motion import Affine, Motion
 
 from lib.params.expressions import evaluate
 from lib.translator import translate
+from lib.translator.translate import _fix_long_formulas
 from lib.translator.values import Sized, _env
 
 HEIGHT = "FilterBox_height_mm"
@@ -216,8 +216,7 @@ class CapsTest(unittest.TestCase):
         doubts = []
         ctx = SimpleNamespace(table=sizes, doubt=lambda names, why, fixed=False: doubts.append((names, fixed)))
         with mock.patch("lib.translator.translate.MAX_FORMULA_LENGTH", len(long_sum) - 1):
-            importlib.import_module("lib.translator.translate")._fix_long_formulas(
-                {"features": [{"label": "Cap", "distance": value}]}, ctx)
+            _fix_long_formulas({"features": [{"label": "Cap", "distance": value}]}, ctx)
         self.assertEqual((value["expr"], value.reads, doubts), ("2 * height_mm / 3 - 30.5", ("height_mm",), []))
 
     def test_an_extent_pattern_with_a_sized_count_never_divides_by_zero(self):

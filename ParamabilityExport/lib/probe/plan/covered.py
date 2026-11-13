@@ -1,10 +1,10 @@
 """The sketches and flat faces the probe can follow: which capture records name them, and which it leaves alone."""
+from ...capture_model.step_kinds import AXIS, HOLE_POINTS, OUTLINE_FACE, PATH, PROFILES, step_type
 from ...sketch_values import keys
 from ...translator.extrude import emboss
+from ...translator.result import Refusal
 from ...translator.sketch import face_outline
 from ...translator.sketch.loops import profile_loops
-from ...translator.result import Refusal
-from ...capture_model.step_kinds import AXIS, HOLE_POINTS, OUTLINE_FACE, PATH, PROFILES, step_type
 
 _CURVES = ("line", "arc", "circle", "ellipse")
 _PATH_CURVES = ("line", "arc", "circle")
@@ -164,8 +164,8 @@ FACE = OUTLINE_FACE
 
 def outline_face(data):
     """The flat face record a step uses as its outline and that the probe can read again: the one face among its
-    outlines, else the face a trimmed emboss is limited to (`translator.emboss.trimmed_face`). None when there is none,
-    or it has no token, or its loops are not lines, arcs, circles and ellipses the translator writes."""
+    outlines, else the face a trimmed emboss is limited to (`translator.extrude.emboss.trimmed_face`). None when there
+    is none, or it has no token, or its loops are not lines, arcs, circles and ellipses the translator writes."""
     faces = [p for p in data.get("profiles") or [] if isinstance(p, dict) and p.get("face")]
     record = faces[0] if len(faces) == 1 else (emboss.trimmed_face(data) if not faces else None)
     if (not isinstance(record, dict) or record.get("foreign") or not record.get("token")

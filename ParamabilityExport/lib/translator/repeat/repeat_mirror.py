@@ -6,18 +6,18 @@ its image (`repeat/repeat_mirror_reach.py`). Otherwise (a round, chamfer, shell 
 cut across the plane, a body on both sides) everything written so far is gathered into one tool step and the mirror
 repeats that, which is the body joined with its image by definition.
 """
+from ...capture_model.step_kinds import SOLID, recipe_kind
 from ...geometry import vec
-from ..faces import follow
 from ..combine import tool_walk
+from ..faces import follow
 from ..faces.follow import Motion
+from ..faces.tool_placer import wrap_body
+from ..result import Refusal
+from ..step_walk import nesting
+from ..values import Quantity
 from .repeat_build import build, round_vec
 from .repeat_mirror_reach import body_mirror_problem, keep_one_side, side_of_plane
 from .repeat_sources import MAX_REFERENCES, split_sources
-from ..result import Refusal
-from ...capture_model.step_kinds import SOLID, recipe_kind
-from ..step_walk import nesting
-from ..faces.tool_placer import wrap_body
-from ..values import Quantity
 
 
 def mirror_plane(data):

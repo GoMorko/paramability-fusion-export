@@ -14,8 +14,8 @@ Without a measurement (no probe, an older export, a face the probe could not rea
 """
 from ...geometry import vec
 from ...params.geometry_links import ref_key
-from ..faces import follow
 from .. import ref_motion
+from ..faces import follow
 from ..sizes import reach_sizes
 from ..values import Quantity
 

@@ -9,9 +9,9 @@ from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
 
 from lib.params import size_table
 from lib.probe import build
-from lib.translator.sketch import loops, spline_fit
 from lib.translator import translate
 from lib.translator.result import Refusal
+from lib.translator.sketch import loops, spline_fit
 
 EDGE = "extrude_spline_edge"
 EXTRUDE = 1

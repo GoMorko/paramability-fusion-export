@@ -5,8 +5,8 @@ import unittest
 from tests import context  # noqa: F401
 from tests.test_capture_reader import Coll, FakeDesign, Obj, P, body, entry, matrix, rect_profile
 
-from lib.fusion_reader.capture import read_capture
 from lib.capture_model.gap_picks import pick_records
+from lib.fusion_reader.capture import read_capture
 
 ROOT = Obj(entityToken="root")
 OTHER = Obj(entityToken="other")

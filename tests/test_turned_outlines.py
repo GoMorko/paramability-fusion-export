@@ -14,8 +14,8 @@ from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
 from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.sketch_values.motion import Motion, Terms
-from lib.translator.sketch import sketch_crossings
 from lib.translator import translate
+from lib.translator.sketch import sketch_crossings
 from lib.translator.sketch.loops import profile_loops
 from lib.translator.values import Quantity
 

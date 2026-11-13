@@ -21,11 +21,11 @@ as not derived with `skipped` or `error`.
 """
 from collections import Counter
 
+from ..geometry import tolerances
 from ..package.numbers import round9
 from ..params import geometry_links
 from ..params.size_table import DERIVED, FREE
 from ..sketch_solve.outcome import DERIVED as SOLVED, NOT_DERIVED, PARTLY
-from ..geometry import tolerances
 from ..sketch_solve.solve import solve_sketch
 from ..sketch_values.motion import Affine, Stuck, Terms
 from . import derived_keys as dk

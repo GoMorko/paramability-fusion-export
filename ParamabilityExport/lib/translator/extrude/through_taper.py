@@ -9,10 +9,10 @@ closes.
 import math
 import time
 
+from ...geometry.footprint import Footprint, polyline
 from ...params.expressions.errors import ExpressionError
 from ...params.expressions.evaluation import evaluate
 from ..ranges import kept_ranges, range_check
-from ...geometry.footprint import Footprint, polyline
 from ..sketch.written_loops import profile_at, written_reads
 
 CLOSES = "%s would close before it passes the part"

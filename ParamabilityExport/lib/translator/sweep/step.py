@@ -42,16 +42,16 @@ import math
 
 from ...capture_model import gap_hints
 from ...geometry import vec
-from ..sketch import borrowed
-from ..paths import path_model, paths
-from . import sweep_taper
 from ..extrude import COMBINE
+from ..paths import path_model, paths
 from ..result import Refusal, StepResult
+from ..sketch import borrowed
+from . import sweep_taper
+from .sweep_ends import end_check
 from .sweep_limits import (
     MIXED_PATH, NOT_MATCHING, PATH_TOO_LONG, PATH_UNREADABLE, SCALED_OUTLINE, SEVERAL_OUTLINES, SEVERAL_TAPERED,
     TAPER_CLOSES, TWIST_CLOSED, UNREADABLE, WHOLE_TURN_TOL, ZERO_TOL,
 )
-from .sweep_ends import end_check
 from .sweep_marks import keep_path_on_plane, mark_path
 from .sweep_outline import outline_of, outline_shapes, profile_points
 from .sweep_rules import follow_path

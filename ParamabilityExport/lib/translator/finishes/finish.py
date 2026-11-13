@@ -15,10 +15,10 @@ from ...capture_model import gap_hints, step_kinds
 from ...geometry import vec
 from ...package.numbers import is_number
 
-from ..faces import follow, picks
-from ..ranges import range_check
 from .. import values
+from ..faces import follow, picks
 from ..faces.placer_makers import ShellMaker
+from ..ranges import range_check
 from ..result import Entry, Refusal, StepResult
 from ..values import Sized
 

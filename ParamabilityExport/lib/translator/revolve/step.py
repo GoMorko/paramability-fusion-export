@@ -15,10 +15,10 @@ from ...capture_model import gap_hints
 from ...geometry import vec
 from ...package.numbers import round9
 
-from ..sketch import loops, sketch_motion
 from .. import notes, placement, ref_motion, values
 from ..extrude import COMBINE
 from ..result import Refusal, StepResult
+from ..sketch import loops, sketch_motion
 
 
 AXIS_PLANE_TOL = 1e-4

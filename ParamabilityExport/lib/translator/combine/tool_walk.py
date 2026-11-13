@@ -7,10 +7,10 @@ until the Combine decides how to write them.
 Steps written one by one onto the part are a different matter: they meet the part, not the tool. `on_part` works such
 steps out again against the part as it stood at each step.
 """
-from ..bodies import body_states
-from .. import walk
 from ...capture_model import lineage, step_kinds, tool_items
 from ...capture_model.capture import outside_component, renamed_target, same_body
+from .. import walk
+from ..bodies import body_states
 from ..result import Refusal, StepResult, TranslateResult
 from ..words import type_words
 

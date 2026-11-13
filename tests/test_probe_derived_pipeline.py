@@ -5,8 +5,8 @@ import unittest
 from unittest import mock
 
 from tests import context  # noqa: F401
-from tests.fakes import FakePartsPort, FakePort
 from tests.derived_fixtures import box_capture
+from tests.fakes import FakePartsPort, FakePort
 from tests.test_parts_pipeline import export as export_parts
 from tests.test_pipeline import export, view
 

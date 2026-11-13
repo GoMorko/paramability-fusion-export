@@ -9,8 +9,8 @@ from tests.translator_helpers import left_out, load_capture, steps_of, verdict_o
 from lib.geometry import vec
 from lib.params import size_table
 from lib.params.expressions import evaluate
-from lib.translator.bodies import move
 from lib.translator import translate
+from lib.translator.bodies import move
 
 FLAT = {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
 

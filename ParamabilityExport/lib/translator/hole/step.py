@@ -12,11 +12,11 @@ from ...capture_model import gap_hints
 from ...geometry import vec
 from ...package.numbers import round9
 
-from ..ranges import range_check
 from .. import ref_motion, values
+from ..ranges import range_check
+from ..result import Refusal, StepResult
 from ..sketch import sketch_motion
 from ..values import Quantity
-from ..result import Refusal, StepResult
 
 
 MARGIN_MM = 0.01

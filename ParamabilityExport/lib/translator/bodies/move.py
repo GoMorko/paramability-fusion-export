@@ -17,8 +17,8 @@ from ...geometry import rigid, vec
 from ...package.numbers import round9
 from .. import repeat, values
 from ..faces.moved_placer import MoveMaker
-from ..result import Refusal, StepResult
 from ..faces.slabs import IDENTITY_ROWS, Motion
+from ..result import Refusal, StepResult
 from ..values import Quantity
 
 FIT_TOL_MM = 1e-3

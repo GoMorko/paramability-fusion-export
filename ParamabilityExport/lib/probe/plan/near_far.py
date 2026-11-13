@@ -38,8 +38,9 @@ def probe_rows(sizes, moved, limit=MAX_PROBE_ROWS, extra=()):
 
     sizes: the kept sizes. moved: the params that move covered sketch values. A row has no STEP (`"step": False`);
     `state` holds the manifest values, `varied` the params that differ, `label` the progress line. `untried` lists
-    the moved params left without near rows by the row limit. `extra` are params tried on a guess (`probe_flow.sizes.extra_sizes`):
-    their rows follow the moved ones, and one left without rows is not listed in `untried`.
+    the moved params left without near rows by the row limit. `extra` are params tried on a guess
+    (`probe_flow.sizes.extra_sizes`): their rows follow the moved ones, and one left without rows is not listed in
+    `untried`.
     """
     rows, untried = [], []
     tried = tried_sizes(sizes, moved, extra)

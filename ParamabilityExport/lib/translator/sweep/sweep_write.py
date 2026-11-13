@@ -3,13 +3,13 @@ import copy
 
 from ...geometry import vec
 from .. import extrude, placement
-from ..sketch import loops, sketch_motion
-from ..revolve import step as revolve
-from . import sweep_frames, sweep_reach
 from ..faces.placer_makers import EndCapsMaker
 from ..result import Refusal, StepResult
-from .sweep_marks import keep_outline_in_bends
+from ..revolve import step as revolve
+from ..sketch import loops, sketch_motion
 from ..values import Quantity
+from . import sweep_frames, sweep_reach
+from .sweep_marks import keep_outline_in_bends
 
 
 def written_form(found, twisted, tapered, fixed):

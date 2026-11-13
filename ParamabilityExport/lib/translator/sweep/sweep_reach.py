@@ -8,8 +8,8 @@ any setting reaches too far.
 import math
 
 from ...params.expressions.errors import ExpressionError
-from ..ranges import range_check
 from ..paths.path_limits import REACH_SHARE
+from ..ranges import range_check
 from ..sketch.written_loops import (
     point as _point, rect_corners as _corners, spline_points as _spline_points, value as _value, written_reads,
 )

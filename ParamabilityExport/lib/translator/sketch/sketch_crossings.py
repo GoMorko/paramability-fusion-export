@@ -13,13 +13,13 @@ outline that crosses itself only in a corner of the ranges (a leg turned while s
 """
 import math
 
+from ...geometry.vec import POINT_TOL
 from ...params.expressions.errors import ExpressionError
 from ...params.expressions.formula import parse_formula
 from ...sketch_values import keys
 from ...sketch_values.motion import CURVE, Affine, Stuck
 from ..ranges import kept_ranges, range_check
 from .curved import Curved, combine, names_of, render, times
-from ...geometry.vec import POINT_TOL
 
 FIT_TOL = 1e-4
 ORDER_STEPS = 20  # halvings that find where a range stops keeping the order: a millionth of the range

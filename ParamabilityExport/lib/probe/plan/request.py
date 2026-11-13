@@ -1,7 +1,7 @@
 """What the reader reads at each probe state."""
+from ...capture_model.step_kinds import pattern_kind
 from ...params import defaults
 from ...params.size_table import DERIVED, FREE
-from ...capture_model.step_kinds import pattern_kind
 from .covered import FACE, scan
 from .references import refs
 

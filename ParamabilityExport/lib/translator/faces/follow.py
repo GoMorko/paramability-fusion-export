@@ -23,17 +23,17 @@ a face that an offsetFaces step moved through the face before the move (faces/of
 two steps cross is placed on both walls (faces/crossings.py).
 """
 from ...geometry import vec
-from . import crossings, picks, shells
 from .. import notes, ref_motion, values
-from ..sketch import sketch_motion
-from .copy_counts import stays_at_least
 from ..sizes import offset_param, on_part
+from ..sketch import sketch_motion
+from ..values import Quantity
+from . import crossings, picks, shells
+from .copy_counts import stays_at_least
 from .placer import ADD
 from .slabs import (
     AXIAL_TOL, CONSTANT_TOL, FACTOR_DIGITS, IDENTITY_ROWS, LATERAL_TOL, Motion, Place, Slab, as_quantity,
     cleaned_all,
 )
-from ..values import Quantity
 
 __all__ = ["AXIAL_TOL", "CONSTANT_TOL", "FACTOR_DIGITS", "IDENTITY_ROWS", "LATERAL_TOL", "Motion", "Place", "Slab",
            "as_quantity", "cleaned_all"]

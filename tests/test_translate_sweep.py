@@ -12,9 +12,9 @@ from tests.translator_helpers import assert_schema_ok, left_out, load_capture, s
 from lib.capture_model import gap_hints
 from lib.params import size_table
 from lib.sketch_values.motion import Affine, Motion, Stuck, Terms
+from lib.translator import translate
 from lib.translator.paths import path_limits
 from lib.translator.sweep import step as sweep, sweep_limits, sweep_rules, sweep_settings
-from lib.translator import translate
 from lib.translator.translate import _sweep_version
 
 PIPE = "sweep_pipe"

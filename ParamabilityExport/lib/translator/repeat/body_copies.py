@@ -17,18 +17,18 @@ so the sizes a count reads are marked. Spacing and angle only move the same copi
 """
 from dataclasses import dataclass
 
+from ...capture_model.capture import outside_component, same_body
+from ...capture_model.step_kinds import SOLID, recipe_kind
 from ...geometry import vec
 from ...geometry.rigid import move_from_frame
-from ..bodies import move, paste
 from .. import ref_motion, repeat, values, walk
+from ..bodies import move, paste
 from ..combine import tool_walk
-from ...capture_model.capture import outside_component, same_body
 from ..faces.moved_placer import MoveMaker
-from ..result import Refusal, StepResult, make_verdict
 from ..faces.slabs import Motion
-from ...capture_model.step_kinds import SOLID, recipe_kind
-from ..step_walk import nesting
 from ..faces.tool_placer import ToolMaker, WrittenFor, wrap_body
+from ..result import Refusal, StepResult, make_verdict
+from ..step_walk import nesting
 
 GRID_PATHS = ("quantity_one", "quantity_two", "distance_one", "distance_two")
 TURN_PATHS = ("quantity", "total_angle_deg")

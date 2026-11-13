@@ -1,31 +1,31 @@
 """The driver: walks a capture's items, calls one handler per feature type, builds the recipe."""
 import importlib
 
-from .gaps import gap_file, gap_measures, gap_place, stops
-from .ranges import kept_ranges, range_check
-from . import repeat
-from .audit import audit
-from .sizes import joint_reasons, probed_sizes, text_reasons, untried_reasons, used_sizes
-from . import notes as wording, place
-from .faces.picks import MAX_NEAR_POINTS
-from .notes import (
-    BODY_MOVED_WHY, dropped_reason, fixed_reason, loose_reason, tried_unmoved_reason, unmoved_link_reason,
-    unmoved_reason, unused_reason)
 from ..capture_model import lineage, step_kinds
 from ..capture_model.capture import validate_capture
-from .context import Context
-from .result import TranslateResult
-from .step_walk import all_steps, nesting
-from .combine.tool_walk import MAX_DEPTH as MAX_TOOL_DEPTH
 from ..geometry import rigid
 from ..params import geometry_links
 from ..params.expressions.formula import tokenize_formula
 from ..params.expressions.simplify import collected_sum
 from ..params.expressions.text import MAX_FORMULA_LENGTH
-from .values import Sized, number
 from ..sketch_values import coverage, keys
 from ..sketch_values.motion import Motion, Stuck, Terms
 from ..timing.timer import span_on
+from . import repeat
+from . import notes as wording, place
+from .audit import audit
+from .combine.tool_walk import MAX_DEPTH as MAX_TOOL_DEPTH
+from .context import Context
+from .faces.picks import MAX_NEAR_POINTS
+from .gaps import gap_file, gap_measures, gap_place, stops
+from .notes import (
+    BODY_MOVED_WHY, dropped_reason, fixed_reason, loose_reason, tried_unmoved_reason, unmoved_link_reason,
+    unmoved_reason, unused_reason)
+from .ranges import kept_ranges, range_check
+from .result import TranslateResult
+from .sizes import joint_reasons, probed_sizes, text_reasons, untried_reasons, used_sizes
+from .step_walk import all_steps, nesting
+from .values import Sized, number
 from .walk import walk_items
 
 RECIPE_VERSION = 12

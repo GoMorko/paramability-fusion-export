@@ -6,8 +6,8 @@ import time
 from ...geometry import vec
 from ...params.expressions.errors import ExpressionError
 
-from ..ranges import kept_ranges, range_check
 from ..paths import path_curves, path_motion, path_rebuilt
+from ..ranges import kept_ranges, range_check
 from . import sweep_reach
 from .sweep_marks import drawn_outline, mark_sketch_place
 

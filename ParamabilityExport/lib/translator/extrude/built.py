@@ -1,10 +1,10 @@
 """The outlines of an extrude as the recipe writes them: sketch outlines and flat faces, merged and checked."""
-from ..sketch import loops, sketch_motion
-from .. import notes, values
-from ..faces import thin_wall
 from ...capture_model import gap_hints
 from ...geometry import outlines, vec
+from .. import notes, values
+from ..faces import thin_wall
 from ..result import Refusal
+from ..sketch import loops, sketch_motion
 from .common import parallel
 
 

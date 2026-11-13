@@ -5,6 +5,7 @@ import math
 
 from ...capture_model import gap_hints
 from ...geometry import vec
+from ..result import Refusal
 from ..sketch import spline_fit
 from .path_curves import arc_of, curve_length, polyline, tangents, turn_deg
 from .path_limits import (
@@ -12,7 +13,6 @@ from .path_limits import (
     OVERLAP_MAX_CORNER_DEG, OVERLAP_STEP_SHARE, REACH_SHARE, SHARP_CORNER, SMOOTH_JOIN_DEG, SQUARE_TOL_DEG,
     STRAIGHT_DEG, TOUCH_TOL, TURNS_BACK,
 )
-from ..result import Refusal
 
 
 def off_square(direction, normal):

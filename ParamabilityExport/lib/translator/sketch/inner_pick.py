@@ -8,12 +8,12 @@ corner whose move keeps the point inside the written outline, with room to its e
 `range_check` builds over the ranges of the sizes the outline reads (`corners` and `middles`); else the centre.
 An edge picked inside the face comes from another step and keeps the centre (`sketch_motion.Outline._inner`).
 """
+from ...geometry.footprint import Footprint
 from ...params.expressions.errors import ExpressionError
 from ...params.expressions.formula import parse_formula
 from ...sketch_values.motion import Stuck
 from ..ranges import range_check
 from .curved import combine, render
-from ...geometry.footprint import Footprint
 from .written_loops import profile_at, written_reads
 
 MAX_CORNERS = 3   # nearest corners tried before the centre

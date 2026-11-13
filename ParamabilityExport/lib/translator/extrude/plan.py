@@ -1,13 +1,13 @@
 """The sides of an extrude: the direction of each, how it ends and its length."""
 import math
 
-from .. import values
 from ...capture_model import gap_hints
 from ...geometry import vec
+from .. import values
 from ..result import Refusal
 from .common import LENGTH_TOL, SIGN_TOL, UNREADABLE, parallel, sign_of
-from .side import SidePlan
 from .reach import distance_quantity, keep_reaches_positive, reach_quantity
+from .side import SidePlan
 from .taper import taper_degrees, taper_quantity
 
 
