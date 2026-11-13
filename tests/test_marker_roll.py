@@ -4,10 +4,9 @@ import copy
 import unittest
 
 from tests import context  # noqa: F401
-from tests.fakes import FakeDesign, FakeStore
-from tests.test_parts_pipeline import FakePartsPort
+from tests.fakes import FakeDesign, FakePartsPort, FakePort, RollingStore, shifted
 from tests.test_parts_pipeline import export as export_parts
-from tests.test_pipeline import CAPTURE, START, FakePort, export, shifted
+from tests.test_pipeline import CAPTURE, START, export
 from tests.test_timeline_marker import Item, Timeline
 
 from lib.design_edit.marker import MARKER_LOST
@@ -206,33 +205,6 @@ class StoreRollTest(unittest.TestCase):
         self.assertTrue(store.marker_holds())
         design.timeline.markerPosition = 1
         self.assertFalse(store.marker_holds())
-
-
-class RollingStore(FakeStore):
-    """A parameter store that records the marker position each recompute ran at."""
-
-    def __init__(self, expressions, fail_roll=False):
-        super().__init__(expressions)
-        self.rolled, self.at, self.events, self.fail_roll, self.holds = None, [], [], fail_roll, True
-
-    def roll_marker(self, position):
-        self.events.append(("roll", position))
-        if self.fail_roll:
-            return False
-        self.rolled = position
-        return True
-
-    def unroll_marker(self):
-        self.events.append(("unroll", self.rolled))
-        self.rolled = None
-        return True
-
-    def marker_holds(self):
-        return self.holds
-
-    def recompute(self):
-        self.at.append(self.rolled)
-        return super().recompute()
 
 
 def box_capture(end=9):

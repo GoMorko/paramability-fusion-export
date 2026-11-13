@@ -1,13 +1,11 @@
 """The export pipeline run against a simulated Fusion: the sketch scan, and every way a step can fail."""
-import contextlib
-import copy
 import json
 import tempfile
 import unittest
 from unittest import mock
 
 from tests import context  # noqa: F401
-from tests.fakes import FakePortExtras, FakeStore
+from tests.fakes import FakePort, FakeStore, shifted
 from tests.translator_helpers import load_capture
 
 from lib.design_edit.errors import StepExportError
@@ -22,115 +20,6 @@ USER = CAPTURE["parameters"]["user"]
 MODEL = CAPTURE["parameters"]["model"]
 TICKED = ["box_count", "cube_mm", "depth_mm", "height_mm", "wall_mm"]
 START = {p["name"]: p["expression"] for p in USER}
-
-
-def shifted(read, dx):
-    """The read with every sketch point moved `dx` along x."""
-    out = copy.deepcopy(read)
-
-    def move(node):
-        if isinstance(node, dict):
-            for key in ("start", "end", "center"):
-                if isinstance(node.get(key), list):
-                    node[key][0] += dx
-            for value in node.values():
-                move(value)
-        elif isinstance(node, list):
-            for value in node:
-                move(value)
-
-    move(out["sketches"])
-    return out
-
-
-class StuckStore(FakeStore):
-    """A store where the named parameters can be changed but never set back to their saved expression."""
-
-    def __init__(self, expressions, stuck=()):
-        super().__init__(expressions)
-        self.saved = dict(expressions)
-        self.stuck = set(stuck)
-
-    def set_expression(self, name, expression):
-        if name in self.stuck and self.exprs[name] != self.saved[name] and expression == self.saved[name]:
-            raise RuntimeError("refused")
-        super().set_expression(name, expression)
-
-
-class BreakingStore(FakeStore):
-    """A store where a value of `name` above `above` breaks a step for good: it stays in error after the values are back,
-    as Fusion can leave a step that lost its input."""
-
-    def __init__(self, expressions, name="depth_mm", above=70):
-        super().__init__(expressions)
-        self.broken = False
-        self.name, self.above = name, above
-
-    def set_expression(self, name, expression):
-        super().set_expression(name, expression)
-        self.broken = self.broken or (name == self.name and float(expression.split()[0]) > self.above)
-
-    def error_items(self):
-        return ["RemoveBody1"] if self.broken else []
-
-
-class FakePort(FakePortExtras):
-    """Fusion as the pipeline sees it. `reads` counts probe reads; `fail_read_from` makes the n-th read and the ones
-    after it raise; `drift` makes every read at the start values after the first come back moved."""
-
-    def __init__(self, capture=CAPTURE, store=None, bad_when=None, fail_read_from=None, drift=0.0,
-                 fail_step_at=None, cancel_at=None):
-        self.capture = capture
-        self.store = store or FakeStore(START, bad_when=bad_when)
-        self.units = {p["name"]: p["unit"] for p in USER}
-        self.reads, self.steps, self.logs, self.warned = 0, 0, [], []
-        self.fail_read_from, self.drift = fail_read_from, drift
-        self.fail_step_at, self.cancel_at = fail_step_at, cancel_at
-        self.progressed = 0
-        self.e0 = {"sketches": {}, "points": {}, "lines": {}, "params": {}}
-        for item in capture["items"] if isinstance(capture, dict) else []:
-            for profile in (item.get("data") or {}).get("profiles") or []:
-                self.e0["sketches"][profile["sketch_token"]] = {
-                    "frame": profile["frame"], "profiles": [{"loops": profile["loops"]}]}
-
-    def read_reach(self, capture, gaps):
-        raise AssertionError("this fake port reads no reach")
-
-    def export_step(self, path):
-        self.steps += 1
-        if self.fail_step_at == self.steps:
-            raise StepExportError("Fusion did not write the STEP file.")
-        with open(path, "wb") as f:
-            f.write(b"ISO-10303-21;")
-
-    def read_capture(self):
-        return self.capture
-
-    def probe_reader(self):
-        def read(request):
-            self.reads += 1
-            if self.fail_read_from is not None and self.reads >= self.fail_read_from:
-                raise RuntimeError("Fusion would not answer")
-            if self.drift and self.reads > 1 and self.store.exprs == START:
-                return shifted(self.e0, self.drift)
-            return self.e0
-        return read
-
-    def progress(self, verb):
-        outer = self
-
-        class Step:
-            def step(self, *args):
-                outer.progressed += 1
-                return outer.cancel_at != outer.progressed
-
-        return contextlib.nullcontext(Step())
-
-    def warn_unrestored(self, names):
-        self.warned.append(list(names))
-
-    def log(self, text):
-        self.logs.append(text)
 
 
 def request(ranges=None):
@@ -263,7 +152,7 @@ class ProbeFailureTest(unittest.TestCase):
 
 class BrokenDesignTest(unittest.TestCase):
     def test_the_tries_stop_once_a_try_leaves_the_design_broken_and_the_person_is_told(self):
-        port = FakePort(store=BreakingStore(START))
+        port = FakePort(store=FakeStore(START, breaks=("depth_mm", 70)))
         result = export(port, ranges={"depth_mm": (30, 120)})
         states = result.report["probe"]["states"]
         failed = [n for n, s in enumerate(states) if not s["built"]]
@@ -282,7 +171,7 @@ class BrokenDesignTest(unittest.TestCase):
         self.assertLessEqual(len(health_module.health_lines(health)[0]), health_module.MAX_LINE)
 
     def test_sizes_whose_tries_never_ran_after_the_stop_are_untried_not_still(self):
-        result = export(FakePort(store=BreakingStore(START, "box_count", 3.5)))
+        result = export(FakePort(store=FakeStore(START, breaks=("box_count", 3.5))))
         probe = result.report["probe"]
         self.assertEqual(probe["untried"], ["cube_mm", "depth_mm"])
         self.assertEqual(probe["motion"]["untried"], ["cube_mm", "depth_mm"])
@@ -292,7 +181,7 @@ class BrokenDesignTest(unittest.TestCase):
 
 class RestoreTest(unittest.TestCase):
     def test_a_parameter_that_will_not_go_back_is_named_and_the_person_is_told_what_to_do(self):
-        port = FakePort(store=StuckStore(START, stuck=["height_mm"]))
+        port = FakePort(store=FakeStore(START, stuck=["height_mm"]))
         result = export(port)
         self.assertEqual(result.health["unrestored"], ["height_mm"])
         lines = section_lines(view(result), "check")
@@ -312,34 +201,20 @@ class RestoreTest(unittest.TestCase):
         self.assertEqual(json.loads(json.dumps(result.report["health"]))["sketch_drift"], True)
 
 
-class FlipPort(FakePort):
+def flip_port(keeper=True, fail_read_at=None, **options):
     """A design whose sketch goes to its other solution in the first try and stays there with the values back, until
     a keeper (when `keeper`) puts its points back. The read number `fail_read_at` raises."""
+    def flip(store):
+        port.flipped = port.flipped or store.exprs != START
 
-    def __init__(self, keeper=True, fail_read_at=None, **options):
-        super().__init__(**options)
-        self.flipped, self.keeper, self.fail_read_at = False, keeper, fail_read_at
-        port = self
+    def read(request):
+        if port.reads == fail_read_at:
+            raise RuntimeError("Fusion would not answer")
+        return shifted(port.e0, 0.5) if port.flipped and port.store.exprs == START else port.e0
 
-        class Store(FakeStore):
-            def recompute(self):
-                port.flipped = port.flipped or self.exprs != START
-                return super().recompute()
-
-        self.store = Store(START)
-
-    def probe_reader(self):
-        def read(request):
-            self.reads += 1
-            if self.reads == self.fail_read_at:
-                raise RuntimeError("Fusion would not answer")
-            return shifted(self.e0, 0.5) if self.flipped and self.store.exprs == START else self.e0
-        return read
-
-    def sketch_keeper(self, tokens):
-        if not self.keeper:
+    def keep(tokens):
+        if not keeper:
             raise RuntimeError("no keeper")
-        port = self
 
         class Keeper:
             @staticmethod
@@ -349,16 +224,20 @@ class FlipPort(FakePort):
 
         return Keeper()
 
+    port = FakePort(store=FakeStore(START, on_recompute=flip), reader=read, keeper=keep, **options)
+    port.flipped = False
+    return port
+
 
 class TriesEndedEarlyTest(unittest.TestCase):
     def test_a_cancel_during_the_tries_puts_a_flipped_sketch_back(self):
-        port = FlipPort(cancel_at=2)
+        port = flip_port(cancel_at=2)
         with self.assertRaises(ExportCancelled):
             export(port)
         self.assertFalse(port.flipped)
 
     def test_failed_tries_that_leave_a_sketch_off_its_solution_are_reported(self):
-        result = export(FlipPort(keeper=False, fail_read_at=3))
+        result = export(flip_port(keeper=False, fail_read_at=3))
         self.assertEqual(result.health["probe"], "failed")
         self.assertTrue(result.health["sketch_drift"])
 
@@ -378,7 +257,7 @@ class FailingStepTest(unittest.TestCase):
         self.assertEqual(port.store.exprs, START)
 
     def test_when_the_export_stops_and_a_parameter_will_not_go_back_it_is_named(self):
-        port = FakePort(store=StuckStore(START, stuck=TICKED), cancel_at=2)
+        port = FakePort(store=FakeStore(START, stuck=TICKED), cancel_at=2)
         with self.assertRaises(ExportCancelled):
             export(port)
         self.assertEqual(len(port.warned), 1)

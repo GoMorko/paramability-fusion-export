@@ -558,6 +558,12 @@ that no module imports an underscore name from another module. `tests/test_inter
 parameter store, the two Fusion ports and the shared fakes have every member the pure code asks of a store or a port
 (declared in `design_edit/store.py` and `export_plan/pipeline/port.py`), and that both probes have every member the try
 runner asks of a probe (declared in `export_plan/probe_flow/interface.py`).
+
+The shared fakes live in `tests/fakes/`, by domain: one parameter store with options for the answers a test needs
+(`store.py`, with the stores that also hold the timeline marker), one port for one body and one for several bodies
+(`port.py`), Fusion objects for the reader tests (`design.py`) and the dialog inputs (`dialog.py`). A test that needs
+another answer passes an option (a recompute hook, a probe read, a sketch keeper, a reach read) rather than a subclass.
+
 From this folder:
 
 ```

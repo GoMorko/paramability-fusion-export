@@ -99,6 +99,17 @@ def run_parts_pipeline(port, request, tmp):
     return PartsPipeline(port, request, tmp).run()
 
 
+def shared_cuts(table, probed):
+    """`table` with the range of each size cut to the narrowest cut over `probed`, the `(part table, motion, capture)`
+    of each part that was probed, so every part writes the same range: the form takes one range for a size, from the
+    first part that has it."""
+    shared = {}
+    for part_table, motion, capture in probed:
+        for name, cut in built_ranges(part_table, motion, capture).items():
+            shared[name] = shared[name].meet(cut) if name in shared else cut
+    return table.with_narrowed(shared)
+
+
 class PartsPipeline:
     def __init__(self, port, request, tmp):
         self.port, self.request, self.tmp = port, request, tmp
@@ -245,13 +256,9 @@ class PartsPipeline:
         return self._translation(index, motion, "translate_first")
 
     def _share_cuts(self):
-        """Cut the ranges of a size that several parts read to the narrowest cut over the parts that were probed, so
-        every part writes the same range: the form takes one range for a size, from the first part that has it."""
-        shared = {}
-        for index, motion in self.motions.items():
-            for name, cut in built_ranges(self._part_table(index), motion, self.captures[index]).items():
-                shared[name] = shared[name].meet(cut) if name in shared else cut
-        self.table = self.table.with_narrowed(shared)
+        """Cut the ranges of a size that several parts read to the narrowest cut over the parts that were probed."""
+        self.table = shared_cuts(self.table, [(self._part_table(index), motion, self.captures[index])
+                                              for index, motion in self.motions.items()])
 
     def _share_fixed(self, finals):
         """Translate the parts again with the sizes that one part had to fix fixed in all, until no part asks for more

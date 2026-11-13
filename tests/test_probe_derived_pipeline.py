@@ -5,10 +5,10 @@ import unittest
 from unittest import mock
 
 from tests import context  # noqa: F401
+from tests.fakes import FakePartsPort, FakePort
 from tests.derived_fixtures import box_capture
-from tests.test_parts_pipeline import FakePartsPort
 from tests.test_parts_pipeline import export as export_parts
-from tests.test_pipeline import FakePort, export, view
+from tests.test_pipeline import export, view
 
 from lib.export_plan import probe_flow
 from lib.probe import derived

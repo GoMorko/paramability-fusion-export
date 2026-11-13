@@ -4,7 +4,8 @@ import tempfile
 import unittest
 
 from tests import context  # noqa: F401
-from tests.test_pipeline import START, FakePort, request
+from tests.fakes import FakePort
+from tests.test_pipeline import START, request
 
 from lib.design_edit import timeline_health as steps_module
 from lib.export_plan import health as health_module

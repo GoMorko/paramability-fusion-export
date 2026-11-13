@@ -7,9 +7,7 @@ import typing
 import unittest
 
 from tests import context
-from tests.fakes import FakeStore
-from tests.test_parts_pipeline import FakePartsPort
-from tests.test_pipeline import FakePort
+from tests.fakes import FakePartsPort, FakePort, FakeStore
 
 from lib.design_edit.store import TIMELINE_CONTROLS, ParameterStore
 from lib.export_plan.pipeline import ExportPort, PartsPort
@@ -128,8 +126,8 @@ class DeclaredInterfaceTest(unittest.TestCase):
         self.assertEqual((STORE_MEMBERS | PORT_MEMBERS | PARTS_PORT_MEMBERS) - asked - {"export_step"}, set())
 
     def test_both_probes_have_every_declared_member(self):
-        self.assertEqual(PROBE_MEMBERS - _class_members(os.path.join(PROBE_FLOW, "size_probe.py"), "SizeProbe"), set())
-        self.assertEqual(PROBE_MEMBERS - _class_members(os.path.join(PROBE_FLOW, "probe_group.py"), "ProbeGroup"), set())
+        for module, name in (("size_probe.py", "SizeProbe"), ("probe_group.py", "ProbeGroup")):
+            self.assertEqual(PROBE_MEMBERS - _class_members(os.path.join(PROBE_FLOW, module), name), set(), name)
 
     def test_the_try_runner_asks_the_probe_only_for_declared_members(self):
         asked = _asked_of_probe_by_the_runner()

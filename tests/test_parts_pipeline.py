@@ -1,5 +1,4 @@
 """The export of several bodies in one file, run against a simulated Fusion."""
-import contextlib
 import copy
 import json
 import tempfile
@@ -7,10 +6,10 @@ import unittest
 from unittest import mock
 
 from tests import context  # noqa: F401
-from tests.fakes import FakePortExtras, FakeStore
+from tests.fakes import FakePartsPort, FakeStore
 from tests.schema_check import load_schema, validate
 from tests.test_manifest import PACKAGE_SCHEMA
-from tests.test_pipeline import MODEL, START, TICKED, USER, StuckStore
+from tests.test_pipeline import MODEL, START, TICKED, USER
 from tests.test_translate_sketch_motion import motion_of
 from tests.translator_helpers import load_capture
 
@@ -19,7 +18,7 @@ from lib.design_edit.runner import ExportCancelled
 from lib.dialog_model.result_rows import also_lines, not_tried_lines, parts_result_view, section, section_lines
 from lib.export_plan import recipe_export
 from lib.export_plan.recipe_export import PartInput, translate_capture
-from lib.export_plan.pipeline.parts import PartsPipeline, run_parts_pipeline
+from lib.export_plan.pipeline.parts import run_parts_pipeline, shared_cuts
 from lib.export_plan.probe_flow import ProbeGroup
 from lib.export_plan.part_names import unique_names
 from lib.export_plan.pipeline import ExportRequest
@@ -54,68 +53,6 @@ def stuck_body():
     capture = renamed(BASE, ("t1", "Body1"), ("t3", "Body3"))
     capture["items"][-1]["health"] = "error"
     return capture
-
-
-class FakePartsPort(FakePortExtras):
-    """Fusion as the parts pipeline sees it: one capture per body, one design with one parameter store.
-    `fail_step_at` is the number of the STEP export that fails; `cancel_at` the number of the progress step that is
-    cancelled; `fail_read_from` makes the n-th probe read of any body, and the ones after it, raise."""
-
-    def __init__(self, captures, store=None, fail_step_at=None, cancel_at=None, fail_read_from=None):
-        self.captures = captures
-        self.count = len(captures)
-        self.store = store or FakeStore(START)
-        self.units = {p["name"]: p["unit"] for p in USER}
-        self.steps, self.reads, self.progressed = 0, 0, 0
-        self.logs, self.warned = [], []
-        self.fail_step_at, self.cancel_at, self.fail_read_from = fail_step_at, cancel_at, fail_read_from
-
-    def body_names(self):
-        return [c["target"]["name"] if isinstance(c, dict) else "Broken" for c in self.captures]
-
-    def read_reach(self, index, capture, gaps):
-        raise AssertionError("this fake port reads no reach")
-
-    def export_step(self, index, path):
-        self.steps += 1
-        if self.fail_step_at == self.steps:
-            raise StepExportError("Fusion did not write the STEP file.")
-        with open(path, "wb") as f:
-            f.write(b"ISO-10303-21;%d" % index)
-
-    def read_capture(self, index):
-        return self.captures[index]
-
-    def probe_reader(self, index):
-        capture = self.captures[index]
-        e0 = {"sketches": {}, "points": {}, "lines": {}, "params": {}}
-        for item in capture["items"]:
-            for profile in (item.get("data") or {}).get("profiles") or []:
-                e0["sketches"][profile["sketch_token"]] = {
-                    "frame": profile["frame"], "profiles": [{"loops": profile["loops"]}]}
-
-        def read(request):
-            self.reads += 1
-            if self.fail_read_from is not None and self.reads >= self.fail_read_from:
-                raise RuntimeError("Fusion would not answer")
-            return e0
-        return read
-
-    def progress(self, verb):
-        outer = self
-
-        class Step:
-            def step(self, *args):
-                outer.progressed += 1
-                return outer.cancel_at != outer.progressed
-
-        return contextlib.nullcontext(Step())
-
-    def warn_unrestored(self, names):
-        self.warned.append(list(names))
-
-    def log(self, text):
-        self.logs.append(text)
 
 
 def request(ticked=TICKED):
@@ -200,22 +137,18 @@ class SharedCutTest(unittest.TestCase):
         self.table = size_tables.build(params["user"], ["height_mm"], params["model"])
         motion = motion_of("linked_pipe_hole", lambda values: None)
         motion.spans = {"height_mm": {"low": 20.0, "high": 30.0, "failed": [[40.0, "Extrude2"]]}}
-        with tempfile.TemporaryDirectory() as tmp:
-            pipeline = PartsPipeline(FakePartsPort([capture, capture]), request(["height_mm"]), tmp)
-        pipeline.captures, pipeline.part_links, pipeline.table = [capture, capture], [[], []], self.table
-        pipeline.motions = {0: motion}
-        pipeline._share_cuts()
-        self.pipeline = pipeline
+        self.motion = motion
+        self.table = shared_cuts(self.table, [(self.table.with_links([]), motion, capture)])
 
     def test_a_part_with_no_probe_gets_the_range_the_probed_part_was_cut_to(self):
-        result = translate_capture(self.capture, "z", self.pipeline._part_table(1), None)
+        result = translate_capture(self.capture, "z", self.table.with_links([]), None)
         self.assertEqual((result.recipe["sizes"]["height_mm"]["min"], result.recipe["sizes"]["height_mm"]["max"]),
                          (10.0, 30.0))
 
     def test_the_file_says_the_range_is_the_same_in_every_part_that_uses_the_size(self):
-        table = self.pipeline.table
+        table = self.table
         inputs = [PartInput(name, "part.step", self.capture, translate_capture(self.capture, "z", table, motion), motion)
-                  for name, motion in (("Lid", self.pipeline.motions[0]), ("Base", None))]
+                  for name, motion in (("Lid", self.motion), ("Base", None))]
         manifest, _, report = recipe_export.plan_parts_export(inputs, "Box", "test", "z", size_table=table)
         [cut] = report["sizes"]["cut"]
         self.assertTrue(cut["shared"] and cut["reason"].startswith("height_mm: the range stops at 30 in every part"))
@@ -338,29 +271,21 @@ class MeasuringTest(unittest.TestCase):
         self.assertEqual(port.store.exprs, START)
 
 
-class RecordingStore(FakeStore):
-    """A store that notes, at every rebuild, which parameters stand at another value than at the start."""
-
-    def __init__(self, expressions):
-        super().__init__(expressions)
-        self.start = dict(expressions)
-        self.rebuilt_with = []
-
-    def recompute(self):
-        self.rebuilt_with.append({n for n, e in self.exprs.items() if e != self.start[n]})
-        return super().recompute()
-
-
 class GuessedSizesTest(unittest.TestCase):
     def test_a_ticked_size_that_nothing_ties_to_a_sketch_gets_its_own_tries_in_a_several_body_export(self):
         user = PIPE["parameters"]["user"]
-        port = FakePartsPort([PIPE], store=RecordingStore({p["name"]: p["expression"] for p in user}))
-        port.units = {p["name"]: p["unit"] for p in user}
+        start = {p["name"]: p["expression"] for p in user}
+        rebuilt_with = []  # the parameters at another value than at the start, at every rebuild
+
+        def rebuilt(store):
+            rebuilt_with.append({n for n, e in store.exprs.items() if e != start[n]})
+
+        port = FakePartsPort([PIPE], store=FakeStore(start, on_recompute=rebuilt))
         with tempfile.TemporaryDirectory() as tmp:
             run_parts_pipeline(port, ExportRequest(
                 title="Box", writer="test", up_axis="z", parameters=user, model_params=PIPE["parameters"]["model"],
                 design_unit="mm", ticked=[p["name"] for p in user], ranges={}), tmp)
-        self.assertIn({"spare_mm"}, port.store.rebuilt_with)
+        self.assertIn({"spare_mm"}, rebuilt_with)
 
 
 class RestoreTest(unittest.TestCase):
@@ -378,14 +303,14 @@ class RestoreTest(unittest.TestCase):
         self.assertEqual(port.store.exprs, START)
 
     def test_a_parameter_that_will_not_go_back_is_named_when_the_export_stops(self):
-        port = FakePartsPort([BASE, second_body()], store=StuckStore(START, stuck=TICKED), cancel_at=2)
+        port = FakePartsPort([BASE, second_body()], store=FakeStore(START, stuck=TICKED), cancel_at=2)
         with self.assertRaises(ExportCancelled):
             export(port)
         self.assertEqual(len(port.warned), 1)
         self.assertTrue(port.warned[0] and set(port.warned[0]) <= set(TICKED))
 
     def test_a_parameter_that_will_not_go_back_after_a_finished_export_is_in_the_health_record(self):
-        port = FakePartsPort([BASE, second_body()], store=StuckStore(START, stuck=["height_mm"]))
+        port = FakePartsPort([BASE, second_body()], store=FakeStore(START, stuck=["height_mm"]))
         result = export(port)
         self.assertEqual(result.health["unrestored"], ["height_mm"])
         self.assertTrue(any("measured" in n for n in result.manifest["notes"]))

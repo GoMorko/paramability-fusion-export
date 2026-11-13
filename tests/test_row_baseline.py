@@ -15,32 +15,10 @@ from tests.row_helpers import apply_row
 UNITS = {"w": "mm"}
 
 
-class ScriptedStore(FakeStore):
-    """recompute() answers come from `answers` (the last one repeats); an answer that is an exception is raised.
-    error_entries() gives the pairs the test sets in `errors`."""
-
-    def __init__(self, answers=(True,), errors=(), expressions=None):
-        super().__init__(expressions or {"w": "5 mm"})
-        self.answers = list(answers)
-        self.errors = list(errors)
-        self.calls = []
-
-    def recompute(self):
-        self.recomputes += 1
-        answer = self.answers.pop(0) if len(self.answers) > 1 else self.answers[0]
-        if isinstance(answer, Exception):
-            raise answer
-        return answer
-
-    def error_entries(self):
-        return list(self.errors)
-
-    def error_items(self):
-        return [name for _, name in self.errors]
-
-    def set_expression(self, name, expression):
-        self.calls.append((name, expression))
-        super().set_expression(name, expression)
+def scripted(answers=(True,), errors=(), expressions=None):
+    """A store whose recompute answers come from `answers` (the last one repeats; an exception is raised) and whose
+    steps in error are the `(index, name)` pairs in `errors`."""
+    return FakeStore(expressions or {"w": "5 mm"}, answers=answers, errors=errors)
 
 
 def apply(store, baseline, value=7.0):
@@ -49,20 +27,20 @@ def apply(store, baseline, value=7.0):
 
 class BaselineRowTest(unittest.TestCase):
     def test_a_design_that_recomputes_cleanly_fails_a_row_whose_recompute_fails(self):
-        store = ScriptedStore([True, False])
+        store = scripted([True, False])
         baseline = measure_baseline(store)
         with self.assertRaises(RowBuildError) as ctx:
             apply(store, baseline)
         self.assertEqual(ctx.exception.detail["reason"], "recompute_failed")
 
     def test_a_baseline_that_already_fails_lets_a_row_pass_when_nothing_new_is_in_error(self):
-        store = ScriptedStore([False], errors=[(3, "Fillet1")])
+        store = scripted([False], errors=[(3, "Fillet1")])
         baseline = measure_baseline(store)
         self.assertFalse(baseline.recompute_ok)
         self.assertEqual(apply(store, baseline), {"w": 7.0})
 
     def test_a_new_error_item_fails_the_row_and_is_named(self):
-        store = ScriptedStore([False], errors=[(3, "Fillet1")])
+        store = scripted([False], errors=[(3, "Fillet1")])
         baseline = measure_baseline(store)
         store.errors.append((9, "Extrude5"))
         with self.assertRaises(RowBuildError) as ctx:
@@ -71,7 +49,7 @@ class BaselineRowTest(unittest.TestCase):
         self.assertIn("Extrude5", str(ctx.exception))
 
     def test_items_are_told_apart_by_position_when_names_repeat(self):
-        store = ScriptedStore([True], errors=[(3, "Extrude")])
+        store = scripted([True], errors=[(3, "Extrude")])
         baseline = measure_baseline(store)
         store.errors.append((8, "Extrude"))
         with self.assertRaises(RowBuildError) as ctx:
@@ -79,14 +57,14 @@ class BaselineRowTest(unittest.TestCase):
         self.assertEqual(ctx.exception.items, ["Extrude"])
 
     def test_a_recompute_that_raises_fails_the_row_even_when_the_baseline_failed(self):
-        store = ScriptedStore([False, RuntimeError("boom")])
+        store = scripted([False, RuntimeError("boom")])
         baseline = measure_baseline(store)
         with self.assertRaises(RowBuildError) as ctx:
             apply(store, baseline)
         self.assertEqual(ctx.exception.detail["reason"], "recompute_raised")
 
     def test_a_baseline_recompute_that_raises_counts_as_failed_and_does_not_stop_the_run(self):
-        store = ScriptedStore([RuntimeError("boom"), False])
+        store = scripted([RuntimeError("boom"), False])
         baseline = measure_baseline(store)
         self.assertFalse(baseline.recompute_ok)
         self.assertEqual(apply(store, baseline), {"w": 7.0})
@@ -105,12 +83,12 @@ class RunnerBaselineTest(unittest.TestCase):
                        tolerate_build_errors=tolerate)
 
     def test_a_design_with_trouble_elsewhere_still_gets_its_rows_built(self):
-        store = ScriptedStore([False], errors=[(2, "Other")])
+        store = scripted([False], errors=[(2, "Other")])
         self.assertEqual(self.run_rows(store)[0]["values"], {"w": 7.0})
         self.assertEqual(store.exprs, {"w": "5 mm"})
 
     def test_a_failed_row_carries_its_detail_and_the_run_goes_on(self):
-        store = ScriptedStore([True], errors=[])
+        store = scripted([True], errors=[])
         store.errors = []
         result = self.run_rows_with_new_error(store)
         self.assertEqual(result["detail"]["items"], ["Extrude5"])
@@ -129,9 +107,9 @@ class RunnerBaselineTest(unittest.TestCase):
 class ParameterNameTest(unittest.TestCase):
     def test_a_parameter_name_with_a_dollar_sign_is_passed_as_it_is_and_not_into_the_expression(self):
         name = "FilterBox_$_width__contains_CeramicMedium"
-        store = ScriptedStore(expressions={name: "1.8"})
+        store = scripted(expressions={name: "1.8"})
         values = apply_row_values(store, {name: ""}, {name: 3.6}, measure_baseline(store))
-        self.assertEqual(store.calls, [(name, "3.6")])
+        self.assertEqual(store.sets, [(name, "3.6")])
         self.assertEqual(values, {name: 0.36})
 
 
@@ -217,7 +195,7 @@ class BatchStore(FakeStore):
     def __init__(self, errors=(), cleared_by_recompute=False, bad="9 mm"):
         super().__init__({"w": "5 mm"})
         self.bad, self.cleared = bad, cleared_by_recompute
-        self.errors, self.stale = list(errors), False
+        self.failing, self.stale = list(errors), False
 
     def set_expressions(self, expressions):
         self.exprs.update(expressions)
@@ -231,7 +209,7 @@ class BatchStore(FakeStore):
         return True
 
     def error_items(self):
-        return list(self.errors) if self.stale else []
+        return list(self.failing) if self.stale else []
 
 
 class IncrementalStore(BatchStore):
