@@ -212,6 +212,15 @@ class SymmetricSizedTest(unittest.TestCase):
         self.assertEqual(offsets(result.recipe, at(table, **{CUBE: 30})), [-102, -68, -34, 0, 34, 68, 102])
         self.assertEqual(offsets(result.recipe, at(table, **{CUBE: 25})), [-58, -29, 0, 29, 58, 87])
 
+    def test_a_negative_spacing_puts_the_extra_copy_the_way_the_distance_points(self):
+        count = {"quantity_one": param("d22", "ceil(%s / 5) + 1" % CUBE, 5.0)}
+        back = {"distance_one": param("d21", "-(%s + 4 mm)" % CUBE, -24.0)}
+        pattern = row(3, [2], 5, 24.0, params=dict(back, **count))
+        pattern["data"]["distance_one"] = -24.0
+        result, table = sized(centred(pattern))
+        self.assertEqual(result.loose, [])
+        self.assertEqual(offsets(result.recipe, at(table, **{CUBE: 25})), [-87, -58, -29, 0, 29, 58])
+
     def test_an_even_extent_reaches_the_distance_ahead_and_a_gap_short_behind(self):
         # 8 copies, extent 30: Fusion spaces them 7.5 apart, from 22.5 behind the original to 30 ahead.
         params = {"distance_one": param("d21", "%s / 2 - 10 mm" % CUBE, 30.0)}

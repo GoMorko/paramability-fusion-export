@@ -1921,7 +1921,8 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   measured odd that can be even inside its range takes the side of the extra step from the tries: each built state
   that read the pattern (`Motion.states[n].patterns`) is checked against the rule at the counts and spacing the sizes
   give there, and the even ones must agree on the side. Without an even try a rectangular pattern takes the side Fusion
-  was seen to use (ahead of the original). The sizes are marked when a try breaks the rule or the even ones disagree,
+  was seen to use (ahead of the original, the way the distance points, so against the direction for a negative
+  distance; not yet confirmed in Fusion for a negative distance). The sizes are marked when a try breaks the rule or the even ones disagree,
   and for a circular pattern without an even try (Fusion's even circular places were not seen). The two part counts
   use the longer formula on that side. A pick on a copy
   off the middle of a symmetric direction fixes the sizes behind the count, since Fusion moves its copies when the

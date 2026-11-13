@@ -101,7 +101,8 @@ def solve_lattice(offset, axes):
 
 
 def lattice_axes(item, ctx):
-    """The directions that have more than one copy, as dicts {dir, step, count, step_q, count_q}; or a Refusal.
+    """The directions that have more than one copy, as dicts {dir, step, count, step_q, count_q, symmetric, which,
+    sign}; or a Refusal. `sign` is -1 when the distance is negative, so the copies run against `dir`.
 
     `step` and `count` are the numbers; `step_q` and `count_q` are Quantities that may follow sizes.
     """
@@ -131,8 +132,11 @@ def lattice_axes(item, ctx):
         step_q = _axis_step(item, ctx, which, quantity, count_q, kind)
         if isinstance(step_q, Refusal):
             return step_q
+        # A negative distance runs the copies against the direction: `sign` says which way the distance points.
+        sign = -1 if float(data.get("distance_" + which) or 0.0) < 0 else 1
         axes.append({"dir": vec.unit(direction), "step": step_q.n, "count": quantity, "step_q": step_q,
-                     "count_q": count_q, "symmetric": bool(data.get("symmetric_" + which)), "which": which})
+                     "count_q": count_q, "symmetric": bool(data.get("symmetric_" + which)), "which": which,
+                     "sign": sign})
     if not axes:
         return Refusal("This pattern makes no copies.")
     if len(axes) == 2 and 1.0 - vec.dot(axes[0]["dir"], axes[1]["dir"]) ** 2 < 1e-9:

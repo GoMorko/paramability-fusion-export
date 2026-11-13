@@ -250,7 +250,7 @@ def rectangular(item, ctx, sources=None):
         if axis["symmetric"]:
             axis["side"] = symmetric.extra_side(ctx, item, axis["count_q"], axis["count"],
                                                 (axis["back"], axis["forward"]), _tried_places(axes, axis),
-                                                default=symmetric.FUSION_EXTRA_SIDE)
+                                                default=symmetric.FUSION_EXTRA_SIDE * axis["sign"])
     _parts(axes)
 
     grids = _grids(axes, {tuple(indexes) for _, indexes in placed})

@@ -21,7 +21,8 @@ from .values import Quantity, wrapped
 
 
 # Where Fusion puts the extra copy of a rectangular pattern with an even count, as seen in its exports: ahead of the
-# original, along the direction of the pattern.
+# original, along the direction of the pattern (the way its distance points, so against the direction when the
+# distance is negative).
 FUSION_EXTRA_SIDE = 1
 
 
