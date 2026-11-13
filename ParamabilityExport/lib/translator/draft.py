@@ -22,23 +22,12 @@ MAX_ANGLE_DEG = 30.0
 VOLUME_TOL_MM3 = 1e-3
 
 
-def _side(box, point, normal):
-    """+1 or -1 when the box lies on that side of the plane, 0 when it crosses it."""
-    lo, hi = box["min"], box["max"]
-    dists = [vec.dot(vec.sub([hi[0] if i & 1 else lo[0], hi[1] if i & 2 else lo[1], hi[2] if i & 4 else lo[2]],
-                             point), normal) for i in range(8)]
-    if min(dists) >= -SIDE_TOL_MM:
-        return 1
-    if max(dists) <= SIDE_TOL_MM:
-        return -1
-    return 0
-
-
 def _faces_side(faces, point, normal):
     """The side of the plane every face lies on, or 0."""
     if any(not isinstance(face.get("box"), dict) for face in faces):
         return 0
-    sides = {_side(face["box"], point, normal) for face in faces}
+    # A face in the plane counts as on its front side: it leans with the faces beside it.
+    sides = {vec.box_side(face["box"], point, normal, SIDE_TOL_MM, flat=1) for face in faces}
     return sides.pop() if len(sides) == 1 else 0
 
 
@@ -91,9 +80,7 @@ def handle(item, ctx):
     lean = side if after < before else -side
     size = _angle(ctx, item, data, angle)
     shift = follow.place_plane(ctx, item, plane, normal, "leans faces about")
-    origin = round_vec(point)
-    if shift is not None and shift.sized:
-        origin = [shift.scaled(c).plus(o).json() if abs(c) > 1e-9 else o for o, c in zip(origin, normal)]
+    origin = follow.shifted_origin(round_vec(point), normal, shift)
     out = StepResult()
     out.add({"kind": "draft", "faces": follow.faces(ctx, item, faces), "angleDeg": size.scaled(lean).json(),
              "neutral": {"origin": origin, "normal": round_vec(normal)}})

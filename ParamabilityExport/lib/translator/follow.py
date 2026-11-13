@@ -405,6 +405,14 @@ def _own_offset(ctx, item, ref, shift, direction, what):
     return core.plus(q.scaled(k)).plus(shift.const - distance * k)
 
 
+def shifted_origin(origin, normal, shift):
+    """A plane origin as the recipe writes it, moved along `normal` by `shift` (`place_plane`): formulas in the
+    coordinates the normal has a part in when the shift follows sizes, else `origin` as it is."""
+    if shift is None or not shift.sized:
+        return origin
+    return [shift.scaled(c).plus(o).json() if abs(c) > 1e-9 else o for o, c in zip(origin, normal)]
+
+
 def place_plane(ctx, item, ref, direction, what="mirrors across"):
     """How a plane or axis moves along unit `direction` as sizes change: a Quantity (plain zero when it stays), or
     None when it may move and cannot be followed (its sizes are then fixed). The Quantity is the move from the

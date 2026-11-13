@@ -49,18 +49,6 @@ def _record(records, body):
     return next((r for r in records or () if isinstance(r, dict) and same_body(r, body)), None)
 
 
-def _side(box, point, normal):
-    """+1 or -1 when the box lies on that side of the plane (within SIDE_TOL_MM), else 0."""
-    lo, hi = box["min"], box["max"]
-    dists = [vec.dot(vec.sub([hi[0] if i & 1 else lo[0], hi[1] if i & 2 else lo[1], hi[2] if i & 4 else lo[2]],
-                             point), normal) for i in range(8)]
-    if min(dists) >= -SIDE_TOL_MM and max(dists) > SIDE_TOL_MM:
-        return 1
-    if max(dists) <= SIDE_TOL_MM and min(dists) < -SIDE_TOL_MM:
-        return -1
-    return 0
-
-
 def _volumes_add_up(parent, pieces):
     volumes = [parent.get("volume")] + [p.get("volume") for p in pieces]
     if any(not isinstance(v, (int, float)) for v in volumes):
@@ -120,9 +108,7 @@ def _box_tool(ctx, item, plane, far, shift, around):
     centre = [(a + b) / 2.0 for a, b in zip(lo, hi)]
     reach = (BOX_REACH * vec.length(vec.sub(hi, lo)) / 2.0 + BOX_MARGIN_MM) * _growth(ctx, item)
     on_plane = vec.sub(centre, vec.scale(plane["normal"], vec.dot(vec.sub(centre, plane["point"]), plane["normal"])))
-    origin = round_vec(on_plane)
-    if shift is not None and shift.sized:
-        origin = [shift.scaled(c).plus(o).json() if abs(c) > 1e-9 else o for o, c in zip(origin, plane["normal"])]
+    origin = follow.shifted_origin(round_vec(on_plane), plane["normal"], shift)
     side = round(2.0 * reach, 3)
     extrude = {"kind": "extrude",
                "sketch": {"on": {"origin": origin, "normal": round_vec(far), "xDir": round_vec(_square(far))},
@@ -145,8 +131,8 @@ def _by_plane(ctx, item, tool, parent, piece, others):
     normal = vec.unit(normal)
     if piece.get("box") is None or any(p.get("box") is None for p in others):
         return _stop("The pieces of this split could not be measured.")
-    side = _side(piece["box"], point, normal)
-    sides = [_side(p["box"], point, normal) for p in others]
+    side = vec.box_side(piece["box"], point, normal, SIDE_TOL_MM)
+    sides = [vec.box_side(p["box"], point, normal, SIDE_TOL_MM) for p in others]
     if side and side in sides:
         return _stop("This split leaves more than one piece on the side of the part, which is not copied yet.")
     if not side or any(s != -side for s in sides):

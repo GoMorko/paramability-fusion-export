@@ -70,6 +70,21 @@ def frame_to_local(frame, p):
     return [dot(d, frame["x"]), dot(d, frame["y"]), dot(d, frame["z"])]
 
 
+def box_side(box, point, normal, tol, flat=0):
+    """+1 or -1 when the box ({min, max}) lies on that side of the plane through `point` with unit `normal` (`tol` mm
+    allowed across it), else 0. A box that lies within `tol` of the plane on both sides gives `flat`."""
+    lo, hi = box["min"], box["max"]
+    dists = [dot(sub([hi[0] if i & 1 else lo[0], hi[1] if i & 2 else lo[1], hi[2] if i & 4 else lo[2]], point), normal)
+             for i in range(8)]
+    if min(dists) >= -tol and max(dists) <= tol:
+        return flat
+    if min(dists) >= -tol:
+        return 1
+    if max(dists) <= tol:
+        return -1
+    return 0
+
+
 def close(a, b, tol=1e-9):
     """Numbers or equal length sequences agree within tol."""
     if isinstance(a, (list, tuple)):

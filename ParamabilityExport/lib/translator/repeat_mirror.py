@@ -28,11 +28,9 @@ def mirror_plane(data):
 def _mirror_plane_at(plane, shift):
     """The plane as written and the shift it was given: with a sized `shift` (how far the plane moves along its normal)
     the origin becomes formulas and the shift is returned; with none the plane and None."""
-    normal, origin = plane["normal"], plane["origin"]
     if not shift.sized:
         return plane, None
-    moved = [shift.scaled(c).plus(o).json() if abs(c) > 1e-9 else o for o, c in zip(origin, normal)]
-    return dict(plane, origin=moved), shift
+    return dict(plane, origin=follow.shifted_origin(plane["origin"], plane["normal"], shift)), shift
 
 
 def _mirror_motion(plane, shift, name):

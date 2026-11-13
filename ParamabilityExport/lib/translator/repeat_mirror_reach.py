@@ -18,14 +18,7 @@ SIDE_TOL_MM = 1e-4
 
 def side_of_plane(box, origin, normal):
     """+1 or -1 when the whole box lies on that side of the plane (within tolerance), else 0."""
-    lo, hi = box["min"], box["max"]
-    dists = [vec.dot(vec.sub([hi[0] if i & 1 else lo[0], hi[1] if i & 2 else lo[1], hi[2] if i & 4 else lo[2]],
-                             origin), normal) for i in range(8)]
-    if min(dists) >= -SIDE_TOL_MM and max(dists) > SIDE_TOL_MM:
-        return 1
-    if max(dists) <= SIDE_TOL_MM and min(dists) < -SIDE_TOL_MM:
-        return -1
-    return 0
+    return vec.box_side(box, origin, normal, SIDE_TOL_MM)
 
 
 def _arc_circle_points(p0, pm, p1):
