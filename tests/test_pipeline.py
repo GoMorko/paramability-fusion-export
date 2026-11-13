@@ -277,7 +277,7 @@ class BrokenDesignTest(unittest.TestCase):
 
     def test_a_long_list_of_broken_steps_is_capped_and_its_line_kept_short(self):
         names = ["Step%d" % n for n in range(40)]
-        health = health_module.make_health(broken=names)
+        health = health_module.make_health(health_module.HealthInputs(broken=names))
         self.assertEqual(len(health["broken"]), health_module.MAX_LISTED)
         self.assertLessEqual(len(health_module.health_lines(health)[0]), health_module.MAX_LINE)
 

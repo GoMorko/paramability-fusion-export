@@ -173,13 +173,13 @@ class DiscoveryTest(unittest.TestCase):
         self.assertEqual(self.probe.also_changes, [])
 
     def test_the_restore_check_names_the_sketch_it_could_not_compare_and_the_person_is_told(self):
-        from lib.export_plan.health import health_lines, make_health
+        from lib.export_plan.health import HealthInputs, health_lines, make_health
         self.assertIsNone(self.probe.measure_restore(self.flipped()))
         self.assertEqual(len(self.probe.restore_unchecked), 1)
         self.assertIn("Sketch2", self.probe.restore_unchecked[0])
-        health = make_health(gap_mm=None, probe="measured", unchecked=self.probe.restore_unchecked)
+        health = make_health(HealthInputs(gap_mm=None, probe="measured", unchecked=self.probe.restore_unchecked))
         self.assertTrue(any("Sketch2" in line for line in health_lines(health)))
-        stayed = make_health(gap_mm=0.0, probe="measured", flipped=["Sketch2"])
+        stayed = make_health(HealthInputs(gap_mm=0.0, probe="measured", flipped=["Sketch2"]))
         self.assertEqual(sum("Sketch2" in line for line in health_lines(stayed)), 1)
         self.assertEqual(self.probe.measure_restore(read_at()), 0.0)
         self.assertEqual(self.probe.restore_unchecked, [])

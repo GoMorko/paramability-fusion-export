@@ -541,7 +541,7 @@ package may import only packages above it in this list (not every one of them). 
 - `design_edit`: setting parameter values row by row, restoring them, the timeline marker, the temporary copy, and the declared interface of the parameter store (`store.py`).
 - `translator`: a capture dict in, a recipe plus verdicts out (one handler per step kind).
 - `probe`: measures sketches and the places of other components' planes, axes and points at other size values and fits the motion file.
-- `export_plan`: the export itself: the pipeline (one body or several), the recipe and its notes, the probe run, size offers.
+- `export_plan`: the export itself: the pipeline (one body or several), the put back of the design at its end (`pipeline/put_back.py`), the recipe and its notes, the probe run, size offers.
 - `dialog_model`: what the dialogs show, as plain data (rows, Sizes table, result view, stop warning).
 - `fusion_reader`: reads the design with `adsk` into a capture.
 - `fusion_ui`: draws the dialogs and handles their events with `adsk`.

@@ -304,7 +304,6 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
             else:
                 result = run_parts_pipeline(
                     undo_steps.attach(FusionPartsPort(design, bodies, units, captures), steps), request, tmp)
-            undo_steps.drop_after(steps, result.health)
             written = time.perf_counter()
             write_package(out_path, result.manifest, result.files)
             log("package written in %.2f s" % (time.perf_counter() - written))

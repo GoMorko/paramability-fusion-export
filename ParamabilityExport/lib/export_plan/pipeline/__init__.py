@@ -17,15 +17,15 @@ not return to their start, a probe that could not measure) goes into the `health
 suppressed for the tries (`timeline_trim`, unless the person turns it off) are turned back on in the same places,
 before the timeline marker goes back, and before the discovery tries. Last, on every way out, the health of every
 timeline step is compared with the start of the export and the design rebuilt when a step differs
-(`design_edit.timeline_health`).
+(`design_edit.timeline_health`). One `put_back.PutBack` per export does all of this in one order for both pipelines,
+and drops the last Undo step of a made export when the design is as it was (`undo_steps`).
 
 Several bodies follow the same sequence with one size table and one probe scan for all of them (`parts`).
 
 The modules: `port` (`ExportPort`, `ExportRequest`, `PipelineResult`), `run` (`run_pipeline` and the stages of one
 export), `parts` (`run_parts_pipeline`, `PartsPort`: the same for several bodies), `probe_run` (`ProbeRun`, the try
-runner), `settle` (the end check of the design after the tries) and `warn` (the messages for what could not be put
-back). This package re-exports what the rest of the add-in reads as
-`pipeline.<name>`.
+runner) and `put_back` (`PutBack`: what the export changed, put back on every way out, and the health inputs). This
+package re-exports what the rest of the add-in reads as `pipeline.<name>`.
 """
 from .parts import PartsPort, PartsResult, run_parts_pipeline
 from .port import ExportPort, ExportRequest, PipelineResult

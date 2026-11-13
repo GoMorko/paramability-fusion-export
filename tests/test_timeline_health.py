@@ -147,7 +147,8 @@ class RecordTest(unittest.TestCase):
     def test_a_long_list_is_capped_and_counted(self):
         changed = [{"index": i, "name": "Fillet%d" % i, "type": "FilletFeature", "before": "ok", "after": "warning",
                     "message": ""} for i in range(steps.MAX_STEPS + 3)]
-        health = health_module.make_health(steps=steps.TimelineSettle(changed, actions=[steps.FULL_COMPUTE]))
+        health = health_module.make_health(health_module.HealthInputs(
+            steps=steps.TimelineSettle(changed, actions=[steps.FULL_COMPUTE])))
         self.assertEqual(len(health["steps_changed"]), steps.MAX_STEPS)
         self.assertEqual(health["steps_more"], 3)
         self.assertTrue(health_module.design_changed(health))
@@ -159,7 +160,7 @@ class RecordTest(unittest.TestCase):
         better = [{"index": i, "name": "Fillet%d" % i, "type": "FilletFeature", "before": "warning", "after": "ok",
                    "message": ""} for i in range(steps.MAX_STEPS)]
         worse = {"index": 99, "name": "Shell1", "type": "ShellFeature", "before": "ok", "after": "warning", "message": ""}
-        health = health_module.make_health(steps=steps.TimelineSettle(better + [worse]))
+        health = health_module.make_health(health_module.HealthInputs(steps=steps.TimelineSettle(better + [worse])))
         self.assertTrue(health_module.design_changed(health))
         self.assertIn("Undo in Fusion until", health_module.health_lines(health)[0])
 

@@ -20,8 +20,8 @@ FUSION_PORTS = os.path.join(context.ADDIN_DIR, "commands", "ExportForParamabilit
 # Folders of the pure code that is handed a store or a port.
 PURE_FOLDERS = ("design_edit", "export_plan")
 
-STORE_NAMES = {"store", "self.store", "port.store", "self.port.store", "owner.port.store"}
-PORT_NAMES = {"port", "self.port", "owner.port"}
+STORE_NAMES = {"store", "self.store", "port.store", "self.port.store"}
+PORT_NAMES = {"port", "self.port"}
 
 STORE_MEMBERS = set(typing.get_protocol_members(ParameterStore)) | set(TIMELINE_CONTROLS)
 PORT_MEMBERS = set(typing.get_protocol_members(ExportPort))

@@ -189,7 +189,7 @@ def recorded(port):
 
 
 def export(port, parts=False):
-    """The calls of one export, as the command runs it, and the export's health (None when it raised)."""
+    """The calls of one export and its health (None when it raised)."""
     port, log = recorded(port)
     original = ProbeRun.try_rows
 
@@ -205,9 +205,7 @@ def export(port, parts=False):
     health = None
     with mock.patch.object(ProbeRun, "try_rows", try_rows), tempfile.TemporaryDirectory() as tmp:
         try:
-            result = run(port, dataclasses.replace(asked, faster_tries=True), tmp)
-            undo_steps.drop_after(port.undo_steps, result.health)
-            health = result.health
+            health = run(port, dataclasses.replace(asked, faster_tries=True), tmp).health
         except (ExportCancelled, StepExportError):
             pass
     return log.calls, health
