@@ -1907,15 +1907,17 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   `axis.point` in the sketch plane. A symmetric revolve turns its moving origin about the axis.
 - Picks on an extrude whose outline moves follow it: a side corner moves with that corner, a point on an outline line
   between its two ends, a point on an arc with the arc's middle (or with the whole arc when it only shifts), on a
-  circle with its centre and radius, and a point inside an end face with the first of its 3 nearest outline corners
-  whose move keeps the point inside the written outline, at least a quarter of its distance from the edges, at the
-  corners and middles of the ranges (`inner_pick.anchor`; the ranges as an order cut above leaves them); else with the
-  centre of the outline's corners. A corner gives a formula a few times shorter than the centre, which sums every
-  corner (with turned corners past the 300 character cap). A round, a rect or an ellipse moves the point with its
-  centre. A point on an arc that changes shape fixes those sizes. An edge inside one flat side wall, away from its
-  corners, where no second flat wall crosses it (a round meets the wall), follows that wall: the outline curve under
-  it and the length. The same holds for pattern and mirror copies, shell inner walls, crossing edges and faces an
-  `offsetFaces` step moved (the point moves back by the distance, then follows what made the face).
+  circle with its centre and radius, and a face picked by a point inside an end face with the first of its 3 nearest
+  outline corners whose move keeps the point inside the written outline, at least a quarter of its distance from the
+  edges, at the corners and middles of the ranges (`inner_pick.anchor`; the ranges as an order cut above leaves them);
+  else with the centre of the outline's corners. A corner gives a formula a few times shorter than the centre, which
+  sums every corner (with turned corners past the 300 character cap). An edge picked inside an end face comes from
+  another step, so it always moves with the centre of the corners: staying inside the face does not keep it on that
+  edge. A round, a rect or an ellipse moves the point with its centre. A point on an arc that changes shape fixes
+  those sizes. An edge inside one flat side wall, away from its corners, where no second flat wall crosses it (a round
+  meets the wall), follows that wall: the outline curve under it and the length. The same holds for pattern and mirror
+  copies, shell inner walls, crossing edges and faces an `offsetFaces` step moved (the point moves back by the
+  distance, then follows what made the face).
 - A pick on a tapered wall follows the taper and the length: the wall leans in by `tan(taper)` times the height along
   the extrude, also when the taper is a size.
 - Symmetric patterns (`lib/translator/symmetric.py`, `repeat.py`). A symmetric direction is written as a forward and a

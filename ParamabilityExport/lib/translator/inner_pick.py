@@ -6,6 +6,7 @@ safe place for a face that keeps its shape, but its formula sums every corner: w
 passes the app's formula length cap. A single corner gives a formula a few times shorter. `anchor` uses the nearest
 corner whose move keeps the point inside the written outline, with room to its edges, at every size setting
 `range_check` builds over the ranges of the sizes the outline reads (`corners` and `middles`); else the centre.
+An edge picked inside the face comes from another step and keeps the centre (`sketch_motion.Outline._inner`).
 """
 from ..params.expressions import ExpressionError, parse_formula
 from ..sketch_values.motion import Stuck
