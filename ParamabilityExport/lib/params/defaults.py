@@ -7,7 +7,8 @@ import re
 
 from ..package.units import unit_kind
 from .dependencies import Graph, names_in
-from .expressions import internal_factor, unit_scale
+from .expressions.translation import unit_scale
+from .expressions.units import internal_factor
 
 LABEL_MAX = 120
 COUNT_CAP = 64

@@ -4,7 +4,7 @@ import io
 from dataclasses import dataclass, field
 
 from ..package.rows import parse_rows_csv
-from ..params.expressions import format_number
+from ..params.expressions.text import format_number
 
 
 @dataclass

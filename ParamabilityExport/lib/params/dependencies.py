@@ -12,7 +12,8 @@ does not hold (a model parameter of another component) is still followed.
 An expression the parser refuses (a unit it cannot read, a text form) still gives its names: the words of the text
 that name a known parameter (`names_in`). A cycle ends at the first parameter seen twice.
 """
-from .expressions import ExpressionError, parse, referenced_names, scanned_names
+from .expressions.errors import ExpressionError
+from .expressions.reading import parse, referenced_names, scanned_names
 
 
 def _read(expression, known):

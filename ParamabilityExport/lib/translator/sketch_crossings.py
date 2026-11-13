@@ -13,7 +13,8 @@ outline that crosses itself only in a corner of the ranges (a leg turned while s
 """
 import math
 
-from ..params.expressions import ExpressionError, parse_formula
+from ..params.expressions.errors import ExpressionError
+from ..params.expressions.formula import parse_formula
 from ..sketch_values import keys
 from ..sketch_values.motion import CURVE, Affine, Stuck
 from . import kept_ranges, range_check

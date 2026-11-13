@@ -38,7 +38,9 @@ A divisor that changes sign inside a range counts as a failed setting.
 import random
 from itertools import combinations, product
 
-from ..params.expressions import ExpressionError, _eval, evaluate, parse_formula
+from ..params.expressions.errors import ExpressionError
+from ..params.expressions.evaluation import _eval, evaluate
+from ..params.expressions.formula import parse_formula
 
 MAX_CORNER_SIZES = 6
 MAX_SETTINGS = 256

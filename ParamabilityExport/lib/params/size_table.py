@@ -35,9 +35,14 @@ from itertools import product
 from ..package.manifest import MAX_FIXED_REASON
 from . import defaults, names
 from .dependencies import Graph, names_in
-from .expressions import (
-    ANGLE, LENGTH, LENGTH_MM, MAX_FORMULA_LENGTH, SCALAR, ExpressionError, Typed, evaluate, scale_node,
-    internal_factor, parse, parse_formula, render, translate_tree, unit_scale)
+from .expressions.errors import ExpressionError
+from .expressions.evaluation import evaluate
+from .expressions.formula import parse_formula
+from .expressions.reading import parse
+from .expressions.text import MAX_FORMULA_LENGTH
+from .expressions.translation import Typed, scale_node, translate_tree, unit_scale
+from .expressions.units import ANGLE, LENGTH, LENGTH_MM, SCALAR, internal_factor
+from .expressions.writing import render
 
 # Named sizes in one recipe, derived ones included (the app's recipe cap).
 MAX_SIZES = 64

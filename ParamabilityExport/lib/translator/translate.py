@@ -15,7 +15,9 @@ from .result import TranslateResult
 from .step_walk import all_steps, nesting
 from .tool_walk import MAX_DEPTH as MAX_TOOL_DEPTH
 from ..params import geometry_links
-from ..params.expressions import MAX_FORMULA_LENGTH, collected_sum, tokenize_formula
+from ..params.expressions.formula import tokenize_formula
+from ..params.expressions.simplify import collected_sum
+from ..params.expressions.text import MAX_FORMULA_LENGTH
 from .values import Sized, number
 from ..sketch_values import coverage, keys
 from ..sketch_values.motion import Motion, Stuck, Terms

@@ -23,7 +23,9 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Optional
 
-from ..params.expressions import ExpressionError, _eval, parse_formula
+from ..params.expressions.errors import ExpressionError
+from ..params.expressions.evaluation import _eval
+from ..params.expressions.formula import parse_formula
 from ..sketch_values import keys
 from ..sketch_values.motion import Stuck
 from . import path_curves, path_limits, path_rebuilt, range_check, sketch_motion, vec

@@ -1,5 +1,5 @@
 """User and model parameters as plain dicts. Uses the objects it is given and imports no adsk (tests use fakes)."""
-from ..params.expressions import is_plain_number
+from ..params.expressions.text import is_plain_number
 from ..package.units import internal_to_unit, unit_kind
 from .read_geometry import collection_items, component_of, enum_name, safe, type_name
 

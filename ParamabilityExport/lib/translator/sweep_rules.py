@@ -3,7 +3,7 @@ the rules stop holding, or the sizes are marked."""
 import math
 import time
 
-from ..params.expressions import ExpressionError
+from ..params.expressions.errors import ExpressionError
 
 from . import kept_ranges, path_curves, path_motion, path_rebuilt, range_check, sweep_reach, vec
 from .sweep_marks import drawn_outline, mark_sketch_place

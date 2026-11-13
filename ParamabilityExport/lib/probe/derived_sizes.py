@@ -6,7 +6,10 @@ together. `override_sets` makes the size settings a sketch is solved and fitted 
 and above its value, then all of them low and all of them high.
 """
 from ..params import defaults
-from ..params.expressions import ANGLE, LENGTH, SCALAR, ExpressionError, evaluate, parse_formula
+from ..params.expressions.errors import ExpressionError
+from ..params.expressions.evaluation import evaluate
+from ..params.expressions.formula import parse_formula
+from ..params.expressions.units import ANGLE, LENGTH, SCALAR
 from ..params.size_table import FREE
 from ..sketch_values import expr as ex
 from . import columns as cols

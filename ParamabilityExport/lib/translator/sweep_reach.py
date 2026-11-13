@@ -7,7 +7,7 @@ any setting reaches too far.
 """
 import math
 
-from ..params.expressions import ExpressionError
+from ..params.expressions.errors import ExpressionError
 from . import range_check
 from .path_limits import REACH_SHARE
 from .written_loops import point as _point, rect_corners as _corners, spline_points as _spline_points, \

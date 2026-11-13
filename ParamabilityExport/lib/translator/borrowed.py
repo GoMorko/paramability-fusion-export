@@ -10,7 +10,7 @@ written as numbers and every size that moves the sketch (its dimensions, `sketch
 Edges, faces and bodies of another component stay refused. Such a step must also keep meeting the part over the size
 range (`meets_part.py`, run when the step is added).
 """
-from ..params.expressions import referenced_names
+from ..params.expressions.reading import referenced_names
 from ..sketch_values import keys
 from .sizes import sketch_sizes
 

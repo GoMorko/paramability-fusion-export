@@ -13,7 +13,7 @@ from ..package.manifest import (
 from ..package.text import clip
 from ..package.units import manifest_unit
 from . import defaults, names, size_table
-from .expressions import tokenize_formula
+from .expressions.formula import tokenize_formula
 
 UNIT_REASON = size_table.UNIT_REASON
 CAP_REASON = "The list holds at most %d parameters." % MAX_PARAMETERS

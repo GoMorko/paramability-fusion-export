@@ -1,5 +1,5 @@
 """Put user parameters back to their saved expressions."""
-from ..params.expressions import is_plain_number
+from ..params.expressions.text import is_plain_number
 from .apply import set_all
 
 

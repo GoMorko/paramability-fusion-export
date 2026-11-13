@@ -1578,7 +1578,7 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   sketch y) and the round writes no step, with a note (`finish._slot_outline`). Not when a later pattern or mirror
   repeats the extrude without the round. Where the other side would get shorter than the short one, Fusion cannot make
   the round either, and the app refuses the slot.
-- A formula longer than the app's cap (`MAX_FORMULA_LENGTH` in `lib/params/expressions.py`, 300 characters) has the
+- A formula longer than the app's cap (`MAX_FORMULA_LENGTH` in `lib/params/expressions/text.py`, 300 characters) has the
   equal terms of its outer sum added up first (`collected_sum`: a plane's move less the same move of another plane
   cancels; a coefficient that is a small fraction is written as one, any other with 12 decimals). The shorter formula
   reads only the sizes left in it. One still too long fixes the sizes it reads (they become plain numbers), also when

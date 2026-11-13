@@ -1,6 +1,6 @@
 # Fusion expressions to app formulas
 
-`lib/params/expressions.py` turns the expression of a Fusion parameter into a formula in the app grammar
+`lib/params/expressions/` turns the expression of a Fusion parameter into a formula in the app grammar
 (`@packages/expressions` in the app). The app formula is a plain number over size names: lengths in mm, angles in
 degrees. So every unit is converted away. The unit powers (length, angle) are tracked only to convert numbers, never
 to refuse: Fusion already refuses an expression whose units do not fit, so whatever it accepts is translated.

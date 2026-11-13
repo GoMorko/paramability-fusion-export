@@ -16,7 +16,8 @@ small angle starts at 0 degrees.
 import re
 
 from ..package.numbers import round9
-from ..params.expressions import MAX_FORMULA_LENGTH, tokenize_formula
+from ..params.expressions.formula import tokenize_formula
+from ..params.expressions.text import MAX_FORMULA_LENGTH
 from . import kept_ranges, range_check
 from .range_check import size_env as _env  # noqa: F401  (the size values at a setting; tests read it from here)
 

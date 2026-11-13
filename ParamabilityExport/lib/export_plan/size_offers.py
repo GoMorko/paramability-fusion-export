@@ -5,7 +5,7 @@ the probe.
 """
 from ..package.units import display_from_manifest, unit_kind
 from ..params import defaults, geometry_links, size_table
-from ..params.expressions import format_number
+from ..params.expressions.text import format_number
 from ..params.size_table import CONSTANT, DERIVED, FIXED, FREE, MAX_SIZES
 from ..translator.notes import loose_reason
 from ..translator.sizes import joint_reasons

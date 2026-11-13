@@ -7,7 +7,8 @@ across it. These helpers prove that at the current sizes (`body_mirror_problem`)
 """
 import math
 
-from ..params.expressions import ExpressionError, evaluate
+from ..params.expressions.errors import ExpressionError
+from ..params.expressions.evaluation import evaluate
 from . import range_check, vec
 from .step_kinds import recipe_kind
 from .values import Sized, number, numbers_of, reads_in

@@ -6,7 +6,9 @@ number the formula gives at a state is checked against the number Fusion read at
 disagrees is left out (and listed), never trusted.
 """
 from ..params import defaults
-from ..params.expressions import ANGLE, LENGTH, SCALAR, ExpressionError, evaluate, internal_factor
+from ..params.expressions.errors import ExpressionError
+from ..params.expressions.evaluation import evaluate
+from ..params.expressions.units import ANGLE, LENGTH, SCALAR, internal_factor
 from ..params.size_table import DERIVED, FREE
 from .fit import Column
 

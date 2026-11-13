@@ -9,7 +9,8 @@ closes.
 import math
 import time
 
-from ..params.expressions import ExpressionError, evaluate
+from ..params.expressions.errors import ExpressionError
+from ..params.expressions.evaluation import evaluate
 from . import kept_ranges, range_check
 from .footprint import Footprint, polyline
 from .written_loops import profile_at, written_reads

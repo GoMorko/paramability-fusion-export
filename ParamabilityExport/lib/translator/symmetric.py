@@ -14,7 +14,8 @@ is read from the measured copies when the count is even. When it is odd, the cop
 an even count tell it (`extra_side`); without such a try the side Fusion was seen to use is taken (rectangular
 patterns only), and when the copies at a try break the rule the sizes that can make the count even are marked.
 """
-from ..params.expressions import ExpressionError, evaluate
+from ..params.expressions.errors import ExpressionError
+from ..params.expressions.evaluation import evaluate
 from . import range_check
 from .repeat_elements import read_in_component
 from .values import Quantity, wrapped

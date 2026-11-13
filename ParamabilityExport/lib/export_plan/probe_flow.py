@@ -20,7 +20,7 @@ import json
 from ..package.manifest import MAX_FIXED_REASON
 from ..design_edit.marker import MARKER_LOST
 from ..package.text import clip
-from ..params.expressions import format_number
+from ..params.expressions.text import format_number
 from ..probe import build, derived, fit, match, plan, plane_sizes, ref_fit, series
 from ..sketch_values.motion import SHAPE, TURNS, UNREAD
 from ..translator import borrowed

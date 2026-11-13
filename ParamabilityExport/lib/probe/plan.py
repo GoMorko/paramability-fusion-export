@@ -36,7 +36,7 @@ guessed ones, and only a size left without a near row because of the limit is re
 """
 from ..package.manifest import MAX_NAME_CHARS
 from ..package.units import display_from_manifest, unit_kind
-from ..params.expressions import format_number
+from ..params.expressions.text import format_number
 from ..params import defaults, geometry_links
 from ..params.size_table import DERIVED, FREE
 from ..sketch_values import keys

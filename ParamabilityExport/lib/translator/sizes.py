@@ -6,7 +6,7 @@ the probe's motion file; without one, no size that moves a sketch or constructio
 one, neither can a size behind a sketch the probe did not measure (`sketch_answer`). The driver keeps such sizes free
 with a warning (`translate`).
 """
-from ..params.expressions import tokenize_formula
+from ..params.expressions.formula import tokenize_formula
 from ..sketch_values.coverage import MOVED, NOT_MEASURED, NOT_TRIED, STILL, Answer
 from ..sketch_values.motion import Affine, Stuck, Terms
 
