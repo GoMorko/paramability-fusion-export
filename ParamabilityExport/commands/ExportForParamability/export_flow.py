@@ -276,7 +276,7 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
     request = ExportRequest(
         title=title, writer=export_common.writer_for(app), up_axis=form["up_axis"], parameters=parameters,
         model_params=model_params, design_unit=design_unit, ticked=form["ticked"], ranges=form["ranges"],
-        marker=marker, faster_tries=bool(form.get("faster_tries")))
+        marker=marker, faster_tries=bool(form.get("faster_tries", True)))
 
     units = {p["name"]: p["unit"] for p in parameters}
 

@@ -350,7 +350,7 @@ class _PartsPipeline:
         group = self.group
         self.roll = TryTimeline(self.port.store, self.port.log, self.request.faster_tries)
         self.roll.begin([self.captures[i] for i in self.probed], lambda: group.matches_start(group.read_now()))
-        run = ProbeRun(self.port, self.tmp, group)
+        run = ProbeRun(self.port, self.tmp, group, before_discovery=self._end_trim)
         tries = self._tries()
         settled = False
         try:

@@ -4,6 +4,7 @@ import copy
 import dataclasses
 import tempfile
 import unittest
+from unittest import mock
 
 from tests import context  # noqa: F401
 from tests.test_marker_roll import LID, OWN, PIPE, RollingStore, box_capture, capture, item, profile_record
@@ -179,16 +180,31 @@ class LeftOffPort(FakePort):
         self.left_off.append(list(names))
 
 
-def export(port, faster=True):
+def export(port, faster=None):
+    """Run the export; `faster` sets the dialog box, None leaves the request as the dialog makes it by default."""
+    asked = single_request() if faster is None else dataclasses.replace(single_request(), faster_tries=faster)
     with tempfile.TemporaryDirectory() as tmp:
-        return run_pipeline(port, dataclasses.replace(single_request(), faster_tries=faster), tmp)
+        return run_pipeline(port, asked, tmp)
+
+
+class SettingStore(TrimStore):
+    """A trim store that also lists each parameter change in `events`."""
+
+    def set_expression(self, name, expression):
+        self.events.append(("set", name))
+        super().set_expression(name, expression)
+
+
+# An unticked parameter of the sketch fixture as a discovery candidate (`size_offers.discovery_sizes`).
+PIPE_TRY = {"param": "pipe_offset_mm", "size": "pipe_offset_mm", "unit": "mm", "kind": "length", "value": 20.0,
+            "min": 10.0, "max": 30.0, "end": 30.0}
 
 
 class PipelineTrimTest(unittest.TestCase):
     def port(self, store=None, **options):
         return LeftOffPort(capture=trim_capture(), store=store or TrimStore(START), **options)
 
-    def test_the_tries_run_with_the_unused_items_off_and_they_come_back_before_the_marker(self):
+    def test_the_tries_run_with_the_unused_items_off_without_being_asked_and_they_come_back_before_the_marker(self):
         port = self.port()
         result = export(port)
         self.assertEqual(port.store.events, [("roll", 9), ("suppress", [6, 7]), ("unsuppress", [6, 7]),
@@ -235,6 +251,18 @@ class PipelineTrimTest(unittest.TestCase):
         for port in (cancelled, failed):
             self.assertEqual(port.store.events[-2:], [("unsuppress", [6, 7]), ("unroll", 9)])
             self.assertEqual(port.store.exprs, START)
+
+    def test_the_discovery_tries_run_with_every_item_back_on(self):
+        port = self.port(store=SettingStore(START))
+        with mock.patch("lib.export_plan.pipeline.discovery_sizes", return_value=[dict(PIPE_TRY)]):
+            result = export(port)
+        events = port.store.events
+        tried = events.index(("set", "pipe_offset_mm"))
+        self.assertLess(events.index(("unsuppress", [6, 7])), tried)
+        self.assertEqual([e for e in events if e[0] in ("suppress", "unsuppress")],
+                         [("suppress", [6, 7]), ("unsuppress", [6, 7])])
+        self.assertEqual(result.report["probe"]["discovery"][0]["param"], "pipe_offset_mm")
+        self.assertEqual(port.store.exprs, START)
 
     def test_items_the_store_turned_off_without_counting_them_are_turned_back_on(self):
         class Uncounted(TrimStore):

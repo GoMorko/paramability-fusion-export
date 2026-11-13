@@ -136,11 +136,11 @@ class DoubtfulTest(unittest.TestCase):
 
 
 class FasterTriesTest(unittest.TestCase):
-    def test_the_faster_tries_box_starts_off_and_the_form_reads_it(self):
+    def test_the_faster_tries_box_starts_on_and_unticking_it_turns_it_off(self):
         _, inputs = make_dialog([offer("wall")])
-        self.assertFalse(recipe_dialog.read_form(inputs, [offer("wall")])["faster_tries"])
-        inputs.itemById(recipe_dialog.FASTER_ID).value = True
         self.assertTrue(recipe_dialog.read_form(inputs, [offer("wall")])["faster_tries"])
+        inputs.itemById(recipe_dialog.FASTER_ID).value = False
+        self.assertFalse(recipe_dialog.read_form(inputs, [offer("wall")])["faster_tries"])
 
 
 class SeveralBodiesTest(unittest.TestCase):

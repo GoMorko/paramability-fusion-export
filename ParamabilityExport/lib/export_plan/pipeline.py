@@ -13,8 +13,8 @@ Fusion is reached only through the port the caller hands in (see `ExportPort`), 
 fakes. Parameters are changed by the probe and put back on every way out: when a step fails, when the person
 cancels, and before the probe's last read. What is left over (a parameter that would not go back, sketches that did
 not return to their start, a probe that could not measure) goes into the `health` record of the result. Timeline items
-suppressed for the tries (`timeline_trim`, only when the person asks for it) are turned back on in the same places,
-before the timeline marker goes back.
+suppressed for the tries (`timeline_trim`, unless the person turns it off) are turned back on in the same places,
+before the timeline marker goes back, and before the discovery tries.
 """
 import os
 from dataclasses import dataclass, field
@@ -115,7 +115,7 @@ class ExportRequest:
     ticked: list
     ranges: dict
     marker: Optional[dict] = None
-    faster_tries: bool = False  # suppress the timeline items the tries do not use (`timeline_trim`)
+    faster_tries: bool = True  # suppress the timeline items the tries do not use (`timeline_trim`)
 
 
 @dataclass
@@ -509,11 +509,14 @@ class ProbeRun:
 
     def discover(self, tries):
         """Read the design once the parameters are back, then run the discovery rows in the room the other rows left
-        and keep what they found. Returns the parameters that changed the part. After the tries stopped on a broken
-        design (`stopped`) nothing is read: every candidate is kept as not tried."""
+        and keep what they found. `before_discovery` runs first when rows are left for them. Returns the parameters that
+        changed the part. After the tries stopped on a broken design (`stopped`) nothing is read: every candidate is
+        kept as not tried."""
         if self.job.not_back is not None:
             self.probe.discovery_rows(list(tries), 0)
             return []
+        if tries and self._left() and self.before_discovery is not None:
+            self.before_discovery()
         base = self._read_now({})
         back = self._put_back(full=True) if self.probe.left_start(base) else None
         self.probe.set_discovery_base(base, back)
@@ -650,7 +653,8 @@ class _Pipeline:
                 probe = self.probe
                 self.roll.begin([capture], lambda: probe.matches_start(probe.read_now()))
                 tries = discovery_sizes(self.table, self.request.parameters, capture)
-                found = self._measure(ProbeRun(self.port, self.tmp, self.probe), sizes, extra, tries)
+                run = ProbeRun(self.port, self.tmp, self.probe, before_discovery=self._end_trim)
+                found = self._measure(run, sizes, extra, tries)
                 if found is not None:
                     self.doubtful.extend(found)
         return self._translation(capture, self.motion, "translate_final")

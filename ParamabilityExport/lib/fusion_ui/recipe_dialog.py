@@ -90,7 +90,7 @@ def build(command, offers, body, up_axis, design_unit="mm", stop=None, marker_no
     _safely("Button tooltip", lambda: setattr(
         button, "tooltip", "Selects the step in Fusion. The timeline marker does not move."))
     show_stop(inputs, stop)
-    faster = inputs.addBoolValueInput(FASTER_ID, rows.FASTER_TRIES, True, "", False)
+    faster = inputs.addBoolValueInput(FASTER_ID, rows.FASTER_TRIES, True, "", True)
     _safely("Faster tries tooltip", lambda: setattr(faster, "tooltipDescription", rows.FASTER_TRIES_TOOLTIP))
 
     if offers:
@@ -328,7 +328,7 @@ def restore_bodies(inputs, bodies):
 def read_form(inputs, offers):
     """Plain dict: bodies (the picked bodies), body (the one picked body, else None), ticked (Fusion parameter names),
     ranges ({name: (min, max)} of the ticked ones), range_problem ('' when every typed range is fine), up_axis and
-    faster_tries (the box that turns off unused timeline steps during the tries)."""
+    faster_tries (the box that turns off unused timeline steps during the tries; on when the box is missing)."""
     ticks = _ticks(inputs, offers)
     ranges, problem = rows.read_ranges(
         offers, ticks, _range_texts(inputs, offers, "min"), _range_texts(inputs, offers, "max"))
@@ -342,7 +342,7 @@ def read_form(inputs, offers):
         "ranges": ranges,
         "range_problem": problem,
         "up_axis": "y" if up_item and up_item.name == UP_LABELS["y"] else "z",
-        "faster_tries": bool(faster is not None and adsk.core.BoolValueCommandInput.cast(faster).value),
+        "faster_tries": bool(faster is None or adsk.core.BoolValueCommandInput.cast(faster).value),
     }
 
 

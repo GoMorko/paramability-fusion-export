@@ -1,8 +1,10 @@
-"""Unused timeline items turned off while the sketch tries run, an opt-in speed-up. Pure: no Fusion imports.
+"""Unused timeline items turned off while the sketch tries run. Pure: no Fusion imports.
 
 Every try rebuilds each item before the timeline marker, also the items of other components the picked body does not
 use. `unused_items` lists the items that can be suppressed for the tries; `TimelineTrim` suppresses them through the
-parameter store (`DesignParameterStore.suppress_items`) and turns them back on when the tries end.
+parameter store (`DesignParameterStore.suppress_items`) and turns them back on when the tries end. It runs on every
+export unless the person unticks "Faster tries" in the dialog. The discovery tries, which look for links to other
+components that the capture cannot show, run with every item back on (`pipeline.ProbeRun.discover`).
 
 The capture does not say which item is built from which, so a component is the unit of trust: an item of another
 component is suppressed only when no item of that component is needed by the tries (`marker_roll.needed_items`, the
@@ -95,8 +97,8 @@ def unused_items(captures, stop):
 
 class TimelineTrim:
     """The unused items suppressed for the tries of one export. `record` is `{ asked, on, items, reason?, left_off? }`:
-    whether the person asked for it, whether the tries ran with items suppressed, how many, why not, and the items
-    that would not turn back on. `left_off` lists those names too.
+    whether the dialog box was ticked (it is by default), whether the tries ran with items suppressed, how many, why
+    not, and the items that would not turn back on. `left_off` lists those names too.
 
     store: the parameter store; one without `suppress_items` never suppresses. log(text): a line for the log."""
 
@@ -113,7 +115,7 @@ class TimelineTrim:
             return set()
 
     def begin(self, captures, stop, unchanged):
-        """Suppress the unused items when the person asked for it. `unchanged()` is called with them suppressed and
+        """Suppress the unused items unless the person turned it off. `unchanged()` is called with them suppressed and
         says whether the design still reads as it did at the start (`SizeProbe.matches_start`); when it says no or
         raises, or a step shows a new error, every item is turned back on and the tries run as without the option."""
         if not self.record["asked"]:
@@ -163,11 +165,11 @@ class TimelineTrim:
 
 class TryTimeline:
     """The timeline as the tries of one export keep it: the marker held early (`MarkerRoll`), the unused items
-    suppressed when `faster` (`TimelineTrim`), and how long the tries took.
+    suppressed unless `faster` is off (`TimelineTrim`), and how long the tries took.
 
     `record` is `MarkerRoll.record` plus `suppressed` (`TimelineTrim.record`) and `try_seconds`."""
 
-    def __init__(self, store, log, faster=False):
+    def __init__(self, store, log, faster=True):
         self.roll = MarkerRoll(store, log)
         self.trim = TimelineTrim(store, log, faster)
         self._started = None
