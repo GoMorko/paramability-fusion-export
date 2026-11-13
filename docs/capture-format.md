@@ -2152,6 +2152,7 @@ when it has something to say:
 | `end_actions` | What was done, in order: `marker_back` (the marker read elsewhere and was put back), `marker_lost` (it would not go back), `turned_back_on`, `full_compute`, `values_again`. |
 | `steps_unread` | True when the steps could not be compared (the timeline could not be read). |
 | `deferred_left` | Sketches whose compute stayed deferred after the keeper moved their points (`SketchKeeper.deferred_left`). |
+| `sketch_gap_after_rebuild_mm` | When `full_compute` or `values_again` ran and the sketches were followed: the gap of a read of the outlines after those rebuilds (`pipeline.gap_after_settle`). `sketch_gap_mm` and `sketch_drift` take the larger of this and the gap read before, so a sketch the end rebuild moved counts as a changed design. |
 
 A step in `steps_changed` that is worse than at the start, or a sketch in `deferred_left`, counts as a changed design:
 the person gets a message box first and the result window says which steps and to use Undo. A step that is only better

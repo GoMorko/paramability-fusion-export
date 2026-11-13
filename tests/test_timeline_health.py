@@ -5,7 +5,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from tests.fakes import FakeDesign, FakeStore
-from tests.test_pipeline import START, FakePort, FlipPort, request, view
+from tests.test_pipeline import START, FakePort, FlipPort, request, shifted, view
 
 from lib.design_edit import timeline_health as steps
 from lib.design_edit.runner import ExportCancelled
@@ -264,6 +264,22 @@ class PipelineTest(unittest.TestCase):
         port.sketch_keeper = keeper
         result = export(port)
         self.assertEqual(result.health["deferred_left"], ["Sketch1"])
+        self.assertTrue(health_module.design_changed(result.health))
+
+    def test_a_sketch_the_end_rebuild_moves_is_reported_as_drift(self):
+        class MovingStore(StepStore):
+            """The full rebuild of the end check, with every value back and a step changed, moves the sketch."""
+            moved = False
+
+            def recompute(self):
+                self.moved = self.moved or (self.exprs == self.saved and self.health != self.START_STEPS)
+                return super().recompute()
+
+        store = MovingStore({"Fillet1": "warning"}, heals={"Fillet1": "compute"})
+        port = Port(store)
+        port.probe_reader = lambda: lambda request: shifted(port.e0, 0.5) if store.moved else port.e0
+        result = export(port)
+        self.assertTrue(result.health["sketch_drift"])
         self.assertTrue(health_module.design_changed(result.health))
 
 

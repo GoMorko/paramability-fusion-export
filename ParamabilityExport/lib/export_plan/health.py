@@ -21,7 +21,7 @@ UNDO_ADVICE = (
 
 
 def make_health(unrestored=(), gap_mm=None, probe=NOT_NEEDED, probe_error="", unchecked=(), flipped=(), stopped=None,
-                broken=(), steps=None, deferred_left=()):
+                broken=(), steps=None, deferred_left=(), gap_after_mm=None):
     """The record kept in `report.json` under `health`.
 
     unrestored: Fusion names of the parameters that could not be put back.
@@ -38,6 +38,8 @@ def make_health(unrestored=(), gap_mm=None, probe=NOT_NEEDED, probe_error="", un
       start, and what was done to bring them back (`timeline_health.record` gives its keys).
     deferred_left: sketches whose compute flag would not go back after their points were moved
       (`SketchKeeper.deferred_left`).
+    gap_after_mm: the gap read again after the end check rebuilt the design (`pipeline.gap_after_settle`), already
+      counted in `gap_mm`; None when there was no such rebuild or read.
     """
     measured = probe == MEASURED
     out = {
@@ -61,6 +63,8 @@ def make_health(unrestored=(), gap_mm=None, probe=NOT_NEEDED, probe_error="", un
     out.update(steps_module.record(steps))
     if deferred_left:
         out["deferred_left"] = list(dict.fromkeys(deferred_left))[:MAX_LISTED]
+    if gap_after_mm is not None:
+        out["sketch_gap_after_rebuild_mm"] = gap_after_mm
     return out
 
 

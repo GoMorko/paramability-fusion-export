@@ -26,7 +26,7 @@ from ..design_edit.runner import ExportCancelled
 from . import health as health_module
 from .body_scope import body_links, scope_inputs
 from .part_names import tagged, unique_names
-from .pipeline import (ProbeRun, deferred_left, settle_after_tries, settle_steps, start_steps, warn_left_off,
+from .pipeline import (ProbeRun, deferred_left, gap_after_settle, settle_after_tries, settle_steps, start_steps, warn_left_off,
                        warn_steps, with_try_seconds)
 from .reach_pass import needs_reach, with_reach
 from .probe_flow import ProbeGroup, SizeProbe, covers_a_sketch, extra_size_params, kept_size_names
@@ -174,6 +174,8 @@ class _PartsPipeline:
         with timing.span("restore"):
             self._end_roll()
             settled = settle_steps(self)
+        with timing.span("probe"):
+            gap, gap_after = gap_after_settle(self, gap, self._outline_gap)
         reports = self.group.reports() if self.group is not None and self._measured() else []
         if self.roll is not None and self.roll.record is not None:
             for report in reports:
@@ -187,7 +189,7 @@ class _PartsPipeline:
                    for name in motion.flipped]
         health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error, unchecked,
                                            flipped, self.stopped, steps=settled,
-                                           deferred_left=deferred_left(self))
+                                           deferred_left=deferred_left(self), gap_after_mm=gap_after)
         inputs = [PartInput(self.names[i], self.steps[i], self.captures[i], finals.get(i), self.motions.get(i),
                             probe_of.get(i), derived_of.get(i)) for i in range(port.count)]
         manifest, files, report = plan_parts_export(
@@ -399,3 +401,9 @@ class _PartsPipeline:
         except Exception as exc:
             self.port.log(f"reading the sketches after the restore failed: {exc!r}")
             return None
+
+    def _outline_gap(self):
+        """The sketch gap from a read of the outlines only, or None without a probe."""
+        if self.group is None:
+            return None
+        return self.group.measure_restore(self.group.read_now(outline=True))

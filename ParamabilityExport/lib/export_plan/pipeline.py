@@ -37,7 +37,7 @@ from .recipe_export import free_sizes, plan_single_export, translate_capture
 from ..design_edit.marker import MARKER_LOST
 from ..design_edit.restore import restore_parameters
 from ..design_edit.runner import ExportCancelled, RowExport
-from ..design_edit.timeline_health import read_timeline, settle_timeline
+from ..design_edit.timeline_health import FULL_COMPUTE, VALUES_AGAIN, read_timeline, settle_timeline
 from .size_offers import discovery_sizes, labels, probe_sizes
 from .timeline_trim import TryTimeline
 
@@ -171,6 +171,23 @@ def settle_steps(owner):
     if owner.settled is None:
         owner.settled = settle_timeline(owner.port.store, owner.steps_start, owner.saved, owner.port.log)
     return owner.settled
+
+
+def gap_after_settle(owner, gap, measure):
+    """`(gap, gap after)`: the sketch gap of the export once `settle_steps` is done. When it rebuilt the design, the
+    outlines are read again (`measure()` reads and compares, None when it cannot tell) and the larger of the two gaps
+    is kept, so a sketch that the rebuild moved counts as drift; `gap after` is that second gap, else None."""
+    settled = owner.settled
+    if settled is None or not any(a in (FULL_COMPUTE, VALUES_AGAIN) for a in settled.actions):
+        return gap, None
+    try:
+        after = measure()
+    except Exception as exc:
+        owner.port.log(f"reading the sketches after the end rebuild failed: {exc!r}")
+        return gap, None
+    if after is None:
+        return gap, None
+    return (after if gap is None else max(gap, after)), after
 
 
 def deferred_left(owner):
@@ -645,11 +662,13 @@ class _Pipeline:
             self._end_roll()
             settled = settle_steps(self)
         with timing.span("probe"):
+            gap, gap_after = gap_after_settle(self, gap, self._outline_gap)
             probe_report = self._close_probe()
             shadow = shadow_of(self.probe, port.log) if self.probe is not None else None
         health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error,
                                            self._unchecked(), self.motion.flipped if self.motion is not None else (),
-                                           self.stopped, steps=settled, deferred_left=deferred_left(self))
+                                           self.stopped, steps=settled, deferred_left=deferred_left(self),
+                                           gap_after_mm=gap_after)
         capture = self.capture if self.capture is not None else capture
         manifest, files, report = plan_single_export(
             capture if capture is not None else RuntimeError("The steps were not read."),
@@ -784,6 +803,12 @@ class _Pipeline:
         except Exception as exc:
             self.port.log(f"reading the sketches after the restore failed: {exc!r}")
             return None
+
+    def _outline_gap(self):
+        """The sketch gap from a read of the outlines only, or None without a probe."""
+        if self.probe is None:
+            return None
+        return self.probe.measure_restore(self.probe.read_now(outline=True))
 
     def _unchecked(self):
         """What the restore check could not compare, for the health record."""
