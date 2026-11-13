@@ -17,8 +17,8 @@ A flat face of the part used as the outline is drawn again from the earlier extr
 measured with the sizes that may change it marked (face_outline.py). Sketch outlines beside the face must lie on its
 plane.
 
-The modules: `step` (`handle`), `plan` (the sides: direction, end and length), `reach` (distance, start and reach to a
-face), `taper` (the taper and its limit), `through` (the length of a cut through all and its taper check with
+The modules: `step` (`handle`), `plan` (the sides: direction, end and length), `side` (the `SidePlan` record of one side), `reach` (distance,
+start and reach to a face), `taper` (the taper and its limit), `through` (the length of a cut through all and its taper check with
 `through_taper.py`), `material` (the side of the part a cut through all goes to), `checks` (measured length, side walls
 and volume), `built` (the outlines to write), `order` (the order of the outlines) and `common` (shared tolerances).
 This package re-exports what the rest of the add-in reads as `extrude.<name>`.

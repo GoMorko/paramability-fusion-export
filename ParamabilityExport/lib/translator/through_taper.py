@@ -70,15 +70,15 @@ def keep_open(ctx, item, entry, profiles, outlines, max_lean):
     (`ctx.cut`); False when it closes at the sizes now, no cut keeps it open, or the check cannot be made in its
     budget. `outlines` are the `sketch_motion.Outline` of `profiles` (None for an outline that follows no size); each
     is worked out as the recipe writes it. The lean is taken at most `max_lean`, where the taper's own range ends."""
-    q = entry.get("taper_q")
+    q = entry.taper_q
     sized = q is not None and q.sized
     shapes = [drawn.preview() if drawn is not None else None for drawn in outlines]
     shapes += [None] * (len(profiles) - len(shapes))
     reads = list(dict.fromkeys(tuple(q.reads if sized else ()) + written_reads(
         *[loop for shape in shapes if shape is not None for loop in [shape[0]] + list(shape[1])])))
-    distance, table = entry["distance"], ctx.table
+    distance, table = entry.distance, ctx.table
     if table is None or not reads:
-        return stays_open(profiles, distance, min(max(entry["taper"] or 0.0, 0.0), max_lean))
+        return stays_open(profiles, distance, min(max(entry.taper or 0.0, 0.0), max_lean))
     answers, began = {}, time.monotonic()
 
     def open_at(setting):
@@ -88,7 +88,7 @@ def keep_open(ctx, item, entry, profiles, outlines, max_lean):
                 raise _OverBudget()
             try:
                 env = range_check.size_env(table, setting)
-                lean = evaluate(q.text, env) if sized else (entry["taper"] or 0.0)
+                lean = evaluate(q.text, env) if sized else (entry.taper or 0.0)
                 lean = min(lean, max_lean)
                 answers[key] = all(_open(profile if shape is None else profile_at(shape[0], shape[1], env),
                                          distance, lean) for profile, shape in zip(profiles, shapes))

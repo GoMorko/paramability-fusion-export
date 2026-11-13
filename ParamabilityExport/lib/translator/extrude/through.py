@@ -41,34 +41,34 @@ def resolve_through(ctx, plan, data, origin, z, combine, box_max=None, profiles=
     `sketch_motion.Outline` of each) follow sizes, it is checked over their ranges, which are cut where it would close
     (`through_taper.keep_open`)."""
     for entry in plan:
-        if entry["extent"] == "through" and combine not in ("cut", "intersect"):
+        if entry.extent == "through" and combine not in ("cut", "intersect"):
             return Refusal("Extruding through all is only copied for cuts.")
-        if entry["extent"] == "through-one":
+        if entry.extent == "through-one":
             if combine not in ("cut", "intersect"):
                 return Refusal("Extruding through all is only copied for cuts.")
             box = _box_union(data.get("target_box_before"), box_max)
             if not box:
                 return Refusal("The part this cuts through could not be measured.")
-            entry["extent"] = "oneSide"
-            direction = vec.scale(z, entry["sign"])
+            entry.extent = "oneSide"
+            direction = vec.scale(z, entry.sign)
             lean = _lean_in(ctx, entry)
             if lean > 0:
-                entry["distance"] = _farthest(box, origin, direction) + THROUGH_TAPER_MARGIN_MM
+                entry.distance = _farthest(box, origin, direction) + THROUGH_TAPER_MARGIN_MM
                 moves = any(drawn is not None and sketch_motion.outline_movers(ctx.table, drawn) for drawn in outlines)
-                if (moves or not through_taper.stays_open(profiles, entry["distance"], lean)) and not \
+                if (moves or not through_taper.stays_open(profiles, entry.distance, lean)) and not \
                         through_taper.keep_open(ctx, item, entry, profiles, outlines, MAX_TAPER_DEG):
                     return Refusal("This tapered cut through all closes before it passes the part, which is not "
                                    "copied.")
             else:
-                entry["distance"] = _reach_through(box, origin, direction)
+                entry.distance = _reach_through(box, origin, direction)
     return None
 
 
 def _lean_in(ctx, entry):
     """The steepest recipe taper (degrees, walls leaning in) the side reaches: its own, or the largest its formula
     gives over the size ranges, at most MAX_TAPER_DEG (also when that cannot be worked out)."""
-    lean = entry["taper"] or 0.0
-    q = entry.get("taper_q")
+    lean = entry.taper or 0.0
+    q = entry.taper_q
     if q is not None and q.sized:
         span = range_check.sweep(ctx.table, q.text, q.reads)
         lean = MAX_TAPER_DEG if span.failed or span.high is None else max(lean, span.high)

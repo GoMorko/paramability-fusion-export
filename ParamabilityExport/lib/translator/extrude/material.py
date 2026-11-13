@@ -1,4 +1,6 @@
 """The side of the part that a cut through all goes to, found from where the outlines meet material."""
+from dataclasses import replace
+
 from .. import follow
 from ...geometry import vec
 from ...geometry.footprint import Footprint, polyline
@@ -62,14 +64,14 @@ def cut_toward_material(ctx, plan, data, profiles, shift, combine):
         return
     reach = vec.length(vec.sub(box["max"], box["min"])) + 1.0
     for entry in plan:
-        if entry["extent"] != "through-one":
+        if entry.extent != "through-one":
             continue
         if _walls_confirm(entry, data, combine):
             continue
-        ahead = _meets_material(ctx, profiles, shift, entry["sign"], reach)
-        behind = _meets_material(ctx, profiles, shift, -entry["sign"], reach)
+        ahead = _meets_material(ctx, profiles, shift, entry.sign, reach)
+        behind = _meets_material(ctx, profiles, shift, -entry.sign, reach)
         if behind and not ahead:
-            entry["sign"] = -entry["sign"]
+            entry.sign = -entry.sign
             ctx.note("Fusion stored the cut direction toward a side without material; the side the cut goes through "
                      "was used.")
 
@@ -77,7 +79,7 @@ def cut_toward_material(ctx, plan, data, profiles, shift, combine):
 def _walls_confirm(entry, data, combine):
     """True when the measured side walls of a tapered side lean as its direction gives, and not as the other one."""
     leans = data.get("side_leans")
-    if not entry["taper"] or not isinstance(leans, list) or not leans:
+    if not entry.taper or not isinstance(leans, list) or not leans:
         return False
-    turned = dict(entry, sign=-entry["sign"])
+    turned = replace(entry, sign=-entry.sign)
     return check_leans([entry], leans, combine) is None and check_leans([turned], leans, combine) is not None
