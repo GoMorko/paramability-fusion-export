@@ -14,7 +14,8 @@ fakes. Parameters are changed by the probe and put back on every way out: when a
 cancels, and before the probe's last read. What is left over (a parameter that would not go back, sketches that did
 not return to their start, a probe that could not measure) goes into the `health` record of the result. Timeline items
 suppressed for the tries (`timeline_trim`, only when the person asks for it) are turned back on in the same places,
-before the timeline marker goes back.
+before the timeline marker goes back. Last, on every way out, the health of every timeline step is compared with the
+start of the export and the design rebuilt when a step differs (`design_edit.timeline_health`).
 """
 import os
 from dataclasses import dataclass, field
@@ -32,10 +33,10 @@ from .body_scope import body_links, scope_inputs
 from .reach_pass import needs_reach, with_reach
 from .probe_flow import SizeProbe, covers_a_sketch, extra_size_params, kept_size_names, shadow_of
 from .recipe_export import free_sizes, plan_single_export, translate_capture
-from ..design_edit.apply import error_entries, new_errors
 from ..design_edit.marker import MARKER_LOST
 from ..design_edit.restore import restore_parameters
 from ..design_edit.runner import ExportCancelled, RowExport
+from ..design_edit.timeline_health import read_timeline, settle_timeline
 from .size_offers import discovery_sizes, labels, probe_sizes
 from .timeline_trim import TryTimeline
 
@@ -47,7 +48,8 @@ READ_PARTS = ("sketches", "points", "params", "refs", "box", "faces")
 def settle_after_tries(owner, run):
     """Put every parameter back, turn the suppressed items back on (`owner._restore`, `owner._end_trim`) and put a
     sketch left on another solution back (`ProbeRun.settle`). Never raises, so it also runs when the tries ended with
-    an error or a cancel."""
+    an error or a cancel. The run's sketch keeper is kept as `owner.keeper` for the health record."""
+    owner.keeper = run.keeper
     try:
         owner._restore()
         owner._end_trim()
@@ -81,6 +83,8 @@ class ExportPort(Protocol):
     warn_unrestored(names): tell the person that these parameters could not be put back, when the export stops.
     warn_left_off(names): optional; tell the person that these timeline steps, turned off for the tries
       (`timeline_trim`), could not be turned back on.
+    warn_steps(lines): optional; tell the person, when the export stops, the `health.health_lines` about steps that
+      differ from the start of the export (`settle_steps`).
     log(text): a line for the log.
     """
 
@@ -116,6 +120,9 @@ class ExportRequest:
     ranges: dict
     marker: Optional[dict] = None
     faster_tries: bool = False  # suppress the timeline items the tries do not use (`timeline_trim`)
+    # The timeline steps before anything was read (`timeline_health.read_timeline`); None reads them when the export
+    # starts.
+    timeline_start: Optional[object] = None
 
 
 @dataclass
@@ -150,20 +157,36 @@ class MarkerNotHeld(Exception):
     the marker and could not put it back."""
 
 
-def read_errors(store):
-    """{key: name} of the timeline items in error now (`apply.error_entries`), or {} when that cannot be read."""
+def start_steps(owner):
+    """The timeline steps at the start of the export: the read the request carries, taken before the dialog read the
+    design, else one read now."""
+    start = getattr(owner.request, "timeline_start", None)
+    return start if start is not None else read_timeline(owner.port.store)
+
+
+def settle_steps(owner):
+    """Compare the timeline steps with the start and bring back what differs (`timeline_health.settle_timeline`), once
+    per export, after the parameters, the suppressed items, the sketches and the marker are back."""
+    if owner.settled is None:
+        owner.settled = settle_timeline(owner.port.store, owner.steps_start, owner.saved, owner.port.log)
+    return owner.settled
+
+
+def deferred_left(owner):
+    """Sketches whose compute flag the keeper could not put back (`SketchKeeper.deferred_left`)."""
+    return list(getattr(getattr(owner, "keeper", None), "deferred_left", None) or [])
+
+
+def warn_steps(owner):
+    """Tell the person, when the export stopped, which timeline steps differ from the start (`settle_steps`). Never
+    raises: it runs while the export stops for another reason."""
     try:
-        return error_entries(store)
-    except Exception:
-        return {}
-
-
-def broken_since(store, before):
-    """Names of the timeline items in error now that were not in error in `before` (`read_errors`), after one full
-    recompute when some read in error (`apply.new_errors`)."""
-    if before is None:
-        return []
-    return new_errors(store, before)
+        lines = health_module.steps_lines(settle_steps(owner), deferred_left(owner))
+        warn = getattr(owner.port, "warn_steps", None)
+        if lines and warn is not None:
+            warn(lines)
+    except Exception as exc:
+        owner.port.log(f"checking the timeline steps after the export failed: {exc!r}")
 
 
 def with_try_seconds(summary, roll):
@@ -511,12 +534,14 @@ class _Pipeline:
         self.doubtful = []
         self.also = []
         self.stopped = None  # `ProbeRun.stopped`
-        self.errors_before = None  # the timeline items in error when the export started (`read_errors`)
+        self.keeper = None  # the sketch keeper of the tries (`settle_after_tries`)
+        self.steps_start = None  # the timeline steps at the start (`start_steps`)
+        self.settled = None  # `settle_steps`
         self.timing = getattr(port, "timing", None) or ExportTiming()
 
     def run(self):
         self.saved = self.port.store.saved_expressions()
-        self.errors_before = read_errors(self.port.store)
+        self.steps_start = start_steps(self)
         done = False
         try:
             result = self._run()
@@ -525,8 +550,10 @@ class _Pipeline:
         finally:
             failed = self._restore()
             self._end_roll()
-            if not done and failed:
-                self.port.warn_unrestored(failed)
+            if not done:
+                if failed:
+                    self.port.warn_unrestored(failed)
+                warn_steps(self)
             warn_left_off(self.port, self.roll)
 
     def _end_trim(self):
@@ -571,13 +598,13 @@ class _Pipeline:
             gap = self._restore_gap()
         with timing.span("restore"):
             self._end_roll()
-            broken = broken_since(port.store, self.errors_before)
+            settled = settle_steps(self)
         with timing.span("probe"):
             probe_report = self._close_probe()
             shadow = shadow_of(self.probe, port.log) if self.probe is not None else None
         health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error,
                                            self._unchecked(), self.motion.flipped if self.motion is not None else (),
-                                           self.stopped, broken)
+                                           self.stopped, steps=settled, deferred_left=deferred_left(self))
         capture = self.capture if self.capture is not None else capture
         manifest, files, report = plan_single_export(
             capture if capture is not None else RuntimeError("The steps were not read."),

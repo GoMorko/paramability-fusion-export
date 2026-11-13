@@ -6,7 +6,7 @@ note the Fusion version and system.
 ## Check first in this version
 
 What 0.6.0 to 0.8.0 added, and what this version adds, in this order. Each id is described in the section named,
-except U1, L1 to L15, F1, F2 and SP1 to SP4, which are described here.
+except U1, L1 to L15, F1, F2, SP1 to SP4 and TH1 to TH6, which are described here.
 
 - [ ] SP1, the marker roll past other components. Make component Cup: a sketch with a 60 mm square whose side is the
       user parameter `Width`, extruded 40 mm. In that sketch project an edge of a body of an earlier component (once
@@ -28,6 +28,33 @@ except U1, L1 to L15, F1, F2 and SP1 to SP4, which are described here.
 - [ ] SP4, memory and Undo. On the SP1 design with SP2's sizes, watch Fusion in Activity Monitor (Memory column)
       before, during and after the export, then use Edit, Undo once. Note the peak, the value after the export and
       after Undo, and whether Undo lists the export as one step. Repeat with 0.10.8 for comparison.
+- [ ] TH1, timeline steps after the export: a fillet that only just fits. A box from a 20 by 20 mm rectangle (user
+      parameter `Width` = 20 mm) extruded 15 mm, the four vertical edges filleted with 9.9 mm. Tick `Width` with a range
+      of 12 to 40 and export. Expect: the low tries fail at the fillet and the range is cut; after the export the fillet
+      shows no warning, and `report.json` `health` has no `steps_changed` (`steps_recovered` and `end_actions` may be
+      there: then the add-in rebuilt the design to bring the fillet back). If `steps_changed` is there, note each
+      `name`, `before`, `after` and `message`, then use Edit, Undo and note how many steps bring the fillet back.
+- [ ] TH2, a sketch with two solutions. A sketch with a triangle: one corner on the origin, one corner 40 mm along X,
+      the third corner placed only by two distances (`Arm` = 30 mm from the origin, 35 mm from the second corner), no
+      other constraint, so it can flip below the X axis. Extrude 10 mm and fillet one top edge with 2 mm. Tick `Arm`
+      with a range of 5 to 80 (both ends do not solve) and export. Expect: `health.flipped` may name the sketch; after
+      the export the triangle is on the same side as before, the fillet has no warning, and `health` has no
+      `steps_changed` and no `deferred_left`.
+- [ ] TH3, a chamfer meeting a fillet. A 40 by 30 by 20 mm box, the vertical edges filleted with `Round` = 5 mm, then
+      the top edges chamfered with `Bevel` = 4 mm, so the chamfer runs into the fillets. Tick both, `Bevel` with a range
+      of 1 to 9, and export. Expect: tries where the chamfer fails cut the range; after the export both steps show what
+      they showed before; any step in `health.steps_changed` is named in the result window with the advice to use Undo.
+- [ ] TH4, a step that already shows a warning. Make TH1's box, then edit its first sketch and cut one corner of the
+      rectangle with a 3 mm sketch chamfer, so the fillet loses one edge and shows a warning. Export with `Width`
+      ticked. Expect: the fillet keeps its warning, with the same text; it is not in `health.steps_changed` (or, if
+      Fusion changed its text, it is listed as "another warning" and with `was_message`).
+- [ ] TH5, a cancelled and a failed export. On TH3, cancel in the "Try 3 of ..." window; then export TH1 with Export
+      size choices and a row `Width` = 12, which Fusion cannot build. Expect: in both, every step is as before; when a
+      step is not, a message box after the export names it and says to use Undo.
+- [ ] TH6, Faster tries. Add a second component with about 20 steps of its own (holes, fillets) after TH1's box. Tick
+      Faster tries and export the box, once to the end and once cancelled during the tries. Expect: every step of the
+      second component is on after the export; `health.end_actions` has no `turned_back_on` (if it has, note which
+      steps stayed off before the add-in turned them on again).
 - [ ] SB1, Split Body by a plane. Model a cup or a box with a shell and a fillet, then Split Body with the YZ origin
       plane and Remove the other half (a second Split Body with the XZ plane of the half gives a quarter). Export the
       piece that the split made (a new body, not the one that kept its name), and once more the piece that kept its
@@ -1270,6 +1297,21 @@ These were written from the API reference and never run:
     read for health.
   - `ExportManager.createSTEPExportOptions` with the root component writes the body as it is at the marker.
   - Timeline groups that span the marker: only their children before the marker are checked.
+- The timeline steps after the export (`design_edit/timeline_health.py`, `DesignParameterStore.timeline_health`,
+  `turn_on` and `return_marker`, hand tests TH1 to TH6):
+  - `TimelineObject.healthState`, `errorOrWarningMessage` and `isSuppressed` of every item before the marker, read
+    once when the dialog opens and again at the end; `TimelineObject.entity.objectType` for the type. A read that
+    takes long on a big timeline shows as a slower dialog start.
+  - Whether Fusion shows some warnings only after `Design.computeAll`: a step that reads fine when the dialog opens
+    and in a warning after the add-in's full recompute is listed in `steps_changed` although the export did not cause
+    it. Check on a design with a known warning: does it show before a Compute All?
+  - `Design.modifyParameters` with every user parameter at its own expression (the "values again" action): Fusion
+    may treat it as no change. Note whether a step in `steps_changed` after `values_again` comes back with Compute All
+    by hand.
+  - `TimelineObject.isSuppressed = False` on an item the add-in finds off at the end that was on at the start.
+- `Sketch.isComputeDeferred` after the keeper moved points: it goes back to the value it had when the export started
+  and is read back; a sketch where it would not is named in `health.deferred_left`. Points closer than 0.0001 mm to
+  their kept place are not moved.
 - The `preSelect` event and `isSelectable` for the body picker.
 - `Design.findEntityByToken` to find the body again after each recompute.
 - `ExportManager.createSTEPExportOptions` with a component, and `execute`.

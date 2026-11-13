@@ -1,5 +1,6 @@
 """Apply size rows to a design and put the parameters back. Works on the design object it is given."""
-from ..design_edit.marker import put_back, read_marker
+from ..design_edit.marker import at_end, put_back, read_marker
+from . import read_geometry as geo
 
 
 def _error_state():
@@ -83,9 +84,39 @@ class DesignParameterStore:
             self._rebuild()
         return left
 
+    def turn_on(self, steps):
+        """Unsuppress the timeline items `steps` ((index, name) pairs) that read suppressed, skipping an index that now
+        holds another name. Returns the names that still read suppressed. The caller rebuilds."""
+        left = []
+        for index, name in steps:
+            try:
+                obj = self.design.timeline.item(index)
+                if obj.name != name or not obj.isSuppressed:
+                    continue
+                obj.isSuppressed = False
+                if obj.isSuppressed:
+                    left.append(name)
+            except Exception:
+                left.append(name)
+        return left
+
     def _keep_marker(self):
         if self.marker is not None:
             put_back(self.design.timeline, self.marker)
+
+    def return_marker(self):
+        """Put the marker back where the store keeps it when it reads elsewhere: "" when it was there or cannot be
+        read, "moved" when it was put back, "lost" when it would not go back."""
+        if self.marker is None:
+            return ""
+        timeline = self.design.timeline
+        try:
+            there = timeline.count if at_end(self.marker) else self.marker["position"]
+            if timeline.markerPosition == there:
+                return ""
+        except Exception:
+            return ""
+        return "moved" if put_back(timeline, self.marker) else "lost"
 
     def roll_marker(self, position):
         """Hold the marker at `position` (that many items stay built) until `unroll_marker`. False, with the marker
@@ -181,6 +212,27 @@ class DesignParameterStore:
             return entries
         except Exception:
             return []
+
+    def timeline_health(self):
+        """`{ index, name, type, health, message, suppressed }` of each item before the marker where the store found
+        it (groups left out), for `design_edit.timeline_health`. Raises when the timeline cannot be read."""
+        timeline = self.design.timeline
+        home = self._home or self.marker
+        end = timeline.count if home is None else min(home["position"], timeline.count)
+        steps = []
+        for i in range(end):
+            item = timeline.item(i)
+            if geo.safe(lambda: item.isGroup, False):
+                continue
+            steps.append({
+                "index": i,
+                "name": geo.safe(lambda: item.name, ""),
+                "type": geo.type_name(geo.safe(lambda: item.entity, None)),
+                "health": geo.safe(lambda: geo.health_name(item.healthState), "ok"),
+                "message": geo.safe(lambda: item.errorOrWarningMessage or "", ""),
+                "suppressed": bool(geo.safe(lambda: item.isSuppressed, False)),
+            })
+        return steps
 
     def error_items(self):
         """Names of the timeline items whose health is error."""

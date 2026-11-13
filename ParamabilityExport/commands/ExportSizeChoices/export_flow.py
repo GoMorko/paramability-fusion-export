@@ -8,6 +8,7 @@ from ...lib.package.naming import body_file_title, component_names, design_title
 from ...lib.design_edit.runner import RowExport
 from ...lib.dialog_model.sizes_text import pick_default_index, read_sizes
 from ...lib.design_edit.marker import read_marker
+from ...lib.design_edit.timeline_health import read_timeline
 from ...lib.fusion_reader import design_info
 from ...lib.fusion_reader.rows import DesignParameterStore
 from ...lib.fusion_reader.step_export import export_body_step, resolve_body
@@ -39,6 +40,7 @@ def run_export(design, parameters, form):
     token = body.entityToken
     marker = read_marker(design.timeline)
     store = DesignParameterStore(design)
+    start, saved = read_timeline(store), store.saved_expressions()
 
     def export_step(path):
         export_body_step(design, resolve_body(design, token, body), path)
@@ -56,4 +58,5 @@ def run_export(design, parameters, form):
             write_package(out_path, manifest, files)
         message_box(saved_message(len(results), os.path.basename(out_path)))
 
-    export_common.run_guarded(design, marker, work, lambda: job.restore_failures)
+    export_common.run_guarded(design, marker, work, lambda: job.restore_failures,
+                              lambda: export_common.settle_steps(store, start, saved))

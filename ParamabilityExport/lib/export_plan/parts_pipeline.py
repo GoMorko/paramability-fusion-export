@@ -26,7 +26,8 @@ from ..design_edit.runner import ExportCancelled
 from . import health as health_module
 from .body_scope import body_links, scope_inputs
 from .part_names import tagged, unique_names
-from .pipeline import ProbeRun, broken_since, read_errors, settle_after_tries, warn_left_off, with_try_seconds
+from .pipeline import (ProbeRun, deferred_left, settle_after_tries, settle_steps, start_steps, warn_left_off,
+                       warn_steps, with_try_seconds)
 from .reach_pass import needs_reach, with_reach
 from .probe_flow import ProbeGroup, SizeProbe, covers_a_sketch, extra_size_params, kept_size_names
 from .recipe_export import PartInput, free_sizes, plan_parts_export, translate_capture
@@ -109,12 +110,14 @@ class _PartsPipeline:
         self.doubtful = []
         self.also = []
         self.stopped = None  # `ProbeRun.stopped`
-        self.errors_before = None  # the timeline items in error when the export started (`pipeline.read_errors`)
+        self.keeper = None  # the sketch keeper of the tries (`pipeline.settle_after_tries`)
+        self.steps_start = None  # the timeline steps at the start (`pipeline.start_steps`)
+        self.settled = None  # `pipeline.settle_steps`
         self.timing = getattr(port, "timing", None) or ExportTiming()
 
     def run(self):
         self.saved = self.port.store.saved_expressions()
-        self.errors_before = read_errors(self.port.store)
+        self.steps_start = start_steps(self)
         done = False
         try:
             result = self._run()
@@ -123,8 +126,10 @@ class _PartsPipeline:
         finally:
             failed = self._restore()
             self._end_roll()
-            if not done and failed:
-                self.port.warn_unrestored(failed)
+            if not done:
+                if failed:
+                    self.port.warn_unrestored(failed)
+                warn_steps(self)
             warn_left_off(self.port, self.roll)
 
     def _end_trim(self):
@@ -168,7 +173,7 @@ class _PartsPipeline:
             gap = self._restore_gap()
         with timing.span("restore"):
             self._end_roll()
-            broken = broken_since(port.store, self.errors_before)
+            settled = settle_steps(self)
         reports = self.group.reports() if self.group is not None and self._measured() else []
         if self.roll is not None and self.roll.record is not None:
             for report in reports:
@@ -181,7 +186,8 @@ class _PartsPipeline:
         flipped = ["%s (%s)" % (name, self.names[i]) for i, motion in self.motions.items() if motion is not None
                    for name in motion.flipped]
         health = health_module.make_health(self.unrestored, gap, self.probe_status, self.probe_error, unchecked,
-                                           flipped, self.stopped, broken)
+                                           flipped, self.stopped, steps=settled,
+                                           deferred_left=deferred_left(self))
         inputs = [PartInput(self.names[i], self.steps[i], self.captures[i], finals.get(i), self.motions.get(i),
                             probe_of.get(i), derived_of.get(i)) for i in range(port.count)]
         manifest, files, report = plan_parts_export(

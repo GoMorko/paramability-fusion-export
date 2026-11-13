@@ -8,6 +8,8 @@ from .. import config
 from ..lib.design_edit.apply import RowBuildError
 from ..lib.design_edit.errors import StepExportError
 from ..lib.design_edit.marker import not_put_back_message, put_back
+from ..lib.design_edit.timeline_health import settle_timeline
+from ..lib.export_plan.health import steps_lines
 from ..lib.package.naming import addin_version, writer_text
 from ..lib.design_edit.runner import ExportCancelled
 from ..lib.export_plan import messages
@@ -64,10 +66,28 @@ def warn_left_off(names):
         + ".\nIn the timeline, right click each one and pick Unsuppress, or use Undo in Fusion.", error=True)
 
 
-def run_guarded(design, marker, work, unrestored=lambda: ()):
+def warn_steps(lines):
+    """Tell the person which timeline steps differ from before the export (`export_plan.health.steps_lines`)."""
+    if not lines:
+        return
+    log("timeline steps after the export: " + " ".join(lines))
+    message_box("\n\n".join(lines), error=True)
+
+
+def settle_steps(store, start, saved):
+    """For an export that keeps no health record of its own: compare the timeline steps with `start`, rebuild when one
+    differs (`timeline_health.settle_timeline`) and tell the person what is still changed. Never raises."""
+    try:
+        warn_steps(steps_lines(settle_timeline(store, start, saved, log)))
+    except Exception as exc:
+        log(f"checking the timeline steps after the export failed: {exc!r}")
+
+
+def run_guarded(design, marker, work, unrestored=lambda: (), settle=None):
     """Run `work()` and return its value, or None when the export stopped. Each way it stops gets a plain message,
     and the timeline marker is moved back to `marker` at the end. `unrestored()` names the parameters that could not be
-    put back, for an export that does not check this itself."""
+    put back, for an export that does not check this itself; `settle()`, when given, runs once the parameters are back
+    (`settle_steps`)."""
     try:
         return work()
     except ExportCancelled:
@@ -78,6 +98,8 @@ def run_guarded(design, marker, work, unrestored=lambda: ()):
         error_box("The export stopped. Nothing was saved.")
     finally:
         warn_unrestored(unrestored())
+        if settle is not None:
+            settle()
         if marker is not None and not put_back(design.timeline, marker):
             message_box(not_put_back_message(marker), error=True)
     return None

@@ -51,15 +51,6 @@ class MarkerError(CaptureReadError):
     """The timeline marker could not be put back where it was."""
 
 
-def _health(state):
-    name = geo.enum_name(state, "FeatureHealthStates").lower()
-    if "error" in name or state == 2:
-        return "error"
-    if "warning" in name or state == 1:
-        return "warning"
-    return "ok"
-
-
 def _is_group(obj):
     return bool(geo.safe(lambda: obj.isGroup, False)) or geo.type_name(obj).endswith("TimelineGroup")
 
@@ -268,7 +259,7 @@ def _finish_item(timeline, ctx, readers, index, items):
     if item is None:
         return
     obj = timeline.item(index)
-    item["health"] = geo.safe(lambda: _health(obj.healthState), "ok")
+    item["health"] = geo.safe(lambda: geo.health_name(obj.healthState), "ok")
     item["message"] = geo.safe(lambda: obj.errorOrWarningMessage or "", "")
     entity, _ = _native_entity(obj)
     if entity is None or item["suppressed"]:
