@@ -364,5 +364,25 @@ class CountVersionTest(unittest.TestCase):
         self.assertEqual(translate(capture, size_table=table).recipe["version"], 15)
 
 
+class MirrorReachTest(unittest.TestCase):
+    """A whole body mirror bounds each cut of an outline with spline parts by the spline's own points."""
+
+    @staticmethod
+    def problem(through):
+        from lib.translator.repeat_mirror_reach import body_mirror_problem
+        outline = {"kind": "profile", "start": [0.0, 0.0],
+                   "segments": [{"kind": "spline", "through": through, "to": [6.0, 0.0]},
+                                {"kind": "line", "to": [0.0, 0.0]}]}
+        cut = {"id": "extrude_1", "kind": "extrude", "combine": "cut", "extent": "oneSide", "distance": 2.0,
+               "sketch": {"on": {"origin": [10.0, 0.0, 0.0], "normal": [0.0, 0.0, 1.0], "xDir": [1.0, 0.0, 0.0]},
+                          "outer": outline}}
+        data = {"target_box_before": {"min": [1.0, -5.0, 0.0], "max": [20.0, 5.0, 4.0]}}
+        return body_mirror_problem(data, {"origin": [0.0, 0.0, 0.0], "normal": [1.0, 0.0, 0.0]}, [cut])
+
+    def test_a_spline_on_one_side_keeps_the_mirror_and_one_across_the_plane_is_found(self):
+        self.assertIsNone(self.problem([[2.0, 3.0], [4.0, -3.0]]))
+        self.assertIn("reaches across", self.problem([[-12.0, 3.0], [4.0, -3.0]]))
+
+
 if __name__ == "__main__":
     unittest.main()

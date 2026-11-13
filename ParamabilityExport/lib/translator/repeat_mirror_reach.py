@@ -11,6 +11,7 @@ from ..params.expressions import ExpressionError, evaluate
 from . import range_check, vec
 from .step_kinds import recipe_kind
 from .values import Sized, number, numbers_of, reads_in
+from .written_loops import spline_points
 
 SIDE_TOL_MM = 1e-4
 
@@ -58,8 +59,10 @@ def _loop_points(loop):
     if kind == "profile":
         points, here = [list(loop["start"])], list(loop["start"])
         for seg in loop["segments"]:
-            if "through" in seg:
+            if seg.get("kind") == "arc":
                 points += _arc_circle_points(here, seg["through"], seg["to"])
+            elif seg.get("kind") == "spline":
+                points += spline_points([here] + [list(p) for p in seg.get("through") or []] + [list(seg["to"])])
             points.append(list(seg["to"]))
             here = list(seg["to"])
         return points
@@ -139,7 +142,7 @@ def body_mirror_problem(data, plane, steps):
             return "A mirror of the whole body is not copied when a cut is repeated or the part is trimmed."
         if not _cuts(step, by_id):
             continue
-        reach = _cut_reach(step)
+        reach = _reach_or_none(step, numbers_of)
         if reach is None:
             return "A mirror of the whole body is not copied when a cut has no measurable end."
         points, margin = reach
@@ -171,11 +174,12 @@ def _step_reads(step, by_id):
 
 
 def _reach_or_none(step, as_numbers):
+    """`_cut_reach`, or None when the step repeats others or its tool cannot be bounded from what it holds."""
     if recipe_kind(step["kind"]).repeats:
         return None
     try:
         return _cut_reach(step, as_numbers)
-    except (KeyError, TypeError, IndexError):
+    except (KeyError, TypeError, IndexError, ValueError, ZeroDivisionError, OverflowError):
         return None
 
 
