@@ -8,6 +8,7 @@ from tests.translator_helpers import assert_schema_ok, left_out, load_capture, s
 
 from lib.params import size_table
 from lib.params.expressions import evaluate
+from lib.sketch_values.motion import Motion
 from lib.translator import translate
 from lib.translator.values import Quantity, _env, _gives_whole_numbers
 
@@ -241,14 +242,15 @@ class ValueKindsTest(unittest.TestCase):
         result = self.check(capture, ticked)
         self.assertEqual(steps_of(result.recipe, "extrude")[0]["taperDeg"], {"expr": "-(turn_deg / 18)"})
 
-    def tapered_through(self, formula, fusion_deg):
+    def tapered_through(self, formula, fusion_deg, motion=None):
         """The one way cut through all of `extrude_cut_through_one` with a taper of `fusion_deg` that follows
         `formula`, its measured walls leaning that way."""
         def edit(data):
             data.update(side_one={"kind": "throughAll", "positive": True, "taper_deg": fusion_deg}, end_offset=None,
                         side_leans=[math.sin(math.radians(fusion_deg))] * 4,
                         params={"side_one.taper_deg": param("d4", formula, fusion_deg)})
-        return run(*on_fixture("extrude_cut_through_one", edit, TICKED + ["turn_deg"]))[0]
+        capture, ticked = on_fixture("extrude_cut_through_one", edit, TICKED + ["turn_deg"])
+        return translate(capture, size_table=table_of(capture, ticked), motion=motion)
 
     def test_a_cut_through_all_that_widens_but_would_close_at_other_sizes_cuts_their_range_and_is_copied(self):
         result = self.tapered_through("turn_deg - 89", 1.0)
@@ -257,6 +259,14 @@ class ValueKindsTest(unittest.TestCase):
         cut = next(c for c in result.cuts if c["name"] == "turn_deg")
         self.assertIn("would close before it passes the part", cut["reason"])
         self.assertLess(cut["max"], 89 + 45)
+
+    def test_a_cut_through_all_that_would_close_at_other_sizes_is_left_out_when_its_outline_follows_sizes(self):
+        # The outline narrows with wall_mm, so the lean that keeps it open now may close it at a smaller wall.
+        narrows = {"3/p0/l0/height": {"const": 2.0, "terms": {"wall_mm": 2.0}, "sketch": "Sketch1"}}
+        motion = Motion.from_json({"version": 1, "box_max": {"min": [0, 0, 0], "max": [40, 20, 10]}, "states": [],
+                                   "values": narrows})
+        result = self.tapered_through("turn_deg - 89", 1.0, motion)
+        self.assertIn("closes before it passes the part", left_out(result, 3)["reason"])
 
     def test_a_cut_through_all_with_a_small_sized_taper_follows_it(self):
         result = self.tapered_through("-(turn_deg / 180)", -0.5)
