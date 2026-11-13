@@ -424,7 +424,11 @@ or `{ "read": false, "error": "<reason>" }` when the read failed.
    treats it as the end of the timeline: items at `end` and after are left out, never refused.
 2. For `k` from 0 to `end`: set `timeline.markerPosition = k`. Read the target's box and volume once. Read
    `bodies_after` and `target_changed` of item `k - 1` and, for items of the target's component, the inputs of item `k`
-   (profiles, edges, faces, tool bodies, the target box before it). One recompute per item.
+   (profiles, edges, faces, tool bodies, the target box before it). One recompute per item. Between two steps of
+   another named component the target is not measured: a run of such steps is measured once before and once after,
+   and when the target reads the same on both sides every step of the run gets `target_changed` false with those
+   numbers. When it does not (or a measure failed), the walk goes back over the run and measures each step, so the
+   capture is the same as with a measure at every position.
 3. The second pass (`lib/fusion_reader/helper_pass.py`), only when a Combine that changes the target lists a tool
    body: roll to the item that holds a body of another component to read its place, then to the items that made the
    tool body, and those that made the bodies it is copied from (see CombineFeature in section 5). It runs in rounds,
@@ -1632,11 +1636,18 @@ The probe tries (`lib/probe/plan.py`, at most 64 rows), in this order:
    share of the way to the range ends. Then up to 8 ticked sizes that nothing ties to a sketch (`MAX_EXTRA_SIZES`, in
    table order) while rows are left: the person ticked them, so a sketch may follow them in a way the capture cannot
    show. Such a size left without rows is not listed as untried.
-2. With two or more sizes tried, one near row puts every tried size at its lower near value and one at its higher.
+2. Near pair rows (`plan.pair_rows`), once the near rows have run: with two or more sizes tried, one row puts every
+   tried size at its lower near value and one at its higher. A size whose own near row on that side did not build (or
+   changed a followed outline) stays at its value; a row left with fewer than two sizes is not run.
 3. The nearer rows below, for near rows that did not build.
 4. Far rows (`plan.far_rows`): the range ends that differ from the value and from the near values, so the measured span
-   grows; then, with two or more sizes tried, every size at its minimum and one at its maximum. Nearer rows follow
+   grows. An end is not tried when a row of that size alone did not build (or changed a followed outline) at a value
+   on that side: the range stops before that value anyway, so the try would only cost a rebuild. Nearer rows follow
    for the far rows that did not build.
+5. Far pair rows (`plan.far_pair_rows`), after those nearer rows: with two or more sizes tried, every size at its
+   minimum and every size at its maximum. A tried size goes only as far as it built on its own on that side (the
+   farthest value that built and kept every outline), or stays at its value; a size without rows goes to its range
+   end. The row runs only when a tried size goes past its near value.
 
 A size that only feeds step values (a free size that moves no covered sketch value and reaches no sketch dimension or
 reference) has no row: its formula is exact, and it is never reported as untried (only a moved size left without a
@@ -1646,9 +1657,12 @@ label with "The last value did not rebuild, so this one is nearer." for a nearer
 
 While the rows run, the timeline marker waits just after the last item the part needs (`lib/export_plan/marker_roll.py`),
 so Fusion rebuilds fewer items per recompute. The items needed: any that may change the target, the sketches the steps
-use (matched by name and component), the last item of every other component a sketch link or measured reference
-depends on, the steps of tool bodies of other components, and joints, rigid groups and items of unknown types. sketch record without a name gives no roll; a reference without a component, or a link with an unsourced reference,
-keeps every other component. The marker is moved only after the first read (E0), and only stays when a read
+use (matched by name and component), the items of every other component a sketch link or measured reference depends
+on that come before the step holding the link (Fusion builds the timeline in order, so a step never depends on a later
+item), the steps of tool bodies of other components, and joints, rigid groups and items of unknown types (an unknown
+type whose name ends in `Feature`, of another named component that did not change the target, is a body feature and
+does not count). A sketch record without a name gives no roll; a reference without a component, or a link with an
+unsourced reference, keeps every other component before its step (every one when its step cannot be found). The marker is moved only after the first read (E0), and only stays when a read
 at the rolled marker gives the same sketches, points, lines, references and body box as E0. `report.json` keeps
 `probe.timeline`: `{ rolled, items, of, reason?, suppressed, try_seconds }`, the items each try rebuilt out of the
 items before the person's marker, why it did not move, the suppression record below, and the seconds from the start of
@@ -1661,8 +1675,9 @@ try rebuilds) that the tries do not use are also suppressed while the rows run (
 The evidence is the one above, with a component as the unit: an item is suppressed only when it is not suppressed
 already, belongs to a named component other than the ones of the picked bodies, no item of that component is needed,
 and it is not an assembly item. Nothing is suppressed when the roll's evidence cannot be matched, when a link or
-reference leaves its component unnamed, when a needed item has no component, when an item before the stop point has a
-type the step kind table does not know, or when an assembly item other than an occurrence (a joint, a rigid group) comes
+reference leaves its component unnamed and its step cannot be found, when a needed item other than an occurrence has
+no component, when an item before the stop point has a type the step kind table does not know and that is not a body
+feature (a type ending in `Feature` of a named component), or when an assembly item other than an occurrence (a joint, a rigid group) comes
 before the stop point. The store checks that each item still has the name the capture saw at its index before it
 touches any. With the items suppressed, a read must give the same state as E0 and no step may show a new error;
 otherwise every item is turned back on and the tries run as without the option. The items are turned back on after the
@@ -1991,8 +2006,9 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
 
 ## 6. Report and capture file
 
-The export writes `report.json` into the package: `{ "writer", "outcome": "recipe" | "stepOnly", "items": [ITEM
-VERDICT, ...], "capture": CAPTURE }` (verdicts: see the translator, `lib/translator/result.py`; a Combine written as tool
+The export writes `report.json` into the package, as compact JSON without indentation (format it with a tool such as
+`python3 -m json.tool` to read it): `{ "writer", "outcome": "recipe" | "stepOnly", "items": [ITEM VERDICT, ...],
+"capture": CAPTURE }` (verdicts: see the translator, `lib/translator/result.py`; a Combine written as tool
 steps has `tool_steps`, the verdicts of the items that built its tools). The app never reads it. A report saved from a real
 design gives a fixture: its `capture` is copied as is.
 
@@ -2032,6 +2048,14 @@ the parameters were put back; `health.unchecked` then names each such sketch and
 the result window says that the tries made then were not used to judge any size. After a row that did not build, or
 whose read showed a followed sketch on another outline, the design is read again once the parameters are back and
 before the next row (`ProbeRun`); that read is the next state's `start` in `probe.states`. A probe row that Fusion cannot build is listed in `probe.dropped`; no size is fixed for it.
+
+A try can leave the design broken: a step that lost its input stays in error after the values are put back. Every
+later try would then fail for that reason, not for its own values, and cut ranges it does not own. So before each try
+after the first, with the values back, the steps in error are compared with the baseline (`RowExport`); when a step is
+in error that was not, the tries stop there. `probe.stopped` (`{ after, items }`: the label of the try run last and the
+steps in error) and `health.tries_stopped` (the same) say so, and the motion is built from the tries before. At the end
+of every export the steps in error are compared with the ones in error when it started; `health.broken` names those
+that were fine before, and the result window tells the person that the design is changed and to use Undo.
 
 Solver flips. Putting the values back does not bring back a sketch that a try moved to its other solution: Fusion solves
 a sketch from where its points are. So the export keeps the places of the followed sketches' own points at E0
@@ -2285,3 +2309,4 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | Reach, to confirm by hand: `Feature.faces` of the entity of a timeline item, read with the marker right after the step, lists every face that step created, and read with the marker just before a later step it still gives the same faces (the same entity or `entityToken`) as the ones a later pick finds through `BRepEdge.faces`, `findEntityByToken` or `findBRepUsingPoint`, for each feature type that can be a candidate (extrude, revolve, sweep, loft, round, chamfer, shell, pattern, combine, move); whether the list of a Move, a Combine join and a draft is empty; whether a face a later step trimmed or split drops out of the list; `Component.findBRepUsingPoint` with `BRepFaceEntityType` finds a face from a recorded point | a list that is empty, shorter than right after the step or unreadable counts as reached by every pick, a pick that cannot be found counts as reached, and the translator then leaves the later step out (safe side); hand tests L2, L3, L5 and L14 in "Check first in this version" of `docs/hand-tests.md` |
 | An intersect with several tools keeps the part and every tool, or the part and any tool | measured per export from the volumes and written as `intersect_model`; B7 |
 | Faster tries, to confirm by hand (checked against the installed stubs, never run): `Timeline.item(index)` gives the item the capture saw at that index; `TimelineObject.name`, `TimelineObject.isGroup`, and `TimelineObject.isSuppressed` get and set on an item before a rolled back marker; `Design.computeAll` after a change of `isSuppressed` rebuilds with the item off and leaves the marker in place; turning the item back on restores the design exactly, adds no item and keeps the order; whether the changes add entries to Undo or mark the document changed | the store touches nothing when a name does not match, counts only items that read suppressed, and names items that read suppressed after the restore; a read with the items off must equal E0 and show no new error; hand test U1 in "Check first in this version" of `docs/hand-tests.md` |
+| One change for the sizes of a try, to confirm by hand (read in the installed stubs on 2026-11-13, never run): `Design.modifyParameters(parameters, values)` with `ValueInput.createByString` sets every expression or none, rebuilds the design once like an edit in the Parameters dialog, updates `TimelineObject.healthState` of the steps it changed, and leaves the timeline marker where it is, so no `computeAll` is needed after it | a call that is missing, raises or answers false sets the values one at a time and recomputes as before; the store puts the marker back after it in any case; hand tests SP2 and SP4 in `docs/hand-tests.md` |

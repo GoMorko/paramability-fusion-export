@@ -6,8 +6,28 @@ note the Fusion version and system.
 ## Check first in this version
 
 What 0.6.0 to 0.8.0 added, and what this version adds, in this order. Each id is described in the section named,
-except U1, L1 to L15, F1 and F2, which are described here.
+except U1, L1 to L15, F1, F2 and SP1 to SP4, which are described here.
 
+- [ ] SP1, the marker roll past other components. Make component Cup: a sketch with a 60 mm square whose side is the
+      user parameter `Width`, extruded 40 mm. In that sketch project an edge of a body of an earlier component (once
+      with the projection link on, once with it off, so the sketch may hold a reference Fusion gives no source for). After the Cup steps,
+      add component Rack with about 100 steps (a pattern of 200 holes, fillets and chamfers on its own body). Tick
+      `Width` and export the Cup. Expect: `probe.timeline` has `rolled: true` and `items` equal to the last Cup step
+      plus one, not the full count; `timing.probe.tries_seconds` per try is about the time of the Cup steps alone.
+- [ ] SP2, one change per try. In SP1, add a second user parameter `Height` for the extrude and a fillet on the top
+      edges whose radius is 5 mm; give `Width` a range down to 8 mm, so the fillet fails at the low end. Export with
+      both ticked. Expect: the tries that fail are still listed in `probe.dropped` with the fillet as the failing
+      step and the range of `Width` is cut, as with 0.10.8; `timing.probe.rebuild` is about half of the 0.10.8 value
+      or less; after the export the design shows the values it had, with no step in error.
+- [ ] SP3, a try that breaks the design. Split a box body with an offset construction plane (offset from the top face
+      by the user parameter `Cut`) and Remove the upper piece. Give `Cut` a range that moves the plane above the box,
+      so the split makes one piece and the Remove step loses its input. Export the box with `Cut` ticked. Expect: when
+      the Remove step stays in error with the values back, `probe.stopped` names the try and `Remove`, no try runs
+      after it, the result window says the tries stopped early, and if the step is still in error at the end it says
+      the design is changed and to use Undo. Edit, Undo then brings the design back.
+- [ ] SP4, memory and Undo. On the SP1 design with SP2's sizes, watch Fusion in Activity Monitor (Memory column)
+      before, during and after the export, then use Edit, Undo once. Note the peak, the value after the export and
+      after Undo, and whether Undo lists the export as one step. Repeat with 0.10.8 for comparison.
 - [ ] SB1, Split Body by a plane. Model a cup or a box with a shell and a fillet, then Split Body with the YZ origin
       plane and Remove the other half (a second Split Body with the XZ plane of the half gives a quarter). Export the
       piece that the split made (a new body, not the one that kept its name), and once more the piece that kept its
@@ -1439,6 +1459,9 @@ D5 to D13). Every read is guarded: a member that raises is listed in the record'
   read of sketches, points, lines, references and the body box at that marker equals the read at the full marker (the
   export checks this once and does not roll when it differs); moving the marker forward again and calling
   `computeAll` builds the later items with the restored parameter values and leaves no entry in Undo.
+- One change per try (`fusion_reader/rows.py` `set_expressions`, hand tests SP2 and SP4): `Design.modifyParameters`
+  with `ValueInput.createByString` sets every expression or none and rebuilds once; `TimelineObject.healthState` is
+  up to date after it without `computeAll`; the marker stays where it was.
 - Faster tries (`fusion_reader/rows.py` `suppress_items`, `unsuppress_items`; `export_plan/timeline_trim.py`, hand
   test U1): `Timeline.item(index)`, `TimelineObject.name`, `isGroup`, and `isSuppressed` get and set on items before
   the rolled marker; `computeAll` then rebuilds without them and leaves the marker in place; setting `isSuppressed`

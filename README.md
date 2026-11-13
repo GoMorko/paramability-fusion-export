@@ -108,25 +108,32 @@ shows a warning mark next to it. The parts of the shape that cannot follow it ke
 the same at the current values. The result window lists these loose sizes.
 
 A size can also move a sketch: a rectangle width, a hole position, or a plane that a sketch sits on. The add-in then
-sets the size to other values, lets Fusion rebuild, and reads the sketch each time. From these
+sets the size to other values, lets Fusion rebuild, and reads the sketch each time. The values of one try go in as
+one change, so Fusion rebuilds once per try, as when you edit the parameters yourself. From these
 readings it writes the sketch value as a formula of your parameters, such as `0.5 * FilterBox_width_mm`, so the
 sketch follows the size in Paramability. Each size that moves a sketch is first tried a quarter below and a quarter
 above its value (inside its range), then, while tries are left, at the ends of its range. A size that only feeds step
 values (an extrude distance, a fillet radius, a pattern count) needs no try: its formula is exact. The progress window
 explains what happens and shows the try ("Try 5 of 31: HolderWidth at 32 mm"), and Cancel works there too. To save
 time, Fusion rebuilds only the timeline up to the last step the part needs while the tries run (the marker moves
-there, and goes back when they end; `report.json` says how many items each try rebuilt, `probe.timeline`). A try that
+there, and goes back when they end; `report.json` says how many items each try rebuilt, `probe.timeline`). Steps of
+other components that come after that point are not rebuilt, also when a sketch of the part is tied to another
+component: a step only uses what comes before it in the timeline. A try that
 Fusion cannot build is dropped; no size is fixed for it. The add-in then tries that size nearer to its value now (half
 way, then a quarter, then a tenth of the way to the end of its range; at most 24 such tries per export). When a nearer
 try builds, the size follows between the values that built. Where one value built and a farther one did not, the add-in
-also tries the values between them, halving up to four times, so the last value that builds is found closely. On a
+also tries the values between them, halving up to four times, so the last value that builds is found closely. A
+value past one that did not build is not tried at all, since the range stops before it anyway. On a
 side where Fusion did not rebuild, the range on the form stops at the last value that built, unless you typed that end
 in the dialog or the failing step belongs to another component than the part; on a side the tries did not reach, the
 size says "it was followed between A and B". Each cut range has one line in the result window ("range cut" with the
 value and the step where Fusion did not rebuild), a reason in `report.json` (`sizes.cut`) and the same reason in the
 file's `cuts` list, where Paramability shows it as a quiet note next to the size, not as a warning. In a file with several bodies a size that more than one body
 reads has the narrowest cut over the bodies that were probed, and its reason says so. A size that did not rebuild at
-any value tried is not a size, and the reason names the values and the step Fusion stopped at. A taper that follows
+any value tried is not a size, and the reason names the values and the step Fusion stopped at. When a try leaves the
+design broken (a step stays in error even with your values back), the tries stop there, since every later try would
+fail for that reason; the result window says so, and if a step is still in error after the export it tells you to use
+Undo. A taper that follows
 sizes gets the same kind of range: it stops before the taper reaches 45 degrees, the steepest Paramability builds.
 
 The box "Faster tries" under the body picker is off to start with. When you tick it, the tries also turn off the
