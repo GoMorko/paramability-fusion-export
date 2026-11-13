@@ -18,6 +18,8 @@ from .read_sketch import dense_samples, read_curve, read_outlines, sketch_refere
 MAX_PATH_ENTITIES = 256
 MAX_SECTIONS = 64
 MAX_RAILS = 16
+# Item types a loft section given as a collection lists at most.
+MAX_COLLECTION_TYPES = 16
 _FLAT_MM = 1e-4
 
 _ORIENTATIONS = [("perpendicular", "perpendicular"), ("parallel", "parallel")]
@@ -359,6 +361,10 @@ def _section(section, number, profiles, areas, params, ctx, before):
     """One loft section as { kind, end, ... }. A profile section adds its outline to `profiles` and `areas` and holds
     its place in them as `profile`; a face section holds a face record as `face`; a point section holds `point`."""
     entity = geo.native_input(geo.safe(lambda: section.entity, None), ctx)
+    if geo.is_sequence(entity):
+        listed = geo.collection_items(entity)
+        if len(listed) == 1 and geo.type_name(listed[0]) == "Profile":
+            entity = geo.native_input(listed[0], ctx)  # a collection of one profile is that profile
     name = geo.type_name(entity)
     record = _end_record(section, params, number)
     if name == "Profile":
@@ -376,6 +382,11 @@ def _section(section, number, profiles, areas, params, ctx, before):
         point = geo.safe(lambda: _point_of(entity, ctx), None)
         if point is not None:
             return geo.mark_foreign(dict(record, kind="point", point=point), entity, ctx)
+    elif geo.is_sequence(entity):
+        # A collection that is not one profile: the types of what it holds say what Fusion gave.
+        listed = geo.collection_items(entity)
+        return dict(record, kind="other", type=name,
+                    items=[geo.type_name(e) for e in listed[:MAX_COLLECTION_TYPES]], count=len(listed))
     return dict(record, kind="other", type=name)
 
 

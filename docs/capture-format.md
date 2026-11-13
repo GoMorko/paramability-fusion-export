@@ -1347,7 +1347,8 @@ Loft `data`:
   its record is appended to `profiles` and `areas`, and `profile` is its place there, so the size probe follows the
   sketches under the usual keys), `point` (a sketch point, construction point or vertex, in the component frame),
   `face` (a `BRepFace`, as the face record of section 4, under a key the probe does not follow) or `other` (with the
-  entity `type`, `Path` for a chain of curves).
+  entity `type`, `Path` for a chain of curves). A section Fusion gives as a collection is the profile it holds when
+  it holds one profile; otherwise it is `other` with `items` (the type names of up to 16 entries) and `count`.
 - `end`: the `LoftSection.endCondition` as `free`, `direction`, `tangent`, `smooth`, `pointSharp`, `pointTangent` or
   `other`; null when it cannot be read. `angle` (degrees) and `weight` are added where the condition has them, and
   the ones that are model parameters are in `params` as `sections.<n>.angle` and `sections.<n>.weight`.

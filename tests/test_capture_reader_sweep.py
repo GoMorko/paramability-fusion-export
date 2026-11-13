@@ -315,6 +315,12 @@ class LoftTest(unittest.TestCase):
         self.assertEqual((kinds[3]["kind"], kinds[3]["type"]), ("other", "Path"))
         self.assertEqual(data["profiles"], [])
 
+    def test_a_section_given_as_a_collection_is_one_profile_or_lists_what_it_holds(self):
+        edges = Coll([Obj("fusion::BRepEdge"), Obj("fusion::BRepEdge")])
+        data = read_loft(loftSections=Coll([section(Coll([profile(40, 4.0)])), section(edges)]))
+        self.assertEqual(data["sections"][0]["kind"], "profile")
+        self.assertEqual((data["sections"][1]["items"], data["sections"][1]["count"]), (["BRepEdge", "BRepEdge"], 2))
+
     def test_rails_and_a_centre_line_are_read_like_paths(self):
         one = path(step(sketch_curve(line3((0, 0, 0), (0, 50, 0)), sketch("RailA", "rail_a"))))
         two = path(step(sketch_curve(line3((0, 0, 0), (0, 40, 0)), sketch("RailB", "rail_b"))))
