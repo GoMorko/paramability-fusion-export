@@ -264,6 +264,13 @@ class Context:
         """Step ids written for the timeline item at `index` at any depth, also inside tool steps."""
         return self.steps_of(index) + self._tool_ids_by_index.get(index, [])
 
+    def item_of_step(self, step_id):
+        """The timeline item that wrote the step `step_id` in this walk or inside one of its tool steps, or None."""
+        for index, ids in list(self._ids_by_index.items()) + list(self._tool_ids_by_index.items()):
+            if step_id in ids:
+                return next((item for item in self.timeline if item.get("index") == index), None)
+        return None
+
     def wrote_after(self, index):
         """True when a timeline item after `index` wrote steps in this walk."""
         return any(at > index and ids for at, ids in self._ids_by_index.items())

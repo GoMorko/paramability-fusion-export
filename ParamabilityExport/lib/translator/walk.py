@@ -8,7 +8,8 @@ still reads right, is left out as a gap (gaps.py). A gap is a step type with no 
 that reaches into another component, and a step that picks faces a gap made. What a left out item would have recorded
 (doubts, notes) is dropped with it. Anything that leaves the body unknown still stops the copy.
 """
-from . import body_states, borrowed, gap_hints, gap_picks, gaps, notes as wording, ref_motion, split_rules, step_kinds
+from . import (body_states, borrowed, floating, gap_hints, gap_picks, gaps, notes as wording, ref_motion, split_rules,
+               step_kinds)
 from .capture import outside_component, renamed_target, same_body
 from .result import Refusal, StepResult, make_verdict
 from .sizes import construction_fixes
@@ -313,6 +314,10 @@ def walk_items(ctx, result):
                     result.items[-1]["tool_steps"] = outcome.tool_steps
                 return False
             if not leave_out(item, outcome.reason, outcome.depends_on, cause=gap_hints.refusal_cause(outcome)):
+                return False
+            return None
+        if floating.floats(ctx, outcome):
+            if not leave_out(item, wording.floats_reason(), cause=gap_hints.AFTER_GAP):
                 return False
             return None
         ctx.doubts.extend(brought.doubts + construction.doubts)

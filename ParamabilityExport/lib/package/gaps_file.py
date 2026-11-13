@@ -2,19 +2,24 @@
 
 One file per recipe (`gaps.json`, or `parts/NN/gaps.json` in a parts package). The manifest names it, and a package
 that names one is version 2 (`manifest.VERSION_WITH_GAPS`).
+
+The file is version 1 when it holds at most VERSION_ONE_GAPS gaps, so it still opens in an app that reads only
+version 1, and version 2 (which allows up to `translator.gaps.MAX_GAPS`) when it holds more.
 """
 import json
 
 from .caps import MAX_GAPS_BYTES
 
 SCHEMA = "paramability.recipeGaps"
-VERSION = 1
+VERSION_ONE_GAPS = 16
 
 
 def build_gaps_file(gaps, to_recipe):
     """The file as a dict. `gaps` are the translator's gap records, `to_recipe` the 12 numbers that map the capture's
     coordinates to the recipe's."""
-    return {"schema": SCHEMA, "version": VERSION, "toRecipe": list(to_recipe), "gaps": list(gaps)}
+    gaps = list(gaps)
+    version = 1 if len(gaps) <= VERSION_ONE_GAPS else 2
+    return {"schema": SCHEMA, "version": version, "toRecipe": list(to_recipe), "gaps": gaps}
 
 
 def _encode(file):

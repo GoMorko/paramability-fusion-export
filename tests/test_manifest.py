@@ -82,6 +82,7 @@ SCHEMA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema")
 PACKAGE_SCHEMA = os.path.join(SCHEMA_DIR, "paramability.recipePackage.v1.schema.json")
 PACKAGE_SCHEMA_V2 = os.path.join(SCHEMA_DIR, "paramability.recipePackage.v2.schema.json")
 GAPS_SCHEMA = os.path.join(SCHEMA_DIR, "paramability.recipeGaps.v1.schema.json")
+GAPS_SCHEMA_V2 = os.path.join(SCHEMA_DIR, "paramability.recipeGaps.v2.schema.json")
 LISTED = [{"name": "wall", "label": "wall", "value": 2, "unit": "mm", "comment": "Wall [1..6]"},
           {"name": "outer", "label": "outer", "value": 84, "unit": "mm", "expr": "wall * 2"}]
 

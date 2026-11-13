@@ -195,7 +195,8 @@ except U1 to U3, UM1, L1 to L15, F1, F2, SP1 to SP4 and TH1 to TH6, which are de
       `manifest.json` of `version` 2 where only that part has `gaps` (`parts/01/gaps.json`), the other part is as
       before, and the result window lists the left out step with the part name first.
 - [ ] L8, more than 16 steps left out. A design with 17 steps of a type that cannot be copied after its first body
-      stops the copy with the reason "More than 16 steps of this part cannot be copied."
+      exports a recipe with a `gaps.json` of `version` 2 that lists all 17. In Paramability it opens like L9: the
+      original shape, the unfinished copy beside it, and the card says 17 steps are missing.
 - [ ] L9 to L13, in Paramability (a build that reads version 2 packages), with the files of L1, L2 and L5. L9: the
       original shape shows, the card says how many steps are missing, the tip names the steps and reasons, and
       Editable copy shows the unfinished copy. L10: with assistant mode off there is no assistant text in the
@@ -212,6 +213,12 @@ except U1 to U3, UM1, L1 to L15, F1, F2, SP1 to SP4 and TH1 to TH6, which are de
 - [ ] L15, a split of the part in the middle of the timeline. After the first extrude, split the body in two (Split
       Body) and add a fillet after it. Export. Expect: the export stops with a fixed shape and a message that names
       the split; no `gaps.json`.
+- [ ] L16, a join that sits only on a left out step. Extrude a 40 by 40 mm square 5 mm as a new body. Make a coil as
+      a new body (square section, 3 turns) that touches one side of the block, and Combine (join) the coil into the
+      block. Sketch a 4 by 4 mm square on the coil's top end face and extrude it 3 mm as a join. Export. Expect: the
+      Combine and the small extrude are both left out; the extrude's reason is "It sits on a step that was left out,
+      so it would float apart from the copy.", and Paramability opens the part with the unfinished copy beside the
+      original. Then sketch the square on the top face of the block instead and export again: the extrude is copied.
 
 - [ ] F1, an extrude of a flat face. Sketch a circle of 10 mm on the XY plane and extrude it 20 mm as a new body, with
       the distance set by a user parameter `post_mm`. Extrude its top face 2 mm (join) with a taper of -25 degrees,

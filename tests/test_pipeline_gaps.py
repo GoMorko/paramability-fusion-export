@@ -10,7 +10,7 @@ from tests import context  # noqa: F401
 from tests import fakes
 from tests.fakes import FakeEdge, FakeFace, FakeMadeFeature, FakeMarkerTimeline, FakeReachDesign, FakeStore
 from tests.schema_check import load_schema, validate
-from tests.test_manifest import GAPS_SCHEMA, PACKAGE_SCHEMA, PACKAGE_SCHEMA_V2
+from tests.test_manifest import GAPS_SCHEMA, GAPS_SCHEMA_V2, PACKAGE_SCHEMA, PACKAGE_SCHEMA_V2
 from tests.test_parts_pipeline import FakePartsPort, renamed
 from tests.translator_helpers import load_capture
 
@@ -184,6 +184,13 @@ class GapPackageTest(unittest.TestCase):
         self.assertNotIn("gaps", result.report)
         self.assertNotIn("reach", result.report)
         self.assertEqual(validate(result.manifest, load_schema(PACKAGE_SCHEMA)), [])
+
+    def test_a_gaps_file_with_more_gaps_than_version_1_holds_is_version_2(self):
+        gap = export(ReachPort(tray(), design=tray_design())).report["gaps"][0]
+        many = [dict(gap, id="gap_%d" % n) for n in range(gaps_file.VERSION_ONE_GAPS + 1)]
+        written = json.loads(gaps_file.gaps_file_bytes(many, [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]))
+        self.assertEqual((written["version"], len(written["gaps"])), (2, gaps_file.VERSION_ONE_GAPS + 1))
+        self.assertEqual(validate(written, load_schema(GAPS_SCHEMA_V2)), [])
 
     def test_a_gaps_file_over_the_cap_is_written_without_the_fusion_data(self):
         full = len(gaps_file.gaps_file_bytes(export(ReachPort(tray(), design=tray_design())).report["gaps"],
