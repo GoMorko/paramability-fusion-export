@@ -1702,7 +1702,9 @@ component: a far end that builds gives the widest span measured, and only a fail
 a value moves along a curve with one size on its own, or follows a `Terms` formula with an angle function (below),
 once per export (`plan.check_rows`, inside the row cap, in this order): each such size half way to the lowest and to
 the highest value it was measured at; each such size with each other size of those values, both low and both high
-(products show there); then every other size at the lowest and at the highest value it was measured at, the curved
+(products show there; the other sizes are those of the curved values, then those of every value of the same sketches,
+`series.curve_sizes`, since a partner of a turn may move no curved value at the sizes now); then every other size at
+the lowest and at the highest value it was measured at, the curved
 ones at their value now, so the formula over those sizes is checked by a state that changes several of them. A state that did not build keeps the
 first step that failed (`failed`). A ticked size the probe set to other values that no formula reads at the end is dropped with
 "it was tried at other values, and it changes nothing in this part" (`used` false, `tried` true), with "between A and
@@ -1787,33 +1789,38 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   (`probe.terms`): each size, the product of two length sizes, and for an angle size `sin`, `cos`, `tan` and `cot` of
   the angle and of half the angle, alone and times a length size. The straight terms come first, then up to 3 others
   chosen one at a time (each the one that leaves the smallest miss), then every term the value can do without is
-  dropped. The sum is used only when every measured state follows from the others within 1e-4 mm (solved without
-  that state, it still gives it), and when no other term in place of a chosen one also gives every state but another
-  value half way to an end or with every size at an end. The motion file keeps it as `{ const, sum: [{ k, of }] }`
-  (`Terms`): `of` lists the factors `[function, name, scale]`, `function` empty for a size, scale 1 or 0.5 for the
-  half angle. The translator writes it as a formula with `sin`, `cos` and `tan` in degrees (`cot` as `cos / sin`),
-  checked over the size ranges like any formula (a value that would reach zero, or a divisor that would cross zero,
-  marks its sizes; a formula past the length cap fixes them). A `Terms` value holds the sizes that a stuck value of the
-  same item names at their value now, so all values of the step's outlines follow the same sizes; values of other
-  items still follow them. A stuck curve key (`<prefix>/c<loop>.<curve>/...`, such as a line's `turn`) holds nothing:
-  a line's direction can turn along a curve while both its ends follow. A sketch can
-  have more than one solution, and Fusion may land on another one after the rows run before (a row that did not build
-  often leaves it there). A different outline blames a size only in that size's own row (the row that changes it
-  alone), when the row started on the captured outline and the outline came back once the parameters were put back
-  (`probe.build`): the read before the row (`start` of the state) or, without one, the row before it (E0 for the
-  first) tells how it started, and the next row's `start` or read (or the read once all rows are done) tells whether
-  it came back. A row of several sizes never blames one for a different outline. Every other state with a different
-  outline blames no size (`apart` lists them, by number in `states`), and so do the states where a sketch reads as
-  the same different outline in rows that change different sizes or one size to two values, unless both rows give
-  some parameter the same new value (two sizes behind one formula), where alike reads are expected. A sketch is
-  solved as a whole: in a state where one of its outlines reads differently, its other outlines give no values
-  either, since they sit on that other solution too (a strip that only shifts there is no move). When the probe put
-  the sketch back before a row, the read after that (`put_back` of the state) tells how the row started instead of
-  `start`. A row run a second time from a checked start (`again`, see "Solver flips" below) blames its own size for
-  another outline even when the outline did not come back. A sketch known to have stayed on its other outline after
-  the parameters were put back, with a row run from it (a `start` read shows it and no `put_back` corrected it, or the
-  same different read in rows of unrelated sizes) is named in `flipped`, and `health.flipped` gives the result window
-  one line about it.
+  dropped. When that finds nothing and an angle size moved the value, every turn term is solved at once
+  (`terms.turn_terms`: each size, and the sine and cosine of the angle, alone and times each length size), less those
+  the states cannot tell apart from the ones before them, then pruned the same way: a corner on a turned leg moves by
+  two to four such products, which one term at a time does not find. The turn terms also read partner sizes
+  (`series.partners`): a free size that moved the value in a state that changes it and that angle alone, compared with
+  a state that changes only the angle to the same value, while its own states did not move it (a leg lying along the
+  line it moves, at the angle now). The sum is used only when every measured state follows from the others within 1e-4
+  mm (solved without that state, it still gives it), and when no other term in place of a chosen one also gives every
+  state but another value half way to an end or with every size at an end. The motion file keeps it as `{ const, sum:
+  [{ k, of }] }` (`Terms`): `of` lists the factors `[function, name, scale]`, `function` empty for a size, scale 1 or
+  0.5 for the half angle. The translator writes it as a formula with `sin`, `cos` and `tan` in degrees (`cot` as `cos
+  / sin`), checked over the size ranges like any formula (a value that would reach zero, or a divisor that would cross
+  zero, marks its sizes; a formula past the length cap fixes them). A `Terms` value holds the sizes that a stuck value
+  of the same item names at their value now, so all values of the step's outlines follow the same sizes; values of
+  other items still follow them. A stuck curve key (`<prefix>/c<loop>.<curve>/...`, such as a line's `turn`) holds
+  nothing: a line's direction can turn along a curve while both its ends follow. A sketch can have more than one
+  solution, and Fusion may land on another one after the rows run before (a row that did not build often leaves it
+  there). A different outline blames a size only in that size's own row (the row that changes it alone), when the row
+  started on the captured outline and the outline came back once the parameters were put back (`probe.build`): the
+  read before the row (`start` of the state) or, without one, the row before it (E0 for the first) tells how it
+  started, and the next row's `start` or read (or the read once all rows are done) tells whether it came back. A row
+  of several sizes never blames one for a different outline. Every other state with a different outline blames no size
+  (`apart` lists them, by number in `states`), and so do the states where a sketch reads as the same different outline
+  in rows that change different sizes or one size to two values, unless both rows give some parameter the same new
+  value (two sizes behind one formula), where alike reads are expected. A sketch is solved as a whole: in a state
+  where one of its outlines reads differently, its other outlines give no values either, since they sit on that other
+  solution too (a strip that only shifts there is no move). When the probe put the sketch back before a row, the read
+  after that (`put_back` of the state) tells how the row started instead of `start`. A row run a second time from a
+  checked start (`again`, see "Solver flips" below) blames its own size for another outline even when the outline did
+  not come back. A sketch known to have stayed on its other outline after the parameters were put back, with a row run
+  from it (a `start` read shows it and no `put_back` corrected it, or the same different read in rows of unrelated
+  sizes) is named in `flipped`, and `health.flipped` gives the result window one line about it.
 - A different outline that a size makes in its own row is a limit of its range, not a reason to drop the size
   (`probe.build.outline_windows`). On that side the range keeps the farthest value tried alone that built and kept
   every followed outline, nearer than the nearest value that changed one; the states that set the size past it are
@@ -1839,9 +1846,14 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   circle, with the centre and radius of that sketch circle.
 - A corner the probe could not fit (it moves along a curve) is rebuilt from the two sketch curves that cross there:
   two lines give an affine point, a line and a circle or two circles a point with `sqrt`. An arc's middle point
-  becomes a fixed direction from its centre. The rebuilt outline must keep its crossings and the order of its corners
-  at every mix of the size ends (up to 6 sizes; a bounded sample past that) and the probe's states; otherwise its sizes are fixed ("along a curve"). A
-  line that turns cannot carry its crossings.
+  becomes a fixed direction from its centre. The rebuilt outline (and an outline of `Terms` values) must keep its
+  crossings and the order of its corners at every mix of the size ends (up to 6 sizes; a bounded sample past that) and
+  the probe's states. Where it keeps them only inside shorter ranges (a leg turned while shorter than another, so the
+  outline would cross itself), the ranges are cut there (`sketch_crossings.order_ranges`: each check above zero at the
+  corners and middles of the ranges, `kept_ranges.holding_ranges_where`): "the range stops at A, since the outline of
+  <sketch> would cross itself or lose a corner". When no shorter ranges keep them (a check that fails at the values
+  now, or every size behind it has a typed range), its sizes are fixed ("along a curve"). A line that turns cannot
+  carry its crossings.
 - A sketch plane that moves writes the placement origin along its normal (`sketch.on.origin`); a "to entity" reach is
   the face's move less the plane's move. Outlines of one step whose planes move differently fix those sizes.
 - A sketch on a face, or on a construction plane built on the part (also a chain of planes), may move with every size
@@ -1856,11 +1868,15 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   `axis.point` in the sketch plane. A symmetric revolve turns its moving origin about the axis.
 - Picks on an extrude whose outline moves follow it: a side corner moves with that corner, a point on an outline line
   between its two ends, a point on an arc with the arc's middle (or with the whole arc when it only shifts), on a
-  circle with its centre and radius, and a point inside an end face with the outline's centre. A point on an arc that
-  changes shape fixes those sizes. An edge inside one flat side wall, away from its corners, where no second flat wall
-  crosses it (a round meets the wall), follows that wall: the outline curve under it and the length. The same holds
-  for pattern and mirror copies, shell inner walls, crossing edges
-  and faces an `offsetFaces` step moved (the point moves back by the distance, then follows what made the face).
+  circle with its centre and radius, and a point inside an end face with the first of its 3 nearest outline corners
+  whose move keeps the point inside the written outline, at least a quarter of its distance from the edges, at the
+  corners and middles of the ranges (`inner_pick.anchor`; the ranges as an order cut above leaves them); else with the
+  centre of the outline's corners. A corner gives a formula a few times shorter than the centre, which sums every
+  corner (with turned corners past the 300 character cap). A round, a rect or an ellipse moves the point with its
+  centre. A point on an arc that changes shape fixes those sizes. An edge inside one flat side wall, away from its
+  corners, where no second flat wall crosses it (a round meets the wall), follows that wall: the outline curve under
+  it and the length. The same holds for pattern and mirror copies, shell inner walls, crossing edges and faces an
+  `offsetFaces` step moved (the point moves back by the distance, then follows what made the face).
 - A pick on a tapered wall follows the taper and the length: the wall leans in by `tan(taper)` times the height along
   the extrude, also when the taper is a size.
 - Symmetric patterns (`lib/translator/symmetric.py`, `repeat.py`). A symmetric direction is written as a forward and a

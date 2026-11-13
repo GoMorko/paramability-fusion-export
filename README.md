@@ -149,14 +149,18 @@ the box on and off.
 
 A point can also move along a curve: the end of a leg that turns with an angle, or a corner set back by a wall along
 half the angle. The add-in then looks for a formula with the angle's sine, cosine, tangent or cotangent (of the angle
-or of half of it), alone or times a length, and with products of two lengths. A formula is used only when the tries
-check it: every try must follow from the others. To have enough tries, the add-in sets each such size half way to its
-ends and together with each other size of the same sketch (about 2 tries per curved size, plus 2 per other size it
-shares a sketch with, inside the 64 tries). When no such formula fits, only that size is marked; the other sizes of
-the sketch still follow, and two more tries check them together. A size the readings still cannot follow is loose.
-In the step with the point that cannot follow, the formulas with sines or products leave that size out, so the
-outline keeps its shape; every other step still follows it. A line whose direction turns while both its ends follow
-leaves out nothing.
+or of half of it), alone or times a length, and with products of two lengths. A corner on a turned leg often needs two
+to four products of a length and the sine or cosine; these are tried all at once, also with a length that moves the
+point only once the angle has turned. A formula is used only when the tries check it: every try must follow from the
+others. To have enough tries, the add-in sets each such size half way to its ends and together with each other size of
+the same sketch (about 2 tries per curved size, plus 2 per other size it shares a sketch with, inside the 64 tries).
+When no such formula fits, only that size is marked; the other sizes of the sketch still follow, and two more tries
+check them together. A size the readings still cannot follow is loose. In the step with the point that cannot follow,
+the formulas with sines or products leave that size out, so the outline keeps its shape; every other step still
+follows it. When the outline would cross itself only in a corner of the size ranges (a turned leg shorter than
+another), the ranges are cut there instead ("the outline of Sketch3 would cross itself or lose a corner"). A round or
+chamfer that picks an end face of such an outline follows the outline corner nearest to its pick point, so its formula
+stays short. A line whose direction turns while both its ends follow leaves out nothing.
 
 These cases cannot be copied in a sketch even with the tries: a point that moves along a curve no such formula
 follows, an outline that changes shape (a line that only crosses the outline above some width, a sketch
