@@ -7,8 +7,9 @@ from tests.schema_check import check_recipe
 from tests.translator_helpers import left_out
 from tests.translator_helpers import load_capture, steps_of, verdict_of
 
+from lib.geometry import vec
 from lib.params import size_table
-from lib.translator import translate, vec
+from lib.translator import translate
 from lib.translator.step_walk import all_steps
 
 CHAIN = "paste_move_offset"

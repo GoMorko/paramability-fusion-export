@@ -9,6 +9,7 @@ gives none before the item, they are read after it from the faces the feature ma
 """
 import math
 
+from ..geometry import vec
 from . import read_geometry as geo
 from .param_refs import Params, with_params
 from .read_face import FaceSpace, face_frame
@@ -18,22 +19,14 @@ from .read_sketch import read_curve
 SQUARE_TOL = 1e-6
 
 
-def _dot(a, b):
-    return sum(x * y for x, y in zip(a, b))
-
-
-def _cross(a, b):
-    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
-
-
 def _square_to(neighbour, normal):
     """True when a side face stands square to a face with this normal: a plane across it or a cylinder along it."""
     geometry = neighbour.geometry
     name = geo.type_name(geometry)
     if name == "Plane":
-        return abs(_dot(geo.unit_vector(geometry.normal), normal)) <= SQUARE_TOL
+        return abs(vec.dot(geo.unit_vector(geometry.normal), normal)) <= SQUARE_TOL
     if name == "Cylinder":
-        return math.sqrt(sum(c * c for c in _cross(geo.unit_vector(geometry.axis), normal))) <= SQUARE_TOL
+        return math.sqrt(sum(c * c for c in vec.cross(geo.unit_vector(geometry.axis), normal))) <= SQUARE_TOL
     return False
 
 

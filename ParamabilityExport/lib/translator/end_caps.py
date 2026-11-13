@@ -8,8 +8,8 @@ the sizes the step reads, which are the only ones that move its faces.
 The faces of a hollow section do not exist in the recipe's kernel, so a step with holes has no placer. A sweep's side
 wall is placed only when the path has a `sweep_frames.SideWalk`; a loft's side walls are not placed.
 """
-from . import vec
-from .footprint import Footprint
+from ..geometry import vec
+from ..geometry.footprint import Footprint
 from .placer import Placer
 from .slabs import AXIAL_TOL, LATERAL_TOL, cleaned_all
 from .values import Quantity

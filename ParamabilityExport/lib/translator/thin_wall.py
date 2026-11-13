@@ -17,7 +17,7 @@ import math
 
 from ..package.numbers import is_number
 from . import gap_hints, loops
-from .footprint import arc_span, curve_length, is_full, polyline
+from ..geometry.footprint import arc_span, curve_length, is_full, polyline
 from .placer import ADD, CUT, Placer
 from .result import Refusal
 from .slabs import Slab

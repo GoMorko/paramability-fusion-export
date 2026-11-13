@@ -6,9 +6,10 @@ from tests.schema_check import check_recipe
 from tests.translator_helpers import left_out
 from tests.translator_helpers import load_capture, steps_of
 
+from lib.geometry import vec
 from lib.params import size_table
 from lib.params.expressions import evaluate
-from lib.translator import body_copies, translate, vec
+from lib.translator import body_copies, translate
 from lib.translator.step_walk import all_steps
 
 ROW = "pattern_bodies_combine"

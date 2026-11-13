@@ -676,7 +676,7 @@ The translator fits the app's spline through points chosen from the samples (`li
   the wrong direction. A taper, through all, thin and intersect are not checked. A capture without these keys (made
   before they were read) is not checked.
 - Profiles of one extrude that share a sketch curve are merged into one outline with holes before they are copied
-  (`lib/translator/outlines.py`), since Fusion extrudes and tapers their whole region at once. Outlines that stay
+  (`lib/geometry/outlines.py`), since Fusion extrudes and tapers their whole region at once. Outlines that stay
   apart are written so that each step touches what is already built (the part, or an outline written before it).
 - `bodies_before` (optional, on any item): root bodies at the marker before the item. With it the driver finds a
   body the item made or split off (refused); without it the driver compares `bodies_after` with the bodies the item's
@@ -967,7 +967,7 @@ later step changes another piece together with the part (`lib/translator/split_r
 
 Optional `volume_before` and `volume_after` (mm3) hold the volume of the target with the marker before and after the
 Combine (`read_geometry.target_volume`; null when it cannot be read). When both are present the translator refuses a Combine that changes the part by more than its tool steps can
-fill (`combine_volume.py`). Each tool also has `volume` (mm3, null when unreadable), read with the marker before the
+fill (`lib/geometry/combine_volume.py`). Each tool also has `volume` (mm3, null when unreadable), read with the marker before the
 Combine.
 
 An intersect of two or more tools has `intersect_volumes` and `intersect_model`. Fusion's help does not say whether the

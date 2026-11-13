@@ -12,8 +12,9 @@ After the step, the walk's placers stand where the Move put them (`moved_placer.
 """
 import math
 
+from ..geometry import rigid, vec
 from ..package.numbers import round9
-from . import place, repeat, tool_items, values, vec
+from . import repeat, tool_items, values
 from .moved_placer import MoveMaker
 from .result import Refusal, StepResult
 from .slabs import IDENTITY_ROWS, Motion
@@ -120,7 +121,7 @@ def _space_rows(ctx, data):
     frame = tool_items.component_frame(ctx) if space is not False else None
     if frame is None:
         return IDENTITY_ROWS
-    rows = place.move_from_frame(frame).inverse().rows
+    rows = rigid.move_from_frame(frame).inverse().rows
     return rows if space or rows == IDENTITY_ROWS else None
 
 
@@ -174,9 +175,9 @@ def _free(item, ctx, data, before, after):
     frame = data.get("transform")
     if frame is None:
         return _fitted(item, before, after)
-    if place.frame_problem(frame):
+    if rigid.frame_problem(frame):
         return Refusal("%s mirrors or scales the body, which a move cannot copy." % _name(item))
-    found = place.move_from_frame(frame)
+    found = rigid.move_from_frame(frame)
     motion = Motion(found.rows, found.offset)
     if not carries(motion, before, after):
         return Refusal("%s does not move the body as its transform says." % _name(item))

@@ -1,6 +1,7 @@
 """The handler of an extrude feature: checks it and writes one recipe extrude step per outline and side."""
+from ...geometry import vec
 from ...package.numbers import round9
-from .. import face_outline, gap_hints, loops, placement, sketch_motion, thin_wall, vec
+from .. import face_outline, gap_hints, loops, placement, sketch_motion, thin_wall
 from ..placer_makers import SlabMaker, ThinWallMaker
 from ..result import Refusal, StepResult
 from ..values import Quantity

@@ -22,7 +22,8 @@ read, flat faces following it by Tangent Chain).
 """
 import copy
 
-from . import extrude, face_outline, loops, placement, values, vec
+from ..geometry import vec
+from . import extrude, face_outline, loops, placement, values
 from .result import Refusal, StepResult
 from .values import Quantity
 

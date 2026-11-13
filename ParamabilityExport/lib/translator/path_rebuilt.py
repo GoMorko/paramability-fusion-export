@@ -1,6 +1,6 @@
 """A path read back from written numbers: its curves, and the check of the app's rules for it that is run over the
 range of every size the path follows (`path_motion`). Pure."""
-from . import vec
+from ..geometry import vec
 from .path_checks import (bend_refusal, corners_refusal, off_square, overlap_refusal, rise_refusal, self_touch,
                           sharp_corner)
 from .path_curves import near, polyline, tangents, tightest_radius

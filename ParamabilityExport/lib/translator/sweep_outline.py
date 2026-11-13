@@ -1,6 +1,7 @@
 """The outline of a sweep: the one profile, its points and its centroid. Pure."""
-from . import loops, vec
-from .footprint import is_full, polyline
+from . import loops
+from ..geometry import vec
+from ..geometry.footprint import is_full, polyline
 from .result import Refusal
 from .sweep_limits import FACE_OUTLINE, SEVERAL_OUTLINES, UNREADABLE
 

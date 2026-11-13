@@ -11,9 +11,10 @@ the angle (`extent.quantity`) gives them as they are.
 """
 import math
 
+from ..geometry import vec
 from ..package.numbers import round9
 
-from . import gap_hints, loops, notes, placement, ref_motion, sketch_motion, values, vec
+from . import gap_hints, loops, notes, placement, ref_motion, sketch_motion, values
 from .extrude import COMBINE
 from .result import Refusal, StepResult
 

@@ -13,7 +13,7 @@ from ..params.expressions.formula import parse_formula
 from ..sketch_values.motion import Stuck
 from . import range_check
 from .curved import combine, render
-from .footprint import Footprint
+from ..geometry.footprint import Footprint
 from .written_loops import profile_at, written_reads
 
 MAX_CORNERS = 3   # nearest corners tried before the centre

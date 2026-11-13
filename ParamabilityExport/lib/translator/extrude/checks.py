@@ -1,7 +1,7 @@
 """Checks of the planned extrude against what Fusion measured: its length, its side walls and the volume it made."""
 import math
 
-from .. import vec
+from ...geometry import vec
 from ..result import Refusal
 from .common import LENGTH_TOL
 

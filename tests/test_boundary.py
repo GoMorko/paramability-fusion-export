@@ -10,16 +10,17 @@ from tests import context
 # places that use Fusion (`adsk`); `commands` sits on top.
 ALLOWED_IMPORTS = {
     "package": set(),
+    "geometry": set(),
     "timing": set(),
     "params": {"package"},
     "sketch_values": {"package"},
     "sketch_solve": {"package", "sketch_values"},
     "design_edit": {"package", "params"},
-    "translator": {"package", "params", "sketch_values", "timing"},
-    "probe": {"package", "params", "sketch_solve", "sketch_values", "translator"},
+    "translator": {"geometry", "package", "params", "sketch_values", "timing"},
+    "probe": {"geometry", "package", "params", "sketch_solve", "sketch_values", "translator"},
     "export_plan": {"design_edit", "package", "params", "probe", "sketch_values", "timing", "translator"},
     "dialog_model": {"export_plan", "package", "params", "translator"},
-    "fusion_reader": {"design_edit", "package", "params", "timing", "translator"},
+    "fusion_reader": {"design_edit", "geometry", "package", "params", "timing", "translator"},
     "fusion_ui": {"dialog_model", "export_plan", "fusion_reader", "package"},
     "commands": {"design_edit", "dialog_model", "export_plan", "fusion_reader", "fusion_ui", "package", "timing"},
 }

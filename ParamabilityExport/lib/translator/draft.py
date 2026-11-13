@@ -10,7 +10,8 @@ The angle follows its sizes, and the size ranges are cut where it would reach ze
 follows them only when both come from the same formula. The faces are picked by points on them, like the open faces of a shell, and the plane
 follows sizes like a mirror plane.
 """
-from . import follow, gap_hints, picks, values, vec
+from ..geometry import vec
+from . import follow, gap_hints, picks, values
 from .extrude import keep_angle_within
 from .repeat_build import round_vec
 from .result import Refusal, StepResult

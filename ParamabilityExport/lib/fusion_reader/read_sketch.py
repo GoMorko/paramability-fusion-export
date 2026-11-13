@@ -1,8 +1,8 @@
 """Sketch profiles as plain dicts: frame, loops and curves in the sketch's own 2D frame (mm)."""
 import math
 
+from ..geometry import rigid, text_outlines
 from . import read_geometry as geo
-from ..translator import place, text_outlines
 from .placement import read_sketch_placement, target_move
 
 # Which space ProfileCurve.geometry is in. "auto" decides per profile: a point off z = 0 proves model space. When
@@ -343,7 +343,7 @@ def into_target(frame, placement_frame, ctx):
     target = target_move(ctx)
     if target is None:
         return None
-    return _moved_frame(frame, place.move_from_frame(placement_frame).then(target.inverse()))
+    return _moved_frame(frame, rigid.move_from_frame(placement_frame).then(target.inverse()))
 
 
 def _borrowed(proxy, sketch, frame, ctx):

@@ -7,8 +7,9 @@ need no special case. Curved faces and moves that were not measured are refused.
 """
 import math
 
-from . import follow, vec
-from .footprint import Footprint
+from . import follow
+from ..geometry import vec
+from ..geometry.footprint import Footprint
 from .placer_makers import MovedFacesMaker
 from .result import Refusal, StepResult
 from .values import Quantity, number, quantity, stays_positive

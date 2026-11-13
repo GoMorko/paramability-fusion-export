@@ -2,7 +2,8 @@
 starts at the wrong end or leaves the wrong way, since those keep the volume; the made end face does. Pure."""
 import math
 
-from . import path_curves, vec
+from ..geometry import vec
+from . import path_curves
 from .path_limits import SQUARE_TOL_DEG
 from .result import Refusal
 from .sweep_limits import NOT_MATCHING

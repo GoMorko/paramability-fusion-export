@@ -1,7 +1,8 @@
 """The sides of an extrude: the direction of each, how it ends and its length."""
 import math
 
-from .. import gap_hints, values, vec
+from .. import gap_hints, values
+from ...geometry import vec
 from ..result import Refusal
 from .common import LENGTH_TOL, SIGN_TOL, UNREADABLE, parallel, sign_of
 from .reach import distance_quantity, keep_reaches_positive, reach_quantity

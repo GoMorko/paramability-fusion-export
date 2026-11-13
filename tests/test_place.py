@@ -8,6 +8,7 @@ from tests import context  # noqa: F401
 from tests.schema_check import check_recipe, load_schema
 from tests.translator_helpers import FIXTURES, assert_schema_ok, load_capture, steps_of, translate_fixture
 
+from lib.geometry import rigid
 from lib.translator import CaptureError, translate
 from lib.translator import place
 from lib.translator.values import Sized
@@ -59,15 +60,15 @@ class TurnTest(unittest.TestCase):
         self.assertEqual(on["origin"], [5.0, 2.0, 3.0])
 
     def test_no_negative_zero(self):
-        turned = place.place(sample_recipe(), place.TURN_Z_UP)["features"][2]["origin"]
+        turned = place.place(sample_recipe(), rigid.TURN_Z_UP)["features"][2]["origin"]
         self.assertEqual(json.dumps(turned), "[1.0, -3.0, 2.0]")
         flat = {"features": [{"kind": "hole", "origin": [1, 2, 0]}]}
-        self.assertEqual(json.dumps(place.place(flat, place.TURN_Z_UP)["features"][0]["origin"]), "[1.0, 0.0, 2.0]")
+        self.assertEqual(json.dumps(place.place(flat, rigid.TURN_Z_UP)["features"][0]["origin"]), "[1.0, 0.0, 2.0]")
 
     def test_input_recipe_is_kept(self):
         recipe = translate_fixture("extrude_plate").recipe
         before = copy.deepcopy(recipe)
-        place.place(recipe, place.TURN_Z_UP)
+        place.place(recipe, rigid.TURN_Z_UP)
         self.assertEqual(recipe, before)
 
 
@@ -115,7 +116,7 @@ class SampleTurnTest(unittest.TestCase):
     def test_every_written_field_turns_and_nothing_else(self):
         recipe = sample_recipe()
         assert_schema_ok(self, recipe)
-        turned = place.place(recipe, place.TURN_Z_UP)
+        turned = place.place(recipe, rigid.TURN_Z_UP)
         assert_schema_ok(self, turned)
         by_id = {s["id"]: s for s in turned["features"]}
         self.assertEqual(by_id["e"]["sketch"]["on"], {"origin": [1.0, -3.0, 2.0], "normal": [0.0, 0.0, 1.0], "xDir": [1.0, 0.0, 0.0]})
@@ -150,18 +151,18 @@ class MoveTest(unittest.TestCase):
     def test_a_moved_part_keeps_plain_formulas(self):
         frame = {"origin": [100, 50, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
         recipe = hole_at(1, 2, sized("0.5 * h", 16, "h"))
-        out = place.place(recipe, place.move_from_frame(frame))["features"][0]["origin"]
+        out = place.place(recipe, rigid.move_from_frame(frame))["features"][0]["origin"]
         self.assertEqual(out, [101.0, 52.0, {"expr": "0.5 * h"}])
         self.assertEqual(out[2].reads, ("h",))
 
     def test_a_turned_part_writes_affine_formulas_and_directions_ignore_the_move(self):
-        move = place.move_from_frame(QUARTER_ABOUT_X)
+        move = rigid.move_from_frame(QUARTER_ABOUT_X)
         out = place.place(hole_at(1, 2, sized("h", 30, "h"), direction=(0.0, 0.0, 1.0)), move)["features"][0]
         self.assertEqual(out["origin"], [11.0, {"expr": "-h"}, 2.0])
         self.assertEqual(out["direction"], [0.0, -1.0, 0.0])
 
     def test_move_then_turn_is_one_pass_and_inverts(self):
-        move = place.move_from_frame(QUARTER_ABOUT_X).then(place.TURN_Z_UP)
+        move = rigid.move_from_frame(QUARTER_ABOUT_X).then(rigid.TURN_Z_UP)
         recipe = hole_at(1, 2, 3)
         out = place.place(recipe, move)["features"][0]["origin"]
         self.assertEqual(out, [11.0, -2.0, -3.0])
@@ -169,21 +170,21 @@ class MoveTest(unittest.TestCase):
 
     def test_identity_returns_a_copy(self):
         recipe = hole_at(1, 2, 3)
-        out = place.place(recipe, place.move_for({"up_axis": "z", "target": {}}))
+        out = place.place(recipe, rigid.move_for({"up_axis": "z", "target": {}}))
         self.assertEqual(out, recipe)
         self.assertIsNot(out, recipe)
 
     def test_rounding_noise_in_a_turn_is_snapped(self):
         frame = {"origin": [0, 0, 0], "x": [6e-17, 1, 0], "y": [-1, 6e-17, 0], "z": [0, 0, 1]}
-        out = place.place(hole_at(5, 0, 0), place.move_from_frame(frame))["features"][0]["origin"]
+        out = place.place(hole_at(5, 0, 0), rigid.move_from_frame(frame))["features"][0]["origin"]
         self.assertEqual(out, [0.0, 5.0, 0.0])
 
     def test_frames_that_are_not_a_rotation_are_named(self):
         good = {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
-        self.assertIsNone(place.frame_problem(good))
-        self.assertIn("scaled", place.frame_problem({**good, "x": [2, 0, 0]}))
-        self.assertIn("mirrored", place.frame_problem({**good, "z": [0, 0, -1]}))
-        self.assertIn("numbers", place.frame_problem({**good, "origin": [0, 0]}))
+        self.assertIsNone(rigid.frame_problem(good))
+        self.assertIn("scaled", rigid.frame_problem({**good, "x": [2, 0, 0]}))
+        self.assertIn("mirrored", rigid.frame_problem({**good, "z": [0, 0, -1]}))
+        self.assertIn("numbers", rigid.frame_problem({**good, "origin": [0, 0]}))
 
 
 class FixturesTest(unittest.TestCase):
@@ -203,7 +204,7 @@ class FixturesTest(unittest.TestCase):
                 continue
             checked += 1
             self.assertEqual(check_recipe(turned.recipe), [], name)
-            self.assertEqual(place.place(turned.recipe, place.TURN_Z_UP.inverse()), flat.recipe, name)
+            self.assertEqual(place.place(turned.recipe, rigid.TURN_Z_UP.inverse()), flat.recipe, name)
         self.assertGreater(checked, 5)
 
 

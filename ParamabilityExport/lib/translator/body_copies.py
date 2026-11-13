@@ -17,10 +17,11 @@ so the sizes a count reads are marked. Spacing and angle only move the same copi
 """
 from dataclasses import dataclass
 
-from . import move, paste, ref_motion, repeat, tool_walk, values, vec, walk
+from ..geometry import vec
+from ..geometry.rigid import move_from_frame
+from . import move, paste, ref_motion, repeat, tool_walk, values, walk
 from .capture import outside_component, same_body
 from .moved_placer import MoveMaker
-from .place import move_from_frame
 from .result import Refusal, StepResult, make_verdict
 from .slabs import Motion
 from .step_kinds import SOLID, recipe_kind

@@ -19,7 +19,7 @@ from ..sketch_values import keys
 from ..sketch_values.motion import CURVE, Affine, Stuck
 from . import kept_ranges, range_check
 from .curved import Curved, combine, names_of, render, times
-from .vec import POINT_TOL
+from ..geometry.vec import POINT_TOL
 
 FIT_TOL = 1e-4
 ORDER_STEPS = 20  # halvings that find where a range stops keeping the order: a millionth of the range

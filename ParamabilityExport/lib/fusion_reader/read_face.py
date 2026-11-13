@@ -11,6 +11,7 @@ brings it back itself).
 import math
 
 from ..design_edit.marker import MARKER_LOST, put_back, read_marker
+from ..geometry import vec
 from ..timing.timer import span_on
 from . import read_geometry as geo
 from .read_finish import strict_items
@@ -22,14 +23,6 @@ _FACE_LISTS = (("start", "startFaces"), ("end", "endFaces"), ("side", "sideFaces
 _NAMED_CURVES = ("Line3D", "Arc3D", "Circle3D", "Ellipse3D")
 
 
-def _dot(a, b):
-    return sum(x * y for x, y in zip(a, b))
-
-
-def _cross(a, b):
-    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
-
-
 class FaceSpace:
     """Maps model points (cm) into the 2D frame of a face (mm), like a sketch space."""
 
@@ -38,11 +31,11 @@ class FaceSpace:
 
     def xy(self, p):
         rel = [a - b for a, b in zip(geo.point(p), self.frame["origin"])]
-        return [round(_dot(rel, self.frame["x"]), 6) + 0.0, round(_dot(rel, self.frame["y"]), 6) + 0.0]
+        return [round(vec.dot(rel, self.frame["x"]), 6) + 0.0, round(vec.dot(rel, self.frame["y"]), 6) + 0.0]
 
     def direction(self, vector, at):
         v = geo.unit_vector(vector)
-        dx, dy = _dot(v, self.frame["x"]), _dot(v, self.frame["y"])
+        dx, dy = vec.dot(v, self.frame["x"]), vec.dot(v, self.frame["y"])
         n = math.hypot(dx, dy) or 1.0
         return [round(dx / n, 9) + 0.0, round(dy / n, 9) + 0.0]
 
@@ -51,7 +44,7 @@ def face_frame(face, plane):
     """The face plane as a frame: origin on the plane, z the outward normal, x along the plane's u direction."""
     z = geo.outward_normal(face)
     x = geo.unit_vector(plane.uDirection)
-    y = _cross(z, x)
+    y = vec.cross(z, x)
     return {"origin": geo.point(plane.origin), "x": x, "y": y, "z": z}
 
 

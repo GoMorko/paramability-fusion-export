@@ -8,9 +8,10 @@ flat face, of another component moves with that place (ref_motion.py).
 """
 import math
 
+from ..geometry import vec
 from ..package.numbers import round9
 
-from . import gap_hints, range_check, ref_motion, sketch_motion, values, vec
+from . import gap_hints, range_check, ref_motion, sketch_motion, values
 from .values import Quantity
 from .result import Refusal, StepResult
 

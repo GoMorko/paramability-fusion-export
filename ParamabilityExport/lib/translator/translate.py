@@ -14,6 +14,7 @@ from .context import Context
 from .result import TranslateResult
 from .step_walk import all_steps, nesting
 from .tool_walk import MAX_DEPTH as MAX_TOOL_DEPTH
+from ..geometry import rigid
 from ..params import geometry_links
 from ..params.expressions.formula import tokenize_formula
 from ..params.expressions.simplify import collected_sum
@@ -56,7 +57,7 @@ def _placement_refusal(capture):
     if placement.get("linked"):
         return {"index": None, "name": "", "type": "", "reason": "This part comes from a linked design.",
                 "note": wording.linked_part_note()}
-    problem = placement.get("error") or (place.frame_problem(placement["frame"]) if "frame" in placement else None)
+    problem = placement.get("error") or (rigid.frame_problem(placement["frame"]) if "frame" in placement else None)
     if problem:
         return {"index": None, "name": "", "type": "", "reason": "The place of this part in the assembly cannot be used. %s" % problem,
                 "note": wording.place_unreadable_note()}
@@ -499,7 +500,7 @@ def _walk(capture, table, size_table, motion=None, cache=None):
     if over:
         result.refusal = {"index": None, "name": "", "type": "", "reason": over}
         return result, ctx
-    move = place.move_for(capture)
+    move = rigid.move_for(capture)
     recipe = place.place(recipe, move)
     _fix_long_formulas(recipe, ctx)
     if ctx.gaps:

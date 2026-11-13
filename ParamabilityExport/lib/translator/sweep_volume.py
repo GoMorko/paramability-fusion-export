@@ -2,7 +2,8 @@
 straight sweep tells how Fusion measures the taper from the volume it made."""
 import math
 
-from . import sweep_taper, vec
+from ..geometry import vec
+from . import sweep_taper
 from .path_limits import STRAIGHT_DEG
 from .result import Refusal
 from .sweep_limits import CENTROID_ON_PATH_TOL, NOT_MATCHING, VOLUME_ABSOLUTE_TOL, VOLUME_RELATIVE_TOL, ZERO_TOL

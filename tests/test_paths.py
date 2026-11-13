@@ -7,7 +7,8 @@ from tests import context  # noqa: F401
 from tests.schema_check import check_recipe
 from tests.translator_helpers import close
 
-from lib.translator import path_checks, path_curves, path_limits, path_model, path_rebuilt, path_writing, paths, vec
+from lib.geometry import vec
+from lib.translator import path_checks, path_curves, path_limits, path_model, path_rebuilt, path_writing, paths
 from lib.translator.result import Refusal
 
 S2 = math.sqrt(0.5)

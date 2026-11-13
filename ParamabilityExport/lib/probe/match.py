@@ -11,6 +11,7 @@ so its curves pair by kind and by their place along the loop.
 """
 import math
 
+from ..geometry import vec
 from ..translator.loops import profile_loops
 from ..translator.path_motion import swept_degrees
 from ..translator.result import Refusal
@@ -23,14 +24,6 @@ ANGLE_TOLERANCE = 1e-6
 _SKIP = ("angleDeg",)
 
 
-def _dot(a, b):
-    return sum(x * y for x, y in zip(a, b))
-
-
-def _sub(a, b):
-    return [x - y for x, y in zip(a, b)]
-
-
 def _dist(a, b):
     return math.hypot(*(x - y for x, y in zip(a, b)))
 
@@ -38,22 +31,22 @@ def _dist(a, b):
 def _turned(z, ref):
     """True when the unit normal `z` is not the unit normal `ref`."""
     cross = [z[1] * ref[2] - z[2] * ref[1], z[2] * ref[0] - z[0] * ref[2], z[0] * ref[1] - z[1] * ref[0]]
-    return math.sqrt(_dot(cross, cross)) > TURN_TOLERANCE or _dot(z, ref) < 0
+    return math.sqrt(vec.dot(cross, cross)) > TURN_TOLERANCE or vec.dot(z, ref) < 0
 
 
 def _faces_back(z, ref):
     """True when the unit normal `z` is `ref` reversed: the plane stays, but the face looks the other way."""
     cross = [z[1] * ref[2] - z[2] * ref[1], z[2] * ref[0] - z[0] * ref[2], z[0] * ref[1] - z[1] * ref[0]]
-    return math.sqrt(_dot(cross, cross)) <= TURN_TOLERANCE and _dot(z, ref) < 0
+    return math.sqrt(vec.dot(cross, cross)) <= TURN_TOLERANCE and vec.dot(z, ref) < 0
 
 
 def _to_ref(world_vector, ref):
-    return [_dot(world_vector, ref["x"]), _dot(world_vector, ref["y"])]
+    return [vec.dot(world_vector, ref["x"]), vec.dot(world_vector, ref["y"])]
 
 
 def _point(p, frame, ref):
     world = [frame["origin"][i] + p[0] * frame["x"][i] + p[1] * frame["y"][i] for i in range(3)]
-    return _to_ref(_sub(world, ref["origin"]), ref)
+    return _to_ref(vec.sub(world, ref["origin"]), ref)
 
 
 def _direction(d, frame, ref):
@@ -78,7 +71,7 @@ def _mapped(curve, frame, ref):
 
 def _gap(curve, other, shift=(0.0, 0.0)):
     """Sum of the distances between the key points of two curves of one kind, `curve` moved back by `shift`."""
-    return sum(_dist(_sub(curve[k], shift), other[k]) for k in _POINT_KEYS[curve["kind"]])
+    return sum(_dist(vec.sub(curve[k], shift), other[k]) for k in _POINT_KEYS[curve["kind"]])
 
 
 def _aligned(curve, like, shift=(0.0, 0.0)):
@@ -87,7 +80,7 @@ def _aligned(curve, like, shift=(0.0, 0.0)):
     if curve["kind"] in ("line", "arc"):
         swapped = dict(curve, start=curve["end"], end=curve["start"])
         return swapped if _gap(swapped, like, shift) < _gap(curve, like, shift) else curve
-    if curve["kind"] == "ellipse" and _dot(curve["major_dir"], like["major_dir"]) < 0:
+    if curve["kind"] == "ellipse" and vec.dot(curve["major_dir"], like["major_dir"]) < 0:
         return dict(curve, major_dir=[-v for v in curve["major_dir"]])
     return curve
 
@@ -110,7 +103,7 @@ def _shift(pairs):
     """The mean move from each capture curve to its state curve: how far the loop slid as a whole."""
     if not pairs:
         return (0.0, 0.0)
-    moves = [_sub(_centre(state), _centre(curve)) for state, curve in pairs]
+    moves = [vec.sub(_centre(state), _centre(curve)) for state, curve in pairs]
     return tuple(sum(m[i] for m in moves) / len(moves) for i in range(2))
 
 
@@ -225,7 +218,7 @@ def _bulge(arc):
     centre = arc.get("center")
     if centre is None:
         return None
-    return _sub(arc["mid"], centre)
+    return vec.sub(arc["mid"], centre)
 
 
 def _likeness(arranged, profile):
@@ -239,7 +232,7 @@ def _likeness(arranged, profile):
             if got["kind"] != "arc" or want["kind"] != "arc" or "mid" not in got or "mid" not in want:
                 continue
             a, b = _bulge(got), _bulge(want)
-            if a is not None and b is not None and _dot(a, b) < 0:
+            if a is not None and b is not None and vec.dot(a, b) < 0:
                 flipped += 1
     return flipped, arranged[1]
 
@@ -297,10 +290,10 @@ def curve_values(loops, like, prefix):
         for j, (curve, base) in enumerate(zip(loop["curves"], ref["curves"])):
             key = keys.curve(prefix, k, j)
             if curve["kind"] == "line":
-                d0 = _unit(_sub(base["end"], base["start"]))
-                d = _unit(_sub(curve["end"], curve["start"]))
+                d0 = _unit(vec.sub(base["end"], base["start"]))
+                d = _unit(vec.sub(curve["end"], curve["start"]))
                 out[key + "offset"] = -d0[1] * curve["start"][0] + d0[0] * curve["start"][1]
-                out[key + "turn"] = math.degrees(math.atan2(d0[0] * d[1] - d0[1] * d[0], _dot(d0, d)))
+                out[key + "turn"] = math.degrees(math.atan2(d0[0] * d[1] - d0[1] * d[0], vec.dot(d0, d)))
             elif curve["kind"] == "arc":
                 out.update({key + "center.0": float(curve["center"][0]), key + "center.1": float(curve["center"][1]),
                             key + "radius": float(curve["radius"])})
@@ -320,7 +313,7 @@ def _capture_profile_values(target):
     profile = target["profile"]
     frame = profile["frame"]
     loops = _profile_loops(profile, target["sketch"])
-    out = _values_of([loops[0]] + list(loops[1]), _dot(frame["origin"], frame["z"]), prefix(target))
+    out = _values_of([loops[0]] + list(loops[1]), vec.dot(frame["origin"], frame["z"]), prefix(target))
     out.update(curve_values(profile["loops"], profile["loops"], prefix(target)))
     return out
 
@@ -333,7 +326,7 @@ def _by_kind(loops):
 def _capture_face_values(target):
     profile = target["profile"]
     loops = _profile_loops(profile, target["sketch"])
-    return _values_of([loops[0]] + list(loops[1]), _dot(profile["frame"]["origin"], profile["frame"]["z"]),
+    return _values_of([loops[0]] + list(loops[1]), vec.dot(profile["frame"]["origin"], profile["frame"]["z"]),
                       prefix(target))
 
 
@@ -359,7 +352,7 @@ def _state_face_values(target, read):
     got, want = [mapped[0]] + list(mapped[1]), [base[0]] + list(base[1])
     if _outline(got) != _outline(want) or not all(_angles_equal(a, b) for a, b in zip(got, want)):
         return None, SHAPE
-    return _values_of(got, _dot(frame["origin"], ref["z"]), prefix(target)), None
+    return _values_of(got, vec.dot(frame["origin"], ref["z"]), prefix(target)), None
 
 
 def _loops_of(record):
@@ -451,7 +444,7 @@ def _state_profile_values(target, read, e0=None):
     got, want = [mapped[0]] + list(mapped[1]), [base[0]] + list(base[1])
     if _outline(got) != _outline(want) or not all(_angles_equal(a, b) for a, b in zip(got, want)):
         return None, SHAPE
-    out = _values_of(got, _dot(frame["origin"], ref["z"]), prefix(target))
+    out = _values_of(got, vec.dot(frame["origin"], ref["z"]), prefix(target))
     out.update(curve_values(best[0], profile["loops"], prefix(target)))
     return out, None
 
@@ -502,7 +495,7 @@ def _path_state(target, read):
         return None, UNREAD
     frame, ref = record["frame"], path["frame"]
     if _turned(frame["z"], ref["z"]) or _turned(frame["x"], ref["x"]) or any(
-            abs(_dot(_sub(frame["origin"], ref["origin"]), ref[axis])) > POINT_TOLERANCE for axis in ("x", "y")):
+            abs(vec.dot(vec.sub(frame["origin"], ref["origin"]), ref[axis])) > POINT_TOLERANCE for axis in ("x", "y")):
         return None, TURNS
     found = [record["curves"].get(curve["entity"]) for curve in path["curves"]]
     if any(not isinstance(f, dict) or f.get("kind") != c["kind"] for f, c in zip(found, path["curves"])):
@@ -519,7 +512,7 @@ def _path_values(target, read):
         if state is None:
             return None, cause
         frame, curves = state
-    out = {keys.path_plane(target["item"]): _dot(frame["origin"], path["frame"]["z"])}
+    out = {keys.path_plane(target["item"]): vec.dot(frame["origin"], path["frame"]["z"])}
     for number, curve in enumerate(curves):
         out.update(_path_curve_values(keys.path_curve(target["item"], number), curve))
     return out, None

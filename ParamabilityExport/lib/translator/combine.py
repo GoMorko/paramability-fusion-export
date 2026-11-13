@@ -25,8 +25,9 @@ them.
 """
 import copy
 
+from ..geometry import rigid
+from ..geometry.combine_volume import exceeds, exceeds_tools, rule_unproven
 from . import body_copies, place, ref_motion, step_kinds, tool_items, tool_walk
-from .combine_volume import exceeds, exceeds_tools, rule_unproven
 from .moved_placer import MovedMaker, motion_of
 from .result import Refusal, StepResult
 from .tool_placer import ToolMaker
@@ -124,15 +125,15 @@ def tool_move(ctx, item, tool):
         return _frame_refusal(name, why or "It was not read.")
     if found.get("target_error"):
         return _frame_refusal("the exported body", found["target_error"])
-    problem = place.frame_problem(found["frame"])
+    problem = rigid.frame_problem(found["frame"])
     if problem:
         return _frame_refusal(name, problem)
-    move = place.move_from_frame(found["frame"])
+    move = rigid.move_from_frame(found["frame"])
     if found.get("target_frame") is not None:
-        problem = place.frame_problem(found["target_frame"])
+        problem = rigid.frame_problem(found["target_frame"])
         if problem:
             return _frame_refusal("the exported body", problem)
-        move = move.then(place.move_from_frame(found["target_frame"]).inverse())
+        move = move.then(rigid.move_from_frame(found["target_frame"]).inverse())
     return move, _follow_place(ctx, item, tool, found)
 
 

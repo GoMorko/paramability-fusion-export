@@ -40,7 +40,8 @@ taper marks the sizes behind it and the outline, and adds a note asking the pers
 """
 import math
 
-from . import borrowed, gap_hints, path_model, paths, sweep_taper, vec
+from ..geometry import vec
+from . import borrowed, gap_hints, path_model, paths, sweep_taper
 from .extrude import COMBINE
 from .result import Refusal, StepResult
 from .sweep_limits import (MIXED_PATH, NOT_MATCHING, PATH_TOO_LONG, PATH_UNREADABLE, SCALED_OUTLINE,

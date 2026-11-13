@@ -12,8 +12,9 @@ face or plane again at every try (`sizes.moving_reaches`) and fits how far it mo
 
 Without a measurement (no probe, an older export, a face the probe could not read) the slabs decide alone.
 """
+from ..geometry import vec
 from ..params.geometry_links import ref_key
-from . import follow, ref_motion, vec
+from . import follow, ref_motion
 from .sizes import reach_sizes
 from .values import Quantity
 

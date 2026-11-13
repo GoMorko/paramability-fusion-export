@@ -6,14 +6,14 @@ its coordinates as Quantities that follow the slab's start, its length and the s
 """
 import math
 
+from ..geometry import vec
+from ..geometry.footprint import Footprint, polyline
+from ..geometry.rigid import IDENTITY_ROWS
 from ..sketch_values.motion import Stuck
-from . import vec
-from .footprint import Footprint, polyline
 from .placer import ADD, CUT, Placer
 from .sketch_motion import combine, rendered
 from .values import Quantity, Sized
 
-IDENTITY_ROWS = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
 ROW_SNAP = 1e-12
 
 AXIAL_TOL = 1e-3

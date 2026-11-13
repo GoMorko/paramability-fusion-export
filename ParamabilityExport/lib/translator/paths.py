@@ -27,9 +27,9 @@ This module orders, orients and classifies the path. The rest of the path code i
 geometry, chaining), `path_checks` (the app's limits as refusals), `path_writing` (arc, circle, flat and corners
 forms), `path_closed` (closed chains) and `path_rebuilt` (a path read back from written numbers).
 """
+from ..geometry import vec
 from ..package.numbers import round9
 
-from . import vec
 from .path_checks import corners_refusal, off_square, outline_reach, rise_refusal
 from .path_closed import closed_plan, half_circles
 from .path_curves import (arc_of, chain, curve_length, flip, joined_lines, near, polyline, readable, tangents, turn_deg,

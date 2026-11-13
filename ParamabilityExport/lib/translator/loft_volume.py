@@ -2,7 +2,7 @@
 the app's kernel pairs them. A new body Fusion made with another pairing has another volume. Pure."""
 import math
 
-from . import vec
+from ..geometry import vec
 from .sweep_limits import VOLUME_ABSOLUTE_TOL, VOLUME_RELATIVE_TOL
 from .sweep_outline import loop_polygon
 

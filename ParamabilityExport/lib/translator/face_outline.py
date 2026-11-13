@@ -21,11 +21,12 @@ The extrude's own length, taper and operation follow their parameters in every c
 """
 import copy
 
+from ..geometry import vec
+from ..geometry.footprint import Footprint, polyline
 from ..sketch_values import keys
 from ..sketch_values.motion import Stuck
-from . import loops, sketch_motion, vec
+from . import loops, sketch_motion
 from .curved import combine
-from .footprint import Footprint, polyline
 from .result import Refusal
 from .slabs import cleaned
 from .values import Quantity, numbers_of

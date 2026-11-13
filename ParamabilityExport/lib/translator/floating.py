@@ -15,9 +15,10 @@ the copy.
 """
 import math
 
-from . import follow, step_kinds, vec
+from . import follow, step_kinds
 from .end_caps import EndCaps
-from .footprint import polyline
+from ..geometry import vec
+from ..geometry.footprint import polyline
 from .moved_placer import MovedPlacer
 from .offset_faces import MovedFaces
 from .placer_makers import SlabMaker

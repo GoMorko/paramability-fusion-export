@@ -1,6 +1,7 @@
 """The side of the part that a cut through all goes to, found from where the outlines meet material."""
-from .. import follow, vec
-from ..footprint import Footprint, polyline
+from .. import follow
+from ...geometry import vec
+from ...geometry.footprint import Footprint, polyline
 from .checks import check_leans
 from .common import SAMPLE_INSET
 

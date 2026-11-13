@@ -9,7 +9,8 @@ outlines of the same shape are not taken for turned ones; a face keeps the frame
 The copy keeps such a loop as measured, so the sizes that may move it are marked: for edges those behind the steps
 written so far, or any size for edges of another body (`sweep_marks.mark_path`); for a face as for an extrude's flat
 face outline (`face_outline`)."""
-from . import face_outline, vec
+from ..geometry import vec
+from . import face_outline
 from .path_curves import arc_of, chain
 from .path_writing import flat_frame
 from .result import Refusal

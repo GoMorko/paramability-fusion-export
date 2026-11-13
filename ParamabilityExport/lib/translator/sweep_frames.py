@@ -10,7 +10,8 @@ path of lines and tangent arcs in one plane (the outline turns about each arc's 
 """
 import math
 
-from . import path_curves, path_limits, vec
+from ..geometry import vec
+from . import path_curves, path_limits
 
 PLANE_TOL = 1e-3
 LATERAL_TOL = 1e-3

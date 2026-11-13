@@ -5,7 +5,7 @@ or the part and any tool. The two give different shapes, so each export measures
 marker before the Combine, temporary copies of the part and the tools (`TemporaryBRepManager`, never added to the
 design) give the volume of each candidate, and with the marker after it the result is matched to one of them.
 """
-from ..translator.combine_volume import intersect_model as model  # noqa: F401  (the reader's name for it)
+from ..geometry.combine_volume import intersect_model as model  # noqa: F401  (the reader's name for it)
 from . import read_geometry as geo
 
 

@@ -8,8 +8,9 @@ kept by a `when` on the count.
 import math
 from itertools import product
 
+from ..geometry import vec
 from ..package.numbers import round9
-from . import range_check, symmetric, values, vec
+from . import range_check, symmetric, values
 from .follow import Motion
 from .repeat_build import build, finish_copies, keep_pattern_fixed, round_vec
 from .repeat_elements import FIT_TOL_MM, in_component, is_identity, is_identity_rotation, kept_elements

@@ -8,8 +8,8 @@ The side walls around a moved face grow or shrink with it. A point on such a wal
 above the outline of the face before the move, so it is placed on that outline and follows the same share of the
 distance.
 """
-from . import vec
-from .footprint import Footprint
+from ..geometry import vec
+from ..geometry.footprint import Footprint
 from .placer import ADD, CUT, Placer
 from .shells import InnerPlace
 from .slabs import AXIAL_TOL, FACTOR_DIGITS, LATERAL_TOL, as_quantity

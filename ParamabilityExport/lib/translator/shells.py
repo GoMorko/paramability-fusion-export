@@ -4,7 +4,7 @@ A shell moves every face of the part inward by its thickness, except the faces i
 the point of an outer face (or edge, where two inner walls meet) moved inward by the thickness. So the point is moved
 back out, placed on the slab that made the outer face, and its coordinates follow that slab and the thickness.
 """
-from . import vec
+from ..geometry import vec
 from .placer import CUT, Placer
 from .slabs import AXIAL_TOL, LATERAL_TOL, Place, as_quantity
 

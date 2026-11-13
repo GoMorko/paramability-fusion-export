@@ -3,9 +3,10 @@ path. Sharp corners between lines are mitred; an outline on such a corner is car
 since the app needs a smooth start. A full circle that has to be a sweep step becomes two half arcs. Pure."""
 import math
 
+from ..geometry import vec
 from ..package.numbers import round9
 
-from . import gap_hints, vec
+from . import gap_hints
 from .path_checks import corners_refusal, off_square, outline_reach
 from .path_curves import (arc_of, curve_length, joined_lines, polyline, round_point, tangents, turn_deg,
                           turned_round)

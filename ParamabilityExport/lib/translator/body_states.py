@@ -4,7 +4,7 @@ The feature readers measure the exported body around each item (`volume_before`,
 `target_changed`). A walk of a tool body, and the walk of the exported body before the split that made it, build
 another body: the reader's `body_states[token]` holds that body's box and volumes around the item instead.
 """
-from .combine_volume import intersect_model, same_volume
+from ..geometry.combine_volume import intersect_model, same_volume
 
 # What the reader measured on the body itself, under the names the handlers read for their target.
 _FIELDS = (("box_before", "target_box_before"), ("volume_before", "volume_before"), ("volume_after", "volume_after"))

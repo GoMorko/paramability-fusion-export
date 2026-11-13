@@ -9,6 +9,7 @@ translator checks the two against each other.
 `EmbossFeature` is marked as preview in the API reference. Each setting is read on its
 own: one that cannot be read becomes null, and the translator then refuses the step.
 """
+from ..geometry import vec
 from . import read_geometry as geo
 from .param_refs import Params, with_params
 from .read_face import face_outline
@@ -107,10 +108,6 @@ def emboss_before(feature, ctx):
     }, params.found)
 
 
-def _dot(a, b):
-    return sum(x * y for x, y in zip(a, b))
-
-
 def _parallel_faces(feature, normal):
     """The flat faces the feature made whose normal is parallel to `normal`."""
     found = []
@@ -118,7 +115,7 @@ def _parallel_faces(feature, normal):
         if geo.safe(lambda: geo.surface_kind(face), None) != "Plane":
             continue
         outward = geo.safe(lambda: geo.outward_normal(face), None)
-        if outward is not None and abs(abs(_dot(outward, normal)) - 1.0) <= 1e-6:
+        if outward is not None and abs(abs(vec.dot(outward, normal)) - 1.0) <= 1e-6:
             found.append(face)
     return found
 
@@ -144,7 +141,7 @@ def emboss_after(feature, ctx, data):
     for face in _parallel_faces(feature, normal):
         point = geo.safe(lambda: geo.point(face.pointOnFace), None)
         if point is not None:
-            offset = _dot([a - b for a, b in zip(point, frame["origin"])], frame["z"])
+            offset = vec.dot([a - b for a, b in zip(point, frame["origin"])], frame["z"])
             measured.append((offset, face))
     if measured:
         offset, face = max(measured, key=lambda found: abs(found[0]))

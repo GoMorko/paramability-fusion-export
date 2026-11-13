@@ -1,5 +1,6 @@
 """The outlines of an extrude as the recipe writes them: sketch outlines and flat faces, merged and checked."""
-from .. import gap_hints, loops, notes, outlines, sketch_motion, thin_wall, values, vec
+from .. import gap_hints, loops, notes, sketch_motion, thin_wall, values
+from ...geometry import outlines, vec
 from ..result import Refusal
 from .common import parallel
 

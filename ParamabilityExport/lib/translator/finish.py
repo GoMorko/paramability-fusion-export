@@ -11,9 +11,10 @@ outside or rounded shells.
 """
 import math
 
+from ..geometry import vec
 from ..package.numbers import is_number
 
-from . import follow, gap_hints, picks, range_check, step_kinds, values, vec
+from . import follow, gap_hints, picks, range_check, step_kinds, values
 from .placer_makers import ShellMaker
 from .result import Entry, Refusal, StepResult
 from .values import Sized

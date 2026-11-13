@@ -6,7 +6,8 @@ its image (`repeat_mirror_reach.py`). Otherwise (a round, chamfer, shell or Move
 cut across the plane, a body on both sides) everything written so far is gathered into one tool step and the mirror
 repeats that, which is the body joined with its image by definition.
 """
-from . import follow, tool_walk, vec
+from ..geometry import vec
+from . import follow, tool_walk
 from .follow import Motion
 from .repeat_build import build, round_vec
 from .repeat_mirror_reach import body_mirror_problem, keep_one_side, side_of_plane

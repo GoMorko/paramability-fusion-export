@@ -3,9 +3,10 @@ the rules stop holding, or the sizes are marked."""
 import math
 import time
 
+from ..geometry import vec
 from ..params.expressions.errors import ExpressionError
 
-from . import kept_ranges, path_curves, path_motion, path_rebuilt, range_check, sweep_reach, vec
+from . import kept_ranges, path_curves, path_motion, path_rebuilt, range_check, sweep_reach
 from .sweep_marks import drawn_outline, mark_sketch_place
 
 PATH_BREAKS = "%s would make its path touch itself, bend tighter than its outline, or turn sharply (the app refuses)"

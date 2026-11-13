@@ -5,8 +5,9 @@ to both sides of the original is written as a part turning each way (`symmetric.
 """
 import math
 
+from ..geometry import vec
 from ..package.numbers import round9
-from . import follow, ref_motion, symmetric, values, vec
+from . import follow, ref_motion, symmetric, values
 from .follow import Motion
 from .repeat_build import build, keep_pattern_fixed, round_vec
 from .repeat_elements import FIT_TOL_MM, in_component, kept_elements

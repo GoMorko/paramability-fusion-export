@@ -13,8 +13,9 @@ results past the values where it still does (`kept_ranges.holding_ranges` and `p
 brought in that way, because it would shrink to its value or because the person typed its range, cannot follow
 (`Context.doubt`).
 """
-from . import follow, shells, vec
-from .footprint import polyline
+from . import follow, shells
+from ..geometry import vec
+from ..geometry.footprint import polyline
 from .kept_ranges import holding_ranges, past_reasons
 from .slabs import Place, Slab
 from .values import Quantity

@@ -11,7 +11,7 @@ from . import placement
 from . import read_geometry as geo
 from .read_repeat import direction_of
 from .read_solid import axis_of
-from ..translator.place import IDENTITY_ROWS, Move, move_from_frame
+from ..geometry.rigid import IDENTITY_ROWS, Move, move_from_frame
 
 NOT_FOUND = "It was not found."
 NO_OCCURRENCE = "The place of its component could not be found."

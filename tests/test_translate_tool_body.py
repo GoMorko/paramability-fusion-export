@@ -11,13 +11,14 @@ from tests.translator_helpers import left_out
 from tests.translator_helpers import load_capture, steps_of, verdict_of
 
 from lib.fusion_reader import read_geometry as geo
+from lib.geometry.combine_volume import exceeds_tools
+from lib.geometry.rigid import Move
 from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.sketch_values.motion import Motion
 from lib.translator import body_states, follow, gap_hints, tool_walk, translate
-from lib.translator.combine_volume import exceeds_tools
 from lib.translator.context import Context
-from lib.translator.place import Move, place
+from lib.translator.place import place
 from lib.translator.placer import ADD, CUT, Placer
 from lib.translator.slabs import Motion as CopyMotion, Slab
 from lib.translator.step_walk import all_steps

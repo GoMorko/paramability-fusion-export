@@ -11,11 +11,12 @@ Without a motion file, or with `OPTIMISTIC`, nothing here runs and the sketch is
 """
 import math
 
+from ..geometry import vec
+from ..geometry.footprint import nearest_point
 from ..sketch_values import keys
 from ..sketch_values.motion import CURVE, UNREAD, UNTRIED, Affine, Stuck, Terms
 from . import inner_pick, notes
 from .curved import Curved, combine, from_terms, names_of, render
-from .footprint import nearest_point
 from .loops import profile_loops
 from .result import Refusal
 from .sizes import placement_sizes, unmeasured_sizes
@@ -286,10 +287,6 @@ def _from_anchors(loop, anchors, sketch, sources=None):
 
 # ---- one written outline ----------------------------------------------------------------------------------------
 
-def _dot(a, b):
-    return sum(x * y for x, y in zip(a, b))
-
-
 class Outline:
     """The written loops of one profile (outer first) as numbers and raw values, and the raw sketch plane: its
     position along the frame normal, measured from the component origin (`plane0` at the captured sizes)."""
@@ -300,7 +297,7 @@ class Outline:
         self._samples = None
         self.frame = frame
         self.loops, self.raw_loops = loops, raw_loops
-        self.plane, self.plane0 = plane, _dot(frame["origin"], frame["z"])
+        self.plane, self.plane0 = plane, vec.dot(frame["origin"], frame["z"])
         self.sketch = sketch
         self.anchors = Anchors(sketch)
         for loop, raw_loop in zip(loops, raw_loops):
@@ -375,8 +372,8 @@ class Outline:
             if a is None or b is None:
                 return None
             d = [curve["end"][i] - curve["start"][i] for i in range(2)]
-            size = _dot(d, d)
-            t = 0.0 if size <= 0 else max(0.0, min(1.0, _dot([near[i] - curve["start"][i] for i in range(2)], d) / size))
+            size = vec.dot(d, d)
+            t = 0.0 if size <= 0 else max(0.0, min(1.0, vec.dot([near[i] - curve["start"][i] for i in range(2)], d) / size))
             return tuple(combine([(1.0 - t, a[i]), (t, b[i])], self.sketch) for i in range(2))
         if kind == "arc":
             keys = ("start", "mid", "end")
@@ -511,7 +508,7 @@ def outline(ctx, item, profile, outer, inners, parts):
         else:
             raw_loops = _stuck_curves(raw_loops, sketch)
     # Merged parts share one frame, so the first part's plane stands for all of them.
-    plane = raw(ctx, keys.plane(prefix), _dot(profile["frame"]["origin"], profile["frame"]["z"]), sketch)
+    plane = raw(ctx, keys.plane(prefix), vec.dot(profile["frame"]["origin"], profile["frame"]["z"]), sketch)
     placement_doubts(ctx, item, profile, plane)
     return Outline(ctx, profile["frame"], loops, raw_loops, plane, sketch, bounds)
 
@@ -522,7 +519,7 @@ def measured_outline(ctx, prefix, frame, loops, sketch):
     written. The plane is one distance along its normal, so a curved formula of it (a wall set back along a half angle)
     is written as fitted."""
     raw_loops = _stuck_curves(_keyed_loops(ctx, prefix, loops, sketch), sketch)
-    plane = raw(ctx, keys.plane(prefix), _dot(frame["origin"], frame["z"]), sketch)
+    plane = raw(ctx, keys.plane(prefix), vec.dot(frame["origin"], frame["z"]), sketch)
     return Outline(ctx, frame, loops, raw_loops, plane, sketch)
 
 
@@ -610,7 +607,7 @@ def axis_point(ctx, item, frame, point2, coords=None):
         return [round(v, 9) + 0.0 for v in point2]
     out = []
     for k, number in zip(("x", "y"), point2):
-        value = combine([(frame[k][c], coords[c]) for c in range(3)] + [(-_dot(frame["origin"], frame[k]), 1.0)],
+        value = combine([(frame[k][c], coords[c]) for c in range(3)] + [(-vec.dot(frame["origin"], frame[k]), 1.0)],
                         sketch)
         out.append(quantity(ctx, value, number).json())
     return out

@@ -12,7 +12,7 @@ import time
 from ..params.expressions.errors import ExpressionError
 from ..params.expressions.evaluation import evaluate
 from . import kept_ranges, range_check
-from .footprint import Footprint, polyline
+from ..geometry.footprint import Footprint, polyline
 from .written_loops import profile_at, written_reads
 
 CLOSES = "%s would close before it passes the part"

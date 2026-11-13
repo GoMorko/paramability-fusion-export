@@ -1,9 +1,9 @@
 """Curves of a sweep path: arcs, directions, points along a curve, and chaining curves end to end. Pure."""
 import math
 
+from ..geometry import vec
 from ..package.numbers import round9
 
-from . import vec
 from .path_limits import ARC_SAMPLE_DEG, CHAIN_TOL, STRAIGHT_DEG
 
 

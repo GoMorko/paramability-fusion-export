@@ -4,9 +4,10 @@
 Copies of rounds and chamfers are placed point by point, so a repeat whose copies cannot follow a changed count or
 angle fixes the sizes behind them (`keep_pattern_fixed`).
 """
+from ..geometry import vec
+from ..geometry.vec import POINT_TOL
 from ..package.numbers import round9
-from . import follow, values, vec
-from .vec import POINT_TOL
+from . import follow, values
 from .picks import MAX_NEAR_POINTS
 from .placer_makers import CopiesMaker
 from .result import Refusal, StepResult

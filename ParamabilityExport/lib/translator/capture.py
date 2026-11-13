@@ -1,10 +1,10 @@
 """Capture checks: the translator reads only a dict that passed these."""
-from . import place
+from ..geometry import rigid
 
 SUPPORTED_CAPTURES = (3,)
 _ENVELOPE_KEYS = ("capture", "target", "items")
 _ITEM_KEYS = ("index", "name", "type")
-_NOT_NUMBERS = place.FRAME_NOT_NUMBERS
+_NOT_NUMBERS = rigid.FRAME_NOT_NUMBERS
 
 
 class CaptureError(Exception):
@@ -48,7 +48,7 @@ def _check_targets(capture):
         raise CaptureError("The placement of the target is not an object.")
     if placement.get("error") or placement.get("linked"):
         return
-    if not isinstance(placement.get("frame"), dict) or place.frame_problem(placement["frame"]) == _NOT_NUMBERS:
+    if not isinstance(placement.get("frame"), dict) or rigid.frame_problem(placement["frame"]) == _NOT_NUMBERS:
         raise CaptureError("The placement of the target has no frame of numbers.")
 
 

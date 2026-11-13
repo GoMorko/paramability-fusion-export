@@ -1,7 +1,8 @@
 """The grid of a rectangular pattern: how Fusion measured its distance, and the directions, spacing and copy counts
 that follow from the measured copies.
 """
-from . import ref_motion, values, vec
+from ..geometry import vec
+from . import ref_motion, values
 from .repeat_elements import FIT_TOL_MM, kept_elements
 from .result import Refusal
 from .values import Quantity

@@ -15,7 +15,8 @@ The capture must show that the piece is the whole of its side: it lies on one si
 the body) and every other piece of the same body on the other side, and the pieces add up to the body's volume.
 Anything that cannot be shown stops the copy, since the body after the split would be unknown.
 """
-from . import combine as combine_step, follow, lineage, vec
+from ..geometry import vec
+from . import combine as combine_step, follow, lineage
 from .capture import same_body
 from .repeat_build import round_vec
 from .result import Refusal, StepResult

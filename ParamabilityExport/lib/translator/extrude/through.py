@@ -1,5 +1,6 @@
 """The length of a cut through all, and whether a tapered one stays open until it passes the part."""
-from .. import range_check, sketch_motion, through_taper, vec
+from .. import range_check, sketch_motion, through_taper
+from ...geometry import vec
 from ..result import Refusal
 from .taper import MAX_TAPER_DEG
 

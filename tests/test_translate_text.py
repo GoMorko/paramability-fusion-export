@@ -6,9 +6,10 @@ from copy import deepcopy
 from tests import context  # noqa: F401
 from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of, stopped
 
+from lib.geometry import text_outlines
 from lib.params import size_table
 from lib.probe import build
-from lib.translator import loops, spline_fit, text_outlines, translate
+from lib.translator import loops, spline_fit, translate
 
 EMBOSS = "emboss_text"
 EXTRUDE = "extrude_text"
