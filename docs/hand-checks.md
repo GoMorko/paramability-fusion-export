@@ -109,11 +109,12 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
    peak, the value after the export and after Undo, and whether Undo lists the export as one step.
 
 10. TH1 and TH5, steps after the export. TH1: a box from a 20 by 20 mm rectangle (user parameter `Width` = 20 mm)
-    extruded 15 mm, the four vertical edges filleted with 9.9 mm. TH5: the same box, with a second design that has a
-    longer timeline.
+    extruded 15 mm, the four vertical edges filleted with 9.9 mm. TH5 needs a second design: a 40 by 30 by 20 mm box,
+    the vertical edges filleted with user parameter `Round` = 5 mm, then the top edges chamfered with `Bevel` = 4 mm,
+    so the chamfer runs into the fillets.
     Export: TH1, tick `Width` with a range of 12 to 40. The low tries fail at the fillet and the range is cut; after
     the export the fillet has no warning and `health` has no `steps_changed` (`steps_recovered` and `end_actions` may
     show the add-in rebuilt the design). If `steps_changed` is there, note each `name`, `before`, `after` and
-    `message`, then use Edit, Undo and count the steps that bring the fillet back. TH5: cancel in the "Try 3 of ..."
-    window, then use Export size choices with a row `Width` = 12, which Fusion cannot build. In both, every step is
+    `message`, then use Edit, Undo and count the steps that bring the fillet back. TH5: tick `Round` and `Bevel` (range 1 to 9) and
+    cancel in the "Try 3 of ..." window; then, on the TH1 box, use Export size choices with a row `Width` = 12, which Fusion cannot build. In both, every step is
     as before; if not, a message box names the step and says to use Undo.
