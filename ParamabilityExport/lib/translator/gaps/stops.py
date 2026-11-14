@@ -13,7 +13,7 @@ from .. import notes as wording
 from ..words import type_words
 
 # The app refuses a whole gaps file that breaks one of these (`RECIPE_GAPS_CAPS` in the app's recipe package); the
-# caps of the gaps file's own fields are in `gaps/gap_file.py`. MAX_GAPS is the count a version 2 gaps file holds: a part
+# caps of the gaps file's own fields are in `gaps/gap_file.py`. MAX_GAPS is the count a gaps file holds (versions 2 and 3): a part
 # with more gaps than that stops the copy.
 MAX_GAPS = 256
 MAX_ID = 64

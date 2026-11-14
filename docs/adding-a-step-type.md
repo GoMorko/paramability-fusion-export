@@ -42,6 +42,10 @@ StepType("EmbossFeature", "emboss", reader="read_emboss", sketches=(PROFILES, OU
   record only when the probe fits it the same way it fits extrude profiles, revolve axes or hole points.
 - `repeats_sources`: for a pattern or mirror whose data names the items it repeats (`data.sources`); a round or
   chamfer checks it to see whether a later step repeats its edges.
+- `finishing`: `FINISHING_ALWAYS` when a missing step of this type only finishes surfaces (a round, a bevel, a draft, an
+  emboss), or `FINISHING_UNMODELED` for a thread whose data says it is not modeled. It sets the gap's `finishing` flag,
+  which lets the app show the copy as the part when only such steps are missing. Leave it out for a step that can
+  change the size of the part.
 
 A step that writes a recipe kind the table does not have needs a `RecipeKind` too: the recipe version that brought
 the kind, the paths to its points and directions (so `place.place` can move the part into the assembly), and how

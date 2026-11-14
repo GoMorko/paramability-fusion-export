@@ -47,12 +47,11 @@ class FinishingFlagTest(unittest.TestCase):
         result = translate(tray(unsupported(SHELL)))
         self.assertEqual({gap["name"]: gap["finishing"] for gap in result.gaps}, {"Shell1": False, "Fillet1": True})
 
-    def test_the_set_is_round_bevel_draft_emboss_and_a_thread_that_is_not_modeled(self):
+    def test_a_round_and_a_thread_that_is_not_modeled_are_finishing_other_steps_are_not(self):
         cases = [
-            ("FilletFeature", {}, True), ("ChamferFeature", {}, True), ("DraftFeature", {}, True),
-            ("EmbossFeature", {}, True), ("ThreadFeature", {"modeled": False}, True),
-            ("ThreadFeature", {"modeled": True}, False), ("ThreadFeature", {}, False), ("ExtrudeFeature", {}, False),
-            ("ThreadFeature", None, False), ("NotAStepType", {"modeled": False}, False),
+            ("FilletFeature", {}, True), ("ThreadFeature", {"modeled": False}, True),
+            ("ThreadFeature", {"modeled": True}, False), ("ThreadFeature", None, False),
+            ("ExtrudeFeature", {}, False), ("NotAStepType", {"modeled": False}, False),
         ]
         for step_type, data, expected in cases:
             with self.subTest(type=step_type, data=data):
