@@ -312,8 +312,8 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 ## Limits
 
 - A part with left out steps is exported the same way as any other, so it takes as long as a full export. At most 256
-  steps can be left out of one part; a longer list stops the copy. A part with more than 16 left out steps needs a
-  Paramability build that reads version 2 gaps files; an older build opens it as a fixed shape.
+  steps can be left out of one part; a longer list stops the copy. A part with left out steps needs a
+  Paramability build that reads version 3 gaps files; an older build opens it as a fixed shape.
 - Every size row and sketch try starts from the saved values: before each one after the first the add-in puts the
   parameters back and recomputes. A sketch with two solutions can still land on its other one after a try that did
   not rebuild, and stay there. After such a try the add-in reads the design again before the next one. A size is
@@ -525,7 +525,7 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
 - Paramability opens up to 256 MB per size and 1 GB per file. The export stops with a message above that.
 - The design needs history (a parametric design).
 - Made for the current Fusion release.
-- This is version 0.11.1. It writes recipe version 16 when a sweep needs it, which needs a Paramability build that opens version 16. The Fusion side has not been run by a tool: see `docs/hand-tests.md`.
+- This is version 0.11.2. It writes recipe version 16 when a sweep needs it, which needs a Paramability build that opens version 16. A package with left out steps holds a gaps file of version 3 (each step says whether it only finishes surfaces), which needs a Paramability build that reads version 3. Version 0.11.1 wrote gaps files of version 1 or 2. The Fusion side has not been run by a tool: see `docs/hand-tests.md`.
 
 ## Code layout
 

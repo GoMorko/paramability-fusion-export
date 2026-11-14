@@ -6,6 +6,7 @@ import json
 import math
 
 from ...capture_model.gap_hints import hint as gap_hint
+from .finishing import is_finishing
 from .gap_measures import moved_measure
 from ..words import type_words
 
@@ -114,7 +115,7 @@ def trimmed_data(data):
 def record(gap, table, move):
     """The gap as written for the package. `sizes` and `looseSizes` start empty; the driver fills them once it knows
     the sizes of the recipe. `hint`, what to change in Fusion so the step copies, is there only when its cause has
-    one (`gap_hints`)."""
+    one (`gap_hints`). `finishing` says the step only finishes surfaces (`finishing.is_finishing`)."""
     after, before, owner = gap.place
     data, trimmed = trimmed_data(gap.item.get("data"))
     out = {
@@ -140,4 +141,5 @@ def record(gap, table, move):
             out[key] = moved
     out["data"] = data
     out["trimmed"] = trimmed
+    out["finishing"] = is_finishing(gap.item.get("type"), gap.item.get("data"))
     return out

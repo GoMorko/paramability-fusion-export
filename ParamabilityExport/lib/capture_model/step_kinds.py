@@ -27,6 +27,10 @@ HOLE_POINTS = "hole"    # data.positions with point_tokens: hole centres on a sk
 PATH = "path"           # data.path: the curves of one sketch a sweep follows
 OUTLINE_FACE = "face"   # a flat face used as the outline: one in data.profiles, or the face a trimmed emboss keeps to
 
+# When a missing step of a type only finishes surfaces (`StepType.finishing`).
+FINISHING_ALWAYS = "always"       # a round, a bevel, a draft, an emboss
+FINISHING_UNMODELED = "unmodeled"  # a thread drawn as a cosmetic thread: data.modeled is false
+
 # How a pattern or mirror treats a recipe step it repeats.
 SOLID = "solid"         # repeated by the pattern or mirror step itself (`of`)
 FINISH = "finish"       # copied as its own step with its pick points moved to each copy
@@ -58,6 +62,8 @@ class StepType:
     pattern: `rectangular` or `circular` for the patterns whose copies the probe reads again at each state.
     repeats_sources: it repeats the items its data names (`data.sources`) as copies of their bodies: a pattern or a
       mirror.
+    finishing: FINISHING_ALWAYS or FINISHING_UNMODELED when a missing step of this type changes neither the size of
+      the part nor which bodies exist, so the gap's `finishing` flag is true (`translator/gaps/finishing.py`).
     """
 
     name: str
@@ -74,6 +80,7 @@ class StepType:
     reaches_bodies: bool = False
     pattern: str = None
     repeats_sources: bool = False
+    finishing: str = None
 
 
 @dataclass(frozen=True)
@@ -106,12 +113,12 @@ STEP_TYPES = (
     StepType("ExtrudeFeature", "extrude", reader="read_solid", sketches=(PROFILES, OUTLINE_FACE)),
     StepType("RevolveFeature", "revolve", reader="read_solid", sketches=(PROFILES, AXIS)),
     StepType("HoleFeature", "hole", reader="read_solid", sketches=(HOLE_POINTS,)),
-    StepType("ThreadFeature", "thread", reader="read_solid"),
+    StepType("ThreadFeature", "thread", reader="read_solid", finishing=FINISHING_UNMODELED),
     StepType("CombineFeature", "combine", reader="read_solid", reaches_bodies=True),
-    StepType("FilletFeature", "fillet", reader="read_finish"),
-    StepType("ChamferFeature", "chamfer", reader="read_finish"),
+    StepType("FilletFeature", "fillet", reader="read_finish", finishing=FINISHING_ALWAYS),
+    StepType("ChamferFeature", "chamfer", reader="read_finish", finishing=FINISHING_ALWAYS),
     StepType("ShellFeature", "shell", reader="read_finish"),
-    StepType("DraftFeature", "draft", reader="read_finish"),
+    StepType("DraftFeature", "draft", reader="read_finish", finishing=FINISHING_ALWAYS),
     StepType("OffsetFacesFeature", "offset faces", reader="read_offset"),
     StepType("RectangularPatternFeature", "rectangular pattern", reader="read_repeat", makes_bodies=True,
              pattern="rectangular", repeats_sources=True),
@@ -132,7 +139,8 @@ STEP_TYPES = (
     StepType("SplitBodyFeature", "split body", reader="read_split", splits_bodies=True, reaches_bodies=True),
     StepType("CopyPasteBody", "pasted body", reader="read_paste", makes_bodies=True),
     StepType("MoveFeature", "move", reader="read_move", moves_bodies=True, reaches_bodies=True),
-    StepType("EmbossFeature", "emboss", reader="read_emboss", sketches=(PROFILES, OUTLINE_FACE)),
+    StepType("EmbossFeature", "emboss", reader="read_emboss", sketches=(PROFILES, OUTLINE_FACE),
+             finishing=FINISHING_ALWAYS),
     StepType("SweepFeature", "sweep", reader="read_sweep", sketches=(PROFILES, PATH)),
     StepType("LoftFeature", "loft", reader="read_sweep", sketches=(PROFILES,)),
     StepType("Sketch", "sketch", role=SKETCH),

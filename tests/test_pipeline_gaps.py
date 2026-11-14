@@ -10,7 +10,7 @@ from tests import fakes
 from tests.fakes import (FakeEdge, FakeFace, FakeMadeFeature, FakeMarkerTimeline, FakePartsPort, FakePort,
                          FakeReachDesign)
 from tests.schema_check import load_schema, validate
-from tests.test_manifest import GAPS_SCHEMA, GAPS_SCHEMA_V2, PACKAGE_SCHEMA, PACKAGE_SCHEMA_V2
+from tests.test_manifest import GAPS_SCHEMA, PACKAGE_SCHEMA, PACKAGE_SCHEMA_V2
 from tests.test_parts_pipeline import renamed
 from tests.translator_helpers import load_capture
 
@@ -103,6 +103,7 @@ class GapPackageTest(unittest.TestCase):
         self.assertEqual(validate(manifest, load_schema(PACKAGE_SCHEMA_V2)), [])
         gaps = json.loads(files["gaps.json"])
         self.assertEqual(validate(gaps, load_schema(GAPS_SCHEMA)), [])
+        self.assertEqual(gaps["version"], 3)
         self.assertEqual([g["name"] for g in gaps["gaps"]], ["Shell1"])
         self.assertEqual(gaps["gaps"][0]["hint"], HINTS[COIL])
         ids = recipe_ids(json.loads(files["recipe.json"])["features"])
@@ -163,12 +164,14 @@ class GapPackageTest(unittest.TestCase):
         self.assertNotIn("reach", result.report)
         self.assertEqual(validate(result.manifest, load_schema(PACKAGE_SCHEMA)), [])
 
-    def test_a_gaps_file_with_more_gaps_than_version_1_holds_is_version_2(self):
+    def test_a_gaps_file_is_version_3_whatever_the_number_of_gaps(self):
         gap = export(reach_port(tray(), design=tray_design())).report["gaps"][0]
-        many = [dict(gap, id="gap_%d" % n) for n in range(gaps_file.VERSION_ONE_GAPS + 1)]
-        written = json.loads(gaps_file.gaps_file_bytes(many, [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]))
-        self.assertEqual((written["version"], len(written["gaps"])), (2, gaps_file.VERSION_ONE_GAPS + 1))
-        self.assertEqual(validate(written, load_schema(GAPS_SCHEMA_V2)), [])
+        for count in (1, 17):
+            with self.subTest(gaps=count):
+                many = [dict(gap, id="gap_%d" % n) for n in range(count)]
+                written = json.loads(gaps_file.gaps_file_bytes(many, [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]))
+                self.assertEqual((written["version"], len(written["gaps"])), (3, count))
+                self.assertEqual(validate(written, load_schema(GAPS_SCHEMA)), [])
 
     def test_a_gaps_file_over_the_cap_is_written_without_the_fusion_data(self):
         full = len(gaps_file.gaps_file_bytes(export(reach_port(tray(), design=tray_design())).report["gaps"],
@@ -176,7 +179,7 @@ class GapPackageTest(unittest.TestCase):
         with mock.patch.object(gaps_file, "MAX_GAPS_BYTES", full - 1):
             result = export(reach_port(tray(), design=tray_design()))
         gap = json.loads(result.files["gaps.json"])["gaps"][0]
-        self.assertEqual((gap["data"], gap["trimmed"]), ({}, True))
+        self.assertEqual((gap["data"], gap["trimmed"], gap["finishing"]), ({}, True, False))
 
     def test_a_gaps_file_that_cannot_fit_makes_the_part_a_fixed_shape(self):
         with mock.patch.object(gaps_file, "MAX_GAPS_BYTES", 10):

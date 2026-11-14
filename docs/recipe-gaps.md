@@ -2,10 +2,11 @@
 
 A step the copy cannot hold is left out of the recipe and recorded as a gap. This page describes the gaps file the
 add-in writes next to the recipe. The format is published by the Paramability app as `paramability.recipeGaps`,
-version 1 or 2 (`schemas/paramability.recipeGaps.v1.schema.json` and `v2`, in the app repository; copies are in
-`tests/schema/`). That schema is the contract: it holds every limit. Version 2 only allows more gaps (256 instead of
-16), so the add-in writes version 1 when a part has 16 gaps or fewer (an older app still opens it) and version 2 above
-(`package/gaps_file.py`). This page says what the add-in puts in each field and why.
+version 3 (`schemas/paramability.recipeGaps.v3.schema.json` in the app repository; copies are in `tests/schema/`).
+That schema is the contract: it holds every limit. Version 2 allowed more gaps (256 instead of 16). Version 3 added
+`finishing`. The add-in always writes version 3 (`package/gaps_file.py`), so it needs a Paramability build that reads
+version 3; an older build refuses the file and opens the part as a fixed shape. This page says what the add-in puts in
+each field and why.
 
 Code: `lib/translator/gaps/` (the records, the picked gaps, where a gap belongs, the file data, the hints), `lib/translator/walk.py` (what becomes a gap),
 `lib/export_plan/reach_pass.py` and `lib/fusion_reader/read_gap_reach.py` (later steps that pick faces of a gap),
@@ -46,7 +47,7 @@ marks as an error, a step that splits the part or makes another body (whether or
 another component; one that the reader saw leave the exported body as it was, `target_changed` false, is passed by
 instead), a Split Body the copy cannot write as the removal of the other side (`bodies/split.py` answers a `Refusal` with
 `stops`; a split that keeps the body as one piece apart from the others is copied, `bodies/split_rules.py`), a gap before the copy has written its first step (a gap needs a body to add to), a gap inside a
-walk of another component's body, more than 256 gaps in one part (`gaps.stops.MAX_GAPS`, the count a version 2 gaps file holds; the gaps inside
+walk of another component's body, more than 256 gaps in one part (`gaps.stops.MAX_GAPS`, the most a gaps file holds; the gaps inside
 the tool bodies count, and a tool that meets the cap stops the whole copy), and the size caps of the recipe.
 
 A tool body of a Combine is walked by the same loop. A gap inside a tool body is kept only when the Combine writes that
@@ -77,7 +78,7 @@ exporter") rather than showing an unfinished copy as a finished part. A package 
 ```json
 {
   "schema": "paramability.recipeGaps",
-  "version": 1,
+  "version": 3,
   "toRecipe": [1, 0, 0, 0, 0, -1, 0, 1, 0, 100, 50, 0],
   "gaps": [ GAP, ... ]
 }
@@ -108,7 +109,8 @@ GAP:
   "bodyBefore": { "box": { "min": [0, 0, 0], "max": [40, 20, 10] }, "volume": 8000 },
   "bodyAfter": { "box": { "min": [0, 0, 0], "max": [40, 20, 22] }, "volume": 8900 },
   "data": { },
-  "trimmed": false
+  "trimmed": false,
+  "finishing": false
 }
 ```
 
@@ -126,6 +128,7 @@ GAP:
 | `bodyBefore`, `bodyAfter` | Box and volume of the part around the step, moved to the recipe's coordinates (the box of the moved corners). From the item's `target_before` and `target_after` (`docs/capture-format.md`, section 2). Left out when a side was not measured. Inside a tool body only `bodyBefore` can exist |
 | `data` | The item's `data` as the reader wrote it, in the capture's coordinates, trimmed to 48 KiB and 32 levels (the object itself is level 1). A number that is not finite becomes null, and so does an object or list that would hold values past level 32. Item level fields such as `body_states` never go in. The app does not read into it |
 | `trimmed` | True when `data` was cut or changed |
+| `finishing` | True when the step only finishes surfaces: a round (`FilletFeature`), a bevel (`ChamferFeature`), a draft (`DraftFeature`), an emboss or deboss (`EmbossFeature`), or a thread whose data says `modeled` is false (the `finishing` trait of the step kind table, read by `translator/gaps/finishing.py`; a cosmetic thread makes no gap today). Such a step changes neither the size of the part nor which bodies exist, so when only these are missing the app shows the editable copy first. Every other type is false |
 
 Trimming goes in this order until `data` fits: free curve `samples` cut to 200 points each, loops past the first 8 of
 an outline dropped, `profiles` dropped, and as a last resort `data` is left empty. When the whole file is over 1 MiB it

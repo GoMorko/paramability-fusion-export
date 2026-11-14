@@ -1,0 +1,265 @@
+{
+  "properties": {
+    "gaps": {
+      "items": {
+        "properties": {
+          "after": {
+            "description": "The id of the step of the recipe the missing step follows.",
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "before": {
+            "description": "The id of the step that follows, or null when `after` is the last one of its list.",
+            "maxLength": 128,
+            "minLength": 1,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "bodyAfter": {
+            "description": "Box and volume of the part after the step, in recipe coordinates.",
+            "properties": {
+              "box": {
+                "properties": {
+                  "max": {
+                    "items": {
+                      "maximum": 1000000,
+                      "minimum": -1000000,
+                      "type": "number"
+                    },
+                    "maxItems": 3,
+                    "minItems": 3,
+                    "type": "array"
+                  },
+                  "min": {
+                    "items": {
+                      "maximum": 1000000,
+                      "minimum": -1000000,
+                      "type": "number"
+                    },
+                    "maxItems": 3,
+                    "minItems": 3,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "min",
+                  "max"
+                ],
+                "type": "object"
+              },
+              "volume": {
+                "maximum": 1000000000000,
+                "minimum": 0,
+                "type": "number"
+              }
+            },
+            "required": [
+              "box",
+              "volume"
+            ],
+            "type": "object"
+          },
+          "bodyBefore": {
+            "description": "Box and volume of the part before the step, in recipe coordinates.",
+            "properties": {
+              "box": {
+                "properties": {
+                  "max": {
+                    "items": {
+                      "maximum": 1000000,
+                      "minimum": -1000000,
+                      "type": "number"
+                    },
+                    "maxItems": 3,
+                    "minItems": 3,
+                    "type": "array"
+                  },
+                  "min": {
+                    "items": {
+                      "maximum": 1000000,
+                      "minimum": -1000000,
+                      "type": "number"
+                    },
+                    "maxItems": 3,
+                    "minItems": 3,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "min",
+                  "max"
+                ],
+                "type": "object"
+              },
+              "volume": {
+                "maximum": 1000000000000,
+                "minimum": 0,
+                "type": "number"
+              }
+            },
+            "required": [
+              "box",
+              "volume"
+            ],
+            "type": "object"
+          },
+          "data": {
+            "description": "The step as the source program holds it, in the source's own coordinates (see toRecipe). Any JSON of at most 48 KiB, nested at most 32 levels. The app never reads into it."
+          },
+          "dependsOn": {
+            "description": "Ids of earlier gaps whose faces this step picks.",
+            "items": {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 256,
+            "type": "array"
+          },
+          "finishing": {
+            "description": "True when the step only finishes surfaces (a round, a bevel, a draft, an emboss, a cosmetic thread): it changes neither the size of the part nor which bodies exist. When every missing step is finishing and the copy matches, the copy lands as the part. Absent means false.",
+            "type": "boolean"
+          },
+          "hint": {
+            "description": "What to change in the source design so the step copies, when the writer has advice.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "id": {
+            "description": "Letters, digits and underscores, unique in the file and not the id of a step of the recipe. The first step added for the gap takes this id.",
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "list": {
+            "description": "The id of the toolBody step whose list holds the gap, or null at the top level.",
+            "maxLength": 128,
+            "minLength": 1,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "looseSizes": {
+            "description": "The sizes of `sizes` that are loose only because of this gap.",
+            "items": {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "reason": {
+            "description": "Why the step could not be copied.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "sizes": {
+            "description": "Names of the recipe sizes the missing step reads.",
+            "items": {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
+          "trimmed": {
+            "description": "True when the writer cut something out of `data` to fit.",
+            "type": "boolean"
+          },
+          "type": {
+            "maxLength": 64,
+            "type": "string"
+          },
+          "values": {
+            "items": {
+              "properties": {
+                "expr": {
+                  "description": "The same as a recipe formula, when the writer could translate it.",
+                  "maxLength": 300,
+                  "type": "string"
+                },
+                "fusion": {
+                  "description": "The expression as Fusion holds it.",
+                  "maxLength": 300,
+                  "type": "string"
+                },
+                "path": {
+                  "description": "Where the value sits in `data`, for example \"side_one.distance\".",
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "fusion"
+              ],
+              "type": "object"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
+          "words": {
+            "description": "The kind of step in plain words, for example \"extrude\".",
+            "maxLength": 64,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "words",
+          "reason",
+          "after",
+          "before",
+          "list",
+          "dependsOn",
+          "sizes",
+          "looseSizes",
+          "values",
+          "data"
+        ],
+        "type": "object"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array"
+    },
+    "schema": {
+      "const": "paramability.recipeGaps"
+    },
+    "toRecipe": {
+      "description": "The rigid map from the source coordinates of `data` to recipe coordinates: a 3 by 3 rotation as rows, then the offset in millimetres.",
+      "items": {
+        "type": "number"
+      },
+      "maxItems": 12,
+      "minItems": 12,
+      "type": "array"
+    },
+    "version": {
+      "const": 3
+    }
+  },
+  "required": [
+    "schema",
+    "version",
+    "toRecipe",
+    "gaps"
+  ],
+  "type": "object"
+}

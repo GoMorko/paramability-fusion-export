@@ -13,6 +13,7 @@ from tests.translator_helpers import load_capture, steps_of, stopped, verdict_of
 from lib.capture_model.gap_picks import pick_records
 from lib.translator import CaptureError, Refusal, translate
 from lib.translator.gaps import stops as gaps_module
+from lib.translator.gaps.finishing import is_finishing
 from lib.translator.gaps.gap_file import MAX_DATA_BYTES, MAX_DATA_DEPTH
 from lib.translator.gaps.stops import MAX_GAPS
 
@@ -39,6 +40,23 @@ def gap_names(result):
 
 def place_of(gap):
     return gap["after"], gap["before"], gap["list"]
+
+
+class FinishingFlagTest(unittest.TestCase):
+    def test_a_gap_is_flagged_by_its_step_type_a_fillet_that_picks_a_gap_is_finishing_the_coil_is_not(self):
+        result = translate(tray(unsupported(SHELL)))
+        self.assertEqual({gap["name"]: gap["finishing"] for gap in result.gaps}, {"Shell1": False, "Fillet1": True})
+
+    def test_the_set_is_round_bevel_draft_emboss_and_a_thread_that_is_not_modeled(self):
+        cases = [
+            ("FilletFeature", {}, True), ("ChamferFeature", {}, True), ("DraftFeature", {}, True),
+            ("EmbossFeature", {}, True), ("ThreadFeature", {"modeled": False}, True),
+            ("ThreadFeature", {"modeled": True}, False), ("ThreadFeature", {}, False), ("ExtrudeFeature", {}, False),
+            ("ThreadFeature", None, False), ("NotAStepType", {"modeled": False}, False),
+        ]
+        for step_type, data, expected in cases:
+            with self.subTest(type=step_type, data=data):
+                self.assertIs(is_finishing(step_type, data), expected)
 
 
 class LeftOutTest(unittest.TestCase):
