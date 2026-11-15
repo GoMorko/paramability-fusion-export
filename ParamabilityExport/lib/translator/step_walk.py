@@ -1,5 +1,6 @@
 """Walking the steps of a recipe at every depth. A tool step holds a list of steps of its own."""
 from ..capture_model import step_kinds
+from .result import Refusal
 
 
 def all_steps(steps):
@@ -25,3 +26,16 @@ def moved_later(steps, step_id):
 def outside_tool(steps):
     """The first step of `steps`, at any depth, of a kind the recipe keeps out of a tool body (a coil), else None."""
     return next((step for step in all_steps(steps) if not step_kinds.recipe_kind(step.get("kind")).in_tool), None)
+
+
+def kind_tool_refusal(kind):
+    """The Refusal for a step of `kind` that cannot be part of a tool body: its words and hint fit the kind."""
+    found = step_kinds.recipe_kind(kind)
+    return Refusal("A %s cannot be part of a tool body that has other steps." % (found.tool_words or kind),
+                   cause=found.tool_cause)
+
+
+def tool_refusal(steps):
+    """A Refusal for the first step of `steps` that the recipe keeps out of a tool body, else None."""
+    found = outside_tool(steps)
+    return None if found is None else kind_tool_refusal(found.get("kind"))

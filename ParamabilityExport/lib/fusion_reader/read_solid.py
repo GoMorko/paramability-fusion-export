@@ -493,11 +493,12 @@ def _hole_extent(feature, ctx):
 
 def _hole_thread(feature, tapped):
     """The thread of a tapped hole as `read_thread.thread_info` gives it, plus `full_length` and `depth` (how deep the
-    thread runs). The members may sit on `feature.thread` or on the hole itself; null when not given."""
+    thread runs). The Fusion API stub of July 2025 has no tapped hole members at all, so where they live (`thread`,
+    `threadInfo` or the hole itself) is hand check TD2; each is tried, and what is missing reads as null (a gap)."""
     if not tapped:
         return None
     source = geo.safe(lambda: feature.thread, None)
-    found = thread_info(source, feature)
+    found = thread_info(source, geo.safe(lambda: feature.threadInfo, None), feature)
     full = geo.safe(lambda: source.isFullLength, None)
     if full is None:
         full = geo.safe(lambda: feature.isFullLength, None)

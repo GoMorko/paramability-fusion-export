@@ -1165,13 +1165,13 @@ order (empty when one cannot be read, since a gap would shift the order).
 }
 ```
 
-- `thread_type`, `designation`, `thread_class`, `internal` (`isInternal`), `right_hand` (`isRightHanded`), `pitch`,
-  `major_diameter`, `minor_diameter` and `angle_deg`: the `threadInfo` members (or the same names on the feature).
-  Lengths in mm; each is null when it cannot be read. `angle_deg` is null when the API gives none: the profile name
-  then decides (metric and Unified are 60 degrees).
+- `thread_type`, `designation`, `thread_class`, `internal` (`isInternal`), `right_hand` (`isRightHanded`), `pitch`
+  (`threadPitch`), `major_diameter`, `minor_diameter` and `angle_deg` (`threadAngle`, already in degrees): the
+  `threadInfo` members, except `right_hand` (on the feature). Lengths in mm; each is null when it cannot be read.
+  `angle_deg` is null when the API gives none: the profile name then decides (metric and Unified are 60 degrees).
 - `full_length` (`isFullLength`), `length` (`threadLength`) and `offset` (`threadOffset`); `params` has the length and
   offset parameters.
-- `faces`: one entry per `inputFaces` item. A cylinder gives `origin`, `axis`, `radius`, `span` (the end vertices'
+- `faces`: one entry per `inputCylindricalFaces` item (`inputCylindricalFace` when the collection is missing). A cylinder gives `origin`, `axis`, `radius`, `span` (the end vertices'
   distance along the axis from `origin`), `face_point` and `outward` (true when its normal points away from the axis:
   a bolt; false for a hole wall); another surface only `surface` and `face_point`. A face of another component is
   `foreign`.
