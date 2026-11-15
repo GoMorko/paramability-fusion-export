@@ -188,7 +188,8 @@ saying that Paramability keeps the original shape and an unfinished copy. A part
 names its own gaps file per part.
 
 When the copy stops (a stop reason, or more gaps than the cap), the package is still a fixed shape with the same
-`refusal`, and `report.json` adds `after_stop` (`translate._diagnosis`): a second walk without sizes in which every
+`refusal` (a stop that has a gap cause also carries its `hint`, which the export window shows as "Tip: ..." and the
+package note repeats when it fits), and `report.json` adds `after_stop` (`translate._diagnosis`): a second walk without sizes in which every
 stop is a gap and there is no cap. It holds `stopped_at` (the index of the step the copy stopped at, null for a stop
 found after the walk), `items` (that walk's verdicts of the steps after it) and `steps` (`{ index, name, type, reason }`
 of every step that walk could not copy, the last with `stops: true` when even that walk had to stop, as for a first

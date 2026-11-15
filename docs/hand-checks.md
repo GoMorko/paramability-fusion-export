@@ -72,6 +72,9 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
    inside piece instead.
    Export: export the plate, then the inside piece. Expect a cut by the cylinder for the plate and an intersect for
    the core, and both copies match the STEP. A split by a curved face of a body stops with "curved surface".
+   Also check the fallback: when Fusion's point containment gives no answer for a face of a piece, the add-in
+   intersects temporary copies of the piece and the tool. Note in `report.json` whether every piece of the split has
+   `inside` set, and compare an export from this version of the plate split with the old one: both copy.
 
 2. SB1, split by an offset plane. Model a box with a shell and a fillet. Add a construction plane offset from the
    top face by a user parameter `Cut`, Split Body with it and Remove the upper piece.
@@ -95,6 +98,24 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
    edges) to a sketch profile above it.
    Export: the single path sweep copies; the guide surface sweep is left out and names the settings Fusion did not
    give; the edge loft names what Fusion gave for the section.
+
+5a. ST1, steps with their own reason. Model a 40 mm box and use Modify, Scale on it; on a second box add a Rib (a
+   sketch line across a shell) and a Web; on a third use Replace Face with a surface, Pattern on Path with a sketch
+   curve, and Boundary Fill between two bodies.
+   Export: each part is left out or saved as a fixed shape with a step name and a plain reason (not "Steps of type
+   ..."), and a tip in `gaps.json`. In `report.json` note the capture `type` of each step: the add-in expects
+   ScaleFeature, ReplaceFaceFeature, RibFeature, WebFeature, PathPatternFeature, BoundaryFillFeature and (surface
+   Offset) OffsetFeature; any other name gets the generic reason.
+
+5b. CC5, a lid that follows a box not in the file. Make component Box with user parameter `Width`. In component Lid,
+   sketch on the box top face, project the box outline, offset it 0.2 mm inwards and extrude 3 mm.
+   Export: export the Lid alone, tick `Width`. The notes say the part follows the sizes of Box. Export Box and Lid
+   together: that note is gone, and changing `Width` in Paramability changes both parts.
+
+5c. CC1, a cut from the top level. Make components Box and Lid (a box 80 x 60 x 30 mm, a lid 80 x 60 x 3 mm on top).
+   With the top level active, sketch two 3 mm circles on the lid top and cut them through both bodies.
+   Export: export the Lid. The copy stops at the cut with "changes this part from another component" and a tip to
+   move the step into the part's component or export both parts together.
 
 6. AS1, steps after a stop. Extrude a box, split it with the curved face of a cylinder body and remove the outer
    piece, then add a thicken joined to the box.

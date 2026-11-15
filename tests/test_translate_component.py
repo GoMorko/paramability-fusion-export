@@ -8,6 +8,7 @@ from tests.test_translate_sketch_motion import run as run_with_motion
 from tests.translator_helpers import left_out, stopped
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, translate_fixture
 
+from lib.capture_model import gap_hints
 from lib.sketch_values.motion import OPTIMISTIC, Affine, Motion, Stuck
 from lib.translator import CaptureError, translate
 from lib.translator.notes import step_only_note
@@ -71,6 +72,14 @@ class RefusalTest(unittest.TestCase):
         self.assertEqual((refusal["index"], refusal["name"]), (3, "Extrude5"))
         self.assertIn("Extrude5 (extrude) changes this part from another component", step_only_note(refusal))
 
+    def test_a_stop_caused_by_another_component_carries_a_tip(self):
+        for name, cause in (("component_cross_cut", gap_hints.CHANGED_FROM_OTHER_COMPONENT),
+                            ("component_made_elsewhere", gap_hints.MADE_IN_OTHER_COMPONENT)):
+            with self.subTest(name):
+                refusal = self.refusal(name, stopped)
+                self.assertEqual(refusal["hint"], gap_hints.HINTS[cause])
+                self.assertTrue(step_only_note(refusal).endswith("Tip: " + refusal["hint"]))
+
     def test_a_body_made_in_another_component(self):
         refusal = self.refusal("component_made_elsewhere", stopped)
         self.assertEqual(refusal["index"], 1)
@@ -90,6 +99,21 @@ class RefusalTest(unittest.TestCase):
         self.assertIsNone(left_out(copied))
         capture["items"][3]["data"]["profiles"][0]["foreign"] = True
         self.assertIn("another component", left_out(translate(capture))["reason"])
+
+    def test_a_reach_that_an_older_add_in_marked_foreign_asks_for_a_new_export(self):
+        capture = load_capture("component_foreign_extent")
+        data = capture["items"][3]["data"]
+        data["side_one"] = {"kind": "distance", "distance": 8.0, "taper_deg": 0.0}
+        data["end_offset"] = 8.0
+        data["profiles"][0] = {key: data["profiles"][0][key] for key in ("sketch", "frame", "loops")}
+        data["profiles"][0].update(foreign=True, space="sketch")
+        gap = left_out(translate(copy.deepcopy(capture)))
+        self.assertIn("Export again with this version", gap["reason"])
+        self.assertEqual(translate(copy.deepcopy(capture)).gaps[0]["hint"], gap_hints.HINTS[gap_hints.OLD_EXPORT])
+        data["profiles"][0].update(component={"token": "cLid", "name": "Lid"}, placement={"error": "no place"})
+        gap = translate(capture).gaps[0]
+        self.assertNotIn("Export again", gap["reason"])
+        self.assertEqual(gap["hint"], gap_hints.HINTS[gap_hints.OTHER_COMPONENT])
 
     def test_a_participant_from_another_component_is_ignored(self):
         capture = load_capture("component_foreign_extent")
@@ -202,6 +226,7 @@ class BorrowedSketchTest(unittest.TestCase):
         self.assertEqual(result.fixed, [])
         self.assertEqual(rim["sketch"]["outer"]["width"]["expr"], "wall_mm + 8")
         self.assertNotIn("fixed numbers", verdicts(result)[9][1])
+        self.assertEqual(result.follows_components, [{"token": "cLid", "name": "Lid"}])
 
     def test_a_borrowed_value_the_probe_could_not_follow_or_never_gave_marks_its_sizes(self):
         stuck = Motion({"9/p0/l0/width": Stuck(["wall_mm"], "unread", "Rim of Lid")})
@@ -213,7 +238,7 @@ class BorrowedSketchTest(unittest.TestCase):
 
     def test_the_first_translation_fixes_nothing_for_a_borrowed_sketch(self):
         result, _ = self.borrowed_run(OPTIMISTIC)
-        self.assertEqual(result.fixed, [])
+        self.assertEqual((result.fixed, result.follows_components), ([], []))
 
     def test_a_borrowed_sketch_without_a_readable_place_refuses(self):
         capture = load_capture("component_moved")

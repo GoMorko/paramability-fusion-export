@@ -2,7 +2,8 @@
 so the step copies.
 
 A handler gives the cause with its Refusal (`Refusal.cause`); a step type with no handler gets it from the step kind
-table (`StepType.gap_cause`).
+table (`StepType.gap_cause`). A step that stops the copy gives its cause to the walk's refusal, so the dialog and the
+report show its hint too.
 The hints follow the app's user guide chapter "Designing in Fusion (experimental)" (page "Steps that do not copy
 yet"): when the two disagree, the chapter is right. A cause without useful advice has no hint.
 """
@@ -33,8 +34,16 @@ COIL_PLACE = "coilPlace"
 COIL_LIMIT = "coilLimit"
 COIL_TOOL = "coilTool"
 COIL_HALF = "coilHalf"
+SCALE = "scale"
+REPLACE_FACE = "replaceFace"
+RIB_WEB = "ribWeb"
+PATH_PATTERN = "pathPattern"
+BOUNDARY_FILL = "boundaryFill"
 NEW_COMPONENT = "newComponent"
 OTHER_COMPONENT = "otherComponent"
+OLD_EXPORT = "oldExport"
+CHANGED_FROM_OTHER_COMPONENT = "changedFromOtherComponent"
+MADE_IN_OTHER_COMPONENT = "madeInOtherComponent"
 AFTER_GAP = "afterGap"
 
 # Causes without a hint: a refusal that names no cause, and a step type with no handler and no cause in the table.
@@ -67,8 +76,16 @@ HINTS = {
     COIL_LIMIT: "A copy holds up to 8 coils and 100 turns in all. Your AI assistant can add the rest.",
     COIL_HALF: "Use revolutions that do not end in a half, such as 3.25 or 4.",
     COIL_TOOL: "Join the coil to the part with a combine before you move or change it.",
+    SCALE: "Change the sizes in the sketches instead of scaling the body.",
+    REPLACE_FACE: "Cut the shape with an extrude, or extrude the face up to the shape you want.",
+    RIB_WEB: "Draw the rib or web outline in a sketch and extrude it.",
+    PATH_PATTERN: "Use a rectangular or circular pattern, or a mirror.",
+    BOUNDARY_FILL: "Build the solid with extrudes and cuts instead of filling a boundary.",
     NEW_COMPONENT: "Make the body in the component that holds the part.",
     OTHER_COMPONENT: "Use sketches, planes and faces of the part's own component.",
+    OLD_EXPORT: "Export again with this version of the add-in.",
+    CHANGED_FROM_OTHER_COMPONENT: "Make the step in the part's own component, or export both parts together.",
+    MADE_IN_OTHER_COMPONENT: "Model the body in the component you export, or export the component that holds it.",
     AFTER_GAP: "Fix the step it builds on first.",
 }
 

@@ -14,7 +14,7 @@ from lib.capture_model import tool_items
 from lib.fusion_reader import read_intersect
 
 SQUARE = [(0, 0, 0), (10, 0, 0), (10, 10, 0), (0, 10, 0)]
-BRICK = "lib.fusion_reader.read_intersect._brep_tools"
+BRICK = "lib.fusion_reader.read_intersect.brep_tools"
 
 
 class Brick(FakeSolid):

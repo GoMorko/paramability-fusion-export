@@ -170,6 +170,8 @@ def raw_moves(ctx, item, ref, shape, what, names=None):
                 ctx.doubt(movers, _stuck_reason(item, ref, what, value.cause))
             value = Affine(0.0)
         out.append(value)
+    if not ref.get("own") and any(sketch_motion.movers(ctx.table, v) for v in out):
+        ctx.follow_component(ref.get("component"))
     return out
 
 
@@ -320,6 +322,43 @@ def bring_in(item):
         if brought is not None:
             edits[slot] = brought
     return dict(item, data=dict(data, **edits)) if edits else item
+
+
+# Lists of the bodies a step takes or makes. A body of another component in one of them has its own rules.
+BODY_LISTS = ("participants", "tools", "sources", "source_bodies", "result_bodies", "bodies", "pieces")
+# What the current reader always adds to a record of another component it cannot bring in: a sketch outline carries
+# its `component` and `placement`, a plane or axis its `ref`.
+_PLACE_KEYS = ("component", "placement", "ref", "assembly")
+
+
+def _foreign_records(node, found):
+    """Fills `found` with the records of `node` marked `foreign`, leaving out the body lists and what sits inside a
+    foreign record."""
+    if isinstance(node, dict):
+        if node.get("foreign") is True:
+            found.append(node)
+            return
+        for key, value in node.items():
+            if key not in BODY_LISTS:
+                _foreign_records(value, found)
+    elif isinstance(node, list):
+        for value in node:
+            _foreign_records(value, found)
+
+
+def _outline_or_plane(record):
+    return isinstance(record.get("loops"), list) or (_vector(record.get("point"))
+                                                     and (_vector(record.get("normal")) or _vector(record.get("dir"))))
+
+
+def from_old_export(item):
+    """True when every record of another component in the step is a sketch outline, a plane or an axis with none of the
+    place data the current reader writes for it. Add-in versions before 0.10.6 marked the part's own sketches and
+    planes, seen through an occurrence, as another component's, so such a step may be the part's own geometry. An edge
+    or a face record cannot be told apart this way."""
+    found = []
+    _foreign_records(item.get("data"), found)
+    return bool(found) and all(_outline_or_plane(r) and not any(k in r for k in _PLACE_KEYS) for r in found)
 
 
 def why_foreign(item):

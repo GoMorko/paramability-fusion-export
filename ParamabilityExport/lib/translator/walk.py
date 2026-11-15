@@ -20,20 +20,20 @@ from .sketch import borrowed
 from .words import type_words
 
 
-def _refusal(item, reason, note=None):
-    """The refusal record of the result. `note` is the package note when it differs from the usual wording."""
+def _refusal(item, reason, note=None, cause=None):
+    """The refusal record of the result. `note` is the package note when it differs from the usual wording; `cause`
+    (`gap_hints`) adds the `hint` that tells the person what to change in Fusion, when it has one."""
     out = {"index": item.get("index"), "name": item.get("name", ""), "type": item.get("type", ""), "reason": reason}
     if note:
         out["note"] = note
+    found = gap_hints.hint(cause)
+    if found:
+        out["hint"] = found
     return out
 
 
 def _label(item):
     return wording.step_label(item.get("name"), item.get("type")) or "A step"
-
-
-# Lists of the bodies a step takes or makes. A body of another component in one of them has its own rules.
-_BODY_LISTS = ("participants", "tools", "sources", "source_bodies", "result_bodies", "bodies", "pieces")
 
 
 def is_foreign(node):
@@ -42,7 +42,7 @@ def is_foreign(node):
     if isinstance(node, dict):
         if node.get("foreign") is True:
             return True
-        return any(is_foreign(v) for k, v in node.items() if k not in _BODY_LISTS)
+        return any(is_foreign(v) for k, v in node.items() if k not in ref_motion.BODY_LISTS)
     if isinstance(node, list):
         return any(is_foreign(v) for v in node)
     return False
@@ -139,6 +139,7 @@ def run_handler(handler, item, ctx):
         outcome.doubts[:0] = recorded.doubts
         outcome.notes[:0] = recorded.notes
         outcome.asked |= recorded.asked
+        outcome.follows |= recorded.follows
     return outcome
 
 
@@ -146,6 +147,12 @@ def _type_cause(item):
     """The `gap_hints` cause of an item whose type the copy has no handler for."""
     spec = step_kinds.step_type(item.get("type"))
     return (spec and spec.gap_cause) or gap_hints.UNSUPPORTED
+
+
+def _unsupported_reason(item):
+    """Why a step of a type with no handler is left out: the step kind table's reason, else the generic one."""
+    spec = step_kinds.step_type(item.get("type"))
+    return (spec and spec.unsupported) or "Steps of type %s are not copied yet." % type_words(item["type"])
 
 
 def _gap_ids(ctx, item):
@@ -173,13 +180,13 @@ def walk_items(ctx, result):
         on instead: True, unless there is no body to add the gap to yet. `cause` is the `gap_hints` cause, when the
         reason has one."""
         if ctx.diagnose and not stops.first_body_stop(ctx):
-            gap = ctx.leave_out(item, reason, ())
+            gap = ctx.leave_out(item, reason, (), cause=cause)
             verdict = make_verdict(item, "leftOut", note=gap.reason)
             verdict.update(gap=gap.id, cause="stop")
             result.items.append(verdict)
             return True
         result.items.append(make_verdict(item, "unsupported", note=reason))
-        result.refusal = _refusal(item, reason, note)
+        result.refusal = _refusal(item, reason, note, cause)
         result.refusal_cause = cause
         return False
 
@@ -216,7 +223,8 @@ def walk_items(ctx, result):
             if item.get("target_changed") is True:
                 if not made_in_component:
                     return refuse(item, "This body was made in another component and moved here later. "
-                                  "Steps across components are not copied yet.", wording.made_elsewhere_note())
+                                  "Steps across components are not copied yet.", wording.made_elsewhere_note(),
+                                  gap_hints.MADE_IN_OTHER_COMPONENT)
                 return refuse(item, "This step changes the part, which is not copied yet.")
             result.items.append(make_verdict(item, "skipped", note=""))
             return None
@@ -231,10 +239,11 @@ def walk_items(ctx, result):
             if item.get("target_changed") is True or _touches_target(item, ctx):
                 if not made_in_component:
                     return refuse(item, "This body was made in another component and moved here later. "
-                                  "Steps across components are not copied yet.", wording.made_elsewhere_note())
+                                  "Steps across components are not copied yet.", wording.made_elsewhere_note(),
+                                  gap_hints.MADE_IN_OTHER_COMPONENT)
                 return refuse(item, "This step changes the part from another component. "
                               "Steps across components are not copied yet.",
-                              wording.from_other_component_note(_label(item)))
+                              wording.from_other_component_note(_label(item)), gap_hints.CHANGED_FROM_OTHER_COMPONENT)
             result.items.append(make_verdict(item, "skipped", note="In another component."))
             return None
 
@@ -255,8 +264,7 @@ def walk_items(ctx, result):
             if handler is not None or item.get("target_changed") is not True:
                 # Only a step the reader saw change the body is a gap: one that may have done anything stops.
                 return refuse(item, "The bodies this %s changes could not be read." % type_words(item["type"]))
-            if not leave_out(item, "Steps of type %s are not copied yet." % type_words(item["type"]),
-                             _gap_ids(ctx, item), cause=_type_cause(item)):
+            if not leave_out(item, _unsupported_reason(item), _gap_ids(ctx, item), cause=_type_cause(item)):
                 return False
             made_in_component = True
             return None
@@ -285,10 +293,7 @@ def walk_items(ctx, result):
         if _data(item).get("read_error"):
             return refuse(item, "This step could not be read from Fusion.")
         if handler is None:
-            spec = step_kinds.step_type(item["type"])
-            if not leave_out(item, (spec and spec.unsupported)
-                             or "Steps of type %s are not copied yet." % type_words(item["type"]),
-                             _gap_ids(ctx, item), cause=_type_cause(item)):
+            if not leave_out(item, _unsupported_reason(item), _gap_ids(ctx, item), cause=_type_cause(item)):
                 return False
             made_in_component = True
             return None
@@ -296,10 +301,16 @@ def walk_items(ctx, result):
         with ctx.recording() as brought:
             item = ctx.current = ref_motion.bring_in(borrowed.bring_in(item, ctx))
         if is_foreign(_data(item)):
-            if not leave_out(item, ref_motion.why_foreign(item)
-                             or "This step reaches into another component, which is not copied yet.",
-                             [gap.id for gap in picked], wording.reaches_component_note(_label(item)),
-                             cause=gap_hints.OTHER_COMPONENT):
+            if ref_motion.from_old_export(item):
+                reason, note, cause = (
+                    "This step reaches into another component, or was read by an older version of the add-in "
+                    "that could not tell its own geometry apart. Export again with this version.",
+                    wording.old_export_note(_label(item)), gap_hints.OLD_EXPORT)
+            else:
+                reason = (ref_motion.why_foreign(item)
+                          or "This step reaches into another component, which is not copied yet.")
+                note, cause = wording.reaches_component_note(_label(item)), gap_hints.OTHER_COMPONENT
+            if not leave_out(item, reason, [gap.id for gap in picked], note, cause=cause):
                 return False
             made_in_component = True
             return None
@@ -329,6 +340,7 @@ def walk_items(ctx, result):
                 return False
             return None
         ctx.doubts.extend(brought.doubts + construction.doubts)
+        ctx.follows |= brought.follows
         ctx.commit(outcome)
         notes = brought.notes + outcome.notes
         if not outcome.entries:

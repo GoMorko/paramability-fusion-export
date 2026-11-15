@@ -327,10 +327,19 @@ def _finish(settled, doubts, capture, motion):
     result.dropped = _dropped(table, sizes, doubts, checked.unmoved, checked.unmoved_links, _tried(motion),
                               {name: found[0] for name, found in spans.items()})
     result.notes.extend(d["reason"] for d in result.dropped)
+    result.follows_components = _followed_components(settled.ctx, checked)
     result.recipe["sizesAsWritten"] = True
     if sizes:
         result.recipe["sizes"] = sizes
     return result
+
+
+def _followed_components(ctx, checked):
+    """`[{ token, name }]` of the other components whose sizes the copy follows: those a written reference or borrowed
+    outline follows (`Context.follows`) and those a sketch tied to them follows (`Audit.follows`, names only)."""
+    found = {(token, name) for token, name in ctx.follows}
+    found |= {("", name) for name in checked.follows if not any(name == known for _, known in found)}
+    return [{"token": token, "name": name} for token, name in sorted(found)]
 
 
 def _gap_sizes(ctx, result, table, sizes, doubts, reads):

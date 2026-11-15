@@ -8,13 +8,17 @@ a split by a solid body whether the piece lies inside that body.
 import math
 
 from ..timing.timer import span_on
-from . import read_geometry as geo
+from . import read_geometry as geo, read_intersect
 from .read_repeat import plane_record
 
 # How far (mm) a point on a face of a piece is moved into the piece before the tool body is asked whether it holds it.
 INSIDE_STEP_MM = 0.01
 # Faces of a piece tried before the inside test gives up.
 MAX_FACES = 16
+# The share of a piece's volume that a temporary intersect with the tool keeps: past the upper bound the piece lies
+# inside the tool, under the lower one outside it.
+INSIDE_SHARE = 0.999
+OUTSIDE_SHARE = 0.001
 
 
 def _state(body, ctx):
@@ -71,13 +75,32 @@ def _probe(face, tool):
     return None
 
 
+def _by_intersect(piece, tool):
+    """Whether `piece` lies inside `tool`, from the volume left of a temporary copy of the piece intersected with a
+    temporary copy of the tool (nothing is added to the design); None when the volume is not about all or none of it.
+    A boolean that reports failure counts as empty, as in `read_intersect`."""
+    whole = geo.volume_mm3(piece)
+    if not whole:
+        return None
+    manager, types = read_intersect.brep_tools()
+    shared = manager.copy(piece)
+    kept = geo.volume_mm3(shared) if manager.booleanOperation(
+        shared, manager.copy(tool), types.IntersectionBooleanType) else 0.0
+    if kept is None:
+        return None
+    if kept >= whole * INSIDE_SHARE:
+        return True
+    return False if kept <= whole * OUTSIDE_SHARE else None
+
+
 def inside(piece, tool):
-    """Whether the body `piece` lies inside the body `tool`, tried on its faces in turn; None when no face tells."""
+    """Whether the body `piece` lies inside the body `tool`: tried on its faces in turn, then by a temporary intersect
+    when no face tells; None when neither does."""
     for face in geo.collection_items(geo.safe(lambda: piece.faces, None))[:MAX_FACES]:
         found = geo.safe(lambda: _probe(face, tool), None)
         if found is not None:
             return found
-    return None
+    return geo.safe(lambda: _by_intersect(piece, tool), None)
 
 
 def _tool_body(feature, ctx, tool):

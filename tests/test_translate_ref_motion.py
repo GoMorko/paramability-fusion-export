@@ -92,6 +92,15 @@ class ReachTest(unittest.TestCase):
         self.assertEqual([value_at(length, gap) for gap in (10, 14, 20)], [15, 19, 25])
         self.assertIn("gap_mm", result.recipe["sizes"])
 
+    def test_the_component_whose_sizes_the_copy_follows_is_named(self):
+        self.assertEqual(self.run_reach().follows_components, [{"token": "cmp_cover", "name": "Cover"}])
+        for label, result in (("a size that does not move it", self.run_reach(ticked=["ear_mm"])),
+                              ("the first translation", self.run_reach(OPTIMISTIC)),
+                              ("a face that cannot be followed", self.run_reach(
+                                  motion_with(self.NAME, {"3/r/side_one/offset": TURNS})))):
+            with self.subTest(label):
+                self.assertEqual(result.follows_components, [])
+
     def test_a_size_that_acts_on_the_component_without_moving_the_face_is_not_marked(self):
         result = self.run_reach()
         self.assertEqual(marked(result), {})

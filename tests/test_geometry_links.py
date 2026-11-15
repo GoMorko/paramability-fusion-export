@@ -104,6 +104,7 @@ class TranslateTest(unittest.TestCase):
         self.assertEqual(expr(outline["start"][0]), "0.5 * pipe_d_mm")
         self.assertEqual(expr(outline["segments"][0]["to"][0]), "-0.5 * pipe_d_mm")
         self.assertEqual(set(dropped(result)), {"spare_mm", "lid_mm"})
+        self.assertEqual(result.follows_components, [{"token": "", "name": "Pipe"}])
 
     def test_a_circle_that_follows_the_pipe_writes_its_radius_as_a_formula(self):
         capture = copy.deepcopy(CAPTURE)
@@ -125,7 +126,9 @@ class TranslateTest(unittest.TestCase):
             for key in [k for k in values if k.startswith("5/")]:
                 del values[key]
 
-        found = dropped(run(CAPTURE, motion_of(NAME, edit)))["pipe_d_mm"]
+        result = run(CAPTURE, motion_of(NAME, edit))
+        found = dropped(result)["pipe_d_mm"]
+        self.assertEqual(result.follows_components, [])
         self.assertFalse(found["used"])
 
     def test_a_hole_whose_outline_changes_shape_leaves_the_pipe_out_naming_the_sketch(self):

@@ -955,9 +955,11 @@ the plane and no cut reaches across it; otherwise (a round, chamfer, shell or Mo
 - `bodies`: the bodies it splits, read with the marker before the item; `pieces`: every body the feature lists once
   computed. Each has its box and volume (mm3, null when unreadable).
 - `inside` (a split by a solid body only): whether the piece lies inside the tool body, from
-  `BRepBody.pointContainment` of a point 0.01 mm inside the piece under one of its first 16 faces; null when no face
-  tells or the tool body is not found. It is read with the marker after the item, where Fusion no longer gives
-  `splittingTool`, so the tool body is found by the token read before the item.
+  `BRepBody.pointContainment` of a point 0.01 mm inside the piece under one of its first 16 faces. When no face tells,
+  a temporary copy of the piece is intersected with a temporary copy of the tool body (nothing is added to the design):
+  a result of about the whole piece means inside, about nothing means outside. Null when neither tells or the tool
+  body is not found. It is read with the marker after the item, where Fusion no longer gives `splittingTool`, so the
+  tool body is found by the token read before the item. Exports before 0.10.6 have no `inside`.
 
 The translator follows a body that a split made back to the body it was split from (`lib/capture_model/lineage.py`),
 for the exported body and for a Combine tool body of its own component (`tool_walk.lineage_chain`): a piece belongs to the only split body, or to the one whose box holds its box. A split of the body it builds becomes the
@@ -966,7 +968,11 @@ the tool body. The box reaches four half diagonals of the body plus 100 mm past 
 size's range end to its value (up to 25; a size past that is marked), so a part the sizes grow is still cut. It stops the copy unless the capture shows the piece is the whole of its side (one side of the plane, or
 inside or outside the tool body, with every other piece of that body on the other side), the pieces add up to the
 body's volume (within a thousandth: Fusion measures each curved piece on its own, to a few parts in 100 000), and no
-later step changes another piece together with the part (`lib/translator/bodies/split_rules.py`).
+later step changes another piece together with the part (`lib/translator/bodies/split_rules.py`). A split by a solid
+body whose pieces have no `inside` is decided from the boxes and volumes of the tool and the pieces
+(`lib/translator/bodies/split_inside.py`): a piece that does not fit the tool's box, or is larger than the tool, cannot
+lie inside it, and the split goes on only when that leaves one side possible for the part; a tool of another component
+is not decided this way.
 
 **CombineFeature** (`targetBody`, `toolBodies`, `operation`, `isKeepToolBodies`):
 
@@ -1481,6 +1487,18 @@ or belongs to the root is read in the root's coordinates. The reader brings it i
 `lib/fusion_reader/placement.py`); when the target's place cannot be read it stays foreign. An axis from a sketch line
 of another component loses `entity`, `sketch_token` and `sketch` (the probe follows only the target's own sketch
 lines); the sketch is named in its `ref`.
+
+A step whose only foreign records are sketch outlines, planes or axes with none of that place data (`component`,
+`placement`, `ref`, `assembly`) comes from an add-in before 0.10.6, which marked the part's own sketches and planes seen
+through an occurrence as foreign. The translator leaves such a step out with the cause `oldExport` and the tip to export
+again (`ref_motion.from_old_export`). Edges and faces carry no place data in any version, so they are never taken for
+old.
+
+The translator also records which other components' sizes the copy follows (`TranslateResult.follows_components`,
+`{ token, name }` each): a measured reference or a borrowed outline that moves with a size, and a sketch tied to a
+component through projected geometry that the probe saw move. Steps inside a tool body walk do not add to it. A single
+export names them in a note ("This part follows the sizes of Cover. Export both together so they change together.");
+in a parts file a component whose body is among the parts is left out.
 
 ### Measured references (`ref`)
 
