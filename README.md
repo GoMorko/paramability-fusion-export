@@ -39,11 +39,16 @@ Nothing is typed in Fusion.
    You can still tick it; its row then says "size, may be unexpected". Click a row to read its comment, its formula
    or the full reason in the box under the table. You can tick up to 64 sizes.
 4. If a step of the body stops the copy altogether (see "When a step cannot be copied"), a warning shows under the
-   body picker as soon as you pick it: which step stops the copy (for example "Extrude9 (extrude)"), and that the part
-   will be saved as a fixed shape while your parameters still come along as variables. Hover the warning for the full
-   reason. "Show in timeline" selects that step in Fusion; the timeline marker does not move. A line "Copied with a
-   note" lists steps that were copied with a remark. A step that is only left out of the copy is not in this warning:
-   the result window names it after the export.
+   body picker as soon as you pick it: which step stops the copy (for example "Extrude9 (extrude)"), a "Tip" with what
+   to change in Fusion when there is one, and that the part will be saved as a fixed shape while your parameters still
+   come along as variables. Hover the warning for the full reason. "Show in timeline" selects that step in Fusion; the
+   timeline marker does not move. Steps that the copy will only leave out are listed there too, under "Likely left
+   out of the copy": the first three, each with its reason and Tip (the same words the result window uses after the
+   export), then "and N more". "More may show after the export" says that some steps can only be checked during the
+   export (for example a round on faces of a left out step), so the list can grow. Fix those steps first, or export
+   anyway. A line "Copied with a note" lists steps that were copied with a remark. The list comes from the steps the
+   dialog already read for the body, with no extra read of the design and no size tries; the Text Commands window
+   shows how long it took.
 5. Pick the design up direction, click OK and choose where to save the file.
 6. A window then shows short sections, each starting with a `# Title` line. Sections with nothing to say are left out:
    - `# Result`: the file, what to do next, whether it is an editable copy (or one with steps left out) and how many

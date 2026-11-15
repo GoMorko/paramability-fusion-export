@@ -196,6 +196,12 @@ step that cannot be copied). The manifest gets a second note, "Not copied either
 other than the one it stopped at, so the person and an AI assistant see every failing step from one export. A parts
 file puts `after_stop` in the part's record. Nothing in the package changes otherwise.
 
-The export window warns early: under the body picker, "Likely left out of the copy:" lists (`dialog_model/stop_warning.py`)
-the steps the first translation leaves out for their own reason, at most three, then "and N more". It runs without
-the size tries and the face read, so a step that is a gap only because it picks faces of another gap is not listed.
+The export window warns early: under the body picker, "Likely left out of the copy:" lists the steps the first
+translation leaves out for their own reason, at most three, then "and N more" (`dialog_model/left_out_preview.py`,
+used by `dialog_model/stop_warning.py`). Each line is the same text as in the result window after the export: "name:
+reason Tip: hint" (`export_plan/messages.left_out_line`), with the reason cut for the box and whole in the tooltip.
+A copy that stops shows the hint of the stopping step too (`TranslateResult.refusal_cause`). The preview runs on the
+capture the dialog read for the body (`CaptureCache`), with no size tries and no face read. A step that is a gap only
+because it picks faces of another gap waits for the face read, so it is not listed and the box says "More may show
+after the export." once (once for all bodies when several are picked). The log line "warning under the body picker"
+gives the seconds the translation took and the seconds of the capture read behind it.

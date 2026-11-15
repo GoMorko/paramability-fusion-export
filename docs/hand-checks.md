@@ -125,3 +125,15 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     `message`, then use Edit, Undo and count the steps that bring the fillet back. TH5: tick `Round` and `Bevel` (range 1 to 9) and
     cancel in the "Try 3 of ..." window; then, on the TH1 box, use Export size choices with a row `Width` = 12, which Fusion cannot build. In both, every step is
     as before; if not, a message box names the step and says to use Undo.
+
+11. LP1, the list before the export. Extrude a 40 by 30 by 20 mm box. Round one vertical edge with a variable radius (a
+    different radius at each end). Then round the top edges with 1 mm, which includes the edge between the top and
+    the face the variable round made. Add a second body, a plain box with no such step.
+    Export: pick the first box and do not click OK. Under the body picker a box lists the variable round with the
+    reason and "Tip: Use a fillet with one radius.", and says "More may show after the export." (the 1 mm round picks
+    faces that only the export can check). Pick the second box: the list is gone. Pick both: the list starts with
+    the first box's name and says "More may show" once. The Text Commands window has a line "warning under the body
+    picker: ... s; reading the steps of the picked bodies: ... s". Then click OK on the first box: the Saved window
+    names the variable round with the same reason and tip, and any step of the 1 mm round it also lists is the one
+    the "More may show" line was about. Note the seconds from the log line on a design with 100 or more steps: the
+    warning itself should take well under a second.
