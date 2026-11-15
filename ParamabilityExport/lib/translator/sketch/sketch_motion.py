@@ -22,7 +22,7 @@ from .loops import profile_loops
 from .rect_corners import rect_axes, rect_corners
 from ..result import Refusal
 from ..sizes import placement_sizes, unmeasured_sizes
-from .sketch_crossings import Sources, keeps_order, order_ranges, simple_ranges
+from .sketch_crossings import OUT_OF_TIME, Sources, checks_of, keeps_order, order_ranges, simple_ranges
 from ..values import Quantity, stays_positive
 
 POSITIVE_FIELDS = ("width", "height", "radius", "radiusX", "radiusY")
@@ -492,10 +492,7 @@ def outline(ctx, item, profile, outer, inners, parts):
         else:
             raw_loops = _stuck_curves(raw_loops, sketch)
     if bounds is None:
-        kept = simple_ranges(ctx.table, loops, raw_loops, ctx.motion, sketch)
-        if kept:
-            ctx.cut(kept, notes.crosses_reason(sketch))
-            bounds = {ctx.table.size_name(name): ends for name, ends in kept.items()}
+        bounds = _crossing_cut(ctx, loops, raw_loops, sketch)
     # Merged parts share one frame, so the first part's plane stands for all of them.
     plane = raw(ctx, keys.plane(prefix), vec.dot(profile["frame"]["origin"], profile["frame"]["z"]), sketch)
     placement_doubts(ctx, item, profile, plane)
@@ -510,12 +507,24 @@ def measured_outline(ctx, prefix, frame, loops, sketch):
     (`simple_ranges`)."""
     raw_loops = _stuck_curves(_keyed_loops(ctx, prefix, loops, sketch), sketch)
     plane = raw(ctx, keys.plane(prefix), vec.dot(frame["origin"], frame["z"]), sketch)
-    bounds = None
-    kept = simple_ranges(ctx.table, loops, raw_loops, ctx.motion, sketch)
-    if kept:
-        ctx.cut(kept, notes.crosses_reason(sketch))
-        bounds = {ctx.table.size_name(name): ends for name, ends in kept.items()}
-    return Outline(ctx, frame, loops, raw_loops, plane, sketch, bounds)
+    return Outline(ctx, frame, loops, raw_loops, plane, sketch, _crossing_cut(ctx, loops, raw_loops, sketch))
+
+
+def _crossing_cut(ctx, loops, raw_loops, sketch):
+    """Cut the ranges where the written loops would cross themselves or a hole would leave the outline
+    (`simple_ranges`), and return the cut as recipe size name to ends, or None. When no shorter ranges keep them, or
+    the checks of this translation ran out of time, the sizes that move the loops are marked with why instead."""
+    kept = simple_ranges(ctx.table, loops, raw_loops, ctx.motion, sketch, checks_of(ctx.cache))
+    if kept is OUT_OF_TIME or kept is None:
+        movers = _names(_raw_values(raw_loops))
+        if movers:
+            ctx.doubt(list(movers), notes.crosses_reason(sketch) if kept is None else notes.unchecked_outline_reason(
+                sketch))
+        return None
+    if not kept:
+        return None
+    ctx.cut(kept, notes.crosses_reason(sketch))
+    return {ctx.table.size_name(name): ends for name, ends in kept.items()}
 
 
 def outline_movers(table, drawn):

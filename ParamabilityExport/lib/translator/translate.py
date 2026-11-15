@@ -22,6 +22,7 @@ from .notes import (
     unmoved_reason, unused_reason)
 from .ranges import kept_ranges, range_check
 from .result import TranslateResult
+from .sketch.sketch_crossings import OutlineChecks
 from .sizes import joint_reasons, probed_sizes, text_reasons, untried_reasons, used_sizes
 from .step_walk import all_steps, nesting
 from .values import Sized, number
@@ -134,8 +135,9 @@ def _over_caps(recipe, ctx):
 def translate(capture, handlers=None, size_table=None, motion=None, timer=None):
     """`_translate`, and when the copy stops in the walk, `result.after_stop` from a walk that goes on past the stop
     (`_diagnosis`): the export still lands as a fixed shape, and the report names every step that cannot be copied.
-    `timer` (`timing.timer.Timer`) gets the time of that second walk as `after_stop`."""
-    result = _translate(capture, handlers, size_table, motion)
+    `timer` (`timing.timer.Timer`) gets the time of that second walk as `after_stop`, and the time of the outline
+    crossing checks as `outline_check` (`sketch.sketch_crossings.OutlineChecks`)."""
+    result = _translate(capture, handlers, size_table, motion, timer)
     if result.recipe is None and result.refusal is not None and result.items:
         with span_on(timer, "after_stop"):
             result.after_stop = _diagnosis(capture, handlers, result.refusal)
@@ -167,7 +169,7 @@ def _diagnosis(capture, handlers, refusal):
     return {"stopped_at": stop, "items": later, "steps": steps}
 
 
-def _translate(capture, handlers=None, size_table=None, motion=None):
+def _translate(capture, handlers=None, size_table=None, motion=None, timer=None):
     """Capture dict to TranslateResult. `handlers` maps a feature type to a handler and overrides the table.
 
     A handler is `handle(item, ctx) -> StepResult | Refusal` (result.py). An empty result means the item makes no step
@@ -206,7 +208,7 @@ def _translate(capture, handlers=None, size_table=None, motion=None):
     table = dict(HANDLERS)
     if handlers:
         table.update(handlers)
-    cache = {}
+    cache = {OutlineChecks.KEY: OutlineChecks(timer)}
     if size_table is None:
         return _walk(capture, table, None, cache=cache)[0]
     if not size_table.links:

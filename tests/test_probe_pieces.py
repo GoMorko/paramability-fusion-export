@@ -30,6 +30,11 @@ class CameApartTest(unittest.TestCase):
         e0 = read(others=[kept_tool, elsewhere])
         self.assertIsNone(pieces.came_apart(read(others=[kept_tool, elsewhere, box((200, 0, 0), (210, 5, 5))]), e0))
 
+    def test_a_body_that_only_comes_near_the_growing_part_is_no_piece(self):
+        lid = box((45, 0, 0), (85, 20, 10))
+        wider = box((0, 0, 0), (50, 20, 10))
+        self.assertIsNone(pieces.came_apart(read(others=[lid], part=wider), read(others=[lid])))
+
     def test_nothing_is_said_when_e0_was_in_pieces_already_or_the_read_has_no_pieces(self):
         self.assertIsNone(pieces.came_apart(read(lumps=2), read(lumps=2)))
         self.assertIsNone(pieces.came_apart({"box": PART}, read()))

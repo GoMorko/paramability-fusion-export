@@ -3,7 +3,8 @@
 
 Phases are spans of the pipeline (`export_plan.pipeline`); one that runs more than once (a
 translation per body, the probe's start and its tries) adds up. `after_stop` is the time of the second walk after a
-stop (`translator.translate`), and it is inside the translate phases. The write of the package file comes after
+stop (`translator.translate`), and it is inside the translate phases, as is `outline_check`, the time the translator
+spends checking that written outlines do not cross themselves. The write of the package file comes after
 `report.json` is made, so it is not in it (the add-in logs it).
 """
 from .timer import Timer, rounded
@@ -19,6 +20,7 @@ PHASES = (
     "restore",  # parameters, suppressed steps and the timeline marker put back
     "package",  # manifest, recipe and report assembled
     "after_stop",  # of which: the second walk after a stop, inside the translate phases
+    "outline_check",  # of which: checking that written outlines do not cross themselves, inside the translate phases
 )
 
 

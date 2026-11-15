@@ -6,9 +6,10 @@ or a join whose new material does not touch the body, gives new bodies next to i
 `pieces`: `{ "lumps": n, "others": [box] }`, the target's own solids and the boxes of the other solid bodies of its
 component (`fusion_reader.probe_state`; `others` is left out when there are too many to read).
 
-A piece split off the target lies where the part was, or next to it. So an other body counts as a piece when its box
-comes within `PIECE_GAP_MM` of the box of the target at E0 or at the state; as many as did so at E0 already are not
-pieces of the part (kept tool bodies, a second body of the design). A state where the part came apart while it was one
+A piece split off the target is a new body, and it lies where the part was, or next to it. So an other body counts as
+a piece when its box comes within `PIECE_GAP_MM` of the box of the target at E0 or at the state; as many as did so at
+E0 already are not pieces of the part (kept tool bodies, a second body of the design), and there are never more such
+pieces than bodies that are new since E0 (a lid laid out next to a box that grows toward it is no piece). A state where the part came apart while it was one
 piece at E0 counts as a try that did not build: nothing is fitted to it, and the range of the size stops before it
 (`translator.ranges.kept_ranges.split_cut`).
 """
@@ -30,10 +31,15 @@ def _meets(a, b):
     return all(a[0][i] <= b[1][i] + PIECE_GAP_MM and b[0][i] <= a[1][i] + PIECE_GAP_MM for i in range(3))
 
 
+def _others(read):
+    others = ((read or {}).get("pieces") or {}).get("others")
+    return others if isinstance(others, list) else None
+
+
 def _near(read, boxes):
     """How many other bodies of `read` meet one of `boxes`, or None when they were not read."""
-    others = ((read or {}).get("pieces") or {}).get("others")
-    if not isinstance(others, list):
+    others = _others(read)
+    if others is None:
         return None
     found = [_box(b) for b in others]
     return sum(1 for b in found if b is not None and any(_meets(b, box) for box in boxes))
@@ -46,8 +52,8 @@ def _lumps(read):
 
 def count(read, e0):
     """The number of separate pieces the part is in at `read`, against the first read `e0`: the target's solids plus
-    the other bodies near the target's box at `read` or at E0, less those near it at E0. None when `read` holds no
-    pieces read or no box."""
+    the other bodies near the target's box at `read` or at E0, less those near it at E0, and at most as many as there
+    are more other bodies than at E0. None when `read` holds no pieces read or no box."""
     lumps, own = _lumps(read), _box((read or {}).get("box"))
     if lumps is None or own is None:
         return None
@@ -57,7 +63,8 @@ def count(read, e0):
     before = _near(e0, [start]) if start is not None else 0
     if now is None or before is None:
         return lumps
-    return lumps + max(0, now - before)
+    new_bodies = len(_others(read)) - len(_others(e0) or [])
+    return lumps + max(0, min(now - before, new_bodies))
 
 
 def came_apart(read, e0):

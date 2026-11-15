@@ -15,6 +15,7 @@ from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.sketch_values.motion import Affine, Motion, Terms
 from lib.translator import translate
+from lib.translator.ranges import kept_ranges
 from lib.translator.sketch import sketch_crossings
 from lib.translator.sketch.loops import profile_loops
 from lib.translator.values import Quantity
@@ -62,17 +63,40 @@ class CrossingCutTest(unittest.TestCase):
         self.assertTrue(all(evaluate(rule, {"p_mm": low + (high - low) * n / 200}) > 0 for n in range(201)))
 
 
+# (p, 5) follows p in a quad with fixed corners (0, 0), (10, 0) and (10, 10).
+STRAIGHT = {"1/p0/l0/points.3.0": Affine(0.0, {"p_mm": 1.0}, "Sketch1")}
+
+
 class StraightCrossingTest(unittest.TestCase):
     def test_a_corner_that_follows_a_size_past_a_side_that_stays_cuts_the_range_before_it(self):
-        # (p, 5) follows p (6 now, range 3 to 12): past 10 the edge back to the origin crosses the side at x = 10.
+        # p is 6 now, range 3 to 12: past 10 the edge back to the origin crosses the side at x = 10.
+        result = self.straight()
+        self.assertEqual((result.recipe["sizes"]["p_mm"]["min"], result.recipe["sizes"]["p_mm"]["max"]), (3.0, 9.99))
+        self.assertEqual([c["name"] for c in result.cuts], ["p_mm"])
+
+    def test_with_a_typed_range_the_size_is_marked_instead_of_cut(self):
+        result = self.straight(ranges={"p_mm": (4.0, 12.0)})
+        self.assertEqual((result.recipe["sizes"]["p_mm"]["min"], result.recipe["sizes"]["p_mm"]["max"]), (4.0, 12.0))
+        self.assertEqual(([c["name"] for c in result.cuts], [f["name"] for f in result.loose]), ([], ["p_mm"]))
+
+    def test_once_the_checks_ran_out_of_time_the_size_is_marked_instead_of_cut(self):
+        with mock.patch.object(sketch_crossings, "OUTLINE_CHECK_SECONDS", 0.0):
+            result = self.straight()
+        self.assertEqual((result.recipe["sizes"]["p_mm"]["min"], result.recipe["sizes"]["p_mm"]["max"]), (3.0, 12.0))
+        self.assertEqual(([c["name"] for c in result.cuts], [f["name"] for f in result.loose]), ([], ["p_mm"]))
+
+    def test_the_walks_of_one_translation_check_an_outline_once(self):
+        found = kept_ranges.holding_ranges_where
+        with mock.patch.object(kept_ranges, "holding_ranges_where", wraps=found) as holding:
+            self.straight()
+        self.assertEqual(holding.call_count, 1)
+
+    def straight(self, ranges=None):
         corners = [(0, 0), (10, 0), (10, 10), (6, 5)]
         capture = capture_with([line(corners[i], corners[(i + 1) % 4], "e%d" % i) for i in range(4)], "p_mm", 6.0)
-        result = run(capture, Motion({"1/p0/l0/points.3.0": Affine(0.0, {"p_mm": 1.0}, "Sketch1")}))
-        size = result.recipe["sizes"]["p_mm"]
-        self.assertEqual(size["min"], 3.0)
-        self.assertAlmostEqual(size["max"], 10.0, places=1)
-        self.assertLessEqual(size["max"], 10.0)
-        self.assertIn("would cross itself", result.cuts[0]["reason"])
+        params = capture["parameters"]
+        table = size_table.build(params["user"], ["p_mm"], params["model"], ranges=ranges)
+        return translate(capture, size_table=table, motion=Motion(dict(STRAIGHT)))
 
     def test_a_corner_that_follows_a_size_into_an_arc_that_stays_cuts_the_range_where_it_meets_the_arc(self):
         # A notch at (-p, 0) inside a half circle of radius 10 (p 6 now, range 3 to 12): past 10 it crosses the arc.

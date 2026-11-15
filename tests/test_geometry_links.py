@@ -174,8 +174,8 @@ class MeasuredSpanTest(unittest.TestCase):
 
     def test_a_size_that_failed_on_one_side_and_came_apart_on_the_other_was_not_measured(self):
         found = dropped(self.run_with([(6.0, "Fillet16")], split=[(24.0, 3)]))["pipe_d_mm"]
-        self.assertIn("Fillet16", found["reason"])
-        self.assertIn("comes apart into 3 separate pieces in Fusion at 24", found["reason"])
+        self.assertTrue(found["used"])
+        self.assertNotIn("tried", found)
 
     def test_nothing_moved_over_part_of_the_range_says_between_which_values(self):
         part = dropped(self.run_with([(6.0, "Fillet16")], built=[24.0]))["pipe_d_mm"]

@@ -7,34 +7,13 @@ any setting reaches too far.
 """
 import math
 
+from ...geometry.plane2d import arc_points
 from ...params.expressions.errors import ExpressionError
 from ..paths.path_limits import REACH_SHARE
 from ..ranges import range_check
 from ..sketch.written_loops import (
     point as _point, rect_corners as _corners, spline_points as _spline_points, value as _value, written_reads,
 )
-
-ARC_STEPS = 16      # points per arc, as the app samples an arc of an outline
-
-
-def _arc_points(a, b, c):
-    """Points along the arc from `a` through `b` to `c`, both ends included, as the app samples it; the chord when the
-    three are in a line."""
-    d = 2.0 * (a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1]))
-    if abs(d) < 1e-12:
-        return [a, c]
-    a2, b2, c2 = (p[0] * p[0] + p[1] * p[1] for p in (a, b, c))
-    centre = [(a2 * (b[1] - c[1]) + b2 * (c[1] - a[1]) + c2 * (a[1] - b[1])) / d,
-              (a2 * (c[0] - b[0]) + b2 * (a[0] - c[0]) + c2 * (b[0] - a[0])) / d]
-    radius = math.hypot(a[0] - centre[0], a[1] - centre[1])
-    start = math.atan2(a[1] - centre[1], a[0] - centre[0])
-    end = math.atan2(c[1] - centre[1], c[0] - centre[0])
-    counter = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]) > 0
-    full = 2.0 * math.pi
-    sweep = (end - start) % full if counter else -((start - end) % full)
-    return [a] + [[centre[0] + radius * math.cos(start + sweep * i / ARC_STEPS),
-                   centre[1] + radius * math.sin(start + sweep * i / ARC_STEPS)] for i in range(1, ARC_STEPS)] + [c]
-
 
 def reach_of(loop, env, start, across=None, toward=None):
     """How far a written loop reaches from `start` (2D, the outline's frame): the loop's farthest point, or for a
@@ -65,7 +44,7 @@ def reach_of(loop, env, start, across=None, toward=None):
     for segment in loop["segments"]:
         to = _point(segment["to"], env)
         if segment["kind"] == "arc":
-            points += _arc_points(points[-1], _point(segment["through"], env), to)[1:]
+            points += arc_points(points[-1], _point(segment["through"], env), to)[1:]
         elif segment["kind"] == "spline":
             through = [_point(p, env) for p in segment.get("through") or []]
             points += _spline_points([points[-1]] + through + [to])[1:]
