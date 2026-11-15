@@ -265,6 +265,8 @@ unchanged.
   with its own note. The other bodies keep their recipes and sizes. A body with left out steps keeps its recipe and
   opens with the original shape and an unfinished copy, as for one body; the result window lists the left out steps
   of each part.
+- A size that moves a body saved as a fixed shape is marked "may give unexpected results" for the file, with the
+  fixed body named in the reason: the editable bodies follow it and the fixed one does not, so they may no longer fit.
 - The sketches of all bodies are tried together over one set of rows (at most 64 in all, not per body), so the export
   takes about as long as for the body with the most sketches plus one read per body per row. A size left without a row
   is marked "may give unexpected results".

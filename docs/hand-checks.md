@@ -125,3 +125,11 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     `message`, then use Edit, Undo and count the steps that bring the fillet back. TH5: tick `Round` and `Bevel` (range 1 to 9) and
     cancel in the "Try 3 of ..." window; then, on the TH1 box, use Export size choices with a row `Width` = 12, which Fusion cannot build. In both, every step is
     as before; if not, a message box names the step and says to use Undo.
+
+11. FP1, a fixed part in a parts package. Make component Box (an 80 x 60 x 30 mm box from user parameter `Width` =
+    80 mm) and component Lid (80 x 60 x 3 mm on top of the box, sketch size from `Width` too). Add to the Lid a Split
+    Body by the curved face of a cylinder body, so the Lid copy stops (see AS1).
+    Export: pick Box and Lid together. The Lid is a fixed shape and the Box has a recipe. `Width` is marked "may give
+    unexpected results" with "Lid stays a fixed shape in this file and does not change with this size." in the
+    result window and in `report.json` `sizes.loose`. A size that only the Lid reads (add a second user parameter
+    used by the Lid alone) is not offered at all.

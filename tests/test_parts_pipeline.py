@@ -16,7 +16,7 @@ from tests.translator_helpers import load_capture
 from lib.design_edit.errors import StepExportError
 from lib.design_edit.runner import ExportCancelled
 from lib.dialog_model.result_rows import also_lines, not_tried_lines, parts_result_view, section, section_lines
-from lib.export_plan import recipe_export
+from lib.export_plan import fixed_parts, recipe_export
 from lib.export_plan.recipe_export import PartInput, translate_capture
 from lib.export_plan.pipeline.parts import run_parts_pipeline, shared_cuts
 from lib.export_plan.probe_flow import ProbeGroup
@@ -252,6 +252,44 @@ class FixedShapeTest(unittest.TestCase):
         self.assertEqual(["recipe" in p for p in result.manifest["parts"]], [False, False])
         self.assertNotIn("fixed", result.manifest)
         self.assertEqual(validate_manifest(result.manifest), [])
+
+
+    def test_a_size_that_moves_a_fixed_shape_is_loose_in_the_editable_part_and_names_the_fixed_part(self):
+        result = export(FakePartsPort([BASE, stuck_body()]))
+        editable, fixed = result.manifest["parts"]
+        [entry] = [e for e in editable["loose"] if e["name"] == "wall_mm"]
+        self.assertTrue(entry["reason"].startswith("Body3 stays a fixed shape in this file"))
+        self.assertNotIn("loose", fixed)
+        self.assertIn("wall_mm", result.report["sizes"]["free"])
+        self.assertIn(entry, result.report["sizes"]["loose"])
+
+    def test_a_size_that_was_loose_already_keeps_its_reason_and_gets_the_fixed_part_after_it(self):
+        result = export(FakePartsPort([with_joint_on(BASE, "wall_mm"), stuck_body()]))
+        [entry] = [e for e in result.manifest["parts"][0]["loose"] if e["name"] == "wall_mm"]
+        self.assertIn("joint", entry["reason"])
+        self.assertIn("Body3 stays a fixed shape", entry["reason"])
+
+    def test_parts_that_are_all_recipes_mark_nothing_for_fixed_shapes(self):
+        result = export(FakePartsPort([BASE, second_body()]))
+        self.assertTrue(all("loose" not in p for p in result.manifest["parts"]))
+
+
+class FixedPartsTest(unittest.TestCase):
+    def table(self):
+        return table_for_body(USER, "mm", MODEL, BASE)
+
+    def test_sizes_reaching_a_part_are_the_ticked_ones_its_parameters_depend_on(self):
+        table = self.table()
+        self.assertIn("wall_mm", fixed_parts.sizes_reaching(table, BASE))
+
+    def test_a_size_no_recipe_part_holds_is_not_listed(self):
+        marked = fixed_parts.marked(self.table(), [("Lid", BASE)], free={"not_this_size"})
+        self.assertEqual([e["name"] for e in marked], [])
+
+    def test_several_fixed_parts_share_one_reason_per_size(self):
+        marked = fixed_parts.marked(self.table(), [("Lid", BASE), ("Clip", BASE)], free={"wall_mm"})
+        self.assertEqual(len(marked), 1)
+        self.assertTrue(marked[0]["reason"].startswith("Lid, Clip stay fixed shapes"))
 
 
 class MeasuringTest(unittest.TestCase):
