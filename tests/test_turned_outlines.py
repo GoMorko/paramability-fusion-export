@@ -83,6 +83,23 @@ class StraightCrossingTest(unittest.TestCase):
         self.assertEqual((result.recipe["sizes"]["p_mm"]["min"], result.recipe["sizes"]["p_mm"]["max"]), (3.0, 9.99))
 
 
+    def test_a_hole_that_a_following_plate_would_leave_cuts_the_range_before_that(self):
+        # A 60 x 40 plate whose right edge follows p (60 now, range 30 to 120) and a round hole 16 wide at x = 30:
+        # the plate must stay wider than 38 mm to hold the hole.
+        corners = [(0, 0), (60, 0), (60, 40), (0, 40)]
+        capture = capture_with([line(corners[i], corners[(i + 1) % 4], "e%d" % i) for i in range(4)], "p_mm", 60.0)
+        capture["items"][1]["data"]["profiles"][0]["loops"].append(
+            {"outer": False, "curves": [{"kind": "circle", "center": [30, 20], "radius": 8, "entity": "c"}]})
+        plate = {"1/p0/l0/width": Affine(0.0, {"p_mm": 1.0}, "Sketch1"),
+                 "1/p0/l0/center.0": Affine(0.0, {"p_mm": 0.5}, "Sketch1")}
+        result = run(capture, Motion(plate))
+        size = result.recipe["sizes"]["p_mm"]
+        self.assertEqual((size["min"], size["max"]), (38.01, 120.0))
+        self.assertIn("hole reach its edge", result.cuts[0]["reason"])
+        capture["items"][1]["data"]["profiles"][0]["loops"][1]["curves"][0].update(center=[10, 20], radius=1.0)
+        self.assertEqual(run(capture, Motion(plate)).cuts, [])
+
+
 def _v_shape(p, q, a, w=3.0):
     """Corners of a V: a leg of length p along x and a leg of length q turned by a, both w wide."""
     c, s = math.cos(math.radians(a)), math.sin(math.radians(a))

@@ -178,9 +178,10 @@ When no such formula fits, only that size is marked; the other sizes of the sket
 check them together. A size the readings still cannot follow is loose. In the step with the point that cannot follow,
 the formulas with sines or products leave that size out, so the outline keeps its shape; every other step still
 follows it. When the outline would cross itself only in a corner of the size ranges (a turned leg shorter than
-another), the ranges are cut there instead ("the outline of Sketch3 would cross itself or lose a corner"). The same
+another), the ranges are cut there instead ("the outline of Sketch3 would cross itself, lose a corner or have a hole reach its edge"). The same
 cut applies to any outline whose corners follow sizes, for example a corner that follows a size while the arc it
-meets is written as its number. A round or
+meets is written as its number, and to a hole that would leave its outline (also for a flat face used as an
+outline, such as the face an emboss is trimmed to). A round or
 chamfer that picks an end face of such an outline follows the outline corner nearest to its pick point, so its formula
 stays short. A line whose direction turns while both its ends follow leaves out nothing.
 

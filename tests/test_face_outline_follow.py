@@ -9,7 +9,7 @@ from tests.fakes import FakeMarkerTimeline, FakePort, FakeStore
 from tests.probe_helpers import size
 from tests.test_capture_reader import Obj
 from tests.test_capture_reader_offset import plane_face, side, with_outline
-from tests.test_translate_emboss import LID, emboss_data, top_face, trimmed_by
+from tests.test_translate_emboss import LID, circle, emboss_data, top_face, trimmed_by
 from tests.test_translate_emboss import square as lid_square
 from tests.test_translate_face_outline import TALLER, UP, face, face_extrude, on_tray, square
 from tests.test_translate_follow import at, loose_names, tray
@@ -99,6 +99,25 @@ class FollowedFaceTest(unittest.TestCase):
         self.assertIsNone(result.refusal)
         self.assertEqual(steps_of(result.recipe, "extrude")[1]["within"]["on"]["origin"][2], {"expr": "lid_mm"})
         self.assertEqual(result.loose, [])
+
+
+    def test_a_hole_of_the_followed_face_that_would_leave_it_cuts_the_range_before_that(self):
+        # The hole is 30 mm above the face's lower edge; the face's upper edge is 10 * lid_mm up, so the hole fits
+        # only from a lid of 3.3 mm.
+        capture = load_capture(LID)
+        face = top_face(lid_square([0, 0], [60, 40]) + [circle([30, 30], 3)],
+                        {"index": 1, "name": "Extrude1", "which": "end"})
+        trimmed_by(face, 280.0)(emboss_data(capture))
+        params = capture["parameters"]
+        table = size_table.build(params["user"], ["lid_mm", "raise_mm"], params["model"], "mm")
+        motion = followed("3/face", {"3/face/plane": {"const": 0, "terms": {"lid_mm": 1}},
+                                     "3/face/l0/center.1": {"const": 0, "terms": {"lid_mm": 5}},
+                                     "3/face/l0/height": {"const": 0, "terms": {"lid_mm": 10}}}, token="f1")
+        result = translate(capture, size_table=table, motion=motion)
+        self.assertIsNone(result.refusal)
+        size = result.recipe["sizes"]["lid_mm"]
+        self.assertEqual((size["min"], size["max"]), (3.31, 8.0))
+        self.assertIn("hole reach its edge", result.cuts[0]["reason"])
 
 
 def face_read(height, holed=False, back=False):
