@@ -36,7 +36,8 @@ class FilterBoxTableTest(unittest.TestCase):
     def test_counts_and_cube_are_free_sizes_with_renamed_dollar_names(self):
         t = table()
         self.assertEqual(t.ticked, TICKED)
-        self.assertEqual(t.sizes[NEW_W], {"kind": "number", "value": 1.8, "min": 0.9, "max": 3.6, "label": W})
+        self.assertEqual(t.sizes[NEW_W], {"kind": "number", "value": 1.8, "min": 0.9, "max": 3.6,
+                                      "label": "Filter box width contains ceramic medium"})
         self.assertEqual(t.sizes[CUBE]["kind"], "length")
         self.assertEqual((t.sizes[CUBE]["value"], t.sizes[CUBE]["min"], t.sizes[CUBE]["max"]), (18.0, 9.0, 36.0))
         self.assertEqual(t.renames[W], NEW_W)
@@ -152,7 +153,7 @@ class FilterBoxTableTest(unittest.TestCase):
         model = [dict(name="d5", expression="holes", value=3.0, unit="", role="Quantity",
                       dependency_parameters=["holes"], kind="derived")]
         t = size_table.build(params, ["holes"], model_params=model)
-        self.assertEqual(t.sizes["holes"], {"kind": "count", "value": 3.0, "min": 1.0, "max": 6.0, "label": "holes", "step": 1})
+        self.assertEqual(t.sizes["holes"], {"kind": "count", "value": 3.0, "min": 1.0, "max": 6.0, "label": "Holes", "step": 1})
 
     def test_a_count_is_found_by_the_pattern_quantity_it_drives_whatever_the_role_text(self):
         params = [dict(name="holes", expression="3", value=3.0, unit="", comment="", is_favorite=True, kind="count"),

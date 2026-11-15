@@ -187,8 +187,11 @@ Each size has a range: you can type it in the table. It starts from a comment su
 otherwise from half to double the current value (a count goes from 1 to twice its value). A parameter that sets how
 many copies a pattern makes is a whole number.
 
-A size is labelled with the name of its Fusion parameter; the Fusion comment goes into the variable list as the
-description of the variable.
+A size is labelled in plain words (`lib/params/labels.py`). A short comment on the parameter is the label (its first
+sentence, without a `[min..max]` hint); a longer comment is a description, and the label is then the parameter name
+in words: `BaseCup_midExtrude_offset__mm` reads "Base cup mid extrude offset", with the unit word dropped. Two sizes
+never share a label. The Fusion name stays the size name, and the package `parameters` list keeps it as `label`
+next to the full comment, so the form can show the name in a tip and the comment as the description.
 
 A copy of what the add-in read is saved inside the file as `report.json`; its `probe` record holds the tries
 for the sketches, and its `health` record says whether the design came back to its start.

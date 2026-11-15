@@ -125,3 +125,10 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     `message`, then use Edit, Undo and count the steps that bring the fillet back. TH5: tick `Round` and `Bevel` (range 1 to 9) and
     cancel in the "Try 3 of ..." window; then, on the TH1 box, use Export size choices with a row `Width` = 12, which Fusion cannot build. In both, every step is
     as before; if not, a message box names the step and says to use Undo.
+
+11. LB1, size labels. Model a 40 x 30 x 10 mm box from three user parameters: `Wall_thickness_mm` (3 mm, comment
+    `Wall thickness`), `BaseCup_midExtrude_offset__mm` (5 mm, no comment) and `Hole_diameter_mm` (6 mm, a comment of two
+    long sentences describing the hole).
+    Export: tick all three. In Paramability the form reads "Wall thickness", "Base cup mid extrude offset" and "Hole
+    diameter". Each field has an info tip "Name in the original design: ..." with the Fusion name, the long comment is
+    the text under the "Hole diameter" field, and the result window still lists the sizes by their Fusion names.
