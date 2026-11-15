@@ -3,7 +3,7 @@ or in their `report.json` form; `json` writes that form."""
 from dataclasses import dataclass, field
 
 # The parts of a read that a state keeps in `report.json`.
-REPORT_READ_KEYS = ("sketches", "points", "lines", "params", "box", "refs", "faces", "patterns", "unread")
+REPORT_READ_KEYS = ("sketches", "points", "lines", "params", "box", "pieces", "refs", "faces", "patterns", "unread")
 
 
 @dataclass(frozen=True)
@@ -11,7 +11,9 @@ class ProbeState:
     """A state of the probe (see `build` for how the fit uses it).
 
     values: Fusion name to the manifest number the row set; a size that is missing stays at its value now.
-    built: False when Fusion could not build the part there; `failed` then names the first step in error.
+    built: False when Fusion could not build the part there; `failed` then names the first step in error. Also False
+      when Fusion built it in several separate pieces while it was one at E0 (`probe.pieces.came_apart`): `pieces`
+      then holds how many, `failed` is empty and `read` is None.
     read: the probe state read there (`fusion_reader.probe_state`), or None.
     e0: True for the first read, at the values now, before any size changed.
     start: the read with the values back, before the row ran, or None when it was not read.
@@ -29,6 +31,7 @@ class ProbeState:
     put_back: object = None
     again: bool = False
     changed: bool = False
+    pieces: object = None
 
     @classmethod
     def from_json(cls, data):
@@ -38,13 +41,15 @@ class ProbeState:
                    e0=bool(data.get("e0")), failed=data.get("failed"),
                    start=start if isinstance(start, dict) else None,
                    put_back=put_back if isinstance(put_back, dict) else None,
-                   again=bool(data.get("again")), changed=bool(data.get("changed")))
+                   again=bool(data.get("again")), changed=bool(data.get("changed")), pieces=data.get("pieces"))
 
     def json(self):
         """The state as `report.json` keeps it: the reads only with `REPORT_READ_KEYS`."""
         out = {"values": self.values, "built": self.built}
         if self.failed:
             out["failed"] = self.failed
+        if self.pieces:
+            out["pieces"] = self.pieces
         if self.e0:
             out["e0"] = True
         if self.again:

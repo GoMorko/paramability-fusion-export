@@ -151,7 +151,7 @@ class TranslateTest(unittest.TestCase):
 class MeasuredSpanTest(unittest.TestCase):
     """pipe_d_mm is 12, with the range 6 to 24; the probe tried it alone at the values in `failed` and `built`."""
 
-    def run_with(self, failed, built=(), moved=False, ranges=None):
+    def run_with(self, failed, built=(), moved=False, ranges=None, split=()):
         def edit(values):
             if not moved:
                 for key in [k for k in values if k.startswith("5/")]:
@@ -160,6 +160,8 @@ class MeasuredSpanTest(unittest.TestCase):
         motion = motion_of(NAME, edit)
         low, high = min((12.0,) + tuple(built)), max((12.0,) + tuple(built))
         motion.spans = {"pipe_d_mm": {"low": low, "high": high, "failed": [list(f) for f in failed]}}
+        if split:
+            motion.spans["pipe_d_mm"]["split"] = [list(f) for f in split]
         table = size_table.build(CAPTURE["parameters"]["user"], ALL, CAPTURE["parameters"]["model"], ranges=ranges)
         return translate(CAPTURE, size_table=table, motion=motion)
 
@@ -169,6 +171,11 @@ class MeasuredSpanTest(unittest.TestCase):
         self.assertNotIn("tried", found)
         self.assertIn("Fillet16", found["reason"])
         self.assertIn("Chamfer3", found["reason"])
+
+    def test_a_size_that_failed_on_one_side_and_came_apart_on_the_other_was_not_measured(self):
+        found = dropped(self.run_with([(6.0, "Fillet16")], split=[(24.0, 3)]))["pipe_d_mm"]
+        self.assertIn("Fillet16", found["reason"])
+        self.assertIn("comes apart into 3 separate pieces in Fusion at 24", found["reason"])
 
     def test_nothing_moved_over_part_of_the_range_says_between_which_values(self):
         part = dropped(self.run_with([(6.0, "Fillet16")], built=[24.0]))["pipe_d_mm"]
@@ -206,10 +213,11 @@ def _mm(store, name):
     return float(re.match(r"\s*([-0-9.eE+]+)", store.exprs[name]).group(1))
 
 
-def pipe_port(still=False, bad_when=None, bad_item="Fillet1", outline_when=None):
+def pipe_port(still=False, bad_when=None, bad_item="Fillet1", outline_when=None, apart_when=None):
     """Fusion where the box outline follows width and depth and the hole follows the pipe (unless `still`). With
     `outline_when`, the pipe hole's sketch reads with one more loop (another outline) when it holds for the pipe
-    diameter in mm. `varied` lists the parameters away from their start at every read."""
+    diameter in mm; with `apart_when`, the body reads as two solids then. `varied` lists the parameters away from
+    their start at every read."""
     def read(request):
         out = copy.deepcopy(port.e0)
         scale = {"s1": (_mm(port.store, "width_mm") / 40.0, _mm(port.store, "depth_mm") / 30.0),
@@ -230,6 +238,9 @@ def pipe_port(still=False, bad_when=None, bad_item="Fillet1", outline_when=None)
             for curve in inner["curves"]:
                 curve["entity"] = curve.get("entity", "") + "x"
             loops.append(inner)
+        if apart_when is not None:
+            out["box"] = {"min": [0, 0, 0], "max": [40, 30, 10]}
+            out["pieces"] = {"lumps": 2 if apart_when(_mm(port.store, "pipe_d_mm")) else 1, "others": []}
         return out
 
     port = FakePort(capture=CAPTURE, store=FakeStore(START, bad_when=bad_when, bad_item=bad_item), reader=read)
@@ -300,6 +311,20 @@ class OutlineRangeTest(unittest.TestCase):
         result = self.export(11.99, 12.01)
         [found] = [d for d in result.report["sizes"]["dropped"] if d["name"] == "pipe_d_mm"]
         self.assertTrue("Extrude2" in found["reason"] and "PipeHole" in found["reason"])
+
+
+class ApartRangeTest(unittest.TestCase):
+    """Fusion builds the part in two separate pieces when the pipe is narrower than 8 (12 now, range 6 to 24)."""
+
+    def test_the_range_starts_at_the_last_value_tried_in_one_piece_and_says_why(self):
+        port = pipe_port(apart_when=lambda d: d < 8)
+        result = export(port, table_for_body(USER, "mm", MODEL, CAPTURE).ticked)
+        # 6 and 7.5 came apart, 9 and 8.25 did not; the halving stops at 7.875.
+        self.assertEqual(pipe_range(result), (8.25, 24.0))
+        [cut] = result.report["sizes"]["cut"]
+        self.assertIn("comes apart into 2 separate pieces in Fusion at 7.875", cut["reason"])
+        states = [s for s in result.report["probe"]["states"] if s.get("pieces")]
+        self.assertEqual(sorted(s["values"]["pipe_d_mm"] for s in states), [6.0, 7.5, 7.875])
 
 
 class LinkOutcomeTest(unittest.TestCase):

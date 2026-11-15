@@ -47,10 +47,10 @@ def span(motion, size):
 
 
 def not_built(motion, size):
-    """True when the probe set the size to other values and Fusion rebuilt the design at none of them: nothing was
-    measured for it."""
+    """True when the probe set the size to other values and Fusion rebuilt the design at none of them, or only in
+    several pieces: nothing was measured for it."""
     found = span(motion, size)
-    return bool(found and found.get("failed") and abs(found["high"] - found["low"]) <= 1e-9)
+    return bool(found and (found.get("failed") or found.get("split")) and abs(found["high"] - found["low"]) <= 1e-9)
 
 
 def kept_only_now(motion, size):

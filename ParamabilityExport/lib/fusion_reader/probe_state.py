@@ -20,6 +20,8 @@ from .read_solid import line_axis
 from .read_sweep import flat_record
 
 MAX_PROFILES = 200
+# Other solid bodies of the target's component read for `pieces`; a component with more leaves `others` out.
+MAX_OTHER_BODIES = 64
 
 
 def _read_sketch(sketch, ctx):
@@ -63,6 +65,23 @@ def _read_borrowed(sketch, ctx, path_name):
         return None, "The place of the part could not be read."
     return dict(base, frame=moved, native_frame=base["frame"],
                 placement={"path": found.get("path", ""), "source": found.get("source", "")}), ""
+
+
+def _read_pieces(body, ctx):
+    """`{ lumps, others }` of the target: how many solids (lumps) it holds and the boxes of the other solid bodies of
+    its component (`probe.pieces`); `others` is left out when they cannot be read or there are more than
+    `MAX_OTHER_BODIES`. None when the lumps cannot be read. Reads what Fusion has built; nothing is recomputed."""
+    lumps = geo.safe(lambda: body.lumps.count, None)
+    if not isinstance(lumps, int) or isinstance(lumps, bool):
+        return None
+    out = {"lumps": lumps}
+    bodies = geo.collection_items(geo.safe(lambda: ctx.component.bRepBodies, None))
+    if len(bodies) <= MAX_OTHER_BODIES + 1:
+        others = [b for b in bodies if not geo.same_entity(b, body) and geo.safe(lambda: b.isSolid, False)]
+        boxes = [geo.safe(lambda: geo.box_of(b), None) for b in others]
+        if all(box is not None for box in boxes):
+            out["others"] = boxes
+    return out
 
 
 def _is_borrowed(sketch, ctx):
@@ -111,8 +130,8 @@ def read_state(design, request, ctx):
     sketch in `curves`, `curves`: { curve token: flat curve }; a borrowed one also has `native_frame` and `placement`.
     `points` maps a token to [x, y, z] mm; `lines` to { point, dir };
     `params` a name to its value in cm or radians; `box` is the target's { min, max } and absent when it cannot be
-    read. `refs` maps a reference key to its place in the target's coordinates, in mm: { point, normal },
-    { point, dir }, { dir } or { point }. `faces` maps a face key to { frame, loops } as the capture holds a face used
+    read; with it, `pieces` is { lumps, others } of the target (`_read_pieces`). `refs` maps a reference key to its
+    place in the target's coordinates, in mm: { point, normal }, { point, dir }, { dir } or { point }. `faces` maps a face key to { frame, loops } as the capture holds a face used
     as an outline; it is read last, since it moves the timeline marker for a while. `patterns` maps a key to
     { count, elements }, the copies a pattern makes at this state (`probe_patterns`). `unread` gives a reason per
     borrowed sketch token that could not be read or placed, and per reference, face or pattern key that could not be
@@ -164,9 +183,14 @@ def read_state(design, request, ctx):
         unread.update(missed)
     if request.get("target"):
         with span_on(ctx, "read_box"):
-            box = geo.safe(ctx.target_box, None)
+            body = geo.safe(ctx.find_target, None)
+            box = geo.safe(lambda: geo.box_of(body), None) if body is not None else None
         if box is not None:
             state["box"] = box
+            with span_on(ctx, "read_pieces"):
+                pieces = _read_pieces(body, ctx)
+            if pieces is not None:
+                state["pieces"] = pieces
     patterns = request.get("patterns") if isinstance(request.get("patterns"), dict) else {}
     if patterns:
         with span_on(ctx, "read_patterns"):

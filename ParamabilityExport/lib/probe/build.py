@@ -3,8 +3,8 @@
 A state is a `state.ProbeState` (or its `report.json` form): `values` holds the kept sizes that differ from the current
 settings (a size that is missing stays at its current value). `read` is the probe state of `fusion_reader.probe_state`
 (sketches, points, lines, params in Fusion's own units, box, faces). Exactly one state has `e0`: the read at the
-current settings, before any size is changed. A state that is not `built` (Fusion could not build the part there) is
-left out of the fit; its `failed` names the first step that failed.
+current settings, before any size is changed. A state that is not `built` (Fusion could not build the part there, or
+built it in several separate pieces, `pieces`) is left out of the fit; its `failed` names the first step that failed.
 
 A sketch can have more than one solution, and Fusion may land on another one depending on the rows run before (a row
 that did not build often leaves it there). A size is blamed for a different outline only by its own row (the row that
@@ -283,9 +283,9 @@ def _limit(tries, now, sign):
 def outline_windows(run, table, spans, capture=None):
     """`{Fusion name: {"kept": [low, high], "changed": [[value, sketch]]}}` of the free sizes whose own try changed a
     followed outline: `changed` lists those values, `kept` the farthest value on each side that kept every outline
-    (`_limit`; None on a side with no change or an end the person typed). When that range and the cut where Fusion did
-    not rebuild (`kept_ranges.failure_cut`, over `spans`) leave only the value now, `kept` is the value now at both
-    ends."""
+    (`_limit`; None on a side with no change or an end the person typed). When that range and the cuts where Fusion did
+    not rebuild or the part came apart (`kept_ranges.failure_cut`, `split_cut`, over `spans`) leave only the value now,
+    `kept` is the value now at both ends."""
     entries = {e.name: e for e in table.entries}
     mine = kept_ranges.part_step(capture)
     out = {}
@@ -300,7 +300,8 @@ def outline_windows(run, table, spans, capture=None):
         span = dict(spans[name], kept=kept, changed=changed)
         low, high, _ = kept_ranges.failure_cut(table, e, span, mine)
         o_low, o_high, _ = kept_ranges.outline_cut(table, e, span)
-        if min(high, o_high) - max(low, o_low) <= SAME_SIZE:
+        s_low, s_high, _ = kept_ranges.split_cut(table, e, span)
+        if min(high, o_high, s_high) - max(low, o_low, s_low) <= SAME_SIZE:
             kept = [now, now]
         out[name] = {"kept": kept, "changed": changed}
     return out
@@ -348,8 +349,9 @@ def _state_record(state):
 
 def spans(states, current):
     """`Motion.spans`: per size a state sets to another value than `current` has, the lowest and highest value of the
-    states that built (the current value included), and `[value, step]` for each state that set it alone and did not
-    build. `states` are `ProbeState` records."""
+    states that built (the current value included), `[value, step]` for each state that set it alone and did not
+    build, and `split`: `[value, pieces]` for each state that set it alone and left the part in several pieces (only
+    when there is one). `states` are `ProbeState` records."""
     out = {}
     for state in states:
         values = state.values
@@ -358,6 +360,8 @@ def spans(states, current):
             span = out.setdefault(name, {"low": current[name], "high": current[name], "failed": []})
             if state.built:
                 span["low"], span["high"] = min(span["low"], value), max(span["high"], value)
+            elif len(moved) == 1 and state.pieces:
+                span.setdefault("split", []).append([value, state.pieces])
             elif len(moved) == 1:
                 span["failed"].append([value, state.failed or ""])
     return out

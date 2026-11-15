@@ -31,24 +31,42 @@ def number_text(value):
     return ("%.6f" % value).rstrip("0").rstrip(".")
 
 
-def _nearest_failures(span):
-    """The failed value nearest to the value now on each side, lowest first, as `(value, step)`."""
-    now = span["low"]
+# What `_nearest_tries` looks at: the key of `Motion.spans` and the `broke` it gives.
+_TRY_KINDS = (("failed", True), ("changed", False), ("split", None))
+
+
+def _nearest_tries(span, now, kinds=("failed", "changed", "split")):
+    """`(value, name, broke)` of the try nearest to `now` on each side, lowest first, among the `kinds` of
+    `Motion.spans`: the values that did not rebuild (`failed`, `broke` true, `name` the step), that changed an outline
+    (`changed`, `name` the sketch) or that left the part in several pieces (`split`, `broke` None, `name` the number
+    of pieces)."""
     out = []
     for side in (-1, 1):
-        found = [f for f in span.get("failed") or () if (f[0] - now) * side > 0]
-        if found:
-            out.append(min(found, key=lambda f: abs(f[0] - now)))
+        seen = [(v, name, broke) for key, broke in _TRY_KINDS if key in kinds
+                for v, name in span.get(key) or () if (v - now) * side > 0]
+        if seen:
+            out.append(min(seen, key=lambda f: abs(f[0] - now)))
     return out
 
 
+def _try_why(value, name, broke):
+    if broke is None:
+        return split_why([(value, name)])
+    return not_rebuilt_why([(value, name)]) if broke else outline_changed_why([(value, name)])
+
+
 def not_built_why(span):
-    """Why a size was not measured: Fusion rebuilt the design at none of the values tried. Names the value nearest to
-    the value now on each side and the step that failed there."""
+    """Why a size was not measured: Fusion rebuilt the design at none of the values tried, or only in several pieces.
+    Names the value nearest to the value now on each side and the step that failed there."""
+    seen = _nearest_tries(span, span["low"], ("failed", "split"))
     tried = ["%s%s" % (number_text(v), " (%s)" % clip(step, MAX_NAME) if step else "")
-             for v, step in _nearest_failures(span)]
-    return "the design does not rebuild in Fusion at %s, the nearest values tried, so it could not be measured" % (
-        " or ".join(tried) or "the values tried")
+             for v, step, broke in seen if broke]
+    split = [split_why([(v, count)]) for v, count, broke in seen if broke is None]
+    if not split:
+        return "the design does not rebuild in Fusion at %s, the nearest values tried, so it could not be measured" % (
+            " or ".join(tried) or "the values tried")
+    parts = (["the design does not rebuild in Fusion at %s" % " or ".join(tried)] if tried else []) + split
+    return "%s, the nearest values tried, so it could not be measured" % " and ".join(parts)
 
 
 def narrow_span(span, low, high):
@@ -121,17 +139,18 @@ def outline_changed_why(changes):
                         for v, sketch in changes)
 
 
+def split_why(splits):
+    """What the size probe saw at the cut ends, from `(value, pieces)` of each: "the part comes apart into 2 separate
+    pieces in Fusion at 40"."""
+    return " and ".join("the part comes apart into %d separate pieces in Fusion at %s" % (count, number_text(v))
+                        for v, count in splits)
+
+
 def only_now_why(span):
-    """Why a size can be copied only at its value now: on each side the nearest value tried did not rebuild in Fusion
-    or made a different outline (`Motion.spans` `failed` and `changed`)."""
+    """Why a size can be copied only at its value now: on each side the nearest value tried did not rebuild in Fusion,
+    made a different outline or left the part in several pieces (`Motion.spans` `failed`, `changed` and `split`)."""
     now = span["kept"][0]
-    seen = []
-    for side in (-1, 1):
-        failed = [(v, step, True) for v, step in span.get("failed") or () if (v - now) * side > 0]
-        changed = [(v, sketch, False) for v, sketch in span.get("changed") or () if (v - now) * side > 0]
-        if failed or changed:
-            seen.append(min(failed + changed, key=lambda f: abs(f[0] - now)))
-    parts = [not_rebuilt_why([(v, name)]) if broke else outline_changed_why([(v, name)]) for v, name, broke in seen]
+    parts = [_try_why(v, name, broke) for v, name, broke in _nearest_tries(span, now)]
     return "no value other than %s could be copied, since %s" % (number_text(now), " and ".join(parts))
 
 
