@@ -5,12 +5,14 @@ from types import SimpleNamespace
 
 from tests import context  # noqa: F401
 from tests.coil_helpers import coil_capture, edit_coil, with_sizes
+from tests.test_translate_thread import thread_data
 from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of
 
 from lib.capture_model import gap_hints
 from lib.params import size_table
 from lib.translator import translate
 from lib.translator.combine import step as combine_step
+from lib.translator.coil import coil_limits as limits
 from lib.translator.result import Refusal
 
 COIL = 2
@@ -95,42 +97,46 @@ class CoilGapTest(unittest.TestCase):
 
     def test_a_taper_angle_is_not_copied(self):
         reason, _ = self.left_out_by(lambda d: d["params"]["taper_deg"].update(value=5.0, expression="5 deg"))
-        self.assertIn("taper", reason)
+        self.assertEqual(reason, limits.TAPERED)
 
     def test_parameters_that_do_not_say_the_type_leave_the_coil_out(self):
-        self.assertIn("sizes", self.left_out_by(lambda d: d["params"].pop("revolutions"))[0])
+        self.assertEqual(self.left_out_by(lambda d: d["params"].pop("revolutions"))[0], limits.NO_PARAMETERS)
+
+    def test_a_gap_carries_the_hint_of_its_cause(self):
+        _, result = self.left_out_by(lambda d: d["params"]["taper_deg"].update(value=5.0))
+        self.assertEqual([g["hint"] for g in result.gaps], [gap_hints.HINTS[gap_hints.COIL_TAPER]])
 
     def test_a_capture_without_coil_details_asks_for_a_new_export(self):
         capture = coil_capture()
         capture["items"][COIL]["data"] = {}
-        self.assertIn("Export again", gap_of(translate(capture))["reason"])
+        self.assertEqual(gap_of(translate(capture))["reason"], limits.OLD_EXPORT)
 
     def test_half_turns_are_not_copied(self):
-        self.assertIn("half", self.left_out_by(lambda d: None, turns=2.5)[0])
+        self.assertEqual(self.left_out_by(lambda d: None, turns=2.5)[0], limits.HALF_TURNS)
 
     def test_end_faces_lost_in_the_part_leave_the_coil_out(self):
         for edit in (lambda d: d["faces"]["flat"].pop(), lambda d: d.update(faces=None)):
             with self.subTest():
-                self.assertIn("end faces", self.left_out_by(edit)[0])
+                self.assertEqual(self.left_out_by(edit)[0], limits.PLACE)
 
     def test_an_end_face_that_is_not_the_whole_wire_leaves_the_coil_out(self):
-        self.assertIn("end faces", self.left_out_by(lambda d: d["faces"]["flat"][0].update(area=1.0))[0])
+        self.assertEqual(self.left_out_by(lambda d: d["faces"]["flat"][0].update(area=1.0))[0], limits.PLACE)
 
     def test_a_wire_that_is_not_a_plain_outline_leaves_the_coil_out(self):
         def second_loop(d):
             d["faces"]["flat"][0]["loops"].append(copy.deepcopy(d["faces"]["flat"][0]["loops"][0]))
-        self.assertIn("wire", self.left_out_by(second_loop)[0])
+        self.assertEqual(self.left_out_by(second_loop)[0], limits.SECTION)
 
     def test_edges_off_the_helix_leave_the_coil_out(self):
         def bend(d):
             d["faces"]["edges"][0][8][2] += 1.0
-        self.assertIn("plain helix", self.left_out_by(bend)[0])
+        self.assertEqual(self.left_out_by(bend)[0], limits.NOT_FITTING)
 
     def test_a_wrong_hand_does_not_fit(self):
         def mirror(d):
             for flat in d["faces"]["flat"]:
                 flat["frame"]["z"] = [-v for v in flat["frame"]["z"]]
-        self.assertIn("plain helix", self.left_out_by(mirror)[0])
+        self.assertEqual(self.left_out_by(mirror)[0], limits.NOT_FITTING)
 
     def test_a_spiral_has_no_rise(self):
         def flatten(d):
@@ -140,21 +146,21 @@ class CoilGapTest(unittest.TestCase):
                 for point in edge:
                     point[2] = 14.0
         reason, _ = self.left_out_by(flatten, kind="revolutions_pitch")
-        self.assertIn("spiral", reason)
+        self.assertEqual(reason, limits.SPIRAL_OR_OTHER)
 
     def test_the_turns_must_not_touch(self):
         reason, _ = self.left_out_by(lambda d: None, size=4.5, diameter=20.0, pitch=4.0)
-        self.assertIn("touch", reason)
+        self.assertEqual(reason, limits.TOUCHING)
 
     def test_a_cut_that_could_also_be_an_intersect_is_left_out(self):
         reason, _ = self.left_out_by(lambda d: d["made"][0].update(volume=100.0), operation="cut")
-        self.assertIn("combines", reason)
+        self.assertEqual(reason, limits.OPERATION)
 
     def test_a_new_body_with_the_wrong_volume_is_left_out(self):
         capture = as_tool(coil_capture(operation="newBody"))
         capture["items"][COIL]["data"]["made"][0]["volume"] *= 1.5
         found = gap_of_index(translate(capture), COIL + 1)
-        self.assertIn("Coil1 (coil)", found["reason"])
+        self.assertTrue(found["reason"].startswith("The tool body Body2 cannot be copied: Coil1 (coil)"))
 
     def test_a_coil_past_the_recipe_caps_is_left_out_and_the_ones_before_stay(self):
         capture = coil_capture()
@@ -169,7 +175,7 @@ class CoilGapTest(unittest.TestCase):
             capture["items"].append(more)
         result = translate(capture)
         self.assertEqual(len(steps_of(result.recipe, "coil")), 8)
-        self.assertIn("at most 8", gap_of_index(result, COIL + 8)["reason"])
+        self.assertEqual(gap_of_index(result, COIL + 8)["reason"], limits.TOO_MANY % limits.MAX_COILS)
 
     def test_the_turns_of_all_coils_stay_within_the_cap(self):
         capture = coil_capture(turns=60.0, pitch=2.5, size=1.0, diameter=8.0)
@@ -182,7 +188,7 @@ class CoilGapTest(unittest.TestCase):
         capture["items"].append(second)
         result = translate(capture)
         self.assertEqual(len(steps_of(result.recipe, "coil")), 1)
-        self.assertIn("100 turns", gap_of_index(result, COIL + 1)["reason"])
+        self.assertEqual(gap_of_index(result, COIL + 1)["reason"], limits.TOO_MANY_TURNS % limits.MAX_TURNS_TOTAL)
 
     def test_a_tool_body_with_a_coil_and_other_steps_is_refused(self):
         tool = SimpleNamespace(steps=[{"kind": "extrude"}, {"kind": "coil"}])
@@ -195,6 +201,35 @@ def gap_of_index(result, index):
     found = left_out(result, index)
     assert found is not None, "the coil was copied"
     return found
+
+
+def thread_capture(coil_first):
+    """The threaded plate and a coil of 95 turns, the coil before the thread when `coil_first` (timeline order)."""
+    capture = load_capture("thread_modeled")
+    capture["items"][-1]["data"] = thread_data()
+    coil = coil_capture(turns=95.0, pitch=2.5, size=1.0, diameter=8.0)["items"][COIL]
+    coil["index"], coil["name"] = 5, "Coil1"
+    coil["data"]["volumes_before"][0]["token"] = coil["data"]["made"][0]["token"] = "t1"
+    capture["items"].append(coil)
+    if coil_first:
+        thread = capture["items"][4]
+        thread["index"], coil["index"] = 5, 4
+        capture["items"][4], capture["items"][5] = coil, thread
+    return capture
+
+
+class CoilAndThreadTurnsTest(unittest.TestCase):
+    """The recipe caps the turns of coils and threads together, so whichever comes later in the timeline is left out."""
+
+    def test_a_thread_after_a_coil_that_used_the_turns_is_left_out(self):
+        result = translate(thread_capture(coil_first=True))
+        self.assertEqual((len(steps_of(result.recipe, "coil")), len(steps_of(result.recipe, "thread"))), (1, 0))
+        self.assertEqual([g["hint"] for g in result.gaps], [gap_hints.HINTS[gap_hints.THREAD_LIMITS]])
+
+    def test_a_coil_after_a_thread_that_used_the_turns_is_left_out(self):
+        result = translate(thread_capture(coil_first=False))
+        self.assertEqual((len(steps_of(result.recipe, "coil")), len(steps_of(result.recipe, "thread"))), (0, 1))
+        self.assertEqual(gap_of_index(result, 5)["reason"], limits.TOO_MANY_TURNS % limits.MAX_TURNS_TOTAL)
 
 
 class CoilSizesTest(unittest.TestCase):
@@ -216,15 +251,15 @@ class CoilSizesTest(unittest.TestCase):
         step = coil_of(sized(with_sizes(coil_capture(kind="height_pitch"))))
         self.assertEqual((step["pitch"], step["turns"]), ({"expr": "coil_p"}, {"expr": "coil_h / coil_p"}))
 
-    def test_a_height_that_is_not_the_rise_marks_its_sizes_and_stays_a_number(self):
-        def stray(capture):
-            capture["items"][COIL]["data"]["params"]["height"]["value"] += 1.5
-        capture = with_sizes(coil_capture())
-        stray(capture)
-        result = sized(capture)
-        step = coil_of(result)
-        self.assertEqual((step["pitch"], step["turns"]), (4.0, {"expr": "coil_n"}))
-        self.assertIn("coil_h", [d["name"] for d in result.dropped])
+    def test_a_height_that_is_not_the_rise_keeps_pitch_and_turns_as_numbers_and_marks_their_sizes(self):
+        for kind, sizes in (("revolutions_height", {"coil_h", "coil_n"}), ("height_pitch", {"coil_h", "coil_p"})):
+            with self.subTest(kind=kind):
+                capture = with_sizes(coil_capture(kind=kind))
+                capture["items"][COIL]["data"]["params"]["height"]["value"] += 1.5
+                result = sized(capture)
+                step = coil_of(result)
+                self.assertEqual((step["pitch"], step["turns"]), (4.0, 3.0))
+                self.assertTrue(sizes <= {d["name"] for d in result.dropped})
 
     def test_a_wire_that_is_not_round_or_square_keeps_its_numbers_and_marks_the_sizes(self):
         result = sized(with_sizes(coil_capture(shape="triangle")))

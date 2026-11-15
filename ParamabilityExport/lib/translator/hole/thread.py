@@ -18,11 +18,12 @@ from ..faces.slabs import as_quantity
 from ..ranges import range_check
 from ..result import Refusal, StepResult
 from ..step_walk import all_steps
+from .. import turn_budget
 from ..values import Quantity
 
 # The recipe's thread caps (feature-recipe caps.ts): threads per recipe, turns in all, pitch range in mm.
 MAX_THREADS = 8
-MAX_TURNS = 100
+MAX_TURNS = turn_budget.MAX_TURNS_TOTAL
 MIN_PITCH, MAX_PITCH = 0.2, 10.0
 FORM_ANGLE_DEG = 60.0
 ANGLE_TOL_DEG = 0.01
@@ -79,10 +80,6 @@ def _thread_steps(ctx):
     return [s for s in all_steps(ctx.steps) if s.get("kind") == "thread"]
 
 
-def _turns(step):
-    return float(values.number(step["length"])) / float(step["pitch"])
-
-
 def _fit_caps(ctx, count):
     """A Refusal when `count` more threads pass the recipe's thread count, else None."""
     if ctx.outer is not None:
@@ -96,8 +93,7 @@ def _limit_length(ctx, item, spec, length, count):
     """`length` (a Quantity) kept within the turns left for the recipe's threads, at every size. A Refusal when the
     turns already pass the cap at the current values; a length that can pass it at some size is written as its number
     and its sizes are marked."""
-    used = sum(_turns(s) for s in _thread_steps(ctx))
-    room = (MAX_TURNS - used) / count * spec.pitch
+    room = turn_budget.left(ctx) / count * spec.pitch
     if length.n > room + 1e-9:
         return Refusal("The threads of the part pass %d turns in all." % MAX_TURNS, cause=gap_hints.THREAD_LIMITS)
     return values.stays_below(ctx, item, length, room, "the thread of %s could pass %d turns at some sizes"

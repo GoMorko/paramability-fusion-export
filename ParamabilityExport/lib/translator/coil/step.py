@@ -14,7 +14,7 @@ import math
 
 from ...geometry import vec
 from ...package.numbers import round9
-from .. import placement, values
+from .. import placement, turn_budget, values
 from ..extrude import COMBINE
 from ..result import Refusal, StepResult
 from ..step_walk import all_steps
@@ -144,7 +144,7 @@ def _write(item, ctx, params, kind, found, measured):
     written = _written_coils(ctx)
     if len(written) >= limits.MAX_COILS:
         return Refusal(limits.TOO_MANY % limits.MAX_COILS, cause=limits.CAUSE_LIMIT)
-    turns_left = limits.MAX_TURNS_TOTAL - sum(values.number(s["turns"]) for s in written)
+    turns_left = turn_budget.left(ctx)
     if turns_mm > min(limits.MAX_TURNS, turns_left):
         return Refusal(limits.TOO_MANY_TURNS % limits.MAX_TURNS_TOTAL, cause=limits.CAUSE_LIMIT)
     frame, loop = start["frame"], start["loop"]
