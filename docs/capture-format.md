@@ -715,6 +715,7 @@ The translator fits the app's spline through points chosen from the samples (`li
   "hole_type": "simple",
   "tap_type": "simple",
   "thread_modeled": null,
+  "thread": null,
   "diameter": 5.0,
   "tip_angle_deg": 118,
   "counterbore": null,
@@ -731,6 +732,11 @@ The translator fits the app's spline through points chosen from the samples (`li
 
 - `hole_type`: `simple`, `counterbore`, `countersink`. `tap_type`: `simple`, `clearance`, `tapped`,
   `taperTapped`. `thread_modeled`: `thread.isModeled` for a tapped hole, else null.
+- `thread`: for a tapped hole, the thread info (the keys of `ThreadFeature` below: `thread_type`, `designation`,
+  `thread_class`, `internal`, `right_hand`, `pitch`, `major_diameter`, `minor_diameter`, `angle_deg`) plus
+  `full_length` (bool or null) and `depth` (mm, how deep the thread runs, or null); every key is null when it cannot be
+  read. Null for a hole that is not tapped. `params["thread.depth"]` holds the depth parameter. A modeled thread is
+  copied as a hole at the minor diameter plus an internal `thread` step for each position.
 - `counterbore`: `{ "diameter", "depth" }`; `countersink`: `{ "diameter", "angle_deg" }`.
 - `positions`: one point per `SketchPointsHolePositionDefinition.sketchPoints` item (`worldGeometry`), else
   `[position]`. Points of another component's sketch are brought into the target's coordinates; such a hole gets
@@ -742,7 +748,10 @@ The translator fits the app's spline through points chosen from the samples (`li
   `point_tokens` (optional): `entityToken` of each sketch point, same order as `positions`; absent when a token is
   missing or the points sit on more than one sketch.
 - `extent`: `{ "kind": "distance", "depth" }`, `{ "kind": "throughAll" }` (also for the `All` kind), `{ "kind":
-  "toEntity" }`, `{ "kind": "other" }`.
+  "toEntity", ... }` with the record of the face or body the hole goes up to (`entity_type`, `plane`, `face_point`,
+  `token`, `body`, `foreign`: the same keys as an extrude's `toEntity` side), `{ "kind": "other" }`. A hole up to an
+  entity is copied as a blind hole of the depth measured from `end_points` (flat ends only, all holes of the step at
+  the same depth); the depth follows the face with `translator/faces/follow.py`.
 - `side_cylinders`: every `sideFaces` item whose geometry is a `Cylinder` (`origin`, `axis`, `radius`).
   `end_points`: `pointOnFace` of each `endFaces` item. `end_face_types`: the geometry type of each of those faces
   (`"plane"` or `"cone"`; `null` when the type is another one or cannot be read), one per `end_points` entry; a flat or
@@ -1128,7 +1137,39 @@ Body records (`lib/fusion_reader/read_bodies.py`): `{ "token", "name" }`, `forei
 tool for a body of another component, and `points`: up to 8 vertices in mm of the native body, in the body's vertex
 order (empty when one cannot be read, since a gap would shift the order).
 
-**ThreadFeature**: `{ "modeled": bool }` (`isModeled`).
+**ThreadFeature**: `{ "modeled": false }` for a cosmetic thread (`isModeled`). A modeled thread (read by
+`lib/fusion_reader/read_thread.py`) holds:
+
+```json
+{
+  "modeled": true,
+  "thread_type": "ISO Metric profile", "designation": "M8x1.25", "thread_class": "6g",
+  "internal": false, "right_hand": true,
+  "pitch": 1.25, "major_diameter": 8.0, "minor_diameter": 6.5, "angle_deg": null,
+  "full_length": true, "length": 10.0, "offset": 0.0,
+  "faces": [{ "surface": "Cylinder", "origin": [..], "axis": [..], "radius": 4.0, "span": [0.0, 10.0],
+              "face_point": [..], "outward": true }],
+  "made_span": [0.0, 9.0],
+  "params": { "length": { }, "offset": { } }
+}
+```
+
+- `thread_type`, `designation`, `thread_class`, `internal` (`isInternal`), `right_hand` (`isRightHanded`), `pitch`,
+  `major_diameter`, `minor_diameter` and `angle_deg`: the `threadInfo` members (or the same names on the feature).
+  Lengths in mm; each is null when it cannot be read. `angle_deg` is null when the API gives none: the profile name
+  then decides (metric and Unified are 60 degrees).
+- `full_length` (`isFullLength`), `length` (`threadLength`) and `offset` (`threadOffset`); `params` has the length and
+  offset parameters.
+- `faces`: one entry per `inputFaces` item. A cylinder gives `origin`, `axis`, `radius`, `span` (the end vertices'
+  distance along the axis from `origin`), `face_point` and `outward` (true when its normal points away from the axis:
+  a bolt; false for a hole wall); another surface only `surface` and `face_point`. A face of another component is
+  `foreign`.
+- `made_span` (after the step): the same span for the faces the thread made; it tells which end a thread over part of the
+  length starts at.
+
+The translator writes a recipe `thread` for a metric or Unified thread with a pitch of 0.2 to 10 mm, at most 100 turns
+in all and 8 threads, and leaves other profiles, tapered threads and a thread inside a tool body out as gaps
+(`threadProfile` and `threadLimits` hints).
 
 **OffsetFacesFeature** (press pull; `inputFaces` (a list or a collection), else `faces`, read before the item;
 `distance`; `faces` after it. When no face is readable before the item, `faces` holds the flat faces of

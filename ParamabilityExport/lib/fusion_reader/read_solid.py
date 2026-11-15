@@ -1,4 +1,4 @@
-"""Extrude, revolve, hole, combine and thread features as plain dicts (docs/capture-format.md).
+"""Extrude, revolve, hole and combine features as plain dicts (docs/capture-format.md).
 
 Each feature type has a pair of readers. `before(feature, ctx)` runs with the timeline marker just before the item
 and reads the inputs. `after(feature, ctx, data)` runs with the marker just after it and reads what the feature
@@ -14,6 +14,7 @@ from .param_refs import Params, with_params
 from .placement import foreign_target_ref, from_assembly, ref_record
 from .read_bodies import tool_ref
 from .read_sketch import first_profile, profile_area, read_outlines, read_profiles
+from .read_thread import thread_info
 
 _OPERATIONS = [
     ("newcomponent", "newComponent"),
@@ -478,7 +479,7 @@ def hole_place(feature, ctx):
     return dict({"positions": [geo.point(p.worldGeometry) for p in points]}, **geo.safe(lambda: _hole_sketch(points), {}))
 
 
-def _hole_extent(feature):
+def _hole_extent(feature, ctx):
     definition = feature.extentDefinition
     name = geo.type_name(definition)
     if "ThroughAll" in name or name.startswith("All"):
@@ -486,15 +487,33 @@ def _hole_extent(feature):
     if name == "DistanceExtentDefinition":
         return {"kind": "distance", "depth": geo.length(definition.distance)}
     if "ToEntity" in name:
-        return {"kind": "toEntity"}
+        return dict({"kind": "toEntity"}, **_target(definition, ctx, "extent"))
     return {"kind": "other", "type": name}
 
 
-def _hole_params(feature, hole_type):
+def _hole_thread(feature, tapped):
+    """The thread of a tapped hole as `read_thread.thread_info` gives it, plus `full_length` and `depth` (how deep the
+    thread runs). The members may sit on `feature.thread` or on the hole itself; null when not given."""
+    if not tapped:
+        return None
+    source = geo.safe(lambda: feature.thread, None)
+    found = thread_info(source, feature)
+    full = geo.safe(lambda: source.isFullLength, None)
+    if full is None:
+        full = geo.safe(lambda: feature.isFullLength, None)
+    found["full_length"] = full if isinstance(full, bool) else None
+    depth = geo.safe(lambda: geo.length(source.threadDepth), None)
+    found["depth"] = depth if depth is not None else geo.safe(lambda: geo.length(feature.threadDepth), None)
+    return found
+
+
+def _hole_params(feature, hole_type, tapped):
     found = Params()
     found.add("diameter", lambda: feature.holeDiameter)
     found.add("tip_angle_deg", lambda: feature.tipAngle, "angle")
     found.add("extent.depth", lambda: _extent_distance(feature.extentDefinition))
+    if tapped:
+        found.add("thread.depth", lambda: feature.thread.threadDepth)
     if hole_type == "counterbore":
         found.add("counterbore.diameter", lambda: feature.counterboreDiameter)
         found.add("counterbore.depth", lambda: feature.counterboreDepth)
@@ -512,6 +531,7 @@ def hole_before(feature, ctx):
         "hole_type": hole_type,
         "tap_type": tap_type,
         "thread_modeled": geo.safe(lambda: bool(feature.thread.isModeled), None) if tapped else None,
+        "thread": _hole_thread(feature, tapped),
         "diameter": geo.length(feature.holeDiameter),
         "tip_angle_deg": geo.safe(lambda: geo.angle(feature.tipAngle), None),
         "counterbore": {
@@ -524,12 +544,12 @@ def hole_before(feature, ctx):
         } if hole_type == "countersink" else None,
         "direction": geo.safe(lambda: geo.unit_vector(feature.direction), None),
         **hole_place(feature, ctx),
-        "extent": geo.safe(lambda: _hole_extent(feature), {"kind": "other", "type": "unreadable"}),
+        "extent": geo.safe(lambda: _hole_extent(feature, ctx), {"kind": "other", "type": "unreadable"}),
         "side_cylinders": [],
         "end_points": [],
         "end_face_types": [],
         "participants": geo.safe(lambda: geo.body_refs(feature.participantBodies, ctx), []),
-    }, _hole_params(feature, hole_type))
+    }, _hole_params(feature, hole_type, tapped))
 
 
 _END_FACE_TYPES = {"Plane": "plane", "Cone": "cone"}
@@ -587,15 +607,10 @@ def combine_after(feature, ctx, data):
     return found
 
 
-def thread_before(feature, ctx):
-    return {"modeled": geo.safe(lambda: bool(feature.isModeled), True)}
-
-
 # type name -> (before, after); either may be None
 READERS = {
     "ExtrudeFeature": (extrude_before, extrude_after),
     "RevolveFeature": (revolve_before, revolve_after),
     "HoleFeature": (hole_before, hole_after),
     "CombineFeature": (combine_before, combine_after),
-    "ThreadFeature": (thread_before, None),
 }

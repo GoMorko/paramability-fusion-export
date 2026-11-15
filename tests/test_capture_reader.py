@@ -640,6 +640,80 @@ class CombineThreadTest(unittest.TestCase):
         self.assertEqual(items[1]["data"], {"modeled": False})
 
 
+def cylinder_face(axis=(0, 0, 1), radius=4.0, span=(0.0, 10.0), outward=True):
+    """A cylinder face about the line through (20, 10, 0) along `axis`, with its end vertices at `span` (mm)."""
+    ends = [P(20 + axis[0] * t, 10 + axis[1] * t, axis[2] * t) for t in span]
+    side = -1.0 if not outward else 1.0
+    return Obj("fusion::BRepFace", geometry=Obj("core::Cylinder", origin=P(20, 10, 0), axis=Obj(x=axis[0], y=axis[1], z=axis[2]),
+                                                 radius=radius * CM),
+               pointOnFace=P(20 + radius, 10, 5), vertices=Coll([Obj(geometry=e) for e in ends]),
+               evaluator=Obj(getNormalAtPoint=lambda p: (True, Obj(x=side, y=0.0, z=0.0))))
+
+
+class ThreadReadTest(unittest.TestCase):
+    def read(self, **kw):
+        target = body()
+        info = Obj(threadType="ISO Metric profile", threadDesignation="M8x1.25", threadClass="6g", isInternal=False,
+                   isRightHanded=True, pitch=0.125, majorDiameter=0.8, minorDiameter=0.646)
+        base = dict(isModeled=True, threadInfo=info, isFullLength=True, threadLength=param(1.0), threadOffset=param(0.0),
+                    inputFaces=Coll([cylinder_face()]), faces=Coll([cylinder_face(span=(0.0, 9.0))]))
+        base.update(kw)
+        thread = entry(feature("ThreadFeature", "Thread1", bodies=[target], **base))
+        design = FakeDesign([thread], target)
+        return read_capture(design, target, fusion="", name="", up_axis="z")["items"][0]["data"]
+
+    def test_a_modeled_thread_gives_its_info_its_length_and_its_cylinder(self):
+        data = self.read()
+        self.assertEqual((data["thread_type"], data["designation"], data["internal"], data["right_hand"]),
+                         ("ISO Metric profile", "M8x1.25", False, True))
+        self.assertEqual((data["pitch"], data["major_diameter"], data["minor_diameter"]), (1.25, 8.0, 6.46))
+        self.assertEqual((data["full_length"], data["length"], data["offset"]), (True, 10.0, 0.0))
+        (face,) = data["faces"]
+        self.assertEqual((face["surface"], face["radius"], face["span"], face["outward"]), ("Cylinder", 4.0, [0.0, 10.0], True))
+        self.assertEqual(data["made_span"], [0.0, 9.0])
+
+    def test_an_inward_face_and_members_that_cannot_be_read_stay_null(self):
+        data = self.read(threadInfo=Obj(threadType="ISO Metric profile"), inputFaces=Coll([cylinder_face(outward=False)]))
+        self.assertIsNone(data["pitch"])
+        self.assertIsNone(data["right_hand"])
+        self.assertFalse(data["faces"][0]["outward"])
+
+    def test_a_face_that_is_not_a_cylinder_has_no_axis(self):
+        plane = Obj("fusion::BRepFace", geometry=Obj("core::Plane"), pointOnFace=P(0, 0, 0))
+        (face,) = self.read(inputFaces=Coll([plane]))["faces"]
+        self.assertNotIn("axis", face)
+
+
+class HoleThreadReadTest(unittest.TestCase):
+    def read(self, **kw):
+        target = body()
+        thread = Obj(isModeled=True, isFullLength=False, threadDepth=0.5, threadType="ANSI Unified Screw Threads",
+                     pitch=0.1, majorDiameter=0.6, minorDiameter=0.5, isRightHanded=True)
+        base = dict(holeType="SimpleHoleType", holeTapType="TappedHoleTapType", holeDiameter=param(0.6),
+                    tipAngle=param(math.radians(118)), direction=Obj(x=0.0, y=0.0, z=-1.0), position=P(10, 10, 10),
+                    holePositionDefinition=Obj("fusion::PointHolePositionDefinition"), thread=thread,
+                    extentDefinition=Obj("fusion::DistanceExtentDefinition", distance=param(0.8)))
+        base.update(kw)
+        hole = entry(feature("HoleFeature", "Hole1", bodies=[target], **base))
+        design = FakeDesign([hole], target)
+        return read_capture(design, target, fusion="", name="", up_axis="z")["items"][0]["data"]
+
+    def test_the_thread_of_a_tapped_hole_gives_its_numbers_and_depth(self):
+        thread = self.read()["thread"]
+        self.assertEqual((thread["thread_type"], thread["pitch"], thread["major_diameter"], thread["minor_diameter"]),
+                         ("ANSI Unified Screw Threads", 1.0, 6.0, 5.0))
+        self.assertEqual((thread["full_length"], thread["depth"], thread["right_hand"]), (False, 5.0, True))
+
+    def test_a_plain_hole_has_no_thread_record(self):
+        self.assertIsNone(self.read(holeTapType="SimpleHoleTapType")["thread"])
+
+    def test_a_hole_up_to_a_face_names_the_face(self):
+        face = Obj("fusion::BRepFace", geometry=Obj("core::Plane", origin=P(0, 0, 4), normal=Obj(x=0.0, y=0.0, z=1.0)),
+                   pointOnFace=P(5, 5, 4), entityToken="f1")
+        extent = self.read(extentDefinition=Obj("fusion::ToEntityExtentDefinition", entity=face))["extent"]
+        self.assertEqual((extent["kind"], extent["entity_type"], extent["face_point"]), ("toEntity", "BRepFace", [5, 5, 4]))
+
+
 class CombineVolumeTest(unittest.TestCase):
     def read(self, volume_at):
         target = body()

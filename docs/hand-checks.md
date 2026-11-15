@@ -125,3 +125,28 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     `message`, then use Edit, Undo and count the steps that bring the fillet back. TH5: tick `Round` and `Bevel` (range 1 to 9) and
     cancel in the "Try 3 of ..." window; then, on the TH1 box, use Export size choices with a row `Width` = 12, which Fusion cannot build. In both, every step is
     as before; if not, a message box names the step and says to use Undo.
+
+11. TD1, modeled threads. Make a jar: a cylinder body of 30 mm diameter and 20 mm long (user parameter `Neck` for
+    the length), and add a Thread (Create, Thread) on its side with "Modeled" ticked: an ISO Metric profile, M30x2,
+    full length, right hand. Make a second design with a left hand M20x1.5 thread over only 10 mm of a 25 mm long
+    cylinder, started from the lower end. Make a third with an ANSI Unified thread, and a fourth with an ACME thread.
+    Export: tick `Neck`. In `report.json`, the item of the thread must hold `thread_type`, `pitch` (2.0), `major_diameter`
+    (30.0), `minor_diameter`, `right_hand`, and a `faces` entry with `radius` 15, a `span` and `outward` true. If
+    a number is missing or 10 times too big or too small, the units of the thread info differ from the reader's guess
+    (cm). The thread copies as a `thread` step; the metric and Unified ones copy, the ACME one is left out with the
+    hint about 60 degree threads. Changing `Neck` in Paramability changes the thread length. In the partial thread
+    design, `made_span` must show where the made faces lie along the axis, and the copy must start at the same end.
+    Compare the volume of the copy with Fusion: the threads differ a little in the crest and root shape, note by how
+    much. In Fusion, also check what start angle the thread has: the copy always uses its own.
+
+12. TD2, threaded and up to a face holes. Make a plate 40 x 40 x 12 mm with a tapped Hole (Hole tool, "Tapped",
+    "Modeled" ticked, M6x1) 8 mm deep with full length thread, and a second one with a thread length of 5 mm. Make a
+    through hole with a modeled M5 thread. Then make a Hole whose extent is "To" an inner floor (a second box body
+    or a stepped pocket), and one up to a body.
+    Export: each tapped hole copies as a hole at the minor diameter plus an internal `thread` step. In `report.json`
+    the hole item must hold `thread` with `pitch`, `major_diameter`, `minor_diameter`, `right_hand`, `full_length`
+    and for the 5 mm one `depth` 5.0. If those members are missing, note where Fusion keeps them (on `feature.thread`
+    or on the hole). Check also what `sideFaces` holds for a modeled thread (the bore cylinder, or only the helical
+    faces); the copy cuts the bore at the minor diameter from the thread info. The holes up to a face and a body copy
+    as blind holes of the measured depth, and when the floor follows a parameter the hole depth follows it. A hole up to a
+    face that ends in a drill point is left out with a reason.

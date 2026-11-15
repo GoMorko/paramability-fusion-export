@@ -1,6 +1,8 @@
-"""Hole and thread handlers (HoleFeature, ThreadFeature).
+"""Hole and cosmetic thread handlers (HoleFeature, ThreadFeature); modeled threads are in `thread.py`.
 
-A hole with a flat end, or through all the way, is a recipe `hole`. A blind hole with a drill tip has no recipe
+A hole with a flat end, or through all the way, is a recipe `hole`. A hole that ends at a face or body is a blind hole
+of the measured depth. A tapped hole with a modeled thread is a hole at the thread's minor diameter plus an internal
+recipe `thread` for each position. A blind hole with a drill tip has no recipe
 `hole` form, so it becomes a revolve cut of the hole's profile (shank, optional step or cone, and the cone of the
 tip) turned about the hole axis. Measured `end_points` and `side_cylinders` check the stored direction and size.
 Hole points follow sizes when the probe's motion file moves them (sketch/sketch_motion.py). A hole on a sketch point, or on a
@@ -13,10 +15,13 @@ from ...geometry import vec
 from ...package.numbers import round9
 
 from .. import ref_motion, values
+from ..faces import follow
+from ..faces.slabs import as_quantity
 from ..ranges import range_check
 from ..result import Refusal, StepResult
 from ..sketch import sketch_motion
 from ..values import Quantity
+from . import thread as threads
 
 
 MARGIN_MM = 0.01
@@ -83,11 +88,9 @@ def _diameter(data, ctx):
     if data.get("tap_type") not in TAPPED:
         return float(data["diameter"])
     if data.get("tap_type") == "taperTapped":
-        return Refusal("Tapered threads are not copied yet.")
+        return Refusal("Tapered threads are not copied yet.", cause=gap_hints.THREAD_PROFILE)
     if data.get("thread_modeled") is None:
         return Refusal("The thread of this hole could not be read.")
-    if data["thread_modeled"]:
-        return Refusal("Modeled threads are not copied yet.", cause=gap_hints.THREAD)
     drilled = _drill_diameter(data)
     if not isinstance(drilled, Refusal):
         ctx.note("The thread of this hole is not copied; it was cut as a plain hole.")
@@ -225,14 +228,15 @@ class _Sizes:
         self.counterbore, self.countersink = counterbore, countersink
 
 
-def _sizes(item, ctx, diameter, depth, counterbore, countersink):
+def _sizes(item, ctx, diameter, depth, counterbore, countersink, depth_q=None):
     data = item["data"]
     if data.get("tap_type") in TAPPED:
         values.pin(ctx, item, "diameter", "the thread of %s sets the drill size" % item.get("name", "a hole"))
         diameter_q = Quantity(diameter)
     else:
         diameter_q = values.quantity(ctx, item, "diameter", diameter, absolute=True)
-    depth_q = None if depth is None else values.quantity(ctx, item, "extent.depth", depth, absolute=True)
+    if depth_q is None and depth is not None:
+        depth_q = values.quantity(ctx, item, "extent.depth", depth, absolute=True)
     bore = None
     if counterbore:
         bore = {"diameter": values.quantity(ctx, item, "counterbore.diameter", counterbore["diameter"], absolute=True),
@@ -258,20 +262,35 @@ def hole(item, ctx):
     ):
         return Refusal("This kind of hole is not copied yet.")
     extent = data.get("extent") or {}
-    if extent.get("kind") not in ("distance", "throughAll"):
+    if extent.get("kind") not in ("distance", "throughAll", "toEntity"):
         return Refusal("This way of setting the hole depth is not copied yet.")
     through = extent["kind"] == "throughAll"
-    depth = None if through else float(extent["depth"])
-    if not through and not depth > 0:
+    up_to = extent["kind"] == "toEntity"
+    depth = None if through or up_to else float(extent["depth"])
+    if depth is not None and not depth > 0:
         return Refusal("This hole has no depth.")
 
-    diameter = _diameter(data, ctx)
+    modeled = data.get("tap_type") == "tapped" and data.get("thread_modeled") is True
+    spec = None
+    if modeled:
+        drilled = _drill_diameter(data)
+        spec = threads.hole_spec(data, ctx, item, None if isinstance(drilled, Refusal) else drilled)
+        diameter = spec if isinstance(spec, Refusal) else spec.minor
+    else:
+        diameter = _diameter(data, ctx)
     if isinstance(diameter, Refusal):
         return diameter
     moved = ref_motion.hole_moves(ctx, item, data)
     direction = _direction(data, ctx)
     _check_size(data, ctx, len(data["positions"]), diameter)
-    sizes = _sizes(item, ctx, diameter, depth, counterbore, countersink)
+    points = _moved_points(ctx, item, data["positions"], moved)
+    depth_q = None
+    if up_to:
+        depth_q = _up_to_depth(item, ctx, data, direction, points)
+        if isinstance(depth_q, Refusal):
+            return depth_q
+        depth = depth_q.n
+    sizes = _sizes(item, ctx, diameter, depth, counterbore, countersink, depth_q)
 
     tip = data.get("tip_angle_deg")
     tipped = False
@@ -291,10 +310,58 @@ def hole(item, ctx):
     _keep_fit(ctx, item, sizes, tipped)
     if tipped:
         profile = _tip_profile(sizes.diameter, sizes.depth, float(tip), sizes.counterbore, sizes.countersink)
-        points = _moved_points(ctx, item, data["positions"], moved)
-        return StepResult.of(_tip_step(p, direction, profile) for p in points)
-    return StepResult.of(_hole_step(p, direction, sizes.diameter, sizes.depth, sizes.counterbore, sizes.countersink)
-                         for p in _moved_points(ctx, item, data["positions"], moved))
+        steps = [_tip_step(p, direction, profile) for p in points]
+    else:
+        steps = [_hole_step(p, direction, sizes.diameter, sizes.depth, sizes.counterbore, sizes.countersink)
+                 for p in points]
+    if spec is not None:
+        cut = threads.hole_threads(ctx, item, data, spec, points, direction, sizes.depth, through)
+        if isinstance(cut, Refusal):
+            return cut
+        steps += cut
+    return StepResult.of(steps)
+
+
+def _along_shifts(points, direction):
+    """How far each written hole point moves along `direction` with the sizes: a Quantity per point whose number is
+    zero (the sum of each coordinate's formula less its number)."""
+    out = []
+    for point in points:
+        total = Quantity(0.0)
+        for c, d in zip(point, direction):
+            q = as_quantity(c)
+            if abs(d) > 1e-9 and q.sized:
+                total = total.plus(q.plus(-q.n).scaled(d))
+        out.append(total)
+    return out
+
+
+def _up_to_depth(item, ctx, data, direction, points):
+    """The depth of a hole that ends at a face or body, as a Quantity, or a Refusal. It is the measured distance from
+    the entry to the flat end of the hole; it follows the face the hole reaches (`follow.target_shift`) and the entry."""
+    positions, ends = data["positions"], data.get("end_points") or []
+    if len(ends) != len(positions):
+        return Refusal("The end of this hole could not be measured.")
+    if set(data.get("end_face_types") or []) != {"plane"}:
+        return Refusal("A hole that ends at a face with a drill point is not copied yet.")
+    depths = [vec.dot(vec.sub(end, start), direction) for start, end in zip(positions, ends)]
+    if any(abs(d - depths[0]) > 1e-4 for d in depths) or depths[0] <= 0:
+        return Refusal("The holes of this step end at different depths.")
+    measured = depths[0]
+    shifts = _along_shifts(points, direction)
+    if any(shift.sized and not shift.same_as(shifts[0]) for shift in shifts):
+        ctx.doubt(tuple(dict.fromkeys(r for shift in shifts for r in shift.reads)),
+                  "the holes of %s do not all move the same way along their depth" % item.get("name", "a hole"))
+        shifts = [Quantity(0.0)] * len(shifts)
+    reach = follow.target_shift(ctx, item, data["extent"], direction, "ends at")
+    if reach is None:
+        reach = Quantity(0.0)
+    depth = reach.plus(measured - reach.n) if reach.sized else Quantity(measured)
+    depth = depth.plus(shifts[0].scaled(-1))
+    if depth.sized and not values.stays_positive(ctx.table, depth):
+        ctx.doubt(depth.reads, "%s would end before it starts at some sizes" % item.get("name", "a hole"))
+        depth = Quantity(measured)
+    return depth
 
 
 def _moved_points(ctx, item, rows, moved):
@@ -310,8 +377,8 @@ def _moved_points(ctx, item, rows, moved):
 
 
 def thread(item, ctx):
-    """A cosmetic thread changes no solid: it makes no step. A modeled one is refused."""
+    """A cosmetic thread changes no solid: it makes no step. A modeled one is `thread.feature`."""
     if (item.get("data") or {}).get("modeled"):
-        return Refusal("Modeled threads are not copied yet.", cause=gap_hints.THREAD)
+        return threads.feature(item, ctx)
     ctx.note("The thread is not copied; the exported shape has none either.")
     return StepResult()

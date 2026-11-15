@@ -24,7 +24,8 @@ PART_OF_PATH = "partOfPath"
 GUIDE_SURFACE = "guideSurface"
 SHARP_CORNER = "sharpCorner"
 LOFT_KIND = "loftKind"
-THREAD = "modeledThread"
+THREAD_PROFILE = "threadProfile"
+THREAD_LIMITS = "threadLimits"
 COIL = "coil"
 NEW_COMPONENT = "newComponent"
 OTHER_COMPONENT = "otherComponent"
@@ -51,7 +52,8 @@ HINTS = {
     GUIDE_SURFACE: "Sweep along the same path without the guide surface, or build the shape with a loft.",
     SHARP_CORNER: "Round the sharp corner of the path with a sketch fillet.",
     LOFT_KIND: "Build it from lofts of two outlines each, or from extrudes.",
-    THREAD: "Use a cosmetic thread, which copies as a plain hole.",
+    THREAD_PROFILE: "Use a metric or Unified thread (60 degrees) that is not tapered, or a cosmetic thread.",
+    THREAD_LIMITS: "Use a pitch of 0.2 to 10 mm, at most 100 turns in all and 8 threads, or a cosmetic thread.",
     COIL: "Your AI assistant can add a coil to the copy.",
     NEW_COMPONENT: "Make the body in the component that holds the part.",
     OTHER_COMPONENT: "Use sketches, planes and faces of the part's own component.",
