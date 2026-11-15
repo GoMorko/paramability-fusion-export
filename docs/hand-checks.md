@@ -253,3 +253,12 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     no step has a warning, the parameters show their formulas, and Undo has no extra step. Export again with 30 minutes
     (or "No limit"): `hit` is false and every size has its tries. If the rebuild is fast on your machine, add more
     holes to the pattern until a try takes a few seconds.
+
+12. HE1, a hole that reaches the edge of its face. Model a lid, 60 x 40 x 3 mm, whose length is user parameter `Width`
+    = 60 mm (left end fixed at x = 0). Cut a round hole of 16 mm diameter through it at x = 30 mm, then use Emboss to
+    raise a 10 mm triangle 0.5 mm on its top face, half over the hole.
+    Export: tick `Width` with a range of 10 to 120. The range starts just above 38 mm (the hole ends at x = 38), with the reason
+    "the outline of the face ... would cross itself, lose a corner or have a hole reach its edge". In Fusion, set
+    `Width` to 40 mm and then to 36 mm: at 36 mm the hole breaks the edge of the lid and the face is a different
+    shape, so Paramability must not offer that value. In Paramability, set `Width` to the smallest value: the
+    triangle is trimmed to the lid and is not left floating.

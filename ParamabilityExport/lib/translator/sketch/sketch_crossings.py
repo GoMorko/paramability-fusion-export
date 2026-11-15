@@ -26,6 +26,7 @@ from ...sketch_values import keys
 from ...sketch_values.motion import CURVE, Affine, Stuck
 from ..ranges import kept_ranges, range_check
 from .curved import Curved, combine, names_of, render, times
+from .rect_corners import rect_corners
 
 FIT_TOL = 1e-4
 ORDER_STEPS = 20  # halvings that find where a range stops keeping the order: a millionth of the range
@@ -444,34 +445,90 @@ def _crossing(points):
     return False
 
 
-def simple_ranges(table, loops, raw_loops, motion=None):
-    """`{Fusion name: (min, max)}` inside which no written loop crosses or touches itself (`_crossing`), at every
-    setting `order_ranges` tests (corners and middles of the ranges and the probe's built states inside them); `{}`
-    when they hold over the whole ranges or nothing in them moves; None when no shorter ranges keep them (they cross
-    at the values now, or a size they read has a typed range). Loops other than profiles and polygons are not
-    checked."""
-    chains = []
+def _ring_chain(loop, raw_loop, sketch):
+    """`_chain` of a loop, also for a rect (its four corners in order); [] for a loop without corners."""
+    if loop["kind"] == "rect":
+        return [(uv, xy, False) for uv, xy in rect_corners(loop, raw_loop, sketch)]
+    return _chain(loop, raw_loop)
+
+
+def _circle_points(centre, radius):
+    """The points the app traces a circle with: four times `ARC_SAMPLES` of them."""
+    steps = 4 * ARC_SAMPLES
+    return [(centre[0] + radius * math.cos(2 * math.pi * i / steps),
+             centre[1] + radius * math.sin(2 * math.pi * i / steps)) for i in range(steps)]
+
+
+def _inside_ring(point, ring):
+    """True when `point` lies inside the closed polygon `ring` and farther than `TOUCH_MM` from every edge."""
+    inside = False
+    for i, a in enumerate(ring):
+        b = ring[i - 1]
+        if _to_segment(point, a, b) <= TOUCH_MM:
+            return False
+        if (a[1] > point[1]) != (b[1] > point[1]) and \
+                point[0] < (b[0] - a[0]) * (point[1] - a[1]) / (b[1] - a[1]) + a[0]:
+            inside = not inside
+    return inside
+
+
+def _holes_inside(rings):
+    """True when every sampled point of each hole (`rings` after the first) lies inside the outline (the first), the
+    rule the app holds a sketch to; a loop that was not drawn as points (None) is left out."""
+    outer = rings[0] if rings else None
+    if outer is None:
+        return True
+    return all(_inside_ring(p, outer) for ring in rings[1:] if ring is not None for p in ring)
+
+
+def simple_ranges(table, loops, raw_loops, motion=None, sketch=""):
+    """`{Fusion name: (min, max)}` inside which no written loop crosses or touches itself (`_crossing`) and every hole
+    stays inside the outline (`_holes_inside`), at every setting `order_ranges` tests (corners and middles of the
+    ranges and the probe's built states inside them); `{}` when they hold over the whole ranges or nothing in them
+    moves; None when no shorter ranges keep them (they fail at the values now, or a size they read has a typed
+    range). Loops other than profiles, polygons, rects and circles are not checked."""
+    shapes = []  # per loop: ("chain", [(written xy, middle)]), ("circle", [written cx, cy, r]) or None
     for loop, raw_loop in zip(loops, raw_loops):
-        chain = _chain(loop, raw_loop)
+        chain = _ring_chain(loop, raw_loop, sketch)
         if chain:
-            chains.append([([_written(v, n, table) for v, n in zip(raw_xy, uv)], middle)
-                           for uv, raw_xy, middle in chain])
-    if any(v is None for chain in chains for xy, _ in chain for v in xy):
+            shapes.append(("chain", [([_written(v, n, table) for v, n in zip(raw_xy, uv)], middle)
+                                     for uv, raw_xy, middle in chain]))
+        elif loop["kind"] == "circle":
+            parts = [(raw_loop["center"][0], loop["center"][0]), (raw_loop["center"][1], loop["center"][1]),
+                     (raw_loop["radius"], loop["radius"])]
+            shapes.append(("circle", [_written(v, n, table) for v, n in parts]))
+        else:
+            shapes.append(None)
+    chains = [shape[1] for shape in shapes if shape is not None and shape[0] == "chain"]
+    circles = [shape[1] for shape in shapes if shape is not None and shape[0] == "circle"]
+    values = [v for chain in chains for xy, _ in chain for v in xy] + [v for circle in circles for v in circle]
+    if any(v is None for v in values):
         return {}
-    reads = list(dict.fromkeys(r for chain in chains for xy, _ in chain for _, found in xy for r in found))
+    reads = list(dict.fromkeys(r for _, found in values for r in found))
     arcs = sum(1 for chain in chains for _, middle in chain if middle)
-    if not reads or sum(len(chain) for chain in chains) + arcs * ARC_SAMPLES > MAX_SIMPLE_POINTS:
+    size = sum(len(chain) for chain in chains) + arcs * ARC_SAMPLES + len(circles) * 4 * ARC_SAMPLES
+    if not reads or size > MAX_SIMPLE_POINTS:
         return {}
     states = _states(table, motion)
+
+    def at(v, env):
+        return range_check.value_of(v[0], env) if v[1] else v[0]
 
     def simple_at(setting):
         try:
             env = range_check.size_env(table, setting)
-            loops_points = [_loop_points([(tuple(range_check.value_of(v, env) if found else v for v, found in xy),
-                                           middle) for xy, middle in chain]) for chain in chains]
+            rings = []
+            for shape in shapes:
+                if shape is None:
+                    rings.append(None)
+                elif shape[0] == "circle":
+                    cx, cy, r = (at(v, env) for v in shape[1])
+                    rings.append(_circle_points((cx, cy), r) if r > 0 else [])
+                else:
+                    rings.append(_loop_points([(tuple(at(v, env) for v in xy), middle) for xy, middle in shape[1]]))
         except _FAILURES:
             return False
-        return not any(_crossing(points) for points in loops_points)
+        return not any(_crossing(r) for r in rings if r is not None) and _holes_inside(rings)
 
     def holds(bounds, only=None):
         if only is not None:

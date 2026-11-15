@@ -955,7 +955,7 @@ the sizes on the form and compare the part with Fusion at the same values.
       dimension between the legs). Extrude it 10 mm, then chamfer the edges around both end faces (pick the two
       faces). Tick all four sizes and export. Expect: `turn_deg` is not marked "along a curve" and no size is fixed
       with "a formula too long"; where a corner of the ranges would let the outline cross itself, a range stops with
-      "the outline of ... would cross itself or lose a corner". In Paramability set `turn_deg` to both ends of its
+      "the outline of ... would cross itself, lose a corner or have a hole reach its edge". In Paramability set `turn_deg` to both ends of its
       range, with the legs at their ends too: the V turns as in Fusion and the chamfer stays on the end faces.
 
 ## 10. Emboss

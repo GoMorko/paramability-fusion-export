@@ -364,7 +364,8 @@ def stuck_reason(cause, sketch):
 
 
 def crosses_reason(sketch):
-    return "the outline of %s would cross itself or lose a corner" % (clip(sketch, MAX_NAME) if sketch else "a sketch")
+    return "the outline of %s would cross itself, lose a corner or have a hole reach its edge" % (
+        clip(sketch, MAX_NAME) if sketch else "a sketch")
 
 
 def shrinks_reason(sketch):

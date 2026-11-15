@@ -1973,7 +1973,7 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   outline would cross itself), the ranges are cut there (`sketch_crossings.order_ranges`: each check above zero over the
   cut ranges by the settings of `range_check.sweep`, so inner values and the places where a term changes sign too,
   plus the middles of the ranges and the probe's states inside them; `kept_ranges.holding_ranges_where`): "the range stops at A, since the outline of
-  <sketch> would cross itself or lose a corner". When no shorter ranges keep them (a check that fails at the values
+  <sketch> would cross itself, lose a corner or have a hole reach its edge". When no shorter ranges keep them (a check that fails at the values
   now, or every size behind it has a typed range), its sizes are fixed ("along a curve"). A line that turns cannot
   carry its crossings.
 - Any other written profile or polygon whose corners follow sizes, also with straight formulas only, is checked the
@@ -1982,7 +1982,11 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   its number), and each loop is held to the app's rule for sketch loops: no two edges cross, touch (within 0.0001
   mm) or fold back, arcs drawn with the app's 16 chords. Where a loop breaks only past some values the ranges are cut
   with the same reason. This catches a corner that follows a size while the curve it meets is written as its number
-  (it moves along a curve the probe could not fit). Loops of more than 400 points are not checked.
+  (it moves along a curve the probe could not fit). Rect and circle loops are checked too, and every hole must stay
+  inside the outline of its sketch (every point the app samples on the hole inside the outline, 0.0001 mm clear of
+  its edges), the app's own rule ("a hole in the sketch reaches outside its outline"). The same check runs on the
+  loops of a flat face the probe read (a face used as an outline, the face an emboss is trimmed to). Loops of more
+  than 400 points are not checked.
 - A sketch plane that moves writes the placement origin along its normal (`sketch.on.origin`); a "to entity" reach is
   the face's move less the plane's move. Outlines of one step whose planes move differently fix those sizes.
 - A sketch on a face, or on a construction plane built on the part (also a chain of planes), may move with every size

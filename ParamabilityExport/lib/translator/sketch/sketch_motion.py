@@ -19,6 +19,7 @@ from . import inner_pick
 from .. import notes
 from .curved import Curved, combine, from_terms, names_of, render
 from .loops import profile_loops
+from .rect_corners import rect_axes, rect_corners
 from ..result import Refusal
 from ..sizes import placement_sizes, unmeasured_sizes
 from .sketch_crossings import Sources, keeps_order, order_ranges, simple_ranges
@@ -144,26 +145,6 @@ def _keyed_loops(ctx, prefix, loops, sketch=""):
             for k, loop in enumerate(loops)]
 
 
-def _rect_axes(loop):
-    angle = math.radians(loop.get("angleDeg", 0.0))
-    c, s = math.cos(angle), math.sin(angle)
-    if abs(s) < 1e-15:
-        c, s = math.copysign(1.0, c), 0.0
-    return (c, s), (-s, c)
-
-
-def _rect_corners(loop, raw_loop, sketch=""):
-    """[(uv, (x, y))] of a rect's corners, numbers and raw values."""
-    u, v = _rect_axes(loop)
-    out = []
-    for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
-        uv = [loop["center"][i] + sx * loop["width"] / 2 * u[i] + sy * loop["height"] / 2 * v[i] for i in range(2)]
-        xy = tuple(combine([(1.0, raw_loop["center"][i]), (sx * u[i] / 2, raw_loop["width"]),
-                            (sy * v[i] / 2, raw_loop["height"])], sketch) for i in range(2))
-        out.append((uv, xy))
-    return out
-
-
 class Anchors:
     """The points of written loops with their raw values: corners and arc points, and circles and ellipses."""
 
@@ -185,7 +166,7 @@ class Anchors:
                 elif "through" in seg:
                     self.points.append((seg["through"], tuple(rseg["through"])))
         elif kind == "rect":
-            self.points += _rect_corners(loop, raw_loop, self.sketch)
+            self.points += rect_corners(loop, raw_loop, self.sketch)
         else:
             self.rounds.append((loop, raw_loop))
 
@@ -263,8 +244,8 @@ def _from_anchors(loop, anchors, sketch, sources=None):
             segments.append(out)
         return dict(loop, start=at(loop["start"]), segments=segments)
     if kind == "rect":
-        u, v = _rect_axes(loop)
-        corners = [at(uv) for uv, _ in _rect_corners(loop, _map(loop, [], lambda path, n: Affine(n)))]
+        u, v = rect_axes(loop)
+        corners = [at(uv) for uv, _ in rect_corners(loop, _map(loop, [], lambda path, n: Affine(n)))]
         center = [combine([(0.25, c[i]) for c in corners], sketch) for i in range(2)]
         # corners run (-,-), (+,-), (+,+), (-,+): width along u, height along v
         width = combine([(0.5 * u[i], corners[1][i]) for i in range(2)] + [(-0.5 * u[i], corners[0][i]) for i in range(2)]
@@ -511,7 +492,7 @@ def outline(ctx, item, profile, outer, inners, parts):
         else:
             raw_loops = _stuck_curves(raw_loops, sketch)
     if bounds is None:
-        kept = simple_ranges(ctx.table, loops, raw_loops, ctx.motion)
+        kept = simple_ranges(ctx.table, loops, raw_loops, ctx.motion, sketch)
         if kept:
             ctx.cut(kept, notes.crosses_reason(sketch))
             bounds = {ctx.table.size_name(name): ends for name, ends in kept.items()}
@@ -525,10 +506,16 @@ def measured_outline(ctx, prefix, frame, loops, sketch):
     """The `Outline` of loops the probe read as a whole under `prefix` (a flat face used as an outline, `keys.face`),
     named `sketch` in reasons. A loop value that moves along a curve is stuck: only straight moves of the edges are
     written. The plane is one distance along its normal, so a curved formula of it (a wall set back along a half angle)
-    is written as fitted."""
+    is written as fitted. The ranges are cut where the face's loops would cross or a hole would leave the face
+    (`simple_ranges`)."""
     raw_loops = _stuck_curves(_keyed_loops(ctx, prefix, loops, sketch), sketch)
     plane = raw(ctx, keys.plane(prefix), vec.dot(frame["origin"], frame["z"]), sketch)
-    return Outline(ctx, frame, loops, raw_loops, plane, sketch)
+    bounds = None
+    kept = simple_ranges(ctx.table, loops, raw_loops, ctx.motion, sketch)
+    if kept:
+        ctx.cut(kept, notes.crosses_reason(sketch))
+        bounds = {ctx.table.size_name(name): ends for name, ends in kept.items()}
+    return Outline(ctx, frame, loops, raw_loops, plane, sketch, bounds)
 
 
 def outline_movers(table, drawn):
