@@ -125,3 +125,12 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     `message`, then use Edit, Undo and count the steps that bring the fillet back. TH5: tick `Round` and `Bevel` (range 1 to 9) and
     cancel in the "Try 3 of ..." window; then, on the TH1 box, use Export size choices with a row `Width` = 12, which Fusion cannot build. In both, every step is
     as before; if not, a message box names the step and says to use Undo.
+
+11. FM2, a formula of numbers. Model a 40 x 40 x 20 mm box, shelled with the user parameter `Wall = 3 * 0.4 mm`.
+    Export: `Wall` is a size and starts ticked. Changing it in Paramability changes the wall. After the export, the
+    Parameters dialog in Fusion shows `3 * 0.4 mm` again.
+
+12. FM3, a guarded count. On a 100 x 40 x 5 mm plate, cut one 5 mm hole and make a rectangular pattern of it with
+    quantity `max(1; floor(Width / 20 mm))`, where the user parameter `Width = 100 mm` drives the plate.
+    Export: tick `Width`. The hole count follows `Width` in Paramability, and `Width` has no warning mark. Repeat
+    with the quantity `if(Width > 60 mm; 3; 2)`.

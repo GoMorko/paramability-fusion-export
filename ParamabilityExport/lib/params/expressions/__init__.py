@@ -20,11 +20,11 @@ from .errors import ExpressionError
 from .evaluation import evaluate
 from .reading import parse, referenced_names
 from .simplify import collected_sum
-from .text import format_expression, is_plain_number
+from .text import format_expression, is_constant_expression, is_plain_number
 from .translation import Typed, translate_tree
 from .units import ANGLE, LENGTH, SCALAR
 from .writing import render
 
 __all__ = [
     "ANGLE", "LENGTH", "SCALAR", "ExpressionError", "Typed", "collected_sum", "evaluate", "format_expression",
-    "is_plain_number", "parse", "referenced_names", "render", "translate_tree"]
+    "is_constant_expression", "is_plain_number", "parse", "referenced_names", "render", "translate_tree"]

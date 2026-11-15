@@ -51,6 +51,17 @@ class TickedTest(unittest.TestCase):
         self.assertEqual(defaults.default_ticked(params, model),
                          [W, CUBE, "FilterBox__PipeTop_offsetFromCenter_mm"])
 
+    def test_a_formula_of_numbers_with_a_unit_is_ticked_but_a_unitless_one_only_when_a_favourite(self):
+        def formula(name, expression, value, unit, kind, fav=False):
+            return dict(p(name, value, unit, kind=kind, fav=fav), expression=expression, dependency_parameters=[])
+
+        params = [formula("wall", "3 * 0.4 mm", 0.12, "mm", "length"), formula("ratio", "2 * PI", 6.28, "", "count"),
+                  formula("turn", "2 * 45 deg", 1.57, "deg", "angle")]
+        model = self.model("wall", "ratio", "turn")
+        self.assertEqual(defaults.default_ticked(params, model), ["wall", "turn"])
+        params[1]["is_favorite"] = True
+        self.assertEqual(defaults.default_ticked(params, model), ["ratio"])
+
     def test_count_names_from_quantity_role(self):
         params = reader_dicts()
         self.assertEqual(defaults.count_names(params, self.model(W, role="Quantity")), {W})

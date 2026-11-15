@@ -128,13 +128,11 @@ class FormulaCorpusTest(unittest.TestCase):
         table = table_of(INCH, ["Width"], unit="in")
         self.assertEqual(entry_state(table, "Slack"), "derived")
 
-    @unittest.expectedFailure
     def test_formula_of_numbers_is_a_size_that_can_be_ticked(self):
         table = table_of(PLAIN_FORMULAS, ["Wall", "Plate"])
         self.assertEqual({n: entry_state(table, n) for n in ("Wall", "Plate")}, {"Wall": "free", "Plate": "free"})
         self.assertAlmostEqual(table.sizes["Wall"]["value"], 1.2)
 
-    @unittest.expectedFailure
     def test_constant_formula_with_a_length_or_angle_unit_starts_ticked(self):
         params = reader_dicts(PLAIN_FORMULAS, {})
         used = [model_param("d1", "Wall + Turn + Ratio + Plate + Width + Nozzle", 0)]

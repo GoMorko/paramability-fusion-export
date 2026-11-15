@@ -24,6 +24,18 @@ class ReaderTest(unittest.TestCase):
         self.assertEqual(listed[1]["comment"], "")
         self.assertTrue(listed[0]["is_favorite"])
 
+    def test_a_formula_of_numbers_has_the_kind_of_its_unit_and_one_that_reads_a_parameter_is_derived(self):
+        design = FakeDesign([
+            dict(name="wall", expression="3 * 0.4 mm", value=0.12, unit="mm", comment="", isFavorite=False),
+            dict(name="turn", expression="2 * 45 deg", value=1.5707963267948966, unit="deg", comment="",
+                 isFavorite=False),
+            dict(name="ratio", expression="2 * PI", value=6.283185307179586, unit="", comment="", isFavorite=False),
+            dict(name="plate", expression="wall * 2", value=0.24, unit="mm", comment="", isFavorite=False),
+            dict(name="jitter", expression="random() * 2 mm", value=0.1, unit="mm", comment="", isFavorite=False),
+        ])
+        self.assertEqual([p["kind"] for p in list_user_parameters(design)],
+                         ["length", "angle", "count", "derived", "derived"])
+
     def test_apply_then_restore_round_trip(self):
         design = FakeDesign(PARAMS)
         saved = saved_expressions(design)

@@ -97,7 +97,9 @@ otherwise:
 `design_units` is the design's default length unit (`fusionUnitsManager.defaultLengthUnits`, `mm` when unreadable); a
 bare number in a length formula is read in it. `parameters.user` is `list_user_parameters(design)` and
 `parameters.model` is `list_model_parameters(component)` (`lib/fusion_reader/parameters.py`: name, expression, value
-in Fusion's internal cm and radians, unit, kind, favourite, dependency lists, and for model parameters `role` and
+in Fusion's internal cm and radians, unit, kind (`derived` only when the expression reads another parameter, calls
+`random` or cannot be read; a formula of plain numbers such as `3 * 0.4 mm` has the kind of its unit), favourite,
+dependency lists, and for model parameters `role` and
 `created_by` as `{ kind, token, name, sketch, component }`, where `sketch` is the name of the sketch that holds a sketch
 dimension (`SketchDimension.parentSketch`) and empty otherwise, and `component` is the token of the component the maker
 lives in: the sketch's component for a dimension, else the component the parameter is listed from) for the target's

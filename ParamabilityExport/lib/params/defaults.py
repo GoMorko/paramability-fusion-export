@@ -7,6 +7,7 @@ import re
 
 from ..package.units import unit_kind
 from .dependencies import Graph, names_in
+from .expressions.text import is_constant_expression, is_plain_number
 from .expressions.translation import unit_scale
 from .expressions.units import internal_factor
 
@@ -117,6 +118,12 @@ def is_offered(p):
             and dim_of_unit(p.get("unit")) is not None)
 
 
+def _unitless_constant(p):
+    """A formula of plain numbers with no length or angle unit (`2 * PI`): a helper constant, not a size to tick."""
+    expression = p.get("expression") or ""
+    return (p.get("kind") == "count" and not is_plain_number(expression) and is_constant_expression(expression))
+
+
 def body_usage(params, model_params=(), linked=()):
     """`dependencies.Usage` of a body: the user parameters its model parameters read at any depth, and `linked`, the
     parameters that may reach one of its sketches through the geometry of another component
@@ -125,7 +132,8 @@ def body_usage(params, model_params=(), linked=()):
 
 
 def default_ticked(params, model_params=(), linked=(), usage=None):
-    """Favourites the body uses. With no favourite among them, every plain parameter the body uses.
+    """Favourites the body uses. With no favourite among them, every plain parameter the body uses, except a unitless
+    formula of numbers (`_unitless_constant`); a formula of numbers with a length or angle unit counts as plain.
 
     The body uses what its model parameters read and what `linked` names, at any depth (`body_usage`, or `usage`
     when given). A plain parameter that only a favourite formula reads counts as a favourite: the formula cannot
@@ -140,4 +148,4 @@ def default_ticked(params, model_params=(), linked=(), usage=None):
     favourites = [p["name"] for p in offered if p["name"] in chosen]
     if favourites:
         return favourites
-    return [p["name"] for p in offered]
+    return [p["name"] for p in offered if not _unitless_constant(p)]
