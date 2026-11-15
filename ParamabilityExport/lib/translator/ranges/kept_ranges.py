@@ -219,8 +219,9 @@ def holding_ranges_where(table, reads, holds, steps=range_check.STEPS, balanced=
             exact = trial
     tidy = dict(exact)
     for _, s in free:
-        size, (lo, hi) = table.sizes[s], exact[s]
-        tidy[s] = (min(_tidy(size, lo, True), size["value"]), max(_tidy(size, hi, False), size["value"]))
+        size, (lo, hi), (own_lo, own_hi) = table.sizes[s], exact[s], bounds[s]
+        tidy[s] = (own_lo if lo == own_lo else min(_tidy(size, lo, True), size["value"]),
+                   own_hi if hi == own_hi else max(_tidy(size, hi, False), size["value"]))
     chosen = tidy if holds(tidy) else exact
     if any(chosen[s][1] - chosen[s][0] <= 1e-9 for _, s in free):
         return None

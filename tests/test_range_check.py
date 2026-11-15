@@ -170,6 +170,16 @@ class HoldingRangesWhereTest(unittest.TestCase):
     def test_a_test_that_fails_at_the_values_now_has_no_cut_that_helps(self):
         self.assertIsNone(self.cut(lambda env: env["a"] != 5))
 
+    def test_an_end_the_cut_does_not_move_keeps_its_exact_value(self):
+        table = CutTable(a=(5, 1, 10), b=(5, 0.625, 10))
+
+        def holds(bounds, only=None):
+            settings = (range_check.corners(table, ("a", "b"), bounds) if only is None
+                        else [{}, {only[0]: bounds[only[0]][only[1]]}])
+            return all(range_check.size_env(table, setting)["a"] < 7.505 for setting in settings)
+        found = kept_ranges.holding_ranges_where(table, ("a", "b"), holds)
+        self.assertEqual(list(found), ["a"])
+
 
 class ShareTest(unittest.TestCase):
     def test_largest_share_that_still_holds(self):
