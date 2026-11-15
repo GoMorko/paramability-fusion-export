@@ -73,7 +73,7 @@ HINTS = {
     COIL_SPIRAL: "Use a coil with a height, or let your AI assistant add the spiral to the copy.",
     COIL_TAPER: "Use a taper angle of 0, or let your AI assistant add the taper to the copy.",
     COIL_PLACE: "Make the coil a new body, then join it to the part with a combine.",
-    COIL_LIMIT: "A copy holds up to 8 coils and 100 turns in all. Your AI assistant can add the rest.",
+    COIL_LIMIT: "A copy holds up to 8 coils and 100 turns of coils and threads in all. Your AI assistant can add the rest.",
     COIL_HALF: "Use revolutions that do not end in a half, such as 3.25 or 4.",
     COIL_TOOL: "Join the coil to the part with a combine before you move or change it.",
     SCALE: "Change the sizes in the sketches instead of scaling the body.",

@@ -1,8 +1,8 @@
 """Tolerances and the refusal texts of the coil handler. The caps repeat the recipe's own (`RECIPE_CAPS` of the app)."""
 from ...capture_model import gap_hints
 
-# Coil features in one recipe, turns of one coil, and turns summed over the coils of a recipe (the app shares the
-# total with threads, which the add-in does not write).
+# Coil features in one recipe, turns of one coil, and turns summed over all coils and threads of a recipe
+# (`translator/turn_budget.py`, the same cap the app applies to both).
 MAX_COILS = 8
 MAX_TURNS = 100
 MAX_TURNS_TOTAL = 100
@@ -25,7 +25,7 @@ SECTION = "The wire of this coil has a shape that is not copied yet."
 PLACE = "The place of this coil could not be worked out from its end faces."
 OPERATION = "How this coil combines with the part could not be told."
 TOO_MANY = "A copy holds at most %d coils."
-TOO_MANY_TURNS = "A copy holds at most %d turns of coils in all."
+TOO_MANY_TURNS = "A copy holds at most %d turns of coils and threads in all."
 TOUCHING = "The turns of this coil would touch each other."
 NEW_COMPONENT = "Coils that make a new component are not copied."
 IN_TOOL = "A coil cannot be part of a tool body that has other steps."

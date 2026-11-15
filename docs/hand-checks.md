@@ -183,7 +183,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
 13. CO3, coil as a tool and the caps. Make a coil as a New Body, then Combine it (Join) with the block. Repeat to get
     more than 8 coils in one design (or 17 coils joined one by one).
     Export: the Combine of a lone coil body is copied as a plain coil step. From the ninth coil on, the coils are left
-    out with the hint about 8 coils and 100 turns; the first eight stay. A coil body that also has a cut or a fillet
+    out with the hint about 8 coils and 100 turns of coils and threads; the first eight stay. A coil body that also has a cut or a fillet
     in its tool is left out with the hint to join the coil before changing it.
 
 11. TD1, modeled threads. Make a jar: a cylinder body of 30 mm diameter and 20 mm long (user parameter `Neck` for

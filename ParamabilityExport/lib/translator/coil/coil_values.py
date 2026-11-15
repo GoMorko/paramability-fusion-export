@@ -91,13 +91,22 @@ def rise_values(ctx, item, params, kind, section, rise_mm, pitch_mm, turns_mm):
     if kind == "revolutions_height":
         turns = values.quantity(ctx, item, "revolutions", turns_mm, dim="scalar", absolute=True)
         rise = _rise_value(ctx, item, params, section, rise_mm)
-        return (rise.divided_by(turns) if rise is not None else Quantity(pitch_mm)), turns
+        if rise is None:
+            return _fixed_rise(ctx, name, Quantity(pitch_mm), Quantity(turns_mm), turns.reads)
+        return rise.divided_by(turns), turns
     ref = params["pitch"]
     pitch = values.quantity(ctx, item, "pitch", abs(ref["value"]), sign=-1 if ref["value"] < 0 else 1, absolute=True)
     rise = _rise_value(ctx, item, params, section, rise_mm)
     if rise is None:
-        return pitch, Quantity(turns_mm)
+        return _fixed_rise(ctx, name, Quantity(pitch_mm), Quantity(turns_mm), pitch.reads)
     return pitch, rise.divided_by(pitch)
+
+
+def _fixed_rise(ctx, name, pitch, turns, reads):
+    """`(pitch, turns)` as plain numbers: the height gives no formula for the rise, so following only one of the two
+    would change the rise when its size moves, where Fusion keeps the height. The sizes of the other value are marked."""
+    _plain(ctx, reads, "the rise of %s is set by a height that its other values do not explain" % name)
+    return pitch, turns
 
 
 def keep_inside_ranges(ctx, item, section, rho, pitch, turns, axial_mm, turns_left):
@@ -115,7 +124,7 @@ def keep_inside_ranges(ctx, item, section, rho, pitch, turns, axial_mm, turns_le
     rules = [q for q in rules if q.sized]
     if not rules or ctx.table is None:
         return section, rho, pitch, turns
-    why = ("%s needs its wire clear of the axis, its turns apart and at most %d turns of coils in all"
+    why = ("%s needs its wire clear of the axis, its turns apart and at most %d turns of coils and threads in all"
            % (name, limits.MAX_TURNS_TOTAL))
     found = kept_ranges.holding_ranges(ctx.table, [(q, 1) for q in rules], GUARD_MM)
     if found:
