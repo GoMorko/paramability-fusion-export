@@ -1985,8 +1985,13 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   (it moves along a curve the probe could not fit). Rect and circle loops are checked too, and every hole must stay
   inside the outline of its sketch (every point the app samples on the hole inside the outline, 0.0001 mm clear of
   its edges), the app's own rule ("a hole in the sketch reaches outside its outline"). The same check runs on the
-  loops of a flat face the probe read (a face used as an outline, the face an emboss is trimmed to). Loops of more
-  than 400 points are not checked.
+  loops of a flat face the probe read (a face used as an outline, the face an emboss is trimmed to). Outlines of
+  more than 300 points are not checked. The far ends are cut first, and each setting is worked out once per check.
+  When no shorter ranges keep the loops (they break at the values now, or a size behind them has a typed range), the
+  sizes that move them are marked with the same reason instead. The checks of one translation share 20 seconds
+  (`OutlineChecks`, timed as `timing.phases.outline_check`): an outline already checked over the same ranges is not
+  checked again, and once the time is used up the sizes of an outline left unchecked are marked "there was no time
+  left to check that the outline of X does not cross itself".
 - A sketch plane that moves writes the placement origin along its normal (`sketch.on.origin`); a "to entity" reach is
   the face's move less the plane's move. Outlines of one step whose planes move differently fix those sizes.
 - A sketch on a face, or on a construction plane built on the part (also a chain of planes), may move with every size
@@ -2361,7 +2366,9 @@ export, the recipe and the notes do not depend on it.
   (the first translation, and the one after the reach is known), `reach` (asking Fusion which step made the faces later
   steps pick), `probe` (its start, tries, close and the `derived` shadow), `translate_final` (with the motion the probe
   found), `restore` (parameters, suppressed steps and the timeline marker put back), `package` (manifest, recipe and
-  report assembled). `after_stop` is the second walk after a stop and is already inside the translate phases. A phase
+  report assembled). `after_stop` is the second walk after a stop and `outline_check` the time spent checking that
+  written outlines do not cross themselves (`sketch_crossings.OutlineChecks`); both are already inside the translate
+  phases. A phase
   that did not run is 0.0. A several-body export has one `timing` block at the top of its `report.json`.
 - `capture` (one body) or `captures` (several bodies: the same record plus `part`, the body's name): `seconds` is the
   whole read, `cached: true` marks a read the dialog made before the export. A step's time is the marker move that

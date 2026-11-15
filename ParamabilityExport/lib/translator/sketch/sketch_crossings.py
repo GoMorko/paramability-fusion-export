@@ -18,6 +18,7 @@ corner that follows a size while the curve it meets stays where it is (a value t
 could not fit) can pass that curve inside the ranges.
 """
 import math
+import time
 
 from ...geometry.plane2d import ARC_CHORDS, arc_points, inside_ring, to_ring, to_segment
 from ...geometry.vec import POINT_TOL
@@ -25,6 +26,7 @@ from ...params.expressions.errors import ExpressionError
 from ...params.expressions.formula import parse_formula
 from ...sketch_values import keys
 from ...sketch_values.motion import CURVE, Affine, Stuck
+from ...timing.timer import span_on
 from ..ranges import kept_ranges, range_check
 from .curved import Curved, combine, names_of, render, times
 from .rect_corners import rect_corners
@@ -34,7 +36,9 @@ ORDER_STEPS = 20  # halvings that find where a range stops keeping the order: a 
 _FAILURES = (ExpressionError, ValueError, ZeroDivisionError, OverflowError)
 TURN_TOL = 1e-9
 LEAST = 1e-9
-MAX_SIMPLE_POINTS = 400  # loops with more points than this are not checked (the check grows with their square)
+MAX_SIMPLE_POINTS = 300  # outlines with more points than this are not checked
+OUTLINE_CHECK_SECONDS = 20.0  # what the outline checks of one translation may take together (`OutlineChecks`)
+OUT_OF_TIME = "out of time"  # `simple_ranges` when the checks of this translation used up their time
 TOUCH_MM = 1e-4  # edges this close count as touching; above the app's own limit, so a cut end keeps clear of it
 
 
@@ -360,15 +364,45 @@ def keeps_order(table, motion, loops, raw_loops, sketch=""):
 # ---- does the written outline stay one loop that does not cross itself ----------------------------------------
 
 def _written(value, number, table):
-    """A parsed formula of a raw value that moves with the sizes, with the sizes it reads, else `(number, ())`: the
-    number the copy writes for a value that does not move or cannot follow. None when `number` is no number."""
+    """`(parsed formula, sizes it reads, its text)` of a raw value that moves with the sizes, else `(number, (),
+    number)`: the number the copy writes for a value that does not move or cannot follow. None when `number` is no
+    number."""
     if isinstance(value, (Affine, Curved)) and names_of(value):
         q = render(value, table)
         if not isinstance(q, Stuck) and q.sized:
-            return parse_formula(q.text), tuple(q.reads)
+            return parse_formula(q.text), tuple(q.reads), q.text
     if not isinstance(number, (int, float)) or isinstance(number, bool):
         return None
-    return float(number), ()
+    return float(number), (), float(number)
+
+
+class _OutOfTime(Exception):
+    pass
+
+
+class OutlineChecks:
+    """What the outline checks of one translation share (`Context.cache`, `checks_of`): the answer of each outline
+    already checked, by its written values and the ranges and states they are checked over (the walks of one
+    translation write the same outline many times), and the time spent, which may not pass `OUTLINE_CHECK_SECONDS`.
+    The time goes to `timer` as `outline_check`."""
+
+    KEY = "outline_checks"
+
+    def __init__(self, timer=None, seconds=None, clock=time.monotonic):
+        self.timer, self.clock = timer, clock
+        self.seconds = OUTLINE_CHECK_SECONDS if seconds is None else seconds
+        self.answers = {}
+        self.spent = 0.0
+
+
+def checks_of(cache):
+    """The `OutlineChecks` of the translation that owns `cache`, made on first use."""
+    found = cache.get(OutlineChecks.KEY) if isinstance(cache, dict) else None
+    if found is None:
+        found = OutlineChecks()
+        if isinstance(cache, dict):
+            cache[OutlineChecks.KEY] = found
+    return found
 
 
 def _loop_points(chain_points):
@@ -414,9 +448,14 @@ def _crossing(points):
         if arrived > 0 and abs(ax * by - ay * bx) / arrived <= TOUCH_MM and ax * bx + ay * by < 0:
             return True
     edges = [(points[i], points[(i + 1) % n]) for i in range(n)]
-    for i in range(n):
-        for j in range(i + 2, n):
-            if not (i == 0 and j == n - 1) and _meet(edges[i], edges[j], TOUCH_MM):
+    # Sweep along x: only edges whose x spans overlap can meet.
+    spans = sorted((min(a[0], b[0]), max(a[0], b[0]), i) for i, (a, b) in enumerate(edges))
+    for at, (_, high, i) in enumerate(spans):
+        for low, _, j in spans[at + 1:]:
+            if low > high + TOUCH_MM:
+                break
+            gap = abs(i - j)
+            if gap > 1 and gap != n - 1 and _meet(edges[i], edges[j], TOUCH_MM):
                 return True
     return False
 
@@ -449,12 +488,15 @@ def _holes_inside(rings):
     return all(_inside_ring(p, outer) for ring in rings[1:] if ring is not None for p in ring)
 
 
-def simple_ranges(table, loops, raw_loops, motion=None, sketch=""):
+def simple_ranges(table, loops, raw_loops, motion=None, sketch="", checks=None):
     """`{Fusion name: (min, max)}` inside which no written loop crosses or touches itself (`_crossing`) and every hole
     stays inside the outline (`_holes_inside`), at every setting `order_ranges` tests (corners and middles of the
     ranges and the probe's built states inside them); `{}` when they hold over the whole ranges or nothing in them
     moves; None when no shorter ranges keep them (they fail at the values now, or a size they read has a typed
-    range). Loops other than profiles, polygons, rects and circles are not checked."""
+    range); `OUT_OF_TIME` when `checks` (`OutlineChecks`) has no time left. Loops other than profiles, polygons,
+    rects and circles are not checked. Each setting is worked out once per check, and the far ends are cut first
+    (`holding_ranges_where` without `balanced`), since the test is costly."""
+    checks = checks if checks is not None else OutlineChecks()
     shapes = []  # per loop: ("chain", [(written xy, middle)]), ("circle", [written cx, cy, r]) or None
     for loop, raw_loop in zip(loops, raw_loops):
         chain = _ring_chain(loop, raw_loop, sketch)
@@ -472,17 +514,64 @@ def simple_ranges(table, loops, raw_loops, motion=None, sketch=""):
     values = [v for chain in chains for xy, _ in chain for v in xy] + [v for circle in circles for v in circle]
     if any(v is None for v in values):
         return {}
-    reads = list(dict.fromkeys(r for _, found in values for r in found))
+    reads = list(dict.fromkeys(r for _, found, _ in values for r in found))
     arcs = sum(1 for chain in chains for _, middle in chain if middle)
     size = sum(len(chain) for chain in chains) + arcs * ARC_CHORDS + len(circles) * 4 * ARC_CHORDS
     if not reads or size > MAX_SIMPLE_POINTS:
         return {}
     states = _states(table, motion)
+    key = _check_key(table, shapes, reads, states)
+    if key in checks.answers:
+        return checks.answers[key]
+    if checks.spent >= checks.seconds:
+        return OUT_OF_TIME
+    with span_on(checks.timer, "outline_check"):
+        start = checks.clock()
+        deadline = start + checks.seconds - checks.spent
+        try:
+            found = _holding(table, shapes, reads, states, lambda: checks.clock() > deadline)
+        except _OutOfTime:
+            found = OUT_OF_TIME
+        checks.spent += checks.clock() - start
+    if found is not OUT_OF_TIME:
+        checks.answers[key] = found
+    return found
+
+
+def _signature(shape):
+    """The written values of one loop of `simple_ranges` (formula texts and numbers)."""
+    if shape is None:
+        return None
+    if shape[0] == "circle":
+        return "circle", tuple(v[2] for v in shape[1])
+    return "chain", tuple((tuple(v[2] for v in xy), middle) for xy, middle in shape[1])
+
+
+def _check_key(table, shapes, reads, states):
+    """What a check's answer depends on: the written values, the ranges of the sizes they read and the states."""
+    ranges = tuple((name, tuple(table.sizes.get(table.size_name(name), {}).get(k) for k in ("min", "max", "value")),
+                    table.typed_ends(name)) for name in reads)
+    return (tuple(_signature(shape) for shape in shapes), ranges,
+            tuple(tuple(sorted(state.items())) for state in states))
+
+
+def _holding(table, shapes, reads, states, late):
+    """`kept_ranges.holding_ranges_where` of the loops of `shapes` (`simple_ranges`); raises `_OutOfTime` once
+    `late()` is true."""
+    seen = {}
 
     def at(v, env):
         return range_check.value_of(v[0], env) if v[1] else v[0]
 
     def simple_at(setting):
+        found = tuple(sorted(setting.items()))
+        if found not in seen:
+            if late():
+                raise _OutOfTime()
+            seen[found] = _simple_at(setting)
+        return seen[found]
+
+    def _simple_at(setting):
         try:
             env = range_check.size_env(table, setting)
             rings = []
@@ -505,4 +594,4 @@ def simple_ranges(table, loops, raw_loops, motion=None, sketch=""):
                     + [state for state in states if _inside(state, bounds)])
         return all(simple_at(setting) for setting in settings)
 
-    return kept_ranges.holding_ranges_where(table, reads, holds, steps=ORDER_STEPS)
+    return kept_ranges.holding_ranges_where(table, reads, holds, steps=ORDER_STEPS, balanced=False)

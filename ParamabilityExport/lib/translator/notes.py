@@ -368,6 +368,11 @@ def crosses_reason(sketch):
         clip(sketch, MAX_NAME) if sketch else "a sketch")
 
 
+def unchecked_outline_reason(sketch):
+    return "there was no time left to check that the outline of %s does not cross itself" % (
+        clip(sketch, MAX_NAME) if sketch else "a sketch")
+
+
 def shrinks_reason(sketch):
     return "an outline in %s would shrink to nothing" % (clip(sketch, MAX_NAME) if sketch else "a sketch")
 
