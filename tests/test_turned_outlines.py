@@ -8,7 +8,7 @@ import unittest
 from tests import context  # noqa: F401
 from unittest import mock
 
-from tests.test_translate_crossings import capture_with, line, user
+from tests.test_translate_crossings import arc, capture_with, line, user
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
 
 from lib.params import size_table
@@ -73,6 +73,14 @@ class StraightCrossingTest(unittest.TestCase):
         self.assertAlmostEqual(size["max"], 10.0, places=1)
         self.assertLessEqual(size["max"], 10.0)
         self.assertIn("would cross itself", result.cuts[0]["reason"])
+
+    def test_a_corner_that_follows_a_size_into_an_arc_that_stays_cuts_the_range_where_it_meets_the_arc(self):
+        # A notch at (-p, 0) inside a half circle of radius 10 (p 6 now, range 3 to 12): past 10 it crosses the arc.
+        a, b = (0, 10), (0, -10)
+        curves = [arc(a, (-10, 0), b, (0, 0), "a0", radius=10), line(b, (-6, 0), "e1"), line((-6, 0), a, "e2")]
+        capture = capture_with(curves, "p_mm", 6.0)
+        result = run(capture, Motion({"1/p0/l0/segments.1.to.0": Affine(0.0, {"p_mm": -1.0}, "Sketch1")}))
+        self.assertEqual((result.recipe["sizes"]["p_mm"]["min"], result.recipe["sizes"]["p_mm"]["max"]), (3.0, 9.99))
 
 
 def _v_shape(p, q, a, w=3.0):

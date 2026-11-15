@@ -1899,7 +1899,8 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
 - Any other written profile or polygon whose corners follow sizes, also with straight formulas only, is checked the
   same way for crossing edges (`sketch_crossings.simple_ranges`): at each mix of the size ends, the middles of the
   ranges and the probe's states inside them, the corners are worked out as written (a value that cannot follow keeps
-  its number, arcs are drawn with 8 chords), and no two edges of the loops may cross. Where they cross only past some
+  its number), and no two edges of the loops may cross (lines and arcs are met exactly; a meeting at the end of
+  an edge is the corner the two share). Where they cross only past some
   values the ranges are cut with the same reason. This catches a corner that follows a size while the curve it meets
   is written as its number (it moves along a curve the probe could not fit). Loops with more than 160 edges are not
   checked.
