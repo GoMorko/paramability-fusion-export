@@ -10,6 +10,11 @@ arc.
 `keeps_order` checks that the rebuilt outline keeps its shape over the size range and the probe's states: every
 crossing still exists and the corners keep their order. `order_ranges` gives the ranges inside which it does, for an
 outline that crosses itself only in a corner of the ranges (a leg turned while shorter than another).
+
+`simple_ranges` checks any outline whose corners follow sizes, also with straight formulas only: at each setting of
+the ranges it works out the corners as the copy writes them (a value that cannot follow stays its number) and looks
+for two edges of the loops that cross. A corner that follows a size while the curve it meets stays where it is (a
+value that moves along a curve the probe could not fit) can pass that curve inside the ranges.
 """
 import math
 
@@ -26,6 +31,9 @@ ORDER_STEPS = 20  # halvings that find where a range stops keeping the order: a 
 _FAILURES = (ExpressionError, ValueError, ZeroDivisionError, OverflowError)
 TURN_TOL = 1e-9
 LEAST = 1e-9
+SIMPLE_ARC_STEPS = 8  # chords an arc is drawn with when the loops are checked for crossing edges
+MAX_SIMPLE_EDGES = 160  # loops with more edges than this are not checked (the check grows with their square)
+CROSS_TOL = 1e-9  # how far (mm squared) an edge end must lie off the other edge for the two to cross
 
 
 def _unit(v):
@@ -345,3 +353,112 @@ def keeps_order(table, motion, loops, raw_loops, sketch=""):
             if isinstance(check, Stuck) or not _stays_above_zero(table, motion, check):
                 return False
     return True
+
+
+# ---- does the written outline stay one loop that does not cross itself ----------------------------------------
+
+def _written(value, number, table):
+    """A parsed formula of a raw value that moves with the sizes, with the sizes it reads, else `(number, ())`: the
+    number the copy writes for a value that does not move or cannot follow. None when `number` is no number."""
+    if isinstance(value, (Affine, Curved)) and names_of(value):
+        q = render(value, table)
+        if not isinstance(q, Stuck) and q.sized:
+            return parse_formula(q.text), tuple(q.reads)
+    if not isinstance(number, (int, float)) or isinstance(number, bool):
+        return None
+    return float(number), ()
+
+
+def _arc(a, m, b, steps):
+    """Points from `a` through `m` to `b` along the circle through them, `b` last; the two chords when they line up."""
+    d = 2.0 * (a[0] * (m[1] - b[1]) + m[0] * (b[1] - a[1]) + b[0] * (a[1] - m[1]))
+    if abs(d) <= 1e-12:
+        return [m, b]
+    sq = [p[0] * p[0] + p[1] * p[1] for p in (a, m, b)]
+    cx = (sq[0] * (m[1] - b[1]) + sq[1] * (b[1] - a[1]) + sq[2] * (a[1] - m[1])) / d
+    cy = (sq[0] * (b[0] - m[0]) + sq[1] * (a[0] - b[0]) + sq[2] * (m[0] - a[0])) / d
+    r = math.hypot(a[0] - cx, a[1] - cy)
+    t0, tm, t1 = (math.atan2(p[1] - cy, p[0] - cx) for p in (a, m, b))
+    turn = (t1 - t0) % (2 * math.pi)
+    if (tm - t0) % (2 * math.pi) > turn:
+        turn -= 2 * math.pi
+    return [(cx + r * math.cos(t0 + turn * i / steps), cy + r * math.sin(t0 + turn * i / steps))
+            for i in range(1, steps)] + [b]
+
+
+def _edges(chain_points):
+    """The edges of one closed loop from `(point, is a middle point)` along it, arcs drawn with chords."""
+    pts, at = [chain_points[0][0]], 1
+    while at < len(chain_points):
+        point, middle = chain_points[at]
+        if middle and at + 1 < len(chain_points):
+            pts += _arc(pts[-1], point, chain_points[at + 1][0], SIMPLE_ARC_STEPS)
+            at += 2
+            continue
+        pts.append(point)
+        at += 1
+    if math.hypot(pts[0][0] - pts[-1][0], pts[0][1] - pts[-1][1]) > POINT_TOL:
+        pts.append(pts[0])
+    return [(pts[i], pts[i + 1]) for i in range(len(pts) - 1)
+            if math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]) > POINT_TOL]
+
+
+def _side(a, b, c):
+    return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+
+def _cross(e, f):
+    (p, q), (r, t) = e, f
+    return (_side(p, q, r) * _side(p, q, t) < -CROSS_TOL and _side(r, t, p) * _side(r, t, q) < -CROSS_TOL)
+
+
+def _crossing(loops_edges):
+    """True when two edges of the loops cross (edges next to each other in a loop share an end and are skipped)."""
+    flat = [(n, i, e) for n, edges in enumerate(loops_edges) for i, e in enumerate(edges)]
+    sizes = [len(edges) for edges in loops_edges]
+    for at, (n, i, e) in enumerate(flat):
+        for m, j, f in flat[at + 1:]:
+            if n == m and (j - i == 1 or (i == 0 and j == sizes[n] - 1)):
+                continue
+            if _cross(e, f):
+                return True
+    return False
+
+
+def simple_ranges(table, loops, raw_loops, motion=None):
+    """`{Fusion name: (min, max)}` inside which the written loops cross neither themselves nor each other, at every
+    setting `order_ranges` tests (corners and middles of the ranges and the probe's built states inside them); `{}`
+    when they hold over the whole ranges or nothing in them moves; None when no shorter ranges keep them (they cross
+    at the values now, or a size they read has a typed range). Loops other than profiles and polygons are not
+    checked."""
+    chains = []
+    for loop, raw_loop in zip(loops, raw_loops):
+        chain = _chain(loop, raw_loop)
+        if chain:
+            chains.append([([_written(v, n, table) for v, n in zip(raw_xy, uv)], middle)
+                           for uv, raw_xy, middle in chain])
+    if any(v is None for chain in chains for xy, _ in chain for v in xy):
+        return {}
+    reads = list(dict.fromkeys(r for chain in chains for xy, _ in chain for _, found in xy for r in found))
+    arcs = sum(1 for chain in chains for _, middle in chain if middle)
+    if not reads or sum(len(chain) for chain in chains) + arcs * SIMPLE_ARC_STEPS > MAX_SIMPLE_EDGES:
+        return {}
+    states = _states(table, motion)
+
+    def simple_at(setting):
+        try:
+            env = range_check.size_env(table, setting)
+            loops_edges = [_edges([(tuple(range_check.value_of(v, env) if found else v for v, found in xy), middle)
+                                   for xy, middle in chain]) for chain in chains]
+        except _FAILURES:
+            return False
+        return not _crossing(loops_edges)
+
+    def holds(bounds, only=None):
+        if only is not None:
+            return simple_at({only[0]: bounds[only[0]][only[1]]})
+        settings = (range_check.corners(table, reads, bounds) + range_check.middles(table, reads, bounds)
+                    + [state for state in states if _inside(state, bounds)])
+        return all(simple_at(setting) for setting in settings)
+
+    return kept_ranges.holding_ranges_where(table, reads, holds, steps=ORDER_STEPS)

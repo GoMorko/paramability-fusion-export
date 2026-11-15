@@ -1896,6 +1896,13 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   <sketch> would cross itself or lose a corner". When no shorter ranges keep them (a check that fails at the values
   now, or every size behind it has a typed range), its sizes are fixed ("along a curve"). A line that turns cannot
   carry its crossings.
+- Any other written profile or polygon whose corners follow sizes, also with straight formulas only, is checked the
+  same way for crossing edges (`sketch_crossings.simple_ranges`): at each mix of the size ends, the middles of the
+  ranges and the probe's states inside them, the corners are worked out as written (a value that cannot follow keeps
+  its number, arcs are drawn with 8 chords), and no two edges of the loops may cross. Where they cross only past some
+  values the ranges are cut with the same reason. This catches a corner that follows a size while the curve it meets
+  is written as its number (it moves along a curve the probe could not fit). Loops with more than 160 edges are not
+  checked.
 - A sketch plane that moves writes the placement origin along its normal (`sketch.on.origin`); a "to entity" reach is
   the face's move less the plane's move. Outlines of one step whose planes move differently fix those sizes.
 - A sketch on a face, or on a construction plane built on the part (also a chain of planes), may move with every size

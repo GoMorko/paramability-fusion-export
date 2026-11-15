@@ -21,7 +21,7 @@ from .curved import Curved, combine, from_terms, names_of, render
 from .loops import profile_loops
 from ..result import Refusal
 from ..sizes import placement_sizes, unmeasured_sizes
-from .sketch_crossings import Sources, keeps_order, order_ranges
+from .sketch_crossings import Sources, keeps_order, order_ranges, simple_ranges
 from ..values import Quantity, stays_positive
 
 POSITIVE_FIELDS = ("width", "height", "radius", "radiusX", "radiusY")
@@ -480,7 +480,9 @@ def outline(ctx, item, profile, outer, inners, parts):
 
     `parts` are `(index, capture profile)` of the item's profiles it was made from: one for a profile written as it
     is, several for an outline merged from touching profiles (its values are taken from theirs). A corner that the
-    probe could not fit is rebuilt from the sketch curves that cross there (sketch/sketch_crossings.py)."""
+    probe could not fit is rebuilt from the sketch curves that cross there (sketch/sketch_crossings.py). The ranges
+    are cut where the written loops would cross themselves (`order_ranges` for rebuilt corners, else
+    `simple_ranges`)."""
     if not active(ctx):
         placement_doubts(ctx, item, profile)
         return None
@@ -508,6 +510,11 @@ def outline(ctx, item, profile, outer, inners, parts):
             bounds = {ctx.table.size_name(name): ends for name, ends in kept.items()}
         else:
             raw_loops = _stuck_curves(raw_loops, sketch)
+    if bounds is None:
+        kept = simple_ranges(ctx.table, loops, raw_loops, ctx.motion)
+        if kept:
+            ctx.cut(kept, notes.crosses_reason(sketch))
+            bounds = {ctx.table.size_name(name): ends for name, ends in kept.items()}
     # Merged parts share one frame, so the first part's plane stands for all of them.
     plane = raw(ctx, keys.plane(prefix), vec.dot(profile["frame"]["origin"], profile["frame"]["z"]), sketch)
     placement_doubts(ctx, item, profile, plane)
