@@ -97,6 +97,8 @@ class RecipeKind:
     always_cuts: it removes material whatever its `combine`.
     in_tool: the step may stand in the `features` of a `toolBody` (the recipe leaves thread, coil, skin and bevelGear
       out of a tool, since they build on the whole part).
+    tool_words, tool_cause: for a kind with `in_tool` false, its plain name in the refusal "cannot be part of a tool
+      body", and the `gap_hints` cause that gives the hint for it.
     written: False for kinds the recipe schema has but the translator never writes.
     """
 
@@ -109,6 +111,8 @@ class RecipeKind:
     combine_tool: bool = False
     always_cuts: bool = False
     in_tool: bool = True
+    tool_words: str = None
+    tool_cause: str = None
     written: bool = True
 
 
@@ -200,13 +204,15 @@ RECIPE_KINDS = (
     RecipeKind("sweep", positions=(("sketch", "on", "origin"), ("path", "on", "origin"), ("path", "points", "[]")),
                directions=(("sketch", "on", "normal"), ("sketch", "on", "xDir"), ("path", "on", "normal"),
                            ("path", "on", "xDir")), repeat=SOLID, combine_tool=True),
-    RecipeKind("thread", positions=(("axis", "origin"),), directions=(("axis", "dir"),), in_tool=False),
+    RecipeKind("thread", positions=(("axis", "origin"),), directions=(("axis", "dir"),), in_tool=False,
+               tool_words="thread", tool_cause=gap_hints.THREAD_TOOL),
     RecipeKind("coil", positions=(("sketch", "on", "origin"),),
-               directions=(("sketch", "on", "normal"), ("sketch", "on", "xDir")), combine_tool=True, in_tool=False),
-    RecipeKind("skin", in_tool=False, written=False),
+               directions=(("sketch", "on", "normal"), ("sketch", "on", "xDir")), combine_tool=True, in_tool=False,
+               tool_words="coil", tool_cause=gap_hints.COIL_TOOL),
+    RecipeKind("skin", in_tool=False, tool_words="surface", written=False),
     RecipeKind("draft", version=8, positions=(("faces", "near", "[]"), ("neutral", "origin")),
                directions=(("neutral", "normal"),)),
-    RecipeKind("bevelGear", in_tool=False, written=False),
+    RecipeKind("bevelGear", in_tool=False, tool_words="gear", written=False),
 )
 
 _TYPES = {t.name: t for t in STEP_TYPES}

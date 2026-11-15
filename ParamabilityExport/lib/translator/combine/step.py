@@ -32,9 +32,8 @@ from .. import place, ref_motion
 from ..faces.moved_placer import MovedMaker, motion_of
 from ..faces.tool_placer import ToolMaker
 from ..repeat import body_copies
-from ..coil.coil_limits import CAUSE_TOOL, IN_TOOL
 from ..result import Refusal, StepResult
-from ..step_walk import outside_tool
+from ..step_walk import tool_refusal
 from ..values import Quantity, reads_in
 from ..walk import copies_bodies, is_foreign
 from . import tool_walk
@@ -186,9 +185,11 @@ def _flat(ctx, found, combine):
 
 def tool_steps(found, combine):
     """One step per tool that holds the tool's own steps, or a Refusal when a tool holds a step the recipe keeps out of
-    a tool body (a coil)."""
-    if any(outside_tool(tool.steps) for tool, _ in found):
-        return Refusal(IN_TOOL, cause=CAUSE_TOOL)
+    a tool body (a coil or a thread)."""
+    for tool, _ in found:
+        refused = tool_refusal(tool.steps)
+        if refused:
+            return refused
     out = StepResult()
     for tool, (move, shift) in found:
         step = {"kind": "toolBody", "combine": combine, "features": tool.steps}

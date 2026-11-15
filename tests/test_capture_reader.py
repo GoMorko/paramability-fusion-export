@@ -653,10 +653,14 @@ def cylinder_face(axis=(0, 0, 1), radius=4.0, span=(0.0, 10.0), outward=True):
 class ThreadReadTest(unittest.TestCase):
     def read(self, **kw):
         target = body()
-        info = Obj(threadType="ISO Metric profile", threadDesignation="M8x1.25", threadClass="6g", isInternal=False,
-                   isRightHanded=True, pitch=0.125, majorDiameter=0.8, minorDiameter=0.646)
-        base = dict(isModeled=True, threadInfo=info, isFullLength=True, threadLength=param(1.0), threadOffset=param(0.0),
-                    inputFaces=Coll([cylinder_face()]), faces=Coll([cylinder_face(span=(0.0, 9.0))]))
+        # Member names and units as the Fusion API has them: ThreadInfo lengths in cm and the angle in degrees,
+        # isRightHanded on the feature, the faces in inputCylindricalFaces.
+        info = Obj(threadType="ISO Metric profile", threadSize="8", threadDesignation="M8x1.25", threadClass="6g",
+                   isInternal=False, threadAngle=60.0, threadPitch=0.125, majorDiameter=0.8, minorDiameter=0.646,
+                   pitchDiameter=0.7)
+        base = dict(isModeled=True, threadInfo=info, isRightHanded=True, isFullLength=True, threadLength=param(1.0),
+                    threadOffset=param(0.0), inputCylindricalFaces=Coll([cylinder_face()]),
+                    faces=Coll([cylinder_face(span=(0.0, 9.0))]))
         base.update(kw)
         thread = entry(feature("ThreadFeature", "Thread1", bodies=[target], **base))
         design = FakeDesign([thread], target)
@@ -666,21 +670,31 @@ class ThreadReadTest(unittest.TestCase):
         data = self.read()
         self.assertEqual((data["thread_type"], data["designation"], data["internal"], data["right_hand"]),
                          ("ISO Metric profile", "M8x1.25", False, True))
-        self.assertEqual((data["pitch"], data["major_diameter"], data["minor_diameter"]), (1.25, 8.0, 6.46))
+        self.assertEqual((data["pitch"], data["major_diameter"], data["minor_diameter"], data["angle_deg"]),
+                         (1.25, 8.0, 6.46, 60.0))
         self.assertEqual((data["full_length"], data["length"], data["offset"]), (True, 10.0, 0.0))
         (face,) = data["faces"]
         self.assertEqual((face["surface"], face["radius"], face["span"], face["outward"]), ("Cylinder", 4.0, [0.0, 10.0], True))
         self.assertEqual(data["made_span"], [0.0, 9.0])
 
     def test_an_inward_face_and_members_that_cannot_be_read_stay_null(self):
-        data = self.read(threadInfo=Obj(threadType="ISO Metric profile"), inputFaces=Coll([cylinder_face(outward=False)]))
+        data = self.read(threadInfo=Obj(threadType="ISO Metric profile"), isRightHanded=None,
+                         inputCylindricalFaces=Coll([cylinder_face(outward=False)]))
         self.assertIsNone(data["pitch"])
-        self.assertIsNone(data["right_hand"])
         self.assertFalse(data["faces"][0]["outward"])
+
+    def test_members_the_api_does_not_have_read_as_missing(self):
+        old = Obj(threadType="ISO Metric profile", pitch=0.125, majorDiameter=0.8, minorDiameter=0.646)
+        data = self.read(threadInfo=old, inputCylindricalFaces=None, inputFaces=Coll([cylinder_face()]))
+        self.assertEqual((data["pitch"], data["faces"]), (None, []))
+
+    def test_the_single_input_face_is_used_when_the_collection_is_missing(self):
+        data = self.read(inputCylindricalFaces=None, inputCylindricalFace=cylinder_face())
+        self.assertEqual(len(data["faces"]), 1)
 
     def test_a_face_that_is_not_a_cylinder_has_no_axis(self):
         plane = Obj("fusion::BRepFace", geometry=Obj("core::Plane"), pointOnFace=P(0, 0, 0))
-        (face,) = self.read(inputFaces=Coll([plane]))["faces"]
+        (face,) = self.read(inputCylindricalFaces=Coll([plane]))["faces"]
         self.assertNotIn("axis", face)
 
 
@@ -688,7 +702,7 @@ class HoleThreadReadTest(unittest.TestCase):
     def read(self, **kw):
         target = body()
         thread = Obj(isModeled=True, isFullLength=False, threadDepth=0.5, threadType="ANSI Unified Screw Threads",
-                     pitch=0.1, majorDiameter=0.6, minorDiameter=0.5, isRightHanded=True)
+                     threadPitch=0.1, majorDiameter=0.6, minorDiameter=0.5, isRightHanded=True)
         base = dict(holeType="SimpleHoleType", holeTapType="TappedHoleTapType", holeDiameter=param(0.6),
                     tipAngle=param(math.radians(118)), direction=Obj(x=0.0, y=0.0, z=-1.0), position=P(10, 10, 10),
                     holePositionDefinition=Obj("fusion::PointHolePositionDefinition"), thread=thread,

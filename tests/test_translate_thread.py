@@ -6,7 +6,9 @@ from tests import context  # noqa: F401
 from tests.test_translate_sized import TICKED, on_fixture, param, run
 from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of, verdict_of
 
+from lib.capture_model import gap_hints
 from lib.translator import translate
+from lib.translator.step_walk import tool_refusal
 
 INFO = {"thread_type": "ISO Metric profile", "designation": "M8x1.25", "internal": False, "right_hand": True,
         "pitch": 1.25, "major_diameter": 8.0, "minor_diameter": 6.5, "angle_deg": None}
@@ -119,7 +121,7 @@ class ThreadRefusalTest(unittest.TestCase):
         result = translate(capture)
         self.assertEqual(len(steps_of(result.recipe, "thread")), 8)
         gap = next(g for g in result.gaps if g["type"] == "ThreadFeature")
-        self.assertIn("8 threads", gap["hint"])
+        self.assertEqual(gap["hint"], gap_hints.hint(gap_hints.THREAD_LIMITS))
 
     def test_the_turns_of_all_threads_stay_under_the_cap(self):
         capture = on_thread(faces=[face(span=(0.0, 100.0))], length=100.0, pitch=1.0)
@@ -132,7 +134,16 @@ class ThreadRefusalTest(unittest.TestCase):
     def test_a_profile_refusal_has_the_profile_hint(self):
         result = translate(on_thread(thread_type="ACME"))
         gap = next(g for g in result.gaps if g["type"] == "ThreadFeature")
-        self.assertIn("Unified", gap["hint"])
+        self.assertEqual(gap["hint"], gap_hints.hint(gap_hints.THREAD_PROFILE))
+
+
+class ToolRuleTest(unittest.TestCase):
+    def test_the_refusal_for_a_step_kept_out_of_a_tool_fits_its_kind(self):
+        self.assertEqual(tool_refusal([{"kind": "thread"}]).cause, gap_hints.THREAD_TOOL)
+        self.assertEqual(tool_refusal([{"kind": "extrude"}, {"kind": "toolBody", "features": [{"kind": "coil"}]}]).cause,
+                         gap_hints.COIL_TOOL)
+        self.assertIsNone(tool_refusal([{"kind": "extrude"}, {"kind": "hole"}]))
+        self.assertNotEqual(gap_hints.hint(gap_hints.THREAD_TOOL), gap_hints.hint(gap_hints.COIL_TOOL))
 
 
 HOLE_INFO = dict(INFO, internal=True, major_diameter=6.0, minor_diameter=5.0, pitch=1.0, full_length=True, depth=None)

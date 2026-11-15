@@ -1,7 +1,7 @@
 """Thread features (adsk.fusion.ThreadFeature) and the thread of a tapped hole as plain dicts (docs/capture-format.md).
 
-A modeled thread is read as the numbers of its `ThreadInfo` (profile name, pitch, major and minor diameter, hand,
-angle) and as the faces it sits on: for each input face its cylinder, the axial span between its end vertices, a point
+A modeled thread is read as the numbers of its `ThreadInfo` (profile name, `threadPitch`, major and minor diameter,
+`threadAngle`) and `ThreadFeature.isRightHanded`, and as the faces it sits on (`inputCylindricalFaces`): for each input face its cylinder, the axial span between its end vertices, a point
 on it and which way it faces. A cosmetic thread is only `{ "modeled": false }`. Every member is read on its own: one
 that cannot be read becomes null, and the translator then leaves the thread out instead of guessing.
 """
@@ -20,8 +20,10 @@ def _bool(value):
 
 
 def thread_info(*sources):
-    """The `ThreadInfo` numbers of the first source that gives each member. A source is a thread feature, a hole, or
-    the thread object of either; the values come in Fusion's units and leave in mm and degrees."""
+    """The thread numbers of the first source that gives each member. A source is a thread feature, its `ThreadInfo`,
+    or for a tapped hole the object that holds its thread (where the hole keeps it is hand check TD2). Member names are
+    the Fusion API's: `threadPitch`, `majorDiameter` and `minorDiameter` are cm and leave in mm; `threadAngle` is
+    already in degrees."""
     def read(name):
         for source in sources:
             value = geo.safe(lambda: getattr(source, name), None)
@@ -39,10 +41,10 @@ def thread_info(*sources):
         "thread_class": _text(read("threadClass")),
         "internal": _bool(read("isInternal")),
         "right_hand": _bool(read("isRightHanded")),
-        "pitch": length("pitch"),
+        "pitch": length("threadPitch"),
         "major_diameter": length("majorDiameter"),
         "minor_diameter": length("minorDiameter"),
-        "angle_deg": None if angle is None else geo.safe(lambda: geo.angle(angle), None),
+        "angle_deg": angle if isinstance(angle, (int, float)) and not isinstance(angle, bool) else None,
     }
 
 
@@ -88,7 +90,11 @@ def thread_before(feature, ctx):
     data["full_length"] = _bool(geo.safe(lambda: feature.isFullLength, None))
     data["length"] = geo.safe(lambda: geo.length(feature.threadLength), None)
     data["offset"] = geo.safe(lambda: geo.length(feature.threadOffset), None)
-    faces = geo.collection_items(geo.safe(lambda: feature.inputFaces, None))[:MAX_FACES]
+    faces = geo.collection_items(geo.safe(lambda: feature.inputCylindricalFaces, None))
+    if not faces:
+        single = geo.safe(lambda: feature.inputCylindricalFace, None)
+        faces = [single] if single is not None else []
+    faces = faces[:MAX_FACES]
     data["faces"] = [_face_record(f, ctx) for f in faces]
     found = Params()
     found.add("length", lambda: feature.threadLength)

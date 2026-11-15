@@ -1668,13 +1668,15 @@ read the capture in `report.json`.
 - `HoleFeature.thread.isModeled`, `holePositionDefinition.sketchPoints[i].worldGeometry`, `position`, `direction`
   (into the material or out), `tipAngle` for a flat drill point, `participantBodies`, `sideFaces`, `endFaces`.
 - `CombineFeature.targetBody`, `toolBodies`, `isKeepToolBodies`.
-- `ThreadFeature.isModeled`, `threadInfo` (`threadType`, `threadDesignation`, `threadClass`, `isInternal`,
-  `isRightHanded`, `pitch`, `majorDiameter`, `minorDiameter`, and `threadAngle` when it exists: read in Fusion's units,
-  expected in cm), `isFullLength`, `threadLength`, `threadOffset`, `inputFaces` (cylinder faces: `geometry`, `vertices`,
-  `pointOnFace`, outward normal), and `faces` after the step (the made thread faces: their `vertices` give `made_span`).
-  Every member is optional in the reader; hand check 11 in `docs/hand-checks.md` lists what to look for.
-- `HoleFeature.thread` members for a tapped hole (the same thread info members, `isFullLength`, `threadDepth`; the reader
-  also tries them on the hole itself), and `extentDefinition.entity` of a `ToEntityExtentDefinition` (hand check 12).
+- `ThreadFeature.isModeled`, `isRightHanded`, `isFullLength`, `threadLength`, `threadOffset`, `threadInfo` and its
+  `threadType`, `threadDesignation`, `threadClass`, `isInternal`, `threadAngle` (degrees), `threadPitch`, `majorDiameter`,
+  `minorDiameter` (cm), `inputCylindricalFaces` (cylinder faces: `geometry`, `vertices`, `pointOnFace`, outward normal),
+  and `faces` after the step (the made thread faces: their `vertices` give `made_span`). These names match the Fusion API
+  stub (July 2025); every member is optional in the reader. Hand check 11 in `docs/hand-checks.md` lists what to look for.
+- Tapped hole thread (hand check 12, TD2): the July 2025 API stub has no `holeTapType`, `thread`, `threadInfo` or
+  `threadDepth` on `HoleFeature`, so where Fusion keeps the tap type and the thread of a tapped hole is not proven. The
+  reader tries `feature.thread`, `feature.threadInfo` and the hole itself; a hole whose members are not found stays a gap.
+  Also `ToEntityExtentDefinition.entity`.
 - `CombineFeature.toolBodies` of a body in another component, in the capture of the exported body's component
   (`tool_identity`, `fusion_reader/placement.py`): the proxy's `assemblyContext.fullPathName`, `nativeObject.entityToken` (must equal the
   token that `bodies_after` of the tool's steps give) and `parentComponent`. The second reading pass
