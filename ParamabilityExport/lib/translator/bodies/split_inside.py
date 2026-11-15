@@ -1,8 +1,9 @@
 """Which pieces of a split by a solid body lie inside that body, when the reader could not say.
 
-The reader tests each piece with the tool body (`read_split.inside`). A capture that lacks that answer is decided from
-the boxes: a piece whose box is not inside the tool's box cannot lie inside it. The pieces of such a split lie on
-opposite sides, so one side is possible for the kept piece only when the boxes allow it and rule the other one out.
+The reader tests each piece with the tool body (`read_split.inside`). A capture that lacks that answer for a piece of a
+split into exactly two pieces is decided from the boxes: a piece whose box is not inside the tool's box cannot lie
+inside it, and the two pieces lie on opposite sides. With more pieces the sides are not certain (a disc split by a tube
+leaves a core, a ring inside the tube and an outer ring), so the reader's answers are the only ones used.
 """
 from ...geometry import vec
 
@@ -33,15 +34,35 @@ def _boxed(record):
 
 
 def decide(tool, piece, others):
-    """Whether the kept `piece` lies inside the `tool` body (True) or outside it (False), from the boxes and volumes
-    of the tool, the piece and the other pieces (each with `box` and `volume`); None when they do not settle it. A tool
-    of another component is not decided: its box is in other coordinates."""
-    if not isinstance(tool, dict) or tool.get("foreign") or not _boxed(tool) or not _boxed(piece):
+    """Whether the kept `piece` lies inside the `tool` body (True) or outside it (False), from the boxes and volumes of
+    the tool and the two pieces (each with `box` and `volume`); None when they do not settle it or the split has more
+    than two pieces. A tool of another component is not decided: its box is in other coordinates."""
+    if len(others) != 1 or not isinstance(tool, dict) or tool.get("foreign") or not _boxed(tool):
         return None
-    if not all(_boxed(p) for p in others) or not others:
+    if not (_boxed(piece) and _boxed(others[0])):
         return None
     kept_inside = _may_lie_inside(piece, tool)
-    kept_outside = all(_may_lie_inside(p, tool) for p in others)
+    kept_outside = _may_lie_inside(others[0], tool)
     if kept_inside == kept_outside:
         return None
     return kept_inside
+
+
+def resolve(tool, piece, others):
+    """Whether the kept `piece` lies inside the `tool` body, from the reader's `inside` answers, or None when they do
+    not settle it.
+
+    Every other piece must lie on the opposite side. A missing answer is filled in only for a split into two pieces:
+    from the other piece's answer, else from the boxes (`decide`). The boxes never replace an answer the reader gave: a
+    disagreement gives None."""
+    inside = piece.get("inside")
+    answers = [p.get("inside") for p in others]
+    if inside is not None and None not in answers:
+        return None if any(a is inside for a in answers) else inside
+    if len(others) != 1:
+        return None
+    guess = decide(tool, piece, others)
+    reader = inside if inside is not None else (None if answers[0] is None else not answers[0])
+    if reader is None:
+        return guess
+    return None if guess is not None and guess != reader else reader

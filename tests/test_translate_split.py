@@ -224,15 +224,51 @@ class SplitByBodyTest(unittest.TestCase):
     def test_pieces_the_boxes_cannot_tell_apart_stop_the_copy(self):
         capture = self.boxed(False)
         capture["items"][4]["data"]["tool"]["body"].update(box=box((-1, -1, -1), (50, 30, 20)), volume=9000.0)
-        self.assertIn("inside its tool body", stopped(translate(capture))["reason"])
+        self.assertEqual(stopped(translate(capture))["index"], 4)
         capture = self.boxed(False)
         del capture["items"][4]["data"]["tool"]["body"]["box"]
-        self.assertIn("inside its tool body", stopped(translate(capture))["reason"])
+        self.assertEqual(stopped(translate(capture))["index"], 4)
 
     def test_a_piece_larger_than_the_tool_is_not_taken_for_one_inside_it(self):
         capture = self.boxed(True)
         capture["items"][4]["data"]["tool"]["body"]["volume"] = 500.0
-        self.assertIn("inside its tool body", stopped(translate(capture))["reason"])
+        self.assertEqual(stopped(translate(capture))["index"], 4)
+
+    def disc_and_tube(self, with_answers=False):
+        """The plate split by a tube around its centre: the core, a ring inside the tube and the outer ring. The core is
+        kept. Every box of the core and the ring lies inside the tube's box, the outer ring's does not."""
+        capture = load_capture("combine_cut")
+        capture["items"] = capture["items"][:4]
+        tube = {"kind": "body", "body": dict(TOOL, token="t2", name="Body2", volume=5000.0,
+                                             box=box((10, 0, -2), (30, 20, 12))), "solid": True}
+        core = piece({"token": "t5", "name": "Body5"}, box((15, 5, 0), (25, 15, 10)), 785.4)
+        ring = piece({"token": "t6", "name": "Body6"}, box((10, 0, 0), (30, 20, 10)), 3000.0)
+        outer = piece(PLATE, WHOLE, 4214.6)
+        pieces = [outer, ring, core]
+        if with_answers:
+            for found, inside in zip(pieces, (False, True, False)):
+                found["inside"] = inside
+        capture["items"].append(split_item(4, tube, pieces))
+        capture["target"] = {"token": "t5", "name": "Body5", "box": core["box"], "volume_mm3": core["volume"]}
+        return capture
+
+    def test_a_split_into_more_than_two_pieces_is_not_decided_from_boxes(self):
+        # Intersecting with the tube would keep the ring, not the core.
+        self.assertEqual(stopped(translate(self.disc_and_tube()))["index"], 4)
+
+    def test_a_split_into_more_than_two_pieces_with_one_side_each_answered_by_the_reader_is_not_guessed(self):
+        capture = self.disc_and_tube(with_answers=True)
+        self.assertEqual(stopped(translate(capture))["index"], 4)
+
+    def test_a_missing_answer_for_the_other_piece_of_two_follows_the_reader_not_the_boxes(self):
+        capture = self.capture(True)
+        pieces = capture["items"][4]["data"]["pieces"]
+        del pieces[0]["inside"]
+        self.assertEqual(steps_of(translate(capture).recipe, "extrude")[-1]["combine"], "intersect")
+        # Boxes that say the opposite of the reader give no answer at all.
+        capture["items"][4]["data"]["tool"]["body"]["box"] = box((14, 4, -1), (26, 16, 11))
+        pieces[1]["inside"] = False
+        self.assertEqual(stopped(translate(capture))["index"], 4)
 
 
 if __name__ == "__main__":
