@@ -12,8 +12,8 @@ crossing still exists and the corners keep their order. `order_ranges` gives the
 outline that crosses itself only in a corner of the ranges (a leg turned while shorter than another).
 
 `simple_ranges` checks any outline whose corners follow sizes, also with straight formulas only: at each setting of
-the ranges it works out the corners as the copy writes them (a value that cannot follow stays its number) and looks
-for two edges of the loops that cross. A corner that follows a size while the curve it meets stays where it is (a
+the ranges it works out the corners as the copy writes them (a value that cannot follow stays its number) and holds
+each loop to the app's own rule for sketch loops: no two edges cross or touch, arcs drawn with the app's chords. A corner that follows a size while the curve it meets stays where it is (a
 value that moves along a curve the probe could not fit) can pass that curve inside the ranges.
 """
 import math
@@ -31,10 +31,9 @@ ORDER_STEPS = 20  # halvings that find where a range stops keeping the order: a 
 _FAILURES = (ExpressionError, ValueError, ZeroDivisionError, OverflowError)
 TURN_TOL = 1e-9
 LEAST = 1e-9
-MAX_SIMPLE_EDGES = 160  # loops with more edges than this are not checked (the check grows with their square)
-CROSS_TOL = 1e-9  # how far (mm squared) an edge end must lie off the other edge for the two to cross
-END_TOL = 1e-6  # a crossing this close (mm) to the end of an edge is the corner the two edges share
-ANGLE_TOL = 1e-9
+ARC_SAMPLES = 16  # chords the app draws an arc with when it checks a loop (cad-kernel sketchGeometry.ts)
+MAX_SIMPLE_POINTS = 400  # loops with more points than this are not checked (the check grows with their square)
+TOUCH_MM = 1e-4  # edges this close count as touching; above the app's own limit, so a cut end keeps clear of it
 
 
 def _unit(v):
@@ -370,115 +369,82 @@ def _written(value, number, table):
     return float(number), ()
 
 
-def _circle(a, m, b):
-    """`(centre, radius, start angle, signed turn)` of the arc from `a` through `m` to `b`, or None when they line up."""
+def _arc_points(a, m, b):
+    """Points along the arc from `a` through `m` to `b` after `a`, `b` last, as the app samples it (`ARC_SAMPLES`
+    chords); just `b` when the three line up."""
     d = 2.0 * (a[0] * (m[1] - b[1]) + m[0] * (b[1] - a[1]) + b[0] * (a[1] - m[1]))
     if abs(d) <= 1e-12:
-        return None
+        return [b]
     sq = [p[0] * p[0] + p[1] * p[1] for p in (a, m, b)]
-    c = ((sq[0] * (m[1] - b[1]) + sq[1] * (b[1] - a[1]) + sq[2] * (a[1] - m[1])) / d,
-         (sq[0] * (b[0] - m[0]) + sq[1] * (a[0] - b[0]) + sq[2] * (m[0] - a[0])) / d)
-    t0, tm, t1 = (math.atan2(p[1] - c[1], p[0] - c[0]) for p in (a, m, b))
-    turn = (t1 - t0) % (2 * math.pi)
-    if (tm - t0) % (2 * math.pi) > turn:
-        turn -= 2 * math.pi
-    return c, math.hypot(a[0] - c[0], a[1] - c[1]), t0, turn
+    cx = (sq[0] * (m[1] - b[1]) + sq[1] * (b[1] - a[1]) + sq[2] * (a[1] - m[1])) / d
+    cy = (sq[0] * (b[0] - m[0]) + sq[1] * (a[0] - b[0]) + sq[2] * (m[0] - a[0])) / d
+    r = math.hypot(a[0] - cx, a[1] - cy)
+    t0, t1 = math.atan2(a[1] - cy, a[0] - cx), math.atan2(b[1] - cy, b[0] - cx)
+    ccw = (m[0] - a[0]) * (b[1] - m[1]) - (m[1] - a[1]) * (b[0] - m[0]) > 0
+    turn = (t1 - t0) % (2 * math.pi) if ccw else -((t0 - t1) % (2 * math.pi))
+    return [(cx + r * math.cos(t0 + turn * i / ARC_SAMPLES), cy + r * math.sin(t0 + turn * i / ARC_SAMPLES))
+            for i in range(1, ARC_SAMPLES)] + [b]
 
 
-def _edges(chain_points):
-    """The edges of one closed loop from `(point, is a middle point)` along it: `("line", a, b)` or `("arc", a, b,
-    circle)`; an arc whose points line up is two lines."""
-    out, last, at = [], chain_points[0][0], 1
+def _loop_points(chain_points):
+    """The points of one closed loop from `(point, is a middle point)` along it, arcs sampled as the app does."""
+    pts, at = [chain_points[0][0]], 1
     while at < len(chain_points):
         point, middle = chain_points[at]
         if middle and at + 1 < len(chain_points):
-            end = chain_points[at + 1][0]
-            circle = _circle(last, point, end)
-            out += [("arc", last, end, circle)] if circle else [("line", last, point), ("line", point, end)]
-            last, at = end, at + 2
+            pts += _arc_points(pts[-1], point, chain_points[at + 1][0])
+            at += 2
             continue
-        out.append(("line", last, point))
-        last, at = point, at + 1
-    first = chain_points[0][0]
-    if math.hypot(first[0] - last[0], first[1] - last[1]) > POINT_TOL:
-        out.append(("line", last, first))
-    return [e for e in out if math.hypot(e[2][0] - e[1][0], e[2][1] - e[1][1]) > POINT_TOL]
+        pts.append(point)
+        at += 1
+    if math.hypot(pts[0][0] - pts[-1][0], pts[0][1] - pts[-1][1]) <= POINT_TOL:
+        pts.pop()
+    return pts
 
 
-def _on_arc(edge, p):
-    """True when `p`, a point of the arc's circle, lies on the arc between its ends."""
-    (cx, cy), _, t0, turn = edge[3]
-    along = (math.atan2(p[1] - cy, p[0] - cx) - t0) % (2 * math.pi)
-    if turn < 0:
-        along = (2 * math.pi - along) % (2 * math.pi)
-    return ANGLE_TOL < along < abs(turn) - ANGLE_TOL
+def _off(p, a, b):
+    """Distance from `p` to the line through `a` and `b`, positive on its left."""
+    length = math.hypot(b[0] - a[0], b[1] - a[1])
+    return ((b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])) / length if length > 0 else 0.0
 
 
-def _on_line(edge, p):
-    (ax, ay), (bx, by) = edge[1], edge[2]
-    dx, dy = bx - ax, by - ay
-    t = ((p[0] - ax) * dx + (p[1] - ay) * dy) / (dx * dx + dy * dy)
-    return 0.0 <= t <= 1.0
+def _to_segment(p, a, b):
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    length2 = dx * dx + dy * dy
+    t = min(1.0, max(0.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / length2)) if length2 > 0 else 0.0
+    return math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy))
 
 
-def _meets(edge):
-    return _on_arc if edge[0] == "arc" else _on_line
+def _meet(e, f, tol):
+    (a, b), (c, d) = e, f
+    sides = (_off(c, a, b), _off(d, a, b), _off(a, c, d), _off(b, c, d))
+    if all(abs(v) > tol for v in sides) and sides[0] * sides[1] < 0 and sides[2] * sides[3] < 0:
+        return True
+    return any(_to_segment(p, x, y) <= tol for p, x, y in ((c, a, b), (d, a, b), (a, c, d), (b, c, d)))
 
 
-def _line_line_cross(e, f):
-    def side(a, b, c):
-        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
-    (p, q), (r, t) = e[1:3], f[1:3]
-    return side(p, q, r) * side(p, q, t) < -CROSS_TOL and side(r, t, p) * side(r, t, q) < -CROSS_TOL
-
-
-def _circle_points(e, f):
-    """Where the line or circle of `e` meets the circle of `f` (an arc), leaving out a touch."""
-    (cx, cy), r = f[3][0], f[3][1]
-    if e[0] == "line":
-        (ax, ay), (bx, by) = e[1], e[2]
-        dx, dy, fx, fy = bx - ax, by - ay, ax - cx, ay - cy
-        qa, qb, qc = dx * dx + dy * dy, 2 * (fx * dx + fy * dy), fx * fx + fy * fy - r * r
-        disc = qb * qb - 4 * qa * qc
-        if disc <= CROSS_TOL * qa:
-            return []
-        root = math.sqrt(disc)
-        return [(ax + t * dx, ay + t * dy) for t in ((-qb - root) / (2 * qa), (-qb + root) / (2 * qa))]
-    (ox, oy), s = e[3][0], e[3][1]
-    dist = math.hypot(cx - ox, cy - oy)
-    if dist <= POINT_TOL or dist >= r + s or dist <= abs(r - s):
-        return []
-    a = (s * s - r * r + dist * dist) / (2 * dist)
-    h = math.sqrt(max(0.0, s * s - a * a))
-    if h <= POINT_TOL:
-        return []
-    ux, uy = (cx - ox) / dist, (cy - oy) / dist
-    return [(ox + a * ux - h * uy, oy + a * uy + h * ux), (ox + a * ux + h * uy, oy + a * uy - h * ux)]
-
-
-def _cross(e, f):
-    """True when two edges cross at a point that is not an end of either (edges that meet at a corner do not)."""
-    if e[0] == "line" and f[0] == "line":
-        return _line_line_cross(e, f)
-    if e[0] == "arc" and f[0] == "line":
-        e, f = f, e
-    ends = (e[1], e[2], f[1], f[2])
-    for p in _circle_points(e, f):
-        if any(math.hypot(p[0] - q[0], p[1] - q[1]) <= END_TOL for q in ends):
-            continue
-        if _meets(e)(e, p) and _meets(f)(f, p):
+def _crossing(points):
+    """True when the closed loop through `points` crosses, touches or folds back on itself (within `TOUCH_MM`), the
+    rule the app holds every sketch loop to; edges next to each other only count when one folds back on the other."""
+    n = len(points)
+    if n < 3:
+        return False
+    for i in range(n):
+        prev, at, nxt = points[i - 1], points[i], points[(i + 1) % n]
+        ax, ay, bx, by = at[0] - prev[0], at[1] - prev[1], nxt[0] - at[0], nxt[1] - at[1]
+        arrived = math.hypot(ax, ay)
+        if arrived > 0 and abs(ax * by - ay * bx) / arrived <= TOUCH_MM and ax * bx + ay * by < 0:
             return True
+    edges = [(points[i], points[(i + 1) % n]) for i in range(n)]
+    for i in range(n):
+        for j in range(i + 2, n):
+            if not (i == 0 and j == n - 1) and _meet(edges[i], edges[j], TOUCH_MM):
+                return True
     return False
 
 
-def _crossing(loops_edges):
-    """True when two edges of the loops cross."""
-    flat = [e for edges in loops_edges for e in edges]
-    return any(_cross(e, f) for at, e in enumerate(flat) for f in flat[at + 1:])
-
-
 def simple_ranges(table, loops, raw_loops, motion=None):
-    """`{Fusion name: (min, max)}` inside which the written loops cross neither themselves nor each other, at every
+    """`{Fusion name: (min, max)}` inside which no written loop crosses or touches itself (`_crossing`), at every
     setting `order_ranges` tests (corners and middles of the ranges and the probe's built states inside them); `{}`
     when they hold over the whole ranges or nothing in them moves; None when no shorter ranges keep them (they cross
     at the values now, or a size they read has a typed range). Loops other than profiles and polygons are not
@@ -492,18 +458,19 @@ def simple_ranges(table, loops, raw_loops, motion=None):
     if any(v is None for chain in chains for xy, _ in chain for v in xy):
         return {}
     reads = list(dict.fromkeys(r for chain in chains for xy, _ in chain for _, found in xy for r in found))
-    if not reads or sum(len(chain) for chain in chains) > MAX_SIMPLE_EDGES:
+    arcs = sum(1 for chain in chains for _, middle in chain if middle)
+    if not reads or sum(len(chain) for chain in chains) + arcs * ARC_SAMPLES > MAX_SIMPLE_POINTS:
         return {}
     states = _states(table, motion)
 
     def simple_at(setting):
         try:
             env = range_check.size_env(table, setting)
-            loops_edges = [_edges([(tuple(range_check.value_of(v, env) if found else v for v, found in xy), middle)
-                                   for xy, middle in chain]) for chain in chains]
+            loops_points = [_loop_points([(tuple(range_check.value_of(v, env) if found else v for v, found in xy),
+                                           middle) for xy, middle in chain]) for chain in chains]
         except _FAILURES:
             return False
-        return not _crossing(loops_edges)
+        return not any(_crossing(points) for points in loops_points)
 
     def holds(bounds, only=None):
         if only is not None:
