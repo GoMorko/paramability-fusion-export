@@ -18,7 +18,7 @@ class WarningBoxTest(unittest.TestCase):
         box = inputs.itemById(recipe_dialog.WARN_ID)
         self.assertTrue(box.isVisible)
         self.assertIn("Coil1", box.formattedText)
-        self.assertIn("Steps of type coil", box.tooltipDescription)
+        self.assertIn("Steps of type thicken", box.tooltipDescription)
         self.assertTrue(inputs.itemById(recipe_dialog.SHOW_ID).isVisible)
 
     def test_left_out_steps_show_with_their_hints_and_the_full_text_in_the_tooltip_and_no_timeline_button(self):

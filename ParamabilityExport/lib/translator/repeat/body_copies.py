@@ -27,8 +27,9 @@ from ..combine import tool_walk
 from ..faces.moved_placer import MoveMaker
 from ..faces.slabs import Motion
 from ..faces.tool_placer import ToolMaker, WrittenFor, wrap_body
+from ..coil.coil_limits import CAUSE_TOOL, IN_TOOL
 from ..result import Refusal, StepResult, make_verdict
-from ..step_walk import nesting
+from ..step_walk import nesting, outside_tool
 
 GRID_PATHS = ("quantity_one", "quantity_two", "distance_one", "distance_two")
 TURN_PATHS = ("quantity", "total_angle_deg")
@@ -229,6 +230,8 @@ def _own_steps(ctx, out, item):
     if (not ctx.gaps and len(ctx.steps) <= repeat.MAX_REFERENCES
             and all(_adds_solid(ctx, step) for step in ctx.steps)):
         return [step["id"] for step in ctx.steps]
+    if outside_tool(ctx.steps):
+        return Refusal(IN_TOOL, cause=CAUSE_TOOL)
     if ctx.depth + 1 + nesting(ctx.steps) > tool_walk.MAX_DEPTH:
         return Refusal("The body %s is built from tools nested too deep to copy." % tool_walk.name_of(ctx.target))
     step_id = "%sbody_%s" % (ctx.id_prefix, item["index"])
@@ -265,6 +268,8 @@ def write(ctx, combine_item, group, combine, number):
                                "%s_%d_%d" % (combine_item["index"], number, place))
         if isinstance(tool, Refusal):
             return tool
+        if outside_tool(tool.steps):
+            return Refusal(IN_TOOL, cause=CAUSE_TOOL)
         step_id = tool.ctx.id_prefix + "tool"
         out.add({"kind": "toolBody", "combine": combine, "features": tool.steps}, [ToolMaker(tool.ctx)],
                 label=source.get("name"), step_id=step_id)

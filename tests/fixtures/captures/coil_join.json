@@ -1,0 +1,698 @@
+{
+  "_comment": "Block 40 x 20 x 10 with a right hand round wire coil of 3 turns joined above it; diameter, wire size, revolutions and height follow user parameters.",
+  "capture": 3,
+  "fusion": "2.0.0",
+  "design": "Test",
+  "up_axis": "z",
+  "target": {
+    "token": "t1",
+    "name": "Body1",
+    "box": {
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        40.0,
+        20.0,
+        10.0
+      ]
+    },
+    "volume_mm3": 8000.0
+  },
+  "items": [
+    {
+      "index": 0,
+      "name": "Sketch1",
+      "type": "Sketch",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [],
+      "data": {}
+    },
+    {
+      "index": 1,
+      "name": "Extrude1",
+      "type": "ExtrudeFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "data": {
+        "operation": "newBody",
+        "profiles": [
+          {
+            "sketch": "Sketch1",
+            "frame": {
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "x": [
+                1,
+                0,
+                0
+              ],
+              "y": [
+                0,
+                1,
+                0
+              ],
+              "z": [
+                0,
+                0,
+                1
+              ]
+            },
+            "loops": [
+              {
+                "outer": true,
+                "curves": [
+                  {
+                    "kind": "line",
+                    "start": [
+                      40,
+                      20
+                    ],
+                    "end": [
+                      0,
+                      20
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      40,
+                      0
+                    ],
+                    "end": [
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      40,
+                      0
+                    ],
+                    "end": [
+                      40,
+                      20
+                    ]
+                  },
+                  {
+                    "kind": "line",
+                    "start": [
+                      0,
+                      20
+                    ],
+                    "end": [
+                      0,
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "start": {
+          "kind": "profilePlane"
+        },
+        "extent_type": "one",
+        "side_one": {
+          "kind": "distance",
+          "distance": 10.0,
+          "taper_deg": 0.0
+        },
+        "side_two": null,
+        "symmetric": null,
+        "thin": false,
+        "participants": [],
+        "target_box_before": null,
+        "end_offset": 10.0
+      }
+    },
+    {
+      "index": 2,
+      "name": "Coil1",
+      "type": "CoilFeature",
+      "suppressed": false,
+      "health": "ok",
+      "message": "",
+      "in_target_component": true,
+      "bodies_before": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "bodies_after": [
+        {
+          "token": "t1",
+          "name": "Body1"
+        }
+      ],
+      "target_changed": true,
+      "data": {
+        "roles": [
+          "Diameter",
+          "SectionSize",
+          "TaperAngle",
+          "Revolutions",
+          "Height"
+        ],
+        "volumes_before": [
+          {
+            "token": "t1",
+            "name": "Body1",
+            "volume": 8000.0
+          }
+        ],
+        "made": [
+          {
+            "token": "t1",
+            "name": "Body1",
+            "volume": 8236.870505626144
+          }
+        ],
+        "faces": {
+          "flat": [
+            {
+              "frame": {
+                "origin": [
+                  20.0,
+                  10.0,
+                  14.0
+                ],
+                "x": [
+                  1.0,
+                  0.0,
+                  0.0
+                ],
+                "y": [
+                  0.0,
+                  0.0,
+                  1.0
+                ],
+                "z": [
+                  -0.0,
+                  -1.0,
+                  -0.0
+                ]
+              },
+              "loops": [
+                {
+                  "outer": true,
+                  "curves": [
+                    {
+                      "kind": "circle",
+                      "center": [
+                        4.0,
+                        0.0
+                      ],
+                      "radius": 1.0
+                    }
+                  ]
+                }
+              ],
+              "area": 3.141592653589793
+            },
+            {
+              "frame": {
+                "origin": [
+                  20.0,
+                  10.0,
+                  26.0
+                ],
+                "x": [
+                  1.0,
+                  -7.347880794884119e-16,
+                  0.0
+                ],
+                "y": [
+                  0.0,
+                  -0.0,
+                  -1.0
+                ],
+                "z": [
+                  7.347880794884119e-16,
+                  1.0,
+                  -0.0
+                ]
+              },
+              "loops": [
+                {
+                  "outer": true,
+                  "curves": [
+                    {
+                      "kind": "circle",
+                      "center": [
+                        4.0,
+                        0.0
+                      ],
+                      "radius": 1.0
+                    }
+                  ]
+                }
+              ],
+              "area": 3.141592653589793
+            }
+          ],
+          "curved": 1,
+          "edges": [
+            [
+              [
+                25.0,
+                10.0,
+                14.0
+              ],
+              [
+                21.91341716182545,
+                14.619397662556434,
+                14.75
+              ],
+              [
+                16.464466094067262,
+                13.535533905932738,
+                15.5
+              ],
+              [
+                15.380602337443566,
+                8.086582838174552,
+                16.25
+              ],
+              [
+                20.0,
+                5.0,
+                17.0
+              ],
+              [
+                24.61939766255643,
+                8.086582838174548,
+                17.75
+              ],
+              [
+                23.535533905932738,
+                13.535533905932738,
+                18.5
+              ],
+              [
+                18.08658283817455,
+                14.619397662556434,
+                19.25
+              ],
+              [
+                15.0,
+                10.000000000000002,
+                20.0
+              ],
+              [
+                18.086582838174547,
+                5.380602337443568,
+                20.75
+              ],
+              [
+                23.535533905932734,
+                6.464466094067258,
+                21.5
+              ],
+              [
+                24.619397662556434,
+                11.913417161825448,
+                22.25
+              ],
+              [
+                20.000000000000004,
+                15.0,
+                23.0
+              ],
+              [
+                15.380602337443568,
+                11.913417161825453,
+                23.75
+              ],
+              [
+                16.464466094067262,
+                6.464466094067261,
+                24.5
+              ],
+              [
+                21.913417161825446,
+                5.380602337443566,
+                25.25
+              ],
+              [
+                25.0,
+                9.999999999999996,
+                26.0
+              ]
+            ],
+            [
+              [
+                25.0,
+                10.0,
+                14.0
+              ],
+              [
+                24.923879532511286,
+                10.0,
+                14.38268343236509
+              ],
+              [
+                24.707106781186546,
+                10.0,
+                14.707106781186548
+              ],
+              [
+                24.38268343236509,
+                10.0,
+                14.923879532511286
+              ],
+              [
+                24.0,
+                10.0,
+                15.0
+              ],
+              [
+                23.61731656763491,
+                10.0,
+                14.923879532511286
+              ],
+              [
+                23.292893218813454,
+                10.0,
+                14.707106781186548
+              ],
+              [
+                23.076120467488714,
+                10.0,
+                14.38268343236509
+              ],
+              [
+                23.0,
+                10.0,
+                14.0
+              ],
+              [
+                23.076120467488714,
+                10.0,
+                13.61731656763491
+              ],
+              [
+                23.292893218813454,
+                10.0,
+                13.292893218813452
+              ],
+              [
+                23.61731656763491,
+                10.0,
+                13.076120467488714
+              ],
+              [
+                24.0,
+                10.0,
+                13.0
+              ],
+              [
+                24.38268343236509,
+                10.0,
+                13.076120467488714
+              ],
+              [
+                24.707106781186546,
+                10.0,
+                13.292893218813452
+              ],
+              [
+                24.923879532511286,
+                10.0,
+                13.61731656763491
+              ],
+              [
+                25.0,
+                10.0,
+                14.0
+              ]
+            ],
+            [
+              [
+                25.0,
+                9.999999999999996,
+                26.0
+              ],
+              [
+                24.923879532511286,
+                9.999999999999996,
+                26.38268343236509
+              ],
+              [
+                24.707106781186546,
+                9.999999999999996,
+                26.707106781186546
+              ],
+              [
+                24.38268343236509,
+                9.999999999999996,
+                26.923879532511286
+              ],
+              [
+                24.0,
+                9.999999999999996,
+                27.0
+              ],
+              [
+                23.61731656763491,
+                9.999999999999996,
+                26.923879532511286
+              ],
+              [
+                23.292893218813454,
+                9.999999999999996,
+                26.707106781186546
+              ],
+              [
+                23.076120467488714,
+                9.999999999999996,
+                26.38268343236509
+              ],
+              [
+                23.0,
+                9.999999999999996,
+                26.0
+              ],
+              [
+                23.076120467488714,
+                9.999999999999996,
+                25.61731656763491
+              ],
+              [
+                23.292893218813454,
+                9.999999999999996,
+                25.292893218813454
+              ],
+              [
+                23.61731656763491,
+                9.999999999999996,
+                25.076120467488714
+              ],
+              [
+                24.0,
+                9.999999999999996,
+                25.0
+              ],
+              [
+                24.38268343236509,
+                9.999999999999996,
+                25.076120467488714
+              ],
+              [
+                24.707106781186546,
+                9.999999999999996,
+                25.292893218813454
+              ],
+              [
+                24.923879532511286,
+                9.999999999999996,
+                25.61731656763491
+              ],
+              [
+                25.0,
+                9.999999999999996,
+                26.0
+              ]
+            ]
+          ]
+        },
+        "params": {
+          "diameter": {
+            "name": "d5",
+            "expression": "coil_d",
+            "value": 10.0
+          },
+          "section_size": {
+            "name": "d6",
+            "expression": "coil_s",
+            "value": 2.0
+          },
+          "taper_deg": {
+            "name": "d7",
+            "expression": "0 deg",
+            "value": 0.0
+          },
+          "revolutions": {
+            "name": "d8",
+            "expression": "coil_n",
+            "value": 3.0
+          },
+          "height": {
+            "name": "d9",
+            "expression": "coil_h",
+            "value": 12.0
+          }
+        }
+      }
+    }
+  ],
+  "parameters": {
+    "user": [
+      {
+        "name": "coil_d",
+        "expression": "10.0 mm",
+        "value": 1.0,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 10.0
+      },
+      {
+        "name": "coil_s",
+        "expression": "2.0 mm",
+        "value": 0.2,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 2.0
+      },
+      {
+        "name": "coil_n",
+        "expression": "3.0",
+        "value": 3.0,
+        "unit": "",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "count",
+        "display_value": 3.0
+      },
+      {
+        "name": "coil_h",
+        "expression": "12.0 mm",
+        "value": 1.2,
+        "unit": "mm",
+        "comment": "",
+        "is_favorite": true,
+        "value_type": "numeric",
+        "dependency_parameters": [],
+        "dependent_parameters": [],
+        "kind": "length",
+        "display_value": 12.0
+      }
+    ],
+    "model": [
+      {
+        "name": "d5",
+        "expression": "coil_d",
+        "value": 1.0,
+        "unit": "mm",
+        "kind": "derived",
+        "role": "diameter",
+        "dependency_parameters": [
+          "coil_d"
+        ],
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d5",
+          "name": "Coil1",
+          "sketch": "",
+          "component": ""
+        }
+      },
+      {
+        "name": "d6",
+        "expression": "coil_s",
+        "value": 0.2,
+        "unit": "mm",
+        "kind": "derived",
+        "role": "section_size",
+        "dependency_parameters": [
+          "coil_s"
+        ],
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d6",
+          "name": "Coil1",
+          "sketch": "",
+          "component": ""
+        }
+      },
+      {
+        "name": "d8",
+        "expression": "coil_n",
+        "value": 0.3,
+        "unit": "mm",
+        "kind": "derived",
+        "role": "revolutions",
+        "dependency_parameters": [
+          "coil_n"
+        ],
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d8",
+          "name": "Coil1",
+          "sketch": "",
+          "component": ""
+        }
+      },
+      {
+        "name": "d9",
+        "expression": "coil_h",
+        "value": 1.2,
+        "unit": "mm",
+        "kind": "derived",
+        "role": "height",
+        "dependency_parameters": [
+          "coil_h"
+        ],
+        "created_by": {
+          "kind": "feature",
+          "token": "tok_d9",
+          "name": "Coil1",
+          "sketch": "",
+          "component": ""
+        }
+      }
+    ]
+  }
+}

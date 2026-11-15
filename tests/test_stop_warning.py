@@ -42,11 +42,11 @@ class SummarizeTest(unittest.TestCase):
     def test_the_stopping_step_is_named_and_the_variables_promise_follows_the_parameters(self):
         summary = summarize(coil_then_plate())
         self.assertTrue(summary["stops"])
-        self.assertEqual(summary["label"], "Coil1 (coil)")
+        self.assertEqual(summary["label"], "Coil1 (thicken)")
         self.assertEqual(summary["index"], 2)
         self.assertIn("Coil1", summary["lines"][0])
         self.assertIn("variables", summary["lines"][-1])
-        self.assertIn("Steps of type coil", summary["tooltip"])
+        self.assertIn("Steps of type thicken", summary["tooltip"])
         self.assertNotIn("variables", summarize(coil_then_plate(), has_parameters=False)["lines"][-1])
 
     def test_a_stop_without_a_step_has_nothing_to_point_at(self):
@@ -67,7 +67,7 @@ class SummarizeTest(unittest.TestCase):
 
     def test_notes_are_listed_after_a_stop_too(self):
         capture = load_capture("fillet_setback")
-        capture["items"].append({"index": 99, "name": "Coil1", "type": "CoilFeature", "suppressed": False,
+        capture["items"].append({"index": 99, "name": "Coil1", "type": "ThickenFeature", "suppressed": False,
                                  "health": "error", "message": "", "in_target_component": True,
                                  "bodies_after": capture["items"][-1]["bodies_after"], "data": {}})
         lines = summarize(capture)["lines"]
@@ -76,10 +76,10 @@ class SummarizeTest(unittest.TestCase):
 
 
 def tray_with_gaps(count=1):
-    """The tray whose shell is a coil, and a fillet after it that picks edges of the shell. `count` more steps
+    """The tray whose shell is a thicken, and a fillet after it that picks edges of the shell. `count` more steps
     that cannot be copied are added before the fillet."""
     capture = load_capture("filter_tray_sized")
-    capture["items"][2]["type"] = "CoilFeature"
+    capture["items"][2]["type"] = "ThickenFeature"
     for n in range(count - 1):
         extra = {**capture["items"][2], "index": 50 + n, "name": "Coil%d" % (n + 2)}
         capture["items"].insert(3, extra)
@@ -91,8 +91,8 @@ class LeftOutTest(unittest.TestCase):
         summary = summarize(tray_with_gaps())
         self.assertFalse(summary["stops"])
         self.assertEqual(summary["lines"][0], "Likely left out of the copy:")
-        self.assertEqual(summary["lines"][1], left_out_line("Shell1", "Steps of type coil are not copied yet.",
-                                                            gap_hint(gap_hints.COIL)))
+        self.assertEqual(summary["lines"][1], left_out_line("Shell1", "Steps of type thicken are not copied yet.",
+                                                            gap_hint(gap_hints.SURFACE)))
         self.assertEqual([step["name"] for step in summary["left_out"]], ["Shell1"])
         self.assertIn(summary["lines"][1], summary["tooltip"])
 
@@ -121,7 +121,7 @@ class LeftOutTest(unittest.TestCase):
         stopped = summarize(coil_then_plate())
         self.assertEqual(stopped["left_out"], [])
         self.assertFalse(stopped["more_may_show"])
-        self.assertEqual(stopped["hint"], gap_hint(gap_hints.COIL))
+        self.assertEqual(stopped["hint"], gap_hint(gap_hints.SURFACE))
         self.assertIn("Tip: " + stopped["hint"], stopped["lines"])
         self.assertLess(stopped["lines"].index("Tip: " + stopped["hint"]), len(stopped["lines"]) - 1)
         self.assertIn("Tip: " + stopped["hint"], stopped["tooltip"])
@@ -149,7 +149,7 @@ class LeftOutTest(unittest.TestCase):
     def test_with_several_bodies_more_may_show_is_said_once_and_a_stop_keeps_its_hint(self):
         summary = summarize_many([("Tray", tray_with_gaps()), ("Lid", tray_with_gaps()), ("Cover", coil_then_plate())])
         self.assertEqual(summary["lines"].count(MORE_MAY_SHOW), 1)
-        self.assertIn("Tip: " + gap_hint(gap_hints.COIL), summary["lines"])
+        self.assertIn("Tip: " + gap_hint(gap_hints.SURFACE), summary["lines"])
         self.assertIn("fixed shapes", summary["lines"][-1])
 
 

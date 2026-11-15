@@ -3,6 +3,7 @@
 gives its reason)."""
 from . import extrude
 from .bodies import move, paste, split
+from .coil import step as coil
 from .combine import step as combine
 from .extrude import emboss
 from .finishes import draft, finish, offset
@@ -30,6 +31,7 @@ HANDLERS = {
     "CopyPasteBody": paste.handle,
     "MoveFeature": move.handle,
     "EmbossFeature": emboss.handle,
+    "CoilFeature": coil.handle,
     "SweepFeature": sweep.handle,
     "LoftFeature": loft.handle,
 }

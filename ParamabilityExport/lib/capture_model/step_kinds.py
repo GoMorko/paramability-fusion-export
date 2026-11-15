@@ -95,6 +95,8 @@ class RecipeKind:
     combine_tool: the step can be one of the steps that build the tool body of a Combine (a body made by such steps
       that only add material).
     always_cuts: it removes material whatever its `combine`.
+    in_tool: the step may stand in the `features` of a `toolBody` (the recipe leaves thread, coil, skin and bevelGear
+      out of a tool, since they build on the whole part).
     written: False for kinds the recipe schema has but the translator never writes.
     """
 
@@ -106,6 +108,7 @@ class RecipeKind:
     repeats: bool = False
     combine_tool: bool = False
     always_cuts: bool = False
+    in_tool: bool = True
     written: bool = True
 
 
@@ -134,8 +137,7 @@ STEP_TYPES = (
              gap_cause=gap_hints.SURFACE),
     StepType("BoundaryFillFeature", "boundary fill", unsupported="Steps of type boundary fill are not copied yet.",
              gap_cause=gap_hints.SURFACE),
-    StepType("CoilFeature", "coil", unsupported="Steps of type coil are not copied yet.",
-             gap_cause=gap_hints.COIL),
+    StepType("CoilFeature", "coil", reader="read_coil", gap_cause=gap_hints.COIL),
     StepType("SplitBodyFeature", "split body", reader="read_split", splits_bodies=True, reaches_bodies=True),
     StepType("CopyPasteBody", "pasted body", reader="read_paste", makes_bodies=True),
     StepType("MoveFeature", "move", reader="read_move", moves_bodies=True, reaches_bodies=True),
@@ -186,12 +188,13 @@ RECIPE_KINDS = (
     RecipeKind("sweep", positions=(("sketch", "on", "origin"), ("path", "on", "origin"), ("path", "points", "[]")),
                directions=(("sketch", "on", "normal"), ("sketch", "on", "xDir"), ("path", "on", "normal"),
                            ("path", "on", "xDir")), repeat=SOLID, combine_tool=True),
-    RecipeKind("thread", written=False),
-    RecipeKind("coil", written=False),
-    RecipeKind("skin", written=False),
+    RecipeKind("thread", in_tool=False, written=False),
+    RecipeKind("coil", positions=(("sketch", "on", "origin"),),
+               directions=(("sketch", "on", "normal"), ("sketch", "on", "xDir")), combine_tool=True, in_tool=False),
+    RecipeKind("skin", in_tool=False, written=False),
     RecipeKind("draft", version=8, positions=(("faces", "near", "[]"), ("neutral", "origin")),
                directions=(("neutral", "normal"),)),
-    RecipeKind("bevelGear", written=False),
+    RecipeKind("bevelGear", in_tool=False, written=False),
 )
 
 _TYPES = {t.name: t for t in STEP_TYPES}

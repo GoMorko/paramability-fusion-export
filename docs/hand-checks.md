@@ -97,9 +97,9 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
    give; the edge loft names what Fusion gave for the section.
 
 6. AS1, steps after a stop. Extrude a box, split it with the curved face of a cylinder body and remove the outer
-   piece, then add a coil joined to the box.
+   piece, then add a thicken joined to the box.
    Export: the box is saved as a fixed shape with the split as the reason, `after_stop` names the split and the
-   coil, and the window says the coil was not copied either.
+   thicken, and the window says the thicken was not copied either.
 
 7. SP1, marker roll. Make component Cup (60 mm square sketch from user parameter `Width`, extruded 40 mm), then
    component Rack with about 100 steps (a pattern of 200 holes, fillets, chamfers).
@@ -144,3 +144,23 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     Export: tick all three. In Paramability the form reads "Wall thickness", "Base cup mid extrude offset" and "Hole
     diameter". Each field has an info tip "Name in the original design: ..." with the Fusion name, the long comment is
     the text under the "Hole diameter" field, and the result window still lists the sizes by their Fusion names.
+
+11. CO1, a coil on a block. Model a 40 x 20 x 10 mm block. Make a Coil with Insert > Coil (Fusion's Coil command) on a
+    plane at the top of the block: diameter `CoilDia` = 10 mm, section size `Wire` = 2 mm, revolutions 3, height
+    `CoilHeight` = 12 mm, round section, section position inside, clockwise, operation Join. Make a second design with
+    a square section, counter clockwise and "Revolutions and Pitch" (pitch 4 mm).
+    Export: tick `CoilDia`, `Wire` and `CoilHeight`. `report.json` has `items[].data` of the coil with `roles`,
+    `params`, `volumes_before`, `made` and `faces` (two flat end faces and sampled edges); the copy has a `coil` step,
+    and in Paramability the coil matches the Fusion one (same hand, same rise, joined to the block). Changing `Wire`
+    or `CoilDia` moves the coil as in Fusion. The ranges stop before the wire reaches the axis or the turns touch.
+
+12. CO2, coils the copy leaves out. In the CO1 design add a coil each with: a taper angle of 5 degrees; type Spiral;
+    revolutions 2.5; a triangle section. Join each to the block.
+    Export: the taper, the spiral and the 2.5 revolutions coils are left out with their own hint. The triangle coil is
+    copied with its numbers (`Wire` and `CoilDia` are marked, not followed).
+
+13. CO3, coil as a tool and the caps. Make a coil as a New Body, then Combine it (Join) with the block. Repeat to get
+    more than 8 coils in one design (or 17 coils joined one by one).
+    Export: the Combine of a lone coil body is copied as a plain coil step. From the ninth coil on, the coils are left
+    out with the hint about 8 coils and 100 turns; the first eight stay. A coil body that also has a cut or a fillet
+    in its tool is left out with the hint to join the coil before changing it.

@@ -125,7 +125,7 @@ class LineageStatesTest(unittest.TestCase):
         right = body("b2", "Body2", lo=(10, 0, 0), hi=(40, 20, 10), volume=6.0)
         plane = Obj("fusion::ConstructionPlane", entityToken="cp1",
                     geometry=Obj("core::Plane", origin=P(10, 0, 0), normal=vector(1, 0, 0)))
-        made = entry(feature("CoilFeature", "Coil1", bodies=[plate]))
+        made = entry(feature("ThickenFeature", "Coil1", bodies=[plate]))
         split = entry(feature("SplitBodyFeature", "Split1", bodies=[plate, right], splittingTool=plane,
                               splitBodies=Coll([plate]), isSplittingToolExtended=True))
         design = FakeDesign([made, split], right, appears_at=2)

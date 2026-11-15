@@ -206,7 +206,7 @@ class EdgesPathTest(unittest.TestCase):
 
     def test_a_wire_along_edges_after_a_step_that_is_left_out_is_left_out_too(self):
         capture = load_capture(PLATE)
-        coil = {"index": 2, "name": "Coil1", "type": "CoilFeature", "suppressed": False, "health": "ok", "message": "",
+        coil = {"index": 2, "name": "Coil1", "type": "ThickenFeature", "suppressed": False, "health": "ok", "message": "",
                 "in_target_component": True, "bodies_after": [{"token": "t1", "name": "Body1"}], "data": {}}
         capture["items"].insert(2, coil)
         for position, item in enumerate(capture["items"]):

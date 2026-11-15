@@ -14,7 +14,7 @@ from tests.test_manifest import GAPS_SCHEMA, PACKAGE_SCHEMA, PACKAGE_SCHEMA_V2
 from tests.test_parts_pipeline import renamed
 from tests.translator_helpers import load_capture
 
-from lib.capture_model.gap_hints import COIL, HINTS
+from lib.capture_model.gap_hints import HINTS, SURFACE
 from lib.design_edit.errors import StepExportError
 from lib.dialog_model.result_rows import parts_result_view, result_view, section_lines
 from lib.export_plan.pipeline import ExportRequest, run_pipeline
@@ -43,7 +43,7 @@ TICKED = ["wall_mm", "pipe_d_mm", "holes_count"]
 def tray(leave_out=True, name=None):
     capture = load_capture(TRAY)
     if leave_out:
-        capture["items"][SHELL]["type"] = "CoilFeature"
+        capture["items"][SHELL]["type"] = "ThickenFeature"
     return renamed(capture, ("t1", "Body1"), (name[0], name[1])) if name else capture
 
 
@@ -105,7 +105,7 @@ class GapPackageTest(unittest.TestCase):
         self.assertEqual(validate(gaps, load_schema(GAPS_SCHEMA)), [])
         self.assertEqual(gaps["version"], 3)
         self.assertEqual([g["name"] for g in gaps["gaps"]], ["Shell1"])
-        self.assertEqual(gaps["gaps"][0]["hint"], HINTS[COIL])
+        self.assertEqual(gaps["gaps"][0]["hint"], HINTS[SURFACE])
         ids = recipe_ids(json.loads(files["recipe.json"])["features"])
         for gap in gaps["gaps"]:
             self.assertIn(gap["after"], ids)
@@ -206,7 +206,7 @@ class ReachPassTest(unittest.TestCase):
     def test_a_tool_body_stopped_at_the_gap_cap_still_names_its_own_gaps(self):
         capture = load_capture("combine_tool_two_steps")
         items = capture["items"]
-        items[5]["type"] = "CoilFeature"
+        items[5]["type"] = "ThickenFeature"
         items[6:] = [dict(copy.deepcopy(items[5]), index=6, name="Extrude4"), dict(items[6], index=7)]
         with mock.patch.object(translator_gaps, "MAX_GAPS", 1):
             result = translate(capture)

@@ -210,7 +210,7 @@ message box when the export stopped), with the advice to use Undo, and `report.j
 
 ### When a step cannot be copied
 
-Some steps cannot be copied yet: a coil, a sweep that twists and tapers, an extrude with a taper on a face, and others (the limits
+Some steps cannot be copied yet: a spiral or tapered coil, a sweep that twists and tapers, an extrude with a taper on a face, and others (the limits
 below say which). What the add-in does then depends on the step.
 
 Most of the time the step is left out. The add-in goes on with the steps after it, writes the copy without the
@@ -388,7 +388,9 @@ in `ParamabilityExport/lib/fusion_reader/step_export.py` to `ROUTE_ASK_DESIGNER`
   usual places, mirrors of faces, a chamfer with two different sizes whose sides could not be
   measured, a press pull (offset
   faces) of a curved face, of a face with a leaning or rounded side, or of two faces that meet, and every
-  step type not listed above (coil). A draft is copied when its faces all lie on one side of its plane, with one angle
+  step type not listed above. A coil is copied when it has a round, square or triangle section, no taper, and its end faces and
+  helical edges read back as one plain helix; at most 8 coils and 100 turns in all (later coils are left out), never as a tool
+  with other steps (a spiral, a taper and a half-turn count of revolutions are left out). A draft is copied when its faces all lie on one side of its plane, with one angle
   under 30 degrees (or the same on both sides; it follows a size only when both sides use the same formula, and the
   size range stays above 0 and below 30 degrees), and the part's volume changes (it tells which way the faces lean);
   other drafts are left out. A step of that kind in a tool body leaves the Combine that
