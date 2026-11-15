@@ -450,8 +450,9 @@ mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter
       window has a "May give unexpected results" group and its row says "may be unexpected", and Paramability shows a
       warning mark. A ticked parameter that no copied step reads is not a size: the message names it, and it is in
       the manifest `parameters` list.
-- [ ] **Labels.** Open the file in Paramability: each size shows the Fusion parameter name as its label, and
-      the Fusion comment as the variable's description (from the manifest `parameters` list), not as the name.
+- [ ] **Labels.** Open the file in Paramability: each size shows a readable label (a short Fusion comment, else the
+      parameter name in words such as "Base cup mid extrude offset"), the Fusion name in the info tip next to it, and
+      a long comment as the description under the field. No two fields share a label.
 
 - [ ] The dialog lists the user parameters in a table, the ones the body reads ticked (favourites first), the formula
       one greyed with "formula" in the last column. OK is on once a body is picked.

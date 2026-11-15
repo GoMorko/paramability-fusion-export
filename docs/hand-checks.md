@@ -137,3 +137,10 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     names the variable round with the same reason and tip, and any step of the 1 mm round it also lists is the one
     the "More may show" line was about. Note the seconds from the log line on a design with 100 or more steps: the
     warning itself should take well under a second.
+
+11. LB1, size labels. Model a 40 x 30 x 10 mm box from three user parameters: `Wall_thickness_mm` (3 mm, comment
+    `Wall thickness`), `BaseCup_midExtrude_offset__mm` (5 mm, no comment) and `Hole_diameter_mm` (6 mm, a comment of two
+    long sentences describing the hole).
+    Export: tick all three. In Paramability the form reads "Wall thickness", "Base cup mid extrude offset" and "Hole
+    diameter". Each field has an info tip "Name in the original design: ..." with the Fusion name, the long comment is
+    the text under the "Hole diameter" field, and the result window still lists the sizes by their Fusion names.

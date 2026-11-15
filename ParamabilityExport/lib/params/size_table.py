@@ -15,7 +15,8 @@ counts as not typed.
 
 The table holds, per parameter, one entry whose `state` is:
 
-- `free`: a plain number kept as a size (`table.sizes[recipe_name]` has `kind`, `value`, `min`, `max`, `label`);
+- `free`: a plain number kept as a size (`table.sizes[recipe_name]` has `kind`, `value`, `min`, `max`, `label`; the
+  label is the form text made by `labels`, while `Entry.label` stays the Fusion name that messages use);
 - `derived`: a formula over other sizes (`{ expr, label }`). Past the size cap it has no size name, and every
   formula that reads it holds the formula itself;
 - `constant`: a plain number that is not a size; every formula that reads it holds its number;
@@ -33,7 +34,7 @@ from dataclasses import dataclass
 from itertools import product
 
 from ..package.manifest import MAX_FIXED_REASON
-from . import defaults, names
+from . import defaults, labels, names
 from .dependencies import Graph, names_in
 from .expressions.errors import ExpressionError
 from .expressions.evaluation import evaluate
@@ -79,7 +80,8 @@ class Entry:
     name: str  # Fusion name
     state: str
     size_name: str = ""  # recipe name, set for free and derived
-    label: str = ""
+    label: str = ""  # the Fusion name, in messages
+    title: str = ""  # the form label of a size, in words (`labels.assign`)
     kind: str = ""  # recipe size kind of a plain number
     value: float = 0.0  # mm, degrees or the plain number
     expression: str = ""  # Fusion text for a derived entry
@@ -175,8 +177,14 @@ class SizeTable:
             if p["name"] not in self._entries:
                 self._derived_entry(p["name"])
         for p in candidates:
+            self.entries.append(self._entries[p["name"]])
+        sized = [e for e in self.entries if e.state in (FREE, DERIVED) and e.size_name]
+        titles = labels.assign([(e.name, self._cand[e.name].get("comment"), self._cand[e.name].get("unit"))
+                                for e in sized])
+        for e in sized:
+            e.title = titles[e.name]
+        for p in candidates:
             e = self._entries[p["name"]]
-            self.entries.append(e)
             if e.state in (FREE, DERIVED) and e.size_name:
                 self.sizes[e.size_name] = self._size_dict(e)
                 if e.size_name != e.name:
@@ -240,12 +248,12 @@ class SizeTable:
 
     def _size_dict(self, e):
         if e.state == DERIVED:
-            return {"expr": e.formula, "label": e.label}
+            return {"expr": e.formula, "label": e.title or e.label}
         p = self._cand[e.name]
         lo, hi = self._ranges.get(e.name) or defaults.size_range(p, e.kind, e.value)
         if e.name in self._narrowed:
             lo, hi = max(lo, self._narrowed[e.name][0]), min(hi, self._narrowed[e.name][1])
-        size = {"kind": e.kind, "value": e.value, "min": lo, "max": hi, "label": e.label}
+        size = {"kind": e.kind, "value": e.value, "min": lo, "max": hi, "label": e.title or e.label}
         if e.kind == "count":
             size["step"] = 1
         return size
