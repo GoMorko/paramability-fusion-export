@@ -9,7 +9,7 @@ from ..geometry.combine_volume import intersect_model as model  # noqa: F401  (t
 from . import read_geometry as geo
 
 
-def _brep_tools():
+def brep_tools():
     """`(TemporaryBRepManager, BooleanTypes)` of Fusion; raises outside Fusion."""
     import adsk.fusion
     return adsk.fusion.TemporaryBRepManager.get(), adsk.fusion.BooleanTypes
@@ -44,7 +44,7 @@ def volumes(feature, tool_refs):
         return None
 
     def measure():
-        manager, types = _brep_tools()
+        manager, types = brep_tools()
         tools = geo.collection_items(feature.toolBodies)
         if len(tools) < 2:
             return None

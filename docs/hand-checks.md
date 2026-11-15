@@ -72,6 +72,9 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
    inside piece instead.
    Export: export the plate, then the inside piece. Expect a cut by the cylinder for the plate and an intersect for
    the core, and both copies match the STEP. A split by a curved face of a body stops with "curved surface".
+   Also check the fallback: when Fusion's point containment gives no answer for a face of a piece, the add-in
+   intersects temporary copies of the piece and the tool. Note in `report.json` whether every piece of the split has
+   `inside` set, and compare an export from this version of the plate split with the old one: both copy.
 
 2. SB1, split by an offset plane. Model a box with a shell and a fillet. Add a construction plane offset from the
    top face by a user parameter `Cut`, Split Body with it and Remove the upper piece.

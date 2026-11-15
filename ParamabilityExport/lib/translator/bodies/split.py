@@ -8,7 +8,9 @@ when it keeps its token, else the body the split made.
   one extrude of a square on the plane, sized from the body's box with a wide margin. Its plane follows sizes like a
   mirror plane (`follow.place_plane`).
 - A split by a solid body becomes a cut by that body when the piece lies outside it, or an intersect when it lies
-  inside, written by the Combine machinery (`combine.step.write_tools`). Fusion keeps the tool body.
+  inside, written by the Combine machinery (`combine.step.write_tools`). Fusion keeps the tool body. The capture says
+  which pieces lie inside the tool; when it does not (an older export, or a read that failed), the boxes decide
+  (`split_inside.py`).
 - A split by anything else (a curved face, a surface body, a sketch curve) stops the copy.
 
 The capture must show that the piece is the whole of its side: it lies on one side of the plane (or inside or outside
@@ -23,6 +25,7 @@ from ..faces import follow
 from ..faces.tool_placer import ToolMaker
 from ..repeat.repeat_build import round_vec
 from ..result import Refusal, StepResult
+from . import split_inside
 from ..values import Quantity
 
 # A piece's box may reach this far (mm) past the plane on the side it does not lie on.
@@ -150,7 +153,11 @@ def _by_body(ctx, item, tool, parent, piece, others):
     if not tool.get("solid"):
         return _stop("This split cuts along a surface, which is not copied yet.")
     inside = piece.get("inside")
-    if inside is None or any(p.get("inside") is not (not inside) for p in others):
+    if inside is None or any(p.get("inside") is None for p in others):
+        inside = split_inside.decide(body, piece, others)
+    elif any(p.get("inside") is inside for p in others):
+        inside = None
+    if inside is None:
         return _stop("The copy could not tell which pieces of this split lie inside its tool body.")
     operation = "intersect" if inside else "cut"
     data = {"tools": [body], "volume_before": parent.get("volume"), "volume_after": piece.get("volume"),

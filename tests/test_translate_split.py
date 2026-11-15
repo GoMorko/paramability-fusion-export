@@ -205,9 +205,33 @@ class SplitByBodyTest(unittest.TestCase):
                 self.assertIsNone(stopped(result))
                 self.assertEqual(steps_of(result.recipe, "extrude")[-1]["combine"], combine)
 
-    def test_pieces_the_reader_could_not_place_stop_the_copy(self):
-        capture = self.capture(False)
-        capture["items"][4]["data"]["pieces"][1]["inside"] = None
+    def boxed(self, kept_inside):
+        """The same split from an older export: no piece says whether it lies inside, but the tool has its box."""
+        capture = self.capture(kept_inside)
+        data = capture["items"][4]["data"]
+        data["tool"]["body"]["box"] = box((14, 4, -1), (26, 16, 11))
+        for found in data["pieces"]:
+            del found["inside"]
+        return capture
+
+    def test_pieces_the_reader_could_not_place_are_told_apart_by_their_boxes(self):
+        for inside, combine in ((False, "cut"), (True, "intersect")):
+            with self.subTest(combine):
+                result = translate(self.boxed(inside))
+                self.assertIsNone(stopped(result))
+                self.assertEqual(steps_of(result.recipe, "extrude")[-1]["combine"], combine)
+
+    def test_pieces_the_boxes_cannot_tell_apart_stop_the_copy(self):
+        capture = self.boxed(False)
+        capture["items"][4]["data"]["tool"]["body"].update(box=box((-1, -1, -1), (50, 30, 20)), volume=9000.0)
+        self.assertIn("inside its tool body", stopped(translate(capture))["reason"])
+        capture = self.boxed(False)
+        del capture["items"][4]["data"]["tool"]["body"]["box"]
+        self.assertIn("inside its tool body", stopped(translate(capture))["reason"])
+
+    def test_a_piece_larger_than_the_tool_is_not_taken_for_one_inside_it(self):
+        capture = self.boxed(True)
+        capture["items"][4]["data"]["tool"]["body"]["volume"] = 500.0
         self.assertIn("inside its tool body", stopped(translate(capture))["reason"])
 
 

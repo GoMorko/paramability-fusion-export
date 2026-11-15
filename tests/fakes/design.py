@@ -229,7 +229,7 @@ class FakeBooleanTypes:
 
 
 def fake_brep_tools(failing=False, empty_fails=False):
-    """`(manager, types)` as `read_intersect._brep_tools` gives them."""
+    """`(manager, types)` as `read_intersect.brep_tools` gives them."""
     return FakeBRepManager(failing, empty_fails), FakeBooleanTypes
 
 

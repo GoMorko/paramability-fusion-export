@@ -1,9 +1,10 @@
 """Reader of Split Body: what it splits with, the bodies it splits and the pieces, with their boxes and volumes."""
 import types
 import unittest
+from unittest import mock
 
 from tests import context  # noqa: F401
-from tests.fakes import install_adsk_core
+from tests.fakes import fake_brep_tools, install_adsk_core
 from tests.test_capture_reader import Coll, FakeDesign, Obj, P, body, entry, feature
 
 from lib.fusion_reader.capture import read_capture
@@ -113,6 +114,31 @@ class SplitReaderTest(unittest.TestCase):
         design.findEntityByToken = lambda token: {"b3": [native], "b2": [inner]}.get(token, [])
         data = read_capture(design, inner, fusion="", name="", up_axis="z")["items"][0]["data"]
         self.assertEqual([p["inside"] for p in data["pieces"]], [False, True])
+
+    def test_a_temporary_intersect_decides_when_no_face_of_a_piece_tells(self):
+        inner, outer = inner_and_outer()
+        inner.faces = outer.faces = Coll([])
+        # Each body is a set of one cm3 cells for the fake temporary booleans.
+        inner.volume, inner.cells = 2.0, {1, 2}
+        outer.volume, outer.cells = 4.0, {3, 4, 5, 6}
+        tool = Obj("fusion::BRepBody", entityToken="b3", name="Body3", isSolid=True, volume=3.0, cells={1, 2, 9},
+                   pointContainment=lambda p: "PointOnPointContainment",
+                   boundingBox=Obj(minPoint=P(15, 5, -2), maxPoint=P(25, 15, 12)))
+        with mock.patch("lib.fusion_reader.read_intersect.brep_tools", return_value=fake_brep_tools()):
+            data = read(tool, [outer, inner])
+        self.assertEqual([p["inside"] for p in data["pieces"]], [False, True])
+
+    def test_a_piece_the_intersect_only_partly_keeps_has_no_answer(self):
+        inner, outer = inner_and_outer()
+        inner.faces = outer.faces = Coll([])
+        inner.volume, inner.cells = 4.0, {1, 2, 3, 4}
+        outer.volume, outer.cells = 2.0, {7, 8}
+        tool = Obj("fusion::BRepBody", entityToken="b3", name="Body3", isSolid=True, volume=3.0, cells={1, 2, 9},
+                   pointContainment=lambda p: "PointOnPointContainment",
+                   boundingBox=Obj(minPoint=P(15, 5, -2), maxPoint=P(25, 15, 12)))
+        with mock.patch("lib.fusion_reader.read_intersect.brep_tools", return_value=fake_brep_tools()):
+            data = read(tool, [outer, inner])
+        self.assertEqual([p["inside"] for p in data["pieces"]], [False, None])
 
     def test_a_curved_face_is_a_surface(self):
         curved = Obj("fusion::BRepFace", geometry=Obj("core::Cylinder"))
