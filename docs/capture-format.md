@@ -1765,7 +1765,12 @@ A size that only feeds step values (a free size that moves no covered sketch val
 reference) has no row: its formula is exact, and it is never reported as untried (only a moved size left without a
 near row by the cap is). Each row has a `label`, the line of the progress window: "HolderWidth at 32 mm" (the value in
 the parameter's own unit), "several sizes together", "checking if X changes this part" for a discovery row, or the
-label with "The last value did not rebuild, so this one is nearer." for a nearer row.
+label with "The last value did not work, so this one is nearer." for a nearer row (a try that did not build, came apart
+or changed an outline).
+
+The rows of a size come in this order: the favourites of the design (`is_favorite`, the sizes the designer starred for
+the form) first, then the others, in table order; the guessed sizes follow the moved ones the same way. Under a time
+limit the near rows of every size run before any pair, far or check row, so a stop cuts the least useful tries first.
 
 While the rows run, the timeline marker waits just after the last item the part needs (`lib/export_plan/marker_roll.py`),
 so Fusion rebuilds fewer items per recompute. The items needed: any that may change the target, the sketches the steps
@@ -2240,6 +2245,28 @@ steps in error) and `health.tries_stopped` (the same) say so, and the motion is 
 of every export the timeline steps are compared with the start (`design_edit.timeline_health`), see "Timeline steps
 after the export" below; `health.broken` names the steps in error that were fine before (at most 5).
 
+Time limit of the tries. The tries (the rows and the discovery rows, `ProbeRun`) have a time limit: the choice of the
+dialog's list "Stop the size tries after" (`ExportRequest.probe_time_limit` in seconds, `None` for no limit; the default
+is `export_plan.time_limit.DEFAULT_SECONDS`, 10 minutes). The clock starts when the try runner is made, just before the
+first try, and covers the reads and put backs between tries. `RowExport` asks `stop_when` before each try; once the
+limit is reached it ends the run there, with the parameters put back as at the end of any run, and no later try of the
+job runs (`RowExport.halted`). A try that did not build is still checked first, so a design it left broken is noticed
+(`probe.stopped`, `health.tries_stopped`) as in a stop on a broken design. The rows planned after the stop are not made
+(`ProbeRun._left` is 0), the discovery tries are kept as not tried (`probe.discovery`, reason "not tried: the tries ran
+out of time"), and the last read, the put back and the end check run as after tries that ended on their own. A time
+stop is not a health problem: nothing is added to `health`, and the Undo step of the export is dropped as usual when
+the end check confirms the design is as it was. `probe.time_limit` is `{ limit_seconds, hit, seconds?, left_out }`: the
+limit in seconds (`null` for none), whether it stopped the tries, how long the tries had taken then, and the Fusion
+names of the sizes that move a sketch or a measured place and have no try of their own that built (their rows did not
+run, or their last row did not build and its nearer tries did not run). Such a size is in the motion's `untried` and
+`timed_out`; the translator gives it the reason "the tries ran out of time before this size was tried. Tip: raise the
+time limit in the export dialog, or untick sizes that need no change": loose ("may give unexpected results") when a
+formula still reads it, "not a size" when only a sketch reads it. `timing.probe.time_limit` holds `limit_seconds`,
+`hit` and, when hit, `left_out`. The result window adds a line to "Result" when the limit was reached (several-body
+files count each size once). The progress window shows a third line under the try: the time spent and an estimate of
+the time left, from the average try so far times the tries planned so far, never past the time the limit leaves
+(`messages.time_note`).
+
 Timeline steps after the export. Before anything is read (when the Export for Paramability dialog opens, before its
 capture moves the marker; for Export size choices when OK is clicked) the add-in reads, for every timeline item before
 the marker (groups left out), its name, type, `healthState` (`ok`, `warning`, `error`), `errorOrWarningMessage` and
@@ -2320,7 +2347,8 @@ export, the recipe and the notes do not depend on it.
                               "seconds": 1.9 } ] },
   "probe": { "tries": 9, "tries_seconds": 12.0, "rebuild": 10.5, "read": { "count": 14, "seconds": 3.1 },
              "read_parts": { "sketches": { "count": 14, "seconds": 2.2 }, "params": { "count": 9, "seconds": 0.4 } },
-             "put_back": { "count": 0, "seconds": 0.0 }, "try_seconds": 13.2 } }
+             "put_back": { "count": 0, "seconds": 0.0 }, "time_limit": { "limit_seconds": 600, "hit": false },
+             "try_seconds": 13.2 } }
 ```
 
 - `total`: from the start of the pipeline to the moment `report.json` is made. The dialog's own reading before the OK
@@ -2351,7 +2379,9 @@ export, the recipe and the notes do not depend on it.
   `read_parts`, the time of each part of those reads (`sketches`, `points` with the lines, `params`, `refs`, `box`,
   `pieces`, `faces`; a part no read held is left out; a face read that parks the marker does not count the move back, which
   happens in the change that puts the values back and so counts in `rebuild`), and `put_back` the sketch put backs
-  (`probe.recovery`). `try_seconds` is the same value as in
+  (`probe.recovery`). `time_limit` is the time limit of the tries (`limit_seconds`, `null` for no limit), `hit` whether
+  it stopped the tries and, when it did, `left_out` the sizes it left without a try (see "Time limit of the tries" under
+  "Probe states"). `try_seconds` is the same value as in
   `probe.timeline` (from the first try to the end of the discovery rows).
 - `undo`: the "Lighter on memory" box of the dialog (`lib/export_plan/undo_steps.py`). `{ "on": false }` when the box is
   off. When it is on: `{ "on": true, "applied": true, "steps": 12, "error": "" }`. `steps` counts the calls of

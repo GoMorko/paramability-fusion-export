@@ -151,6 +151,18 @@ when the design has joints), it turns nothing off. The discovery tries, which ch
 component also changes the body, run with every step back on. Untick the box to keep every step on; `report.json`
 says what happened and how long the tries took (`probe.timeline.suppressed`, `try_seconds`).
 
+The list "Stop the size tries after" in the same place sets a time limit for the tries: 10 minutes to start with, or
+anything from 1 minute to 2 hours, or no limit. Small designs finish their tries in seconds; a big design can spend most
+of the export there. The progress window shows the time spent and about how long the tries still take. When the limit is
+reached, the tries stop at the next try, every value and step goes back exactly as after any end of the tries, and the
+export goes on with what was measured. Sizes that move a sketch and were not tried in time are marked "may give
+unexpected results" (or "not a size", when only a sketch reads them), with the reason that the tries ran out of time and
+a tip: pick a longer time, or untick sizes that do not need to change. The result window says that the tries stopped
+and how many sizes were left out. The tries start with the sizes you marked as favourites in Fusion, then the others, so
+a limit cuts the sizes least likely to matter first; the extra tries (the far ends of the ranges, the sizes together,
+the checks of other components) come after the near tries of every size. `report.json` keeps the limit, whether it was
+reached and the sizes left out (`probe.time_limit`, `timing.probe.time_limit`).
+
 A try that reads a flat face a step uses as its outline (see "Limits") leaves the timeline marker before that step
 until the values are put back, so Fusion rebuilds the steps after it once per try instead of twice. The marker
 is always back where the tries hold it before the next read and when the tries end.

@@ -1075,8 +1075,9 @@ Send `report.json` after each of these; the capture and `probe` are what is chec
       each size. Fusion rebuilds the design for every try; all values go back at the end.") and, under it, a line
       such as "Try 5 of 31: HolderWidth at 32 mm". The value has the unit you typed (inches in an inch design, degrees
       for an angle). A try on several sizes says "several sizes together"; a discovery try says "checking if X changes
-      this part"; a try nearer after one that did not rebuild ends with "The last value did not rebuild, so this one is
-      nearer." If Fusion shows only one line, note which one; the explanation then moves to the window title.
+      this part"; a try nearer after one that did not work ends with "The last value did not work, so this one is
+      nearer." A third line shows "Time spent: ... About ... left (limit: ...)" once a try has finished. If Fusion shows
+      only one line, note which one; the explanation then moves to the window title.
 - [ ] **D7 Rectangle with no position dimension.** The rectangle floats (no dimension from the origin). Its entry in
       `sketch_graphs` has `fully_constrained` false and its points and lines `free` true. The export gives the same
       part as before.

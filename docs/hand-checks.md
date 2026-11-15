@@ -237,3 +237,19 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     `probe.states` and an entry in `probe.dropped`; each range is cut with "the part comes apart into 2 separate
     pieces in Fusion at ...". Note for each design whether the post or the second half shows as its own body in the
     browser at such a value or as part of Body1, and `timing.probe.read_parts.pieces` against `read_parts.box`.
+
+11. TL1, the time limit of the size tries. Model a part that is slow to rebuild: a 60 x 40 x 20 mm box with a shell
+    and a rectangular pattern of 300 small holes (all in one component), and user parameters `Length` = 60 mm and
+    `Width` = 40 mm for the box sketch, `Wall` = 2 mm for the shell, and `Count` = 300 for the pattern. Mark `Length`
+    as a favourite in Fusion.
+    Export: open the dialog, set "Stop the size tries after" to 1 minute, tick `Length`, `Width`, `Wall` and `Count`. In
+    the "Trying" window the third line shows "Time spent" and "About ... left (limit: 1 min)"; the estimate does not
+    go past the limit. At the limit the window closes, and the result window says "The size tries stopped at the time
+    limit (1 min)" and how many sizes were not tried. `Length` (the favourite) is tried first, so it is not among them.
+    Each size left out is "may give unexpected results" (or "not a size") with "the tries ran out of time before this
+    size was tried" and "Tip: raise the time limit in the export dialog, or untick sizes that need no change". In
+    `report.json`, `probe.time_limit` is `{ limit_seconds: 60, hit: true, left_out: [...] }`, `timing.probe.time_limit`
+    has the same, and `health` has no `tries_stopped`. Afterwards the 10-second check passes: the marker is at the end,
+    no step has a warning, the parameters show their formulas, and Undo has no extra step. Export again with 30 minutes
+    (or "No limit"): `hit` is false and every size has its tries. If the rebuild is fast on your machine, add more
+    holes to the pattern until a try takes a few seconds.
