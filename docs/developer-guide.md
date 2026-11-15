@@ -1,0 +1,3511 @@
+# The Paramability export add-in for Fusion: a guide for debugging
+
+## 0. About this guide
+
+This guide explains the Fusion add-in "Paramability export". The add-in saves a Fusion body as a `.paramability`
+file. Paramability opens that file as a part. The part has sizes that come from the Fusion user parameters.
+
+The guide is for a developer who knows Fusion as a user and knows Python. The developer did not write the add-in. The
+goal is that the developer can find and fix a problem alone.
+
+The guide describes the code as it is on `main` of the add-in repository, version 0.12.0.
+Version 0.11.1 was the architecture refactor. The refactor changed where the code sits and how the parts talk
+to each other. It did not change what an export writes. The new layout is in section 2. The short rules of the layout
+are in the add-in `README.md`, part "Code layout".
+
+What version 0.12.0 added, with the sections that explain it:
+
+- A readable label for each size, made from the comment or from the name of the parameter (1.3, "The label of a size").
+- Formulas of plain numbers (`3 * 0.4 mm`, `3/8 in`) that can be ticked as sizes, and more counts that follow their
+  sizes (1.3 and 1.9.6).
+- Modelled threads and coils that copy as recipe steps (3.12 and 3.13). Tapped holes with a modelled thread are read
+  too, but this is unproven until hand check TD2 (3.12). Holes that end at a face or at a body copy as blind holes
+  (3.12).
+- More causes and hints for steps that do not copy, also for a step that stops the copy (1.9.3).
+- An early list, in the export dialog, of the steps that the copy will probably leave out (1.2).
+- A time limit for the size tries (1.8, "The time limit of the tries").
+- Ranges that stop where the part comes apart into pieces, where an outline would cross itself or where a hole would
+  leave its outline (1.8 and 3.2).
+- A Split Body by a solid body that no longer needs the answer of the reader for every piece (3.4).
+- Sizes that are marked when they also move a part that stays a fixed shape in the same file (1.10).
+- A note when a part follows the sizes of a component that is not in the file (1.10).
+
+What this version writes:
+
+- recipe version 16 when a sweep needs it, else a lower version;
+- a gaps file of version 3 always (up to 256 left-out steps, each with a `finishing` flag). Version 0.11.1 wrote version 1 for up to 16 steps and version 2 for more;
+- a `report.json` with a `timing` block and a `health` block, and also the record of the time limit
+  (`probe.time_limit`), the count of pieces in the tries (`pieces`) and a `hint` in `refusal`;
+- recipe sizes with a readable `label` (the manifest `parameters` list keeps the Fusion name as the label).
+
+Names of files, functions and fields are in backticks. Line numbers change often, so the guide names functions and not
+lines. In commands, `<add-in repo>` is the folder of the add-in repository.
+
+Where to find the code:
+
+| What | Where |
+| --- | --- |
+| The add-in | `<add-in repo>/ParamabilityExport/` (the folder you load in Fusion) |
+| The add-in tests | `<add-in repo>/tests/` |
+| The add-in scripts | `<add-in repo>/scripts/`: `fixture_geometry.py` (box and volume of a capture fixture), `formula_census.py` (counts how the formulas of exports translate, see 4.5) |
+| The add-in docs | `README.md`, `docs/capture-format.md`, `docs/recipe-gaps.md`, `docs/hand-checks.md` (the short check before a release), `docs/hand-tests.md` (every hand test), `docs/adding-a-step-type.md`, `docs/expressions.md`, `docs/test-projects.md` (fifteen typical printing projects to build and export, to see how many kinds of projects the copy covers), `docs/user-guide.md` and `docs/limits.md` (what a user sees and what does not copy), `docs/development.md` (code layout and tests), `docs/publishing.md` |
+
+The docs in the add-in repository are long and exact. This guide tells the story in order. When you need every
+detail of one field, read `docs/capture-format.md`. When the docs and this guide do not agree, the code is right.
+
+The guide has five parts:
+
+1. The whole workflow, from the click in Fusion to the part in Paramability.
+2. The code map: the packages, the main modules and how data flows.
+3. Key ideas with small examples.
+4. Debugging: `report.json`, grep, replay, tests, Fusion calls, failure patterns and checklists.
+5. A glossary of the project terms.
+
+## 1. The whole workflow
+
+### 1.1 The big picture
+
+The add-in has two buttons in the Utilities tab, in the panel "Paramability":
+
+- "Export for Paramability" saves one body (or several bodies) with its modeling steps. Paramability opens it as an
+  editable part with sizes. Most of this guide is about this button.
+- "Export size choices" saves fixed shapes at several sets of parameter values. Paramability shows them as a
+  dropdown. This button is simple: it sets the values, lets Fusion rebuild, writes one STEP file per row and puts the
+  values back (`commands/ExportSizeChoices/`, `lib/design_edit/runner.py`).
+
+"Export for Paramability" does these stages, in this order:
+
+```
+ click
+   |
+   v
+ dialog: pick body, tick parameters, set ranges, up axis,
+         "Faster tries", time limit of the tries, "Lighter on memory"
+   |  (the dialog already reads the capture to tick parameters and to show a stop warning)
+   v
+ OK, choose file name
+   |
+   v
+ 1. STEP file of the body as it is now               (fusion_reader/step_export.py)
+ 2. capture: read the timeline into a plain dict     (fusion_reader/capture.py)
+ 3. size table: which parameters are sizes           (params/size_table.py)
+ 4. first translation, without measured sketches     (translator/, motion = OPTIMISTIC)
+ 5. reach read, only when steps were left out        (fusion_reader/read_gap_reach.py)
+ 6. size probe: set sizes to other values, rebuild,
+    read sketches and places, fit formulas           (export_plan/probe_flow/, probe/)
+ 7. final translation with the measured motion       (translator/)
+ 8. put everything back: parameters, suppressed
+    steps, sketches, timeline marker, then the
+    end check of every timeline step                 (design_edit/, export_plan/pipeline/)
+ 9. package: manifest, recipe, gaps, report, STEP    (export_plan/recipe_export.py, package/)
+   |
+   v
+ result window in Fusion
+   |
+   v
+ Paramability opens the file: reads it, builds the recipe in its CAD kernel,
+ compares it with the STEP, puts the sizes on the form
+```
+
+Stages 2 to 9 run in `run_pipeline` (`lib/export_plan/pipeline/run.py`). The pipeline talks to Fusion only through a
+"port" object. The members of the port are declared in one place (`ExportPort` in `lib/export_plan/pipeline/port.py`).
+The real port is `FusionPort` in `commands/ExportForParamability/export_flow.py`. The tests use a fake port
+(`tests/fakes/port.py`). So the whole pipeline can run without Fusion. Stage 8 is done by one object, `PutBack`
+(`lib/export_plan/pipeline/put_back.py`), that the pipeline makes at the start of the export (see 1.11).
+
+Export of several bodies in one file has its own driver (`lib/export_plan/pipeline/parts.py`, see 1.10). It uses the
+same `PutBack`, the same try runner and the same probe interface.
+
+Two ideas are important from the start:
+
+- The add-in never edits the design for good. It changes parameter values for a short time, moves the timeline
+  marker for a short time, and sometimes turns off timeline steps for a short time. It always puts them back. If it
+  cannot put something back, it tells the person.
+- The add-in never guesses in silence. When it cannot copy something exactly, it writes a reason. The reason goes to
+  the result window, to the manifest notes, to the gaps file or to `report.json`. Most debugging starts from such a
+  reason.
+
+### 1.2 The click and the dialog
+
+The file `ParamabilityExport/ParamabilityExport.py` is the add-in entry. Fusion calls `run(context)` when the add-in
+starts. `run` calls `commands.start()`, which adds the two buttons (`commands/panel.py`). When the add-in stops,
+`stop(context)` removes the buttons and drops the add-in modules from the Python cache (`_forget_modules`). So "Stop"
+and then "Run" in the Scripts and Add-Ins dialog loads the files on disk again. Use this after you change the code.
+
+When the person clicks "Export for Paramability", Fusion calls `_on_created` in
+`commands/ExportForParamability/entry.py`. It does this:
+
+1. It gets the design (`panel.design_or_reason`). A design without history gets a short message and no dialog: the
+   export needs a parametric design.
+2. It asks if parts were moved by hand and the position is not captured (`export_flow.position_pending`, which reads
+   `design.snapshots.hasPendingSnapshot`). If yes, the dialog shows only "Capture the position of moved parts first".
+   This question comes first because reading the timeline moves the marker, and a marker move can drop such a
+   pending move.
+3. It reads the user parameters (`list_user_parameters`), the model parameters of the root, the design's length unit
+   and the timeline marker. When the marker is not at the end, the dialog shows "Exporting the design as it is at the
+   timeline marker (step 48 of 120)" (`design_edit/marker.py`, `marker_note`).
+4. When the design has only one solid body, that body is picked to start with.
+5. It makes a `CaptureCache`. Each time the person picks a body, the dialog reads the capture of that body (stage 2
+   above) and keeps it. The export later uses the same capture when the marker did not move.
+6. For the picked bodies it builds the parameter table (`size_offers`, see 1.3) and the early warning
+   (`dialog_model/stop_warning.py`, see "The early warning under the body picker" below). The early warning translates
+   the capture once, without sizes. When a step stops the copy, the warning says "Copy stops at Extrude9 (extrude)."
+   and "The part will be saved as a fixed shape". When the copy goes on, it lists up to three steps that are "Likely
+   left out of the copy". A button "Show in timeline" selects the stopping step in Fusion.
+7. On OK, `export_flow.run_export` runs. It asks for the file name, reads the marker again, builds an
+   `ExportRequest` (title, writer text, up axis, parameters, ticked names, typed ranges, marker, "Faster tries", the
+   time limit of the tries) and
+   runs the pipeline inside `export_common.run_guarded`.
+8. The export runs only once per dialog. With "Lighter on memory" ticked, the export calls Fusion's
+   `Command.beginStep`. Fusion then fires the execute event of the command again. `on_execute` in `entry.py` remembers
+   that the export started, and it ignores the second event.
+
+`run_guarded` catches every way the export can stop and shows one plain message. A cancel shows "Export cancelled.
+Your parameters are back to their values." A known error (`RowBuildError`, `StepExportError`, `PackageCapError`,
+`MarkerError`) shows its own message. Any other exception shows "The export stopped. Nothing was saved." with the
+Python traceback, and writes the traceback to the log. In every case it puts the timeline marker back and warns about
+parameters that did not go back.
+
+The dialog itself is in `lib/fusion_ui/recipe_dialog.py`. The texts of the dialog come from `lib/dialog_model/`, which
+is pure Python. The dialog holds:
+
+- the body picker (up to 32 bodies);
+- the parameter table: one row per user parameter, with a tick, the name, the value now, Min, Max and what the
+  parameter becomes in Paramability;
+- a details box under the table (the comment, the formula or the full reason of the row you click);
+- the stop warning;
+- the up axis ("Z up" or "Y up");
+- the check box "Faster tries" (on to start with, see 1.8);
+- the list "Stop the size tries after" (1, 5, 10, 20 or 30 minutes, 1 or 2 hours, or "No limit"; 10 minutes to start
+  with, see 1.8);
+- the check box "Lighter on memory" (off to start with, an experiment, see 1.11). When the person ticks it, a line under
+  the box reminds them to save the design first.
+
+#### The early warning under the body picker
+
+Under the body picker the dialog shows a short warning about the picked body. The warning comes from one translation of
+the capture that the dialog already read. This translation has no sizes, no size tries and no face read, so it is
+fast. The export log gets one line with the time of the warning and the seconds that the reads of the picked bodies
+took, since the reads are the slow part (`entry.py`, `_log_warning_time`). All the logic is pure Python:
+`dialog_model/stop_warning.py` (`summarize` and `summarize_many`) and `dialog_model/left_out_preview.py`.
+
+There are two cases:
+
+1. The copy stops. The warning shows, in this order: the title ("Copy stops at Extrude9 (extrude)."), a short reason, a
+   "Tip: ..." line when the cause of the stop has a hint in `gap_hints` (the same table of causes as for a gap, see
+   1.9.3), and the sentence that the part will be saved as a fixed shape. `refusal_hint(result)` in
+   `export_plan/recipe_export.py` gives the hint.
+2. The copy goes on. The warning lists up to three steps under "Likely left out of the copy:". Each line reads
+   "name: reason Tip: hint". When more steps are left out, the line "and N more." follows. When a later step may pick
+   faces of a step that is left out, the line "More may show after the export." follows once. Only the face read of
+   the export (1.7) decides that later step, so the early warning cannot list it.
+
+The wording of a line is shared with the result window (`export_plan.messages.left_out_line`). So a step reads the
+same before and after the export. The result of `summarize` has these keys: `hint`, `left_out` (a list of dicts
+`{ index, name, reason, hint }`) and `more_may_show`. For several bodies, `summarize_many` joins the lines of each
+body, with the name of the body in front, and adds "More may show after the export." once.
+
+### 1.3 Parameters, the size table and the dependency resolver
+
+#### What the reader gives
+
+`lib/fusion_reader/parameters.py` reads the parameters into plain dicts. Values stay in Fusion's internal units
+(cm and radians). Each user parameter has:
+
+- `name`, `expression`, `value`, `unit`, `comment`, `is_favorite`;
+- `kind`: `derived` when the expression names another parameter, calls `random()` or cannot be parsed. Else
+  `length`, `angle`, `count` or `unsupported` (a unit the add-in does not convert, such as a mass). A formula of plain
+  numbers has the kind of its unit: `3 * 0.4 mm`, `3/8 in` and `PI * 10 mm` are `length`, and `2 * PI` is `count`
+  (`is_constant_expression` in `params/expressions/text.py`);
+- `dependency_parameters` and `dependent_parameters`: Fusion's own lists of what the parameter reads and what reads it;
+- `dependents`: every model parameter that reads it, directly or through other parameters, with the kind of thing that
+  made the model parameter (`sketchDimension`, `feature`, `constructionPlane`, `joint` and so on), its component and
+  its sketch. The reader walks this at most 2000 times per parameter.
+
+Each model parameter has `created_by`: `{ kind, token, name, sketch, component }`. This says which sketch dimension,
+feature or construction plane made it.
+
+#### The dependency resolver
+
+A user parameter can reach the body directly ("Extrude1 distance = Height") or through formulas
+("Inner = Outer - 2 * Wall", and a sketch dimension reads "Inner"). The resolver finds both.
+
+`lib/params/dependencies.py` builds one `Graph` per table. The graph has an edge from a parameter to each name it
+reads. It takes the names from three places:
+
+1. The names in the expression. The add-in has its own expression parser (`lib/params/expressions/`, `reading.py`). When the
+   parser refuses a text (an unknown unit, for example), the resolver still takes the words of the text that are
+   known parameter names (`names_in`).
+2. Fusion's own list `dependency_parameters`.
+3. The reverse direction: `dependent_parameters` and `dependents` of each user parameter. This finds a chain through
+   a model parameter of another component, which the capture does not list.
+
+`Graph.walk` follows the edges at any depth. A cycle stops at the first name seen twice.
+
+`Graph.usage(starts, linked)` gives a `Usage` record for a body:
+
+- `used`: every user parameter the body reaches, at any depth;
+- `direct`: the user parameters a model parameter of the body names itself (also through other model parameters);
+- `through`: for a user parameter that the body reads only through formulas of other user parameters, the outermost
+  of those formulas. The dialog uses this for the line "This part uses it through the formula Inner."
+
+Example. The design has `Outer = 60 mm`, `Wall = 2 mm` and the formula `Inner = Outer - 2 * Wall`. A sketch dimension
+`d4` of the body has the expression `Inner`. Then:
+
+- the graph has `d4 -> Inner`, `Inner -> Outer`, `Inner -> Wall`;
+- `used` is `{Inner, Outer, Wall}`;
+- `direct` is `{Inner}`;
+- `through` is `{Outer: [Inner], Wall: [Inner]}`.
+
+`Inner` is a formula, so it cannot be ticked. `Outer` and `Wall` are ticked to start with. In the recipe, `Inner`
+becomes a derived size with the formula `Outer - 2 * Wall`.
+
+#### Which parameters are ticked to start with
+
+`size_offers.initial_table` decides the first ticks. The rules are in `params/defaults.py`, `default_ticked`:
+
+1. A parameter is "offered" when it is a plain number in a length, an angle or no unit (`is_offered`). A formula of
+   plain numbers counts as a plain number here, since its kind is the kind of its unit.
+2. When the person has favourites that the body uses, only those favourites are ticked. A plain parameter that only a
+   favourite formula reads counts as a favourite too. A favourite is ticked also when it is a unitless formula of
+   numbers.
+3. Else every offered parameter the body uses is ticked, with one exception: a formula of plain numbers with no unit
+   (`2 * PI`) is a helper constant and not a size, so it starts unticked (`defaults._unitless_constant`). It is still
+   offered, so the person can tick it. A formula of plain numbers with a length or an angle unit (`3 * 0.4 mm`) is
+   ticked like a plain parameter.
+4. A parameter that a joint reads is not ticked (`joint_reasons`). The part does not follow a joint in the assembly.
+   The person can still tick it; its row then says "size, may be unexpected".
+5. At most 64 parameters can be ticked (`MAX_SIZES` in `size_table.py`, the app's recipe cap).
+
+When the person picks another body, the ticks follow that body. With several bodies, a parameter that any body uses is
+ticked (`size_table.merged`).
+
+#### The range of a size
+
+Each ticked row has Min and Max. The default comes from `defaults.size_range`:
+
+- A comment that ends with `[min..max]` (for example `Wall [1..6]`) sets the range, when the value lies inside it.
+- Else a length goes from half to double its value (0 to 10 for a value of 0).
+- An angle goes 45 degrees below and above, kept inside 0 to 360 for a value in that span.
+- A count goes from 1 to twice its value, at most 64.
+
+The person can type other numbers. A typed end is kept: the add-in never cuts a typed end (see 1.9.5).
+
+#### The size table
+
+`params/size_table.py`, `SizeTable`, holds the result. Each user parameter gets one `Entry` with a `state`:
+
+| State | Meaning |
+| --- | --- |
+| `free` | A plain number kept as a size. The recipe gets `sizes[name] = { kind, value, min, max, label }`. |
+| `derived` | A formula over other sizes. The recipe gets `{ expr, label }`. |
+| `constant` | A plain number that is not a size. A formula that reads it writes its number. |
+| `fixed` | Ticked, but it cannot follow. It is shown greyed with its reason. |
+| `not_offered` | A text or a unit that cannot be copied. |
+
+The recipe name of a size is the Fusion name when it is valid (`^[A-Za-z_][A-Za-z0-9_]*$`, at most 64 characters).
+Else `names.assign` replaces the bad characters with `_`, puts `p_` before a leading digit and adds `_2`, `_3` on a
+clash. The recipe name and the label are two different things. The label is the text on the form in Paramability. It is
+not the Fusion name any more (see "The label of a size" below). `Entry.label` still holds the Fusion name, and the
+messages and reasons use it. `Entry.title` holds the label of the form.
+
+The table can also translate a Fusion expression into a recipe formula (`SizeTable.translate`). The translator uses
+this for every value that a model parameter holds (see 1.9.6).
+
+#### The label of a size
+
+The label of a size is the text that Paramability shows next to the field. A person reads it, so it must be words.
+A Fusion name such as `BaseCup_midExtrude_offset__mm` is not good for this. `lib/params/labels.py` (`assign`) makes the
+labels of all the sizes of one recipe together. `SizeTable` keeps each one in `Entry.title` and writes it as `label` in
+`sizes`.
+
+The rules for one size:
+
+1. A short comment on the parameter gives the label. Take the first sentence of the comment. Remove a trailing
+   `[min..max]` first, since that is the range (see "The range of a size"). When the sentence has 48 characters or
+   fewer and has a letter in it, it is the label, with a capital first letter ("Wall thickness"). A comment longer
+   than 48 characters is a description and not a label.
+2. Else the name gives the label, in words. `name_words` splits the name at underscores, symbols and camelCase. It drops
+   a trailing unit word (`mm`, `cm`, `deg`, `degrees`, `rad`, `unitless`, or the unit of the parameter) when it is not
+   the only word. It writes the words in lower case with a capital first letter. So `BaseCup_midExtrude_offset__mm`
+   becomes "Base cup mid extrude offset". An acronym such as `ID` stays as it is. A name written all in capitals is made
+   lower case.
+3. Two sizes of one recipe never keep the same label (the case of the letters does not count). Sizes whose label came
+   from a comment go back to their name in words. Sizes that still share a label get the Fusion name in brackets behind
+   the label, for example "Wall (Wall_a)". The labels are cut to the label length (120 characters) before they are
+   compared, and the text in brackets is made to fit. When names are so long that the cut makes them alike, a number is
+   added.
+
+What keeps the Fusion name: `Entry.label` (messages and reasons), the recipe size name, and `label` in the manifest
+`parameters` list (`params/listing.py`). The Paramability app words the label of a package from an older add-in in the same way, and it shows the Fusion name of the parameter in the tip of
+the field.
+
+#### Formulas of plain numbers, and fractions
+
+A formula of plain numbers needs no other parameter. `3 * 0.4 mm`, `25.4 * 2 mm`, `3/8 in` and `PI * 10 mm` are
+examples. Fusion works them out alone. The size probe sets such a parameter to a number, and the restore puts the text
+back, as for every parameter. So the add-in treats it like a plain number: it has the kind of its unit, it is offered
+and it can be ticked. In the manifest `parameters` list it is a plain entry with its value and no `expr`. A formula that
+names another parameter stays `derived`.
+
+The parser reads a unit word right after a division of two number literals as the unit of the whole fraction. So
+`3/8 in` is three eighths of an inch (`_fraction_unit` in `params/expressions/reading.py`). In every other division the
+unit word binds to its divisor only: `w / 2 mm` is `w / (2 mm)`. `docs/expressions.md` has the full grammar.
+
+### 1.4 Body scope
+
+A design often holds many bodies. Only some steps and parameters belong to the picked body. `lib/export_plan/
+body_scope.py` finds them from the capture alone:
+
+- `body_items(capture)`: the timeline items that touch the picked body, a body it was split from (up to that split),
+  or a tool body that a Combine joins into it. It repeats until nothing new is found, since a Combine adds its tools to
+  the list of wanted bodies.
+- `scoped_model_params(capture)`: the model parameters the body can read. A parameter is dropped only when it is
+  matched to a step or a sketch that the body does not use. Anything that cannot be matched stays. Names are matched
+  together with the component token, because every component has its own `Sketch1`.
+- `quantity_refs(capture)`: the model parameters that set a pattern count. The user parameters behind them become
+  whole number sizes (kind `count`).
+- `body_links(capture)`: the geometry links of the body (a sketch drawn around another component, or a step that uses
+  a plane of another component; see 3.3).
+
+The rule is "drop only what is proven to belong to another body". So a wrong match never hides a parameter.
+
+### 1.5 The STEP file
+
+The pipeline writes the STEP file first, before it reads the capture (`export_body_step` in
+`lib/fusion_reader/step_export.py`). The STEP is the shape "as it is" at the timeline marker.
+
+- When the design holds only one solid body, Fusion exports the root component.
+- Else the add-in makes a temporary component, copies the picked body into it (`BRepBody.copyToComponent`), checks that
+  the copy sits where the body sits (bounding boxes within 0.001 mm), exports that component and deletes it.
+
+Fusion puts the timeline items of the copy at the marker. `lib/design_edit/temp_copy.py` deletes only the items that
+were not there before (it compares Fusion objects with `==`, not tokens). Then the marker goes back. When items are
+left behind, the export stops with "The temporary copy of the part left N steps in the timeline."
+
+`MULTI_BODY_ROUTE` in `step_export.py` can switch to `ROUTE_ASK_DESIGNER`. Then the add-in asks the person to hide the
+other bodies instead of making a copy.
+
+### 1.6 The capture: reading the timeline
+
+The capture is one plain dict that holds everything the add-in knows about the design. It has only JSON values:
+dicts, lists, strings, numbers, booleans and null. The translator reads only the capture. It never calls Fusion. This
+is why the translator can run in tests and on a saved `report.json`.
+
+`read_capture(design, body)` in `lib/fusion_reader/capture.py` makes it. The format is capture number 3. The full
+format is in `docs/capture-format.md`, sections 1 to 5.
+
+#### Units and frames
+
+- Lengths are in mm (Fusion's cm times 10). Angles are in degrees.
+- 3D values are in the coordinates of the body's own component (the native body), before any up axis turn.
+- `target.placement` says where that component sits in the assembly (`frame`, the occurrence path, how many times the
+  component is used, and whether it comes from a linked design).
+
+The reader reads the placement once, before the walk (`placement.py`). To check a frame, it maps a few points of the
+body and compares them with the body in the assembly. It fetches only three vertices (`POINTS_TO_CHECK = 3`). When the
+body has fewer vertices, it takes points on faces. It fetches the items one at a time. So a body with many vertices
+costs no more time than a simple body. The probe reads the place of the body again at each state in the same way
+(`probe_refs._target_back`).
+
+#### The walk, step by step
+
+The timeline marker is the bar in the Fusion timeline. Fusion builds only the items before it. The reader uses this:
+it moves the marker through the timeline, one item at a time, and reads the design at each place.
+
+1. It reads where the marker is now: `end`. Items at `end` and after are left out of the export. They are not
+   refused, they are simply not part of the design "as it is at the marker".
+2. For `k` from 0 to `end`, it sets `timeline.markerPosition = k`. Fusion rebuilds the items before `k`.
+3. At each `k` it reads the picked body once: its box and its volume (`_target_state`).
+4. It finishes item `k - 1` (`_finish_item`): the bodies the item lists (`bodies_after`), its health (`ok`, `warning`,
+   `error`) and Fusion's message, whether the body changed (`target_changed`), the body before and after
+   (`target_before`, `target_after`), and the "after" reader of the step type.
+5. It starts item `k` (`_start_item`): its name, type, component, whether it is suppressed, the sketches it takes
+   (`sketch_inputs`), the bodies of the component before it (`bodies_before`), and the "before" reader of the step type.
+6. After the loop, the second pass reads the steps that built the tool bodies of a Combine (see "Tool bodies" below).
+7. In a `finally` block the marker goes back to `end`. If it does not read `end` after that, the reader raises
+   `MarkerError`. The export then stops with a message.
+8. The reader checks that timeline groups hide no item before `end` (`_check_groups`). A group with an unread child
+   raises `CaptureReadError` and the part is saved as a fixed shape.
+9. It reads the parameters, the sketch links (`read_links.py`) and the sketch graphs (`read_constraints.py`) with the
+   marker back at `end`.
+
+So a capture of a timeline with 120 items costs about 121 marker moves and as many rebuilds. This is one cost of an
+export (see checklist 4.10.5).
+
+#### What the reader reads per step
+
+Each step type has a pair of reader functions `(before, after)`. The pairs are in the `READERS` dict of a module in
+`lib/fusion_reader/` (`read_solid.py`, `read_finish.py`, `read_repeat.py`, `read_sweep.py`, `read_split.py`,
+`read_move.py`, `read_paste.py`, `read_offset.py`, `read_emboss.py`, `read_thread.py`, `read_coil.py`). The step kind table
+(`lib/capture_model/step_kinds.py`) says which module reads which type.
+
+- `before(feature, ctx)` runs with the marker just before the step. It returns the step's `data`: the profiles, the
+  extent, the operation, the edges and faces it picks, the bodies it takes, the parameters behind its values.
+- `after(feature, ctx, data)` runs with the marker just after the step. It adds what Fusion built: end faces, side
+  wall leans, volumes, the faces the step made.
+
+Inputs such as fillet edges and extrude profiles must be read with the marker before the step. The Fusion reference
+says so (`timelineObject.rollTo(True)`). This is why there are two readers.
+
+Every Fusion call in a reader is wrapped in `geo.safe(...)` (`lib/fusion_reader/read_geometry.py`). A member that
+raises gives `null` or `"other"`. The reader never invents a value. The translator then refuses what it cannot read.
+When a reader function raises, the step's data becomes `{"read_error": "..."}` and the translator stops the copy at
+that step ("This step could not be read from Fusion.").
+
+Types without a reader (sketches, construction geometry, a thicken) get `"data": {}`. They still get `target_before`
+and `target_after`. So even a step the add-in does not know says where it changed the body and by how much.
+
+#### The values behind parameters
+
+A value that Fusion keeps as a model parameter is listed in `data.params`, by its path in the data:
+
+```json
+"params": { "side_one.distance": { "name": "d12", "expression": "Height + 2 mm", "value": 32.0 } }
+```
+
+`lib/fusion_reader/param_refs.py` writes these. The translator turns each of them into a formula of the sizes when it
+can (see 1.9.6). Sketch dimensions and construction planes are not listed per step. They are model parameters whose
+`created_by.kind` is `sketchDimension` or `constructionPlane`. The size probe handles them (see 1.8).
+
+#### Body measures
+
+The reader measures the picked body around each step. These numbers are the "proof" the translator uses:
+
+- `target_changed`: true when the box moved by more than 0.0001 mm or the volume changed. False when the step did not
+  change the body. Null when the body exists on neither side or a measure failed.
+- `target_before` and `target_after`: `{ box, volume_mm3 }` before and after the step.
+- Some readers also write `volume_before` and `volume_after` in the step data (a Combine, a sweep, an emboss, a
+  draft). The handlers check their copy against these volumes.
+
+Example: a sweep makes a new body. The reader measures 1250 mm3. The outline area is 25 mm2 and the path is 50 mm
+long, so the expected volume is 25 * 50 = 1250 mm3. The volumes agree, so the handler trusts its reading of the
+sweep. If Fusion had made 1310 mm3, the handler would leave the sweep out, since Fusion did something the copy does
+not model.
+
+#### Tokens
+
+Bodies, sketches, faces and construction planes are named by `entityToken`, a text that Fusion gives each entity. The
+capture names a body as `{ "token": "...", "name": "Body1" }`. Two records name the same body when the tokens match.
+Names are compared only when a token is missing.
+
+When a step makes a body with the picked body's name but another token, the translator does not guess. It stops with
+"The body could not be followed through the timeline." So when you see that reason, look at the tokens in
+`bodies_after` of the items around the stop.
+
+The size probe also uses tokens. It finds each sketch, sketch point, line, face and plane again with
+`Design.findEntityByToken` after each rebuild.
+
+`bodies_after` can be `null`. This is not the same as `[]`. `[]` means "the step makes no body". `null` means "the
+bodies could not be read". The translator stops at a `null` for a step that may touch the body.
+
+#### Tool bodies and the second pass
+
+A Combine can take tool bodies. A tool body can be made by its own steps, even in another component. The first walk
+reads feature data only for items of the picked body's component. So `lib/fusion_reader/helper_pass.py` runs a second
+pass when a Combine that changes the body lists a tool. It moves the marker to the items that made the tool and reads
+them in the tool's own component frame. It runs in rounds, since those items can name more bodies. The limits are 120
+items, 32 tool bodies and 3 levels deep (`capture_model/tool_items.py`).
+
+Items read this way carry:
+
+- `helper_of`: the token of the tool body (for items of another component);
+- `body_states`: per body token, `{ box_before, volume_before, volume_after }` of that body around the item. A tool
+  step reads these numbers, not the numbers of the exported body.
+
+`body_states` is also written on the steps that built a body the picked body was split from (see 3.4).
+
+#### Sketch links and sketch graphs
+
+- `sketch_links` (`read_links.py`): for each sketch the body uses, the other components it is tied to: projected
+  curves, constraints to such curves, or a sketch drawn on a face of another component. With this, a parameter that
+  changes a pipe in another component can be offered for a hole drawn around that pipe.
+- `sketch_graphs` (`read_constraints.py`): every point, curve, dimension and constraint of each sketch the body uses.
+  Only the shadow check `derived` reads it (see 4.2). The recipe does not depend on it.
+
+### 1.7 The first translation and the reach read
+
+The pipeline now builds the size table (`size_table.build`) with the ticked names, the typed ranges, the scoped
+model parameters and the body links.
+
+Then it translates once with `motion = OPTIMISTIC` (`sketch_values/motion.py`). OPTIMISTIC means: write every sketch
+value as a number, and fix nothing because of sketches. This first look tells the pipeline:
+
+- whether the copy stops (then the size probe still runs, but the result will be a fixed shape);
+- which sizes the recipe keeps (`free_sizes`), so the probe tries only those;
+- whether steps were left out (gaps).
+
+When the first translation left steps out, or stopped because the part had more than 256 gaps, the pipeline asks
+Fusion one more question: which step made the faces that each later step picks (`reach_pass.with_reach`, reader
+`read_gap_reach.read_reach`). This is the "reach read".
+
+Why: a round picks its edges by measured points (`near`). If the step that made those edges is missing from the copy,
+the kernel would round the nearest other edge without a word. With the answer, only the later steps that really pick
+faces of a missing step are left out too.
+
+The reach read moves the marker to just after each candidate step (to read `Feature.faces`) and to just before each
+picking step (to find the picked faces). The answer goes into the capture as `reach`:
+
+```json
+"reach": { "read": true, "gaps": [12], "makers": { "17": [12], "19": [12, 17] }, "moves": 3 }
+```
+
+This says: step 12 was left out; step 17 picks a face that step 12 made; step 19 picks faces of steps 12 and 17. A
+failed read gives `{ "read": false, "error": "..." }`. Then every later step that picks geometry is left out, with
+"It may pick faces of Extrude5, which is missing from the copy." This is the safe side.
+
+The capture with `reach` is translated again. That result decides the sizes the probe tries.
+
+### 1.8 The size probe
+
+#### Why the probe exists
+
+A sketch dimension is not a step value. The capture holds the sketch as Fusion drew it at the current values: points
+and curves with numbers. The capture does not say how a corner moves when `Width` changes. Fusion's sketch solver
+knows, but the add-in cannot call the solver directly.
+
+So the add-in asks Fusion by experiment. It sets a size to another value, lets Fusion rebuild, and reads the sketch
+again. From several such readings it fits a formula for each sketch value. This is the "size probe". Each experiment
+is a "row" (or a "try"). The design read at one row is a "state". The first read, at the current values, is "E0".
+
+#### Which sizes get rows
+
+One module decides which sizes get rows: `lib/export_plan/probe_flow/sizes.py`. Both export pipelines call its
+`sizes_to_try`. It uses `kept_sizes` (the sizes the first translation kept, plus the sizes that reach a sketch) and
+`extra_sizes` (the guessed ones, see the last point below). It gives the probe size dicts (`size_offers.probe_sizes`)
+and the Fusion names of the guessed sizes. A size gets rows when it can move something the probe follows:
+
+- a sketch dimension of a followed sketch, a construction plane or a sketch tied through another component
+  (`translator.sizes.probed_sizes`);
+- a plane that a followed sketch sits on (`plane_sizes.plane_driven`);
+- a measured reference of another component (a mirror plane, a pattern axis, a face an extrude reaches to);
+- a flat face that a step uses as its outline;
+- up to 8 more ticked sizes that nothing ties to a sketch (`MAX_EXTRA_SIZES`). The person ticked them, so they may
+  matter in a way the capture cannot show.
+
+A size that only feeds step values (an extrude distance, a fillet radius, a pattern count) needs no row. Its formula
+is exact from the expression.
+
+A symmetric pattern is a special case. Its copies lie on both sides of the original. The tries read its copies at
+every state (see "What a state holds"), but its count gives the count's size no rows of its own. So Fusion's places
+at an even count are read only when that size gets rows for another reason: it moves a sketch, or it is one of the
+extra ticked sizes. Section 3.11 explains why the even count matters.
+
+What the probe follows (`plan.scan`): the sketch profiles of extrudes, revolves, sweeps, lofts and embosses, the hole
+points, a revolve axis on a sketch line, a sweep path of sketch lines and arcs, and a flat face used as an outline. The
+step kind table says which records of a step the probe may follow (`sketches=` in `StepType`). A sketch token in any
+other place leaves that sketch unfollowed. A sketch with a spline or text is not followed either.
+
+#### The start: E0
+
+`SizeProbe.start(capture, table, read)` builds the request (`plan.request`): the sketch tokens, point tokens, line
+tokens, parameters, references and faces to read. It reads E0 through the port (`read_state` in
+`lib/fusion_reader/probe_state.py`). A sketch whose E0 read does not match the capture is not followed
+(`match.readable`). A reference whose E0 read does not match is not read again (`ref_fit.measurable`). When nothing is
+left to follow, the probe does not run.
+
+#### The marker roll and "Faster tries"
+
+Each row rebuilds the design. Fusion rebuilds every item before the marker. Items after the last item the part needs
+are only lost time. So `TryTimeline.begin` (`lib/export_plan/timeline_trim.py`) does two things:
+
+1. The marker roll (`marker_roll.py`, `MarkerRoll`). `needed_position` finds the last item the tries need: any item
+   that may change the body, the sketches the steps use, the items of each other component a link depends on that
+   come before the step holding the link (a step never depends on a later item), joints and unknown items (an unknown
+   `...Feature` of another component excepted). The store holds the marker just after it (`DesignParameterStore.roll_marker`). The roll
+   stays only when a read at the rolled marker gives the same sketches, points, lines, references and box as E0.
+2. "Faster tries" (`TimelineTrim`), on unless the person unticks the box (it starts ticked). It suppresses items of
+   other components that the tries do not need. The unit of trust is the component: an item is turned off only when no item of its
+   component is needed. Nothing is turned off when the evidence is unclear (an unknown item type, a joint before the
+   stop point, a link without a component). After turning items off, the design must read the same as E0 and show no
+   new error, else every item is turned back on. The items come back on before the discovery rows (`ProbeRun.discover`
+   calls `before_discovery`), since those rows look for links to other components.
+
+Both are undone on every way out: after the rows, on cancel and on error. The marker goes back without a full
+`computeAll` when every parameter expression is as it was at the roll (`DesignParameterStore.unroll_marker`); Fusion
+builds the later items as the marker passes them. `report.json` keeps what happened in
+`probe.timeline` (see 4.2).
+
+#### The rows, in order
+
+`ProbeRun.measure` and `ProbeRun.discover` in `lib/export_plan/pipeline/probe_run.py` run the rows. The plans come from
+`lib/probe/plan/`. All rows of one export share one budget of 64 rows (`MAX_PROBE_ROWS`).
+
+`ProbeRun` does not know if the probe is one part or a group of parts. It asks the probe for each kind of row through
+one declared interface, `Probe` (`lib/export_plan/probe_flow/interface.py`). `SizeProbe` (one part) and `ProbeGroup`
+(several parts over shared rows) both have every member of it. A new row kind or probe call is declared there first
+(see 4.11).
+
+The probe also keeps where it is in the order below. A `RowSchedule` (`probe_flow/row_schedule.py`) holds the row phase
+(`NOT_PLANNED`, `NEAR`, `FAR`, `DONE`), the sizes the near rows tried (`moved` for sizes that move a sketch or a
+measured place, `extra` for the guessed ones), how many nearer rows ran (the cap of 24) and whether the check rows
+were planned (they are planned once). A group keeps one schedule for the nearer rows and the check rows its parts
+share (`ProbeGroup.schedule`).
+
+1. Near rows (`plan.probe_rows`). Each tried size gets two rows: 25 percent of its value below and above
+   (`NEAR_SHARE`), kept inside its range. A count moves by whole numbers. A value of zero moves 25 percent of the way
+   to each range end. The sizes come in an order (`rows.tried_sizes`): first the sizes that move a sketch or a measured
+   place, then the guessed ones. In each group the favourites of the design come first, since the designer starred
+   them for the form. When the time limit stops the tries (see "The time limit of the tries" below), the sizes that
+   come last lose their tries first.
+2. Pair rows (`plan.pair_rows`), after the near rows ran. With two or more tried sizes: one row with all of them at
+   the lower near value, one at the higher. A size whose own near row on that side failed stays at its value.
+3. Nearer rows (`plan.nearer_rows`) for the rows that did not build. See below.
+4. Far rows (`plan.far_rows`): the range ends of each tried size, when they differ from the value and the near values.
+   An end past a value of that size that failed alone is not tried.
+5. Nearer rows again, for far rows that did not build. Then, with two or more sizes, all sizes at their minimum and all
+   at their maximum (`plan.far_pair_rows`), each tried size only as far as it built alone.
+6. Check rows (`plan.check_rows`), once per export: for a value that one size moves along a curve (see 3.1), more
+   rows that let the add-in fit and check a formula with sine, cosine or products. Some of these rows are pair rows.
+   A pair row sets a curved size together with one other size. The other size is one of the sizes of the curved
+   values, or any size that moves a value of the same sketch (`series.curve_sizes`).
+7. Discovery rows (`plan.discovery_rows`), in the rows still left: up to 12 unticked parameters of other components
+   (`MAX_DISCOVERY`), each set once to one end of its range. They only answer "does this parameter also change the
+   part?". They never become sizes in this export. They do not run after the time limit stopped the tries.
+
+Nearer rows. A row that Fusion cannot build is tried again nearer to the value now: half way to that range end, then a
+quarter, then a tenth (`NEARER_STEPS`). When one value built and a farther one did not, the add-in halves between them
+(at most 4 times, `BISECT_STEPS`, until the two are within a tenth of the way, `BISECT_GAP`). At most 24 nearer rows run
+per export (`MAX_NEARER_ROWS`). A row where the size alone made a followed sketch take another outline counts like a
+row that did not build. A row where the part came apart into separate pieces counts the same way. Section 3.2 shows a
+full example.
+
+#### One row, in detail
+
+`RowExport.run` (`lib/design_edit/runner.py`) runs the rows. For one batch of rows:
+
+1. Before the first row ever, it saves every parameter expression and measures a baseline: one rebuild with nothing
+   changed, and the list of items already in error (`apply.measure_baseline`). A design with an old error elsewhere
+   can still be probed.
+2. Per row, it first asks `stop_when` whether the time limit is reached (see "The time limit of the tries" below).
+   Then it asks the progress window if the person cancelled. The window shows "Try 5 of 31: Width at 32 mm" and, under
+   it, a line about the time that the tries took.
+3. From the second row on, it puts every parameter back to the saved expression and rebuilds
+   (`_back_to_current`). So every row starts from the design as it was. A row never builds on the values of the row
+   before it.
+4. It calls the hook `ProbeRun._before_row` (see "Solver flips" below). The hook first brings the marker home. Then,
+   with "Lighter on memory" on, it lets Fusion forget the Undo data of the rows so far (`_drop_undo`, see 1.11). Every
+   value is back at this point, so the dropped data holds no change that the add-in does not undo itself.
+5. It sets the row's values as expressions (`apply.apply_row_values`). The value is written in the parameter's own unit
+   (`format_expression`). All values go in as one change (`Design.modifyParameters`), so Fusion rebuilds once; a
+   Fusion without that call gets them one at a time and a `design.computeAll`. Before that, after a row that did not
+   build, a step still in error with the values back (after one full recompute) that was fine in the baseline stops
+   the tries (`RowExport.not_back`). The row
+   fails when Fusion refuses the expression, when the rebuild raises or reports failure, or when an item before the
+   marker goes into error that was fine in the baseline. After one change, a step in error is judged after one full
+   recompute, since that change rebuilds only the steps it touches. The first new item in error is the "failed step"
+   of the row.
+6. For a probe row there is no STEP file (`"step": False`). The step callback reads the probe state instead
+   (`ProbeRun._export`). A row with a STEP file (Export size choices) is recomputed in full after the change, and
+   judged by that recompute, before its STEP is written.
+7. In a `finally` block, the parameters go back.
+
+So each row costs two rebuilds: one with the new values and one to put the values back. A row whose read includes an
+outline face leaves the marker before the face's step (`park`, `read_faces(stay=True)`); the change that puts the
+values back then moves it home, so the face read adds no third rebuild. `ProbeRun._home` brings the marker back before
+any other read and when a batch ends, and stops the probe when it does not go back.
+
+#### What a state holds
+
+`read_state(design, request, ctx)` reads, for each followed sketch, its frame and every profile, each curve with the
+token of its sketch entity. It also reads the sketch points and lines (hole points, revolve axes), the values of the
+named parameters, the body's box, the measured references (`probe_refs.py`) and the outline faces (`read_face.py`).
+Every value is in the component's coordinates, like the capture. A part that cannot be read has no key. Nothing
+raises.
+
+A state also holds `pieces`: `{ lumps, others }`. `lumps` is the number of solids that the picked body holds
+(`BRepBody.lumps`). `others` is the list of boxes of the other solid bodies of the same component. It is left out when
+there are more than 64 of them (`MAX_OTHER_BODIES`). Reading them recomputes nothing. The reason for this read: the app
+builds a part only while it is one connected solid. Fusion also builds a part in several pieces. A body can hold several
+solids. A cut can cut the body in two. A join whose new material does not touch the body makes a new body beside it.
+
+`probe/pieces.py` (`count`, `came_apart`) counts the pieces of the part at a state, against E0. The count is the lumps of
+the body, plus the other bodies whose box comes within 1 mm of the box of the body at that state or at E0, less the
+bodies that did so at E0 already. Never more of them count than the number of bodies that are new since E0. So a tool
+body kept beside the part, a second body of the design, and a lid laid out next to a box that grows toward it do not
+count as pieces. A try where the part comes apart while it was one piece at E0 is stored as a try that did not build
+(`SizeProbe.add_states`): `built: false`, `pieces: n` and no `read`. `probe.dropped` gets the entry "the part came apart
+into N separate pieces". Nothing is fitted to such a state. Section 3.2 shows what happens to the range.
+
+A state can also hold `patterns`. This happens when the capture has a symmetric pattern whose count follows a
+parameter (`plan.symmetric_patterns`). For each such pattern, the reader gives the counts and the copies (`elements`)
+that Fusion made at that state (`fusion_reader/probe_patterns.py`). The motion keeps them per state
+(`Motion.states[n].patterns`, only for a state that built). A `start` read and a `put_back` read skip them.
+
+#### Solver flips and put backs
+
+A sketch can have two solutions. Example: a point at a distance from a projected point, with no side given. After a
+row that did not build, Fusion may leave the sketch on its other solution, also after the values are put back. Then
+every later row starts from the wrong outline.
+
+The pipeline protects against this:
+
+- Before the rows, `SketchKeeper` (`lib/fusion_reader/sketch_keep.py`) keeps the place of every own point of the
+  followed sketches (projected and fixed points stay).
+- `ProbeRun._before_row` reads the design before a row when the row before did not build or read another outline.
+  This read is the state's `start`. It holds only the outlines (sketches, points, lines and outline faces), not the
+  parameters, references or box, since it only tells where the row starts from. A row can bring a sketch back as well
+  as move it away, so each such row reads its own start, also after put backs are given up.
+- When that read shows a followed sketch away from E0 (another outline, or a value more than 0.05 mm or degrees off,
+  `FLIP_TOLERANCE`), the keeper moves every kept point more than 0.0001 mm from its place back, with its sketch's
+  compute deferred and then set back to its start value (a sketch with all points in place is not touched), and the design is rebuilt once, also when no point moved: the
+  keeper matches points by their entity token and skips a point that is gone, and a rebuild may still bring the
+  sketch back. The read after that is the state's `put_back`. After two put backs in a row that do not help, no more
+  are tried.
+- A row that did not start from a checked read, and after which the sketch was found flipped, is run once more from a
+  checked start. The second run is marked `again`. Its first run is left out of the states.
+- Before the discovery rows, and once after all tries (`ProbeRun.settle`), the sketch is put back again, so the design
+  is left on the solution it had. Before the discovery rows the read after the put back is a full read: it is the base
+  the discovery rows are compared with, box and parameters included.
+
+`probe.recovery` in `report.json` counts the extra rebuilds (`put_backs`, `again`). `health.flipped` names the
+sketches that stayed on their other solution for a while.
+
+#### The time limit of the tries
+
+The tries rebuild the design twice per row. On a large design they can take most of the export. So the dialog has the
+list "Stop the size tries after". The choices are in `export_plan/time_limit.py` (`CHOICES`): 1, 5, 10, 20 and 30
+minutes, 1 and 2 hours, and "No limit". The default is 10 minutes (`DEFAULT_SECONDS`). The slowest design measured took
+about a minute per try, so ten minutes still gives it about ten tries. The choice goes to `ExportRequest.probe_time_limit`
+in seconds, with `None` for no limit.
+
+How it works:
+
+1. `ProbeRun` gets `time_limit` and a `clock`. The clock starts when the runner is made, just before the first try. It
+   also counts the reads and the put backs between the tries. The clock is the one of the export timer, so a test can
+   drive it.
+2. `RowExport` gets `stop_when` (`ProbeRun._out_of_time`). Before each row, `RowExport._halt` asks it. When the time is
+   up, the run ends there, cleanly. No later row runs. The parameters go back as at the end of any run.
+   `RowExport.halted` stays true for every later run of the same job. A clock that fails never stops the tries. A row
+   that did not build is still checked first (`not_back`), so a time stop never hides a design that a failed row left
+   broken.
+3. After a halt, `ProbeRun._left` is 0, so no further rows are planned. The probe is told which sizes got no try
+   (`SizeProbe.note_time_limit(record, unrun)`). A discovery row that did not run is told apart by its key
+   (`plan.DISCOVERY_KEY`) and kept as "not tried: the tries ran out of time". `ProbeRun.discover` does not run after a
+   halt. `note_time_limit` and `time_left_out` are members of the `Probe` interface, so `ProbeGroup` has them too.
+4. A time stop is not a health problem. The put back is the same as after tries that ended on their own:
+   `PutBack.tries_done`, `tries_ended` and `settle` make the same calls, and nothing goes into `health`. The Undo step
+   is dropped as usual when the end check confirms that the design is as it was.
+
+Which sizes count as left out: `SizeProbe.time_left_out()` gives the Fusion names of the sizes that move a sketch or a
+measured place and have no try of their own that built. Their rows did not run, or their last row did not build and its
+nearer tries did not run. A size that was only tried on a guess is not counted, since nothing is known to move with it.
+These sizes go to `motion.untried` and to `motion.timed_out`. `translate()` reads `motion.timed_out` and gives them the
+reason `TIMED_OUT_WHY`: "the tries ran out of time before this size was tried. Tip: raise the time limit in the export
+dialog, or untick sizes that need no change". A size that a formula still reads is loose ("may give unexpected
+results"). A size that only a sketch reads is "not a size".
+
+What the person and the report see:
+
+- `probe.time_limit` is `{ limit_seconds, hit, seconds?, left_out }`. `seconds` is there only when the limit was hit.
+- `timing.probe.time_limit` is `{ limit_seconds, hit, left_out? }`. `left_out` is there only when the limit was hit.
+- The result window adds a line to "Result" when the limit was hit: "The size tries stopped at the time limit (1 min). 3
+  sizes were not tried, see Sizes." (`messages.time_stop_line`).
+- The progress window shows a third line: "Time spent: 2 min 10 s. About 4 min left (limit: 10 min)." The estimate is the
+  average time of a try so far times the tries planned so far. It never goes past the time that the limit leaves
+  (`messages.time_note`). The step of the progress window of the port has a fourth argument for this line:
+  `step(index, total, name, note)`.
+
+Hand check TL1 in `docs/hand-checks.md` tests this in Fusion.
+
+#### The end of the probe
+
+The put back of the design is one object per export, `PutBack` (`lib/export_plan/pipeline/put_back.py`). Both
+pipelines make it at the start of the export. `_Pipeline._measure` (in `pipeline/run.py`) calls it after the rows:
+
+1. `put_back.tries_done(run)` notes the time the tries took (`TryTimeline.tries_done`). Then it puts the design back
+   (`PutBack._after_tries`), in this order:
+   1. Every parameter is put back (`PutBack.restore`, which calls `restore_parameters`). After one change, the
+      expressions are read back as text; any that did not take is set on its own, and one that still differs is
+      listed in `health.unrestored`.
+   2. The suppressed items are turned back on (`PutBack.end_trim`).
+   3. `run.settle()` puts a flipped sketch back.
+2. `probe.finish(read_now(), labels)` builds the motion file from the states (`probe/build.py`). It also lists the
+   sizes the probe cannot follow: sizes left without rows by the cap (`untried`), sizes that the time limit left
+   without a try (`timed_out`, also in `untried`), sizes that change a borrowed sketch it could not follow, and sizes
+   that changed the body but moved nothing the probe follows (`body_moved`).
+3. `finish` compares the sketches read after the restore with E0 (`measure_restore`). The largest difference is
+   `restore_gap_mm`. The end of the export reads and compares once more (see 1.11).
+
+The tries end through a `finally` block: `put_back.tries_ended(run)` runs on every way out, also when the tries fail
+or are cancelled. When `tries_done` did not run, it does the same put back (`_after_tries`). It also keeps how the
+tries stopped and the timing of the probe. So a flipped sketch is put back on every way out.
+
+A probe that fails (an exception other than a cancel) does not stop the export. The final translation then runs
+without a motion file, and every size behind a sketch is marked with "it changes a sketch, which could not be tried at
+other values". `health.probe` says `failed`, and the restore gap is still measured, so `health.sketch_drift` says when
+a sketch stayed off its first solution.
+
+### 1.9 The final translation
+
+The translator gets the capture, the size table and the motion file. It returns a `TranslateResult`
+(`lib/translator/result.py`): the recipe or a refusal, a verdict per item, notes, and the sizes in four lists:
+`fixed`, `loose`, `cuts` and `dropped`. It may also return `gaps` and `after_stop`.
+
+The driver is `translate()` in `lib/translator/translate.py`. In order:
+
+1. `validate_capture` checks the capture number and the main keys. A bad capture raises `CaptureError`.
+2. `_placement_refusal`: a part from a linked design, or a place in the assembly that cannot be read, stops here.
+3. The size table gets the capture's geometry links when it has none.
+4. `kept_ranges.built_ranges` (`translator/ranges/kept_ranges.py`) cuts the ranges where the probe saw Fusion fail to rebuild, or saw a followed sketch
+   change its outline (see 3.2).
+5. It collects "upfront doubts": sizes behind a joint, sizes that change sketch text, sizes the probe saw changing the
+   body in a way the copy does not follow (`BODY_MOVED_WHY`), sizes that did not rebuild at any value tried.
+6. It walks the capture (`_settle`), maybe several times (see 1.9.5).
+7. `_finish` runs the end of walk audit, adds the sizes that only gaps read, cuts the ranges, and fills `loose` and
+   `dropped`.
+8. When the walk stopped, `_diagnosis` runs one more walk for `after_stop` (see 1.9.4).
+
+#### 1.9.1 The walk, item by item
+
+The item loop is `walk_items(ctx, result)` in `lib/translator/walk.py`. It visits every item of the capture in
+timeline order. For each item it makes one of these decisions. The first rule that matches wins:
+
+| The item is | Verdict |
+| --- | --- |
+| suppressed | `skipped`, "Suppressed in Fusion." |
+| a sketch, construction geometry or unreadable | `skipped` |
+| an assembly item (occurrence, joint) | `skipped`; but if it changed the body: stop |
+| a step of another component that builds a tool body | `skipped`, the Combine walks it |
+| a step of another component | `skipped`; but if it changed the body: stop |
+| a step whose body cannot be followed (token changed) | stop |
+| a step whose `bodies_after` is null | stop |
+| a step in error in Fusion that touches the body | stop |
+| a step that does not touch the body | `skipped`, "Helper geometry" (with special cases for types that copy or move bodies) |
+| a step that makes another body, or a split | stop, unless `split_rules.stop_reason` allows the split |
+| a Split Face that left the body unchanged | `skipped` with a note |
+| a step whose reader failed (`read_error`) | stop |
+| a step type with no handler | gap, with the type's `unsupported` reason |
+| a step that reaches into another component (`foreign`) | gap |
+| a step that picks faces of a gap | gap (`cause: picks`) |
+| otherwise | the handler runs |
+
+The handler answers with a `StepResult` (the recipe steps) or a `Refusal` (a reason):
+
+- A `Refusal` normally makes the item a gap. A `Refusal(stops=True)` stops the copy.
+- An empty `StepResult` makes the item `skipped` on purpose (a cosmetic thread, for example).
+- A `StepResult` with steps is written. The verdict is `translated`, or `translatedWithNote` when the handler or the
+  walk added a note. A step that Fusion shows with a warning gets a note with Fusion's message.
+
+One check runs after the handler. When the handler wrote an extrude join that meets only material of earlier gaps,
+the walk leaves the step out instead (`faces/floating.py`, "It sits on a step that was left out", see 1.9.3).
+
+The first written step must make a body (`combine: "new"`). Else the copy stops with "The body starts in a way that
+cannot be copied."
+
+Each written step gets an id `<kind>_<timeline index>` (for example `extrude_3`) and the label of the Fusion item
+(for example `Extrude2`). A second step of the same item gets `_2`, `_3`. So a recipe step always tells you which
+Fusion item made it.
+
+#### 1.9.2 Handlers and the step kind table
+
+`lib/capture_model/step_kinds.py` holds one table, `STEP_TYPES`. It is the only list of step types in the add-in. It
+sits in `capture_model`, below the translator, the probe and the Fusion reader, so all of them read the same table.
+Each entry says, for one Fusion type: the words used in messages ("rectangular pattern"), the role (modeling, sketch,
+assembly), the reader module (in `lib/fusion_reader`), the sketch records the probe follows, and some flags
+(`makes_bodies`, `moves_bodies`, `splits_bodies`, `splits_faces`, `reaches_bodies`, `pattern`, `repeats_sources`).
+`repeats_sources` marks the pattern and mirror types; `finishes/finish.py` uses it to see whether a later step repeats
+the edges of a round or a chamfer. A type with no handler has `unsupported` (the plain reason) and, when the reason has
+a tip for the person, `gap_cause`.
+
+The table holds no handler. The handlers are in `lib/translator/handlers.py`: `HANDLERS` maps a capture type to a
+function `handle(item, ctx)`. The table never imports translator code, and only the translator reads `HANDLERS`.
+
+| Fusion type | Handler in `HANDLERS` |
+| --- | --- |
+| `ExtrudeFeature` | `extrude.handle` |
+| `RevolveFeature` | `revolve.step.handle` |
+| `HoleFeature`, `ThreadFeature` | `hole.step.hole`, `hole.step.thread` (a cosmetic thread writes nothing; a modelled one goes on to `hole.thread.feature`, see 3.12) |
+| `CombineFeature` | `combine.step.handle` |
+| `FilletFeature`, `ChamferFeature`, `ShellFeature` | `finishes.finish.fillet`, `.chamfer`, `.shell` |
+| `DraftFeature` | `finishes.draft.handle` |
+| `OffsetFacesFeature` | `finishes.offset.handle` |
+| `RectangularPatternFeature`, `CircularPatternFeature`, `MirrorFeature` | `repeat.body_copies.rectangular`, `.circular`, `.mirror` |
+| `SplitBodyFeature` | `bodies.split.handle` |
+| `CopyPasteBody`, `MoveFeature` | `bodies.paste.handle`, `bodies.move.handle` |
+| `EmbossFeature` | `extrude.emboss.handle` |
+| `SweepFeature`, `LoftFeature` | `sweep.step.handle`, `loft.step.handle` |
+| `CoilFeature` | `coil.step.handle` (see 3.13) |
+| `SplitFaceFeature` | none (skipped when the body is unchanged) |
+
+Any other modeling type has no entry. It becomes a gap with the reason of its table entry (`unsupported`). When the
+entry gives none, the reason is "Steps of type thicken are not copied yet." (`walk._unsupported_reason`). These are the
+types that the add-in does not copy, with the reason and the cause of the hint (the table of causes is in 1.9.3):
+
+| Fusion type | Reason | Cause |
+| --- | --- | --- |
+| `DeleteFaceFeature` | "Steps of type delete face are not copied yet." | `deleteFace` |
+| `ThickenFeature` | "Steps of type thicken are not copied yet." | `surface` |
+| `StitchFeature` | "Steps of type stitch are not copied yet." | `surface` |
+| `OffsetFeature` (surface offset) | "Offsetting a surface is not copied yet." | `surface` |
+| `BoundaryFillFeature` | "Boundary Fill is not copied yet." | `boundaryFill` |
+| `ScaleFeature` | "Scaling a body is not copied yet." | `scale` |
+| `ReplaceFaceFeature` | "Replace Face is not copied yet." | `replaceFace` |
+| `RibFeature`, `WebFeature` | "Rib is not copied yet.", "Web is not copied yet." | `ribWeb` |
+| `PathPatternFeature` | "Path Pattern is not copied yet." | `pathPattern` |
+
+Scale, Replace Face, Rib, Web, Path Pattern and the surface Offset also have the flag `reaches_bodies`. They can change
+or take bodies of another component, so the capture walk measures the body around them also when they sit in another
+component. A coil and a modelled thread are copied, so they are not in this table (3.12 and 3.13).
+
+A second table, `RECIPE_KINDS`, lists the recipe step kinds the translator writes (`extrude`, `revolve`, `hole`,
+`round`, `bevel`, `shell`, `offsetFaces`, `pattern`, `mirror`, `toolBody`, `move`, `loft`, `sweep`, `draft`, `thread`,
+`coil`). Each kind has the recipe version that brought it, and the paths of its points and directions (so `place.place`
+can move the recipe into the assembly and turn it for Y up). The `thread` and the `coil` use the base recipe version.
+
+A kind can also say that it may not stand inside a tool body (`in_tool` is false). This holds for `thread` and `coil`,
+and for `skin` and `bevelGear`, which the translator never writes. These kinds build on the whole part. `tool_words` is
+the plain name of the kind in the refusal "A coil cannot be part of a tool body that has other steps." `tool_cause`
+selects the hint of that refusal (`coilTool` or `threadTool`). `step_walk.tool_refusal` makes the refusal, and the code of
+a Combine and of a pattern of bodies calls it before it writes a tool step (see 3.5).
+
+`docs/adding-a-step-type.md` explains how to add a new type: a table entry, a reader in `READERS` and a handler in
+`translator/handlers.py`. Read it before you add a handler.
+
+#### 1.9.3 Gaps, stops and the cap of 256
+
+A step the copy cannot hold has two possible outcomes:
+
+- A gap (the step is "left out"). The walk goes on without the step. The recipe is still written. The gap is recorded
+  with its reason, its place in the recipe and the step's Fusion data. Paramability opens such a part with the original
+  STEP shape and an unfinished copy beside it.
+- A stop (the copy "stops"). The walk ends at the step. No recipe is written. The part is saved as a fixed shape: the
+  STEP plus the parameters as variables. The verdict of the item is `unsupported` and `report.json` has `refusal`.
+
+The rule: a step is left out when its effect stays on the body and the rest of the timeline still reads right without
+it. Everything that leaves the body unknown stops the copy. Section 3.10 has the full list.
+
+A gap also stops the copy in these cases (`stop_reason` in `lib/translator/gaps/stops.py`):
+
+- the walk has not written a first step yet (a gap needs a body to add to);
+- the walk is inside a tool body of another component;
+- the part already holds 256 gaps (`MAX_GAPS = 256`, the most a gaps file holds). The 257th gap stops
+  the copy with "More than 256 steps of this part cannot be copied." Gaps inside tool bodies count too. A tool walk
+  that meets the cap stops the whole copy.
+
+Before this version the cap was 16. A part with 17 or more gaps became a fixed shape. Now such a part keeps its recipe
+and every gap, and it opens in the app as an unfinished copy that the person can repair. The gaps file is version 3 (see 1.10). Before
+version 0.11.2 a part with 16 gaps or fewer got a version 1 file, so an older app still opened it. Now every gaps file
+is version 3, so the app must be a release that reads version 3.
+
+Later picking steps count as gaps until the reach read clears them. This is why the pipeline also runs the reach read
+when the first translation stopped only because of the cap (`TranslateResult.over_gap_cap`).
+
+What a left out step would have recorded (doubts, notes) is dropped with it. So a step that is not written never
+fixes or marks a size by itself.
+
+A join that would float. An extrude join can meet only material of a step that was left out. Example: a rib stands
+on a floor, and the Combine that made the floor is a gap. In the copy the rib would float apart from the part. The
+app's kernel refuses a step that leaves the part in separate pieces, so this one step would stop the whole copy. So
+the walk leaves such a join out too (`faces/floating.py`), with the reason "It sits on a step that was left out, so it would
+float apart from the copy." It decides this from its own model of the copied part (the placers):
+
+1. It samples the faces of the join and a thin band round them closely.
+2. It samples the inside of the join and the band on a coarse grid.
+3. Where the box of a step of the model comes near the band, it samples closely again.
+4. When any sample meets material of the model, the join is kept.
+
+On any doubt the join is kept: a step of the model whose box cannot be told, a step that adds material in a way the
+check does not model (a revolve, a loft, an extrude up to a face), a thin join, or more than 20000 sample points. The
+gap of a left-out join lists in `dependsOn` the gaps it sits on (`floating.sat_on`). Its cause is `afterGap`, so its
+hint says to fix the step it builds on first. `docs/recipe-gaps.md` gives the
+order in which those gaps are picked.
+
+#### Causes and hints
+
+Every gap has a cause. The cause is a short code that says why the step was left out, for example `taperSteep` or
+`guideSurface`. The cause selects a hint. The hint is one plain sentence that tells the person what to change in
+Fusion so that the step copies. One table in `lib/capture_model/gap_hints.py` holds every cause and its hint.
+
+Where a cause comes from:
+
+- A handler gives it with its refusal: `Refusal(reason, cause=...)`.
+- A step type with no handler gets it from the step kind table (`StepType.gap_cause`).
+- The walk gives it to a step that reaches into another component (`otherComponent`) and to a step that picks faces of
+  a gap (`afterGap`). A refusal with no cause that names the gaps it depends on also gets `afterGap`
+  (`gap_hints.refusal_cause`).
+- A Combine left out because a step of its tool body cannot be copied gets the cause of that inner step. The tool walk
+  keeps it in `TranslateResult.refusal_cause`, and `tool_walk.cannot_copy` passes it on. So a tool built with a thicken
+  gets the hint for surface work.
+- A step that stops the copy gives its cause to the refusal of the walk (`TranslateResult.refusal_cause`). The `refusal`
+  record then has a `hint` (`walk._refusal`). The early warning in the dialog shows it as "Tip: ...", and the package
+  note adds it when it fits (`notes.step_only_note`). Before, only a gap had a hint.
+
+A refusal with no cause, and a step type with no cause in the table, give no hint. The table follows the app's user
+guide page "Steps that do not copy yet", in the chapter "Designing in Fusion (experimental)". When the two do not
+agree, the guide is right and the hint must change. `tests/test_gap_hints.py` checks that every cause the translator
+gives has a hint, and that every hint is used.
+
+The hint goes into the gap record as `hint` (see 1.10). The result window shows it after the reason, as "Tip: ...".
+Example, made up: a cut with a taper of 50 degrees is left out with "The taper of this extrude is too steep to copy."
+and the tip "Use a taper under 45 degrees, or draw the sloped wall in the sketch."
+
+The table of causes. The column "Given by" says which code gives the cause. The hint is the sentence of
+`lib/capture_model/gap_hints.py` (`HINTS`).
+
+| Cause | Given by | Hint |
+| --- | --- | --- |
+| `deleteFace` | the step type Delete Face | Cut the shape away with an extrude cut, or change the step that made the face. |
+| `surface` | the step types thicken, stitch and surface offset; a sweep or a loft that makes a surface | Build the solid with an extrude, sweep, loft or shell. |
+| `draftSteep` | a draft of 30 degrees or more (`finishes/draft.py`) | Draw the sloped wall in the sketch, or give the extrude a taper. |
+| `taperSteep` | an extrude or a sweep with a taper that is too steep | Use a taper under 45 degrees, or draw the sloped wall in the sketch. |
+| `taperCutBothWays` | a tapered cut through all, both ways | Make two tapered cuts through all, one for each way, or give the cut a distance. |
+| `extrudeEndFace` | an extrude that starts or ends on a face it cannot follow (a surface that is not flat or a tilted one) | Start and end on flat faces or planes, or give a distance. |
+| `thinOutline` | a thin extrude of an outline with holes or of several outlines | Draw one closed outline for the wall, or shell a solid body. |
+| `roundKind` | a round of a kind the copy does not write | Use a fillet with one radius. |
+| `shellKind` | a shell that grows outward, or a closed hollow shell | Shell inward, with the open faces picked. |
+| `repeatFaces` | a pattern or a mirror of faces or bodies (`repeat/repeat_sources.py`) | Pattern or mirror the feature or the body. |
+| `sweepKind` | a sweep with a rail, or one that both twists and tapers | Use a twist or a taper alone, or a loft between two outlines. |
+| `twistLong` | a sweep with a twist of more than 3600 degrees | Use a twist of 3600 degrees or less. |
+| `partOfPath` | a sweep along a part of its path | Sweep along the whole path. |
+| `guideSurface` | a sweep with a guide surface | Sweep along the same path without the guide surface, or build the shape with a loft. |
+| `sharpCorner` | a sweep path with a corner that is too sharp | Round the sharp corner of the path with a sketch fillet. |
+| `loftKind` | a loft along a centre line, or with rails | Build it from lofts of two outlines each, or from extrudes. |
+| `threadProfile` | a thread that is not a 60 degree metric or Unified form, or is tapered (3.12) | Use a metric or Unified thread (60 degrees) that is not tapered, or a cosmetic thread. |
+| `threadLimits` | a pitch outside 0.2 to 10 mm, more than 8 threads, or more than 100 turns in all | Use a pitch of 0.2 to 10 mm, at most 100 turns in all and 8 threads, or a cosmetic thread. |
+| `threadTool` | a thread that would stand in a tool body with other steps | Make the thread on the finished part, not on a body that is combined later, or use a cosmetic thread. |
+| `coil` | any other coil that does not copy (an older export, sizes that could not be read, a shape that is not a plain helix) | Your AI assistant can add a coil to the copy. |
+| `coilSpiral` | a spiral (3.13) | Use a coil with a height, or let your AI assistant add the spiral to the copy. |
+| `coilTaper` | a coil with a taper angle | Use a taper angle of 0, or let your AI assistant add the taper to the copy. |
+| `coilPlace` | a coil whose place cannot be worked out from its end faces, or whose operation cannot be told | Make the coil a new body, then join it to the part with a combine. |
+| `coilLimit` | more than 8 coils, or more than 100 turns of coils and threads in all | A copy holds up to 8 coils and 100 turns of coils and threads in all. Your AI assistant can add the rest. |
+| `coilHalf` | revolutions that end in a half turn | Use revolutions that do not end in a half, such as 3.25 or 4. |
+| `coilTool` | a coil that would stand in a tool body with other steps | Join the coil to the part with a combine before you move or change it. |
+| `scale` | the step type Scale | Change the sizes in the sketches instead of scaling the body. |
+| `replaceFace` | the step type Replace Face | Cut the shape with an extrude, or extrude the face up to the shape you want. |
+| `ribWeb` | the step types Rib and Web | Draw the rib or web outline in a sketch and extrude it. |
+| `pathPattern` | the step type Path Pattern | Use a rectangular or circular pattern, or a mirror. |
+| `boundaryFill` | the step type Boundary Fill | Build the solid with extrudes and cuts instead of filling a boundary. |
+| `newComponent` | an extrude, revolve, loft or sweep that makes a new component | Make the body in the component that holds the part. |
+| `otherComponent` | a step that reaches into another component (the walk) | Use sketches, planes and faces of the part's own component. |
+| `oldExport` | a step whose only records of another component are sketch outlines, planes or axes with none of the place data of the current reader (an export from before 0.10.6) | Export again with this version of the add-in. |
+| `changedFromOtherComponent` | a step of another component that changes the part (a stop) | Make the step in the part's own component, or export both parts together. |
+| `madeInOtherComponent` | a body that was made in another component and moved here later (a stop) | Model the body in the component you export, or export the component that holds it. |
+| `afterGap` | a step that picks faces of a gap, repeats a gap, or sits on a floating join | Fix the step it builds on first. |
+| `refused`, `unsupported` | a refusal with no cause, or a step type with no handler and no cause | no hint |
+
+A step that does not copy is told in the app's user guide page "Steps that do not copy yet". `tests/test_gap_hints.py`
+checks that every cause that the translator gives has a hint and that every hint is used.
+
+After the walk, each gap gets its place in the final recipe (`gaps/gap_place.py`, `place_all`): `after` (the last step written
+before it that is still in the recipe), `before` (the step after that one in the same list) and `list` (the
+`toolBody` step that holds the list, or null). `gaps/gap_file.py`, `record`, writes the record for the gaps file (see 1.10).
+
+#### 1.9.4 after_stop
+
+When the copy stops, the person would see only the first failing step. They fix it in Fusion, export again, and meet
+the next one. To avoid this, `translate()` runs `_diagnosis` after a stop. It is one more walk, without sizes, with
+`Context.diagnose = True`. In this walk every stop becomes a gap and there is no cap.
+
+The result goes to `report.json` as `after_stop`:
+
+```json
+"after_stop": {
+  "stopped_at": 9,
+  "items": [ ... verdicts of the steps after the stop ... ],
+  "steps": [
+    { "index": 9, "name": "Split1", "type": "SplitBodyFeature", "reason": "This split cuts along a curved surface ..." },
+    { "index": 14, "name": "Thicken1", "type": "ThickenFeature", "reason": "Steps of type thicken are not copied yet." }
+  ]
+}
+```
+
+The manifest gets a second note: "Not copied either: Thicken1." (`notes.also_failing_note`). The package stays a fixed
+shape with the same refusal. `after_stop` only explains. It never changes the export. When even the diagnosis walk
+has to stop (for example at the first step), its last entry has `stops: true`.
+
+#### 1.9.5 Loose, cut, fixed and dropped sizes
+
+A ticked size ends in one of these states. The words are used everywhere: in the code, in `report.json`, in the
+result window and in the app.
+
+| State | Meaning | Where you see it |
+| --- | --- | --- |
+| free | A size of the recipe. Every value that reads it follows it. | `sizes.free` |
+| loose (marked) | A free size, but some value cannot follow it and keeps its number. The app shows a warning mark. Reason: "<name> may give unexpected results: ...". | `sizes.loose`, manifest `loose` |
+| cut | A free size whose range was made shorter. The app shows a quiet info mark, not a warning. Reason: "<name>: the range stops at 68.75, since ...". | `sizes.cut`, manifest `cuts` |
+| fixed | Not a size: it became a plain number, since a free size would make the recipe invalid. Today only a formula too long to write does this. | `sizes.fixed`, manifest `fixed` |
+| dropped | Ticked, but no written formula reads it. Reason: "<name> is not a size: ..." or "... is not used by any copied step". | `sizes.dropped` |
+
+A size can be both loose and cut.
+
+How the translator gets there. A handler reports a value it cannot follow with `ctx.doubt(names, why)`. The value is
+then written as its number. `translate()` walks in two phases (`_settle`):
+
+1. First phase: every doubted size is made a plain number in a new size table (`with_fixed`), and the walk runs again,
+   until no new size is doubted (at most 70 passes, `MAX_PASSES`). This phase learns which sizes are doubted and why.
+2. Second phase: the doubted sizes stay free. Every value that can follow them still does. The values that cannot
+   follow keep their numbers. So the shape at the current values is the same, and the other values still move.
+
+The doubts become `loose`. A doubt with `fixed=True` (a formula too long to write) makes the size `fixed`. A doubt
+with `cut` ranges (`ctx.cut(ranges, why)`) cuts the range instead of marking the size.
+
+A doubted size that no formula reads after the second phase is `dropped` with `used: true`.
+
+The end of walk audit (`lib/translator/audit.py`) runs after the last walk. It checks every free size that a copied
+step reads. The size must be read by a written formula, or be fixed, loose or dropped with a reason. A step reads a
+size through its `data.params`, the sketches it uses and the construction geometry it uses. A handler must "ask" for
+each `data.params` path (`values.quantity`, `values.pin` or `values.handled`). A path that reads a free size and that
+no handler asked for makes the size loose with "<step> reads it, and the copy does not follow it". So a value a
+handler forgot gives a warning, not a wrong part.
+
+The audit also drops a sketch size that the probe measured and that moves nothing ("changes nothing in the copied
+steps"), and a size that the probe tried and that changed nothing in the part ("it was tried at other values, and it
+changes nothing in this part").
+
+A size that only gaps read stays a size. It is loose with "Fusion uses it only in Extrude5, a step the export could
+not copy, so it changes nothing in the copy yet." (`_gap_sizes`). So the missing step can use it later.
+
+#### 1.9.6 Formulas and the 300 character cap
+
+`values.quantity(ctx, item, path, literal, dim=...)` (`lib/translator/values.py`) is the one way a handler writes a
+value that a parameter may drive. It does this:
+
+1. It looks for `data.params[path]`. Without it, the value is a plain number.
+2. It translates the Fusion expression into a recipe formula over the sizes (`SizeTable.translate`). The formula
+   grammar is described in `docs/expressions.md`.
+3. It checks the formula at the current values (`params/expressions/evaluation.py`: `evaluate` for the text of a
+   formula, `evaluate_tree` for a parsed tree). It must give the number Fusion measured within 1e-6. Else the sizes
+   are doubted: "its formula in Extrude2 does not match what Fusion measured".
+4. It checks the length of the formula. The app accepts at most 300 characters (`MAX_FORMULA_LENGTH` in
+   `params/expressions/text.py`). A longer formula is doubted.
+5. A count must give whole numbers at every size value (the whole-number check in `values.py`). It reads the parsed
+   formula and accepts it when it is built from whole parts: whole number literals, count sizes, derived sizes that
+   are whole, `+`, `-` and `*`, `round`, `floor` and `ceil` of anything, `min`, `max` and `abs` of whole parts, `mod`
+   of whole parts, `pow` of a whole part to a whole literal of 0 or more, and a choice `test ? a : b` whose two
+   results are whole (the test can be anything). A division or a decimal literal makes the count not whole. The
+   count is then written as its number and its sizes are marked. The check follows derived sizes up to 8 levels deep.
+6. A length that the step needs above zero (`absolute=True`) must stay above zero over the whole size range. The check
+   tries every mix of the range ends (`range_check.sweep`). An angle the step needs above zero has its ranges cut
+   instead (`_angle_above_zero`).
+7. It returns a `Quantity`: the number plus the formula and the Fusion names it reads. `.json()` writes
+   `{ "expr": "..." }` or a plain number.
+
+Some formulas are built later from several values, for example a plane's move minus another plane's move. They can
+pass 300 characters. `_fix_long_formulas` in `translate.py` first adds up equal terms (`collected_sum`:
+`a + 2 * b - (b + 1) + 3` becomes `a + b + 2`). A size whose terms cancel is no longer read. A formula still too long
+fixes the sizes it reads (`fixed=True`). This is the main source of `sizes.fixed`.
+
+One source of long formulas is now smaller. A round or a chamfer can pick an end face by a point inside it. Before,
+that point always followed the centre of all outline corners, and its formula summed every corner. Now it follows one
+corner when it can (see 3.3, "A point on an earlier extrude"). Its formula is then a few times shorter.
+
+#### 1.9.7 Where the recipe sits
+
+The capture is in the component's coordinates. The STEP file is in the design's coordinates. The recipe must land
+where the STEP lands. So `_walk` ends with `place.place(recipe, rigid.move_for(capture))`. `place.place` is in `lib/translator/place.py` and `rigid.move_for` (the
+rigid map of the part's frame, `Move`) is in `lib/geometry/rigid.py`. This moves every point
+and turns every direction of every step by the part's place in the assembly. For a Y up design it also turns
+(x, y, z) to (x, -z, y), since a recipe is always Z up. The paths of the points and directions of each step kind come
+from `RECIPE_KINDS`.
+
+The gaps file does not move the raw `data` of a gap. It gives `toRecipe` instead: 12 numbers (a 3 by 3 rotation by
+rows, then the offset) that map a point of the capture to the recipe.
+
+The recipe version is the lowest version that holds every written step and selector: 12 as the base, 13 with an
+`offsetFaces` step, 14 with a `chain` or `faceEdges` pick, 15 with a `toolBody` or `move` step or a pattern of more
+than 64 copies, 16 with a sweep that has `twistDeg`, `taperDeg`, `orientation` or a closed path. So a simple part still
+opens in an older app.
+
+`_over_caps` checks the app's limits at the current values: at most 400 steps, tool steps nested at most 3 deep, at most
+256 copies per pattern. A limit that is broken stops the copy. A pattern count that can pass its limit somewhere in the
+size ranges marks the sizes it reads.
+
+### 1.10 The package
+
+`plan_single_export` in `lib/export_plan/recipe_export.py` turns the results into files. `write_package`
+(`lib/package/writer.py`) writes them into one zip with the extension `.paramability`. The zip is written to a
+temporary file beside the target and then renamed, so a failed export never leaves half a file.
+
+#### Package kinds
+
+| `kind` | When | Files |
+| --- | --- | --- |
+| `recipe` | The translation gave a recipe. | `manifest.json`, `part.step`, `recipe.json`, `report.json`, and `gaps.json` when steps were left out (up to 256) |
+| `stepOnly` | The copy stopped, the capture failed or the translator raised. | `manifest.json`, `part.step`, `report.json` |
+| `parts` | Several bodies were picked. | `manifest.json`, `parts/NN/part.step`, `parts/NN/recipe.json`, `parts/NN/gaps.json`, one `report.json` |
+| `valueRows` | "Export size choices" with two or more rows. | `manifest.json`, `rows/NN.step` |
+
+Whatever goes wrong while reading or translating, the person still gets the STEP as a `stepOnly` package with one
+plain note. This is the fallback of every failure.
+
+#### The manifest
+
+`manifest.json` (schema `paramability.recipePackage`) holds:
+
+- `schema`, `version`, `kind`, `name` (the design title), `upAxis` (`z` or `y`, for the STEP only), `writer` (for
+  example "Paramability Fusion export 0.11.0, Fusion 2.0.21508");
+- `notes`: at most 5 short sentences. The app shows the first one when the file opens. `_most_useful` ranks them: the
+  step count first ("12 steps copied from Fusion."), then the left out steps, then the loose, cut and fixed sizes,
+  then a note about doubtful measures or a note that the part follows the sizes of a component that is not in the file
+  ("This part follows the sizes of FilterBox. Export both together so they change together."), then "N sizes are
+  ready to put on the form.", then the notes about dropped sizes;
+- `parameters`: every user parameter of the design, up to 64 (`params/listing.py`): `name`, `label` (the Fusion name,
+  not the readable label of the form), `value`,
+  `unit`, `comment`, and `expr` for a formula the add-in could write. A formula it could not write keeps `expression`
+  (Fusion's text) and `untranslated` (the reason). The parameters come along also when the shape is fixed, so the
+  person gets them as variables;
+- for a recipe: `part`, `recipe`, `checks` (always empty: the add-in writes no size checks), `fixed`, `loose`, `cuts`
+  and `gaps` (the path of the gaps file).
+
+The manifest version is 1. It is 2 only when the package names a gaps file. An older app then refuses the file as "made
+by a newer exporter" instead of showing an unfinished copy as a finished part.
+
+`validate_manifest` (`lib/package/manifest.py`) checks the package rules locally before the file is written. A broken
+rule raises `ValueError`. The app stays the authority: it checks again when it opens the file. `lib/package/caps.py`
+checks the byte limits of the app: 256 MB per STEP, 1 GB in all, 200 files, 1 MB per gaps file. A recipe above 8 MB is
+not written (the part becomes a fixed shape with "The recipe is too large to open.").
+
+#### recipe.json
+
+```json
+{ "schema": "paramability.recipe", "version": 12, "features": [ ... ], "sizesAsWritten": true,
+  "sizes": { "Width": { "kind": "length", "value": 40, "min": 20, "max": 68.75, "label": "Box width" },
+             "Inner": { "expr": "Width - 2 * Wall", "label": "Inner width" } } }
+```
+
+`label` is the readable text of the form (see 1.3, "The label of a size"). In this example the parameters have the
+comments "Box width" and "Inner width".
+
+`sizes` holds the free sizes that a written formula reads, the derived sizes those formulas read, and the sizes only
+gaps read. `sizesAsWritten: true` tells the app to keep the sizes as written and not to look for more sizes in the
+numbers. The recipe format is published by the Paramability app as JSON schemas (copies are in `tests/schema/`).
+
+#### gaps.json
+
+Only when steps were left out. One record per gap. `docs/recipe-gaps.md` describes every field.
+
+The file has a version. `package/gaps_file.py` always writes version 3. Version 2 allowed more gaps (256 instead of
+16). Version 3 added `finishing`. An app that does not know version 3 refuses the gaps file, and then opens the part
+as a fixed shape. So release the add-in after the app release that reads version 3. The schemas are published with the
+app, and copies are in the add-in's `tests/schema/`.
+
+The main fields of a gap record:
+
+| Field | Meaning |
+| --- | --- |
+| `id` | `gap_<timeline index>`. The step added later for this gap takes this id, so the app knows which gaps are filled. |
+| `name`, `type`, `words` | The Fusion name and type, and the type in words. |
+| `reason` | Why it was left out, at most 200 characters. |
+| `hint` | What to change in Fusion so the step copies, from the gap's cause (see 1.9.3). Left out when the cause has no hint. |
+| `after`, `before`, `list` | Where the step belongs in the recipe. |
+| `dependsOn` | Earlier gaps whose faces it picks, whose steps it repeats, or that a floating join sits on. |
+| `sizes`, `looseSizes` | The recipe sizes it reads, and those loose only because of it. |
+| `values` | Per `data.params` value: the Fusion expression and the recipe formula when one exists. |
+| `bodyBefore`, `bodyAfter` | Box and volume of the part around the step, in recipe coordinates. |
+| `data` | The step's capture data as the reader wrote it, cut to 48 KiB. |
+| `trimmed` | True when `data` was cut. |
+| `finishing` | True when the step only finishes surfaces: a round, a bevel, a draft, an emboss or deboss, or a thread whose data says `modeled` is false (the `finishing` trait of the step kind table, read by `gaps/finishing.py`, `is_finishing`). When only such steps are missing and the copy matches, the app shows the editable copy first. The app reads this flag and no Fusion type names. |
+
+#### report.json
+
+`report.json` is the full record for debugging. The app never reads it. It holds the capture, the verdicts, the probe
+record, the sizes and the health. Section 4.2 explains it field by field.
+
+#### Several bodies
+
+`run_parts_pipeline` (`lib/export_plan/pipeline/parts.py`, class `PartsPipeline`) does the same for up to 32 bodies.
+It has its own port interface (`PartsPort`, in the same file): the calls take the body index. It uses the same
+`PutBack` and the same `ProbeRun` as the export of one body. Differences:
+
+- One STEP per body. One capture per body.
+- One size table for all bodies. A parameter is one size for every body that reads it.
+- One probe run for all bodies (`ProbeGroup`): the same rows, one read per body per row. The 64 rows are for the whole
+  export, not per body.
+- A size fixed in one body is fixed in all. A size loose in one body is loose in all, and the reason starts with the
+  body names. A cut range is the narrowest over the bodies (`PartsPipeline._share_cuts`, which calls `shared_cuts(table, probed)`).
+- A body that cannot be copied is a fixed shape beside the editable ones, with its own note.
+- A size that also moves a body that stays a fixed shape in the same file is listed as loose. `export_plan/fixed_parts.py`
+  (`marked` and `joined`) does this, called from `plan_parts_export`. A size moves a fixed part when the model
+  parameters in the scope of that part, its quantity references or its geometry links reach it (`body_scope.scope_inputs`
+  and `body_links`). The reason is "<Part> stays a fixed shape in this file and does not change with this size." (up to
+  three names, then "and N more"). It goes in front of an older reason of the same size, so the part is still named
+  when the reason is cut to the length of the manifest. The size stays free and is marked loose. It is not made fixed. A
+  part with no capture marks nothing. The other bodies change with the size, and the fixed one does not.
+- A note names the components that are not in the file but whose sizes the copy follows (`follows_components_note`
+  with `parts=True`). The record behind it is `TranslateResult.follows_components` (`[{ token, name }]`). The translator
+  fills it from the other components whose sizes a written step follows: a measured reference, a borrowed outline, and a
+  sketch tied to a component that the probe saw move (`Context.follow_component` and `Audit.follows`). Steps inside a
+  tool body walk do not add to it. In a parts file, a component whose body is one of the parts is left out
+  (`recipe_export.followed_outside`). `report.json` does not hold this record. Only the manifest note shows it.
+- `report.json` has a `parts` list with one record per body: `name`, `outcome`, `items`, `notes`, `capture`, `probe`,
+  `sizes`, `derived`, and `refusal`, `after_stop`, `gaps`, `reach` when they apply. `sizes`, `health`, `parameters`
+  and `also_changes` are at the top.
+
+### 1.11 After the export, in Fusion
+
+When the file is written, `_show_result` in `export_flow.py` shows a result window (`lib/fusion_ui/result_dialog.py`).
+The texts come from `lib/dialog_model/result_rows.py`. The window has sections, each with a `# Title` line. A section
+with nothing to say is left out:
+
+- `# Check your design` (first, and only when something went wrong): a parameter that did not go back, timeline
+  steps whose health differs from the start, sketches that did not come back to their first shape, sketches that
+  could not be checked or measured, sketches left with their compute deferred (`health_lines`);
+- `# Result`: the file, whether it is an editable copy (or one with steps left out) and how many parameters come along.
+  When the size tries stopped at the time limit, a line says so and how many sizes were not tried (`time_stop_lines`);
+- `# Sizes`: one line per size with its range and its state ("may be unexpected", "range cut", "kept fixed",
+  "not followed", "not used") and the short reason;
+- `# Left out`: each step left out, with its reason and, when the gap has one, "Tip: " and its hint (see 1.9.3);
+- `# More sizes`: unticked parameters that also change the part (from the discovery rows), and parameters that could
+  not be tried.
+
+A part saved as a fixed shape gets a message box instead. Its first line names the stopping step. Fusion's status line
+(bottom right) shows a short form of the same (`lib/fusion_ui/notice.py`). When the design may be changed (a parameter
+not put back, sketch drift, a step worse than at the start, a sketch left deferred), a message box with the health
+lines comes first. A step worse than at the start counts also when it is past the eight steps that `report.json` lists
+(`health.steps_worse`).
+
+#### What an export changes, and how each is put back
+
+An export changes the design in these ways. Each row says how it is put back and what can still leave a step in
+another state than before. One object does all the put backs of one export, in one fixed order: `PutBack`
+(`lib/export_plan/pipeline/put_back.py`). The table is the list of what it brings back. The order is below the table.
+
+| Change | Put back by | What can still differ |
+| --- | --- | --- |
+| Parameter values (the tries) | `RowExport` puts every expression back before each row and at the end (`restore_parameters`): one `Design.modifyParameters`, the expressions read back as text, any that did not take set one by one, then `computeAll`. `PutBack.restore` does the same at every point of the end (after the tries, in `settle`, in `close` and in `close_failed`). | The text is back, but the steps were rebuilt from the last try. A step that only solved by luck from its previous solution (a fillet that barely fits, a sketch with two solutions) can land elsewhere. `modifyParameters` rebuilds only the steps it touches, so a step can keep an error or warning that a full rebuild would clear. |
+| Timeline marker (capture walk, helper pass, face reads, reach reads, marker roll, temporary copy) | Each read puts it back in a `finally` (`restore_marker`, `put_back`), the store puts it back after every recompute, `unroll_marker` rebuilds once, `PutBack.close` and `PutBack.close_failed` put it back (`TryTimeline.end`), and `run_guarded` puts it back once more at the very end. | Moving the marker rebuilds the steps after it one by one; a risky step can come out of that rebuild in a warning. The capture walk of the dialog runs before the export, so its effect is only seen when the start is read before it (it is, since this change). |
+| Suppressed steps (Faster tries) | `TimelineTrim.end` (called by `TryTimeline.end_trim`) turns them on, read back, then one rebuild; `left_off` names those that stay off. The end check below tries again to turn them on. | A step that stays off; the steps after it rebuilt without it. |
+| Sketch points (`SketchKeeper.put_back`) | Points more than 0.0001 mm off are moved back with the sketch's compute deferred, then one rebuild. | Moving a point of an under-constrained sketch changes the sketch even when it goes to its old place; a fully constrained sketch may solve to the other side. The compute flag goes back to its start value and is read back (`deferred_left` names a sketch where it would not). |
+| Compute calls | `computeAll` in the baseline, after a failed row, after one change with a step in error, in the restore fallback, after unsuppress and unroll. | A full rebuild can show warnings the person's last incremental rebuild did not show: a step reads worse although the export did not change it. |
+| Temporary copy (`step_export`) | The occurrence and only the timeline items the copy added are deleted; the marker goes back; leftovers stop the export. | Nothing in the steps before the marker. |
+| Selections | `timeline_select` selects the stopping step when the person asks. | Not a design change. No visibility, light bulb or appearance is ever changed. |
+
+#### The put back, in order
+
+`PutBack` is the one place that knows the order. Both pipelines make it at the start (`PutBack.start`) and call it at
+fixed points. The order is the same for one body and for several bodies:
+
+1. `start`: save every parameter expression and read the timeline steps (the read the request carries, taken before
+   the dialog read the design, else one read now).
+2. `hold_timeline`: before the tries, hold the marker early and turn off the items the tries do not use
+   (`TryTimeline.begin`). The try runner calls `end_trim` before the discovery rows, since those rows look for links
+   to other components.
+3. `tries_done(run)` after the tries, and `tries_ended(run)` on every way out of them: the values and the items go
+   back, and a sketch left on another solution is put back (`ProbeRun.settle`), before the probe's last read.
+4. `settle(read_gap, read_outline_gap)` once the export is made: the values and the items back, the sketch gap read,
+   the marker back, the end check of the timeline steps (next part), and the outlines read again when the end check
+   rebuilt the design.
+5. `close(health)` when the export is made. It puts the values and the marker back once more, names the items that
+   stayed off (`_warn_left_off`) and, as its last call, drops the last Undo step when the health record says the design
+   is as it was (`undo_steps.drop_after`, see "Lighter on memory").
+6. `close_failed()` when the export stops: the values and the marker go back, the person is told which parameters did
+   not go back (`port.warn_unrestored`), which timeline steps differ from the start (`_warn_steps`, the end check runs
+   here when it did not yet) and which items stayed off. A warning that fails is logged and the next warnings still
+   run, so the error or cancel that stopped the export is the one that is raised.
+
+In Export for Paramability, `run_guarded` (in `commands/export_common.py`) no longer puts values back or drops Undo
+data. It shows the message boxes and puts the timeline marker back once more at the end. (Export size choices does not
+use `PutBack`: it still gives `run_guarded` the restore of its own rows.) The record `health` of the result is made from one
+object, `health.HealthInputs` (`lib/export_plan/health.py`): `health.make_health(HealthInputs(...))`, and
+`PutBack.health_inputs(probe, probe_error, unchecked, flipped)` fills in what the put back knows. The test that holds
+the expected call order for every way an export ends is `tests/test_put_back_order.py` (see 4.11).
+
+#### The end check of the timeline
+
+At the end of every export, once all of the above is back, `settle_timeline` (`lib/design_edit/timeline_health.py`)
+checks every timeline step. `PutBack._settle_steps` calls it, once per export. It runs also after a failed or cancelled
+export. Step by step:
+
+1. At the start, the add-in reads every step before the marker: its health (fine, warning or error), Fusion's message
+   and whether it is turned off. It reads this when the dialog opens, before the dialog reads the capture.
+2. At the end, it reads the same again and compares.
+3. When a step differs, it turns back on every step that was on at the start and reads off now. This also covers a
+   step of the faster tries that would not turn back on. Such a step leaves `left_off` when the end check turns it
+   on, so the person gets no separate box about it.
+4. It rebuilds the whole design once. The last rebuild may have been one change that rebuilt only some steps.
+5. When a step is still worse than at the start, it sets every parameter to its start expression once more, and it
+   rebuilds again.
+6. When step 4 or 5 ran and the probe followed sketches, it reads the outlines again
+   (`PutBack._gap_after_settle`). A rebuild can move a sketch. The gap of that read is
+   `health.sketch_gap_after_rebuild_mm`. `sketch_gap_mm` and `sketch_drift` take the larger of this gap and the gap
+   read before.
+7. What is still different goes to `health.steps_changed` and to the person.
+
+A step that still differs gets one line in the result window. When the export stopped, the same lines come in a
+message box. The box about steps of the faster tries that stayed off (`PutBack._warn_left_off`, then `port.warn_left_off`) names
+only the steps that the end check does not name already.
+
+The hand tests TH1 to TH6 in `docs/hand-tests.md` check this in Fusion: a fillet that only just fits, a sketch with
+two solutions, a chamfer that meets a fillet, a step that already shows a warning, a cancelled and a failed export,
+and the faster tries with a second component.
+
+#### Lighter on memory
+
+Fusion keeps Undo data for every rebuild of a command until the command ends. The whole export is one command. So a
+long export with many tries can make Fusion grow to many GB. The dialog box "Lighter on memory" is an experiment
+against this. It is off to start with.
+
+How it works (`lib/export_plan/undo_steps.py`):
+
+1. With the box ticked, `run_export` makes an `UndoSteps` for the running command and gives it to the port
+   (`undo_steps.attach`).
+2. At points where every value is back, the tries call `UndoSteps.drop`: before each row (`ProbeRun._before_row`) and
+   once after the tries (`ProbeRun.settle`). `drop` calls Fusion's preview call
+   `Command.beginStep(makeExistingStepNonUndoable=True)`. Fusion then ends the current step of the command without
+   Undo data, and it starts a new step.
+3. The add-in puts every value back itself, so nothing should be lost. But Undo may not step back through the export
+   afterwards. This is why the dialog shows a line that reminds the person to save first.
+4. After the export, one more call drops the Undo data of the last part of the export (`undo_steps.drop_after`,
+   called by `PutBack.close` as its last call, not by the command). This happens only when the end check confirms the design is as it was (`health.back_as_it_was`): every value back, no
+   sketch drift, no step worse or left off, nothing left deferred, the steps read, the sketches compared and the
+   marker back. On any doubt the data is kept, so Undo can still help.
+
+The drop rule is fail safe. When the call is missing, raises or answers False, no further call is made, and the export
+goes on as with the box off.
+
+When Undo data was dropped, `health.undo_dropped` is true. Then no line sends the person to Undo. The health lines,
+and the box about steps that stayed off, say to close the design without saving and to open the version saved before
+the export (`health.NO_UNDO_ADVICE`).
+
+`report.json` keeps the record in `timing.undo` (`on`, `applied`, `steps`, `error`). The hand test UM1 in
+`docs/hand-tests.md` checks the memory in Fusion.
+
+### 1.12 What the app does with the file
+
+The Paramability app is a separate project. This section says what it does with a package, so a developer can tell
+which side a problem belongs to. The add-in code never runs in the app.
+
+When the person opens a `recipe` package:
+
+1. The app reads the manifest and checks every rule. A wrong required field refuses the file. A wrong optional field
+   reads as absent, except `gaps`.
+2. It reads `recipe.json` and builds it in its CAD kernel at the sizes as written.
+3. It reads `part.step` as a mesh and compares the two shapes: the volume overlap, the typical gap and the largest gap,
+   at the "Standard" bar. The answer is one of three levels: it matches, it is close, or it is far off.
+4. A match lands as a CAD part that keeps its recipe. The free sizes go on the form ("Put on the form"), each with its
+   label, value, Min, Max and step. A `loose` size gets a warning mark with its reason. A `cuts` size gets a quiet
+   info mark ("Range shortened."). The `fixed` list shows as "Kept fixed by the export" on the Shape sizes card.
+5. A copy that is close, or far off but still builds, is not thrown away. The part keeps the STEP shape (the
+   "original") and the recipe beside it (the "editable copy"). A switch on the Shape sizes card shows one or the
+   other. The card also shows the gaps between the two surfaces. This is the "copy note" (`RecipeCopyNote`).
+6. A recipe that does not build lands the STEP as a fixed shape. The message names the step where the kernel stopped.
+
+The range end check. The add-in cuts the ranges where Fusion fails (3.2). Fusion can build designs that the kernel of
+the app cannot. Examples are rounds or chamfers that meet at a corner, and an emboss whose hole reaches past its
+outline. The add-in cannot see this. So the app checks the ends itself when it opens a package:
+
+1. It builds every free size at its smallest and at its largest value in its own kernel, with the other sizes at their
+   values.
+2. An end that does not build is pulled in. A short search halves the gap between the end and the value of the size, up
+   to 6 times, and stops at the last value that builds. The end moves only when the kernel names the step that fails. A
+   time out, a stopped kernel, a Skip or a spent budget leave the end as it was written.
+3. The shorter range is written into the recipe that lands. It is an extra entry in the `cuts` list, with the old end
+   and the reason. The card shows "Range shortened". A size that several parts share gets the shortest range that any
+   part allows.
+4. A package builds at most 80 times for this check, over all its parts (`RANGE_CHECK_BUILDS`). The open dialog shows
+   "Skip the range check" beside Cancel while it runs. After a Skip, or for an end that was not checked, the range
+   stays as exported and the size is marked "may give unexpected results" ("Its range ends were not checked").
+
+The check proves the two ends. It does not prove every value inside the range. A Fusion size check where the recipe
+does not build waits for the range check: once the end is pulled in past the value of that check, the size is not
+frozen.
+
+For a package with a gaps file (an "unfinished copy"):
+
+- The part always lands beside the original, and the original shows first. Its build is never stored as the finished
+  body, also when it matches.
+- An exception: when every missing step is cosmetic (a round, a chamfer, an emboss, or a cosmetic thread) and the
+  copy matches or is close, the copy lands shown, with its sizes on the form. The toast says "N small steps are
+  missing".
+- The copy is built best effort. A step that the kernel cannot build is left out, and the build goes on from the last
+  good part. The note lists such a step in `leftOut` with the kernel's reason. Example: a join whose missing steps
+  leave it floating apart from the part. So one such step does not turn the whole part into a fixed shape. Before, a
+  failed step there made the whole copy fail.
+- The gaps file is kept verbatim beside the CAD source (`assets/cad/<id>.gaps.json`), so a saved project keeps it. The
+  app reads version 1, 2 and 3 files. A version 1 or 2 file has no `finishing` flag, so the app sets it from the Fusion
+  type of each gap. A version 1 file with more than 16 gaps is refused, with a message that says why.
+- With assistant mode on, a second message says that the person's AI assistant can add the missing steps.
+
+The AI assistant data. The app has no AI of its own. A person can connect their own AI assistant. The assistant reads
+the copy with `object.readRecipeCopy`: the copy note, the recipe (paged) and the gaps, each with its reason, its place,
+its sizes, its hint and its Fusion data. It edits the copy with `object.editRecipeCopy`. A step it adds with the id
+of a gap fills that gap, but only when the kernel built that step. An edit also builds best effort: a step that does
+not build is answered in `leftOut` with its reason, and its gap stays open (`gapsNotBuilt`). After each edit the app
+compares the copy with the original again. This is why the add-in keeps so much in
+each gap: the name, the reason, the place, the Fusion expressions and the raw data. A good gap lets the assistant (or a
+person) redo the step without Fusion.
+
+`report.json` is never read by the app. It is only for you.
+
+## 2. The code map
+
+### 2.1 Packages and layers
+
+The code is in `ParamabilityExport/lib/`, one package per job, plus `ParamabilityExport/commands/`. The packages sit in
+layers. A package may import only packages that are lower in the layers, and only those listed for it. The table
+`ALLOWED_IMPORTS` in `tests/test_boundary.py` holds the exact list. The add-in `README.md` ("Code layout") gives the same
+order. The table below follows that order, lowest layer first. `commands` is on top.
+
+| Package | May import | What it owns |
+| --- | --- | --- |
+| `package` | nothing | The `.paramability` file: units, manifest builders and checks, caps, file names, zip writer, gaps file bytes. |
+| `geometry` | nothing | Pure geometry that the translator, the probe and the reader share: vector helpers (`vec`), the rigid map of a frame (`rigid`: `Move`, `move_for`, `frame_problem`), sketch outlines (`outlines`, `text_outlines`, `footprint`), 2D helpers on points (`plane2d`), the volume checks of a Combine (`combine_volume`) and the tolerances (`tolerances`). |
+| `capture_model` | `geometry` | What a capture and a recipe step are made of: the step kind table (`step_kinds`), the capture checks (`capture`: `validate_capture`, `CaptureError`, `same_body`), the chain of splits (`lineage`), the items that build tool bodies (`tool_items`), and the gap causes, hints and picks (`gap_hints`, `gap_picks`). |
+| `timing` | nothing | Stopwatch helpers and the `timing` block of `report.json`. |
+| `params` | `package` | Fusion parameters as sizes: names, defaults and ranges, the expression parser, the dependency graph, geometry links, the size table, the parameter listing. |
+| `sketch_values` | `package` | The motion file (`Affine`, `Stuck`, `Terms`), its keys and the "measured / not measured" answers (`coverage`). |
+| `sketch_solve` | `package`, `sketch_values` | A small sketch solver for the shadow check `derived`. `slots.slot_text(slot)` names a solver slot in words. |
+| `design_edit` | `package`, `params` | Changing the design for a while: apply a row, restore parameters, the timeline marker, the timeline health, the temporary copy, and the declared interface of the parameter store (`store.py`). |
+| `translator` | `capture_model`, `geometry`, `package`, `params`, `sketch_values`, `timing` | A capture in, a recipe and verdicts out. One handler per step kind. |
+| `probe` | `capture_model`, `geometry`, `package`, `params`, `sketch_solve`, `sketch_values`, `translator` | Plans the rows, matches the reads with the capture, fits the motion file. |
+| `export_plan` | `capture_model`, `design_edit`, `geometry`, `package`, `params`, `probe`, `sketch_values`, `timing`, `translator` | The export itself: the pipelines, the put back, body scope, size offers, the probe flow, marker roll, timeline trim, reach pass, health, package plan. |
+| `dialog_model` | `export_plan`, `package`, `params`, `translator` | What the dialogs show, as plain data: rows, stop warning, result view. |
+| `fusion_reader` | `capture_model`, `design_edit`, `geometry`, `package`, `params`, `timing` | Reads the design with `adsk`: the capture, the probe states, the reach, the STEP export, the parameter store. It does not import the translator. |
+| `fusion_ui` | `dialog_model`, `export_plan`, `fusion_reader`, `package` | Draws the dialogs with `adsk` and handles their events; the log and message boxes. |
+| `commands` | `design_edit`, `dialog_model`, `export_plan`, `fusion_reader`, `fusion_ui`, `package`, `timing` | The two buttons, their flows and the panel. |
+
+Only `fusion_reader`, `fusion_ui` and `commands` use `adsk`. Everything else is pure Python and runs without Fusion.
+
+`tests/test_boundary.py` checks these rules. A change that breaks one fails the test:
+
+1. Every folder in `lib/` is in the table and has more than one module.
+2. A package imports only the packages the table lists for it. The table has no cycle.
+3. Only `fusion_reader`, `fusion_ui` and `commands` import `adsk`. Two reader files (`parameters.py` and `rows.py`)
+   do not import `adsk` at the top, so the tests can run them with fakes.
+4. A name with a leading underscore is private to its module. No module imports it from another module.
+5. A test may reach a private name only when the test file and the name are listed in `PRIVATE_REACHES_IN_TESTS` in the
+   same file. The test imports it with a plain `from module import _name`, not with `importlib`.
+
+Style rule for imports: inside one block, relative imports from the farther package come first, then the rest in
+alphabetical order by module.
+
+### 2.2 The main modules
+
+#### commands
+
+- `commands/ExportForParamability/entry.py`: the dialog life cycle (`_on_created`, `on_changed`, execute).
+- `commands/ExportForParamability/export_flow.py`: `run_export`, the ports `FusionPort` and `FusionPartsPort`, the
+  `CaptureCache`, `_show_result`.
+- `commands/export_common.py`: `run_guarded` (every way an export stops becomes one message, and the marker goes
+  back), the writer text, the progress window.
+
+#### export_plan
+
+- `pipeline/` (a package, see its docstring in `__init__.py`):
+  - `port.py` holds `ExportPort` (every member the pipeline asks of Fusion), `ExportRequest` and `PipelineResult`.
+  - `run.py` holds `run_pipeline` and the stages of one export (`_Pipeline`).
+  - `parts.py` holds `run_parts_pipeline` and `PartsPipeline` for several bodies, `PartsPort` (its port, with the body
+    index in each call) and `shared_cuts`.
+  - `probe_run.py` holds `ProbeRun` (the try runner: rows, put backs, rows run again, discovery) and `MarkerNotHeld`.
+  - `put_back.py` holds `PutBack`: what the export changed, put back in one order on every way out, the end check, the
+    last Undo drop and the health inputs (see 1.11).
+  - The package re-exports what the rest of the add-in reads as `pipeline.<name>`.
+- `probe_flow/` (a package):
+  - `size_probe.py` holds `SizeProbe` (one part: states, the rows it plans, the discovery rows, the motion). It is one
+    class in one module on purpose: the states, the rows, the discovery and the findings all read the same state, and
+    split parts would need that state handed in and forwarding methods (the class docstring has the reason).
+  - `probe_group.py` holds `ProbeGroup` (several parts over shared rows).
+  - `interface.py` holds `Probe`, the interface that `ProbeRun` and both pipelines call. `SizeProbe` and `ProbeGroup`
+    both have every member.
+  - `row_schedule.py` holds `RowSchedule` (the row phases, see 1.8).
+  - `sizes.py` holds `kept_sizes`, `extra_sizes` and `sizes_to_try`, the one place that decides which sizes get tries.
+  - `borrowed_view.py` (`probe_view`, `borrowed_sketches`, `covers_a_sketch`, `with_borrowed`), `shared_reads.py`,
+    `states.py` (compare states), `reasons.py` (the texts of untried sizes) and `shadow.py` (`shadow_of`).
+  - The package re-exports what the rest of the add-in reads as `probe_flow.<name>`.
+- `recipe_export.py`: `translate_capture`, `plan_single_export`, `plan_parts_export` (the package plan),
+  `link_outcomes`. `assemble.py` makes the manifest and the files for the writer. `part_names.py` holds the names of the
+  parts of a several-body export.
+- `body_scope.py`, `size_offers.py`: what belongs to the picked body; the dialog rows and the probe sizes.
+- `marker_roll.py`, `timeline_trim.py`: the marker roll and "Faster tries" (`TryTimeline`).
+- `reach_pass.py`: when and how to ask for the reach.
+- `health.py`: the `health` record and its sentences (`HealthInputs`, `make_health`, `health_lines`, `back_as_it_was`,
+  `left_off_line`). `messages.py`: the package notes and the "Tip: " lines of the left-out steps.
+- `undo_steps.py`: the "Lighter on memory" experiment (`UndoSteps`, `attach`, `drop_after`).
+- `time_limit.py`: the choices, the default and the words of the time limit of the size tries (see 1.8).
+  `fixed_parts.py`: the sizes that also move a part that stays a fixed shape in a parts file (`marked`, `joined`, see
+  1.10).
+
+#### dialog_model
+
+- `stop_warning.py`: the early warning under the body picker (`summarize`, `summarize_many`) and the texts after the
+  export (`saved_message`, `status_text`). `left_out_preview.py`: the steps that the copy will probably leave out, as the
+  dialog lists them before the export (`Found`, `find`, `lines`, see 1.2).
+- `dialog_rows.py`: the texts and the checks of the rows of the parameter table. `result_rows.py`: what the result
+  window shows. `sizes_table.py` and `sizes_text.py`: the sizes table of the dialog as plain data, and the sizes as CSV
+  text.
+
+#### translator
+
+The top level of `lib/translator/` holds the driver and the parts that every handler uses. The handlers sit in folders,
+one folder per family of steps.
+
+- Driver and shared parts: `translate.py` (`translate`, `_settle`, `_walk`, `_finish`, `_diagnosis`, `_over_caps`,
+  `_fix_long_formulas`), `handlers.py` (`HANDLERS`, the handler of each capture type), `walk.py` (the item
+  loop, `walk_items`), `context.py` (`Context`: doubts, notes, cuts, gaps, steps, placers), `result.py` (`StepResult`,
+  `Refusal`, `Doubt`, `TranslateResult`, the verdicts), `step_walk.py` (`all_steps`: every step at every depth),
+  `words.py` (type names in words), `notes.py` (every reason sentence), `audit.py`, `turn_budget.py` (the turns of the
+  threads and coils written so far: the 100 turn cap that both share).
+- Values and sizes: `values.py` (`quantity`, `pin`, `handled`), `sizes.py` (which sizes a step reads, upfront doubts,
+  `probed_sizes`, the sizes the probe tries).
+- Places: `place.py` (`place`, `POSITIONS`, `DIRECTIONS`, `NOT_WRITTEN`: moves a finished recipe by the rigid map from
+  `geometry.rigid`), `placement.py` (sketch frames to recipe placements), `ref_motion.py` (places of other components).
+- Handler folders:
+  - `extrude/`: `step.py` holds `handle`. Also `plan.py`, `side.py` (`SidePlan`: the plan of one side), `reach.py`,
+    `reach_motion.py` (a face or plane placed by the probe's measure), `taper.py`, `through.py`, `through_taper.py`,
+    `material.py`, `checks.py`, `built.py`, `order.py`, `common.py`, and `emboss.py` (the Emboss handler).
+  - `sweep/`: `step.py` holds `handle`, with `sweep_*.py` for settings, outline, volume, ends, frames, taper, reach,
+    marks, rules, write and limits.
+  - `paths/`: sweep paths (`paths.py`, `path_curves`, `path_checks`, `path_writing`, `path_closed`, `path_rebuilt`,
+    `path_motion`, `path_model`, `path_limits`).
+  - `loft/`: `step.py`, `loft_sections.py`, `loft_volume.py`.
+  - `revolve/step.py`, `hole/step.py` (holes and cosmetic threads) and `hole/thread.py` (modelled threads and the thread
+    of a tapped hole, see 3.12).
+  - `coil/`: the coil handler (see 3.13). `step.py` holds `handle`. Also `coil_fit.py` (the axis, the hand and the check of
+    the helix), `coil_section.py` (the wire's section from an end face), `coil_operation.py` (new body, join or cut from
+    the volumes), `coil_values.py` (the sizes of the coil as formulas) and `coil_limits.py` (the caps and the refusal
+    texts).
+  - `repeat/`: patterns and mirrors. `body_copies.py` (bodies), `repeat_*.py` (sources, build, elements, lattice, the
+    three kinds, the mirror reach) and `symmetric.py` (copies on both sides: `extra_side`, `value_at`,
+    `FUSION_EXTRA_SIDE`). The package `__init__` is the entry point the walk imports.
+  - `combine/`: `step.py` (`handle`) and `tool_walk.py` (the walk of a tool body, `cannot_copy`).
+  - `finishes/`: `finish.py` (fillet, chamfer, shell), `draft.py`, `offset.py`.
+  - `bodies/`: `move.py`, `paste.py`, `split.py`, `split_rules.py`, `split_inside.py` (which pieces of a split by a body
+    lie inside the tool, when the reader could not say, see 3.4), `body_states.py` (`seen_on`: an item seen from another
+    body, such as a tool body).
+- Picks and faces that follow sizes, `faces/`: `follow.py` (picks, faces and planes that follow sizes), `picks.py`,
+  `placer.py` (the placer protocol), `placer_makers.py`, `moved_placer.py`, `tool_placer.py`, `slabs.py`, `shells.py`,
+  `offset_faces.py`, `end_caps.py`, `thin_wall.py`, `crossings.py`, `copy_counts.py`, `meets_part.py` and `floating.py`
+  (joins that would float).
+- Sketch values, `sketch/`: `loops.py`, `written_loops.py`, `sketch_motion.py` (sketch values from the motion file),
+  `curved.py` (formulas with sines and products), `spline_fit.py`, `sketch_crossings.py` (`order_ranges` and
+  `simple_ranges`, an outline that would cross itself or have a hole reach its edge, and `OutlineChecks`, the shared
+  time of these checks), `rect_corners.py` (the corners of a rectangle loop as numbers and as raw size values), `inner_pick.py` (a face picked inside an end face follows one corner; an edge keeps the
+  centre of all corners), `face_outline.py` (`may_change`, `doubt`) and `borrowed.py` (outlines from another
+  component's sketch).
+- Checks over the size ranges, `ranges/`: `range_check.py` (`size_env` gives the value of every size at a setting) and
+  `kept_ranges.py` (range cuts, `part_step`, `built_ranges`).
+- Gaps, `gaps/`: `stops.py` (the gap record, the gap names, `stop_reason`, `MAX_GAPS`), `gap_place.py`,
+  `gap_measures.py` (`to_recipe`, the move of a gap in recipe form), `gap_file.py`, `finishing.py` (the `finishing` flag). The causes and hints are not here: they are in `capture_model` (`gap_hints.py`,
+  `gap_picks.py`).
+- The step kind table, the chain of splits (`lineage`) and the tool items are not in the translator. They are in
+  `capture_model`, since the Fusion reader uses them too.
+
+#### capture_model and geometry
+
+- `capture_model/step_kinds.py`: the step kind table, with `gap_cause` per type and `pattern_kind()`.
+  `capture.py`: `validate_capture`, `CaptureError`, `same_body`. `lineage.py`: `of`, `at`, `bodies`.
+  `tool_items.py`: the items that build tool bodies (`component_frame`, `MAX_ITEMS`, `MAX_TOOLS`, `MAX_DEPTH`).
+  `gap_hints.py`: causes and hints (`refusal_cause`). `gap_picks.py`: `pick_records`.
+- `geometry/vec.py`: one place for vector helpers. A module does not keep its own `_dot`. `geometry/rigid.py`: `Move`,
+  `IDENTITY_ROWS`, `TURN_Z_UP`, `move_from_frame`, `frame_problem`, `move_for`. `geometry/tolerances.py`: see 4.11. `geometry/plane2d.py`: small 2D helpers on `(x, y)` points: the distance to a segment
+  or to a ring, a point inside a ring, and an arc drawn as points the way the app draws it (`to_segment`, `to_ring`,
+  `inside_ring`, `arc_points`). `footprint`, the outline checks and the coil fit use them.
+
+#### probe
+
+- `plan/`: what to read and which rows to run. `covered.py` (`scan`), `references.py` (`refs`), `request.py`
+  (`request`, `symmetric_patterns`), `rows.py` (one row, `MAX_PROBE_ROWS`), `near_far.py` (`probe_rows`, `pair_rows`,
+  `far_rows`, `far_pair_rows`), `nearer.py` (`nearer_rows`), `extra_rows.py` (`check_rows`, `discovery_rows`),
+  `history.py` (what earlier states show). The package re-exports the names the rest of the add-in reads as
+  `plan.<name>`. The choice of which sizes get rows is not here any more: it is in `export_plan/probe_flow/sizes.py`.
+- `state.py`: `ProbeState`, the record of one probe state (`json()`, `from_json()`, `as_states()`,
+  `REPORT_READ_KEYS`). `build.py`, `plan` and `derived` take these records, or the report dicts. Rows stay dicts
+  (`design_edit.runner.row_key(row)` gives the key of a row).
+- `build.py`: from the states to the motion file (`build`), the spans (`spans`), the outline limits. `build`, `StateRun` and the plan entry functions (`probe_rows`, `nearer_rows` and the others) turn report dicts into `ProbeState` records once, with `as_states`. The helpers in `plan/history.py` and `spans` take `ProbeState` records only.
+- `match.py`: which read profile stands for which captured profile, values of a state (`state_values`).
+- `pieces.py`: how many separate pieces the part is in at a state (`count`, `came_apart`, see 1.8).
+- `fit.py`: the straight line fit (`fit_value`, `least_squares`, `fit_residual`, `snap_coefficients`).
+  `terms.py`, `series.py`: fits with angle functions and products (`terms.turn_terms`, `series.partners`,
+  `series.curve_sizes`). `columns.py`: the parameter columns a written value may follow.
+- `ref_fit.py`: the places of other components. `plane_sizes.py`: sizes that may move a sketch plane or a face.
+- `derived*.py`: the shadow check from the sketch graphs.
+
+#### params
+
+- `expressions/`: Fusion expression text to an app formula. `reading.py` (tokens and parse tree, `parse`,
+  `referenced_names`), `units.py` (unit words, `unit_factor`, `internal_factor`), `translation.py` (`translate_tree`,
+  `unit_scale`), `writing.py` (`render`), `formula.py` (`parse_formula`), `functions.py` and `evaluation.py`
+  (`evaluate` for the text of a formula, `evaluate_tree` for a parsed tree), `simplify.py` (`collected_sum`), `text.py`
+  (`format_number`, `MAX_FORMULA_LENGTH`, `is_constant_expression`), `errors.py` (`ExpressionError`).
+- `labels.py`: the readable label of each size (`assign`, see 1.3).
+
+#### design_edit
+
+- `store.py`: `ParameterStore` (the members every parameter store has), `TIMELINE_CONTROLS` (the optional group for a
+  design with a timeline) and `timeline_control(store, name)` (the method, or None when the store has none).
+- `apply.py`, `runner.py` (`RowExport`, `row_key`), `restore.py` (`restore_parameters`), `marker.py`,
+  `timeline_health.py` (`settle_timeline`), `temp_copy.py`, `errors.py`.
+
+#### fusion_reader
+
+- `capture.py`: `read_capture`. `helper_pass.py`: the second pass for tool bodies.
+- `read_*.py`: one module per family of step types, each with a `READERS` dict. `read_thread.py` reads the modelled
+  thread of a `ThreadFeature` (and the thread info of a tapped hole), `read_coil.py` reads a coil from its parameters,
+  volumes and faces (3.12 and 3.13). `read_geometry.py`: `safe`, boxes, frames, `same_entity`, `foreign`. `read_links.py`, `read_constraints.py`: sketch links and graphs.
+- `placement.py`: the place of the body in the assembly, `ref_record`.
+- `probe_state.py`, `probe_refs.py`, `read_face.py`, `probe_patterns.py`: the reads at each probe row.
+- `read_gap_reach.py`: the reach read.
+- `rows.py`: `DesignParameterStore` (set expressions, rebuild, health, marker roll, suppression). It has every member of
+  `ParameterStore` and of the timeline controls.
+- `sketch_keep.py`: `SketchKeeper`. `step_export.py`: the STEP file.
+- `parameters.py`: the parameter lists.
+
+### 2.3 How data flows
+
+```
+ Fusion design
+     |  read_capture (fusion_reader)
+     v
+ capture dict  ---------------------------------------------+
+     |  body_scope, size_table.build (export_plan, params)   |
+     v                                                       |
+ SizeTable                                                   |
+     |  translate(capture, table, OPTIMISTIC)                |
+     v                                                       |
+ TranslateResult (first look)                                |
+     |  read_reach (fusion_reader) when gaps                 |
+     v                                                       |
+ capture + reach                                             |
+     |  SizeProbe + ProbeRun: rows -> read_state (fusion_reader)
+     v                                                       |
+ states -> probe.build -> Motion (motion file)               |
+     |  PutBack: values, items, sketches, marker back        |
+     |  translate(capture, table, motion)                    |
+     v                                                       v
+ TranslateResult (final) -> plan_single_export -> manifest, recipe, gaps, report (capture inside)
+     |  write_package (package)
+     v
+ .paramability zip -> Paramability app
+```
+
+Things to note:
+
+- The capture inside `report.json` is the same dict the translator used, with `reach` when it was read. So the
+  translation can be run again from the report alone (see 4.4).
+- The motion file is not in the report as a file. But `report.json` keeps the probe states (`probe.states`, the
+  `report.json` form of `ProbeState`) and the motion (`probe.motion`). A replay rebuilds the motion from the
+  states (`motion_for` in `tests/test_local_captures.py`).
+- The step kind table (`capture_model/step_kinds.py`) is read from three sides: the Fusion reader (which module reads a
+  type), the translator (which handler copies it) and the probe (which sketch records it may follow).
+- The put back is not a stage in the diagram, since it happens at several points. `PutBack` makes the calls, in one
+  order (1.11).
+
+### 2.4 Pure parts and Fusion parts
+
+Pure (tested directly, no Fusion needed): `package`, `geometry`, `capture_model`, `params`, `sketch_values`,
+`sketch_solve`, `timing`, `design_edit` (it works on any object with the right methods), `translator`, `probe`,
+`export_plan`, `dialog_model`.
+
+Fusion facing (tested with fakes, and by hand in Fusion): `fusion_reader`, `fusion_ui`, `commands`.
+
+The border is the port and the parameter store. Both are declared once, as protocols:
+
+- `ExportPort` (`lib/export_plan/pipeline/port.py`) and `PartsPort` (`pipeline/parts.py`) list every member the pipeline
+  asks of Fusion: `store`, `units`, `timing`, `undo_steps`, `read_timer`, `export_step`, `read_capture`, `read_reach`,
+  `probe_reader`, `sketch_keeper`, `progress`, `warn_unrestored`, `warn_left_off`, `warn_steps` and `log`. The real
+  ports are `FusionPort` and `FusionPartsPort` (`commands/ExportForParamability/export_flow.py`).
+- `ParameterStore` (`lib/design_edit/store.py`) lists the store members (`saved_expressions`, `set_expression`,
+  `set_expressions`, `recompute`, `read_value`, `error_items`, `error_entries`, `return_marker`, `marker_holds` and so
+  on) and `TIMELINE_CONTROLS` lists the optional ones (`timeline_health`, `turn_on`, `keep_marker`, `roll_marker`,
+  `unroll_marker`, `suppress_items`, `unsuppress_items`). The real store is `DesignParameterStore`
+  (`lib/fusion_reader/rows.py`).
+- `Probe` (`lib/export_plan/probe_flow/interface.py`) is the interface between the try runner and the probe. It is not
+  a border to Fusion, but it follows the same rule: one declaration, and a test that checks every class has it.
+
+`tests/test_interfaces.py` checks all of this (see 4.11).
+
+### 2.5 Fakes and test helpers
+
+All in `tests/`:
+
+| File | What it gives |
+| --- | --- |
+| `context.py` | Puts `ParamabilityExport/` on the import path, so tests import `lib....`. Every test imports it first. |
+| `fakes/` (a package, by domain) | The shared fakes. `store.py`: `FakeStore` (a parameter store with expressions as text; options `bad_when`, `breaks`, `reject`, `flaky`, `stuck`, `answers`, `errors`, `on_recompute`), `RollingStore` (also holds the timeline marker) and `TrimStore` (also turns timeline items off). `port.py`: `FakePort` (one body) and `FakePartsPort` (several bodies), with options for the answers a test needs (`reader`, `keeper`, `reach`, `fail_read_from`, `fail_step_at`, `cancel_at`) and the warnings they keep (`warned`, `left_off`, `warned_steps`). `design.py`: Fusion objects for the reader tests (`FakeDesign`, `FakeTimeline`, where new items go in at the marker like in Fusion, `FakeMarkerTimeline`, occurrences, matrices, solids, `FakeBRepManager`). `dialog.py`: the dialog inputs. |
+| `translator_helpers.py` | `load_capture(name)`, `translate_fixture`, `edited`, `variant`, `steps_of`, `verdict_of`, `left_out`, `stopped`, `assert_schema_ok`. |
+| `probe_helpers.py` | Builders for user and model parameters, sizes, sketch lines and states as the reader gives them. |
+| `params_fixtures.py`, `row_helpers.py`, `sketch_graph_fakes.py`, `sketch_solve_helpers.py`, `derived_fixtures.py`, `filter_box_motion.py`, `coil_helpers.py` | Builders for their own test families. `coil_helpers.py` builds the `data` of a coil from exact helix geometry, so a test can break one thing at a time. |
+| `schema_check.py`, `schema/` | Checks a recipe, a manifest or a gaps file against copies of the app's JSON schemas. |
+| `fixtures/captures/*.json` | About 180 captures, made by hand or saved from real designs. Each test family loads them. |
+| `fixtures/motion/*.json` | Motion files for some captures. |
+
+Rule for new tests: use an option of a shared fake for an answer. A test that needs a new answer from a store or a
+port adds an option to the shared fake. Subclass a fake store only to act out Fusion behaviour over several calls:
+`OrderStore` (`test_put_back_order.py`), `ParkStore` (`test_face_outline_follow.py`), `StepStore`
+(`test_timeline_health.py`) and `BatchStore` (`test_row_baseline.py`).
+
+Tests of the layout and of the order:
+
+| File | What it checks |
+| --- | --- |
+| `test_boundary.py` | The import table, the `adsk` rule and the private names (see 2.1). |
+| `test_interfaces.py` | That the real classes, the shared fakes and both probes have every declared member, and that the pure code asks a store, a port or a probe only for a declared member. |
+| `test_put_back_order.py` | The order of the calls an export makes to put the design back, on every way it ends. |
+| `test_probe_row_schedule.py` | The row phases and the nearer and check rows of a probe or a group. |
+| `test_probe_state_record.py` | The `ProbeState` record and its `report.json` form. |
+| `test_step_kinds.py` | The step kind table, its handlers and the readers. |
+
+`tests/test_pipeline.py`, `tests/test_pipeline_gaps.py` and `tests/test_parts_pipeline.py` run the whole pipeline
+against `FakePort` or `FakePartsPort`: a simulated Fusion, with reads you can script per row.
+
+`scripts/fixture_geometry.py` computes the box and the volume of a capture fixture from its steps (it needs numpy).
+Run it after you edit a fixture: `python3 scripts/fixture_geometry.py <fixture name> --write`.
+
+## 3. Key ideas, with examples
+
+The examples in this part are made up. They show the logic, not a real design.
+
+### 3.1 How a sketch point becomes a formula from tries
+
+#### The problem
+
+A sketch has a corner point. The designer placed it with two dimensions, so that its x is `Width / 2 - Wall`. With
+`Width = 40` and `Wall = 3`, the corner sits at x = 17.
+
+The capture does not hold the rule `Width / 2 - Wall`. It holds only the number Fusion drew: 17. To write x as a
+formula, the add-in measures it at other values.
+
+#### The keys
+
+Every value the translator writes for a sketch has a key (`lib/sketch_values/keys.py`). The key says which step,
+which profile, which loop and which field:
+
+- `4/p0/l0/center.0`: step 4, profile 0, loop 0 (the outer loop), the x of the centre;
+- `4/p0/l1/radius`: the radius of the first hole;
+- `4/p0/plane`: how far the sketch plane moved along its normal;
+- `7/positions/2/0`: the x of the third hole point of step 7;
+- `9/axis/point/1`: the y of a revolve axis point;
+- `12/path/c3/end.0`: a field of curve 3 of a sweep path;
+- `15/r/plane/offset`: how far a measured plane of another component moved.
+
+The probe and the translator use the same keys, so they talk about the same numbers.
+
+#### The tries
+
+The probe reads E0 and then the rows. Here the corner value at each state:
+
+| State | Width | Wall | x read |
+| --- | --- | --- | --- |
+| E0 | 40 | 3 | 17 |
+| Width near min | 30 | 3 | 12 |
+| Width near max | 50 | 3 | 22 |
+| Wall near min | 40 | 2.25 | 17.75 |
+| Wall near max | 40 | 3.75 | 16.25 |
+
+#### The fit
+
+`fit_value` in `lib/probe/fit.py` looks for `x = const + a * Width + b * Wall`:
+
+1. It takes the columns (one per parameter) that change in some state. It sorts first the columns that change where
+   the value changed.
+2. It tries one column, then two, up to four (`MAX_COLUMNS`). For each set it solves a least squares fit of the
+   changes of `x` from E0.
+3. A fit counts only when every state agrees within 0.0001 mm (`FIT_TOLERANCE` in `lib/geometry/tolerances.py`). It must also have enough states: the
+   columns must change in at least one more state than there are columns. Else the fit is not trusted (cause
+   `untried`).
+4. Each coefficient is snapped to the nearest k / 24 when that keeps every state within the tolerance. So 0.4999999
+   becomes 0.5.
+
+Here the result is `const = 0`, `Width: 0.5`, `Wall: -1`. The motion file keeps it as an `Affine`:
+
+```json
+"4/p0/l0/points.1.0": { "const": 0, "terms": { "Width": 0.5, "Wall": -1 } }
+```
+
+The translator (`sketch_motion.raw`, then `curved.render`) writes it as the formula `0.5 * Width - Wall`. It checks
+that the formula gives the captured number (17) within 0.001 mm. It checks that a width, a height or a radius stays
+above zero over the ranges. Then the recipe point is `{ "expr": "0.5 * Width - Wall" }`.
+
+A term can also be a model parameter. Then the translator writes it through that parameter's own expression, so the
+formula reads only sizes.
+
+#### When no straight line fits
+
+Some values move along a curve. Example: the end of a leg of length `L` that turns with an angle `A`: `x = L * cos(A)`.
+No straight formula fits. Before it gives up, the probe tries a sum of terms (`lib/probe/terms.py`): each size, the
+product of two lengths, and for an angle `sin`, `cos`, `tan`, `cot` of the angle and of half the angle, alone or times a
+length. At most 3 such terms. The sum is used only when every state follows from the others (leave one state out, fit,
+and the fit must still give that state). The check rows (1.8, step 6) give the extra states for this test. The motion
+file keeps it as `Terms`:
+
+```json
+{ "const": 0, "sum": [ { "k": 1, "of": [["", "L", 1], ["cos", "A", 1]] } ] }
+```
+
+The translator writes `L * cos(A)` (angles in degrees).
+
+A corner on a leg that turns often needs more than 3 terms. Example: the end of a leg that starts at the end of
+another leg, with `x = L1 + L2 * cos(A)`, and the corner set back by a wall `W` along the turned leg. Then `x` needs
+`L1`, `L2 * cos(A)`, `W * cos(A)` and more. The search one term at a time can miss such a sum. So, when it fails, a
+second step runs (`terms.turn_terms`, `_turned`):
+
+1. It takes every term of a turn at once: each size, and for each angle size its sine and its cosine, alone and times
+   each length size.
+2. It solves for all of them together.
+3. It drops the terms that the fit does not need (it prunes), and it checks the rest with the same leave-one-out test.
+
+Some sizes move the value only after the angle turned. Example: at `A = 0` a leg lies along the line it moves, so a
+row that sets only that leg moves nothing. `series.partners` finds such a partner size. It compares a state that sets
+the angle and the size with a state that sets only the angle to the same value. When the two values differ, the size
+is a partner, and the fit takes it in.
+
+#### When nothing fits: Stuck
+
+A value that cannot be fitted is `Stuck`, with the sizes that move it and a cause:
+
+| Cause | Meaning | Reason text (from `notes.stuck_reason`) |
+| --- | --- | --- |
+| `curve` | It moves along a curve no formula follows. The translator first tries to cut the ranges (3.2, "An outline that would cross itself"); it marks the size only when no cut works. | "it moves Sketch3 along a curve, which cannot be copied yet" |
+| `shape` | The outline changes (a line appears, two profiles merge). | "Sketch3 makes a different outline at other values" |
+| `turns` | The sketch plane turns. | "it turns the plane of Sketch3" |
+| `unread` | A state did not give the value. | "Sketch3 could not be read at other values" |
+| `untried` | Not enough states. | "it changes Sketch3 and could not be tried at other values" |
+
+The translator writes the captured number and doubts the sizes. When only some sizes are to blame, the probe also fits
+`rest`: what the value follows once those sizes keep their value. The other sizes then still follow. So one bad size
+does not freeze the whole sketch.
+
+A different outline is special. When a size changes the outline only in its own row, that is a limit of its range,
+not a reason to drop it (see 3.2).
+
+### 3.2 How a range is cut
+
+#### An example
+
+`Width` is 40 mm. Its default range is 20 to 80. A fillet in the part fails above about 70. The rows go like this
+(checked with `lib/probe/plan/`):
+
+| Row | Width | Why this value | Result |
+| --- | --- | --- | --- |
+| near min | 30 | 25 % below | builds |
+| near max | 50 | 25 % above | builds |
+| far min | 20 | range end | builds |
+| far max | 80 | range end | Fusion does not rebuild (Fillet2 in error) |
+| nearer | 65 | half way between 50 (built) and 80 (failed) | builds |
+| nearer | 72.5 | half way between 65 and 80 | fails |
+| nearer | 68.75 | half way between 65 and 72.5 | builds |
+| (none) | | 68.75 and 72.5 are within a tenth of the way (`BISECT_GAP`) | stop |
+
+The probe keeps the span of `Width`: `low` 20, `high` 68.75, and `failed` `[[80, "Fillet2"], [72.5, "Fillet2"]]`.
+
+The translator (`kept_ranges.built_ranges`, `failure_cut`) then cuts the range to 20 to 68.75. The reason comes from
+`notes.cut_reason`:
+
+"Width: the range stops at 68.75, since Fusion did not rebuild the design at 72.5 (Fillet2)."
+
+The reason names the nearest failure past the cut end.
+
+#### When a near row fails
+
+If the row at 50 had failed, the next row on that side is nearer: a tenth of the way to 80, so 44 (the half and the
+quarter are not nearer than 50). The progress window says "Width at 44 mm. The last value did not work, so this one
+is nearer." The far end 80 is still tried later, since a far end that builds gives the widest span.
+
+#### The rules around the cut
+
+- Only a failure in a step the part is built from counts (`kept_ranges.part_step`): an item of the body's component, or a step
+  that built a tool body. A failure in another component cuts nothing.
+- A typed end is never cut. Then the size keeps its typed range and says "it was followed between A and B; beyond that
+  it could not be tried".
+- A size whose row changed a followed outline is cut in the same way, at the farthest value that kept the outline
+  (`outline_cut`). Reason: "Width: the range stops at 55, since Sketch3 makes a different outline at 60."
+- A size whose row left the part in several separate pieces is cut in the same way, at the farthest value tried in one
+  piece (`kept_ranges.split_cut`, `Motion.spans[size].split`, `Cut.split`). Reason: "Width: the range stops at 55, since
+  the part comes apart into 2 separate pieces in Fusion at 60." This happens when copies of a pattern or a join no
+  longer touch the part, or when a cut cuts the part in two. The app builds a part only in one piece. The reasons
+  "no value other than 40 could be copied" and "could not be measured" name such tries too. A typed end is never cut,
+  as for the other cuts.
+- A cut leaves an end that it does not move at its exact value. It does not round that end to hundredths
+  (`kept_ranges.holding_ranges_where`).
+- A size that built at no value other than its value now is not a size. Its reason: "no value other than 40 could be
+  copied, since ...".
+- A size that did not rebuild at any value tried is doubted up front: "the design does not rebuild in Fusion at 30
+  (Fillet2) or 50 (Fillet2), the nearest values tried, so it could not be measured".
+- When the person typed a wide range and the rows covered less, the size is loose: "it was followed between 20 and
+  68.75; beyond that it could not be tried".
+
+#### Cuts that come from the recipe rules
+
+Some limits come from the app, not from Fusion. The handler calls `ctx.cut(ranges, why)` with the values inside which
+the rule holds (`kept_ranges.holding_ranges`):
+
+- A taper that follows sizes must stay under 45 degrees (the app refuses a steeper one).
+- A draft or revolve angle must stay above zero. Since the default range of a small angle starts at 0, the range is
+  cut to start at 0.01 (`values._angle_above_zero`).
+- A "to entity" length must not pass its own start.
+- A coil: the wire must clear the axis, the turns must not touch each other, and the turns of coils and threads together
+  stay under 100 (3.13).
+
+When no cut can keep the rule (every size it reads has a typed range), the sizes are marked loose instead.
+
+#### An outline that would cross itself
+
+A curved outline can follow its sizes well inside the ranges, and still break in a corner of the ranges. Example: a
+leg turns with an angle, and at the shortest leg and the largest angle it crosses another leg. Then the outline would
+cross itself or lose a corner. Before, the translator marked the sizes "along a curve". Now it cuts the ranges first
+(`sketch_crossings.order_ranges`):
+
+1. For each loop, it writes checks that must stay above zero while the corners keep their order.
+2. It tests these checks over the ranges with the same settings as the whole-range check (`range_check.sweep`): every
+   mix of the range ends, the middles of the ranges, and the probe's built states inside them.
+3. It cuts the ranges to where every check holds (`kept_ranges.holding_ranges_where`).
+
+The reason says "the outline of Sketch3 would cross itself or lose a corner". The sizes are marked "along a curve"
+only when no cut works.
+
+In a parts file, a size read by several bodies gets the narrowest cut over the bodies.
+
+The first check works for corners that the translator rebuilt from curves that cross. Other outlines need a check too. A
+corner can follow a size while the curve it meets is written as a plain number, since that curve moves along a curve that
+the probe could not fit. So a second check runs for every written outline whose corners follow sizes
+(`sketch_crossings.simple_ranges`, called by `sketch_motion._crossing_cut`). It runs when `order_ranges` made no cut. It
+also runs for rectangle and circle loops, for the loops of a flat face that the probe read (3.3), and for the face that
+an emboss is trimmed to. It tests at the same settings as `order_ranges`: every mix of the range ends, the middles of the
+ranges and the states of the probe inside them that built. At each setting it works out the written corners, and it
+holds every loop to the rule that the app holds sketch loops to:
+
+- no two edges cross, touch (within 0.0001 mm) or fold back on each other;
+- an arc is drawn as 16 chords, the way the app draws it (`geometry/plane2d.py`, `arc_points`);
+- every hole stays inside its outline: every point that the app samples on the hole lies inside the outline and is
+  0.0001 mm clear of its edges.
+
+Where a loop breaks only past some values, the ranges are cut. The reason reads "the outline of Sketch3 would cross
+itself, lose a corner or have a hole reach its edge". The check costs time, so it has limits:
+
+- An outline of more than 300 points is not checked (`MAX_SIMPLE_POINTS`).
+- The far ends are cut first, and each setting is worked out only once.
+- One check is made for each outline in one translation, since the walks of one translation write the same outline
+  many times (`OutlineChecks`).
+- The checks of one translation share 20 seconds (`OUTLINE_CHECK_SECONDS`, timed as `timing.phases.outline_check`).
+  When the time is used up, the sizes behind an outline that was not checked are marked "there was no time left to
+  check that the outline of Sketch3 does not cross itself".
+
+When no shorter ranges keep the loops (they break at the values now, or a size behind them has a typed range), no cut is
+possible. The sizes that move the loops are marked loose with the crossing reason.
+
+The add-in cuts where Fusion fails and where the outline rules fail. The app cuts what is left when the file opens: it
+builds the ends of every range in its own kernel (1.12, "The range end check").
+
+### 3.3 How a face or a construction plane follows sizes
+
+Rounds, chamfers and shells pick edges and faces by measured points. An extrude can start from a face or reach to one.
+If the face moves when a size changes, a fixed point would pick the wrong face. `lib/translator/faces/follow.py` places such
+points on what the copy knows.
+
+#### A point on an earlier extrude
+
+Every written extrude is kept as a `Slab`: its sketch placement, its outline and its length. A point is placed against
+the slabs, latest first.
+
+Example. `Extrude1` draws a 40 by 20 rectangle and extrudes it by `Height` (10 mm). Later, `Fillet1` rounds the four
+top edges, and `Shell1` opens the top face.
+
+- The top face is the end face of `Extrude1`. It moves with `Height`. So `Shell1` writes
+  `{ "featureFace": "extrude_1", "which": "end" }` instead of a point. The app finds the face on the extrude itself.
+- The four top edges are exactly the edges of that end face. So `Fillet1` writes
+  `{ "featureEdges": "extrude_1", "which": "end" }`.
+- A point half way up a side wall writes its height along the extrude as a formula: `0.5 * Height`.
+- A point inside an end face moves with the face when the outline follows sizes (`inner_pick.anchor`). The add-in tries
+  the 3 nearest outline corners, nearest first. It takes the first corner whose move keeps the point inside the written
+  outline, with some room to its edges, at every size setting of the range check. When no corner works, the point
+  follows the centre of all corners. A round or a rectangle uses its centre. One corner gives a formula a few times
+  shorter than the centre of all corners, so it stays under the 300 character cap.
+- This corner rule is for a face that a step picks by a point inside an end face. An edge that a step picks inside an end
+  face is different. Such an edge comes from another step, and the add-in found no side walls that cross it. A corner
+  can carry the point off that edge when the sizes change. So an edge point always follows the centre of all corners
+  (`inner_pick.centre`). Example: a chamfer picks an edge inside the top face of a symmetric outline. When the depth
+  grows, the centre stays on the middle line and the point stays on the edge.
+- A point that no slab places "may sit on geometry that moves". Then every size the steps before it read is marked
+  loose, with the step named in the reason.
+
+#### A construction plane
+
+A step can use a construction plane: a sketch on it, an extrude that reaches to it, a mirror across it, a split along
+it. The reader records what the plane is (`read_reference.describe_plane`): an origin plane, or `made_by`,
+`definition` and `built_on`.
+
+Example. `Lift = 12 mm`. A plane is offset from the XY plane by `Lift`. A sketch on it draws a boss.
+
+- An origin plane stays. Nothing moves.
+- An offset plane: the translator finds the parameter of its distance (`sizes.offset_param`). The plane moves along its
+  normal by that distance. So the sketch origin of the boss gets `z = { "expr": "Lift" }`.
+- Fusion sometimes gives an offset plane a second parameter, a fixed extra offset. The distance is followed only where
+  it matches the measured plane.
+- A midplane follows its two bases. Chains of planes are followed too.
+- Any other plane built on the part (at an angle, through an edge, tangent, along a path) cannot be followed from its
+  definition. The probe then reads the plane at every row (`sizes.moving_reaches`, `extrude/reach_motion.py`, `target_shift`) and the
+  translator writes its measured move as a formula. Only a size the probe could not follow is marked.
+
+#### A face used as an outline
+
+An extrude or an emboss can take a flat face of the part as its outline. `lib/translator/sketch/face_outline.py` writes it in
+one of three ways:
+
+1. Followed: the probe read the face before its step at every row. Its loops and its plane are written as formulas. The
+   ranges are cut where its loops would cross itself, or where a hole of the face would leave the face
+   (`simple_ranges`, 3.2). The reason reads "the outline of the face Extrude3 starts on would cross itself, lose a
+   corner or have a hole reach its edge". The face that an emboss is trimmed to is checked the same way.
+2. Same outline: the face is the top or bottom of an earlier extrude without a taper, and nothing changed it. The
+   copy draws that extrude's outline again on a plane at the face. The outline then follows that extrude's sizes.
+3. As measured: any other face is written as numbers. The sizes the earlier steps read are marked loose. This is also
+   the result for a face that the probe did not read, for example in an export of an older add-in: the face stays as it
+   was measured, and its sizes stay loose.
+
+#### A place of another component
+
+A step can use a plane, axis or point of another component. The reader records it as a `ref` with its token. The probe
+reads it again at every row (`probe_refs.py`) and fits how far it moves (`ref_fit.py`). The translator
+(`ref_motion.py`) writes the move as a formula, or marks the sizes that act on that component when the place turns or
+was not measured.
+
+### 3.4 How a Split Body is translated
+
+A split makes new bodies. Later steps may belong to the other piece. So a split normally stops the copy. The add-in
+copies a Split Body only when the picked body comes out of it as one piece, and the other pieces stay apart from it.
+
+#### The lineage
+
+When the picked body was made by a split, its token is new at that split. The steps before the split built the body it
+was split from. `lib/capture_model/lineage.py` finds the chain: `of(capture)` gives `[(index of split, parent body)]`.
+During the walk, `Context.is_target` answers yes for the parent body before the split. The steps before the split read
+the parent's measures (`body_states`, from the reader).
+
+#### The checks
+
+`bodies/split_rules.py` (`stop_reason`, used in the walk) and `bodies/split.py` (`handle`) check:
+
+1. The split's tool was read (`data.tool`). An older export without it stops with "What this split cuts with was not
+   read. Exporting again with this version of the add-in reads it."
+2. The kept piece is among the bodies after the split.
+3. No later step changes another piece together with the part ("Fillet3 changes Body2, another piece of this split,
+   together with the part. That is not copied yet."). A later Combine that takes a piece as a tool is fine.
+4. The pieces add up to the volume of the body that was split (within 0.01 mm3 or 0.1 percent).
+
+#### A split by a plane
+
+Example. A cup is split by the YZ origin plane. The kept piece lies on the +X side. The other piece lies on the -X side.
+
+1. `_side` checks that the kept piece's box lies on one side of the plane (within 0.01 mm), and every other piece on
+   the other side.
+2. The copy removes the far side with a cut by a big box: a `toolBody` with `combine: "cut"` that holds one extrude of a
+   square on the plane, facing away from the kept piece.
+3. The square reaches far past the body (4 times the half diagonal plus 100 mm, times how much the sizes may grow the
+   part, at most 25 times). So the part stays inside the box at every size.
+4. The plane follows sizes like a mirror plane (`follow.place_plane`, see 3.3). A split by a plane offset by `Gap`
+   moves the box with `Gap`.
+
+#### A split by a body
+
+The reader measures, for each piece, whether it lies inside the tool body (`inside`, `read_split.inside`). It tries two
+ways:
+
+1. It moves a point 0.01 mm into the piece, under each of the first 16 faces of the piece, and asks the tool body with
+   `BRepBody.pointContainment`. The first face that gives an answer decides.
+2. When no face tells, it intersects a temporary copy of the piece with a temporary copy of the tool
+   (`TemporaryBRepManager`, nothing is added to the design). What is left gives the answer: 99.9 percent of the piece or
+   more means inside, and 0.1 percent or less means outside. Any other result gives no answer. A boolean that fails gives
+   no answer too (it often fails for faces that coincide, since a piece shares its split faces with the tool). A
+   piece and a tool that are seen in different coordinates (one of them through an occurrence) give no answer either.
+
+Exports of the add-in from before 0.10.6 have no `inside` at all.
+
+The translator takes the answers in `bodies/split_inside.py` (`resolve`). The kept piece outside the tool becomes a cut by
+the tool. The kept piece inside the tool becomes an intersect with the tool. The Combine code writes it
+(`combine.write_tools`). A split by a surface or a curved face stops the copy.
+
+When an answer is missing (an old export, or a read that failed), these rules hold:
+
+- A missing answer is filled only for a split into exactly two pieces. The two pieces lie on opposite sides, so the
+  answer of one piece gives the answer of the other. When neither piece has an answer, the boxes and the volumes decide
+  (`decide`). A piece whose box is not inside the box of the tool cannot lie inside it. A piece that is larger than the
+  tool (by more than 0.1 percent of the volume) cannot lie inside it either. The boxes must settle the question: when
+  both pieces could be inside, or neither, there is no answer.
+- The boxes never replace an answer that the reader gave. When the boxes and the reader disagree, there is no answer,
+  and the copy stops with "The copy could not tell which pieces of this split lie inside its tool body."
+- With three or more pieces, only the answers of the reader count. Example: a disc split by a tube leaves a core, a ring
+  inside the tube and an outer ring, so the sides are not certain from the boxes.
+- A tool of another component is not decided from boxes, since its box is in other coordinates.
+
+### 3.5 How a Combine and its tool bodies are translated
+
+A Combine joins, cuts or intersects tool bodies with the part. Each tool body is made by its own steps.
+`combine.step.handle` (`lib/translator/combine/step.py`) does this:
+
+1. It checks the operation and that the Combine changes the exported body. A Combine where this body is only a kept
+   tool writes nothing.
+2. For each tool, `tool_walk.build` walks the steps that made the tool, with the same item loop, in a child context
+   whose target is the tool. Handlers do not know they work on a tool.
+3. It decides the form:
+   - Flat: when every tool is made only of steps that add material (a new body, then joins), each tool step is written
+     onto the part with the Combine's operation. Cutting A then B removes A and B together. This form opens in older
+     app versions. For an intersect, only one tool of one step can be flat.
+   - Tool step: else each tool becomes one `toolBody` step that holds the tool's steps (recipe version 15). A tool with
+     a gap inside is always a tool step.
+   - A pattern of bodies that the Combine takes whole becomes a tool per source and one `pattern` or `mirror` step
+     (`body_copies.py`), so its count and spacing can follow sizes.
+4. It checks the volumes. A Combine that changes the part by more than its tools can give is left out ("This combine
+   changes the part by more than its tool bodies hold ...").
+5. An intersect of several tools: Fusion does not document whether it keeps what every tool holds or what any tool
+   holds. The reader tests both on temporary copies (`TemporaryBRepManager`, never added to the design) and records
+   `intersect_model`. When both give the same volume, the sizes of the tools are marked.
+
+A tool from another component is read in its own frame (the second pass, 1.6). The Combine moves its steps into the
+part's frame with the tool's place in the assembly (`tool_move`). A size that moves the tool's component follows when
+the probe measured it, else it is marked ("puts its tool at the place of Rod that turns with it").
+
+A tool that cannot be built makes the whole Combine one gap. The reason names the step that stops the tool: "The tool
+body Body3 cannot be copied: Thicken1 (thicken): ...".
+
+A tool may not hold a thread or a coil together with other steps. The recipe keeps these kinds out of a tool body
+(`RecipeKind.in_tool`, 1.9.2), since they build on the whole part. A Combine, or a pattern of bodies, whose tool walk
+wrote such a step refuses. The Combine becomes one gap with the cause `coilTool` or `threadTool`. One case is different:
+a Combine whose tool is one coil body. There the coil is written onto the part with the operation of the Combine (the
+flat form). The reader tells the handler which bodies a coil made (`data.made`), so the check "the step makes one body"
+looks at those bodies and not at every body of the component (`_writes_flat`).
+
+### 3.6 How a mirror is translated
+
+`repeat.body_copies:mirror` is the handler of every mirror item. A mirror of bodies is handled like a pattern of bodies
+(`body_copies.py`: the copies are matched to their sources by their corners). A mirror of features goes to
+`repeat.mirror` (`repeat/repeat_mirror.py`). This section is about the mirror of features and of the whole body.
+
+- A mirror of features writes a recipe `mirror` step that repeats the source steps (`of`) across the plane. The source
+  steps must be repeatable: a step that Fusion recomputes per copy (it reaches to a face, or cuts through all) is
+  refused as a source.
+- A mirror plane that sits on a face or edge of the part follows sizes (`follow.place_plane`). When the plane moves by
+  `d`, the copies move by `2 * d`.
+- A mirror of the whole body repeats every earlier step when that gives the body joined with its image
+  (`repeat_mirror_reach.py`). When it does not (a round, chamfer, shell or Move among the steps, a gap, a cut across the
+  plane, a body on both sides), everything written so far is gathered into one `toolBody` step, and the mirror repeats
+  that. A gap then stays one missing step inside the tool.
+- A mirror of a gap is left out too ("It repeats Extrude5, which is missing from the copy.").
+
+### 3.7 How a draft is translated
+
+`draft.handle` (`lib/translator/finishes/draft.py`) writes a recipe `draft` step: the faces (picked by points), the neutral plane
+and one angle.
+
+The difficulty: Fusion's API does not say which way its angle and its flip lean a face. So the copy reads it from the
+part:
+
+1. Every drafted face must lie on one side of the neutral plane. Else the draft is left out ("This draft leans faces
+   on both sides of its plane, so the way it leans cannot be checked.").
+2. The volume must change. A draft that takes material off leans the faces in on that side. One that adds material
+   leans them out. So the sign of the recipe angle comes from `volume_after < volume_before` and the side.
+3. The angle must be under 30 degrees (`MAX_ANGLE_DEG`, the app's cap). Two different angles are left out. Two angles
+   from the same formula are fine.
+4. The angle follows its parameter. Its range is cut to stay above zero and under 30 degrees, so the default range of
+   a 3 degree draft becomes about 0.01 to 29.98.
+5. The neutral plane follows sizes like a mirror plane.
+
+Example: two side walls of a 40 by 20 by 10 block are drafted by `Taper = 3` degrees about the bottom plane. The
+volume goes from 8000 to 7900 mm3. The walls lie above the plane, so the copy leans them in: `angleDeg: { "expr":
+"Taper" }`.
+
+### 3.8 How a sweep is translated
+
+`sweep.step.handle` (`lib/translator/sweep/step.py`). The path code is in `lib/translator/paths/`; the other sweep
+modules (`sweep_ends.py`, `sweep_limits.py`, `sweep_rules.py` and the rest) sit next to `step.py`. The outline must be one closed sketch outline (holes allowed). Several
+outlines become one sweep each along the same path.
+
+The path decides what is written (`paths.plan`):
+
+| Path | Written as |
+| --- | --- |
+| a straight line | an extrude of the outline (`extrude.handle`), so later rounds follow its sizes |
+| one arc or a full circle | a revolve about the arc's axis (`revolve.handle`) |
+| a chain of lines, arcs and splines in one plane | a `sweep` step with a flat path |
+| lines joined by tangent arcs in 3D | a `sweep` step with a corners path |
+| a closed chain in one plane | a `sweep` step with `closed: true` (version 16), cut open where it meets the outline's plane; sharp corners between lines are mitred |
+| any of the above with a twist, a taper or a parallel orientation | a `sweep` step with `twistDeg`, `taperDeg` or `orientation` (version 16) |
+
+The checks before writing:
+
+- The path must start on the outline, square to it, and run one way.
+- No crossing, no bend tighter than the outline (`path_checks.py`).
+- Sharp corners: see below.
+- A new body must have the volume the outline and the path give (outline area times path length; for a closed path,
+  Pappus' rule). With mitred corners, see below.
+- The end face Fusion made must lie where the path ends (`sweep_ends.py`).
+- Many settings are refused: a guide rail, a twist with a taper, part of a path, a surface sweep and others
+  (`sweep_limits.py` holds the texts).
+
+Sharp corners. A sharp corner is a place where two curves of the path meet at an angle. Fusion builds a sharp corner
+between two straight lines of a flat path as a mitre: the two straight pieces meet on the plane that halves the
+corner. A test export confirmed this for open paths too (the volume was the outline area times the path length). The
+copy does the same (`path_checks.corners_refusal`):
+
+1. A corner between two lines of a flat path, open or closed, is mitred. This is so only when the sweep does not
+   twist, does not taper and does not keep the outline direction.
+2. The corner may turn by at most 160 degrees (`MAX_MITRE_DEG`). A sharper turn has no usable mitre.
+3. A mitre needs straight path on both sides of the corner: the outline's reach across the path's plane times
+   tan(turn / 2). So a line between two corners needs room for both mitres. When a line is too short, the sweep is
+   left out.
+4. Any other sharp corner is left out with the cause `sharpCorner`: a corner next to an arc or a spline, a corner in a
+   3D path, or a corner on a sweep that twists or tapers. The hint says to round the corner with a sketch fillet.
+
+The check of the size ranges (`path_rebuilt.rebuilt_refusal(mitres=...)`) uses the same rule. The volume check counts
+each mitred corner too. For a closed path, Pappus' rule counts 2 tan(t/2) for a corner that turns by t, instead of t.
+For an open flat chain of lines with the outline beside the path, `sweep_volume._open_lines_volume` counts the same
+for the offset of the outline's centre.
+
+On a closed path, an outline that sits on a corner seam moves to the middle of the line it is square to
+(`path_closed.py`, `PathPlan.moved`). There the path is straight, so the cut that opens the ring is clean. A closed
+path with `distance_two` = 1 is the whole ring, which is Fusion's default. A twist on such a sweep is refused.
+
+Guide surfaces. A sweep can follow a guide surface. The reader records them as `guide_surfaces`
+(`SweepFeature.guideSurfaces`). A listed surface means "not copied yet" (cause `guideSurface`). Some Fusion versions
+do not give the list. Then the reader sees an `InternalValidationError` when it reads the orientation, and it cannot
+read the twist and the taper either. This mix means "likely a guide surface", and the sweep is left out with the same
+cause. The hint says to sweep along the same path without the guide surface, or to build the shape with a loft.
+
+The path follows sizes when the probe measured a path of sketch lines and arcs (`path_motion.py`). The path rules are
+then tested over the size ranges and the ranges are cut where they stop holding (`sweep_rules.py`). Any other path is
+written as measured, and the sizes behind its sketch are marked.
+
+Fusion does not document how it measures the sweep taper or which way the twist turns (`TAPER_MEANING_CONFIRMED` and
+`TWIST_SIGN_CONFIRMED` are false). So a written twist or taper gets a note that asks the person to check the shape,
+and marks its sizes.
+
+### 3.9 How a loft is translated
+
+`loft.step.handle` (`lib/translator/loft/step.py`) copies a loft through exactly two sections with free ends. Fusion joins two such sections with straight
+faces, so the recipe `loft` step is ruled. Holes are paired by the nearest centre and need the same count on both
+sides. The planes of the sections must not cross.
+
+A section can be one of three things:
+
+1. A closed sketch outline. It is written like an extrude outline, and it follows sizes.
+2. A closed flat loop of edges. The reader gives it as a path record (`Path`).
+3. A flat face of the part.
+
+The second and the third kind are written as measured (`loft/loft_sections.py`). So they do not follow sizes. The sizes of
+the steps that made them are marked as for any measured outline.
+
+A new body of two parallel outlines of straight lines must have the volume the kernel's pairing of corners gives
+(`loft/loft_volume.py`). Another volume means Fusion paired the corners another way: the loft is left out. Outlines of
+different shapes get a note.
+
+Left out: three or more sections, a point end, a curved face, an open or non-flat loop of edges, end conditions,
+rails, a centre line, a closed loft and a surface loft.
+
+### 3.10 Why a step becomes a gap or a stop
+
+The rule: a gap when the effect of the step stays on the body and the rest still reads right; a stop when the body
+after the step is unknown.
+
+A step becomes a gap (left out, recipe still written):
+
+- its type has no handler, and the reader saw it change the body (`target_changed` true): a thicken, for example;
+- it is a modelled thread or a coil that the copy cannot hold (a profile that is not a 60 degree form, a taper, a spiral,
+  a cap that is passed, a step in a tool body: see 3.12 and 3.13);
+- its handler answers a `Refusal` (an extrude with a taper on a face, a revolve axis it cannot use, a draft with two
+  angles);
+- it reaches into another component in a way the copy cannot follow (`foreign` records). An export from before 0.10.6
+  marked the part's own sketches and planes, when seen through an occurrence, as records of another component. A step
+  whose only such records are sketch outlines, planes or axes with none of the place data of the current reader is left
+  out with the cause `oldExport` and the tip to export again (`ref_motion.from_old_export`). An edge or a face record
+  carries no place data in any version, so it is never taken for old;
+- it picks faces of a gap, or may pick them (`cause: picks`);
+- it is a pattern or mirror of a gap;
+- it is a Combine whose tool cannot be built;
+- it is an extrude join that meets only material of earlier gaps, so it would float apart from the copy (1.9.3).
+
+A step stops the copy (fixed shape):
+
+- the place of the part in the assembly cannot be used, or the part comes from a linked design;
+- a step of another component or an assembly item changes the part;
+- the body cannot be followed (a new token with the same name);
+- the bodies of the step cannot be read (`bodies_after` null), or its reader failed (`read_error`);
+- Fusion shows the step in error;
+- the step splits the part or makes another body, except a Split Body that `split_rules` allows;
+- a step with no handler whose effect cannot be told (`target_changed` null);
+- a handler answers `Refusal(stops=True)` (the split handler does this);
+- the gap would come before the first written step, or inside a tool of another component;
+- there would be more than 256 gaps;
+- the recipe breaks a cap (more than 400 steps, a pattern of more than 256 copies, too deep nesting), it is too large
+  (over 8 MB), or the gaps file cannot be written.
+
+A stop that has a cause carries its hint: the `refusal` record holds it, the early warning in the dialog shows
+"Tip: ...", and the package note adds it when it fits (1.9.3).
+
+A step is passed by (skipped, no gap) when it is suppressed, a sketch, construction geometry, a step of another body
+that is never joined to the part, a Remove of another body (`target_changed` false), or a Split Face that left the body
+unchanged.
+
+### 3.11 How a pattern with copies on both sides is translated
+
+A pattern direction can be symmetric: the copies spread to both sides of the original. A recipe pattern starts at the
+original and runs one way. So `lib/translator/repeat/symmetric.py` writes a symmetric direction as two parts that both start
+at the original: a forward part and a backward part.
+
+The rule for the places, for `count` copies:
+
+- An odd count: the original is the middle copy. There are `count // 2` steps each way.
+- An even count: the original is one of the two middle copies. There are `count // 2` steps one way and one less the
+  other way. Fusion's rectangular patterns put the extra copy ahead of the original, the way the distance points
+  (`FUSION_EXTRA_SIDE = 1`). Test exports showed this at counts 4, 6 and 8.
+
+The step between copies. With a `spacing` distance, the distance is the step, as usual. With an `extent` distance, the
+distance is the reach ahead of the original. So the step is `distance / (count // 2)`, not
+`2 * distance / (count - 1)` (`repeat_lattice._extent_gaps`). Example, made up: an extent of 30 mm and 7 copies give a
+step of 30 / 3 = 10 mm. With 6 copies the step is also 10 mm, and the copy behind stops one step short.
+
+A count that follows sizes. When a size can make the count even, the side of the extra copy matters. `extra_side`
+decides it:
+
+1. When the count is even now, the measured copies show the side.
+2. When it is odd now, the copies that the probe read at tries with an even count show it (1.8, "What a state holds").
+3. Without such a try, the side Fusion was seen to use is taken (rectangular patterns only). A negative distance flips
+   that side. This flip is not confirmed in Fusion yet.
+4. When the copies at a try break the rule, or no side is known (a circular pattern without an even try), the sizes
+   that can make the count even are marked. The reason says "Pattern3 spreads copies to both sides of the first one,
+   and where Fusion puts them for an even count was not confirmed".
+
+`value_at` gives the value of the count at a try, so the copies of that try can be compared with the rule.
+
+Two more details:
+
+- The frames of the copies are in assembly space. For a part placed in the assembly, the translator first carries them
+  into the part's frame (`repeat_elements.in_component`, with `tool_items.component_frame`). The probe's reads of the
+  copies are carried the same way (`read_in_component`).
+- A direction with a distance of 0 makes copies on top of one another. Fusion keeps a count of 3 in an unused second
+  direction, for example. The translator ignores that direction and merges such copies.
+
+Circular patterns. Fusion's transforms of a symmetric circular pattern are not always right for the copies behind the
+original. So an odd count is taken as centred, but only when every copy is listed and kept (none suppressed or left
+out by number), the original is among them, and every copy turns by a whole number of steps. Else the pattern is
+refused. An even count of a symmetric circular pattern stays marked.
+
+### 3.12 How a thread and a tapped hole are translated
+
+A recipe `thread` step is a helical thread of a set form on a cylinder. It holds an axis (origin and direction), a length,
+the major diameter, the pitch, the minor diameter, whether it is internal, and the hand (written only for a left hand
+thread). The form is a 60 degree form. Fusion's metric and Unified profiles are that form.
+
+#### A cosmetic thread
+
+A cosmetic thread changes no solid. The handler writes nothing and adds the note "The thread is not copied; the exported
+shape has none either." (`hole.step.thread`). The verdict is `skipped`. When a gap is a cosmetic thread, its `finishing`
+flag is true (1.10).
+
+#### A modelled thread
+
+`read_thread.py` reads a modelled `ThreadFeature`:
+
+- the `threadInfo`: the profile name, the designation, the class, `isInternal`, `threadPitch`, the major and the minor
+  diameter and `threadAngle`;
+- `isRightHanded`, `isFullLength`, `threadLength` and `threadOffset`;
+- the faces it sits on (`inputCylindricalFaces`). For each face it gives the cylinder (origin, axis, radius), the span of
+  its end vertices along the axis, a point on the face, and whether the face looks away from the axis (a bolt) or toward
+  it (the wall of a hole);
+- after the step, `made_span`: the same span for the faces that the thread made.
+
+`docs/capture-format.md` has the exact fields. Every member is read on its own. A member that cannot be read is null, and
+the translator then leaves the thread out. It never guesses. Fusion keeps lengths in cm, and they leave the reader in mm.
+`threadAngle` is in degrees already.
+
+`hole/thread.py` (`feature`) checks these points in this order. A failed check is a refusal, so the thread is a gap:
+
+1. The profile. A given angle must be 60 degrees (within 0.01). The name must say metric or Unified. A name with acme,
+   trapezoid, whitworth, BSP, NPT, pipe, buttress, square or taper in it is refused (cause `threadProfile`).
+2. The numbers. The pitch, both diameters and the hand must be there. The pitch must be 0.2 to 10 mm (cause
+   `threadLimits`). The thread must have a usable depth.
+3. The faces. They must all be cylinders with one axis and one radius, and they must touch each other.
+4. Inside or outside. The thread info and the direction of the face must agree. The diameter must fit the cylinder: the
+   minor diameter for an internal thread, the major diameter for an external one, within 0.3 mm. This also catches a
+   unit mix-up in the read.
+5. The start. The offset must be 0. A full length thread starts at the low end of the cylinder. A partial one starts at
+   the end that the faces it made touch (`made_span`). When that cannot be told, the thread is left out.
+6. The caps. At most 8 threads in one recipe (cause `threadLimits`). A thread is refused while the walk is inside a tool
+   body.
+
+The length and the start follow the sizes that move the end faces of the cylinder (`faces/follow.py`). A size that changes
+the diameter of the cylinder is marked, since a thread fits one diameter.
+
+The recipe starts every thread at its own standard angle, and Fusion starts it somewhere else. So the step gets the note
+"The thread starts at a standard angle, not where Fusion starts it." Hand check TD1 compares the shapes.
+
+#### The turn budget
+
+Threads and coils share one cap: 100 turns in all in one recipe (`threadTurnsTotal` in the app).
+`translator/turn_budget.py` adds up the turns of every thread (its length over its pitch) and of every coil that the walk
+wrote so far, in the walk and in the walks around it, in timeline order. The step that would pass the cap is left out,
+and so is every later one (cause `threadLimits` or `coilLimit`). A thread whose length could pass the cap at some size
+keeps its number, and its sizes are marked.
+
+#### A tapped hole
+
+A Hole step with a tapped thread that is modelled is written as two things: a hole at the minor diameter of the thread,
+and an internal `thread` step for each hole position (`hole.thread.hole_spec` and `hole_threads`). Before, such a hole was
+a gap. This path is unproven until hand check TD2 passes (see the end of this part). The depth of each thread:
+
+- a through hole: measured from the entry to the end faces (`end_points`);
+- a blind hole: the depth of the hole;
+- a thread over part of the length: `thread.depth` (a parameter that can follow a size);
+- when it cannot be told whether the thread is full length, the hole is left out.
+
+A tapered tapped hole is refused ("Tapered threads are not copied yet.", cause `threadProfile`). A cosmetic tapped hole is
+still a plain hole at the drill diameter, with a note. A pattern or a mirror of a threaded hole is a gap: the `thread` kind
+has no repeat rule, so the pattern refuses with "A step of this pattern cannot be repeated."
+
+The reader tries `feature.thread`, `feature.threadInfo` and the hole itself for the thread members (`_hole_thread` in
+`read_solid.py`). The Fusion API stub says nothing about the thread of a tapped hole. So where Fusion keeps these members
+is not known. This is hand check TD2. The reading of a tapped hole with a modelled thread is read but unproven until TD2
+passes. A member that Fusion does not give reads as null, and the hole then stays a gap with a reason.
+
+#### A hole that ends at a face or at a body
+
+A Hole whose extent is "To" a face or a body is written as a blind hole of the measured depth, with a flat end only
+(`hole.step._up_to_depth`). The depth is the distance from the entry to the end point that the reader measured
+(`end_points`). All holes of the step must end at the same depth, and the end faces must be planes. A hole that ends in a
+drill point on such a face is left out with a reason. The depth follows the face or body that the hole goes up to
+(`follow.target_shift`) and the entry, as the length of an extrude up to an entity does. When the depth could be zero or
+negative at some sizes, those sizes are marked.
+
+### 3.13 How a coil is translated
+
+A coil is a wire swept along a helix. It is the recipe step `coil` (the sketch of the section of the wire, the axis, the
+pitch, the turns, the operation, and the hand when it is left). Fusion's API gives an existing coil only what every
+feature has: no type, no axis, no hand, no section and no operation. So the add-in works these out from measurements,
+and then proves that they are right.
+
+#### What the reader measures
+
+`read_coil.py` reads:
+
+- `roles` and `params`: the model parameters that the coil made, by their role text (Diameter, SectionSize, TaperAngle,
+  Revolutions, Height, Pitch). Which two of revolutions, height and pitch are there tells the type of the coil. A spiral
+  has revolutions and pitch too;
+- `volumes_before`: the bodies of the component and their volumes, with the marker before the coil;
+- `made`: the bodies that the coil made or changed, with their volumes after it;
+- `faces`, with the marker after the coil: the flat end faces (up to two, as outlines with their area), the number of
+  curved faces, and 17 sampled points along each edge of the curved faces (up to 24 edges). It is null when the faces
+  cannot be read or there are more than 8.
+
+A capture of an older add-in has no `faces`. Its coil is left out with "This coil was captured without its details.
+Export again with this version of the add-in to copy it."
+
+#### From the measurements to the step
+
+The approach: worked out from measurements, then verified. `translator/coil/step.py` does this in order:
+
+1. A taper angle that is not 0 is refused (cause `coilTaper`).
+2. The parameters must give a type: revolutions with height, revolutions with pitch, or height with pitch.
+3. Revolutions that end a half turn from where they start are refused (cause `coilHalf`). The two end faces of such a
+   coil lie in one plane, on the two sides of the axis, so they do not give the axis. A coil of height and pitch is
+   exempt, since its turns come from the measured rise. The same cause is given when the check in step 6 fails and the
+   measured turns end in a half.
+4. Two flat end faces must be there. Each must be one outline without holes, and its area must agree with the area that
+   Fusion gives. The outline is a circle, a rectangle or a polygon (a round, square or triangle wire). A wire of another
+   shape is refused with no hint. A place that cannot be worked out gets the cause `coilPlace`.
+5. The axis, the hand and the rise come from the end faces and the helical edges (`coil_fit.find_axis`). For a coil of
+   whole turns the two faces lie in one plane. The axis then runs along the line between their centres, and where it sits
+   across that line comes from a circle that is fitted to the points of a helical edge seen along the axis. Otherwise the
+   axis is where the two end planes cross. The hand follows from which way the first end face looks.
+6. The check. `coil_fit.verify` walks every sampled point back to the first turn and tests that it lies on the outline of
+   the section. This rejects a tapered coil, a section that is not on a plane through the axis, and a wrong pitch, turns,
+   hand or axis. A coil of revolutions and pitch that does not fit may be a spiral, since a spiral has the same two
+   parameters. It is refused with the cause `coilSpiral`.
+7. The operation (new body, join or cut) comes from the volumes (`coil_operation`). A body that the coil made and that was
+   not there before is a new body, and its volume must be the volume of the coil (within 0.5 percent). A body that was
+   there grows by at most the volume of the coil for a join. It shrinks for a cut, but a shrink also fits an intersect
+   that keeps a piece of the size of the coil, so only a body that stays larger than the coil can be a cut. Anything
+   else is refused (cause `coilPlace`).
+8. The caps. At most 8 coils in one recipe, at most 100 turns in one coil, and 100 turns in all with the threads (3.12,
+   "The turn budget"). Coils are copied in timeline order. From the cap on, that coil and every later one is a gap (cause
+   `coilLimit`). The turns of a coil must not touch each other.
+
+#### The values
+
+`coil_values.py` tries each formula against the number that was measured. It writes a formula only when it gives that
+number. This holds for the section size, for the place of the wire against the diameter (inside, on or outside it) and
+for the rise. When the height does not match the measured rise, the pitch and the turns are written as numbers, and the
+sizes behind them are marked (`_fixed_rise`). The taper is never followed. The ranges of the sizes are cut where the wire
+stays clear of the axis, the turns stay apart and the turns stay under the cap (`keep_inside_ranges`). When no cut keeps
+them, every value is a number and its sizes are marked.
+
+A coil is not repeatable: a pattern or a mirror of a coil is a gap. The handler writes the step with `repeatable=False`,
+and the `coil` kind has no repeat rule.
+
+## 4. Debugging
+
+### 4.1 What you need
+
+- The `.paramability` file of the export. It is a zip. Rename it to `.zip` or use `unzip -l` to see the files.
+- `report.json` from inside it. Open it in an editor that folds JSON. It can be large, since it holds the whole
+  capture and every probe state.
+- The add-in repository and Python 3.10 or newer (standard library only; `scripts/fixture_geometry.py` needs numpy).
+
+A quick way to read the main facts of a report:
+
+```bash
+unzip -p Part.paramability report.json > /tmp/my-scratch/report.json
+python3 -c "
+import json; r = json.load(open('/tmp/my-scratch/report.json'))
+print(r['outcome'], r.get('refusal'))
+for v in r['items']:
+    if v['verdict'] not in ('translated', 'skipped'):
+        print(v['index'], v['name'], v['verdict'], v.get('cause', ''), v['note'])
+for k in ('fixed', 'loose', 'cut', 'dropped'):
+    for e in (r.get('sizes') or {}).get(k, []):
+        print(k, e['name'], e['reason'])
+print(r.get('health'))
+"
+```
+
+Use your own scratch folder (`mktemp -d`), not the repository.
+
+### 4.2 How to read report.json, field by field
+
+`report.json` of one body (`plan_single_export`). Keys that do not apply are left out.
+
+| Key | What it holds | Look here when |
+| --- | --- | --- |
+| `writer` | Add-in version and Fusion version. | You compare two exports. |
+| `outcome` | `recipe` or `stepOnly` (`parts` for a several-body file). | Always first. |
+| `items` | One verdict per timeline item, in order, up to the stop. | A step is missing or has a note. |
+| `notes` | The translator's notes (also the dropped size reasons). | You want all remarks in one list. |
+| `refusal` | `{ index, name, type, reason, note?, hint? }` of the step that stopped the copy, or of a check after the walk (index null). `hint` is there when the cause of the stop has one (1.9.3). | The part is a fixed shape. |
+| `after_stop` | The diagnosis walk after a stop: `stopped_at`, `items`, `steps`. | You want every failing step, not only the first. |
+| `error` | `Type: message` of an exception in the reader or the translator. | The note says "the steps could not be read" or "could not be copied". |
+| `marker` | `{ position, count }` of the timeline marker. | Steps seem to be missing (they may be after the marker). |
+| `capture` | The full capture (section 1.6). | You check what Fusion gave for a step. |
+| `probe` | The size probe record (below). | Sizes are marked, cut or dropped. |
+| `derived` | The shadow check from the sketch graphs. Not used for the recipe. | You work on reading sketches directly. |
+| `timing` | Where the export spent its time (below). | The export is slow. |
+| `health` | How the design came out of the export (below). | The design may be changed. |
+| `parameters` | `{ listed, left_out, no_formula }`: the user parameters in the manifest, those left out (unit) and the formulas kept as numbers. | A parameter is missing in Paramability. |
+| `sizes` | `free`, `fixed`, `loose`, `cut`, `dropped` (section 1.9.5). | Always, for sizes. |
+| `gaps` | The gap records, as in `gaps.json`. | Steps were left out. |
+| `reach` | The reach read (`read`, `gaps`, `makers`, `moves`, or `error`). | A round or shell was left out "because it picks faces". |
+| `links` | Each geometry link of the body with what became of its parameter (`size`, `loose`, `fixed`, `dropped`, `formula`, `not ticked`). | A parameter of another component did not follow. |
+| `also_changes` | Unticked parameters that the discovery rows saw changing the part. | You wonder why the result says "These parameters also change this part". |
+
+A `parts` report has `parts: [ { name, outcome, items, notes, capture, probe, sizes, derived, refusal, after_stop,
+gaps, reach } ]`, and `marker`, `health`, `parameters`, `sizes`, `links` and `also_changes` at the top.
+
+#### items: the verdicts
+
+```json
+{ "index": 7, "name": "Fillet2", "type": "FilletFeature", "verdict": "leftOut", "steps": [],
+  "note": "It picks faces of Thicken1, which is missing from the copy.", "gap": "gap_7", "cause": "picks" }
+```
+
+- `verdict`: `translated`, `translatedWithNote`, `skipped`, `unsupported` (the step that stopped the copy) or
+  `leftOut` (a gap).
+- `steps`: the recipe step ids this item wrote (`fillet_7`, `round_7` and so on).
+- `note`: the reason or remark.
+- `gap`, `cause`: for `leftOut`. `cause` is `own` (its own reason), `picks` (it picks faces of a gap) or `stop` (only in
+  `after_stop`: a stop turned into a gap). This `cause` is not the cause of the hint (1.9.3). The hint is in the gap
+  record, in `gaps[]`.
+- `tool_steps`: for a Combine written with tool steps, the verdicts of the items that built the tools. Look inside
+  them when a Combine is left out: the failing step of the tool is there.
+
+#### sizes
+
+```json
+"sizes": {
+  "free": ["Width", "Wall", "Height"],
+  "fixed": [],
+  "loose": [{ "name": "Wall", "reason": "Wall may give unexpected results: it moves Sketch3 along a curve, which cannot be copied yet." }],
+  "cut": [{ "name": "Width", "reason": "Width: the range stops at 68.75, since Fusion did not rebuild the design at 72.5 (Fillet2).",
+            "words": "the range stops at 68.75", "why": "Fusion did not rebuild the design at 72.5 (Fillet2)",
+            "min": 20, "max": 68.75, "shared": false }],
+  "dropped": [{ "name": "Lid_gap", "reason": "Lid_gap is not used by any copied step, so it is not a size.", "used": false }]
+}
+```
+
+`free`, `loose` and `cut` use recipe size names. `dropped` uses Fusion names. In `dropped`, `used: true` means a copied
+step reads the parameter but the copy could not follow it. `tried: true` means the probe set it to other values and
+nothing in the part changed.
+
+#### probe
+
+| Key | Meaning |
+| --- | --- |
+| `request` | What each state read: sketch tokens, point and line tokens, parameter names, references, faces, borrowed sketches. |
+| `states` | One record per state, as `ProbeState.json()` writes it (`lib/probe/state.py`). The first has `e0: true`. Each has `values` (the sizes this row set, by Fusion name, in mm or degrees), `built`, `failed` (the first step in error when it did not build), `read` (what was read), and when they happened `start` (the read before the row), `put_back` (the read after a sketch was put back) and `again` (a row run a second time). A try where the part came apart has `pieces` (the count) and no `read`. `read.pieces` is `{ lumps, others }` (1.8). `read.patterns` holds the copies of each symmetric pattern: `{ key: { count: [n1, n2], elements } }` (3.11). |
+| `dropped` | The rows that did not build, with Fusion's error detail (`reason`: `expression_refused`, `recompute_raised`, `recompute_failed` or `new_errors`, and `items`). A try where the part came apart is listed too, with the `error` "the part came apart into N separate pieces" and no detail. |
+| `untried` | Sizes that move a sketch but got no near rows (the 64 row cap). |
+| `restore_gap_mm` | The largest difference between E0 and the read after the parameters went back. |
+| `motion` | The motion file (below). |
+| `discovery` | The discovery rows: `{ param, value, built, moved, changed, unread }`, or `{ param, moved: null, tried: false, reason }`. |
+| `after_rows` | What read differently from E0 once the rows were done and the values were back (`changed`, `unread`). A sketch named here stayed on another solution. |
+| `restore_unchecked` | Sketches the restore check could not compare, with why. |
+| `recovery` | `{ put_backs, again }`: the extra rebuilds for solver flips. |
+| `timeline` | `{ rolled, items, of, reason, suppressed, try_seconds }`: the marker roll (each try rebuilt `items` of the `of` items before the marker), why it did not roll, the "Faster tries" record (`asked`, `on`, `items`, `reason`, `left_off`) and the seconds the tries took. |
+| `time_limit` | `{ limit_seconds, hit, seconds?, left_out }`: the time limit of the tries (`null` for none), whether it stopped them, how long they had taken then, and the Fusion names of the sizes that got no try that built (1.8). |
+
+The motion file (`probe.motion`):
+
+| Key | Meaning |
+| --- | --- |
+| `values` | Key to a fitted value: `{ const, terms }` (Affine), `{ const, sum }` (Terms) or `{ stuck, cause, sketch, rest }` (Stuck). A key that is not listed did not move. |
+| `spans` | Per size the probe set: `low`, `high` (the values that built), `failed` (`[value, step]`), `split` (`[value, pieces]`, only when a row left the part in several pieces), and `kept`, `changed` when a row changed an outline. |
+| `unmeasured` | Sketch name to why the probe could not measure it. |
+| `untried` | Sizes left without rows. |
+| `timed_out` | Sizes that the time limit left without a try. They are in `untried` too. |
+| `refs` | Per measured reference key: an empty text when measured, else why not. |
+| `faces` | The outline faces that were measured. |
+| `body_moved` | Sizes that changed the body but moved nothing the probe follows. |
+| `apart` | State numbers where a sketch was solved another way, so a different outline blames no size. |
+| `flipped` | Sketches that stayed on another outline after the values went back. |
+| `box_max` | The union of the body boxes over the states (used by cuts through all). |
+| `curves` | The profiles whose sketch curves were measured. |
+
+How to use the states. To see what a size did, find the states whose `values` hold only that size. Compare their
+`read` with the E0 `read` under the same sketch token. A state with `built: false` and `failed: "Fillet2"` tells you
+that Fusion could not build that value.
+
+#### health
+
+```json
+"health": { "unrestored": [], "sketch_gap_mm": 0.0, "sketch_drift": false, "restore_unverified": false,
+            "probe": "measured", "probe_error": "", "flipped": ["Sketch3"] }
+```
+
+| Key | Meaning |
+| --- | --- |
+| `unrestored` | Parameters that could not be put back. The design is changed. |
+| `sketch_gap_mm` | How far the followed sketches are from E0 after the restore (null when not measured). |
+| `sketch_drift` | True when that gap is over 0.0001 mm. The design may be changed. |
+| `restore_unverified` | True when the probe measured, but the restore could not be compared. `unchecked` says which sketch and why ("reads another outline", "could not be read", "lies on a turned plane"). |
+| `probe` | `measured`, `not needed` (no sketch to follow) or `failed`. |
+| `probe_error` | The exception of a failed probe. |
+| `flipped` | Sketches that stayed on their other solution for a while during the tries. |
+| `steps_changed` | Timeline steps still not as at the start after the end check: `{ name, type, before, after, message, was_message?, suppressed? }`, at most 8 (`steps_more` counts the rest). `before: new` for a step not there at the start, `after: gone` for one not there now. |
+| `steps_recovered` | Steps that differed and came back by the end actions. |
+| `end_actions` | What the end check did: `marker_back`, `marker_lost`, `turned_back_on`, `full_compute`, `values_again`. |
+| `steps_unread` | The steps could not be compared. |
+| `broken` | The steps in `steps_changed` that are in error now and were not at the start (at most 5). |
+| `deferred_left` | Sketches whose compute stayed deferred after their points were moved back. |
+| `steps_worse` | True when any step that differs is worse than at the start, also one past the steps `steps_changed` lists. |
+| `left_off` | Items of the faster tries that are still off after the end check (at most 5). |
+| `sketch_gap_after_rebuild_mm` | The gap of the sketches read again after the end check rebuilt the design (1.11). |
+| `undo_dropped` | True when "Lighter on memory" made Fusion forget Undo data. Then no message sends the person to Undo. |
+
+#### timing
+
+`timing` says where the export spent its time (`lib/timing/`, `docs/capture-format.md`, "Timing"). The numbers are
+seconds, rounded to 0.01. A failure of the timing code drops the block and changes nothing else.
+
+```json
+"timing": { "total": 61.5,
+  "phases": { "step_export": 1.2, "capture": 40.1, "size_table": 0.0, "translate_first": 0.8, "reach": 0.0,
+              "probe": 15.0, "translate_final": 0.9, "restore": 0.5, "package": 0.1, "after_stop": 0.0,
+              "outline_check": 0.0 },
+  "capture": { "seconds": 40.1, "steps": 120, "cached": true, "marker_moves": { "count": 124, "seconds": 31.0 },
+               "by_type": { ... }, "by_component": { ... }, "slowest": [ ... ] },
+  "probe": { "tries": 31, "tries_seconds": 12.0, "rebuild": 10.5, "read": { "count": 40, "seconds": 1.5 },
+             "put_back": { "count": 0, "seconds": 0.0 }, "time_limit": { "limit_seconds": 600, "hit": false },
+             "try_seconds": 13.2 } }
+```
+
+| Key | Meaning |
+| --- | --- |
+| `total` | From the start of the pipeline to the moment `report.json` is made. The dialog's read before OK and the file write are not in it. |
+| `phases` | One time per stage of section 1.1. `after_stop` and `outline_check` (the check that written outlines do not cross themselves, 3.2) are already inside the translate phases. A stage that did not run is 0. |
+| `capture` | The timeline read: `cached: true` when the dialog read it before the OK click (then its time is not part of this export). `marker_moves` counts the marker moves and their time. `readers` is the time of all step readers. `placement` is the place of the picked body, read once before the walk. `tail` is the read after the walk, split in `tail_parts` (`target`, `parameters`, `links`, `graphs`). `by_type` and `by_component` add up the time per step type and per component. `slowest` lists the 10 slowest steps. A several-body export has `captures`, one per body. |
+| `probe` | `tries` (rows run), `tries_seconds` (time inside them), `rebuild` (that time without the reads: setting sizes, rebuilding, putting back), `read` and `put_back` (count and time), `read_parts` (the time of each part of the reads, with `pieces`), `time_limit` (`limit_seconds`, `hit` and, when hit, `left_out`, 1.8), `try_seconds` (the same as in `probe.timeline`). |
+| `undo` | The "Lighter on memory" record: `{ on: false }`, or `{ on, applied, steps, error }` (1.11). |
+
+The time of one step in the capture is mostly the marker move that builds it. So a step type that is slow in
+`by_type` is a step type that Fusion rebuilds slowly.
+
+#### derived
+
+The shadow check: the add-in solves each sketch from its graph (`sketch_solve`) and compares the solved values with
+what the probe read. `summary` counts the sketches and values that agree and disagree. It changes nothing in the
+export. It is useful only when you work on reading sketches without tries.
+
+### 4.3 From a note in the app to the code
+
+Every reason text in the add-in is built from fixed words plus names and numbers. To find the code that wrote a text:
+
+1. Pick a part of the text without names and numbers. From "Width: the range stops at 68.75, since Fusion did not
+   rebuild the design at 72.5 (Fillet2)." pick "did not rebuild the design".
+2. Search the add-in code:
+
+   ```bash
+   cd <add-in repo>
+   grep -rn "did not rebuild the design" ParamabilityExport/lib
+   ```
+
+3. If nothing is found, the text may be split around a `%s`. Try a shorter piece: "did not rebuild", "range stops".
+4. You find the function that builds the text (here `notes.not_rebuilt_why`, `notes.cut_words`, `notes.cut_reason`).
+   Then search who calls it: `grep -rn "not_rebuilt_why" ParamabilityExport/lib`.
+
+Where the texts live:
+
+| Text family | Module |
+| --- | --- |
+| Size reasons: "may give unexpected results", "stays fixed", "is not a size", "the range stops at", stuck causes, gap texts, fixed shape notes | `lib/translator/notes.py` |
+| Step refusals ("This draft leans faces on both sides ...") | the handler module of the step type; sweep and path texts in `sweep/sweep_limits.py` and `paths/path_limits.py` |
+| Walk stops ("The body could not be followed through the timeline.") | `lib/translator/walk.py`, `bodies/split_rules.py`, `gaps/stops.py`, `translate.py` |
+| Package notes ("12 steps copied from Fusion.", "N sizes may give unexpected results") and "Tip: " lines | `lib/export_plan/messages.py`, `lib/translator/notes.py` |
+| Hints of left-out steps and of stops ("Round the sharp corner of the path with a sketch fillet.") | `lib/capture_model/gap_hints.py` |
+| Labels of sizes ("Base cup mid extrude offset") | `lib/params/labels.py` |
+| Time limit lines ("Time spent: 2 min 10 s. About 4 min left ...") | `lib/export_plan/messages.py`, `lib/export_plan/time_limit.py` |
+| Probe reasons ("it changes a sketch and could not be tried at other values") | `lib/export_plan/probe_flow/reasons.py` |
+| Health lines ("These parameters could not be set back ...") and the box about steps left off | `lib/export_plan/health.py` |
+| Dialog, early warning ("Likely left out of the copy:") and result window | `lib/dialog_model/` |
+| Error messages of a stopped export ("Fusion could not rebuild the design for this size.") | `lib/design_edit/`, `lib/fusion_reader/step_export.py`, `commands/export_common.py` |
+
+A text that is not in the add-in comes from the Paramability app. Examples: "Range shortened.", "Kept fixed by the
+export", "N small steps are missing". Search the text of the app.
+
+The step label tells you which Fusion item a recipe step came from: the recipe step `{ "id": "round_7", "label":
+"Fillet2" }` was written for timeline index 7, named Fillet2. A gap id `gap_12` is timeline index 12. A step inside a
+tool has a prefix, for example `t9_0_extrude_4`.
+
+### 4.4 Replay an export without Fusion
+
+The capture inside `report.json` is enough to run the translator again. This is the most useful debug tool: change
+the code, translate the same capture again, compare. To check an export against many captures at once, keep them in a
+local folder and list them in `tests/local/captures.json` (see `tests/test_local_captures.py`).
+
+Put this file in your scratch folder, not in the repository:
+
+```python
+# replay_one.py: translate the capture of one export again, without sizes.
+import json, sys, zipfile
+
+ADDIN, EXPORT = sys.argv[1], sys.argv[2]
+sys.path.insert(0, ADDIN + "/ParamabilityExport")
+from lib.translator import translate
+
+if EXPORT.endswith(".json"):
+    with open(EXPORT, encoding="utf-8") as f:
+        report = json.load(f)
+else:
+    with zipfile.ZipFile(EXPORT) as z:
+        report = json.loads(z.read("report.json"))
+capture = report["capture"]          # a parts file: report["parts"][n]["capture"]
+result = translate(capture)
+for v in result.items:
+    print(v["index"], v["name"], v["verdict"], v["note"])
+print("refusal:", result.refusal)
+print("gaps:", [g["name"] for g in result.gaps])
+```
+
+Run it with `python3 -I replay_one.py <add-in repo> Part.paramability`.
+
+Without a size table every value is a number. This shows the walk: which steps are copied, left out or stop the copy,
+and why. For the sizes, also build the size table and the motion like the export did (`table_for` and `motion_for` in
+`tests/test_local_captures.py` show how).
+
+To try a change, edit the capture (a copy of it) and translate again. For example, set a step's `data.angle_deg` to
+another number, or remove a key to see what the handler does without it.
+
+### 4.5 Run the tests
+
+From the add-in repository:
+
+```bash
+python3 -m unittest discover -s tests -t .                 # the full suite
+python3 -m unittest tests.test_translate_draft             # one module
+python3 -m unittest tests.test_translate_draft.DraftTest.test_the_angle_follows_its_size   # one test
+```
+
+The full suite has about 2500 tests and takes about a minute on a laptop. Set `PYTHONDONTWRITEBYTECODE=1` if you do
+not want `__pycache__` folders (they are ignored by git anyway).
+
+Tests that help most when you debug:
+
+- `tests/test_follow_or_flag.py` translates every capture fixture with every user parameter ticked. Each parameter a
+  copied step reads must be followed, loose or dropped with a reason. A new fixture is picked up on its own.
+- `tests/test_step_kinds.py` keeps the step kind table and the readers in step.
+- `tests/test_boundary.py` checks the import table of the packages and the private names (see 2.1).
+- `tests/test_interfaces.py` checks the declared store, port and probe members (see 4.11).
+- `tests/test_put_back_order.py` holds the call order of the put back on every way an export ends (see 4.11).
+- `tests/test_pipeline.py`, `tests/test_pipeline_gaps.py` and `tests/test_parts_pipeline.py` run the whole pipeline
+  against a fake Fusion (`FakePort`, `FakePartsPort` in `tests/fakes/port.py`).
+- `tests/test_local_captures.py` covers captures saved from real designs. They stay on one machine (git-ignored
+  `tests/local/captures.json`, packages in the folder `PARAMABILITY_LOCAL_REPORTS`), and the module skips without them.
+- `tests/test_gap_hints.py` keeps the hint table and the causes of the translator in step.
+- `tests/test_undo_steps.py` covers "Lighter on memory" with a fake `Command.beginStep`.
+- `tests/test_formula_corpus.py` holds typical printing formulas, made up (a wall of `3 * 0.4 mm`, a fraction of an inch,
+  a guarded count). Each case is a set of user parameters, or a feature value that reads them. The test asks whether the
+  size table and `values.quantity` keep the formula, so that the shape follows a size that is changed in Paramability.
+  A case marked as an expected failure waits for the change that fixes that class of formula.
+- `tests/test_left_out_preview.py` covers the early list of left-out steps, `tests/test_probe_time_limit.py` the time
+  limit (the stop, the put back, the words, the progress line and the choice in the dialog), `tests/test_probe_pieces.py`
+  the count of pieces, and `tests/test_params_labels.py` the labels of the sizes.
+- `tests/test_translate_thread.py`, `tests/test_translate_coil.py` and `tests/test_capture_reader_coil.py` cover the
+  threads, the tapped holes and the coils. `tests/coil_helpers.py` builds the coil captures.
+
+Two more tools help to measure, outside the unit tests:
+
+- `docs/test-projects.md` is a set of fifteen small, typical printing projects: an electronics box with a lid, a threaded
+  jar, a hinge, a cable clip, a gear, a phone stand, a name tag, a spring, a bracket, a lamp shade and a mug, a plant pot,
+  a drawer organizer, a pen cup with a name, a lid with a centred label, and a plate with a tuned hole. Build each one in
+  Fusion (a Fusion AI assistant can do this from the first line of its text), export it as the "Export:" line says, start
+  the file name with its number (`P1_`, `P2_`), and open each file in Paramability. Then you see how many kinds of
+  projects the copy covers, and not one design. Every project uses parameters with comments and at least one
+  formula.
+- `scripts/formula_census.py` counts how the formulas of exported packages translate. Run it from the add-in root:
+  `python3 scripts/formula_census.py <folder of .paramability or .zip exports>`. For each distinct set of user
+  parameters it builds the size table the way the manifest list does (every offered parameter ticked). It counts the
+  formula parameters that become derived sizes or constants and those that stay numbers, the feature values that read a
+  size and whether they translate, and the forms that the formulas use (operators, functions, unit words, fractions). It
+  prints counts only, with the reasons masked: never a value or a name. So its output can go in a ticket. Run it before you
+  change the expression code, to see which forms real designs use.
+
+### 4.6 Add a synthetic capture test for a new case
+
+Example: you want to check what the walk does with a step type it does not copy, after a copied extrude.
+
+1. Start from a fixture close to your case. `tests/fixtures/captures/` has about 180. Small ones: `core_*.json`,
+   `extrude_plate.json`, `combine_cut.json`.
+2. Write the test in a `tests/test_translate_<topic>.py` file. Build the capture in the test with `load_capture` and a
+   small edit, so the test shows what is special:
+
+   ```python
+   import unittest
+
+   from tests import context  # noqa: F401  puts the add-in on the import path
+   from tests.translator_helpers import load_capture, left_out, stopped
+
+   from lib.translator import translate
+
+
+   def with_thicken(target_changed=True):
+       """The plate of extrude_plate, then a thicken on the part."""
+       capture = load_capture("extrude_plate")
+       capture["items"].append({
+           "index": len(capture["items"]), "name": "Thicken1", "type": "ThickenFeature", "suppressed": False,
+           "health": "ok", "message": "", "in_target_component": True,
+           "bodies_after": [{"token": capture["target"]["token"], "name": capture["target"]["name"]}],
+           "target_changed": target_changed, "data": {}})
+       return capture
+
+
+   class ThickenTest(unittest.TestCase):
+       def test_a_thicken_that_changes_the_part_is_left_out(self):
+           result = translate(with_thicken())
+           self.assertIsNotNone(left_out(result))
+           self.assertIsNone(stopped(result))
+   ```
+
+3. Assert outcomes, not wording: the recipe values, the verdicts, the loose and dropped names. Wording changes
+   often.
+4. For a case with sizes, give the capture `parameters` and a `data.params` entry, build a table
+   (`tests/test_translate_sized.py` has `table_of(capture, ["Height"])`) and call `translate(capture,
+   size_table=table)`. For sketch values, also give a motion (`tests/fixtures/motion/` or `tests/probe_helpers.py`).
+5. When you save a fixture file, run `python3 scripts/fixture_geometry.py <fixture name> --write` so its box and volume
+   are right.
+6. To make a fixture from a real export, copy the `capture` of `report.json` as it is. Keep private designs out of the
+   repository: rename and simplify, or build a small capture by hand that shows the same thing.
+
+`translate(capture, handlers={...})` lets a test replace a handler, to test the walk alone.
+
+### 4.7 The Fusion calls, and which ones are risky
+
+No tool runs Fusion. The Fusion side is checked by hand. There are two pages:
+
+- `docs/hand-checks.md` is the short page for each release. Export your usual projects and compare them with the last
+  release ("same or better"). Then do the 10-second check in Fusion after each export: the marker is back, no step is
+  newly yellow or red, the sketches look the same, and the parameters show their formulas and old values. It also has
+  a short list of small test models for cases your own projects do not cover, and the first fields of `report.json`
+  to open when something looks wrong.
+- `docs/hand-tests.md` lists every hand test, with past results. Use it only when `hand-checks.md` points to a test.
+  Its sections "Fusion calls to watch" and "Capture reader calls to watch (...)" list every Fusion call that was
+  written from the API reference and not yet confirmed on a real design. When you add a Fusion call, add it there too.
+
+Where the calls are:
+
+- `lib/fusion_reader/`: all reads (capture, probe states, reach, faces, references), the parameter store
+  (`rows.py`), the sketch keeper and the STEP export.
+- `lib/fusion_ui/`: the dialogs, the log and the message boxes.
+- `commands/`: the buttons and the flows.
+
+The calls with most risk, since they change the design or depend on Fusion's exact behavior:
+
+| Call | Where | Risk |
+| --- | --- | --- |
+| `Timeline.markerPosition` (set), `moveToEnd` | `capture.py`, `read_gap_reach.py`, `read_face.py`, `rows.py`, `design_edit/marker.py` | The marker may not go back. The code checks after every move and raises `MarkerError`. |
+| `UserParameter.expression` (set), `Design.computeAll` | `rows.py` | A parameter may not go back. `restore_parameters` tries twice, plain numbers before formulas. |
+| `TimelineObject.isSuppressed` (set) | `rows.py` (`suppress_items`) | An item may stay off. Only with "Faster tries" (on to start with). `left_off` names it, and the end check turns it on again. |
+| `Command.beginStep(makeExistingStepNonUndoable=True)` | `undo_steps.py` (through the port) | A preview call. Only with "Lighter on memory". Undo may not step back through the export. On a failed call no further call is made. |
+| `SketchPoint.move`, `Sketch.isComputeDeferred` | `sketch_keep.py` | Moves sketch points back after a solver flip. The flag goes back to its start value, read back. |
+| `TimelineObject.healthState`, `errorOrWarningMessage`, `isSuppressed` (set to False) | `rows.py` (`timeline_health`, `turn_on`) | Read at the start and end of each export; a step off at the end that was on at the start is turned on again. |
+| `Occurrences.addNewComponent`, `BRepBody.copyToComponent`, `Occurrence.deleteMe` | `step_export.py`, `temp_copy.py` | The temporary copy adds timeline items; they must all go. |
+| `Design.findEntityByToken` | everywhere in the probe and reach reads | A token may change after a rebuild. A probe sketch that does not match E0 is not followed. |
+| `Feature.faces` | `read_gap_reach.py` | May not list every face after later steps. An empty or short list counts as "reached". |
+| `TemporaryBRepManager` | `read_intersect.py`, `read_split.py` | Tests an intersect on copies: the volumes of a Combine, and which pieces of a split lie inside the tool when no face tells. It must never touch the design. A boolean that fails gives no answer. |
+| `ThreadFeature.threadInfo`, `isFullLength`, `threadLength`, `threadOffset`, `inputCylindricalFaces`; the thread of `HoleFeature` | `read_thread.py`, `read_solid.py` | The member names and the units come from the API reference. Where a tapped hole keeps its thread (`thread`, `threadInfo` or the hole itself) is not confirmed: hand check TD2. A member that is missing reads as null, and the thread is left out. |
+| `CoilFeature.faces`, `Edge.evaluator`, `ModelParameter.role`, `ModelParameter.createdBy` | `read_coil.py` | The API gives a coil no type, axis or hand. The reader takes the parameter roles, the faces and points along the edges. A member that is missing leaves the coil out. |
+| `BRepBody.lumps`, `Component.bRepBodies` | `probe_state.py` | Read at each try for the pieces of the part. Nothing is recomputed. |
+| `createForAssemblyContext`, `Occurrence.transform2` | `placement.py`, `probe_refs.py` | Places of other components. A wrong frame gives `placement.error` and a fixed shape. |
+
+Every read is wrapped in `geo.safe`, so a failed read gives null and never a guess. The risky part is the writes.
+
+### 4.8 The add-in log in Fusion
+
+`lib/fusion_ui/log.py`, `log(text)`, writes with `Application.log`. Each line starts with "Paramability export:". In
+Fusion the lines show in the Text Commands window (in recent Fusion versions: File menu, View, Show Text Commands).
+Open it before you export.
+
+What is logged: a capture that failed, a translation that failed, a probe that could not start or failed, a sketch
+put back that failed, a marker roll or suppression that failed, the reach read result, the shadow check line,
+parameters that could not be restored, steps that would not turn back on, a "Lighter on memory" call that stopped
+("keeping the tries out of Undo stopped: ..."), and the full traceback of an unexpected error. An unexpected error also shows a
+message box with the traceback (`error_box`).
+
+To debug code in Fusion: change the file, then in Scripts and Add-Ins click Stop and Run on the add-in. `stop` drops
+the add-in modules from Python's cache, so Run loads your change. Fusion can also attach a Python debugger (VS Code)
+to an add-in from the Scripts and Add-Ins dialog; see Autodesk's help for your version.
+
+### 4.9 Common failure patterns
+
+| What you see | What it looks like in report.json | Usual cause | Where to look |
+| --- | --- | --- | --- |
+| Fixed shape, note "the steps could not be read" | `outcome: stepOnly`, `error: "CaptureReadError: ..."` or another exception, often no `items` | The reader raised: a timeline group with an unread child, an exception outside `geo.safe` | the log; `capture.py` |
+| Fixed shape at a named step | `refusal` with `index` and `reason`; that item's verdict `unsupported` | A stop rule (3.10) | the reason text, grep (4.3); `after_stop` for more |
+| "The body could not be followed through the timeline." | `refusal` at a step; tokens differ in `bodies_after` around it | A step made a new body with the same name (a split, a Move with copy) | `capture.items[n].bodies_after`, `lineage.py` |
+| "More than 256 steps of this part cannot be copied." | `refusal` with index null; `after_stop.steps` lists them | Too many gaps; often one gap makes many later picks gaps | `reach`; fix the first gap |
+| A join left out with "It sits on a step that was left out" | `leftOut` verdict; the gap's `dependsOn` names the gaps it sits on | The join meets only material of gaps (1.9.3) | the first gap in `dependsOn` |
+| Many rounds left out "It may pick faces of ..." | verdicts `leftOut` with `cause: picks`; `reach.read: false` | The reach read failed or did not run | `reach.error`, the log |
+| A size is marked | `sizes.loose` with a reason | A value could not follow (3.1), a pick on moving geometry (3.3), the audit | checklist 4.10.2 |
+| A size is not a size | `sizes.dropped` | Not read by any copied step, or tried and changes nothing, or cannot follow | `used`, `tried`; `probe.motion.spans` |
+| Range too short | `sizes.cut` with `why` | A step failed in Fusion, or a sketch changed outline, or a recipe rule | checklist 4.10.3 |
+| Sketch sizes all marked "could not be tried" | `health.probe: failed`, `probe` missing | The probe failed to start or a read failed | `health.probe_error`, the log |
+| Sizes marked "it changes a sketch and could not be tried" | `probe.untried` not empty | The 64 row cap | untick sizes you do not need |
+| Strange size results after a failed try | `health.flipped`, `probe.recovery`, `probe.after_rows.changed` | A sketch with two solutions flipped | the sketch's constraints in Fusion |
+| "Check your design" in the result | `health.unrestored` or `health.sketch_drift: true` | A parameter did not go back, or a sketch did not come back | checklist 4.10.6 |
+| Slow export | `timing.phases`; many `probe.states`, `probe.timeline.rolled: false`, high `try_seconds` | Each row rebuilds the whole timeline twice | checklist 4.10.5 |
+| Sizes marked "the tries ran out of time before this size was tried" | `probe.time_limit.hit: true` and `left_out`; `probe.motion.timed_out` | The time limit of the dialog was reached | raise the limit or untick sizes (1.8) |
+| A range stops with "the part comes apart into N separate pieces" | `sizes.cut`; `probe.states` with `pieces`; `probe.dropped`; `probe.motion.spans[...].split` | Copies of a pattern or a join no longer touch the part, or a cut cuts it in two | 1.8, "What a state holds"; 3.2 |
+| A step left out with "Export again with this version of the add-in" | verdict `leftOut`; the gap has the hint | An export of an older add-in (before 0.10.6) | export again |
+| "<Part> stays a fixed shape in this file and does not change with this size." | `sizes.loose` of a `parts` report | A size also moves a part that stays a fixed shape | 1.10, "Several bodies" |
+
+### 4.10 Checklists
+
+#### 4.10.1 "A step was left out"
+
+1. In `report.json`, find the item: `items[]` with `verdict: "leftOut"`. When it is not at the top level, look in the
+   `tool_steps` of a Combine.
+2. Read `cause`:
+   - `picks`: the step was left out only because it picks faces of another gap. Go to step 5.
+   - `own`: the step has its own reason. Go on.
+3. Read `note` (the reason). Grep a piece of it (4.3) to find the handler branch that refused it.
+4. Look at the step's capture data: `capture.items[]` with the same `index`. Check that the reader gave what the
+   handler needs. A `null` or `"other"` value means Fusion did not answer: the reader could not read a member. Compare
+   with `docs/capture-format.md`, section 5, for that type.
+5. For `picks`: look at `reach`. Is `read` true? Does `makers["<index>"]` list the gap? If `read` is false, the reach
+   read failed (`reach.error`, the log), and every later picking step is left out on the safe side. If the gap is in
+   `makers`, the pick is real: fix the first gap.
+6. Look at the gap record in `gaps[]`: `after` and `before` say where it belongs; `sizes` and `looseSizes` say which
+   sizes it reads; `hint` says what the person was told to change. A gap with no `hint` has a refusal without a cause.
+   A refusal that stops the copy has its `hint` in `refusal`, when its cause has one.
+   When the advice is useful, give the refusal a cause and add a hint to `gap_hints.py` (and a row to the app's page
+   "Steps that do not copy yet").
+7. Replay the capture (4.4) with your fix. Write a test with a small capture of the case (4.6).
+8. If the type has no handler at all, read `docs/adding-a-step-type.md`.
+
+#### 4.10.2 "A size is marked" (may give unexpected results)
+
+1. Find the size in `sizes.loose`. Read the reason after "may give unexpected results". A "past 2.05" before the colon
+   means the problem starts only past that value.
+2. Find the family of the reason:
+   - A stuck cause ("moves Sketch3 along a curve", "makes a different outline", "turns the plane", "could not be read
+     at other values", "could not be tried"): the probe could not fit a sketch value. Go to step 3.
+   - "picks a point ...", "may move with it", "a face that may move": a pick or a reach on geometry the copy cannot
+     place (3.3).
+   - "<step> reads it, and the copy does not follow it": the audit. A handler did not deal with a `data.params` path.
+     This is a gap in the handler, not in the design.
+   - "it changes this part in a way the copy does not follow": the probe saw the body change in the size's own row,
+     but no followed sketch or reference moved (`probe.motion.body_moved`).
+   - "Fusion uses it only in Extrude5, a step the export could not copy": only a gap reads it. Expected.
+   - "it was followed between A and B": the rows covered less than the range.
+   - "it moves a joint": a joint reads it.
+3. For a stuck value: in `probe.motion.values`, find the keys with `stuck` that name the size. The key tells the step,
+   profile, loop and field. The `sketch` tells the sketch.
+4. In `probe.states`, find the rows that set only that size. Compare their `read` of that sketch with E0. Did the
+   outline change shape? Did the value move along a curve?
+5. Check `probe.motion.apart` and `health.flipped`: a flip may have spoiled some rows.
+6. In Fusion, look at the sketch: is it fully constrained? Does a dimension have two solutions? A fully constrained
+   sketch with clear dimensions fits much better.
+
+#### 4.10.3 "The range is cut too short"
+
+1. Find the size in `sizes.cut`. Read `why`:
+   - "Fusion did not rebuild the design at X (Step)": a try failed in Fusion.
+   - "Sketch makes a different outline at X": a try changed the outline.
+   - "the part comes apart into N separate pieces in Fusion at X": a try left the part in several pieces. Look at
+     `probe.motion.spans[<Fusion name>].split` and at the states with `pieces`. In Fusion, set that value and look at
+     the browser: does a post, or a half of the part, show as its own body?
+   - "the outline of Sketch3 would cross itself, lose a corner or have a hole reach its edge": the outline check (3.2).
+   - another text: a recipe rule (a taper near 45 degrees, an angle near zero, a length that would pass its start, a coil
+     whose wire would touch the axis).
+2. For a failure: look at `probe.motion.spans[<Fusion name>]`: `low`, `high` and `failed`. Check the step named in
+   `failed`. Is it a step of the part? (Only those cut.) Set the same value in Fusion by hand and see if that step
+   fails. If Fusion really fails there, the cut is right.
+3. Count the nearer rows. The probe has at most 24 nearer rows per export and 64 rows in all. With many sizes, some
+   get only one nearer try. Then the cut end can be far from the real limit. Untick sizes you do not need, or type the
+   range in the dialog.
+4. Check `probe.dropped` for the detail of each failed row (`reason`, `items`). `expression_refused` means Fusion did
+   not accept the value text (a unit problem), not a geometry failure.
+5. Check flips (`health.flipped`, `probe.recovery`): a row that started on the wrong solution can fail for no real
+   reason. The `again` rows protect against most of this.
+6. A typed range is never cut. If you need the full range, type it; the size then gets "followed between A and B".
+7. When `report.json` has no cut for a size but the app shows "Range shortened", the app made the cut when it opened the
+   file (1.12, "The range end check"). The message of the app names the step that fails there.
+
+#### 4.10.4 "The copy does not match"
+
+1. In the app, the Shape sizes card shows the gap between the copy and the original. Read the copy note: largest gap,
+   typical gap, and the steps the kernel left out, with the kernel's reason.
+2. Translate the capture again with your change (4.4). Compare the verdicts and the gaps with the report.
+3. In `report.json`, list the verdicts `translatedWithNote`. Their notes often say what the copy does another way
+   ("Fusion's stored direction ... turned", "a twist or taper ... check the shape", "Fusion joins the corners ... another
+   way").
+4. Check the gaps: an unfinished copy cannot match until the steps are added.
+5. Check the place: `upAxis` of the manifest, `capture.up_axis`, `capture.target.placement`. A Y up design with the wrong
+   choice in the dialog turns the recipe.
+6. Find the first step where the copy and Fusion differ. Build the recipe with the steps up to step N (edit a copy of
+   `recipe.json`, or replay a capture with later items removed) and compare the volume with `capture.items[N]
+   .target_after.volume_mm3`.
+7. Check the sizes at their current values: every formula must give the captured number. The translator checks this,
+   so a mismatch here points to the app's formula evaluation or units.
+
+#### 4.10.5 "The export is slow"
+
+1. Read `timing.phases` in `report.json`. It tells you which stage to look at. Then count the work. The capture
+   moves the marker once per timeline item (one rebuild each); it measures the body only around runs of steps of other
+   components, not inside them. Each probe row costs two rebuilds (the row and the restore). With a Fusion that has
+   `Design.modifyParameters` each is one rebuild of the steps the sizes change; without it, one per parameter and a
+   full `computeAll`; Export size choices adds one `computeAll` per size before its STEP. The reach read moves the
+   marker `reach.moves` times. A face used as an outline is read with the marker before its step, in each row that
+   may change that face; the marker stays there until the values go back, so it adds a rollback but no rebuild.
+2. Look at `probe.timeline`:
+   - `rolled: false` and a `reason`: each row rebuilt the whole timeline. The reason says why the marker could not
+     move earlier. Steps of other components after the part's last needed step never keep the marker back (a link
+     counts only for the items before the step that holds it), so a `rolled: false` on a design with many components
+     points to a joint, an unknown step type that is not a `...Feature`, or a link whose step could not be found.
+   - `items` and `of`: how many items each row rebuilt.
+   - `suppressed`: was "Faster tries" asked, did it turn items off, and how many.
+   - `try_seconds`: the time of all tries.
+3. Count `probe.states`. Up to 64 rows plus the rows run again. Fewer ticked sizes give fewer rows.
+4. Look at `probe.recovery`: many put backs mean a sketch flips often. Fix the sketch in Fusion. Look at
+   `probe.stopped` and `health.tries_stopped`: a try left a step in error with the values back, so the tries ended
+   there. The step named is the one to fix in Fusion (often a Remove or a Combine that lost its body).
+5. Look at `probe.discovery`: up to 12 rows for parameters of other components.
+6. "Faster tries" is on by default; untick it once and compare `try_seconds` with and without it.
+7. In `timing.probe`, `read_parts` splits the state reads of the tries into sketches, points, params, refs, box, pieces and
+   faces (the marker roll check and the read after the tries are not counted). A `faces` part with
+   a large time means outline face reads, each of which moves the marker before the face's step. A large `refs` part
+   points at the place of the body read at each state (`probe_refs._target_back`); it fetches only three vertices.
+8. Read `probe.time_limit`: when `hit` is true, the time limit of the dialog stopped the tries, and `left_out` names the
+   sizes that got no try (1.8).
+9. Read `timing` (4.2) first: `phases` says which stage took the time. When `capture` is large, `slowest` and
+   `by_type` name the steps Fusion rebuilds slowly. When `probe` is large, compare `rebuild` with `read`: a large
+   `read` time points to many outline face reads or borrowed sketches.
+
+#### 4.10.6 "The design is not put back"
+
+1. Read the result window section "Check your design" and `report.json` `health`.
+2. `health.steps_changed` names each step whose health differs from the start, with `before`, `after` and Fusion's
+   `message`. `end_actions` says what the add-in did about it: `full_compute` alone means a full rebuild did not
+   help, `values_again` that setting the start values again did not help either. `steps_recovered` lists the steps
+   those actions brought back. Look at the step types first: a fillet or chamfer points to a value round trip, a
+   sketch to a solver flip (check `health.flipped`), a step that was already in a warning to a risky step. A step
+   that reads worse after `full_compute` may only show a warning Fusion hides until a full rebuild: do Compute All on
+   the saved design without the add-in and compare. `steps_unread` means nothing could be compared.
+3. `health.deferred_left`: a sketch whose compute stayed deferred. Edit it and finish it, or use Undo.
+4. `health.unrestored` names parameters that did not go back. In Fusion, open the parameters and check them. Use Undo,
+   or reopen the last save.
+   When `health.undo_dropped` is true, Undo is not valid advice: "Lighter on memory" made Fusion forget Undo data. Then
+   close the design without saving and open the version saved before the export. Every message of the add-in says the
+   same in that case.
+5. `health.sketch_drift: true` with `sketch_gap_mm`: a sketch did not come back to E0. Most often a sketch with two
+   solutions stayed on the other one. Check `health.flipped` and `probe.after_rows`. With `health.probe: failed` the
+   tries ended early; the sketch was still put back once, so a drift there means the put back did not help.
+6. `health.restore_unverified` with `unchecked`: the add-in could not compare. Look at the named sketches.
+7. `probe.timeline.suppressed.left_off` and `health.left_off`: timeline items that stayed suppressed after "Faster
+   tries", also after the end check tried to turn them on. The person got a message only for the items that the end
+   check does not name already. Unsuppress them in the timeline.
+8. The timeline marker (`end_actions` has `marker_back` or `marker_lost`): the person got a message "The timeline marker could not be moved back ..." when it failed.
+   Move it by hand.
+9. Items left by the temporary copy: the export stops with "The temporary copy of the part left N steps in the
+   timeline." Delete them or use Undo.
+10. To find the cause in the code, start at `PutBack` (`export_plan/pipeline/put_back.py`, see 4.11.1). It calls
+    these, in this order: `restore` (`design_edit/restore.py`, `restore_parameters`), `end_trim` and `_end_roll`
+    (`TryTimeline.end_trim` and `TryTimeline.end` in `timeline_trim.py`), `_after_tries` (with `ProbeRun.settle` and
+    `_put_back` in `pipeline/probe_run.py`, and `SketchKeeper.put_back` in `fusion_reader/sketch_keep.py`),
+    `_settle_steps` (`settle_timeline` in `design_edit/timeline_health.py`), `_gap_after_settle`, `_warn_steps`,
+    `_warn_left_off` and `undo_steps.drop_after`. The store calls (`unsuppress_items`, `unroll_marker`) are in
+    `DesignParameterStore` (`fusion_reader/rows.py`).
+
+### 4.11 The end of an export, the interfaces, the order tests and the tolerances
+
+#### 4.11.1 Where an export ends: `PutBack`
+
+When the design is not as the person left it, the cause is in the end of the export. All of the end is in one class,
+`PutBack` (`lib/export_plan/pipeline/put_back.py`). Both pipelines (one body and several bodies) use it. Step by step:
+
+1. Open `put_back.py`. The docstring of `PutBack` lists the calls in order (see also 1.11, "The put back, in order").
+2. Find how the export ended. A made export ends in `close`. An export that stopped (an error or a cancel) ends in
+   `close_failed`. Tries that failed end in `tries_ended`.
+3. Find the `health` key in `report.json` and the member that sets it:
+
+   | `health` key | Set by |
+   | --- | --- |
+   | `unrestored` | `PutBack.restore` (it keeps the names that would not go back) |
+   | `sketch_gap_mm`, `sketch_drift` | `PutBack.settle`, from the gap read after the restore |
+   | `sketch_gap_after_rebuild_mm` | `PutBack._gap_after_settle` |
+   | `steps_changed`, `steps_recovered`, `end_actions`, `steps_unread`, `broken`, `steps_worse` | `PutBack._settle_steps` (`settle_timeline`) |
+   | `left_off` | `PutBack.left_off` (`TryTimeline.left_off`) |
+   | `deferred_left` | `PutBack.deferred_left` (`SketchKeeper.deferred_left`) |
+   | `tries_stopped` | `ProbeRun.stopped`, kept by `PutBack.tries_ended` |
+   | `undo_dropped` | `PutBack.undo_dropped` (`undo_steps.UndoSteps.record`) |
+   | `probe`, `probe_error`, `flipped`, `unchecked` | The probe. The pipeline hands them to `PutBack.health_inputs`. |
+
+4. All these go into one record, `health.HealthInputs`. `health.make_health(HealthInputs(...))` makes the `health` of
+   the report. When a key is wrong, look at the `HealthInputs` the pipeline built (`PutBack.health_inputs`), not at the
+   sentence that shows it.
+5. To see the calls an export makes on one way out, read the list of that way in `tests/test_put_back_order.py` (see
+   4.11.3).
+
+The `run_guarded` function (`commands/export_common.py`) is not the place to look for a lost value in Export for
+Paramability. It only shows the message boxes and puts the marker back once more.
+
+#### 4.11.2 The interfaces and the conformance tests
+
+Four things are declared once and checked by a test. A class that lacks a declared member fails the test. Code that
+asks for a member that is not declared fails it too. A declared member that no code asks for also fails it, so a
+declaration never keeps a dead member.
+
+| Interface | Declared in | Real classes | Fakes |
+| --- | --- | --- | --- |
+| Parameter store | `design_edit/store.py` (`ParameterStore`, `TIMELINE_CONTROLS`) | `DesignParameterStore` in `fusion_reader/rows.py` | `FakeStore`, `RollingStore`, `TrimStore` in `tests/fakes/store.py` |
+| Port of one body | `export_plan/pipeline/port.py` (`ExportPort`) | `FusionPort` in `commands/ExportForParamability/export_flow.py` | `FakePort` in `tests/fakes/port.py` |
+| Port of several bodies | `export_plan/pipeline/parts.py` (`PartsPort`) | `FusionPartsPort` in the same `export_flow.py` | `FakePartsPort` |
+| Probe | `export_plan/probe_flow/interface.py` (`Probe`) | `SizeProbe`, `ProbeGroup` | none: both real classes are pure |
+
+The test is `tests/test_interfaces.py`. It does these things:
+
+1. It checks that each real class has every declared member: the Fusion store (with the timeline controls), both Fusion
+   ports and both probes. It reads the Fusion classes with the Python parser, since they sit beside `adsk` and the test
+   cannot import them.
+2. It checks the parameters too. The Fusion classes and the shared fakes must match the declared parameters exactly:
+   names, kinds and defaults. The probes match by position, and may take extra parameters when each has a default.
+   When a call passes a keyword to a probe, that keyword must exist on both probes.
+3. It checks that each shared fake has every declared member. The shared fake stores need not have the timeline
+   controls, since a store may leave them out.
+4. It reads all of `lib/` and `commands/`, except `commands/ExportForParamability/export_flow.py` (the real port), and
+   lists every member they ask of a store, a port or a probe. It finds `store.name`, `port.name`,
+   `timeline_control(store, "name")`, and also an ask through an alias (`x = self.port`) or through `getattr` and
+   `hasattr`. Each member must be declared, and each declared member must be asked for somewhere.
+5. For the probe, each declared member is asked for by the runner or by both pipelines.
+
+When you see "missing member" from this test, you have used or added a member in one place and not in the others. The
+fix is in 4.12.
+
+#### 4.11.3 The order tests
+
+`tests/test_put_back_order.py` records the calls an export makes to put the design back: the store calls, the reads,
+the sketch keeper, the warnings, the log lines and the Undo drop. It notes each call in one list. A batch of try rows
+counts as one entry (`rows`). It runs the export once for each way an export can end. For one body these are:
+
+- a clean export, which puts everything back and then drops the last Undo step;
+- a sketch put back, an end rebuild and a step left off;
+- a step that stays changed, which gets the values again and keeps the Undo data;
+- a failed probe, which puts back after its log line;
+- a cancel, which puts back and then warns about values, steps and items;
+- tries stopped on a broken design;
+- a STEP file that fails before the tries.
+
+For several bodies the tests cover a clean export, a cancel, a failed probe and a STEP file that fails. Each test holds the expected list. When a change moves a call, the list differs and the test fails. Read the diff. A
+change that is meant to change the order must change the lists in the same commit. A change that is not meant to
+change the order, but fails here, moved a put back call by mistake. Use this test to see what a refactor did to the
+end of an export.
+
+Two other tests hold a fixed behavior in the same way: `tests/test_probe_row_schedule.py` (the row phases) and
+`tests/test_probe_state_record.py` (the `report.json` form of a probe state).
+
+#### 4.11.4 The tolerances file
+
+All the numbers that decide if two reads of the design agree are in one file: `lib/geometry/tolerances.py`. Each value
+has a one line comment that says what it compares. The values are separate names even when they are equal, so one can
+change without the others.
+
+| Name | Value | Compares |
+| --- | --- | --- |
+| `SAME_SIZE` | 1e-9 | Two values of one size are the same value (probe rows, kept ranges). |
+| `FIT_TOLERANCE` | 1e-4 | A probed value fits a model, or two fits agree (the fit, terms and series, the comparison of states). |
+| `POINT_TOLERANCE_MM` | 1e-4 | Two reads of a sketch point or of a reference point are the same point. |
+| `BODY_TOLERANCE_MM` | 1e-4 | Two reads of the box of a body agree (the capture and the probe states). |
+| `RESTORE_TOLERANCE_MM` | 1e-4 | The sketches after the put back are where they were (`health.sketch_drift`). |
+| `FLIP_TOLERANCE` | 0.05 | A followed value may be this far from E0 before the sketch counts as on another solution. |
+| `CHAIN_TOL` | 1e-4 | Curve ends closer than this are one point (outlines, loops, paths). |
+
+Use the file when a report looks like noise:
+
+- "A discovery row says a parameter changes the part, but it only moves a point by a tiny amount", or "`sketch_drift`
+  is true with a gap of about 0.0001 mm": the cause can be a tolerance that is too tight for the design, or a value
+  that is not in this file. First check which name the code uses (`grep -rn "<name>" lib`). Then compare it with the gap
+  in the report (`probe.restore_gap_mm`, `health.sketch_gap_mm`).
+- A sketch that "stayed on another solution" with a small shift: see `FLIP_TOLERANCE`. Fusion's own restore can leave up
+  to about 0.01 degrees on short lines, so the value is 0.05.
+- One local constant is not in the file: `POINT_TOLERANCE_MM = 1e-3` in `fusion_reader/placement.py` (the check of a
+  frame by three points). It has the same name as the shared one but another value.
+
+A number that decides if two reads agree does not go in a module. It goes in this file (see 4.12).
+
+### 4.12 Adding things
+
+Each of these has one declaration and one or two tests that tell you what you missed. Do the steps in this order. Run
+the named test after each.
+
+#### A new member of the parameter store, the port or the probe
+
+1. Declare the member where the interface is declared (the table in 4.11.2):
+   - a store member in `ParameterStore` (`design_edit/store.py`), or, when a design without a timeline can go on without
+     it, in `TIMELINE_CONTROLS`;
+   - a port member in `ExportPort` (`pipeline/port.py`) and `PartsPort` (`pipeline/parts.py`);
+   - a probe member in `Probe` (`probe_flow/interface.py`).
+2. Write the docstring line of the member in the same place. The docstring says what the caller can count on.
+3. Add the member to every real class: `DesignParameterStore` for a store member; `FusionPort` and `FusionPartsPort`
+   for a port member; `SizeProbe` and `ProbeGroup` for a probe member.
+4. Add it to the shared fakes: `FakeStore` (or `RollingStore` or `TrimStore` for a timeline control) in
+   `tests/fakes/store.py`, `FakePort` and `FakePartsPort` in `tests/fakes/port.py`. Give the fake an option for the
+   answers a test needs. Do not write a subclass in one test file.
+5. Run `python3 -m unittest tests.test_interfaces`. It lists the class or the call site that does not agree. A member
+   that you declare but do not use yet also fails it: add the call first, or leave the declaration out.
+
+#### A new tolerance
+
+1. Do not write the number in a module. Put it in `lib/geometry/tolerances.py` with a one line comment that says what it
+   compares.
+2. Give it its own name, also when the value equals another. One value can then change alone.
+3. Import it in the module that needs it (`from ...geometry.tolerances import NAME`). `geometry` imports no other
+   package, so every package may import it.
+
+#### A new package, or a new import between packages
+
+1. Add the package to `ALLOWED_IMPORTS` in `tests/test_boundary.py`, at the right layer, with the packages it may
+   import. A package needs more than one module.
+2. Add it to the code layout in the add-in `README.md` and to the table in 2.1 of this guide.
+3. Run `python3 -m unittest tests.test_boundary`.
+
+#### A new step type
+
+Follow `docs/adding-a-step-type.md` in the add-in repository. The short version, with the places after the refactor:
+
+1. Add one entry to the step kind table, `lib/capture_model/step_kinds.py`. A step that writes a new recipe kind also
+   needs a `RecipeKind` entry in the same file. Set `finishing` when a missing step of the type only finishes surfaces
+   (the `finishing` flag of its gap is then true, 1.10). Set `in_tool` to false, with `tool_words` and `tool_cause`, for
+   a recipe kind that must not stand in a tool body (1.9.2). For a type that is not copied, give `unsupported` and, when
+   a hint exists, `gap_cause` (1.9.3).
+2. Write the reader pair in a `lib/fusion_reader/read_*.py` module and register it in that module's `READERS` dict.
+3. Write the handler in the folder of its family under `lib/translator/` (`extrude/`, `finishes/`, `bodies/`, `sweep/`
+   and so on). Make a new folder only when no family fits, and let its `__init__.py` docstring say what it holds.
+4. Register the handler in `HANDLERS` in `lib/translator/handlers.py`, keyed by the capture type, for example
+   `"EmbossFeature": emboss.handle`. Give `unsupported` in the table entry instead while the step cannot be copied. Set
+   `repeats_sources` when the step is a pattern or a mirror.
+5. Write the tests: a capture fixture, handler tests, and a hand test entry for every new Fusion call.
+6. Run `python3 -m unittest tests.test_step_kinds`. It fails when `HANDLERS` registers a type that is not a modeling type of the table,
+   when a modeling type has neither a handler nor an `unsupported` reason, when a type name or a list of recipe kinds shows up in another module, and when a reader registers a type that the
+   table does not give to that reader module.
+
+## 5. Glossary
+
+The project uses these words in a fixed meaning. The code, the docs, `report.json` and the messages all use them.
+
+| Term | Meaning |
+| --- | --- |
+| add-in | The Fusion program in `ParamabilityExport/`. Fusion runs it from Scripts and Add-Ins. |
+| after_stop | A record in `report.json` when the copy stopped: a second walk without sizes, in which every stop is a gap and there is no cap. It names every step the copy could not hold. |
+| Affine | A fitted value `const + sum(a * parameter)`. The probe writes it in the motion file. |
+| apart | States where a sketch was solved another way. A different outline there blames no size. |
+| assembly (record) | A plane, axis or point of another component brought into the part's coordinates (`assembly: true`). The copy can follow it. |
+| audit | The check after the last walk (`audit.py`): every free size a copied step reads must be followed, or marked with a reason. |
+| bisect | Halving between the farthest value that built and the nearest that did not, to find the end of a range closely. At most 4 times per side. |
+| body measures | The box and volume of the body around each step (`target_before`, `target_after`, `target_changed`, `body_states`). |
+| body scope | What of the capture belongs to the picked body (`body_scope.py`). |
+| body_states | Per body token, the box and volume of a tool body (or a body the part was split from) around a step. |
+| borrowed sketch | A sketch of another component that a step of the part uses. |
+| capture | The plain dict of everything the reader read from the design. The only input of the translator. Format number 3. |
+| check rows | Probe rows that test a formula with sines or products (`plan.check_rows`). |
+| copy (editable copy) | In the app: the recipe built beside the original STEP shape. |
+| copy note | In the app: the record that says which shape shows and how far the copy is from the original. |
+| cosmetic gap | In the app: a missing round, chamfer, emboss or cosmetic thread. A copy missing only such steps can land shown. |
+| cut (range cut) | A free size whose range was made shorter: where Fusion did not rebuild, where a sketch changed its outline, where the part came apart into pieces, where an outline would cross itself or lose a hole, or where a recipe rule stops. The app adds cuts when it opens the file (range end check). Shown as a quiet note. |
+| derived (size) | A parameter whose value is a formula of other parameters. In the recipe, `{ expr }`. |
+| derived (report) | The shadow check that solves sketch graphs and compares them with the probe. Not used for the recipe. |
+| discovery rows | Probe rows that set an unticked parameter of another component once, only to see if the part changes. |
+| doubt | A handler's record that a value cannot follow some sizes (`ctx.doubt`). It becomes a loose, fixed or cut size. |
+| dropped | A ticked parameter that is not a size of the recipe, with a reason. |
+| E0 | The first probe read, with every value as the person left it. Every other state is compared with E0. |
+| end check | The check of every timeline step at the end of an export (`settle_timeline`): steps turned back on, a full rebuild, the start values once more. What is left goes to `health.steps_changed`. |
+| far rows | Probe rows at the ends of a size's range. |
+| favourite | A parameter that the designer starred in Fusion (`is_favorite`). Favourites are ticked first, and their rows run first. |
+| Faster tries | A dialog option: turn off timeline items of other components during the tries. On to start with. |
+| featureFace, featureEdges | Recipe picks that name an extrude's end face or edges instead of a point, so they follow its sizes. |
+| fixed | A ticked size that became a plain number, since a free size would break the recipe (a formula over 300 characters). |
+| fixed part | A body of a parts file that is saved as a fixed shape. A size that also moves it is marked loose (`fixed_parts.py`). |
+| fixed shape | A part saved as its STEP only (`stepOnly`), with the parameters as variables. |
+| flip (solver flip) | A sketch with two solutions that stays on the other one after the values go back. |
+| floating join | An extrude join that meets only material of left-out steps. It is left out too, since the copy would be in separate pieces. |
+| foreign | A record of an input that belongs to another component and cannot be followed. The step becomes a gap. |
+| free (size) | A size of the recipe that the person can change on the form. |
+| gap | A step left out of the copy. The recipe is still written. The gap records the reason, the hint, the place and the Fusion data. |
+| gap cause | The code of why a step was left out (`taperSteep`, `guideSurface` and so on). It selects the hint. |
+| gaps file | `gaps.json`: the list of gaps of a recipe (`paramability.recipeGaps`). Version 1 holds at most 16 gaps, version 2 and 3 at most 256. Version 3 adds the `finishing` flag, and the add-in writes it always. |
+| handler | The translator function for one step type: `handle(item, ctx) -> StepResult or Refusal`. |
+| health | The record of how the design came out of the export (`report.json` `health`). |
+| helper geometry | A step that does not touch the exported body. It is skipped. |
+| hint (remodel hint) | One sentence per gap that says what to change in Fusion so the step copies. It comes from the gap's cause (`gap_hints.py`). The result window shows it as "Tip: ". |
+| item | One timeline entry in the capture: index, name, type, bodies, measures, data. |
+| key | The name of one sketch value in the motion file, for example `4/p0/l0/center.0`. |
+| label | The readable text of a size on the form (`params/labels.py`): the short comment of the parameter, else its name in words. It is not the Fusion name, which stays in `Entry.label`, the messages and the manifest `parameters` list. |
+| left-out preview | The early list, in the export dialog, of the steps that the copy will probably leave out (`dialog_model/left_out_preview.py`). |
+| Lighter on memory | A dialog option, an experiment: Fusion forgets the Undo data of the tries. Off to start with. Save the design first. |
+| lineage | The chain of splits the picked body comes through (`lineage.py`). Before a split, the walk builds the body that was split. |
+| link (geometry link) | A sketch of the part tied to another component (projected, constrained or drawn on its face), or a step that uses a plane or axis of another component. |
+| loose (marked) | A free size that some value cannot follow. It stays a size, with a warning and a reason ("may give unexpected results"). |
+| marker (timeline marker) | The bar in the Fusion timeline. Fusion builds only the items before it. The export works on the design as it is at the marker. |
+| marker roll | Holding the marker earlier during the tries, so each row rebuilds fewer items. |
+| motion (motion file) | What the probe found: per key an `Affine`, `Terms` or `Stuck`, plus spans, unmeasured sketches and references. |
+| near rows | The first probe rows: each size 25 percent below and above its value. |
+| nearer rows | Probe rows nearer to the value, after a row did not build or changed an outline. At most 24 per export. |
+| note | A plain remark on a step (`ctx.note`), or a sentence in the manifest `notes`. |
+| OPTIMISTIC | The motion of the first translation: write sketch values as numbers and fix nothing for them. |
+| outline check | The check that every written outline keeps the rule of the app for sketch loops (`sketch_crossings.simple_ranges`). It cuts ranges where a loop would cross itself or a hole would leave its outline. The checks of one translation share 20 seconds. |
+| original | In the app: the STEP shape of the package. |
+| package | The `.paramability` zip: manifest, STEP, recipe, gaps, report. |
+| parts | The package kind for several bodies. |
+| pick | How a round, chamfer, shell or draft names its edges or faces: measured points (`near`), or a feature selector. |
+| pieces | The number of separate pieces the part is in at a probe state (`probe/pieces.py`). A try where the part comes apart while it was one piece at E0 counts as a try that did not build. |
+| placement | Where the body's component sits in the assembly (`target.placement`). |
+| placer, slab | What the translator keeps about each written step so that later picks on its faces can follow sizes. A slab is an extrude. |
+| port | The object through which the pipeline reaches Fusion (`FusionPort`, `FusionPartsPort`). Its members are declared in `ExportPort` and `PartsPort`. Tests use a fake (`FakePort`, `FakePartsPort`). |
+| probe (size probe) | The part of the export that sets sizes to other values, rebuilds and reads the design, and fits formulas. `SizeProbe` is the probe of one part and `ProbeGroup` the probe of several parts; both have the members of `Probe`. |
+| probe state record | `ProbeState` (`probe/state.py`): one probe state as a typed record, with its `report.json` form (`json()`, `from_json()`). |
+| put back | Moving the points of a flipped sketch back to E0 and rebuilding once. For the whole export, see `PutBack`. |
+| PutBack | The one object per export (`export_plan/pipeline/put_back.py`) that brings the design back on every way the export ends: values, suppressed items, sketches, marker, the end check and the last Undo drop. It also gives the inputs of `health`. |
+| range end check | The check that the app makes when it opens a package: it builds each end of each free size range in its own kernel and pulls an end that does not build in to the last value that does. |
+| reach | The answer of Fusion about which step made the faces a later step picks. In the capture as `reach`. |
+| read | One reading of the design at a probe row (`read_state`). |
+| reader | The `(before, after)` functions that read one step type from Fusion. |
+| recipe | The JSON list of steps the app builds in its kernel (`paramability.recipe`, version 12 to 16). |
+| ref (measured reference) | A record of a plane, axis or point of another component, with its token, so the probe can read it again. |
+| refusal | Why the copy stopped (`report.json` `refusal`), or a handler's `Refusal` (usually a gap). |
+| row (try) | One experiment of the probe: set some sizes, rebuild, read. At most 64 per export. |
+| row schedule | `RowSchedule` (`probe_flow/row_schedule.py`): the row phase of a probe (`NOT_PLANNED`, `NEAR`, `FAR`, `DONE`), the sizes its near rows tried, the nearer rows planned and whether the check rows were planned. |
+| size | A ticked user parameter that becomes a recipe size. |
+| size table | `SizeTable`: what each user parameter becomes (free, derived, constant, fixed, not offered). |
+| sketch graph | The points, curves, dimensions and constraints of a sketch, read as plain data. |
+| span | Per probed size: the lowest and highest values that built, and the values that failed. |
+| state | One probe reading with the values that were set (`probe.states`). |
+| step kind table | `STEP_TYPES` and `RECIPE_KINDS` in `capture_model/step_kinds.py`: the one list of Fusion step types and recipe step kinds. A step type names its reader module. The handlers are in `translator/handlers.py` (`HANDLERS`). |
+| stepOnly | The package kind of a fixed shape. |
+| stop | The copy ends at a step. No recipe is written; the part is a fixed shape. |
+| Stuck | A value no formula fits, with the sizes that move it and a cause (`curve`, `shape`, `turns`, `unread`, `untried`). |
+| symmetric pattern | A pattern direction whose copies spread to both sides of the original (3.11). |
+| Terms | A fitted value with angle functions or products, such as `L * cos(A)`. |
+| time limit | The time that the size tries may take before they stop (the list "Stop the size tries after", 10 minutes to start with). Sizes left without a try are marked. |
+| token | Fusion's `entityToken`: the text that names a body, sketch, face or plane. Used to follow and find entities. |
+| tolerances | `geometry/tolerances.py`: the numbers that decide if two reads of the design agree (`SAME_SIZE`, `FIT_TOLERANCE`, `POINT_TOLERANCE_MM`, `BODY_TOLERANCE_MM`, `RESTORE_TOLERANCE_MM`, `FLIP_TOLERANCE`, `CHAIN_TOL`). |
+| tool body | A body that a Combine joins, cuts or intersects with the part. |
+| toolBody (step) | A recipe step (version 15) that holds the steps of a tool body. |
+| translator | The pure Python code that turns a capture into a recipe (`lib/translator/`). |
+| turn budget | The 100 turns that threads and coils share in one recipe (`translator/turn_budget.py`). |
+| up axis | Z up or Y up. The recipe is always Z up; a Y up design is turned. |
+| upfront doubt | A size marked before the walk (a joint, sketch text, a size that changes the body in a way the copy does not follow). |
+| valueRows | The package kind of "Export size choices": fixed shapes as a dropdown. |
+| verdict | The outcome per item: `translated`, `translatedWithNote`, `skipped`, `unsupported`, `leftOut`. |
+| walk | One pass of the item loop over the capture. One translation walks many times. |

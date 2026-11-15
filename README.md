@@ -83,6 +83,7 @@ or if an error occurs.
 | `docs/user-guide.md` | All dialogs, the result window, several bodies, steps that the copy leaves out |
 | `docs/limits.md` | What the copy can and cannot do, step by step |
 | `docs/development.md` | Code layout and tests |
+| `docs/developer-guide.md` | How an export works step by step, the code map, worked examples, how to debug with `report.json` |
 | `docs/capture-format.md`, `docs/expressions.md`, `docs/recipe-gaps.md` | File formats and how formulas are copied |
 | `docs/adding-a-step-type.md` | How to copy one more kind of Fusion step |
 | `docs/hand-checks.md`, `docs/hand-tests.md`, `docs/test-projects.md` | Checks by hand in Fusion |
