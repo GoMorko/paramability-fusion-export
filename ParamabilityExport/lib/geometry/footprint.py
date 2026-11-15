@@ -5,6 +5,8 @@ ellipses are measured on a fine polyline, free curves on their dense samples.
 """
 import math
 
+from .plane2d import to_segment as _to_segment
+
 CORNER_TOL = 1e-6
 ELLIPSE_SEGMENTS = 720
 ARC_SEGMENTS = 64
@@ -12,15 +14,6 @@ ARC_SEGMENTS = 64
 
 def _dist(a, b):
     return math.hypot(a[0] - b[0], a[1] - b[1])
-
-
-def _to_segment(p, a, b):
-    dx, dy = b[0] - a[0], b[1] - a[1]
-    size = dx * dx + dy * dy
-    if size <= 0:
-        return _dist(p, a)
-    t = max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / size))
-    return _dist(p, [a[0] + t * dx, a[1] + t * dy])
 
 
 def _to_polyline(p, points):

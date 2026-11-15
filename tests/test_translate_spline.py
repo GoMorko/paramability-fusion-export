@@ -7,6 +7,7 @@ from unittest import mock
 from tests import context  # noqa: F401
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
 
+from lib.geometry.plane2d import to_segment
 from lib.params import size_table
 from lib.probe import build
 from lib.translator import translate
@@ -85,7 +86,7 @@ class SplineCopyTest(unittest.TestCase):
 
 
 def _gap(p, a, b):
-    return spline_fit._to_segment(p, a, b)
+    return to_segment(p, a, b)
 
 
 class SplineRefusalTest(unittest.TestCase):

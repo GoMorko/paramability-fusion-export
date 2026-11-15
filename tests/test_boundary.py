@@ -37,7 +37,6 @@ PRIVATE_REACHES_IN_TESTS = {
     "test_translate_follow.py": {"_fix_long_formulas"},
     "test_translate_moved_faces.py": {"_walk"},
     "test_translate_sized.py": {"_gives_whole_numbers"},
-    "test_translate_spline.py": {"_to_segment"},
     "test_translate_sweep.py": {"_sweep_version"},
     "test_translate_sweep_limits.py": {"_scaled_volume"},
     "test_translate_text.py": {"_fit"},

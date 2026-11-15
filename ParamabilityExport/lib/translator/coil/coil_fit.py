@@ -14,6 +14,7 @@ rejects a tapered coil, a section that is not on a plane through the axis, and a
 import math
 
 from ...geometry import vec
+from ...geometry.plane2d import to_ring
 from ..result import Refusal
 from . import coil_limits as limits
 from .coil_section import outline, outline_3d
@@ -138,17 +139,6 @@ def find_axis(start, end, edges):
             "hand": "right" if lean > 0 else "left"}
 
 
-def _boundary_distance(r, h, section):
-    """How far the point (r, h) lies from the closed polyline `section`."""
-    best = math.inf
-    for a, b in zip(section, section[1:] + section[:1]):
-        dx, dy = b[0] - a[0], b[1] - a[1]
-        size = dx * dx + dy * dy
-        t = 0.0 if size == 0 else max(0.0, min(1.0, ((r - a[0]) * dx + (h - a[1]) * dy) / size))
-        best = min(best, math.hypot(r - a[0] - t * dx, h - a[1] - t * dy))
-    return best
-
-
 def _section(axis, start):
     """The outline of the first end face as (r, h) points: outward from the axis and along it."""
     return [[vec.dot(vec.sub(p, axis["point"]), axis["radial"]), vec.dot(vec.sub(p, axis["point"]), axis["dir"])]
@@ -184,7 +174,7 @@ def verify(axis, start, end, edges, pitch, turns):
         theta = sign * math.atan2(vec.dot(across, third), vec.dot(across, axis["radial"]))
         first = math.ceil((-MARGIN - theta) / (2.0 * math.pi))
         last = math.floor((total + MARGIN - theta) / (2.0 * math.pi))
-        if not any(_boundary_distance(r, h - pitch * (theta + 2.0 * math.pi * k) / (2.0 * math.pi), section) <= tolerance
+        if not any(to_ring((r, h - pitch * (theta + 2.0 * math.pi * k) / (2.0 * math.pi)), section) <= tolerance
                    for k in range(first, last + 1)):
             return False
     return True

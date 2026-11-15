@@ -19,6 +19,7 @@ could not fit) can pass that curve inside the ranges.
 """
 import math
 
+from ...geometry.plane2d import ARC_CHORDS, arc_points, inside_ring, to_ring, to_segment
 from ...geometry.vec import POINT_TOL
 from ...params.expressions.errors import ExpressionError
 from ...params.expressions.formula import parse_formula
@@ -33,7 +34,6 @@ ORDER_STEPS = 20  # halvings that find where a range stops keeping the order: a 
 _FAILURES = (ExpressionError, ValueError, ZeroDivisionError, OverflowError)
 TURN_TOL = 1e-9
 LEAST = 1e-9
-ARC_SAMPLES = 16  # chords the app draws an arc with when it checks a loop (cad-kernel sketchGeometry.ts)
 MAX_SIMPLE_POINTS = 400  # loops with more points than this are not checked (the check grows with their square)
 TOUCH_MM = 1e-4  # edges this close count as touching; above the app's own limit, so a cut end keeps clear of it
 
@@ -371,30 +371,13 @@ def _written(value, number, table):
     return float(number), ()
 
 
-def _arc_points(a, m, b):
-    """Points along the arc from `a` through `m` to `b` after `a`, `b` last, as the app samples it (`ARC_SAMPLES`
-    chords); just `b` when the three line up."""
-    d = 2.0 * (a[0] * (m[1] - b[1]) + m[0] * (b[1] - a[1]) + b[0] * (a[1] - m[1]))
-    if abs(d) <= 1e-12:
-        return [b]
-    sq = [p[0] * p[0] + p[1] * p[1] for p in (a, m, b)]
-    cx = (sq[0] * (m[1] - b[1]) + sq[1] * (b[1] - a[1]) + sq[2] * (a[1] - m[1])) / d
-    cy = (sq[0] * (b[0] - m[0]) + sq[1] * (a[0] - b[0]) + sq[2] * (m[0] - a[0])) / d
-    r = math.hypot(a[0] - cx, a[1] - cy)
-    t0, t1 = math.atan2(a[1] - cy, a[0] - cx), math.atan2(b[1] - cy, b[0] - cx)
-    ccw = (m[0] - a[0]) * (b[1] - m[1]) - (m[1] - a[1]) * (b[0] - m[0]) > 0
-    turn = (t1 - t0) % (2 * math.pi) if ccw else -((t0 - t1) % (2 * math.pi))
-    return [(cx + r * math.cos(t0 + turn * i / ARC_SAMPLES), cy + r * math.sin(t0 + turn * i / ARC_SAMPLES))
-            for i in range(1, ARC_SAMPLES)] + [b]
-
-
 def _loop_points(chain_points):
     """The points of one closed loop from `(point, is a middle point)` along it, arcs sampled as the app does."""
     pts, at = [chain_points[0][0]], 1
     while at < len(chain_points):
         point, middle = chain_points[at]
         if middle and at + 1 < len(chain_points):
-            pts += _arc_points(pts[-1], point, chain_points[at + 1][0])
+            pts += arc_points(pts[-1], point, chain_points[at + 1][0])[1:]
             at += 2
             continue
         pts.append(point)
@@ -410,19 +393,12 @@ def _off(p, a, b):
     return ((b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])) / length if length > 0 else 0.0
 
 
-def _to_segment(p, a, b):
-    dx, dy = b[0] - a[0], b[1] - a[1]
-    length2 = dx * dx + dy * dy
-    t = min(1.0, max(0.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / length2)) if length2 > 0 else 0.0
-    return math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy))
-
-
 def _meet(e, f, tol):
     (a, b), (c, d) = e, f
     sides = (_off(c, a, b), _off(d, a, b), _off(a, c, d), _off(b, c, d))
     if all(abs(v) > tol for v in sides) and sides[0] * sides[1] < 0 and sides[2] * sides[3] < 0:
         return True
-    return any(_to_segment(p, x, y) <= tol for p, x, y in ((c, a, b), (d, a, b), (a, c, d), (b, c, d)))
+    return any(to_segment(p, x, y) <= tol for p, x, y in ((c, a, b), (d, a, b), (a, c, d), (b, c, d)))
 
 
 def _crossing(points):
@@ -453,23 +429,15 @@ def _ring_chain(loop, raw_loop, sketch):
 
 
 def _circle_points(centre, radius):
-    """The points the app traces a circle with: four times `ARC_SAMPLES` of them."""
-    steps = 4 * ARC_SAMPLES
+    """The points the app traces a circle with: four times `ARC_CHORDS` of them."""
+    steps = 4 * ARC_CHORDS
     return [(centre[0] + radius * math.cos(2 * math.pi * i / steps),
              centre[1] + radius * math.sin(2 * math.pi * i / steps)) for i in range(steps)]
 
 
 def _inside_ring(point, ring):
     """True when `point` lies inside the closed polygon `ring` and farther than `TOUCH_MM` from every edge."""
-    inside = False
-    for i, a in enumerate(ring):
-        b = ring[i - 1]
-        if _to_segment(point, a, b) <= TOUCH_MM:
-            return False
-        if (a[1] > point[1]) != (b[1] > point[1]) and \
-                point[0] < (b[0] - a[0]) * (point[1] - a[1]) / (b[1] - a[1]) + a[0]:
-            inside = not inside
-    return inside
+    return to_ring(point, ring) > TOUCH_MM and inside_ring(point, ring)
 
 
 def _holes_inside(rings):
@@ -506,7 +474,7 @@ def simple_ranges(table, loops, raw_loops, motion=None, sketch=""):
         return {}
     reads = list(dict.fromkeys(r for _, found in values for r in found))
     arcs = sum(1 for chain in chains for _, middle in chain if middle)
-    size = sum(len(chain) for chain in chains) + arcs * ARC_SAMPLES + len(circles) * 4 * ARC_SAMPLES
+    size = sum(len(chain) for chain in chains) + arcs * ARC_CHORDS + len(circles) * 4 * ARC_CHORDS
     if not reads or size > MAX_SIMPLE_POINTS:
         return {}
     states = _states(table, motion)

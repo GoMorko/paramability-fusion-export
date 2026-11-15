@@ -16,6 +16,8 @@ and gets points near it.
 import math
 from functools import lru_cache
 
+from ...geometry.plane2d import to_segment
+
 TOLERANCE_MM = 0.005   # the app's own sampling floor for a spline outline
 MAX_THROUGH = 64       # `through` points of one segment (recipe cap)
 MIN_SPAN = 1e-9
@@ -171,13 +173,6 @@ def interpolate(points):
 
 # ---- choosing the points -----------------------------------------------------------------------------------------
 
-def _to_segment(p, a, b):
-    dx, dy = b[0] - a[0], b[1] - a[1]
-    size = dx * dx + dy * dy
-    t = 0.0 if size <= 0 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / size))
-    return math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy)
-
-
 _BLOCK = 8   # segments per bounding box in a `_Line`
 
 
@@ -323,7 +318,7 @@ def _run(dense):
         if curve is None:
             return None
         if len(chosen) <= 2:
-            gaps = [_to_segment(p, dense[0], dense[last]) for p in dense]
+            gaps = [to_segment(p, dense[0], dense[last]) for p in dense]
         else:
             gaps = _deviations(dense, chosen, curve, worst_only=True)
         added = _worst_per_span(gaps, chosen)
@@ -398,7 +393,7 @@ def max_error(samples, pieces):
         final = number == len(pieces) - 1
         if len(piece) == 2:
             end = len(dense) - 1 if final else _index_of(dense, piece[1], start)
-            worst = max([worst] + [_to_segment(p, piece[0], piece[1]) for p in dense[start:end + 1]])
+            worst = max([worst] + [to_segment(p, piece[0], piece[1]) for p in dense[start:end + 1]])
             start = end
             continue
         end = len(dense) - 1 if final else _index_of(dense, piece[-1], start)
