@@ -54,6 +54,18 @@ class TranslateTest(unittest.TestCase):
         self.assertEqual((render(t.node), t.dim), ("ceil(w / 42)", SCALAR))
         self.assertEqual(formula("n rad", SIZES), "n * 180 / pi()")
 
+    def test_a_unit_after_a_fraction_of_numbers_applies_to_the_fraction(self):
+        cases = {"3/8 in": "9.525", "-3/8 in": "-9.525", "(3/8) in": "9.525", "w + 1/8 in": "w + 3.175",
+                 "1/16 in * 2": "1.5875 * 2", "3/8 in / 2": "9.525 / 2"}
+        self.assertEqual({text: formula(text, SIZES) for text in cases}, cases)
+        self.assertEqual(translate("1/4 in", SIZES).dim, LENGTH)
+
+    def test_a_unit_after_another_division_binds_to_its_divisor(self):
+        self.assertEqual(formula("w / 2 mm", SIZES), "w / 2")
+        self.assertEqual(translate("w / 2 mm", SIZES).dim, SCALAR)
+        self.assertEqual(formula("1 / 2 / 4 in", SIZES), "1 / 2 / 101.6")
+        self.assertEqual(formula("2 mm / 8 in", SIZES), "2 / 203.2")
+
     def test_caret_and_percent(self):
         self.assertEqual(formula("n ^ 2", SIZES), "pow(n, 2)")
         self.assertEqual(translate("w ^ 2 / mm", SIZES).dim, LENGTH)

@@ -27,7 +27,9 @@ Sources: the Fusion help pages "Parameters reference" (operators, constants, log
 ## Units
 
 A unit word after any operand multiplies it: `2 mm`, `500mm`, `(a + b) mm`, `w mm`. It binds to that operand only,
-so `w / 42 mm` is `w / (42 mm)`. A unit word on its own is 1 of that unit: `w / mm` is `w`, `w / in` is `w / 25.4`.
+so `w / 42 mm` is `w / (42 mm)`. The one exception is a fraction of two plain numbers: `3/8 in` is `(3/8) in`, three
+eighths of an inch, so inch fractions read the way they are written (`Width + 1/8 in`). A unit word on its own is 1 of
+that unit: `w / mm` is `w`, `w / in` is `w / 25.4`.
 After a value, the unit is matched without case (`2 MM`); on its own it must match exactly, so a parameter named `M`
 is not taken for metres.
 

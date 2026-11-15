@@ -55,6 +55,27 @@ def tokenize(text):
 # Parse tree: ("num", v), ("name", s), ("unitword", w), ("unit", a, w), ("const", s), ("neg", a), ("not", a),
 # ("bin", op, a, b) for + - * / % ^, ("cmp", op, a, b), ("logic", op, a, b), ("call", f, args)
 
+def _is_number(node):
+    """A number literal, possibly negated."""
+    return node[0] == "num" or (node[0] == "neg" and node[1][0] == "num")
+
+
+def _fraction_unit(left, right):
+    """The fraction `left / right` with the divisor's unit words moved onto the whole fraction (`3/8 in` is three
+    eighths of an inch), when both are number literals and the divisor carries unit words; else None. A unit word after
+    any other division binds to its divisor only (`w / 2 mm`)."""
+    words, inner = [], right
+    while inner[0] == "unit":
+        words.append(inner[2])
+        inner = inner[1]
+    if not words or inner[0] != "num":
+        return None
+    node = ("bin", "/", left, inner)
+    for word in reversed(words):
+        node = ("unit", node, word)
+    return node
+
+
 class _Parser:
     def __init__(self, tokens):
         self.t = tokens
@@ -127,7 +148,9 @@ class _Parser:
         node = self.unary()
         while self.is_op("*", "/", "%"):
             op = self.take()[1]
-            node = ("bin", op, node, self.unary())
+            right = self.unary()
+            fraction = _fraction_unit(node, right) if op == "/" and _is_number(node) else None
+            node = fraction or ("bin", op, node, right)
         return node
 
     def unary(self):

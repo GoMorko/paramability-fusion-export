@@ -120,7 +120,6 @@ class FormulaCorpusTest(unittest.TestCase):
         self.assertTrue(q.sized)
         self.assertEqual(ctx.doubts, [])
 
-    @unittest.expectedFailure
     def test_inch_fraction_with_a_unit_word_follows_its_size(self):
         table = table_of(INCH, ["Width"], unit="in")
         self.assertEqual(entry_state(table, "Outer"), "derived")
