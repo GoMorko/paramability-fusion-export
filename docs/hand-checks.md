@@ -107,6 +107,16 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
    ScaleFeature, ReplaceFaceFeature, RibFeature, WebFeature, PathPatternFeature, BoundaryFillFeature and (surface
    Offset) OffsetFeature; any other name gets the generic reason.
 
+5b. CC5, a lid that follows a box not in the file. Make component Box with user parameter `Width`. In component Lid,
+   sketch on the box top face, project the box outline, offset it 0.2 mm inwards and extrude 3 mm.
+   Export: export the Lid alone, tick `Width`. The notes say the part follows the sizes of Box. Export Box and Lid
+   together: that note is gone, and changing `Width` in Paramability changes both parts.
+
+5c. CC1, a cut from the top level. Make components Box and Lid (a box 80 x 60 x 30 mm, a lid 80 x 60 x 3 mm on top).
+   With the top level active, sketch two 3 mm circles on the lid top and cut them through both bodies.
+   Export: export the Lid. The copy stops at the cut with "changes this part from another component" and a tip to
+   move the step into the part's component or export both parts together.
+
 6. AS1, steps after a stop. Extrude a box, split it with the curved face of a cylinder body and remove the outer
    piece, then add a coil joined to the box.
    Export: the box is saved as a fixed shape with the split as the reason, `after_stop` names the split and the

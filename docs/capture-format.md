@@ -1435,6 +1435,18 @@ or belongs to the root is read in the root's coordinates. The reader brings it i
 of another component loses `entity`, `sketch_token` and `sketch` (the probe follows only the target's own sketch
 lines); the sketch is named in its `ref`.
 
+A step whose only foreign records are sketch outlines, planes or axes with none of that place data (`component`,
+`placement`, `ref`, `assembly`) comes from an add-in before 0.10.6, which marked the part's own sketches and planes seen
+through an occurrence as foreign. The translator leaves such a step out with the cause `oldExport` and the tip to export
+again (`ref_motion.from_old_export`). Edges and faces carry no place data in any version, so they are never taken for
+old.
+
+The translator also records which other components' sizes the copy follows (`TranslateResult.follows_components`,
+`{ token, name }` each): a measured reference or a borrowed outline that moves with a size, and a sketch tied to a
+component through projected geometry that the probe saw move. Steps inside a tool body walk do not add to it. A single
+export names them in a note ("This part follows the sizes of Cover. Export both together so they change together.");
+in a parts file a component whose body is among the parts is left out.
+
 ### Measured references (`ref`)
 
 An entity of another component that a step uses (the face or plane an extrude starts from or reaches to, a mirror

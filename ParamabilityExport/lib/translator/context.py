@@ -40,6 +40,7 @@ class Context:
     doubts: the `result.Doubt` records that count for the walk, in order (`doubt`, `commit`). `depends` and
       `must_fix` read them by size; the driver turns the sizes of `must_fix` into fixed numbers and walks again.
     copied_items: the capture items whose steps are part of the recipe (the audit reads the sizes behind them).
+    follows: `(token, name)` of the other components whose sizes the written steps follow (`follow_component`).
     asked: `(item index, params path)` of every value the handlers of the copied items dealt with (`ask`).
     placers: the placers of the steps written so far, in the order they were made (faces/placer.py), for picks and reaches
       that follow sizes. The placer makers of each step's `Entry` add them (`add_placer`).
@@ -81,6 +82,7 @@ class Context:
         self.used_tools = set()
         self.entries_by_index = {}
         self.copied_items = []
+        self.follows = set()
         self.asked = set()
         self.not_repeatable = set()
         # item index of a round drawn into an earlier extrude's outline (`finish._slot_outline`) -> that step's id
@@ -142,6 +144,15 @@ class Context:
         record = Doubt(names, why, self.current.get("index") if self.current else None, fixed, cut)
         (self._recordings[-1] if self._recordings else self).doubts.append(record)
 
+    def follow_component(self, component):
+        """Record that a value follows the sizes of another component: `component` is its `{ token, name }` record or
+        its name. Recorded like `doubt`, so it counts only when the handler's steps are written."""
+        if isinstance(component, str):
+            component = {"name": component}
+        if isinstance(component, dict) and (component.get("name") or component.get("token")):
+            (self._recordings[-1] if self._recordings else self).follows.add(
+                (component.get("token") or "", component.get("name") or ""))
+
     def doubted(self):
         """Fusion names of the sizes marked so far (a doubt without a cut), in this handler and in the walk."""
         records = self.doubts + (self._recordings[-1].doubts if self._recordings else [])
@@ -186,6 +197,7 @@ class Context:
         and notes. A handler tries one way to follow a value this way and keeps it only when it worked."""
         here = self._recordings[-1] if self._recordings else self
         here.asked |= recorded.asked
+        here.follows |= recorded.follows
         if doubts:
             here.doubts.extend(recorded.doubts)
             if self._recordings:
@@ -195,6 +207,7 @@ class Context:
         """The steps of `result` are part of the recipe: its doubts and the items of other bodies it carries count."""
         self.doubts.extend(result.doubts)
         self.asked |= result.asked
+        self.follows |= result.follows
         self.copied_items.extend(result.items)
         self.gaps.extend(result.gaps)
 

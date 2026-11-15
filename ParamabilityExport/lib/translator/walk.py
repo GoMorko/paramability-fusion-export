@@ -36,17 +36,13 @@ def _label(item):
     return wording.step_label(item.get("name"), item.get("type")) or "A step"
 
 
-# Lists of the bodies a step takes or makes. A body of another component in one of them has its own rules.
-_BODY_LISTS = ("participants", "tools", "sources", "source_bodies", "result_bodies", "bodies", "pieces")
-
-
 def is_foreign(node):
     """A record of the step's data marked `foreign` by the reader: it belongs to another component. The bodies a step
     lists are left to their own rules."""
     if isinstance(node, dict):
         if node.get("foreign") is True:
             return True
-        return any(is_foreign(v) for k, v in node.items() if k not in _BODY_LISTS)
+        return any(is_foreign(v) for k, v in node.items() if k not in ref_motion.BODY_LISTS)
     if isinstance(node, list):
         return any(is_foreign(v) for v in node)
     return False
@@ -143,6 +139,7 @@ def run_handler(handler, item, ctx):
         outcome.doubts[:0] = recorded.doubts
         outcome.notes[:0] = recorded.notes
         outcome.asked |= recorded.asked
+        outcome.follows |= recorded.follows
     return outcome
 
 
@@ -304,10 +301,16 @@ def walk_items(ctx, result):
         with ctx.recording() as brought:
             item = ctx.current = ref_motion.bring_in(borrowed.bring_in(item, ctx))
         if is_foreign(_data(item)):
-            if not leave_out(item, ref_motion.why_foreign(item)
-                             or "This step reaches into another component, which is not copied yet.",
-                             [gap.id for gap in picked], wording.reaches_component_note(_label(item)),
-                             cause=gap_hints.OTHER_COMPONENT):
+            if ref_motion.from_old_export(item):
+                reason, note, cause = (
+                    "This step reaches into another component, or was read by an older version of the add-in "
+                    "that could not tell its own geometry apart. Export again with this version.",
+                    wording.old_export_note(_label(item)), gap_hints.OLD_EXPORT)
+            else:
+                reason = (ref_motion.why_foreign(item)
+                          or "This step reaches into another component, which is not copied yet.")
+                note, cause = wording.reaches_component_note(_label(item)), gap_hints.OTHER_COMPONENT
+            if not leave_out(item, reason, [gap.id for gap in picked], note, cause=cause):
                 return False
             made_in_component = True
             return None
@@ -337,6 +340,7 @@ def walk_items(ctx, result):
                 return False
             return None
         ctx.doubts.extend(brought.doubts + construction.doubts)
+        ctx.follows |= brought.follows
         ctx.commit(outcome)
         notes = brought.notes + outcome.notes
         if not outcome.entries:

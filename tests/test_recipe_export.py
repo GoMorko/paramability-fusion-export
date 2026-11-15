@@ -26,6 +26,32 @@ def coil_then_plate():
     return capture
 
 
+COVER = {"token": "cmp_cover", "name": "Cover"}
+
+
+class FollowedComponentsTest(unittest.TestCase):
+    def followed(self):
+        from tests.test_translate_ref_motion import SIZES, motion_with, run
+        return run(load_capture("component_ref_reach"), motion_with("component_ref_reach"), SIZES)
+
+    def test_a_part_that_follows_a_component_outside_the_file_says_so(self):
+        result = self.followed()
+        manifest, _, _ = plan_single_export(load_capture("component_ref_reach"), "x.step", "Boss", "w", "z",
+                                            translated=result)
+        self.assertIn("This part follows the sizes of Cover. Export both together so they change together.",
+                      manifest["notes"])
+
+    def test_a_component_whose_body_is_in_the_file_is_not_named(self):
+        result = self.followed()
+        self.assertEqual(recipe_export.followed_outside([result]), ["Cover"])
+        self.assertEqual(recipe_export.followed_outside([result], [{"component": COVER}]), [])
+        self.assertEqual(recipe_export.followed_outside([result], [{"component": {"token": "", "name": "Cover"}}]), [])
+
+    def test_a_part_that_follows_nothing_gets_no_such_note(self):
+        manifest, _, _ = plan_single_export(load_capture("extrude_plate"), "x.step", "Plate", "w", "z")
+        self.assertFalse(any("follows the sizes" in note for note in manifest["notes"]))
+
+
 class PlanTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

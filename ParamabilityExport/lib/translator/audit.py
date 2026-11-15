@@ -29,13 +29,15 @@ class Audit:
     """`forgotten`: Fusion name of a free size to why, for each size a copied step reads that has no state.
     `unmoved`: Fusion names of the sizes that copied steps read only through sketches the probe measured, and that did
     not move anything. `unmoved_links`: of those, the ones tied to such a sketch only through another component, with
-    that component's name. `gap_reads`: gap id to the Fusion names of the free sizes that left out step reads."""
+    that component's name. `gap_reads`: gap id to the Fusion names of the free sizes that left out step reads.
+    `follows`: names of the other components whose sizes a copied step follows through a sketch tied to them."""
 
     def __init__(self):
         self.forgotten = {}
         self.unmoved = set()
         self.unmoved_links = {}
         self.gap_reads = {}
+        self.follows = set()
 
 
 def _sketch_names(node, found):
@@ -146,6 +148,9 @@ def audit(capture, ctx, table, named, motion):
         for sketch in _sketch_names(item.get("data") or {}, {}):
             linked = _only_linked(table, sketch)
             for name in sketch_sizes(table, sketch):
+                if name in linked and name in reached and name not in named and measured \
+                        and sketch_answer(table, motion, sketch, name).kind == MOVED:
+                    out.follows.add(_link_component(table, sketch, name))
                 if name in named or name in reached or name in out.forgotten:
                     continue
                 if not measured:

@@ -78,7 +78,8 @@ class StepResult:
     item's `data.params`. `tool_steps` are the verdicts of the items inside the tool steps written here. `wraps_body`,
     when set, is a function of the context that gathers everything written so far into one tool step and gives its
     `Entry`: the walk writes it first (a pattern can then repeat the finished body). `gaps` are the steps of other
-    bodies left out of these steps (`gaps.stops.Gap`); they count once these steps are written.
+    bodies left out of these steps (`gaps.stops.Gap`); they count once these steps are written. `follows` holds the
+    `(token, name)` of each other component whose sizes these steps follow (`Context.follow_component`).
     """
 
     def __init__(self, entries=()):
@@ -90,6 +91,7 @@ class StepResult:
         self.tool_steps = []
         self.wraps_body = None
         self.gaps = []
+        self.follows = set()
 
     @classmethod
     def of(cls, steps):
@@ -118,6 +120,7 @@ class StepResult:
         self.notes.extend(other.notes)
         self.tool_steps.extend(other.tool_steps)
         self.gaps.extend(other.gaps)
+        self.follows |= other.follows
 
 
 # `leftOut`: the step is a gap (gaps/stops.py); its verdict also has `gap`, the gap's id, and `cause`: `picks` when the step
@@ -159,6 +162,9 @@ class TranslateResult:
     to_recipe: Optional[list] = None
     # True when the walk stopped because the part holds more gaps than `gaps.stops.MAX_GAPS`.
     over_gap_cap: bool = False
+    # `[{ token, name }]`: the other components whose sizes the written steps follow (`Context.follow_component`, and the
+    # sketches tied to a component that follow its sizes, `audit.Audit.follows`). `token` is "" when only the name is known.
+    follows_components: list = field(default_factory=list)
     # When the copy stops: the `gap_hints` cause of the step that stops it, when it has one. A tool body walk passes
     # it on, so the gap its Combine becomes gets that step's hint.
     refusal_cause: Optional[str] = None

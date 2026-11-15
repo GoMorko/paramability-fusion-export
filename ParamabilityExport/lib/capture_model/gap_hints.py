@@ -34,6 +34,7 @@ PATH_PATTERN = "pathPattern"
 BOUNDARY_FILL = "boundaryFill"
 NEW_COMPONENT = "newComponent"
 OTHER_COMPONENT = "otherComponent"
+OLD_EXPORT = "oldExport"
 CHANGED_FROM_OTHER_COMPONENT = "changedFromOtherComponent"
 MADE_IN_OTHER_COMPONENT = "madeInOtherComponent"
 AFTER_GAP = "afterGap"
@@ -68,6 +69,7 @@ HINTS = {
     BOUNDARY_FILL: "Build the solid with extrudes and cuts instead of filling a boundary.",
     NEW_COMPONENT: "Make the body in the component that holds the part.",
     OTHER_COMPONENT: "Use sketches, planes and faces of the part's own component.",
+    OLD_EXPORT: "Export again with this version of the add-in.",
     CHANGED_FROM_OTHER_COMPONENT: "Make the step in the part's own component, or export both parts together.",
     MADE_IN_OTHER_COMPONENT: "Model the body in the component you export, or export the component that holds it.",
     AFTER_GAP: "Fix the step it builds on first.",

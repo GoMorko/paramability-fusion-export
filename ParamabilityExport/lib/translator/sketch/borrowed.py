@@ -67,6 +67,8 @@ def bring_in(item, ctx):
         component = (profile.get("component") or {}).get("name") or "another component"
         followed = _has_motion(ctx, item, number)
         followed_any = followed_any or followed
+        if followed:
+            ctx.follow_component(profile.get("component"))
         if not followed and not _optimistic(ctx):
             _fix_sizes(ctx, item, profile)
         out.append(dict({k: v for k, v in profile.items() if k not in BORROWED_KEYS}, borrowed=component))

@@ -16,7 +16,7 @@ from ..params.size_table import CONSTANT, DERIVED
 from ..translator import CaptureError, translate
 from ..timing.export_timing import attach as attach_timing, stamp as timing_stamp
 from ..translator.notes import (
-    also_failing_note, cut_reason, left_out_note, recipe_note, reader_failure_note, step_only_note,
+    also_failing_note, cut_reason, follows_components_note, left_out_note, recipe_note, reader_failure_note, step_only_note,
     translate_failure_note, used_several_times_note)
 from .health import measuring_note
 from .messages import (
@@ -67,6 +67,21 @@ def _recipe_and_gaps(result):
     if gaps is None:
         return None, None, _GAPS_NOT_WRITTEN
     return data, gaps, None
+
+
+def followed_outside(results, held=()):
+    """Names of the other components that the copies in `results` follow the sizes of, once each in the order met.
+    A component whose body is in the file (`held`, the capture targets) is left out: its sizes change with the file."""
+    tokens = {t["component"].get("token") for t in held if isinstance(t.get("component"), dict)} - {"", None}
+    names = {t["component"].get("name") for t in held if isinstance(t.get("component"), dict)} - {"", None}
+    found = []
+    for result in results:
+        for component in getattr(result, "follows_components", None) or ():
+            name = component.get("name") or "another component"
+            if component.get("token") in tokens or name in names or name in found:
+                continue
+            found.append(name)
+    return found
 
 
 def _most_useful(ranked):
@@ -313,6 +328,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
         not_followed = [d["name"] for d in dropped if d["used"]]
         unused = [d["name"] for d in dropped if not d["used"] and not d.get("tried")]
         unchanged = [d["name"] for d in dropped if not d["used"] and d.get("tried")]
+        followed = followed_outside([result])
         notes = _most_useful([
             (0, first),
             (1, left_out_note([gap["name"] for gap in result.gaps]) if gapped else ""),
@@ -322,6 +338,7 @@ def plan_single_export(capture_or_error, step_file, title, writer, up_axis,
             (2, loose_note([f["name"] for f in all_loose]) if all_loose else ""),
             (2, cut_note([f["name"] for f in all_cut]) if all_cut else ""),
             (2, fixed_note([f["name"] for f in all_fixed]) if all_fixed else ""),
+            (3, follows_components_note(followed) if followed else ""),
             (6, _not_followed_note(not_followed) if not_followed else ""),
             (7, unchanged_note(unchanged) if unchanged else ""),
             (8, dropped_note(unused) if unused else ""),
@@ -424,7 +441,7 @@ def _tagged_loose(recipes):
     return [{"name": name, "reason": tagged(names, reason)} for (name, reason), names in found.items()]
 
 
-def _parts_notes(parts, free, loose, fixed, health, cut=()):
+def _parts_notes(parts, free, loose, fixed, health, cut=(), followed=()):
     """The package notes of a several-body export, at most `MAX_NOTES` (`_most_useful`)."""
     recipes = sum(1 for p in parts if p.is_recipe)
     first = "%d %s, %d %s." % (len(parts), "part" if len(parts) == 1 else "parts", len(free),
@@ -440,6 +457,7 @@ def _parts_notes(parts, free, loose, fixed, health, cut=()):
         (2, loose_note([f["name"] for f in loose]) if loose else ""),
         (2, cut_note([f["name"] for f in cut]) if cut else ""),
         (2, fixed_note([f["name"] for f in fixed]) if fixed else ""),
+        (3, follows_components_note(followed, parts=True) if followed else ""),
     ])
 
 
@@ -548,8 +566,10 @@ def plan_parts_export(inputs, title, writer, up_axis, size_table=None, listing=N
         else:
             entry["note"] = clip(part.fixed_note(), MAX_PART_NOTE)
         entries.append(entry)
+    followed = followed_outside([p.result for p in recipes], [(p.capture or {}).get("target") or {} for p in parts])
     manifest = build_parts_manifest(
-        title, writer, entries, up_axis=up_axis, notes=_parts_notes(parts, free, all_loose, all_fixed, health, all_cut),
+        title, writer, entries, up_axis=up_axis,
+        notes=_parts_notes(parts, free, all_loose, all_fixed, health, all_cut, followed),
         fixed=all_fixed, parameters=listing.entries if listing is not None else None)
     attach_timing(report, timing, started, parts=True)
     files["report.json"] = _parts_report_bytes(report)

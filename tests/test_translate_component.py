@@ -100,6 +100,21 @@ class RefusalTest(unittest.TestCase):
         capture["items"][3]["data"]["profiles"][0]["foreign"] = True
         self.assertIn("another component", left_out(translate(capture))["reason"])
 
+    def test_a_reach_that_an_older_add_in_marked_foreign_asks_for_a_new_export(self):
+        capture = load_capture("component_foreign_extent")
+        data = capture["items"][3]["data"]
+        data["side_one"] = {"kind": "distance", "distance": 8.0, "taper_deg": 0.0}
+        data["end_offset"] = 8.0
+        data["profiles"][0] = {key: data["profiles"][0][key] for key in ("sketch", "frame", "loops")}
+        data["profiles"][0].update(foreign=True, space="sketch")
+        gap = left_out(translate(copy.deepcopy(capture)))
+        self.assertIn("Export again with this version", gap["reason"])
+        self.assertEqual(translate(copy.deepcopy(capture)).gaps[0]["hint"], gap_hints.HINTS[gap_hints.OLD_EXPORT])
+        data["profiles"][0].update(component={"token": "cLid", "name": "Lid"}, placement={"error": "no place"})
+        gap = translate(capture).gaps[0]
+        self.assertNotIn("Export again", gap["reason"])
+        self.assertEqual(gap["hint"], gap_hints.HINTS[gap_hints.OTHER_COMPONENT])
+
     def test_a_participant_from_another_component_is_ignored(self):
         capture = load_capture("component_foreign_extent")
         capture["items"][3]["data"]["side_one"] = {"kind": "distance", "distance": 8.0, "taper_deg": 0.0}
@@ -211,6 +226,7 @@ class BorrowedSketchTest(unittest.TestCase):
         self.assertEqual(result.fixed, [])
         self.assertEqual(rim["sketch"]["outer"]["width"]["expr"], "wall_mm + 8")
         self.assertNotIn("fixed numbers", verdicts(result)[9][1])
+        self.assertEqual(result.follows_components, [{"token": "cLid", "name": "Lid"}])
 
     def test_a_borrowed_value_the_probe_could_not_follow_or_never_gave_marks_its_sizes(self):
         stuck = Motion({"9/p0/l0/width": Stuck(["wall_mm"], "unread", "Rim of Lid")})
@@ -222,7 +238,7 @@ class BorrowedSketchTest(unittest.TestCase):
 
     def test_the_first_translation_fixes_nothing_for_a_borrowed_sketch(self):
         result, _ = self.borrowed_run(OPTIMISTIC)
-        self.assertEqual(result.fixed, [])
+        self.assertEqual((result.fixed, result.follows_components), ([], []))
 
     def test_a_borrowed_sketch_without_a_readable_place_refuses(self):
         capture = load_capture("component_moved")

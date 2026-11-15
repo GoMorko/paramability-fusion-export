@@ -274,6 +274,24 @@ def reaches_component_note(label):
     return "Added as a fixed shape: %s reaches into another component, which is not copied yet." % label
 
 
+def follows_components_note(names, parts=False):
+    """'This part follows the sizes of FilterBox. Export both together so they change together.' for the other
+    components whose sizes a part follows and that are not in the file. `parts` words it for a file of several parts."""
+    many = len(names) > 1
+    if parts:
+        text = "The parts follow the sizes of %s, which %s not in this file. Export %s with them so they change together." % (
+            _names(names), "are" if many else "is", "them" if many else "it")
+    else:
+        text = "This part follows the sizes of %s. Export %s together so they change together." % (
+            _names(names), "all of them" if many else "both")
+    return clip(text, MAX_NOTE)
+
+
+def old_export_note(label):
+    return ("Added as a fixed shape: %s was read by an older version of the add-in and may use only this part's own "
+            "geometry. Export again with this version." % label)
+
+
 def health_warning_note(label, message):
     """A step Fusion shows a warning on was copied as Fusion built it; the copy may not match what Fusion meant."""
     detail = _ends(plain(message or ""))
