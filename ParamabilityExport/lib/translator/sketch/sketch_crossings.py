@@ -13,8 +13,9 @@ outline that crosses itself only in a corner of the ranges (a leg turned while s
 
 `simple_ranges` checks any outline whose corners follow sizes, also with straight formulas only: at each setting of
 the ranges it works out the corners as the copy writes them (a value that cannot follow stays its number) and holds
-each loop to the app's own rule for sketch loops: no two edges cross or touch, arcs drawn with the app's chords. A corner that follows a size while the curve it meets stays where it is (a
-value that moves along a curve the probe could not fit) can pass that curve inside the ranges.
+each loop to the app's own rule for sketch loops: no two edges cross or touch, arcs drawn with the app's chords. A
+corner that follows a size while the curve it meets stays where it is (a value that moves along a curve the probe
+could not fit) can pass that curve inside the ranges.
 """
 import math
 
