@@ -959,7 +959,8 @@ the plane and no cut reaches across it; otherwise (a round, chamfer, shell or Mo
 - `inside` (a split by a solid body only): whether the piece lies inside the tool body, from
   `BRepBody.pointContainment` of a point 0.01 mm inside the piece under one of its first 16 faces. When no face tells,
   a temporary copy of the piece is intersected with a temporary copy of the tool body (nothing is added to the design):
-  a result of about the whole piece means inside, about nothing means outside. Null when neither tells or the tool
+  a result of about the whole piece means inside, about nothing means outside. A boolean that fails, or a tool and a
+  piece seen in different coordinates (one through an occurrence), give null. Null also when neither tells or the tool
   body is not found. It is read with the marker after the item, where Fusion no longer gives `splittingTool`, so the
   tool body is found by the token read before the item. Exports before 0.10.6 have no `inside`.
 
@@ -971,10 +972,12 @@ size's range end to its value (up to 25; a size past that is marked), so a part 
 inside or outside the tool body, with every other piece of that body on the other side), the pieces add up to the
 body's volume (within a thousandth: Fusion measures each curved piece on its own, to a few parts in 100 000), and no
 later step changes another piece together with the part (`lib/translator/bodies/split_rules.py`). A split by a solid
-body whose pieces have no `inside` is decided from the boxes and volumes of the tool and the pieces
-(`lib/translator/bodies/split_inside.py`): a piece that does not fit the tool's box, or is larger than the tool, cannot
-lie inside it, and the split goes on only when that leaves one side possible for the part; a tool of another component
-is not decided this way.
+body whose pieces lack an `inside` answer is completed only when the body came apart into exactly two pieces
+(`lib/translator/bodies/split_inside.py`): the missing answer is the opposite of the other piece's, else it comes from
+the boxes and volumes of the tool and the pieces (a piece that does not fit the tool's box, or is larger than the tool,
+cannot lie inside it). The boxes never replace an answer the reader gave: a disagreement stops the copy. With three or
+more pieces only the reader's answers count, since part minus tool can leave several pieces on one side. A tool of
+another component is not decided this way.
 
 **CombineFeature** (`targetBody`, `toolBodies`, `operation`, `isKeepToolBodies`):
 

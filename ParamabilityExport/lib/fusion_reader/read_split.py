@@ -77,20 +77,29 @@ def _probe(face, tool):
 
 def _by_intersect(piece, tool):
     """Whether `piece` lies inside `tool`, from the volume left of a temporary copy of the piece intersected with a
-    temporary copy of the tool (nothing is added to the design); None when the volume is not about all or none of it.
-    A boolean that reports failure counts as empty, as in `read_intersect`."""
+    temporary copy of the tool (nothing is added to the design); None when the volume is not about all or none of it,
+    when the boolean fails (it often does for faces that coincide, as a piece shares its split faces with the tool),
+    or when the two bodies are seen in different coordinates (one through an occurrence)."""
     whole = geo.volume_mm3(piece)
-    if not whole:
+    if not whole or not _same_context(piece, tool):
         return None
     manager, types = read_intersect.brep_tools()
     shared = manager.copy(piece)
-    kept = geo.volume_mm3(shared) if manager.booleanOperation(
-        shared, manager.copy(tool), types.IntersectionBooleanType) else 0.0
+    if not manager.booleanOperation(shared, manager.copy(tool), types.IntersectionBooleanType):
+        return None
+    kept = geo.volume_mm3(shared)
     if kept is None:
         return None
     if kept >= whole * INSIDE_SHARE:
         return True
     return False if kept <= whole * OUTSIDE_SHARE else None
+
+
+def _same_context(a, b):
+    """True when both bodies sit in the same coordinates: neither is seen through an occurrence, or both through the
+    same one."""
+    first, second = (geo.safe(lambda body=body: body.assemblyContext, None) for body in (a, b))
+    return (first is None and second is None) or geo.same_entity(first, second)
 
 
 def inside(piece, tool):
