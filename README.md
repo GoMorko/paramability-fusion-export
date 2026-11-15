@@ -578,6 +578,8 @@ package may import only packages above it in this list (not every one of them). 
 ## Tests
 
 For a quick check of a release by hand, with your own projects and a few small test models, see `docs/hand-checks.md`.
+To measure how many kinds of projects the copy covers, build the typical printing projects in `docs/test-projects.md`,
+export them and score them with the app's scoreboard.
 
 Everything under `lib/` except `fusion_reader/` and `fusion_ui/` is pure Python and runs without Fusion. The Fusion
 reading code is tested with fakes. Anything that touches `adsk` stays in `lib/fusion_reader/`, `lib/fusion_ui/` and
