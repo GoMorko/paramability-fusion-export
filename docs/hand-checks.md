@@ -99,7 +99,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
    Export: the single path sweep copies; the guide surface sweep is left out and names the settings Fusion did not
    give; the edge loft names what Fusion gave for the section.
 
-5a. ST1, steps with their own reason. Model a 40 mm box and use Modify, Scale on it; on a second box add a Rib (a
+6. ST1, steps with their own reason. Model a 40 mm box and use Modify, Scale on it; on a second box add a Rib (a
    sketch line across a shell) and a Web; on a third use Replace Face with a surface, Pattern on Path with a sketch
    curve, and Boundary Fill between two bodies.
    Export: each part is left out or saved as a fixed shape with a step name and a plain reason (not "Steps of type
@@ -107,36 +107,36 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
    ScaleFeature, ReplaceFaceFeature, RibFeature, WebFeature, PathPatternFeature, BoundaryFillFeature and (surface
    Offset) OffsetFeature; any other name gets the generic reason.
 
-5b. CC5, a lid that follows a box not in the file. Make component Box with user parameter `Width`. In component Lid,
+7. CC5, a lid that follows a box not in the file. Make component Box with user parameter `Width`. In component Lid,
    sketch on the box top face, project the box outline, offset it 0.2 mm inwards and extrude 3 mm.
    Export: export the Lid alone, tick `Width`. The notes say the part follows the sizes of Box. Export Box and Lid
    together: that note is gone, and changing `Width` in Paramability changes both parts.
 
-5c. CC1, a cut from the top level. Make components Box and Lid (a box 80 x 60 x 30 mm, a lid 80 x 60 x 3 mm on top).
+8. CC1, a cut from the top level. Make components Box and Lid (a box 80 x 60 x 30 mm, a lid 80 x 60 x 3 mm on top).
    With the top level active, sketch two 3 mm circles on the lid top and cut them through both bodies.
    Export: export the Lid. The copy stops at the cut with "changes this part from another component" and a tip to
    move the step into the part's component or export both parts together.
 
-6. AS1, steps after a stop. Extrude a box, split it with the curved face of a cylinder body and remove the outer
+9. AS1, steps after a stop. Extrude a box, split it with the curved face of a cylinder body and remove the outer
    piece, then add a thicken joined to the box.
    Export: the box is saved as a fixed shape with the split as the reason, `after_stop` names the split and the
    thicken, and the window says the thicken was not copied either.
 
-7. SP1, marker roll. Make component Cup (60 mm square sketch from user parameter `Width`, extruded 40 mm), then
+10. SP1, marker roll. Make component Cup (60 mm square sketch from user parameter `Width`, extruded 40 mm), then
    component Rack with about 100 steps (a pattern of 200 holes, fillets, chamfers).
    Export: tick `Width` on the Cup. `probe.timeline` has `rolled: true` and fewer items than the whole design, and
    the time per try is about the time of the Cup alone.
 
-8. SP2, one change per try. In the SP1 design add user parameter `Height` for the extrude and a 5 mm fillet on the
+11. SP2, one change per try. In the SP1 design add user parameter `Height` for the extrude and a 5 mm fillet on the
    top edges; give `Width` a range down to 8 mm so the fillet fails at the low end.
    Export: tick both. The failing tries are listed in `probe.dropped` with the fillet named, the `Width` range is cut,
    and the design shows its old values with no step in error afterwards.
 
-9. SP4, memory and Undo. Use the SP2 design.
+12. SP4, memory and Undo. Use the SP2 design.
    Export: watch Fusion in Activity Monitor (Memory) before, during and after; then use Edit, Undo once. Note the
    peak, the value after the export and after Undo, and whether Undo lists the export as one step.
 
-10. TH1 and TH5, steps after the export. TH1: a box from a 20 by 20 mm rectangle (user parameter `Width` = 20 mm)
+13. TH1 and TH5, steps after the export. TH1: a box from a 20 by 20 mm rectangle (user parameter `Width` = 20 mm)
     extruded 15 mm, the four vertical edges filleted with 9.9 mm. TH5 needs a second design: a 40 by 30 by 20 mm box,
     the vertical edges filleted with user parameter `Round` = 5 mm, then the top edges chamfered with `Bevel` = 4 mm,
     so the chamfer runs into the fillets.
@@ -147,7 +147,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     cancel in the "Try 3 of ..." window; then, on the TH1 box, use Export size choices with a row `Width` = 12, which Fusion cannot build. In both, every step is
     as before; if not, a message box names the step and says to use Undo.
 
-11. LP1, the list before the export. Extrude a 40 by 30 by 20 mm box. Round one vertical edge with a variable radius (a
+14. LP1, the list before the export. Extrude a 40 by 30 by 20 mm box. Round one vertical edge with a variable radius (a
     different radius at each end). Then round the top edges with 1 mm, which includes the edge between the top and
     the face the variable round made. Add a second body, a plain box with no such step.
     Export: pick the first box and do not click OK. Under the body picker a box lists the variable round with the
@@ -159,14 +159,14 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     the "More may show" line was about. Note the seconds from the log line on a design with 100 or more steps: the
     warning itself should take well under a second.
 
-11. LB1, size labels. Model a 40 x 30 x 10 mm box from three user parameters: `Wall_thickness_mm` (3 mm, comment
+15. LB1, size labels. Model a 40 x 30 x 10 mm box from three user parameters: `Wall_thickness_mm` (3 mm, comment
     `Wall thickness`), `BaseCup_midExtrude_offset__mm` (5 mm, no comment) and `Hole_diameter_mm` (6 mm, a comment of two
     long sentences describing the hole).
     Export: tick all three. In Paramability the form reads "Wall thickness", "Base cup mid extrude offset" and "Hole
     diameter". Each field has an info tip "Name in the original design: ..." with the Fusion name, the long comment is
     the text under the "Hole diameter" field, and the result window still lists the sizes by their Fusion names.
 
-11. CO1, a coil on a block. Model a 40 x 20 x 10 mm block. Make a Coil with Insert > Coil (Fusion's Coil command) on a
+16. CO1, a coil on a block. Model a 40 x 20 x 10 mm block. Make a Coil with Insert > Coil (Fusion's Coil command) on a
     plane at the top of the block: diameter `CoilDia` = 10 mm, section size `Wire` = 2 mm, revolutions 3, height
     `CoilHeight` = 12 mm, round section, section position inside, clockwise, operation Join. Make a second design with
     a square section, counter clockwise and "Revolutions and Pitch" (pitch 4 mm).
@@ -175,18 +175,18 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     and in Paramability the coil matches the Fusion one (same hand, same rise, joined to the block). Changing `Wire`
     or `CoilDia` moves the coil as in Fusion. The ranges stop before the wire reaches the axis or the turns touch.
 
-12. CO2, coils the copy leaves out. In the CO1 design add a coil each with: a taper angle of 5 degrees; type Spiral;
+17. CO2, coils the copy leaves out. In the CO1 design add a coil each with: a taper angle of 5 degrees; type Spiral;
     revolutions 2.5; a triangle section. Join each to the block.
     Export: the taper, the spiral and the 2.5 revolutions coils are left out with their own hint. The triangle coil is
     copied with its numbers (`Wire` and `CoilDia` are marked, not followed).
 
-13. CO3, coil as a tool and the caps. Make a coil as a New Body, then Combine it (Join) with the block. Repeat to get
+18. CO3, coil as a tool and the caps. Make a coil as a New Body, then Combine it (Join) with the block. Repeat to get
     more than 8 coils in one design (or 17 coils joined one by one).
     Export: the Combine of a lone coil body is copied as a plain coil step. From the ninth coil on, the coils are left
     out with the hint about 8 coils and 100 turns of coils and threads; the first eight stay. A coil body that also has a cut or a fillet
     in its tool is left out with the hint to join the coil before changing it.
 
-11. TD1, modeled threads. Make a jar: a cylinder body of 30 mm diameter and 20 mm long (user parameter `Neck` for
+19. TD1, modeled threads. Make a jar: a cylinder body of 30 mm diameter and 20 mm long (user parameter `Neck` for
     the length), and add a Thread (Create, Thread) on its side with "Modeled" ticked: an ISO Metric profile, M30x2,
     full length, right hand. Make a second design with a left hand M20x1.5 thread over only 10 mm of a 25 mm long
     cylinder, started from the lower end. Make a third with an ANSI Unified thread, and a fourth with an ACME thread.
@@ -200,7 +200,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     Compare the volume of the copy with Fusion: the threads differ a little in the crest and root shape, note by how
     much. In Fusion, also check what start angle the thread has: the copy always uses its own.
 
-12. TD2, threaded and up to a face holes. Make a plate 40 x 40 x 12 mm with a tapped Hole (Hole tool, "Tapped",
+20. TD2, threaded and up to a face holes. Make a plate 40 x 40 x 12 mm with a tapped Hole (Hole tool, "Tapped",
     "Modeled" ticked, M6x1) 8 mm deep with full length thread, and a second one with a thread length of 5 mm. Make a
     through hole with a modeled M5 thread. Then make a Hole whose extent is "To" an inner floor (a second box body
     or a stepped pocket), and one up to a body.
@@ -214,16 +214,16 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     as blind holes of the measured depth, and when the floor follows a parameter the hole depth follows it. A hole up to a
     face that ends in a drill point is left out with a reason.
 
-11. FM2, a formula of numbers. Model a 40 x 40 x 20 mm box, shelled with the user parameter `Wall = 3 * 0.4 mm`.
+21. FM2, a formula of numbers. Model a 40 x 40 x 20 mm box, shelled with the user parameter `Wall = 3 * 0.4 mm`.
     Export: `Wall` is a size and starts ticked. Changing it in Paramability changes the wall. After the export, the
     Parameters dialog in Fusion shows `3 * 0.4 mm` again.
 
-12. FM3, a guarded count. On a 100 x 40 x 5 mm plate, cut one 5 mm hole and make a rectangular pattern of it with
+22. FM3, a guarded count. On a 100 x 40 x 5 mm plate, cut one 5 mm hole and make a rectangular pattern of it with
     quantity `max(1; floor(Width / 20 mm))`, where the user parameter `Width = 100 mm` drives the plate.
     Export: tick `Width`. The hole count follows `Width` in Paramability, and `Width` has no warning mark. Repeat
     with the quantity `if(Width > 60 mm; 3; 2)`.
 
-11. FP1, a fixed part in a parts package. Make component Box (an 80 x 60 x 30 mm box from user parameter `Width` =
+23. FP1, a fixed part in a parts package. Make component Box (an 80 x 60 x 30 mm box from user parameter `Width` =
     80 mm) and component Lid (80 x 60 x 3 mm on top of the box, sketch size from `Width` too). Add to the Lid a Split
     Body by the curved face of a cylinder body, so the Lid copy stops (see AS1).
     Export: pick Box and Lid together. The Lid is a fixed shape and the Box has a recipe. `Width` is marked "may give
@@ -231,7 +231,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     result window and in `report.json` `sizes.loose`. A size that only the Lid reads (add a second user parameter
     used by the Lid alone) is not offered at all.
 
-11. PC1, a part that comes apart. Model a 80 by 20 by 5 mm plate whose length is user parameter `Width` = 80 mm,
+24. PC1, a part that comes apart. Model a 80 by 20 by 5 mm plate whose length is user parameter `Width` = 80 mm,
     with the left end fixed at x = 0 and the right end at `Width`. On its top face draw a 4 mm circle at x = 70 and
     extrude it 5 mm up with Join. Second design: the same plate with a 2 mm wide slot cut across it at x = 40, 4 mm
     deep, its depth user parameter `Slot` = 4 mm.
@@ -241,7 +241,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     pieces in Fusion at ...". Note for each design whether the post or the second half shows as its own body in the
     browser at such a value or as part of Body1, and `timing.probe.read_parts.pieces` against `read_parts.box`.
 
-11. TL1, the time limit of the size tries. Model a part that is slow to rebuild: a 60 x 40 x 20 mm box with a shell
+25. TL1, the time limit of the size tries. Model a part that is slow to rebuild: a 60 x 40 x 20 mm box with a shell
     and a rectangular pattern of 300 small holes (all in one component), and user parameters `Length` = 60 mm and
     `Width` = 40 mm for the box sketch, `Wall` = 2 mm for the shell, and `Count` = 300 for the pattern. Mark `Length`
     as a favourite in Fusion.
@@ -257,7 +257,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     (or "No limit"): `hit` is false and every size has its tries. If the rebuild is fast on your machine, add more
     holes to the pattern until a try takes a few seconds.
 
-12. HE1, a hole that reaches the edge of its face. Model a lid, 60 x 40 x 3 mm, whose length is user parameter `Width`
+26. HE1, a hole that reaches the edge of its face. Model a lid, 60 x 40 x 3 mm, whose length is user parameter `Width`
     = 60 mm (left end fixed at x = 0). Cut a round hole of 16 mm diameter through it at x = 30 mm, then use Emboss to
     raise a 10 mm triangle 0.5 mm on its top face, half over the hole.
     Export: tick `Width` with a range of 10 to 120. The range starts just above 38 mm (the hole ends at x = 38), with the reason
