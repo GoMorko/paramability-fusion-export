@@ -36,7 +36,7 @@ def capture(base="extrude_plate", join_z=50.0, gap=True, before=(), side=4.0, co
     for n, (post_side, post_at, post_height) in enumerate(before):
         found["items"].append(_join(len(found["items"]), "Post%d" % (n + 1), target, post_side, post_at, post_height))
     at = len(found["items"])
-    coil = {"index": at, "name": "Coil1", "type": "CoilFeature", "suppressed": False, "health": "ok", "message": "",
+    coil = {"index": at, "name": "Coil1", "type": "ThickenFeature", "suppressed": False, "health": "ok", "message": "",
             "in_target_component": True, "bodies_after": target, "target_changed": True, "data": {}}
     join = _join(at + 1 if gap else at, "Extrude2", target, side, [corner[0], corner[1], join_z], height)
     found["items"] += ([coil] if gap else []) + [join]

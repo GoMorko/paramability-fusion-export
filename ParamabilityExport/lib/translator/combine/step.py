@@ -32,7 +32,9 @@ from .. import place, ref_motion
 from ..faces.moved_placer import MovedMaker, motion_of
 from ..faces.tool_placer import ToolMaker
 from ..repeat import body_copies
+from ..coil.coil_limits import CAUSE_TOOL, IN_TOOL
 from ..result import Refusal, StepResult
+from ..step_walk import outside_tool
 from ..values import Quantity, reads_in
 from ..walk import copies_bodies, is_foreign
 from . import tool_walk
@@ -88,7 +90,10 @@ def _writes_flat(tool):
     joining = False
     for item in tool.chain:
         data = item.get("data") or {}
-        if (data.get("tools") or len(item.get("bodies_after") or []) != 1 or is_foreign(data) or copies_bodies(item)
+        # A step that names the bodies it made or changed (`made`, a coil) is judged by those, not by every body of
+        # its component.
+        listed = data["made"] if isinstance(data.get("made"), list) else item.get("bodies_after")
+        if (data.get("tools") or len(listed or []) != 1 or is_foreign(data) or copies_bodies(item)
                 or not adds_only(tool.entries_of(item), joining)):
             return False
         joining = True
@@ -179,8 +184,11 @@ def _flat(ctx, found, combine):
     return out
 
 
-def _tool_steps(found, combine):
-    """One step per tool that holds the tool's own steps."""
+def tool_steps(found, combine):
+    """One step per tool that holds the tool's own steps, or a Refusal when a tool holds a step the recipe keeps out of
+    a tool body (a coil)."""
+    if any(outside_tool(tool.steps) for tool, _ in found):
+        return Refusal(IN_TOOL, cause=CAUSE_TOOL)
     out = StepResult()
     for tool, (move, shift) in found:
         step = {"kind": "toolBody", "combine": combine, "features": tool.steps}
@@ -194,7 +202,9 @@ def _tool_steps(found, combine):
 
 def _union_tool(ctx, item, found):
     """One intersecting step that holds the tools: the part keeps what any of them holds."""
-    inner = _tool_steps(found, "add")
+    inner = tool_steps(found, "add")
+    if isinstance(inner, Refusal):
+        return inner
     inner.steps[0]["combine"] = "new"
     held = ctx.child({"name": item.get("name")}, "%st%s_any_" % (ctx.id_prefix, item["index"]), depth=ctx.depth + 1)
     held.add_steps(item, inner)
@@ -286,7 +296,7 @@ def write_tools(ctx, item, data, combine):
     elif union:
         out = _union_tool(ctx, item, found)
     else:
-        out = _tool_steps(found, combine)
+        out = tool_steps(found, combine)
     if isinstance(out, Refusal):
         return out
     if combine == "intersect" and len(tools) > 1 and rule_unproven(data.get("intersect_volumes")):

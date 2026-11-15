@@ -20,7 +20,7 @@ def coil_then_plate():
     capture = load_capture("extrude_plate")
     body = capture["items"][1]["bodies_after"]
     capture["items"][1]["index"] = 3
-    capture["items"].insert(1, {"index": 2, "name": "Coil1", "type": "CoilFeature", "suppressed": False,
+    capture["items"].insert(1, {"index": 2, "name": "Coil1", "type": "ThickenFeature", "suppressed": False,
                                 "health": "ok", "message": "", "in_target_component": True, "bodies_after": body,
                                 "data": {}})
     return capture
@@ -76,7 +76,7 @@ class PlanTest(unittest.TestCase):
 
     def test_with_steps_left_out_the_loose_and_fixed_size_notes_stay_within_the_note_cap(self):
         capture = load_capture("filter_tray_sized")
-        capture["items"][2]["type"] = "CoilFeature"
+        capture["items"][2]["type"] = "ThickenFeature"
         params = capture["parameters"]
         table = size_table.build(params["user"], ["wall_mm", "pipe_d_mm", "holes_count"], params["model"], "mm",
                                  fixed={"pipe_d_mm": "it cannot follow"})
@@ -159,13 +159,13 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(sorted(files), ["part.step", "report.json"])
         self.assertIn("coil", manifest["notes"][0].lower())
         self.assertEqual(validate_manifest(manifest), [])
-        self.assertEqual(report["refusal"]["type"], "CoilFeature")
+        self.assertEqual(report["refusal"]["type"], "ThickenFeature")
         self.assertEqual(report["outcome"], "stepOnly")
 
     def test_a_stop_still_reports_the_later_steps_that_cannot_be_copied(self):
         capture = load_capture("filter_tray_sized")
         capture["items"][2]["health"] = "error"
-        capture["items"][5]["type"] = "CoilFeature"
+        capture["items"][5]["type"] = "ThickenFeature"
         manifest, files, report = self.plan(capture)
         self.assertEqual((manifest["kind"], report["refusal"]["index"]), ("stepOnly", 2))
         self.assertIn(5, [step["index"] for step in report["after_stop"]["steps"]])

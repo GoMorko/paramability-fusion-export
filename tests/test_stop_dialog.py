@@ -17,7 +17,7 @@ class WarningBoxTest(unittest.TestCase):
         box = inputs.itemById(recipe_dialog.WARN_ID)
         self.assertTrue(box.isVisible)
         self.assertIn("Coil1", box.formattedText)
-        self.assertIn("Steps of type coil", box.tooltipDescription)
+        self.assertIn("Steps of type thicken", box.tooltipDescription)
         self.assertTrue(inputs.itemById(recipe_dialog.SHOW_ID).isVisible)
 
     def test_a_stop_without_a_step_has_no_timeline_button(self):

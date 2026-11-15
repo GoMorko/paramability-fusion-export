@@ -244,7 +244,7 @@ class WalkTest(unittest.TestCase):
         self.assertEqual(items[2]["data"]["target_box_before"], {"min": [0, 0, 0], "max": [40, 20, 10]})
 
     def test_unknown_type_suppressed_and_error_health(self):
-        loft = entry(feature("CoilFeature", "Coil1"))
+        loft = entry(feature("ThickenFeature", "Coil1"))
         hidden_entity, hidden_name = feature("ExtrudeFeature", "Hidden")
         design = FakeDesign([loft, (hidden_entity, hidden_name, {})], self.target)
         design.timeline.entries[0][2]["healthState"] = "ErrorFeatureHealthState"
@@ -252,7 +252,7 @@ class WalkTest(unittest.TestCase):
         design.timeline.entries[1][2]["isSuppressed"] = True
         items = read_capture(design, self.target, fusion="", name="", up_axis="z")["items"]
         self.assertEqual((items[0]["type"], items[0]["data"], items[0]["health"], items[0]["message"]),
-                         ("CoilFeature", {}, "error", "Cannot build"))
+                         ("ThickenFeature", {}, "error", "Cannot build"))
         self.assertTrue(items[1]["suppressed"])
         self.assertEqual(items[1]["data"], {})
 
@@ -337,7 +337,7 @@ class UnreadableTest(unittest.TestCase):
         item = self.capture([(move, "Move1", {})])["items"][0]
         self.assertIsNone(item["bodies_after"])
         self.assertTrue(item["read_error"].startswith("bodies"))
-        empty = self.capture([entry(feature("CoilFeature", "E"))])["items"][0]
+        empty = self.capture([entry(feature("ThickenFeature", "E"))])["items"][0]
         self.assertEqual(empty["bodies_after"], [])
         self.assertNotIn("read_error", empty)
 

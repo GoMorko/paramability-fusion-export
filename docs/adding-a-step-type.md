@@ -1,7 +1,7 @@
 # Adding a Fusion step type
 
 This guide is for a developer who wants the export to copy one more kind of Fusion timeline step (for example a
-modeled thread or a coil). Read `docs/capture-format.md` sections 1 and 5 first. The Emboss
+modeled thread). Read `docs/capture-format.md` sections 1 and 5 first. The Emboss
 step (`read_emboss.py`, `extrude/emboss.py`, `tests/test_translate_emboss.py`) is a small worked example of every part below,
 and of a step that reuses another handler. The sweep handler (`sweep/step.py`, the `sweep_*.py` modules next to it and the `paths/` package) is a second example
 of that.
@@ -194,6 +194,9 @@ on its own (`lib/translator/combine/tool_walk.py`) by the same item loop, in a c
 - `combine_tool` on the `RecipeKind`: the step can be one of the steps that a tool made only of such steps is written
   with, one by one, onto the part (`combine.step.adds_only`). Set it only for a kind that adds material and nothing else
   (extrude and revolve do). A kind without it is still copied inside a `toolBody`; it just stops the flat form.
+- `RecipeKind.in_tool`: False for a kind the recipe keeps out of a tool body's `features` (thread, coil, skin, bevel
+  gear). A Combine or pattern whose tool walk wrote such a step refuses with a hint (`step_walk.outside_tool`); the coil
+  is written onto the part when it is the only step of its tool.
 - `RecipeKind.repeat`: `toolBody` is `SOLID`, so a pattern repeats a tool. A step inside a tool is a `features` entry:
   walk steps with `step_walk.all_steps`, never `ctx.steps` alone, when code must see every step (the version, the
   `place.place` of a body into the assembly, the audit and the copy limits do). A new `RecipeKind` with `positions` and
@@ -210,7 +213,7 @@ on its own (`lib/translator/combine/tool_walk.py`) by the same item loop, in a c
   bodies: `makes_bodies` on the step type) or moves them (`moves_bodies`) must say so, or the walk skips it when it
   names no body of its target.
 - A step type that cannot be copied inside a tool gives `unsupported` as usual, and the Combine becomes one gap whose
-  reason names it: "The tool body Body3 cannot be copied: Coil1 (coil): ...". The gaps inside the tool are dropped
+  reason names it: "The tool body Body3 cannot be copied: Thicken1 (thicken): ...". The gaps inside the tool are dropped
   with the failed tool. A tool that is written but has a gap is always a `toolBody` step, never written one by one
   onto the part (`combine.step._writes_flat`).
 

@@ -1155,6 +1155,18 @@ order (empty when one cannot be read, since a gap would shift the order).
   The translator copies a face only when one of them lies on the face plane moved by `distance`; each face becomes an
   extrude of its outline (join outwards, cut inwards).
 
+**CoilFeature** (`roles`, `volumes_before`, `made`, `faces`, `params`; `fusion_reader/read_coil.py`; Fusion's API gives
+an existing coil no type, axis, hand, section or operation, so these are worked out from what the reader measures):
+- `roles`: the `role` text of every model parameter the coil made. `params`: those of them the translator uses, by path
+  (`diameter`, `section_size`, `taper_deg`, `revolutions`, `height`, `pitch`). Which two of the last three are present
+  is the coil type; a spiral has revolutions and pitch too.
+- `volumes_before`: `{ token, name, volume }` of each body of the component with the marker before the coil. `made`:
+  the same for the bodies of `Feature.bodies` after it. They give the operation (`translator/coil/coil_operation.py`).
+- `faces`: `{ flat, curved, edges }` with the marker after the coil. `flat` holds the flat end faces as outline records
+  (`frame`, `loops`) with their `area`; `edges` holds 17 sampled points (mm) along each edge of the curved faces. Null
+  when the faces cannot be read or are more than a coil can have. The translator finds the axis, the hand and the
+  turns from them (`coil_fit.py`) and checks that the helix passes through every sampled point.
+
 **EmbossFeature** (`profiles`, `inputFaces`, `faces`, `isTangentChain`, `depth`, `horizontalDistance`,
 `verticalDistance`, `rotationAngle`; `adsk.fusion.EmbossFeature` is marked preview in the API reference):
 
@@ -1504,6 +1516,7 @@ plain number, a retired member) adds nothing, and `params` is absent when nothin
 | ShellFeature | `inside` |
 | RectangularPatternFeature | `quantity_one`, `quantity_two`, `distance_one`, `distance_two` |
 | CircularPatternFeature | `quantity`, `total_angle_deg` |
+| CoilFeature | `diameter`, `section_size`, `taper_deg`, `revolutions`, `height`, `pitch` (each followed only where its formula gives the measured number; the taper is not followed) |
 | EmbossFeature | `depth` (read like an extrude length; a negative depth is written negated), `offset_x`, `offset_y`, `rotation_deg` (not followed: the copy needs them to be zero, and a size behind them is pinned) |
 
 Sketch dimensions, construction planes, axes and joints are not listed per item. They are model parameters whose

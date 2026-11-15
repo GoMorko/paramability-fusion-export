@@ -28,7 +28,7 @@ def tray(edit=None):
     return capture
 
 
-def unsupported(index, type_name="CoilFeature"):
+def unsupported(index, type_name="ThickenFeature"):
     def edit(capture):
         capture["items"][index]["type"] = type_name
     return edit
@@ -92,7 +92,7 @@ def _shell_with_new_body(type_name=None, **data):
 
 def _more_gaps_than_the_cap(capture):
     shell = capture["items"][SHELL]
-    capture["items"][SHELL:] = [dict(copy.deepcopy(shell), index=10 + n, name="Coil%d" % n, type="CoilFeature")
+    capture["items"][SHELL:] = [dict(copy.deepcopy(shell), index=10 + n, name="Coil%d" % n, type="ThickenFeature")
                                 for n in range(MAX_GAPS + 1)]
 
 
@@ -103,13 +103,13 @@ class StopTest(unittest.TestCase):
             "its bodies could not be read": (_at_shell(bodies_after=None), SHELL),
             "its data could not be read": (_at_shell(data={"read_error": "boom"}), SHELL),
             "a type without a handler whose data could not be read":
-                (_at_shell(type="CoilFeature", data={"read_error": "boom"}), SHELL),
+                (_at_shell(type="ThickenFeature", data={"read_error": "boom"}), SHELL),
             "the body cannot be followed": (_at_shell(bodies_after=[{"token": "t9", "name": "Body1"}]), SHELL),
-            "a type without a handler makes another body": (_shell_with_new_body("CoilFeature"), SHELL),
+            "a type without a handler makes another body": (_shell_with_new_body("ThickenFeature"), SHELL),
             "a step that reaches into another component makes another body":
                 (_shell_with_new_body(inside={"foreign": True}), SHELL),
             "a step its handler refuses makes another body": (_shell_with_new_body(shell_type="rounded"), SHELL),
-            "the first step is a gap": (unsupported(1, "CoilFeature"), 1),
+            "the first step is a gap": (unsupported(1, "ThickenFeature"), 1),
             "more gaps than the cap": (_more_gaps_than_the_cap, 10 + MAX_GAPS),
         }
         for label, (edit, index) in cases.items():
@@ -121,7 +121,7 @@ class StopTest(unittest.TestCase):
     def test_a_part_with_more_gaps_than_an_old_gaps_file_held_keeps_its_recipe_and_every_gap(self):
         def edit(capture):
             shell = capture["items"][SHELL]
-            capture["items"][SHELL:] = [dict(copy.deepcopy(shell), index=10 + n, name="Coil%d" % n, type="CoilFeature")
+            capture["items"][SHELL:] = [dict(copy.deepcopy(shell), index=10 + n, name="Coil%d" % n, type="ThickenFeature")
                                         for n in range(20)]
         result = translate(tray(edit))
         self.assertIsNone(stopped(result))
@@ -140,7 +140,7 @@ class StopTest(unittest.TestCase):
         # Two left out steps after the tool's first one: the second meets the cap inside the tool walk.
         capture = load_capture("combine_tool_two_steps")
         items = capture["items"]
-        items[5]["type"] = "CoilFeature"
+        items[5]["type"] = "ThickenFeature"
         items[6:] = [dict(copy.deepcopy(items[5]), index=6, name="Extrude4"), dict(items[6], index=7)]
         with mock.patch.object(gaps_module, "MAX_GAPS", 1):
             result = translate(capture)
@@ -200,7 +200,7 @@ class PicksTest(unittest.TestCase):
 
     def test_a_mirror_of_the_whole_body_after_a_gap_mirrors_the_gathered_body_with_the_gap_inside(self):
         capture = load_capture("mirror_body")
-        capture["items"][3]["type"] = "CoilFeature"
+        capture["items"][3]["type"] = "ThickenFeature"
         result = translate(capture)
         gathered = result.recipe["features"][0]
         self.assertEqual(gap_names(result), ["Extrude2"])
@@ -223,21 +223,21 @@ class PicksTest(unittest.TestCase):
 class PlaceTest(unittest.TestCase):
     def test_a_gap_inside_a_tool_body_belongs_to_the_tool_step_written_for_it(self):
         capture = load_capture("combine_tool_two_steps")  # a tool of two adding steps, written onto the part
-        capture["items"][5]["type"] = "CoilFeature"
+        capture["items"][5]["type"] = "ThickenFeature"
         result = translate(capture)
         tool = steps_of(result.recipe, "toolBody")[0]
         self.assertEqual(place_of(result.gaps[0]), (tool["features"][0]["id"], None, tool["id"]))
 
     def test_a_tool_whose_first_step_is_a_gap_makes_the_combine_one_gap(self):
         capture = load_capture("combine_tool_filleted")
-        capture["items"][3]["type"] = "CoilFeature"
+        capture["items"][3]["type"] = "ThickenFeature"
         result = translate(capture)
         self.assertEqual(gap_names(result), ["Combine1"])
         self.assertEqual(steps_of(result.recipe, "toolBody"), [])
 
     def test_a_pattern_of_the_whole_body_after_a_gap_takes_the_gap_into_its_tool(self):
         capture = load_capture("pattern_target_finish")
-        capture["items"][2]["type"] = "CoilFeature"
+        capture["items"][2]["type"] = "ThickenFeature"
         result = translate(capture)
         tool = steps_of(result.recipe, "toolBody")[0]
         self.assertEqual(place_of(result.gaps[0]), ("extrude_1", None, tool["id"]))

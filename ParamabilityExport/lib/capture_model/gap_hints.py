@@ -26,6 +26,12 @@ SHARP_CORNER = "sharpCorner"
 LOFT_KIND = "loftKind"
 THREAD = "modeledThread"
 COIL = "coil"
+COIL_SPIRAL = "coilSpiral"
+COIL_TAPER = "coilTaper"
+COIL_PLACE = "coilPlace"
+COIL_LIMIT = "coilLimit"
+COIL_TOOL = "coilTool"
+COIL_HALF = "coilHalf"
 NEW_COMPONENT = "newComponent"
 OTHER_COMPONENT = "otherComponent"
 AFTER_GAP = "afterGap"
@@ -53,6 +59,12 @@ HINTS = {
     LOFT_KIND: "Build it from lofts of two outlines each, or from extrudes.",
     THREAD: "Use a cosmetic thread, which copies as a plain hole.",
     COIL: "Your AI assistant can add a coil to the copy.",
+    COIL_SPIRAL: "Use a coil with a height, or let your AI assistant add the spiral to the copy.",
+    COIL_TAPER: "Use a taper angle of 0, or let your AI assistant add the taper to the copy.",
+    COIL_PLACE: "Make the coil a new body, then join it to the part with a combine.",
+    COIL_LIMIT: "A copy holds up to 8 coils and 100 turns in all. Your AI assistant can add the rest.",
+    COIL_HALF: "Use revolutions that do not end in a half, such as 3.25 or 4.",
+    COIL_TOOL: "Join the coil to the part with a combine before you move or change it.",
     NEW_COMPONENT: "Make the body in the component that holds the part.",
     OTHER_COMPONENT: "Use sketches, planes and faces of the part's own component.",
     AFTER_GAP: "Fix the step it builds on first.",

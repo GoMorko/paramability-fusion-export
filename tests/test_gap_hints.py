@@ -47,7 +47,7 @@ class HintTableTest(unittest.TestCase):
 class GapHintTest(unittest.TestCase):
     def test_a_step_type_with_advice_and_the_step_that_picks_its_faces_get_their_hints(self):
         result = translate(tray(unsupported(SHELL)))
-        self.assertEqual(hint_of(result, "Shell1"), gap_hints.HINTS[gap_hints.COIL])
+        self.assertEqual(hint_of(result, "Shell1"), gap_hints.HINTS[gap_hints.SURFACE])
         self.assertEqual(hint_of(result, "Fillet1"), gap_hints.HINTS[gap_hints.AFTER_GAP])
 
     def test_a_pattern_of_a_gap_gets_the_hint_to_fix_that_step_first(self):

@@ -1926,6 +1926,22 @@ as a marker, which the translator refuses, so a wrong guess shows up as a refusa
   record says `text_params_unknown` and every size that reaches a parameter with an unknown maker is treated as
   reaching the text.
 
+## Capture reader calls to watch (coil)
+
+Hand checks CO1 to CO3 are in `docs/hand-checks.md`. The reader is `read_coil.py`.
+
+- `CoilFeature` has no type, axis, hand, section or operation member in the API. The reader uses only
+  `Feature.entityToken`, `Feature.parentComponent`, `Feature.faces` and `Feature.bodies`.
+- `Component.modelParameters` and `ModelParameter.createdBy`, `.role`: the parameters the coil made are matched by
+  `createdBy` (or its token). Expected roles, as seen in exports: `Diameter`, `SectionSize`, `TaperAngle`,
+  `Revolutions`, and `Height` or `Pitch`. Check `data.roles` for a spiral and for each coil type; the translator
+  accepts only the pairs revolutions with height, revolutions with pitch, and height with pitch.
+- `Component.bRepBodies` with the marker before the coil, and `Feature.bodies` after it: `volumes_before` and `made`.
+  A coil that Joins grows its body by the coil volume; a Cut shrinks it; a New Body appears as a new token.
+- `BRepFace` of `Feature.faces`: the flat end faces read like any flat face (`face_loops`), the curved faces give
+  `BRepEdge.evaluator.getPointAtParameter` samples (17 per edge). Expected: two flat faces for a round, square or
+  triangle section; `faces.edges` holds the helical edges.
+
 ## Capture reader calls to watch (reach)
 
 Written from the API reference and never run (`lib/fusion_reader/read_gap_reach.py`, used only when the first

@@ -12,10 +12,10 @@ class NotesTest(unittest.TestCase):
         self.assertEqual(notes.recipe_note(1), "1 step copied from Fusion.")
 
     def test_names_the_first_unsupported_feature(self):
-        refusal = {"index": 4, "name": "Coil1", "type": "CoilFeature", "reason": "Steps of type coil are not copied yet."}
+        refusal = {"index": 4, "name": "Coil1", "type": "ThickenFeature", "reason": "Steps of type thicken are not copied yet."}
         self.assertEqual(
             notes.step_only_note(refusal),
-            "Added as a fixed shape: Coil1 (coil) could not be copied. Steps of type coil are not copied yet.")
+            "Added as a fixed shape: Coil1 (thicken) could not be copied. Steps of type thicken are not copied yet.")
         multi = {"index": 1, "name": "", "type": "RectangularPatternFeature", "reason": "No."}
         self.assertIn("rectangular pattern", notes.step_only_note(multi))
 
