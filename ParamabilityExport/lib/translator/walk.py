@@ -20,11 +20,15 @@ from .sketch import borrowed
 from .words import type_words
 
 
-def _refusal(item, reason, note=None):
-    """The refusal record of the result. `note` is the package note when it differs from the usual wording."""
+def _refusal(item, reason, note=None, cause=None):
+    """The refusal record of the result. `note` is the package note when it differs from the usual wording; `cause`
+    (`gap_hints`) adds the `hint` that tells the person what to change in Fusion, when it has one."""
     out = {"index": item.get("index"), "name": item.get("name", ""), "type": item.get("type", ""), "reason": reason}
     if note:
         out["note"] = note
+    found = gap_hints.hint(cause)
+    if found:
+        out["hint"] = found
     return out
 
 
@@ -179,13 +183,13 @@ def walk_items(ctx, result):
         on instead: True, unless there is no body to add the gap to yet. `cause` is the `gap_hints` cause, when the
         reason has one."""
         if ctx.diagnose and not stops.first_body_stop(ctx):
-            gap = ctx.leave_out(item, reason, ())
+            gap = ctx.leave_out(item, reason, (), cause=cause)
             verdict = make_verdict(item, "leftOut", note=gap.reason)
             verdict.update(gap=gap.id, cause="stop")
             result.items.append(verdict)
             return True
         result.items.append(make_verdict(item, "unsupported", note=reason))
-        result.refusal = _refusal(item, reason, note)
+        result.refusal = _refusal(item, reason, note, cause)
         result.refusal_cause = cause
         return False
 
@@ -222,7 +226,8 @@ def walk_items(ctx, result):
             if item.get("target_changed") is True:
                 if not made_in_component:
                     return refuse(item, "This body was made in another component and moved here later. "
-                                  "Steps across components are not copied yet.", wording.made_elsewhere_note())
+                                  "Steps across components are not copied yet.", wording.made_elsewhere_note(),
+                                  gap_hints.MADE_IN_OTHER_COMPONENT)
                 return refuse(item, "This step changes the part, which is not copied yet.")
             result.items.append(make_verdict(item, "skipped", note=""))
             return None
@@ -237,10 +242,11 @@ def walk_items(ctx, result):
             if item.get("target_changed") is True or _touches_target(item, ctx):
                 if not made_in_component:
                     return refuse(item, "This body was made in another component and moved here later. "
-                                  "Steps across components are not copied yet.", wording.made_elsewhere_note())
+                                  "Steps across components are not copied yet.", wording.made_elsewhere_note(),
+                                  gap_hints.MADE_IN_OTHER_COMPONENT)
                 return refuse(item, "This step changes the part from another component. "
                               "Steps across components are not copied yet.",
-                              wording.from_other_component_note(_label(item)))
+                              wording.from_other_component_note(_label(item)), gap_hints.CHANGED_FROM_OTHER_COMPONENT)
             result.items.append(make_verdict(item, "skipped", note="In another component."))
             return None
 

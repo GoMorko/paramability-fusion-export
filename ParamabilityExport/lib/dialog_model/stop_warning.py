@@ -40,6 +40,9 @@ def _stop_fields(refusal, has_parameters):
     lines = [title]
     if reason and reason != title:
         lines.append(clip(reason, MAX_SHORT_REASON))
+    hint = " ".join(str(refusal.get("hint") or "").split())
+    if hint:
+        lines.append(clip("Tip: %s" % hint, MAX_SHORT_REASON))
     lines.append(fixed_shape_sentence(has_parameters))
     return {"stops": True, "index": _step_index(refusal), "label": label, "title": title, "reason": reason,
             "lines": lines}

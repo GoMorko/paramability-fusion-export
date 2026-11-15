@@ -242,23 +242,28 @@ def also_failing_note(after_stop):
     return clip("Not copied either: %s." % ", ".join(names), MAX_NOTE) if names else ""
 
 
+def _with_tip(text, refusal):
+    """`text` and the refusal's hint ("Tip: ..."), when the hint is there and fits the note."""
+    tip = " Tip: %s" % refusal["hint"] if refusal.get("hint") else ""
+    return text + tip if tip and len(text) + len(tip) <= MAX_NOTE else text
+
+
 def step_only_note(refusal):
-    """Note for a part that could not be copied. `refusal` is the translator's {index, name, type, reason}; a refusal
-    that carries its own `note` is written as it is."""
+    """Note for a part that could not be copied. `refusal` is the translator's {index, name, type, reason, hint}; a
+    refusal that carries its own `note` is written as it is. The hint follows when it fits."""
     if refusal.get("note"):
-        return clip(refusal["note"], MAX_NOTE)
+        return _with_tip(clip(refusal["note"], MAX_NOTE), refusal)
     reason = plain(str(refusal.get("reason") or "").strip())
     label = step_label(refusal.get("name"), refusal.get("type"))
     if label:
         text = "Added as a fixed shape: %s could not be copied. %s" % (label, reason)
     else:
         text = "Added as a fixed shape: the part could not be copied. %s" % reason
-    return clip(text, MAX_NOTE)
+    return _with_tip(clip(text, MAX_NOTE), refusal)
 
 
 def from_other_component_note(label):
-    return ("Added as a fixed shape: %s changes this part from another component. "
-            "Steps across components are not copied yet." % label)
+    return "Added as a fixed shape: %s changes this part from another component." % label
 
 
 def made_elsewhere_note():

@@ -8,6 +8,7 @@ from tests.test_translate_sketch_motion import run as run_with_motion
 from tests.translator_helpers import left_out, stopped
 from tests.translator_helpers import assert_schema_ok, load_capture, steps_of, translate_fixture
 
+from lib.capture_model import gap_hints
 from lib.sketch_values.motion import OPTIMISTIC, Affine, Motion, Stuck
 from lib.translator import CaptureError, translate
 from lib.translator.notes import step_only_note
@@ -70,6 +71,14 @@ class RefusalTest(unittest.TestCase):
         refusal = self.refusal("component_cross_cut", stopped)
         self.assertEqual((refusal["index"], refusal["name"]), (3, "Extrude5"))
         self.assertIn("Extrude5 (extrude) changes this part from another component", step_only_note(refusal))
+
+    def test_a_stop_caused_by_another_component_carries_a_tip(self):
+        for name, cause in (("component_cross_cut", gap_hints.CHANGED_FROM_OTHER_COMPONENT),
+                            ("component_made_elsewhere", gap_hints.MADE_IN_OTHER_COMPONENT)):
+            with self.subTest(name):
+                refusal = self.refusal(name, stopped)
+                self.assertEqual(refusal["hint"], gap_hints.HINTS[cause])
+                self.assertTrue(step_only_note(refusal).endswith("Tip: " + refusal["hint"]))
 
     def test_a_body_made_in_another_component(self):
         refusal = self.refusal("component_made_elsewhere", stopped)

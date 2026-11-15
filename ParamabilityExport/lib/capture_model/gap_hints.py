@@ -2,7 +2,8 @@
 so the step copies.
 
 A handler gives the cause with its Refusal (`Refusal.cause`); a step type with no handler gets it from the step kind
-table (`StepType.gap_cause`).
+table (`StepType.gap_cause`). A step that stops the copy gives its cause to the walk's refusal, so the dialog and the
+report show its hint too.
 The hints follow the app's user guide chapter "Designing in Fusion (experimental)" (page "Steps that do not copy
 yet"): when the two disagree, the chapter is right. A cause without useful advice has no hint.
 """
@@ -33,6 +34,8 @@ PATH_PATTERN = "pathPattern"
 BOUNDARY_FILL = "boundaryFill"
 NEW_COMPONENT = "newComponent"
 OTHER_COMPONENT = "otherComponent"
+CHANGED_FROM_OTHER_COMPONENT = "changedFromOtherComponent"
+MADE_IN_OTHER_COMPONENT = "madeInOtherComponent"
 AFTER_GAP = "afterGap"
 
 # Causes without a hint: a refusal that names no cause, and a step type with no handler and no cause in the table.
@@ -65,6 +68,8 @@ HINTS = {
     BOUNDARY_FILL: "Build the solid with extrudes and cuts instead of filling a boundary.",
     NEW_COMPONENT: "Make the body in the component that holds the part.",
     OTHER_COMPONENT: "Use sketches, planes and faces of the part's own component.",
+    CHANGED_FROM_OTHER_COMPONENT: "Make the step in the part's own component, or export both parts together.",
+    MADE_IN_OTHER_COMPONENT: "Model the body in the component you export, or export the component that holds it.",
     AFTER_GAP: "Fix the step it builds on first.",
 }
 
