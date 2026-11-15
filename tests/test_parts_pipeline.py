@@ -263,11 +263,11 @@ class FixedShapeTest(unittest.TestCase):
         self.assertIn("wall_mm", result.report["sizes"]["free"])
         self.assertIn(entry, result.report["sizes"]["loose"])
 
-    def test_a_size_that_was_loose_already_keeps_its_reason_and_gets_the_fixed_part_after_it(self):
+    def test_a_size_that_was_loose_already_gets_the_fixed_part_in_front_of_its_reason(self):
         result = export(FakePartsPort([with_joint_on(BASE, "wall_mm"), stuck_body()]))
         [entry] = [e for e in result.manifest["parts"][0]["loose"] if e["name"] == "wall_mm"]
+        self.assertTrue(entry["reason"].startswith("Body3 stays a fixed shape"))
         self.assertIn("joint", entry["reason"])
-        self.assertIn("Body3 stays a fixed shape", entry["reason"])
 
     def test_parts_that_are_all_recipes_mark_nothing_for_fixed_shapes(self):
         result = export(FakePartsPort([BASE, second_body()]))

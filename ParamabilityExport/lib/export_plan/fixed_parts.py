@@ -49,14 +49,14 @@ def marked(size_table, fixed_parts, free):
 
 
 def joined(loose, extra):
-    """`loose` with the entries of `extra` added: a size that is loose already keeps its reason and gets the new one
-    after it, cut to the manifest limit."""
+    """`loose` with the entries of `extra` added: a size that is loose already gets the new reason in front of its own,
+    so the fixed part is named even when the cut to the manifest limit shortens the old reason."""
     out = [dict(e) for e in loose]
     at = {e["name"]: e for e in out}
     for entry in extra:
         if entry["name"] in at:
             found = at[entry["name"]]
-            found["reason"] = clip("%s %s" % (found["reason"], entry["reason"]), MAX_FIXED_REASON)
+            found["reason"] = clip("%s %s" % (entry["reason"], found["reason"]), MAX_FIXED_REASON)
         else:
             out.append(dict(entry))
             at[entry["name"]] = out[-1]
