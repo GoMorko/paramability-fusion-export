@@ -28,13 +28,11 @@ TOO_MANY = "A copy holds at most %d coils."
 TOO_MANY_TURNS = "A copy holds at most %d turns of coils and threads in all."
 TOUCHING = "The turns of this coil would touch each other."
 NEW_COMPONENT = "Coils that make a new component are not copied."
-IN_TOOL = "A coil cannot be part of a tool body that has other steps."
 
 # The hint of each cause: `capture_model/gap_hints.py`.
 CAUSE_SPIRAL = gap_hints.COIL_SPIRAL
 CAUSE_TAPER = gap_hints.COIL_TAPER
 CAUSE_PLACE = gap_hints.COIL_PLACE
 CAUSE_LIMIT = gap_hints.COIL_LIMIT
-CAUSE_TOOL = gap_hints.COIL_TOOL
 CAUSE_HALF = gap_hints.COIL_HALF
 CAUSE_OTHER = gap_hints.COIL
