@@ -4,7 +4,7 @@ from ...design_edit.marker import MARKER_LOST
 from ...geometry.tolerances import FIT_TOLERANCE, FLIP_TOLERANCE, SAME_SIZE
 from ...package.manifest import MAX_FIXED_REASON
 from ...package.text import clip
-from ...probe import build, derived, match, plan, plane_sizes, ref_fit, series
+from ...probe import build, derived, match, pieces, plan, plane_sizes, ref_fit, series
 from ...probe.state import ProbeState
 from ...sketch_values.motion import SHAPE
 from ...translator.notes import loose_reason
@@ -110,17 +110,24 @@ class SizeProbe:
         start, more)`: the size values a row set, its RowExport result, the probe state read there (None when it did
         not build), the read of the design before the row ran, once the parameters were back (None when it was not
         read), and `more`: `put_back`, the read once the followed sketches were put back on their first solution
-        before the row ran, and `again`, true for a row run a second time (`pipeline.ProbeRun`)."""
+        before the row ran, and `again`, true for a row run a second time (`pipeline.ProbeRun`).
+
+        A row that built the part in several separate pieces, while it was one at E0 (`pieces.came_apart`), is kept
+        as a row that did not build, with the number of pieces: the app cannot build the part there."""
         for values, result, read, *rest in entries:
             start = rest[0] if rest else None
             more = rest[1] if len(rest) > 1 and isinstance(rest[1], dict) else {}
             put_back = more.get("put_back")
             kept = {"start": start if isinstance(start, dict) else None,
                     "put_back": put_back if isinstance(put_back, dict) else None, "again": bool(more.get("again"))}
+            apart = None if result.get("error") else pieces.came_apart(read, self.e0)
             if result.get("error"):
                 detail = result.get("detail") or {}
                 state = ProbeState(values or {}, built=False, failed=(detail.get("items") or [""])[0], **kept)
                 self.dropped.append({"name": result.get("name"), "error": result.get("error"), "detail": detail})
+            elif apart:
+                state = ProbeState(values or {}, built=False, pieces=apart, **kept)
+                self.dropped.append({"name": result.get("name"), "error": pieces.APART_ERROR % apart})
             else:
                 state = ProbeState(values or {}, read=read, **kept)
             self.states.append(state)

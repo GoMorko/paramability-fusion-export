@@ -8,7 +8,7 @@ from ...timing.timer import Timer, rounded
 from .. import messages
 
 # The parts of a probe read the Fusion reader times (`fusion_reader.probe_state.read_state`).
-READ_PARTS = ("sketches", "points", "params", "refs", "box", "faces")
+READ_PARTS = ("sketches", "points", "params", "refs", "box", "pieces", "faces")
 
 
 def plan_rows_left(rows):
@@ -251,8 +251,8 @@ class ProbeRun:
     def summary(self):
         """How the time of the tries went, for `report.json` (`timing.probe`): `tries` rows run, `rebuild` (the rows
         without the reads made inside them: setting the sizes, rebuilding the design, putting them back), the state
-        `read`s with the time of their parts (`read_parts`: sketches, points and lines, params, refs, box, faces) and
-        the `put_back` of sketches. Never raises."""
+        `read`s with the time of their parts (`read_parts`: sketches, points and lines, params, refs, box, the pieces of
+        the part, faces) and the `put_back` of sketches. Never raises."""
         try:
             timer = self.timer
             return {

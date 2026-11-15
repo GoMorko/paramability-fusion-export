@@ -93,6 +93,28 @@ class ReadStateTest(unittest.TestCase):
         self.assertNotIn("box", state(design, target=True))
 
 
+class PiecesTest(unittest.TestCase):
+    """With the box, the target's solids and the boxes of the other solid bodies of its component."""
+
+    def design(self, lumps, others):
+        design = Design({})
+        design.target.lumps = Coll([Obj()] * lumps)
+        design.target.isSolid = True
+        design.rootComponent.bRepBodies = Coll([design.target] + others)
+        return design
+
+    def test_the_lumps_and_the_other_solid_bodies_are_read(self):
+        piece = body("b2", lo=(50, 0, 0), hi=(60, 10, 10))
+        piece.isSolid = True
+        surface = body("b3")
+        surface.isSolid = False
+        got = state(self.design(2, [piece, surface]), target=True)["pieces"]
+        self.assertEqual(got, {"lumps": 2, "others": [{"min": [50, 0, 0], "max": [60, 10, 10]}]})
+
+    def test_a_target_whose_lumps_cannot_be_read_has_no_pieces(self):
+        self.assertNotIn("pieces", state(Design({}), target=True))
+
+
 class PathCurvesTest(unittest.TestCase):
     def setUp(self):
         self.sk = sketch()

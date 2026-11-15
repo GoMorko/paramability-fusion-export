@@ -391,6 +391,10 @@ def _cut_notes(table, sizes, ctx):
                    if seen and hit and side in seen.changed and abs(seen[0 if side == "low" else 1] - at) < 1e-9]
         if changes:
             causes.append(wording.outline_changed_why(changes))
+        splits = [seen.split[side] for side, at, hit in (("low", low, cut_low), ("high", high, cut_high))
+                  if seen and hit and side in seen.split and abs(seen[0 if side == "low" else 1] - at) < 1e-9]
+        if splits:
+            causes.append(wording.split_why(splits))
         causes += [why for ends, why in made.get(e.name, {}).items()
                    if (cut_low and abs(ends[0] - low) < 1e-9) or (cut_high and abs(ends[1] - high) < 1e-9)]
         if not causes:

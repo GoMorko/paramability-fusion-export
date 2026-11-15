@@ -54,24 +54,25 @@ FREE, DERIVED, CONSTANT, FIXED, NOT_OFFERED = "free", "derived", "constant", "fi
 class Cut(tuple):
     """`(low, high)` a size range is cut to. `failed` holds, for each end that was cut (`"low"`, `"high"`), the
     `(value, step)` of the nearest try Fusion did not rebuild past it; `changed` the `(value, sketch)` of the nearest
-    try past it where a sketch the copy follows made a different outline."""
+    try past it where a sketch the copy follows made a different outline; `split` the `(value, pieces)` of the nearest
+    try past it where the part came apart into several pieces."""
 
-    def __new__(cls, low, high, failed=None, changed=None):
+    def __new__(cls, low, high, failed=None, changed=None, split=None):
         out = super().__new__(cls, (low, high))
         out.failed = dict(failed or {})
         out.changed = dict(changed or {})
+        out.split = dict(split or {})
         return out
 
     def meet(self, other):
         """The cut that holds both: the higher low end and the lower high end, each with the try behind it."""
-        failed, changed = {}, {}
+        found = {"failed": {}, "changed": {}, "split": {}}
         for side, at, pick in (("low", 0, max), ("high", 1, min)):
             won = other if pick(self[at], other[at]) != self[at] else self
-            if side in won.failed:
-                failed[side] = won.failed[side]
-            if side in won.changed:
-                changed[side] = won.changed[side]
-        return Cut(max(self[0], other[0]), min(self[1], other[1]), failed, changed)
+            for kind, held in found.items():
+                if side in getattr(won, kind):
+                    held[side] = getattr(won, kind)[side]
+        return Cut(max(self[0], other[0]), min(self[1], other[1]), **found)
 
 
 @dataclass

@@ -1609,7 +1609,9 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   step that made a Combine tool body, or a failure with no step name; a step of another component, or a name no
   capture item has, cuts nothing and the size keeps the "followed between A and B" mark. Where a followed sketch made
   a different outline with only that size changed, the range stops the same way at the farthest value that kept it
-  (`spans.kept`, `Cut.changed`). Second, a value that
+  (`spans.kept`, `Cut.changed`), and where Fusion built the part in several separate pieces, at the farthest value
+  tried in one piece (`spans.split`, `Cut.split`, `kept_ranges.split_cut`; the reason says "the part comes apart into
+  2 separate pieces in Fusion at 40"). Second, a value that
   Paramability refuses past some size value (a taper of 45 degrees or more) cuts the ranges of the untyped sizes it
   reads (`Context.cut`). `TranslateResult.cuts` lists each cut size as `{ name, reason, words, why, min, max }`
   (`translate._cut_notes`, `notes.cut_reason`: "Slope: the range stops at 0.5, since Fusion did not rebuild the
@@ -1789,7 +1791,8 @@ tell, a read curve runs the way the captured one does along the loop), an arc's 
 (`<item>/p<profile>`) whose curves were measured. For a sketch the probe measured, a key that is not listed did not
 move. `spans` gives, per size the probe set to other values, the lowest and highest value of the states that built
 (the value now included) and `failed`, `[value, step]` for each value tried alone that did not build
-(`probe.build.spans`), and `kept` and `changed` for a size whose own row changed a followed outline (see the
+(`probe.build.spans`), `split`, `[value, pieces]` for each value tried alone where Fusion built the part in several
+separate pieces (only when there is one, see "Probe states"), and `kept` and `changed` for a size whose own row changed a followed outline (see the
 different outline item below). A sketch the probe could not measure (a step uses it in a way the probe cannot follow, its first read did not
 match the capture, or there was no read at the current sizes) is listed in `unmeasured` (sketch name to reason), and
 nothing is known about it. For one sketch and one size the motion file therefore gives one of three answers: measured
@@ -2019,6 +2022,7 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
   "lines": { "<sketch line token>": { "point": [x, y, z], "dir": [x, y, z] } },
   "params": { "d12": 2.0 },
   "box": { "min": [..], "max": [..] },
+  "pieces": { "lumps": 1, "others": [{ "min": [..], "max": [..] }] },
   "refs": { "57.plane": { "point": [x, y, z], "normal": [x, y, z] } },
   "faces": { "15/face": { "frame": FRAME, "loops": [LOOP, ...] } },
   "patterns": { "17": { "count": [7, 1], "elements": [{ "id": 3, "suppressed": false, "frame": FRAME }, ...] } }
@@ -2035,6 +2039,15 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
 - `params`: `value` of each named parameter in Fusion's own units (cm, radians), as in `parameters.*.value`. A name
   is looked up in the user parameters, then in the target component's model parameters.
 - `box`: the target body's box, as `target.box`.
+- `pieces` (only with `box`): `lumps`, how many solids the target body holds (`BRepBody.lumps`), and `others`, the
+  boxes of the other solid bodies of its component (left out when one cannot be read or there are more than 64). The
+  app builds a part only in one piece, so the probe works out from them how many pieces the part is in
+  (`lib/probe/pieces.py`): the lumps, plus the other bodies whose box comes within 1 mm of the target's box at this
+  state or at E0, less as many as did so at E0 (a cut that cuts a body in two, or a join that does not reach it, leaves
+  new bodies next to it). A try where the part is in several pieces while it was one at E0 is kept as a try that did
+  not build, with `pieces` (the count) in its state and an entry in `probe.dropped`: nothing is fitted to it, and the
+  size's range stops at the farthest value tried in one piece (`Motion.spans` `split`, `kept_ranges.split_cut`).
+  Reading them recomputes nothing.
 - A sketch of another component that a step borrows is requested with the optional `borrowed`: `{ "<sketch token>":
   { "path": "<fullPathName the capture recorded>" } }`. It is found by token, read native, and its place is found
   again at every state: the occurrence of its component with that path (the only one when there is no path), then the
@@ -2254,7 +2267,7 @@ export, the recipe and the notes do not depend on it.
   without the state reads made inside it (setting sizes, Fusion rebuilding, putting them back), `read` the state reads of
   the tries (rows, starts, put backs, the discovery base; not the marker roll check or the read after the tries) with
   `read_parts`, the time of each part of those reads (`sketches`, `points` with the lines, `params`, `refs`, `box`,
-  `faces`; a part no read held is left out; a face read that parks the marker does not count the move back, which
+  `pieces`, `faces`; a part no read held is left out; a face read that parks the marker does not count the move back, which
   happens in the change that puts the values back and so counts in `rebuild`), and `put_back` the sketch put backs
   (`probe.recovery`). `try_seconds` is the same value as in
   `probe.timeline` (from the first try to the end of the discovery rows).

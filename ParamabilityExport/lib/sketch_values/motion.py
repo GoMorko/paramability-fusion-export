@@ -33,8 +33,9 @@ of an export): nothing is known about it.
 
 `spans` says, per size the probe set to other values, between which values it was really measured: `low` and `high`
 are the lowest and highest values of the states that built (the value now included), `failed` lists each value tried
-alone that Fusion could not rebuild, with the first step that failed there. A size whose `low` and `high` are its
-value now and that has `failed` entries was not measured at all.
+alone that Fusion could not rebuild, with the first step that failed there, and `split` (only when there is one) each
+value tried alone where Fusion built the part in several separate pieces, with how many. A size whose `low` and `high`
+are its value now and that has `failed` or `split` entries was not measured at all.
 
 A value that follows its sizes along a curve the copy can write is a sum of products instead:
 `{ "const": 2, "sum": [ { "k": 1, "of": [["", "wall", 1], ["cot", "angle", 0.5]] } ] }` is

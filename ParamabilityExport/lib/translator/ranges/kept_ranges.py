@@ -13,7 +13,9 @@ the person typed gets no value: the rules cannot be kept for it.
 `built_ranges` does change ranges: where Fusion itself did not rebuild the design at a value the size probe tried, the
 range stops at the farthest value that built on that side, since the form should not offer a value the design cannot
 take. Only a failure in a step the part is built from counts. Where a sketch the copy follows makes a different outline
-(`Motion.spans` `kept`, `probe.build.outline_windows`), the range stops at the farthest value tried that kept it.
+(`Motion.spans` `kept`, `probe.build.outline_windows`), the range stops at the farthest value tried that kept it, and
+where Fusion built the part in several separate pieces (`Motion.spans` `split`, `probe.pieces`), at the farthest value
+tried that kept it in one.
 """
 import math
 
@@ -51,22 +53,36 @@ def part_step(capture):
     return lambda step: not step or (step in mine and step not in other)
 
 
-def failure_cut(table, entry, span, mine):
-    """`(low, high, found)`: the range of a free size cut on each side where Fusion did not rebuild with only that
-    size changed (`span` as `Motion.spans`), past the farthest value that built; `mine(step)` says whether a failed
-    step counts (`part_step`). An end the person typed is kept; `found` holds `(value, step)` of the nearest failure
-    behind each cut end."""
+def _cut_past(table, entry, span, tries):
+    """`(low, high, found)`: the range of a free size cut on each side where one of `tries` (`(value, what)` each) lies
+    past the farthest value that built (`span` as `Motion.spans`), with `(value, what)` of the nearest one behind each
+    cut end. An end the person typed is kept."""
     size = table.sizes[entry.size_name]
-    failed = [(value, step) for value, step in span.get("failed") or () if mine(step)]
     typed_low, typed_high = table.typed_ends(entry.name)
     low, high, found = size["min"], size["max"], {}
-    below = [f for f in failed if f[0] < span["low"] - SAME_SIZE]
-    past = [f for f in failed if f[0] > span["high"] + SAME_SIZE]
+    below = [f for f in tries if f[0] < span["low"] - SAME_SIZE]
+    past = [f for f in tries if f[0] > span["high"] + SAME_SIZE]
     if not typed_low and below:
         low, found["low"] = max(low, span["low"]), max(below, key=lambda f: f[0])
     if not typed_high and past:
         high, found["high"] = min(high, span["high"]), min(past, key=lambda f: f[0])
     return low, high, found
+
+
+def failure_cut(table, entry, span, mine):
+    """`(low, high, found)`: the range of a free size cut on each side where Fusion did not rebuild with only that
+    size changed (`span` as `Motion.spans`), past the farthest value that built; `mine(step)` says whether a failed
+    step counts (`part_step`). An end the person typed is kept; `found` holds `(value, step)` of the nearest failure
+    behind each cut end."""
+    return _cut_past(table, entry, span, [(value, step) for value, step in span.get("failed") or () if mine(step)])
+
+
+def split_cut(table, entry, span):
+    """`(low, high, found)`: the range of a free size cut on each side where Fusion built the part in several separate
+    pieces with only that size changed (`span` `split`), past the farthest value that built in one piece. The app
+    builds a part only in one piece. An end the person typed is kept; `found` holds `(value, pieces)` of the nearest
+    such try behind each cut end."""
+    return _cut_past(table, entry, span, [(value, count) for value, count in span.get("split") or ()])
 
 
 def outline_cut(table, entry, span):
@@ -94,8 +110,9 @@ def outline_cut(table, entry, span):
 
 def built_ranges(table, motion, capture=None):
     """`{Fusion name: Cut}` of the free sizes whose range goes past a value at which Fusion did not rebuild the design
-    (`Motion.spans`: a value tried with only that size changed), or at which a followed sketch makes a different
-    outline (`outline_cut`). On that side the range stops at the farthest value that built and kept the outline. An end
+    (`Motion.spans`: a value tried with only that size changed), at which a followed sketch makes a different outline
+    (`outline_cut`), or at which the part came apart into several pieces (`split_cut`). On that side the range stops at
+    the farthest value that built in one piece and kept the outline. An end
     the person typed is kept, and a range that would shrink to the value now is left as it is (the size could not be
     measured). A failure in a step the part is not built from (`capture` items of other components) cuts nothing: the
     part itself may rebuild there."""
@@ -108,7 +125,9 @@ def built_ranges(table, motion, capture=None):
             continue
         low, high, found = failure_cut(table, e, span, mine)
         kept_low, kept_high, changed = outline_cut(table, e, span)
-        cut = Cut(low, high, found).meet(Cut(kept_low, kept_high, changed=changed))
+        split_low, split_high, split = split_cut(table, e, span)
+        cut = (Cut(low, high, found).meet(Cut(kept_low, kept_high, changed=changed))
+               .meet(Cut(split_low, split_high, split=split)))
         if (cut[0], cut[1]) != (size["min"], size["max"]) and cut[1] - cut[0] > SAME_SIZE:
             out[e.name] = cut
     return out
