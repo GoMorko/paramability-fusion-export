@@ -26,6 +26,11 @@ SHARP_CORNER = "sharpCorner"
 LOFT_KIND = "loftKind"
 THREAD = "modeledThread"
 COIL = "coil"
+SCALE = "scale"
+REPLACE_FACE = "replaceFace"
+RIB_WEB = "ribWeb"
+PATH_PATTERN = "pathPattern"
+BOUNDARY_FILL = "boundaryFill"
 NEW_COMPONENT = "newComponent"
 OTHER_COMPONENT = "otherComponent"
 AFTER_GAP = "afterGap"
@@ -53,6 +58,11 @@ HINTS = {
     LOFT_KIND: "Build it from lofts of two outlines each, or from extrudes.",
     THREAD: "Use a cosmetic thread, which copies as a plain hole.",
     COIL: "Your AI assistant can add a coil to the copy.",
+    SCALE: "Change the sizes in the sketches instead of scaling the body.",
+    REPLACE_FACE: "Cut the shape with an extrude, or extrude the face up to the shape you want.",
+    RIB_WEB: "Draw the rib or web outline in a sketch and extrude it.",
+    PATH_PATTERN: "Use a rectangular or circular pattern, or a mirror.",
+    BOUNDARY_FILL: "Build the solid with extrudes and cuts instead of filling a boundary.",
     NEW_COMPONENT: "Make the body in the component that holds the part.",
     OTHER_COMPONENT: "Use sketches, planes and faces of the part's own component.",
     AFTER_GAP: "Fix the step it builds on first.",

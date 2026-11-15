@@ -99,6 +99,14 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
    Export: the single path sweep copies; the guide surface sweep is left out and names the settings Fusion did not
    give; the edge loft names what Fusion gave for the section.
 
+5a. ST1, steps with their own reason. Model a 40 mm box and use Modify, Scale on it; on a second box add a Rib (a
+   sketch line across a shell) and a Web; on a third use Replace Face with a surface, Pattern on Path with a sketch
+   curve, and Boundary Fill between two bodies.
+   Export: each part is left out or saved as a fixed shape with a step name and a plain reason (not "Steps of type
+   ..."), and a tip in `gaps.json`. In `report.json` note the capture `type` of each step: the add-in expects
+   ScaleFeature, ReplaceFaceFeature, RibFeature, WebFeature, PathPatternFeature, BoundaryFillFeature and (surface
+   Offset) OffsetFeature; any other name gets the generic reason.
+
 6. AS1, steps after a stop. Extrude a box, split it with the curved face of a cylinder body and remove the outer
    piece, then add a coil joined to the box.
    Export: the box is saved as a fixed shape with the split as the reason, `after_stop` names the split and the

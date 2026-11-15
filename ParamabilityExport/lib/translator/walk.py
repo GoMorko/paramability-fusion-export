@@ -148,6 +148,12 @@ def _type_cause(item):
     return (spec and spec.gap_cause) or gap_hints.UNSUPPORTED
 
 
+def _unsupported_reason(item):
+    """Why a step of a type with no handler is left out: the step kind table's reason, else the generic one."""
+    spec = step_kinds.step_type(item.get("type"))
+    return (spec and spec.unsupported) or "Steps of type %s are not copied yet." % type_words(item["type"])
+
+
 def _gap_ids(ctx, item):
     """Ids of the gaps whose faces `item` picks, or may pick."""
     return [gap.id for gap in gap_picks.picked_gaps(ctx, item)[0]]
@@ -255,8 +261,7 @@ def walk_items(ctx, result):
             if handler is not None or item.get("target_changed") is not True:
                 # Only a step the reader saw change the body is a gap: one that may have done anything stops.
                 return refuse(item, "The bodies this %s changes could not be read." % type_words(item["type"]))
-            if not leave_out(item, "Steps of type %s are not copied yet." % type_words(item["type"]),
-                             _gap_ids(ctx, item), cause=_type_cause(item)):
+            if not leave_out(item, _unsupported_reason(item), _gap_ids(ctx, item), cause=_type_cause(item)):
                 return False
             made_in_component = True
             return None
@@ -285,10 +290,7 @@ def walk_items(ctx, result):
         if _data(item).get("read_error"):
             return refuse(item, "This step could not be read from Fusion.")
         if handler is None:
-            spec = step_kinds.step_type(item["type"])
-            if not leave_out(item, (spec and spec.unsupported)
-                             or "Steps of type %s are not copied yet." % type_words(item["type"]),
-                             _gap_ids(ctx, item), cause=_type_cause(item)):
+            if not leave_out(item, _unsupported_reason(item), _gap_ids(ctx, item), cause=_type_cause(item)):
                 return False
             made_in_component = True
             return None
