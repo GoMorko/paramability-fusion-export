@@ -2,7 +2,7 @@
 
 A step the copy cannot hold is left out of the recipe and recorded as a gap. This page describes the gaps file the
 add-in writes next to the recipe. The format is published by the Paramability app as `paramability.recipeGaps`,
-version 3 (`schemas/paramability.recipeGaps.v3.schema.json` in the app repository; copies are in `tests/schema/`).
+version 3 (the schema files are published with the app; copies are in `tests/schema/`).
 That schema is the contract: it holds every limit. Version 2 allowed more gaps (256 instead of 16). Version 3 added
 `finishing`. The add-in always writes version 3 (`package/gaps_file.py`), so it needs a Paramability build that reads
 version 3; an older build refuses the file and opens the part as a fixed shape. This page says what the add-in puts in

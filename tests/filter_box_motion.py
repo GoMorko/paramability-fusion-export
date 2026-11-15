@@ -1,4 +1,4 @@
-"""A motion file for the owner's FilterBox capture, written by hand from how its sketches are drawn.
+"""A motion file for a FilterBox capture, written by hand from how its sketches are drawn.
 
 The capture holds no probe states, so the motion is what the probe fits for this geometry:
 - BoxBase: a rectangle centred on the origin, `FilterBox_width_mm` by `FilterBox_depth_mm`.

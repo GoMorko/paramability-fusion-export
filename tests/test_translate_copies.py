@@ -150,7 +150,7 @@ class CopiedFinishTest(unittest.TestCase):
 
 
 class CopyCountTest(unittest.TestCase):
-    """A count formula with rounding, as in the owner's filter box: `ceil(width_count) * 2` copies."""
+    """A count formula with rounding, as in a filter box: `ceil(width_count) * 2` copies."""
 
     def table(self, ranges=None):
         width = {"name": "width_count", "expression": "1.8", "value": 1.8, "unit": "", "kind": "count",

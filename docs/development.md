@@ -1,6 +1,7 @@
 # Development
 
-How the code is laid out and how it is tested.
+How the code is laid out and how it is tested. For how an export works from the click to the file, with worked
+examples and debugging steps, read `docs/developer-guide.md`.
 
 ## Code layout
 
@@ -28,7 +29,7 @@ package may import only packages above it in this list (not every one of them). 
 
 For a quick check of a release by hand, with your own projects and a few small test models, see `docs/hand-checks.md`.
 To measure how many kinds of projects the copy covers, build the typical printing projects in `docs/test-projects.md`,
-export them and score them with the app's scoreboard.
+export them and open each one in the Paramability app to see how much of the design it keeps.
 
 Everything under `lib/` except `fusion_reader/` and `fusion_ui/` is pure Python and runs without Fusion. The Fusion
 reading code is tested with fakes. Anything that touches `adsk` stays in `lib/fusion_reader/`, `lib/fusion_ui/` and
@@ -55,8 +56,8 @@ python3 -m unittest discover -s tests -t .
 
 Python 3.10 or newer, standard library only.
 
-The owner-capture checks (`tests/test_owner_captures.py`) need a local `tests/local/owner_captures.json` (git-ignored); without it they skip.
-Set `PARAMABILITY_OWNER_CAPTURES` to use another path and `PARAMABILITY_OWNER_REPORTS` for the folder with the packages.
+The local capture checks (`tests/test_local_captures.py`) read exported packages that stay outside the repository. They need a local `tests/local/captures.json` (git-ignored); without it they skip.
+Set `PARAMABILITY_LOCAL_CAPTURES` to use another path and `PARAMABILITY_LOCAL_REPORTS` for the folder with the packages.
 
 To make the export copy one more kind of Fusion step, follow `docs/adding-a-step-type.md`.
 The file that lists the steps left out of a copy is described in `docs/recipe-gaps.md`.

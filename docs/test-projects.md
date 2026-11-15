@@ -1,9 +1,9 @@
 # Test projects
 
 A set of small, typical 3D printing projects. Together they cover the Fusion steps and modelling habits most projects
-use, so the scoreboard measures how many kinds of projects the copy covers, not one design. Build each one with your
+use, so they show how many kinds of projects the copy covers, not one design. Build each one with your
 Fusion AI assistant from the first line, then export as the "Export:" line says. Start each file name with its number
-(`P1_`, `P2_`, ...) so the scoreboard rows are easy to find.
+(`P1_`, `P2_`, ...) so the exports are easy to find.
 
 Every project uses user parameters. Give each parameter a comment (it becomes the label people see) and make at least
 one parameter a formula of others.
