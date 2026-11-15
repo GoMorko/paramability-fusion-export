@@ -19,6 +19,7 @@ from ..timing.export_timing import attach as attach_timing, stamp as timing_stam
 from ..translator.notes import (
     also_failing_note, cut_reason, follows_components_note, left_out_note, recipe_note, reader_failure_note, step_only_note,
     translate_failure_note, used_several_times_note)
+from . import fixed_parts
 from .health import measuring_note
 from .messages import (
     MAX_NOTE, ORIGINAL_KEPT_NOTE, ORIGINAL_KEPT_PARTS_NOTE, cut_note, dropped_note, fixed_note, left_out_parts_note, loose_note,
@@ -511,7 +512,8 @@ def plan_parts_export(inputs, title, writer, up_axis, size_table=None, listing=N
     A size that is fixed in one part is fixed in all (the caller translates with it fixed; `size_table.fixed` and
     each result's `fixed` are joined here). A size that is loose in one part (a translator doubt, or `loose` from the
     size probe) is listed as loose for every part whose recipe holds it; each reason starts with the part it was found
-    in. A size whose range was cut (`TranslateResult.cuts`) is cut alike in every part that reads it, and its reason
+    in. A size that moves a part that is a fixed shape in the file is loose too, and its reason names that part
+    (`fixed_parts`). A size whose range was cut (`TranslateResult.cuts`) is cut alike in every part that reads it, and its reason
     says so; the manifest lists it as loose with that reason. A ticked size that no part writes as a size is listed
     once in `report.json` under "dropped".
     loose, health, listing, marker, also, timing: as in `plan_single_export`.
@@ -528,6 +530,9 @@ def plan_parts_export(inputs, title, writer, up_axis, size_table=None, listing=N
         fixed_names = {f["name"] for f in all_fixed}
         found = list(loose or []) + _tagged_loose(recipes)
         all_loose = _merge_fixed(size_table, found, skip=fixed_names, only=set(free))
+        shapes = [(p.given.name, p.capture) for p in parts if not p.is_recipe and p.capture is not None]
+        all_loose = fixed_parts.joined(all_loose, [
+            e for e in fixed_parts.marked(size_table, shapes, set(free)) if e["name"] not in fixed_names])[:MAX_FIXED]
         dropped = _shared_dropped(size_table, recipes, fixed_names, set(free))
         users = [name for part in recipes for name in part.free]
         all_cut = _cut_entries(size_table, [c for part in recipes for c in part.result.cuts], set(free),

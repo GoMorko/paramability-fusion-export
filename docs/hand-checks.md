@@ -219,3 +219,11 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     quantity `max(1; floor(Width / 20 mm))`, where the user parameter `Width = 100 mm` drives the plate.
     Export: tick `Width`. The hole count follows `Width` in Paramability, and `Width` has no warning mark. Repeat
     with the quantity `if(Width > 60 mm; 3; 2)`.
+
+11. FP1, a fixed part in a parts package. Make component Box (an 80 x 60 x 30 mm box from user parameter `Width` =
+    80 mm) and component Lid (80 x 60 x 3 mm on top of the box, sketch size from `Width` too). Add to the Lid a Split
+    Body by the curved face of a cylinder body, so the Lid copy stops (see AS1).
+    Export: pick Box and Lid together. The Lid is a fixed shape and the Box has a recipe. `Width` is marked "may give
+    unexpected results" with "Lid stays a fixed shape in this file and does not change with this size." in the
+    result window and in `report.json` `sizes.loose`. A size that only the Lid reads (add a second user parameter
+    used by the Lid alone) is not offered at all.
