@@ -20,6 +20,8 @@ def main():
                     continue
                 full = os.path.join(dirpath, name)
                 zf.write(full, os.path.join("ParamabilityExport", os.path.relpath(full, ADDIN)))
+        # The GPL asks for the licence text to travel with every copy.
+        zf.write(os.path.join(ROOT, "LICENSE.txt"), os.path.join("ParamabilityExport", "LICENSE.txt"))
     print(out)
 
 
