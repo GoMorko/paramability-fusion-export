@@ -152,6 +152,16 @@ class BatchDesign(FakeDesign):
         return True
 
 
+class FormulaOfNumbersTest(unittest.TestCase):
+    def test_a_row_writes_a_number_into_a_formula_of_numbers_and_the_restore_puts_the_text_back(self):
+        store = FakeStore({"w": "5 mm", "wall": "3 * 0.4 mm"})
+        saved = store.saved_expressions()
+        apply_row_values(store, {"wall": "mm"}, {"wall": 1.5})
+        self.assertEqual(store.exprs["wall"], "1.5 mm")
+        self.assertEqual(restore_parameters(store, saved), [])
+        self.assertEqual(store.exprs, saved)
+
+
 class BatchedParametersTest(unittest.TestCase):
     UNITS = {"w": "mm", "h": "mm"}
 

@@ -1,5 +1,5 @@
 """User and model parameters as plain dicts. Uses the objects it is given and imports no adsk (tests use fakes)."""
-from ..params.expressions.text import is_plain_number
+from ..params.expressions.text import is_constant_expression, is_plain_number
 from ..package.units import internal_to_unit, unit_kind
 from .read_geometry import collection_items, component_of, enum_name, safe, type_name
 
@@ -8,8 +8,10 @@ MAX_DEPENDENTS = 2000
 
 
 def _kind_of_value(expression, unit):
-    """derived for a formula, else the unit kind (length, angle, count) or unsupported."""
-    if not is_plain_number(expression):
+    """derived for a formula that reads another parameter (or the text cannot be read), else the unit kind (length,
+    angle, count) or unsupported. A formula of plain numbers (`3 * 0.4 mm`) has the kind of its unit: it is a number
+    that can be changed like a plain one."""
+    if not is_plain_number(expression) and not is_constant_expression(expression):
         return "derived"
     kind = unit_kind(unit)
     return "unsupported" if kind == "unknown" else kind

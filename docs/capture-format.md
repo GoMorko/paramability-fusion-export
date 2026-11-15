@@ -97,7 +97,9 @@ otherwise:
 `design_units` is the design's default length unit (`fusionUnitsManager.defaultLengthUnits`, `mm` when unreadable); a
 bare number in a length formula is read in it. `parameters.user` is `list_user_parameters(design)` and
 `parameters.model` is `list_model_parameters(component)` (`lib/fusion_reader/parameters.py`: name, expression, value
-in Fusion's internal cm and radians, unit, kind, favourite, dependency lists, and for model parameters `role` and
+in Fusion's internal cm and radians, unit, kind (`derived` only when the expression reads another parameter, calls
+`random` or cannot be read; a formula of plain numbers such as `3 * 0.4 mm` has the kind of its unit), favourite,
+dependency lists, and for model parameters `role` and
 `created_by` as `{ kind, token, name, sketch, component }`, where `sketch` is the name of the sketch that holds a sketch
 dimension (`SketchDimension.parentSketch`) and empty otherwise, and `component` is the token of the component the maker
 lives in: the sketch's component for a dimension, else the component the parameter is listed from) for the target's
@@ -1593,8 +1595,9 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
 - Symmetric half length is written as `2 * (formula)`. An extent spacing is `(distance) / ((count) - 1)`. Hole
   tip outlines and counterbore or countersink sizes follow sizes point by point.
 - Pattern counts that follow sizes must give whole numbers at every size value: the formula is rounded as a whole
-  (`round`, `floor`, `ceil`), or it adds, subtracts and multiplies whole numbers and count sizes. Otherwise the sizes
-  are fixed. An extent spacing divides by `max((count) - 1, 1)`, so a count of 1 never divides by zero.
+  (`round`, `floor`, `ceil`), or it is built from whole numbers, count sizes, `+ - *`, `min`, `max`, `abs`, `mod`, `pow`
+  to a whole literal and choices with whole results (`docs/expressions.md`, "Counts"). Otherwise the sizes are fixed.
+  An extent spacing divides by `max((count) - 1, 1)`, so a count of 1 never divides by zero.
 - Values that stay numbers while a size reaches them: construction geometry that a step uses itself (except the
   distance of an offset plane an extrude starts from or reaches to), the "up to" offset, a tip angle, a countersink angle, a full circular turn, a revolve that is not a plain
   part turn, and a pattern whose copies are left out by number or are rounds copied one by one. The sizes behind

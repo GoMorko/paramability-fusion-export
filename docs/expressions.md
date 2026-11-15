@@ -27,7 +27,9 @@ Sources: the Fusion help pages "Parameters reference" (operators, constants, log
 ## Units
 
 A unit word after any operand multiplies it: `2 mm`, `500mm`, `(a + b) mm`, `w mm`. It binds to that operand only,
-so `w / 42 mm` is `w / (42 mm)`. A unit word on its own is 1 of that unit: `w / mm` is `w`, `w / in` is `w / 25.4`.
+so `w / 42 mm` is `w / (42 mm)`. The one exception is a fraction of two plain numbers: `3/8 in` is `(3/8) in`, three
+eighths of an inch, so inch fractions read the way they are written (`Width + 1/8 in`). A unit word on its own is 1 of
+that unit: `w / mm` is `w`, `w / in` is `w / 25.4`.
 After a value, the unit is matched without case (`2 MM`); on its own it must match exactly, so a parameter named `M`
 is not taken for metres.
 
@@ -52,6 +54,15 @@ same way, to the unit of the field they set.
 A parameter unit built from lengths and angles (`mm^2`) gives a plain number in mm squared: formulas can read it,
 but it cannot be ticked as a size. A parameter in another unit (a mass, a time) is left out, and so is any formula
 that reads it.
+
+### Formulas of plain numbers
+
+A user parameter whose formula reads no other parameter and does not call `random` (`3 * 0.4 mm`, `25.4 * 2 mm`,
+`PI * 10 mm`, `3/8 in`) is a number that happens to be written as a sum. The reader gives it the kind of its unit
+(length, angle, or count without a unit), not `derived`, so it is offered and ticked like a plain number: the size
+probe writes numbers into it and the restore puts Fusion's text back afterwards, as for every parameter. One with a
+length or angle unit starts ticked when the body reads it. One without a unit (`2 * PI`) is offered but starts
+unticked, unless it is a favourite. In the manifest list it is an entry with its value and no `expr`.
 
 ### Helper parameters
 
@@ -102,6 +113,14 @@ Function names are matched without case.
 | `min`, `max` | values of one unit | same | that unit |
 | `sign(x)` | any | `x > 0` | 1 above zero, else 0 |
 | `random()` | | refused | |
+
+## Counts
+
+A pattern quantity must give a whole number at every size. It does when it is built from whole parts: a whole number
+literal, a count size, a derived size that is whole, `+ - *` of whole parts, `round`, `floor` or `ceil` of anything,
+`min`, `max` or `abs` of whole parts, `test ? a : b` with whole `a` and `b` (the test can be anything), `mod` of whole
+parts and `pow` of a whole part to a whole number literal of 0 or more. A division, a decimal literal or any other
+function makes it a part number, so the quantity is written as its number and its sizes are marked.
 
 ## Value check
 

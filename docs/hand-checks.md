@@ -210,3 +210,12 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     faces); the copy cuts the bore at the minor diameter from the thread info. The holes up to a face and a body copy
     as blind holes of the measured depth, and when the floor follows a parameter the hole depth follows it. A hole up to a
     face that ends in a drill point is left out with a reason.
+
+11. FM2, a formula of numbers. Model a 40 x 40 x 20 mm box, shelled with the user parameter `Wall = 3 * 0.4 mm`.
+    Export: `Wall` is a size and starts ticked. Changing it in Paramability changes the wall. After the export, the
+    Parameters dialog in Fusion shows `3 * 0.4 mm` again.
+
+12. FM3, a guarded count. On a 100 x 40 x 5 mm plate, cut one 5 mm hole and make a rectangular pattern of it with
+    quantity `max(1; floor(Width / 20 mm))`, where the user parameter `Width = 100 mm` drives the plate.
+    Export: tick `Width`. The hole count follows `Width` in Paramability, and `Width` has no warning mark. Repeat
+    with the quantity `if(Width > 60 mm; 3; 2)`.

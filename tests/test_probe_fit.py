@@ -48,6 +48,11 @@ class FitValueTests(unittest.TestCase):
         self.assertEqual(fit_value(near, cols(w=WIDTH)).kind, "affine")
         self.assertEqual(fit_value(far, cols(w=WIDTH)).kind, "stuck")
 
+    def test_a_stepped_column_that_stays_flat_over_the_tries_gets_no_share_of_the_motion(self):
+        flat = [3] * len(WIDTH)  # floor(width / 20), unchanged over states that only differ a little
+        self.assertEqual(fit_value(WIDTH, cols(steps=flat, w=WIDTH)).terms, {"w": 1.0})
+        self.assertEqual(fit_value(WIDTH, cols(steps=flat)).kind, "stuck")
+
     def test_a_curved_move_gives_up(self):
         result = fit_value([w * w / 100.0 for w in WIDTH], cols(w=WIDTH))
         self.assertEqual((result.kind, result.cause), ("stuck", "curve"))

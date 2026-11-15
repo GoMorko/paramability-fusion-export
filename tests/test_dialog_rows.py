@@ -33,6 +33,13 @@ class OffersRangeTest(unittest.TestCase):
         self.assertEqual(table.with_fixed({"gone": "x"}).sizes["wall"]["max"], 9.0)
 
 
+class FormulaOfNumbersTest(unittest.TestCase):
+    def test_a_formula_of_numbers_is_offered_as_a_size_and_not_as_a_formula(self):
+        params = [{**length("wall", value=0.12), "expression": "3 * 0.4 mm"}]
+        line = offers(initial_table(params), params)[0]
+        self.assertEqual((line["state"], line["ticked"], line["enabled"]), ("size", True, True))
+
+
 class CellTextTest(unittest.TestCase):
     def test_each_state_has_its_plain_words(self):
         self.assertEqual(rows.status_text(offer(), True), "size")

@@ -453,6 +453,24 @@ class WholeCountTest(unittest.TestCase):
         cases = {"ceil(depth) * 2": True, "n * 2 + round(depth / 2)": True, "ceil(depth) / 2": False, "depth * 2": False}
         self.assertEqual({f: _gives_whole_numbers(table, f) for f in cases}, cases)
 
+    def test_min_max_abs_mod_pow_and_choices_are_whole_when_their_parts_are(self):
+        table = type("Table", (), {"sizes": {"depth": {"value": 1.5}, "n": {"value": 3, "kind": "count"},
+                                             "m": {"expr": "n * 2 + 1"}, "h": {"expr": "depth * 2"}}})()
+        cases = {
+            "max(1, floor(depth / 2))": True, "max(1, depth / 2)": False, "min(n, 4) + abs(n - 5)": True,
+            "n > 2 ? 3 : 2": True, "depth > 2 ? 3 : 2": True, "depth > 2 ? 2.5 : 3": False,
+            "n > 2 ? n : depth": False, "mod(n, 2)": True, "mod(n, 2.5)": False, "pow(n, 2)": True,
+            "pow(n, -1)": False, "pow(n, n)": False, "pow(depth, 2)": False, "m * 2": True, "h + 1": False,
+            "-n + 2": True, "n / 2": False, "sqrt(n)": False, "n +": False, "unknown + 1": False,
+        }
+        self.assertEqual({f: _gives_whole_numbers(table, f) for f in cases}, cases)
+
+    def test_derived_sizes_are_followed_to_a_depth_limit(self):
+        sizes = {"n": {"value": 3, "kind": "count"}, "d0": {"expr": "n"}}
+        sizes.update({"d%d" % i: {"expr": "d%d + 1" % (i - 1)} for i in range(1, 12)})
+        table = type("Table", (), {"sizes": sizes})()
+        self.assertEqual((_gives_whole_numbers(table, "d3"), _gives_whole_numbers(table, "d11")), (True, False))
+
 
 if __name__ == "__main__":
     unittest.main()

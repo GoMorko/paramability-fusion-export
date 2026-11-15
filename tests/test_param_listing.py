@@ -55,6 +55,11 @@ class ListingTest(unittest.TestCase):
         self.assertTrue(odd["untranslated"])
         self.assertEqual(listing.no_formula, [{"name": "odd", "reason": odd["untranslated"]}])
 
+    def test_a_formula_of_numbers_is_listed_as_a_plain_size(self):
+        listing = list_parameters([dict(plain("wall", 1.2), expression="3 * 0.4 mm")])
+        self.assertEqual(listing.entries, [{"name": "wall", "label": "wall", "value": 1.2, "unit": "mm"}])
+        self.assertEqual(listing.no_formula, [])
+
     def test_a_translated_formula_carries_no_fusion_text(self):
         listing = list_parameters([plain("wall", 2), formula("outer", "wall * 2 + 1 mm", 5, reads=["wall"])])
         outer = by_label(listing)["outer"]

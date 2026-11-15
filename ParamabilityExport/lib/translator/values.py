@@ -16,7 +16,8 @@ small angle starts at 0 degrees.
 import re
 
 from ..package.numbers import round9
-from ..params.expressions.formula import tokenize_formula
+from ..params.expressions.errors import ExpressionError
+from ..params.expressions.formula import parse_formula
 from ..params.expressions.text import MAX_FORMULA_LENGTH
 from .ranges import kept_ranges, range_check
 
@@ -248,46 +249,53 @@ def _stays_in_range(table, formula, reads, sign, low):
 
 
 _ROUNDING = ("round", "floor", "ceil")
-
-
-def _without_rounding(tokens):
-    """The tokens with each rounding call (`ceil(...)` and the like) left out: such a call is a whole number."""
-    out, at = [], 0
-    while at < len(tokens):
-        token = tokens[at]
-        if token[0] == "id" and token[1] in _ROUNDING and at + 1 < len(tokens) and tokens[at + 1] == ("op", "("):
-            level, at = 0, at + 1
-            while at < len(tokens):
-                level += {("op", "("): 1, ("op", ")"): -1}.get(tokens[at], 0)
-                at += 1
-                if level == 0:
-                    break
-            out.append(("num", 1))
-            continue
-        out.append(token)
-        at += 1
-    return out
+_WHOLE_FROM_WHOLE_PARTS = ("min", "max", "abs", "mod")
+# How many derived sizes deep `_gives_whole_numbers` follows before it gives up.
+_WHOLE_DEPTH = 8
 
 
 def _gives_whole_numbers(table, formula, depth=0):
-    """True when a formula gives a whole number at every size value: it adds, subtracts and multiplies whole
-    numbers, rounding calls and count sizes (and derived sizes that do the same)."""
-    tokens = _without_rounding(tokenize_formula(formula)[:-1])
-    for token in tokens:
-        if token[0] == "num" and token[1] != int(token[1]):
+    """True when a formula gives a whole number at every size value. It is built from whole parts: whole number
+    literals, count sizes, derived sizes that are whole, `+ - *`, `round`, `floor` and `ceil` of anything, `min`,
+    `max` and `abs` of whole parts, `mod` of whole parts, `pow` of a whole part to a whole literal of 0 or more, and a
+    choice `test ? a : b` whose two results are whole (the test can be anything)."""
+    if depth > _WHOLE_DEPTH:
+        return False
+    try:
+        tree = parse_formula(formula)
+    except ExpressionError:
+        return False
+    return _whole(table, tree, depth)
+
+
+def _whole(table, node, depth):
+    kind = node[0]
+    if kind == "num":
+        return node[1] == int(node[1])
+    if kind == "name":
+        size = table.sizes.get(node[1])
+        if size is None:
             return False
-        if token[0] == "op" and token[1] not in "+-*()":
-            return False
-        if token[0] == "id":
-            size = table.sizes.get(token[1])
-            if size is None or depth > 8:
-                return False
-            if "expr" in size:
-                if not _gives_whole_numbers(table, size["expr"], depth + 1):
-                    return False
-            elif size.get("kind") != "count":
-                return False
-    return True
+        if "expr" in size:
+            return _gives_whole_numbers(table, size["expr"], depth + 1)
+        return size.get("kind") == "count"
+    if kind == "neg":
+        return _whole(table, node[1], depth)
+    if kind == "bin":
+        return node[1] in "+-*" and _whole(table, node[2], depth) and _whole(table, node[3], depth)
+    if kind == "cond":
+        return _whole(table, node[2], depth) and _whole(table, node[3], depth)
+    if kind == "call":
+        name, args = node[1], node[2]
+        if name in _ROUNDING:
+            return True
+        if name == "pow":
+            exponent = args[1] if len(args) == 2 else None
+            return (exponent is not None and exponent[0] == "num" and exponent[1] >= 0
+                    and _whole(table, args[0], depth) and _whole(table, exponent, depth))
+        if name in _WHOLE_FROM_WHOLE_PARTS:
+            return bool(args) and all(_whole(table, arg, depth) for arg in args)
+    return False
 
 
 def stays_below(ctx, item, q, limit, why):
