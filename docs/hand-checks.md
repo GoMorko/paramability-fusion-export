@@ -125,3 +125,13 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     `message`, then use Edit, Undo and count the steps that bring the fillet back. TH5: tick `Round` and `Bevel` (range 1 to 9) and
     cancel in the "Try 3 of ..." window; then, on the TH1 box, use Export size choices with a row `Width` = 12, which Fusion cannot build. In both, every step is
     as before; if not, a message box names the step and says to use Undo.
+
+11. PC1, a part that comes apart. Model a 80 by 20 by 5 mm plate whose length is user parameter `Width` = 80 mm,
+    with the left end fixed at x = 0 and the right end at `Width`. On its top face draw a 4 mm circle at x = 70 and
+    extrude it 5 mm up with Join. Second design: the same plate with a 2 mm wide slot cut across it at x = 40, 4 mm
+    deep, its depth user parameter `Slot` = 4 mm.
+    Export: in the first design tick `Width` with a range of 40 to 160; in the second tick `Slot` with a range of 2
+    to 8. In `report.json`, the tries below 68 mm (first) and at 5 mm or more (second) have `pieces` 2 in
+    `probe.states` and an entry in `probe.dropped`; each range is cut with "the part comes apart into 2 separate
+    pieces in Fusion at ...". Note for each design whether the post or the second half shows as its own body in the
+    browser at such a value or as part of Body1, and `timing.probe.read_parts.pieces` against `read_parts.box`.
