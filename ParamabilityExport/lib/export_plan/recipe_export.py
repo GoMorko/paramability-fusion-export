@@ -7,6 +7,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from ..capture_model.gap_hints import hint as gap_hint
 from ..package.gaps_file import gaps_file_bytes
 from ..package.manifest import (
     GAPS_ENTRY, MAX_FIXED, MAX_PART_NOTE, build_parts_manifest, build_recipe_manifest, build_step_only_manifest,
@@ -93,6 +94,12 @@ def translate_capture(capture, up_axis, size_table=None, motion=None, timer=None
     (`TranslateResult.loose`); the ranges are the table's. `timer` gets the time of the walk after a stop
     (`translator.translate`)."""
     return translate(_with_up_axis(capture, up_axis), size_table=size_table, motion=motion, timer=timer)
+
+
+def refusal_hint(result):
+    """What to change in Fusion so the step that stops the copy (`result.refusal`) copies, or "" when the cause has no
+    hint."""
+    return gap_hint(result.refusal_cause) or ""
 
 
 def free_sizes(recipe):

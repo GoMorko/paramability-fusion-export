@@ -4,7 +4,12 @@ from tests import context  # noqa: F401
 from tests.test_recipe_export import coil_then_plate
 from tests.translator_helpers import load_capture
 
+from lib.capture_model import gap_hints
+from lib.capture_model.gap_hints import hint as gap_hint
+from lib.dialog_model.left_out_preview import MORE_MAY_SHOW
 from lib.dialog_model.stop_warning import saved_message, status_text, summarize, summarize_many
+from lib.export_plan.messages import left_out_line, left_out_lines
+from lib.export_plan.recipe_export import translate_capture
 
 
 class SummarizeManyTest(unittest.TestCase):
@@ -82,33 +87,70 @@ def tray_with_gaps(count=1):
 
 
 class LeftOutTest(unittest.TestCase):
-    def test_a_step_the_copy_will_leave_out_is_named_with_its_reason_and_the_picking_step_after_it_is_not(self):
+    def test_a_left_out_step_is_named_with_reason_and_hint_and_the_step_picking_its_faces_is_not(self):
         summary = summarize(tray_with_gaps())
         self.assertFalse(summary["stops"])
         self.assertEqual(summary["lines"][0], "Likely left out of the copy:")
-        self.assertTrue(summary["lines"][1].startswith("Shell1 (coil): "), summary["lines"])
-        self.assertEqual(len(summary["lines"]), 2)
-        self.assertEqual([label for label, _ in summary["left_out"]], ["Shell1 (coil)"])
-        self.assertIn("Shell1 (coil): ", summary["tooltip"])
+        self.assertEqual(summary["lines"][1], left_out_line("Shell1", "Steps of type coil are not copied yet.",
+                                                            gap_hint(gap_hints.COIL)))
+        self.assertEqual([step["name"] for step in summary["left_out"]], ["Shell1"])
+        self.assertIn(summary["lines"][1], summary["tooltip"])
 
-    def test_a_long_list_shows_a_few_steps_and_counts_the_rest(self):
+    def test_the_line_of_a_step_reads_the_same_as_in_the_result_window_after_the_export(self):
+        capture = load_capture("fillet_variable")
+        record = translate_capture(capture, "z").gaps[0]
+        self.assertEqual(summarize(capture)["lines"][1], left_out_lines([(None, record)])[0])
+
+    def test_a_step_without_a_hint_has_no_tip(self):
+        self.assertNotIn("Tip", summarize(load_capture("fillet_g2"))["lines"][1])
+
+    def test_the_export_may_find_more_steps_only_when_a_later_step_waits_for_the_face_read(self):
+        self.assertTrue(summarize(tray_with_gaps())["more_may_show"])
+        self.assertEqual(summarize(tray_with_gaps())["lines"][-1], MORE_MAY_SHOW)
+        alone = summarize(load_capture("fillet_g2"))
+        self.assertFalse(alone["more_may_show"])
+        self.assertNotIn(MORE_MAY_SHOW, alone["lines"])
+
+    def test_a_long_list_shows_a_few_steps_counts_the_rest_and_says_more_may_show_once(self):
         summary = summarize(tray_with_gaps(5))
         self.assertEqual(len(summary["left_out"]), 5)
-        self.assertEqual(len(summary["lines"]), 5)
-        self.assertEqual(summary["lines"][-1], "and 2 more.")
+        self.assertEqual(summary["lines"][-2:], ["and 2 more.", MORE_MAY_SHOW])
+        self.assertEqual(len(summary["lines"]), 6)
 
-    def test_a_copy_that_stops_lists_no_left_out_steps(self):
-        self.assertEqual(summarize(coil_then_plate())["left_out"], [])
+    def test_a_copy_that_stops_lists_no_left_out_steps_and_gives_the_hint_of_the_stop(self):
+        stopped = summarize(coil_then_plate())
+        self.assertEqual(stopped["left_out"], [])
+        self.assertFalse(stopped["more_may_show"])
+        self.assertEqual(stopped["hint"], gap_hint(gap_hints.COIL))
+        self.assertIn("Tip: " + stopped["hint"], stopped["lines"])
+        self.assertLess(stopped["lines"].index("Tip: " + stopped["hint"]), len(stopped["lines"]) - 1)
+        self.assertIn("Tip: " + stopped["hint"], stopped["tooltip"])
+
+    def test_a_stop_without_a_hint_has_no_tip_line(self):
+        stopped = summarize(load_capture("revolve_two_sides"))
+        self.assertEqual(stopped["hint"], "")
+        self.assertFalse(any(line.startswith("Tip") for line in stopped["lines"]))
 
     def test_a_part_with_nothing_left_out_has_no_such_lines(self):
         self.assertEqual(summarize(load_capture("fillet_setback"))["left_out"], [])
+
+    def test_a_step_that_reaches_into_another_component_is_listed_with_the_hint_for_it(self):
+        summary = summarize(load_capture("component_foreign_extent"))
+        self.assertEqual(summary["left_out"][0]["hint"], gap_hint(gap_hints.OTHER_COMPONENT))
+        self.assertIn("Tip: " + gap_hint(gap_hints.OTHER_COMPONENT), summary["lines"][1])
 
     def test_with_several_bodies_the_steps_are_listed_under_the_name_of_their_body(self):
         summary = summarize_many([("Tray", tray_with_gaps()), ("Plate", load_capture("extrude_plate"))])
         self.assertFalse(summary["stops"])
         self.assertEqual(summary["lines"][0], "Tray: likely left out of the copy:")
-        self.assertTrue(summary["lines"][1].startswith("Shell1 (coil): "))
+        self.assertTrue(summary["lines"][1].startswith("Shell1: "))
         self.assertFalse(any("Plate" in line for line in summary["lines"]))
+
+    def test_with_several_bodies_more_may_show_is_said_once_and_a_stop_keeps_its_hint(self):
+        summary = summarize_many([("Tray", tray_with_gaps()), ("Lid", tray_with_gaps()), ("Cover", coil_then_plate())])
+        self.assertEqual(summary["lines"].count(MORE_MAY_SHOW), 1)
+        self.assertIn("Tip: " + gap_hint(gap_hints.COIL), summary["lines"])
+        self.assertIn("fixed shapes", summary["lines"][-1])
 
 
 class AfterExportTest(unittest.TestCase):

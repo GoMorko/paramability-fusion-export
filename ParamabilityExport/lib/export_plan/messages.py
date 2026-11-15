@@ -97,14 +97,19 @@ def left_out_parts_note(counts):
                 MAX_NOTE)
 
 
+def left_out_line(name, reason, hint=None):
+    """"Extrude5: the reason Tip: the hint". The result window and the early warning in the export dialog use it, so
+    a step reads the same before and after the export."""
+    text = "%s: %s" % (name, reason)
+    return text + " Tip: %s" % hint if hint else text
+
+
 def left_out_lines(entries):
-    """"Extrude5: the reason" for each `(part name or None, gap record)`, then "Tip: " and the gap's hint when it has
-    one. A parts file puts the part first. A long list is cut and points to the report."""
+    """One line (`left_out_line`) for each `(part name or None, gap record)`. A parts file puts the part first. A long
+    list is cut and points to the report."""
     lines = []
     for part, gap in entries[:MAX_LISTED_FIXED]:
-        text = "%s: %s" % (gap["name"], gap["reason"])
-        if gap.get("hint"):
-            text += " Tip: %s" % gap["hint"]
+        text = left_out_line(gap["name"], gap["reason"], gap.get("hint"))
         lines.append("%s, %s" % (part, text) if part else text)
     if len(entries) > MAX_LISTED_FIXED:
         lines.append("and %d more (see report.json)." % (len(entries) - MAX_LISTED_FIXED))

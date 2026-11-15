@@ -78,6 +78,11 @@ class CaptureCache:
         self._read.clear()
         self._summaries.clear()
 
+    def read_seconds(self, body):
+        """Seconds the read of `body` took (`CaptureTimer.summary`), or None when it was not read."""
+        found = self._summaries.get(body.entityToken)
+        return found.get("seconds") if isinstance(found, dict) else None
+
     def get(self, body, timing=None, part=None):
         token = body.entityToken
         cached = self._read.get(token)

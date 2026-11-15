@@ -4,6 +4,7 @@ from tests import context  # noqa: F401
 from tests import fakes
 from tests.test_recipe_dialog import make_dialog, offer
 from tests.test_recipe_export import coil_then_plate
+from tests.test_stop_warning import tray_with_gaps
 
 core = fakes.install_adsk_core()
 from lib.dialog_model.stop_warning import summarize  # noqa: E402
@@ -19,6 +20,17 @@ class WarningBoxTest(unittest.TestCase):
         self.assertIn("Coil1", box.formattedText)
         self.assertIn("Steps of type coil", box.tooltipDescription)
         self.assertTrue(inputs.itemById(recipe_dialog.SHOW_ID).isVisible)
+
+    def test_left_out_steps_show_with_their_hints_and_the_full_text_in_the_tooltip_and_no_timeline_button(self):
+        _, inputs = make_dialog([offer("wall")])
+        recipe_dialog.show_stop(inputs, summarize(tray_with_gaps()))
+        box = inputs.itemById(recipe_dialog.WARN_ID)
+        self.assertTrue(box.isVisible)
+        self.assertIn("Shell1: ", box.formattedText)
+        self.assertIn("Tip: ", box.formattedText)
+        self.assertIn("More may show after the export.", box.formattedText)
+        self.assertIn("Shell1: ", box.tooltipDescription)
+        self.assertFalse(inputs.itemById(recipe_dialog.SHOW_ID).isVisible)
 
     def test_a_stop_without_a_step_has_no_timeline_button(self):
         _, inputs = make_dialog([offer("wall")])

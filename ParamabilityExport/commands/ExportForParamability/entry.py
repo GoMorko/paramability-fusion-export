@@ -14,6 +14,7 @@ from ...lib.fusion_reader.rows import DesignParameterStore
 from ...lib.fusion_reader.step_export import count_solid_bodies
 from ...lib.fusion_ui.log import log, message_box
 from ...lib.fusion_ui import handlers, recipe_dialog, result_dialog, timeline_select
+from ...lib.timing.timer import Timer
 from .. import panel
 from . import export_flow
 
@@ -67,23 +68,38 @@ def _on_created(args):
         if len(picked) <= 1:
             capture = found[0] if found else None
             rows = size_offers(table_for_body(parameters, design_unit, model_params, capture), parameters, design_unit)
-            return rows, _stop_for(capture)
+            return rows, _stop_for(picked, capture)
         table = table_for_bodies(parameters, design_unit, model_params, found)
-        return size_offers(table, parameters, design_unit), _stops_for([b.name for b in picked], found)
+        return size_offers(table, parameters, design_unit), _stops_for(picked, found)
 
-    def _stop_for(capture):
+    def _warn(picked, work):
+        """The warning from `work()`, or None when it fails. The log gets the time of the warning and of the reads of
+        the steps it uses: the reads are the slow part, the warning itself should stay in the milliseconds."""
+        timer = Timer()
         try:
-            return summarize_stop(capture, has_parameters=bool(parameters))
+            with timer.span("warning"):
+                return work()
         except Exception as exc:
             log(f"stop warning failed: {exc!r}")
             return None
+        finally:
+            if picked:
+                _log_warning_time(picked, timer.seconds("warning"))
 
-    def _stops_for(names, found):
+    def _log_warning_time(picked, seconds):
         try:
-            return summarize_stops(list(zip(names, found)), has_parameters=bool(parameters))
+            reads = ", ".join("?" if r is None else "%.1f" % r for r in (captures.read_seconds(b) for b in picked))
+            log("warning under the body picker: %.2f s; reading the steps of the picked bodies: %s s" % (
+                seconds, reads))
         except Exception as exc:
-            log(f"stop warning failed: {exc!r}")
-            return None
+            log(f"timing the warning failed: {exc!r}")
+
+    def _stop_for(picked, capture):
+        return _warn(picked, lambda: summarize_stop(capture, has_parameters=bool(parameters)))
+
+    def _stops_for(picked, found):
+        return _warn(picked, lambda: summarize_stops(
+            list(zip([b.name for b in picked], found)), has_parameters=bool(parameters)))
 
     offers, stop = inspect([body] if body is not None else [])
     recipe_dialog.build(
