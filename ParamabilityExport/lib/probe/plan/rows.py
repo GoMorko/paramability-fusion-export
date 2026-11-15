@@ -5,8 +5,9 @@ from ...package.units import display_from_manifest, unit_kind
 from ...params.expressions.text import format_number
 
 MAX_PROBE_ROWS = 64
+KEY_PREFIX = "probe: "  # the start of every probe row's key
 # Added to the progress line of a row that tries again nearer after a value that did not build.
-RETRY_NOTE = ". The last value did not rebuild, so this one is nearer."
+RETRY_NOTE = ". The last value did not work, so this one is nearer."
 
 
 def state_values(sizes, overrides=None):
@@ -40,7 +41,7 @@ def probe_row(sizes, name, overrides, key=None, retry=False):
     varied = sorted(p for p in overrides if abs(manifest[p] - current[p]) > SAME_SIZE)
     row = {
         "name": name[:MAX_NAME_CHARS],
-        "key": "probe: " + (key or name),
+        "key": KEY_PREFIX + (key or name),
         "values": {s["param"]: display_from_manifest(manifest[s["param"]], s["unit"]) for s in sizes},
         "step": False,
         "state": manifest,
@@ -50,10 +51,17 @@ def probe_row(sizes, name, overrides, key=None, retry=False):
     return row
 
 
+def _favorites_first(sizes):
+    """`sizes` with the favourites of the design first, otherwise in the order given."""
+    return sorted(sizes, key=lambda s: not s.get("favorite"))
+
+
 def tried_sizes(sizes, moved, extra):
-    """The sizes that get rows: the ones that move a sketch or a measured reference, then those tried on a guess."""
-    moved_sizes = [s for s in sizes if s["param"] in moved]
-    return moved_sizes + [s for s in sizes if s["param"] in extra and s["param"] not in moved]
+    """The sizes that get rows, in the order they are tried: the ones that move a sketch or a measured reference, then
+    those tried on a guess; in each group the favourites of the design first, since the designer starred them for the
+    form, so a time limit cuts the tries of the sizes least likely to matter."""
+    moved_sizes = _favorites_first(s for s in sizes if s["param"] in moved)
+    return moved_sizes + _favorites_first(s for s in sizes if s["param"] in extra and s["param"] not in moved)
 
 
 def value_toward(size, end, share):

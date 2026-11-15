@@ -6,6 +6,7 @@ from ...probe.plan.nearer import BISECT_STEPS, NEARER_STEPS
 from ...probe.plan.rows import MAX_PROBE_ROWS
 from ...timing.timer import Timer, rounded
 from .. import messages
+from ..time_limit import limit_text
 
 # The parts of a probe read the Fusion reader times (`fusion_reader.probe_state.read_state`).
 READ_PARTS = ("sketches", "points", "params", "refs", "box", "pieces", "faces")
@@ -57,6 +58,12 @@ class ProbeRun:
     A row that leaves the design broken with the parameters back stops the tries (`RowExport.not_back`): no later
     batch runs, and the probe keeps the states read before (`stopped`).
 
+    With a `time_limit` (seconds, from when the runner is made), the tries stop at the first row that would start after
+    it (`RowExport.halted`): no later row runs, the rows planned are left out (`_left` is 0) and the probe is told which
+    sizes got no try (`SizeProbe.note_time_limit`); `timed_out` holds the record. The parameters, the sketches and the
+    timeline are put back by the same calls as after tries that ended on their own. `clock` is the clock of the
+    timers (the export's, so tests can drive it).
+
     The read inside a row may leave the timeline marker before an outline face's step (`SizeProbe.read_now` with
     `park`), when the store can bring it back (`keep_marker`): the change that puts the values back then rebuilds the
     items after the face only once, with the values back, instead of once with the row's values (the marker going back
@@ -73,11 +80,15 @@ class ProbeRun:
 
     MAX_PUT_BACK_MISSES = 2
 
-    def __init__(self, port, tmp, probe, before_discovery=None):
+    def __init__(self, port, tmp, probe, before_discovery=None, time_limit=None, clock=None):
         self.port, self.tmp, self.probe = port, tmp, probe
         self.before_discovery = before_discovery
+        self.time_limit = time_limit  # seconds the tries may take from now on, or None for no limit
+        self.timed_out = None  # `{ limit_seconds, hit, seconds }` once the limit stopped the tries
+        self._halt_logged = False
         self._parked = False  # a row read may have left the marker before an outline face's step
-        self.timer = Timer()  # where the time of the tries goes (`summary`)
+        self.timer = Timer(clock) if clock else Timer()  # where the time of the tries goes (`summary`)
+        self._started = self._now()
         self.reads, self.rows, self.starts, self.backs = {}, [], {}, {}
         self._values = {}  # key of a row to the sizes it sets (`_row_values`)
         self.read_failure = None
@@ -88,7 +99,31 @@ class ProbeRun:
         self._previous = None  # key of the row run last
         self.keeper = self._keeper()
         self.undo = port.undo_steps
-        self.job = RowExport(port.store, port.units, self._export, self._before_row)
+        self.job = RowExport(port.store, port.units, self._export, self._before_row, self._out_of_time)
+        self.probe.note_time_limit({"limit_seconds": time_limit, "hit": False})
+
+    def _now(self):
+        try:
+            return self.timer.clock()
+        except Exception:
+            return None
+
+    def _elapsed(self):
+        """Seconds since the runner was made, or None when the clock failed."""
+        now = self._now()
+        return None if now is None or self._started is None else max(0.0, now - self._started)
+
+    def _out_of_time(self):
+        """`RowExport`'s `stop_when`: true once the tries have taken the time limit. The record of the first time it
+        was true stays in `timed_out`. Never raises: a clock that fails never stops the tries."""
+        if self.time_limit is None:
+            return False
+        spent = self._elapsed()
+        if spent is None or spent < self.time_limit:
+            return False
+        if self.timed_out is None:
+            self.timed_out = {"limit_seconds": self.time_limit, "hit": True, "seconds": rounded(spent)}
+        return True
 
     def _keeper(self):
         """The port's keeper of the followed sketches as they are now, or None when the port keeps none."""
@@ -219,8 +254,9 @@ class ProbeRun:
                 self.port.log(f"size probe read failed: {exc!r}")
 
     def _left(self):
-        """How many rows the cap leaves; none once a row left the design broken (`RowExport.not_back`)."""
-        return 0 if self.job.not_back is not None else plan_rows_left(self.rows)
+        """How many rows the cap leaves; none once a row left the design broken (`RowExport.not_back`) or the time limit
+        stopped the tries."""
+        return 0 if self.job.not_back is not None or self.job.halted else plan_rows_left(self.rows)
 
     @property
     def stopped(self):
@@ -234,7 +270,7 @@ class ProbeRun:
         with self.port.progress(messages.TRY_VERB) as progress:
             def step(index, total, label):
                 # The window counts the tries of the whole export, not of this batch.
-                return progress.step(done + index, done + total, label)
+                return progress.step(done + index, done + total, label, self._time_note(done + index, done + total))
 
             with self.timer.span("rows"):
                 try:
@@ -246,7 +282,26 @@ class ProbeRun:
             self.port.log("tries stopped: the design did not rebuild with the values back after %s"
                           % self.job.not_back["after"])
             self.probe.note_stop(self.job.not_back, rows[len(results):])
+        if self.job.halted:
+            self._note_halt(rows[len(results):])
         return results
+
+    def _time_note(self, at, total):
+        """The time line of the progress window for try number `at` of `total` (`messages.time_note`). Never raises."""
+        try:
+            spent = self._elapsed()
+            return "" if spent is None else messages.time_note(spent, at - 1, total - at + 1, self.time_limit)
+        except Exception:
+            return ""
+
+    def _note_halt(self, unrun):
+        """Tell the probe the time limit stopped the tries, with the rows that did not run."""
+        if self.timed_out is None:
+            return
+        if not self._halt_logged:
+            self._halt_logged = True
+            self.port.log("tries stopped at the time limit of %s" % limit_text(self.time_limit))
+        self.probe.note_time_limit(self.timed_out, unrun)
 
     def summary(self):
         """How the time of the tries went, for `report.json` (`timing.probe`): `tries` rows run, `rebuild` (the rows
@@ -263,9 +318,18 @@ class ProbeRun:
                 "read_parts": {name: timer.entry("read_" + name) for name in READ_PARTS
                                if timer.count("read_" + name)},
                 "put_back": timer.entry("put_back"),
+                "time_limit": self._time_limit_record(),
             }
         except Exception:
             return None
+
+    def _time_limit_record(self):
+        """`{ limit_seconds, hit, left_out }` for `timing.probe`: the limit (None for no limit), whether it stopped the
+        tries, and the sizes it left without a try (`Probe.time_left_out`)."""
+        record = {"limit_seconds": self.time_limit, "hit": self.timed_out is not None}
+        if self.timed_out is not None:
+            record["left_out"] = list(self.probe.time_left_out())
+        return record
 
     def probe_states(self, since=0):
         """(values, result, read, start, more) of the rows run from number `since` on, for `SizeProbe.add_states`;
@@ -365,13 +429,20 @@ class ProbeRun:
         check = self.probe.check_rows(sizes, self._left())
         if check:
             self.run_rows(check)
+        if self.job.halted:
+            self._note_unplanned(sizes)
+
+    def _note_unplanned(self, sizes):
+        """After the time limit stopped the tries: the sizes whose last try did not build and whose nearer tries were
+        still to come count as left out like those whose rows did not run."""
+        self._note_halt(self.probe.nearer_rows(sizes, MAX_PROBE_ROWS))
 
     def discover(self, tries):
         """Read the design once the parameters are back, then run the discovery rows in the room the other rows left
         and keep what they found. `before_discovery` runs first when rows are left for them. Returns the parameters that
-        changed the part. After the tries stopped on a broken design (`stopped`) nothing is read: every candidate is
-        kept as not tried."""
-        if self.job.not_back is not None:
+        changed the part. After the tries stopped on a broken design (`stopped`) or on the time limit nothing is read:
+        every candidate is kept as not tried."""
+        if self.job.not_back is not None or self.job.halted:
             self.probe.discovery_rows(list(tries), 0)
             return []
         if tries and self._left() and self.before_discovery is not None:

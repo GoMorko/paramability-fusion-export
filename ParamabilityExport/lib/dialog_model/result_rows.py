@@ -10,7 +10,7 @@ from .dialog_rows import range_text
 from ..export_plan.health import FAILED, health_lines
 from ..export_plan.messages import (
     ORIGINAL_KEPT_NOTE, ORIGINAL_KEPT_PARTS_NOTE, also_changes_line, also_changes_parts_line, left_out_lines,
-    not_tried_line)
+    not_tried_line, time_stop_line)
 
 KEPT_FIXED, NOT_USED = "kept fixed", "not used"
 NOT_FOLLOWED = "not followed"
@@ -174,6 +174,17 @@ def _left_out_lines(report):
     return left_out_lines(entries) + [ORIGINAL_KEPT_PARTS_NOTE if "parts" in report else ORIGINAL_KEPT_NOTE]
 
 
+def time_stop_lines(report):
+    """The line that says the size tries stopped on their time limit, or none. A parts file counts each size once."""
+    limit, left, hit = None, [], False
+    for _, probe in _probe_records(report):
+        record = probe.get("time_limit") or {}
+        if record.get("hit"):
+            hit, limit = True, record.get("limit_seconds")
+            left += [name for name in record.get("left_out") or [] if name not in left]
+    return [time_stop_line(limit, len(left))] if hit else []
+
+
 def _count(n, one, many):
     return "%d %s" % (n, one if n == 1 else many)
 
@@ -194,7 +205,7 @@ def _result_lines(file_name, manifest, report, size_count, part_lines=()):
     variables = len(manifest.get("parameters") or [])
     if variables:
         lines.append("%s along as variables." % _count(variables, "parameter comes", "parameters come"))
-    return lines
+    return lines + time_stop_lines(report)
 
 
 def _part_lines(manifest, report):

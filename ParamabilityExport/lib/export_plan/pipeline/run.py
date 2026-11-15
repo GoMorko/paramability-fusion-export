@@ -111,7 +111,8 @@ class _Pipeline:
                 probe = self.probe
                 self.put_back.hold_timeline([capture], lambda: probe.matches_start(probe.read_now()))
                 tries = discovery_sizes(self.table, self.request.parameters, capture)
-                run = ProbeRun(self.port, self.tmp, self.probe, before_discovery=self.put_back.end_trim)
+                run = ProbeRun(self.port, self.tmp, self.probe, before_discovery=self.put_back.end_trim,
+                               time_limit=self.request.probe_time_limit, clock=self.timing.clock)
                 found = self._measure(run, sizes, extra, tries)
                 if found is not None:
                     self.doubtful.extend(found)

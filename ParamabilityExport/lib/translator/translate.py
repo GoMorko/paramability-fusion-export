@@ -18,7 +18,7 @@ from .faces.picks import MAX_NEAR_POINTS
 from .handlers import HANDLERS
 from .gaps import gap_file, gap_measures, gap_place, stops
 from .notes import (
-    BODY_MOVED_WHY, dropped_reason, fixed_reason, loose_reason, tried_unmoved_reason, unmoved_link_reason,
+    BODY_MOVED_WHY, TIMED_OUT_WHY, dropped_reason, fixed_reason, loose_reason, tried_unmoved_reason, unmoved_link_reason,
     unmoved_reason, unused_reason)
 from .ranges import kept_ranges, range_check
 from .result import TranslateResult
@@ -215,6 +215,8 @@ def _translate(capture, handlers=None, size_table=None, motion=None):
     upfront = joint_reasons(size_table) if motion is not None else untried_reasons(size_table)
     for name, why in text_reasons(size_table, capture).items():
         upfront.setdefault(name, why)
+    for name in getattr(motion, "timed_out", None) or ():
+        upfront.setdefault(name, TIMED_OUT_WHY)
     for name in getattr(motion, "body_moved", None) or ():
         upfront.setdefault(name, BODY_MOVED_WHY)
     for name in probed_sizes(size_table):

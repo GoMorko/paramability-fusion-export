@@ -49,8 +49,8 @@ def _user(capture):
 class _Ported:
     """What both fake ports share: the store, the units, the counters, the progress window, the sketch keeper, the
     warnings and the log. Each warning is kept: `warned` (parameters not put back), `left_off` (timeline steps not
-    turned back on, with `undo_dropped`) and `warned_steps`; `shown` keeps every progress step and `verb` the last
-    window's verb."""
+    turned back on, with `undo_dropped`) and `warned_steps`; `shown` keeps every progress step, `notes` the time line
+    of those that had one, and `verb` the last window's verb."""
 
     timing = None
     undo_steps = None
@@ -61,6 +61,7 @@ class _Ported:
         self.units = units if units is not None else {p["name"]: p["unit"] for p in user}
         self.reads, self.steps, self.progressed = 0, 0, 0
         self.logs, self.warned, self.left_off, self.warned_steps, self.shown = [], [], [], [], []
+        self.notes = []  # the time line of each progress step that came with one
         self.undo_dropped, self.verb = None, None
         self.fail_read_from, self.fail_step_at, self.cancel_at = fail_read_from, fail_step_at, cancel_at
         self.keeper, self.reach, self.reader = keeper, reach, reader
@@ -89,8 +90,10 @@ class _Ported:
             @staticmethod
             def step(*args):
                 outer.progressed += 1
-                if len(args) == 3:
-                    outer.shown.append(tuple(args))
+                if len(args) >= 3:
+                    outer.shown.append(tuple(args[:3]))
+                if len(args) > 3:
+                    outer.notes.append(args[3])
                 return outer.cancel_at != outer.progressed
 
         return contextlib.nullcontext(Step())

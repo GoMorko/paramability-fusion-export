@@ -33,6 +33,11 @@ FASTER_TRIES_TOOLTIP = ("On to start with. While the sizes are tried, timeline s
                         "body does not use are turned off, so each try rebuilds less. Every step is turned back on "
                         "afterwards, and steps you had turned off stay off. If the body looks different with them "
                         "off, nothing is turned off. Untick it to keep every step on.")
+TIME_LIMIT = "Stop the size tries after"
+TIME_LIMIT_TOOLTIP = ("While it exports, the add-in tries your sizes at other values to learn how the shape follows "
+                      "them. A big design can take a long time. When this time is up, the tries stop, your design "
+                      "goes back as it was, and the sizes not tried yet are marked \"may give unexpected results\". "
+                      "Pick a longer time to try them all, or untick sizes that do not need to change.")
 LIGHT_UNDO = "Lighter on memory: leave the tries out of Undo (experimental)"
 LIGHT_UNDO_TOOLTIP = ("Fusion keeps Undo data for every try, which can make it use many GB during a long export. "
                       "With this on, Fusion forgets the tries as they run. The add-in puts every value back itself, "

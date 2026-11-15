@@ -84,6 +84,14 @@ class ProbeGroup:
         for probe in self.probes:
             probe.note_stop(record, unrun)
 
+    def note_time_limit(self, record, unrun=()):
+        for probe in self.probes:
+            probe.note_time_limit(record, unrun)
+
+    def time_left_out(self):
+        """The sizes the time limit left without a try, over the parts."""
+        return list(dict.fromkeys(name for probe in self.probes for name in probe.time_left_out()))
+
     def matches_start(self, reads):
         """True when every part's read equals its first read (`SizeProbe.matches_start`)."""
         return all(probe.matches_start(read) for probe, read in zip(self.probes, reads or []))

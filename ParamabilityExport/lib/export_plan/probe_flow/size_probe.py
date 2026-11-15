@@ -7,11 +7,11 @@ from ...package.text import clip
 from ...probe import build, derived, match, pieces, plan, plane_sizes, ref_fit, series
 from ...probe.state import ProbeState
 from ...sketch_values.motion import SHAPE
-from ...translator.notes import loose_reason
+from ...translator.notes import TIMED_OUT_WHY, loose_reason
 from ...translator.sizes import construction_only, probed_sizes
 from .borrowed_view import borrowed_sketches, probe_view, with_borrowed
-from .reasons import (NOT_READ_TRY, NOT_TRIED, NOT_TRIED_STOPPED, RESTORE_WHY, UNREADABLE, UNTRIED, not_built_try,
-                      watched_why)
+from .reasons import (NOT_READ_TRY, NOT_TRIED, NOT_TRIED_STOPPED, NOT_TRIED_TIME, RESTORE_WHY,
+                      UNREADABLE, UNTRIED, not_built_try, watched_why)
 from .row_schedule import DONE, FAR, NEAR, RowSchedule
 from .shared_reads import SharedReads
 from .states import body_changed, box_numbers, marked_states, same_numbers
@@ -52,6 +52,8 @@ class SizeProbe:
         self.recovery = None  # what was done when a sketch stayed on another solution (`note_recovery`)
         self.stopped = None  # `{ after, items }` when a try left the design broken and the tries stopped (`note_stop`)
         self._unrun = []  # the sizes of the rows planned that did not run because the tries stopped
+        self.time_limit = None  # `{ limit_seconds, hit, seconds }` of the tries' time limit (`note_time_limit`)
+        self._timed_out = []  # the sizes of the rows the time limit kept from running
         self._changes = None  # (number of states, `outline_changes`) of the last time it was worked out
         self.face_sizes = plane_sizes.face_sizes(self.capture, table)  # face key to the sizes that may change it
         self.shared = SharedReads()
@@ -163,6 +165,20 @@ class SizeProbe:
         theirs that moves a sketch and has no try of its own as untried."""
         self.stopped = {"after": record.get("after"), "items": list(record.get("items") or [])}
         self._unrun.extend(p for row in unrun for p in row.get("varied") or [] if p not in self._unrun)
+
+    def note_time_limit(self, record, unrun=()):
+        """Keep the time limit of the tries for `report`: `record` is `{ limit_seconds, hit, seconds }`, `hit` true once
+        the tries stopped because the limit was reached. `unrun` are the rows planned that did not run for that
+        reason: a size of theirs that moves a sketch and has no built try of its own is listed as loose (`finish`), a
+        discovery row among them is kept as not tried."""
+        self.time_limit = dict(record)
+        for row in unrun:
+            if str(row.get("key", "")).startswith(plan.DISCOVERY_KEY):
+                param = (row.get("varied") or [None])[0]
+                if param is not None and all(d["param"] != param for d in self.discovery):
+                    self.discovery.append({"param": param, "moved": None, "tried": False, "reason": NOT_TRIED_TIME})
+            else:
+                self._timed_out.extend(p for p in row.get("varied") or [] if p not in self._timed_out)
 
     def matches_start(self, read):
         """True when `read` has the same sketches, points, lines, references and body box as the first read (E0), within
@@ -310,10 +326,13 @@ class SizeProbe:
         """Rows that try unticked parameters once each (`size_offers.discovery_sizes`), within `room` rows. The
         candidates left without a row are kept in the discovery record as not tried."""
         rows = plan.discovery_rows(candidates, room)
-        why = NOT_TRIED_STOPPED if self.stopped else NOT_TRIED
+        why = NOT_TRIED_STOPPED if self.stopped else NOT_TRIED_TIME if self._hit_limit() else NOT_TRIED
         self.discovery.extend({"param": c["param"], "moved": None, "tried": False, "reason": why}
                               for c in plan.discovery_left(candidates, room))
         return rows
+
+    def _hit_limit(self):
+        return bool(self.time_limit and self.time_limit.get("hit"))
 
     def set_discovery_base(self, read, put_back=None):
         """Keep the read of the design once the parameters are back after the measured rows, and `put_back`, the read
@@ -414,8 +433,10 @@ class SizeProbe:
         alone = {name for state in self.states[1:] for name in state.values if len(state.values) == 1}
         tried = self.schedule.moved
         self.untried.extend(p for p in self._unrun if p in tried and p not in alone and p not in self.untried)
+        timed = self.time_left_out()
+        self.untried.extend(p for p in timed if p not in self.untried)
         for param in self.untried:
-            found.append(self._entry(param, UNTRIED, labels))
+            found.append(self._entry(param, TIMED_OUT_WHY if param in timed else UNTRIED, labels))
         try:
             # The read once the measured rows were done and the parameters back tells whether the last row's sketch
             # came back; the discovery rows ran after it.
@@ -429,9 +450,14 @@ class SizeProbe:
         found.extend(self._watched(labels, {f["param"] for f in found}))
         if self.motion is not None:
             self.motion.untried = list(self.untried)
+            self.motion.timed_out = list(timed)
             self.motion.body_moved = self._body_only({f["param"] for f in found})
         self.measure_restore(after)
         return found
+
+    def _built_alone(self):
+        """Fusion names of the sizes with a try of their own that built."""
+        return {name for state in self.states[1:] if state.built for name in state.values if len(state.values) == 1}
 
     def measure_restore(self, after):
         """Compare the sketches read after the parameters were put back with the first read. Keeps and returns the
@@ -519,7 +545,16 @@ class SizeProbe:
             out["recovery"] = dict(self.recovery)
         if self.stopped:
             out["stopped"] = dict(self.stopped)
+        if self.time_limit is not None:
+            out["time_limit"] = dict(self.time_limit, left_out=self.time_left_out())
         return out
+
+    def time_left_out(self):
+        """Fusion names of the sizes that move a sketch or a measured place and that the time limit left without a try
+        that built on its own: the copy cannot follow them, so `finish` lists them as loose. A size tried on a guess
+        (`extra`) that got no try is not counted: nothing is known to move with it."""
+        built = self._built_alone()
+        return [p for p in self._timed_out if p in self.schedule.moved and p not in built]
 
     def _body_only(self, skip):
         """Fusion names of the sizes that changed the body in a state where they alone differ, and in no such state

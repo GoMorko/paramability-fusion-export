@@ -33,6 +33,9 @@ class RowExport:
     the parameters that could not be put back by any run, whatever the outcome.
     before_row(row), when given, is called just before each row's values are set, once the parameters are back: the
     place to read the design the row starts from.
+    stop_when(), when given, is asked before each row; when it answers true the run ends there, cleanly: no later row
+    runs, the parameters are put back as at the end of any run, and `halted` stays true for every later run of the
+    job. A row that did not build is still checked first (`not_back`), so a stop never hides a broken design.
     With build errors tolerated, every row after a row that did not build first checks, with the parameters back and
     before `before_row`, that the design rebuilds as in the baseline (`apply.new_errors`, which recomputes in full once
     when a step reads in error). When a step is still in error, the failed row has left the design broken, so every
@@ -40,11 +43,13 @@ class RowExport:
     `{ after, items }`, the row run last and the steps in error. No later run of the job runs a row.
     """
 
-    def __init__(self, store, units, export_step, before_row=None):
+    def __init__(self, store, units, export_step, before_row=None, stop_when=None):
         self.store = store
         self.units = units
         self.export_step = export_step
         self.before_row = before_row
+        self.stop_when = stop_when
+        self.halted = False  # `stop_when` ended a run: no later run of this job runs a row
         self.current_row = ""
         self.current_key = ""
         self.restore_failures = []
@@ -72,6 +77,18 @@ class RowExport:
                 self.not_back = {"after": self._last, "items": broken}
         return self.not_back is not None
 
+    def _halt(self, index):
+        """True when `stop_when` asks the run to end before row number `index`. A row that did not build is checked
+        first, with the parameters back, so the design it may have left broken is still noticed."""
+        if not self.halted and (self.stop_when is None or not self.stop_when()):
+            return False
+        self.halted = True
+        if self._last_failed and self._saved is not None:
+            if index > 1:
+                self._back_to_current()
+            self._stopped()
+        return True
+
     def run(self, rows, tmpdir, progress, tolerate_build_errors=False):
         """Return [{'name', 'values', 'step_file'}]. progress(index, total, text) returns False to cancel; `text` is
         the row's `label` (what the person reads) or its name.
@@ -89,6 +106,8 @@ class RowExport:
             results = []
             count = len(rows)
             for index, row in enumerate(rows, start=1):
+                if self._halt(index):
+                    break
                 if not progress(index, count, row.get("label") or row["name"]):
                     raise ExportCancelled()
                 if index > 1:

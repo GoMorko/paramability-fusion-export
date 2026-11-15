@@ -1,10 +1,13 @@
 """Rows after the first tries: check rows for a fit along a curve and discovery rows for unticked parameters."""
 from ...geometry.tolerances import SAME_SIZE
 from ...package.manifest import MAX_NAME_CHARS
-from .rows import probe_row, value_toward
+from .rows import KEY_PREFIX, probe_row, value_toward
 
 # Unticked parameters that act on another component, tried once each to find links the reader cannot see.
 MAX_DISCOVERY = 12
+# The start of the key of a discovery row (`discovery_rows`).
+DISCOVERY_PREFIX = "try "
+DISCOVERY_KEY = KEY_PREFIX + DISCOVERY_PREFIX
 
 
 def _span_ends(spans, size):
@@ -58,7 +61,7 @@ def discovery_rows(candidates, room, limit=MAX_DISCOVERY):
     rows = []
     for candidate in candidates[:max(0, min(limit, room))]:
         row = probe_row([candidate], "%s (try)" % candidate["size"][:MAX_NAME_CHARS - 6],
-                   {candidate["param"]: candidate["end"]}, "try %s" % candidate["param"])
+                        {candidate["param"]: candidate["end"]}, DISCOVERY_PREFIX + candidate["param"])
         row["label"] = "checking if %s changes this part" % candidate["param"]
         rows.append(row)
     return rows

@@ -2,6 +2,8 @@
 from dataclasses import dataclass, field
 from typing import Optional, Protocol
 
+from ..time_limit import DEFAULT_SECONDS
+
 
 class ExportPort(Protocol):
     """What the pipeline needs from Fusion. The command passes the real one (`FusionPort`), tests pass a fake.
@@ -19,8 +21,8 @@ class ExportPort(Protocol):
     probe_reader(): a callable `read(request)` giving one probe state, or raising.
     sketch_keeper(tokens): an object that keeps the sketches `tokens` as they are now and whose `put_back()` moves
       their points back there (`fusion_reader.sketch_keep.SketchKeeper`, `ProbeRun`), or None when the port keeps none.
-    progress(verb): a context manager whose value has `step(index, total, name)`; the step returns False when the
-      person cancelled.
+    progress(verb): a context manager whose value has `step(index, total, name, note)`; `note` is a line about the time
+      the tries take (empty when there is none). The step returns False when the person cancelled.
     warn_unrestored(names): tell the person that these parameters could not be put back, when the export stops.
     warn_left_off(names, undo_dropped): tell the person that these timeline steps, turned off for the tries
       (`timeline_trim`), could not be turned back on; `undo_dropped` is True when Fusion forgot Undo data
@@ -71,6 +73,8 @@ class ExportRequest:
     ranges: dict
     marker: Optional[dict] = None
     faster_tries: bool = True  # suppress the timeline items the tries do not use (`timeline_trim`)
+    # Seconds the size tries may take before they stop (`time_limit`), None for no limit.
+    probe_time_limit: Optional[float] = DEFAULT_SECONDS
     # The timeline steps before anything was read (`timeline_health.read_timeline`); None reads them when the export
     # starts.
     timeline_start: Optional[object] = None

@@ -14,7 +14,8 @@ Sizes are dicts as in `export_plan.size_offers.probe_sizes`: param (Fusion name)
 min, max (manifest numbers).
 
 Row order, each step only while rows are left under `MAX_PROBE_ROWS` (64):
-1. Near rows (`probe_rows`): every size that moves a sketch, then the sizes tried on a guess, gets one row
+1. Near rows (`probe_rows`): every size that moves a sketch, then the sizes tried on a guess (in each group the
+   favourites of the design first, `rows.tried_sizes`), gets one row
    `NEAR_SHARE` (25 percent) of its value below and one above, kept inside its range (a count is a whole number, at
    least one step away).
 2. Near pair rows (`pair_rows`, run after the near rows): when two or more sizes are tried, one row with all of them at
@@ -39,7 +40,7 @@ The modules: `covered` (`scan`), `references` (`refs`), `request` (`request`), `
 re-exports what the rest of the add-in reads as `plan.<name>`.
 """
 from .covered import FACE, SCANNERS, Scan, outline_face, scan
-from .extra_rows import MAX_DISCOVERY, check_rows, discovery_left, discovery_rows
+from .extra_rows import DISCOVERY_KEY, MAX_DISCOVERY, check_rows, discovery_left, discovery_rows
 from .near_far import far_pair_rows, far_rows, near_values, pair_rows, probe_rows
 from .nearer import BISECT_STEPS, MAX_NEARER_ROWS, NEARER_STEPS, nearer_rows
 from .references import NO_PLACE, NO_TOKEN, SHAPE_AXIS, SHAPE_DIRECTION, SHAPE_PLANE, SHAPE_POINT, is_vector, refs
@@ -47,8 +48,8 @@ from .request import request, symmetric_patterns
 from .rows import MAX_PROBE_ROWS, RETRY_NOTE, state_values
 
 __all__ = [
-    "BISECT_STEPS", "FACE", "MAX_DISCOVERY", "MAX_NEARER_ROWS", "MAX_PROBE_ROWS", "NEARER_STEPS", "NO_PLACE",
-    "NO_TOKEN", "RETRY_NOTE", "SHAPE_AXIS", "SHAPE_DIRECTION", "SHAPE_PLANE", "SHAPE_POINT", "SCANNERS", "Scan",
-    "check_rows", "discovery_left", "discovery_rows", "far_pair_rows", "far_rows", "is_vector", "near_values",
+    "BISECT_STEPS", "DISCOVERY_KEY", "FACE", "MAX_DISCOVERY", "MAX_NEARER_ROWS", "MAX_PROBE_ROWS", "NEARER_STEPS",
+    "NO_PLACE", "NO_TOKEN", "RETRY_NOTE", "SHAPE_AXIS", "SHAPE_DIRECTION", "SHAPE_PLANE", "SHAPE_POINT", "SCANNERS",
+    "Scan", "check_rows", "discovery_left", "discovery_rows", "far_pair_rows", "far_rows", "is_vector", "near_values",
     "nearer_rows", "outline_face", "pair_rows", "probe_rows", "refs", "request", "scan", "state_values",
     "symmetric_patterns"]

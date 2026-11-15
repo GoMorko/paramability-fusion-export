@@ -118,7 +118,7 @@ class ExportTimingTest(unittest.TestCase):
         self.assertEqual(timing["capture"]["steps"], 1)
         self.assertGreater(timing["probe"]["tries"], 0)
         self.assertEqual(set(timing["probe"]), {"tries", "tries_seconds", "rebuild", "read", "read_parts", "put_back",
-                                               "try_seconds"})
+                                               "time_limit", "try_seconds"})
         self.assertIn("total", timing)
         self.assertEqual(json.loads(result.files["report.json"])["timing"], timing)
 

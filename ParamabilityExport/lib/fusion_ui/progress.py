@@ -3,7 +3,8 @@ import adsk.core
 
 
 class ProgressDialog:
-    """Use as a context manager. step(index, total, name) returns False when the person cancelled.
+    """Use as a context manager. step(index, total, name, note="") returns False when the person cancelled; a `note`
+    is a last line under the message (the time the tries take).
 
     The message of each step is "{verb} size 2 of 5: Large", or `line(index, total, name)` when it is given. `intro`
     is a first line that stays the same: the message is then two lines, the intro and the changing line.
@@ -29,12 +30,13 @@ class ProgressDialog:
             self._dialog.hide()
         return False
 
-    def step(self, index, total, name):
+    def step(self, index, total, name, note=""):
         if not self._shown:
             self._dialog.show(self._title, self._shown_text, 0, total, 1)
             self._shown = True
         text = self._line(index, total, name)
-        self._dialog.message = f"{self._intro}\n{text}" if self._intro else text
+        lines = [line for line in (self._intro, text, note) if line]
+        self._dialog.message = "\n".join(lines)
         self._dialog.progressValue = index - 1
         adsk.doEvents()
         return not self._dialog.wasCancelled

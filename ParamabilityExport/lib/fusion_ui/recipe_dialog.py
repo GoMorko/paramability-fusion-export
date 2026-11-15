@@ -12,6 +12,7 @@ from .body_inputs import BODY_ID, add_body_inputs
 from .log import log
 
 from ..dialog_model import dialog_rows as rows
+from ..export_plan import time_limit
 from ..export_plan.size_offers import MAX_TICKED
 from ..package.manifest import MAX_PARTS
 from ..fusion_reader.bodies import is_pickable_body
@@ -26,6 +27,7 @@ CLEAR_ID = "pm_untick_all"
 WARN_ID = "pm_stop_warning"
 SHOW_ID = "pm_show_in_timeline"
 FASTER_ID = "pm_faster_tries"
+TIME_LIMIT_ID = "pm_time_limit"
 LIGHT_UNDO_ID = "pm_light_undo"
 LIGHT_UNDO_NOTE_ID = "pm_light_undo_note"
 
@@ -94,6 +96,10 @@ def build(command, offers, body, up_axis, design_unit="mm", stop=None, marker_no
     show_stop(inputs, stop)
     faster = inputs.addBoolValueInput(FASTER_ID, rows.FASTER_TRIES, True, "", True)
     _safely("Faster tries tooltip", lambda: setattr(faster, "tooltipDescription", rows.FASTER_TRIES_TOOLTIP))
+    limit = inputs.addDropDownCommandInput(TIME_LIMIT_ID, rows.TIME_LIMIT, adsk.core.DropDownStyles.TextListDropDownStyle)
+    for minutes in time_limit.CHOICES:
+        limit.listItems.add(time_limit.choice_text(minutes), minutes == time_limit.DEFAULT_MINUTES)
+    _safely("Time limit tooltip", lambda: setattr(limit, "tooltipDescription", rows.TIME_LIMIT_TOOLTIP))
     light = inputs.addBoolValueInput(LIGHT_UNDO_ID, rows.LIGHT_UNDO, True, "", False)
     _safely("Lighter on memory tooltip", lambda: setattr(light, "tooltipDescription", rows.LIGHT_UNDO_TOOLTIP))
     reminder = inputs.addTextBoxCommandInput(LIGHT_UNDO_NOTE_ID, "", rows.escape(rows.LIGHT_UNDO_REMINDER), 1, True)
@@ -340,7 +346,8 @@ def restore_bodies(inputs, bodies):
 def read_form(inputs, offers):
     """Plain dict: bodies (the picked bodies), body (the one picked body, else None), ticked (Fusion parameter names),
     ranges ({name: (min, max)} of the ticked ones), range_problem ('' when every typed range is fine), up_axis and
-    faster_tries (the box that turns off unused timeline steps during the tries; on when the box is missing) and
+    faster_tries (the box that turns off unused timeline steps during the tries; on when the box is missing),
+    probe_time_limit (seconds the size tries may take, None for no limit; the default when the list is missing) and
     light_undo (the box that leaves the tries out of Undo, `export_plan.undo_steps`)."""
     ticks = _ticks(inputs, offers)
     ranges, problem = rows.read_ranges(
@@ -348,6 +355,8 @@ def read_form(inputs, offers):
     up_item = inputs.itemById(UP_ID).selectedItem
     faster = inputs.itemById(FASTER_ID)
     light = inputs.itemById(LIGHT_UNDO_ID)
+    limit = inputs.itemById(TIME_LIMIT_ID)
+    chosen = limit.selectedItem if limit is not None else None
     bodies = picked_bodies(inputs)
     return {
         "bodies": bodies,
@@ -357,6 +366,7 @@ def read_form(inputs, offers):
         "range_problem": problem,
         "up_axis": "y" if up_item and up_item.name == UP_LABELS["y"] else "z",
         "faster_tries": bool(faster is None or adsk.core.BoolValueCommandInput.cast(faster).value),
+        "probe_time_limit": time_limit.seconds_of(time_limit.minutes_of(chosen.name if chosen else None)),
         "light_undo": bool(light is not None and adsk.core.BoolValueCommandInput.cast(light).value),
     }
 

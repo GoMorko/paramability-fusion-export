@@ -14,7 +14,9 @@ class Probe(Protocol):
     probe_rows(sizes, extra), pair_rows, far_rows, far_pair_rows, nearer_rows, check_rows (sizes, room): the rows of
       each phase, in the order `ProbeRun.measure` asks for them.
     add_states(entries): the states of the rows run (`ProbeRun.probe_states`).
-    note_recovery(record), note_stop(record, unrun): what the runner did, for the report.
+    note_recovery(record), note_stop(record, unrun), note_time_limit(record, unrun): what the runner did, for the
+      report (`note_time_limit`: the time limit of the tries, and the rows it kept from running).
+    time_left_out(): the sizes the time limit left without a try that built on its own.
     discovery_rows(candidates, room), set_discovery_base(read, put_back), discover(entries), also_changes: the
       discovery rows and the unticked parameters they showed changing the part.
     finish(after, labels): build the motion; returns the sizes the probe cannot follow.
@@ -51,6 +53,10 @@ class Probe(Protocol):
     def note_recovery(self, record): ...
 
     def note_stop(self, record, unrun=()): ...
+
+    def note_time_limit(self, record, unrun=()): ...
+
+    def time_left_out(self): ...
 
     def discovery_rows(self, candidates, room): ...
 

@@ -22,7 +22,8 @@ did not move: the translator writes the captured number, unless its sketch is in
 reason the probe could not measure it): then nothing is known about it, and the sizes behind that sketch cannot be
 followed (`sketch_values.coverage`). A motion file without `unmeasured` says nothing about such sketches.
 `untried` lists the Fusion names of sizes that move a sketch but were left without probe rows: for them every sketch
-answers `NOT_MEASURED`.
+answers `NOT_MEASURED`. `timed_out` lists those among them (and the sizes whose tries did not build) that the time limit
+of the tries left without a try; the translator gives them the time reason.
 
 `refs` has one entry per measured reference the probe looked at (`<item>.<slot>`, `params.geometry_links.ref_key`):
 an empty text when it was measured, else why it could not be. Its values are keyed `<item>/r/<slot>/...`: how far the
@@ -212,7 +213,8 @@ class Motion:
     optimistic = False
 
     def __init__(self, values=None, box_max=None, states=None, dropped=None, curves=None, apart=None,
-                 unmeasured=None, untried=None, refs=None, body_moved=None, spans=None, flipped=None, faces=None):
+                 unmeasured=None, untried=None, refs=None, body_moved=None, spans=None, flipped=None, faces=None,
+                 timed_out=None):
         self.values = dict(values or {})
         self.box_max = box_max
         self.states = list(states or [])
@@ -230,6 +232,9 @@ class Motion:
         self.spans = dict(spans or {})
         # `<item>/face` to the token of the flat face used as an outline that the probe read at every try
         self.faces = dict(faces or {})
+        # Fusion names of sizes that moved a sketch and were left without a try that built when the time limit stopped
+        # the tries (they are also in `untried`, and the translator gives them the time reason)
+        self.timed_out = list(timed_out or [])
 
     def get(self, key):
         """`Affine`, `Terms`, `Stuck`, or None when the value did not move."""
@@ -260,6 +265,8 @@ class Motion:
             out["spans"] = {name: dict(span) for name, span in self.spans.items()}
         if self.faces:
             out["faces"] = dict(self.faces)
+        if self.timed_out:
+            out["timed_out"] = list(self.timed_out)
         return out
 
     @classmethod
@@ -278,7 +285,7 @@ class Motion:
                 values[key] = Affine(raw.get("const", 0.0), raw.get("terms"), raw.get("sketch", ""))
         return cls(values, data.get("box_max"), data.get("states"), data.get("dropped"), data.get("curves"),
                    data.get("apart"), data.get("unmeasured"), data.get("untried"), data.get("refs"),
-                   data.get("body_moved"), data.get("spans"), data.get("flipped"), data.get("faces"))
+                   data.get("body_moved"), data.get("spans"), data.get("flipped"), data.get("faces"), data.get("timed_out"))
 
 
 class _Optimistic(Motion):

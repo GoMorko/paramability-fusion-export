@@ -133,7 +133,7 @@ class DoubtfulTest(unittest.TestCase):
         self.assertEqual(row(inputs, "status", 1).formattedText, "size")
         self.assertEqual(set(recipe_dialog.read_form(inputs, offers)),
                          {"bodies", "body", "ticked", "ranges", "range_problem", "up_axis", "faster_tries",
-                          "light_undo"})
+                          "probe_time_limit", "light_undo"})
 
 
 class FasterTriesTest(unittest.TestCase):

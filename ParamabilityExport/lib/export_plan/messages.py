@@ -1,6 +1,7 @@
 """Plain sentences about sizes for the package notes and the message after the export. No dashes."""
 from ..package.text import clip
 from .part_names import parts_label
+from .time_limit import duration_text, limit_text
 
 MAX_NOTE = 200
 MAX_LISTED_FIXED = 5
@@ -14,6 +15,30 @@ TRY_INTRO = ("Measuring how your sketches follow each size. Fusion rebuilds the 
 def try_line(index, total, label):
     """The changing line of the tries window: "Try 5 of 31: HolderWidth at 32 mm"."""
     return "Try %d of %d: %s" % (index, total, label)
+
+
+def time_note(spent, done, left, limit):
+    """The time line of the tries window, from the seconds `spent` on the tries so far, the `done` tries so far and
+    the `left` tries planned so far (the one now running included); `limit` is the limit in seconds or None. The
+    estimate is the average time of a try so far times `left`, and never goes past the time the limit leaves. Before
+    a try has finished only the limit is shown. "Time spent: 2 min 10 s. About 4 min left (limit: 10 min)."."""
+    if done <= 0 or left <= 0:
+        return "Time limit: %s." % limit_text(limit) if limit is not None else ""
+    guess = spent / done * left
+    if limit is None:
+        return "Time spent: %s. About %s left." % (duration_text(spent), duration_text(guess))
+    guess = min(guess, max(0.0, limit - spent))
+    return "Time spent: %s. About %s left (limit: %s)." % (duration_text(spent), duration_text(guess),
+                                                           limit_text(limit))
+
+
+def time_stop_line(limit, count):
+    """The line in the result window after tries that stopped on the time limit: when, and how many sizes were left
+    without a try (the sizes list gives each one's reason)."""
+    if not count:
+        return "The size tries stopped at the time limit (%s), so the last extra tries were skipped." % limit_text(limit)
+    return "The size tries stopped at the time limit (%s). %s not tried, see Sizes." % (
+        limit_text(limit), _count(count, "size was", "sizes were"))
 
 
 def _count(n, one, many):

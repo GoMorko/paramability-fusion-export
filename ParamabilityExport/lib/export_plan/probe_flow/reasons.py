@@ -6,6 +6,7 @@ from ...sketch_values.motion import SHAPE, TURNS, UNREAD
 NOT_TRIED = "not tried: the export tries only a limited number of parameters of other components"
 NOT_READ_TRY = "not tried: the design could not be read at the value tried"
 NOT_TRIED_STOPPED = "not tried: the tries stopped early, after a try left a step in error"
+NOT_TRIED_TIME = "not tried: the tries ran out of time"
 
 
 def not_built_try(value, step):

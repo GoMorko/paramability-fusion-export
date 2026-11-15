@@ -332,7 +332,8 @@ class PartsPipeline:
         group = self.group
         self.put_back.hold_timeline([self.captures[i] for i in self.probed],
                                     lambda: group.matches_start(group.read_now()))
-        run = ProbeRun(self.port, self.tmp, group, before_discovery=self.put_back.end_trim)
+        run = ProbeRun(self.port, self.tmp, group, before_discovery=self.put_back.end_trim,
+                       time_limit=self.request.probe_time_limit, clock=self.timing.clock)
         tries = self._tries()
         try:
             run.measure(group.probe_rows(sizes, extra), sizes)

@@ -107,6 +107,22 @@ class SizeProbeTest(unittest.TestCase):
         self.assertEqual([(f["param"], f["size"]) for f in found], [("off", "off")])
         self.assertIn("Hole offset", found[0]["reason"])
 
+    def test_a_size_whose_rows_the_time_limit_kept_from_running_is_loose_with_the_time_reason(self):
+        probe = self.start()
+        sizes = [s for s in self.sizes if s["param"] in ("off", "cube")]
+        rows = probe.probe_rows(sizes)
+        ran = [r for r in rows if r["varied"] == ["cube"]]
+        reads = []
+        job = RowExport(self.fusion.store, UNITS, lambda path: reads.append(probe.read_now()))
+        results = job.run(ran, "", lambda *a: True, tolerate_build_errors=True)
+        probe.add_states(states([{p: r["state"][p] for p in r["varied"]} for r in ran], results, reads))
+        probe.note_time_limit({"limit_seconds": 60, "hit": True}, [r for r in rows if r not in ran])
+        found = probe.finish(probe.read_now(), {})
+        self.assertEqual([f["param"] for f in found], ["off"])
+        self.assertIn("ran out of time", found[0]["reason"])
+        self.assertEqual(Motion.from_json(probe.motion.json()).timed_out, ["off"])
+        self.assertEqual(probe.report()["time_limit"], {"limit_seconds": 60, "hit": True, "left_out": ["off"]})
+
     def test_a_size_left_without_rows_is_not_measured_for_the_sketches_that_read_it(self):
         probe = self.start()
         run(self.fusion, probe, [s for s in self.sizes if s["param"] != "off"])
@@ -345,6 +361,19 @@ class PutBackTest(unittest.TestCase):
         left.update({"sk1", "sk2"})  # sk1 moved too little to read as moved
         ProbeRun(runner_port(fusion, lambda tokens: Keeper()), "", probe).settle()
         self.assertEqual(left, set())
+
+    def test_discovery_rows_the_time_limit_kept_from_running_are_kept_as_not_tried(self):
+        from lib.export_plan.pipeline import ProbeRun
+        fusion = Fusion()
+        tbl = table(PARAMS, TICKED, MODEL)
+        probe = SizeProbe.start(CAPTURE, tbl, fusion.read)
+        candidates = [dict(size(tbl, name, UNITS[name]), end=size(tbl, name, UNITS[name])["max"])
+                      for name in ("off", "height")]
+        run = ProbeRun(runner_port(fusion), "", probe, time_limit=0)
+        self.assertEqual(run.discover(candidates), [])
+        self.assertEqual([(d["param"], d["tried"]) for d in probe.discovery], [("off", False), ("height", False)])
+        self.assertTrue(all("ran out of time" in d["reason"] for d in probe.discovery))
+        self.assertEqual(fusion.store.exprs, START)
 
     def test_the_discovery_base_after_a_put_back_holds_the_whole_state(self):
         from lib.export_plan.pipeline import ProbeRun

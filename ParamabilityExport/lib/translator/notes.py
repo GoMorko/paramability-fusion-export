@@ -180,6 +180,10 @@ def tried_unmoved_reason(name, span=None):
         name, where), MAX_NOTE)
 
 
+# Why a size the tries ran out of time for cannot be followed, with what the designer can do about it.
+TIMED_OUT_WHY = ("the tries ran out of time before this size was tried. Tip: raise the time limit in the export "
+                 "dialog, or untick sizes that need no change")
+
 # Why a size that moved the body in a try, but no sketch or reference the copy follows, cannot be followed.
 BODY_MOVED_WHY = "it changes this part in a way the copy does not follow"
 

@@ -16,6 +16,7 @@ from ...lib.design_edit.marker import read_marker
 from ...lib.package.naming import body_file_title, component_names, design_title, package_file_name
 from ...lib.export_plan.pipeline import ExportRequest, run_parts_pipeline, run_pipeline
 from ...lib.export_plan import undo_steps
+from ...lib.export_plan.time_limit import DEFAULT_SECONDS
 from ...lib.dialog_model.result_rows import parts_result_view, result_view
 from ...lib.dialog_model.stop_warning import saved_message, status_text
 from ...lib.fusion_reader import design_info
@@ -297,7 +298,8 @@ def run_export(design, parameters, model_params, design_unit, form, captures=Non
     request = ExportRequest(
         title=title, writer=export_common.writer_for(app), up_axis=form["up_axis"], parameters=parameters,
         model_params=model_params, design_unit=design_unit, ticked=form["ticked"], ranges=form["ranges"],
-        marker=marker, faster_tries=bool(form.get("faster_tries", True)), timeline_start=timeline_start)
+        marker=marker, faster_tries=bool(form.get("faster_tries", True)), timeline_start=timeline_start,
+        probe_time_limit=form.get("probe_time_limit", DEFAULT_SECONDS))
 
     units = {p["name"]: p["unit"] for p in parameters}
     steps = undo_steps.command_steps(command, log) if form.get("light_undo") else None
