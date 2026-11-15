@@ -8,10 +8,12 @@ from tests.probe_helpers import circle, loop, size, table, user
 from tests.test_probe_motion import CAPTURE, MODEL, PARAMS, TICKED, W, read_at
 
 from lib.export_plan.probe_flow import SizeProbe, covers_a_sketch
+from lib.export_plan.probe_flow.reasons import NOT_TRIED_TIME
 from lib.design_edit.runner import RowExport
 from lib.probe import plan
 from lib.sketch_values import coverage
 from lib.sketch_values.motion import Motion
+from lib.translator.notes import TIMED_OUT_WHY
 from lib.translator.sizes import sketch_answer, sketch_sizes
 
 UNITS = {"count": "", "cube": "mm", "off": "mm", "height": "mm"}
@@ -119,7 +121,7 @@ class SizeProbeTest(unittest.TestCase):
         probe.note_time_limit({"limit_seconds": 60, "hit": True}, [r for r in rows if r not in ran])
         found = probe.finish(probe.read_now(), {})
         self.assertEqual([f["param"] for f in found], ["off"])
-        self.assertIn("ran out of time", found[0]["reason"])
+        self.assertIn(TIMED_OUT_WHY, found[0]["reason"])
         self.assertEqual(Motion.from_json(probe.motion.json()).timed_out, ["off"])
         self.assertEqual(probe.report()["time_limit"], {"limit_seconds": 60, "hit": True, "left_out": ["off"]})
 
@@ -372,7 +374,7 @@ class PutBackTest(unittest.TestCase):
         run = ProbeRun(runner_port(fusion), "", probe, time_limit=0)
         self.assertEqual(run.discover(candidates), [])
         self.assertEqual([(d["param"], d["tried"]) for d in probe.discovery], [("off", False), ("height", False)])
-        self.assertTrue(all("ran out of time" in d["reason"] for d in probe.discovery))
+        self.assertTrue(all(d["reason"] == NOT_TRIED_TIME for d in probe.discovery))
         self.assertEqual(fusion.store.exprs, START)
 
     def test_the_discovery_base_after_a_put_back_holds_the_whole_state(self):

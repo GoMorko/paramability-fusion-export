@@ -12,6 +12,7 @@ from lib.export_plan import recipe_export
 from lib.export_plan.messages import fixed_note, loose_note
 from lib.export_plan.recipe_export import plan_single_export
 from lib.params import size_table
+from lib.translator import notes
 from lib.package.manifest import validate_manifest
 
 
@@ -38,8 +39,7 @@ class FollowedComponentsTest(unittest.TestCase):
         result = self.followed()
         manifest, _, _ = plan_single_export(load_capture("component_ref_reach"), "x.step", "Boss", "w", "z",
                                             translated=result)
-        self.assertIn("This part follows the sizes of Cover. Export both together so they change together.",
-                      manifest["notes"])
+        self.assertIn(notes.follows_components_note(["Cover"]), manifest["notes"])
 
     def test_a_component_whose_body_is_in_the_file_is_not_named(self):
         result = self.followed()
@@ -49,7 +49,7 @@ class FollowedComponentsTest(unittest.TestCase):
 
     def test_a_part_that_follows_nothing_gets_no_such_note(self):
         manifest, _, _ = plan_single_export(load_capture("extrude_plate"), "x.step", "Plate", "w", "z")
-        self.assertFalse(any("follows the sizes" in note for note in manifest["notes"]))
+        self.assertEqual(manifest["notes"], [notes.recipe_note(1)])
 
 
 class PlanTest(unittest.TestCase):

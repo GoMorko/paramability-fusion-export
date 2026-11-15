@@ -20,7 +20,7 @@ from lib.export_plan.size_offers import offers, table_for_body
 from lib.params import geometry_links, size_table
 from lib.probe import plan
 from lib.sketch_values.motion import Motion, Stuck
-from lib.translator import translate
+from lib.translator import notes, translate
 
 NAME = "linked_pipe_hole"
 CAPTURE = load_capture(NAME)
@@ -322,7 +322,7 @@ class ApartRangeTest(unittest.TestCase):
         # 6 and 7.5 came apart, 9 and 8.25 did not; the halving stops at 7.875.
         self.assertEqual(pipe_range(result), (8.25, 24.0))
         [cut] = result.report["sizes"]["cut"]
-        self.assertIn("comes apart into 2 separate pieces in Fusion at 7.875", cut["reason"])
+        self.assertIn(notes.split_why([(7.875, 2)]), cut["reason"])
         states = [s for s in result.report["probe"]["states"] if s.get("pieces")]
         self.assertEqual(sorted(s["values"]["pipe_d_mm"] for s in states), [6.0, 7.5, 7.875])
 

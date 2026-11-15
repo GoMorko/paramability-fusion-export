@@ -4,6 +4,8 @@ from types import SimpleNamespace
 from tests import context  # noqa: F401
 
 from lib.dialog_model import left_out_preview as preview
+from lib.export_plan.messages import left_out_line
+from lib.package.text import clip
 
 
 def verdict(index, gap, cause="own", tool_steps=()):
@@ -50,14 +52,13 @@ class LinesTest(unittest.TestCase):
     def test_a_long_reason_is_cut_in_the_box_but_the_hint_stays(self):
         step = {"index": 1, "name": "S", "reason": "word " * 60, "hint": "Fix it."}
         line = preview.lines(preview.Found([step]), "H:")[1]
-        self.assertTrue(line.endswith("... Tip: Fix it."))
-        self.assertLess(len(line), 140)
+        self.assertEqual(line, left_out_line("S", clip(step["reason"], preview.MAX_SHORT_REASON), "Fix it."))
         self.assertGreater(len(preview.step_text(step, whole=True)), 300)
 
     def test_at_most_a_few_steps_are_listed_and_the_rest_is_counted(self):
         shown = preview.lines(self.found(5, True), "H:")
         self.assertEqual(shown[0], "H:")
-        self.assertEqual(shown[1], "S0: No. Tip: Fix it.")
+        self.assertEqual(shown[1], left_out_line("S0", "No.", "Fix it."))
         self.assertEqual(shown[-2:], ["and 2 more.", preview.MORE_MAY_SHOW])
         self.assertEqual(len(shown), 1 + preview.MAX_LISTED + 2)
 

@@ -14,7 +14,7 @@ from tests.translator_helpers import assert_schema_ok, load_capture, steps_of
 from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.sketch_values.motion import Affine, Motion, Terms
-from lib.translator import translate
+from lib.translator import notes, translate
 from lib.translator.ranges import kept_ranges
 from lib.translator.sketch import sketch_crossings
 from lib.translator.sketch.loops import profile_loops
@@ -119,7 +119,7 @@ class StraightCrossingTest(unittest.TestCase):
         result = run(capture, Motion(plate))
         size = result.recipe["sizes"]["p_mm"]
         self.assertEqual((size["min"], size["max"]), (38.01, 120.0))
-        self.assertIn("hole reach its edge", result.cuts[0]["reason"])
+        self.assertEqual(result.cuts[0]["why"], notes.crosses_reason("Sketch1"))
         capture["items"][1]["data"]["profiles"][0]["loops"][1]["curves"][0].update(center=[10, 20], radius=1.0)
         self.assertEqual(run(capture, Motion(plate)).cuts, [])
 

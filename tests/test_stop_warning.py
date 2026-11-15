@@ -38,8 +38,8 @@ class SummarizeTest(unittest.TestCase):
     def test_a_stop_with_a_hint_shows_the_tip_before_the_fixed_shape_line(self):
         summary = summarize(load_capture("component_cross_cut"))
         self.assertTrue(summary["stops"])
-        self.assertTrue(summary["lines"][-2].startswith("Tip: "))
-        self.assertIn("export both parts together", summary["lines"][-2])
+        self.assertEqual(summary["hint"], gap_hint(gap_hints.CHANGED_FROM_OTHER_COMPONENT))
+        self.assertEqual(summary["lines"][-2], "Tip: " + summary["hint"])
 
     def test_a_part_that_copies_cleanly_or_is_not_picked_has_nothing_to_warn_about(self):
         self.assertIsNone(summarize(load_capture("extrude_plate")))

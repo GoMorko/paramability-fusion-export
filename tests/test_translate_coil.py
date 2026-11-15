@@ -160,7 +160,8 @@ class CoilGapTest(unittest.TestCase):
         capture = as_tool(coil_capture(operation="newBody"))
         capture["items"][COIL]["data"]["made"][0]["volume"] *= 1.5
         found = gap_of_index(translate(capture), COIL + 1)
-        self.assertTrue(found["reason"].startswith("The tool body Body2 cannot be copied: Coil1 (coil)"))
+        self.assertEqual(found["name"], "Combine1")
+        self.assertIn(limits.NOT_FITTING, found["reason"])
 
     def test_a_coil_past_the_recipe_caps_is_left_out_and_the_ones_before_stay(self):
         capture = coil_capture()

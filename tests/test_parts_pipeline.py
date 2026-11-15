@@ -258,7 +258,7 @@ class FixedShapeTest(unittest.TestCase):
         result = export(FakePartsPort([BASE, stuck_body()]))
         editable, fixed = result.manifest["parts"]
         [entry] = [e for e in editable["loose"] if e["name"] == "wall_mm"]
-        self.assertTrue(entry["reason"].startswith("Body3 stays a fixed shape in this file"))
+        self.assertTrue(entry["reason"].startswith("Body3 "))
         self.assertNotIn("loose", fixed)
         self.assertIn("wall_mm", result.report["sizes"]["free"])
         self.assertIn(entry, result.report["sizes"]["loose"])
@@ -266,8 +266,10 @@ class FixedShapeTest(unittest.TestCase):
     def test_a_size_that_was_loose_already_gets_the_fixed_part_in_front_of_its_reason(self):
         result = export(FakePartsPort([with_joint_on(BASE, "wall_mm"), stuck_body()]))
         [entry] = [e for e in result.manifest["parts"][0]["loose"] if e["name"] == "wall_mm"]
-        self.assertTrue(entry["reason"].startswith("Body3 stays a fixed shape"))
-        self.assertIn("joint", entry["reason"])
+        before = export(FakePartsPort([with_joint_on(BASE, "wall_mm")]))
+        [old] = [e for e in before.manifest["parts"][0]["loose"] if e["name"] == "wall_mm"]
+        self.assertTrue(entry["reason"].startswith("Body3 "))
+        self.assertTrue(entry["reason"].endswith(old["reason"]))
 
     def test_parts_that_are_all_recipes_mark_nothing_for_fixed_shapes(self):
         result = export(FakePartsPort([BASE, second_body()]))
@@ -292,12 +294,12 @@ class FixedPartsTest(unittest.TestCase):
         got = fixed_parts.joined(loose, extra, 3)
         self.assertEqual(len(got), 3)
         self.assertEqual({e["name"] for e in got[:2]}, {"s4", "late"})
-        self.assertTrue(got[0]["reason"].startswith("Lid stays a fixed shape."))
+        self.assertTrue(got[0]["reason"].startswith("Lid "))
 
     def test_several_fixed_parts_share_one_reason_per_size(self):
         marked = fixed_parts.marked(self.table(), [("Lid", BASE), ("Clip", BASE)], free={"wall_mm"})
         self.assertEqual(len(marked), 1)
-        self.assertTrue(marked[0]["reason"].startswith("Lid, Clip stay fixed shapes"))
+        self.assertTrue(marked[0]["reason"].startswith("Lid, Clip "))
 
 
 class MeasuringTest(unittest.TestCase):

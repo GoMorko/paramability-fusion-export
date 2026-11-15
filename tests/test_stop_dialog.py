@@ -7,6 +7,8 @@ from tests.test_recipe_export import coil_then_plate
 from tests.test_stop_warning import tray_with_gaps
 
 core = fakes.install_adsk_core()
+from lib.dialog_model import dialog_rows as rows  # noqa: E402
+from lib.dialog_model.left_out_preview import MORE_MAY_SHOW  # noqa: E402
 from lib.dialog_model.stop_warning import summarize  # noqa: E402
 from lib.fusion_ui import recipe_dialog, timeline_select  # noqa: E402
 
@@ -23,13 +25,13 @@ class WarningBoxTest(unittest.TestCase):
 
     def test_left_out_steps_show_with_their_hints_and_the_full_text_in_the_tooltip_and_no_timeline_button(self):
         _, inputs = make_dialog([offer("wall")])
-        recipe_dialog.show_stop(inputs, summarize(tray_with_gaps()))
+        summary = summarize(tray_with_gaps())
+        recipe_dialog.show_stop(inputs, summary)
         box = inputs.itemById(recipe_dialog.WARN_ID)
         self.assertTrue(box.isVisible)
-        self.assertIn("Shell1: ", box.formattedText)
-        self.assertIn("Tip: ", box.formattedText)
-        self.assertIn("More may show after the export.", box.formattedText)
-        self.assertIn("Shell1: ", box.tooltipDescription)
+        self.assertEqual(box.formattedText, "<br>".join(rows.escape(line) for line in summary["lines"]))
+        self.assertIn(MORE_MAY_SHOW, summary["lines"])
+        self.assertEqual(box.tooltipDescription, summary["tooltip"])
         self.assertFalse(inputs.itemById(recipe_dialog.SHOW_ID).isVisible)
 
     def test_a_stop_without_a_step_has_no_timeline_button(self):

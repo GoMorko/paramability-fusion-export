@@ -23,7 +23,7 @@ from lib.fusion_reader.read_face import read_faces
 from lib.params import size_table
 from lib.probe import build
 from lib.sketch_values.motion import Motion
-from lib.translator import translate
+from lib.translator import notes, translate
 
 ON_TOP = {"const": 0, "terms": {"FilterBox_height_mm": 1}}
 
@@ -117,7 +117,7 @@ class FollowedFaceTest(unittest.TestCase):
         self.assertIsNone(result.refusal)
         size = result.recipe["sizes"]["lid_mm"]
         self.assertEqual((size["min"], size["max"]), (3.31, 8.0))
-        self.assertIn("hole reach its edge", result.cuts[0]["reason"])
+        self.assertEqual(result.cuts[0]["why"], notes.crosses_reason("the face Emboss1 starts on"))
 
 
 def face_read(height, holed=False, back=False):

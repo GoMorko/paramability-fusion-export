@@ -107,13 +107,12 @@ class RefusalTest(unittest.TestCase):
         data["end_offset"] = 8.0
         data["profiles"][0] = {key: data["profiles"][0][key] for key in ("sketch", "frame", "loops")}
         data["profiles"][0].update(foreign=True, space="sketch")
-        gap = left_out(translate(copy.deepcopy(capture)))
-        self.assertIn("Export again with this version", gap["reason"])
-        self.assertEqual(translate(copy.deepcopy(capture)).gaps[0]["hint"], gap_hints.HINTS[gap_hints.OLD_EXPORT])
+        old = translate(copy.deepcopy(capture)).gaps[0]
+        self.assertEqual(old["hint"], gap_hints.HINTS[gap_hints.OLD_EXPORT])
         data["profiles"][0].update(component={"token": "cLid", "name": "Lid"}, placement={"error": "no place"})
         gap = translate(capture).gaps[0]
-        self.assertNotIn("Export again", gap["reason"])
         self.assertEqual(gap["hint"], gap_hints.HINTS[gap_hints.OTHER_COMPONENT])
+        self.assertNotEqual(gap["reason"], old["reason"])
 
     def test_a_participant_from_another_component_is_ignored(self):
         capture = load_capture("component_foreign_extent")

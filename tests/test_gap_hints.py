@@ -67,11 +67,12 @@ class GapHintTest(unittest.TestCase):
         kinds = {"ScaleFeature": gap_hints.SCALE, "ReplaceFaceFeature": gap_hints.REPLACE_FACE,
                  "RibFeature": gap_hints.RIB_WEB, "WebFeature": gap_hints.RIB_WEB,
                  "PathPatternFeature": gap_hints.PATH_PATTERN, "BoundaryFillFeature": gap_hints.BOUNDARY_FILL}
+        generic = translate(tray(unsupported(SHELL, "MadeUpFeature"))).gaps[0]["reason"]
         for type_name, cause in kinds.items():
             with self.subTest(type_name):
                 gap = translate(tray(unsupported(SHELL, type_name))).gaps[0]
                 self.assertEqual(gap["hint"], gap_hints.HINTS[cause])
-                self.assertNotIn("Steps of type", gap["reason"])
+                self.assertNotEqual(gap["reason"], generic)
 
     def test_a_step_type_without_advice_gets_no_hint(self):
         result = translate(tray(unsupported(SHELL, "MadeUpFeature")))

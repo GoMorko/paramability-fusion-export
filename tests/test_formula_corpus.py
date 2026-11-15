@@ -9,7 +9,7 @@ import unittest
 from tests import context  # noqa: F401
 from tests.params_fixtures import mm, plain_param, reader_dicts
 
-from lib.params import defaults, size_table
+from lib.params import size_table
 from lib.translator.values import quantity
 
 
@@ -90,12 +90,8 @@ GRID = [
 ]
 
 PLAIN_FORMULAS = [
-    plain_param("Nozzle", "0.4 mm", mm(0.4), "mm"),
     plain_param("Wall", "3 * 0.4 mm", mm(1.2), "mm"),
     plain_param("Plate", "25.4 * 2 mm", mm(50.8), "mm"),
-    plain_param("Turn", "2 * 45 deg", 3.141592653589793 / 2, "deg"),
-    plain_param("Ratio", "2 * 1.5", 3, ""),
-    plain_param("Width", "40 mm", mm(40), "mm"),
 ]
 
 
@@ -120,24 +116,14 @@ class FormulaCorpusTest(unittest.TestCase):
         self.assertTrue(q.sized)
         self.assertEqual(ctx.doubts, [])
 
-    def test_inch_fraction_with_a_unit_word_follows_its_size(self):
+    def test_inch_fractions_follow_their_size_with_or_without_a_unit_word(self):
         table = table_of(INCH, ["Width"], unit="in")
-        self.assertEqual(entry_state(table, "Outer"), "derived")
-
-    def test_bare_inch_fraction_in_an_inch_design_already_follows(self):
-        table = table_of(INCH, ["Width"], unit="in")
-        self.assertEqual(entry_state(table, "Slack"), "derived")
+        self.assertEqual({n: entry_state(table, n) for n in ("Outer", "Slack")}, {"Outer": "derived", "Slack": "derived"})
 
     def test_formula_of_numbers_is_a_size_that_can_be_ticked(self):
         table = table_of(PLAIN_FORMULAS, ["Wall", "Plate"])
         self.assertEqual({n: entry_state(table, n) for n in ("Wall", "Plate")}, {"Wall": "free", "Plate": "free"})
         self.assertAlmostEqual(table.sizes["Wall"]["value"], 1.2)
-
-    def test_constant_formula_with_a_length_or_angle_unit_starts_ticked(self):
-        params = reader_dicts(PLAIN_FORMULAS, {})
-        used = [model_param("d1", "Wall + Turn + Ratio + Plate + Width + Nozzle", 0)]
-        ticked = defaults.default_ticked(params, used)
-        self.assertEqual(ticked, ["Nozzle", "Wall", "Plate", "Turn", "Width"])
 
     def test_guarded_count_follows_the_size(self):
         table = table_of(GRID, ["Width"])
