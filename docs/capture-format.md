@@ -1523,8 +1523,9 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
 - Symmetric half length is written as `2 * (formula)`. An extent spacing is `(distance) / ((count) - 1)`. Hole
   tip outlines and counterbore or countersink sizes follow sizes point by point.
 - Pattern counts that follow sizes must give whole numbers at every size value: the formula is rounded as a whole
-  (`round`, `floor`, `ceil`), or it adds, subtracts and multiplies whole numbers and count sizes. Otherwise the sizes
-  are fixed. An extent spacing divides by `max((count) - 1, 1)`, so a count of 1 never divides by zero.
+  (`round`, `floor`, `ceil`), or it is built from whole numbers, count sizes, `+ - *`, `min`, `max`, `abs`, `mod`, `pow`
+  to a whole literal and choices with whole results (`docs/expressions.md`, "Counts"). Otherwise the sizes are fixed.
+  An extent spacing divides by `max((count) - 1, 1)`, so a count of 1 never divides by zero.
 - Values that stay numbers while a size reaches them: construction geometry that a step uses itself (except the
   distance of an offset plane an extrude starts from or reaches to), the "up to" offset, a tip angle, a countersink angle, a full circular turn, a revolve that is not a plain
   part turn, and a pattern whose copies are left out by number or are rounds copied one by one. The sizes behind

@@ -3,7 +3,7 @@ import unittest
 
 from tests import context  # noqa: F401
 from lib.params import size_table
-from lib.params.size_table import DERIVED, NOT_OFFERED
+from lib.params.size_table import CONSTANT, DERIVED, NOT_OFFERED
 from tests.params_fixtures import mm, plain_param, reader_dicts
 
 
@@ -29,8 +29,8 @@ class ModuloTest(unittest.TestCase):
         self.assertFalse(tr.ok)
         self.assertEqual(tr.reads, ("w",))
 
-    def test_a_negative_constant_left_side_is_not_copied(self):
-        self.assertEqual(table("(0 mm - 20 mm) % 7 mm", ticked=()).entry("r").state, NOT_OFFERED)
+    def test_a_formula_of_numbers_with_a_negative_left_side_is_a_plain_number_since_it_is_never_worked_out(self):
+        self.assertEqual(table("(0 mm - 20 mm) % 7 mm", ticked=()).entry("r").state, CONSTANT)
 
     def test_the_range_the_person_typed_decides(self):
         raw = [plain_param("w", "130 mm", mm(130.0), "mm", isFavorite=True), plain_param("r", "(w - 120 mm) % 7 mm", mm(3.0), "mm")]

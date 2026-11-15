@@ -139,7 +139,6 @@ class FormulaCorpusTest(unittest.TestCase):
         ticked = defaults.default_ticked(params, used)
         self.assertEqual(ticked, ["Nozzle", "Wall", "Plate", "Turn", "Width"])
 
-    @unittest.expectedFailure
     def test_guarded_count_follows_the_size(self):
         table = table_of(GRID, ["Width"])
         expression = "max(1; floor(Width / Pitch))"
@@ -147,7 +146,6 @@ class FormulaCorpusTest(unittest.TestCase):
         self.assertTrue(q.sized)
         self.assertEqual(ctx.doubts, [])
 
-    @unittest.expectedFailure
     def test_count_chosen_with_if_follows_the_size(self):
         table = table_of(GRID, ["Width"])
         expression = "if(Width > 30 mm; 3; 2)"
