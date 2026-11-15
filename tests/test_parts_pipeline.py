@@ -286,6 +286,14 @@ class FixedPartsTest(unittest.TestCase):
         marked = fixed_parts.marked(self.table(), [("Lid", BASE)], free={"not_this_size"})
         self.assertEqual([e["name"] for e in marked], [])
 
+    def test_when_the_loose_list_is_too_long_the_sizes_a_fixed_part_marks_stay(self):
+        loose = [{"name": "s%d" % n, "reason": "may break."} for n in range(5)]
+        extra = [{"name": "s4", "reason": "Lid stays a fixed shape."}, {"name": "late", "reason": "Lid stays a fixed shape."}]
+        got = fixed_parts.joined(loose, extra, 3)
+        self.assertEqual(len(got), 3)
+        self.assertEqual({e["name"] for e in got[:2]}, {"s4", "late"})
+        self.assertTrue(got[0]["reason"].startswith("Lid stays a fixed shape."))
+
     def test_several_fixed_parts_share_one_reason_per_size(self):
         marked = fixed_parts.marked(self.table(), [("Lid", BASE), ("Clip", BASE)], free={"wall_mm"})
         self.assertEqual(len(marked), 1)

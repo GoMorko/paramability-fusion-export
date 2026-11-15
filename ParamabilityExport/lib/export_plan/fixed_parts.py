@@ -48,11 +48,13 @@ def marked(size_table, fixed_parts, free):
     return [{"name": name, "reason": clip(_reason(parts), MAX_FIXED_REASON)} for name, parts in moved.items()]
 
 
-def joined(loose, extra):
-    """`loose` with the entries of `extra` added: a size that is loose already gets the new reason in front of its own,
-    so the fixed part is named even when the cut to the manifest limit shortens the old reason."""
+def joined(loose, extra, limit):
+    """`loose` with the entries of `extra` added, at most `limit` entries. A size that is loose already gets the new
+    reason in front of its own, so the fixed part is named even when the cut to the manifest limit shortens the old
+    reason. When the list is too long, the sizes that a fixed part marks stay and the others are cut."""
     out = [dict(e) for e in loose]
     at = {e["name"]: e for e in out}
+    marked = {entry["name"] for entry in extra}
     for entry in extra:
         if entry["name"] in at:
             found = at[entry["name"]]
@@ -60,4 +62,6 @@ def joined(loose, extra):
         else:
             out.append(dict(entry))
             at[entry["name"]] = out[-1]
-    return out
+    if len(out) > limit:
+        out = [e for e in out if e["name"] in marked] + [e for e in out if e["name"] not in marked]
+    return out[:limit]

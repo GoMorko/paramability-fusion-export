@@ -124,8 +124,8 @@ def free_sizes(recipe):
     return [name for name, size in sizes.items() if isinstance(size, dict) and "value" in size]
 
 
-def _merge_fixed(size_table, *lists, skip=(), only=None):
-    """Manifest entries {'name', 'reason'} in order, the first entry per size wins, at most MAX_FIXED.
+def _merge_fixed(size_table, *lists, skip=(), only=None, limit=MAX_FIXED):
+    """Manifest entries {'name', 'reason'} in order, the first entry per size wins, at most `limit`.
 
     Names in the lists are Fusion parameter names (or recipe size names). The entry holds the recipe size name; the
     reason names the Fusion parameter when the two differ. Recipe names in `skip` are left out, and so is every name
@@ -142,7 +142,7 @@ def _merge_fixed(size_table, *lists, skip=(), only=None):
                 continue
             seen.add(made["name"])
             out.append(made)
-    return out[:MAX_FIXED]
+    return out[:limit]
 
 
 def _cut_entries(size_table, cuts, free, shared=()):
@@ -529,10 +529,10 @@ def plan_parts_export(inputs, title, writer, up_axis, size_table=None, listing=N
         all_fixed = _merge_fixed(size_table, size_table.fixed, *[p.result.fixed for p in recipes])
         fixed_names = {f["name"] for f in all_fixed}
         found = list(loose or []) + _tagged_loose(recipes)
-        all_loose = _merge_fixed(size_table, found, skip=fixed_names, only=set(free))
+        all_loose = _merge_fixed(size_table, found, skip=fixed_names, only=set(free), limit=None)
         shapes = [(p.given.name, p.capture) for p in parts if not p.is_recipe and p.capture is not None]
         all_loose = fixed_parts.joined(all_loose, [
-            e for e in fixed_parts.marked(size_table, shapes, set(free)) if e["name"] not in fixed_names])[:MAX_FIXED]
+            e for e in fixed_parts.marked(size_table, shapes, set(free)) if e["name"] not in fixed_names], MAX_FIXED)
         dropped = _shared_dropped(size_table, recipes, fixed_names, set(free))
         users = [name for part in recipes for name in part.free]
         all_cut = _cut_entries(size_table, [c for part in recipes for c in part.result.cuts], set(free),
