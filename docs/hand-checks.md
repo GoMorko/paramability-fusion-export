@@ -237,3 +237,12 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     `probe.states` and an entry in `probe.dropped`; each range is cut with "the part comes apart into 2 separate
     pieces in Fusion at ...". Note for each design whether the post or the second half shows as its own body in the
     browser at such a value or as part of Body1, and `timing.probe.read_parts.pieces` against `read_parts.box`.
+
+12. HE1, a hole that reaches the edge of its face. Model a lid, 60 x 40 x 3 mm, whose length is user parameter `Width`
+    = 60 mm (left end fixed at x = 0). Cut a round hole of 16 mm diameter through it at x = 30 mm, then use Emboss to
+    raise a 10 mm triangle 0.5 mm on its top face, half over the hole.
+    Export: tick `Width` with a range of 10 to 120. The range starts just above 38 mm (the hole ends at x = 38), with the reason
+    "the outline of the face ... would cross itself, lose a corner or have a hole reach its edge". In Fusion, set
+    `Width` to 40 mm and then to 36 mm: at 36 mm the hole breaks the edge of the lid and the face is a different
+    shape, so Paramability must not offer that value. In Paramability, set `Width` to the smallest value: the
+    triangle is trimmed to the lid and is not left floating.
