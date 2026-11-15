@@ -53,7 +53,7 @@ def assign(items):
 
     The comment label is used when there is one. When two sizes end up with the same label, those whose label came
     from a comment fall back to their name in words, and sizes that still share a label get the Fusion name in
-    brackets, so the form never shows two fields alike.
+    brackets, so the form never shows two fields alike. Labels are cut to the label length before they are compared.
     """
     found = {}
     from_comment = set()
@@ -61,16 +61,30 @@ def assign(items):
         text = comment_label(comment)
         if text:
             from_comment.add(name)
-        found[name] = text or name_words(name, unit)
+        found[name] = _cut(text or name_words(name, unit))
     units = {name: unit for name, _, unit in items}
     for group in _repeats(found):
         for name in group:
             if name in from_comment:
-                found[name] = name_words(name, units[name])
+                found[name] = _cut(name_words(name, units[name]))
     for group in _repeats(found):
         for name in group:
-            found[name] = "%s (%s)" % (found[name], name)
-    return {name: text[:defaults.LABEL_MAX].strip() for name, text in found.items()}
+            found[name] = _with_name(found[name], name)
+    for group in _repeats(found):  # names so long that the cut made them alike: number them
+        for number, name in enumerate(group, start=1):
+            found[name] = "%s %d" % (found[name][:defaults.LABEL_MAX - len(str(number)) - 1].rstrip(), number)
+    return found
+
+
+def _cut(text):
+    return text[:defaults.LABEL_MAX].strip()
+
+
+def _with_name(text, name):
+    """`text (name)` within the label length: the text is cut to leave room for the name, so the name always shows."""
+    suffix = " (%s)" % name
+    room = defaults.LABEL_MAX - len(suffix)
+    return text[:room].rstrip() + suffix if room > 0 else _cut(name)
 
 
 def _repeats(found):

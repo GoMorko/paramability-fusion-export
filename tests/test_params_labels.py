@@ -47,6 +47,13 @@ class AssignTest(unittest.TestCase):
         same = labels.assign([("a_b", "", "mm"), ("a$b", "", "mm")])
         self.assertEqual(same, {"a_b": "A b (a_b)", "a$b": "A b (a$b)"})
 
+    def test_labels_made_alike_by_the_cut_to_the_label_length_are_told_apart(self):
+        long = "x" * (labels.defaults.LABEL_MAX + 10)
+        for pairs in ((long + "_a", long + "_b"), ("x" * 100 + "_a", "x" * 100 + "$a")):
+            got = labels.assign([(name, "", "mm") for name in pairs])
+            self.assertEqual(len({text.lower() for text in got.values()}), 2)
+            self.assertTrue(all(0 < len(text) <= labels.defaults.LABEL_MAX for text in got.values()))
+
 
 class TableLabelTest(unittest.TestCase):
     def test_the_recipe_size_gets_the_words_and_the_entry_keeps_the_fusion_name(self):
