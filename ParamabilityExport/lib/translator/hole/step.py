@@ -10,7 +10,8 @@ flat face, of another component moves with that place (ref_motion.py).
 """
 import math
 
-from ...capture_model import gap_hints
+from ...design_model.problem import Problem
+from ...design_model.steps import hole as facts
 from ...design_model.values import Quantity, Sized
 from ...geometry import vec
 from ...package.numbers import round9
@@ -25,11 +26,8 @@ from . import thread as threads
 
 
 MARGIN_MM = 0.01
-DIAMETER_TOL = 1e-3
-BEHIND_TOL = 1e-6
 FLAT_TIP_DEG = 179.999
 MIN_COUNTERSINK_DEG, MAX_COUNTERSINK_DEG = 60.0, 120.0
-TAPPED = ("tapped", "taperTapped")
 
 
 def _vec(values):
@@ -47,71 +45,31 @@ def _perpendicular(direction):
 
 
 def _direction(data, ctx):
-    """Unit hole direction (into the material), negated when a measured end lies behind the positions."""
-    direction = vec.unit(data["direction"])
-    positions = data["positions"]
-    for at, end in enumerate(data.get("end_points") or []):
-        start = positions[min(at, len(positions) - 1)]
-        if vec.dot(vec.sub(end, start), direction) < -BEHIND_TOL:
-            ctx.note("Fusion stored the hole direction the other way; the measured end of the hole was used.")
-            return vec.scale(direction, -1.0)
-    return direction
+    """Unit hole direction (into the material); the measured end of the hole wins over the stored direction."""
+    found = facts.direction_of(data)
+    if found.flipped:
+        ctx.note("Fusion stored the hole direction the other way; the measured end of the hole was used.")
+    return found.unit
 
 
 def _check_size(data, ctx, count, diameter):
     """Note when the measured cylinder faces disagree with the stored diameter or number of holes."""
-    cylinders = list(data.get("side_cylinders") or [])
-    if not cylinders:
-        return
-    bore = data.get("counterbore")
-    if bore:
-        cylinders = [c for c in cylinders if abs(2 * c["radius"] - bore["diameter"]) > DIAMETER_TOL] or cylinders
-    if len(cylinders) != count or any(abs(2 * c["radius"] - diameter) > DIAMETER_TOL for c in cylinders):
+    if facts.size_differs(data, count, diameter):
         ctx.note("The measured size of this hole differs from its stored size; the stored size was used.")
-
-
-def _drill_diameter(data):
-    """Diameter of the drilled bore of a cosmetic tapped hole, or a Refusal.
-
-    The widest measured cylinder that is not wider than the stored size: a counterbore wall is wider, and the
-    thread's nominal size is the stored one.
-    """
-    limit = float(data["diameter"]) / 2.0 + DIAMETER_TOL
-    radii = [float(c["radius"]) for c in data.get("side_cylinders") or [] if float(c["radius"]) <= limit]
-    if not radii:
-        return Refusal("The drill size of this tapped hole could not be measured.")
-    return 2.0 * max(radii)
-
-
-def _diameter(data, ctx):
-    """Diameter to cut: the stored one, or for a tapped hole the measured drill size, or a Refusal."""
-    if data.get("tap_type") not in TAPPED:
-        return float(data["diameter"])
-    if data.get("tap_type") == "taperTapped":
-        return Refusal("Tapered threads are not copied yet.", cause=gap_hints.THREAD_PROFILE)
-    if data.get("thread_modeled") is None:
-        return Refusal("The thread of this hole could not be read.")
-    drilled = _drill_diameter(data)
-    if not isinstance(drilled, Refusal):
-        ctx.note("The thread of this hole is not copied; it was cut as a plain hole.")
-    return drilled
 
 
 def _is_tipped(data, tip, ctx):
     """True for a conical drill point, False for a flat end, or a Refusal.
 
-    The measured shape of the end faces (`end_face_types`) wins over the stored tip angle.
+    The measured shape of the end faces (`facts.end_shape`) wins over the stored tip angle.
     """
     stored_tipped = not _is_flat(tip)
-    measured = set(data.get("end_face_types") or [])
-    if not measured:
+    measured = facts.end_shape(data)
+    if measured is None:
         return stored_tipped
-    if measured == {"cone"}:
-        tipped = True
-    elif measured == {"plane"}:
-        tipped = False
-    else:
+    if measured == facts.MIXED:
         return Refusal("The end of this hole could not be told apart as flat or pointed.")
+    tipped = measured == facts.CONE
     if tipped != stored_tipped:
         ctx.note("Fusion stored the drill tip of this hole differently from its measured end; the measured end was used.")
     return tipped
@@ -230,7 +188,7 @@ class _Sizes:
 
 def _sizes(item, ctx, diameter, depth, counterbore, countersink, depth_q=None):
     data = item["data"]
-    if data.get("tap_type") in TAPPED:
+    if facts.tap_of(data) != facts.PLAIN:
         values.pin(ctx, item, "diameter", "the thread of %s sets the drill size" % item.get("name", "a hole"))
         diameter_q = Quantity(diameter)
     else:
@@ -252,34 +210,34 @@ def _sizes(item, ctx, diameter, depth, counterbore, countersink, depth_q=None):
 
 def hole(item, ctx):
     data = item.get("data") or {}
-    if not data.get("positions") or not data.get("direction") or not data.get("diameter"):
-        return Refusal("This hole has no readable position or size.")
-    hole_type = data.get("hole_type", "simple")
-    counterbore = data.get("counterbore") if hole_type == "counterbore" else None
-    countersink = data.get("countersink") if hole_type == "countersink" else None
-    if hole_type not in ("simple", "counterbore", "countersink") or (
-        (hole_type == "counterbore" and not counterbore) or (hole_type == "countersink" and not countersink)
-    ):
-        return Refusal("This kind of hole is not copied yet.")
-    extent = data.get("extent") or {}
-    if extent.get("kind") not in ("distance", "throughAll", "toEntity"):
-        return Refusal("This way of setting the hole depth is not copied yet.")
-    through = extent["kind"] == "throughAll"
-    up_to = extent["kind"] == "toEntity"
-    depth = None if through or up_to else float(extent["depth"])
-    if depth is not None and not depth > 0:
-        return Refusal("This hole has no depth.")
+    problem = facts.placed(data)
+    if problem:
+        return threads.refusal(problem)
+    kind = facts.kind_of(data)
+    if isinstance(kind, Problem):
+        return threads.refusal(kind)
+    counterbore = kind.recess if kind.name == facts.COUNTERBORE else None
+    countersink = kind.recess if kind.name == facts.COUNTERSINK else None
+    extent = facts.extent_of(data)
+    if isinstance(extent, Problem):
+        return threads.refusal(extent)
+    through = extent.kind == facts.THROUGH_ALL
+    up_to = extent.kind == facts.TO_ENTITY
+    depth = extent.depth
 
-    modeled = data.get("tap_type") == "tapped" and data.get("thread_modeled") is True
+    tap = facts.tap_of(data)
+    if isinstance(tap, Problem):
+        return threads.refusal(tap)
     spec = None
-    if modeled:
-        drilled = _drill_diameter(data)
-        spec = threads.hole_spec(data, ctx, item, None if isinstance(drilled, Refusal) else drilled)
-        diameter = spec if isinstance(spec, Refusal) else spec.minor
+    if tap == facts.PLAIN:
+        diameter = float(data["diameter"])
     else:
-        diameter = _diameter(data, ctx)
-    if isinstance(diameter, Refusal):
-        return diameter
+        bore = facts.tapped_bore(data, item.get("name", "a hole"), threads.PITCHES)
+        if isinstance(bore, Problem):
+            return threads.refusal(bore)
+        diameter, spec = bore
+        if spec is None:
+            ctx.note("The thread of this hole is not copied; it was cut as a plain hole.")
     moved = ref_motion.hole_moves(ctx, item, data)
     direction = _direction(data, ctx)
     _check_size(data, ctx, len(data["positions"]), diameter)
@@ -339,15 +297,9 @@ def _along_shifts(points, direction):
 def _up_to_depth(item, ctx, data, direction, points):
     """The depth of a hole that ends at a face or body, as a Quantity, or a Refusal. It is the measured distance from
     the entry to the flat end of the hole; it follows the face the hole reaches (`follow.target_shift`) and the entry."""
-    positions, ends = data["positions"], data.get("end_points") or []
-    if len(ends) != len(positions):
-        return Refusal("The end of this hole could not be measured.")
-    if set(data.get("end_face_types") or []) != {"plane"}:
-        return Refusal("A hole that ends at a face with a drill point is not copied yet.")
-    depths = [vec.dot(vec.sub(end, start), direction) for start, end in zip(positions, ends)]
-    if any(abs(d - depths[0]) > 1e-4 for d in depths) or depths[0] <= 0:
-        return Refusal("The holes of this step end at different depths.")
-    measured = depths[0]
+    measured = facts.reach_depth(data, direction)
+    if isinstance(measured, Problem):
+        return threads.refusal(measured)
     shifts = _along_shifts(points, direction)
     if any(shift.sized and not shift.same_as(shifts[0]) for shift in shifts):
         ctx.doubt(tuple(dict.fromkeys(r for shift in shifts for r in shift.reads)),

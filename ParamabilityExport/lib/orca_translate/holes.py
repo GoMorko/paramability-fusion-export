@@ -16,10 +16,12 @@ from ..geometry import vec
 from ..orca_recipe.enums import FeatureType
 from ..orca_recipe.feature import CadFeature
 from . import causes, finish_body, hole_place, threads
+from ..design_model.problem import Problem
+from ..design_model.steps import hole as hole_facts
 from ..design_model.values import Quantity
 from .skip import Skip
 from .solid import CUT, Prism
-from .steps import LONG, SIDE_TOL, behind, misses_reason, toward_material
+from .steps import LONG, behind, misses_reason, toward_material
 from .tools import data_of, label
 
 
@@ -34,24 +36,27 @@ def hole(ctx, item):
     data = data_of(item)
     if not ctx.has_body:
         return Skip("The part this hole is drilled into is not in the copy.", gap_hints.AFTER_GAP)
-    kind = data.get("hole_type")
-    if kind not in ("simple", "counterbore", "countersink"):
-        return Skip("This kind of hole is not copied yet.")
-    if data.get("tap_type") not in ("simple", "clearance", "tapped", "taperTapped", None):
-        return Skip("This kind of hole is not copied yet.")
+    found = hole_facts.kind_of(data)
+    if isinstance(found, Problem):
+        return threads.skip(found)
+    kind, recess = found
+    tap = hole_facts.tap_of(data)
+    if isinstance(tap, Problem):
+        return threads.skip(tap)
     if data.get("foreign"):
         return Skip("This hole is placed on another component, which is not copied yet.",
                     gap_hints.OTHER_COMPONENT)
-    direction = data.get("direction")
-    positions = data.get("positions") or []
-    if not isinstance(direction, (list, tuple)) or not positions or not isinstance(data.get("diameter"),
-                                                                                       (int, float)):
-        return Skip("This hole could not be read.")
-    extent = data.get("extent") or {}
-    if extent.get("kind") not in ("distance", "throughAll"):
+    problem = hole_facts.placed(data)
+    if problem:
+        return threads.skip(problem)
+    direction, positions = data["direction"], data["positions"]
+    extent = hole_facts.extent_of(data)
+    if isinstance(extent, Problem):
+        return threads.skip(extent)
+    if extent.kind == hole_facts.TO_ENTITY:
         return Skip("This hole goes up to a face, which the Orca copy does not follow yet.",
                     gap_hints.EXTRUDE_END_FACE)
-    spec, tapped = None, data.get("tap_type") in ("tapped", "taperTapped")
+    spec, tapped = None, tap != hole_facts.PLAIN
     if tapped:
         found = threads.tapped(item, data)
         if isinstance(found, Skip):
@@ -62,32 +67,28 @@ def hole(ctx, item):
         diameter = Quantity(bore)
     else:
         diameter = ctx.quantity(item, "diameter", float(data["diameter"]))
-    normal = vec.unit(list(direction))
+    normal = hole_facts.direction_of(data).unit
     ends = [p for p in data.get("end_points") or [] if isinstance(p, (list, tuple))]
-    if ends and len(ends) == len(positions) and vec.dot(vec.sub(list(ends[0]), list(positions[0])), normal) < -SIDE_TOL:
-        normal = vec.scale(normal, -1.0)  # the measured bottom wins over the stored direction
     depth = None
-    if extent["kind"] == "distance":
-        depth = ctx.quantity(item, "extent.depth", float(extent["depth"]))
+    if extent.kind == hole_facts.DISTANCE:
+        depth = ctx.quantity(item, "extent.depth", extent.depth)
         if "cone" in (data.get("end_face_types") or []):
             ctx.notes.append("%s: the drill point at the bottom is left flat in Orca." % label(item))
     box = (item.get("target_before") or {}).get("box") or data.get("target_box_before")
     style, extra = 0, []
-    if kind == "counterbore" and isinstance(data.get("counterbore"), dict):
+    if kind == hole_facts.COUNTERBORE:
         style = 1
-        cb = data["counterbore"]
+        cb = recess
         extra = [("hole_cbore_diameter", "counterbore diameter",
                   ctx.quantity(item, "counterbore.diameter", float(cb["diameter"]))),
                  ("hole_cbore_depth", "counterbore depth", ctx.quantity(item, "counterbore.depth", float(cb["depth"])))]
-    elif kind == "countersink" and isinstance(data.get("countersink"), dict):
+    elif kind == hole_facts.COUNTERSINK:
         style = 2
-        cs = data["countersink"]
+        cs = recess
         extra = [("hole_csink_diameter", "countersink diameter",
                   ctx.quantity(item, "countersink.diameter", float(cs["diameter"]))),
                  ("hole_csink_angle", "countersink angle",
                   ctx.quantity(item, "countersink.angle_deg", float(cs["angle_deg"]), "angle"))]
-    elif kind != "simple":
-        return Skip("This hole could not be read.")
     if spec is not None and style:
         return Skip("This tapped hole has a %s, and the copy cannot tell where Fusion starts its thread then, so it is "
                     "left out." % ("counterbore" if style == 1 else "countersink"), causes.TAPPED_RECESS)
