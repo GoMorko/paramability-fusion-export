@@ -311,3 +311,12 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     `end_normal` is parallel to X when Fusion lists one (an end cap at -18.5 mm, `end_area` about the slot area
     inside the wall), else a rib wall with a normal across X and a small area. Either way the cut is copied in both
     outputs; write down which face Fusion listed first and whether `endFaces` held a cap at all.
+32. JT1, a size of a joint that moves a face the part reaches to. Make component Base: a 60 x 40 x 5 mm plate.
+    Make component Post: a 10 x 10 mm square sketch on its XY plane. Make component Cap: a 30 x 30 x 3 mm plate. In
+    the top level, ground Base, join Post to the top face of Base with a rigid joint, and join the bottom face of Cap
+    to the top face of Base with a slider joint along Z whose offset is user parameter `Lift` = 40 mm, so Cap floats
+    40 mm above Base. Activate Post and extrude its square "To object" up to the bottom face of Cap.
+    Export: export the Post body and tick only `Lift`. In `report.json`, `probe.motion.refs` lists the reach of the
+    extrude with an empty reason, and `probe.motion.values` has a `.../r/side_one/offset` key with a term of `Lift`.
+    In Paramability the post grows as `Lift` grows; `Lift` is a loose size with "it moves a joint". Afterwards Cap
+    sits 40 mm above Base as before, `Lift` is 40 mm, and no step or joint is in warning.

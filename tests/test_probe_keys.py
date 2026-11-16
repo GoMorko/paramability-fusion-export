@@ -133,6 +133,11 @@ class AnswerTest(unittest.TestCase):
         self.assertIn("4/p0/l0/width", moved.keys)
         self.assertEqual(sketch_answer(self.table, motion, "Sketch1", "height").kind, coverage.STILL)
 
+    def test_a_size_no_try_set_is_not_measured_rather_than_still(self):
+        motion = build(CAPTURE, self.table, [s for s in states() if "off" not in s["values"]])
+        answer = sketch_answer(self.table, motion, "Sketch1", "off")
+        self.assertEqual((answer.kind, answer.reason), (coverage.NOT_MEASURED, coverage.NOT_TRIED))
+
     def test_a_sketch_whose_first_read_does_not_match_is_not_measured_for_every_size_behind_it(self):
         e0 = at(off=4)
         e0["e0"], e0["values"] = True, {}

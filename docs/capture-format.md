@@ -1587,8 +1587,8 @@ capture places it and marks the sizes that act on its component (`orca_translate
     revolve axis point, extrude start shift or reach, hole centre) and the size stays free;
   - a `Stuck` key (the reference turns, or the move is no exact formula): the sizes behind it are marked loose and the
     place stays where the capture has it;
-  - not measured (`probe.motion.refs` holds a reason, or the size was left without rows), not looked at (no entry),
-    or no motion file: every such size is marked loose with the step and the component named.
+  - not measured (`probe.motion.refs` holds a reason, or the size was left without rows or set by no state), not
+    looked at (no entry), or no motion file: every such size is marked loose with the step and the component named.
   The first translation of an export (`OPTIMISTIC`) marks nothing. An `origin` reference is handled like any other: it
   moves with the occurrence of its component. The sizes whose user parameter acts on a joint, another assembly item
   or a Move whose `input_kind` is not `bodies` or `faces` (a Move of occurrences) count for every reference of another
@@ -1915,8 +1915,10 @@ separate pieces (only when there is one, see "Probe states"), and `kept` and `ch
 different outline item below). A sketch the probe could not measure (a step uses it in a way the probe cannot follow, its first read did not
 match the capture, or there was no read at the current sizes) is listed in `unmeasured` (sketch name to reason), and
 nothing is known about it. For one sketch and one size the motion file therefore gives one of three answers: measured
-and still, measured and moved (the keys), or not measured (`translator.sizes.sketch_answer`). A motion file without
-`unmeasured` (written by hand) says nothing about such sketches. The translator uses it like this:
+and still, measured and moved (the keys), or not measured (`translator.sizes.sketch_answer`). A size that no state
+sets to another value (no `states[].values` names it) is not measured (`NOT_TRIED`, `coverage.tried`), never still: the
+tries tell nothing about it. A motion file without `states` (written by hand) cannot tell which sizes were tried, so its
+values are the answer. A motion file without `unmeasured` (written by hand) says nothing about such sketches. The translator uses it like this:
 
 - `motion=None`: the rule above, sketch sizes fixed up front. `motion=OPTIMISTIC` (the export's first translation):
   sketch values are written as numbers and nothing is fixed for them, so the export can see which sizes to try.
@@ -2140,7 +2142,9 @@ not in `refs` was not looked at (a motion file written without references, or th
 nothing is known. For one
 reference and one size acting on its component, `sketch_values.coverage.ref_answer` gives the same three answers as for
 sketches: `STILL`, `MOVED` (with the keys) or `NOT_MEASURED` (with the reason, or `NOT_TRIED` for a size left without
-rows, `NOT_LOOKED` for a key not in `refs`).
+rows or set by no state, `NOT_LOOKED` for a key not in `refs`). A size of a joint or of a move that places an
+occurrence may move every reference of another component (`design_model.refs.acting_sizes`), but the probe tries it
+only on a guess, while rows are left. When no state set it, the answer is `NOT_TRIED`, and the step marks the size.
 
 ### Probe states (`lib/fusion_reader/probe_state.py`)
 

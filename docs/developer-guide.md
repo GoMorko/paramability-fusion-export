@@ -2587,6 +2587,26 @@ reads it again at every row (`probe_refs.py`) and fits how far it moves (`ref_fi
 (`ref_motion.py`) writes the move as a formula, or marks the sizes that act on that component when the place turns or
 was not measured.
 
+For one size and one place, `sketch_values.coverage.ref_answer` gives the answer of the motion file: still, moved or
+not measured. A size that no try set to another value is not measured (`coverage.tried`). It is never still, because
+the tries tell nothing about it. This is important for the size of a joint, or of a move that places an occurrence:
+
+1. Such a size can move every place of another component (`refs.acting_sizes`).
+2. The probe tries it only on a guess (`probe_flow/sizes.extra_sizes`), and only while rows are left.
+3. When no row set it, the answer is "not tried". The translator gives the size a doubt that names the step and says
+   that the size was not tried at other values. The size is then loose, or left out with that reason when no formula
+   reads it. The audit does not say "nothing in this part moved with it".
+
+A motion file without states (a test file written by hand) cannot tell which sizes were tried. Its values are then the
+answer. The same rule applies to a sketch (`translator.sizes.sketch_answer`).
+
+The probe can try such a size like any other size. The try changes the parameter, and Fusion moves the occurrence
+through its joint or move when it rebuilds. The reader reads each place through the occurrence where it is now, and
+brings it into the coordinates of the part as the part is now (`fusion_reader/probe_refs.py`). The put back restores
+the parameter, and Fusion puts the occurrence back when it rebuilds. The tries keep every joint: the marker roll keeps
+the assembly items before the marker, and the timeline trim turns nothing off when a joint comes before the stop
+point. An export does not start when the position of a moved part is not captured (`position_pending`).
+
 The facts that do not need the probe are in the shared layer, `lib/design_model/refs.py`. Both translators use them:
 
 - `acting_sizes` gives the ticked sizes that can move the reference. It also tells if the capture can say this. An old
