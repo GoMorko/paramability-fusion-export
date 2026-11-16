@@ -394,21 +394,21 @@ def _sketch_item(timeline, sketch, before):
     return found
 
 
-def placement_sizes(table, timeline, profile, before, unread_on_part=False):
+def placement_sizes(table, timeline, profile, before):
     """Fusion names of the ticked sizes that may move the plane the sketch of `profile` sits on, in table order: the
     sizes behind the construction plane itself and, for a plane on a face or on construction geometry built on the
     part (a chain of planes included), every size an item of the body's component reads before the plane was made.
     `before` is the timeline index of the step that uses the sketch. Empty for an origin plane, a sketch of another
-    component, still `foreign` or brought in (`borrowed`: its links and its own sizes say what moves it). With
-    `unread_on_part` (the Orca copy, which no probe measures) a sketch whose reference Fusion did not give counts as
-    one on a face of the part, unless its frame lies on an origin plane (Fusion gives no reference for some sketches
-    on faces; older captures give none for any sketch); otherwise it names no size."""
+    component, still `foreign` or brought in (`borrowed`: its links and its own sizes say what moves it), or an outline
+    the recipe places on the face its extrude starts from (`on_start_face`, an emboss), which follows that face. A sketch
+    whose reference Fusion did not give counts as one on a face of the part, unless its frame lies on an origin plane
+    (Fusion gives no reference for some sketches on faces; older captures give none for any sketch)."""
     if table is None or not isinstance(profile, dict) or profile.get("foreign") or profile.get("borrowed") \
-            or profile.get("face"):
+            or profile.get("face") or profile.get("on_start_face"):
         return []
     reference = profile.get("reference")
     if not isinstance(reference, dict):
-        if not unread_on_part or not profile.get("sketch") or _looks_like_origin(profile.get("frame")):
+        if not profile.get("sketch") or _looks_like_origin(profile.get("frame")):
             return []
         reference = {"kind": "other"}
     names = set()
@@ -651,7 +651,7 @@ def sketch_plane_sizes(table, timeline, item, profile):
         return []
     if profile.get("face"):
         return any_face_sizes(table, timeline, item)
-    return placement_sizes(table, timeline, profile, item.get("index"), unread_on_part=True)
+    return placement_sizes(table, timeline, profile, item.get("index"))
 
 
 def hole_plane_sizes(table, timeline, item, data):

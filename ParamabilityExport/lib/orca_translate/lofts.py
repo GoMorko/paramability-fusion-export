@@ -350,7 +350,7 @@ def loft(ctx, step):
                         [(m, outlines_of(p), p) for p, m in written])
     items = ctx.capture.get("items") or []
     for profile in profiles:
-        moving = placement_sizes(ctx.table, items, profile, item.get("index"), unread_on_part=True) if ctx.table is not None else []
+        moving = placement_sizes(ctx.table, items, profile, item.get("index")) if ctx.table is not None else []
         ctx.doubt(moving, "%s: an outline sits on a plane or face that moves with it, and Orca cannot move a sketch "
                   "plane with a variable" % name)
 

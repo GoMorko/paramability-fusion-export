@@ -2020,12 +2020,14 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   - The plane of a sketch. `placement_sizes` gives the sizes that can move the plane a sketch sits on: the sizes behind
     its construction plane and, for a plane on the part, every size that an earlier step reads. `sketch_plane_sizes`
     does this for an outline, also when the outline is a face of the body. Fusion 2706 gives no
-    `Sketch.referencePlane` for some sketches on a face, so the capture has no `reference` for them. The Orca output
-    has no probe that measures the plane. Thus it calls `placement_sizes` with `unread_on_part`: a sketch without a
-    reference then counts as a sketch on a face of the part, and every size that an earlier step reads is marked.
-    Example. A boss is sketched on the top face of a plate, and `Height` sets the plate. `Height` then follows "but not
-    everywhere". A sketch whose frame lies on an origin plane is an exception, because older captures give no
-    reference for any sketch. The recipe translator keeps the old rule. `hole_plane_sizes` does this for the holes
+    `Sketch.referencePlane` for some sketches on a face, so the capture has no `reference` for them. Thus a sketch
+    without a reference counts as a sketch on a face of the part: `placement_sizes` gives every size that an earlier
+    step reads. Example. A boss is sketched on the top face of a plate, and `Height` sets the plate. The Orca output
+    then marks `Height` ("follows but not everywhere"). The probe tries `Height` (`probe/plane_sizes.plane_driven`),
+    so the recipe follows the measured plane of the boss sketch; without a try or a motion file, the recipe marks
+    `Height`. A sketch whose frame lies on an origin plane is an exception, because older captures give no reference
+    for any sketch. An emboss outline is another exception (`on_start_face`): the recipe starts it on the face, which
+    it follows. `hole_plane_sizes` does this for the holes
     of one step. `borrowed_plane_sizes` does this for a sketch of another component: a face, or a construction
     plane built on geometry, can be of the part, so it gives every size that the body's component reads before the
     step. `on_part` and `offset_param` say if a plane sits on the part and which parameter is the own distance of an

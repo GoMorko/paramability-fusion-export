@@ -235,7 +235,7 @@ not judged to meet material where Orca removes nothing.
   read before the sketch) are marked for every extrude, and for the outlines of revolves, sweeps and lofts
   (`design_model.reach.sketch_plane_sizes`). Fusion 2706 gives no `Sketch.referencePlane` for some sketches on a face
   (a boss sketched on the top of a plate), so a sketch without a reference counts as one on a face of the part,
-  unless its frame lies on an origin plane (`unread_on_part`).
+  unless its frame lies on an origin plane. The recipe output uses the same rule.
 - Taper. Orca tapers a Blind extrude only (and its "up to face"); symmetric and two sided extrudes ignore
   `taper_deg`. It moves the outline in its plane by the signed length times the tangent of `taper_deg` (a positive
   angle grows the outline along the extrude; with Flip the same angle shrinks it) and lofts the two outlines. A

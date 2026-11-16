@@ -305,6 +305,10 @@ class BodyMirrorOverRangesTest(unittest.TestCase):
     def result(self, plane_z, *middle):
         pocket = copy_extrude(3, "Pocket", "cut", {"origin": [0, 0, 10], "x": [1, 0, 0], "y": [0, -1, 0], "z": [0, 0, -1]},
                           (20, 5, 30, 15), 8.0, {"side_one.distance": param("d30", "wall_mm * 4", 8.0)})
+        # On a plane 10 mm above the XY plane, which no size moves (a sketch without a reference may sit on a face).
+        pocket["data"]["profiles"][0]["reference"] = {"kind": "constructionPlane", "token": "plane10",
+                                                      "definition": "ConstructionPlaneOffsetDefinition",
+                                                      "built_on": [{"origin": True}]}
         plane = {"point": [0, 0, plane_z], "normal": [0, 0, 1], "origin": True}
         capture = post_capture(pocket, *middle, _mirror(4 + len(middle), plane, "bodies", True, self.PLATE_BOX))
         return translate(capture, size_table=table_of(capture, TICKED))

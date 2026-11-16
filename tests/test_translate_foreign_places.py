@@ -36,6 +36,12 @@ def mirror_with(edit):
 def on_fixture(name, edit):
     """A fixture's items with the sizes of the mirror fixture; its first extrude reads `gap_mm`."""
     capture = load_capture(name)
+    # Its later sketches sit on a plane no size moves (one without a reference may sit on a face `gap_mm` moves).
+    for item in capture["items"][2:]:
+        for profile in (item.get("data") or {}).get("profiles") or []:
+            profile.setdefault("reference", {"kind": "constructionPlane", "token": "still",
+                                             "definition": "ConstructionPlaneOffsetDefinition",
+                                             "built_on": [{"origin": True}]})
     capture["parameters"] = load_capture("component_foreign_mirror")["parameters"]
     capture["items"][1]["data"]["params"] = {"side_one.distance": {"name": "d1", "expression": "gap_mm", "value": 10.0}}
     edit(capture)

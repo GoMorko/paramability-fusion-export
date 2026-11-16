@@ -259,7 +259,17 @@
                   }
                 ]
               }
-            ]
+            ],
+            "reference": {
+              "kind": "constructionPlane",
+              "token": "plane_z3",
+              "definition": "ConstructionPlaneOffsetDefinition",
+              "built_on": [
+                {
+                  "origin": true
+                }
+              ]
+            }
           }
         ],
         "start": {

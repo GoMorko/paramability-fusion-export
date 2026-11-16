@@ -189,7 +189,8 @@ def handle(ctx, step):
         values.pin(ctx, item, path, "it sets how far %s moves its outline" % item.get("name", "an emboss"))
     built = {
         "operation": "join" if depth > 0 else "cut",
-        "profiles": profiles,
+        # The extrude starts on the face, which the copy follows, so the sketch plane itself places nothing.
+        "profiles": [dict(p, on_start_face=True) for p in profiles],
         "start": {"kind": "fromEntity", "plane": face["plane"], "entity_type": "BRepFace",
                   "face_point": face["face_point"]},
         "extent_type": "one",
