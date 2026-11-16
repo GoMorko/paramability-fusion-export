@@ -50,23 +50,10 @@ PRIVATE_REACHES_IN_TESTS = {
     "test_translate_tool_body.py": {"_over_caps"},
 }
 
-# Modules above the shared design layer that still take the data of a timeline step from the item itself
-# (`item["data"]`, `item.get("data")`, or a `data_of` or `_data` helper), by path under `lib`. A module that gets
-# that data handed in is reached through one of these. The shared layer (`design_model`), the reader
-# (`fusion_reader`) and the capture model (`capture_model`) read it on purpose. This list may only shrink: a module
-# that moves to the facts of `design_model` leaves it, and no module joins it.
-RAW_STEP_DATA = {
-    "translator/audit.py", "translator/bodies/move.py", "translator/bodies/paste.py", "translator/bodies/split.py",
-    "translator/bodies/split_rules.py", "translator/coil/step.py", "translator/combine/step.py",
-    "translator/extrude/emboss.py", "translator/extrude/step.py",
-    "translator/faces/floating.py", "translator/finishes/draft.py", "translator/finishes/finish.py",
-    "translator/finishes/offset.py", "translator/gaps/gap_file.py", "translator/gaps/gap_measures.py",
-    "translator/hole/step.py", "translator/hole/thread.py", "translator/loft/step.py",
-    "translator/repeat/body_copies.py", "translator/repeat/repeat_circular.py", "translator/repeat/repeat_lattice.py",
-    "translator/repeat/repeat_mirror.py", "translator/repeat/repeat_rectangular.py",
-    "translator/repeat/repeat_sources.py", "translator/revolve/step.py", "translator/sketch/sketch_motion.py",
-    "translator/sweep/step.py", "translator/values.py",
-}
+# The shared layer (`design_model`), the reader (`fusion_reader`) and the capture model (`capture_model`) take the data
+# of a timeline step from the item (`item["data"]`, `item.get("data")`, or a `data_of` or `_data` helper) on purpose.
+# Every other module reads a step through the shared layer (`design.ResolvedStep`, `as_read`, `params_of`) or gets
+# the data handed in.
 _READS_DATA_ITSELF = ("design_model", "fusion_reader", "capture_model")
 _DATA_HELPERS = ("data_of", "_data")
 # Names of one output that the shared layer must not use: its refusals, skips and translation contexts.
@@ -247,15 +234,14 @@ class BoundaryTest(unittest.TestCase):
 
 
 class DesignLayerTest(unittest.TestCase):
-    def test_only_the_listed_modules_take_step_data_from_an_item(self):
+    def test_no_module_above_the_shared_layer_takes_step_data_from_an_item(self):
         lib = os.path.join(context.ADDIN_DIR, "lib")
         found = set()
         for path in _python_files(lib):
             rel = os.path.relpath(path, lib).replace(os.sep, "/")
             if rel.split("/")[0] not in _READS_DATA_ITSELF and _reads_step_data(path):
                 found.add(rel)
-        self.assertEqual(found - RAW_STEP_DATA, set(), "new modules read the data of a step from the item")
-        self.assertEqual(RAW_STEP_DATA - found, set(), "these modules no longer do: take them off the list")
+        self.assertEqual(found, set(), "these modules read the data of a step from the item")
 
     def test_the_design_layer_has_no_destination_words_or_contexts(self):
         # Its public functions take a recorder (`design_model.recorder.Recorder`); `tests/test_interfaces.py` checks

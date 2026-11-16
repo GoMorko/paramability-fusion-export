@@ -264,7 +264,7 @@ class SizesTest(unittest.TestCase):
         self.assertNotIn(height, self.result.gaps[0]["looseSizes"])
 
     def test_the_doubt_of_a_refused_handler_fixes_no_size(self):
-        def refuse(item, ctx):
+        def refuse(ctx, step):
             ctx.doubt(("wall_mm",), "it cannot be followed", fixed=True)
             return Refusal("Not today.")
         result = translate(tray(), handlers={"ShellFeature": refuse}, size_table=self.table)

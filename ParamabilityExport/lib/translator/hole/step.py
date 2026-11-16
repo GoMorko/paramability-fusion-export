@@ -186,8 +186,7 @@ class _Sizes:
         self.counterbore, self.countersink = counterbore, countersink
 
 
-def _sizes(item, ctx, diameter, depth, counterbore, countersink, depth_q=None):
-    data = item["data"]
+def _sizes(item, data, ctx, diameter, depth, counterbore, countersink, depth_q=None):
     if facts.tap_of(data) != facts.PLAIN:
         values.pin(ctx, item, "diameter", "the thread of %s sets the drill size" % item.get("name", "a hole"))
         diameter_q = Quantity(diameter)
@@ -208,8 +207,8 @@ def _sizes(item, ctx, diameter, depth, counterbore, countersink, depth_q=None):
     return _Sizes(diameter_q, depth_q, bore, sink)
 
 
-def hole(item, ctx):
-    data = item.get("data") or {}
+def hole(ctx, step):
+    item, data = step.brought, step.brought_data
     problem = facts.placed(data)
     if problem:
         return threads.refusal(problem)
@@ -241,14 +240,14 @@ def hole(item, ctx):
     moved = ref_motion.hole_moves(ctx, item, data)
     direction = _direction(data, ctx)
     _check_size(data, ctx, len(data["positions"]), diameter)
-    points = _moved_points(ctx, item, data["positions"], moved)
+    points = _moved_points(ctx, item, data, moved)
     depth_q = None
     if up_to:
         depth_q = _up_to_depth(item, ctx, data, direction, points)
         if isinstance(depth_q, Refusal):
             return depth_q
         depth = depth_q.n
-    sizes = _sizes(item, ctx, diameter, depth, counterbore, countersink, depth_q)
+    sizes = _sizes(item, data, ctx, diameter, depth, counterbore, countersink, depth_q)
 
     tip = data.get("tip_angle_deg")
     tipped = False
@@ -316,9 +315,10 @@ def _up_to_depth(item, ctx, data, direction, points):
     return depth
 
 
-def _moved_points(ctx, item, rows, moved):
-    """The written hole points, each moved by the formulas of `moved` (how far the place it sits on moves)."""
-    points = sketch_motion.points(ctx, item, rows)
+def _moved_points(ctx, item, data, moved):
+    """The written hole points (`data.positions`), each moved by the formulas of `moved` (how far the place it sits on
+    moves)."""
+    points = sketch_motion.points(ctx, item, data, data["positions"])
     for point, move in zip(points, moved):
         for c, q in enumerate(move):
             if q.sized:
@@ -328,9 +328,9 @@ def _moved_points(ctx, item, rows, moved):
     return points
 
 
-def thread(item, ctx):
+def thread(ctx, step):
     """A cosmetic thread changes no solid: it makes no step. A modeled one is `thread.feature`."""
-    if (item.get("data") or {}).get("modeled"):
-        return threads.feature(item, ctx)
+    if step.brought_data.get("modeled"):
+        return threads.feature(ctx, step)
     ctx.note("The thread is not copied; the exported shape has none either.")
     return StepResult()

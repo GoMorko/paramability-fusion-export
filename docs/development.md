@@ -25,7 +25,8 @@ package may import only packages above it in this list (not every one of them). 
   timeline item with its role, what about it cannot be read, the step with the geometry of other components brought
   in and the doubts that waits for the walk to replay, and the facts of its kind; a handler takes the resolved step and
   reads its step only through it, `brought`, `brought_data` and `facts`, and an item that no walk resolves through
-  `as_read`; `params_of` gives the model parameters behind the values of an item); `recorder.py` declares what it asks
+  `as_read`; `params_of` gives the model parameters behind the values of an item, `sketches_of` the sketches it
+  names); `recorder.py` declares what it asks
   of a translation; `refs.py` holds the planes,
   faces, axes and points of other components (which records a step can use, which sizes may move them, the doubt when
   the copy keeps them in place); `borrowed.py` the outlines taken from another component's sketch; `roles.py` what
@@ -50,14 +51,14 @@ package may import only packages above it in this list (not every one of them). 
   and length, and the checks against what Fusion measured: end face, side walls, volume), `steps/hole.py` and
   `steps/thread.py` (the kind, the direction, the measured sizes and the thread of a hole and of a
   ThreadFeature), `steps/repeat.py` (the copies a pattern kept and their frames, the grid index of a copy, the reach of
-  a symmetric direction, the plane of a mirror), `steps/move.py` (the rigid move fitted from the corners of a body),
+  a symmetric direction, the plane of a mirror, the items a pattern or a mirror repeats), `steps/move.py` (the rigid move fitted from the corners of a body),
   `steps/split.py` (which piece of a split lies inside the tool), `steps/finish.py` (the sets of a round or a chamfer:
   kinds, sizes, the face of the first distance of an uneven chamfer, edges of one size; each translator keeps its own
   picks of the edges), `steps/sweep.py` (the settings that are not plain, the outline points, the volume and end face
   checks), `steps/emboss.py` (the volume check and the face an outline is trimmed to) and `steps/loft.py` (the volumes of
   the corner pairings).
 - `results`: the shape of a verdict and of the record of a step left out, for both translators and the dialogs (`verdicts.py`, `left_out.py`). It holds shapes and the words of a verdict kind, not facts about the design.
-- `translator`: a capture dict in, a recipe plus verdicts out (one handler per step type, mapped in `handlers.py`). `translate.py`, `walk.py`, `context.py`, `result.py`, `values.py` (the policy: ranges, pins, the audit) and `sizes.py` are the driver; the rest sits in folders by job: `extrude/` (also emboss), `sweep/` and `paths/` (the recipe caps on a path, the path that follows sizes), `loft/`, `revolve/`, `hole/`, `repeat/` (patterns and mirrors), `combine/` (also tool bodies), `finishes/` (fillet, chamfer, shell, draft, offset faces), `bodies/` (move, paste, split), `faces/` (the faces steps make and the picks that follow sizes), `sketch/` (outlines and sketch values), `ranges/` (formulas over the size ranges) and `gaps/`.
+- `translator`: a capture dict in, a recipe plus verdicts out (one handler per step type, mapped in `handlers.py`; each handler takes the resolved step of `design_model.design`, `handler(ctx, step)`, and reads no step data from an item itself). `translate.py`, `walk.py`, `context.py`, `result.py`, `values.py` (the policy: ranges, pins, the audit) and `sizes.py` are the driver; the rest sits in folders by job: `extrude/` (also emboss), `sweep/` and `paths/` (the recipe caps on a path, the path that follows sizes), `loft/`, `revolve/`, `hole/`, `repeat/` (patterns and mirrors), `combine/` (also tool bodies), `finishes/` (fillet, chamfer, shell, draft, offset faces), `bodies/` (move, paste, split), `faces/` (the faces steps make and the picks that follow sizes), `sketch/` (outlines and sketch values), `ranges/` (formulas over the size ranges) and `gaps/`.
 - `probe`: measures sketches and the places of other components' planes, axes and points at other size values and fits the motion file. It does not import the translator: what it reads of the recipe (the loop writer and the range cuts of its tries) is in `design_model`.
 - `orca_translate`: a capture in, an OrcaSlicer Design tab recipe (`orca_recipe`) plus a verdict per step out, for Export for Orca (experimental): one handler module per kind of step, and the shape of the part built so far for the checks of cuts. Each handler takes the resolved step of `design_model.design` (`handler(ctx, step)`) and reads no step data from an item itself. It imports neither the recipe translator nor the probe. The modules are listed in `docs/orca-output.md`.
 - `export_plan`: the export itself: the pipeline (one body or several), the put back of the design at its end (`pipeline/put_back.py`), the recipe and its notes, the probe run, size offers. The try runner (`pipeline/probe_run.py`) calls the probe through one declared interface (`probe_flow/interface.py`) that the probe of one part (`probe_flow/size_probe.py`) and the group of several parts (`probe_flow/probe_group.py`) both have.
@@ -103,11 +104,11 @@ Everything under `lib/` except `fusion_reader/` and `fusion_ui/` is pure Python 
 reading code is tested with fakes. Anything that touches `adsk` stays in `lib/fusion_reader/`, `lib/fusion_ui/` and
 `commands/`. `tests/test_boundary.py` checks that, which package may import which (so imports only go one way),
 that no module imports an underscore name from another module, that the shared layer (`design_model`) uses no name
-of an output (`Refusal`, `Skip`, `Context`) and imports no output, and which modules above the shared layer still
-take the data of a step from the item itself (`RAW_STEP_DATA`). That list may only shrink: a module that reads the
-facts of `design_model` instead leaves it, and a new module must not join it. The pattern that takes a module off
-the list (the handler gets the resolved step, other items go in through `as_read`) is in `docs/developer-guide.md`
-under `design.py` in 2.2; `orca_translate`, `probe` and `export_plan` follow it. A module that reads every item of
+of an output (`Refusal`, `Skip`, `Context`) and imports no output, and that no module outside the shared layer, the
+reader and the capture model takes the data of a step from the item itself. The pattern instead (the handler gets
+the resolved step, other items go in through `as_read`, helpers get the data handed in) is in
+`docs/developer-guide.md` under `design.py` in 2.2; `translator`, `orca_translate`, `probe` and `export_plan` follow
+it. A module that reads every item of
 a capture (not a walk) reads each item's data through `as_read`; `geometry` and `params`, below the shared layer, get
 the data or plain values from their caller (`design_model/step_links.py` reads the step facts the geometry links need). `tests/test_interfaces.py` checks that the Fusion
 parameter store, the two Fusion ports and the shared fakes have every member declared for a store or a port (in

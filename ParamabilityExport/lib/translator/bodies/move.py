@@ -182,8 +182,8 @@ def _points_of(ctx, data):
     return before[n], after[n]
 
 
-def handle(item, ctx):
-    data = item.get("data") or {}
+def handle(ctx, step):
+    item, data = step.brought, step.brought_data
     kind = data.get("input_kind")
     if kind == "faces":
         return Refusal("%s moves faces of the body, which is not copied yet." % _name(item))
@@ -196,8 +196,8 @@ def handle(item, ctx):
     found = way(item, ctx, data, *points)
     if isinstance(found, Refusal):
         return found
-    step, motion = found
+    recipe_step, motion = found
     out = StepResult()
-    if step is not None:
-        out.add(step, [MoveMaker(motion)])
+    if recipe_step is not None:
+        out.add(recipe_step, [MoveMaker(motion)])
     return out

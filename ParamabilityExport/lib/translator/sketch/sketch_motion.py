@@ -580,11 +580,12 @@ def planes_apart(ctx, outlines_, item):
                   notes.stuck_reason("apart", item.get("name") or ""))
 
 
-def points(ctx, item, rows):
-    """Written 3D points of a hole's positions (`rows`): lists of numbers or formulas."""
+def points(ctx, item, data, rows):
+    """Written 3D points of a hole's positions (`rows`): lists of numbers or formulas. `data` is the data of the hole
+    `item`."""
     if not active(ctx):
         return [[round(float(c), 9) + 0.0 for c in p] for p in rows]
-    sketch = (item.get("data") or {}).get("sketch") or ""
+    sketch = data.get("sketch") or ""
     out = []
     for n, p in enumerate(rows):
         row = []
@@ -597,13 +598,13 @@ def points(ctx, item, rows):
     return out
 
 
-def axis_point(ctx, item, frame, point2, coords=None):
+def axis_point(ctx, item, axis, frame, point2, coords=None):
     """The revolve axis point in the sketch plane (`point2`, numbers) as written: it follows the axis line when the
-    probe moved it. The plane only moves along its normal, so the in-plane coordinates read the line alone. `coords`
+    probe moved it. `axis` is the axis record of the revolve `item` (`data.axis`). The plane only moves along its normal, so the in-plane coordinates read the line alone. `coords`
     are the raw 3D axis point when the axis is not a line of a sketch of the part (an axis of another component). An
     axis marked `fixed` is not a sketch line (the centre of a sweep path arc): it stays as written unless `coords` give
     it."""
-    axis = (item.get("data") or {}).get("axis") or {}
+    axis = axis or {}
     if not active(ctx) or (axis.get("fixed") and coords is None):
         return [round(v, 9) + 0.0 for v in point2]
     sketch = axis.get("sketch") or ""
@@ -619,9 +620,10 @@ def axis_point(ctx, item, frame, point2, coords=None):
     return out
 
 
-def axis_raw(ctx, item):
-    """The raw 3D axis point of a revolve, or None when sketch values do not follow sizes."""
-    axis = (item.get("data") or {}).get("axis") or {}
+def axis_raw(ctx, item, axis):
+    """The raw 3D axis point of the revolve `item` from its axis record (`data.axis`), or None when sketch values do
+    not follow sizes."""
+    axis = axis or {}
     if not active(ctx) or axis.get("fixed") or "point" not in axis:
         return None
     sketch = axis.get("sketch") or ""

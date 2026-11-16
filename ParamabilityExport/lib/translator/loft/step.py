@@ -172,8 +172,8 @@ def _turned_corners(profiles, built):
     return vec.length(vec.sub(first, second)) > 1e-6
 
 
-def handle(item, ctx):
-    data = item.get("data") or {}
+def handle(ctx, step):
+    item, data = step.brought, step.brought_data
     refusal = _settings_refusal(data)
     if refusal is None:
         refusal = _sections_refusal(data["sections"])

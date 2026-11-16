@@ -191,8 +191,8 @@ class EdgesPathTest(unittest.TestCase):
     def test_a_path_of_body_edges_is_copied_and_cannot_be_repeated_by_a_pattern(self):
         written = []
 
-        def recording(item, ctx):
-            written.append(sweep.handle(item, ctx))
+        def recording(ctx, step):
+            written.append(sweep.handle(ctx, step))
             return written[-1]
 
         result = translate(load_capture(PLATE), {"SweepFeature": recording})

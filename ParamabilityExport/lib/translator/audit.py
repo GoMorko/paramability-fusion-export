@@ -19,7 +19,7 @@ can keep a size that only such a step reads and say why it changes nothing yet.
 from ..design_model.values import reads_in
 from ..sketch_values.coverage import MOVED, STILL, ref_answer
 from ..sketch_values.motion import Motion
-from ..design_model import refs
+from ..design_model import design, refs
 from ..design_model.reach import construction_fixes, linked_sizes, sketch_params, sketch_sizes
 from .notes import step_label, untried_link_reason
 from .sizes import sketch_answer, used_sizes
@@ -41,26 +41,11 @@ class Audit:
         self.follows = set()
 
 
-def _sketch_names(node, found):
-    """Names of the sketches an item's data refers to, in order."""
-    if isinstance(node, dict):
-        for key, value in node.items():
-            if key == "sketch" and isinstance(value, str) and value:
-                found.setdefault(value, None)
-            else:
-                _sketch_names(value, found)
-    elif isinstance(node, list):
-        for value in node:
-            _sketch_names(value, found)
-    return list(found)
-
-
 def _param_sizes(table, item, only=None):
     """Fusion names of the free sizes behind the item's `data.params`: what each expression reads, and for one the
     parser cannot read, what Fusion lists for its parameter. `only(path)` picks the values to look at."""
     found = set()
-    params = (item.get("data") or {}).get("params")
-    for path, ref in (params.items() if isinstance(params, dict) else ()):
+    for path, ref in design.params_of(item).items():
         if not isinstance(ref, dict) or not ref.get("expression") or (only and not only(path)):
             continue
         tr = table.translate(ref["expression"])
@@ -116,7 +101,7 @@ def _gap_reads(ctx, table, item, measured, motion):
     probe measured that a size does not move the sketch), its construction geometry and its measured references."""
     free = set(table.ticked)
     found = _param_sizes(table, item) & free
-    for sketch in _sketch_names(item.get("data") or {}, {}):
+    for sketch in design.sketches_of(item):
         for name in sketch_sizes(table, sketch):
             if not (measured and sketch_answer(table, motion, sketch, name).kind == STILL):
                 found.add(name)
@@ -146,7 +131,7 @@ def audit(capture, ctx, table, named, motion):
         for name in sorted(_param_sizes(table, item) & free):
             if name not in named and (name not in own or name in unasked):
                 out.forgotten.setdefault(name, "%s reads it, and the copy does not follow it" % label)
-        for sketch in _sketch_names(item.get("data") or {}, {}):
+        for sketch in design.sketches_of(item):
             linked = _only_linked(table, sketch)
             for name in sketch_sizes(table, sketch):
                 if name in linked and name in reached and name not in named and measured \

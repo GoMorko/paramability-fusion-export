@@ -7,7 +7,7 @@ from tests import context  # noqa: F401
 
 from lib.capture_model import step_kinds
 from lib.design_model import design, roles
-from lib.design_model.steps import finish
+from lib.design_model.steps import finish, repeat
 
 PART = {"token": "t1", "name": "Body1"}
 FRAME = {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
@@ -114,6 +114,14 @@ class FactsTest(unittest.TestCase):
     def test_every_kind_of_facts_in_the_step_kind_table_has_a_reader(self):
         named = {t.facts for t in step_kinds.STEP_TYPES if t.facts}
         self.assertEqual(named - set(design.FACT_READERS), set())
+
+    def test_the_sketches_an_item_names_at_any_depth_once_each_in_order(self):
+        data = {"sketch": "Base", "profiles": [{"sketch": "Top"}, {"sketch": "Base"}], "path": {"sketch": ""}}
+        self.assertEqual(design.sketches_of(item(data=data)), ["Base", "Top"])
+
+    def test_a_pattern_names_the_items_it_repeats_and_another_kind_none(self):
+        self.assertEqual(repeat.repeated_items(item(3, "MirrorFeature", data={"sources": [1, 2]})), [1, 2])
+        self.assertEqual(repeat.repeated_items(item(3, "CombineFeature", data={"sources": [1, 2]})), [])
 
 
 if __name__ == "__main__":

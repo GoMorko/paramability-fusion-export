@@ -946,6 +946,10 @@ body (`lib/design_model/`, see 2.2). The walk takes the brought in item and repl
 
 A record that these two cannot bring in stays `foreign`, and the step becomes a gap.
 
+The walk gives the handler the resolved step (`handler(ctx, step)` through `run_handler`). The handler reads the item
+from `step.brought` and its data from `step.brought_data`. It does not read the data from the item itself (see
+"Handlers read the resolved step" in 2.2).
+
 The handler answers with a `StepResult` (the recipe steps) or a `Refusal` (a reason):
 
 - A `Refusal` normally makes the item a gap. A `Refusal(stops=True)` stops the copy.
@@ -978,7 +982,8 @@ alone (`ROUND_SETS`, `CHAMFER_SETS`). The resolved step of the shared layer give
 see 2.2).
 
 The table holds no handler. The handlers are in `lib/translator/handlers.py`: `HANDLERS` maps a capture type to a
-function `handle(item, ctx)`. The table never imports translator code, and only the translator reads `HANDLERS`.
+function `handle(ctx, step)`. `step` is the resolved step of the item (`ResolvedStep`, see 2.2). The table never
+imports translator code, and only the translator reads `HANDLERS`.
 
 | Fusion type | Handler in `HANDLERS` |
 | --- | --- |
@@ -1808,10 +1813,10 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   another component" in 3.3). `bring_in` writes them in the `borrowed_movers` key (`MOVERS`) of the profile that it
   brings in.
 - `steps/`: one reader per kind of step, as facts. `steps/repeat.py`: the copies a pattern kept (`kept_elements`), their
-  frames in the frame of the part (`in_component` for an item, `data_in_component` for the data alone,
-  `read_in_component` for a probe read), the grid index of a copy (`solve_lattice`),
-  the steps a symmetric direction runs each way (`reach`, `FUSION_EXTRA_SIDE`) and the plane of a mirror
-  (`mirror_plane`). `steps/move.py`: the rigid move that carried a body, fitted from its corners before and after
+  frames in the frame of the part (`data_in_component` for the data of a pattern, `read_in_component` for a probe
+  read), the grid index of a copy (`solve_lattice`), the steps a symmetric direction runs each way (`reach`,
+  `FUSION_EXTRA_SIDE`), the plane of a mirror (`mirror_plane`) and the timeline items that a pattern or a mirror
+  repeats (`repeated_items`). `steps/move.py`: the rigid move that carried a body, fitted from its corners before and after
   (`fit`). `steps/split.py`: which piece of a split lies inside the tool body (`resolve`). How a copy is written
   and what it does about a size stay in each translator.
 - `design.py`: the design as the walks read it. `read(capture, table, motion, chain, cache)` gives one
@@ -1846,18 +1851,28 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     kind table says which reader applies to a type (`StepType.facts` in `capture_model/step_kinds.py`). The sets of
     a round or a chamfer step (`steps/finish.py`) are such facts. The Orca handlers of a round and of a chamfer
     (`finishes.fillet`, `finishes.chamfer`) read them. The Orca output also reads them when it measures a round or a
-    chamfer that it leaves out (`finishes.note_left_out`). For another kind, `facts` is None. The handlers of the
-    recipe output still call the step readers themselves.
+    chamfer that it leaves out (`finishes.note_left_out`). The recipe handlers of a round and of a chamfer
+    (`finishes/finish.py`, `fillet` and `chamfer`) read them too. For another kind, `facts` is None.
   `resolve(item, ctx, role)` gives the `ResolvedStep` of one item. The Orca output uses it for each step of a tool
   body (`tools.build`), without a role.
   `as_read(item)` gives a `ResolvedStep` of an item as the capture holds it. It has no role, it brings in nothing,
   and it has no events. Use it for an item that no walk resolves, but that a handler reads or copies. Examples are a
   source of a pattern, a Combine among the sources, and an item that a handler writes again as a step of another
-  kind (a straight sweep that the Orca output writes as an extrude). A test that calls a handler directly also gives
-  it `as_read(item)`.
+  kind (a straight sweep that the Orca output writes as an extrude). The recipe output uses it for the same
+  kinds of items: the Combines among the sources of a pattern (`repeat/repeat_sources.py`), the pattern that made a
+  tool body (`repeat/body_copies.py`), the steps of a tool body that a Combine writes onto the part one by one
+  (`combine/step.py`, `combine/tool_walk.on_part`), the item of a left out step (`gaps/`), the item that wrote a
+  sweep (`faces/floating.py`), and the extrude or revolve that a sweep or an emboss is written as
+  (`sweep/sweep_write.py`, `extrude/emboss.py`). A test that calls a handler directly also gives it
+  `as_read(item)`.
   `params_of(item)` gives the model parameters that Fusion keeps for the values of an item (`data.params`), by the
   path of each value in the data. Each parameter has its name, its expression and its value. It is an empty dict when
-  the item has none. The Orca output reads a value that can follow sizes through it (`Context.quantity`).
+  the item has none. The Orca output reads a value that can follow sizes through it (`Context.quantity`). The recipe
+  output reads it in `values.py` (`quantity`, `pin`), in the audit and in the record of a gap.
+  `sketches_of(item)` gives the names of the sketches that the data of an item names. It finds every `sketch` field,
+  at each depth of the data. Each name is in the list one time, in the order in which it first occurs. The audit of
+  the recipe output (`translator/audit.py`) reads it. The audit uses it to find the sizes of the sketches that a
+  copied step or a left out step uses.
 
   Handlers read the resolved step. The rule is for each module above the shared layer that reads a timeline step:
 
@@ -1872,8 +1887,24 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
      other handler.
   5. A fact that the output needs and that the shared layer does not give yet goes into the shared layer, as a fact
      that does not name an output. An example is `steps/repeat.py`, `data_in_component`: the copies of a pattern in
-     the frame of the component, from the data alone. The policy of the output (the limits, the checks of the part,
+     the frame of the component, from the data alone. Another example is `steps/repeat.py`, `repeated_items`: the
+     timeline items that a pattern or a mirror repeats. The policy of the output (the limits, the checks of the part,
      the choice to leave a step out) stays in the output.
+
+  The recipe output applies the rule in these places:
+  - The walk (`translator/walk.py`) gives each handler the `ResolvedStep` through `run_handler(handler, step, ctx)`.
+    The split rules get the `ResolvedStep` too (`bodies/split_rules.stop_reason(step, ctx)`).
+  - The walk of a tool body (`combine/tool_walk.build`) uses the same walk, so each step of a tool body is resolved.
+    When a Combine writes the steps of a tool onto the part one by one (`tool_walk.on_part`), it gives each handler
+    `as_read(item)`.
+  - A pattern or mirror handler (`repeat/`) carries the data of its step into the frame of the component with
+    `data_in_component`, as the Orca output does. It gives the data to the helpers of the grid
+    (`repeat_lattice.lattice_axes`). A Combine that takes a whole pattern runs the handler of the pattern on
+    `as_read(pattern item)`.
+  - A helper gets the data, or a part of it, from its handler. Examples: `sketch_motion.points` gets the data of the
+    hole, and `sketch_motion.axis_point` and `axis_raw` get the axis record of the revolve.
+  - In a handler, the name `step` is the resolved step. A recipe step that the handler writes has the name
+    `recipe_step`.
 
   Some modules do not copy steps. They read all the items of a capture to find facts: the steps of the picked body
   (`export_plan/body_scope.py`), the items that the tries need (`export_plan/marker_roll.py`), the sketches of other
@@ -1889,10 +1920,9 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     `params/geometry_links.reach` gets the names of the parameters that can place an occurrence. The function
     `design_model/step_links.reach` reads them from the steps and calls it.
 
-  `tests/test_boundary.py` keeps the list of the modules that still take the data of a step from the item
-  (`RAW_STEP_DATA`). A module that follows the rule above leaves that list. The modules of `orca_translate` follow the
-  rule, and so do the modules of `probe`, `export_plan`, `geometry` and `params`. Some modules of `translator` do not
-  follow it yet.
+  `tests/test_boundary.py` checks that no module takes the data of a step from the item, except the modules of the
+  shared layer (`design_model`), of the reader (`fusion_reader`) and of the capture model (`capture_model`). The
+  modules of `translator`, `orca_translate`, `probe`, `export_plan`, `geometry` and `params` follow the rule.
 - `roles.py`: what each timeline item is for the body that a walk builds, and which measures of that body apply to
   the item. The walk of the recipe and the walk of the Orca output both read them:
   - `role_of(item, target, chain)` gives a `Role`: the kind of the item (`SUPPRESSED`, `NOT_A_STEP`, `ASSEMBLY`,
@@ -2179,7 +2209,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   - `component_frame(capture, bodies)` gives the frame of the component that a walk builds in. `bodies` are the tool
     bodies that the walk is inside, the outermost first. The innermost tool of another component gives the frame of
     its component. Without such a tool, the frame of the component of the exported body applies. The copies of a
-    pattern are in assembly coordinates, so the walk carries them into this frame (`steps/repeat.py`, `in_component`).
+    pattern are in assembly coordinates, so the walk carries them into this frame (`steps/repeat.py`, `data_in_component`).
     Both contexts give this frame as `component_frame()`.
   - `is_place_slot(slot)`: the slot of an origin plane that places a tool of another component (`tool<n>.<plane>`).
     Such a reference is the place of the tool, not geometry that a step uses.
@@ -3142,7 +3172,7 @@ decides it:
 Two more details:
 
 - The frames of the copies are in assembly space. For a part placed in the assembly, the translator first carries them
-  into the part's frame (`design_model/steps/repeat.py`, `in_component`, with the frame of `Context.component_frame`,
+  into the part's frame (`design_model/steps/repeat.py`, `data_in_component`, with the frame of `Context.component_frame`,
   which reads `design_model.tool_chains.component_frame`). The probe's reads of the
   copies are carried the same way (`read_in_component`).
 - A direction with a distance of 0 makes copies on top of one another. Fusion keeps a count of 3 in an unused second
@@ -4133,7 +4163,7 @@ The project uses these words in a fixed meaning. The code, the docs, `report.jso
 | gap | A step left out of the copy. The recipe is still written. The gap records the reason, the hint, the place and the Fusion data. |
 | gap cause | The code of why a step was left out (`taperSteep`, `guideSurface` and so on). It selects the hint. |
 | gaps file | `gaps.json`: the list of gaps of a recipe (`paramability.recipeGaps`). Version 1 holds at most 16 gaps, version 2 and 3 at most 256. Version 3 adds the `finishing` flag, and the add-in writes it always. |
-| handler | The translator function for one step type: `handle(item, ctx) -> StepResult or Refusal`. |
+| handler | The translator function for one step type: `handle(ctx, step) -> StepResult or Refusal`, where `step` is the resolved step of the item. |
 | health | The record of how the design came out of the export (`report.json` `health`). |
 | helper geometry | A step that does not touch the exported body. It is skipped. |
 | hint (remodel hint) | One sentence per gap that says what to change in Fusion so the step copies. It comes from the gap's cause (`gap_hints.py`). The result window shows it as "Tip: ". |

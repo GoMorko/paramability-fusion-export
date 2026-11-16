@@ -62,9 +62,9 @@ def _extent_step_q(data, which, distance, count_q):
     return distance.divided_by(Quantity(float(max(int(count_q.n) // 2, 1)), text, count_q.reads))
 
 
-def _axis_step(item, ctx, which, quantity, count_q, kind):
-    """Spacing along one direction as a Quantity, from the pattern distance and how Fusion measures it."""
-    data = item["data"]
+def _axis_step(item, data, ctx, which, quantity, count_q, kind):
+    """Spacing along one direction as a Quantity, from the pattern distance and how Fusion measures it. `data` is the
+    data of the pattern `item`."""
     raw = float(data.get("distance_" + which) or 0.0)
     if kind not in ("spacing", "extent"):
         return Refusal("The spacing of this pattern could not be read.")
@@ -85,13 +85,13 @@ def gaps_between(count_q):
     return Quantity(count_q.n - 1, "max(%s - 1, 1)" % count_q.text, count_q.reads)
 
 
-def lattice_axes(item, ctx):
-    """The directions that have more than one copy, as dicts {dir, step, count, step_q, count_q, symmetric, which,
-    sign}; or a Refusal. `sign` is -1 when the distance is negative, so the copies run against `dir`.
+def lattice_axes(item, data, ctx):
+    """The directions of the pattern `item` (its data `data`) that have more than one copy, as dicts {dir, step,
+    count, step_q, count_q, symmetric, which, sign}; or a Refusal. `sign` is -1 when the distance is negative, so the
+    copies run against `dir`.
 
     `step` and `count` are the numbers; `step_q` and `count_q` are Quantities that may follow sizes.
     """
-    data = item["data"]
     kind = _distance_kind(data)
     axes = []
     for which, dir_key, qty_key in (("one", "direction_one", "quantity_one"), ("two", "direction_two", "quantity_two")):
@@ -116,7 +116,7 @@ def lattice_axes(item, ctx):
         else:
             ref_motion.check_own_direction(ctx, item, which, "spreads copies along")
         count_q = values.quantity(ctx, item, "quantity_" + which, quantity, dim="scalar", whole=True)
-        step_q = _axis_step(item, ctx, which, quantity, count_q, kind)
+        step_q = _axis_step(item, data, ctx, which, quantity, count_q, kind)
         if isinstance(step_q, Refusal):
             return step_q
         # A negative distance runs the copies against the direction: `sign` says which way the distance points.

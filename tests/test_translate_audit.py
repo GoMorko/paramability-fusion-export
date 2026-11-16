@@ -16,10 +16,10 @@ COUNT = "FilterBox_$_height__contains_CeramicMedium"
 CUBE = "_CeramicMedium__Cube_width_mm"
 
 
-def forgetful_extrude(item, ctx):
+def forgetful_extrude(ctx, step):
     """An extrude handler that writes every length as a number and records nothing about the sizes behind it."""
     with ctx.recording():  # what the real handler records is dropped
-        outcome = extrude_handle(item, ctx)
+        outcome = extrude_handle(ctx, step)
     if not isinstance(outcome, Refusal):
         for entry in outcome.entries:
             entry.step = numbers_of(entry.step)

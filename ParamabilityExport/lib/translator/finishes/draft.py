@@ -53,8 +53,8 @@ def _angle(ctx, item, data, angle):
     return size
 
 
-def handle(item, ctx):
-    data = item.get("data") or {}
+def handle(ctx, step):
+    item, data = step.brought, step.brought_data
     faces = [face for face in data.get("faces") or [] if isinstance(face, dict)]
     points = picks.face_points(faces)
     if not points or len(points) != len(faces):

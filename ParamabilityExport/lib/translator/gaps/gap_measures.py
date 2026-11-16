@@ -5,6 +5,8 @@ measures on the item; a tool body has what was measured on the tool itself (`too
 """
 import math
 
+from ...design_model import design
+
 MAX_MEASURE = 1e6
 
 
@@ -28,7 +30,7 @@ def _state(record):
 def measures(ctx, item):
     """`(before, after)` of the body this walk builds around `item`, each `{ box, volume }` or None. The exported body
     has the reader's measures on the item; a tool body has what was measured on the tool itself (`tool_walk`)."""
-    data = item.get("data") if isinstance(item.get("data"), dict) else {}
+    data = design.as_read(item).brought_data
     if _root(ctx).is_target(ctx.target):
         before = _state(item.get("target_before")) or _measure(data.get("target_box_before"), data.get("volume_before"))
         return before, _state(item.get("target_after"))

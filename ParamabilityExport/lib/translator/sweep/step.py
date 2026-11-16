@@ -45,6 +45,7 @@ import math
 from ...capture_model import gap_hints
 from ...geometry import vec
 from ..extrude import COMBINE
+from ...design_model import design
 from ...design_model.paths import planner
 from ...design_model.problem import is_problem
 from ...design_model.steps.sweep import end_check, outline_shapes, profile_points, volume_problem
@@ -89,7 +90,7 @@ def _each_outline(item, ctx, data, profiles):
     for n, profile in enumerate(profiles):
         operation = "join" if n and COMBINE[data["operation"]] == "new" else data["operation"]
         one = dict(profile, profile_index=n) if isinstance(profile, dict) else profile
-        found = handle(dict(item, data=dict(data, profiles=[one], areas=None, operation=operation)), ctx)
+        found = handle(ctx, design.as_read(dict(item, data=dict(data, profiles=[one], areas=None, operation=operation))))
         if isinstance(found, Refusal):
             return found
         out.extend(found.entries)
@@ -97,8 +98,8 @@ def _each_outline(item, ctx, data, profiles):
     return out
 
 
-def handle(item, ctx):
-    data = item.get("data") or {}
+def handle(ctx, step):
+    item, data = step.brought, step.brought_data
     operation = data.get("operation")
     if operation == "newComponent":
         return Refusal("Sweeps that make a new component are not copied.", cause=gap_hints.NEW_COMPONENT)

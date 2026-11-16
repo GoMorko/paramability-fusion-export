@@ -22,6 +22,7 @@ read, flat faces following it by Tangent Chain).
 """
 import copy
 
+from ...design_model import design
 from ...design_model.steps.emboss import volume_check
 from ...design_model.values import Quantity
 from ...geometry import vec
@@ -152,8 +153,8 @@ def _direction(data, face, depth):
     return direction
 
 
-def handle(item, ctx):
-    data = item.get("data") or {}
+def handle(ctx, step):
+    item, data = step.brought, step.brought_data
     faces = _flat_faces(data.get("faces"))
     if isinstance(faces, Refusal):
         return faces
@@ -205,7 +206,7 @@ def handle(item, ctx):
     }
     if "depth" in (data.get("params") or {}):
         built["params"] = {"side_one.distance": data["params"]["depth"]}
-    outcome = extrude.handle(dict(item, data=built), ctx)
+    outcome = extrude.handle(ctx, design.as_read(dict(item, data=built)))
     values.handled(ctx, item, "depth", same_as="side_one.distance")
     if limit is not None and isinstance(outcome, StepResult):
         for entry in outcome.entries:

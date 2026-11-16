@@ -160,9 +160,9 @@ class ToolWalkTest(unittest.TestCase):
         """What the handler of the tool's fillet sees: its context and its item."""
         seen = []
 
-        def spy(item, ctx):
-            seen.append((item, ctx.target, list(ctx.steps)))
-            return fillet(item, ctx)
+        def spy(ctx, step):
+            seen.append((step.brought, ctx.target, list(ctx.steps)))
+            return fillet(ctx, step)
         capture = load_capture("combine_tool_filleted")
         if edit:
             edit(capture)

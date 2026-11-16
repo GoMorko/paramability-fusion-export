@@ -7,7 +7,7 @@ until the Combine decides how to write them.
 Steps written one by one onto the part are a different matter: they meet the part, not the tool. `on_part` works such
 steps out again against the part as it stood at each step.
 """
-from ...design_model import tool_chains
+from ...design_model import design, tool_chains
 from .. import walk
 from ..result import Refusal, StepResult, TranslateResult
 from ...design_model.words import ToolStop
@@ -117,7 +117,7 @@ def on_part(ctx, tool):
         with ctx.as_of(item):
             with ctx.recording() as construction:
                 walk.fix_construction(ctx, item)
-            outcome = walk.run_handler(ctx.handlers[item["type"]], item, ctx)
+            outcome = walk.run_handler(ctx.handlers[item["type"]], design.as_read(item), ctx)
         if isinstance(outcome, Refusal):
             return cannot_copy(tool.body, item, outcome.reason, outcome.cause, outcome.stop)
         out.extend(outcome.entries)

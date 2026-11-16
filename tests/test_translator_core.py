@@ -17,18 +17,18 @@ with open(fixture_path("schema_example_v12"), encoding="utf-8") as _f:
 _EXTRUDE = _EXAMPLE["features"][0]
 
 
-def extrude_handler(item, ctx):
+def extrude_handler(ctx, step):
     return StepResult.of([copy.deepcopy(_EXTRUDE)])
 
 
-def join_handler(item, ctx):
+def join_handler(ctx, step):
     step = copy.deepcopy(_EXTRUDE)
     step["combine"] = "add"
     return StepResult.of([step])
 
 
 def by_index(table):
-    return lambda item, ctx: table[item["index"]](item, ctx)
+    return lambda ctx, step: table[step.index](ctx, step)
 
 
 class CoreTest(unittest.TestCase):
@@ -49,7 +49,7 @@ class CoreTest(unittest.TestCase):
     def test_handler_refusal_names_the_item(self):
         result = translate_fixture("core_unknown_feature", {
             "ExtrudeFeature": extrude_handler,
-            "EmbossFeature": lambda item, ctx: Refusal("Not today."),
+            "EmbossFeature": lambda ctx, step: Refusal("Not today."),
         })
         self.assertEqual((left_out(result)["index"], left_out(result)["reason"]), (2, "Not today."))
 
@@ -86,7 +86,7 @@ class CoreTest(unittest.TestCase):
     def test_ids_are_unique_and_short_and_labels_cut(self):
         capture = load_capture("core_unknown_feature")
         capture["items"][1]["name"] = "N" * 300
-        table = {1: lambda i, c: StepResult.of([copy.deepcopy(_EXTRUDE), join_handler(i, c).steps[0]]),
+        table = {1: lambda c, s: StepResult.of([copy.deepcopy(_EXTRUDE), join_handler(c, s).steps[0]]),
                  2: join_handler}
         result = translate(capture, {"ExtrudeFeature": by_index(table), "EmbossFeature": by_index(table)})
         ids = [s["id"] for s in result.recipe["features"]]
@@ -96,9 +96,9 @@ class CoreTest(unittest.TestCase):
         self.assertEqual(result.items[1]["steps"], ["extrude_1", "extrude_1_2"])
 
     def test_notes_make_a_note_verdict(self):
-        def noting(item, ctx):
+        def noting(ctx, step):
             ctx.note("Measured value used.")
-            return extrude_handler(item, ctx)
+            return extrude_handler(ctx, step)
         result = translate_fixture("core_suppressed", {"ExtrudeFeature": noting})
         self.assertEqual(result.items[1]["verdict"], "translatedWithNote")
         self.assertEqual(result.notes, ["Measured value used."])
@@ -106,7 +106,7 @@ class CoreTest(unittest.TestCase):
     def test_over_cap_refuses(self):
         capture = load_capture("core_empty")
         capture["items"] = [dict(load_capture("core_suppressed")["items"][1], index=i) for i in range(1, 402)]
-        table = lambda item, ctx: extrude_handler(item, ctx) if item["index"] == 1 else join_handler(item, ctx)
+        table = lambda ctx, step: extrude_handler(ctx, step) if step.index == 1 else join_handler(ctx, step)
         result = translate(capture, {"ExtrudeFeature": table})
         self.assertIn("more than 400", result.refusal["reason"])
 

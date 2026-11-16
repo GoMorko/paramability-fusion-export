@@ -109,9 +109,9 @@ def _length_along(axis, start, end):
     return total
 
 
-def feature(item, ctx):
+def feature(ctx, step):
     """The handler of a modeled ThreadFeature (a cosmetic one is `hole.step.thread`)."""
-    data = item.get("data") or {}
+    item, data = step.brought, step.brought_data
     what = item.get("name", "a thread")
     found = facts.read_feature(data, what, PITCHES)
     if isinstance(found, Problem):
