@@ -133,6 +133,9 @@ def _walk(ctx):
         if role.kind == roles.HELPER and not changed:
             ctx.items.append(verdict(item, SKIPPED, shared.HELPER))
             continue
+        if kind not in HANDLERS and roles.only_splits_faces(item, role.bodies):
+            ctx.items.append(verdict(item, SKIPPED, shared.SPLITS_FACES_ONLY))
+            continue
         if step.has(design.FAILS):
             leave_out(step, step.problem(design.FAILS).words, gap_hints.REFUSED)
             continue

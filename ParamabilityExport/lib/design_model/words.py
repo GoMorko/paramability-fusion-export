@@ -107,6 +107,7 @@ BODIES_UNREAD = "The bodies this step changes could not be read."
 SUPPRESSED = "Suppressed in Fusion."
 HELPER = "Helper geometry, not part of the exported body."
 IN_OTHER_COMPONENT = "In another component."
+SPLITS_FACES_ONLY = "Only splits faces of the body, so the solid stays the same."
 
 # Extrudes.
 EXTRUDE_UNREADABLE = "A setting of this extrude could not be read from Fusion."
