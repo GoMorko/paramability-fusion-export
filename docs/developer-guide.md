@@ -846,7 +846,8 @@ pipelines make it at the start of the export. `_Pipeline._measure` (in `pipeline
 2. `probe.finish(read_now(), labels)` builds the motion file from the states (`probe/build.py`). It also lists the
    sizes the probe cannot follow: sizes left without rows by the cap (`untried`), sizes that the time limit left
    without a try (`timed_out`, also in `untried`), sizes that change a borrowed sketch it could not follow, and sizes
-   that changed the body but moved nothing the probe follows (`body_moved`).
+   that changed the body but moved nothing the probe follows (`body_moved`). The motion file also keeps, for each
+   size that a try set alone, whether the body changed at that try (`body_changes`, `probe/build.py`).
 3. `finish` compares the sketches read after the restore with E0 (`measure_restore`). The largest difference is
    `restore_gap_mm`. The end of the export reads and compares once more (see 1.11).
 
@@ -1248,6 +1249,20 @@ handler forgot gives a warning, not a wrong part.
 The audit also drops a sketch size that the probe measured and that moves nothing ("changes nothing in the copied
 steps"), and a size that the probe tried and that changed nothing in the part ("it was tried at other values, and it
 changes nothing in this part").
+
+The text "changes nothing" must be true. Thus the translator looks at the body that the probe read at each try that
+set that size alone (`Motion.body_changes`, `translate._dropped`):
+
+- The body read the same at each such try. Then the size is dropped with "it was tried at other values, and it
+  changes nothing in this part" (`used` false, `tried` true).
+- The body changed at one such try, and no written formula reads the size. Then the copy cannot follow the size. The
+  size is dropped with "it changes this part in a way the copy does not follow" (`used` true). The copy keeps the
+  value now, so the part is correct at that value.
+- The probe did not read the body at such a try (an older motion file). Then the size gets the plain reason "is not
+  used by any copied step" (`used` false, no `tried`).
+
+A try where a sketch landed on another solution (`apart`), or where a size is past the values where its outlines
+hold (`outside`), does not count. The body change there does not come from the size alone.
 
 A size that only gaps read stays a size. It is loose with "Fusion uses it only in Extrude5, a step the export could
 not copy, so it changes nothing in the copy yet." (`_gap_sizes`). So the missing step can use it later.
@@ -2412,9 +2427,11 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   `history.py` (what earlier states show). The package re-exports the names the rest of the add-in reads as
   `plan.<name>`. The choice of which sizes get rows is not here any more: it is in `export_plan/probe_flow/sizes.py`.
 - `state.py`: `ProbeState`, the record of one probe state (`json()`, `from_json()`, `as_states()`,
-  `REPORT_READ_KEYS`). `build.py`, `plan` and `derived` take these records, or the report dicts. Rows stay dicts
-  (`design_edit.runner.row_key(row)` gives the key of a row).
-- `build.py`: from the states to the motion file (`build`), the spans (`spans`), the outline limits. `build`, `StateRun` and the plan entry functions (`probe_rows`, `nearer_rows` and the others) turn report dicts into `ProbeState` records once, with `as_states`. The helpers in `plan/history.py` and `spans` take `ProbeState` records only.
+  `REPORT_READ_KEYS`), and the comparison of the body in two reads (`box_numbers`, `body_changed`). `build.py`,
+  `plan` and `derived` take these records, or the report dicts. Rows stay dicts (`design_edit.runner.row_key(row)`
+  gives the key of a row).
+- `build.py`: from the states to the motion file (`build`), the spans (`spans`), the outline limits, the body change
+  of each size tried alone (`body_changes`). `build`, `StateRun` and the plan entry functions (`probe_rows`, `nearer_rows` and the others) turn report dicts into `ProbeState` records once, with `as_states`. The helpers in `plan/history.py` and `spans` take `ProbeState` records only.
 - `match.py`: which read profile stands for which captured profile, values of a state (`state_values`).
 - `pieces.py`: how many separate pieces the part is in at a state (`count`, `came_apart`, see 1.8).
 - `fit.py`: the straight line fit (`fit_value`, `least_squares`, `fit_residual`, `snap_coefficients`).
@@ -2821,6 +2838,45 @@ top edges, and `Shell1` opens the top face.
   grows, the centre stays on the middle line and the point stays on the edge.
 - A point that no slab places "may sit on geometry that moves". Then every size the steps before it read is marked
   loose, with the step named in the reason.
+
+#### A face of another body
+
+An extrude can start from a face of another body, or reach to it. That other body is often a helper body: the designer
+uses it only to give the extrude a place.
+
+Example. `Body1` is a helper box. Its height is `Height` (10 mm). `Body2` is the exported body. The extrude of
+`Body2` starts 3 mm above the top face of `Body1` (`Lift`).
+
+- The walk builds `Body2` only. It does not write the steps of `Body1`, so it keeps no slab for `Body1`.
+- The capture keeps the body of each face that a step uses (`body` in the face record). When that body is not the
+  body that the walk builds (`Context.is_target`), the face is never "on this body" (`follow._beyond_tool`). This
+  is also true when a slab of `Body2` has a face at the same place. That slab face is not the face that the step
+  uses.
+- No slab places the face. Thus every size that the items before the step read can move it
+  (`reach.any_face_sizes`). These sizes are marked, and the face counts as a face that the copy cannot follow.
+- When the probe measured the face, the measured move is written instead (see the next part). In the example, the
+  sketch origin of `Body2` gets `z = { "expr": "Height + Lift" }`. Both sizes stay free.
+- This rule is for a step outside a tool. In a tool, the walk that holds the tool places a face that is not on the
+  tool (`_beyond_tool`, see the tool walk).
+
+#### A face that the probe measured
+
+The probe reads a flat face or a construction plane again at every try when an extrude starts from it or reaches to
+it (`reach.moving_reaches`). The slabs can also give a move for that face. Two answers are then available. The
+translator uses the move of the slabs only when these two conditions are true (`extrude/reach_motion.py`,
+`target_shift`):
+
+1. The slabs place the face without a doubt.
+2. The move of the slabs is equal to the measured move at each try that built and that set the free sizes inside
+   their ranges (`_agrees`). The tolerance is 0.001 mm (`AGREE_TOL`).
+
+When one condition is false, the translator writes the measured move (`_measured_shift`). It also writes the
+measured move when the measured move is stuck, because then the two answers cannot be compared. Thus a move that
+the slabs work out never wins over a move that the probe saw.
+
+Example. The slabs say that a face does not move, because nothing that the walk wrote reads a size yet. The probe
+tried `Height` at 7.5 mm and at 12.5 mm, and the face moved by -2.5 mm and +2.5 mm. The two answers are different
+at these tries. So the translator writes the measured move, `Height - 10`, and `Height` stays free.
 
 #### The picks that Fusion was given: faces and tangent chains
 
@@ -4260,6 +4316,7 @@ The motion file (`probe.motion`):
 | `refs` | Per measured reference key: an empty text when measured, else why not. |
 | `faces` | The outline faces that were measured. |
 | `body_moved` | Sizes that changed the body but moved nothing the probe follows. |
+| `body_changes` | Per size that a try set alone: `true` when the body changed at one such try, `false` when it read the same at all of them. A try on another sketch solution (`apart`) or past an outline limit does not count. |
 | `apart` | State numbers where a sketch was solved another way, so a different outline blames no size. |
 | `flipped` | Sketches that stayed on another outline after the values went back. |
 | `box_max` | The union of the body boxes over the states (used by cuts through all). |

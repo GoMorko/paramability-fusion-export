@@ -2,8 +2,13 @@
 or in their `report.json` form; `json` writes that form."""
 from dataclasses import dataclass, field
 
+from ..geometry.tolerances import BODY_TOLERANCE_MM
+
 # The parts of a read that a state keeps in `report.json`.
 REPORT_READ_KEYS = ("sketches", "points", "lines", "params", "box", "pieces", "refs", "faces", "patterns", "unread")
+# Two reads of the volume of a body agree (mm3, or this share of the volume).
+VOLUME_TOLERANCE_MM3 = 1e-4
+VOLUME_RELATIVE = 1e-6
 
 
 @dataclass(frozen=True)
@@ -63,3 +68,29 @@ class ProbeState:
 def as_states(states):
     """`states` as records: a record stays as it is, a dict is read as its `report.json` form."""
     return [s if isinstance(s, ProbeState) else ProbeState.from_json(s) for s in states]
+
+
+def box_numbers(read):
+    box = read.get("box") if isinstance(read, dict) else None
+    if not isinstance(box, dict):
+        return None
+    low, high = box.get("min"), box.get("max")
+    if not all(isinstance(v, (list, tuple)) and len(v) == 3 for v in (low, high)):
+        return None
+    numbers = list(low) + list(high)
+    return numbers if all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in numbers) else None
+
+
+def _volume(read):
+    value = read.get("volume_mm3") if isinstance(read, dict) else None
+    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def body_changed(before, now):
+    """True when the body reads differently in two probe states: its box moved, or its volume changed when both states
+    read it. False when they agree or the body cannot be compared (a state without a box)."""
+    a, b = box_numbers(before), box_numbers(now)
+    if a is not None and b is not None and any(abs(x - y) > BODY_TOLERANCE_MM for x, y in zip(a, b)):
+        return True
+    va, vb = _volume(before), _volume(now)
+    return va is not None and vb is not None and abs(va - vb) > max(VOLUME_TOLERANCE_MM3, VOLUME_RELATIVE * abs(va))

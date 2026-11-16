@@ -605,3 +605,10 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     apart along z. Then add a Rotate Move of the sphere (10 degrees about the z axis through (0, 0, 0)) before the
     Combine and export again: the Combine is left out with a reason that names the sphere and the Rotate Move, and no
     flat box is written. Afterwards the design is as before.
+56. HB1, an extrude that starts from a face of a helper body. Add user parameters `Height` = 10 mm and `Lift` = 3 mm.
+    Body1: a 40 x 40 mm rectangle at the origin extruded `Height` as a new body. Body2: a 10 x 10 mm rectangle
+    centred at (20, 20) on the XY plane, extruded 5 mm as a new body, with the start "From object" on the top face of
+    Body1 and an offset of `Lift`. Body3: the same with the centre at (10, 10) and an offset of `-Lift`.
+    Export: pick Body2 and tick both sizes. Both stay sizes, and the start of the extrude in `recipe.json` reads
+    `Height + Lift` (Body3: `Height - Lift`). No size is "not used" with "changes nothing". In Paramability, change
+    `Height` to 15 mm: Body2 starts at 18 mm, as in Fusion. Afterwards the design is as before.

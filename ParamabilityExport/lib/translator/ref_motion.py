@@ -122,6 +122,20 @@ def moves(ctx, item, ref, shape, what, names=None):
     return out
 
 
+def measured_offset(ctx, item, slot):
+    """The probe's move of the plane or face in `slot` of `item` along its normal, written as `moves` writes it but
+    without marking anything: a Quantity whose number is zero (a plain zero when it did not move), or None when the
+    move is stuck or no formula of the sizes writes it."""
+    value = sketch_motion.raw(ctx, keys.reference_offset(item.get("index"), slot), 0.0)
+    if isinstance(value, Stuck):
+        return None
+    rest, const = _constant_apart(value)
+    written = sketch_motion.rendered(ctx.table, rest, -const)
+    if isinstance(written, Stuck):
+        return None
+    return written.plus(const) if written.sized else Quantity(0.0)
+
+
 def _normal(record, ref):
     for found in (ref.get("normal"), record.get("normal"), (record.get("plane") or {}).get("normal")):
         if refs.is_vector(found) and vec.length(found) > 1e-9:
