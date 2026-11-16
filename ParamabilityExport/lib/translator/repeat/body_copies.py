@@ -22,6 +22,7 @@ from ...capture_model.step_kinds import SOLID, recipe_kind
 from ...geometry import vec
 from ...geometry.rigid import move_from_frame
 from ...design_model import refs, roles
+from ...design_model.verdicts import TRANSLATED
 from ...design_model.steps.repeat import is_identity, kept_elements, mirror_plane
 from .. import ref_motion, repeat, values, walk
 from ..bodies import move, paste
@@ -297,5 +298,5 @@ def write(ctx, combine_item, group, combine, number):
         tool.hand_over(out)
     out.join(recorded)
     out.items.append(group.item)
-    out.tool_steps.append(make_verdict(group.item, "translated"))
+    out.tool_steps.append(make_verdict(group.item, TRANSLATED))
     return out

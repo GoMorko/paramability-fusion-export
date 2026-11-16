@@ -13,9 +13,10 @@ copied step ("unused").
 from ..capture_model import gap_hints, step_kinds
 from ..capture_model.capture import CaptureError, validate_capture
 from ..design_model import design, reach, roles
+from ..design_model.verdicts import COPIED, LEFT_OUT, SKIPPED, left_out, verdict
+from ..design_model import words as shared
 from ..orca_recipe.recipe import Recipe
 from ..params.size_table import FREE
-from ..translator.words import type_words
 from .context import Context
 from .place import BED_CENTRE, Placement
 from .steps import HANDLERS, Skip
@@ -46,10 +47,11 @@ class OrcaResult:
     """What a translation made.
 
     recipe: the `orca_recipe.Recipe`. place: the `place.Placement` (the mesh takes `place.root_to_orca`).
-    items: a verdict per timeline item, `{index, name, type, verdict, note}` with `verdict` "copied", "leftOut" or
-    "skipped". left_out: `{index, name, type, reason, cause}` per step left out. parameters: per ticked parameter
-    `{name, variable, outcome, follows, reasons}`. variables: the recipe's variables. bound: `{feature, field,
-    formula, reads}` per field that follows variables. notes: plain sentences about the copy.
+    items: a verdict per timeline item (`design_model.verdicts.verdict`) with `verdict` "copied", "leftOut" or
+    "skipped". left_out: a record (`design_model.verdicts.left_out`) per step left out, with its `index` and `cause`.
+    parameters: per ticked parameter `{name, variable, outcome, follows, reasons}`. variables: the recipe's variables.
+    bound: `{feature, field, formula, reads}` per field that follows variables. notes: plain sentences about the
+    copy.
     """
 
     def __init__(self, recipe, place, items, left_out, parameters, bound, notes):
@@ -76,16 +78,9 @@ class OrcaResult:
         }
 
 
-def _verdict(item, verdict, note=""):
-    return {"index": item.get("index"), "name": item.get("name", ""), "type": item.get("type", ""),
-            "verdict": verdict, "note": note}
-
-
 def _unsupported(item):
     spec = step_kinds.step_type(item.get("type"))
-    words = type_words(item.get("type") or "")
-    reason = spec.unsupported if spec is not None and spec.unsupported else \
-        "Steps of type %s are not copied to Orca yet." % words
+    reason = spec.unsupported if spec is not None and spec.unsupported else shared.unsupported_type(item.get("type"))
     return reason, (spec.gap_cause if spec is not None and spec.gap_cause else gap_hints.UNSUPPORTED)
 
 
@@ -97,9 +92,8 @@ def _item_sizes(ctx, item):
 def _walk(ctx):
     def leave_out(step, reason, cause, error=None):
         item = step.item
-        ctx.items.append(_verdict(item, "leftOut", reason))
-        gap = {"index": item.get("index"), "name": item.get("name", ""), "type": item.get("type", ""),
-               "reason": reason, "cause": cause}
+        ctx.items.append(verdict(item, LEFT_OUT, reason))
+        gap = {"index": item.get("index"), **left_out(item, reason, causes.tip(cause)), "cause": cause}
         if error is not None:
             gap["error"] = "%s: %s" % (type(error).__name__, error)
         ctx.left_out.append(gap)
@@ -112,10 +106,10 @@ def _walk(ctx):
     for step in design.read(ctx.capture, ctx.table, ctx.motion, cache=ctx.cache):
         item, role, kind = step.item, step.role, step.type
         if role.kind == roles.SUPPRESSED:
-            ctx.items.append(_verdict(item, "skipped", "Suppressed in Fusion."))
+            ctx.items.append(verdict(item, SKIPPED, shared.SUPPRESSED))
             continue
         if role.kind == roles.NOT_A_STEP:
-            ctx.items.append(_verdict(item, "skipped"))
+            ctx.items.append(verdict(item, SKIPPED))
             continue
         changed = role.changed is True
         if role.kind in (roles.ASSEMBLY, roles.TOOL_ELSEWHERE, roles.OTHER_COMPONENT):
@@ -123,7 +117,7 @@ def _walk(ctx):
                 leave_out(step, "This step changes the part from another component, which is not copied yet.",
                           gap_hints.CHANGED_FROM_OTHER_COMPONENT)
             else:
-                ctx.items.append(_verdict(item, "skipped", "In another component."))
+                ctx.items.append(verdict(item, SKIPPED, shared.IN_OTHER_COMPONENT))
             continue
         if role.lost:
             leave_out(step, "This step lists another body with the part's name, so the copy cannot tell whether it "
@@ -135,7 +129,7 @@ def _walk(ctx):
         # A body made by a split is built like the body it was split from, up to that split.
         ctx.part.target = role.before
         if role.kind == roles.HELPER and not changed:
-            ctx.items.append(_verdict(item, "skipped", "Helper geometry, not part of the exported body."))
+            ctx.items.append(verdict(item, SKIPPED, shared.HELPER))
             continue
         if step.has(design.FAILS):
             leave_out(step, step.problem(design.FAILS).words, gap_hints.REFUSED)
@@ -170,15 +164,15 @@ def _walk(ctx):
             continue
         if isinstance(made, Pass):
             ctx.rollback(mark)
-            ctx.items.append(_verdict(item, "skipped", made.note))
+            ctx.items.append(verdict(item, SKIPPED, made.note))
             continue
         note = _copied_note(ctx, made, earlier)
         ctx.written[item.get("index")] = list(made)
         ctx.shapes[item.get("index")] = ctx.solid.pieces[start:]
         if not made:
-            ctx.items.append(_verdict(item, "skipped", "This step changes no shape."))
+            ctx.items.append(verdict(item, SKIPPED, "This step changes no shape."))
             continue
-        ctx.items.append(_verdict(item, "copied", note))
+        ctx.items.append(verdict(item, COPIED, note))
 
 
 def _copied_note(ctx, made, earlier):

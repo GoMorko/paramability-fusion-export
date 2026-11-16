@@ -205,6 +205,16 @@ same before and after the export. The result of `summarize` has these keys: `hin
 `{ index, name, reason, hint }`) and `more_may_show`. For several bodies, `summarize_many` joins the lines of each
 body, with the name of the body in front, and adds "More may show after the export." once.
 
+The dialog of Export for Orca has the same box under the body picker. Its warning comes from `preview(capture, up_axis)`
+in `dialog_model/orca_result.py`, and `commands/ExportForOrca/entry.py` shows it through `recipe_dialog.show_stop`. The
+preview makes one Orca translation of the capture, with no sizes ticked. It lists up to three steps under "Likely left
+out of the copy:", in the same lines as the recipe dialog and with the same "and N more." line. The Orca translation
+decides every step that it leaves out by itself, so this list is whole: `find_orca` in `left_out_preview.py` reads the
+left out records of the result, and `waits_for_faces` is always false. The result has the same keys as the one of
+`summarize`, with `stops` false. The preview gives None when the part is not read or when nothing is left out. A size
+that you tick can change which steps the Orca copy leaves out (a round that would cost the binding of an outline), so
+the list says "likely".
+
 ### 1.3 Parameters, the size table and the dependency resolver
 
 #### What the reader gives
@@ -842,6 +852,17 @@ The translator gets the capture, the size table and the motion file. It returns 
 (`lib/translator/result.py`): the recipe or a refusal, a verdict per item, notes, and the sizes in four lists:
 `fixed`, `loose`, `cuts` and `dropped`. It may also return `gaps` and `after_stop`.
 
+A verdict has the same shape in the recipe output and in the Orca output (`design_model/verdicts.py`, `verdict`): the
+`index`, the `name` and the `type` of the item, the `verdict` and a `note`. The recipe output adds `steps` (the ids of
+the recipe steps that the item wrote) and, for a step left out, `gap` (the id of its gap) and `cause` (`own`, `picks`
+or `stop`). The Orca output adds nothing. The words of a verdict differ in one place: a step that is copied is
+`translated` or `translatedWithNote` in the recipe output and `copied` in the Orca output. `skipped` and `leftOut` mean
+the same in both. The record of a step that is left out has one shape too (`verdicts.left_out`): the `name` (the type in
+words when the item has no name), the `type`, the `reason` and a `hint` when the output has a tip for the cause. The gap
+of the recipe output (`gaps/gap_file.record`) and the left out record of the Orca output (`orca.left_out[]`) add their
+own keys after these. The dialogs read the shared keys only (`export_plan.messages.left_out_line`,
+`dialog_model/left_out_preview.py`, `dialog_model/orca_result.py`).
+
 The driver is `translate()` in `lib/translator/translate.py`. In order:
 
 1. `validate_capture` checks the capture number and the main keys. A bad capture raises `CaptureError`.
@@ -975,20 +996,20 @@ function `handle(item, ctx)`. The table never imports translator code, and only 
 | `SplitFaceFeature` | none (skipped when the body is unchanged) |
 
 Any other modeling type has no entry. It becomes a gap with the reason of its table entry (`unsupported`). When the
-entry gives none, the reason is "Steps of type thicken are not copied yet." (`walk._unsupported_reason`). These are the
+entry gives none, the reason is "Steps of type thicken are not copied." (`design_model.words.unsupported_type`, which both outputs use). These are the
 types that the add-in does not copy, with the reason and the cause of the hint (the table of causes is in 1.9.3):
 
 | Fusion type | Reason | Cause |
 | --- | --- | --- |
-| `DeleteFaceFeature` | "Steps of type delete face are not copied yet." | `deleteFace` |
-| `ThickenFeature` | "Steps of type thicken are not copied yet." | `surface` |
-| `StitchFeature` | "Steps of type stitch are not copied yet." | `surface` |
-| `OffsetFeature` (surface offset) | "Offsetting a surface is not copied yet." | `surface` |
-| `BoundaryFillFeature` | "Boundary Fill is not copied yet." | `boundaryFill` |
-| `ScaleFeature` | "Scaling a body is not copied yet." | `scale` |
-| `ReplaceFaceFeature` | "Replace Face is not copied yet." | `replaceFace` |
-| `RibFeature`, `WebFeature` | "Rib is not copied yet.", "Web is not copied yet." | `ribWeb` |
-| `PathPatternFeature` | "Path Pattern is not copied yet." | `pathPattern` |
+| `DeleteFaceFeature` | "Steps of type delete face are not copied." | `deleteFace` |
+| `ThickenFeature` | "Steps of type thicken are not copied." | `surface` |
+| `StitchFeature` | "Steps of type stitch are not copied." | `surface` |
+| `OffsetFeature` (surface offset) | "Offsetting a surface is not copied." | `surface` |
+| `BoundaryFillFeature` | "Boundary Fill is not copied." | `boundaryFill` |
+| `ScaleFeature` | "Scaling a body is not copied." | `scale` |
+| `ReplaceFaceFeature` | "Replace Face is not copied." | `replaceFace` |
+| `RibFeature`, `WebFeature` | "Rib is not copied.", "Web is not copied." | `ribWeb` |
+| `PathPatternFeature` | "Path Pattern is not copied." | `pathPattern` |
 
 Scale, Replace Face, Rib, Web, Path Pattern and the surface Offset also have the flag `reaches_bodies`. They can change
 or take bodies of another component, so the capture walk measures the body around them also when they sit in another
@@ -1151,7 +1172,7 @@ The result goes to `report.json` as `after_stop`:
   "items": [ ... verdicts of the steps after the stop ... ],
   "steps": [
     { "index": 9, "name": "Split1", "type": "SplitBodyFeature", "reason": "This split cuts along a curved surface ..." },
-    { "index": 14, "name": "Thicken1", "type": "ThickenFeature", "reason": "Steps of type thicken are not copied yet." }
+    { "index": 14, "name": "Thicken1", "type": "ThickenFeature", "reason": "Steps of type thicken are not copied." }
   ]
 }
 ```
@@ -1598,7 +1619,7 @@ order. The table below follows that order, lowest layer first. `commands` is on 
 | `translator` | `capture_model`, `design_model`, `geometry`, `package`, `params`, `sketch_values`, `timing` | A capture in, a recipe and verdicts out. One handler per step kind. |
 | `probe` | `capture_model`, `design_model`, `geometry`, `package`, `params`, `sketch_solve`, `sketch_values`, `translator` | Plans the rows, matches the reads with the capture, fits the motion file. |
 | `export_plan` | `capture_model`, `design_edit`, `design_model`, `geometry`, `package`, `params`, `probe`, `sketch_values`, `timing`, `translator` | The export itself: the pipelines, the put back, body scope, size offers, the probe flow, marker roll, timeline trim, reach pass, health, package plan. |
-| `dialog_model` | `export_plan`, `package`, `params`, `translator` | What the dialogs show, as plain data: rows, stop warning, result view. |
+| `dialog_model` | `design_model`, `export_plan`, `package`, `params`, `translator` | What the dialogs show, as plain data: rows, stop warning, result view. |
 | `fusion_reader` | `capture_model`, `design_edit`, `geometry`, `package`, `params`, `timing` | Reads the design with `adsk`: the capture, the probe states, the reach, the STEP export, the parameter store. It does not import the translator. |
 | `fusion_ui` | `dialog_model`, `export_plan`, `fusion_reader`, `package` | Draws the dialogs with `adsk` and handles their events; the log and message boxes. |
 | `commands` | `design_edit`, `dialog_model`, `export_plan`, `fusion_reader`, `fusion_ui`, `package`, `timing` | The two buttons, their flows and the panel. |
@@ -1668,7 +1689,8 @@ alphabetical order by module.
 
 - `stop_warning.py`: the early warning under the body picker (`summarize`, `summarize_many`) and the texts after the
   export (`saved_message`, `status_text`). `left_out_preview.py`: the steps that the copy will probably leave out, as the
-  dialog lists them before the export (`Found`, `find`, `lines`, see 1.2).
+  dialog lists them before the export (`Found`, `find` for the recipe, `find_orca` for the Orca copy, `lines`, see 1.2).
+  `orca_result.py`: the result window of Export for Orca (`orca_view`) and its early warning (`preview`).
 - `dialog_rows.py`: the texts and the checks of the rows of the parameter table. `result_rows.py`: what the result
   window shows. `sizes_table.py` and `sizes_text.py`: the sizes table of the dialog as plain data, and the sizes as CSV
   text.
@@ -1682,7 +1704,7 @@ one folder per family of steps.
   `_fix_long_formulas`), `handlers.py` (`HANDLERS`, the handler of each capture type), `walk.py` (the item
   loop, `walk_items`), `context.py` (`Context`: doubts, notes, cuts, gaps, steps, placers), `result.py` (`StepResult`,
   `Refusal`, `Doubt`, `TranslateResult`, the verdicts), `step_walk.py` (`all_steps`: every step at every depth),
-  `words.py` (type names in words), `notes.py` (every reason sentence), `audit.py`, `turn_budget.py` (the turns of the
+  `notes.py` (every reason sentence; the type names in words are in `design_model/words.py`), `audit.py`, `turn_budget.py` (the turns of the
   threads and coils written so far: the 100 turn cap that both share).
 - Values and sizes: `values.py` (`quantity`, `pin`, `handled`), `sizes.py` (the sizes the recipe cannot follow:
   `untried_reasons`, `construction_only`, `text_reasons`, `sketch_answer`, and `used_sizes`). Which sizes can move a
@@ -1868,8 +1890,18 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     one after the other"). The Orca output makes one round or chamfer for each part (see `docs/orca-output.md`).
   The picks stay in the outputs: the recipe names edges by points that follow the sizes (`faces/`), the Orca output by
   a group of faces of the part (`finish_body`) or by the corners of an outline (`outline_rounds`).
-- `words.py`: the texts of these facts (the noun of a reference, "may move with it", the note of a borrowed outline,
-  the reasons of `why_foreign`). Both outputs give the same sentence for the same fact.
+- `words.py`: the sentences that both outputs give for the same fact: the noun of a reference, "may move with it", the
+  note of a borrowed outline, the reasons of `why_foreign`, the problems of the readers of extrudes, holes, threads and
+  sweeps, and the refusals that the two translators word the same (patterns, mirrors, splits, revolves, lofts, sweeps,
+  rounds and chamfers). The words of the problems of sweep paths are in `paths/words.py`. A sentence in these files
+  says what the design has and that it is not copied. It does not name an output (no "Orca", no "Paramability"), and
+  it does not say "yet", since the layer cannot promise that a later version copies it. So each sentence reads right
+  in the recipe and in the Orca copy, and the Orca output shows the sentence of a `Problem` as it is (`Skip.of`). A
+  refusal that comes from a limit of only one output stays in that output. `type_words` (a step type in words) and
+  `unsupported_type` (the reason of a step of a type that has no handler) are here too.
+- `verdicts.py`: the shape of a verdict and of the record of a step left out, for both outputs (see 1.9). `verdict`,
+  `left_out`, `item_name` and the verdict kinds. The recipe output (`translator/result.make_verdict`,
+  `gaps/gap_file.record`) and the Orca output (`translate._walk`) build their records with it.
 - `reach.py`: which ticked sizes can move something that a step uses. This came from `translator/sizes.py`. Each
   function reads the size table and the capture only. No function says what a copy does about a size. The recipe
   output, the Orca output and the probe plan decide that for themselves. The functions are in five groups:
@@ -2950,7 +2982,7 @@ a gap. This path is unproven until hand check TD2 passes (see the end of this pa
 - a thread over part of the length: `thread.depth` (a parameter that can follow a size);
 - when it cannot be told whether the thread is full length, the hole is left out.
 
-A tapered tapped hole is refused ("Tapered threads are not copied yet.", cause `threadProfile`). A cosmetic tapped hole is
+A tapered tapped hole is refused ("Tapered threads are not copied.", cause `threadProfile`). A cosmetic tapped hole is
 still a plain hole at the drill diameter, with a note. A pattern or a mirror of a threaded hole is a gap: the `thread` kind
 has no repeat rule, so the pattern refuses with "A step of this pattern cannot be repeated."
 
@@ -3246,10 +3278,11 @@ Where the texts live:
 | Text family | Module |
 | --- | --- |
 | Size reasons: "may give unexpected results", "stays fixed", "is not a size", "the range stops at", stuck causes, gap texts, fixed shape notes | `lib/translator/notes.py` |
+| Sentences that both outputs give for the same fact ("This extrude starts in a way that is not copied.", "Steps of type thicken are not copied.") | `lib/design_model/words.py`, and `lib/design_model/paths/words.py` for sweep paths |
 | Step refusals ("This draft leans faces on both sides ...") | the handler module of the step type; sweep texts in `sweep/sweep_limits.py`, path texts in `design_model/paths/words.py` |
 | Walk stops ("The body could not be followed through the timeline.") | `lib/translator/walk.py`, `bodies/split_rules.py`, `gaps/stops.py`, `translate.py` |
 | Package notes ("12 steps copied from Fusion.", "N sizes may give unexpected results") and "Tip: " lines | `lib/export_plan/messages.py`, `lib/translator/notes.py` |
-| Hints of left-out steps and of stops ("Round the sharp corner of the path with a sketch fillet.") | `lib/capture_model/gap_hints.py` |
+| Hints of left-out steps and of stops ("Round the sharp corner of the path with a sketch fillet.") | `lib/capture_model/gap_hints.py`; the Orca output shows only the hints that fit it (`lib/orca_translate/causes.py`, `tip`) |
 | Labels of sizes ("Base cup mid extrude offset") | `lib/params/labels.py` |
 | Time limit lines ("Time spent: 2 min 10 s. About 4 min left ...") | `lib/export_plan/messages.py`, `lib/export_plan/time_limit.py` |
 | Probe reasons ("it changes a sketch and could not be tried at other values") | `lib/export_plan/probe_flow/reasons.py` |

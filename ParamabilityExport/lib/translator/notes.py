@@ -1,6 +1,6 @@
 """Plain sentences for the package notes. Each is at most 200 characters, with no dashes."""
 from ..package.text import clip, plain
-from .words import type_words
+from ..design_model.words import type_words
 
 MAX_NOTE = 200
 MAX_NAME = 60

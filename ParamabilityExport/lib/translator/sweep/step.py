@@ -48,6 +48,7 @@ from ..extrude import COMBINE
 from ...design_model.paths import planner
 from ...design_model.problem import is_problem
 from ...design_model.steps.sweep import end_check, outline_shapes, profile_points, volume_problem
+from ...design_model import words as shared
 from ..paths import path_limits
 from ..result import Refusal, StepResult
 from ..sketch import borrowed
@@ -105,7 +106,7 @@ def handle(item, ctx):
         return Refusal("This sweep combines with the part in a way that is not copied yet.")
     if data.get("solid") is not True:
         if data.get("solid") is False:
-            return Refusal("Surface sweeps are not copied.", cause=gap_hints.SURFACE)
+            return Refusal(shared.SWEEP_SURFACE, cause=gap_hints.SURFACE)
         return Refusal(UNREADABLE)
     profiles = data.get("profiles")
     if isinstance(profiles, list) and len(profiles) > 1:

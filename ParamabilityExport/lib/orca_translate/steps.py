@@ -31,6 +31,7 @@ from ..orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType
 from ..orca_recipe.feature import CadFeature
 from . import causes, drilled, extents, outline_cuts
 from ..design_model.values import Quantity
+from ..design_model import words as shared
 from .skip import Skip
 from .sketch_sizes import sketch_doubts, sketch_formulas
 from .sketches import Outline, outline_sketch, outlines_of
@@ -153,7 +154,7 @@ def _end_gap(ctx, data, frame, shift, read, operation):
         if len(read) == 2 and any(_past(box, origin, frame["z"], side.sign, side.length.n)
                                   for side in read if side.length is not None):
             return None
-    return Skip("The measured end of this extrude does not match its length, so it is not copied.")
+    return Skip(shared.END_DIFFERS)
 
 
 def _sides(ctx, item, data, frame, shift):
@@ -179,7 +180,7 @@ def _sides(ctx, item, data, frame, shift):
 
     read = dm.read_sides(data, frame, shift)
     if is_problem(read):
-        return extents.skip_of(read)
+        return Skip.of(read)
     first = read[0]
     if first.kind == dm.THROUGH_BOTH:
         if any(side.taper for side in read):
@@ -297,7 +298,6 @@ def misses_reason(ctx, what):
 
 _TAPER_THROUGH = "Orca does not taper an extrude through all, so this tapered extrude is left out."
 _THROUGH_ADDS = "An extrude through all is copied to Orca only when it cuts or intersects."
-_UNREAD = "This extrude could not be read from Fusion."
 
 
 def _profile_check(profile):
@@ -341,7 +341,7 @@ def extrude(ctx, item):
     if operation == "newComponent":
         return Skip("This extrude makes a new component, which is not copied yet.", gap_hints.NEW_COMPONENT)
     if data.get("thin") is None and "thin" in data:
-        return Skip(_UNREAD)
+        return Skip(shared.EXTRUDE_UNREADABLE)
     if data.get("thin"):
         return Skip("Thin extrudes are not copied to Orca yet.", gap_hints.THIN_OUTLINE)
     profiles = data.get("profiles") or []
@@ -378,7 +378,7 @@ def extrude(ctx, item):
         return refused
     found = dm.volume_problem(data, dm.read_sides(data, frame, shift), operation, profiles, False)
     if found is not None:
-        return Skip(found.words)
+        return Skip.of(found)
     start = data.get("start") or {}
     moved = ctx.quantity(item, "start.offset", shift).reads if start.get("kind") == "offset" else ()
 

@@ -1,7 +1,7 @@
 """Extrude extents of the Orca copy beyond a plain distance: an end on a face or plane ("To"), a start on a face or
 plane ("From"), and a taper. `steps.extrude` asks these; each answer is a value to write or a `Skip`. The shared
 reader (`design_model/steps/extrude.py`) reads the start, the sides and the planes; this module makes them follow sizes
-where Orca can, and words the reader's problems for the Orca copy (`skip_of`).
+where Orca can.
 
 Orca's Extrude ends at a distance (blind, symmetric, two sides) or goes through all. Its "up to face" names a face by
 Orca's own numbering of the body it rebuilt, which the copy cannot know, so a face or plane becomes a distance:
@@ -39,6 +39,7 @@ from ..design_model.problem import is_problem
 from ..design_model.steps import extrude as dm
 from . import causes, limits
 from ..design_model.values import Quantity
+from ..design_model import words as shared
 from .skip import Skip
 from .solid import Prism
 
@@ -55,7 +56,6 @@ _TAPER_MAX = 80.0
 # An edge or arc of the moved outline at the far end must keep at least this size (mm).
 _KEEP = 0.05
 
-_UNREAD = "This extrude could not be read from Fusion."
 _AXES = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0])
 
 
@@ -224,38 +224,13 @@ def _touches(shape, point):
 
 # ---- From and To --------------------------------------------------------------------------------------------------
 
-# The Orca texts of the shared reader's problems that name what the copy leaves out: `what` is "starts from" or
-# "reaches to".
-_ORCA_WORDS = {
-    dm.FOREIGN: ("This extrude %s a curved face of another component, or one whose place could not be read, which is "
-                 "not copied to Orca.", gap_hints.OTHER_COMPONENT),
-    dm.NOT_FLAT: ("This extrude %s a surface that is not flat, which is not copied to Orca.", gap_hints.EXTRUDE_END_FACE),
-    dm.TILTED: ("This extrude %s a tilted surface, which is not copied to Orca.", gap_hints.EXTRUDE_END_FACE),
-    dm.ON_START: ("This extrude ends on the plane it starts from.", gap_hints.REFUSED),
-    dm.SAME_SIDE: ("Both sides of this extrude end on the same side of its sketch, which is not copied to Orca.",
-                   gap_hints.EXTRUDE_END_FACE),
-    dm.START_OFFSET: ("This extrude starts at a distance from a face or plane, which is not copied to Orca yet.",
-                      gap_hints.EXTRUDE_END_FACE),
-    dm.START_KIND: ("This extrude starts in a way that is not copied to Orca yet.", gap_hints.REFUSED),
-    dm.EXTENT_KIND: ("This way of setting the extrude length is not copied yet.", gap_hints.REFUSED),
-    dm.UNREADABLE: (_UNREAD, gap_hints.REFUSED),
-}
-
-
-def skip_of(found, what="reaches to"):
-    """The Skip of a `Problem` of the shared extrude reader (`design_model.steps.extrude`). `what` says what the
-    extrude does with a face or plane the problem is about ("starts from", "reaches to")."""
-    words, cause = _ORCA_WORDS.get(found.code, (found.words, found.cause or gap_hints.REFUSED))
-    return Skip(words % what if "%s" in words else words, cause)
-
-
 def start(ctx, item, data, frame):
     """How far along the sketch normal (mm) the extrude starts from its sketch plane (`dm.start_of`), or a Skip. The
     sizes that move a start offset, or the face or plane it starts from, are marked: Orca keeps the sketch plane in
     place."""
     found = dm.start_of(data, frame)
     if is_problem(found):
-        return skip_of(found, "starts from")
+        return Skip.of(found)
     if found.kind == dm.OFFSET and found.shift:
         ctx.doubt(ctx.quantity(item, found.path, found.shift).reads,
                   "%s starts away from its sketch, and Orca cannot move a sketch with a variable" % _label(item))
@@ -333,7 +308,7 @@ def taper(ctx, item, path, deg, flip, outline, length):
     `length` the side's length now (mm). A taper whose sign a size could turn keeps its number when the outline has
     sharp corners, since Orca would then round them."""
     if deg is None:
-        return Skip(_UNREAD)
+        return Skip(shared.EXTRUDE_UNREADABLE)
     if not deg:
         return None
     if abs(deg) >= _TAPER_MAX:
@@ -360,7 +335,7 @@ def taper_measured(data, sides, outlines):
     plan = [dm.SidePlan(dm.DISTANCE, "", -1 if side.flip else 1, Quantity(side.distance.n), side.taper)
             for side in sides]
     found = dm.taper_problem(plan, data, data.get("operation"), outlines)
-    return Skip(found.words) if found is not None else None
+    return Skip.of(found) if found is not None else None
 
 
 def _ends(curve):

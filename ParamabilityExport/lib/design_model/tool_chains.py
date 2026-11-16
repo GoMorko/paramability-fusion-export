@@ -25,7 +25,7 @@ from . import roles
 from .problem import Problem
 
 # Why an item that `made_by` cannot see stops the copy of a tool.
-CHANGED_ELSEWHERE = "This step changes the body from another component, which is not copied yet."
+CHANGED_ELSEWHERE = "This step changes the body from another component, which is not copied."
 NOT_FOLLOWED = "The body could not be followed through the timeline."
 # The codes of the problems of a tool's place (`place_of`).
 PLACE_UNREAD = "placeUnread"

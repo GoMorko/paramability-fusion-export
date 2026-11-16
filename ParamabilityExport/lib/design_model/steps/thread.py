@@ -16,6 +16,7 @@ from typing import NamedTuple
 from ...capture_model import gap_hints
 from ...geometry import vec
 from ..problem import Problem
+from .. import words
 
 FORM_ANGLE_DEG = 60.0
 ANGLE_TOL_DEG = 0.01
@@ -76,13 +77,12 @@ def _profile(info, what):
     name = (info.get("thread_type") or "").lower()
     angle = info.get("angle_deg")
     if angle is not None and abs(angle - FORM_ANGLE_DEG) > ANGLE_TOL_DEG:
-        return Problem("threadProfile", "A thread that is not a 60 degree thread is not copied yet.",
-                       gap_hints.THREAD_PROFILE)
+        return Problem("threadProfile", words.THREAD_PROFILE, gap_hints.THREAD_PROFILE)
     if not name:
-        return Problem("threadUnread", "The kind of thread of %s could not be read." % what)
+        return Problem("threadUnread", words.THREAD_KIND_UNREAD % what)
     if any(word in name for word in OTHER_PROFILES) or not any(word in name for word in FORM_PROFILES):
-        return Problem("threadProfile", "Only metric and Unified threads are copied, not %s."
-                       % (info.get("thread_type") or name), gap_hints.THREAD_PROFILE)
+        return Problem("threadProfile", words.THREAD_FAMILY % (info.get("thread_type") or name),
+                       gap_hints.THREAD_PROFILE)
     return None
 
 
@@ -97,12 +97,11 @@ def spec_of(info, what, major=None, minor=None, pitches=None):
     minor = info.get("minor_diameter") or minor
     right = info.get("right_hand")
     if not (pitch and major and minor) or right is None:
-        return Problem("threadUnread", "The size or hand of the thread of %s could not be read." % what)
+        return Problem("threadUnread", words.THREAD_SIZE_UNREAD % what)
     if pitches is not None and not (pitches[0] <= pitch <= pitches[1]):
-        return Problem("pitch", "A thread pitch of %g mm is not copied (%g to %g mm)." % (pitch, *pitches),
-                       gap_hints.THREAD_LIMITS)
+        return Problem("pitch", words.THREAD_PITCH % (pitch, *pitches), gap_hints.THREAD_LIMITS)
     if not (0 < minor < major) or (major - minor) / 2.0 < 0.05 * pitch:
-        return Problem("threadDepth", "The thread of %s has no usable depth." % what)
+        return Problem("threadDepth", words.THREAD_NO_DEPTH % what)
     return Spec(float(pitch), float(major), float(minor), bool(right))
 
 
@@ -111,14 +110,12 @@ def cylinder(data):
     component, faces that are not one cylinder, or faces that do not touch each other."""
     faces = data.get("faces") or []
     if not faces or any(f.get("surface") != "Cylinder" for f in faces):
-        return Problem("notCylinder", "A thread on a face that is not a cylinder is not copied yet.",
-                       gap_hints.THREAD_PROFILE)
+        return Problem("notCylinder", words.THREAD_NOT_CYLINDER, gap_hints.THREAD_PROFILE)
     if any(f.get("foreign") for f in faces):
-        return Problem("foreignFace", "This thread is on a face of another component, which is not copied.",
-                       gap_hints.OTHER_COMPONENT)
+        return Problem("foreignFace", words.THREAD_OTHER_COMPONENT, gap_hints.OTHER_COMPONENT)
     first = faces[0]
     if not (first.get("origin") and first.get("axis") and first.get("radius")):
-        return Problem("cylinderUnread", "The cylinder of this thread could not be read.")
+        return Problem("cylinderUnread", words.THREAD_CYLINDER_UNREAD)
     origin, axis, radius = [float(c) for c in first["origin"]], vec.unit(first["axis"]), float(first["radius"])
     spans = []
     for face in faces:
@@ -126,7 +123,7 @@ def cylinder(data):
         off = vec.sub(face["origin"], origin) if face.get("origin") else None
         on_line = off is not None and vec.length(vec.sub(off, vec.scale(axis, vec.dot(off, axis)))) < 1e-3
         if not (parallel and on_line and abs(float(face.get("radius") or 0) - radius) < 1e-4 and face.get("span")):
-            return Problem("notOneCylinder", "The faces of this thread are not one cylinder.")
+            return Problem("notOneCylinder", words.THREAD_NOT_ONE_CYLINDER)
         shift = vec.dot(off, axis)
         low, high = face["span"]
         if vec.dot(vec.unit(face["axis"]), axis) < 0:
@@ -136,7 +133,7 @@ def cylinder(data):
     reach = spans[0][1]
     for low, high in spans[1:]:
         if low > reach + 1e-3:
-            return Problem("facesApart", "The faces of this thread do not touch each other.")
+            return Problem("facesApart", words.THREAD_FACES_APART)
         reach = max(reach, high)
     outward = {f.get("outward") for f in faces}
     return Cylinder(origin, axis, radius, (spans[0][0], reach), outward.pop() if len(outward) == 1 else None)
@@ -158,14 +155,14 @@ def start_end(data, span, pitch, full):
         return 0
     made = data.get("made_span")
     if not made:
-        return Problem("startUnread", "Where the thread over part of the length starts could not be read.")
+        return Problem("startUnread", words.THREAD_START_UNREAD)
     low, high = abs(made[0] - span[0]), abs(span[1] - made[1])
     reach = pitch + 0.5
     if low <= reach and low + END_TOL < high:
         return 0
     if high <= reach and high + END_TOL < low:
         return 1
-    return Problem("startUnclear", "Where the thread over part of the length starts could not be told.")
+    return Problem("startUnclear", words.THREAD_START_UNCLEAR)
 
 
 def read_feature(data, what, pitches=None):
@@ -180,15 +177,15 @@ def read_feature(data, what, pitches=None):
     if internal is None and found.outward is not None:
         internal = not found.outward
     if internal is None or (found.outward is not None and internal == found.outward):
-        return Problem("insideOrOutside", "It could not be told whether this thread is inside or outside.")
+        return Problem("insideOrOutside", words.THREAD_SIDE_UNREAD)
     if abs(2.0 * found.radius - (spec.minor if internal else spec.major)) > DIAMETER_TOL:
-        return Problem("cylinderSize", "The size of this thread does not match its cylinder.")
+        return Problem("cylinderSize", words.THREAD_SIZE_MISMATCH)
     offset, length = data.get("offset"), data.get("length")
     if offset is None or abs(offset) > OFFSET_TOL:
-        return Problem("offset", "A thread that starts away from the end of its face is not copied yet.")
+        return Problem("offset", words.THREAD_OFFSET)
     full = is_full(data, found.span, length)
     if full is None:
-        return Problem("lengthUnread", "How long this thread runs could not be read.")
+        return Problem("lengthUnread", words.THREAD_LENGTH_UNREAD)
     start = start_end(data, found.span, spec.pitch, full)
     if isinstance(start, Problem):
         return start
@@ -204,7 +201,7 @@ def hole_spec(data, what, drill, pitches=None):
     if isinstance(spec, Problem):
         return spec
     if drill is not None and abs(drill - spec.minor) > DIAMETER_TOL:
-        return Problem("holeSize", "The thread size of %s does not match the hole that was measured." % what)
+        return Problem("holeSize", words.THREAD_HOLE_MISMATCH % what)
     return spec
 
 
@@ -216,12 +213,12 @@ def hole_depth(data):
         return Depth(True, None)
     if full is False and info.get("depth"):
         return Depth(False, float(info["depth"]))
-    return Problem("depthUnread", "How deep the thread of this hole runs could not be read.")
+    return Problem("depthUnread", words.THREAD_DEPTH_UNREAD)
 
 
 def measured_ends(data, count):
     """The measured end points of a hole through all, one for each of its `count` positions, or a Problem."""
     ends = [list(p) for p in data.get("end_points") or [] if isinstance(p, (list, tuple))]
     if len(ends) != count:
-        return Problem("endsUnread", "The depth of this threaded hole could not be measured.")
+        return Problem("endsUnread", words.THREAD_HOLE_ENDS_UNREAD)
     return ends

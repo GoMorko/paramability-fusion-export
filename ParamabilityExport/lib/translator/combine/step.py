@@ -29,6 +29,7 @@ from ...capture_model import step_kinds, tool_items
 from ...design_model.values import Quantity, reads_in
 from ...geometry.combine_volume import exceeds, exceeds_tools, rule_unproven
 from ...design_model import refs, roles, tool_chains
+from ...design_model import words as shared
 from .. import place, ref_motion
 from ..faces.moved_placer import MovedMaker, motion_of
 from ..faces.tool_placer import ToolMaker
@@ -107,8 +108,7 @@ def _unusable(ctx, body):
         return Refusal("The tool body of %s is in another component, which is not copied yet."
                        % (body.get("name") or "a body"))
     if tool_items.is_foreign_tool(body) and ctx.component is not None:
-        return Refusal("The tool body %s is taken by a Combine inside a tool body of another component, which is not "
-                       "copied yet." % tool_walk.name_of(body))
+        return Refusal(shared.TOOL_NESTED_ELSEWHERE % tool_walk.name_of(body))
     if tool_key(body) in ctx.used_tools:
         return Refusal("The tool body %s was used up by an earlier combine." % tool_walk.name_of(body))
     return None

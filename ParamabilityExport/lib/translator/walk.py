@@ -20,7 +20,9 @@ from .bodies import split_rules
 from .faces import floating
 from .gaps import stops
 from .result import Refusal, StepResult, make_verdict
-from .words import type_words
+from ..design_model.verdicts import LEFT_OUT, NOTED, SKIPPED, TRANSLATED, UNSUPPORTED
+from ..design_model.words import type_words
+from ..design_model import words as shared
 
 
 def _refusal(item, reason, note=None, cause=None):
@@ -72,7 +74,7 @@ def _type_cause(item):
 def _unsupported_reason(item):
     """Why a step of a type with no handler is left out: the step kind table's reason, else the generic one."""
     spec = step_kinds.step_type(item.get("type"))
-    return (spec and spec.unsupported) or "Steps of type %s are not copied yet." % type_words(item["type"])
+    return (spec and spec.unsupported) or shared.unsupported_type(item["type"])
 
 
 def _gap_ids(ctx, item):
@@ -90,11 +92,11 @@ def walk_items(ctx, result):
         reason has one."""
         if ctx.diagnose and not stops.first_body_stop(ctx):
             gap = ctx.leave_out(item, reason, (), cause=cause)
-            verdict = make_verdict(item, "leftOut", note=gap.reason)
+            verdict = make_verdict(item, LEFT_OUT, note=gap.reason)
             verdict.update(gap=gap.id, cause="stop")
             result.items.append(verdict)
             return True
-        result.items.append(make_verdict(item, "unsupported", note=reason))
+        result.items.append(make_verdict(item, UNSUPPORTED, note=reason))
         result.refusal = _refusal(item, reason, note, cause)
         result.refusal_cause = cause
         return False
@@ -109,7 +111,7 @@ def walk_items(ctx, result):
                 return refuse(item, stop)
             return refuse(item, stop, note, cause)
         gap = ctx.leave_out(item, reason, depends_on, picks, cause)
-        verdict = make_verdict(item, "leftOut", note=gap.reason)
+        verdict = make_verdict(item, LEFT_OUT, note=gap.reason)
         verdict["gap"] = gap.id
         verdict["cause"] = "picks" if picks else "own"
         result.items.append(verdict)
@@ -124,8 +126,8 @@ def walk_items(ctx, result):
         item, role = step.item, step.role
         ctx.enter(item)
         if role.kind in (roles.SUPPRESSED, roles.NOT_A_STEP):
-            note = "Suppressed in Fusion." if role.kind == roles.SUPPRESSED else ""
-            result.items.append(make_verdict(item, "skipped", note=note))
+            note = shared.SUPPRESSED if role.kind == roles.SUPPRESSED else ""
+            result.items.append(make_verdict(item, SKIPPED, note=note))
             return None
 
         if role.kind == roles.ASSEMBLY:
@@ -136,12 +138,12 @@ def walk_items(ctx, result):
                                   "Steps across components are not copied yet.", wording.made_elsewhere_note(),
                                   gap_hints.MADE_IN_OTHER_COMPONENT)
                 return refuse(item, "This step changes the part, which is not copied yet.")
-            result.items.append(make_verdict(item, "skipped", note=""))
+            result.items.append(make_verdict(item, SKIPPED, note=""))
             return None
 
         if role.kind == roles.TOOL_ELSEWHERE:
             # A step of a tool body from another component: the Combine that takes the tool walks it.
-            result.items.append(make_verdict(item, "skipped", note="Helper geometry, not part of the exported body."))
+            result.items.append(make_verdict(item, SKIPPED, note=shared.HELPER))
             return None
 
         if role.kind == roles.OTHER_COMPONENT:
@@ -154,7 +156,7 @@ def walk_items(ctx, result):
                 return refuse(item, "This step changes the part from another component. "
                               "Steps across components are not copied yet.",
                               wording.from_other_component_note(_label(item)), gap_hints.CHANGED_FROM_OTHER_COMPONENT)
-            result.items.append(make_verdict(item, "skipped", note="In another component."))
+            result.items.append(make_verdict(item, SKIPPED, note=shared.IN_OTHER_COMPONENT))
             return None
 
         if role.lost:
@@ -169,7 +171,7 @@ def walk_items(ctx, result):
         handler = ctx.handlers.get(item.get("type"))
         if not touches and not item["bodies_after"] and (handler is None or roles.changes_named_bodies(item)):
             if role.changed is False:
-                result.items.append(make_verdict(item, "skipped", note="Does not change the exported body."))
+                result.items.append(make_verdict(item, SKIPPED, note="Does not change the exported body."))
                 return None
             if handler is not None or role.changed is not True:
                 # Only a step the reader saw change the body is a gap: one that may have done anything stops.
@@ -179,13 +181,13 @@ def walk_items(ctx, result):
             made_in_component = True
             return None
         if not touches:
-            result.items.append(make_verdict(item, "skipped", note="Helper geometry, not part of the exported body."))
+            result.items.append(make_verdict(item, SKIPPED, note=shared.HELPER))
             return None
 
         if role.makes_other and role.changed is False:
             # Another body made next to the part (a surface offset, for one): a later Combine that takes it walks it
             # as a tool.
-            result.items.append(make_verdict(item, "skipped", note="Does not change the exported body."))
+            result.items.append(make_verdict(item, SKIPPED, note="Does not change the exported body."))
             return None
         if role.makes_other or split_rules.is_split(item):
             # Later steps may belong to the other body, so no single missing step can stand for this one. A split
@@ -196,7 +198,7 @@ def walk_items(ctx, result):
                 return refuse(item, stop)
         if handler is None and roles.only_splits_faces(item, role.bodies):
             note = wording.split_face_note(_label(item))
-            result.items.append(make_verdict(item, "skipped", note=note))
+            result.items.append(make_verdict(item, SKIPPED, note=note))
             result.notes.append(note)
             return None
         if step.has(design.UNREAD):
@@ -253,7 +255,7 @@ def walk_items(ctx, result):
         ctx.commit(outcome)
         notes = brought.notes + outcome.notes
         if not outcome.entries:
-            result.items.append(make_verdict(item, "skipped", note=" ".join(notes)))
+            result.items.append(make_verdict(item, SKIPPED, note=" ".join(notes)))
             result.notes.extend(notes)
             return None
         if not ctx.steps and outcome.steps[0].get("combine") != "new":
@@ -262,7 +264,7 @@ def walk_items(ctx, result):
         ctx.copied_items.append(item)
         if item.get("health") == "warning":
             notes.append(wording.health_warning_note(_label(item), item.get("message")))
-        verdict = make_verdict(item, "translatedWithNote" if notes else "translated", ids, " ".join(notes))
+        verdict = make_verdict(item, NOTED if notes else TRANSLATED, ids, " ".join(notes))
         if outcome.tool_steps:
             verdict["tool_steps"] = outcome.tool_steps
         result.items.append(verdict)

@@ -2,6 +2,8 @@
 from dataclasses import dataclass, field
 from typing import Optional
 
+from ..design_model import verdicts
+
 
 class Refusal:
     """Returned by a handler instead of a `StepResult` when its item cannot be copied. `reason` is one plain
@@ -125,18 +127,12 @@ class StepResult:
 
 # `leftOut`: the step is a gap (gaps/stops.py); its verdict also has `gap`, the gap's id, and `cause`: `picks` when the step
 # is a gap only because it picks, or may pick, faces of earlier gaps, else `own`.
-VERDICTS = ("translated", "translatedWithNote", "skipped", "unsupported", "leftOut")
+VERDICTS = (verdicts.TRANSLATED, verdicts.NOTED, verdicts.SKIPPED, verdicts.UNSUPPORTED, verdicts.LEFT_OUT)
 
 
 def make_verdict(item, verdict, steps=(), note=""):
-    return {
-        "index": item.get("index"),
-        "name": item.get("name", ""),
-        "type": item.get("type", ""),
-        "verdict": verdict,
-        "steps": list(steps),
-        "note": note,
-    }
+    """The verdict of an item (`design_model.verdicts.verdict`) with the recipe steps it wrote."""
+    return verdicts.verdict(item, verdict, note, steps=list(steps))
 
 
 @dataclass

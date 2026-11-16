@@ -26,6 +26,10 @@ orca=True)`: one body, the parameter table, the up direction) and the export pip
   does not block OK;
 - the design is put back and checked as for a recipe (`PutBack`), and the result window has the same `# Title`
   sections (`dialog_model/orca_result.py`): Check your design, Result, Variables, Left out, Next in OrcaSlicer;
+- the dialog shows a warning under the body picker, as the dialog of a recipe does: the steps that the Orca copy will
+  probably leave out, one line each with its reason and tip (`orca_result.preview`, which reads one Orca translation
+  with no sizes ticked, and `left_out_preview.find_orca`). The list is whole for the sizes that are not ticked, because
+  the Orca translation decides every step it leaves out by itself;
 - the file (`export_plan/orca_export.py`): the mesh, `Metadata/orca_cad.bin` (`orca_recipe`) and
   `Metadata/paramability_report.json`, the report with the capture and an `orca` block (features with their bound
   fields, variables, what each ticked parameter became, the steps left out, the plate move) and `mesh_check` (the
@@ -137,10 +141,21 @@ A handler that stops on an error the copy did not expect leaves only its step ou
 error in `orca.left_out[].error`), goes back to the state before the step as for any step left out, and the copy
 goes on with the next step.
 
-Each step left out has a cause in the report (`orca.left_out[].cause`): a cause of `capture_model/gap_hints.py`
+Each step left out has a record in the report (`orca.left_out[]`) with the shape that the recipe gaps share
+(`design_model/verdicts.left_out`): `name` (the type in words when the item has no name), `type`, `reason`, and the Orca
+keys `index` and `cause` (and `error` for a step that failed). The cause is a cause of `capture_model/gap_hints.py`
 when the recipe translator gives the same one, else one of `orca_translate/causes.py` for a rule of the Orca copy
 only (a cut that misses the part, copies Orca cannot repeat, a revolve axis off the sketch plane...). The Orca output
-writes no gap file, so those causes have no hint. The result window shows every reason whole.
+writes no gap file. A record has a `hint` (the tip of `gap_hints.py`, shown as "Tip: ...") only when the cause is one
+whose tip fits Orca too (`orca_translate/causes.tip`). The tips about the Paramability app (a coil that an AI
+assistant adds, the size limits of a thread, exporting parts together) and the causes of the Orca copy only have no
+tip. The result window lists up to five steps in full lines ("name: reason Tip: hint") and points to the report for
+the rest.
+
+When a shared reader finds a problem in the design (`design_model.problem.Problem`), the Orca copy shows the sentence of
+the problem as it is (`Skip.of`). The sentence comes from `design_model/words.py` and names no output, so the recipe
+and the Orca copy give the same words for the same fact: "This extrude starts in a way that is not copied." A refusal
+that comes from a limit of Orca only is worded in `orca_translate` ("... which is not copied to Orca yet.").
 
 Orca stops the whole rebuild on a cut or hole that removes nothing, so the copy checks each cut, intersect and hole
 against the part it has built so far (`orca_translate/solid.py`: every copied extrude and hole as an outline swept

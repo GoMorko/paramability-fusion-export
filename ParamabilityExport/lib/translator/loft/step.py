@@ -19,6 +19,7 @@ from ...capture_model import gap_hints
 from ...design_model.steps import loft as loft_reader
 from ...design_model.steps.sweep import made_volume
 from ...design_model.values import Quantity
+from ...design_model import words as shared
 from ...geometry import vec
 from ...geometry.footprint import polyline
 from .. import placement
@@ -30,7 +31,7 @@ from . import loft_sections
 
 PLANE_TOL = 1e-6
 
-UNREADABLE = "A setting of this loft could not be read from Fusion."
+UNREADABLE = shared.LOFT_UNREAD
 CORNERS_PAIRED = ("Fusion joins the corners of the two outlines of this loft another way than the copy does, so it is "
                   "not copied yet.")
 
@@ -43,12 +44,12 @@ def _settings_refusal(data):
     if operation not in COMBINE:
         return Refusal("This loft combines with the part in a way that is not copied yet.")
     if data.get("solid") is False:
-        return Refusal("Surface lofts are not copied.", cause=gap_hints.SURFACE)
+        return Refusal(shared.LOFT_SURFACE, cause=gap_hints.SURFACE)
     flags = (data.get("solid"), data.get("closed"), data.get("rails"), data.get("sections"), data.get("profiles"))
     if any(flag is None for flag in flags):
         return Refusal(UNREADABLE)
     if data["closed"]:
-        return Refusal("Closed lofts are not copied yet.")
+        return Refusal(shared.LOFT_CLOSED)
     if data.get("centerline"):
         return Refusal("Lofts along a centre line are not copied yet.", cause=gap_hints.LOFT_KIND)
     if data["rails"]:
@@ -73,7 +74,7 @@ def _sections_refusal(sections):
     if len(sections) > 2:
         return Refusal("Lofts through more than two outlines are not copied yet.", cause=gap_hints.LOFT_KIND)
     if len(sections) < 2:
-        return Refusal("This loft has fewer than two outlines.")
+        return Refusal(shared.LOFT_FEW_OUTLINES)
     return None
 
 
@@ -199,7 +200,7 @@ def handle(item, ctx):
     if len(built[0][1]) != len(built[1][1]):
         return Refusal("The outlines of this loft have different numbers of openings.")
     if _out_of_order(*profiles):
-        return Refusal("The outlines of this loft cross each other.")
+        return Refusal(shared.LOFT_CROSSING)
 
     checked = _pairing_check(item, data, profiles)
     if isinstance(checked, Refusal):

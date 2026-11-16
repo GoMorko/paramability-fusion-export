@@ -21,6 +21,7 @@ import math
 from ..capture_model import gap_hints
 from ..design_model.steps import finish as sets_of
 from ..design_model.values import Quantity
+from ..design_model import words as shared
 from ..orca_recipe.enums import FeatureType
 from ..orca_recipe.feature import CadFeature
 from . import causes, corner_hosts, finish_body, limits, outline_rounds
@@ -99,7 +100,7 @@ def fillet(ctx, item):
     data = _data(item)
     sets = sets_of.round_sets(data)
     if not sets:
-        return Skip("This round has no edges to copy.")
+        return Skip(shared.ROUND_NO_EDGES)
     quantity = _quantity(ctx, item)
     for one in sets:
         if one.kind != sets_of.CONSTANT:
@@ -111,7 +112,7 @@ def fillet(ctx, item):
         if problem:
             return problem
         if one.radius is None:
-            return Skip("This round has no readable radius.")
+            return Skip(shared.ROUND_NO_RADIUS)
     sizes = [one.size(quantity) for one in sets]
     drawn = outline_rounds.made(ctx, item, [outline_rounds.Pick(one.edges, size) for one, size in zip(sets, sizes)],
                                 False)
@@ -128,7 +129,7 @@ def _even_chamfer(ctx, item, one):
     """The `Quantity` of the distance of an even chamfer set, or a Skip. Two equal distances, or a distance and 45
     degrees, are even while they stay so: the second value's sizes get the reason."""
     if one.distance is None:
-        return Skip("This chamfer has no readable size.")
+        return Skip(shared.CHAMFER_NO_SIZE)
     if one.problem == sets_of.UNKNOWN_KIND:
         return Skip("This kind of chamfer is not copied to Orca.")
     if not one.even:
@@ -144,7 +145,7 @@ def chamfer(ctx, item):
     data = _data(item)
     sets = sets_of.chamfer_sets(data)
     if not sets:
-        return Skip("This chamfer has no edges to copy.")
+        return Skip(shared.CHAMFER_NO_EDGES)
     sizes = []
     for one in sets:
         found = _even_chamfer(ctx, item, one)

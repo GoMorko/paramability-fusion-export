@@ -39,6 +39,7 @@ from . import causes, finish_body, limits
 from ..design_model.problem import Problem
 from ..design_model.steps import hole as hole_facts, thread as facts
 from ..design_model.values import Quantity
+from ..design_model import words as shared
 from .sketches import entities_of
 from .solid import CUT, Prism
 from .skip import Skip
@@ -69,11 +70,6 @@ LEAD_NOTE = {True: " Where the thread runs out of the part, the hole is a little
                    "turn, so a bolt still goes in.",
              False: " Where the thread runs out of the part, the rod is cut down to the thread's root for that half "
                     "turn, so a nut still goes on."}
-
-
-def skip(problem):
-    """The Skip of a read problem of the shared layer."""
-    return Skip(problem.words, problem.cause or gap_hints.REFUSED)
 
 
 def orca_limits(major, minor, pitch, height):
@@ -295,7 +291,7 @@ def thread(ctx, item):
     what = item.get("name") or "a thread"
     found = facts.read_feature(data, what, PITCHES)
     if isinstance(found, Problem):
-        return skip(found)
+        return Skip.of(found)
     spec, (origin, axis, radius, span, outward) = found.spec, found.cylinder
     internal, full, length, start = found.internal, found.full, found.length, found.start
     if full:
@@ -303,7 +299,7 @@ def thread(ctx, item):
     else:
         height = ctx.quantity(item, "length", float(length))
         if height.n > span[1] - span[0] + 1e-3:
-            return Skip("The thread is longer than its face.")
+            return Skip(shared.THREAD_LONGER_THAN_FACE)
     if not ctx.has_body:
         return Skip("The part this thread is on is not in the copy.", gap_hints.AFTER_GAP)
     rise = axis if start == 0 else vec.scale(axis, -1.0)
@@ -334,7 +330,7 @@ def tapped(item, data):
     """(bore diameter, Spec or None) of a tapped hole, or a Skip: a cosmetic thread is drilled at the drill size and
     writes no thread; a modeled one is drilled at the thread's minor diameter and gets a thread (`hole_threads`)."""
     found = hole_facts.tapped_bore(data, item.get("name") or "a hole", PITCHES)
-    return skip(found) if isinstance(found, Problem) else found
+    return Skip.of(found) if isinstance(found, Problem) else found
 
 
 def hole_lengths(item, data, spec, positions, normal, depth, ctx):
@@ -343,17 +339,17 @@ def hole_lengths(item, data, spec, positions, normal, depth, ctx):
     if depth is None:
         ends = facts.measured_ends(data, len(positions))
         if isinstance(ends, Problem):
-            return skip(ends)
+            return Skip.of(ends)
         lengths = [Quantity(abs(vec.dot(vec.sub(e, list(p)), normal))) for p, e in zip(positions, ends)]
     else:
         lengths = [depth] * len(positions)
     reach = facts.hole_depth(data)
     if isinstance(reach, Problem):
-        return skip(reach)
+        return Skip.of(reach)
     if not reach.full:
         part = ctx.quantity(item, "thread.depth", reach.length)
         if any(part.n > s.n + 1e-6 for s in lengths):
-            return Skip("The thread is deeper than its hole.")
+            return Skip(shared.THREAD_DEEPER_THAN_HOLE)
         lengths = [part] * len(positions)
     return lengths
 

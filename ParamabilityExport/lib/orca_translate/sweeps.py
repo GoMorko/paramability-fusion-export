@@ -40,6 +40,7 @@ from ..geometry.footprint import polyline
 from ..translator.sweep.sweep_settings import settings_refusal
 from . import causes, extents, limits, revolve, sketch_sizes, steps
 from ..design_model.values import Quantity
+from ..design_model import words as shared
 from .sketches import entities_of, graph_for, outline_sketch, outlines_of
 from .skip import Skip
 from .solid import ADD, CUT, INTERSECT, Prism, Solid, Turned
@@ -73,11 +74,6 @@ def _skip(refusal):
     return Skip(refusal.reason, refusal.cause or gap_hints.REFUSED)
 
 
-def _left_out(problem):
-    """The Skip of a problem of the shared layer (`design_model.problem.Problem`)."""
-    return Skip(problem.words, problem.cause or gap_hints.REFUSED)
-
-
 def _profile_problem(profile):
     if not isinstance(profile, dict):
         return "The outline of this sweep could not be read."
@@ -95,14 +91,14 @@ def _profile_problem(profile):
 
 def _path_problem(path):
     if not isinstance(path, dict):
-        return Skip("The path of this sweep could not be read from Fusion.")
+        return Skip(shared.SWEEP_PATH_UNREAD)
     if path.get("foreign"):
         return Skip("The path of this sweep is in another component, which is not copied yet.",
                     gap_hints.OTHER_COMPONENT)
     if path.get("kind") == "mixed":
-        return Skip("The path of this sweep mixes sketch curves and body edges, which is not copied yet.")
+        return Skip(shared.SWEEP_PATH_MIXED)
     if path.get("truncated"):
-        return Skip("The path of this sweep has more parts than can be read, so it is not copied.")
+        return Skip(shared.SWEEP_PATH_TOO_LONG)
     return None
 
 
@@ -113,11 +109,11 @@ def sweep(ctx, item):
     if operation == "newComponent":
         return Skip("This sweep makes a new component, which is not copied yet.", gap_hints.NEW_COMPONENT)
     if operation not in _SOLID_MODES:
-        return Skip("This kind of sweep is not copied yet.")
+        return Skip(shared.SWEEP_KIND)
     if data.get("solid") is not True:
         if data.get("solid") is False:
-            return Skip("Surface sweeps are not copied.", gap_hints.SURFACE)
-        return Skip("A setting of this sweep could not be read from Fusion.")
+            return Skip(shared.SWEEP_SURFACE, gap_hints.SURFACE)
+        return Skip(shared.SWEEP_UNREAD)
     if not ctx.has_body and operation in ("cut", "intersect"):
         return Skip("The part this %s works on is not in the copy." % ("cut" if operation == "cut" else "intersect"),
                     gap_hints.AFTER_GAP)
@@ -129,7 +125,7 @@ def sweep(ctx, item):
         if problem:
             return Skip(problem)
     if len(profiles) > 1 and operation == "intersect":
-        return Skip("Sweeps that intersect the part with several outlines at once are not copied yet.")
+        return Skip(shared.SWEEP_SEVERAL_OUTLINES)
     refusal = settings_refusal(data)
     if refusal is not None:
         return _skip(refusal)
@@ -148,7 +144,7 @@ def sweep(ctx, item):
     found = planner.plan(path, frame, points,
                          PathOptions(max_segments=_MAX_SEGMENTS, max_points=_MAX_POINTS, splines=spline_fit))
     if is_problem(found):
-        return _left_out(found)
+        return Skip.of(found)
     if found.kind == "corners":
         return Skip(_NOT_FLAT, causes.SWEEP_PATH)
     if any(c.get("kind") not in ("line", "arc", "circle") for c in found.curves):
@@ -164,10 +160,10 @@ def sweep(ctx, item):
         if len(profiles) == 1:
             problem = volume_problem(item, data, combine, profile, found)
             if problem is not None:
-                return _left_out(problem)
+                return Skip.of(problem)
         problem, _ = end_check(data, combine, profile, found, profile_points(profile), False, False)
         if problem is not None:
-            return _left_out(problem)
+            return Skip.of(problem)
     if found.kind == "line":
         made = _as_extrude(ctx, item, data, profiles, found)
     elif found.kind in ("arc", "circle"):

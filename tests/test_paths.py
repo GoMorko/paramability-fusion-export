@@ -395,7 +395,7 @@ class ClosedTest(unittest.TestCase):
         plane, points = at_point((5, 0, 0), [1, 0, 0])
         wide = [vec.add(p, vec.scale(vec.sub(p, [5, 0, 0]), 5.0)) for p in points]
         found = recipe_plan(path_of(self.SQUARE_LOOP, frame=XY_SKETCH), plane, wide)
-        self.assertTrue(found.words.startswith("A sharp corner of the path of this sweep is too close"))
+        self.assertEqual(found.code, "corner_too_tight")
 
     def test_a_line_between_two_corners_needs_room_for_both_mitres(self):
         """Each 90 degree corner needs 6 mm of straight path: the 10 mm sides have room for one mitre, not two."""
@@ -509,7 +509,7 @@ class RefusalTest(unittest.TestCase):
     def test_a_sharp_corner_of_an_open_path_too_tight_for_its_outline(self):
         wide = [[0, 4 * y, z] for y in (-1, 1) for z in (-1, 1)]
         found = plan([line((0, 0, 0), (3, 0, 0)), line((3, 0, 0), (3, 10, 0))], points=wide)
-        self.assertTrue(found.words.startswith("A sharp corner of the path of this sweep is too close"))
+        self.assertEqual(found.code, "corner_too_tight")
 
     def test_a_sharp_corner_next_to_an_arc(self):
         across = quarter([15, 0, 0], [-1, 0, 0], [0, -1, 0], 5)

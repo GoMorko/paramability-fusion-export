@@ -17,8 +17,8 @@ Code: `lib/translator/gaps/` (the records, the picked gaps, where a gap belongs,
 The item loop (`walk_items`) has two outcomes for an item it cannot copy: stop the copy, or leave the item out. It
 leaves out when the effect stays on the body and the rest of the timeline still reads right:
 
-- a step type with no handler that changes the part (`StepType.unsupported`, or "Steps of type X are not copied
-  yet"): coil and the like. A step that lists no body counts only when the reader saw the part
+- a step type with no handler that changes the part (`StepType.unsupported`, or "Steps of type X are not copied."):
+  coil and the like. A step that lists no body counts only when the reader saw the part
   change (`target_changed` true); when it cannot tell, the copy stops;
 - a handler that answers a `Refusal` (an extrude with a taper on a face, a revolve axis it cannot use, a Combine whose
   tool cannot be built, a pattern whose sources it cannot repeat);

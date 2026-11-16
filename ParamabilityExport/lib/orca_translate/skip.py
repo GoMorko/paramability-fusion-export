@@ -9,3 +9,8 @@ class Skip:
     def __init__(self, reason, cause=gap_hints.REFUSED):
         self.reason = reason
         self.cause = cause
+
+    @classmethod
+    def of(cls, problem):
+        """The Skip of a `design_model.problem.Problem`: its own sentence and its cause (`REFUSED` when it has none)."""
+        return cls(problem.words, problem.cause or gap_hints.REFUSED)

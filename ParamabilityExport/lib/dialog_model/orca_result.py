@@ -5,7 +5,11 @@ Orca variable and which stayed fixed, the steps left out, and what to do next in
 of the export (`export_plan.orca_export`).
 """
 from ..export_plan.health import health_lines
+from ..export_plan.messages import left_out_lines
+from ..export_plan.orca_export import translate_for_orca
+from . import left_out_preview
 from .result_rows import view_message
+from .stop_warning import LEFT_OUT_HEADING
 
 TITLE = "Saved for OrcaSlicer"
 NEXT_LINES = [
@@ -67,7 +71,7 @@ def _left_out_lines(report):
     gaps = ((report.get("orca") or {}).get("left_out")) or []
     if not gaps:
         return []
-    return [_line("%s: %s" % (g.get("name") or g.get("type"), g.get("reason"))) for g in gaps] + [LEFT_OUT_END]
+    return left_out_lines([(None, gap) for gap in gaps]) + [LEFT_OUT_END]
 
 
 def _section(key, title, lines):
@@ -88,3 +92,22 @@ def orca_view(file_name, report, ticked=()):
     ]
     sections = [s for s in sections if s]
     return {"title": TITLE, "sections": sections, "message": view_message(sections)}
+
+
+def preview(capture, up_axis="z"):
+    """The warning under the body picker of the Export for Orca dialog (the dict of `stop_warning.summarize`: `lines`,
+    `tooltip`, `left_out`, `stops` and the rest), or None when the picked body is not read or nothing is left out. One
+    translation of the capture the dialog already read, with no sizes ticked."""
+    if not isinstance(capture, dict):
+        return None
+    try:
+        result = translate_for_orca(capture, capture.get("up_axis") or up_axis)
+    except Exception:
+        return None
+    found = left_out_preview.find_orca(result)
+    lines = left_out_preview.lines(found, LEFT_OUT_HEADING, closing=False)
+    if not lines:
+        return None
+    tooltip = "\n".join(left_out_preview.step_text(step, whole=True) for step in found.steps)
+    return {"stops": False, "index": None, "label": "", "title": "", "reason": "", "hint": "", "lines": lines,
+            "tooltip": tooltip, "noted": [], "left_out": found.steps, "more_may_show": False}

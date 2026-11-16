@@ -5,10 +5,11 @@ The app refuses a whole gaps file that breaks one of the caps (`RECIPE_GAPS_CAPS
 import json
 import math
 
-from ...capture_model.gap_hints import hint as gap_hint
+from ...capture_model import gap_hints
+from ...design_model import verdicts
 from .finishing import is_finishing
 from .gap_measures import moved_measure
-from ..words import type_words
+from ...design_model.words import type_words
 
 MAX_WORDS = 64
 MAX_SIZES = 64
@@ -118,12 +119,13 @@ def record(gap, table, move):
     one (`gap_hints`). `finishing` says the step only finishes surfaces (`finishing.is_finishing`)."""
     after, before, owner = gap.place
     data, trimmed = trimmed_data(gap.item.get("data"))
+    left_out = verdicts.left_out(gap.item, gap.reason, gap_hints.hint(gap.cause), type_limit=MAX_WORDS)
     out = {
         "id": gap.id,
-        "name": gap.name,
-        "type": str(gap.item.get("type") or "")[:MAX_WORDS],
+        "name": left_out["name"],
+        "type": left_out["type"],
         "words": type_words(gap.item.get("type") or "")[:MAX_WORDS],
-        "reason": gap.reason,
+        "reason": left_out["reason"],
         "after": after,
         "before": before,
         "list": owner,
@@ -132,9 +134,8 @@ def record(gap, table, move):
         "looseSizes": [],
         "values": _values(gap.item, table),
     }
-    found = gap_hint(gap.cause)
-    if found:
-        out["hint"] = found
+    if "hint" in left_out:
+        out["hint"] = left_out["hint"]
     for key, measure in (("bodyBefore", gap.before), ("bodyAfter", gap.after)):
         moved = moved_measure(measure, move)
         if moved is not None:

@@ -29,7 +29,8 @@ package may import only packages above it in this list (not every one of them). 
   the copy keeps them in place); `borrowed.py` the outlines taken from another component's sketch; `roles.py` what
   each timeline item is for the body a walk builds (a sketch, an assembly item, a step of another component, a step of
   the body or of another body), the body before and after it, the measures of that body (`seen_on`) and the other
-  pieces of a split; `words.py` the texts of these facts; `reach.py` which sizes may move a sketch, a plane, a face or
+  pieces of a split; `words.py` the sentences both outputs give for the same fact (a problem of a reader, a refusal
+  both outputs word alike) and `verdicts.py` the one shape of a verdict and of the record of a step left out; `reach.py` which sizes may move a sketch, a plane, a face or
   a joint; `dimension_sizes.py` the sketch dimensions as formulas of the sizes and the size settings a sketch is tried
   at; `problem.py` the answer of a reader that cannot read, place or build the design (`Problem`: a code, plain words
   and a gap cause; each output turns it into its own refusal); `values.py` the one value type, `Quantity` (a number
@@ -50,7 +51,7 @@ package may import only packages above it in this list (not every one of them). 
 - `probe`: measures sketches and the places of other components' planes, axes and points at other size values and fits the motion file.
 - `orca_translate`: a capture in, an OrcaSlicer Design tab recipe (`orca_recipe`) plus a verdict per step out, for Export for Orca (experimental): one handler module per kind of step, and the shape of the part built so far for the checks of cuts. The modules are listed in `docs/orca-output.md`.
 - `export_plan`: the export itself: the pipeline (one body or several), the put back of the design at its end (`pipeline/put_back.py`), the recipe and its notes, the probe run, size offers. The try runner (`pipeline/probe_run.py`) calls the probe through one declared interface (`probe_flow/interface.py`) that the probe of one part (`probe_flow/size_probe.py`) and the group of several parts (`probe_flow/probe_group.py`) both have.
-- `dialog_model`: what the dialogs show, as plain data (rows, Sizes table, result view, stop warning).
+- `dialog_model`: what the dialogs show, as plain data (rows, Sizes table, result view, stop warning, and the result view and the left out preview of Export for Orca).
 - `fusion_reader`: reads the design with `adsk` into a capture.
 - `fusion_ui`: draws the dialogs and handles their events with `adsk`.
 - `commands/`: the two buttons, their flows and the panel; also uses `adsk`.

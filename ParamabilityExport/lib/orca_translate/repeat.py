@@ -34,6 +34,8 @@ from . import causes
 from ..design_model.steps.repeat import (FIT_TOL_MM, in_component, is_identity, is_identity_rotation, mirror_plane,
                                         reach as symmetric_reach, solve_lattice)
 from ..design_model.values import Quantity
+from ..design_model import words as shared
+from ..design_model.verdicts import LEFT_OUT, SKIPPED
 from .solid import ADD, Moved, Solid
 from .steps import Skip
 from .tools import OPERATIONS, Pass, boolean, build, data_of, feature, hold_place, label, of_steps, step_mode
@@ -152,18 +154,17 @@ def sources(ctx, item, what):
             continue
         source = _item(ctx, index)
         verdict = _verdict(ctx, index)
-        if verdict is not None and verdict.get("verdict") == "leftOut":
+        if verdict is not None and verdict.get("verdict") == LEFT_OUT:
             return Skip("A step this %s repeats (%s) is left out of the Orca copy." % (what, verdict.get("name")),
                         gap_hints.AFTER_GAP)
         if _is_combine(source):
             mode = OPERATIONS.get(data_of(source).get("operation"))
             if mode not in (BooleanMode.ADD, BooleanMode.CUT):
-                return Skip("%s keeps only what its tool shares with the part, so this %s cannot repeat it." % (
-                    label(source), what))
+                return Skip(shared.REPEAT_TOOL_KEEPS % (label(source), what))
             groups.append((mode, "combine", source))
             continue
         if not ctx.written.get(index):
-            if verdict is not None and verdict.get("verdict") == "skipped" and source is not None \
+            if verdict is not None and verdict.get("verdict") == SKIPPED and source is not None \
                     and source.get("suppressed"):
                 continue
             return Skip("A step this %s repeats is not part of the exported body." % what)
@@ -275,13 +276,13 @@ def _directions(item, data):
                         "the part's place, which is not copied to Orca.", gap_hints.OTHER_COMPONENT)
         direction = data.get("direction_" + which)
         if not isinstance(direction, (list, tuple)) or vec.length(direction) < 1e-9:
-            return Skip("The direction of this pattern could not be read.")
+            return Skip(shared.PATTERN_DIRECTION_UNREAD)
         out.append((which, vec.scale(vec.unit(direction), 1.0 if raw > 0 else -1.0), n, abs(raw),
                     bool(data.get("symmetric_" + which))))
     if not out:
-        return Skip("This pattern makes no copies.")
+        return Skip(shared.PATTERN_NO_COPIES)
     if len(out) == 2 and 1.0 - vec.dot(out[0][1], out[1][1]) ** 2 < 1e-9:
-        return Skip("The two directions of this pattern run along one line.")
+        return Skip(shared.PATTERN_ONE_LINE)
     return out
 
 
@@ -299,8 +300,7 @@ def _grid(data, elements, directions):
         for element in elements:
             frame = element["frame"]
             if not is_identity_rotation(frame):
-                return Skip("The copies of this pattern are turned, which is not copied to Orca yet.",
-                            causes.COPIES_TURNED)
+                return Skip(shared.PATTERN_TURNED, causes.COPIES_TURNED)
             indexes, residual = solve_lattice(frame["origin"], [(d[1], s) for d, s in zip(directions, steps)])
             if residual > FIT_TOL_MM:
                 fits = False
@@ -308,7 +308,7 @@ def _grid(data, elements, directions):
             places.append(tuple(indexes))
         if fits:
             return guess, steps, places
-    return Skip("The copies of this pattern do not sit on an even grid.", causes.COPIES_UNEVEN)
+    return Skip(shared.PATTERN_UNEVEN_GRID, causes.COPIES_UNEVEN)
 
 
 def _parts(ctx, item, direction, kind, step, places):
@@ -335,12 +335,11 @@ def _parts(ctx, item, direction, kind, step, places):
             # Fusion can run the copies against the direction it stores.
             forward, places = vec.scale(forward, -1.0), [-p for p in places]
         if any(p < 0 or p >= n for p in places):
-            return Skip("The copies of this pattern do not match its count.", causes.COPIES_UNEVEN)
+            return Skip(shared.PATTERN_COUNT, causes.COPIES_UNEVEN)
         return [_Part(forward, n, count_value, step, step_value)]
     found = symmetric_reach(list(places), n)
     if found is None:
-        return Skip("The copies of this pattern do not spread to both sides of the first one by the rule that was "
-                    "expected.", causes.COPIES_UNEVEN)
+        return Skip(shared.PATTERN_RULE, causes.COPIES_UNEVEN)
     back, ahead = found
     longer = "((%s) + 1) / 2" % _text(count_value)
     shorter = "(%s) / 2" % _text(count_value)
@@ -380,11 +379,11 @@ def rectangular(ctx, item):
     data = item["data"]
     elements = data.get("elements") or []
     if not elements:
-        return Skip("The copies of this pattern could not be read.")
+        return Skip(shared.PATTERN_COPIES_UNREAD)
     if data.get("suppressed_ids") or any(e.get("suppressed") for e in elements):
         return Skip(LEAVES_COPIES_OUT % "pattern", causes.COPIES_SUPPRESSED)
     if not any(is_identity(e["frame"]) for e in elements):
-        return Skip("The original copy was not found among the copies of this pattern.")
+        return Skip(shared.PATTERN_ORIGINAL_LOST)
     directions = _directions(item, data)
     if isinstance(directions, Skip):
         return directions
@@ -464,23 +463,23 @@ def circular(ctx, item):
         return Skip("The turning axis of this pattern could not be read as a line.")
     n = int(data.get("quantity") or 1)
     if n < 2:
-        return Skip("This pattern makes no copies.")
+        return Skip(shared.PATTERN_NO_COPIES)
     raw = float(data.get("total_angle_deg") or 0.0)
     full = abs(abs(raw) - FULL_TURN_DEG) <= ANGLE_TOL_DEG
     if not full and not 0 < abs(raw) < FULL_TURN_DEG:
-        return Skip("The angle of this pattern could not be read.")
+        return Skip(shared.PATTERN_ANGLE_UNREAD)
     delta = FULL_TURN_DEG / n if full else abs(raw) / (n - 1)
     item = in_component(item, ctx.component_frame())
     data = item["data"]
     elements = data.get("elements") or []
     if not elements:
-        return Skip("The copies of this pattern could not be read.")
+        return Skip(shared.PATTERN_COPIES_UNREAD)
     if data.get("suppressed_ids") or any(e.get("suppressed") for e in elements):
         return Skip(LEAVES_COPIES_OUT % "pattern", causes.COPIES_SUPPRESSED)
     direction, point = vec.unit(axis["dir"]), [float(c) for c in axis["point"]]
     turns = [_turn_of(e["frame"], direction, point) for e in elements]
     if any(t is None for t in turns):
-        return Skip("The copies of this pattern do not turn about the axis that was read.", causes.COPIES_UNEVEN)
+        return Skip(shared.PATTERN_OFF_AXIS, causes.COPIES_UNEVEN)
     symmetric = bool(data.get("symmetric")) and not full
     name = label(item)
     for sign in (1.0, -1.0):
@@ -488,7 +487,7 @@ def circular(ctx, item):
         if numbers is not None:
             break
     else:
-        return Skip("The copies of this pattern are not spread evenly round the axis.", causes.COPIES_UNEVEN)
+        return Skip(shared.PATTERN_UNEVEN_ROUND, causes.COPIES_UNEVEN)
     axis_dir = vec.scale(direction, sign)
     count_value = ctx.quantity(item, "quantity", n, "scalar")
     angle_value = ctx.quantity(item, "total_angle_deg", abs(raw), "angle").magnitude()
@@ -499,8 +498,7 @@ def circular(ctx, item):
     else:
         found = symmetric_reach(numbers, n)
         if found is None or len(set(numbers)) != n:
-            return Skip("The copies of this pattern do not spread to both sides of the first one by the rule that "
-                        "was expected.", causes.COPIES_UNEVEN)
+            return Skip(shared.PATTERN_RULE, causes.COPIES_UNEVEN)
         back, ahead = found
         ctx.doubt(count_value.reads + angle_value.reads, "%s turns copies to both sides of the first one, which "
                   "Orca writes with fixed numbers" % name)
@@ -534,7 +532,7 @@ def mirror(ctx, item):
                     "which is not copied to Orca.", gap_hints.OTHER_COMPONENT)
     plane = mirror_plane(data)
     if plane is None:
-        return Skip("The mirror plane could not be read as a flat plane.")
+        return Skip(shared.MIRROR_PLANE)
     reflect = _reflection(plane["origin"], plane["normal"])
     entity = data.get("entity_type")
     if entity == "bodies":
@@ -547,7 +545,7 @@ def mirror(ctx, item):
         ctx.solid.add(ADD, Moved(ctx.solid.copy(), *reflect))
         return [made]
     if entity != "features":
-        return Skip("Mirrors of faces are not copied to Orca yet.", gap_hints.REPEAT_FACES)
+        return Skip(shared.MIRROR_FACES, gap_hints.REPEAT_FACES)
     groups = sources(ctx, item, "mirror")
     if isinstance(groups, Skip):
         return groups

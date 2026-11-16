@@ -16,8 +16,11 @@ from lib.probe import derived
 
 def outputs(result):
     """Everything an export writes that shadow mode must not change: the manifest, the recipe, the report without its
-    `derived` block and the sketch graphs it reads, the health record and what the result window shows."""
+    `derived` block and the sketch graphs it reads, the health record and what the result window shows. The seconds
+    that the tries took change from run to run, so they are left out."""
     report = {k: v for k, v in result.report.items() if k not in ("derived", "timing")}
+    report["probe"] = dict(report["probe"], timeline={k: v for k, v in report["probe"]["timeline"].items()
+                                                      if k != "try_seconds"})
     report["capture"] = {k: v for k, v in report["capture"].items() if k != "sketch_graphs"}
     return (result.manifest, result.files["recipe.json"], json.dumps(report, sort_keys=True, default=str),
             result.health, view(result))

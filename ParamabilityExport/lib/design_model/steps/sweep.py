@@ -10,6 +10,7 @@ from ...package.numbers import is_number
 from ..paths.curves import tangents
 from ..paths.tolerances import SQUARE_TOL_DEG, STRAIGHT_DEG
 from ..problem import Problem
+from .. import words
 
 ZERO_TOL = 1e-6
 VOLUME_RELATIVE_TOL = 0.01
@@ -18,8 +19,8 @@ CENTROID_ON_PATH_TOL = 0.01   # the path runs through the outline's centroid whe
 END_PLANE_TOL = 1e-3      # a made end face lies this close to the plane square to the path end (mm)
 REACH_TOLERANCE = 0.01    # share of the outline's reach a point of the end face may lie beyond (arcs are sampled)
 
-NOT_MATCHING = "The result of this sweep does not match its outline and path, so it is not copied yet."
-END_UNCHECKED = "The end of the path of %s could not be checked against the shape Fusion made."
+NOT_MATCHING = words.SWEEP_NOT_MATCHING
+END_UNCHECKED = words.SWEEP_END_UNCHECKED
 # The problem of a sweep whose new body or end face does not match its outline and path.
 MISMATCH = Problem("not_matching", NOT_MATCHING)
 

@@ -20,6 +20,7 @@ Anything that cannot be shown stops the copy, since the body after the split wou
 from ...capture_model import lineage
 from ...capture_model.capture import same_body
 from ...design_model.steps.split import resolve as inside_of
+from ...design_model import words as shared
 from ...geometry import vec
 from ..combine import step as combine_step
 from ..faces import follow
@@ -66,12 +67,12 @@ def _pieces(item, data, before, kept):
     """`(parent record, kept piece, other pieces)` of the body the walk builds, or a Refusal."""
     parent = _record(data.get("bodies"), before)
     if parent is None:
-        return _stop("This split does not list the body it cuts.")
+        return _stop(shared.SPLIT_BODY_UNLISTED)
     pieces = [p for p in data.get("pieces") or () if isinstance(p, dict)
               and same_body(lineage.parent_of(item, p) or {}, parent)]
     piece = _record(pieces, kept)
     if piece is None:
-        return _stop("The piece of this split that the part comes from was not found.")
+        return _stop(shared.SPLIT_PIECE_LOST)
     others = [p for p in pieces if p is not piece]
     if not others:
         return _stop("This split leaves the body in one piece, which the copy cannot tell apart from a cut.")
@@ -132,16 +133,16 @@ def _by_plane(ctx, item, tool, parent, piece, others):
     plane = tool.get("plane") or {}
     point, normal = plane.get("point"), plane.get("normal")
     if not (isinstance(point, list) and isinstance(normal, list) and vec.length(normal) > 1e-9):
-        return _stop("The plane of this split could not be read.")
+        return _stop(shared.SPLIT_PLANE_UNREAD)
     normal = vec.unit(normal)
     if piece.get("box") is None or any(p.get("box") is None for p in others):
-        return _stop("The pieces of this split could not be measured.")
+        return _stop(shared.SPLIT_UNMEASURED)
     side = vec.box_side(piece["box"], point, normal, SIDE_TOL_MM)
     sides = [vec.box_side(p["box"], point, normal, SIDE_TOL_MM) for p in others]
     if side and side in sides:
         return _stop("This split leaves more than one piece on the side of the part, which is not copied yet.")
     if not side or any(s != -side for s in sides):
-        return _stop("This split leaves pieces on both sides of its plane, which is not copied yet.")
+        return _stop(shared.SPLIT_BOTH_SIDES)
     shift = follow.place_plane(ctx, item, plane, normal, "splits along")
     around = parent.get("box") or piece["box"]
     return _box_tool(ctx, item, {"point": point, "normal": normal}, vec.scale(normal, -side), shift, around)
@@ -150,10 +151,10 @@ def _by_plane(ctx, item, tool, parent, piece, others):
 def _by_body(ctx, item, tool, parent, piece, others):
     body = tool.get("body") or {}
     if not tool.get("solid"):
-        return _stop("This split cuts along a surface, which is not copied yet.")
+        return _stop(shared.SPLIT_SURFACE)
     inside = inside_of(body, piece, others)
     if inside is None:
-        return _stop("The copy could not tell which pieces of this split lie inside its tool body.")
+        return _stop(shared.SPLIT_INSIDE_TOOL)
     operation = "intersect" if inside else "cut"
     data = {"tools": [body], "volume_before": parent.get("volume"), "volume_after": piece.get("volume"),
             "intersect_model": "every"}
@@ -167,7 +168,7 @@ def handle(item, ctx):
     data = _data(item)
     tool = data.get("tool")
     if not isinstance(tool, dict):
-        return _stop("What this split cuts with was not read.")
+        return _stop(shared.SPLIT_TOOL_UNREAD)
     if not ctx.steps:
         return _stop("The body is split before the copy has a body to split.")
     before, kept = ctx.lineage_at(item["index"])
@@ -178,5 +179,5 @@ def handle(item, ctx):
         return _by_plane(ctx, item, tool, *found)
     if tool.get("kind") == "body":
         return _by_body(ctx, item, tool, *found)
-    return _stop("This split cuts along a curved surface or a line, which is not copied yet.")
+    return _stop(shared.SPLIT_CURVED)
 

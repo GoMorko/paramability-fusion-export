@@ -1163,7 +1163,7 @@ surprises.
       not square to the path at its start"). Note what Fusion builds.
 - [ ] **SW12 3D path.** A 3D sketch of three lines with sketch fillets at the two corners. The recipe holds a sweep
       step with a 3D path with two bends and the part matches. With a spline or an arc that is not tangent to its
-      neighbours the sweep is left out ("bends in 3D in a way that is not copied yet").
+      neighbours the sweep is left out ("bends in 3D in a way that is not copied").
 - [ ] **SW13 Space of the path curves.** In a design where the sweep's component is moved in the assembly, check that
       `path.curves` and `check` (read from `PathEntity.curve`) agree in the component's frame, not the root frame.
 - [ ] **SW15 Twist on a bent path.** The SW2 path with twist 90 degrees. Copied as a `sweep` step with `twistDeg`

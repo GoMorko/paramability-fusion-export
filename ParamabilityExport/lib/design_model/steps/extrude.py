@@ -34,6 +34,7 @@ from ...capture_model import gap_hints
 from ...geometry import vec
 from ..problem import Problem
 from ..values import Quantity
+from .. import words
 
 DISTANCE, REACH, THROUGH, THROUGH_BOTH, SYMMETRIC = "distance", "reach", "through", "throughBoth", "symmetric"
 SKETCH_PLANE, OFFSET, FACE = "sketchPlane", "offset", "face"
@@ -76,38 +77,34 @@ _SLOT_WORDS = {"start": "starts from", "side_one": "ends on", "side_two": "ends 
 
 
 _WORDS = {
-    UNREADABLE: ("A setting of this extrude could not be read from Fusion.", None),
-    EXTENT_KIND: ("This extrude sets its length in a way that is not copied yet.", None),
-    SIDE_KIND: ("This way of setting the extrude length is not copied yet.", None),
-    START_KIND: ("This extrude starts in a way that is not copied yet.", None),
-    NO_LENGTH: ("This extrude has no length.", None),
-    NO_READABLE_LENGTH: ("This extrude has no readable length.", None),
-    FOREIGN: ("This extrude %s a curved face of another component, or one whose place could not be read, which is "
-              "not copied.", gap_hints.OTHER_COMPONENT),
-    NOT_FLAT: ("This extrude %s a surface that is not flat, which is not copied yet.", gap_hints.EXTRUDE_END_FACE),
-    TILTED: ("This extrude %s a tilted surface, which is not copied yet.", gap_hints.EXTRUDE_END_FACE),
-    ON_START: ("This extrude ends on the surface it starts from.", None),
-    SAME_SIDE: ("Both sides of this extrude end on the same side of its sketch, which is not copied yet.",
-                gap_hints.EXTRUDE_END_FACE),
-    START_OFFSET: ("This extrude starts at a distance from a face or plane, which is not copied yet.",
-                   gap_hints.EXTRUDE_END_FACE),
-    TAPER_WAY: ("The taper direction does not match what was measured, so it is not copied.", None),
-    TAPER_UNMEASURED: ("The taper of this extrude could not be measured.", None),
-    TAPER_WAY_UNMEASURED: ("The direction of the taper could not be measured.", None),
-    TAPER_NO_CHANGE: ("The taper of this extrude shows no change in size, so it is not copied.", None),
-    VOLUME_UNMEASURED: ("The change this extrude makes to the part could not be measured, so it is not copied.", None),
-    VOLUME_DIFFERS: ("The result of this extrude does not match the outlines it was drawn with, so it is not copied.",
-                     None),
+    UNREADABLE: (words.EXTRUDE_UNREADABLE, None),
+    EXTENT_KIND: (words.EXTRUDE_EXTENT_KIND, None),
+    SIDE_KIND: (words.EXTRUDE_SIDE_KIND, None),
+    START_KIND: (words.EXTRUDE_START_KIND, None),
+    NO_LENGTH: (words.EXTRUDE_NO_LENGTH, None),
+    NO_READABLE_LENGTH: (words.EXTRUDE_NO_READABLE_LENGTH, None),
+    FOREIGN: (words.EXTRUDE_FOREIGN, gap_hints.OTHER_COMPONENT),
+    NOT_FLAT: (words.EXTRUDE_NOT_FLAT, gap_hints.EXTRUDE_END_FACE),
+    TILTED: (words.EXTRUDE_TILTED, gap_hints.EXTRUDE_END_FACE),
+    ON_START: (words.EXTRUDE_ON_START, None),
+    SAME_SIDE: (words.EXTRUDE_SAME_SIDE, gap_hints.EXTRUDE_END_FACE),
+    START_OFFSET: (words.EXTRUDE_START_OFFSET, gap_hints.EXTRUDE_END_FACE),
+    TAPER_WAY: (words.TAPER_WAY, None),
+    TAPER_UNMEASURED: (words.TAPER_UNMEASURED, None),
+    TAPER_WAY_UNMEASURED: (words.TAPER_WAY_UNMEASURED, None),
+    TAPER_NO_CHANGE: (words.TAPER_NO_CHANGE, None),
+    VOLUME_UNMEASURED: (words.VOLUME_UNMEASURED, None),
+    VOLUME_DIFFERS: (words.VOLUME_DIFFERS, None),
 }
 
 
 def problem(code, slot=None):
     """The `Problem` of `code` (`design_model/problem.py`), worded for the capture field `slot` (`start`, `side_one`,
     `side_two`) when its sentence names one."""
-    words, cause = _WORDS[code]
-    if "%s" in words:
-        words = words % _SLOT_WORDS.get(slot, "ends on")
-    return Problem(code, words, cause)
+    text, cause = _WORDS[code]
+    if "%s" in text:
+        text = text % _SLOT_WORDS.get(slot, "ends on")
+    return Problem(code, text, cause)
 
 
 def sign_of(value):

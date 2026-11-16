@@ -33,6 +33,7 @@ from ..geometry.footprint import polyline
 from ..orca_recipe.enums import BooleanMode, FeatureType
 from . import causes, sketch_sizes, steps
 from ..design_model.values import Quantity
+from ..design_model import words as shared
 from .sketches import circle_of, outline_sketch, outlines_of
 from .skip import Skip
 from .solid import ADD, CUT, INTERSECT, ahead, box_of, traced
@@ -52,7 +53,6 @@ _STEPS = 4096
 _HALVINGS = 30
 _WALL_SLACK = 1e-9
 
-_UNREAD = "A setting of this loft could not be read from Fusion."
 _SHAPES = ("Orca joins the two outlines of this loft in its own way, which can differ from Fusion, so it is left out "
            "(only two circles, or two outlines of straight lines whose corners pair up clearly, are copied).")
 
@@ -65,18 +65,18 @@ def _refusal(data):
     if operation not in _SOLID_MODES:
         return Skip("This kind of loft is not copied yet.")
     if data.get("solid") is False:
-        return Skip("Surface lofts are not copied.", gap_hints.SURFACE)
+        return Skip(shared.LOFT_SURFACE, gap_hints.SURFACE)
     flags = (data.get("solid"), data.get("closed"), data.get("rails"), data.get("sections"), data.get("profiles"))
     if any(flag is None for flag in flags) or not isinstance(data["sections"], list):
-        return Skip(_UNREAD)
+        return Skip(shared.LOFT_UNREAD)
     if data["closed"]:
-        return Skip("Closed lofts are not copied to Orca yet.", gap_hints.LOFT_KIND)
+        return Skip(shared.LOFT_CLOSED, gap_hints.LOFT_KIND)
     if data.get("centerline") or data["rails"]:
         return Skip("Orca's loft has no rails or centre line, so this loft is left out.", gap_hints.LOFT_KIND)
     sections = data["sections"]
     for section in sections:
         if not isinstance(section, dict) or section.get("end") is None:
-            return Skip(_UNREAD)
+            return Skip(shared.LOFT_UNREAD)
         if section.get("kind") != "profile":
             return Skip("Orca's loft takes sketch outlines only, so a loft to a point, a face or edges of the part "
                         "is left out.", gap_hints.LOFT_KIND)
@@ -85,7 +85,7 @@ def _refusal(data):
                         gap_hints.LOFT_KIND)
     if len(sections) != 2:
         return Skip("Orca's loft through more than two outlines is smooth in its own way, so this loft is left out."
-                    if len(sections) > 2 else "This loft has fewer than two outlines.", gap_hints.LOFT_KIND)
+                    if len(sections) > 2 else shared.LOFT_FEW_OUTLINES, gap_hints.LOFT_KIND)
     return None
 
 
@@ -271,7 +271,7 @@ def _shape(item, data, profiles, frames):
     points = [[vec.frame_apply(p["frame"], [u, v, 0.0]) for c in o.outer for u, v in polyline(c)]
               for p, o in zip(profiles, outlines)]
     if not (_side(frames[0], points[1]) and _side(frames[1], points[0])):
-        return Skip("The outlines of this loft cross each other.")
+        return Skip(shared.LOFT_CROSSING)
     height = vec.dot(vec.sub(frames[1]["origin"], frames[0]["origin"]), normal)
     base = frames[0] if height > 0 else dict(frames[0], y=vec.scale(frames[0]["y"], -1.0),
                                              z=vec.scale(normal, -1.0))
@@ -322,7 +322,7 @@ def loft(ctx, item):
     try:
         profiles = [data["profiles"][s["profile"]] for s in data["sections"]]
     except (IndexError, KeyError, TypeError):
-        return Skip(_UNREAD)
+        return Skip(shared.LOFT_UNREAD)
     for profile in profiles:
         problem = _profile_problem(profile)
         if problem:

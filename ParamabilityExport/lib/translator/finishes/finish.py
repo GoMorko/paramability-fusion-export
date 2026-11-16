@@ -12,6 +12,7 @@ outside or rounded shells.
 from ...capture_model import gap_hints, step_kinds
 from ...design_model.steps import finish as sets_of
 from ...design_model.values import Sized, number, reads_in
+from ...design_model import words as shared
 
 from .. import values
 from ..faces import follow, picks
@@ -193,7 +194,7 @@ def fillet(item, ctx):
     data = item.get("data") or {}
     sets = sets_of.round_sets(data)
     if not sets:
-        return Refusal("This round has no edges to copy.")
+        return Refusal(shared.ROUND_NO_EDGES)
     for one in sets:
         if one.kind != sets_of.CONSTANT:
             return Refusal(_FILLET_SET_REFUSALS.get(one.kind, "This kind of round is not copied yet."),
@@ -203,7 +204,7 @@ def fillet(item, ctx):
         if one.continuity == "curvature":
             return Refusal("Rounds with curvature continuity are not copied yet.")
         if one.radius is None:
-            return Refusal("This round has no readable radius.")
+            return Refusal(shared.ROUND_NO_RADIUS)
     edges = sets_of.edges_of(sets)
     sizes = [one.size(_quantity(ctx, item)) for one in sets]
     if not edges or any(one.unlocated for one in sets):
@@ -231,7 +232,7 @@ def _quantity(ctx, item):
 
 
 _CHAMFER_PROBLEMS = {
-    sets_of.NO_SIZE: "This chamfer has no readable size.",
+    sets_of.NO_SIZE: shared.CHAMFER_NO_SIZE,
     sets_of.NO_ANGLE: "This chamfer has no readable angle.",
     sets_of.UNKNOWN_KIND: "This kind of chamfer is not copied yet.",
 }
@@ -266,7 +267,7 @@ def chamfer(item, ctx):
     data = item.get("data") or {}
     sets = sets_of.chamfer_sets(data)
     if not sets:
-        return Refusal("This chamfer has no edges to copy.")
+        return Refusal(shared.CHAMFER_NO_EDGES)
     sides = []
     for one in sets:
         if one.problem:
@@ -281,7 +282,7 @@ def chamfer(item, ctx):
         sides.append(split)
     groups = _chamfer_parts(ctx, item, sets, sides)
     if not groups:
-        return Refusal("This chamfer has no edges to copy.")
+        return Refusal(shared.CHAMFER_NO_EDGES)
     if data.get("corner_type", "chamfer") != "chamfer":
         ctx.note("Fusion used another corner type for this chamfer; the copy uses the default one.")
     if len(groups) > 1:

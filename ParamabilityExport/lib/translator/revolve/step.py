@@ -17,6 +17,7 @@ from ...geometry import vec
 from ...package.numbers import round9
 
 from ...design_model import refs
+from ...design_model import words as shared
 from .. import notes, placement, ref_motion, values
 from ..extrude import COMBINE
 from ..result import Refusal, StepResult
@@ -89,7 +90,7 @@ def _turn_direction(frame, outer, point2, dir2, dir3):
     along = p[0] * dir2[0] + p[1] * dir2[1]
     perp = [p[0] - along * dir2[0], p[1] - along * dir2[1]]
     if math.hypot(perp[0], perp[1]) < 1e-9:
-        return Refusal("The sketch of this revolve lies on its axis.")
+        return Refusal(shared.REVOLVE_ON_AXIS)
     radial = vec.add(vec.scale(frame["x"], perp[0]), vec.scale(frame["y"], perp[1]))
     return vec.unit(vec.cross(dir3, radial))
 
@@ -98,7 +99,7 @@ def _travel_from_normal(data, combine):
     """Measured travel direction at the start of the turn, or a Refusal."""
     normal = data.get("start_face_normal")
     if not normal:
-        return Refusal("The turning direction of this revolve could not be read.")
+        return Refusal(shared.REVOLVE_TURN_UNREAD)
     return vec.scale(vec.unit(normal), 1.0 if combine == "cut" else -1.0)
 
 
@@ -112,7 +113,7 @@ def _sense(data, combine, frame, outer, point2, dir2, dir3):
         return turn
     side = vec.dot(travel, turn)
     if abs(side) < 1e-6:
-        return Refusal("The turning direction of this revolve could not be read.")
+        return Refusal(shared.REVOLVE_TURN_UNREAD)
     return 1 if side > 0 else -1
 
 
@@ -141,13 +142,13 @@ def _angles(extent):
     if kind == "angle":
         angle = float(extent["angle_deg"])
         if not angle > 0 or angle > FULL_TURN_DEG + 1e-9:
-            return Refusal("This revolve turns by an angle that is not copied.")
+            return Refusal(shared.REVOLVE_ANGLE)
         if angle >= FULL_TURN_DEG - 1e-9:
             return "full", FULL_TURN_DEG
         return ("symmetric" if extent.get("symmetric") else "part"), angle
     if kind == "twoSidesAngle":
         return Refusal("Revolves turned to both sides are not copied yet.")
-    return Refusal("This way of setting the revolve angle is not copied yet.")
+    return Refusal(shared.REVOLVE_ANGLE_KIND)
 
 
 def _turned(on, dir3, point3, degrees):

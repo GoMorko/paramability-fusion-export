@@ -9,6 +9,7 @@ repeats that, which is the body joined with its image by definition.
 from ...capture_model.step_kinds import SOLID, recipe_kind
 from ...design_model.steps.repeat import mirror_plane
 from ...design_model.values import Quantity
+from ...design_model import words as shared
 from ..combine import tool_walk
 from ..faces import follow
 from ..faces.follow import Motion
@@ -55,7 +56,7 @@ def mirror(item, ctx, sources=None):
     data = item.get("data") or {}
     plane = mirror_plane(data)
     if plane is None:
-        return Refusal("The mirror plane could not be read as a flat plane.")
+        return Refusal(shared.MIRROR_PLANE)
     shift = follow.place_plane(ctx, item, data["plane"], plane["normal"], "mirrors across")
     written, moved = _mirror_plane_at(plane, shift if shift is not None else Quantity(0.0))
     entity = data.get("entity_type")
@@ -80,6 +81,6 @@ def mirror(item, ctx, sources=None):
             return sources
         solids, finishes = sources
     else:
-        return Refusal("Mirrors of faces are not copied yet.")
+        return Refusal(shared.MIRROR_FACES)
     motion = _mirror_motion(plane, moved, item.get("name", ""))
     return build(ctx, item, solids, finishes, [({"kind": "mirror", "plane": written}, [motion])], "mirror")

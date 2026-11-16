@@ -26,6 +26,7 @@ from ..geometry import rigid, vec
 from ..orca_recipe.enums import BooleanMode, FeatureType
 from ..design_model.steps.move import fit
 from ..design_model.steps.split import resolve as inside_of
+from ..design_model import words as shared
 from . import causes
 from .solid import INTERSECT, HalfSpace
 from .steps import Skip
@@ -49,12 +50,12 @@ def _pieces(ctx, item, data):
         before = kept = ctx.target
     parent = _record(data.get("bodies"), before)
     if parent is None:
-        return Skip("This split does not list the body it cuts.")
+        return Skip(shared.SPLIT_BODY_UNLISTED)
     pieces = [p for p in data.get("pieces") or () if isinstance(p, dict)
               and same_body(lineage.parent_of(item, p) or {}, parent)]
     piece = _record(pieces, kept)
     if piece is None:
-        return Skip("The piece of this split that the part comes from was not found.")
+        return Skip(shared.SPLIT_PIECE_LOST)
     others = [p for p in pieces if p is not piece]
     if not others:
         return Skip("This split leaves the body in one piece.")
@@ -84,7 +85,7 @@ def split(ctx, item):
     data = data_of(item)
     tool = data.get("tool")
     if not isinstance(tool, dict):
-        return Skip("What this split cuts with was not read.")
+        return Skip(shared.SPLIT_TOOL_UNREAD)
     if not ctx.has_body:
         return Skip("The part this split cuts is not in the copy.", gap_hints.AFTER_GAP)
     found = _pieces(ctx, item, data)
@@ -98,7 +99,7 @@ def split(ctx, item):
         return _by_plane(ctx, item, tool, piece, others)
     if tool.get("kind") == "body":
         return _by_body(ctx, item, tool, piece, others)
-    return Skip("This split cuts along a curved surface or a line, which is not copied to Orca yet.")
+    return Skip(shared.SPLIT_CURVED)
 
 
 def _by_plane(ctx, item, tool, piece, others):
@@ -108,15 +109,14 @@ def _by_plane(ctx, item, tool, piece, others):
                     "place, which is not copied to Orca.", gap_hints.OTHER_COMPONENT)
     point, normal = plane.get("point"), plane.get("normal")
     if not (isinstance(point, (list, tuple)) and isinstance(normal, (list, tuple)) and vec.length(normal) > 1e-9):
-        return Skip("The plane of this split could not be read.")
+        return Skip(shared.SPLIT_PLANE_UNREAD)
     normal = vec.unit(normal)
     if piece.get("box") is None or any(p.get("box") is None for p in others):
-        return Skip("The pieces of this split could not be measured.")
+        return Skip(shared.SPLIT_UNMEASURED)
     side = vec.box_side(piece["box"], point, normal, SIDE_TOL_MM)
     sides = [vec.box_side(p["box"], point, normal, SIDE_TOL_MM) for p in others]
     if not side or any(s != -side for s in sides):
-        return Skip("This split leaves pieces on both sides of its plane, which is not copied to Orca yet.",
-                    causes.SPLIT_SIDES)
+        return Skip(shared.SPLIT_BOTH_SIDES, causes.SPLIT_SIDES)
     x_axis = vec.unit(vec.cross(normal, [1.0, 0.0, 0.0] if abs(normal[0]) < 0.9 else [0.0, 1.0, 0.0]))
     made = feature(FeatureType.CUT, label(item), plane=ctx.place.plane(point, x_axis, vec.cross(normal, x_axis),
                                                                        normal),
@@ -129,10 +129,10 @@ def _by_plane(ctx, item, tool, piece, others):
 def _by_body(ctx, item, tool, piece, others):
     body = tool.get("body") or {}
     if not tool.get("solid"):
-        return Skip("This split cuts along a surface, which is not copied to Orca yet.")
+        return Skip(shared.SPLIT_SURFACE)
     inside = inside_of(body, piece, others)
     if inside is None:
-        return Skip("The copy could not tell which pieces of this split lie inside its tool body.")
+        return Skip(shared.SPLIT_INSIDE_TOOL)
     start = len(ctx.features)
     mark = ctx.checkpoint()
     made = build(ctx, body, item)

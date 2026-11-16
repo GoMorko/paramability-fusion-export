@@ -15,6 +15,7 @@ from ...capture_model import gap_hints
 from ...geometry import vec
 from ..problem import Problem
 from . import thread
+from .. import words
 
 SIMPLE, COUNTERBORE, COUNTERSINK = "simple", "counterbore", "countersink"
 PLAIN, TAPPED, TAPERED = "plain", "tapped", "taperTapped"
@@ -57,7 +58,7 @@ def placed(data):
     direction, positions, diameter = data.get("direction"), data.get("positions"), data.get("diameter")
     if not (isinstance(direction, (list, tuple)) and positions and isinstance(diameter, (int, float))
             and not isinstance(diameter, bool) and diameter > 0):
-        return Problem("holeUnread", "This hole has no readable position or size.")
+        return Problem("holeUnread", words.HOLE_UNREAD)
     return None
 
 
@@ -65,12 +66,12 @@ def kind_of(data):
     """The `Kind` of a hole, or a Problem for a kind that is not read or a recess the capture does not hold."""
     name = data.get("hole_type", SIMPLE)
     if name not in (SIMPLE, COUNTERBORE, COUNTERSINK):
-        return Problem("holeKind", "This kind of hole is not copied yet.")
+        return Problem("holeKind", words.HOLE_KIND)
     if name == SIMPLE:
         return Kind(name, None)
     recess = data.get(name)
     if not isinstance(recess, dict) or not recess:
-        return Problem("holeRecess", "This kind of hole is not copied yet.")
+        return Problem("holeRecess", words.HOLE_KIND)
     return Kind(name, recess)
 
 
@@ -81,7 +82,7 @@ def tap_of(data):
         return PLAIN
     if tap in (TAPPED, TAPERED):
         return tap
-    return Problem("holeTap", "This kind of hole is not copied yet.")
+    return Problem("holeTap", words.HOLE_KIND)
 
 
 def extent_of(data):
@@ -90,12 +91,12 @@ def extent_of(data):
     extent = data.get("extent") or {}
     kind = extent.get("kind")
     if kind not in (DISTANCE, THROUGH_ALL, TO_ENTITY):
-        return Problem("holeExtent", "This way of setting the hole depth is not copied yet.")
+        return Problem("holeExtent", words.HOLE_EXTENT)
     if kind != DISTANCE:
         return Extent(kind, None)
     depth = extent.get("depth")
     if not isinstance(depth, (int, float)) or isinstance(depth, bool) or not depth > 0:
-        return Problem("holeDepth", "This hole has no depth.")
+        return Problem("holeDepth", words.HOLE_NO_DEPTH)
     return Extent(kind, float(depth))
 
 
@@ -154,12 +155,12 @@ def reach_depth(data, unit):
     a measured flat end for each position, and all of them at the same depth."""
     positions, ends = data["positions"], _ends(data)
     if len(ends) != len(positions):
-        return Problem("endUnread", "The end of this hole could not be measured.")
+        return Problem("endUnread", words.HOLE_END_UNREAD)
     if end_shape(data) != PLANE:
-        return Problem("endNotFlat", "A hole that ends at a face with a drill point is not copied yet.")
+        return Problem("endNotFlat", words.HOLE_DRILL_POINT)
     depths = [vec.dot(vec.sub(list(end), list(start)), unit) for start, end in zip(positions, ends)]
     if any(abs(d - depths[0]) > DEPTH_TOL for d in depths) or depths[0] <= 0:
-        return Problem("endsDiffer", "The holes of this step end at different depths.")
+        return Problem("endsDiffer", words.HOLE_ENDS_DIFFER)
     return depths[0]
 
 
@@ -167,14 +168,14 @@ def tapped_bore(data, what, pitches=None):
     """(the diameter the bore is cut at, the thread `Spec` or None) of a tapped hole, or a Problem. A cosmetic thread
     is drilled at the measured drill size and has no spec; a modeled one is cut at the thread's minor diameter."""
     if data.get("tap_type") == TAPERED:
-        return Problem("taperTapped", "Tapered threads are not copied yet.", gap_hints.THREAD_PROFILE)
+        return Problem("taperTapped", words.THREAD_TAPERED, gap_hints.THREAD_PROFILE)
     modeled = data.get("thread_modeled")
     if modeled is None:
-        return Problem("threadUnread", "The thread of this hole could not be read.")
+        return Problem("threadUnread", words.HOLE_THREAD_UNREAD)
     drill = drill_diameter(data)
     if not modeled:
         if drill is None:
-            return Problem("drillUnread", "The drill size of this tapped hole could not be measured.")
+            return Problem("drillUnread", words.HOLE_DRILL_UNREAD)
         return drill, None
     spec = thread.hole_spec(data, what, drill, pitches)
     if isinstance(spec, Problem):

@@ -89,7 +89,7 @@ the two against each other.
 def handle(item, ctx):
     data = item.get("data") or {}
     if data.get("kind") == "other":
-        return Refusal("This emboss works in a way that is not copied yet.")
+        return Refusal("This emboss works in a way that is not copied.")
     out = StepResult()
     out.add({"kind": "extrude", ...}, placers=[SlabMaker(...)], repeatable=True)
     return out
@@ -157,7 +157,9 @@ new body. The path is planned in `design_model/paths/`: `planner.py` orders and 
 `closed` (closed chains), `model` (`PathOptions`, `PathPlan`), `tolerances` and `words` (the problem texts). The
 recipe side keeps `paths/path_limits` (its caps, the planner options and the refusal of a problem), `path_rebuilt`
 (a path read back from numbers, for the range rules) and `path_motion`. A new refusal text of the recipe goes into
-the limits module of its side; a new problem of the shared layer goes into its `words` module.
+the limits module of its side; a new problem of the shared layer goes into its `words` module. A sentence for a
+problem that both outputs give goes into `design_model/words.py` (or `design_model/paths/words.py` for a path). It says
+what the design has and that it is not copied; it names no output and has no "yet". Each output shows it as it is.
 
 A step that takes sketch outlines checks each profile record with `loops.outline_refusal` (sketch text that could not
 be read, a flat face or an unknown entity is not an outline) and gets its loops from `loops.profile_loops`. Only the

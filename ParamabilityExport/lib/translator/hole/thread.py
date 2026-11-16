@@ -14,6 +14,7 @@ from ...capture_model import gap_hints
 from ...design_model.problem import Problem
 from ...design_model.steps import thread as facts
 from ...design_model.values import Quantity
+from ...design_model import words as shared
 from .. import values
 from ..faces import follow
 from ..faces.slabs import as_quantity
@@ -135,7 +136,7 @@ def feature(item, ctx):
     else:
         size = values.quantity(ctx, item, "length", length, absolute=True)
         if size.n > span[1] - span[0] + 1e-3:
-            return Refusal("The thread is longer than its face.")
+            return Refusal(shared.THREAD_LONGER_THAN_FACE)
     values.pin(ctx, item, "offset", "the thread of %s starts at the end of its face" % what)
     size = _limit_length(ctx, item, spec, size, 1)
     if isinstance(size, Refusal):
@@ -171,7 +172,7 @@ def hole_threads(ctx, item, data, spec, points, direction, depth, through):
     else:
         partial = values.quantity(ctx, item, "thread.depth", reach.length, absolute=True)
         if any(partial.n > s.n + 1e-6 for s in sizes):
-            return Refusal("The thread is deeper than its hole.")
+            return Refusal(shared.THREAD_DEEPER_THAN_HOLE)
         sizes = [partial] * len(points)
     out = []
     for point, size in zip(points, sizes):

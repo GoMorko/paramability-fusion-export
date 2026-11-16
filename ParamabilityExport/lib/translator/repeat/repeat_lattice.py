@@ -3,6 +3,7 @@ that follow from the measured copies.
 """
 from ...design_model.steps.repeat import FIT_TOL_MM, kept_elements, solve_lattice
 from ...design_model.values import Quantity, wrapped
+from ...design_model import words as shared
 from ...geometry import vec
 from .. import ref_motion, values
 from ..result import Refusal
@@ -108,7 +109,7 @@ def lattice_axes(item, ctx):
             continue
         direction = data.get(dir_key)
         if not direction or vec.length(direction) < 1e-9:
-            return Refusal("The direction of this pattern could not be read.")
+            return Refusal(shared.PATTERN_DIRECTION_UNREAD)
         place = data.get(dir_key + "_place")
         if isinstance(place, dict) and place.get("assembly"):
             ref_motion.check_direction(ctx, item, place, "spreads copies along")
@@ -122,7 +123,7 @@ def lattice_axes(item, ctx):
                      "count_q": count_q, "symmetric": bool(data.get("symmetric_" + which)), "which": which,
                      "sign": sign})
     if not axes:
-        return Refusal("This pattern makes no copies.")
+        return Refusal(shared.PATTERN_NO_COPIES)
     if len(axes) == 2 and 1.0 - vec.dot(axes[0]["dir"], axes[1]["dir"]) ** 2 < 1e-9:
-        return Refusal("The two directions of this pattern run along one line.")
+        return Refusal(shared.PATTERN_ONE_LINE)
     return axes

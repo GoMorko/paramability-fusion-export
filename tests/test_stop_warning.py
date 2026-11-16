@@ -6,6 +6,7 @@ from tests.translator_helpers import load_capture
 
 from lib.capture_model import gap_hints
 from lib.capture_model.gap_hints import hint as gap_hint
+from lib.capture_model.step_kinds import step_type
 from lib.dialog_model.left_out_preview import MORE_MAY_SHOW
 from lib.dialog_model.stop_warning import saved_message, status_text, summarize, summarize_many
 from lib.export_plan.messages import left_out_line, left_out_lines
@@ -97,8 +98,8 @@ class LeftOutTest(unittest.TestCase):
         summary = summarize(tray_with_gaps())
         self.assertFalse(summary["stops"])
         self.assertEqual(summary["lines"][0], "Likely left out of the copy:")
-        self.assertEqual(summary["lines"][1], left_out_line("Shell1", "Steps of type thicken are not copied yet.",
-                                                            gap_hint(gap_hints.SURFACE)))
+        reason = step_type("ThickenFeature").unsupported
+        self.assertEqual(summary["lines"][1], left_out_line("Shell1", reason, gap_hint(gap_hints.SURFACE)))
         self.assertEqual([step["name"] for step in summary["left_out"]], ["Shell1"])
         self.assertIn(summary["lines"][1], summary["tooltip"])
 

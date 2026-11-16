@@ -7,6 +7,7 @@ import math
 
 from ...design_model.steps.repeat import FIT_TOL_MM, in_component, kept_elements, reach as reach_of
 from ...design_model.values import Quantity
+from ...design_model import words as shared
 from ...geometry import vec
 from ...package.numbers import round9
 from .. import ref_motion, values
@@ -129,7 +130,7 @@ def _measured_places(setup):
     count, delta, point, direction, turns = (setup[key] for key in ("count", "delta", "point", "direction", "turns"))
     steps = [(element, _signed_copy(turn, delta, count)) for element, turn in turns]
     if any(k is None for _, k in steps):
-        return None, "The copies of this pattern are not spread evenly round the axis."
+        return None, shared.PATTERN_UNEVEN_ROUND
     every = []
     for element in setup["data"]["elements"]:
         turn = _turn_about(element["frame"], direction)
@@ -140,8 +141,7 @@ def _measured_places(setup):
     if 0 not in every:
         return None, "The original sits between two copies of this pattern, which is not copied yet."
     if reach_of(every, count) is None:
-        return None, ("The copies of this pattern do not spread to both sides of the first one by the rule that was "
-                      "expected.")
+        return None, (shared.PATTERN_RULE)
     return steps, every
 
 
@@ -236,16 +236,16 @@ def circular(item, ctx, sources=None):
         return Refusal("The turning axis of this pattern could not be read.")
     count = int(data.get("quantity") or 1)
     if count < 2:
-        return Refusal("This pattern makes no copies.")
+        return Refusal(shared.PATTERN_NO_COPIES)
     raw_total = float(data.get("total_angle_deg") or 0.0)
     total_deg = abs(raw_total)
     full = abs(total_deg - FULL_TURN_DEG) <= ANGLE_TOL_DEG
     if not full and not 0 < total_deg < FULL_TURN_DEG:
-        return Refusal("The angle of this pattern could not be read.")
+        return Refusal(shared.PATTERN_ANGLE_UNREAD)
     delta = FULL_TURN_DEG / count if full else total_deg / (count - 1)
     kept = kept_elements(data)
     if kept is None:
-        return Refusal("The copies of this pattern could not be read.")
+        return Refusal(shared.PATTERN_COPIES_UNREAD)
 
     direction = vec.unit(axis["dir"])
     point = axis["point"]
@@ -255,7 +255,7 @@ def circular(item, ctx, sources=None):
         turn = _turn_about(frame, direction)
         # The axis point must stay where it is under the element's transform.
         if turn is None or not vec.close(vec.frame_apply(frame, point), point, FIT_TOL_MM):
-            return Refusal("The copies of this pattern do not turn about the axis that was read.")
+            return Refusal(shared.PATTERN_OFF_AXIS)
         turns.append((element, turn))
 
     if data.get("symmetric") and not full:
@@ -268,7 +268,7 @@ def circular(item, ctx, sources=None):
 
     sign = next((s for s in (1, -1) if all(_copy_number(t, delta, s, count, full) is not None for _, t in turns)), 0)
     if not sign:
-        return Refusal("The copies of this pattern are not spread evenly round the axis.")
+        return Refusal(shared.PATTERN_UNEVEN_ROUND)
     if sign < 0:
         direction = vec.scale(direction, -1)
     by_place = {_copy_number(t, delta, sign, count, full): element for element, t in turns}

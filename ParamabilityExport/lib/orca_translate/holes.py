@@ -38,21 +38,21 @@ def hole(ctx, item):
         return Skip("The part this hole is drilled into is not in the copy.", gap_hints.AFTER_GAP)
     found = hole_facts.kind_of(data)
     if isinstance(found, Problem):
-        return threads.skip(found)
+        return Skip.of(found)
     kind, recess = found
     tap = hole_facts.tap_of(data)
     if isinstance(tap, Problem):
-        return threads.skip(tap)
+        return Skip.of(tap)
     if data.get("foreign"):
         return Skip("This hole is placed on another component, which is not copied yet.",
                     gap_hints.OTHER_COMPONENT)
     problem = hole_facts.placed(data)
     if problem:
-        return threads.skip(problem)
+        return Skip.of(problem)
     direction, positions = data["direction"], data["positions"]
     extent = hole_facts.extent_of(data)
     if isinstance(extent, Problem):
-        return threads.skip(extent)
+        return Skip.of(extent)
     if extent.kind == hole_facts.TO_ENTITY:
         return Skip("This hole goes up to a face, which the Orca copy does not follow yet.",
                     gap_hints.EXTRUDE_END_FACE)

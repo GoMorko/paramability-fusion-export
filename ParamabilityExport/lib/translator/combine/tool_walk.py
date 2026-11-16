@@ -10,7 +10,7 @@ steps out again against the part as it stood at each step.
 from ...design_model import tool_chains
 from .. import walk
 from ..result import Refusal, StepResult, TranslateResult
-from ..words import type_words
+from ...design_model.words import type_words
 
 MAX_DEPTH = 3
 

@@ -9,6 +9,7 @@ from ..combine import tool_walk
 from ..result import Refusal
 from ...capture_model import gap_hints, tool_items
 from ...capture_model.step_kinds import FINISH, SOLID, recipe_kind
+from ...design_model import words as shared
 from ..step_walk import moved_later
 
 MAX_REFERENCES = 64
@@ -53,7 +54,7 @@ def _combined_tools(indexes, ctx, what):
         if item["index"] not in chosen:
             continue
         if (item.get("data") or {}).get("operation") == "intersect":
-            return Refusal("%s keeps only what its tool shares with the part, so this %s cannot repeat it."
+            return Refusal(shared.REPEAT_TOOL_KEEPS
                            % (item.get("name") or "A Combine", what))
         for name, found in tools:
             if not found or not found <= chosen:

@@ -11,6 +11,7 @@ from itertools import product
 from ...design_model.steps.repeat import (FIT_TOL_MM, FUSION_EXTRA_SIDE, in_component, is_identity,
                                           is_identity_rotation, kept_elements, reach as reach_of, solve_lattice)
 from ...design_model.values import Quantity, wrapped
+from ...design_model import words as shared
 from ...geometry import vec
 from ...package.numbers import round9
 from ..faces.follow import Motion
@@ -172,8 +173,7 @@ def _symmetric_reach(axes, data):
             continue
         reach = reach_of(found, axis["count"])
         if reach is None:
-            return Refusal("The copies of this pattern do not spread to both sides of the first one by the rule that "
-                           "was expected.")
+            return Refusal(shared.PATTERN_RULE)
         axis["back"], axis["forward"] = reach
     return None
 
@@ -215,22 +215,22 @@ def rectangular(item, ctx, sources=None):
         return axes
     kept = kept_elements(data)
     if kept is None:
-        return Refusal("The copies of this pattern could not be read.")
+        return Refusal(shared.PATTERN_COPIES_UNREAD)
 
     # Element transforms are relative to the original, so offsets are measured from the origin, and the original
     # itself must be among the elements or the lattice could be off by one place.
     if not any(is_identity(e["frame"]) for e in data["elements"]):
         if any(axis["symmetric"] for axis in axes):
             return Refusal("The original sits between two copies of this pattern, which is not copied yet.")
-        return Refusal("The original copy was not found among the copies of this pattern.")
+        return Refusal(shared.PATTERN_ORIGINAL_LOST)
     placed = []
     for element in kept:
         frame = element["frame"]
         if not is_identity_rotation(frame):
-            return Refusal("The copies of this pattern are turned, which is not copied yet.")
+            return Refusal(shared.PATTERN_TURNED)
         indexes, residual = solve_lattice(frame["origin"], [(a["dir"], a["step"]) for a in axes])
         if residual > FIT_TOL_MM:
-            return Refusal("The copies of this pattern do not sit on an even grid.")
+            return Refusal(shared.PATTERN_UNEVEN_GRID)
         placed.append((element, indexes))
 
     reach = _symmetric_reach(axes, data)
@@ -248,7 +248,7 @@ def rectangular(item, ctx, sources=None):
             for _, indexes in placed:
                 indexes[n] = -indexes[n]
         if any(not 0 <= indexes[n] < axis["count"] for _, indexes in placed):
-            return Refusal("The copies of this pattern do not match its count.")
+            return Refusal(shared.PATTERN_COUNT)
     for axis in axes:
         if axis["symmetric"]:
             axis["side"] = symmetric.extra_side(ctx, item, axis["count_q"], axis["count"],

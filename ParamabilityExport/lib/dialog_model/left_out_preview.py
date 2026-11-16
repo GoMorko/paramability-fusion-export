@@ -3,10 +3,12 @@ Pure: no Fusion imports.
 
 The list comes from one translation of the capture the dialog already read, with no size tries and no face read. It
 holds the steps the translation leaves out for their own reason (a step type the copy has no handler for, a step that
-reaches into another component, a refusal of a handler). A step that is a gap only because it picks faces of one of
-those waits for the face read of the export, so it is not listed; the preview says more may show instead. Each line
-reads like the one in the result window after the export (`export_plan.messages.left_out_line`).
+reaches into another component, a refusal of a handler). For the recipe, a step that is a gap only because it picks
+faces of one of those waits for the face read of the export, so it is not listed; the preview says more may show
+instead (`find`). The Orca translation decides every step it leaves out by itself, so its list is whole (`find_orca`).
+Each line reads like the one in the result window after the export (`export_plan.messages.left_out_line`).
 """
+from ..design_model.verdicts import LEFT_OUT
 from ..export_plan.messages import left_out_line
 from ..package.text import clip
 
@@ -25,15 +27,19 @@ class Found:
         self.waits_for_faces = waits_for_faces
 
 
+def _step(index, record):
+    """The step of a left out record (`design_model.verdicts.left_out`)."""
+    return {"index": index, "name": record.get("name") or "A step",
+            "reason": " ".join(str(record.get("reason") or "").split()), "hint": record.get("hint") or ""}
+
+
 def _collect(verdicts, records, own, waiting):
     """Fill `own` (`{index: step}`) and `waiting` (a one item list) from the verdicts, tool steps at any depth.
     `records` are the gap records the recipe keeps, by gap id."""
     for verdict in verdicts:
-        record = records.get(verdict.get("gap")) if verdict.get("verdict") == "leftOut" else None
+        record = records.get(verdict.get("gap")) if verdict.get("verdict") == LEFT_OUT else None
         if record is not None and verdict.get("cause") == "own":
-            own.setdefault(verdict.get("index"), {
-                "index": verdict.get("index"), "name": record.get("name") or "A step",
-                "reason": " ".join(str(record.get("reason") or "").split()), "hint": record.get("hint") or ""})
+            own.setdefault(verdict.get("index"), _step(verdict.get("index"), record))
         elif record is not None and verdict.get("cause") == "picks":
             waiting[0] = True
         _collect(verdict.get("tool_steps") or [], records, own, waiting)
@@ -46,6 +52,13 @@ def find(result):
     _collect(result.items or [], records, own, waiting)
     steps = [own[index] for index in sorted(own, key=lambda i: i if isinstance(i, int) else -1)]
     return Found(steps, waiting[0])
+
+
+def find_orca(result):
+    """The `Found` of an Orca translation result: the steps it left out, in timeline order."""
+    steps = [_step(record.get("index"), record) for record in result.left_out]
+    steps.sort(key=lambda step: step["index"] if isinstance(step["index"], int) else -1)
+    return Found(steps)
 
 
 def step_text(step, whole=False):

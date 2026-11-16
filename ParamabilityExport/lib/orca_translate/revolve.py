@@ -18,6 +18,7 @@ from ..orca_recipe.enums import BooleanMode, EntityType, FeatureType
 from ..orca_recipe.sketch import SketchEntity
 from . import causes
 from ..design_model.values import Quantity
+from ..design_model import words as shared
 from .sketches import entities_of, outlines_of
 from .solid import ADD, CUT, INTERSECT, Turned
 from .sketch_sizes import profile_sizes, projection_doubts
@@ -52,10 +53,10 @@ def _angle(ctx, item, extent):
         return Skip("Revolves turned to both sides by two angles are not copied to Orca yet.",
                     causes.REVOLVE_TWO_ANGLES)
     if kind != "angle" or not isinstance(extent.get("angle_deg"), (int, float)):
-        return Skip("This way of setting the revolve angle is not copied yet.")
+        return Skip(shared.REVOLVE_ANGLE_KIND)
     angle = abs(float(extent["angle_deg"]))
     if not 0 < angle <= FULL_TURN_DEG + 1e-9:
-        return Skip("This revolve turns by an angle that is not copied.")
+        return Skip(shared.REVOLVE_ANGLE)
     value = ctx.quantity(item, "extent.angle_deg", angle, "angle").magnitude()
     if angle >= FULL_TURN_DEG - 1e-9:
         if value.text is not None:
@@ -77,17 +78,17 @@ def _sense(data, operation, frame, outer, point, direction):
     """+1 when Fusion turned by the right hand rule about `direction`, -1 when the other way, or a Skip."""
     normal = data.get("start_face_normal")
     if not isinstance(normal, (list, tuple)) or vec.length(normal) < 1e-9:
-        return Skip("The turning direction of this revolve could not be read.")
+        return Skip(shared.REVOLVE_TURN_UNREAD)
     travel = vec.scale(vec.unit(normal), 1.0 if operation == "cut" else -1.0)
     flat = _points(outer)
     centre = [sum(p[0] for p in flat) / len(flat), sum(p[1] for p in flat) / len(flat)]
     v = vec.sub(vec.frame_apply(frame, [centre[0], centre[1], 0.0]), point)
     radial = vec.sub(v, vec.scale(direction, vec.dot(v, direction)))
     if vec.length(radial) < 1e-9:
-        return Skip("The sketch of this revolve lies on its axis.")
+        return Skip(shared.REVOLVE_ON_AXIS)
     side = vec.dot(travel, vec.cross(direction, vec.unit(radial)))
     if abs(side) < 1e-6:
-        return Skip("The turning direction of this revolve could not be read.")
+        return Skip(shared.REVOLVE_TURN_UNREAD)
     return 1.0 if side > 0 else -1.0
 
 

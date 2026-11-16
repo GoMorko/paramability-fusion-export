@@ -5,6 +5,7 @@ import adsk.core
 
 from ... import config
 from ...lib.design_edit.marker import marker_note, read_marker
+from ...lib.dialog_model.orca_result import preview as left_out_preview
 from ...lib.design_edit.timeline_health import read_timeline
 from ...lib.export_plan.size_offers import offers as size_offers, table_for_body
 from ...lib.fusion_reader.design_info import default_length_unit, detect_up_axis
@@ -12,6 +13,7 @@ from ...lib.fusion_reader.parameters import list_model_parameters, list_user_par
 from ...lib.fusion_reader.rows import DesignParameterStore
 from ...lib.fusion_reader.step_export import count_solid_bodies
 from ...lib.fusion_ui import handlers, recipe_dialog
+from ...lib.fusion_ui.log import log
 from .. import panel
 from ..ExportForParamability.export_flow import PENDING_POSITION_MESSAGE, CaptureCache, position_pending
 from . import export_flow
@@ -58,8 +60,21 @@ def _on_created(args):
         capture = captures.get(picked) if picked is not None else None
         return size_offers(table_for_body(parameters, design_unit, model_params, capture), parameters, design_unit)
 
+    up_axis = detect_up_axis(adsk.core.Application.get())
+
+    def left_out_for(picked):
+        """The warning about the steps the copy will leave out, or None (nothing picked, nothing left out, or the
+        preview failed)."""
+        if picked is None:
+            return None
+        try:
+            return left_out_preview(captures.get(picked), up_axis)
+        except Exception as exc:
+            log(f"left out preview failed: {exc!r}")
+            return None
+
     offers = offers_for(body)
-    recipe_dialog.build(command, offers, body, detect_up_axis(adsk.core.Application.get()), design_unit=design_unit,
+    recipe_dialog.build(command, offers, body, up_axis, design_unit=design_unit, stop=left_out_for(body),
                         marker_note=note, orca=True)
     shown = {"body": body.entityToken if body is not None else None}
 
@@ -68,9 +83,13 @@ def _on_created(args):
         if args.input.id == recipe_dialog.BODY_ID:
             picked = recipe_dialog.picked_body(inputs)
             token = picked.entityToken if picked is not None else None
-            if picked is not None and token != shown["body"]:
+            if picked is None:
+                shown["body"] = None
+                recipe_dialog.show_stop(inputs, None)
+            elif token != shown["body"]:
                 shown["body"] = token
                 recipe_dialog.apply_offers(inputs, offers, offers_for(picked))
+                recipe_dialog.show_stop(inputs, left_out_for(picked))
         else:
             recipe_dialog.handle_change(inputs, offers, args.input)
 

@@ -26,7 +26,7 @@ ALLOWED_IMPORTS = {
                        "sketch_values", "translator"},
     "export_plan": {"capture_model", "design_edit", "design_model", "geometry", "orca_recipe", "orca_translate",
                     "package", "params", "probe", "sketch_values", "timing", "translator"},
-    "dialog_model": {"export_plan", "package", "params", "translator"},
+    "dialog_model": {"design_model", "export_plan", "package", "params", "translator"},
     "fusion_reader": {"capture_model", "design_edit", "geometry", "package", "params", "timing"},
     "fusion_ui": {"dialog_model", "export_plan", "fusion_reader", "package"},
     "commands": {"design_edit", "dialog_model", "export_plan", "fusion_reader", "fusion_ui", "package", "timing"},

@@ -4,6 +4,7 @@
 The Orca output writes no gap file, so these causes have no hint in `capture_model.gap_hints`; they tell the report
 and the tests which rule left the step out. Causes the recipe translator gives as well come from `gap_hints`.
 """
+from ..capture_model import gap_hints
 
 # A join or new body extrude through all: the copy cannot give it a length that stays right when sizes change.
 THROUGH_ALL_ADDS = "throughAllAdds"
@@ -80,3 +81,18 @@ BODY_LOST = "bodyLost"
 # A step whose handler stopped on an error the copy did not expect: the step is left out, the error goes to the
 # report (`orca.left_out[].error`), and the rest of the copy goes on.
 INTERNAL_ERROR = "internalError"
+
+
+# The causes of `gap_hints` whose tip fits the Orca copy as well. The tip of any other cause names the Paramability app
+# (an AI assistant that adds a coil, the size limits of a thread, exporting parts together), so it is not shown.
+_TIPS = frozenset({
+    gap_hints.DELETE_FACE, gap_hints.SURFACE, gap_hints.EXTRUDE_END_FACE, gap_hints.TAPER_STEEP,
+    gap_hints.THIN_OUTLINE, gap_hints.ROUND_KIND, gap_hints.REPEAT_FACES, gap_hints.SHARP_CORNER,
+    gap_hints.LOFT_KIND, gap_hints.SCALE, gap_hints.REPLACE_FACE, gap_hints.RIB_WEB, gap_hints.PATH_PATTERN,
+    gap_hints.BOUNDARY_FILL, gap_hints.NEW_COMPONENT, gap_hints.OTHER_COMPONENT,
+    gap_hints.MADE_IN_OTHER_COMPONENT, gap_hints.AFTER_GAP})
+
+
+def tip(cause):
+    """What to change in Fusion so a step left out for `cause` copies to Orca, or None."""
+    return gap_hints.hint(cause) if cause in _TIPS else None

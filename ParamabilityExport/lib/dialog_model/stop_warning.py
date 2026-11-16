@@ -3,6 +3,7 @@
 The dialog shows them as soon as a body is picked, the message after the export repeats the same first line, and
 the Fusion status line uses the short form. All of them name the step the same way: "Extrude9 (extrude)".
 """
+from ..design_model.verdicts import NOTED
 from ..package.text import clip
 from ..translator import CaptureError
 from ..translator.notes import step_label
@@ -54,7 +55,7 @@ def _noted_steps(items):
     """(labels, notes) of the steps that were copied with a note."""
     labels, notes = [], []
     for item in items or []:
-        if item.get("verdict") != "translatedWithNote":
+        if item.get("verdict") != NOTED:
             continue
         label = step_label(item.get("name"), item.get("type")) or "A step"
         if label not in labels:

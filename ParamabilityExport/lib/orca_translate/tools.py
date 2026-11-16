@@ -21,7 +21,9 @@ from ..design_model import design, refs, roles, tool_chains
 from ..geometry import rigid
 from ..orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType, SketchShape
 from ..orca_recipe.feature import CadFeature
-from ..translator.words import type_words
+from ..design_model.verdicts import COPIED, SKIPPED
+from ..design_model.words import type_words
+from ..design_model import words as shared
 from . import causes, corner_hosts, other_components, outline_cuts
 from .context import Body
 from .solid import ADD, CUT, INTERSECT
@@ -101,11 +103,10 @@ def _unusable(ctx, record, name):
                         "copied to Orca." % name, gap_hints.OTHER_COMPONENT)
         return None
     if _foreign_scope(ctx) is not None:
-        return Skip("The tool body %s is taken by a Combine inside a tool body of another component, which is not "
-                    "copied to Orca yet." % name, gap_hints.OTHER_COMPONENT)
+        return Skip(shared.TOOL_NESTED_ELSEWHERE % name, gap_hints.OTHER_COMPONENT)
     place = tool_chains.place_of(record)
     if place.problem:
-        return Skip(place.problem.words, place.problem.cause)
+        return Skip.of(place.problem)
     return place
 
 
@@ -202,8 +203,8 @@ def mark_copied(ctx, indexes, note):
     """Steps that were passed by as building another body, now copied as part of a tool."""
     wanted = set(indexes)
     for verdict in ctx.items:
-        if verdict.get("index") in wanted and verdict.get("verdict") == "skipped":
-            verdict["verdict"], verdict["note"] = "copied", note
+        if verdict.get("index") in wanted and verdict.get("verdict") == SKIPPED:
+            verdict["verdict"], verdict["note"] = COPIED, note
 
 
 def boolean(ctx, tool, mode, name):

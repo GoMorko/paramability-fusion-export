@@ -12,11 +12,12 @@ applies to the translation that uses the answer.
 The read is asked about the steps left out for their own reason, also inside tool bodies. A step left out only because
 it may pick faces of another gap is not one of them: the read tests it as a picking step instead.
 """
+from ..design_model.verdicts import LEFT_OUT
 
 
 def _own_gaps(verdicts):
     for verdict in verdicts:
-        if verdict.get("verdict") == "leftOut" and verdict.get("cause") != "picks":
+        if verdict.get("verdict") == LEFT_OUT and verdict.get("cause") != "picks":
             yield verdict.get("index")
         yield from _own_gaps(verdict.get("tool_steps") or [])
 

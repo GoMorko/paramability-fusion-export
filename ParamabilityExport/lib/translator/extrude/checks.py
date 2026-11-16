@@ -2,6 +2,7 @@
 The facts come from the shared reader (`design_model/steps/extrude.py`); this module turns them into refusals."""
 from ...design_model.steps import extrude as dm
 from ...design_model.values import Quantity
+from ...design_model import words as shared
 from ...geometry import vec
 from ..result import Refusal
 from .common import LENGTH_TOL
@@ -34,7 +35,7 @@ def check_measured_length(plan, data, start, z, combine):
             side.length is not None and _beyond_part(box, start, vec.scale(z, side.sign), side.length.n)
             for side in reads):
         return None
-    return Refusal("The measured end of this extrude does not match its length, so it is not copied.")
+    return Refusal(shared.END_DIFFERS)
 
 
 def facts_of(plan):

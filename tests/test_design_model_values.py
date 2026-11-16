@@ -5,7 +5,6 @@ import unittest
 from tests import context  # noqa: F401
 
 from lib.design_model.values import Quantity, Sized, negated, negated_text, number, numbers_of, reads_in
-from lib.orca_translate.context import Context
 
 
 class QuantityTest(unittest.TestCase):
@@ -39,12 +38,6 @@ class WrittenValueTest(unittest.TestCase):
         flipped = negated(written)
         self.assertEqual((flipped["expr"], number(flipped), flipped.reads), ("-(w + 1)", -5.0, ("w",)))
         self.assertEqual(numbers_of({"a": [written, 2.0]}), {"a": [5.0, 2.0]})
-
-
-class OrcaSharesTheTypeTest(unittest.TestCase):
-    def test_a_context_value_is_the_shared_quantity(self):
-        ctx = Context({"items": []}, None, None)
-        self.assertIsInstance(ctx.quantity({"data": {}}, "x", 3), Quantity)
 
 
 if __name__ == "__main__":

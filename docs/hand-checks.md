@@ -292,5 +292,12 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     one at another place), and note `params["side_one.taper_deg"]` of the extrude to the plane. The two sided cut is
     copied with side one along the stored direction. The tapered extrude to the plane is copied with its taper and
     ends on the plane. The extrude from the face with an offset is left out with "This extrude starts at a distance
-    from a face or plane, which is not copied yet."; note which way Fusion moved its start (along the sketch normal
+    from a face or plane, which is not copied."; note which way Fusion moved its start (along the sketch normal
     or along the face's normal), so a later copy can follow it.
+30. OR3, the left out steps under the body picker of Export for Orca. Model a 40 x 20 x 10 mm plate with its corner at the
+    origin, then add a Thicken step on one of its faces (a type that the copy does not make), and a Coil step.
+    Export: open Export for Orca and pick the plate. Under the body picker the dialog lists "Likely left out of the
+    copy:" with one line for each of the two steps: "name: reason", and "Tip: ..." for the Thicken step (build the
+    solid with an extrude, sweep, loft or shell) but no tip for the Coil step (the coil tip is about Paramability).
+    Pick no body: the list goes. Export: the result window lists the same two steps with the same words. Then remove
+    both steps and pick the body again: no list shows.
