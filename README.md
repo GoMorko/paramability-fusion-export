@@ -36,6 +36,8 @@ For example, a Pattern on Path is copied only when its path is one straight line
 Some places stay where they are in the copy, for example an axis or a plane that a step turns about or mirrors
 across. The add-in marks each size that may move such a place "may give unexpected results". When it cannot tell
 what a place is, it marks every size that the steps before it use (`docs/limits.md`).
+The same holds when Fusion picked the edges of a round set by chord length from faces or chains of edges: the copy
+picks the edges one by one, and at other sizes those faces or chains may hold other edges.
 Paramability then shows the original shape and a list of the missing steps.
 
 ## Install

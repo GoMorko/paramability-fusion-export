@@ -6,8 +6,10 @@ step the radius of the round there; `design_model.steps.finish` reads what the s
 A chord length set is a plain round. Its radius is chord / (2 sin(a / 2)), where `a` is the angle between the
 outward normals of the edge's two faces. The angle must be the same along each edge, and the radius measured on the
 round must match. Edges with different angles get their own size (`edgeSizes`). The radius follows the chord length
-scaled by a constant only while no size can turn the faces (`design_model.edges.angle_sizes`). Otherwise the radius
-is written as its number, and the chord length and the sizes that may turn the faces are marked.
+scaled by a constant only while both faces are straight across the edge (`finish.straight_across`: flat, or a
+cylinder or cone the edge goes round) and no size can turn the faces (`design_model.edges.angle_sizes`). Otherwise
+the radius is written as its number, the chord length is pinned, and the sizes that may turn or bend the faces are
+marked. On a face that curves across the edge the factor also depends on how it curves.
 
 A changing radius is written with `sizeEnd`: the radius changes evenly along the edge from `size` at the end lowest
 along x (then y, then z) of the recipe to `sizeEnd` at the other end. The copy is made only for one edge in a step
@@ -70,13 +72,18 @@ def chord_sizes(ctx, item, one, quantity):
     turners = set()
     for edge, _ in found:
         turners |= set(part_edges.angle_sizes(ctx.table, ctx.capture, item, edge.get("side_faces") or []))
-    if turners:
+    curved = not all(sets_of.straight_across(edge) for edge, _ in found)
+    if curved:
+        values.pin(ctx, item, one.path("chord_length"), "the round in %s is set by its chord length on a face that "
+                   "curves across the edge, and the copy writes its radius" % _name(item))
+    elif turners:
         values.pin(ctx, item, one.path("chord_length"), "the round in %s is set by its chord length, and the copy "
                    "writes its radius" % _name(item))
-        if not _optimistic(ctx):
+    if curved or turners:
+        if turners and not _optimistic(ctx):
             ctx.doubt([name for name in ctx.table.ticked if name in turners],
-                      "the radius of the round in %s changes with the angle between its faces, which may turn "
-                      "with these sizes" % _name(item))
+                      "the radius of the round in %s changes with the angle between its faces%s, which may change "
+                      "with these sizes" % (_name(item), " and with how they curve" if curved else ""))
         chord = Quantity(one.chord)
     else:
         chord = one.chord_size(quantity)

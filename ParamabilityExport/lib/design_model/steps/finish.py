@@ -7,9 +7,10 @@ reason to give and how to name the edges.
 - `RoundSet`: the kind (`CONSTANT`, `VARIABLE`, `CHORD_LENGTH`, `ASYMMETRIC`, or anything else Fusion has), the radius
   and the smoothness of the join; for a chord length set the chord, for a changing radius the radii at the two ends
   and the number of radii set between them.
-- `face_angle`, `chord_radius`, `matches_radius`, `law`: what the samples of an edge (`samples` of the edge records)
-  show. The angle between the edge's two faces, the radius a chord length gives at that angle, whether the radius
-  measured on the round matches a radius, and how a changing radius runs along the edge.
+- `face_angle`, `straight_across`, `chord_radius`, `matches_radius`, `law`: what the samples of an edge (`samples`
+  of the edge records) show. The angle between the edge's two faces, whether both faces are straight across the
+  edge, the radius a chord length gives at that angle, whether the radius measured on the round matches a radius,
+  and how a changing radius runs along the edge.
 - `ChamferSet`: the kind (`EQUAL`, `TWO_DISTANCES`, `DISTANCE_ANGLE`), the first distance and the second measure
   (`second` when the two sides differ, `held` when it is a second way to write an even chamfer), and `problem` when
   a value cannot be read. `sides` splits the edges of an uneven chamfer by the face that takes the first distance,
@@ -292,6 +293,36 @@ def face_angle(edge):
     if not angles or max(angles) - min(angles) > FACE_ANGLE_TOL:
         return None
     return sum(angles) / len(angles)
+
+
+# How far from square (the cosine of the angle) a cylinder or cone axis may run to the edge for the face to be
+# straight across it.
+SQUARE_TOL = 1e-6
+
+
+def straight_across(edge):
+    """True when each of the edge's two faces (`side_faces`) is straight across the edge at every sample: a flat face,
+    or a cylinder or a cone whose axis runs square to the edge there (the edge goes round the axis, and a cut square
+    to the edge holds the axis). Across such faces the radius of a round is its chord length times a factor of the
+    angle between them alone; on a face that curves across the edge (a sphere, a torus, a cylinder along the edge)
+    the factor also depends on how the face curves. False when the faces or the samples cannot be read."""
+    faces = edge.get("side_faces")
+    found = samples(edge)
+    if not isinstance(faces, list) or len(faces) != 2 or not found:
+        return False
+    tangents = [s.get("tangent") for s in found]
+    if not all(isinstance(t, list) and len(t) == 3 and vec.length(t) > 0 for t in tangents):
+        return False
+    for face in faces:
+        surface = face.get("surface") if isinstance(face, dict) else None
+        if surface == "Plane":
+            continue
+        axis = face.get("axis") if surface in ("Cylinder", "Cone") else None
+        if not isinstance(axis, list) or len(axis) != 3 or vec.length(axis) <= 0:
+            return False
+        if any(abs(vec.dot(vec.unit(axis), vec.unit(t))) > SQUARE_TOL for t in tangents):
+            return False
+    return True
 
 
 def chord_radius(chord, angle):

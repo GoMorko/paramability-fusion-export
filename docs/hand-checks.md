@@ -525,6 +525,11 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     `0.707106781 * Chord`, and `Chord` is a size. Change `Chord` to 5 in Paramability: the round grows like Fusion's.
     Export the second box: the radius is 3 / (2 sin(a / 2)), where a is the angle between the slanted face and the
     face beside it, and matches the measured `radius`. If the measured radius differs, note both numbers.
+    On a third part, extrude a circle of diameter 30 mm up 10 mm and round its top edge with a Chord Length fillet of
+    `Chord`; on a fourth, round the top edge of a 40 x 20 x 10 mm box whose top was cut by a sphere of radius 60 mm.
+    Export the third part with `Chord` ticked: in `report.json` the cylinder in `side_faces` has an `axis` along Z and
+    the round follows `Chord`. Export the fourth: the radius is a number, `Chord` is not a size, and the reason says
+    the round sits on a face that curves across the edge.
 50. VR1, a variable radius: is Fusion's change even? Model a 60 x 20 x 20 mm box with its corner at the origin.
     Round the front top edge (along X) with a fillet whose type is Variable Radius: 1 mm at the start, 5 mm at the
     end, no radii between them. On a copy, round the same edge with 5 mm at the start and 1 mm at the end.
@@ -549,7 +554,10 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     `report.json` the path pattern data has `start_point` 0, `flip` false and `along_path` true, and `elements` hold
     the moves of the copies from the original. Then set `Count` to 4 in Fusion: note whether Fusion puts the fourth
     hole past the end of the line, leaves it out, or fails (the copy keeps the copies on the path). Afterwards the
-    design is as before.
+    design is as before. On another copy, set the arc pattern's start point to 0.75 and pick the arc so that the path
+    runs from (50, 20) to (70, 20), against the arc. In `report.json` the path curve has `opposed` true. The copy
+    counts the start point from the start of the path: 7.9 mm of arc lie ahead of it and the copies reach 10 mm, so
+    the pattern is left out as running past the end. Note where Fusion puts the copies (`elements`).
 52. TD3, a tapped hole with a counterbore and one with a countersink. Make a plate 40 x 40 x 12 mm. Add a Hole at
     (10, 20) on the top face: Counterbore, counterbore 10 mm across and 3 mm deep, "Tapped", "Modeled" ticked,
     M6x1, 10 mm deep, full length thread. Add a Hole at (30, 20): Countersink, 12 mm across at 90 degrees, tapped

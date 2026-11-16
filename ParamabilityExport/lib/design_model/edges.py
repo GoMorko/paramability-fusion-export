@@ -1,6 +1,7 @@
 """Edges and faces of the part matched to the straight extrudes that made them: which sizes may turn a pattern
 direction taken from one, which may change the angle between two faces, and which may change the thickness a tapped
-hole goes through.
+hole goes through. Also which sizes may turn or stretch a sketch line a step takes as numbers (`line_sizes`): only
+the dimensions the sketch solver shows on the gap between its ends, and what moves the sketch plane.
 
 Both outputs write such a direction and such a thread length as numbers. In general every size read before the step
 may change them (`reach.reference_sizes`, `reach.hole_end_sizes`). The capture can show less, but only for a part
@@ -183,32 +184,69 @@ def _graph(capture, profile):
     return found[0] if len(found) == 1 else None
 
 
-def _keeps_direction(capture, table, profile, line):
-    """True when the sketch solver gives the ends of the outline's `line` a gap that turns with no size."""
-    record = _graph(capture, profile)
-    if record is None:
-        return False
+def _line_gaps(capture, table, source, line):
+    """The gaps `[x, y]` from the start to the end of the sketch line `line` (`start`, `end` in the sketch's own
+    plane) of the sketch `source` names (`sketch_token`, else `sketch`), as `Expr`s of the sketch's dimensions and
+    measured inputs, from the sketch solver (default reading); None when the line is not in the sketch graph or the
+    solver does not give both ends."""
+    record = _graph(capture, source)
+    if record is None or not isinstance(line, dict):
+        return None
     xy = {p["id"]: p["xy"] for p in record.get("points") or [] if isinstance(p, dict) and p.get("xy")}
     ends = [line.get("start"), line.get("end")]
+    if not all(isinstance(p, (list, tuple)) and len(p) >= 2 for p in ends):
+        return None
 
     def at(point):
-        return next((pid for pid, found in xy.items() if vec.length(vec.sub(list(found) + [0.0],
-                                                                              list(point) + [0.0])) <= TOL_MM), None)
+        return next((pid for pid, found in xy.items() if vec.length(vec.sub(list(found[:2]) + [0.0],
+                                                                              list(point[:2]) + [0.0])) <= TOL_MM),
+                    None)
     ids = [at(p) for p in ends]
     if None in ids or not any(c.get("kind") == "line" and set(c.get("points") or ()) == set(ids)
                               for c in record.get("curves") or [] if isinstance(c, dict)):
-        return False
+        return None
     try:
         linked = bool(reach.linked_sizes(table, record.get("sketch")))
         solution = solve_sketch(record, None, constants_of(record, linked))
         a, b = solution.points.get(ids[0]), solution.points.get(ids[1])
         if not a or not b or not all(v.derived for v in a + b):
-            return False
-        gaps = [b[k].expr - a[k].expr for k in (0, 1)]
+            return None
+        return [b[k].expr - a[k].expr for k in (0, 1)]
     except Exception:  # a sketch the solver cannot read keeps the general sizes
+        return None
+
+
+def _keeps_direction(capture, table, profile, line):
+    """True when the sketch solver gives the ends of the outline's `line` a gap that turns with no size."""
+    gaps = _line_gaps(capture, table, profile, line)
+    if gaps is None:
         return False
     zero = [g.is_constant and abs(g.const) <= TOL_MM for g in gaps]
     return any(zero) or all(g.is_constant for g in gaps)
+
+
+def line_sizes(table, capture, item, source, line):
+    """Fusion names of the ticked sizes that may turn the sketch line `line` (`start`, `end` in the sketch's own
+    plane) that the step `item` uses, or change its length, in table order. `source` names the sketch (`sketch`,
+    `sketch_token`) and says what it sits on (`reference`, `projected`), as for `reach.sketch_line_sizes`, which gives
+    the answer in general. When the sketch solver gives the gap between the line's ends as formulas of the sketch's
+    own dimensions (no projected or linked geometry), only the sizes behind those dimensions and the sizes that may
+    move the sketch plane (`reach.placement_sizes`) can turn or stretch the line."""
+    if table is None:
+        return []
+    timeline = capture.get("items") or []
+    sketch = source.get("sketch") or ""
+    names = reach.sketch_line_sizes(table, timeline, item, sketch, source.get("reference"), source.get("projected"))
+    gaps = _line_gaps(capture, table, source, line)
+    if gaps is not None:
+        leaves = {leaf for gap in gaps for leaf in gap.names()}
+        if not any(leaf.startswith("@") for leaf in leaves):
+            on = source.get("reference") if isinstance(source.get("reference"), dict) else {"kind": "other"}
+            found = set(reach.placement_sizes(table, timeline, {"sketch": sketch, "reference": on}, item.get("index")))
+            for leaf in leaves:
+                found |= set(table.depends(leaf))
+            names = names & found
+    return [name for name in table.ticked if name in names]
 
 
 def _runs_along(frame, line, direction):

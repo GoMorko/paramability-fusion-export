@@ -14,7 +14,7 @@ from ...capture_model import gap_hints
 from ...design_model.steps import finish as sets_of
 from ...design_model.steps.repeat import repeated_items
 from ...design_model.values import Sized, number, reads_in
-from ...design_model import words as shared
+from ...design_model import reach, words as shared
 
 from .. import values
 from ..faces import follow, picks
@@ -36,20 +36,25 @@ def _split_note(ctx, entries):
                  % (len(entries), picks.MAX_NEAR_POINTS))
 
 
-def _edge_steps(ctx, item, kind, edges, sizes, extra=None, sets=()):
+def _edge_steps(ctx, item, kind, edges, sizes, extra=None, sets=(), own_pick=True):
     """`round` or `bevel` steps over `edges` as result Entries, one per group of edges that fits a pick. `sizes` is one
     size Quantity per point of the edges, in order; steps with mixed sizes carry `edgeSizes`. `extra` holds more fields
-    of every step (the second measure of a chamfer). `sets` are the sets (`design_model.steps.finish`) the edges come from."""
+    of every step (the second measure of a chamfer). `sets` are the sets (`design_model.steps.finish`) the edges come
+    from. `own_pick` False keeps Fusion's own picks (faces, tangent chains) out, for edges whose size depends on the
+    edge: an edge such a pick takes in at other sizes would get a size the copy cannot give it. The sizes that may
+    change which edges those picks hold are then marked (`_mark_own_picks`)."""
     extra = extra or {}
     even = all(s.same_as(sizes[0]) for s in sizes)
     whole = follow.whole_edges(ctx, edges) if even else None
     if whole is not None:
         reads = next(p.followed_reads for p in ctx.placers if getattr(p, "id", None) == whole["featureEdges"])
         return [_with_plain(dict({"kind": kind, "edges": whole, "size": sizes[0].json()}, **extra), edges, reads)]
-    picked = _input_pick(ctx, item, edges, sets) if even else None
+    picked = _input_pick(ctx, item, edges, sets) if even and own_pick else None
     if picked is not None:
         step = dict({"kind": kind, "edges": picked, "size": sizes[0].json()}, **extra)
         return [_with_plain(step, edges, reads_in(picked), always=True)]
+    if not own_pick:
+        _mark_own_picks(ctx, item, edges, sets)
     steps, at = [], 0
     for group in picks.edge_groups(edges):
         count = sum(len(edge["points"]) for edge in group)
@@ -60,6 +65,27 @@ def _edge_steps(ctx, item, kind, edges, sizes, extra=None, sets=()):
             step["edgeSizes"] = [s.json() for s in own]
         steps.append(_with_plain(step, group))
     return steps
+
+
+def _picks_own_edges(one):
+    """True when Fusion picks the edges of the set `one` itself, from faces or tangent chains: at other sizes such a
+    pick can hold more or fewer edges."""
+    return "face" in (one.entry.get("input_kinds") or []) or bool(one.entry.get("tangent_chain"))
+
+
+def _mark_own_picks(ctx, item, edges, sets):
+    """The copy picks `edges` one by one: when a set they come from was picked by Fusion from faces or tangent chains,
+    mark the sizes that may change which edges those faces or chains hold (`reach.any_face_sizes`: every size read
+    before the step). The first translation of an export marks nothing."""
+    if ctx.table is None or getattr(ctx.motion, "optimistic", False):
+        return
+    wanted = {id(edge) for edge in edges}
+    if not any(_picks_own_edges(one) and any(id(edge) in wanted for edge in one.edges) for one in sets):
+        return
+    names = reach.any_face_sizes(ctx.table, ctx.capture.get("items") or [], item)
+    if names:
+        ctx.doubt(names, "%s picks its edges from faces or chains of edges, which may hold other edges at other "
+                  "sizes; the copy picks the edges it has now" % item.get("name", "a step"))
 
 
 def _with_plain(step, edges, reads=None, always=False):
@@ -238,7 +264,7 @@ def fillet(ctx, step):
     # Fusion's own picks (faces, tangent chains) can take in edges at other sizes; only a round of one radius gives
     # them the same size as Fusion does.
     plain = all(one.kind == sets_of.CONSTANT for one in sets)
-    entries = _edge_steps(ctx, item, "round", edges, point_sizes, extra, sets=sets if plain else ())
+    entries = _edge_steps(ctx, item, "round", edges, point_sizes, extra, sets=sets, own_pick=plain)
     _split_note(ctx, entries)
     return StepResult(entries)
 

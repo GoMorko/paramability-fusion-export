@@ -892,7 +892,9 @@ against `samples`.
   two main curvatures there, the one whose direction lies more across the edge than along it, as 1 / curvature in
   mm; null when it cannot be measured. A `chordLength` EDGE also has `side_faces`: per face of the edge
   `{ "face_point", "surface", "normal" }` (`pointOnFace`, the surface kind, the outward normal there), which
-  `design_model/edges.py` matches to the extrudes that made them. An EDGE whose samples cannot be read has none of
+  `design_model/edges.py` matches to the extrudes that made them. A `Cylinder` or `Cone` face also has `axis`, the
+  unit direction of `Cylinder.axis` or `Cone.axis` (null when it cannot be read); the translator uses it to tell a
+  face the edge goes round from one that curves across the edge. An EDGE whose samples cannot be read has none of
   these keys.
 
 **ChamferFeature** (`edgeSets`, `cornerType`):

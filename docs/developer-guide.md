@@ -3776,7 +3776,8 @@ edge than along it. The other curvature comes from the bend of the edge itself. 
 measure has a null radius.
 
 The reader also reads the kind of curve of the edge (`curve`). For a chord length set, it records the two faces of
-the edge (`side_faces`): a point on each face, the surface kind and the outward normal.
+the edge (`side_faces`): a point on each face, the surface kind and the outward normal. For a cylinder or a cone, it
+also records the direction of the axis (`axis`, null when the reader cannot read it).
 
 #### A chord length set
 
@@ -3797,19 +3798,41 @@ The handler (`finishes/measured_rounds.py`, `chord_sizes`) does these steps for 
 
 Edges with different angles get different radii. The step then writes `edgeSizes`.
 
-The radius follows the size of the chord length only when no size can turn the faces. The handler asks
-`design_model/edges.py` (`angle_sizes`) for the sizes that can change the angle between the faces of each edge:
+The formula is exact only when each face is straight across the edge. Look at a cut through the part that is
+square to the edge. In this cut, each face must be a straight line. Then the round is a circle that touches two
+lines, and only the angle between the lines sets the factor between the chord length and the radius. These faces are
+straight across the edge (`finish.straight_across`):
 
-- When there are no such sizes, the radius is the chord length times a constant number (1 / (2 sin(a / 2))). The
-  formula is exact at all sizes.
-- When there are such sizes, the radius is written as a number. The chord length is pinned
-  (`values.pin`): its sizes are not sizes of the copy, and the reason says that the copy writes the radius. Each
-  size that can turn the faces is marked "may give unexpected results". The first translation of an export marks
-  nothing.
+- a flat face;
+- a cylinder or a cone whose axis is square to the edge at each sample. The edge then goes round the axis, for
+  example the top edge of a round boss. The cut square to the edge holds the axis, and it cuts the face along a
+  straight line.
+
+Other faces curve across the edge: a sphere, a torus, or a cylinder whose axis is along the edge. On such a face, the
+factor also changes with the radius of the face. When the reader did not read the surface kind or the axis, the
+handler also counts the face as curved.
+
+The radius follows the size of the chord length only when both faces are straight across the edge and no size can
+turn the faces. The handler asks `design_model/edges.py` (`angle_sizes`) for the sizes that can change the angle
+between the faces of each edge:
+
+- When both faces are straight across the edge and there are no such sizes, the radius is the chord length times a
+  constant number (1 / (2 sin(a / 2))). The formula is exact at all sizes.
+- When a face curves across the edge, or when there are such sizes, the radius is written as a number. The chord
+  length is pinned (`values.pin`): its sizes are not sizes of the copy, and the reason says that the copy writes the
+  radius. Each size that can turn the faces is marked "may give unexpected results". For a face that is not flat,
+  `angle_sizes` gives every size that the steps before the round read, so the sizes that can bend the face are also
+  marked. The first translation of an export marks nothing.
 
 The handler writes one point for each edge. It does not use the picks that Fusion was given (the faces of the set, or
 a tangent chain). At other sizes, such a pick can include an edge that has a different angle, and thus a different
-radius.
+radius. The copy cannot give that edge its own radius.
+
+But a pick of Fusion can also hold more or fewer edges at other sizes. The copy with one point for each edge does not
+see these edges. Thus, when a set was picked from faces or from a tangent chain (`input_kinds` has `face`, or
+`tangent_chain` is true), the handler marks the sizes that can change which edges the pick holds
+(`finish._mark_own_picks`). These are all the sizes that the steps before the round read (`reach.any_face_sizes`).
+Each one is marked "may give unexpected results". The same rule applies to a round with a changing radius.
 
 #### A changing radius set
 
@@ -3877,7 +3900,10 @@ The shared reader `design_model/steps/path_pattern.py` (`layout`) gives the plai
 4. A setting that cannot be read is a problem.
 
 `layout` also gives `room`: how far the copies can go from the start point to each end of the path. On a closed path
-(a circle), the room is the length of the path. It is not known what Fusion does with copies past an end of the path.
+(a circle), the room is the length of the path. The start point is a fraction of the path, counted from the start of
+the path. A curve can run against the path (`opposed`). Then the path starts at the end of the curve. For a line,
+`layout` turns the direction. For an arc, `layout` turns the sense of the turn. In both cases, the room toward the end
+of the path is the length x (1 - start point), and the room toward the start is the length x the start point. It is not known what Fusion does with copies past an end of the path.
 Thus the translator keeps the copies on the path.
 
 The handler is `translator/repeat/repeat_path.py`, `path`. It does these steps:
@@ -3890,17 +3916,30 @@ The handler is `translator/repeat/repeat_path.py`, `path`. It does these steps:
    distance. For a `spacing` distance, it is the distance x (count - 1). A travel that is longer than the room leaves
    the step out. When the count or the distance follows sizes, the travel can grow. Then the handler cuts the ranges
    of those sizes to where the copies stay on the path (`_keep_on_path`). When no cut can do that, it marks the sizes.
-4. It marks the sizes that may move or turn the path (`_mark_path`). For a sketch path, these are the sizes of the
-   sketch, the sizes that move the plane of the sketch, and the sizes before a sketch with projected geometry
-   (`reach.sketch_line_sizes`). For an edge of the part, these are the sizes of the steps before it
-   (`reach.reference_sizes`). The path is written as numbers.
+4. It marks the sizes that may change what the copy takes from the path (`_mark_path`). The path is written as
+   numbers. For an edge of the part, these are the sizes of the steps before it (`reach.reference_sizes`). For a
+   sketch path, the handler starts from the general set: the sizes of the sketch, the sizes that move the plane of
+   the sketch, and the sizes before a sketch with projected geometry (`reach.sketch_line_sizes`). Then it removes
+   sizes when it can show that they change nothing that the copy uses (`_sketch_path_sizes`):
+   - A line gives only its direction and its length. The place of the line does not move the copies. The sketch
+     solver gives the gap between the two ends of the line as formulas of the dimensions of the sketch
+     (`edges.line_sizes`). When the formulas read no projected or linked geometry, only the sizes behind these
+     dimensions and the sizes that move the plane of the sketch can turn or stretch the line. When the solver cannot
+     give the gap, the general set stays.
+   - When the size probe measured the path (its key `<item>/path` is in the motion file), a size that the probe
+     tried and that moved no value the copy uses is removed. For a line, these values are the gaps between the ends.
+     For an arc or a circle, they are every point of the curve, its radius and the place of its plane. A value that
+     the probe could not follow (the plane turned, the sketch was not read) keeps its sizes. A size that the probe
+     did not try stays.
 5. It writes the data of the plain pattern and gives it to the rectangular or the circular handler. The item keeps its
    index and name.
 
 For a line, the data has `direction_one` (the line), `quantity_one`, `distance_one` and the distance type. The
-parameters of the count and the distance go under the new names. The sketch or the edge of the path goes in as
-`direction_one_sketch` or `direction_one_place`. Thus the rectangular handler marks the sizes that may turn the line,
-as it does for a direction of its own (`ref_motion.check_own_direction`).
+parameters of the count and the distance go under the new names. An edge of the path goes in as
+`direction_one_place`. Thus the rectangular handler marks the sizes that may turn the edge, as it does for a direction
+of its own (`ref_motion.check_own_direction`). A sketch line goes in as a `direction_one_place` that is marked
+`fixed`, because step 4 already marked the sizes that may turn or stretch the line. The rectangular handler then marks
+nothing more for the direction.
 
 For an arc or a circle, the data has the axis (marked `fixed`, because the handler marked the sizes of the path), the
 count and the total angle. The radius is read rounded. Thus the handler takes the turn between copies from the
@@ -4331,7 +4370,7 @@ The calls with most risk, since they change the design or depend on Fusion's exa
 | `Feature.faces` | `read_gap_reach.py` | May not list every face after later steps. An empty or short list counts as "reached". |
 | `TemporaryBRepManager` | `read_intersect.py`, `read_split.py` | Tests an intersect on copies: the volumes of a Combine, and which pieces of a split lie inside the tool when no face tells. It must never touch the design. A boolean that fails gives no answer. |
 | `ThreadFeature.threadInfo`, `isFullLength`, `threadLength`, `threadOffset`, `inputCylindricalFaces`; the thread of `HoleFeature` | `read_thread.py`, `read_solid.py` | The member names and the units come from the API reference. Where a tapped hole keeps its thread (`thread`, `threadInfo` or the hole itself) is not confirmed: hand check TD2. A member that is missing reads as null, and the thread is left out. |
-| `ChordLengthFilletEdgeSet.chordLength`, `VariableRadiusFilletEdgeSet.startRadius`, `endRadius`, `midPositions`, `CurveEvaluator3D.getTangent`, `SurfaceEvaluator.getCurvature` | `read_finish.py` | The radius of the round is measured from the curvature of the face that the step made. Hand checks CR1 and VR1 confirm the rule of a chord length and the change of a changing radius. A member that is missing reads as null, and the round is left out. |
+| `ChordLengthFilletEdgeSet.chordLength`, `VariableRadiusFilletEdgeSet.startRadius`, `endRadius`, `midPositions`, `CurveEvaluator3D.getTangent`, `SurfaceEvaluator.getCurvature`, `Cylinder.axis`, `Cone.axis` | `read_finish.py` | The radius of the round is measured from the curvature of the face that the step made. The axis of a cylinder or cone beside a chord length edge tells if the face is straight across the edge. Hand checks CR1 and VR1 confirm the rule of a chord length and the change of a changing radius. A member that is missing reads as null: the round is left out, or, for an axis, the chord length keeps its number. |
 | `CoilFeature.faces`, `Edge.evaluator`, `ModelParameter.role`, `ModelParameter.createdBy` | `read_coil.py` | The API gives a coil no type, axis or hand. The reader takes the parameter roles, the faces and points along the edges. A member that is missing leaves the coil out. |
 | `Component.findBRepUsingRay`, `ToEntityExtentDefinition.isChained` | `read_face_rays.py`, `read_solid.py` | The rays from the outline of an extrude to a curved face it ends on, with the marker before the step. Hidden bodies are included. Hand check EX3 confirms that a ray meets the face when the outline lands on it, and misses where the outline reaches past it. No answer gives null, and the step is left out. |
 | `BRepBody.lumps`, `Component.bRepBodies` | `probe_state.py` | Read at each try for the pieces of the part. Nothing is recomputed. |

@@ -90,10 +90,10 @@ def _round(curve, opposed, start):
         # The arc runs from its start through its middle; that sense is the path's unless the path is opposed.
         turning = normal if side > 0 else vec.scale(normal, -1.0)
         length = 2.0 * half * radius
+        # The start point is counted from the start of the path, as on a line: an opposed arc swaps only the sense.
         room = (length * (1.0 - start), length * start)
     if opposed:
         turning = vec.scale(turning, -1.0)
-        room = (room[1], room[0])
     return PathLayout("round", room, axis={"point": list(centre), "dir": turning}, radius=float(radius))
 
 

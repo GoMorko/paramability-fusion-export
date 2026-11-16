@@ -6,6 +6,8 @@ import math
 import unittest
 
 from tests import context  # noqa: F401
+from tests.derived_fixtures import dimension
+from tests.sketch_solve_helpers import P, Sketch, rectangle
 from tests.test_translate_sized import on_fixture, param, run
 from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of, variant, verdict_of
 
@@ -32,12 +34,27 @@ def sampled(start, end, radius_at, sides=None, token="e0", curve="Line3D"):
             sample["sides"] = sides
         samples.append(sample)
     middle = [a + d / 2 for a, d in zip(start, direction)]
-    return {"token": token, "closed": False, "points": [middle], "curve": curve, "samples": samples}
+    found = {"token": token, "closed": False, "points": [middle], "curve": curve, "samples": samples}
+    if sides is not None:
+        found["side_faces"] = [{"face_point": middle, "surface": "Plane", "normal": normal} for normal in sides]
+    return found
 
 
 def front(radius_at, sides=SQUARE):
     """The top front edge, from x 0 to 40."""
     return sampled([0, 0, 10], [40, 0, 10], radius_at, sides)
+
+
+def box_graph():
+    """The sketch graph of the 40 by 20 mm outline of the box, from the origin, with fixed dimensions."""
+    sketch = Sketch()
+    corners = [0, sketch.point(40.0, 0.0), sketch.point(40.0, 20.0), sketch.point(0.0, 20.0)]
+    rectangle(sketch, corners)
+    dimension(sketch, "linear", [P(0), P(corners[1])], 40.0, "g1", "40 mm", "horizontal")
+    dimension(sketch, "linear", [P(0), P(corners[3])], 20.0, "g2", "20 mm", "vertical")
+    record = sketch.record()
+    record["sketch"] = "Sketch1"
+    return record
 
 
 def chord_set(*edges, chord=2.0):
@@ -112,6 +129,40 @@ class ChordLengthTest(unittest.TestCase):
         self.assertIn("corner_mm", [entry["name"] for entry in result.dropped if entry["used"]])
 
 
+    def test_a_face_that_curves_across_the_edge_keeps_the_radius_and_pins_the_chord(self):
+        def on(surface, axis=None):
+            def edit(data):
+                edge = front(lambda at: 3 * math.sqrt(0.5))
+                edge["side_faces"][1].update(surface=surface, axis=axis)
+                with_sets(chord_set(edge, chord=3.0))(data)
+                data["params"] = {"sets.0.chord_length": param("d4", "corner_mm", 3.0)}
+            result, _ = run(*on_fixture("fillet_four_edges", edit))
+            (step,) = steps_of(result.recipe, "round")
+            return step["size"]
+        self.assertIn("corner_mm", on("Cylinder", [0, 0, 1])["expr"])
+        for name, surface, axis in (("a sphere", "other", None), ("a cylinder along the edge", "Cylinder", [1, 0, 0]),
+                                    ("a cylinder whose axis was not read", "Cylinder", None)):
+            with self.subTest(name):
+                self.assertAlmostEqual(on(surface, axis), 3 * math.sqrt(0.5))
+
+    def test_a_chain_or_face_pick_marks_the_sizes_that_may_add_edges_to_it(self):
+        def picked(chain):
+            def edit(data):
+                edge = dict(front(lambda at: 3 * math.sqrt(0.5)), seed=True)
+                # Points inside the top and the front face of the box, which its extrude made.
+                for face, point in zip(edge["side_faces"], ([20, 10, 10], [20, 0, 5])):
+                    face["face_point"] = point
+                with_sets(dict(chord_set(edge, chord=3.0), tangent_chain=chain))(data)
+                data["params"] = {"sets.0.chord_length": param("d4", "corner_mm", 3.0)}
+            capture, ticked = on_fixture("fillet_four_edges", edit)
+            capture["items"][1]["data"]["params"] = {"side_one.distance": param("d1", "wall_mm * 5", 10.0)}
+            capture["sketch_graphs"] = [box_graph()]
+            result, _ = run(capture, ticked)
+            return [entry["name"] for entry in result.loose]
+        # The box height does not turn its faces, but it may add edges to a chain that Fusion picks itself.
+        self.assertEqual((picked(False), picked(True)), ([], ["wall_mm"]))
+
+
 class ChangingRadiusTest(unittest.TestCase):
     def test_the_size_is_the_radius_at_the_end_lowest_along_x(self):
         cases = (("measured from the start", front(even(1, 3)), (1.0, 3.0)),
@@ -131,6 +182,16 @@ class ChangingRadiusTest(unittest.TestCase):
         with_sets(changing_set(upright))(capture["items"][-1]["data"])
         (step,) = steps_of(translate(capture).recipe, "round")
         capture["up_axis"] = "y"
+        (turned,) = steps_of(translate(capture).recipe, "round")
+        self.assertEqual([(s["size"], s["sizeEnd"]) for s in (step, turned)], [(1.0, 3.0), (3.0, 1.0)])
+
+    def test_the_ends_are_read_in_the_recipe_frame_of_a_turned_component(self):
+        # The component is turned half round about z: the end at x 0 lies at x 0 and the end at x 40 at x -40.
+        capture = load_capture("fillet_four_edges")
+        with_sets(changing_set(front(even(1, 3))))(capture["items"][-1]["data"])
+        (step,) = steps_of(translate(capture).recipe, "round")
+        capture.setdefault("target", {})["placement"] = {
+            "frame": {"origin": [5, 0, 0], "x": [-1, 0, 0], "y": [0, -1, 0], "z": [0, 0, 1]}}
         (turned,) = steps_of(translate(capture).recipe, "round")
         self.assertEqual([(s["size"], s["sizeEnd"]) for s in (step, turned)], [(1.0, 3.0), (3.0, 1.0)])
 
