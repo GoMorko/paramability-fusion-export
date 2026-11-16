@@ -8,10 +8,11 @@ and splines). A free curve (`kind: other`, with its dense `samples`) becomes spl
 import math
 
 from ...design_model.values import Sized, negated
+from ...geometry.footprint import closed_chain
 from ...geometry.tolerances import CHAIN_TOL
 from ...package.numbers import round9
 
-from . import spline_fit
+from ...geometry import spline_fit
 from ..result import Refusal
 
 RIGHT_ANGLE_TOL = 1e-6
@@ -31,40 +32,6 @@ def _dist(a, b):
 
 def _where(sketch):
     return "An outline in %s" % sketch if sketch else "An outline"
-
-
-def _oriented(curve, reverse):
-    """A chain link: the curve with its start and end swapped when `reverse`. An arc keeps its mid; a free curve
-    runs its samples the other way."""
-    link = dict(curve)
-    if reverse:
-        link["start"], link["end"] = curve["end"], curve["start"]
-        if "samples" in curve:
-            link["samples"] = list(reversed(curve["samples"]))
-    return link
-
-
-def closed_chain(curves):
-    """Order and orient lines and arcs so each starts where the last ended. None when they do not close."""
-    remaining = list(curves)
-    first = remaining.pop(0)
-    chain = [dict(first)]
-    while remaining:
-        tip = chain[-1]["end"]
-        for position, curve in enumerate(remaining):
-            if _dist(tip, curve["start"]) <= CHAIN_TOL:
-                chain.append(_oriented(curve, False))
-            elif _dist(tip, curve["end"]) <= CHAIN_TOL:
-                chain.append(_oriented(curve, True))
-            else:
-                continue
-            del remaining[position]
-            break
-        else:
-            return None
-    if _dist(chain[-1]["end"], chain[0]["start"]) > CHAIN_TOL:
-        return None
-    return chain
 
 
 def _area(chain):

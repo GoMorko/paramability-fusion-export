@@ -16,7 +16,7 @@ and gets points near it.
 import math
 from functools import lru_cache
 
-from ...geometry.plane2d import to_segment
+from .plane2d import to_segment
 
 TOLERANCE_MM = 0.005   # the app's own sampling floor for a spline outline
 MAX_THROUGH = 64       # `through` points of one segment (recipe cap)

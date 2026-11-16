@@ -3,18 +3,17 @@ path. Sharp corners between lines are mitred; an outline on such a corner is car
 since the app needs a smooth start. A full circle that has to be a sweep step becomes two half arcs. Pure."""
 import math
 
-from ...capture_model import gap_hints
 from ...geometry import vec
 from ...package.numbers import round9
 
-from .path_checks import corners_refusal, off_square, outline_reach
-from .path_curves import arc_of, curve_length, joined_lines, polyline, round_point, tangents, turn_deg, turned_round
-from .path_limits import (
-    CLOSED_3D, CLOSED_AT_CORNER, CLOSED_PARALLEL, CLOSED_TAPER, NOT_SQUARE, OFF_PLANE, PLANE_TOL, SMOOTH_JOIN_DEG,
-    STRAIGHT_DEG,
+from ..problems import is_problem
+from .checks import corners_problem, off_square, outline_reach
+from .curves import arc_of, curve_length, joined_lines, polyline, round_point, tangents, turn_deg, turned_round
+from .tolerances import PLANE_TOL, SMOOTH_JOIN_DEG, STRAIGHT_DEG
+from .words import (
+    CLOSED_3D, CLOSED_AT_CORNER, CLOSED_PARALLEL, CLOSED_TAPER, NOT_SQUARE, OFF_PLANE, problem, sharp_corner,
 )
-from .path_writing import flat_frame, flat_plan
-from ..result import Refusal
+from .writing import flat_frame, flat_plan
 
 
 def half_circles(ring):
@@ -31,39 +30,39 @@ def closed_plan(path, ordered, profile_frame, profile_points, options, cut=True)
     the outline sits on such a corner, the path starts in the middle of the first line instead and `moved` carries
     the outline there. A twisting outline needs a smooth path."""
     if options.tapered:
-        return Refusal(CLOSED_TAPER)
+        return problem(CLOSED_TAPER)
     if options.fixed:
-        return Refusal(CLOSED_PARALLEL)
+        return problem(CLOSED_PARALLEL)
     ordered = joined_lines(ordered)
     frame = flat_frame(path.get("frame"), ordered)
     if frame is None:
-        return Refusal(CLOSED_3D)
+        return problem(CLOSED_3D)
     origin, normal = profile_frame["origin"], vec.unit(profile_frame["z"])
     if cut:
         ordered = _cut_at_plane(ordered, origin, normal, profile_points)
-        if isinstance(ordered, Refusal):
+        if is_problem(ordered):
             return ordered
     moved = None
     seam, seam_lines = _junction(ordered[-1], ordered[0])
     if seam > (STRAIGHT_DEG if seam_lines else SMOOTH_JOIN_DEG):
         if options.twisted or not seam_lines:
-            return Refusal(CLOSED_AT_CORNER, cause=gap_hints.SHARP_CORNER)
+            return sharp_corner(CLOSED_AT_CORNER)
         if off_square(tangents(ordered[0])[0], normal):
             ordered = turned_round(ordered)  # the line the outline is square to arrives at the corner
         ordered, moved = _start_mid_line(ordered)
         profile_points = [vec.add(p, moved) for p in profile_points]
     reach = outline_reach(profile_points, ordered[0]["start"], frame["z"])
-    refusal = corners_refusal(ordered, reach, not options.twisted, closed=True)
-    if refusal is not None:
-        return refusal
+    issue = corners_problem(ordered, reach, not options.twisted, closed=True)
+    if issue is not None:
+        return issue
     start = ordered[0]["start"]
     direction = tangents(ordered[0])[0]
     if off_square(direction, normal):
-        return Refusal(NOT_SQUARE)
+        return problem(NOT_SQUARE)
     base = dict(curves=ordered, start=round_point(start), end=round_point(start), direction=round_point(direction),
                 length=round9(sum(curve_length(c) for c in ordered)))
     found = flat_plan(base, ordered, frame, profile_points, options, closed=True)
-    if moved is not None and not isinstance(found, Refusal):
+    if moved is not None and not is_problem(found):
         found.moved = round_point(moved)
     return found
 
@@ -83,10 +82,10 @@ def _start_mid_line(ordered):
 
 def _cut_at_plane(ordered, origin, normal, profile_points):
     """The closed chain turned (and one curve split) so it starts where it meets the outline's plane nearest to the
-    outline, or a Refusal when it never meets the plane."""
+    outline, or a problem when it never meets the plane."""
     found = _plane_crossings(ordered, origin, normal)
     if not found:
-        return Refusal(OFF_PLANE)
+        return problem(OFF_PLANE)
     mean = [sum(p[i] for p in profile_points) / len(profile_points) for i in range(3)] if profile_points else origin
     index, at, fraction, point = min(found, key=lambda c: vec.length(vec.sub(c[3], mean)))
     if at == 0 and fraction == 0.0:

@@ -7,7 +7,8 @@ from tests.test_translate_gaps import FILLET, HOLE, SHELL, tray, unsupported
 from lib.capture_model import gap_hints, step_kinds
 from lib.translator import translate
 
-TRANSLATOR_DIR = os.path.join(context.ADDIN_DIR, "lib", "translator")
+# The translator gives the causes of its own refusals and of the problems of the shared layer it turns into refusals.
+CAUSE_DIRS = [os.path.join(context.ADDIN_DIR, "lib", name) for name in ("translator", "design_model")]
 NO_HINT = {gap_hints.REFUSED, gap_hints.UNSUPPORTED}
 
 
@@ -15,7 +16,8 @@ def _named_causes():
     """The causes the translator gives: every `gap_hints.NAME` it reads, and the causes of the step kind table (a step type's gap cause, a recipe kind's tool cause)."""
     found = {spec.gap_cause for spec in step_kinds.STEP_TYPES if spec.gap_cause}
     found |= {kind.tool_cause for kind in step_kinds.RECIPE_KINDS if kind.tool_cause}
-    paths = sorted(os.path.join(folder, name) for folder, _, names in os.walk(TRANSLATOR_DIR) for name in names)
+    paths = sorted(os.path.join(folder, name) for root in CAUSE_DIRS for folder, _, names in os.walk(root)
+                   for name in names)
     for path in paths:
         if not path.endswith(".py") or os.path.basename(path) == "gap_hints.py":
             continue

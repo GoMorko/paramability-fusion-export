@@ -593,7 +593,7 @@ point lies within 0.0005 mm of the chord, at most 800 points (`truncated: true` 
 when the chords do not add up to the curve's own length, and the translator then refuses the curve). `start`, `end` and `mid` are samples. `tangent_start` and `tangent_end` are unit
 directions of the curve at its ends (`CurveEvaluator3D.getTangent`), left out when they cannot be read; the recipe's
 spline segment has no tangent field, so they are for checks only. A curve that cannot be evaluated has `samples: []`.
-The translator fits the app's spline through points chosen from the samples (`lib/translator/sketch/spline_fit.py`, tolerance
+The translator fits the app's spline through points chosen from the samples (`lib/geometry/spline_fit.py`, tolerance
 0.005 mm between the points, also where the curve runs between two samples, at most 64 points inside one segment, split into several segments past that, at most 1000 points in a loop).
 
 A `NurbsCurve3D` also carries its exact definition from `NurbsCurve3D.getData` (`read_sketch._nurbs`), when Fusion
@@ -1341,7 +1341,7 @@ Tangent Chain is on, and edges the copy can write; otherwise the refusal says wh
   free curves or more than 64 parts, a taper of 45 degrees or more, a twist over 3600 degrees, and a parallel
   outline along a path that turns back past its plane (every tangent must rise at least 0.05 along the outline's
   normal).
-- Closed paths (`lib/translator/paths/paths.py`): a closed chain in one plane becomes a flat path with `closed: true`. The
+- Closed paths (`lib/design_model/paths/closed.py`): a closed chain in one plane becomes a flat path with `closed: true`. The
   chain is cut where it meets the outline's plane nearest to the outline (a line, an arc or a spline sample is split
   in two; a joint is used as it is), turned to start there, and its last segment ends exactly on the start. A sharp
   corner between two lines is mitred, as Fusion builds it (a 3 by 3 mm outline round the 40 by 40 mm top edges of a
@@ -1356,7 +1356,7 @@ Tangent Chain is on, and edges the copy can write; otherwise the refusal says wh
   new body must have the volume of Pappus: the area times the path length less the offset of the outline's centre
   towards the inside times the turn of the path (2 pi, where each mitred corner turning by t counts 2 tan(t / 2)); a
   twisting outline is checked only when its centre sits on the path.
-- Arc and circle paths (`lib/translator/paths/path_writing.py`): the revolve about the arc's axis builds an outline on the
+- Arc and circle paths (`lib/design_model/paths/writing.py`): the revolve about the arc's axis builds an outline on the
   outer side of the arc however wide it is; only an outline that reaches the axis is left out (the reach toward the
   centre counts, along the radius). The check over the size ranges (`sweep/sweep_rules.py`) uses the same rule.
 - Path sizes (`lib/translator/paths/path_motion.py`). A path of sketch lines and arcs that the probe measured (its
@@ -1386,7 +1386,7 @@ Tangent Chain is on, and edges the copy can write; otherwise the refusal says wh
 - `faces_after`: a point and the outward normal of the made start and end faces (`startFaces` and `endFaces` of a
   sweep, `startFace` and `endFace` of a loft), read with the marker after the item. Each side is null when the member
   cannot be read. The key is not a pick.
-  The translator checks a sweep's `end` faces against the planned path end (`lib/translator/sweep/sweep_ends.py`): each
+  The translator checks a sweep's `end` faces against the planned path end (`lib/design_model/steps/sweep.py`, `end_check`): each
   must lie on the plane through the path end that is square to the path's end direction (square to the outline's own
   normal when the outline keeps its direction) and face along it, and a new body's one end face must lie within the
   outline's reach of the path end (not checked with a taper). A mismatch leaves the sweep out; unreadable faces add a
@@ -1471,7 +1471,7 @@ Loft `data`:
 - `rails` and `centerline` come from `centerLineOrRails`: `rails` is the list of rail paths (empty when there are
   none), `centerline` the path when `isCenterLine` is true (then `rails` is empty). Both are null when the member
   cannot be read. `closed` is `isClosed`, `merge_tangent` is `isTangentEdgesMerged`.
-- Pairing check (`lib/translator/loft/loft_volume.py`): for a new body between two parallel outlines of straight lines of
+- Pairing check (`lib/design_model/steps/loft.py`): for a new body between two parallel outlines of straight lines of
   the same corner count, the measured volume must equal the volume of the loft the copy builds, with the corners
   paired as the app kernel pairs them (nearest corners about each outline's centre); another volume means Fusion
   paired them another way and the loft is left out. Where this cannot be told, corner outlines whose sketch frames

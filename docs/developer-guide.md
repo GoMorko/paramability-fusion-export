@@ -1677,11 +1677,14 @@ one folder per family of steps.
   - `extrude/`: `step.py` holds `handle`. Also `plan.py`, `side.py` (`SidePlan`: the plan of one side), `reach.py`,
     `reach_motion.py` (a face or plane placed by the probe's measure), `taper.py`, `through.py`, `through_taper.py`,
     `material.py`, `checks.py`, `built.py`, `order.py`, `common.py`, and `emboss.py` (the Emboss handler).
-  - `sweep/`: `step.py` holds `handle`, with `sweep_*.py` for settings, outline, volume, ends, frames, taper, reach,
-    marks, rules, write and limits.
-  - `paths/`: sweep paths (`paths.py`, `path_curves`, `path_checks`, `path_writing`, `path_closed`, `path_rebuilt`,
-    `path_motion`, `path_model`, `path_limits`).
-  - `loft/`: `step.py`, `loft_sections.py`, `loft_volume.py`.
+  - `sweep/`: `step.py` holds `handle`, with `sweep_*.py` for settings, outline, frames, taper (also the taper read
+    from the volume), reach, marks, rules, write and limits. The outline's points, the volume check and the end face
+    check are in `design_model/steps/sweep.py`.
+  - `paths/`: what the recipe adds to the shared path planner (`design_model/paths/`). `path_limits.py` holds the caps
+    of the recipe (`MAX_SEGMENTS`, `MAX_POINTS`), `options` (the planner options with these caps and the spline fit)
+    and `refusal` (the refusal of a problem of the shared layer). `path_motion.py` holds the path that follows sizes,
+    and `path_rebuilt.py` the rules of a path read back from written numbers, for the checks over the size ranges.
+  - `loft/`: `step.py`, `loft_sections.py`. The volume of the corner pairing is in `design_model/steps/loft.py`.
   - `revolve/step.py`, `hole/step.py` (holes and cosmetic threads) and `hole/thread.py` (modelled threads and the thread
     of a tapped hole, see 3.12).
   - `coil/`: the coil handler (see 3.13). `step.py` holds `handle`. Also `coil_fit.py` (the axis, the hand and the check of
@@ -1701,7 +1704,7 @@ one folder per family of steps.
   `offset_faces.py`, `end_caps.py`, `thin_wall.py`, `crossings.py`, `copy_counts.py`, `meets_part.py` and `floating.py`
   (joins that would float).
 - Sketch values, `sketch/`: `loops.py`, `written_loops.py`, `sketch_motion.py` (sketch values from the motion file),
-  `curved.py` (formulas with sines and products), `spline_fit.py`, `sketch_crossings.py` (`order_ranges` and
+  `curved.py` (formulas with sines and products), `sketch_crossings.py` (`order_ranges` and
   `simple_ranges`, an outline that would cross itself or have a hole reach its edge, and `OutlineChecks`, the shared
   time of these checks), `rect_corners.py` (the corners of a rectangle loop as numbers and as raw size values), `inner_pick.py` (a face picked inside an end face follows one corner; an edge keeps the
   centre of all corners), `face_outline.py` (`may_change`, `doubt`) and `borrowed.py` (`mark_unchecked`: the sizes of
@@ -1801,6 +1804,37 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   settings a sketch is tried at (`moving_sizes`, `override_sets`, `near_values`) and the value of every size at one
   setting (`size_values`, `size_env`). This came from `probe/derived_sizes.py`, and `near_values` and `size_values`
   came from the probe plan and the probe columns. The shadow check of the probe and the Orca output both read it.
+- `problems.py`: `Problem`, the record of something that the layer cannot read, place or build. A problem has a
+  `code` (a short name, for an output that treats one problem in its own way), `words` (one plain sentence for the
+  person) and a `cause` (a cause of `gap_hints.py`, or None). A problem is a fact, not a refusal. Each output turns a
+  problem into its own answer. The recipe output makes a refusal with the same words and the same cause
+  (`translator/paths/path_limits.refusal`). The Orca output leaves the step out with the same words, and with the
+  cause `refused` when the problem has no cause.
+- `paths/`: the path of a sweep. This came from `translator/paths/`. The recipe output and the Orca output both plan
+  the path here:
+  - `planner.plan(path, profile_frame, profile_points, options)` gives a `PathPlan` or a `Problem`. It chains the
+    curves of the path, turns the chain so that it starts on the plane of the outline, and names the kind of path
+    (`line`, `arc`, `circle`, `flat` or `corners`). It also writes the flat form and the corners form of a recipe
+    sweep step (`PathPlan.recipe`).
+  - `model.py`: `PathOptions` and `PathPlan`. `PathOptions` holds what the sweep asks (`as_step`, `twisted`,
+    `tapered`, `growth`, `fixed`) and what the output asks. The output gives its caps (`max_segments`, `max_points`)
+    and its spline fit (`splines`). By default there is no cap and no spline fit. Without a spline fit, a path with a
+    free curve gives the problem `too_complex`.
+  - `curves.py` (the geometry of the curves, and the chain), `checks.py` (the limits of the app's sweep as problems:
+    crossing, overlap, an outline that reaches past a bend, sharp corners, a path that stops rising), `writing.py`
+    (the arc, circle, flat and corners forms), `closed.py` (closed chains), `tolerances.py` and `words.py` (the words
+    and the code of each problem).
+  The recipe caps stay in `translator/paths/path_limits.py`. The Orca output gives the same caps and the same spline
+  fit, so that it takes the same paths as the recipe output.
+- `steps/`: one reader for each kind of step:
+  - `sweep.py`: the points of a sweep outline (`profile_points`), its loops (`loop_polygon`, `outline_shapes`) and
+    its centroid. Also the volume of a new body (`made_volume`) and the check of that volume against the outline and
+    the path (`volume_problem`), and the check of the end face that Fusion made against the end of the planned path
+    (`end_check`). A result that does not agree gives the problem `MISMATCH`. This came from
+    `translator/sweep/sweep_outline.py`, `sweep_volume.py` and `sweep_ends.py`.
+  - `loft.py`: the volumes of a ruled loft between two parallel outlines of straight lines, one for each pairing of
+    corners that the kernel can choose (`ruled_volumes`), and the check of a measured volume against them
+    (`matches`). This came from `translator/loft/loft_volume.py`.
 
 #### capture_model and geometry
 
@@ -1811,7 +1845,10 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
 - `geometry/vec.py`: one place for vector helpers. A module does not keep its own `_dot`. `geometry/rigid.py`: `Move`,
   `IDENTITY_ROWS`, `TURN_Z_UP`, `move_from_frame`, `frame_problem`, `move_for`. `geometry/tolerances.py`: see 4.11. `geometry/plane2d.py`: small 2D helpers on `(x, y)` points: the distance to a segment
   or to a ring, a point inside a ring, and an arc drawn as points the way the app draws it (`to_segment`, `to_ring`,
-  `inside_ring`, `arc_points`). `footprint`, the outline checks and the coil fit use them.
+  `inside_ring`, `arc_points`). `footprint`, the outline checks and the coil fit use them. `geometry/footprint.py`
+  also has `closed_chain`, which puts the curves of one loop in order, end to end. `geometry/spline_fit.py`: the
+  spline of the app (`interpolate`, `evaluate`) and the fit of points to a free curve (`fit`). The sketch outlines of
+  the recipe and the free curves of a sweep path use them.
 
 #### probe
 
@@ -2439,11 +2476,20 @@ volume goes from 8000 to 7900 mm3. The walls lie above the plane, so the copy le
 
 ### 3.8 How a sweep is translated
 
-`sweep.step.handle` (`lib/translator/sweep/step.py`). The path code is in `lib/translator/paths/`; the other sweep
-modules (`sweep_ends.py`, `sweep_limits.py`, `sweep_rules.py` and the rest) sit next to `step.py`. The outline must be one closed sketch outline (holes allowed). Several
-outlines become one sweep each along the same path.
+`sweep.step.handle` (`lib/translator/sweep/step.py`). The other sweep modules of the recipe output
+(`sweep_limits.py`, `sweep_rules.py` and the rest) sit next to `step.py`. The shared parts are in `design_model`, and
+the Orca output uses them too:
 
-The path decides what is written (`paths.plan`):
+- The path planner is in `lib/design_model/paths/` (see 2.2). It gives a `PathPlan` or a `Problem`.
+- The points of the outline, the volume check and the end face check are in `lib/design_model/steps/sweep.py`.
+
+The recipe output asks the planner with its own caps and its spline fit (`paths/path_limits.options`). It turns a
+problem into a refusal with the same words and the same cause (`paths/path_limits.refusal`).
+
+The outline must be one closed sketch outline (holes allowed). Several outlines become one sweep each along the same
+path.
+
+The path decides what is written (`planner.plan`):
 
 | Path | Written as |
 | --- | --- |
@@ -2457,18 +2503,18 @@ The path decides what is written (`paths.plan`):
 The checks before writing:
 
 - The path must start on the outline, square to it, and run one way.
-- No crossing, no bend tighter than the outline (`path_checks.py`).
+- No crossing, no bend tighter than the outline (`design_model/paths/checks.py`).
 - Sharp corners: see below.
 - A new body must have the volume the outline and the path give (outline area times path length; for a closed path,
   Pappus' rule). With mitred corners, see below.
-- The end face Fusion made must lie where the path ends (`sweep_ends.py`).
+- The end face Fusion made must lie where the path ends (`design_model/steps/sweep.py`, `end_check`).
 - Many settings are refused: a guide rail, a twist with a taper, part of a path, a surface sweep and others
   (`sweep_limits.py` holds the texts).
 
 Sharp corners. A sharp corner is a place where two curves of the path meet at an angle. Fusion builds a sharp corner
 between two straight lines of a flat path as a mitre: the two straight pieces meet on the plane that halves the
 corner. A test export confirmed this for open paths too (the volume was the outline area times the path length). The
-copy does the same (`path_checks.corners_refusal`):
+copy does the same (`design_model/paths/checks.corners_problem`):
 
 1. A corner between two lines of a flat path, open or closed, is mitred. This is so only when the sweep does not
    twist, does not taper and does not keep the outline direction.
@@ -2481,11 +2527,11 @@ copy does the same (`path_checks.corners_refusal`):
 
 The check of the size ranges (`path_rebuilt.rebuilt_refusal(mitres=...)`) uses the same rule. The volume check counts
 each mitred corner too. For a closed path, Pappus' rule counts 2 tan(t/2) for a corner that turns by t, instead of t.
-For an open flat chain of lines with the outline beside the path, `sweep_volume._open_lines_volume` counts the same
+For an open flat chain of lines with the outline beside the path, `design_model/steps/sweep._open_lines_volume` counts the same
 for the offset of the outline's centre.
 
 On a closed path, an outline that sits on a corner seam moves to the middle of the line it is square to
-(`path_closed.py`, `PathPlan.moved`). There the path is straight, so the cut that opens the ring is clean. A closed
+(`design_model/paths/closed.py`, `PathPlan.moved`). There the path is straight, so the cut that opens the ring is clean. A closed
 path with `distance_two` = 1 is the whole ring, which is Fusion's default. A twist on such a sweep is refused.
 
 Guide surfaces. A sweep can follow a guide surface. The reader records them as `guide_surfaces`
@@ -2518,7 +2564,7 @@ The second and the third kind are written as measured (`loft/loft_sections.py`).
 the steps that made them are marked as for any measured outline.
 
 A new body of two parallel outlines of straight lines must have the volume the kernel's pairing of corners gives
-(`loft/loft_volume.py`). Another volume means Fusion paired the corners another way: the loft is left out. Outlines of
+(`design_model/steps/loft.py`). Another volume means Fusion paired the corners another way: the loft is left out. Outlines of
 different shapes get a note.
 
 Left out: three or more sections, a point end, a curved face, an open or non-flat loop of edges, end conditions,
@@ -2976,7 +3022,7 @@ Where the texts live:
 | Text family | Module |
 | --- | --- |
 | Size reasons: "may give unexpected results", "stays fixed", "is not a size", "the range stops at", stuck causes, gap texts, fixed shape notes | `lib/translator/notes.py` |
-| Step refusals ("This draft leans faces on both sides ...") | the handler module of the step type; sweep and path texts in `sweep/sweep_limits.py` and `paths/path_limits.py` |
+| Step refusals ("This draft leans faces on both sides ...") | the handler module of the step type; sweep texts in `sweep/sweep_limits.py`, path texts in `design_model/paths/words.py` |
 | Walk stops ("The body could not be followed through the timeline.") | `lib/translator/walk.py`, `bodies/split_rules.py`, `gaps/stops.py`, `translate.py` |
 | Package notes ("12 steps copied from Fusion.", "N sizes may give unexpected results") and "Tip: " lines | `lib/export_plan/messages.py`, `lib/translator/notes.py` |
 | Hints of left-out steps and of stops ("Round the sharp corner of the path with a sketch fillet.") | `lib/capture_model/gap_hints.py` |

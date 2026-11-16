@@ -5,6 +5,8 @@ sign leans in. The two volumes differ for most outlines, so the volume of a new 
 """
 import math
 
+from ...design_model.steps.sweep import made_volume
+
 OFFSET = "offset"        # the walls move in or out by the same distance everywhere, as the recipe's taper does
 FLIPPED = "flipped"      # the same, with the lean the other way round
 SCALED = "scaled"        # the whole outline shrinks or grows about its middle, which the recipe cannot write
@@ -155,3 +157,13 @@ def meaning(loops, length, made, slope):
         if _fits(made, volume(terms, length, sign * slope)):
             return label
     return NO_FIT
+
+
+def taper_lean(item, shapes, data, combine, found, slope):
+    """The taper's meaning read from the volume of a new body along a straight path: `OFFSET`, `FLIPPED` (it leans the
+    other way), `SCALED`, `NO_FIT` (no model gives the volume), or None when it cannot be told."""
+    areas, made = data.get("areas"), made_volume(item, data)
+    if (shapes is None or found.kind != "line" or combine != "new" or made is None or not isinstance(areas, list)
+            or len(areas) != 1):
+        return None
+    return meaning(shapes, found.length, made, slope)

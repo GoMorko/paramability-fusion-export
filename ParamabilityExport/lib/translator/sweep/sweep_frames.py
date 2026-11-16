@@ -11,11 +11,12 @@ path of lines and tangent arcs in one plane (the outline turns about each arc's 
 import math
 
 from ...geometry import vec
-from ..paths import path_curves, path_limits
+from ...design_model.paths import curves as path_curves
+from ...design_model.paths.tolerances import SMOOTH_JOIN_DEG
 
 PLANE_TOL = 1e-3
 LATERAL_TOL = 1e-3
-JOIN_TOL_DEG = path_limits.SMOOTH_JOIN_DEG
+JOIN_TOL_DEG = SMOOTH_JOIN_DEG
 
 
 def _same(v):
@@ -58,8 +59,8 @@ def _carry(found, fixed):
 
 
 def end_frame(frame, found, fixed=False):
-    """The outline's frame carried to the path's end (`found` is the path_model.PathPlan the sweep is written from),
-    or None when that is not known."""
+    """The outline's frame carried to the path's end (`found` is the `PathPlan` the sweep is written from), or None
+    when that is not known."""
     carry = _carry(found, fixed)
     if carry is None:
         return None

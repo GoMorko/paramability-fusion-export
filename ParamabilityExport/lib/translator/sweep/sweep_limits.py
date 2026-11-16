@@ -1,10 +1,8 @@
-"""Limits and refusal texts of the sweep handler. The path code keeps its own in `path_limits`."""
-from ..paths.path_limits import TURNS_BACK
+"""Limits and refusal texts of the sweep handler. The shared path code keeps its own in `design_model.paths`
+(`tolerances`, `words`), and the shared sweep reader its tolerances and `NOT_MATCHING` in `design_model.steps.sweep`."""
+from ...design_model.paths.words import TURNS_BACK
+from ...design_model.steps.sweep import NOT_MATCHING, ZERO_TOL
 
-ZERO_TOL = 1e-6
-VOLUME_RELATIVE_TOL = 0.01
-VOLUME_ABSOLUTE_TOL = 1e-3
-CENTROID_ON_PATH_TOL = 0.01   # the path runs through the outline's centroid when it starts this close to it (mm)
 WHOLE_TURN_TOL = 1e-6 / 360.0  # a twist along a closed path is whole turns within this share of a turn, as in the app
 MAX_TWIST_DEG = 3600.0        # the recipe takes a twist up to this either way
 MAX_TAPER_STATIONS = 65       # the recipe builds a taper through at most this many places along the path
@@ -34,4 +32,3 @@ OTHER_KIND = "This kind of sweep is not copied yet."
 KEEPS_DIRECTION = TURNS_BACK
 PART_OF_PATH = "This sweep covers only part of its path, which is not copied yet."
 BOTH_WAYS_TWIST = "This sweep runs both ways round its closed path and twists, which is not copied yet."
-NOT_MATCHING = "The result of this sweep does not match its outline and path, so it is not copied yet."

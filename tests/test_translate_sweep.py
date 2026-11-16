@@ -13,7 +13,7 @@ from lib.capture_model import gap_hints
 from lib.params import size_table
 from lib.sketch_values.motion import Affine, Motion, Stuck, Terms
 from lib.translator import translate
-from lib.translator.paths import path_limits
+from lib.design_model.paths import words as path_words
 from lib.translator.sweep import step as sweep, sweep_limits, sweep_rules, sweep_settings
 from lib.translator.translate import _sweep_version
 
@@ -496,8 +496,8 @@ class RefusalTest(unittest.TestCase):
         self.reasons([
             ("none", lambda d: d.update(path=None), sweep_limits.PATH_UNREADABLE),
             ("sketch and edges", lambda d: d["path"].update(kind="mixed"), sweep_limits.MIXED_PATH),
-            ("an entity that is neither", lambda d: d["path"].update(kind="other"), path_limits.NOT_SKETCH),
-            ("curves unread", lambda d: d["path"].update(curves=None), path_limits.UNREADABLE),
+            ("an entity that is neither", lambda d: d["path"].update(kind="other"), path_words.NOT_SKETCH),
+            ("curves unread", lambda d: d["path"].update(curves=None), path_words.UNREADABLE),
             ("longer than what is read", lambda d: d["path"].update(truncated=True), sweep_limits.PATH_TOO_LONG),
         ])
 
@@ -512,8 +512,8 @@ class PathShapeTest(unittest.TestCase):
     """Paths the recipe cannot hold leave the sweep out as a gap after the block."""
 
     def test_each_path_the_recipe_cannot_hold_leaves_the_sweep_out_with_its_reason(self):
-        cases = (("sweep_middle_outline", path_limits.BOTH_SIDES), ("sweep_tilted_outline", path_limits.NOT_SQUARE),
-                 ("sweep_bend_3d", path_limits.BENDS_3D))
+        cases = (("sweep_middle_outline", path_words.BOTH_SIDES), ("sweep_tilted_outline", path_words.NOT_SQUARE),
+                 ("sweep_bend_3d", path_words.BENDS_3D))
         for name, reason in cases:
             with self.subTest(name):
                 result = translate(load_capture(name))
@@ -524,7 +524,7 @@ class PathShapeTest(unittest.TestCase):
         step = only_sweep(self, translate(load_capture("sweep_sharp_corner")))
         self.assertEqual([s["kind"] for s in step["path"]["segments"]], ["line", "line"])
         twisted = translate(edited("sweep_sharp_corner", 4, lambda d: d.update(twist_deg=90.0)))
-        self.assertEqual(left_out(twisted, 4)["reason"], path_limits.SHARP_CORNER)
+        self.assertEqual(left_out(twisted, 4)["reason"], path_words.SHARP_CORNER)
         self.assertEqual([gap["hint"] for gap in twisted.gaps], [gap_hints.HINTS[gap_hints.SHARP_CORNER]])
 
     def test_an_outline_wider_than_the_bend_is_refused(self):
@@ -818,8 +818,8 @@ class ClosedTest(unittest.TestCase):
                 self.assertEqual(stopped(result)["reason"], sweep_limits.TWIST_CLOSED)
 
     def test_a_taper_or_a_parallel_outline_along_a_closed_path_is_left_out(self):
-        for edit, reason in ((dict(taper_deg=2.0), path_limits.CLOSED_TAPER),
-                             (dict(orientation="parallel"), path_limits.CLOSED_PARALLEL)):
+        for edit, reason in ((dict(taper_deg=2.0), path_words.CLOSED_TAPER),
+                             (dict(orientation="parallel"), path_words.CLOSED_PARALLEL)):
             for name in (RIM, "sweep_ring"):
                 with self.subTest(name, edit=edit):
                     self.assertEqual(stopped(translate(edited_after(load_capture(name), **edit)))["reason"], reason)

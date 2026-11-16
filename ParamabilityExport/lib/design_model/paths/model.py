@@ -1,4 +1,5 @@
-"""What the sweep options ask of a path (`PathOptions`) and the path the planner found (`PathPlan`). Pure."""
+"""What the sweep options and the destination ask of a path (`PathOptions`) and the path the planner found
+(`PathPlan`). Pure."""
 import math
 from dataclasses import dataclass
 from typing import Optional
@@ -14,6 +15,10 @@ class PathOptions:
     growth: the most the outline's walls can lean out, per mm of path (tangent of the taper angle times the outline's
       corner factor; 0 without a taper).
     fixed: the outline keeps its direction; the path must keep moving along its normal (no bend or overlap checks).
+    max_segments: the most segments a flat path may have (the destination's cap; none by default).
+    max_points: the most points a corners path may have (the destination's cap; none by default).
+    splines: what writes a free curve as spline segments, with `fit(samples)` as `geometry.spline_fit.fit` has it; None
+      when the destination takes no free curves (a path with one is then too complex).
     """
 
     as_step: bool = False
@@ -21,11 +26,14 @@ class PathOptions:
     tapered: bool = False
     growth: float = 0.0
     fixed: bool = False
+    max_segments: float = math.inf
+    max_points: float = math.inf
+    splines: Optional[object] = None
 
 
 @dataclass
 class PathPlan:
-    """A path ready for the sweep handler.
+    """A path ready for a sweep handler.
 
     kind: `line`, `arc`, `circle`, `flat` or `corners`.
     curves: the chained curves, oriented along the path, the first one starting on the outline's plane.
@@ -33,8 +41,9 @@ class PathPlan:
     direction: unit direction of travel at `start`.
     length: path length in mm.
     reversed: the capture listed the path from the far end, so the chain was turned round.
-    recipe: the `flat` or `corners` path of the sweep step, else None. `corners` points are 3D in capture
-      coordinates, `bendRadius` one number when every bend has it, else one per inner point.
+    recipe: the `flat` or `corners` path as a recipe sweep step writes it, else None. `flat` has its plane (`on`) and
+      2D segments; `corners` points are 3D in capture coordinates, `bendRadius` one number when every bend has it,
+      else one per inner point.
     axis: for an arc or circle, `{ "point": centre, "dir": unit }` with the path turning positively about `dir`.
     radius, angle_deg: for an arc or circle (360).
     tightest: for a `flat` or `corners` path, the radius of its tightest bend (infinity when it has none).

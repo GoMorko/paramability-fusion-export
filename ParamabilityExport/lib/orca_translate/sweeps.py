@@ -7,9 +7,9 @@ and no way to keep the outline in one direction, and its outline must be one clo
 wire of an open path from the free end of the first entity written, and of a closed path from the start of the first
 entity, so the copy writes the path entities in order from the outline.
 
-The path is planned as for a recipe (`translator.paths.plan`: the chain ordered from the outline's plane, a closed
-chain cut open there, and the rules the shape needs: no crossing, the outline clear of the tightest bend and of the
-other parts of the path). Then:
+The path is planned as for a recipe (`design_model.paths.planner.plan`, with the recipe's caps and free curve fit:
+the chain ordered from the outline's plane, a closed chain cut open there, and the rules the shape needs: no
+crossing, the outline clear of the tightest bend and of the other parts of the path). Then:
 - a straight path is an Orca Extrude of the outline (`steps.extrude`, holes included);
 - one arc or a full circle is an Orca Revolve about its axis (`revolve.revolve`);
 - a chain of lines and arcs in one plane, open or closed, that meet smoothly is an Orca Sweep along a sketch of the
@@ -19,7 +19,7 @@ other parts of the path). Then:
 Left out: a twist or a taper, an outline kept in one direction along a path that turns, guide rails and surfaces, part
 of a path, a path that bends out of one plane, free curves in the path, sharp corners, an outline with holes along a
 bent path, an outline that is not square to the path where it starts, and a new body whose measured volume or end
-face does not match the outline and path (`translator.sweep`).
+face does not match the outline and path (`design_model.steps.sweep`).
 
 Orca cannot tie a path to a variable, so the path keeps its numbers and the sizes that move it are marked. The outline
 of an extrude or a sweep follows its sizes as an extrude outline does.
@@ -28,18 +28,16 @@ import math
 
 from ..capture_model import gap_hints
 from ..design_model import reach
-from ..geometry import vec
+from ..design_model.paths import curves as path_curves, planner
+from ..design_model.paths.checks import bend_problem, overlap_problem
+from ..design_model.paths.curves import tangents
+from ..design_model.paths.model import PathOptions
+from ..design_model.problems import is_problem
+from ..design_model.steps.sweep import end_check, profile_points, volume_problem
+from ..geometry import spline_fit, vec
 from ..orca_recipe.enums import BooleanMode, FeatureType
 from ..geometry.footprint import polyline
-from ..translator.paths import path_curves, paths
-from ..translator.paths.path_checks import bend_refusal, overlap_refusal
-from ..translator.paths.path_curves import tangents
-from ..translator.paths.path_model import PathOptions
-from ..translator.result import Refusal
-from ..translator.sweep.sweep_ends import end_check
-from ..translator.sweep.sweep_outline import profile_points
 from ..translator.sweep.sweep_settings import settings_refusal
-from ..translator.sweep.sweep_volume import volume_refusal
 from . import causes, extents, limits, revolve, sketch_sizes, steps
 from ..design_model.values import Quantity
 from .sketches import entities_of, graph_for, outline_sketch, outlines_of
@@ -55,6 +53,10 @@ _SQUARE = 1e-6
 # Two parts of the path that meet at a turn above this (degrees) make a sharp corner.
 _SMOOTH_DEG = 0.01
 _ZERO = 1e-6
+# The path is planned with the caps and the free curve fit of a recipe sweep step, so the parts of a path the copy
+# takes are the ones the recipe output takes.
+_MAX_SEGMENTS = 64
+_MAX_POINTS = 64
 
 _TWIST = "Orca's sweep cannot twist or taper its outline, so this sweep is left out."
 _KEEPS_DIRECTION = ("Orca's sweep turns the outline with its path and cannot keep it in one direction, so this sweep "
@@ -69,6 +71,11 @@ _PATH_FIXED = "%s: Orca cannot tie the path of a sweep to a variable, so the pat
 
 def _skip(refusal):
     return Skip(refusal.reason, refusal.cause or gap_hints.REFUSED)
+
+
+def _left_out(problem):
+    """The Skip of a problem of the shared layer (`design_model.problems.Problem`)."""
+    return Skip(problem.words, problem.cause or gap_hints.REFUSED)
 
 
 def _profile_problem(profile):
@@ -138,9 +145,10 @@ def sweep(ctx, item):
            for p in profiles):
         return Skip("The outlines of this sweep lie in different planes, which is not copied to Orca yet.")
     points = [q for p in profiles for q in profile_points(p)]
-    found = paths.plan(path, frame, points, PathOptions())
-    if isinstance(found, Refusal):
-        return _skip(found)
+    found = planner.plan(path, frame, points,
+                         PathOptions(max_segments=_MAX_SEGMENTS, max_points=_MAX_POINTS, splines=spline_fit))
+    if is_problem(found):
+        return _left_out(found)
     if found.kind == "corners":
         return Skip(_NOT_FLAT, causes.SWEEP_PATH)
     if any(c.get("kind") not in ("line", "arc", "circle") for c in found.curves):
@@ -154,12 +162,12 @@ def sweep(ctx, item):
     combine = _COMBINE[operation]
     for profile in profiles:
         if len(profiles) == 1:
-            refusal = volume_refusal(item, data, combine, profile, found)
-            if refusal is not None:
-                return _skip(refusal)
-        refusal, _ = end_check(data, combine, profile, found, profile_points(profile), False, False)
-        if refusal is not None:
-            return _skip(refusal)
+            problem = volume_problem(item, data, combine, profile, found)
+            if problem is not None:
+                return _left_out(problem)
+        problem, _ = end_check(data, combine, profile, found, profile_points(profile), False, False)
+        if problem is not None:
+            return _left_out(problem)
     if found.kind == "line":
         made = _as_extrude(ctx, item, data, profiles, found)
     elif found.kind in ("arc", "circle"):
@@ -347,7 +355,7 @@ def _limit(ctx, sketch, outer, plane, found):
     def ok(numbers):
         loop = extents.drawn_loop(sketch, outer, *numbers)
         reach = max(_across(sketch.plane, plane, p) for c in loop for p in polyline(c))
-        return bend_refusal(reach, found.tightest) is None and overlap_refusal(points, reach, found.closed) is None
+        return bend_problem(reach, found.tightest) is None and overlap_problem(points, reach, found.closed) is None
 
     limits.guard(ctx, fields, ok, "%s: the Orca copy cannot tell how far this may change before the sweep runs into "
                  "itself" % sketch.name)

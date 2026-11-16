@@ -10,8 +10,8 @@ The copy keeps such a loop as measured, so the sizes that may move it are marked
 written so far, or any size for edges of another body (`sweep_marks.mark_path`); for a face as for an extrude's flat
 face outline (`face_outline`)."""
 from ...geometry import vec
-from ..paths.path_curves import arc_of, chain
-from ..paths.path_writing import flat_frame
+from ...design_model.paths.curves import arc_of, chain
+from ...design_model.paths.writing import flat_frame
 from ..result import Refusal
 from ..sketch import face_outline
 from ..sweep.sweep_marks import mark_path
