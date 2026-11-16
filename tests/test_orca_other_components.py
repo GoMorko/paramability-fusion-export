@@ -85,6 +85,10 @@ class MirrorPlaneTest(unittest.TestCase):
         capture = fixture("component_foreign_mirror")
         capture["items"][4]["data"].update(entity_type="bodies", combine=False,
                                            source_bodies=[dict(capture["target"])])
+        # Its sketches sit on a plane no size moves (one without a reference may sit on a face the size moves).
+        for item in capture["items"]:
+            for profile in (item.get("data") or {}).get("profiles") or []:
+                profile.setdefault("reference", {"kind": "constructionPlane", "origin": True})
         result = run(capture)
         self.assertEqual(verdict_of(result, 4)["verdict"], "skipped")
         self.assertEqual(outcomes(result)["gap_mm"], "variable")

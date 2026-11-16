@@ -410,7 +410,7 @@ def _mark_path(ctx, item, path):
         names = reach.any_face_sizes(ctx.table, items, item)
     else:
         names = (reach.profile_sizes(ctx.table, path, graph_for(ctx.capture, path))
-                 + reach.placement_sizes(ctx.table, items, path, item.get("index")))
+                 + reach.placement_sizes(ctx.table, items, path, item.get("index"), unread_on_part=True))
     ctx.doubt(list(dict.fromkeys(names)), _PATH_FIXED % label(item))
 
 

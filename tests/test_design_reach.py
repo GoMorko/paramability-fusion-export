@@ -162,11 +162,20 @@ class SketchPlaneTest(unittest.TestCase):
         found = reach.placement_sizes(self.table, self.timeline, self.profile({"kind": "face"}), 2)
         self.assertEqual(found, ["h_mm", "gap_mm"])
 
-    def test_a_sketch_on_an_origin_plane_or_an_unknown_one_is_still(self):
+    def test_a_sketch_on_an_origin_plane_is_still(self):
         origin = {"kind": "constructionPlane", "origin": True}
         self.assertEqual(reach.placement_sizes(self.table, self.timeline, self.profile(origin), 2), [])
-        self.assertEqual(reach.placement_sizes(self.table, self.timeline, {"sketch": "Sketch9"}, 2), [])
         self.assertEqual(reach.placement_sizes(None, self.timeline, self.profile({"kind": "face"}), 2), [])
+
+    def test_for_orca_a_sketch_without_a_reference_counts_as_on_a_face_unless_it_lies_on_an_origin_plane(self):
+        # Fusion gives no reference for some sketches on faces.
+        unread = {"sketch": "Sketch9", "frame": FRAME}
+        self.assertEqual(reach.placement_sizes(self.table, self.timeline, unread, 2, unread_on_part=True),
+                         ["h_mm", "gap_mm"])
+        self.assertEqual(reach.placement_sizes(self.table, self.timeline, unread, 2), [])
+        flat = {"origin": [0, 0, 0], "x": [1, 0, 0], "y": [0, 1, 0], "z": [0, 0, 1]}
+        self.assertEqual(reach.placement_sizes(self.table, self.timeline, dict(unread, frame=flat), 2,
+                                               unread_on_part=True), [])
 
     def test_a_sketch_of_another_component_or_on_a_body_face_names_no_size(self):
         for more in ({"foreign": True}, {"borrowed": "Lid"}, {"face": True}):
