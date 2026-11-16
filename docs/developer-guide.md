@@ -1162,6 +1162,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `coilHalf` | revolutions that end in a half turn | Use revolutions that do not end in a half, such as 3.25 or 4. |
 | `coilTool` | a coil that would stand in a tool body with other steps | Join the coil to the part with a combine before you move or change it. |
 | `scale` | the step type Scale | Change the sizes in the sketches instead of scaling the body. |
+| `moveUnmeasured` | a Move whose body could not be measured before and after it: the body or its box was not found, or a body with no corners turns or follows a point (`bodies/move.py`) | Draw the sketch of the body where the body should be, instead of moving the body. |
 | `offsetCurved` | a Press Pull (Offset Faces) that moves a curved face, also with flat faces in the same step (`finishes/offset.py`) | Press Pull flat faces only, or change the size of the curved face in its sketch. |
 | `replaceFace` | the step type Replace Face | Cut the shape with an extrude, or extrude the face up to the shape you want. |
 | `ribWeb` | the step types Rib and Web | Draw the rib or web outline in a sketch and extrude it. |
@@ -3109,7 +3110,8 @@ A Combine joins, cuts or intersects tool bodies with the part. Each tool body is
      onto the part with the Combine's operation. Cutting A then B removes A and B together. This form opens in older
      app versions. For an intersect, only one tool of one step can be flat.
    - Tool step: else each tool becomes one `toolBody` step that holds the tool's steps (recipe version 15). A tool with
-     a gap inside is always a tool step.
+     a gap inside is always a tool step. Only a gap of a step that finishes surfaces can stay inside a tool (see
+     "A gap inside a tool body" below).
    - A pattern of bodies that the Combine takes whole becomes a tool per source and one `pattern` or `mirror` step
      (`body_copies.py`), so its count and spacing can follow sizes.
 4. It checks the volumes. A Combine that changes the part by more than its tools can give is left out ("This combine
@@ -3139,6 +3141,40 @@ beside `refusal_cause`. The cause of the inner step goes on as before, so the hi
 `Context.body_words`. On the part, this is "the part". While the Orca output builds a tool body, this is "the tool
 body Body3". So the reason of a round, a chamfer or a cut in a tool body names the tool body and not the part (see
 `docs/orca-output.md`).
+
+**A gap inside a tool body.** The walk of a tool can leave a step out (a gap), as the walk of the part can. The
+Combine then looks at each gap of the tool (`tool_walk.unfinished`, `tool_walk.shaping_gap`):
+
+- A gap of a step that only finishes surfaces stays in the list of the `toolBody` step. These steps are a round, a
+  chamfer, a draft, an emboss and a cosmetic thread. The gaps file marks such a gap with `finishing: true`
+  (`gaps/finishing.py`).
+- Any other gap makes the whole Combine one gap. Examples are a Move, an extrude, a shell and a Combine of the tool.
+  Such a step can change the place of the tool or the material of the tool. Without the step, the tool sits at a
+  different place or holds different material. A join, a cut or an intersect with that tool gives a wrong part, and
+  the gap in the tool does not show this. For example, a sphere that a Move lowers into a box and an intersect that
+  keeps the shared part give a dome. Without the Move, the sphere holds all of the box, and the copy is a flat box.
+- The reason names the tool body and the step, in the same words as for a tool that cannot be built
+  ("The tool body Body2 cannot be copied because of its step Move1. ..."). The cause of the gap in the tool goes to
+  the Combine, so the hint stays right. The gaps inside the tool are dropped with the tool.
+
+A pattern of bodies that the Combine takes whole is checked in the same way. When a source of the pattern has a gap
+that does not only finish surfaces, the Combine does not write the pattern (`_whole_patterns`). It walks each tool on
+its own, and that walk refuses the Combine and names the step.
+
+**The Move of a body with no corners.** The Move handler (`bodies/move.py`) measures what the body did from its first
+vertices before and after the Move. A sphere, a torus and a closed revolve have no vertices. For such a body the
+reader also reads the box of the body before and after the Move (`boxes_before`, `boxes_after`). A box moves by
+exactly the same vector as the body when the body only shifts. A box does not show a turn. Thus the handler does
+this:
+
+- A Move along X, Y and Z must move the box by its distances. Then the handler writes the Move with its distances as
+  sizes. A box that moves by a different vector, or that changes its size, refuses the Move.
+- A free Move whose transform only shifts must move the box by that shift. A free Move that turns refuses.
+- A Rotate and the kinds that only the points can measure (point to point, to a position, along an entity) refuse.
+  The reason says that the body has no corners.
+- A body with no box after the Move refuses ("could not be measured").
+
+The Orca output uses the same box shift for a Move along X, Y and Z only (`orca_translate/bodies.py`, `_motion`).
 
 A tool may not hold a thread or a coil together with other steps. The recipe keeps these kinds out of a tool body
 (`RecipeKind.in_tool`, 1.9.2), since they build on the whole part. A Combine, or a pattern of bodies, whose tool walk

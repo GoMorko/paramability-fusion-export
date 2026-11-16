@@ -195,7 +195,9 @@ What the copy can and cannot do, step by step. The README lists only the main li
   Combine keeps can serve a later Combine, which gets the tool with the steps added since. Tools made from tools are
   followed 3 levels deep. The export reads up to 120 steps and 32 tool bodies in all (a pattern of many copies counts
   as one body). The message after the export names the tool body and the step that stops it (for example "The tool
-  body Body3 cannot be copied because of its step Coil1"), so you know what to change in Fusion. A tool step that starts from or reaches to a
+  body Body3 cannot be copied because of its step Coil1"), so you know what to change in Fusion. A tool may miss only
+  rounds, chamfers, drafts and embosses: when any other step of a tool (a Move, an extrude, a cut) cannot be copied,
+  the whole Combine is left out, since a tool at the wrong place or with the wrong material would give a wrong part. A tool step that starts from or reaches to a
   face of the part follows that face where the add-in can place it, and marks the sizes it cannot follow.
 - Copy Paste Body is copied by writing the steps of the source again, as the source stood at the paste. The pasted
   body must be a new body: a paste that lands on a body that already has steps is left out of the copy. A copy that sits where
@@ -206,7 +208,9 @@ What the copy can and cannot do, step by step. The README lists only the main li
   their distances and angles as sizes. The other kinds (point to point, to a position, along an entity) are written
   as the numbers Fusion measured. What they follow can move with any size, so every ticked size is marked or left
   out with the reason. A Move of faces, and a Move that mirrors or
-  scales, are left out of the copy.
+  scales, are left out of the copy. A body with no corners (a sphere, a torus, a closed revolve) is copied when a Move
+  along X, Y and Z or a free Move only shifts it; a Rotate, or any other Move that turns such a body, is left out with
+  the tip to draw the sketch of the body where the body should be.
 - A rectangular, circular or mirror pattern of bodies is copied when a Combine takes the copies. When the Combine takes
   the whole pattern (the original and every copy), the pattern is written as a pattern, so its count and spacing follow
   sizes. For a join the original may be the part itself. When the Combine takes only some of the copies, or the layout

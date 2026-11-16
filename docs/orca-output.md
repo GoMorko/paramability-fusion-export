@@ -521,7 +521,9 @@ not judged to meet material where Orca removes nothing.
   Combine that takes such a piece as a tool does not count; its own handler builds that tool. Inside a tool body only
   the steps before the item that takes the tool count. Later steps that meet the part where the split would have cut
   are judged against the part as the copy builds it (cause `afterGap` when they miss it after a left out step).
-- Move: the rigid move is fitted from the body's first vertices before and after (`design_model/steps/move.py`, `fit`). A Move that
+- Move: the rigid move is fitted from the body's first vertices before and after (`design_model/steps/move.py`, `fit`). A
+  body with no vertices (a sphere, a torus) moved along X, Y and Z moves by the shift of its box (`box_shift`); any
+  other Move of such a body is left out. A Move that
   turns about an axis and agrees with the points becomes a Transform about that axis with `xf_angle_deg` bound to its
   angle (Orca turns by a positive angle, so a negative one turns about the reversed axis and its formula is
   negated); any other move a Transform by the fitted turn (about the component origin) and shift. Orca cannot tie a move

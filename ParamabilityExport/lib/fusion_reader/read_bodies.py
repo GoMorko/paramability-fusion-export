@@ -3,7 +3,8 @@
 A record is `{ token, name }` (`geo.body_ref`). A body of another component also names its native `token`, its
 `component` and the occurrence `path` (`placement.tool_identity`), so the steps that made it can be found and read.
 `points` are the first vertices of the body in its own component's coordinates, in the body's vertex order: the
-translator matches a body before and after a step by them.
+translator matches a body before and after a step by them. A body with no vertices (a sphere, a torus) is followed by
+its box instead (`box_of`).
 """
 from . import read_geometry as geo
 from .placement import tool_identity
@@ -28,6 +29,17 @@ def points_of(ctx, token):
     """The vertex points of the body with this token at the current marker position, or [] when it is not found."""
     body = geo.find_native(ctx.design, token) if token else None
     return geo.vertex_points(body) if body is not None else []
+
+
+def box_of(body):
+    """The box `{min, max}` of a body in its own component's coordinates, or None when it cannot be read."""
+    return geo.safe(lambda: geo.box_of(geo.native_object(body)), None)
+
+
+def box_by_token(ctx, token):
+    """The box of the body with this token at the current marker position, or None when it is not found or read."""
+    body = geo.find_native(ctx.design, token) if token else None
+    return box_of(body) if body is not None else None
 
 
 def result_bodies(feature, ctx):

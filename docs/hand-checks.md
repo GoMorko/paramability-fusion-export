@@ -592,3 +592,13 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     still reach the bottom face. In Orca, the counterbore hole has a lead-in at the counterbore floor and at the
     bottom face. When a `span` is null or covers only part of the bore, note what `vertices` the side face of the
     hole has. Afterwards the design is as before.
+55. MV1, a sphere moved into a box and kept where both meet. Make a box 40 x 20 x 10 mm with its corner at the
+    origin. Make a second body: sketch a half circle of radius 60 mm on a plane through the middle of the box (y = 10),
+    centre at (20, 10, 0), with its straight side on a vertical line, and revolve it 360 degrees about that line as a
+    new body. Move the sphere with a Move along X, Y and Z by z = -52 mm. Combine the box with the sphere: Intersect,
+    the box as target.
+    Export: pick the box. The recipe has a `toolBody` with the revolve and a `move` of -52 mm along z, and the copy is
+    a dome 8 mm high that matches the STEP. In `report.json` the Move data has `boxes_before` and `boxes_after` 52 mm
+    apart along z. Then add a Rotate Move of the sphere (10 degrees about the z axis through (0, 0, 0)) before the
+    Combine and export again: the Combine is left out with a reason that names the sphere and the Rotate Move, and no
+    flat box is written. Afterwards the design is as before.

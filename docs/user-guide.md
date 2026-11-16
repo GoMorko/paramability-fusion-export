@@ -230,7 +230,7 @@ A step that picks edges or faces of a left out step is left out too, since in th
 round on the edges of a coil, for example). The add-in asks Fusion which step made the faces each later round,
 chamfer or shell picks, and leaves out only the ones that pick faces of a missing step. When Fusion does not
 answer, every later step that picks edges or faces is left out. A pattern or mirror of a left out step is left out
-too (a mirror of the whole body mirrors the part with the step missing instead), and so is a Combine whose tool body cannot be copied (the Combine is one missing step; the rest of the part is
+too (a mirror of the whole body mirrors the part with the step missing instead), and so is a Combine whose tool body cannot be copied or misses a step other than a round, chamfer, draft or emboss (the Combine is one missing step; the rest of the part is
 copied). An extrude that joins only material a left out step made (a rib on a floor that a left out Combine made)
 would float apart from the copy, and Paramability could not build the copy at all; so it is left out too, with "It
 sits on a step that was left out". The add-in checks this against its own model of the copied part and keeps the

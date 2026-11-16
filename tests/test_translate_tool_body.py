@@ -135,7 +135,9 @@ class WrittenToolTest(unittest.TestCase):
         del item["body_states"]
         item["data"].update(side_one={"kind": "throughAll", "positive": True, "taper_deg": 0.0}, params={}, end_offset=None,
                             target_box_before={"min": [0, 0, 0], "max": [400, 400, 400]})
-        self.assertEqual(left_out(translate(capture))["name"], "Extrude5")
+        gap = left_out(translate(capture))
+        self.assertEqual(gap["name"], "Combine1")
+        self.assertIn("Extrude5", gap["reason"])
 
     def test_a_tool_step_that_cannot_be_copied_gives_the_combine_its_hint(self):
         capture = load_capture("combine_tool_chamfer")
@@ -182,7 +184,9 @@ class WrittenToolTest(unittest.TestCase):
         copied = translate(capture)
         self.assertEqual((copied.refusal, copied.gaps), (None, []))
         chamfer["body_states"]["t2"]["volume_after"] = 4.0
-        self.assertEqual(left_out(translate(capture))["name"], "Split1")
+        gap = left_out(translate(capture))
+        self.assertEqual(gap["name"], "Combine1")
+        self.assertIn("Split1", gap["reason"])
 
     def test_a_tool_of_another_component_is_carried_into_place(self):
         result = translate(load_capture("combine_tool_foreign_fillet"))

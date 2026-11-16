@@ -1,7 +1,8 @@
 """The rigid move that carried a body, read from the places of its corners before and after a Move step.
 
 `fit` finds the turn and shift that put the points `before` on the points `after`, or None when too few points tell
-or no rigid move does it (a mirror or a scale). The result is a `geometry.rigid.Move` of plain numbers. Which size a
+or no rigid move does it (a mirror or a scale). The result is a `geometry.rigid.Move` of plain numbers. A body with no
+corners is followed by its box (`box_shift`), which tells a shift only. Which size a
 move follows, and how it is written, stay with the destination.
 """
 from ...geometry import vec
@@ -18,6 +19,22 @@ def _apply(move, point):
 def carries(move, before, after):
     """True when `move` puts each of the points `before` on the point of `after` at its place in the list."""
     return len(before) == len(after) and all(vec.close(_apply(move, p), q, FIT_TOL_MM) for p, q in zip(before, after))
+
+
+def box_shift(before, after):
+    """The shift that carries the box `before` (`{min, max}`) onto the box `after`, or None when a box is missing or
+    the two differ in size. A body with no corners (a sphere, a torus) shows how it moved only by its box, which follows
+    a shift exactly but not a turn."""
+    if not all(isinstance(box, dict) and _is_point(box.get("min")) and _is_point(box.get("max"))
+               for box in (before, after)):
+        return None
+    low, high = vec.sub(after["min"], before["min"]), vec.sub(after["max"], before["max"])
+    return low if vec.close(low, high, FIT_TOL_MM) else None
+
+
+def _is_point(value):
+    return isinstance(value, (list, tuple)) and len(value) == 3 and all(
+        isinstance(c, (int, float)) and not isinstance(c, bool) for c in value)
 
 
 def spread(points):

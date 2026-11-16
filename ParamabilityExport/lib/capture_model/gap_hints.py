@@ -39,6 +39,7 @@ COIL_LIMIT = "coilLimit"
 COIL_TOOL = "coilTool"
 COIL_HALF = "coilHalf"
 SCALE = "scale"
+MOVE_UNMEASURED = "moveUnmeasured"
 OFFSET_CURVED = "offsetCurved"
 REPLACE_FACE = "replaceFace"
 RIB_WEB = "ribWeb"
@@ -87,6 +88,7 @@ HINTS = {
     COIL_HALF: "Use revolutions that do not end in a half, such as 3.25 or 4.",
     COIL_TOOL: "Join the coil to the part with a combine before you move or change it.",
     SCALE: "Change the sizes in the sketches instead of scaling the body.",
+    MOVE_UNMEASURED: "Draw the sketch of the body where the body should be, instead of moving the body.",
     OFFSET_CURVED: "Press Pull flat faces only, or change the size of the curved face in its sketch.",
     REPLACE_FACE: "Cut the shape with an extrude, or extrude the face up to the shape you want.",
     RIB_WEB: "Draw the rib or web outline in a sketch and extrude it.",

@@ -147,6 +147,28 @@ class MoveTest(unittest.TestCase):
         data = item_of(design, target, "Move1")["data"]
         self.assertEqual((data["input_kind"], data["bodies"], data["move_type"]), ("other", [], "other"))
 
+    def test_a_body_with_no_corners_is_followed_by_its_box_and_a_body_with_corners_is_not(self):
+        def ball(centre):
+            low, high = [c - 6 for c in centre], [c + 6 for c in centre]
+            found = Brick(token="b2", name="Body2")
+            found.boundingBox = Obj(minPoint=P(*low), maxPoint=P(*high))
+            return found
+
+        class Design(FakeDesign):
+            def findEntityByToken(self, token):
+                if token != "b2":
+                    return super().findEntityByToken(token)
+                return [ball((0, 0, -5) if self.timeline.markerPosition >= 2 else (0, 0, 0))]
+
+        definition = Obj("fusion::MoveFeatureTranslateXYZDefinition", xDistance=Obj(value=0.0),
+                         yDistance=Obj(value=0.0), zDistance=Obj(value=-0.5), isDesignSpace=True)
+        target = body()
+        move = feature("MoveFeature", "Move1", inputEntities=Coll([ball((0, 0, 0))]), definition=definition)
+        data = item_of(Design([sketch_entry(), entry(move)], target), target, "Move1")["data"]
+        self.assertEqual(data["points_before"], [[]])
+        self.assertEqual((data["boxes_before"][0]["min"], data["boxes_after"][0]["min"]), ([-6, -6, -6], [-6, -6, -11]))
+        self.assertNotIn("boxes_before", self.read(definition))
+
     def test_a_body_that_cannot_be_found_after_the_move_has_no_points_after(self):
         data = self.read(Obj("fusion::MoveFeatureFreeMoveDefinition"),
                          entities=[Brick(vertices=SQUARE, token="gone", name="Body9")])

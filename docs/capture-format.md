@@ -1283,6 +1283,11 @@ are marked.
 - `points_before`, `points_after`: per body in `bodies`, its first vertex points in the body's own coordinates and
   vertex order; `points_after` is found again by token with the marker after the item and is empty for a body that
   cannot be found. The translator fits the rigid move from them.
+- `boxes_before`, `boxes_after`: only when a body in `bodies` has no vertex points (a sphere, a torus, a closed
+  revolve). Per body, its `boundingBox` as `{ "min": [x, y, z], "max": [x, y, z] }` in the body's own coordinates,
+  null for a body that has vertex points; `boxes_after` is found again by token after the item and is null for a body
+  that cannot be found. A box moves exactly with a shift and shows no turn, so the translator checks only a Move that
+  shifts against it.
 - `translateXYZ`: `translate` is the three distances in mm (`xDistance`, `yDistance`, `zDistance`; null for one that
   cannot be read), `is_design_space` from `isDesignSpace` (null when unreadable). Params paths: `translate.0`,
   `translate.1`, `translate.2`.
@@ -1295,7 +1300,9 @@ are marked.
 - `pointToPoint` carries only the points.
 
 The handler (`translator/bodies/move.py`) writes a `move` step in the walk of the body it moves, and refuses a Move of faces
-and one that does not map the measured points rigidly (a mirror or a scale). `translateXYZ`, `rotate` and `free` must
+and one that does not map the measured points rigidly (a mirror or a scale). A body with no vertex points is measured
+by its boxes: `translateXYZ`, and a `free` transform that only shifts, must move the box by their shift, and any other
+Move of such a body is refused (cause `moveUnmeasured`). `translateXYZ`, `rotate` and `free` must
 agree with the measured points, and `translateXYZ` and `rotate` write their distances and angle through the sizes. The
 other types are written as the numbers of the fit. What they follow can move with any size, so every ticked size is
 marked, and the parameters in their `params` are pinned. After the step the walk's
@@ -2762,6 +2769,7 @@ Not verified (each has a measured check or a test in section 7 of `docs/hand-tes
 | The `entityToken` of a tool body's native body equals the token in `bodies_after` of the steps that made it, and `Design.findEntityByToken` finds it with the marker just before the Combine | an unmatched token leaves the steps unread and the Combine refused naming the step; G1 |
 | `BRepBody.copyToComponent(proxy)` keeps the assembly place | the copy guard in `step_export.py` compares the bounding boxes (1e-3 mm) and refuses before writing |
 | `MoveFeature.inputEntities` (only bodies or only faces) read with the marker before the item; the same bodies found by token after it, with their vertices in the same order | `points_before` and `points_after` are fitted by the translator; a mismatch is refused; the Move hand tests B3 to B5 |
+| `BRepBody.boundingBox` (API reference: "Returns the bounding box of this body") of a moved body with no vertices moves by exactly the shift of a Move along X, Y and Z | a box that changes size or moves by another vector refuses the Move; a box that cannot be read is null and refuses it; the hand check of a sphere moved into a box (`docs/hand-checks.md`) |
 | `MoveFeature.definition` has a class per type, and the type name contains `TranslateXYZ`, `Rotate`, `FreeMove`, `PointToPoint`, `PointToPosition` or `TranslateAlongEntity` | an unknown name reads `other` and the Move is refused; B3 to B5 |
 | `xDistance`, `yDistance`, `zDistance` (model parameters in cm) and `isDesignSpace` of a translate move; `angle` (model parameter in radians) and `axisEntity` of a rotate move | a member that cannot be read is null, and the Move is refused; the sign and the space (component or design) come from the fit against the points; B4, B5 |
 | `MoveFeatureFreeMoveDefinition.transform` answers for a free move | null when it cannot be read; the fit against the points decides alone; B3 |
