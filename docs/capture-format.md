@@ -930,8 +930,10 @@ neither way, refuses an uneven chamfer.
 
 `faces[].point` is `BRepFace.pointOnFace`; tangent chains expanded with `tangentiallyConnectedFaces`;
 `bodies_input` true when the input is a body (a closed hollow). `shell_type`: `sharp`, `rounded` or `other` (a name
-that is not known, or a member that cannot be read). `outside` is null when `outsideThickness` cannot be read, and the
-translator leaves such a shell out. `volume_before` and `volume_after` are the target body's volume in mm3 before and
+that is not known, or a member that cannot be read). `inside` and `outside` are in mm. Fusion gives no parameter (None,
+not an error) for the side that has no wall, so an inward shell has `outside: 0.0` and an outward shell `inside: 0.0`.
+A side is null only when its member raises or is missing, and the translator leaves such a shell out
+(`read_finish._shell_side`). `volume_before` and `volume_after` are the target body's volume in mm3 before and
 after the step (`read_geometry.target_volume`; null when it cannot be read); the translator checks that the shell
 made the part smaller (inward) or changed it (outward).
 

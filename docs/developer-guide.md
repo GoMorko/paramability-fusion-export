@@ -4102,8 +4102,12 @@ wall of one thickness. The copy reads four things from Fusion.
    inward: the outer shape of the part stays. The outside thickness gives a wall that grows outward: the faces of the
    part stay as the walls of the hollow, and the wall is added outside them, so the part gets bigger by the thickness.
    The step then has `outside: true`. When both thicknesses are more than 0, the wall grows both ways. The recipe
-   cannot say that, so the step is left out with the cause `shellKind`. When the outside thickness cannot be read, the
-   step is left out too. The reader does not guess 0 for it, because that would write an inward wall for an outward one.
+   cannot say that, so the step is left out with the cause `shellKind`. Fusion gives no parameter for the side that
+   has no wall. It gives an empty value (None), and it does not give an error. An inward shell has no outside
+   thickness, and an outward shell has no inside thickness. The reader reads an empty value as 0 (no wall on that
+   side). The reader reads a side as unknown only when Fusion gives an error for it or does not have the member. When
+   one of the two thicknesses is unknown, the step is left out. The reader does not guess 0 for an unknown side,
+   because that would write an inward wall for an outward one (`_shell_side` in `fusion_reader/read_finish.py`).
 2. The corners. `shellType` is sharp or rounded. A rounded shell writes `corners: "round"`. A sharp shell writes no
    `corners` field. A type that cannot be read, or that is neither of the two, is left out with the cause `shellKind`.
 3. The open faces. A shell that picks faces opens them: the step has `openFaces`, picked as before (`follow.faces`). A

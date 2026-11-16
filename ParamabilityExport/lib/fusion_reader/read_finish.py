@@ -376,6 +376,16 @@ def _face_record(face, ctx):
     return geo.mark_foreign({"token": _token(face), "point": geo.point(face.pointOnFace)}, face, ctx)
 
 
+def _shell_side(read):
+    """One wall side of a shell in mm. Fusion returns None for the side that has no wall (an inward shell has no
+    outside thickness), which reads as 0.0. A member that raises or is missing gives None (unreadable)."""
+    try:
+        member = read()
+        return 0.0 if member is None else geo.length(member)
+    except Exception:
+        return None
+
+
 def shell_before(feature, ctx):
     tangent_chain = geo.safe(lambda: bool(feature.isTangentChain), False)
     bodies_input, faces, foreign_body = False, [], False
@@ -389,8 +399,8 @@ def shell_before(feature, ctx):
     data = {
         "faces": [_face_record(f, ctx) for f in _unique(faces)],
         "bodies_input": bodies_input,
-        "inside": geo.length(feature.insideThickness),
-        "outside": geo.safe(lambda: geo.length(feature.outsideThickness), None),
+        "inside": _shell_side(lambda: feature.insideThickness),
+        "outside": _shell_side(lambda: feature.outsideThickness),
         "shell_type": _named(lambda: feature.shellType, "ShellTypes", _SHELL_TYPES, "other", "other"),
         "volume_before": geo.target_volume(ctx),
         "volume_after": None,
