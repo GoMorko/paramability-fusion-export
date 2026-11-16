@@ -167,6 +167,14 @@ class SketchPlaneTest(unittest.TestCase):
         self.assertEqual(reach.placement_sizes(self.table, self.timeline, self.profile(origin), 2), [])
         self.assertEqual(reach.placement_sizes(None, self.timeline, self.profile({"kind": "face"}), 2), [])
 
+    def test_a_sketch_plane_is_fixed_only_when_no_ticked_size_moves_it(self):
+        origin = {"kind": "constructionPlane", "origin": True}
+        self.assertTrue(reach.plane_fixed(self.table, self.timeline, self.profile(origin), 2))
+        turned = {"kind": "constructionPlane", "token": "p1", "definition": "At angle", "built_on": [{"origin": True}]}
+        self.assertFalse(reach.plane_fixed(self.table, self.timeline, self.profile(turned), 2))
+        self.assertFalse(reach.plane_fixed(self.table, self.timeline, self.profile({"kind": "face"}), 2))
+        self.assertFalse(reach.plane_fixed(self.table, self.timeline, self.profile(origin, borrowed="Lid"), 2))
+
     def test_a_sketch_without_a_reference_counts_as_on_a_face_unless_it_lies_on_an_origin_plane(self):
         # Fusion gives no reference for some sketches on faces.
         unread = {"sketch": "Sketch9", "frame": FRAME}
