@@ -25,7 +25,7 @@ _FLAT_MM = 1e-4
 
 _ORIENTATIONS = [("perpendicular", "perpendicular"), ("parallel", "parallel")]
 # "noscaling" is tested before "scale": both words are in the option name.
-_SCALINGS = [("noscaling", "none"), ("stretch", "stretch"), ("scale", "scale")]
+_SCALINGS = list({"noscaling": "none", "stretch": "stretch", "scale": "scale"}.items())
 # "point..." conditions are tested before "tangent", which is also in "PointTangent".
 _END_CONDITIONS = [("pointsharp", "pointSharp"), ("pointtangent", "pointTangent"), ("direction", "direction"),
                    ("tangent", "tangent"), ("smooth", "smooth"), ("free", "free")]
