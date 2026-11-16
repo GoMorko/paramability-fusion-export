@@ -6,6 +6,8 @@ from tests.translator_helpers import left_out
 from tests.translator_helpers import (
     assert_schema_ok, edited, load_capture, steps_of, translate_fixture, variant, verdict_of)
 
+from tests.test_translate_sized import on_fixture, param, run
+
 from lib.geometry import vec
 from lib.translator import translate
 
@@ -129,6 +131,92 @@ class InputPickTest(unittest.TestCase):
         self.assertIn("faceEdges", source["edges"])
         self.assertEqual(len(copies["edges"]["near"]), 6)
         assert_schema_ok(self, result.recipe)
+
+
+class OwnPickTest(unittest.TestCase):
+    """Sets that Fusion picked by faces or tangent chains may hold other edges at other sizes: the copy keeps Fusion's
+    pick where the recipe can say it, and otherwise marks the sizes that may change those picks."""
+
+    @staticmethod
+    def chains(data):
+        """Both sets of `fillet_two_radii` (radii 2 and 3) as tangent chains from their first edge."""
+        for one in data["sets"]:
+            one["tangent_chain"] = True
+            one["edges"][0]["seed"] = True
+
+    def loose(self, edit):
+        """The sizes left loose when the box height follows `wall_mm` (read before the round)."""
+        capture, ticked = on_fixture("fillet_two_radii", edit)
+        capture["items"][1]["data"]["params"] = {"side_one.distance": param("d1", "wall_mm * 5", 10.0)}
+        result, _ = run(capture, ticked)
+        return result, [entry["name"] for entry in result.loose]
+
+    def test_tangent_chains_of_different_radii_round_together_along_their_chains(self):
+        result, loose = self.loose(self.chains)
+        (step,) = steps_of(result.recipe, "round")
+        # One point per seed: the side edges at x 0, y 0 and at x 40, y 20, their height following the box.
+        self.assertEqual([p[:2] for p in step["edges"]["near"]], [[0, 0], [40, 20]])
+        self.assertEqual((step["edges"]["chain"], step["edgeSizes"]), ("tangent", [2, 3]))
+        self.assertEqual(loose, [])
+        assert_schema_ok(self, result.recipe)
+
+    def test_a_pattern_copies_each_chain_with_its_radius(self):
+        def edit(capture):
+            data = capture["items"][3]["data"]
+            first = data["sets"][0]
+            first["edges"] = first["edges"][:1]
+            second = dict(first, radius=3.0, edges=[{"token": "e1", "closed": False, "points": [[40, 0, 5]]}])
+            data["sets"].append(second)
+            for one in data["sets"]:
+                one["tangent_chain"] = True
+                one["edges"][0]["seed"] = True
+        source, copies = steps_of(translate(edited_capture("rpattern_fillet", edit)).recipe, "round")
+        self.assertEqual((source["edges"]["chain"], source["edgeSizes"]), ("tangent", [2, 3]))
+        self.assertEqual((copies["edges"]["chain"], copies["edgeSizes"]), ("tangent", [2, 3] * 3))
+
+    def test_a_whole_own_pick_is_kept_where_the_edges_of_one_extrude_would_also_do(self):
+        def one_radius(data):
+            self.chains(data)
+            data["sets"][1]["radius"] = 2.0
+        result, loose = self.loose(one_radius)
+        (step,) = steps_of(result.recipe, "round")
+        self.assertEqual((step["edges"]["chain"], loose), ("tangent", []))
+
+    def test_picks_the_recipe_cannot_say_mark_the_sizes_read_before(self):
+        def face_and_chain(data):
+            self.chains(data)
+            data["sets"][1].update(radius=2.0, tangent_chain=False, input_kinds=["face"],
+                                   faces=[{"token": "top", "point": [20.0, 10.0, 10.0]}])
+
+        def shared_edge(data):
+            self.chains(data)
+            data["sets"][1]["edges"][1]["token"] = "e0"
+
+        def plain_edges(data):
+            for one in data["sets"]:
+                one["tangent_chain"] = False
+        for name, edit, marked in (("a face pick and a chain", face_and_chain, ["wall_mm"]),
+                                   ("chains with an edge in common", shared_edge, ["wall_mm"]),
+                                   ("edges picked one by one", plain_edges, [])):
+            with self.subTest(name):
+                result, loose = self.loose(edit)
+                self.assertTrue(all("chain" not in s["edges"] for s in steps_of(result.recipe, "round")))
+                self.assertEqual(loose, marked)
+
+    def test_a_chamfer_split_by_the_face_of_its_first_distance_marks_a_chain_pick(self):
+        # Edges 1 and 3 take the first distance on the other face, so the set is written as two steps.
+        def split(data):
+            edges = data["sets"][0]["edges"]
+            for edge in (edges[1], edges[3]):
+                side = edge["sides"][0][1]
+                edge["cut_normals"] = [vec.unit([2 * side[0], 2 * side[1], 4])]
+            data["sets"][0]["tangent_chain"] = True
+            edges[0]["seed"] = True
+        capture, ticked = on_fixture("chamfer_two_sides", split)
+        capture["items"][1]["data"]["params"] = {"side_one.distance": param("d1", "wall_mm * 5", 10.0)}
+        result, _ = run(capture, ticked)
+        self.assertEqual(len(steps_of(result.recipe, "bevel")), 2)
+        self.assertEqual([entry["name"] for entry in result.loose], ["wall_mm"])
 
 
 def edited_capture(name, edit):

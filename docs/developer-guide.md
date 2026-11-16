@@ -2782,6 +2782,37 @@ top edges, and `Shell1` opens the top face.
 - A point that no slab places "may sit on geometry that moves". Then every size the steps before it read is marked
   loose, with the step named in the reason.
 
+#### The picks that Fusion was given: faces and tangent chains
+
+A round or chamfer set can get its edges from faces (every edge around each face) or from a tangent chain (every edge
+that runs on from a picked edge without a corner). At other sizes, such a pick can hold more edges or fewer edges. A
+copy that picks each edge by a point does not see these edges. Thus the handler (`finishes/finish.py`,
+`_edge_steps`) picks the edges in this order:
+
+1. Whole sets of one size, all picked only by faces or all picked only by tangent chains: the step writes the pick
+   of Fusion (`_input_pick`). Sets picked by faces write `faceEdges`, the edges around the face points. Tangent chain
+   sets write one point for each edge that was an input (`seed`) and `chain: tangent`. This pick comes before
+   `featureEdges`. The edges of one extrude are the same edges now, but at other sizes the pick of Fusion can hold
+   other edges.
+2. Whole tangent chain sets of different radii in one round (`_chains_of_sizes`): the step writes one point for each
+   seed, `chain: tangent`, and `edgeSizes` with the radius of the set of each seed. The app gives each edge of a
+   chain the size of the point that the chain grew from. Thus all the chains are rounded in one step, as Fusion
+   does, and a chain that grows at other sizes keeps the radius of its set. These conditions must be true: each set
+   is picked only by edges, the sets have no edge in common, the edges of each set have one radius, each set has a
+   seed, and all the seeds fit in one pick (32 points). A pattern or a mirror copies the seed points with their
+   sizes.
+3. The edges of one extrude (`featureEdges`), when all the edges have one size.
+4. One point for each edge.
+
+The recipe cannot say the pick of Fusion for these cases: a step that mixes sets picked by faces and sets picked by
+tangent chains, sets of different sizes picked by faces, a chamfer set that is split by the face of its first
+distance, part of a set, and picks with too many points. Each step of the copy is then a different operation than
+the one step of Fusion, so the steps can only be the same where the sets do not meet. The capture cannot show that
+the sets stay apart at all sizes. Thus, for steps 3 and 4, when a set was picked by faces or by a tangent chain, the
+handler marks the sizes that can change which edges the pick holds (`_mark_own_picks`). These are all the sizes that
+the steps before the round or chamfer read (`reach.any_face_sizes`). Each one is marked "may give unexpected results".
+The first translation of an export marks nothing.
+
 #### A construction plane
 
 A step can use a construction plane: a sketch on it, an extrude that reaches to it, a mirror across it, a split along
@@ -3832,7 +3863,9 @@ But a pick of Fusion can also hold more or fewer edges at other sizes. The copy 
 see these edges. Thus, when a set was picked from faces or from a tangent chain (`input_kinds` has `face`, or
 `tangent_chain` is true), the handler marks the sizes that can change which edges the pick holds
 (`finish._mark_own_picks`). These are all the sizes that the steps before the round read (`reach.any_face_sizes`).
-Each one is marked "may give unexpected results". The same rule applies to a round with a changing radius.
+Each one is marked "may give unexpected results". The same rule applies to a round with a changing radius, and to
+every round and chamfer whose pick the recipe cannot say (section "The picks that Fusion was given: faces and
+tangent chains").
 
 #### A changing radius set
 
