@@ -12,24 +12,27 @@ the chain ordered from the outline's plane, a closed chain cut open there, and t
 crossing, the outline clear of the tightest bend and of the other parts of the path). Then:
 - a straight path is an Orca Extrude of the outline (`steps.extrude`, holes included);
 - one arc or a full circle is an Orca Revolve about its axis (`revolve.revolve`);
-- a chain of lines and arcs in one plane, open or closed, that meet smoothly is an Orca Sweep along a sketch of the
-  path. Its shape for later cuts (`solid`) is the outline carried along each part: a prism along a line, the outline
-  turned about the centre of an arc.
+- a chain of lines, arcs and splines in one plane, open or closed, that meet smoothly is an Orca Sweep along a
+  sketch of the path. A spline is written exactly, as Bezier pieces (`sweep_splines`, `splines`), never as the
+  recipe's fitted curve. Its shape for later cuts (`solid`) is the outline carried along each part: a prism along a
+  line, the outline turned about the centre of an arc, a chain of short prisms along a spline.
 
 Left out: a twist or a taper, an outline kept in one direction along a path that turns, guide rails and surfaces, part
-of a path, a path that bends out of one plane, free curves in the path, sharp corners, an outline with holes along a
-bent path, an outline that is not square to the path where it starts, and a new body whose measured volume or end
-face does not match the outline and path (`design_model.steps.sweep`).
+of a path, a path that bends out of one plane, a free curve Orca cannot draw exactly (one without its exact
+definition, as a body edge, one `splines` refuses, or a spline the planner cut open inside), sharp corners, an
+outline with holes along a bent path, an outline that is not square to the path where it starts, and a new body
+whose measured volume or end face does not match the outline and path (`design_model.steps.sweep`).
 
 Orca cannot tie a path to a variable, so the path keeps its numbers and the sizes that move it are marked. The outline
 of an extrude or a sweep follows its sizes as an extrude outline does.
 """
+import dataclasses
 import math
 
 from ..capture_model import gap_hints
 from ..design_model import reach
 from ..design_model.paths import curves as path_curves, planner
-from ..design_model.paths.checks import bend_problem, overlap_problem
+from ..design_model.paths.checks import bend_problem, outline_reach, overlap_problem, reach_problem
 from ..design_model.paths.curves import tangents
 from ..design_model.paths.model import PathOptions
 from ..design_model.problem import is_problem
@@ -37,7 +40,7 @@ from ..design_model.steps.sweep import cover_problem, end_check, profile_points,
 from ..geometry import spline_fit, vec
 from ..orca_recipe.enums import BooleanMode, FeatureType
 from ..geometry.footprint import polyline
-from . import causes, extents, limits, revolve, sketch_sizes, steps
+from . import causes, extents, limits, revolve, sketch_sizes, steps, sweep_splines
 from ..design_model.values import Quantity
 from ..design_model import words as shared
 from .sketches import entities_of, graph_for, outline_sketch, outlines_of
@@ -62,7 +65,8 @@ _TWIST = "Orca's sweep cannot twist or taper its outline, so this sweep is left 
 _KEEPS_DIRECTION = ("Orca's sweep turns the outline with its path and cannot keep it in one direction, so this sweep "
                     "is left out.")
 _NOT_FLAT = "Orca's copy of a sweep takes a path in one plane only, so this sweep is left out."
-_FREE_CURVE = "The path of this sweep has a free curve (a spline), which the Orca copy cannot draw, so it is left out."
+_FREE_CURVE = ("The path of this sweep has a free curve (a spline) the Orca copy cannot draw exactly, so it is "
+               "left out.")
 _SHARP = "The path of this sweep has a sharp corner, which the Orca copy does not build the way Fusion does."
 _HOLES = "Orca's sweep cannot carry an outline with holes along a bent path, so this sweep is left out."
 _NOT_SQUARE = "The outline of this sweep is not square to its path, which the Orca copy cannot build the same way."
@@ -136,13 +140,13 @@ def sweep(ctx, item):
            for p in profiles):
         return Skip("The outlines of this sweep lie in different planes, which is not copied to Orca yet.")
     points = [q for p in profiles for q in profile_points(p)]
-    found = planner.plan(path, frame, points,
+    found = planner.plan(sweep_splines.with_exact_splines(path), frame, points,
                          PathOptions(max_segments=_MAX_SEGMENTS, max_points=_MAX_POINTS, splines=spline_fit))
     if is_problem(found):
         return Skip.of(found)
     if found.kind == "corners":
         return Skip(_NOT_FLAT, causes.SWEEP_PATH)
-    if any(c.get("kind") not in ("line", "arc", "circle") for c in found.curves):
+    if any(c.get("kind") == "other" and not c.get("nurbs3d") for c in found.curves):
         return Skip(_FREE_CURVE, causes.SWEEP_PATH)
     if data["orientation"] == "parallel" and found.kind != "line":
         return Skip(_KEEPS_DIRECTION, causes.SWEEP_SHAPE)
@@ -228,10 +232,13 @@ def _path_frame(found):
 
 
 def _flat_curve(curve, frame):
-    """A path curve in the 2D frame of the path's plane, as a capture curve."""
+    """A path curve in the 2D frame of the path's plane, as a capture curve; None for a spline Orca cannot draw
+    exactly."""
     def local(p):
         return vec.frame_to_local(frame, p)[:2]
 
+    if curve["kind"] == "other":
+        return sweep_splines.flat_spline(curve, frame)
     if curve["kind"] == "line":
         return {"kind": "line", "start": local(curve["start"]), "end": local(curve["end"])}
     if curve["kind"] == "circle":
@@ -242,21 +249,33 @@ def _flat_curve(curve, frame):
 
 def carried(frame, loops, found):
     """The shape of the outline (`loops` of capture curves in `frame`) swept along the flat path `found`, turning
-    with it: a `solid.Solid` that adds a prism along each line and the outline turned about the centre of each arc."""
+    with it: a `solid.Solid` that adds a prism along each line, the outline turned about the centre of each arc and a
+    chain of prisms along each spline (`sweep_splines.chain`)."""
     normal = vec.unit(found.recipe["on"]["normal"])
     first = vec.unit(found.direction)
-    shape = Solid()
-    for curve in found.curves:
-        start = tangents(curve)[0]
-        turn = math.degrees(math.atan2(vec.dot(vec.cross(first, start), normal), vec.dot(first, start)))
 
-        def moved(p, offset=True, turn=turn, at=curve["start"]):
+    def placed(direction, at):
+        turn = math.degrees(math.atan2(vec.dot(vec.cross(first, direction), normal), vec.dot(first, direction)))
+
+        def moved(p, offset=True):
             if not offset:
                 return vec.rotate(p, normal, turn)
             return vec.add(vec.rotate(vec.sub(p, found.start), normal, turn), at)
 
-        here = {"origin": moved(frame["origin"]), "x": moved(frame["x"], False), "y": moved(frame["y"], False),
+        return {"origin": moved(frame["origin"]), "x": moved(frame["x"], False), "y": moved(frame["y"], False),
                 "z": moved(frame["z"], False)}
+
+    shape = Solid()
+    last = len(found.curves) - 1
+    for number, curve in enumerate(found.curves):
+        start = tangents(curve)[0]
+        if curve["kind"] == "other":
+            corners = [vec.frame_apply(frame, list(p) + [0.0]) for c in loops[0] for p in polyline(c)]
+            reach = outline_reach(corners, found.start, normal)
+            shape.add(ADD, sweep_splines.chain(curve, lambda d, at: (placed(d, at), loops), reach,
+                                               number == 0 and not found.closed, number == last and not found.closed))
+            continue
+        here = placed(start, curve["start"])
         if curve["kind"] == "line":
             length = vec.length(vec.sub(curve["end"], curve["start"]))
             along = 1.0 if vec.dot(here["z"], start) > 0 else -1.0
@@ -279,9 +298,15 @@ def _arc_angle(curve, centre, axis):
 def _as_sweep(ctx, item, data, profiles, found):
     operation = data.get("operation")
     frame = _path_frame(found)
-    entities = entities_of([[_flat_curve(c, frame) for c in found.curves]])
+    flat = [_flat_curve(c, frame) for c in found.curves]
+    entities = entities_of([flat]) if all(c is not None for c in flat) else None
     if entities is None:
         return Skip(_FREE_CURVE, causes.SWEEP_PATH)
+    # The planner's tightest bend is read from its fitted curve; the spline Orca builds is the exact one.
+    found = dataclasses.replace(found, tightest=min(found.tightest, sweep_splines.tightest(flat)))
+    issue = reach_problem([q for p in profiles for q in profile_points(p)], found.start, frame["z"], found.tightest)
+    if issue is not None:
+        return Skip.of(issue)
     written = []
     for n, profile in enumerate(profiles):
         outline = outlines_of(profile)

@@ -1477,6 +1477,18 @@ The button "Export for Orca (experimental)" in the Paramability panel saves one 
       component, not in `Rod`) counts for the place of `Rod` only through the rule for joints and Moves of
       occurrences (`refs.acting_sizes`). If `RodX` shows as not used, send `report.json`: its `dependents` tell which
       item reads it.
+- [ ] OR24, a sweep along a spline. A user parameter `Wire` = 4 mm. On the XY plane draw a path: a 20 mm line from
+      the origin along X, then a control point spline from the line's end through control points (32, 0), (40, 14),
+      (52, -14), (60, 0) to (72, 0) mm, tangent to the line at their shared point. On the YZ plane draw a circle of
+      diameter `Wire` centred on the origin and sweep it along the whole path as a new body. Make a second body the
+      same way, with the path drawn the other way round (the spline from (72, 0) first, then the line back to the
+      origin). Make a third body with a fit point spline through (20, 0), (30, 5) and (40, 20) mm that is not tangent
+      to its 20 mm line.
+      Export: each body for Orca with `Wire` ticked. Expect: the first two copied as one Orca sweep each, the path
+      sketch a line and B-spline pieces starting at the outline, `Wire` follows and the path sizes stay numbers; the
+      third under "Left out" (sharp corner). Each Orca body has the box and volume Fusion measures (Inspect >
+      Properties); set `Wire` to 6 in both and compare again. Send `report.json` when a spline path is left out with
+      "cannot draw exactly": its path curve must hold `flat` with `nurbs`.
 
 ## Thin extrudes
 

@@ -259,3 +259,68 @@ def block_and_bend(clockwise=False):
     box["min"][1], box["max"][1] = min(box["min"][1], y0), max(box["max"][1], y1)
     out["target"]["volume_mm3"] = round(out["target"]["volume_mm3"] + 80.0, 4)
     return out
+
+
+# ---- sweeps along a spline ----------------------------------------------------------------------------------------
+
+# A cubic of two pieces with uneven knots from (20, 0), leaving along +x (so it meets a line along +x smoothly), and
+# bending up to (40, 20); `BEND_BACK` is the same curve drawn from its far end.
+BEND_SPLINE = {"degree": 3, "knots": [0, 0, 0, 0, 0.3, 1, 1, 1, 1],
+               "poles": [(20.0, 0.0), (28.0, 0.0), (36.0, 4.0), (40.0, 12.0), (40.0, 20.0)]}
+BEND_BACK = dict(BEND_SPLINE, knots=[0, 0, 0, 0, 0.7, 1, 1, 1, 1], poles=list(reversed(BEND_SPLINE["poles"])))
+
+
+def _spline_path_curve(spec, token, opposed=False):
+    """A path curve of a spline in the XY plane: its points in 3D and its exact definition in `flat`."""
+    flat = spline_curve(spec)
+    lift = [list(p) + [0.0] for p in flat["samples"]]
+    return {"kind": "other", "type": "NurbsCurve3D", "start": lift[0], "end": lift[-1], "mid": lift[len(lift) // 2],
+            "samples": lift, "opposed": opposed, "entity": token, "flat": flat}
+
+
+# A cubic of three pieces that leaves (20, 0) along +x, bends left, then right through a turning point, and ends
+# along +x at (72, 0): Orca must carry the outline through the turning point without flipping it.
+S_SPLINE = {"degree": 3, "knots": [0, 0, 0, 0, 0.4, 0.6, 1, 1, 1, 1],
+            "poles": [(20.0, 0.0), (32.0, 0.0), (40.0, 14.0), (52.0, -14.0), (60.0, 0.0), (72.0, 0.0)]}
+
+
+def spline_bend_points(spec=BEND_SPLINE, count=4000):
+    return [nurbs_point(spec["degree"], spec["knots"], spec["poles"], k / float(count)) for k in range(count + 1)]
+
+
+def _along_spline(name, outline, area, across, up, spec, drawn_back=False):
+    """`outline` (in `ACROSS_X`, of `area`, reaching `across` in the XY plane and `up` out of it from its centre on
+    the path start) swept along a 20 mm line along +x from the origin and the spline `spec` on from its end. The
+    outline's centre runs on the path, so the volume is the area times the path length; the box is the path grown
+    by `across` square to it and by `up` along z. With `drawn_back` both curves are drawn from the far end of the path
+    (`BEND_BACK`, then the line back to the origin), so the copy must turn both round."""
+    outline = dict(profile("Sketch1", ACROSS_X, outline), space="sketch")
+    curves = [_line((0.0, 0.0, 0.0), (20.0, 0.0, 0.0), "p0"), _spline_path_curve(spec, "p1")]
+    if drawn_back:
+        curves = [_spline_path_curve(BEND_BACK, "p1"), _line((20.0, 0.0, 0.0), (0.0, 0.0, 0.0), "p0")]
+    items = [sketch_item(0, "Sketch1"), sketch_item(1, "Path"),
+             sweep(2, name, [outline], path_record(curves), areas=[area])]
+    dense = spline_bend_points(spec)
+    length = 20.0 + sum(math.dist(a, b) for a, b in zip(dense, dense[1:]))
+    grown = [(0.0, -across), (0.0, across)]
+    for a, b in zip(dense, dense[1:]):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        size = math.hypot(dx, dy)
+        for p in (a, b):
+            grown += [(p[0] - dy / size * across, p[1] + dx / size * across),
+                      (p[0] + dy / size * across, p[1] - dx / size * across)]
+    low = (min(p[0] for p in grown), min(p[1] for p in grown), -up)
+    high = (max(p[0] for p in grown), max(p[1] for p in grown), up)
+    return capture(items, (low, high), area * length)
+
+
+def pipe_along_spline(radius=2.0, drawn_back=False):
+    """A circle of `radius` swept along a line and `BEND_SPLINE` (`_along_spline`)."""
+    return _along_spline("Pipe", circle(radius), math.pi * radius ** 2, radius, radius, BEND_SPLINE, drawn_back)
+
+
+def bar_along_s_spline(width=4.0, height=1.5):
+    """A `width` (in the path's plane) by `height` rectangle swept along a line and `S_SPLINE` (`_along_spline`): a
+    rectangle that flipped at the turning point would stand `width` high there."""
+    return _along_spline("Bar", rect(-width / 2, -height / 2, width / 2, height / 2), width * height, width / 2,
+                         height / 2, S_SPLINE)
