@@ -435,9 +435,10 @@ not judged to meet material where Orca removes nothing.
   intersect inside a tool takes its rule (`every` or `any`) from the tool's own volume, and is left out when the tool
   was not measured. A Combine inside a tool builds its own tools the same way, up to 3 levels. A step of
   the tool that cannot be copied leaves the whole step out, naming the tool and that step, and nothing of it is
-  written. The reason reads "The tool body X cannot be copied, because its step Y is left out: <reason of the
-  step>." (for a step that the chain of the tool cannot see: "..., because of the step Y: ..."), with no reason in
-  parentheses inside another. While a tool body is built, the reasons of its steps name the tool and not the part
+  written. The reason reads "The tool body X cannot be copied because of its step Y. <reason of the
+  step>", the same two sentences as in the recipe (`design_model.words.ToolStop`). When Y is a Combine whose own tool
+  cannot be built, the reason names the step that really stops it once, and its tool body: "... because of the step Z
+  in the tool body W. <reason of Z>". While a tool body is built, the reasons of its steps name the tool and not the part
   (`Context.body_words`: "the part", or "the tool body X"), for example the rounds and chamfers (`finishes`) and a
   cut that meets nothing (`steps.misses_reason`). A pattern whose tool cannot be built gives "This pattern cannot be
   copied." and then the reason of the tool. Those steps were passed by as building another body; once copied into a tool their verdict says so.

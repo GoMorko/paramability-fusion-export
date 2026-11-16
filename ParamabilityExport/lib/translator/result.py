@@ -11,11 +11,14 @@ class Refusal:
     `over_gap_cap` says a tool body walk met more gaps than a part may hold: the whole copy stops, the item does not
     become a gap. `tool_steps` are then the verdicts of that walk, so its own gaps are known. `stops` says the body
     after the item cannot be known without it, so the copy stops there instead of leaving the item out. `cause` is the
-    gap cause of `gap_hints` that gives the person a hint on what to change in Fusion, or None."""
+    gap cause of `gap_hints` that gives the person a hint on what to change in Fusion, or None. `stop` is the
+    `design_model.words.ToolStop` when the reason says a tool body cannot be built, so a tool of a tool can name the
+    step that really stops it."""
 
-    def __init__(self, reason, depends_on=(), over_gap_cap=False, tool_steps=(), stops=False, cause=None):
+    def __init__(self, reason, depends_on=(), over_gap_cap=False, tool_steps=(), stops=False, cause=None, stop=None):
         self.reason = reason
         self.cause = cause
+        self.stop = stop
         self.doubts = []
         self.depends_on = list(depends_on)
         self.over_gap_cap = over_gap_cap
@@ -164,5 +167,7 @@ class TranslateResult:
     # When the copy stops: the `gap_hints` cause of the step that stops it, when it has one. A tool body walk passes
     # it on, so the gap its Combine becomes gets that step's hint.
     refusal_cause: Optional[str] = None
+    # When the copy stops: the `ToolStop` of the refusal when it says a tool body cannot be built, else None.
+    refusal_stop: Optional[object] = None
     # When the copy stops: what a walk past the stop finds (`translate._diagnosis`), or None.
     after_stop: Optional[dict] = None
