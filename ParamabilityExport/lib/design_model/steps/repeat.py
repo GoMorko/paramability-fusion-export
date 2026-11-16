@@ -4,9 +4,11 @@ An element frame is the transform of one copy from the original (`origin` and th
 assembly space; `in_component` (`data_in_component` for the data alone) carries the frames into the frame of the
 component the steps are written in, and drops copies that sit exactly on an earlier one. `read_in_component` does
 the same for the copies a probe state read. `solve_lattice` gives the grid index of a copy, `reach` the steps a
-symmetric direction runs each way, and `mirror_plane` the plane of a mirror. What a copy does about a size, and how a
-copy is written, stay with the destination.
+symmetric direction runs each way, and `mirror_plane` the plane of a mirror. `repeated_items` gives the timeline
+items a pattern or a mirror of features repeats. What a copy does about a size, and how a copy is written, stay with
+the destination.
 """
+from ...capture_model import step_kinds
 from ...geometry import vec
 from ...package.numbers import round9
 
@@ -56,6 +58,16 @@ def read_in_component(read, place):
     if place is None or not read.get("elements"):
         return read
     return dict(read, elements=[dict(e, frame=carried_frame(place, e["frame"])) for e in read["elements"]])
+
+
+def repeated_items(item):
+    """The timeline indexes of the items that `item` repeats as copies (`data.sources`) when its kind repeats items
+    (`StepType.repeats_sources`: a pattern or a mirror), else an empty list."""
+    spec = step_kinds.step_type(item.get("type"))
+    if spec is None or not spec.repeats_sources:
+        return []
+    data = item.get("data")
+    return (data.get("sources") if isinstance(data, dict) else None) or []
 
 
 def in_component(item, place, merge=False):

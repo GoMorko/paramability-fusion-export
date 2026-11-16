@@ -9,8 +9,9 @@ A chamfer with two distances, or a distance and an angle, says which face takes 
 reader measures it per edge (`sides`, `cut_normals`). What the recipe has no words for is refused: changing radii,
 outside or rounded shells.
 """
-from ...capture_model import gap_hints, step_kinds
+from ...capture_model import gap_hints
 from ...design_model.steps import finish as sets_of
+from ...design_model.steps.repeat import repeated_items
 from ...design_model.values import Sized, number, reads_in
 from ...design_model import words as shared
 
@@ -129,10 +130,8 @@ def _repeated_without(ctx, item, source_index):
         if other is item or other.get("index") == item.get("index"):
             later = True
             continue
-        sources = (other.get("data") or {}).get("sources") or []
-        spec = step_kinds.step_type(other.get("type"))
-        repeats = spec is not None and spec.repeats_sources
-        if later and repeats and source_index in sources and item.get("index") not in sources:
+        sources = repeated_items(other)
+        if later and source_index in sources and item.get("index") not in sources:
             return True
     return False
 
@@ -191,8 +190,7 @@ def _fold_into_slot(ctx, item, folded):
 
 
 def fillet(ctx, step):
-    item, data = step.brought, step.brought_data
-    sets = sets_of.round_sets(data)
+    item, data, sets = step.brought, step.brought_data, step.facts
     if not sets:
         return Refusal(shared.ROUND_NO_EDGES)
     for one in sets:
@@ -264,8 +262,7 @@ def _chamfer_parts(ctx, item, sets, sides):
 
 
 def chamfer(ctx, step):
-    item, data = step.brought, step.brought_data
-    sets = sets_of.chamfer_sets(data)
+    item, data, sets = step.brought, step.brought_data, step.facts
     if not sets:
         return Refusal(shared.CHAMFER_NO_EDGES)
     sides = []
