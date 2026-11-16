@@ -22,6 +22,7 @@ A point on the inner wall of a shell is placed through the outer wall it was mov
 a face that an offsetFaces step moved through the face before the move (faces/offset_faces.py). An edge where the walls of
 two steps cross is placed on both walls (faces/crossings.py).
 """
+from ...capture_model.capture import renamed_target
 from ...design_model.values import Quantity
 from ...geometry import vec
 from .. import notes, ref_motion, values
@@ -232,6 +233,18 @@ def reads_with_outer(ctx, item):
         return tuple(dict.fromkeys(ctx.written_reads + reads_with_outer(ctx.outer, item)))
 
 
+def _another_body(ctx, body):
+    """True when the body record `body` is proven to be another body than the one the walk builds: it is not that
+    body (`Context.is_target`), and it is not a body with that body's name under another token, which may be the same
+    body after Fusion gave it a new token (`capture.renamed_target`)."""
+    if not body or ctx.is_target(body):
+        return False
+    held = [ctx.target]
+    if ctx.lineage and ctx.current is not None:
+        held += list(ctx.lineage_at(ctx.current.get("index", 0)))
+    return not any(renamed_target(body, b) for b in held if b)
+
+
 def _beyond_tool(ctx, item, ref, points, what, ask, edge=False):
     """How a reference a step uses moves, when it is not on the body the walk builds; `_ON_THIS_BODY` when it is.
     In a tool, `ask(outer)` works it out in the walk that holds the tool, as that walk stood at `item`.
@@ -239,12 +252,12 @@ def _beyond_tool(ctx, item, ref, points, what, ask, edge=False):
     The body on record says where the reference lies. Without one, a point the tool cannot place is taken to lie
     outside it, and outside a tool the reference is taken to lie on the body walked. A body no walk builds, or a tool
     in another frame, cannot be followed: every size may move it. Outside a tool, a reference on another body (a
-    helper body) is never on this body: no step of the walk places it, and a step that has a face at the same place is
-    not the one meant. Every size read before the step may move it (`reach.any_face_sizes`)."""
+    helper body, `_another_body`) is never on this body: no step of the walk places it, and a step that has a face at
+    the same place is not the one meant. Every size read before the step may move it (`reach.any_face_sizes`)."""
     outer = ctx.outer
     body = ref.get("body")
     if outer is None:
-        if body and not ctx.is_target(body):
+        if _another_body(ctx, body):
             names = any_face_sizes(ctx.table, ctx.timeline, item) if ctx.table is not None else ()
             ctx.doubt(names, "%s %s a face of another body that may move with it, and the copy cannot follow that"
                       % (_name(item), what))

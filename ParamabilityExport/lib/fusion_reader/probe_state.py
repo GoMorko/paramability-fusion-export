@@ -127,7 +127,8 @@ def read_state(design, request, ctx):
     sketch in `curves`, `curves`: { curve token: flat curve }; a borrowed one also has `native_frame` and `placement`.
     `points` maps a token to [x, y, z] mm; `lines` to { point, dir };
     `params` a name to its value in cm or radians; `box` is the target's { min, max } and absent when it cannot be
-    read; with it, `pieces` is { lumps, others } of the target (`_read_pieces`). `refs` maps a reference key to its
+    read; with it, `volume_mm3` and `area_mm2` of the target (`BRepBody.volume`, `BRepBody.area`, each absent when
+    it cannot be read) and `pieces`, { lumps, others } of the target (`_read_pieces`). `refs` maps a reference key to its
     place in the target's coordinates, in mm: { point, normal }, { point, dir }, { dir } or { point }. `faces` maps a face key to { frame, loops } as the capture holds a face used
     as an outline; it is read last, since it moves the timeline marker for a while. `patterns` maps a key to
     { count, elements }, the copies a pattern makes at this state (`probe_patterns`). `unread` gives a reason per
@@ -184,6 +185,14 @@ def read_state(design, request, ctx):
             box = geo.safe(lambda: geo.box_of(body), None) if body is not None else None
         if box is not None:
             state["box"] = box
+            # The volume and area tell a change inside the box (a pocket, a hole, an inner wall) that the box misses.
+            with span_on(ctx, "read_volume"):
+                volume = geo.safe(lambda: round(body.volume * 1000.0, 6) + 0.0, None)
+                area = geo.safe(lambda: round(body.area * 100.0, 6) + 0.0, None)
+            if volume is not None:
+                state["volume_mm3"] = volume
+            if area is not None:
+                state["area_mm2"] = area
             with span_on(ctx, "read_pieces"):
                 pieces = _read_pieces(body, ctx)
             if pieces is not None:
