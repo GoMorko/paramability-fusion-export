@@ -194,7 +194,7 @@ def walk_items(ctx, result):
             # Later steps may belong to the other body, so no single missing step can stand for this one. A split
             # that keeps the body as one piece apart from the others is copied (bodies/split_rules.py), whichever piece
             # keeps the name of the body it split.
-            stop = split_rules.stop_reason(item, ctx)
+            stop = split_rules.stop_reason(step, ctx)
             if stop is not None:
                 return refuse(item, stop)
         if handler is None and roles.only_splits_faces(item, role.bodies):

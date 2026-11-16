@@ -16,21 +16,17 @@ ANOTHER_BODY = "This step splits the part or makes another body, which is not co
 NOT_READ = ("What this split cuts with was not read. Exporting again with this version of the add-in reads it.")
 
 
-def _data(item):
-    data = item.get("data")
-    return data if isinstance(data, dict) else {}
-
-
 def is_split(item):
     return lineage.is_split(item)
 
 
-def stop_reason(item, ctx):
-    """None when the walk may run the split handler on `item`, a step that leaves more than one body; else the reason
-    the copy stops."""
+def stop_reason(step, ctx):
+    """None when the walk may run the split handler on `step` (a `design_model.design.ResolvedStep`), a step that
+    leaves more than one body; else the reason the copy stops."""
+    item = step.item
     if not lineage.is_split(item):
         return ANOTHER_BODY
-    if not isinstance(_data(item).get("tool"), dict):
+    if not isinstance(step.data.get("tool"), dict):
         return NOT_READ
     before, kept = ctx.lineage_at(item.get("index", 0))
     after = item.get("bodies_after") or []
