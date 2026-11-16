@@ -1,0 +1,797 @@
+{
+ "capture": 3,
+ "fusion": "2706.1.17",
+ "design": "Test models",
+ "up_axis": "z",
+ "design_units": "mm",
+ "parameters": {
+  "user": [
+   {
+    "name": "Sweep",
+    "expression": "270 deg",
+    "value": 4.71238898038469,
+    "display_value": 270.0,
+    "unit": "deg",
+    "kind": "angle",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "comment": "",
+    "dependent_parameters": [
+     "d150",
+     "d154",
+     "d162"
+    ],
+    "dependents": [
+     {
+      "name": "d162",
+      "kind": "feature",
+      "component": "tok1",
+      "feature": "Revolve1"
+     },
+     {
+      "name": "d154",
+      "kind": "feature",
+      "component": "tok1",
+      "feature": "Revolve1"
+     },
+     {
+      "name": "d150",
+      "kind": "feature",
+      "component": "tok2",
+      "feature": "Revolve1"
+     }
+    ]
+   },
+   {
+    "name": "RingW",
+    "expression": "10 mm",
+    "value": 1.0,
+    "display_value": 10.0,
+    "unit": "mm",
+    "kind": "length",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "comment": "",
+    "dependent_parameters": [
+     "d147",
+     "d151"
+    ],
+    "dependents": [
+     {
+      "name": "d151",
+      "kind": "sketchDimension",
+      "component": "tok1",
+      "sketch": "RingSketch",
+      "sketch_token": "tok3"
+     },
+     {
+      "name": "d147",
+      "kind": "sketchDimension",
+      "component": "tok2",
+      "sketch": "RingSketch",
+      "sketch_token": "tok4"
+     }
+    ]
+   }
+  ],
+  "model": [
+   {
+    "name": "d151",
+    "expression": "RingW",
+    "value": 1.0,
+    "display_value": 10.0,
+    "unit": "mm",
+    "kind": "derived",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "RingW"
+    ],
+    "role": "Linear Dimension-2",
+    "created_by": {
+     "kind": "sketchDimension",
+     "token": "tok5",
+     "name": "",
+     "sketch": "RingSketch",
+     "component": "tok1"
+    }
+   },
+   {
+    "name": "d152",
+    "expression": "15 mm",
+    "value": 1.5,
+    "display_value": 15.0,
+    "unit": "mm",
+    "kind": "length",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "Linear Dimension-3",
+    "created_by": {
+     "kind": "sketchDimension",
+     "token": "tok6",
+     "name": "",
+     "sketch": "RingSketch",
+     "component": "tok1"
+    }
+   },
+   {
+    "name": "d153",
+    "expression": "20 mm",
+    "value": 2.0,
+    "display_value": 20.0,
+    "unit": "mm",
+    "kind": "length",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "Linear Dimension-4",
+    "created_by": {
+     "kind": "sketchDimension",
+     "token": "tok7",
+     "name": "",
+     "sketch": "RingSketch",
+     "component": "tok1"
+    }
+   },
+   {
+    "name": "d154",
+    "expression": "Sweep",
+    "value": 4.71238898038469,
+    "display_value": 270.0,
+    "unit": "deg",
+    "kind": "derived",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "Sweep"
+    ],
+    "role": "AlongAngle",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok8",
+     "name": "Revolve1",
+     "sketch": "",
+     "component": "tok1"
+    }
+   }
+  ]
+ },
+ "targets": [
+  {
+   "token": "tok9",
+   "name": "Body1",
+   "box": {
+    "min": [
+     -30.0,
+     -30.0,
+     0.0
+    ],
+    "max": [
+     30.0,
+     30.0,
+     15.0
+    ]
+   },
+   "volume_mm3": 23561.944902,
+   "component": {
+    "token": "tok1",
+    "name": "T15b-revolve-symmetric",
+    "root": false
+   },
+   "placement": {
+    "path": "T15b-revolve-symmetric:1",
+    "frame": {
+     "origin": [
+      0.0,
+      1920.0,
+      0.0
+     ],
+     "x": [
+      1.0,
+      0.0,
+      0.0
+     ],
+     "y": [
+      0.0,
+      1.0,
+      0.0
+     ],
+     "z": [
+      0.0,
+      0.0,
+      1.0
+     ]
+    },
+    "source": "transform2",
+    "checked_points": 3,
+    "uses": 1,
+    "linked": false
+   }
+  }
+ ],
+ "target": {
+  "token": "tok9",
+  "name": "Body1",
+  "box": {
+   "min": [
+    -30.0,
+    -30.0,
+    0.0
+   ],
+   "max": [
+    30.0,
+    30.0,
+    15.0
+   ]
+  },
+  "volume_mm3": 23561.944902,
+  "component": {
+   "token": "tok1",
+   "name": "T15b-revolve-symmetric",
+   "root": false
+  },
+  "placement": {
+   "path": "T15b-revolve-symmetric:1",
+   "frame": {
+    "origin": [
+     0.0,
+     1920.0,
+     0.0
+    ],
+    "x": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "y": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "z": [
+     0.0,
+     0.0,
+     1.0
+    ]
+   },
+   "source": "transform2",
+   "checked_points": 3,
+   "uses": 1,
+   "linked": false
+  }
+ },
+ "items": [
+  {
+   "index": 78,
+   "name": "RingSketch",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "tok1",
+   "in_target_component": true,
+   "bodies_after": [],
+   "target_changed": null,
+   "target_before": null,
+   "target_after": null,
+   "data": {},
+   "bodies_before": []
+  },
+  {
+   "index": 79,
+   "name": "Revolve1",
+   "type": "RevolveFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "tok1",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "tok9",
+     "name": "Body1"
+    }
+   ],
+   "target_changed": true,
+   "target_before": null,
+   "target_after": {
+    "box": {
+     "min": [
+      -30.0,
+      -30.0,
+      0.0
+     ],
+     "max": [
+      30.0,
+      30.0,
+      15.0
+     ]
+    },
+    "volume_mm3": 23561.944902
+   },
+   "data": {
+    "operation": "newBody",
+    "profiles": [
+     {
+      "sketch": "RingSketch",
+      "frame": {
+       "origin": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "x": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "y": [
+        0.0,
+        0.0,
+        -1.0
+       ],
+       "z": [
+        0.0,
+        1.0,
+        0.0
+       ]
+      },
+      "space": "sketch",
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "line",
+          "start": [
+           30.0,
+           -15.0
+          ],
+          "end": [
+           20.0,
+           -15.0
+          ],
+          "entity": "tok10"
+         },
+         {
+          "kind": "line",
+          "start": [
+           30.0,
+           0.0
+          ],
+          "end": [
+           30.0,
+           -15.0
+          ],
+          "entity": "tok11"
+         },
+         {
+          "kind": "line",
+          "start": [
+           22.5,
+           0.0
+          ],
+          "end": [
+           30.0,
+           0.0
+          ],
+          "entity": "tok12"
+         },
+         {
+          "kind": "line",
+          "start": [
+           20.0,
+           0.0
+          ],
+          "end": [
+           22.5,
+           0.0
+          ],
+          "entity": "tok12"
+         },
+         {
+          "kind": "line",
+          "start": [
+           20.0,
+           -15.0
+          ],
+          "end": [
+           20.0,
+           0.0
+          ],
+          "entity": "tok13"
+         }
+        ]
+       }
+      ],
+      "sketch_token": "tok3",
+      "reference": {
+       "kind": "constructionPlane",
+       "token": "tok14",
+       "origin": true
+      }
+     }
+    ],
+    "axis": {
+     "point": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "dir": [
+      0.0,
+      0.0,
+      1.0
+     ],
+     "token": "tok15",
+     "origin": true
+    },
+    "project_axis": false,
+    "extent": {
+     "kind": "angle",
+     "angle_deg": 270.0,
+     "symmetric": true
+    },
+    "participants": [],
+    "start_face_normal": null,
+    "params": {
+     "extent.angle_deg": {
+      "name": "d154",
+      "expression": "Sweep",
+      "value": 270.0
+     }
+    }
+   },
+   "sketch_inputs": [
+    {
+     "token": "tok3",
+     "name": "RingSketch"
+    }
+   ],
+   "bodies_before": []
+  }
+ ],
+ "sketch_links": [
+  {
+   "sketch": "RingSketch",
+   "token": "tok3",
+   "links": [],
+   "unknown": 0
+  }
+ ],
+ "sketch_graphs": [
+  {
+   "sketch": "RingSketch",
+   "token": "tok3",
+   "component": {
+    "token": "tok1",
+    "name": "T15b-revolve-symmetric"
+   },
+   "fully_constrained": true,
+   "origin": 0,
+   "points": [
+    {
+     "id": 0,
+     "xy": [
+      0.0,
+      0.0
+     ],
+     "origin": true,
+     "token": "tok16",
+     "fixed": true,
+     "free": false,
+     "linked": false,
+     "reference": null
+    },
+    {
+     "id": 1,
+     "xy": [
+      20.0,
+      0.0
+     ],
+     "origin": false,
+     "token": "tok17",
+     "fixed": false,
+     "free": false,
+     "linked": false,
+     "reference": null
+    },
+    {
+     "id": 2,
+     "xy": [
+      30.0,
+      0.0
+     ],
+     "origin": false,
+     "token": "tok18",
+     "fixed": false,
+     "free": false,
+     "linked": false,
+     "reference": null
+    },
+    {
+     "id": 3,
+     "xy": [
+      30.0,
+      -15.0
+     ],
+     "origin": false,
+     "token": "tok19",
+     "fixed": false,
+     "free": false,
+     "linked": false,
+     "reference": null
+    },
+    {
+     "id": 4,
+     "xy": [
+      20.0,
+      -15.0
+     ],
+     "origin": false,
+     "token": "tok20",
+     "fixed": false,
+     "free": false,
+     "linked": false,
+     "reference": null
+    },
+    {
+     "id": 5,
+     "xy": [
+      1.75,
+      0.0
+     ],
+     "origin": false,
+     "token": "tok21",
+     "fixed": false,
+     "free": false,
+     "linked": true,
+     "reference": null
+    },
+    {
+     "id": 6,
+     "xy": [
+      22.5,
+      0.0
+     ],
+     "origin": false,
+     "token": "tok22",
+     "fixed": false,
+     "free": false,
+     "linked": true,
+     "reference": null
+    }
+   ],
+   "curves": [
+    {
+     "id": 0,
+     "kind": "line",
+     "construction": false,
+     "token": "tok12",
+     "fixed": false,
+     "free": false,
+     "linked": false,
+     "reference": null,
+     "points": [
+      1,
+      2
+     ],
+     "center_line": false
+    },
+    {
+     "id": 1,
+     "kind": "line",
+     "construction": false,
+     "token": "tok11",
+     "fixed": false,
+     "free": false,
+     "linked": false,
+     "reference": null,
+     "points": [
+      2,
+      3
+     ],
+     "center_line": false
+    },
+    {
+     "id": 2,
+     "kind": "line",
+     "construction": false,
+     "token": "tok10",
+     "fixed": false,
+     "free": false,
+     "linked": false,
+     "reference": null,
+     "points": [
+      3,
+      4
+     ],
+     "center_line": false
+    },
+    {
+     "id": 3,
+     "kind": "line",
+     "construction": false,
+     "token": "tok13",
+     "fixed": false,
+     "free": false,
+     "linked": false,
+     "reference": null,
+     "points": [
+      4,
+      1
+     ],
+     "center_line": false
+    },
+    {
+     "id": 4,
+     "kind": "line",
+     "construction": false,
+     "token": "tok23",
+     "fixed": false,
+     "free": false,
+     "linked": true,
+     "reference": {
+      "source": "own",
+      "component": "tok1",
+      "token": "tok24"
+     },
+     "points": [
+      5,
+      6
+     ],
+     "center_line": false
+    }
+   ],
+   "dimensions": [
+    {
+     "id": 0,
+     "type": "linear",
+     "on": [
+      [
+       "point",
+       1
+      ],
+      [
+       "point",
+       2
+      ]
+     ],
+     "orientation": "horizontal",
+     "param": "d151",
+     "expression": "RingW",
+     "reads": [
+      "RingW"
+     ],
+     "value": 10.0,
+     "driving": true,
+     "text": [
+      20.0,
+      -10.0
+     ],
+     "token": "tok5"
+    },
+    {
+     "id": 1,
+     "type": "linear",
+     "on": [
+      [
+       "point",
+       2
+      ],
+      [
+       "point",
+       3
+      ]
+     ],
+     "orientation": "vertical",
+     "param": "d152",
+     "expression": "15 mm",
+     "reads": [],
+     "value": 15.0,
+     "driving": true,
+     "text": [
+      40.0,
+      0.0
+     ],
+     "token": "tok6"
+    },
+    {
+     "id": 2,
+     "type": "linear",
+     "on": [
+      [
+       "point",
+       0
+      ],
+      [
+       "point",
+       1
+      ]
+     ],
+     "orientation": "horizontal",
+     "param": "d153",
+     "expression": "20 mm",
+     "reads": [],
+     "value": 20.0,
+     "driving": true,
+     "text": [
+      10.0,
+      5.0
+     ],
+     "token": "tok7"
+    }
+   ],
+   "constraints": [
+    {
+     "id": 0,
+     "type": "horizontal",
+     "on": [
+      [
+       "line",
+       0
+      ]
+     ],
+     "token": "tok25"
+    },
+    {
+     "id": 1,
+     "type": "vertical",
+     "on": [
+      [
+       "line",
+       1
+      ]
+     ],
+     "token": "tok26"
+    },
+    {
+     "id": 2,
+     "type": "horizontal",
+     "on": [
+      [
+       "line",
+       2
+      ]
+     ],
+     "token": "tok27"
+    },
+    {
+     "id": 3,
+     "type": "vertical",
+     "on": [
+      [
+       "line",
+       3
+      ]
+     ],
+     "token": "tok28"
+    },
+    {
+     "id": 4,
+     "type": "coincident",
+     "on": [
+      [
+       "point",
+       1
+      ],
+      [
+       "line",
+       4
+      ]
+     ],
+     "token": "tok29"
+    }
+   ],
+   "cut": ""
+  }
+ ],
+ "marker": {
+  "position": 143,
+  "count": 143
+ },
+ "_comment": "Made-up test model T15b (Fusion 2706): a 10 by 15 mm outline 20 mm from the Z axis, revolved symmetric by Sweep = 270 degrees to each side, so the ring closes and Fusion gives no start face."
+}

@@ -1,0 +1,1360 @@
+{
+ "capture": 3,
+ "fusion": "2706.1.17",
+ "design": "Test models",
+ "up_axis": "z",
+ "design_units": "mm",
+ "parameters": {
+  "user": [
+   {
+    "name": "T21_Width",
+    "expression": "30 mm",
+    "value": 3.0,
+    "display_value": 30.0,
+    "unit": "mm",
+    "kind": "length",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "comment": "Width for T21",
+    "dependent_parameters": [
+     "d226"
+    ],
+    "dependents": [
+     {
+      "name": "d226",
+      "kind": "sketchDimension",
+      "component": "tok2",
+      "sketch": "Sketch1",
+      "sketch_token": "tok3"
+     }
+    ]
+   },
+   {
+    "name": "T21_Height",
+    "expression": "10 mm",
+    "value": 1.0,
+    "display_value": 10.0,
+    "unit": "mm",
+    "kind": "length",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "comment": "Height for T21",
+    "dependent_parameters": [
+     "d228"
+    ],
+    "dependents": [
+     {
+      "name": "d228",
+      "kind": "feature",
+      "component": "tok2",
+      "feature": "Base"
+     }
+    ]
+   }
+  ],
+  "model": [
+   {
+    "name": "d226",
+    "expression": "T21_Width",
+    "value": 3.0,
+    "display_value": 30.0,
+    "unit": "mm",
+    "kind": "derived",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "T21_Width"
+    ],
+    "role": "Linear Dimension-2",
+    "created_by": {
+     "kind": "sketchDimension",
+     "token": "tok4",
+     "name": "",
+     "sketch": "Sketch1",
+     "component": "tok2"
+    }
+   },
+   {
+    "name": "d227",
+    "expression": "20 mm",
+    "value": 2.0,
+    "display_value": 20.0,
+    "unit": "mm",
+    "kind": "length",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "Linear Dimension-3",
+    "created_by": {
+     "kind": "sketchDimension",
+     "token": "tok5",
+     "name": "",
+     "sketch": "Sketch1",
+     "component": "tok2"
+    }
+   },
+   {
+    "name": "d228",
+    "expression": "T21_Height",
+    "value": 1.0,
+    "display_value": 10.0,
+    "unit": "mm",
+    "kind": "derived",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [
+     "T21_Height"
+    ],
+    "role": "AlongDistance",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok6",
+     "name": "Base",
+     "sketch": "",
+     "component": "tok2"
+    }
+   },
+   {
+    "name": "d229",
+    "expression": "0.0 deg",
+    "value": 0.0,
+    "display_value": 0.0,
+    "unit": "deg",
+    "kind": "angle",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "TaperAngle",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok6",
+     "name": "Base",
+     "sketch": "",
+     "component": "tok2"
+    }
+   },
+   {
+    "name": "d230",
+    "expression": "6 mm",
+    "value": 0.6000000000000001,
+    "display_value": 6.000000000000001,
+    "unit": "mm",
+    "kind": "length",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "Diameter Dimension-2",
+    "created_by": {
+     "kind": "sketchDimension",
+     "token": "tok7",
+     "name": "",
+     "sketch": "BossSketch",
+     "component": "tok2"
+    }
+   },
+   {
+    "name": "d231",
+    "expression": "5 mm",
+    "value": 0.5,
+    "display_value": 5.0,
+    "unit": "mm",
+    "kind": "length",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "AlongDistance",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok8",
+     "name": "Boss",
+     "sketch": "",
+     "component": "tok2"
+    }
+   },
+   {
+    "name": "d232",
+    "expression": "0.0 deg",
+    "value": 0.0,
+    "display_value": 0.0,
+    "unit": "deg",
+    "kind": "angle",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "TaperAngle",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok8",
+     "name": "Boss",
+     "sketch": "",
+     "component": "tok2"
+    }
+   }
+  ]
+ },
+ "targets": [
+  {
+   "token": "tok9",
+   "name": "Body1",
+   "box": {
+    "min": [
+     -30.0,
+     0.0,
+     0.0
+    ],
+    "max": [
+     30.0,
+     20.0,
+     15.0
+    ]
+   },
+   "volume_mm3": 12282.743339,
+   "component": {
+    "token": "tok2",
+    "name": "T21-mirror-body",
+    "root": false
+   },
+   "placement": {
+    "path": "T21-mirror-body:1",
+    "frame": {
+     "origin": [
+      0.0,
+      2760.0,
+      0.0
+     ],
+     "x": [
+      1.0,
+      0.0,
+      0.0
+     ],
+     "y": [
+      0.0,
+      1.0,
+      0.0
+     ],
+     "z": [
+      0.0,
+      0.0,
+      1.0
+     ]
+    },
+    "source": "transform2",
+    "checked_points": 3,
+    "uses": 1,
+    "linked": false
+   }
+  }
+ ],
+ "target": {
+  "token": "tok9",
+  "name": "Body1",
+  "box": {
+   "min": [
+    -30.0,
+    0.0,
+    0.0
+   ],
+   "max": [
+    30.0,
+    20.0,
+    15.0
+   ]
+  },
+  "volume_mm3": 12282.743339,
+  "component": {
+   "token": "tok2",
+   "name": "T21-mirror-body",
+   "root": false
+  },
+  "placement": {
+   "path": "T21-mirror-body:1",
+   "frame": {
+    "origin": [
+     0.0,
+     2760.0,
+     0.0
+    ],
+    "x": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "y": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "z": [
+     0.0,
+     0.0,
+     1.0
+    ]
+   },
+   "source": "transform2",
+   "checked_points": 3,
+   "uses": 1,
+   "linked": false
+  }
+ },
+ "items": [
+  {
+   "index": 115,
+   "name": "Sketch1",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "tok2",
+   "in_target_component": true,
+   "bodies_after": [],
+   "target_changed": null,
+   "target_before": null,
+   "target_after": null,
+   "data": {},
+   "bodies_before": []
+  },
+  {
+   "index": 116,
+   "name": "Base",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "tok2",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "tok9",
+     "name": "Body1"
+    }
+   ],
+   "target_changed": true,
+   "target_before": null,
+   "target_after": {
+    "box": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      30.0,
+      20.0,
+      10.0
+     ]
+    },
+    "volume_mm3": 6000.0
+   },
+   "data": {
+    "operation": "newBody",
+    "profiles": [
+     {
+      "sketch": "Sketch1",
+      "frame": {
+       "origin": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "x": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "y": [
+        0.0,
+        1.0,
+        0.0
+       ],
+       "z": [
+        0.0,
+        0.0,
+        1.0
+       ]
+      },
+      "space": "sketch",
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "line",
+          "start": [
+           0.0,
+           20.0
+          ],
+          "end": [
+           0.0,
+           0.0
+          ],
+          "entity": "tok10"
+         },
+         {
+          "kind": "line",
+          "start": [
+           0.0,
+           0.0
+          ],
+          "end": [
+           30.0,
+           0.0
+          ],
+          "entity": "tok11"
+         },
+         {
+          "kind": "line",
+          "start": [
+           30.0,
+           0.0
+          ],
+          "end": [
+           30.0,
+           20.0
+          ],
+          "entity": "tok12"
+         },
+         {
+          "kind": "line",
+          "start": [
+           30.0,
+           20.0
+          ],
+          "end": [
+           0.0,
+           20.0
+          ],
+          "entity": "tok13"
+         }
+        ]
+       }
+      ],
+      "sketch_token": "tok3",
+      "reference": {
+       "kind": "constructionPlane",
+       "token": "tok14",
+       "origin": true
+      }
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "distance",
+     "distance": 10.0,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": false,
+    "participants": [],
+    "target_box_before": null,
+    "end_offset": 10.0,
+    "profile_area": 600.0,
+    "end_area": 600.0,
+    "params": {
+     "side_one.distance": {
+      "name": "d228",
+      "expression": "T21_Height",
+      "value": 10.0
+     },
+     "side_one.taper_deg": {
+      "name": "d229",
+      "expression": "0.0 deg",
+      "value": 0.0
+     }
+    },
+    "side_leans": [
+     0.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    "end_normal": [
+     0.0,
+     0.0,
+     1.0
+    ]
+   },
+   "sketch_inputs": [
+    {
+     "token": "tok3",
+     "name": "Sketch1"
+    }
+   ],
+   "bodies_before": []
+  },
+  {
+   "index": 117,
+   "name": "BossSketch",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "tok2",
+   "in_target_component": true,
+   "bodies_after": [],
+   "target_changed": false,
+   "target_before": {
+    "box": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      30.0,
+      20.0,
+      10.0
+     ]
+    },
+    "volume_mm3": 6000.0
+   },
+   "target_after": {
+    "box": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      30.0,
+      20.0,
+      10.0
+     ]
+    },
+    "volume_mm3": 6000.0
+   },
+   "data": {},
+   "bodies_before": [
+    {
+     "token": "tok9",
+     "name": "Body1"
+    }
+   ]
+  },
+  {
+   "index": 118,
+   "name": "Boss",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "tok2",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "tok9",
+     "name": "Body1"
+    }
+   ],
+   "target_changed": true,
+   "target_before": {
+    "box": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      30.0,
+      20.0,
+      10.0
+     ]
+    },
+    "volume_mm3": 6000.0
+   },
+   "target_after": {
+    "box": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      30.0,
+      20.0,
+      15.0
+     ]
+    },
+    "volume_mm3": 6141.371669
+   },
+   "data": {
+    "operation": "join",
+    "profiles": [
+     {
+      "sketch": "BossSketch",
+      "frame": {
+       "origin": [
+        0.0,
+        0.0,
+        10.0
+       ],
+       "x": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "y": [
+        0.0,
+        1.0,
+        0.0
+       ],
+       "z": [
+        0.0,
+        0.0,
+        1.0
+       ]
+      },
+      "space": "sketch",
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "circle",
+          "center": [
+           10.0,
+           10.0
+          ],
+          "radius": 3.0,
+          "entity": "tok15"
+         }
+        ]
+       }
+      ],
+      "sketch_token": "tok16"
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "distance",
+     "distance": 5.0,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": false,
+    "participants": [
+     {
+      "token": "tok9",
+      "name": "Body1"
+     }
+    ],
+    "target_box_before": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      30.0,
+      20.0,
+      10.0
+     ]
+    },
+    "end_offset": 5.0,
+    "profile_area": 28.274334,
+    "end_area": 28.274334,
+    "params": {
+     "side_one.distance": {
+      "name": "d231",
+      "expression": "5 mm",
+      "value": 5.0
+     },
+     "side_one.taper_deg": {
+      "name": "d232",
+      "expression": "0.0 deg",
+      "value": 0.0
+     }
+    },
+    "side_leans": [
+     0.0
+    ],
+    "end_normal": [
+     0.0,
+     0.0,
+     1.0
+    ]
+   },
+   "sketch_inputs": [
+    {
+     "token": "tok16",
+     "name": "BossSketch"
+    }
+   ],
+   "bodies_before": [
+    {
+     "token": "tok9",
+     "name": "Body1"
+    }
+   ]
+  },
+  {
+   "index": 119,
+   "name": "Mirror1",
+   "type": "MirrorFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "tok2",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "tok9",
+     "name": "Body1"
+    }
+   ],
+   "target_changed": true,
+   "target_before": {
+    "box": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      30.0,
+      20.0,
+      15.0
+     ]
+    },
+    "volume_mm3": 6141.371669
+   },
+   "target_after": {
+    "box": {
+     "min": [
+      -30.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      30.0,
+      20.0,
+      15.0
+     ]
+    },
+    "volume_mm3": 12282.743339
+   },
+   "data": {
+    "entity_type": "bodies",
+    "sources": [],
+    "source_bodies": [
+     {
+      "token": "tok9",
+      "name": "Body1",
+      "points": [
+       [
+        7.0,
+        10.0,
+        15.0
+       ],
+       [
+        7.0,
+        10.0,
+        10.0
+       ],
+       [
+        30.0,
+        20.0,
+        0.0
+       ],
+       [
+        0.0,
+        20.0,
+        0.0
+       ],
+       [
+        0.0,
+        20.0,
+        10.0
+       ],
+       [
+        30.0,
+        20.0,
+        10.0
+       ],
+       [
+        30.0,
+        0.0,
+        0.0
+       ],
+       [
+        30.0,
+        0.0,
+        10.0
+       ]
+      ]
+     }
+    ],
+    "result_bodies": [
+     {
+      "token": "tok9",
+      "name": "Body1",
+      "points": [
+       [
+        -7.0,
+        10.0,
+        15.0
+       ],
+       [
+        -7.0,
+        10.0,
+        10.0
+       ],
+       [
+        -30.0,
+        20.0,
+        0.0
+       ],
+       [
+        -30.0,
+        0.0,
+        0.0
+       ],
+       [
+        -30.0,
+        0.0,
+        10.0
+       ],
+       [
+        -30.0,
+        20.0,
+        10.0
+       ],
+       [
+        7.0,
+        10.0,
+        15.0
+       ],
+       [
+        7.0,
+        10.0,
+        10.0
+       ]
+      ]
+     }
+    ],
+    "plane": {
+     "point": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "normal": [
+      1.0,
+      0.0,
+      0.0
+     ],
+     "token": "tok17",
+     "origin": true
+    },
+    "combine": true,
+    "target_box_before": {
+     "min": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "max": [
+      30.0,
+      20.0,
+      15.0
+     ]
+    }
+   },
+   "bodies_before": [
+    {
+     "token": "tok9",
+     "name": "Body1"
+    }
+   ]
+  }
+ ],
+ "sketch_links": [
+  {
+   "sketch": "Sketch1",
+   "token": "tok3",
+   "links": [],
+   "unknown": 0
+  },
+  {
+   "sketch": "BossSketch",
+   "token": "tok16",
+   "links": [],
+   "unknown": 0
+  }
+ ],
+ "sketch_graphs": [
+  {
+   "sketch": "Sketch1",
+   "token": "tok3",
+   "component": {
+    "token": "tok2",
+    "name": "T21-mirror-body"
+   },
+   "fully_constrained": true,
+   "origin": 0,
+   "points": [
+    {
+     "id": 0,
+     "xy": [
+      0.0,
+      0.0
+     ],
+     "origin": true,
+     "token": "tok18",
+     "fixed": true,
+     "free": false,
+     "linked": false,
+     "reference": null
+    },
+    {
+     "id": 1,
+     "xy": [
+      0.0,
+      0.0
+     ],
+     "origin": false,
+     "token": "tok19",
+     "fixed": false,
+     "free": false,
+     "linked": false,
+     "reference": null
+    },
+    {
+     "id": 2,
+     "xy": [
+      30.0,
+      0.0
+     ],
+     "origin": false,
+     "token": "tok20",
+     "fixed": false,
+     "free": false,
+     "linked": false,
+     "reference": null
+    },
+    {
+     "id": 3,
+     "xy": [
+      30.0,
+      20.0
+     ],
+     "origin": false,
+     "token": "tok21",
+     "fixed": false,
+     "free": false,
+     "linked": false,
+     "reference": null
+    },
+    {
+     "id": 4,
+     "xy": [
+      0.0,
+      20.0
+     ],
+     "origin": false,
+     "token": "tok22",
+     "fixed": false,
+     "free": false,
+     "linked": false,
+     "reference": null
+    }
+   ],
+   "curves": [
+    {
+     "id": 0,
+     "kind": "line",
+     "construction": false,
+     "token": "tok11",
+     "fixed": false,
+     "free": false,
+     "linked": false,
+     "reference": null,
+     "points": [
+      1,
+      2
+     ],
+     "center_line": false
+    },
+    {
+     "id": 1,
+     "kind": "line",
+     "construction": false,
+     "token": "tok12",
+     "fixed": false,
+     "free": false,
+     "linked": false,
+     "reference": null,
+     "points": [
+      2,
+      3
+     ],
+     "center_line": false
+    },
+    {
+     "id": 2,
+     "kind": "line",
+     "construction": false,
+     "token": "tok13",
+     "fixed": false,
+     "free": false,
+     "linked": false,
+     "reference": null,
+     "points": [
+      3,
+      4
+     ],
+     "center_line": false
+    },
+    {
+     "id": 3,
+     "kind": "line",
+     "construction": false,
+     "token": "tok10",
+     "fixed": false,
+     "free": false,
+     "linked": false,
+     "reference": null,
+     "points": [
+      4,
+      1
+     ],
+     "center_line": false
+    }
+   ],
+   "dimensions": [
+    {
+     "id": 0,
+     "type": "linear",
+     "on": [
+      [
+       "point",
+       1
+      ],
+      [
+       "point",
+       2
+      ]
+     ],
+     "orientation": "horizontal",
+     "param": "d226",
+     "expression": "T21_Width",
+     "reads": [
+      "T21_Width"
+     ],
+     "value": 30.0,
+     "driving": true,
+     "text": [
+      0.0,
+      -10.0
+     ],
+     "token": "tok4"
+    },
+    {
+     "id": 1,
+     "type": "linear",
+     "on": [
+      [
+       "point",
+       2
+      ],
+      [
+       "point",
+       3
+      ]
+     ],
+     "orientation": "vertical",
+     "param": "d227",
+     "expression": "20 mm",
+     "reads": [],
+     "value": 20.0,
+     "driving": true,
+     "text": [
+      40.0,
+      0.0
+     ],
+     "token": "tok5"
+    }
+   ],
+   "constraints": [
+    {
+     "id": 0,
+     "type": "horizontal",
+     "on": [
+      [
+       "line",
+       0
+      ]
+     ],
+     "token": "tok23"
+    },
+    {
+     "id": 1,
+     "type": "vertical",
+     "on": [
+      [
+       "line",
+       1
+      ]
+     ],
+     "token": "tok24"
+    },
+    {
+     "id": 2,
+     "type": "horizontal",
+     "on": [
+      [
+       "line",
+       2
+      ]
+     ],
+     "token": "tok25"
+    },
+    {
+     "id": 3,
+     "type": "vertical",
+     "on": [
+      [
+       "line",
+       3
+      ]
+     ],
+     "token": "tok26"
+    },
+    {
+     "id": 4,
+     "type": "coincident",
+     "on": [
+      [
+       "point",
+       1
+      ],
+      [
+       "point",
+       0
+      ]
+     ],
+     "token": "tok27"
+    }
+   ],
+   "cut": ""
+  },
+  {
+   "sketch": "BossSketch",
+   "token": "tok16",
+   "component": {
+    "token": "tok2",
+    "name": "T21-mirror-body"
+   },
+   "fully_constrained": false,
+   "origin": 0,
+   "points": [
+    {
+     "id": 0,
+     "xy": [
+      0.0,
+      0.0
+     ],
+     "origin": true,
+     "token": "tok28",
+     "fixed": true,
+     "free": false,
+     "linked": false,
+     "reference": null
+    },
+    {
+     "id": 1,
+     "xy": [
+      0.0,
+      20.0
+     ],
+     "origin": false,
+     "token": "tok29",
+     "fixed": false,
+     "free": false,
+     "linked": true,
+     "reference": null
+    },
+    {
+     "id": 2,
+     "xy": [
+      0.0,
+      0.0
+     ],
+     "origin": false,
+     "token": "tok30",
+     "fixed": false,
+     "free": false,
+     "linked": true,
+     "reference": null
+    },
+    {
+     "id": 3,
+     "xy": [
+      30.0,
+      0.0
+     ],
+     "origin": false,
+     "token": "tok31",
+     "fixed": false,
+     "free": false,
+     "linked": true,
+     "reference": null
+    },
+    {
+     "id": 4,
+     "xy": [
+      30.0,
+      20.0
+     ],
+     "origin": false,
+     "token": "tok32",
+     "fixed": false,
+     "free": false,
+     "linked": true,
+     "reference": null
+    },
+    {
+     "id": 5,
+     "xy": [
+      10.0,
+      10.0
+     ],
+     "origin": false,
+     "token": "tok33",
+     "fixed": false,
+     "free": true,
+     "linked": false,
+     "reference": null
+    }
+   ],
+   "curves": [
+    {
+     "id": 0,
+     "kind": "line",
+     "construction": false,
+     "token": "tok34",
+     "fixed": false,
+     "free": false,
+     "linked": true,
+     "reference": {
+      "source": "own",
+      "component": "tok2",
+      "token": "tok35"
+     },
+     "points": [
+      1,
+      2
+     ],
+     "center_line": false
+    },
+    {
+     "id": 1,
+     "kind": "line",
+     "construction": false,
+     "token": "tok36",
+     "fixed": false,
+     "free": false,
+     "linked": true,
+     "reference": {
+      "source": "own",
+      "component": "tok2",
+      "token": "tok35"
+     },
+     "points": [
+      2,
+      3
+     ],
+     "center_line": false
+    },
+    {
+     "id": 2,
+     "kind": "line",
+     "construction": false,
+     "token": "tok37",
+     "fixed": false,
+     "free": false,
+     "linked": true,
+     "reference": {
+      "source": "own",
+      "component": "tok2",
+      "token": "tok35"
+     },
+     "points": [
+      3,
+      4
+     ],
+     "center_line": false
+    },
+    {
+     "id": 3,
+     "kind": "line",
+     "construction": false,
+     "token": "tok38",
+     "fixed": false,
+     "free": false,
+     "linked": true,
+     "reference": {
+      "source": "own",
+      "component": "tok2",
+      "token": "tok35"
+     },
+     "points": [
+      4,
+      1
+     ],
+     "center_line": false
+    },
+    {
+     "id": 4,
+     "kind": "circle",
+     "construction": false,
+     "token": "tok15",
+     "fixed": false,
+     "free": true,
+     "linked": false,
+     "reference": null,
+     "center": 5,
+     "radius": 3.0
+    }
+   ],
+   "dimensions": [
+    {
+     "id": 0,
+     "type": "diameter",
+     "on": [
+      [
+       "circle",
+       4
+      ]
+     ],
+     "param": "d230",
+     "expression": "6 mm",
+     "reads": [],
+     "value": 6.0,
+     "driving": true,
+     "text": [
+      20.0,
+      15.0
+     ],
+     "token": "tok7"
+    }
+   ],
+   "constraints": [],
+   "cut": ""
+  }
+ ],
+ "marker": {
+  "position": 143,
+  "count": 143
+ },
+ "_comment": "Made-up test model T21 (Fusion 2706): a plate T21_Width by 20 by T21_Height, a boss sketched on its top face (Fusion gives no reference plane for that sketch), mirrored and joined."
+}
