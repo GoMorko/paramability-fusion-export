@@ -642,7 +642,12 @@ against Orca 2.5.1 (`CadDocument::apply_feature` Cut and Transform, `apply_boole
     the shorter line, in radians). A capture rounds each coordinate to a millionth of a mm, so a 120 degree angle
     between lines 3 mm long measures 59.9999986 degrees, which the default reading refuses. The slack is at most
     0.001 radians (`checks.MAX_SLACK`), so a very short line does not widen the test;
-  - each line gets its direction as an angle formula (`Solution.directions`).
+  - each line gets its direction as an angle formula (`Solution.directions`);
+  - a line whose two ends are not known yet takes its direction from the gap between its ends when that gap is known
+    on both axes (`_Solver._gap_of_ends`): the corners of a rectangle share their coordinates, so the gap of each
+    diagonal is known from the width and the height. A centre point that lies on both diagonals (two coincident
+    constraints, as some centre rectangles are drawn, without a midpoint constraint) then places the rectangle:
+    "Extrude1 sketch keeps its numbers: its points have no formula" no longer comes for such a rectangle.
 - The formula check. The corner formulas must give the drawn corners now (within 0.00001 mm), each side must run along
   its direction formula, the half-plane formula must give the outline in every cell of the lines through its sides
   (`halfplanes.check`: a point between each two neighbouring rays at each crossing of the lines), and Orca must be able
