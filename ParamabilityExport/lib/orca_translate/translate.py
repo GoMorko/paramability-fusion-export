@@ -11,8 +11,8 @@ in some places only ("partly"), nowhere because Orca cannot follow what it moves
 copied step ("unused").
 """
 from ..capture_model import gap_hints, lineage, step_kinds
-from ..capture_model.capture import CaptureError, outside_component, same_body, validate_capture
-from ..design_model import reach
+from ..capture_model.capture import CaptureError, validate_capture
+from ..design_model import reach, roles
 from ..orca_recipe.recipe import Recipe
 from ..params.size_table import FREE
 from ..translator.words import type_words
@@ -81,15 +81,6 @@ def _verdict(item, verdict, note=""):
             "verdict": verdict, "note": note}
 
 
-def _touches(item, target):
-    if any(same_body(b, target) for b in item.get("bodies_after") or []):
-        return True
-    data = item.get("data") if isinstance(item.get("data"), dict) else {}
-    if same_body(data.get("target"), target) or any(same_body(b, target) for b in data.get("bodies") or []):
-        return True
-    return data.get("operation") != "newBody" and any(same_body(b, target) for b in data.get("participants") or [])
-
-
 def _unsupported(item):
     spec = step_kinds.step_type(item.get("type"))
     words = type_words(item.get("type") or "")
@@ -120,14 +111,17 @@ def _walk(ctx):
 
     for item in ctx.capture["items"]:
         kind = item.get("type")
-        if item.get("suppressed"):
+        # Before the split that made the part, a step of the body it was split from reads that body's measures.
+        item = roles.seen_before_split(item, target, chain)
+        role = roles.role_of(item, target, chain)
+        if role.kind == roles.SUPPRESSED:
             ctx.items.append(_verdict(item, "skipped", "Suppressed in Fusion."))
             continue
-        if step_kinds.skipped(kind):
+        if role.kind == roles.NOT_A_STEP:
             ctx.items.append(_verdict(item, "skipped"))
             continue
-        changed = item.get("target_changed") is True
-        if step_kinds.is_assembly(kind) or outside_component(item):
+        changed = role.changed is True
+        if role.kind in (roles.ASSEMBLY, roles.TOOL_ELSEWHERE, roles.OTHER_COMPONENT):
             if changed:
                 leave_out(item, "This step changes the part from another component, which is not copied yet.",
                           gap_hints.CHANGED_FROM_OTHER_COMPONENT)
@@ -138,9 +132,8 @@ def _walk(ctx):
             leave_out(item, "The bodies this step changes could not be read.", gap_hints.REFUSED)
             continue
         # A body made by a split is built like the body it was split from, up to that split.
-        before, after = lineage.at(chain, target, item.get("index"))
-        ctx.part.target = before
-        if not (_touches(item, before) or _touches(item, after)) and not changed:
+        ctx.part.target = role.before
+        if role.kind == roles.HELPER and not changed:
             ctx.items.append(_verdict(item, "skipped", "Helper geometry, not part of the exported body."))
             continue
         if item.get("health") == "error":

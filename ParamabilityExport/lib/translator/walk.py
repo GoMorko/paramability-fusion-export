@@ -3,17 +3,19 @@
 The same loop copies the exported body and each tool body of a Combine. The context says what it builds
 (`Context.target`, `Context.capture`, `Context.handlers`), so a handler always sees the body it works on as its target.
 
-An item the copy cannot hold either stops the copy or, when its effect stays on the body and the rest of the timeline
-still reads right, is left out as a gap (gaps/stops.py). A gap is a step type with no handler, a handler's Refusal, a step
-that reaches into another component, and a step that picks faces a gap made. What a left out item would have recorded
-(doubts, notes) is dropped with it. Anything that leaves the body unknown still stops the copy.
+What each item is for the body (a sketch, an assembly item, a step of another component, a step of the body or of
+another body) and the body before and after it come from the shared layer (`design_model/roles.py`); the walk decides
+from them. An item the copy cannot hold either stops the copy or, when its effect stays on the body and the rest of
+the timeline still reads right, is left out as a gap (gaps/stops.py). A gap is a step type with no handler, a
+handler's Refusal, a step that reaches into another component, and a step that picks faces a gap made. What a left
+out item would have recorded (doubts, notes) is dropped with it. Anything that leaves the body unknown still stops
+the copy.
 """
 from ..capture_model import gap_hints, gap_picks, step_kinds
-from ..capture_model.capture import outside_component, renamed_target, same_body
-from ..design_model import borrowed, refs
+from ..design_model import borrowed, refs, roles
 from ..design_model.reach import construction_fixes
 from . import notes as wording
-from .bodies import body_states, split_rules
+from .bodies import split_rules
 from .faces import floating
 from .gaps import stops
 from .result import Refusal, StepResult, make_verdict
@@ -39,72 +41,6 @@ def _label(item):
 def _data(item):
     data = item.get("data")
     return data if isinstance(data, dict) else {}
-
-
-def _touches_target(item, ctx):
-    """The item lists the target among its bodies, or its own data names the target as the body it works on."""
-    if any(ctx.is_target(b) for b in item.get("bodies_after") or []):
-        return True
-    data = _data(item)
-    if ctx.is_target(data.get("target")) or any(ctx.is_target(b) for b in data.get("bodies") or []):
-        return True
-    if data.get("operation") != "newBody":
-        return any(ctx.is_target(b) for b in data.get("participants") or [])
-    return False
-
-
-def _existing_bodies(item):
-    """Bodies that existed before the item: the reader's `bodies_before`, else the bodies the item's data names."""
-    before = item.get("bodies_before")
-    if isinstance(before, list):
-        return before
-    data = _data(item)
-    named = list(data.get("participants") or []) + list(data.get("tools") or []) + list(data.get("bodies") or [])
-    if data.get("target"):
-        named.append(data["target"])
-    return named
-
-
-def _new_bodies(item, ctx):
-    """Bodies the item lists that are not the target and did not exist before it (a split, or a second new body)."""
-    existing = _existing_bodies(item)
-    return [
-        b for b in item.get("bodies_after") or []
-        if not ctx.is_target(b) and not any(same_body(b, e) for e in existing)
-    ]
-
-
-def copies_bodies(item):
-    """The item makes bodies that copy others: a Paste, or a pattern or mirror of bodies."""
-    spec = step_kinds.step_type(item.get("type"))
-    return spec is not None and spec.makes_bodies and _data(item).get("entity_type", "bodies") == "bodies"
-
-
-def _changes_named_bodies(item):
-    """The item copies or moves bodies, so one that lists no body may still have changed the part."""
-    spec = step_kinds.step_type(item.get("type"))
-    return copies_bodies(item) or (spec is not None and spec.moves_bodies)
-
-
-def _lost_target(item, ctx):
-    bodies = list(item.get("bodies_after") or []) + list(item.get("bodies_before") or [])
-    return any(renamed_target(b, ctx.target) for b in bodies)
-
-
-def _only_splits_faces(item, ctx):
-    """A split of faces that the capture shows left the body as it was: its solid is the same, only its faces are cut
-    up, so nothing is copied."""
-    spec = step_kinds.step_type(item.get("type"))
-    return (spec is not None and spec.splits_faces and item.get("target_changed") is False
-            and not _new_bodies(item, ctx))
-
-
-def _skip_reason(item):
-    if item.get("suppressed"):
-        return "Suppressed in Fusion."
-    if step_kinds.skipped(item.get("type")):
-        return ""
-    return None
 
 
 def fix_construction(ctx, item):
@@ -148,17 +84,6 @@ def _gap_ids(ctx, item):
     return [gap.id for gap in gap_picks.picked_gaps(ctx, item)[0]]
 
 
-def _seen_before_split(item, ctx):
-    """Before the split that made the body this walk builds, an item of the body it was split from is read with what
-    the reader measured on that body (`body_states`), like a step of the target."""
-    if not ctx.lineage or split_rules.is_split(item) or outside_component(item):
-        return item
-    held = ctx.lineage_at(item.get("index", 0))[0]
-    if same_body(held, ctx.target) or not body_states.measured(item, held):
-        return item
-    return body_states.seen_on(item, held)
-
-
 def walk_items(ctx, result):
     """Walk the items of `ctx.capture`: True when every item was dealt with, False when one stops the copy (then
     `result.refusal` says why). Verdicts and notes go to `result`, steps and doubts to `ctx`."""
@@ -200,15 +125,16 @@ def walk_items(ctx, result):
         """One item: False when it stops the copy, else None (a step forced to a gap while diagnosing too)."""
         nonlocal made_in_component
         ctx.enter(item)
-        item = ctx.current = _seen_before_split(item, ctx)
-        reason = _skip_reason(item)
-        if reason is not None:
-            result.items.append(make_verdict(item, "skipped", note=reason))
+        item = ctx.current = roles.seen_before_split(item, ctx.target, ctx.lineage)
+        role = roles.role_of(item, ctx.target, ctx.lineage)
+        if role.kind in (roles.SUPPRESSED, roles.NOT_A_STEP):
+            note = "Suppressed in Fusion." if role.kind == roles.SUPPRESSED else ""
+            result.items.append(make_verdict(item, "skipped", note=note))
             return None
 
-        if step_kinds.is_assembly(item.get("type")):
+        if role.kind == roles.ASSEMBLY:
             # Components, joints and the like: in component coordinates they never change the part's shape.
-            if item.get("target_changed") is True:
+            if role.changed is True:
                 if not made_in_component:
                     return refuse(item, "This body was made in another component and moved here later. "
                                   "Steps across components are not copied yet.", wording.made_elsewhere_note(),
@@ -217,14 +143,14 @@ def walk_items(ctx, result):
             result.items.append(make_verdict(item, "skipped", note=""))
             return None
 
-        if outside_component(item) and item.get("helper_of"):
+        if role.kind == roles.TOOL_ELSEWHERE:
             # A step of a tool body from another component: the Combine that takes the tool walks it.
             result.items.append(make_verdict(item, "skipped", note="Helper geometry, not part of the exported body."))
             return None
 
-        if outside_component(item):
+        if role.kind == roles.OTHER_COMPONENT:
             # A step made in another component: harmless unless it changes the target.
-            if item.get("target_changed") is True or _touches_target(item, ctx):
+            if role.changed is True or role.touches:
                 if not made_in_component:
                     return refuse(item, "This body was made in another component and moved here later. "
                                   "Steps across components are not copied yet.", wording.made_elsewhere_note(),
@@ -235,21 +161,21 @@ def walk_items(ctx, result):
             result.items.append(make_verdict(item, "skipped", note="In another component."))
             return None
 
-        if _lost_target(item, ctx):
+        if role.lost:
             return refuse(item, "The body could not be followed through the timeline.")
         if item.get("bodies_after") is None:
             return refuse(item, "The bodies this step changes could not be read.")
 
-        touches = _touches_target(item, ctx)
+        touches = role.touches
         if item.get("health") == "error" and (touches or not item.get("bodies_after")):
             return refuse(item, "This step does not build in Fusion.")
 
         handler = ctx.handlers.get(item.get("type"))
-        if not touches and not item["bodies_after"] and (handler is None or _changes_named_bodies(item)):
-            if item.get("target_changed") is False:
+        if not touches and not item["bodies_after"] and (handler is None or roles.changes_named_bodies(item)):
+            if role.changed is False:
                 result.items.append(make_verdict(item, "skipped", note="Does not change the exported body."))
                 return None
-            if handler is not None or item.get("target_changed") is not True:
+            if handler is not None or role.changed is not True:
                 # Only a step the reader saw change the body is a gap: one that may have done anything stops.
                 return refuse(item, "The bodies this %s changes could not be read." % type_words(item["type"]))
             if not leave_out(item, _unsupported_reason(item), _gap_ids(ctx, item), cause=_type_cause(item)):
@@ -260,20 +186,19 @@ def walk_items(ctx, result):
             result.items.append(make_verdict(item, "skipped", note="Helper geometry, not part of the exported body."))
             return None
 
-        makes_other = bool(_new_bodies(item, ctx)) and not copies_bodies(item)
-        if makes_other and item.get("target_changed") is False:
+        if role.makes_other and role.changed is False:
             # Another body made next to the part (a surface offset, for one): a later Combine that takes it walks it
             # as a tool.
             result.items.append(make_verdict(item, "skipped", note="Does not change the exported body."))
             return None
-        if makes_other or split_rules.is_split(item):
+        if role.makes_other or split_rules.is_split(item):
             # Later steps may belong to the other body, so no single missing step can stand for this one. A split
             # that keeps the body as one piece apart from the others is copied (bodies/split_rules.py), whichever piece
             # keeps the name of the body it split.
             stop = split_rules.stop_reason(item, ctx)
             if stop is not None:
                 return refuse(item, stop)
-        if handler is None and _only_splits_faces(item, ctx):
+        if handler is None and roles.only_splits_faces(item, role.bodies):
             note = wording.split_face_note(_label(item))
             result.items.append(make_verdict(item, "skipped", note=note))
             result.notes.append(note)

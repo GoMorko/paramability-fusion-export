@@ -265,3 +265,13 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     `Width` to 40 mm and then to 36 mm: at 36 mm the hole breaks the edge of the lid and the face is a different
     shape, so Paramability must not offer that value. In Paramability, set `Width` to the smallest value: the
     triangle is trimmed to the lid and is not left floating.
+
+27. OR1, a tool made by an intersect, for Export for Orca. Model a 60 x 40 x 10 mm plate (Body1) with its corner at
+    the origin. Make three bodies that overlap near the middle of the plate, each 10 mm high from the plate's base: a
+    20 x 20 mm box (Body2) from x = 20, y = 10, a 20 mm cylinder (Body3) centred at x = 30, y = 20, and a 10 x 20 mm
+    box (Body4) from x = 25, y = 10. Combine Body2 with Body3 and Body4 as tools, Intersect, without "Keep Tools".
+    Then Combine Body1 with Body2 as Cut.
+    Export: Export for Orca with Body1. In `report.json` the first Combine has `body_states` for Body2 with
+    `volume_before` and `volume_after` (its own `intersect_model` is read on Body1 and does not count). The Orca copy
+    cuts the shape that Fusion cuts (compare it with the Fusion part from above), and the result lists no step left
+    out. If `body_states` is missing, the Cut is left out with the reason that the intersect rule is not known.

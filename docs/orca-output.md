@@ -37,6 +37,9 @@ The modules of `lib/orca_translate/`:
 
 - `translate.py`: the walk over the timeline. It passes by the steps that do not build the body, gives every other
   step to the handler of its kind (`HANDLERS`, gathered from the handler modules) and keeps the verdict of each step.
+  What each step is for the body (a sketch, an assembly item, a step of another component, a step of the body or of
+  another body) and the body before and after it come from the shared layer (`design_model.roles`), the same facts
+  the recipe walk reads.
 - `context.py`: what one translation keeps while it walks: the recipe so far, the formulas it bound, the sizes that
   keep their numbers and why, and the part built so far. Its `Context` is a `design_model.recorder.Recorder`
   (`cache`, `motion` always None, `doubt`, `note`, `follow_component`), so the shared layer can record on it.
@@ -370,7 +373,10 @@ not judged to meet material where Orca removes nothing.
   (`body_ref_ids` is worked out by Orca on the first rebuild, not stored).
 - Tool bodies (`tools.build`): a Combine's tool, or a split's tool body, is written from the steps whose `bodies_after`
   list it before that step (`tool_items.makers`), each by its own handler with the tool as the body it works on, the
-  first one starting a new body. A Combine inside a tool builds its own tools the same way, up to 3 levels. A step of
+  first one starting a new body. Each of these steps reads what the reader measured on the tool itself
+  (`body_states`, through `design_model.roles.seen_on`), not the box and volume of the exported part: a Combine
+  intersect inside a tool takes its rule (`every` or `any`) from the tool's own volume, and is left out when the tool
+  was not measured. A Combine inside a tool builds its own tools the same way, up to 3 levels. A step of
   the tool that cannot be copied leaves the whole step out, naming the tool and that step, and nothing of it is
   written. Those steps were passed by as building another body; once copied into a tool their verdict says so.
 - Orca drops the tool after the Boolean even when Fusion keeps it (`keep_tools`): only the part is copied. A Combine
@@ -407,7 +413,7 @@ not judged to meet material where Orca removes nothing.
   (`combine` true): an Orca Mirror of the part. A pattern or mirror of bodies that leaves its copies apart does not
   change the part and is passed by; a part that is such a copy, or a Combine that takes such a copy, is left out.
 - Split Body: the part's piece (followed through the split by `lineage`, so a piece with a new name is built by the
-  steps of the body it came from) must lie on one side of the plane and every other piece of that body on the other.
+  steps of the body it came from, and those steps read the measures of that body, `design_model.roles`) must lie on one side of the plane and every other piece of that body on the other.
   Orca's Cut keeps the side its plane normal points to (`cut_keep_upper`) or the other one. A split by a solid body
   writes that body as a tool and keeps what lies inside it (Intersect) or outside it (Cut), from the pieces' `inside`
   answers (`split_inside.resolve`).

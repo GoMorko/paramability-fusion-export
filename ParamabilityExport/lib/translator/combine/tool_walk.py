@@ -9,8 +9,8 @@ steps out again against the part as it stood at each step.
 """
 from ...capture_model import lineage, step_kinds, tool_items
 from ...capture_model.capture import outside_component, renamed_target, same_body
+from ...design_model import roles
 from .. import walk
-from ..bodies import body_states
 from ..result import Refusal, StepResult, TranslateResult
 from ..words import type_words
 
@@ -157,7 +157,7 @@ def build(ctx, body, before, depth, place=0):
         return cannot_copy(body, *unseen)
     exported = _exported(ctx, body)
     links, made = lineage_chain(ctx, body, before)
-    chain = [body_states.seen_on(item, lineage.at(links, body, item["index"])[0], exported) for item in made]
+    chain = [roles.seen_on(item, lineage.at(links, body, item["index"])[0], exported) for item in made]
     if not chain:
         return Refusal("The tool body %s is built in a way that cannot be copied." % name_of(body))
     for item in chain:

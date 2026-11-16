@@ -23,9 +23,12 @@ package may import only packages above it in this list (not every one of them). 
 - `design_model`: the shared layer both translators read: facts about the design that every output needs and doubts
   about sizes, never a refusal. `recorder.py` declares what it asks of a translation; `refs.py` holds the planes,
   faces, axes and points of other components (which records a step can use, which sizes may move them, the doubt when
-  the copy keeps them in place); `borrowed.py` the outlines taken from another component's sketch; `words.py` the texts
-  of these facts; `reach.py` which sizes may move a sketch, a plane, a face or a joint; `dimension_sizes.py` the
-  sketch dimensions as formulas of the sizes and the size settings a sketch is tried at.
+  the copy keeps them in place); `borrowed.py` the outlines taken from another component's sketch; `roles.py` what
+  each timeline item is for the body a walk builds (a sketch, an assembly item, a step of another component, a step of
+  the body or of another body), the body before and after it, the measures of that body (`seen_on`) and the other
+  pieces of a split; `words.py` the texts of these facts; `reach.py` which sizes may move a sketch, a plane, a face or
+  a joint; `dimension_sizes.py` the sketch dimensions as formulas of the sizes and the size settings a sketch is tried
+  at.
 - `translator`: a capture dict in, a recipe plus verdicts out (one handler per step type, mapped in `handlers.py`). `translate.py`, `walk.py`, `context.py`, `result.py`, `values.py` and `sizes.py` are the driver; the rest sits in folders by job: `extrude/` (also emboss), `sweep/` and `paths/`, `loft/`, `revolve/`, `hole/`, `repeat/` (patterns and mirrors), `combine/` (also tool bodies), `finishes/` (fillet, chamfer, shell, draft, offset faces), `bodies/` (move, paste, split), `faces/` (the faces steps make and the picks that follow sizes), `sketch/` (outlines and sketch values), `ranges/` (formulas over the size ranges) and `gaps/`.
 - `probe`: measures sketches and the places of other components' planes, axes and points at other size values and fits the motion file.
 - `orca_translate`: a capture in, an OrcaSlicer Design tab recipe (`orca_recipe`) plus a verdict per step out, for Export for Orca (experimental): one handler module per kind of step, and the shape of the part built so far for the checks of cuts. The modules are listed in `docs/orca-output.md`.

@@ -18,7 +18,7 @@ from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.sketch_values.motion import Motion
 from lib.translator import translate
-from lib.translator.bodies import body_states
+from lib.design_model import roles
 from lib.translator.combine import tool_walk
 from lib.translator.context import Context
 from lib.translator.faces import follow
@@ -200,7 +200,7 @@ class IntersectOfSeveralToolsTest(unittest.TestCase):
     def test_the_model_of_a_combine_inside_a_tool_comes_from_the_tool_volume(self):
         item = {"data": {"intersect_volumes": {"every": 2.0, "any": 5.0}, "intersect_model": "unknown"},
                 "body_states": {"t2": {"volume_before": 9.0, "volume_after": 5.0}}}
-        self.assertEqual(body_states.seen_on(item, TOOL, False)["data"]["intersect_model"], "any")
+        self.assertEqual(roles.seen_on(item, TOOL, False)["data"]["intersect_model"], "any")
 
     def test_a_part_kept_where_every_tool_reaches_is_a_tool_step_per_tool(self):
         result = sized(load_capture("intersect_every"))
