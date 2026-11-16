@@ -328,7 +328,10 @@ curves). A borrowed sketch is read through its native object, so its numbers are
 - Per entity: `fixed` is `isFixed`; `free` is `not isFullyConstrained`; `linked` is `isLinked`; `construction` is
   `SketchCurve.isConstruction`. `reference` is `null` for own geometry, else
   `{ "source": "own" | "other" | "none", "component", "token" }` from `referencedEntity`: `own` is a source in the
-  target's component, `other` one in another component, `none` a reference with no source (not parametric).
+  target's component, `other` one in another component, `none` a reference with no source (not parametric). A
+  projection of the origin point (`Component.originConstructionPoint`), an origin axis or an origin plane of the
+  component named in `component` also has `"origin": true` (`placement.is_component_origin`). A projected origin of
+  the sketch's own component sits still in the sketch, whatever the sizes (`sketch_solve.constants.own_origin`).
 - Curve kinds: `line` (`points`: start, end; `center_line`), `arc` (`center`, `points`: start, end, counter clockwise;
   `radius`), `circle` (`center`, `radius`), and for curves the reader does not tabulate `ellipse`, `elliptical_arc`,
   `conic`, `spline` or `other` (with `name`, the class name); these carry no geometry beyond the common fields.
@@ -780,7 +783,8 @@ against `samples`.
   `edge_points`, `made_by`, `definition`, `built_on`; see MirrorFeature below, `read_reference.axis_with_reference`).
   An axis from a sketch line of the body's component also has `sketch_reference`, what its sketch sits on (as a
   profile's `reference`, null when it cannot be read), and `sketch_projected`, true when that sketch holds projected
-  curves or points (`read_sketch.holds_projection`; null when that cannot be read). Older captures leave these keys
+  curves or points other than projections of its own component's origin point, axes and planes
+  (`read_sketch.holds_projection`; null when that cannot be read). Older captures leave these keys
   out; the translators then count the axis as one that may move with every size read before the step (a record
   with `entity` and `sketch_token` counts as a sketch line whose plane and projections are unknown).
 - `extent`: `{ "kind": "angle", "angle_deg", "symmetric" }` (`AngleExtentDefinition.angle`, `isSymmetric`),

@@ -2072,6 +2072,13 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   - A face or plane that a step starts from or reaches to. `moving_reaches` lists the flat faces and planes of the part
     that can move, and that the probe can find again. `reach_sizes` gives the sizes that can move one of them.
     `any_face_sizes` gives the sizes that can change any face of the body: every size an earlier step reads.
+  - Geometry projected into a sketch. `projection_sizes` gives the sizes that can move it: every size that a step
+    before the sketch reads. A sketch takes its projections at its place in the timeline. Thus the dimensions of the
+    sketch and the steps after the sketch do not move them. The Orca output marks these sizes when an outline corner
+    or a hole centre follows projected geometry (`sketch_sizes.projection_doubts`, `hole_place`). A projection of the
+    origin point, an origin axis or an origin plane of the component of the sketch does not move with the sizes. The
+    reader marks it with `origin: true` in the sketch graph. The sketch solver then keeps it as a fixed number
+    (`sketch_solve/constants.py`, `own_origin`), as it keeps the origin of the sketch.
   - Another plane, axis or face of the component of the body that a step uses as a place: a split plane, a mirror
     plane, a turning axis. `reference_sizes` gives the sizes that can move it. These are the sizes behind a
     construction plane or axis and behind the construction geometry that it is built on. A record without a token
@@ -2080,7 +2087,9 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     geometry was made). For a line of a sketch, `sketch_line_sizes` gives the sizes. These are the sizes of that
     sketch and the sizes that can move the plane of that sketch. When the sketch holds projections, or when the
     capture does not tell, they also include every size that a step before the sketch reads. Projected geometry of
-    the part moves with those sizes. An origin plane or axis gives no size. A record of another component gives no
+    the part moves with those sizes. A projection of the origin point, an origin axis or an origin plane of the
+    component of the sketch is not counted as a projection (`read_sketch.holds_projection`), because it does not move
+    with the sizes. An origin plane or axis gives no size. A record of another component gives no
     size here, because its sizes come from its measured reference (`refs.mark_all`). A place that the step works out
     from another record (`fixed`, the axis of a sweep path arc) gives no size, because the step marks the sizes of
     that record. Unknown counts as "can move". A record that does not say what it is (an older capture) gives every

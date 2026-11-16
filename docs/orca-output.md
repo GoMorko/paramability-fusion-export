@@ -640,9 +640,11 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
 - Geometry projected into a sketch (an edge of the part, a line of another sketch) is a measured input of the
   sketch's formulas (`@p3.x`), and the capture does not tell which sizes move it. The copy writes it as its number
   now. So when a corner or centre of an outline (of an extrude, revolve, sweep or loft), or a hole centre, reads such
-  an input, every size read before the sketch (for a hole, before the hole) is marked: "its outline is placed by
-  geometry projected into Sketch2, and Orca keeps that geometry where it is now" (`sketch_sizes.projection_doubts`,
-  `hole_place`, `SketchFormulas.follows_projection`, `sketches.reads_input`).
+  an input, every size read before the sketch is marked: "its outline is placed by geometry projected into Sketch2,
+  and Orca keeps that geometry where it is now" (`sketch_sizes.projection_doubts`, `hole_place`,
+  `reach.projection_sizes`, `SketchFormulas.follows_projection`, `sketches.reads_input`). The sketch's own dimensions
+  come after its projections, so they are never marked for it and still follow. A projection of the origin point, an
+  origin axis or an origin plane of the sketch's own component is no input: it is fixed, like the sketch origin.
 - A hole centre follows when the capture holds the frame of its sketch (`sketch_frame`) and the sketch's graph: the
   hole's plane is the sketch plane, turned so that its normal is the drilling direction, and `hole_x`, `hole_y` are
   the point's sketch coordinates as formulas of the sizes (`orca_translate/hole_place.py`). A size that an earlier

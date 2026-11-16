@@ -142,7 +142,8 @@ def _followed(ctx, item, data, normal, positions):
         if pid is None:
             reasons.append("the export did not read a hole point from the sketch")
         if pair is not None and any(v.derived and reads_input(v.expr) for v in pair):
-            ctx.doubt(reach.any_face_sizes(ctx.table, ctx.capture.get("items") or [], item),
+            items = ctx.capture.get("items") or []
+            ctx.doubt(reach.projection_sizes(ctx.table, items, item, data.get("sketch") or ""),
                       "%s: the hole centres are placed by geometry projected into %s, and Orca keeps that "
                       "geometry where it is now" % (item.get("name") or "the hole",
                                                     data.get("sketch") or "their sketch"))

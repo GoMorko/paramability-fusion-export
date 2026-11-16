@@ -644,6 +644,18 @@ def any_face_sizes(table, timeline, item):
     return reach_sizes(table, timeline, item, {"entity_type": "BRepFace"})
 
 
+def projection_sizes(table, timeline, item, sketch):
+    """Fusion names of the ticked sizes that may move geometry projected into the sketch named `sketch` that the step
+    `item` uses, in table order: every size an item of the body's component reads before that sketch (before the step
+    when no such sketch comes before it). A sketch takes its projections where it sits in the timeline, so its own
+    dimensions and later steps do not move them."""
+    if table is None:
+        return []
+    bound = _sketch_item(timeline, sketch, item.get("index"))
+    names = _reads_before(table, timeline, item.get("index") if bound is None else bound)
+    return [name for name in table.ticked if name in names]
+
+
 def sketch_plane_sizes(table, timeline, item, profile):
     """Fusion names of the ticked sizes that may move the plane the sketch of `profile` sits on, or, for a profile
     that is a face of the body (`face`), that may move or change that face (`any_face_sizes`), in table order."""

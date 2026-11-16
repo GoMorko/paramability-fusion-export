@@ -159,3 +159,16 @@ class ProjectionTest(unittest.TestCase):
         own, projected = Obj(isReference=False), Obj(isReference=True)
         self.assertEqual((holds([own], [own]), holds([projected]), holds([own], [projected])), (False, True, True))
         self.assertIsNone(read_sketch.holds_projection(Obj("fusion::Sketch")))
+
+    def test_a_projection_of_the_origin_of_the_sketchs_own_component_is_not_one(self):
+        part, box = Obj(entityToken="part"), Obj(entityToken="box")
+        part.originConstructionPoint = Obj("fusion::ConstructionPoint", entityToken="op", component=part)
+        part.xConstructionAxis = Obj("fusion::ConstructionAxis", entityToken="xa", component=part)
+        box.originConstructionPoint = Obj("fusion::ConstructionPoint", entityToken="bp", component=box)
+
+        def holds(source):
+            projected = Obj("fusion::SketchPoint", isReference=True, referencedEntity=source)
+            return read_sketch.holds_projection(Obj("fusion::Sketch", parentComponent=part, sketchCurves=Coll([]),
+                                                    sketchPoints=Coll([projected])))
+        self.assertEqual((holds(part.originConstructionPoint), holds(part.xConstructionAxis),
+                          holds(box.originConstructionPoint)), (False, False, True))

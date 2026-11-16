@@ -3,7 +3,8 @@ import math
 
 from ..geometry import rigid, text_outlines
 from . import read_geometry as geo
-from .placement import native_sketch_placement, read_sketch_placement, target_move
+from .placement import (is_component_origin, native_sketch_placement, owner_component, read_sketch_placement,
+                        target_move)
 
 # Which space ProfileCurve.geometry is in. "auto" decides per profile: a point off z = 0 proves model space. When
 # every point is at z = 0 and the sketch frame is not the identity, the curve is compared with its sketch entity
@@ -420,13 +421,23 @@ def sketch_reference(sketch, ctx):
 
 def holds_projection(sketch):
     """True when the sketch holds projected (reference) curves or points (`SketchEntity.isReference`), its own origin
-    point left out; None when that cannot be read. Geometry of the part projected into a sketch moves with the sizes
-    that move the part."""
+    point and projections of its component's origin point, axes and planes left out; None when that cannot be read.
+    Geometry of the part projected into a sketch moves with the sizes that move the part; the origin of the sketch's
+    component does not."""
+    component = geo.safe(lambda: sketch.parentComponent, None)
+
+    def projected(entity):
+        if not bool(entity.isReference):
+            return False
+        source = geo.safe(lambda: entity.referencedEntity, None)
+        return not (source is not None and geo.safe(lambda: is_component_origin(source), False)
+                    and geo.same_entity(owner_component(source), component))
+
     def read():
         origin = geo.safe(lambda: sketch.originPoint, None)
-        if any(bool(curve.isReference) for curve in geo.sequence_items(sketch.sketchCurves)):
+        if any(projected(curve) for curve in geo.sequence_items(sketch.sketchCurves)):
             return True
-        return any(bool(point.isReference) and not geo.same_entity(point, origin)
+        return any(projected(point) and not geo.same_entity(point, origin)
                    for point in geo.sequence_items(sketch.sketchPoints))
     return geo.safe(read, None)
 

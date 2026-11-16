@@ -52,14 +52,16 @@ def centre(feature, env):
     return plane_point(feature.plane, (value("hole_x"), value("hole_y")))
 
 
-def box_hole(frame=UP):
-    """The centred box with its hole on Sketch2 placed `pipe_offset_mm` left of the sketch origin, drilled up."""
+def box_hole(frame=UP, projected=None):
+    """The centred box with its hole on Sketch2 placed `pipe_offset_mm` left of the sketch origin, drilled up. With
+    `projected` (the `reference` of a projected point at the origin), the hole is dimensioned from that point."""
     capture = box_capture()
     capture["items"] = [it for it in capture["items"] if it["type"] not in ("ShellFeature", "FilletFeature")]
     s = Sketch()
     point = s.point(-20.0, 0.0)
-    dimension(s, "linear", [P(point), P(0)], 20.0, "d7", "pipe_offset_mm", "horizontal")
-    s.con("horizontal_points", P(0), P(point))
+    start = 0 if projected is None else s.point(0.0, 0.0, reference=projected)
+    dimension(s, "linear", [P(point), P(start)], 20.0, "d7", "pipe_offset_mm", "horizontal")
+    s.con("horizontal_points", P(start), P(point))
     record = s.record()
     record.update(sketch="Sketch2", token="s2")
     capture["sketch_graphs"].append(record)
@@ -99,6 +101,16 @@ class PlaceTest(unittest.TestCase):
         self.assertEqual(hole.plane.normal, (0.0, 0.0, -1.0))
         for a, b in zip(centre(hole, {"pipe_offset_mm": 30.0}), Placement(capture).point([-30, 0, 32])):
             self.assertAlmostEqual(a, b)
+
+    def test_a_centre_dimensioned_from_projected_geometry_follows_the_sketchs_own_size(self):
+        # The projection may move with the sizes read before the sketch, never with the sketch's own dimensions.
+        for reference in ({"source": "own", "component": "", "token": "o", "origin": True},
+                          {"source": "own", "component": "", "token": "e"}):
+            with self.subTest(reference):
+                result = run(box_hole(projected=reference), BOX_TICKED)
+                (hole,) = holes(result)
+                self.assertEqual(hole.expr["hole_x"], "-pipe_offset_mm")
+                self.assertEqual(outcome(result, "pipe_offset_mm")["outcome"], VARIABLE)
 
     def test_without_the_sketch_frame_the_centre_keeps_its_place(self):
         capture = box_hole(frame=None)

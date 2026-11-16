@@ -319,6 +319,19 @@ def _is_origin_of(native, component):
                for member in ORIGIN_MEMBERS.get(geo.type_name(native), ()))
 
 
+def is_component_origin(entity):
+    """True for the origin point (`Component.originConstructionPoint`), an origin axis or an origin plane of the
+    component that owns the entity (`owner_component`), read natively when it is seen through an occurrence. Such
+    geometry sits still in its component, whatever the sizes; it moves only with the component's place."""
+    native = _native_of(entity)
+    owner = owner_component(entity)
+    if owner is None:
+        return False
+    if geo.type_name(native) == "ConstructionPoint":
+        return geo.same_entity(native, geo.safe(lambda: owner.originConstructionPoint, None))
+    return _is_origin_of(native, owner)
+
+
 def _back_move(entity, ctx):
     """The move from root coordinates into the target's, for an entity whose geometry is in root coordinates (seen
     through an occurrence, or owned by the root); None when it is not, or the target's place cannot be read."""
