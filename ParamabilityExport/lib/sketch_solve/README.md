@@ -10,7 +10,7 @@ record (`docs/capture-format.md`, "Sketch graphs"). Pure Python, no Fusion, no n
 ```python
 from lib.sketch_solve.solve import solve_sketch, input_name, default_settings
 
-solution = solve_sketch(record, settings=None, constants=(), tol=1e-6)
+solution = solve_sketch(record, settings=None, constants=(), tol=1e-6, extended=False, distance_parallel=True)
 ```
 
 - `record`: one sketch graph record as the reader writes it.
@@ -20,6 +20,13 @@ solution = solve_sketch(record, settings=None, constants=(), tol=1e-6)
   dimensions that read one user parameter) should pass settings made from user parameter values.
 - `constants`: refs `("point", id)` or `("curve", id)` of projected entities that do not move with any size; they
   become numbers instead of measured inputs.
+- `extended`: the reading the Orca copy uses (`orca_translate.sketches`); the recipe export and `probe.derived` keep
+  the default, so their output does not change with it (`tests/test_sketch_solve_extended.py`). It reads a driving
+  distance dimension between two lines as keeping them parallel, tests angle dimensions and the parallel lines of a
+  distance dimension within what the rounding of the drawing allows for the lines' lengths
+  (`checks.turn_slack`, at most `checks.MAX_SLACK` radians), and fills `directions`.
+- `distance_parallel`: with `extended`, False leaves out the rule that a distance dimension keeps its two lines
+  parallel. The Orca copy solves a sketch both ways to find the formulas that rest on that rule (hand test OR18).
 
 `solution` (`outcome.Solution`):
 
@@ -30,6 +37,11 @@ solution = solve_sketch(record, settings=None, constants=(), tol=1e-6)
 - `leaves[name]`: every name a formula may read. `kind` `dimension`: the dimension's model parameter (`d16`), with
   the dimension id, `expression` and `reads`. `kind` `input`: a measured coordinate of a projected entity, named
   `input_name(ref, field)`: `@p3.x`, `@p3.y`, `@c5.r`, with the entity ref, field and token.
+- `directions[id]`: with `extended`, a `Value` per line with a direction: its angle in degrees from its first point
+  to its second, when the rules give it as an angle (horizontal, vertical, angle dimensions, perpendicular and
+  parallel lines).
+- `parallel_by_distance`: with `extended` and `distance_parallel`, the pairs of line ids that only a distance
+  dimension keeps parallel.
 - `assumptions`: each choice between two solutions, with a `guard` expression that stays above zero while the
   choice holds and `flips`, the numbers of the settings where it does not.
 - `dimensions[id]`, `constraints[id]`: `Usage` with `status` (`used`, `driven`, `refused`, `not_covered`,

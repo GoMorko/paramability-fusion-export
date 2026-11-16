@@ -63,6 +63,16 @@ class Directions:
     def same_class(self, a, b):
         return self.root(a) == self.root(b)
 
+    def angle_of(self, line):
+        """The angle (an `Expr`, degrees) of a line from its first point to its second, or None when its class has
+        no known angle. The class's direction points along its base vector, so a line drawn the other way is turned
+        half round."""
+        known = self.known(line)
+        if known is None or known.angle is None:
+            return None
+        own, base = self.vector[line], self.base(line)
+        return known.angle + 180.0 if own[0] * base[0] + own[1] * base[1] < 0 else known.angle
+
 
 def matches(d, vector, value_at, tol=1e-6):
     """True when a `Dir` equals a unit vector on the solved drawing; `value_at` gives an `Expr`'s number there."""

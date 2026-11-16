@@ -104,6 +104,8 @@ class Solution:
     - `radii`: arc or circle id to a `Value`;
     - `leaves`: name to `Leaf`, every name a formula may read;
     - `assumptions`: list of `Assumption`;
+    - `directions`: line id to the line's angle as a `Value` (the extended reading only);
+    - `parallel_by_distance`: the pairs of lines the extended reading keeps parallel for a distance dimension alone;
     - `dimensions`, `constraints`: id to `Usage`;
     - `settings`: the size settings (leaf name to number) the redundant rules and the choices were checked at."""
 
@@ -118,6 +120,12 @@ class Solution:
         self.assumptions = []
         self.dimensions = {}
         self.constraints = {}
+        # Line id to the angle of the line (degrees, from its first point to its second) as a `Value`; filled by the
+        # extended reading only (`solve_sketch(extended=True)`).
+        self.directions = {}
+        # Pairs of line ids that only a driving distance dimension between them keeps parallel (the extended reading
+        # with `distance_parallel`).
+        self.parallel_by_distance = []
         self.settings = []
         self.notes = []
 

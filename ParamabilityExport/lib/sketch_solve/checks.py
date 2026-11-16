@@ -35,6 +35,24 @@ def _tol(tol, value):
     return tol * (1.0 + abs(value) * 1e-3)
 
 
+# A coordinate of the drawing may be off by about `tol` (the capture rounds it), so a line of length L may point up to
+# about ROUNDING * tol / L radians away from its true direction. The extended reading (`solve_sketch(extended=True)`)
+# allows that much when it tests an angle or two parallel lines.
+ROUNDING = 4.0
+# The slack never goes past this (radians): a line so short that its rounding allows more says too little about its
+# direction to test an angle on it.
+MAX_SLACK = 1e-3
+# Two lines count as parallel when the cross product of their unit directions is at most this, in the default reading.
+PARALLEL = 1e-9
+
+
+def turn_slack(g, lines, tol):
+    """The angle in radians by which the drawn directions of `lines` may be off together, from the rounding of their
+    ends (`ROUNDING`), at most `MAX_SLACK`."""
+    shortest = min(_length(g, cid) for cid in lines)
+    return min(ROUNDING * tol / max(shortest, tol), MAX_SLACK)
+
+
 def _point_of(g, ref, axis_line=None):
     """A point id for a ref: the point itself, or the start of a line that runs along `axis_line` ("vertical" for a
     horizontal gap, "horizontal" for a vertical one), or None."""
@@ -114,9 +132,9 @@ def _cross(u, v):
     return u[0] * v[1] - u[1] * v[0]
 
 
-def measure(g, shape):
+def measure(g, shape, slack=0.0):
     """The quantity a shape measures on the solved geometry, or None when it is not defined there (two lines that
-    are not parallel, a line with no length)."""
+    are not parallel, a line with no length). `slack` (radians) widens the parallel test of two lines."""
     kind = shape.kind
     if kind in ("dx", "dy", "dist"):
         (ax, ay), (bx, by) = g.xy(shape.a), g.xy(shape.b)
@@ -126,7 +144,7 @@ def measure(g, shape):
         return None if gap is None else abs(gap)
     if kind == "line_line":
         d1, d2 = g.direction(shape.line), g.direction(shape.other)
-        if d1 is None or d2 is None or abs(_cross(d1, d2)) > 1e-9:
+        if d1 is None or d2 is None or abs(_cross(d1, d2)) > max(PARALLEL, slack):
             return None
         gap = _gap_to_line(g, g.curves[shape.other].points[0], shape.line)
         return abs(gap)
@@ -142,15 +160,20 @@ def measure(g, shape):
     return None
 
 
-def dimension_holds(g, shape, value, tol):
-    """True when the solved geometry gives the dimension's value."""
-    found = measure(g, shape)
+def dimension_holds(g, shape, value, tol, extended=False):
+    """True when the solved geometry gives the dimension's value. `extended` allows the angle between two lines, and
+    the parallel test of a distance between two lines, to be off by what the rounding of the drawing allows for the
+    lines' lengths (`turn_slack`)."""
+    lines = [c for c in (shape.line, shape.other) if c is not None] if shape.kind in ("angle", "line_line") else []
+    slack = turn_slack(g, lines, tol) if extended and lines else 0.0
+    found = measure(g, shape, slack)
     if found is None:
         return False
     if shape.kind == "angle":
         # A line has no sense of direction: the dimension is one of the angles the two lines make.
         rest = value % 180.0
-        return any(abs(((found - c) + 90.0) % 180.0 - 90.0) <= tol for c in (rest, -rest))
+        allowed = max(tol, math.degrees(slack))
+        return any(abs(((found - c) + 90.0) % 180.0 - 90.0) <= allowed for c in (rest, -rest))
     return abs(found - value) <= _tol(tol, value)
 
 
