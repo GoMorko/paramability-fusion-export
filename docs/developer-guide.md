@@ -1183,6 +1183,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `ribWeb` | the step types Rib and Web | Draw the rib or web outline in a sketch and extrude it. |
 | `pathPattern` | a path pattern that is not copied (a path that is not one line, arc or circle, copies on both sides of the start point, copies that keep their direction on a round path, copies past the end of the path) | Use a rectangular or circular pattern, or a mirror. |
 | `revolveSides` | a revolve to two sides whose start face does not tell which side each angle turns to (3.14) | Make two revolves, one to each side of the sketch. |
+| `revolveAxisSide` | a revolve whose outline would reach or cross its axis inside size ranges that the person typed (3.14) | Type size ranges that keep the outline on one side of the axis, or leave the ranges to the add-in. |
 | `boundaryFill` | the step type Boundary Fill | Build the solid with extrudes and cuts instead of filling a boundary. |
 | `newComponent` | an extrude, revolve, loft or sweep that makes a new component | Make the body in the component that holds the part. |
 | `otherComponent` | a step that reaches into another component (the walk) | Use sketches, planes and faces of the part's own component. |
@@ -1796,7 +1797,8 @@ one folder per family of steps.
     and `path_rebuilt.py` the rules of a path read back from written numbers, for the checks over the size ranges.
   - `loft/`: `step.py`, `loft_sections.py`. The volume of the corner pairing is in `design_model/steps/loft.py`.
   - `revolve/step.py` (see 3.14; which side each angle of a revolve to two sides turns to is in
-    `design_model/steps/revolve.py`), `hole/step.py` (holes and cosmetic threads) and `hole/thread.py` (modelled threads and the thread
+    `design_model/steps/revolve.py`) with `revolve/axis_side.py` (the ranges where the outline stays on its side of
+    the axis), `hole/step.py` (holes and cosmetic threads) and `hole/thread.py` (modelled threads and the thread
     of a tapped hole, see 3.12). They read the hole and the thread through `design_model/steps/hole.py` and
     `thread.py`; they keep the caps of the recipe, the values that follow sizes and the refusals.
   - `coil/`: the coil handler (see 3.13). `step.py` holds `handle`. Also `coil_fit.py` (the axis, the hand and the check of
@@ -3899,6 +3901,42 @@ The handler then puts the start of the turn back by the angle before the sketch.
 An intersect of several outlines keeps the part only where any of the outlines turns. Thus the handler does not write
 one intersect for each outline. It writes one `toolBody` step with `combine: "intersect"`. In that step, the first
 outline makes a new body and the other outlines join it.
+
+#### The side of the axis
+
+Fusion turns a revolve toward one side of the sketch plane. Fusion keeps that side when the outline is on the other
+side of the axis. Thus, when the outline passes to the other side of the axis, the turn about the axis reverses. When
+the outline touches the axis or crosses it, Fusion can build the step with a warning. The recipe writes one turn about
+the axis by the right hand rule, and this turn does not change. The app refuses an outline that crosses its axis.
+Thus the copy is correct only while the outline stays on the side of the axis where it is now.
+
+Example. A box is 40 x 20 mm, and its height is a size. A line on the top front edge of the box is the axis. The
+outline is a 10 x 3 mm rectangle on the XZ plane, from z = 12 to z = 15. The revolve turns it 90 degrees toward the
+box. At the height 10, the axis is below the outline. At the height 15, the axis is on the top edge of the outline.
+At the height 20, the axis is above the outline. Fusion then turns the outline into the box, but a copy with one
+turn would turn it out of the box.
+
+`revolve/axis_side.py` (`keep_side`) does this check after the handler writes the steps. The check uses each written
+`revolve` step: its outline and its axis point, as numbers or formulas. When no size moves the outline or the axis,
+there is nothing to check. Else the check calculates the distance of the outline from the axis, across the axis, at
+these size settings:
+
+- the ends and the corners of the ranges of the sizes that the step reads (`range_check.corners`);
+- the inner settings too, when a formula is more than sums and products (`range_check.needs_inner`).
+
+A line gives its two ends. An arc gives its two ends, and the point nearest to the axis or farthest from it when that
+point is on the arc. A circle and an ellipse give their nearest and farthest points. A free curve gives its samples.
+
+At the current sizes, the outline is on one side of the axis. The rule is that the outline stays on that side, more
+than 0.0001 mm (`SIDE_TOL_MM`) away from the axis. An outline that touches the axis now (for example a vase drawn
+from its centre line) can stay on the axis, but it must not pass it. When the rule fails at a setting, the check
+finds the shorter ranges where it holds (`kept_ranges.holding_ranges_where`) and cuts the ranges there
+(`Context.cut`, with the reason "the outline of ... would reach its axis"). In most designs the outline and the axis
+move in a straight line with the sizes. Then the halvings find the place where the outline reaches the axis, and the
+range stops at the step of the form before it. In the example, the range of the height stops at 11.99.
+
+When no shorter ranges keep the rule, the step is left out with the cause `revolveAxisSide`. This occurs when every
+size that the step reads has a range that the person typed.
 
 The Orca export (`orca_translate/revolve.py`) uses the same `back_sides` check for two sides. It turns the sketch plane
 back by the angle before the sketch and turns by the sum. Both angles keep their numbers in Orca, and their sizes are

@@ -40,6 +40,10 @@ What the copy can and cannot do, step by step. The README lists only the main li
   the sizes the size probe tried; each other size that may move or turn that line (a size of its sketch, of the plane
   or face that sketch sits on, or of part edges projected into it) is marked the same way, and with no tries every
   such size is.
+- Fusion turns a revolve toward one side of its sketch plane, also when a size moves the axis (or the outline) to the
+  other side of the outline. Then the turn about the axis reverses, and the copy turns one way only. So the range of
+  such a size stops just before the outline would reach the axis. An outline drawn on the axis may stay on it. When the
+  person typed the ranges of all the sizes that move it, the revolve is left out instead.
 - A revolve whose axis is not in the plane of its sketch (or is not square to that plane) is left out too, unless Fusion
   itself projects the axis onto the sketch plane.
 - A revolve to two sides with two angles is copied when its start face shows which side each angle turns to. When one

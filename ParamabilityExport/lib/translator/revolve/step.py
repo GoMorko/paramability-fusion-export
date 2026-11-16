@@ -13,7 +13,9 @@ a sketch line follow sizes (sketch/sketch_motion.py); for a line of another sket
 may move it and were not tried are marked (`ref_motion.check_own_axis`). An axis of another component follows the
 sizes the probe measured it move with (ref_motion.py). Any other axis of the part is written as measured, and the
 sizes that may move it are marked (`ref_motion.check_own_axis`). A caller that has worked out the axis point's raw
-values (`axis.raw`) or the angle (`extent.quantity`) gives them as they are.
+values (`axis.raw`) or the angle (`extent.quantity`) gives them as they are. Fusion turns toward the same side of
+the sketch plane whichever side of the axis the outline is on, so the ranges are cut where the written outline would
+reach its axis (`axis_side.keep_side`).
 """
 import math
 
@@ -31,6 +33,7 @@ from ..faces.tool_placer import JoinedWalk
 from ..ranges import range_check
 from ..result import Refusal, StepResult
 from ..sketch import loops, sketch_motion
+from .axis_side import keep_side
 
 
 AXIS_PLANE_TOL = 1e-4
@@ -402,6 +405,9 @@ def handle(ctx, step):
             recipe_step["angleDeg"] = angle_value.json()
         steps.append(recipe_step)
     ref_motion.check_own_axis(ctx, item, axis, "turns about", {p.get("sketch") for p, _, _, _ in built})
+    off_axis = keep_side(ctx, item, steps)
+    if off_axis is not None:
+        return off_axis
     if turn_back is not None:
         # The revolves start at the sketch; the move turns them back about the axis (the right hand rule about the
         # reversed axis). It holds no projected or moving axis (`_two_sides_values`), so built[0] gives the axis.
