@@ -20,10 +20,10 @@ copies it:
   keeps none of them. `error` is the exception that bringing in raised, if any; `replay` raises it again.
 
 A handler of an output takes the `ResolvedStep` of its step and reads the step through it: `brought` for the item,
-`brought_data` for its data, `facts` for what the shared reader of its kind gives, `params_of` for the model
-parameters behind a value and `sketches_of` for the sketches it names. An item that no walk resolves but that a handler reads or copies (a source of a pattern, a
-Combine among them, an item a handler writes again as another kind of step) goes in as `as_read(item)`: the item as
-it is, nothing brought in.
+`brought_data` for its data, `facts` for what the shared reader of its kind gives, `params_of` for the model parameters
+behind a value and `sketches_of` for the sketches it names. An item that no walk resolves but that a handler reads or
+copies (a source of a pattern, a Combine among them, an item a handler writes again as another kind of step) goes in as
+`as_read(item)`: the item as it is, nothing brought in.
 
 These are facts only. Each output decides from them whether a step is copied, left out or stops the copy, and words
 its own answer. Pure: it reads capture dicts only.
