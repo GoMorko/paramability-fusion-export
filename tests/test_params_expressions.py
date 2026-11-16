@@ -160,7 +160,7 @@ class TranslateTest(unittest.TestCase):
             with self.assertRaises(ExpressionError, msg=text):
                 evaluate(text, {})
 
-    def test_owner_exports_translate(self):
+    def test_exported_formulas_translate(self):
         for text, values, expected in (
                 ("ceil(w / 42 mm)", {"w": 100.0}, 3.0),
                 ("if(h < 500 mm; 2; 3) * w / mm", {"h": 600.0, "w": 7.0}, 21.0),

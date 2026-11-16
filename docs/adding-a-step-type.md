@@ -15,7 +15,7 @@ of that.
 4. When the step writes a recipe kind the translator does not write yet: one `RecipeKind` entry in the same table,
    plus the recipe schema copy in `tests/schema/` and support for the kind in the Paramability app.
 5. Tests: a capture fixture, handler tests, and a hand test entry for every new Fusion call.
-6. The README limits list and `docs/capture-format.md` section 5, where the reader data is described.
+6. The limits list in `docs/limits.md` and `docs/capture-format.md` section 5, where the reader data is described.
 
 Nothing else holds a list of step types. `tests/test_step_kinds.py` fails when a type name or a list of recipe kinds
 shows up in another module, when a reader registers a type that the table does not give to that reader module, when

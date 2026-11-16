@@ -280,20 +280,20 @@ class UnmeasuredSketchTest(unittest.TestCase):
         self.assertNotIn("depth_mm", reasons(run(depth_drives_sketch_and_extrude(), BOX_SIZES, motion)))
 
 
-class OwnerFilterBoxTest(unittest.TestCase):
-    """The owner's FilterBox package (outside the repo, 0.4.0 capture) with a motion file written by hand
-    (filter_box_motion.py): supports cross the walls, and pipe circles cross each other. The motion has no values for
-    the lid steps drawn on BoxLid's sketches, so they are copied as numbers."""
+class LocalFilterBoxTest(unittest.TestCase):
+    """A FilterBox package (kept outside the repo, in the PARAMABILITY_LOCAL_REPORTS folder; 0.4.0 capture) with a
+    motion file written by hand (filter_box_motion.py): supports cross the walls, and pipe circles cross each other.
+    The motion has no values for the lid steps drawn on BoxLid's sketches, so they are copied as numbers."""
 
-    PACKAGE = os.path.expanduser("~/Documents/free-projects/3mf-compose/tmp/reports/"
-                                 "Pat -22 Pipe, Filter (Box, Cylinder).paramability")
+    PACKAGE = os.path.join(os.path.expanduser(os.environ.get("PARAMABILITY_LOCAL_REPORTS") or ""),
+                           "Pat -22 Pipe, Filter (Box, Cylinder).paramability")
     TICKED = ["FilterBox_$_width__contains_CeramicMedium", "FilterBox_$_height__contains_CeramicMedium",
               "FilterBox_$_depth__contains_CeramicMedium", "_CeramicMedium__Cube_width_unitless",
               "_Filter__Wall_thickness_mm", "FilterBox__PipeTop_offsetFromCenter_mm"]
 
     def test_box_sizes_stay_free_unless_the_lid_steps_copied_as_numbers_would_come_off_the_box(self):
-        if not os.path.exists(self.PACKAGE):
-            self.skipTest("the owner's package is not on this machine")
+        if not os.environ.get("PARAMABILITY_LOCAL_REPORTS") or not os.path.exists(self.PACKAGE):
+            self.skipTest("the FilterBox package is not on this machine")
         from tests.filter_box_motion import filter_box_motion
         with zipfile.ZipFile(self.PACKAGE) as package:
             capture = json.loads(package.read("report.json"))["capture"]

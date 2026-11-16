@@ -1,8 +1,8 @@
 """Checks of private exported packages, kept outside the repo.
 
 Every package name, size name, step name and expected value lives in a local JSON file (default
-`tests/local/owner_captures.json`, or the path in PARAMABILITY_OWNER_CAPTURES). Without that file the module skips.
-The reports folder comes from PARAMABILITY_OWNER_REPORTS, else from "reports_dir" in the JSON. The JSON holds
+`tests/local/captures.json`, or the path in PARAMABILITY_LOCAL_CAPTURES). Without that file the module skips.
+The reports folder comes from PARAMABILITY_LOCAL_REPORTS, else from "reports_dir" in the JSON. The JSON holds
 {"reports_dir": str, "cases": {<kind>: [case, ...]}}; each test below runs one kind over its cases, and a package
 that is not in the folder skips its case."""
 import json
@@ -20,8 +20,8 @@ from lib.probe import build as probe_build
 from lib.sketch_values.motion import Stuck, Terms
 from lib.translator import translate
 
-CONFIG = os.environ.get("PARAMABILITY_OWNER_CAPTURES") or os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "local", "owner_captures.json")
+CONFIG = os.environ.get("PARAMABILITY_LOCAL_CAPTURES") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "local", "captures.json")
 
 
 def _load():
@@ -32,7 +32,7 @@ def _load():
 
 
 DATA = _load()
-REPORTS = os.path.expanduser(os.environ.get("PARAMABILITY_OWNER_REPORTS") or DATA.get("reports_dir") or "")
+REPORTS = os.path.expanduser(os.environ.get("PARAMABILITY_LOCAL_REPORTS") or DATA.get("reports_dir") or "")
 
 
 def cases(kind):
@@ -78,7 +78,7 @@ def replay(case):
     return translate(capture, size_table=table, motion=motion), motion
 
 
-@unittest.skipUnless(DATA, "skipped: no local capture file (see the README test section)")
+@unittest.skipUnless(DATA, "skipped: no local capture file (see the test section of docs/development.md)")
 class OwnerCaptureTest(unittest.TestCase):
     def each(self, kind, check, key="package"):
         """Runs `check(case)` for every listed case whose package is present; skips when none is."""
