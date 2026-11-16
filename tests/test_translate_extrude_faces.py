@@ -45,7 +45,10 @@ def slanted_post(side=None, frame=SLANTED, **more):
     item["type"] = "ExtrudeFeature"
     item["data"] = dict({
         "operation": "join",
-        "profiles": [{"sketch": "Sketch2", "frame": frame, "loops": [{"outer": True, "curves": SQUARE}]}],
+        "profiles": [{"sketch": "Sketch2", "frame": frame, "loops": [{"outer": True, "curves": SQUARE}],
+                      # The post's sketch sits on a plane offset from the origin, not on a face of the lid.
+                      "reference": {"kind": "constructionPlane", "token": "plane_post",
+                                    "definition": "ConstructionPlaneOffsetDefinition", "built_on": [{"origin": True}]}}],
         "start": {"kind": "profilePlane"}, "extent_type": "one", "side_one": side or lid_face(),
         "side_two": None, "symmetric": None, "thin": False, "participants": [BODY],
         "target_box_before": {"min": [0.0, 0.0, 0.0], "max": [60.0, 40.0, 4.0]}, "end_offset": None}, **more)
