@@ -585,13 +585,18 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     the origin. Drill a simple 5 mm hole through all at (10, 10). Make a rectangular pattern of the hole: direction
     one along X, quantity 4, distance 20 mm, spacing; direction two along Y, quantity 3, distance 15 mm. On a copy of
     the design, tick Symmetric in direction one and set its quantity to 5, with the hole at (50, 10). On another copy,
-    suppress the copy at (50, 25).
+    suppress the copy at (50, 25). On a last copy, make the plate in a new component and move that component 100 mm
+    along Y and turn it 90 degrees about Z, then make a circular pattern of the hole about the Z axis of the
+    component: Full, quantity 4.
     Export: Export for Paramability and Export for Orca. In `report.json`, for each element compare the shift of its
     `frame` (`origin`) with the move from the original's `source_faces` to the element's `faces`. Expect them to
     agree, and the holes at x 10, 30, 50, 70 and y 10, 25, 40. Each pattern is copied (the suppressed copy as a
     skip in the recipe; Orca leaves that one out) and matches the STEP. If a pattern is left out with "Fusion gives a
     place for a copy of this pattern that is not where the faces of that copy are", note the ids, frames and face
-    centres: the transforms of rectangular patterns are wrong too.
+    centres: the transforms of rectangular patterns are wrong too. In the moved component, the frames are in
+    assembly space and the face centres in the component's space (the original hole near (10, 10), not near (-10, 110)); both patterns
+    are copied. If they are left out with that reason, note the frames and face centres: the spaces differ from
+    what the reader expects.
 55. PE2, where Fusion says the copies of a path pattern round a whole circle are. Make a 60 x 60 x 5 mm plate with
     its corner at the origin. Sketch a circle of radius 20 mm centred at (30, 30) on the top face, and a circle of
     radius 2 mm at (50, 30); cut the small circle through all. Make a Pattern on Path of the cut along the large

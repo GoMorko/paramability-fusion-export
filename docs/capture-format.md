@@ -987,7 +987,10 @@ mm2 (`BRepFace.area`).
 - `distance_type`: `spacing` or `extent` (enum `PatternDistanceType`), `other` when unreadable. The translator then
   takes the kind whose grid holds every kept element.
 - `elements`: every `PatternElement` (`id`, `isSuppressed`, `transform` as a frame, and `faces`: up to 8 of the faces
-  that element made, `PatternElement.faces`, null when they cannot be read). The ids start at 0 (the original) and
+  that element made, `PatternElement.faces`, null when they cannot be read). Only up to 12 kept elements have
+  `faces`: all of them in a smaller pattern, else the first three, the last two and copies spread evenly between.
+  The face centroids are in the space of the face's own component (a face seen through an occurrence is read as its
+  native face); the frames are in assembly space. The ids start at 0 (the original) and
   follow the order of the copies. The transform is not always right: in Fusion 2706 the transform of each copy of a
   circular pattern after the original is one step ahead (hand check CP1). So the translators take the places of
   one-sided circular copies from their ids and check every place against the faces
@@ -997,8 +1000,8 @@ mm2 (`BRepFace.area`).
   before the item: the faces each source feature made (`Feature.faces`), the source faces of a pattern of faces, or
   the faces of the source bodies. Null when they cannot be read, absent in older captures. The frames are in assembly space, so for a
   part placed in the assembly the translator carries them into the component's frame first
-  (`design_model/steps/repeat.py`, `data_in_component`, using the target's `placement`), and the face centroids with
-  them. In a symmetric circular pattern the frames of the
+  (`design_model/steps/repeat.py`, `data_in_component`, using the target's `placement`). The face centroids stay as
+  they are. In a symmetric circular pattern the frames of the
   copies behind the original have been seen as unturned and the one ahead as turned too far, while the part itself
   had them centred; an odd count with every copy listed is therefore taken as centred (`repeat/repeat_circular.py`), but
   only when no copy is suppressed or left out by number (`suppressed_ids`), the original is among the copies and every
