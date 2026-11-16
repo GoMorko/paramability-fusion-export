@@ -104,7 +104,7 @@ class OrcaTipTest(unittest.TestCase):
             gap_hints.DELETE_FACE, gap_hints.SURFACE, gap_hints.EXTRUDE_END_FACE, gap_hints.TAPER_STEEP,
             gap_hints.THIN_OUTLINE, gap_hints.ROUND_KIND, gap_hints.REPEAT_FACES, gap_hints.SHARP_CORNER,
             gap_hints.LOFT_KIND, gap_hints.SCALE, gap_hints.REPLACE_FACE, gap_hints.RIB_WEB, gap_hints.PATH_PATTERN,
-            gap_hints.BOUNDARY_FILL, gap_hints.NEW_COMPONENT, gap_hints.OTHER_COMPONENT,
+            gap_hints.REVOLVE_SIDES, gap_hints.BOUNDARY_FILL, gap_hints.NEW_COMPONENT, gap_hints.OTHER_COMPONENT,
             gap_hints.MADE_IN_OTHER_COMPONENT, gap_hints.AFTER_GAP})
 
     def test_a_cause_of_orca_alone_has_no_tip(self):

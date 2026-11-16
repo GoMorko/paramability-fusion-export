@@ -1,15 +1,19 @@
 """Revolve feature handler (RevolveFeature): sketch profiles turned about an axis in their sketch plane.
 
-The recipe kernel turns by the right hand rule about the axis direction. Fusion does not say which way it turned, so
-the measured outward normal of the start face decides whether the axis direction is kept or negated. The start face
-bounds the new material for a new body, join or intersect, so its outward normal points against the travel. After a
-cut it bounds the material that stays, so the normal points along the travel. Two sided revolves are refused: their
-start face is the end of one side, which does not name the side. With the probe's motion file the outline, its plane
-and an axis from a sketch line follow sizes (sketch/sketch_motion.py); for a line of another sketch than the outline's,
-the sizes that may move it and were not tried are marked (`ref_motion.check_own_axis`). An axis of another component
-follows the sizes the probe measured it move with (ref_motion.py). Any other axis of the part is written as measured,
-and the sizes that may move it are marked (`ref_motion.check_own_axis`). A caller that has worked out the axis point's
-raw values (`axis.raw`) or the angle (`extent.quantity`) gives them as they are.
+The recipe kernel turns by the right hand rule about the axis direction. Fusion does not say which way it turned, so the
+measured outward normal of the start face decides whether the axis direction is kept or negated. The start face bounds
+the new material for a new body, join or intersect, so its outward normal points against the travel. After a cut it
+bounds the material that stays, so the normal points along the travel. The start face of a revolve to two sides is the
+end of one side: `design_model.steps.revolve.back_sides` tells from it which side each angle turns to. The copy turns
+the sketch back by that angle and revolves by the sum of the two (as a symmetric revolve turns it back by half). When
+the angle back follows a size, the revolve stays at the sketch and a `move` inside a `toolBody` turns it back instead.
+An intersect of several outlines is one `toolBody` that holds them all, since the part keeps what any of them holds.
+With the probe's motion file the outline, its plane and an axis from a sketch line follow sizes
+(sketch/sketch_motion.py); for a line of another sketch than the outline's, the sizes that may move it and were not
+tried are marked (`ref_motion.check_own_axis`). An axis of another component follows the sizes the probe measured it
+move with (ref_motion.py). Any other axis of the part is written as measured, and the sizes that may move it are marked
+(`ref_motion.check_own_axis`). A caller that has worked out the axis point's raw values (`axis.raw`) or the angle
+(`extent.quantity`) gives them as they are.
 """
 import math
 
@@ -19,9 +23,12 @@ from ...geometry import vec
 from ...package.numbers import round9
 
 from ...design_model import refs
+from ...design_model.steps.revolve import back_sides
 from ...design_model import words as shared
 from .. import notes, placement, ref_motion, values
 from ..extrude import COMBINE
+from ..faces.tool_placer import JoinedWalk
+from ..ranges import range_check
 from ..result import Refusal, StepResult
 from ..sketch import loops, sketch_motion
 
@@ -29,6 +36,8 @@ from ..sketch import loops, sketch_motion
 AXIS_PLANE_TOL = 1e-4
 AXIS_SQUARE_TOL = 1e-9
 FULL_TURN_DEG = 360.0
+# The params paths of the two angles of a revolve to two sides.
+TWO_ANGLES = ("extent.angle_one_deg", "extent.angle_two_deg")
 
 
 def _pt(p):
@@ -138,8 +147,28 @@ def _symmetric_ok(data, combine, frame, outer, point2, dir2, dir3, angle):
     return Refusal("The turn of this symmetric revolve does not match its measured start face.")
 
 
+def _two_sides_back(data, combine, frame, outer, point2, dir2, dir3, angles):
+    """The side (1 or 2) whose angle the turn starts back from the sketch, by the right hand rule about dir3; 0 when
+    the two angles are equal and either fits; or a Refusal."""
+    travel = _travel_from_normal(data, combine)
+    if isinstance(travel, Refusal):
+        return travel
+    turn = _turn_direction(frame, outer, point2, dir2, dir3)
+    if isinstance(turn, Refusal):
+        return turn
+    sides = back_sides(travel, turn, dir3, angles[0], angles[1])
+    if not sides:
+        return Refusal("The turn of this two sided revolve does not match its measured start face.")
+    if len(sides) == 1:
+        return sides[0]
+    if abs(angles[0] - angles[1]) <= 1e-9:
+        return 0
+    return Refusal("The start face of this two sided revolve does not tell which side each angle turns to.",
+                   cause=gap_hints.REVOLVE_SIDES)
+
+
 def _angles(extent):
-    """(kind, angle) with kind full, part or symmetric; or a Refusal."""
+    """(kind, angle) with kind full, part, symmetric or twoSides (angle is then the pair of angles); or a Refusal."""
     kind = (extent or {}).get("kind")
     if kind == "angle":
         angle = float(extent["angle_deg"])
@@ -149,7 +178,12 @@ def _angles(extent):
             return "full", FULL_TURN_DEG
         return ("symmetric" if extent.get("symmetric") else "part"), angle
     if kind == "twoSidesAngle":
-        return Refusal("Revolves turned to both sides are not copied yet.")
+        pair = (float(extent["angle_one_deg"]), float(extent["angle_two_deg"]))
+        if not (pair[0] > 0 and pair[1] > 0) or sum(pair) > FULL_TURN_DEG + 1e-9:
+            return Refusal(shared.REVOLVE_ANGLE)
+        if sum(pair) >= FULL_TURN_DEG - 1e-9:
+            return "full", FULL_TURN_DEG
+        return "twoSides", pair
     return Refusal(shared.REVOLVE_ANGLE_KIND)
 
 
@@ -185,13 +219,18 @@ def _keep_in_plane(ctx, item, coords, outlines):
                       "the plane of its sketch, and the copy cannot follow that" % item.get("name", "a step"))
 
 
+def _moves(axis):
+    """True when the raw axis point `axis` (None when sketch values do not follow sizes) moves with sizes."""
+    return axis is not None and any(not (isinstance(a, sketch_motion.Affine) and a.is_constant) for a in axis)
+
+
 def _turned_sized(ctx, item, data, drawn, dir3, point3, degrees, axis=None):
     """The sketch origin turned about the axis when the plane or the axis moves with sizes: R o + (I - R) a, as
     written values; None when neither moves. `data` is the data of the revolve `item`. `axis` is the raw axis point
     when it comes from another component."""
     if axis is None:
         axis = sketch_motion.axis_raw(ctx, item, data.get("axis"))
-    moving_axis = axis is not None and any(not (isinstance(a, sketch_motion.Affine) and a.is_constant) for a in axis)
+    moving_axis = _moves(axis)
     still = isinstance(drawn.plane, sketch_motion.Affine) and drawn.plane.is_constant if drawn is not None else True
     if drawn is None or (not moving_axis and still):
         return None
@@ -214,15 +253,56 @@ def _turned_sized(ctx, item, data, drawn, dir3, point3, degrees, axis=None):
     return out
 
 
-def _angle_value(ctx, item, mode, angle, given=None):
+def _angle_value(ctx, item, mode, angle, extent):
     """The turn as a Quantity. Only a turn that starts at the sketch can follow a size; the others stay numbers.
-    `given` is a Quantity the caller worked out (a sweep along an arc)."""
+    `extent.quantity` is a Quantity the caller worked out (a sweep along an arc)."""
+    given = extent.get("quantity")
     if given is not None and mode == "part":
         return given
     if mode == "part":
         return values.quantity(ctx, item, "extent.angle_deg", angle, dim="angle", absolute=True)
-    values.pin(ctx, item, "extent.angle_deg", "a %s turn in %s cannot follow it" % (mode, item.get("name", "a step")))
+    for path in (TWO_ANGLES if extent.get("kind") == "twoSidesAngle" else ("extent.angle_deg",)):
+        values.pin(ctx, item, path, "a %s turn in %s cannot follow it" % (mode, item.get("name", "a step")))
     return Quantity(angle)
+
+
+def _two_sides_values(ctx, item, data, angles, side, axis_raw):
+    """`(total, back, turn_back)` of a two sided revolve whose turn starts back by the angle of `side` (0 when the two
+    angles are equal): the whole turn as a Quantity, the degrees back as a number, and the turn back as a Quantity
+    when it follows sizes (a `move` writes it then), else None. Both angles follow sizes while their sum stays a full
+    turn or less. With equal angles the copy cannot tell which side each one turns to at other sizes, so both stay
+    numbers. The turn back stays a number about a projected axis or an axis that moves with sizes."""
+    name = item.get("name", "a step")
+    if side == 0:
+        for path in TWO_ANGLES:
+            values.pin(ctx, item, path, "the two angles of %s are equal, so the copy cannot tell which side each one "
+                       "turns to" % name)
+        return Quantity(sum(angles)), angles[1], None
+    at = side - 1
+    ahead = values.quantity(ctx, item, TWO_ANGLES[1 - at], angles[1 - at], dim="angle", absolute=True)
+    back = values.quantity(ctx, item, TWO_ANGLES[at], angles[at], dim="angle", absolute=True)
+    total = ahead.plus(back)
+    if total.sized and not range_check.sweep(ctx.table, total.text, total.reads).at_most(FULL_TURN_DEG + 1e-9):
+        ctx.doubt(total.reads, "the two angles of %s would turn more than a full circle at other sizes" % name)
+        return Quantity(sum(angles)), angles[at], None
+    if back.sized and (data.get("project_axis") or _moves(axis_raw)):
+        ctx.doubt(back.reads, "the axis of %s is projected onto its sketch or moves with sizes, so its angle on the "
+                  "far side of the sketch cannot follow them" % name)
+        return ahead.plus(angles[at]), angles[at], None
+    return total, angles[at], (back if back.sized else None)
+
+
+def _held(ctx, item, steps, combine, extra=None):
+    """One `toolBody` step with `combine` that holds the revolves `steps` (the first makes the tool, the rest join it)
+    and the `extra` step after them."""
+    for n, step in enumerate(steps):
+        step["combine"] = "add" if n else "new"
+    inner = StepResult.of(steps + ([extra] if extra else []))
+    held = ctx.child({"name": item.get("name")}, "%st%s_rv_" % (ctx.id_prefix, item["index"]), depth=ctx.depth + 1)
+    held.add_steps(item, inner)
+    out = StepResult()
+    out.add({"kind": "toolBody", "combine": combine, "features": held.steps}, [JoinedWalk(held)])
+    return out
 
 
 # What a revolve axis the copy cannot use is, by the Fusion type the reader recorded.
@@ -284,7 +364,8 @@ def handle(ctx, step):
         _keep_in_plane(ctx, item, coords, [drawn for _, _, _, drawn in built])
 
     profile, (outer, _), (point2, dir2, point3, dir3), _ = built[0]
-    sign = 1
+    extent = data.get("extent") or {}
+    sign, back, turn_back = 1, 0.0, None
     if mode == "part":
         sign = _sense(data, combine, profile["frame"], outer, point2, dir2, dir3)
         if isinstance(sign, Refusal):
@@ -293,14 +374,21 @@ def handle(ctx, step):
         checked = _symmetric_ok(data, combine, profile["frame"], outer, point2, dir2, dir3, angle)
         if isinstance(checked, Refusal):
             return checked
-
-    angle_value = _angle_value(ctx, item, mode, angle, (data.get("extent") or {}).get("quantity"))
+        back = angle / 2.0
+    if mode == "twoSides":
+        side = _two_sides_back(data, combine, profile["frame"], outer, point2, dir2, dir3, angle)
+        if isinstance(side, Refusal):
+            return side
+        axis_raw = coords if coords is not None else sketch_motion.axis_raw(ctx, item, axis)
+        angle_value, back, turn_back = _two_sides_values(ctx, item, data, angle, side, axis_raw)
+    else:
+        angle_value = _angle_value(ctx, item, mode, angle, extent)
     steps = []
     for profile, (outer, inners), (point2, dir2, point3, dir3), drawn in built:
         on = placement.from_frame(profile["frame"])
-        if mode == "symmetric":
-            moved = _turned_sized(ctx, item, data, drawn, dir3, point3, -angle / 2.0, coords)
-            on = _turned(on, dir3, point3, -angle / 2.0)
+        if back and turn_back is None:
+            moved = _turned_sized(ctx, item, data, drawn, dir3, point3, -back, coords)
+            on = _turned(on, dir3, point3, -back)
             if moved is not None:
                 on["origin"] = moved
         elif drawn is not None:
@@ -321,4 +409,13 @@ def handle(ctx, step):
             recipe_step["angleDeg"] = angle_value.json()
         steps.append(recipe_step)
     ref_motion.check_own_axis(ctx, item, axis, "turns about", {p.get("sketch") for p, _, _, _ in built})
+    if turn_back is not None:
+        # The revolves start at the sketch; the move turns them back about the axis (the right hand rule about the
+        # reversed axis). It holds no projected or moving axis (`_two_sides_values`), so built[0] gives the axis.
+        _, _, (_, _, point3, dir3), _ = built[0]
+        move = {"kind": "move", "turn": {"axisPoint": [round9(c) for c in point3],
+                                         "axis": [round9(-c) for c in dir3], "angleDeg": turn_back.json()}}
+        return _held(ctx, item, steps, combine, move)
+    if combine == "intersect" and len(steps) > 1:
+        return _held(ctx, item, steps, combine)
     return StepResult.of(steps)

@@ -55,8 +55,8 @@ package may import only packages above it in this list (not every one of them). 
   `steps/split.py` (which piece of a split lies inside the tool), `steps/finish.py` (the sets of a round or a chamfer:
   kinds, sizes, the face of the first distance of an uneven chamfer, edges of one size; each translator keeps its own
   picks of the edges), `steps/sweep.py` (the settings that are not plain, the outline points, the volume and end face
-  checks), `steps/emboss.py` (the volume check and the face an outline is trimmed to) and `steps/loft.py` (the volumes of
-  the corner pairings).
+  checks), `steps/emboss.py` (the volume check and the face an outline is trimmed to), `steps/loft.py` (the volumes of
+  the corner pairings) and `steps/revolve.py` (which side each angle of a revolve to two sides turns to).
 - `results`: the shape of a verdict and of the record of a step left out, for both translators and the dialogs (`verdicts.py`, `left_out.py`). It holds shapes and the words of a verdict kind, not facts about the design.
 - `translator`: a capture dict in, a recipe plus verdicts out (one handler per step type, mapped in `handlers.py`; each handler takes the resolved step of `design_model.design`, `handler(ctx, step)`, and reads no step data from an item itself). `translate.py`, `walk.py`, `context.py`, `result.py`, `values.py` (the policy: ranges, pins, the audit) and `sizes.py` are the driver; the rest sits in folders by job: `extrude/` (also emboss), `sweep/` and `paths/` (the recipe caps on a path, the path that follows sizes), `loft/`, `revolve/`, `hole/`, `repeat/` (patterns and mirrors), `combine/` (also tool bodies), `finishes/` (fillet, chamfer, shell, draft, offset faces), `bodies/` (move, paste, split), `faces/` (the faces steps make and the picks that follow sizes), `sketch/` (outlines and sketch values), `ranges/` (formulas over the size ranges) and `gaps/`.
 - `probe`: measures sketches and the places of other components' planes, axes and points at other size values and fits the motion file. It does not import the translator: what it reads of the recipe (the loop writer and the range cuts of its tries) is in `design_model`.

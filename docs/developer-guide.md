@@ -988,7 +988,7 @@ imports translator code, and only the translator reads `HANDLERS`.
 | Fusion type | Handler in `HANDLERS` |
 | --- | --- |
 | `ExtrudeFeature` | `extrude.handle` |
-| `RevolveFeature` | `revolve.step.handle` |
+| `RevolveFeature` | `revolve.step.handle` (see 3.14) |
 | `HoleFeature`, `ThreadFeature` | `hole.step.hole`, `hole.step.thread` (a cosmetic thread writes nothing; a modelled one goes on to `hole.thread.feature`, see 3.12) |
 | `CombineFeature` | `combine.step.handle` |
 | `FilletFeature`, `ChamferFeature`, `ShellFeature` | `finishes.finish.fillet`, `.chamfer`, `.shell` |
@@ -1149,6 +1149,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `replaceFace` | the step type Replace Face | Cut the shape with an extrude, or extrude the face up to the shape you want. |
 | `ribWeb` | the step types Rib and Web | Draw the rib or web outline in a sketch and extrude it. |
 | `pathPattern` | the step type Path Pattern | Use a rectangular or circular pattern, or a mirror. |
+| `revolveSides` | a revolve to two sides whose start face does not tell which side each angle turns to (3.14) | Make two revolves, one to each side of the sketch. |
 | `boundaryFill` | the step type Boundary Fill | Build the solid with extrudes and cuts instead of filling a boundary. |
 | `newComponent` | an extrude, revolve, loft or sweep that makes a new component | Make the body in the component that holds the part. |
 | `otherComponent` | a step that reaches into another component (the walk) | Use sketches, planes and faces of the part's own component. |
@@ -1737,7 +1738,8 @@ one folder per family of steps.
     and `refusal` (the refusal of a problem of the shared layer). `path_motion.py` holds the path that follows sizes,
     and `path_rebuilt.py` the rules of a path read back from written numbers, for the checks over the size ranges.
   - `loft/`: `step.py`, `loft_sections.py`. The volume of the corner pairing is in `design_model/steps/loft.py`.
-  - `revolve/step.py`, `hole/step.py` (holes and cosmetic threads) and `hole/thread.py` (modelled threads and the thread
+  - `revolve/step.py` (see 3.14; which side each angle of a revolve to two sides turns to is in
+    `design_model/steps/revolve.py`), `hole/step.py` (holes and cosmetic threads) and `hole/thread.py` (modelled threads and the thread
     of a tapped hole, see 3.12). They read the hole and the thread through `design_model/steps/hole.py` and
     `thread.py`; they keep the caps of the recipe, the values that follow sizes and the refusals.
   - `coil/`: the coil handler (see 3.13). `step.py` holds `handle`. Also `coil_fit.py` (the axis, the hand and the check of
@@ -3422,6 +3424,66 @@ them, every value is a number and its sizes are marked.
 
 A coil is not repeatable: a pattern or a mirror of a coil is a gap. The handler writes the step with `repeatable=False`,
 and the `coil` kind has no repeat rule.
+
+### 3.14 How a revolve is translated
+
+`revolve.step.handle` (`lib/translator/revolve/step.py`) writes one recipe `revolve` step for each sketch outline of the
+revolve. The recipe turns the outline about its axis by the right hand rule. Fusion does not say which way it turned.
+So the handler reads the measured outward normal of the start face (`start_face_normal`).
+
+The start face shows the direction in which the material leaves it:
+
+1. For a new body, a join or an intersect, the start face bounds the new material. Its outward normal points against
+   the turn.
+2. For a cut, the start face bounds the material that stays. Its outward normal points along the turn.
+
+The handler also calculates the direction in which the middle of the outline moves at the start of a right hand
+turn. It compares the two directions.
+
+Fusion has four ways to set the angle:
+
+1. A full turn. The step has no angle. The start face is not necessary.
+2. One angle from the sketch. When the two directions agree, the axis keeps its direction. When they do not agree, the
+   handler writes the axis in the opposite direction. The angle can follow a size.
+3. A symmetric angle. The material starts half of the angle before the sketch. The handler turns the sketch plane
+   back by half of the angle about the axis, and writes the full angle. The start face must be half of the angle
+   before the sketch (`_symmetric_ok`). If it is not, the revolve is left out. Thus an angle that Fusion stores as the
+   half turn does not give a wrong copy. The angle keeps its number.
+4. Two sides with two angles (`angleOne` and `angleTwo`). Fusion does not say to which side each angle turns. The
+   material covers one turn of angle one plus angle two. If side one turns by the right hand rule, the turn starts
+   angle two before the sketch. If side one turns the other way, the turn starts angle one before the sketch. The
+   start face is one of the two end faces of that turn. `design_model/steps/revolve.py` (`back_sides`) compares the
+   start face with the four end faces of the two possible turns, and gives the side whose angle is before the sketch.
+
+For two sides, these results are possible:
+
+- No end face agrees with the start face. The revolve is left out.
+- The end faces of the two possible turns agree with the start face. This occurs when one angle is 90 or 270 degrees
+  and the other angle is different: the two faces lie in one plane on the two sides of the axis. The revolve is left
+  out with the cause `revolveSides`.
+- The two angles are equal. The two possible turns are the same at these values. But at other values of the sizes
+  the copy cannot tell which side each angle turns to. So both angles keep their numbers, and their sizes are marked.
+- One side agrees. The handler writes the sum of the two angles as the angle of the step. Each angle can follow a
+  size. If the sum of the two angles can be more than 360 degrees in the size range, both angles keep their numbers,
+  and their sizes are marked.
+
+The handler then puts the start of the turn back by the angle before the sketch. There are two ways:
+
+1. The angle before the sketch is a number. The handler turns the sketch plane back by that angle about the axis, as
+   for a symmetric revolve (`_turned`, and `_turned_sized` when the plane or the axis moves with sizes).
+2. The angle before the sketch follows a size. The revolve stays at the sketch. A `move` step turns it back about the
+   axis by that angle. The `move` turns about the reversed axis, so a positive angle turns it back. The revolves and
+   the `move` are in one `toolBody` step with the combine of the revolve, so the `move` turns only the revolve. The
+   axis point of the `move` is a number. So when the axis is projected onto the sketch, or the axis moves with sizes,
+   the angle before the sketch keeps its number and its sizes are marked. Then the first way is used.
+
+An intersect of several outlines keeps the part only where any of the outlines turns. Thus the handler does not write
+one intersect for each outline. It writes one `toolBody` step with `combine: "intersect"`. In that step, the first
+outline makes a new body and the other outlines join it.
+
+The Orca export (`orca_translate/revolve.py`) uses the same `back_sides` check for two sides. It turns the sketch plane
+back by the angle before the sketch and turns by the sum. Both angles keep their numbers in Orca, and their sizes are
+marked.
 
 ## 4. Debugging
 

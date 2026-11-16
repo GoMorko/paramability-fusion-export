@@ -42,6 +42,11 @@ What the copy can and cannot do, step by step. The README lists only the main li
   such size is.
 - A revolve whose axis is not in the plane of its sketch (or is not square to that plane) is left out too, unless Fusion
   itself projects the axis onto the sketch plane.
+- A revolve to two sides with two angles is copied when its start face shows which side each angle turns to. When one
+  angle is 90 or 270 degrees and the other is not the same, the start face can fit both sides: the revolve is left
+  out, with the tip to make two revolves. Both angles follow sizes while their sum stays at 360 degrees or less. Two
+  equal angles keep their numbers, since the copy cannot tell their sides apart at other sizes. The angle on the far
+  side of the sketch keeps its number when the axis is projected onto the sketch or moves with sizes.
 - A round with two different radii (Fusion's "asymmetric" rounds) is left out by both exports.
 - One solid body per part. Several bodies go in one file as parts (see "Several bodies in one file").
 - A body inside a component (at any depth) exports as a recipe with sizes, like a root body, and lands where Fusion
