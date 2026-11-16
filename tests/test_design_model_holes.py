@@ -95,8 +95,11 @@ class ThreadFeatureTest(unittest.TestCase):
         self.assertEqual(thread.read_feature(feature_data(faces=[face(radius=6.0)]), "t").code, "cylinderSize")
 
     def test_a_thread_that_starts_away_from_the_end_is_a_problem(self):
-        self.assertEqual(thread.read_feature(feature_data(offset=1.0), "t").code, "offset")
-        self.assertEqual(thread.read_feature(feature_data(offset=None), "t").code, "offset")
+        part = dict(full_length=False, length=5.0, made_span=[0.0, 5.0])
+        self.assertEqual(thread.read_feature(feature_data(offset=1.0, **part), "t").code, "offset")
+        self.assertEqual(thread.read_feature(feature_data(offset=None, **part), "t").code, "offset")
+        # Fusion uses the offset only for a thread over part of the face.
+        self.assertTrue(thread.read_feature(feature_data(offset=None), "t").full)
 
     def test_a_partial_thread_starts_at_the_end_its_made_faces_touch(self):
         low = thread.read_feature(feature_data(full_length=False, length=5.0, made_span=[0.0, 5.0]), "t")
@@ -116,7 +119,13 @@ class ThreadFeatureTest(unittest.TestCase):
 class ThreadOfAHoleTest(unittest.TestCase):
     def test_the_depth_is_the_whole_hole_or_a_length_and_never_a_guess(self):
         self.assertEqual(thread.hole_depth({"thread": {"full_length": True}}), thread.Depth(True, None))
-        self.assertEqual(thread.hole_depth({"thread": {"full_length": False, "depth": 6}}), thread.Depth(False, 6.0))
+        part = {"full_length": False, "depth": 6, "pitch": 1.0}
+        self.assertEqual(thread.hole_depth({"thread": dict(part, made_span=[0.2, 5.8])}), thread.Depth(False, 6.0))
+        # The measured thread faces decide: none, a thread below the mouth, or one shorter than Fusion says.
+        for made in (None, [3.0, 9.0], [0.2, 3.0]):
+            self.assertIsInstance(thread.hole_depth({"thread": dict(part, made_span=made)}), Problem)
+        self.assertIsInstance(thread.hole_depth({"thread": {"full_length": True, "pitch": 1.0,
+                                                            "made_span": [4.0, 30.0]}}), Problem)
         self.assertIsInstance(thread.hole_depth({"thread": {"full_length": False}}), Problem)
         self.assertIsInstance(thread.hole_depth({"thread": {}}), Problem)
 

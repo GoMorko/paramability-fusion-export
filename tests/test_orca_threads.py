@@ -145,13 +145,19 @@ class ThreadFeatureTest(unittest.TestCase):
         self.assertEqual(threads(result), [])
         self.assertEqual([g["cause"] for g in result.left_out], [causes.THREAD_END])
 
+    def test_a_full_length_thread_needs_no_length_or_offset(self):
+        # Fusion gives no length or offset parameter for a full length thread.
+        result = translate(rod(length=None, offset=None))
+        self.assertEqual((len(threads(result)), result.left_out), (1, []))
+
     def test_threads_orca_cannot_make_are_left_out(self):
         cases = {"left hand": (dict(right_hand=False), gap_hints.REFUSED),
                  "deep for its size": (dict(major_diameter=1.2, minor_diameter=0.5, pitch=0.6,
                                             faces=[face(radius=0.6)]), gap_hints.THREAD_LIMITS),
                  "acme": (dict(thread_type="ACME"), gap_hints.THREAD_PROFILE),
                  "on a cone": (dict(faces=[dict(face(), surface="Cone")]), gap_hints.THREAD_PROFILE),
-                 "off the end": (dict(offset=2.0), gap_hints.REFUSED)}
+                 "off the end": (dict(full_length=False, length=5.0, made_span=[0.0, 5.0], offset=2.0),
+                                 gap_hints.REFUSED)}
         for name, (more, cause) in cases.items():
             with self.subTest(name):
                 result = translate(rod(**more))

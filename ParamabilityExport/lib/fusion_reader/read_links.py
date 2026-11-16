@@ -177,7 +177,7 @@ def _each(value):
 def sketch_inputs(entity):
     """`[{ token, name }]` of the sketches a timeline step takes its outlines, path or points from: `profile` and
     `profiles` (extrude, revolve, sweep, emboss), `path` and `guideRail` (sweep, `PathEntity.entity`), `loftSections`
-    (`LoftSection.entity`) and the sketch points of a hole (`holePositionDefinition.sketchPoints`). No geometry is
+    (`LoftSection.entity`) and the sketch points of a hole (`holePositionDefinition.sketchPoints`, or `sketchPoint` for one). No geometry is
     read; an input that cannot be read adds nothing."""
     inputs = []
     for member in ("profile", "profiles"):
@@ -187,6 +187,7 @@ def sketch_inputs(entity):
     for section in geo.collection_items(geo.safe(lambda: entity.loftSections, None)):
         inputs += _each(geo.safe(lambda: section.entity, None))
     inputs += geo.collection_items(geo.safe(lambda: entity.holePositionDefinition.sketchPoints, None))
+    inputs.append(geo.safe(lambda: entity.holePositionDefinition.sketchPoint, None))
     found = []
     for item in inputs:
         sketch = _sketch_of(item) if item is not None else None

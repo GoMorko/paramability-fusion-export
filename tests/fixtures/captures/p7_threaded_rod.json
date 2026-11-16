@@ -1,0 +1,1598 @@
+{
+ "capture": 3,
+ "fusion": "2706.1.17",
+ "design": "Test models",
+ "up_axis": "z",
+ "design_units": "mm",
+ "parameters": {
+  "user": [],
+  "model": [
+   {
+    "name": "d105",
+    "expression": "8 mm",
+    "value": 0.8,
+    "display_value": 8.0,
+    "unit": "mm",
+    "kind": "length",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "Diameter Dimension-2",
+    "created_by": {
+     "kind": "sketchDimension",
+     "token": "tok1",
+     "name": "",
+     "sketch": "Rod1Sketch",
+     "component": "tok2"
+    }
+   },
+   {
+    "name": "d106",
+    "expression": "20 mm",
+    "value": 2.0,
+    "display_value": 20.0,
+    "unit": "mm",
+    "kind": "length",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "AlongDistance",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok3",
+     "name": "Rod1",
+     "sketch": "",
+     "component": "tok2"
+    }
+   },
+   {
+    "name": "d107",
+    "expression": "0.0 deg",
+    "value": 0.0,
+    "display_value": 0.0,
+    "unit": "deg",
+    "kind": "angle",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "TaperAngle",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok3",
+     "name": "Rod1",
+     "sketch": "",
+     "component": "tok2"
+    }
+   },
+   {
+    "name": "d108",
+    "expression": "5 mm",
+    "value": 0.5,
+    "display_value": 5.0,
+    "unit": "mm",
+    "kind": "length",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "AlongDistance",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok4",
+     "name": "Square2",
+     "sketch": "",
+     "component": "tok2"
+    }
+   },
+   {
+    "name": "d109",
+    "expression": "0.0 deg",
+    "value": 0.0,
+    "display_value": 0.0,
+    "unit": "deg",
+    "kind": "angle",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "TaperAngle",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok4",
+     "name": "Square2",
+     "sketch": "",
+     "component": "tok2"
+    }
+   },
+   {
+    "name": "d110",
+    "expression": "8 mm",
+    "value": 0.8,
+    "display_value": 8.0,
+    "unit": "mm",
+    "kind": "length",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "Diameter Dimension-2",
+    "created_by": {
+     "kind": "sketchDimension",
+     "token": "tok5",
+     "name": "",
+     "sketch": "Rod2Sketch",
+     "component": "tok2"
+    }
+   },
+   {
+    "name": "d113",
+    "expression": "20 mm",
+    "value": 2.0,
+    "display_value": 20.0,
+    "unit": "mm",
+    "kind": "length",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "AlongDistance",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok6",
+     "name": "Rod2",
+     "sketch": "",
+     "component": "tok2"
+    }
+   },
+   {
+    "name": "d114",
+    "expression": "0.0 deg",
+    "value": 0.0,
+    "display_value": 0.0,
+    "unit": "deg",
+    "kind": "angle",
+    "is_favorite": false,
+    "value_type": "numeric",
+    "dependency_parameters": [],
+    "role": "TaperAngle",
+    "created_by": {
+     "kind": "feature",
+     "token": "tok6",
+     "name": "Rod2",
+     "sketch": "",
+     "component": "tok2"
+    }
+   }
+  ]
+ },
+ "targets": [
+  {
+   "token": "tok7",
+   "name": "Body1",
+   "box": {
+    "min": [
+     -3.933,
+     -3.933,
+     0.0
+    ],
+    "max": [
+     3.933,
+     3.933,
+     20.0
+    ]
+   },
+   "volume_mm3": 800.713547,
+   "component": {
+    "token": "tok2",
+    "name": "T12-threaded-rod",
+    "root": false
+   },
+   "placement": {
+    "path": "T12-threaded-rod:1",
+    "frame": {
+     "origin": [
+      0.0,
+      1440.0,
+      0.0
+     ],
+     "x": [
+      1.0,
+      0.0,
+      0.0
+     ],
+     "y": [
+      0.0,
+      1.0,
+      0.0
+     ],
+     "z": [
+      0.0,
+      0.0,
+      1.0
+     ]
+    },
+    "source": "transform2",
+    "checked_points": 3,
+    "uses": 1,
+    "linked": false
+   }
+  }
+ ],
+ "target": {
+  "token": "tok7",
+  "name": "Body1",
+  "box": {
+   "min": [
+    -3.933,
+    -3.933,
+    0.0
+   ],
+   "max": [
+    3.933,
+    3.933,
+    20.0
+   ]
+  },
+  "volume_mm3": 800.713547,
+  "component": {
+   "token": "tok2",
+   "name": "T12-threaded-rod",
+   "root": false
+  },
+  "placement": {
+   "path": "T12-threaded-rod:1",
+   "frame": {
+    "origin": [
+     0.0,
+     1440.0,
+     0.0
+    ],
+    "x": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "y": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "z": [
+     0.0,
+     0.0,
+     1.0
+    ]
+   },
+   "source": "transform2",
+   "checked_points": 3,
+   "uses": 1,
+   "linked": false
+  }
+ },
+ "items": [
+  {
+   "index": 55,
+   "name": "Rod1Sketch",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "tok2",
+   "in_target_component": true,
+   "bodies_after": [],
+   "target_changed": null,
+   "target_before": null,
+   "target_after": null,
+   "data": {},
+   "bodies_before": []
+  },
+  {
+   "index": 56,
+   "name": "Rod1",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "tok2",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "tok7",
+     "name": "Body1"
+    }
+   ],
+   "target_changed": true,
+   "target_before": null,
+   "target_after": {
+    "box": {
+     "min": [
+      -4.0,
+      -4.0,
+      0.0
+     ],
+     "max": [
+      4.0,
+      4.0,
+      20.0
+     ]
+    },
+    "volume_mm3": 1005.309649
+   },
+   "data": {
+    "operation": "newBody",
+    "profiles": [
+     {
+      "sketch": "Rod1Sketch",
+      "frame": {
+       "origin": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "x": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "y": [
+        0.0,
+        1.0,
+        0.0
+       ],
+       "z": [
+        0.0,
+        0.0,
+        1.0
+       ]
+      },
+      "space": "sketch",
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "circle",
+          "center": [
+           0.0,
+           0.0
+          ],
+          "radius": 4.0,
+          "entity": "tok8"
+         }
+        ]
+       }
+      ],
+      "sketch_token": "tok9",
+      "reference": {
+       "kind": "constructionPlane",
+       "token": "tok10",
+       "origin": true
+      }
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "distance",
+     "distance": 20.0,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": false,
+    "participants": [],
+    "target_box_before": null,
+    "end_offset": 20.0,
+    "profile_area": 50.265482,
+    "end_area": 50.265482,
+    "params": {
+     "side_one.distance": {
+      "name": "d106",
+      "expression": "20 mm",
+      "value": 20.0
+     },
+     "side_one.taper_deg": {
+      "name": "d107",
+      "expression": "0.0 deg",
+      "value": 0.0
+     }
+    },
+    "side_leans": [
+     0.0
+    ],
+    "end_normal": [
+     0.0,
+     0.0,
+     1.0
+    ]
+   },
+   "sketch_inputs": [
+    {
+     "token": "tok9",
+     "name": "Rod1Sketch"
+    }
+   ],
+   "bodies_before": []
+  },
+  {
+   "index": 57,
+   "name": "SquareSketch",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "tok2",
+   "in_target_component": true,
+   "bodies_after": [],
+   "target_changed": false,
+   "target_before": {
+    "box": {
+     "min": [
+      -4.0,
+      -4.0,
+      0.0
+     ],
+     "max": [
+      4.0,
+      4.0,
+      20.0
+     ]
+    },
+    "volume_mm3": 1005.309649
+   },
+   "target_after": {
+    "box": {
+     "min": [
+      -4.0,
+      -4.0,
+      0.0
+     ],
+     "max": [
+      4.0,
+      4.0,
+      20.0
+     ]
+    },
+    "volume_mm3": 1005.309649
+   },
+   "data": {},
+   "bodies_before": [
+    {
+     "token": "tok7",
+     "name": "Body1"
+    }
+   ]
+  },
+  {
+   "index": 58,
+   "name": "Square2",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "tok2",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "tok11",
+     "name": "Body2"
+    }
+   ],
+   "target_changed": false,
+   "target_before": {
+    "box": {
+     "min": [
+      -4.0,
+      -4.0,
+      0.0
+     ],
+     "max": [
+      4.0,
+      4.0,
+      20.0
+     ]
+    },
+    "volume_mm3": 1005.309649
+   },
+   "target_after": {
+    "box": {
+     "min": [
+      -4.0,
+      -4.0,
+      0.0
+     ],
+     "max": [
+      4.0,
+      4.0,
+      20.0
+     ]
+    },
+    "volume_mm3": 1005.309649
+   },
+   "data": {
+    "operation": "newBody",
+    "profiles": [
+     {
+      "sketch": "SquareSketch",
+      "frame": {
+       "origin": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "x": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "y": [
+        0.0,
+        1.0,
+        0.0
+       ],
+       "z": [
+        0.0,
+        0.0,
+        1.0
+       ]
+      },
+      "space": "sketch",
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "line",
+          "start": [
+           30.0,
+           10.0
+          ],
+          "end": [
+           30.0,
+           -10.0
+          ],
+          "entity": "tok12"
+         },
+         {
+          "kind": "line",
+          "start": [
+           30.0,
+           -10.0
+          ],
+          "end": [
+           50.0,
+           -10.0
+          ],
+          "entity": "tok13"
+         },
+         {
+          "kind": "line",
+          "start": [
+           50.0,
+           -10.0
+          ],
+          "end": [
+           50.0,
+           10.0
+          ],
+          "entity": "tok14"
+         },
+         {
+          "kind": "line",
+          "start": [
+           50.0,
+           10.0
+          ],
+          "end": [
+           30.0,
+           10.0
+          ],
+          "entity": "tok15"
+         }
+        ]
+       }
+      ],
+      "sketch_token": "tok16",
+      "reference": {
+       "kind": "constructionPlane",
+       "token": "tok10",
+       "origin": true
+      }
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "distance",
+     "distance": 5.0,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": false,
+    "participants": [],
+    "target_box_before": {
+     "min": [
+      -4.0,
+      -4.0,
+      0.0
+     ],
+     "max": [
+      4.0,
+      4.0,
+      20.0
+     ]
+    },
+    "end_offset": 5.0,
+    "profile_area": 400.0,
+    "end_area": 400.0,
+    "params": {
+     "side_one.distance": {
+      "name": "d108",
+      "expression": "5 mm",
+      "value": 5.0
+     },
+     "side_one.taper_deg": {
+      "name": "d109",
+      "expression": "0.0 deg",
+      "value": 0.0
+     }
+    },
+    "side_leans": [
+     0.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    "end_normal": [
+     0.0,
+     0.0,
+     1.0
+    ]
+   },
+   "sketch_inputs": [
+    {
+     "token": "tok16",
+     "name": "SquareSketch"
+    }
+   ],
+   "bodies_before": [
+    {
+     "token": "tok7",
+     "name": "Body1"
+    }
+   ]
+  },
+  {
+   "index": 59,
+   "name": "Rod2Sketch",
+   "type": "Sketch",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "tok2",
+   "in_target_component": true,
+   "bodies_after": [],
+   "target_changed": false,
+   "target_before": {
+    "box": {
+     "min": [
+      -4.0,
+      -4.0,
+      0.0
+     ],
+     "max": [
+      4.0,
+      4.0,
+      20.0
+     ]
+    },
+    "volume_mm3": 1005.309649
+   },
+   "target_after": {
+    "box": {
+     "min": [
+      -4.0,
+      -4.0,
+      0.0
+     ],
+     "max": [
+      4.0,
+      4.0,
+      20.0
+     ]
+    },
+    "volume_mm3": 1005.309649
+   },
+   "data": {},
+   "bodies_before": [
+    {
+     "token": "tok7",
+     "name": "Body1"
+    },
+    {
+     "token": "tok11",
+     "name": "Body2"
+    }
+   ]
+  },
+  {
+   "index": 60,
+   "name": "Rod2",
+   "type": "ExtrudeFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "tok2",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "tok11",
+     "name": "Body2"
+    }
+   ],
+   "target_changed": false,
+   "target_before": {
+    "box": {
+     "min": [
+      -4.0,
+      -4.0,
+      0.0
+     ],
+     "max": [
+      4.0,
+      4.0,
+      20.0
+     ]
+    },
+    "volume_mm3": 1005.309649
+   },
+   "target_after": {
+    "box": {
+     "min": [
+      -4.0,
+      -4.0,
+      0.0
+     ],
+     "max": [
+      4.0,
+      4.0,
+      20.0
+     ]
+    },
+    "volume_mm3": 1005.309649
+   },
+   "data": {
+    "operation": "join",
+    "profiles": [
+     {
+      "sketch": "Rod2Sketch",
+      "frame": {
+       "origin": [
+        0.0,
+        0.0,
+        5.0
+       ],
+       "x": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "y": [
+        0.0,
+        1.0,
+        0.0
+       ],
+       "z": [
+        0.0,
+        0.0,
+        1.0
+       ]
+      },
+      "space": "sketch",
+      "loops": [
+       {
+        "outer": true,
+        "curves": [
+         {
+          "kind": "circle",
+          "center": [
+           40.0,
+           0.0
+          ],
+          "radius": 4.0,
+          "entity": "tok17"
+         }
+        ]
+       }
+      ],
+      "sketch_token": "tok18"
+     }
+    ],
+    "start": {
+     "kind": "profilePlane"
+    },
+    "extent_type": "one",
+    "side_one": {
+     "kind": "distance",
+     "distance": 20.0,
+     "taper_deg": 0.0
+    },
+    "side_two": null,
+    "symmetric": null,
+    "thin": false,
+    "participants": [
+     {
+      "token": "tok11",
+      "name": "Body2"
+     }
+    ],
+    "target_box_before": {
+     "min": [
+      -4.0,
+      -4.0,
+      0.0
+     ],
+     "max": [
+      4.0,
+      4.0,
+      20.0
+     ]
+    },
+    "end_offset": 20.0,
+    "profile_area": 50.265482,
+    "end_area": 50.265482,
+    "params": {
+     "side_one.distance": {
+      "name": "d113",
+      "expression": "20 mm",
+      "value": 20.0
+     },
+     "side_one.taper_deg": {
+      "name": "d114",
+      "expression": "0.0 deg",
+      "value": 0.0
+     }
+    },
+    "side_leans": [
+     0.0
+    ],
+    "end_normal": [
+     0.0,
+     0.0,
+     1.0
+    ]
+   },
+   "sketch_inputs": [
+    {
+     "token": "tok18",
+     "name": "Rod2Sketch"
+    }
+   ],
+   "bodies_before": [
+    {
+     "token": "tok7",
+     "name": "Body1"
+    },
+    {
+     "token": "tok11",
+     "name": "Body2"
+    }
+   ]
+  },
+  {
+   "index": 61,
+   "name": "Thread1",
+   "type": "ThreadFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "tok2",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "tok7",
+     "name": "Body1"
+    }
+   ],
+   "target_changed": true,
+   "target_before": {
+    "box": {
+     "min": [
+      -4.0,
+      -4.0,
+      0.0
+     ],
+     "max": [
+      4.0,
+      4.0,
+      20.0
+     ]
+    },
+    "volume_mm3": 1005.309649
+   },
+   "target_after": {
+    "box": {
+     "min": [
+      -3.933,
+      -3.933,
+      0.0
+     ],
+     "max": [
+      3.933,
+      3.933,
+      20.0
+     ]
+    },
+    "volume_mm3": 800.713547
+   },
+   "data": {
+    "modeled": true,
+    "thread_type": "ISO Metric profile",
+    "designation": "M8x1.25",
+    "thread_class": "6g",
+    "internal": false,
+    "right_hand": true,
+    "pitch": 1.25,
+    "major_diameter": 7.866,
+    "minor_diameter": 6.4455,
+    "angle_deg": 60.0,
+    "full_length": true,
+    "length": null,
+    "offset": null,
+    "faces": [
+     {
+      "surface": "Cylinder",
+      "face_point": [
+       0.0,
+       4.0,
+       10.0
+      ],
+      "origin": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "axis": [
+       0.0,
+       0.0,
+       1.0
+      ],
+      "radius": 4.0,
+      "span": [
+       0.0,
+       20.0
+      ],
+      "outward": true
+     }
+    ],
+    "made_span": [
+     0.0,
+     20.0
+    ]
+   },
+   "bodies_before": [
+    {
+     "token": "tok7",
+     "name": "Body1"
+    },
+    {
+     "token": "tok11",
+     "name": "Body2"
+    }
+   ]
+  },
+  {
+   "index": 62,
+   "name": "Thread2",
+   "type": "ThreadFeature",
+   "suppressed": false,
+   "health": "ok",
+   "message": "",
+   "component": "tok2",
+   "in_target_component": true,
+   "bodies_after": [
+    {
+     "token": "tok11",
+     "name": "Body2"
+    }
+   ],
+   "target_changed": false,
+   "target_before": {
+    "box": {
+     "min": [
+      -3.933,
+      -3.933,
+      0.0
+     ],
+     "max": [
+      3.933,
+      3.933,
+      20.0
+     ]
+    },
+    "volume_mm3": 800.713547
+   },
+   "target_after": {
+    "box": {
+     "min": [
+      -3.933,
+      -3.933,
+      0.0
+     ],
+     "max": [
+      3.933,
+      3.933,
+      20.0
+     ]
+    },
+    "volume_mm3": 800.713547
+   },
+   "data": {
+    "modeled": true,
+    "thread_type": "ISO Metric profile",
+    "designation": "M8x1.25",
+    "thread_class": "6g",
+    "internal": false,
+    "right_hand": true,
+    "pitch": 1.25,
+    "major_diameter": 7.866,
+    "minor_diameter": 6.4455,
+    "angle_deg": 60.0,
+    "full_length": true,
+    "length": null,
+    "offset": null,
+    "faces": [
+     {
+      "surface": "Cylinder",
+      "face_point": [
+       40.0,
+       4.0,
+       15.0
+      ],
+      "origin": [
+       40.0,
+       0.0,
+       5.0
+      ],
+      "axis": [
+       0.0,
+       0.0,
+       1.0
+      ],
+      "radius": 4.0,
+      "span": [
+       0.0,
+       20.0
+      ],
+      "outward": true
+     }
+    ],
+    "made_span": [
+     0.0,
+     20.0
+    ]
+   },
+   "bodies_before": [
+    {
+     "token": "tok7",
+     "name": "Body1"
+    },
+    {
+     "token": "tok11",
+     "name": "Body2"
+    }
+   ]
+  }
+ ],
+ "sketch_links": [
+  {
+   "sketch": "Rod1Sketch",
+   "token": "tok9",
+   "links": [],
+   "unknown": 0
+  },
+  {
+   "sketch": "SquareSketch",
+   "token": "tok16",
+   "links": [],
+   "unknown": 0
+  },
+  {
+   "sketch": "Rod2Sketch",
+   "token": "tok18",
+   "links": [],
+   "unknown": 0
+  }
+ ],
+ "sketch_graphs": [
+  {
+   "sketch": "Rod1Sketch",
+   "token": "tok9",
+   "component": {
+    "token": "tok2",
+    "name": "T12-threaded-rod"
+   },
+   "fully_constrained": true,
+   "origin": 0,
+   "points": [
+    {
+     "id": 0,
+     "xy": [
+      0.0,
+      0.0
+     ],
+     "origin": true,
+     "token": "tok19",
+     "fixed": true,
+     "free": false,
+     "linked": false,
+     "reference": null
+    },
+    {
+     "id": 1,
+     "xy": [
+      0.0,
+      0.0
+     ],
+     "origin": false,
+     "token": "tok20",
+     "fixed": false,
+     "free": false,
+     "linked": false,
+     "reference": null
+    }
+   ],
+   "curves": [
+    {
+     "id": 0,
+     "kind": "circle",
+     "construction": false,
+     "token": "tok8",
+     "fixed": false,
+     "free": false,
+     "linked": false,
+     "reference": null,
+     "center": 1,
+     "radius": 4.0
+    }
+   ],
+   "dimensions": [
+    {
+     "id": 0,
+     "type": "diameter",
+     "on": [
+      [
+       "circle",
+       0
+      ]
+     ],
+     "param": "d105",
+     "expression": "8 mm",
+     "reads": [],
+     "value": 8.0,
+     "driving": true,
+     "text": [
+      10.0,
+      10.0
+     ],
+     "token": "tok1"
+    }
+   ],
+   "constraints": [
+    {
+     "id": 0,
+     "type": "coincident",
+     "on": [
+      [
+       "point",
+       1
+      ],
+      [
+       "point",
+       0
+      ]
+     ],
+     "token": "tok21"
+    }
+   ],
+   "cut": ""
+  },
+  {
+   "sketch": "SquareSketch",
+   "token": "tok16",
+   "component": {
+    "token": "tok2",
+    "name": "T12-threaded-rod"
+   },
+   "fully_constrained": false,
+   "origin": 0,
+   "points": [
+    {
+     "id": 0,
+     "xy": [
+      0.0,
+      0.0
+     ],
+     "origin": true,
+     "token": "tok22",
+     "fixed": true,
+     "free": false,
+     "linked": false,
+     "reference": null
+    },
+    {
+     "id": 1,
+     "xy": [
+      30.0,
+      -10.0
+     ],
+     "origin": false,
+     "token": "tok23",
+     "fixed": false,
+     "free": true,
+     "linked": false,
+     "reference": null
+    },
+    {
+     "id": 2,
+     "xy": [
+      50.0,
+      -10.0
+     ],
+     "origin": false,
+     "token": "tok24",
+     "fixed": false,
+     "free": true,
+     "linked": false,
+     "reference": null
+    },
+    {
+     "id": 3,
+     "xy": [
+      50.0,
+      10.0
+     ],
+     "origin": false,
+     "token": "tok25",
+     "fixed": false,
+     "free": true,
+     "linked": false,
+     "reference": null
+    },
+    {
+     "id": 4,
+     "xy": [
+      30.0,
+      10.0
+     ],
+     "origin": false,
+     "token": "tok26",
+     "fixed": false,
+     "free": true,
+     "linked": false,
+     "reference": null
+    }
+   ],
+   "curves": [
+    {
+     "id": 0,
+     "kind": "line",
+     "construction": false,
+     "token": "tok13",
+     "fixed": false,
+     "free": true,
+     "linked": false,
+     "reference": null,
+     "points": [
+      1,
+      2
+     ],
+     "center_line": false
+    },
+    {
+     "id": 1,
+     "kind": "line",
+     "construction": false,
+     "token": "tok14",
+     "fixed": false,
+     "free": true,
+     "linked": false,
+     "reference": null,
+     "points": [
+      2,
+      3
+     ],
+     "center_line": false
+    },
+    {
+     "id": 2,
+     "kind": "line",
+     "construction": false,
+     "token": "tok15",
+     "fixed": false,
+     "free": true,
+     "linked": false,
+     "reference": null,
+     "points": [
+      3,
+      4
+     ],
+     "center_line": false
+    },
+    {
+     "id": 3,
+     "kind": "line",
+     "construction": false,
+     "token": "tok12",
+     "fixed": false,
+     "free": true,
+     "linked": false,
+     "reference": null,
+     "points": [
+      4,
+      1
+     ],
+     "center_line": false
+    }
+   ],
+   "dimensions": [],
+   "constraints": [
+    {
+     "id": 0,
+     "type": "horizontal",
+     "on": [
+      [
+       "line",
+       0
+      ]
+     ],
+     "token": "tok27"
+    },
+    {
+     "id": 1,
+     "type": "horizontal",
+     "on": [
+      [
+       "line",
+       2
+      ]
+     ],
+     "token": "tok28"
+    },
+    {
+     "id": 2,
+     "type": "vertical",
+     "on": [
+      [
+       "line",
+       1
+      ]
+     ],
+     "token": "tok29"
+    },
+    {
+     "id": 3,
+     "type": "vertical",
+     "on": [
+      [
+       "line",
+       3
+      ]
+     ],
+     "token": "tok30"
+    }
+   ],
+   "cut": ""
+  },
+  {
+   "sketch": "Rod2Sketch",
+   "token": "tok18",
+   "component": {
+    "token": "tok2",
+    "name": "T12-threaded-rod"
+   },
+   "fully_constrained": false,
+   "origin": 0,
+   "points": [
+    {
+     "id": 0,
+     "xy": [
+      0.0,
+      0.0
+     ],
+     "origin": true,
+     "token": "tok31",
+     "fixed": true,
+     "free": false,
+     "linked": false,
+     "reference": null
+    },
+    {
+     "id": 1,
+     "xy": [
+      30.0,
+      10.0
+     ],
+     "origin": false,
+     "token": "tok32",
+     "fixed": false,
+     "free": false,
+     "linked": true,
+     "reference": null
+    },
+    {
+     "id": 2,
+     "xy": [
+      30.0,
+      -10.0
+     ],
+     "origin": false,
+     "token": "tok33",
+     "fixed": false,
+     "free": false,
+     "linked": true,
+     "reference": null
+    },
+    {
+     "id": 3,
+     "xy": [
+      50.0,
+      -10.0
+     ],
+     "origin": false,
+     "token": "tok34",
+     "fixed": false,
+     "free": false,
+     "linked": true,
+     "reference": null
+    },
+    {
+     "id": 4,
+     "xy": [
+      50.0,
+      10.0
+     ],
+     "origin": false,
+     "token": "tok35",
+     "fixed": false,
+     "free": false,
+     "linked": true,
+     "reference": null
+    },
+    {
+     "id": 5,
+     "xy": [
+      40.0,
+      0.0
+     ],
+     "origin": false,
+     "token": "tok36",
+     "fixed": false,
+     "free": true,
+     "linked": false,
+     "reference": null
+    }
+   ],
+   "curves": [
+    {
+     "id": 0,
+     "kind": "line",
+     "construction": false,
+     "token": "tok37",
+     "fixed": false,
+     "free": false,
+     "linked": true,
+     "reference": {
+      "source": "own",
+      "component": "tok2",
+      "token": "tok38"
+     },
+     "points": [
+      1,
+      2
+     ],
+     "center_line": false
+    },
+    {
+     "id": 1,
+     "kind": "line",
+     "construction": false,
+     "token": "tok39",
+     "fixed": false,
+     "free": false,
+     "linked": true,
+     "reference": {
+      "source": "own",
+      "component": "tok2",
+      "token": "tok38"
+     },
+     "points": [
+      2,
+      3
+     ],
+     "center_line": false
+    },
+    {
+     "id": 2,
+     "kind": "line",
+     "construction": false,
+     "token": "tok40",
+     "fixed": false,
+     "free": false,
+     "linked": true,
+     "reference": {
+      "source": "own",
+      "component": "tok2",
+      "token": "tok38"
+     },
+     "points": [
+      3,
+      4
+     ],
+     "center_line": false
+    },
+    {
+     "id": 3,
+     "kind": "line",
+     "construction": false,
+     "token": "tok41",
+     "fixed": false,
+     "free": false,
+     "linked": true,
+     "reference": {
+      "source": "own",
+      "component": "tok2",
+      "token": "tok38"
+     },
+     "points": [
+      4,
+      1
+     ],
+     "center_line": false
+    },
+    {
+     "id": 4,
+     "kind": "circle",
+     "construction": false,
+     "token": "tok17",
+     "fixed": false,
+     "free": true,
+     "linked": false,
+     "reference": null,
+     "center": 5,
+     "radius": 4.0
+    }
+   ],
+   "dimensions": [
+    {
+     "id": 0,
+     "type": "diameter",
+     "on": [
+      [
+       "circle",
+       4
+      ]
+     ],
+     "param": "d110",
+     "expression": "8 mm",
+     "reads": [],
+     "value": 8.0,
+     "driving": true,
+     "text": [
+      55.0,
+      10.0
+     ],
+     "token": "tok5"
+    }
+   ],
+   "constraints": [],
+   "cut": ""
+  }
+ ],
+ "marker": {
+  "position": 63,
+  "count": 63
+ },
+ "_comment": "Made-up test model T12 (Fusion 2706): a rod of 8 mm, 20 high, with a modeled M8x1.25 full length thread; Fusion gives no thread length or offset."
+}

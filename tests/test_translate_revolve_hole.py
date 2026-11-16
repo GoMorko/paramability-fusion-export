@@ -104,6 +104,13 @@ class RevolveTest(unittest.TestCase):
         missing = variant("revolve_symmetric", lambda i: i["data"].update(start_face_normal=None))
         self.assertIsNone(missing.recipe)
 
+    def test_symmetric_angle_is_the_turn_to_each_side(self):
+        # 2 x 200 degrees closes the ring, and Fusion then gives no start face.
+        result = variant("revolve_symmetric", lambda i: i["data"].update(
+            extent={"kind": "angle", "angle_deg": 200, "symmetric": True}, start_face_normal=None))
+        (step,) = result.recipe["features"]
+        self.assertNotIn("angleDeg", step)
+
     def test_cut_start_face_points_along_the_travel(self):
         result = translate_fixture("revolve_cut_quarter")
         step = result.recipe["features"][1]

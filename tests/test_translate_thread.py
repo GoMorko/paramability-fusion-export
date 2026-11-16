@@ -101,8 +101,9 @@ class ThreadRefusalTest(unittest.TestCase):
             "unknown length": dict(full_length=None, length=None),
             "part length with no made faces": dict(full_length=False, length=5.0),
             "part length from the middle": dict(full_length=False, length=2.0, made_span=[4.0, 6.0]),
-            "offset": dict(offset=2.0),
-            "offset unreadable": dict(offset=None),
+            "offset": dict(full_length=False, length=5.0, made_span=[0.0, 5.0], offset=2.0),
+            "offset unreadable": dict(full_length=False, length=5.0, made_span=[0.0, 5.0], offset=None),
+            "full length that stops short": dict(made_span=[0.0, 5.0]),
             "longer than the face": dict(full_length=False, length=12.0, made_span=[0.0, 10.0]),
             "over the turn cap": dict(faces=[face(span=(0.0, 200.0))], length=200.0),
             "faces apart": dict(faces=[face(span=(0.0, 3.0)), face(span=(5.0, 10.0))]),
@@ -181,7 +182,8 @@ class TappedHoleTest(unittest.TestCase):
         self.assertIsNone(steps_of(result.recipe, "hole")[0]["depth"])
 
     def test_a_part_depth_thread_and_several_holes(self):
-        (step,) = steps_of(tapped_hole(thread=dict(HOLE_INFO, full_length=False, depth=5.0)).recipe, "thread")
+        (step,) = steps_of(tapped_hole(thread=dict(HOLE_INFO, full_length=False, depth=5.0,
+                                                          made_span=[0.0, 5.0])).recipe, "thread")
         self.assertEqual(step["length"], 5)
         result = tapped_hole("hole_three_points")
         self.assertEqual(len(steps_of(result.recipe, "thread")), 3)

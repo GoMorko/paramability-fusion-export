@@ -159,6 +159,12 @@ class SketchInputsTest(unittest.TestCase):
         self.assertEqual(sketch_inputs(sweep), [{"token": "sk_pipe", "name": "PipeProfile"},
                                                 {"token": "sk_path", "name": "Rail"}])
 
+    def test_a_hole_names_the_sketch_of_its_one_point(self):
+        point_sketch = Obj("fusion::Sketch", entityToken="sk_point", name="HolePoint")
+        hole = Obj("fusion::HoleFeature", holePositionDefinition=Obj(
+            "fusion::SketchPointHolePositionDefinition", sketchPoint=Obj(parentSketch=point_sketch)))
+        self.assertEqual(sketch_inputs(hole), [{"token": "sk_point", "name": "HolePoint"}])
+
     def test_a_step_whose_inputs_cannot_be_read_names_none(self):
         self.assertEqual(sketch_inputs(Broken()), [])
         self.assertEqual(sketch_inputs(Obj("fusion::ExtrudeFeature", profile=Obj("fusion::BRepFace"))), [])

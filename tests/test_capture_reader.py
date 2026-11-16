@@ -576,6 +576,19 @@ class RevolveTest(unittest.TestCase):
         self.assertEqual(data["extent"], {"kind": "angle", "angle_deg": 90.0, "symmetric": True})
         self.assertEqual(data["start_face_normal"], [0, 0, -1])
 
+    def test_a_merged_start_face_leaves_the_end_face_and_the_made_box(self):
+        def box(low, high):
+            return Obj("fusion::BRepFace", boundingBox=Obj(minPoint=P(*low), maxPoint=P(*high)))
+
+        end = Obj("fusion::BRepFace", pointOnFace=P(0, 0, 1),
+                  evaluator=Obj(getNormalAtPoint=lambda p: (True, Obj(x=0.0, y=0.0, z=1.0))))
+        data = self.read(None, Obj("fusion::AngleExtentDefinition", angle=param(math.pi / 2), isSymmetric=False),
+                         start_faces=None, endFaces=Coll([end]),
+                         faces=Coll([box((10, -8, 2), (15, 0, 10)), box((10, -8, 10), (15, 0, 10))]))
+        self.assertIsNone(data["start_face_normal"])
+        self.assertEqual(data["end_face_normal"], [0, 0, 1])
+        self.assertEqual(data["made_box"], {"min": [10, -8, 2], "max": [15, 0, 10]})
+
     def test_axis_sources_two_sides_and_unknown(self):
         cyl = Obj("fusion::BRepFace", geometry=Obj("core::Cylinder", origin=P(1, 2, 3), axis=Obj(x=0, y=0, z=2.0)))
         con = Obj("fusion::ConstructionAxis", geometry=Obj("core::InfiniteLine3D", origin=P(0, 0, 4),
@@ -723,9 +736,14 @@ class ThreadReadTest(unittest.TestCase):
 class HoleThreadReadTest(unittest.TestCase):
     def read(self, **kw):
         target = body()
-        thread = Obj(isModeled=True, isFullLength=False, threadDepth=0.5, threadType="ANSI Unified Screw Threads",
-                     threadPitch=0.1, majorDiameter=0.6, minorDiameter=0.5, isRightHanded=True)
+        # Fusion keeps the numbers in `tappedHoleInfo` (a ThreadInfo) and the length in the hidden thread feature.
+        info = Obj(threadType="ANSI Unified Screw Threads", threadPitch=0.1, majorDiameter=0.6, minorDiameter=0.5,
+                   isInternal=True)
+        corners = [Obj(geometry=P(10, 10, z)) for z in (9.8, 5.2)]
+        thread = Obj(isModeled=True, isFullLength=False, threadLength=param(0.5), threadOffset=param(0.0),
+                     isRightHanded=True, threadInfo=info, faces=Coll([Obj(vertices=Coll(corners))]))
         base = dict(holeType="SimpleHoleType", holeTapType="TappedHoleTapType", holeDiameter=param(0.6),
+                    tappedHoleInfo=info,
                     tipAngle=param(math.radians(118)), direction=Obj(x=0.0, y=0.0, z=-1.0), position=P(10, 10, 10),
                     holePositionDefinition=Obj("fusion::PointHolePositionDefinition"), thread=thread,
                     extentDefinition=Obj("fusion::DistanceExtentDefinition", distance=param(0.8)))
@@ -738,7 +756,9 @@ class HoleThreadReadTest(unittest.TestCase):
         thread = self.read()["thread"]
         self.assertEqual((thread["thread_type"], thread["pitch"], thread["major_diameter"], thread["minor_diameter"]),
                          ("ANSI Unified Screw Threads", 1.0, 6.0, 5.0))
-        self.assertEqual((thread["full_length"], thread["depth"], thread["right_hand"]), (False, 5.0, True))
+        self.assertEqual((thread["full_length"], thread["depth"], thread["offset"], thread["right_hand"]),
+                         (False, 5.0, 0.0, True))
+        self.assertEqual(thread["made_span"], [0.2, 4.8])
 
     def test_a_plain_hole_has_no_thread_record(self):
         self.assertIsNone(self.read(holeTapType="SimpleHoleTapType")["thread"])

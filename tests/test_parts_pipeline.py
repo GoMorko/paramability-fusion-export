@@ -154,7 +154,8 @@ class SharedCutTest(unittest.TestCase):
         self.assertTrue(cut["shared"] and cut["reason"].startswith("height_mm: the range stops at 30 in every part"))
         for part in manifest["parts"]:
             self.assertEqual(part["cuts"], [{"name": "height_mm", "reason": cut["reason"]}])
-            self.assertNotIn("loose", part)
+            # The part without a probe keeps the pipe hole's sketch, which sits on the top face, where it is now.
+            self.assertEqual([d["name"] for d in part.get("loose", [])], ["height_mm"])
 
 
 class StubProbe:

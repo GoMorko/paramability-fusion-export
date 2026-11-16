@@ -68,7 +68,7 @@ can be.
 | Thin extrude: open line | Left out | Yes, add-in only | Left out | Yes, add-in only | The app builds walls along an open line. Orca has a rib. |
 | Thin extrude: several outlines, holes, two ways, To object, taper | Left out | Yes, needs an app change | Left out | Needs Orca | |
 | Revolve: full turn or angle | Copied | - | Copied | - | Orca: one outline without holes, the axis in the sketch plane. |
-| Revolve: symmetric | Copied | - | Partly | Yes, add-in only | Orca: the angle keeps its number. |
+| Revolve: symmetric | Copied | - | Partly | Yes, add-in only | Fusion's angle is the turn to each side; 180 degrees or more to each side closes the ring. Orca: the angle keeps its number. |
 | Revolve: two sides with two angles | Copied | - | Partly | Needs Orca | Left out when one angle is 90 or 270 degrees and the start face fits both sides. Two equal angles keep their numbers. Orca: both angles keep their numbers. |
 | Revolve: outline with holes, several outlines | Copied | - | Left out | Yes, add-in only | |
 | Sweep: path in one plane (lines, arcs, splines) | Copied | - | Partly | Needs Orca | Paramability: a path of lines and arcs follows sizes; a spline path is copied as measured. Orca: the path keeps its numbers, one outline without holes, no sharp corners. |

@@ -17,7 +17,8 @@ What version 0.12.0 added, with the sections that explain it:
 - Formulas of plain numbers (`3 * 0.4 mm`, `3/8 in`) that can be ticked as sizes, and more counts that follow their
   sizes (1.3 and 1.9.6).
 - Modelled threads and coils that copy as recipe steps (3.12 and 3.13). Tapped holes with a modelled thread are read
-  too, but this is unproven until hand check TD2 (3.12). Holes that end at a face or at a body copy as blind holes
+  from `tappedHoleInfo` and the hidden thread feature of the hole, and checked against the faces of the thread, but
+  this is unproven until hand check TD2 (3.12). Symmetric revolves turn twice their angle (3.14). Holes that end at a face or at a body copy as blind holes
   (3.12).
 - More causes and hints for steps that do not copy, also for a step that stops the copy (1.9.3).
 - An early list, in the export dialog, of the steps that the copy will probably leave out (1.2).
@@ -2018,7 +2019,15 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     text, with the name of the sketch. `reasons` is the helper that finds the sizes behind the parameters of one maker.
   - The plane of a sketch. `placement_sizes` gives the sizes that can move the plane a sketch sits on: the sizes behind
     its construction plane and, for a plane on the part, every size that an earlier step reads. `sketch_plane_sizes`
-    does this for an outline, also when the outline is a face of the body. `hole_plane_sizes` does this for the holes
+    does this for an outline, also when the outline is a face of the body. Fusion 2706 gives no
+    `Sketch.referencePlane` for some sketches on a face, so the capture has no `reference` for them. Thus a sketch
+    without a reference counts as a sketch on a face of the part: `placement_sizes` gives every size that an earlier
+    step reads. Example. A boss is sketched on the top face of a plate, and `Height` sets the plate. The Orca output
+    then marks `Height` ("follows but not everywhere"). The probe tries `Height` (`probe/plane_sizes.plane_driven`),
+    so the recipe follows the measured plane of the boss sketch; without a try or a motion file, the recipe marks
+    `Height`. A sketch whose frame lies on an origin plane is an exception, because older captures give no reference
+    for any sketch. An emboss outline is another exception (`on_start_face`): the recipe starts it on the face, which
+    it follows. `hole_plane_sizes` does this for the holes
     of one step. `borrowed_plane_sizes` does this for a sketch of another component: a face, or a construction
     plane built on geometry, can be of the part, so it gives every size that the body's component reads before the
     step. `on_part` and `offset_param` say if a plane sits on the part and which parameter is the own distance of an
@@ -3312,8 +3321,11 @@ check is a refusal, so the thread is a gap:
 4. Inside or outside. The thread info and the direction of the face must agree. The diameter must fit the cylinder: the
    minor diameter for an internal thread, the major diameter for an external one, within 0.3 mm. This also catches a
    unit mix-up in the read.
-5. The start. The offset must be 0. A full length thread starts at the low end of the cylinder. A partial one starts at
-   the end that the faces it made touch (`made_span`). When that cannot be told, the thread is left out.
+5. The start. A full length thread starts at the low end of the cylinder. Fusion uses the length and the offset only for
+   a thread that is not full length. Fusion 2706 gives no length and no offset for a full length thread, so the
+   handler does not look at them for such a thread. When the faces that the thread made are measured (`made_span`),
+   they must reach both ends of the cylinder. A partial thread must have an offset of 0. It starts at the end that the
+   faces it made touch (`made_span`). When that cannot be told, the thread is left out.
 6. The caps. At most 8 threads in one recipe (cause `threadLimits`). A thread is refused while the walk is inside a tool
    body.
 
@@ -3342,14 +3354,34 @@ a gap. This path is unproven until hand check TD2 passes (see the end of this pa
 - a thread over part of the length: `thread.depth` (a parameter that can follow a size);
 - when it cannot be told whether the thread is full length, the hole is left out.
 
+The reader also measures the faces that the thread made (`made_span`). It gives how deep below the mouth of the first
+hole the vertices of these faces are, along the direction of the hole. `hole_depth` in `design_model/steps/thread.py`
+uses these numbers as a check:
+
+- The faces must start at the mouth of the hole, within one pitch and 0.5 mm. Else the hole is left out.
+- A thread over part of the hole must have measured faces, and they must end at `thread.depth`, within one pitch and
+  0.5 mm. Else the hole is left out.
+
+The measured bore must also be at the minor diameter of the thread (`hole_spec`). Fusion can keep the "Modeled" flag on
+and still make no thread, so that the bore stays at the full size. Such a hole is left out.
+
 A tapered tapped hole is refused ("Tapered threads are not copied.", cause `threadProfile`). A cosmetic tapped hole is
 still a plain hole at the drill diameter, with a note. A pattern or a mirror of a threaded hole is a gap: the `thread` kind
 has no repeat rule, so the pattern refuses with "A step of this pattern cannot be repeated."
 
-The reader tries `feature.thread`, `feature.threadInfo` and the hole itself for the thread members (`_hole_thread` in
-`read_solid.py`). The Fusion API stub says nothing about the thread of a tapped hole. So where Fusion keeps these members
-is not known. This is hand check TD2. The reading of a tapped hole with a modelled thread is read but unproven until TD2
-passes. A member that Fusion does not give reads as null, and the hole then stays a gap with a reason.
+Fusion (September 2025 and later) keeps the numbers of a tapped hole in two places (`_hole_thread` in `read_solid.py`):
+
+- `HoleFeature.tappedHoleInfo` is a `ThreadInfo`. It holds the profile name, the designation, the class, the pitch and the
+  diameters.
+- `HoleFeature.thread` is a thread feature that Fusion makes for the hole and does not show in the timeline. Its
+  `threadInfo` holds the same numbers. It also holds `isRightHanded`, `isModeled`, `isFullLength`, `threadLength`,
+  `threadOffset` and the faces of the thread.
+
+The reader reads the numbers from these two places first. The Fusion API stub of July 2025 has none of these members,
+so the reader still tries the older guesses (`threadInfo` and `threadDepth` on the hole) after them. Fusion 2706 gave
+`isFullLength` false for tapped holes that were made with the default settings, also for holes through all. Then
+`threadLength` is the length of the thread. Hand check TD2 compares this length with the Hole dialog. A member that
+Fusion does not give reads as null, and the hole then stays a gap with a reason.
 
 #### A hole that ends at a face or at a body
 
@@ -3429,26 +3461,57 @@ and the `coil` kind has no repeat rule.
 
 `revolve.step.handle` (`lib/translator/revolve/step.py`) writes one recipe `revolve` step for each sketch outline of the
 revolve. The recipe turns the outline about its axis by the right hand rule. Fusion does not say which way it turned.
-So the handler reads the measured outward normal of the start face (`start_face_normal`).
+So the handler reads the measured caps of the turned material. `design_model/steps/revolve.py` gives the facts to
+both translators: the whole turn (`total_turn`), the turning direction (`sense`), the check of a symmetric turn
+(`symmetric_ok`) and the side of a turn to two sides (`back_sides`).
 
-The start face shows the direction in which the material leaves it:
+#### The angle
 
-1. For a new body, a join or an intersect, the start face bounds the new material. Its outward normal points against
-   the turn.
-2. For a cut, the start face bounds the material that stays. Its outward normal points along the turn.
+The reader records the angle and the symmetric flag of the extent. For a revolve that turns to one side, the angle is
+the whole turn. For a symmetric revolve, Fusion's angle is the turn to each side of the sketch
+(`RevolveFeatures.setAngleExtent` in the API reference). Thus the whole turn is twice the angle.
 
-The handler also calculates the direction in which the middle of the outline moves at the start of a right hand
-turn. It compares the two directions.
+Example. A symmetric revolve has the angle 60 degrees. The outline turns 60 degrees back and 60 degrees forward. The
+whole turn is 120 degrees. The copy turns the sketch plane 60 degrees back and turns the outline by 120 degrees.
+
+When the whole turn is 360 degrees or more, the ring closes. `total_turn` then gives a full turn. Example. A symmetric
+revolve of 270 degrees closes the ring, and Fusion makes no start face and no end face.
+
+#### The turning direction
+
+Fusion does not record in which direction a revolve with one side turned. The reader measures three things after the
+step:
+
+- `start_face_normal`: the outward normal of the first start face (the cap in the sketch plane);
+- `end_face_normal`: the outward normal of the first end face (the cap where the turn stops);
+- `made_box`: the box around all the faces that the revolve made.
+
+For new material, the start cap points against the travel and the end cap points along it. After a cut, both caps
+point the other way. `sense` tries the two directions. It keeps a direction when each measured cap points where that
+direction puts it.
+
+A join can merge a cap into a face of the part. Example. A quarter round turns from the front face of a box. Its start
+face lies on the front face of the box, so Fusion merges it and gives no start face. The end cap is then the only cap.
+After a quarter turn, the end cap has the same normal for the two directions. In this case `sense` uses `made_box`. It
+calculates the box that the outline sweeps in each direction (`turned_box`). The faces that the revolve made must fit
+in the box of one direction and not in the box of the other direction. When the measurements do not give one
+direction, the revolve is left out with the reason "The turning direction of this revolve could not be read."
+
+A symmetric revolve looks the same in the two directions. `symmetric_ok` checks only that each measured cap sits at the
+angle before or after the sketch plane. This check also shows that Fusion counts the angle on each side. When a cap is
+at another place, the revolve is left out ("The turn of this symmetric revolve does not match its measured ends.").
+
+#### The four ways to set the angle
 
 Fusion has four ways to set the angle:
 
 1. A full turn. The step has no angle. The start face is not necessary.
-2. One angle from the sketch. When the two directions agree, the axis keeps its direction. When they do not agree, the
+2. One angle from the sketch. When the measured caps show a right hand turn, the axis keeps its direction. Else the
    handler writes the axis in the opposite direction. The angle can follow a size.
-3. A symmetric angle. The material starts half of the angle before the sketch. The handler turns the sketch plane
-   back by half of the angle about the axis, and writes the full angle. The start face must be half of the angle
-   before the sketch (`_symmetric_ok`). If it is not, the revolve is left out. Thus an angle that Fusion stores as the
-   half turn does not give a wrong copy. The angle keeps its number.
+3. A symmetric angle. Fusion's angle is the turn to each side, so the whole turn is twice the angle. The handler turns
+   the sketch plane back by the angle about the axis, and writes twice the angle. The measured caps must be the angle
+   before and after the sketch (`_symmetric_ok`). If they are not, the revolve is left out. The angle keeps its
+   number. When twice the angle is 360 degrees or more, the step is a full turn.
 4. Two sides with two angles (`angleOne` and `angleTwo`). Fusion does not say to which side each angle turns. The
    material covers one turn of angle one plus angle two. If side one turns by the right hand rule, the turn starts
    angle two before the sketch. If side one turns the other way, the turn starts angle one before the sketch. The

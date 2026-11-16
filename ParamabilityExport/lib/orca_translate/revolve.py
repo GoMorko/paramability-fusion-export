@@ -2,11 +2,12 @@
 
 Each outline becomes a sketch of its lines and arcs, plus a construction line along the turning axis that the
 Revolve names (`revolve_axis_entity`), so the axis may sit anywhere in the sketch plane. Orca turns by the right hand
-rule about that line; Fusion does not say which way it turned, so the measured start face decides (its outward normal
-points against the turn for new material, along it for a cut). `revolve_angle` follows the angle's parameter. A
-symmetric turn starts half the angle back: the sketch plane is turned there, so its angle keeps its number. A turn to
-two sides by two angles starts the angle of one side back (the start face tells which, `design_model.steps.revolve`)
-and turns by the sum of the two; both angles keep their numbers.
+rule about that line; Fusion does not say which way it turned, so the measured caps decide (`steps.revolve.sense`).
+`revolve_angle` follows the angle's parameter. Fusion's angle of a symmetric revolve is the turn to each side: the copy
+turns twice the angle from the angle back, the sketch plane is turned there, so its angle keeps its number, and the
+measured caps must sit where that puts them. A symmetric turn of 180 degrees or more to each side closes the ring. A
+turn to two sides by two angles starts the angle of one side back (the start face tells which,
+`design_model.steps.revolve.back_sides`) and turns by the sum of the two; both angles keep their numbers.
 
 Orca needs the axis in the sketch plane, an outline on one side of it and no holes in the outline; anything else is
 left out with the reason. A cut that removes nothing stops Orca's rebuild, so a cut that misses the copied part is
@@ -14,6 +15,7 @@ left out (`solid.Turned` is the shape the check uses).
 """
 from ..capture_model import gap_hints
 from ..design_model import reach
+from ..design_model.steps import revolve as revolve_facts
 from ..geometry import vec
 from ..geometry.footprint import polyline
 from ..orca_recipe.enums import BooleanMode, EntityType, FeatureType
@@ -21,7 +23,6 @@ from ..orca_recipe.sketch import SketchEntity
 from . import causes, kept_refs
 from ..design_model.values import Quantity
 from ..design_model import words as shared
-from ..design_model.steps.revolve import back_sides
 from .sketches import entities_of, outlines_of
 from .solid import ADD, CUT, INTERSECT, Turned
 from .sketch_sizes import profile_sizes, projection_doubts
@@ -75,21 +76,35 @@ def _angle(ctx, item, extent):
     angle = abs(float(extent["angle_deg"]))
     if not 0 < angle <= FULL_TURN_DEG + 1e-9:
         return Skip(shared.REVOLVE_ANGLE)
-    value = ctx.quantity(item, "extent.angle_deg", angle, "angle").magnitude()
-    if angle >= FULL_TURN_DEG - 1e-9:
-        if value.text is not None:
-            ctx.doubt(value.reads, "%s turns a full circle only while its angle is 360" % label(item))
-        return Quantity(FULL_TURN_DEG), False
     symmetric = bool(extent.get("symmetric"))
+    total, full = revolve_facts.total_turn(angle, symmetric)
+    value = ctx.quantity(item, "extent.angle_deg", angle, "angle").magnitude()
+    if full:
+        if value.text is not None:
+            ctx.doubt(value.reads, "%s turns a full circle only while its angle is %s" % (
+                label(item), "180 or more" if symmetric else "360"))
+        return Quantity(FULL_TURN_DEG), None
     if symmetric and value.text is not None:
         ctx.doubt(value.reads, "%s turns to both sides of its sketch, so its angle keeps its number in Orca"
                   % label(item))
-        value = Quantity(angle)
+    if symmetric:
+        value = Quantity(total)
     return value, ("symmetric" if symmetric else None)
 
 
 def _points(curves):
     return [p for c in curves for p in polyline(c)]
+
+
+def _turn(frame, outer, point, direction):
+    """The unit way the outline moves at its sketch plane on a right hand turn about `direction`, or a Skip."""
+    flat = _points(outer)
+    centre = [sum(p[0] for p in flat) / len(flat), sum(p[1] for p in flat) / len(flat)]
+    v = vec.sub(vec.frame_apply(frame, [centre[0], centre[1], 0.0]), point)
+    radial = vec.sub(v, vec.scale(direction, vec.dot(v, direction)))
+    if vec.length(radial) < 1e-9:
+        return Skip(shared.REVOLVE_ON_AXIS)
+    return vec.unit(vec.cross(direction, vec.unit(radial)))
 
 
 def _travel_turn(data, operation, frame, outer, point, direction):
@@ -99,25 +114,25 @@ def _travel_turn(data, operation, frame, outer, point, direction):
     if not isinstance(normal, (list, tuple)) or vec.length(normal) < 1e-9:
         return Skip(shared.REVOLVE_TURN_UNREAD)
     travel = vec.scale(vec.unit(normal), 1.0 if operation == "cut" else -1.0)
-    flat = _points(outer)
-    centre = [sum(p[0] for p in flat) / len(flat), sum(p[1] for p in flat) / len(flat)]
-    v = vec.sub(vec.frame_apply(frame, [centre[0], centre[1], 0.0]), point)
-    radial = vec.sub(v, vec.scale(direction, vec.dot(v, direction)))
-    if vec.length(radial) < 1e-9:
-        return Skip(shared.REVOLVE_ON_AXIS)
-    return travel, vec.cross(direction, vec.unit(radial))
+    turn = _turn(frame, outer, point, direction)
+    return turn if isinstance(turn, Skip) else (travel, turn)
 
 
-def _sense(data, operation, frame, outer, point, direction):
-    """+1 when Fusion turned by the right hand rule about `direction`, -1 when the other way, or a Skip."""
-    found = _travel_turn(data, operation, frame, outer, point, direction)
-    if isinstance(found, Skip):
-        return found
-    travel, turn = found
-    side = vec.dot(travel, turn)
-    if abs(side) < 1e-6:
-        return Skip(shared.REVOLVE_TURN_UNREAD)
-    return 1.0 if side > 0 else -1.0
+def _sense(data, operation, frame, outer, point, direction, angle, symmetric):
+    """+1 when Fusion turned by the right hand rule about `direction`, -1 when the other way (a symmetric turn keeps
+    +1 once its caps fit), or a Skip."""
+    turn = _turn(frame, outer, point, direction)
+    if isinstance(turn, Skip):
+        return turn
+    cut = operation == "cut"
+    if symmetric:
+        fits = revolve_facts.symmetric_ok(data, turn, direction, angle / 2.0, cut)
+        if fits is None:
+            return Skip(shared.REVOLVE_TURN_UNREAD)
+        return 1.0 if fits else Skip(shared.REVOLVE_SYMMETRIC_CAPS)
+    points = [vec.frame_apply(frame, [p[0], p[1], 0.0]) for p in _points(outer)]
+    found = revolve_facts.sense(data, turn, direction, angle, cut, points, point)
+    return Skip(shared.REVOLVE_TURN_UNREAD) if found is None else found
 
 
 def _back(data, operation, frame, outer, point, direction, angles):
@@ -125,7 +140,7 @@ def _back(data, operation, frame, outer, point, direction, angles):
     found = _travel_turn(data, operation, frame, outer, point, direction)
     if isinstance(found, Skip):
         return found
-    sides = back_sides(found[0], found[1], direction, angles[0], angles[1])
+    sides = revolve_facts.back_sides(found[0], found[1], direction, angles[0], angles[1])
     if not sides:
         return Skip("The turn of this two sided revolve does not match its measured start face.")
     if len(sides) > 1 and abs(angles[0] - angles[1]) > 1e-9:
@@ -198,7 +213,7 @@ def revolve(ctx, step):
             return back
         start = -back
     elif angle.n < FULL_TURN_DEG:
-        sense = _sense(data, operation, frame, outline.outer, point, direction)
+        sense = _sense(data, operation, frame, outline.outer, point, direction, angle.n, sides == "symmetric")
         if isinstance(sense, Skip):
             return sense
         if sides == "symmetric":

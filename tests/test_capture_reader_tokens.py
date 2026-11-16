@@ -66,12 +66,12 @@ def read_item(feature_pair):
 
 
 class FeatureTokensTest(unittest.TestCase):
-    def hole(self, points):
+    def hole(self, points, definition=None):
         return feature("HoleFeature", "Hole1", holeType="SimpleHoleType", holeTapType="SimpleHoleTapType",
                        holeDiameter=Obj(value=0.5), tipAngle=Obj(value=math.radians(118)),
                        direction=Obj(x=0.0, y=0.0, z=-1.0), position=P(0, 0, 0),
-                       holePositionDefinition=Obj("fusion::SketchPointsHolePositionDefinition",
-                                                  sketchPoints=Coll(points)),
+                       holePositionDefinition=definition or Obj("fusion::SketchPointsHolePositionDefinition",
+                                                                sketchPoints=Coll(points)),
                        extentDefinition=Obj("fusion::ThroughAllExtentDefinition"), sideFaces=Coll([]),
                        endFaces=Coll([]))
 
@@ -82,6 +82,11 @@ class FeatureTokensTest(unittest.TestCase):
         sk = sketch()
         data = read_item(self.hole([self.point("p1", sk, (1, 2, 3)), self.point("p2", sk, (4, 5, 6))]))
         self.assertEqual((data["sketch_token"], data["sketch"], data["point_tokens"]), ("sk1", "Sketch1", ["p1", "p2"]))
+
+    def test_hole_on_one_sketch_point_names_its_sketch(self):
+        point = self.point("p1", sketch(), (1, 2, 3))
+        data = read_item(self.hole([], Obj("fusion::SketchPointHolePositionDefinition", sketchPoint=point)))
+        self.assertEqual((data["sketch"], data["point_tokens"], data["positions"]), ("Sketch1", ["p1"], [[1, 2, 3]]))
 
     def test_hole_points_on_two_sketches_have_no_point_tokens(self):
         data = read_item(self.hole([self.point("p1", sketch("a"), (1, 2, 3)), self.point("p2", sketch("b"), (4, 5, 6))]))

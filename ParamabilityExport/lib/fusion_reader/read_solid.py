@@ -404,21 +404,37 @@ def revolve_before(feature, ctx):
        .add("extent.angle_two_deg", lambda: feature.extentDefinition.angleTwo, "angle").found)
 
 
-def revolve_after(feature, ctx, data):
-    """start_face_normal: the normal of the first start face at a point on it; null for a full turn."""
-    extent = data.get("extent") or {}
-    if extent.get("kind") == "angle" and extent.get("angle_deg", 0) >= _FULL_TURN_DEG:
-        return {}
-    faces = geo.collection_items(geo.safe(lambda: feature.startFaces, None))
-    if not faces:
-        return {}
-
+def _cap_normal(faces):
+    """The outward normal of the first of `faces` at a point on it, or None."""
     def normal():
         face = faces[0]
         ok, n = face.evaluator.getNormalAtPoint(face.pointOnFace)
         return geo.unit_vector(n) if ok else None
 
-    return {"start_face_normal": geo.safe(normal, None)}
+    return geo.safe(normal, None) if faces else None
+
+
+def _faces_box(faces):
+    """{ min, max } in mm around the boxes of `faces`, or None when one cannot be read."""
+    boxes = [geo.safe(lambda: geo.box_of(face), None) for face in faces]
+    if not boxes or any(box is None for box in boxes):
+        return None
+    return {"min": [min(box["min"][i] for box in boxes) for i in range(3)],
+            "max": [max(box["max"][i] for box in boxes) for i in range(3)]}
+
+
+def revolve_after(feature, ctx, data):
+    """The measured caps of a revolve that is not a full turn: `start_face_normal` and `end_face_normal`, the outward
+    normals of the first start and end face (null when Fusion gives none, as when a join merged the cap into a face
+    of the part), and `made_box`, the box around the faces the revolve made."""
+    extent = data.get("extent") or {}
+    if extent.get("kind") == "angle" and extent.get("angle_deg", 0) >= _FULL_TURN_DEG:
+        return {}
+    def faces(name):
+        return [geo.native_input(f, ctx) for f in geo.collection_items(geo.safe(lambda: getattr(feature, name), None))]
+
+    return {"start_face_normal": _cap_normal(faces("startFaces")), "end_face_normal": _cap_normal(faces("endFaces")),
+            "made_box": _faces_box(faces("faces"))}
 
 
 def _cylinder(face):
@@ -433,9 +449,15 @@ def _cylinder(face):
 
 
 def _sketch_points(feature, ctx):
-    """The sketch points of a hole placed on sketch points, else None."""
+    """The sketch points of a hole placed on sketch points, else None. Fusion gives a hole on one sketch point a
+    `SketchPointHolePositionDefinition` (`sketchPoint`), one on several a `SketchPointsHolePositionDefinition`
+    (`sketchPoints`)."""
     definition = geo.safe(lambda: feature.holePositionDefinition, None)
-    if "SketchPoints" not in geo.type_name(definition):
+    kind = geo.type_name(definition)
+    if kind == "SketchPointHolePositionDefinition":
+        point = geo.safe(lambda: definition.sketchPoint, None)
+        return [geo.native_input(point, ctx)] if point is not None else None
+    if "SketchPoints" not in kind:
         return None
     return [geo.native_input(p, ctx) for p in geo.collection_items(definition.sketchPoints)]
 
@@ -534,20 +556,39 @@ def _hole_extent(feature, ctx):
 
 
 def _hole_thread(feature, tapped):
-    """The thread of a tapped hole as `read_thread.thread_info` gives it, plus `full_length` and `depth` (how deep the
-    thread runs). The Fusion API stub of July 2025 has no tapped hole members at all, so where they live (`thread`,
-    `threadInfo` or the hole itself) is hand check TD2; each is tried, and what is missing reads as null (a gap)."""
+    """The thread of a tapped hole as `read_thread.thread_info` gives it, plus `full_length`, `depth` (how deep the
+    thread runs when it is not full length) and `offset`. Fusion keeps the numbers of a tapped hole in
+    `HoleFeature.tappedHoleInfo` and in the hidden thread feature `HoleFeature.thread` (its `threadInfo`,
+    `isFullLength`, `threadLength` and `threadOffset`); the older guesses `threadInfo` and `threadDepth` on the hole
+    are still tried. What is missing reads as null (a gap)."""
     if not tapped:
         return None
     source = geo.safe(lambda: feature.thread, None)
-    found = thread_info(source, geo.safe(lambda: feature.threadInfo, None), feature)
+    found = thread_info(geo.safe(lambda: feature.tappedHoleInfo, None), geo.safe(lambda: source.threadInfo, None),
+                        source, geo.safe(lambda: feature.threadInfo, None), feature)
     full = geo.safe(lambda: source.isFullLength, None)
     if full is None:
         full = geo.safe(lambda: feature.isFullLength, None)
     found["full_length"] = full if isinstance(full, bool) else None
-    depth = geo.safe(lambda: geo.length(source.threadDepth), None)
+    depth = geo.safe(lambda: geo.length(source.threadLength), None)
     found["depth"] = depth if depth is not None else geo.safe(lambda: geo.length(feature.threadDepth), None)
+    found["offset"] = geo.safe(lambda: geo.length(source.threadOffset), None)
     return found
+
+
+def _thread_span(feature, data):
+    """[low, high]: how deep below the mouth of the first hole the faces of a tapped hole's modeled thread reach, along
+    the hole's direction, from their vertices; None when they cannot be read."""
+    positions, direction = data.get("positions") or [], data.get("direction")
+    if not positions or not direction:
+        return None
+    along = []
+    for face in geo.collection_items(geo.safe(lambda: feature.thread.faces, None)):
+        for vertex in geo.collection_items(geo.safe(lambda: face.vertices, None)):
+            p = geo.safe(lambda: geo.point(vertex.geometry), None)
+            if p is not None:
+                along.append(sum((p[i] - positions[0][i]) * direction[i] for i in range(3)))
+    return [round(min(along), 6) + 0.0, round(max(along), 6) + 0.0] if along else None
 
 
 def _hole_params(feature, hole_type, tapped):
@@ -556,7 +597,7 @@ def _hole_params(feature, hole_type, tapped):
     found.add("tip_angle_deg", lambda: feature.tipAngle, "angle")
     found.add("extent.depth", lambda: _extent_distance(feature.extentDefinition))
     if tapped:
-        found.add("thread.depth", lambda: feature.thread.threadDepth)
+        found.add("thread.depth", lambda: feature.thread.threadLength)
     if hole_type == "counterbore":
         found.add("counterbore.diameter", lambda: feature.counterboreDiameter)
         found.add("counterbore.depth", lambda: feature.counterboreDepth)
@@ -610,7 +651,10 @@ def hole_after(feature, ctx, data):
         if p is not None:
             ends.append(p)
             end_types.append(_END_FACE_TYPES.get(geo.safe(lambda: geo.type_name(face.geometry), None)))
-    return {"side_cylinders": side, "end_points": ends, "end_face_types": end_types}
+    found = {"side_cylinders": side, "end_points": ends, "end_face_types": end_types}
+    if isinstance(data.get("thread"), dict) and data.get("thread_modeled"):
+        found["thread"] = dict(data["thread"], made_span=_thread_span(feature, data))
+    return found
 
 
 def _tool_bodies(collection, ctx):
