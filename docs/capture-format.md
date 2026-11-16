@@ -1999,11 +1999,13 @@ the lowest and at the highest value it was measured at, the curved
 ones at their value now, so the formula over those sizes is checked by a state that changes several of them. A state that did not build keeps the
 first step that failed (`failed`). A ticked size the probe set to other values that no formula reads at the end is dropped with
 "it was tried at other values, and it changes nothing in this part" (`used` false, `tried` true), with "between A and
-B; beyond that it could not be tried" when the rows that built cover less than its range, but only when the body's box
-(and volume) read the same at every try that set it alone (`Motion.body_changes`, `probe.build.body_changes`; a try on
-another sketch solution, `apart`, or past an outline limit does not count). When the body changed at such a try, it is
-dropped with "it changes this part in a way the copy does not follow" (`used` true); when no such try read the body
-(an older motion file), it gets the plain "not used by any copied step" reason without `tried`. A size that reaches a sketch
+B; beyond that it could not be tried" when the rows that built cover less than its range, but only when the body's box,
+volume and area (`volume_mm3`, `area_mm2` in each state read) read the same at every try that set it alone
+(`Motion.body_changes`, `probe.build.body_changes`; a try on another sketch solution, `apart`, or past an outline limit
+does not count, and a try counts as "the same" only when it and the first read hold the box and the volume). When
+the body changed at such a try, it is dropped with "it changes this part in a way the copy does not follow" (`used`
+true); when no such try read the box and the volume (an older export), it gets the plain "not used by any copied
+step" reason without `tried`. A size that reaches a sketch
 or a measured place (`design_model.reach.probed_sizes`) and whose rows all failed to build was not measured: it is
 doubted up front with "the design does not rebuild in Fusion at A (step) or B (step), the nearest values tried, so it
 could not be measured" (loose when a formula reads it, else dropped with `used` true), never called unchanging. A
@@ -2317,6 +2319,9 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
 - `params`: `value` of each named parameter in Fusion's own units (cm, radians), as in `parameters.*.value`. A name
   is looked up in the user parameters, then in the target component's model parameters.
 - `box`: the target body's box, as `target.box`.
+- `volume_mm3`, `area_mm2` (only with `box`): the target body's volume (`BRepBody.volume`, cm3 times 1000) and area
+  (`BRepBody.area`, cm2 times 100), each absent when it cannot be read. They show a change inside the box (a deeper
+  pocket, a wider hole) when the probe asks whether a size changed the body (`Motion.body_changes`).
 - `pieces` (only with `box`): `lumps`, how many solids the target body holds (`BRepBody.lumps`), and `others`, the
   boxes of the other solid bodies of its component (left out when one cannot be read or there are more than 64). The
   app builds a part only in one piece, so the probe works out from them how many pieces the part is in

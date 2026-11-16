@@ -5,10 +5,14 @@ from dataclasses import dataclass, field
 from ..geometry.tolerances import BODY_TOLERANCE_MM
 
 # The parts of a read that a state keeps in `report.json`.
-REPORT_READ_KEYS = ("sketches", "points", "lines", "params", "box", "pieces", "refs", "faces", "patterns", "unread")
+REPORT_READ_KEYS = ("sketches", "points", "lines", "params", "box", "volume_mm3", "area_mm2", "pieces", "refs", "faces",
+                    "patterns", "unread")
 # Two reads of the volume of a body agree (mm3, or this share of the volume).
 VOLUME_TOLERANCE_MM3 = 1e-4
 VOLUME_RELATIVE = 1e-6
+# Two reads of the area of a body agree (mm2, or this share of the area).
+AREA_TOLERANCE_MM2 = 1e-4
+AREA_RELATIVE = 1e-6
 
 
 @dataclass(frozen=True)
@@ -81,16 +85,26 @@ def box_numbers(read):
     return numbers if all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in numbers) else None
 
 
-def _volume(read):
-    value = read.get("volume_mm3") if isinstance(read, dict) else None
+def _number(read, key):
+    value = read.get(key) if isinstance(read, dict) else None
     return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
+def _differs(a, b, tolerance, relative):
+    return a is not None and b is not None and abs(a - b) > max(tolerance, relative * abs(a))
+
+
 def body_changed(before, now):
-    """True when the body reads differently in two probe states: its box moved, or its volume changed when both states
-    read it. False when they agree or the body cannot be compared (a state without a box)."""
+    """True when the body reads differently in two probe states: its box moved, or its volume or area changed when
+    both states read it. False when they agree or the body cannot be compared (a state without a box)."""
     a, b = box_numbers(before), box_numbers(now)
     if a is not None and b is not None and any(abs(x - y) > BODY_TOLERANCE_MM for x, y in zip(a, b)):
         return True
-    va, vb = _volume(before), _volume(now)
-    return va is not None and vb is not None and abs(va - vb) > max(VOLUME_TOLERANCE_MM3, VOLUME_RELATIVE * abs(va))
+    return (_differs(_number(before, "volume_mm3"), _number(now, "volume_mm3"), VOLUME_TOLERANCE_MM3, VOLUME_RELATIVE)
+            or _differs(_number(before, "area_mm2"), _number(now, "area_mm2"), AREA_TOLERANCE_MM2, AREA_RELATIVE))
+
+
+def body_compared(before, now):
+    """True when two probe states read enough of the body to tell that it did not change: a box and a volume in
+    both. A box alone misses a change inside it (a deeper pocket, a wider hole)."""
+    return all(box_numbers(r) is not None and _number(r, "volume_mm3") is not None for r in (before, now))
