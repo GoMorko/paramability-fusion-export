@@ -69,7 +69,8 @@ that use that sketch, and those steps shape bodies of their component. A paramet
 is drawn around is ticked to start with and tried like a size behind a sketch dimension: if the sketch moves with it
 and the tries can follow, it is a free size and the outline follows it; if the outline changes in a way the tries
 cannot follow, it is "not followed" with the reason; if nothing in the part moves with it, it is "not used", with the
-reason that it was tried and changes nothing in this part. Up to 8 more ticked parameters that nothing seems to tie
+reason that it was tried and changes nothing in this part. A parameter of a joint, or of a move that places a
+component, may move the pipe against the part, so it counts for every such sketch too. Up to 8 more ticked parameters that nothing seems to tie
 to the part are tried too, after the others, since you know your design.
 
 A step can also use a plane, axis or point of another component directly (a mirror plane, a pattern axis, a face an
@@ -81,8 +82,9 @@ point or flat face a hole sits on move with the parameter, and the parameter sta
 on that component but does not move the place is not marked. A place that turns with a parameter, or moves in a way the
 tries cannot follow, marks that parameter "may give unexpected results" with the step and the other component named;
 so does a place the tries could not measure. The result is kept in `report.json` (`probe.motion.refs`). A parameter of
-a joint, or of a move that places a component, can move every other component. The export tries such a parameter
-after the others, while tries are left. If the tries did not measure it, it is marked "may give unexpected results"
+a joint, or of a move that places a component, can move every other component. The dialog offers such a parameter
+as one that may move that component in the assembly, and the export tries it like a parameter behind a sketch (a
+joint parameter is not ticked to start with). If the tries did not measure it, it is marked "may give unexpected results"
 for each such place, and never "nothing in this part moved with it".
 
 When a sketch of the part is tied to another component, or a step uses a place of one, the export also tries up to 12

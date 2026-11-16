@@ -1613,7 +1613,7 @@ order. The table below follows that order, lowest layer first. `commands` is on 
 | `orca_recipe` | nothing | The OrcaSlicer 2.5 Design tab recipe (features, sketch entities, enums) and its 3MF writer. |
 | `capture_model` | `geometry` | What a capture and a recipe step are made of: the step kind table (`step_kinds`), the capture checks (`capture`: `validate_capture`, `CaptureError`, `same_body`), the chain of splits (`lineage`), the items that build tool bodies (`tool_items`), and the gap causes, hints and picks (`gap_hints`, `gap_picks`). |
 | `timing` | nothing | Stopwatch helpers and the `timing` block of `report.json`. |
-| `params` | `package` | Fusion parameters as sizes: names, defaults and ranges, the expression parser, the dependency graph, geometry links, the size table, the parameter listing. |
+| `params` | `capture_model`, `package` | Fusion parameters as sizes: names, defaults and ranges, the expression parser, the dependency graph, geometry links, the size table, the parameter listing. The geometry links read the step kind table to find the items that can place an occurrence (`geometry_links.places_occurrence`). |
 | `sketch_values` | `package` | The motion file (`Affine`, `Stuck`, `Terms`), its keys and the "measured / not measured" answers (`coverage`). |
 | `sketch_solve` | `package`, `sketch_values` | A small sketch solver for the shadow check `derived` and for the Orca output. `slots.slot_text(slot)` names a solver slot in words. `constants.constants_of` says which projected entities no size moves. The Orca output uses the extended reading (`extended=True`). In that reading, a line gets its direction from the gap between its two ends when the solver knows that gap on the x axis and on the y axis, also when it does not know the ends. Example: the diagonals of a rectangle. A centre point on the two diagonals then gives the place of the rectangle. The solver reasons are for developers. The Orca output changes them into plain words for the user (`orca_translate/sketches.open_reason`). |
 | `design_edit` | `package`, `params` | Changing the design for a while: apply a row, restore parameters, the timeline marker, the timeline health, the temporary copy, and the declared interface of the parameter store (`store.py`). |
@@ -1621,7 +1621,7 @@ order. The table below follows that order, lowest layer first. `commands` is on 
 | `results` | `design_model` | The shape of what an output says about a timeline item, for both outputs and the dialogs: the verdict (`verdicts.py`: `verdict` and the verdict kinds) and the record of a step left out (`left_out.py`: `left_out`, `item_name`). It holds shapes and the words of a verdict kind, not facts about the design. See 1.9. |
 | `translator` | `capture_model`, `design_model`, `geometry`, `package`, `params`, `results`, `sketch_values`, `timing` | A capture in, a recipe and verdicts out. One handler per step kind. |
 | `probe` | `capture_model`, `design_model`, `geometry`, `package`, `params`, `sketch_solve`, `sketch_values` | Plans the rows, matches the reads with the capture, fits the motion file. It does not import the translator. It measures the sketch values through the loop writer of the shared layer (`design_model/loops.py`), which the translator also writes with. Thus a measured value is the value that the translator writes. The range cuts of the tries (`design_model/tried_ranges.py`) are also in the shared layer. |
-| `orca_translate` | `capture_model`, `design_model`, `geometry`, `orca_recipe`, `params`, `results`, `sketch_solve`, `sketch_values` | A capture in, an OrcaSlicer Design tab recipe and verdicts out. It does not import the recipe translator or the probe: what both need is in `design_model`. |
+| `orca_translate` | `capture_model`, `design_model`, `geometry`, `orca_recipe`, `params`, `results`, `sketch_solve`, `sketch_values` | A capture in, an OrcaSlicer Design tab recipe and verdicts out. It does not import the recipe translator or the probe: what both need is in `design_model`. `limits.py` finds how far a variable can change before a step stops fitting. A check can give `limits.Stop(kind)` instead of False. `Stop` counts as False, and its kind tells why the value does not fit. The search keeps the kind of the first value past each limit (`Range.why`). The limit text then tells the cause in plain words (`limits.CAUSES`), for example "(below that, the end of the extrude passes its start)". The kind changes only the text. It does not change the place of a limit. |
 | `export_plan` | `capture_model`, `design_edit`, `design_model`, `geometry`, `orca_recipe`, `orca_translate`, `package`, `params`, `probe`, `results`, `sketch_values`, `timing`, `translator` | The export itself: the pipelines, the put back, body scope, size offers, the probe flow, marker roll, timeline trim, reach pass, health, package plan. |
 | `dialog_model` | `design_model`, `export_plan`, `package`, `params`, `results`, `translator` | What the dialogs show, as plain data: rows, stop warning, result view. |
 | `fusion_reader` | `capture_model`, `design_edit`, `geometry`, `package`, `params`, `timing` | Reads the design with `adsk`: the capture, the probe states, the reach, the STEP export, the parameter store. It does not import the translator. |
@@ -2652,7 +2652,8 @@ not measured. A size that no try set to another value is not measured (`coverage
 the tries tell nothing about it. This is important for the size of a joint, or of a move that places an occurrence:
 
 1. Such a size can move every place of another component (`refs.acting_sizes`).
-2. The probe tries it only on a guess (`probe_flow/sizes.extra_sizes`), and only while rows are left.
+2. The probe tries it as a linked size (a link with `via: "assembly"`, see below). The row limit or the time limit can
+   still leave it without a try.
 3. When no row set it, the answer is "not tried". The translator gives the size a doubt that names the step and says
    that the size was not tried at other values. The size is then loose, or left out with that reason when no formula
    reads it. The audit does not say "nothing in this part moved with it".
@@ -2677,6 +2678,18 @@ The facts that do not need the probe are in the shared layer, `lib/design_model/
     inputs are not bodies or faces. Such an item is usually in the root component, not in the component that it
     moves. The capture does not say which occurrence such an item places. Thus these sizes apply to every reference
     of another component. They do not apply to a reference of the component of the exported body (`own`).
+    `params.geometry_links.places_occurrence` finds these parameters. The geometry links use the same test: such a
+    parameter gets a link (`via: "assembly"`) to every sketch of the part that is tied to another component, for
+    example a sketch that projects an edge of that component. Thus the size counts as a size that the sketch reads
+    (`reach.sketch_sizes`):
+    `reference_links` gives such a parameter the same kind of link to every component whose plane, axis, point or
+    face a step of the part uses (not the component of the part itself). Thus:
+    1. The probe tries it like a size behind a sketch dimension. When the row limit leaves it without a try, it is
+       listed as not tried. The dialog offers it as linked: "It may move Cover in the assembly, and the step ...".
+       A joint parameter is still not ticked to start with.
+    2. The recipe translator follows the sketch as the probe measured it. It marks the size when no try set it, or
+       when there is no motion file.
+    3. The Orca output marks the size, because it writes the sketch with its numbers.
 - `mark_all` marks those sizes with a doubt: the copy keeps the reference where it is now. When the capture cannot say
   which sizes can move the reference, `mark_all` calls `movers_unknown` on the recorder, and the output decides (see
   `recorder.py` in 2.2).

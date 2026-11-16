@@ -264,6 +264,21 @@ not judged to meet material where Orca removes nothing.
   18.5 mm" for the diameter of a swept circle, never a limit below zero). When a limit cannot be worked out (the check
   fails at the current values, or the variable has no parameter line), the field keeps its number and its sizes get
   the reason. The told limit is a `limits.Limit`: the words, with the variable and the low and high numbers.
+- Why a limit stops. A check that knows why a value does not fit returns `limits.Stop(kind)` (it counts as False)
+  instead of False. The walk (`limits.bounds`) keeps the answer of the first value it tested past each limit
+  (`limits.Range.why`), and `limits.words` adds the cause in plain words (`limits.CAUSES`, kept in `Limit.why`):
+  "keep lift_mm over 5 mm (below that, the end of the extrude passes its start)", "keep wall between 3 and 28 mm
+  (outside that, a rounded corner reaches another side of the outline)", "keep ang between 45.1 and 178.7 degrees
+  (below 45.1 degrees, two sides of the outline meet or cross; above 178.7 degrees, the outline grows too large for
+  the copy)". The causes: a size of the shape reaches zero (`POSITIVE`); for an outline built from cuts
+  (`Planned.fits`), two sides meet or cross, the outline grows past the block, a side turns around, a choice of the
+  sketch solver flips, or the cuts no longer give the outline; for corner tools (`corner_tools.holds`), a corner
+  gets flat or turns the other way, an angled chamfer loses its square corner, a round or chamfer gets too small,
+  the rounds and chamfers need more than a whole side, or a corner tool reaches another side; for a sweep, the
+  outline grows past the tightest bend or reaches another part of the path; for an extrude, the "To" end passes the
+  start or the taper closes the outline; the rounds or chamfers no longer fit on the part; the thread no longer
+  fits. A check that cannot be worked out at a value (an error) gives no cause, and the limit is told without one.
+  The cause changes only the words: where a limit is found does not change.
 - The end faces of a copied extrude (`solid.Prism.ends`, which a later "To" follows) are set once its fields are
   bound and checked: a length that Orca does not hold as a formula (it cannot write it, or the limit check unbinds
   it) is a number there too, so a later "To" on that face keeps its number as the earlier extrude does.

@@ -223,9 +223,10 @@ def _hole_end_plane(ctx, place, point, n):
 def _tell_limits(ctx, feature, spec, longest=None):
     """Tell how short (or long) the variables behind a thread's bound length may go before Orca cannot make it, or
     before it is longer than `longest` (mm, the Orca thread on the whole face)."""
-    limits.tell(ctx, [(feature, "thread_height")],
-                lambda heights: orca_limits(spec.major, spec.minor, spec.pitch, heights[0]) is None
-                and (longest is None or heights[0] <= longest + 1e-9))
+    def ok(heights):
+        fits = orca_limits(spec.major, spec.minor, spec.pitch, heights[0]) is None
+        return limits.stop(fits and (longest is None or heights[0] <= longest + 1e-9), limits.THREAD_NO_FIT)
+    limits.tell(ctx, [(feature, "thread_height")], ok)
 
 
 def note(what, internal, leads):

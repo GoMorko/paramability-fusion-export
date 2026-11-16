@@ -14,6 +14,7 @@ from tests.fakes import FakePort, FakeStore
 from tests.test_translate_sketch_motion import motion_of
 from tests.translator_helpers import load_capture, steps_of
 
+from lib import orca_translate
 from lib.dialog_model.result_rows import NOT_USED, result_view, section, section_lines
 from lib.export_plan.pipeline import ExportRequest, run_pipeline
 from lib.export_plan.size_offers import offers, table_for_body
@@ -325,6 +326,48 @@ class ApartRangeTest(unittest.TestCase):
         self.assertIn(notes.split_why([(7.875, 2)]), cut["reason"])
         states = [s for s in result.report["probe"]["states"] if s.get("pieces")]
         self.assertEqual(sorted(s["values"]["pipe_d_mm"] for s in states), [6.0, 7.5, 7.875])
+
+
+def placed_by_the_assembly():
+    """The fixture with three more parameters in the root: `joint_x` sets a joint, `move_x` a Move of occurrences and
+    `body_x` a Move of bodies. The first two may move Pipe against the box, so PipeHole may follow them."""
+    capture = copy.deepcopy(CAPTURE)
+    for name, kind, feature in (("joint_x", "joint", "Slider1"), ("move_x", "feature", "Move1"),
+                                ("body_x", "feature", "Move2")):
+        capture["parameters"]["user"].append(dict(copy.deepcopy(USER[-1]), name=name, dependents=[
+            {"name": "d_" + name, "kind": kind, "component": "cmp_root", "feature": feature}]))
+    for index, name, inputs in ((6, "Move1", "occurrences"), (7, "Move2", "bodies")):
+        capture["items"].append({"index": index, "type": "MoveFeature", "name": name, "component": "cmp_root",
+                                 "in_target_component": False, "target_changed": False, "bodies_before": [],
+                                 "bodies_after": [], "data": {"input_kind": inputs}})
+    return capture
+
+
+class PlacedComponentTest(unittest.TestCase):
+    def setUp(self):
+        self.capture = placed_by_the_assembly()
+        self.links = geometry_links.reach(self.capture)
+        self.names = [p["name"] for p in self.capture["parameters"]["user"]]
+
+    def test_a_size_that_places_an_occurrence_reaches_every_sketch_tied_to_another_component(self):
+        found = {(link["param"], link["sketch"], link["via"]) for link in self.links}
+        self.assertIn(("joint_x", "PipeHole", "assembly"), found)
+        self.assertIn(("move_x", "PipeHole", "assembly"), found)
+        self.assertNotIn("body_x", {link["param"] for link in self.links})
+
+    def test_the_recipe_marks_such_a_size_when_no_try_set_it(self):
+        result = run(self.capture, motion_of(NAME), self.names)
+        self.assertTrue(dropped(result)["move_x"]["used"])
+
+    def test_the_recipe_marks_such_a_size_without_a_motion_file(self):
+        self.assertTrue(dropped(run(self.capture, None, self.names))["move_x"]["used"])
+
+    def test_the_orca_copy_marks_such_a_size(self):
+        table = size_table.build(self.capture["parameters"]["user"], self.names, self.capture["parameters"]["model"],
+                                 links=self.links)
+        outcomes = {p["name"]: p["outcome"] for p in orca_translate.translate(self.capture, table).parameters}
+        self.assertNotEqual(outcomes["move_x"], "unused")
+        self.assertEqual(outcomes["body_x"], "unused")
 
 
 class LinkOutcomeTest(unittest.TestCase):

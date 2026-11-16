@@ -12,6 +12,9 @@ from tests.probe_helpers import user
 
 from lib import orca_translate, translator
 from lib.design_model import refs
+from lib.design_model.reach import probed_sizes
+from lib.export_plan.size_offers import offers, table_for_body
+from lib.params import geometry_links
 from lib.sketch_values.motion import Affine, Motion
 
 ROD = {"token": "cRod", "name": "Rod"}
@@ -131,6 +134,42 @@ class OutputsTest(unittest.TestCase):
         self.assertIn("move_x", marks)
         self.assertNotIn("gap_mm", marks)
         self.assertFalse(any(d.get("tried") for d in result.dropped if d["name"] == "move_x"))
+
+
+def mirror_placed_by_the_assembly():
+    """`component_foreign_mirror` (a mirror across a plane of Cover) with `move_x` on a Move of occurrences and
+    `body_x` on a Move of bodies, both in the root."""
+    capture = fixture("component_foreign_mirror")
+    capture["parameters"]["user"] += [acting("move_x", kind="feature", component="cRoot", feature="Move1"),
+                                      acting("body_x", kind="feature", component="cRoot", feature="Move2")]
+    for at, (name, inputs) in enumerate((("Move1", "other"), ("Move2", "bodies")), start=5):
+        capture["items"].append(dict(move(name, "cRoot", inputs), index=at, in_target_component=False,
+                                     target_changed=False, bodies_before=[], bodies_after=[]))
+    return capture
+
+
+class AssemblyReferenceLinkTest(unittest.TestCase):
+    def setUp(self):
+        self.capture = mirror_placed_by_the_assembly()
+
+    def links(self):
+        return {(link["param"], link["via"]) for link in geometry_links.reference_links(self.capture)}
+
+    def test_a_size_that_places_an_occurrence_links_to_a_place_of_another_component(self):
+        self.assertEqual(self.links(), {("gap_mm", "reference"), ("move_x", "assembly")})
+
+    def test_a_place_of_the_part_own_component_gets_no_assembly_link(self):
+        ref = self.capture["items"][4]["data"]["plane"]["ref"]
+        ref["component"] = {"token": "cmp_tray", "name": "Tray"}
+        self.assertNotIn(("move_x", "assembly"), self.links())
+
+    def test_the_dialog_offers_it_as_linked_and_the_probe_tries_it(self):
+        users = self.capture["parameters"]["user"]
+        table = table_for_body(users, "mm", self.capture["parameters"]["model"], self.capture)
+        rows = {o["param"]: o for o in offers(table, users)}
+        self.assertTrue(rows["move_x"]["link"])
+        self.assertIn("move_x", table.ticked)
+        self.assertIn("move_x", probed_sizes(table))
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ from tests.orca_cuts import ELL, TRAPEZOID, WINDOW, Section, Shape
 
 from lib.design_model.design import as_read
 from lib.orca_recipe.enums import BooleanMode, FaceGroup, FeatureType
-from lib.orca_translate import VARIABLE, causes, corner_hosts, corner_tools, finishes, steps, translate
+from lib.orca_translate import VARIABLE, causes, corner_hosts, corner_tools, finishes, limits, steps, translate
 from lib.orca_translate.context import Context
 from lib.orca_translate.place import Placement
 from lib.orca_translate.skip import Skip
@@ -302,6 +302,7 @@ class LeftOutTest(unittest.TestCase):
         result = run(corners.rounded_outline(ELL, corners.ELL_STEPS))
         (limit,) = [w for p in result.parameters if p["name"] == "wall" for w in p["follows"] if hasattr(w, "low")]
         self.assertAlmostEqual(limit.low, 3.0, places=2)
+        self.assertEqual(limit.why[0], limits.CORNER_MEETS)
 
 
 class RollbackTest(unittest.TestCase):

@@ -252,6 +252,7 @@ class LimitTest(unittest.TestCase):
                 param = outcome(run(sketched_up(lift, z)), "lift_mm")
                 self.assertEqual(param["outcome"], VARIABLE)
                 self.assertEqual((limit_of(param).low, limit_of(param).high), (z, None))
+                self.assertEqual(limit_of(param).why, (limits.END_PASSES_START, None))
 
     def test_a_to_length_no_variable_takes_to_zero_tells_nothing(self):
         param = outcome(run(ex.to_offset_plane(lift=15.0)), "lift_mm")
@@ -263,6 +264,7 @@ class LimitTest(unittest.TestCase):
                 param = outcome(run(ex.tapered_rod(deg=-10.0, down=down)), "draft_deg")
                 # A radius of 10 over a length of 10 closes at 45 degrees in (less the 0.05 mm kept).
                 self.assertAlmostEqual(limit_of(param).low, -math.degrees(math.atan(9.95 / 10.0)), delta=0.1)
+                self.assertEqual(limit_of(param).why[0], limits.TAPER_CLOSES)
 
     def test_only_a_limit_orca_stops_on_may_be_left_untold_for_being_far(self):
         for near, high in ((True, None), (False, 60.0)):
@@ -290,6 +292,19 @@ class LimitTest(unittest.TestCase):
         self.assertNotIn("distance", named(result, "Cap").expr)
         self.assertAlmostEqual(named(result, "Cap").distance, 15.0)
         self.assertEqual(outcome(result, "h")["outcome"], PARTLY)
+
+    def test_each_limit_keeps_the_cause_of_the_first_value_past_it(self):
+        sketch = CadFeature(name="Box sketch")
+        sketch.expr["width"] = "w - 5"  # the shape reaches zero at w = 5
+        found = limits.ranges(_Context({"w": "10"}), [(sketch, "width")],
+                              lambda numbers: limits.stop(numbers[0] < 15.0, limits.CUTS_DIFFER))
+        self.assertEqual(found["w"].why, (limits.SHAPE_ZERO, limits.CUTS_DIFFER))
+        unsaid = limits.ranges(_Context({"w": "10"}), [(sketch, "width")], lambda numbers: numbers[0] < 15.0)
+        self.assertEqual(unsaid["w"].why, (limits.SHAPE_ZERO, None))
+        told = limits.words("w", 5.0, 20.0, 10.0, " mm", False, why=found["w"].why)
+        self.assertEqual(told.why, (limits.SHAPE_ZERO, limits.CUTS_DIFFER))
+        self.assertEqual(limits.words("w", None, 20.0, 10.0, " mm", False, why=found["w"].why).why,
+                         (None, limits.CUTS_DIFFER))
 
     def test_a_field_whose_limit_cannot_be_told_keeps_its_number(self):
         extrude = CadFeature(name="Post")

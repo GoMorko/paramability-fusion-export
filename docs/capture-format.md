@@ -256,7 +256,10 @@ target through a link (`reach`), in this order:
 2. `via: "body"`: when the link's `bodies` name a body that items before the target's sketch made or changed
    (`bodies_after`), one of those items is one it drives; when such items exist and it drives none of them, it has
    no link through that component;
-3. `via: "component"`: otherwise, when the link's component is one it acts on.
+3. `via: "component"`: otherwise, when the link's component is one it acts on;
+4. `via: "assembly"`: otherwise, when it acts on an item that may place an occurrence (`places_occurrence`: a
+   dependent of kind `joint`, an assembly item of the timeline, or a Move whose `input_kind` is not `bodies` or
+   `faces`). The capture does not say which occurrence the item places, so every link to another component counts.
 
 Tokens are compared, names only when a token is missing. The export works with the sketches the picked body's own
 steps use (`body_scope.body_links`), and the translator, given a size table without links, takes them from the whole
@@ -267,8 +270,11 @@ probe decides.
 
 A step can also use a plane, axis, direction or point of another component directly (measured references, "Measured
 references", section 4). A user parameter that acts on the component that owns such a reference gets a link `{ "param", "sketch": "", "component", "via": "reference", "step", "ref" }` once per
-component (`reference_links`; `step` is the step's name, `ref` the key of the first reference). It is offered, ticked
-to start with and probed like a sketch link; the offer text says which step uses which component.
+component (`reference_links`; `step` is the step's name, `ref` the key of the first reference). A user parameter that
+may place an occurrence (`places_occurrence`) gets the same link with `via: "assembly"` for every component whose
+reference moves with its occurrence: not a reference of the target's own component, and not one marked `own`. It is
+offered, ticked to start with and probed like a sketch link; the offer text says which step uses which component,
+and for `assembly` that the parameter may move that component in the assembly.
 
 When a sketch of the body is tied to another component (a link, or only `unknown` references), or a step of the body
 uses a reference of another component, the user parameters that act on a component other than the target's
@@ -2151,8 +2157,8 @@ nothing is known. For one
 reference and one size acting on its component, `sketch_values.coverage.ref_answer` gives the same three answers as for
 sketches: `STILL`, `MOVED` (with the keys) or `NOT_MEASURED` (with the reason, or `NOT_TRIED` for a size left without
 rows or set by no state, `NOT_LOOKED` for a key not in `refs`). A size of a joint or of a move that places an
-occurrence may move every reference of another component (`design_model.refs.acting_sizes`), but the probe tries it
-only on a guess, while rows are left. When no state set it, the answer is `NOT_TRIED`, and the step marks the size.
+occurrence may move every reference of another component (`design_model.refs.acting_sizes`). When no state set it
+(the row limit, a time limit, or a probe of an older add-in), the answer is `NOT_TRIED`, and the step marks the size.
 
 ### Probe states (`lib/fusion_reader/probe_state.py`)
 
