@@ -949,8 +949,12 @@ The translator (`lib/translator/finishes/draft.py`) writes the recipe's `draft` 
 plane as `neutral` (its normal is the pull direction) and the angle as a size; the size ranges are cut where the
 angle would reach 30 degrees, and two angles from different formulas stay a number with their sizes marked. Fusion's sign and flip are not
 documented, so the sign is read from the part: with every face on one side of the plane, a draft that removes
-material takes it off there (a positive recipe angle on the side the normal points to). A draft with faces on both
-sides of its plane, two different angles, an angle of 30 degrees or more, or no measured change of volume is left out.
+material takes it off there (a positive recipe angle on the side the normal points to). A Symmetric draft with faces
+on both sides of its plane leans both sides away from the plane (or both toward it) by the same angle, so the sign
+comes from the change of volume alone and the step carries the angle twice: `angleDeg` and `angleTwoDeg` (recipe
+version 17). A draft with faces on both sides of its plane that is not Symmetric, a Two Sides draft with two different
+angles (the API does not say which angle belongs to the side the pull direction points to) or with faces on both
+sides, an angle of 30 degrees or more, or no measured change of volume is left out.
 
 **RectangularPatternFeature** (`patternEntityType`, `inputEntities`, `directionOne`, `directionTwo`,
 `directionOneEntity`, `directionTwoEntity`, `quantityOne`, `quantityTwo`, `distanceOne`, `distanceTwo`,
@@ -1885,7 +1889,7 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   count that can pass its limit inside the size ranges (`range_check.sweep`) marks the sizes it reads.
 - The recipe is version 12, or the lowest version that holds its steps and selectors (13 with an `offsetFaces` step, 14
   with a `chain` or `faceEdges` pick, 15 with a tool step, a `move` step, or a pattern whose copy count passes 64: a
-  polar count or the two linear counts together, at the current values or anywhere in the size ranges; 16 with a `sweep` step that has `twistDeg`, `taperDeg`, `orientation` or a path with `closed`: `SWEEP_VERSIONS` and `SWEEP_PATH_VERSIONS` in `translator/translate.py`). With a size table it carries `sizesAsWritten: true` and `sizes`: the sizes that a written
+  polar count or the two linear counts together, at the current values or anywhere in the size ranges; 16 with a `sweep` step that has `twistDeg`, `taperDeg`, `orientation` or a path with `closed`: `SWEEP_VERSIONS` and `SWEEP_PATH_VERSIONS` in `translator/translate.py`; 17 with a `draft` step that has `angleTwoDeg`: `DRAFT_VERSIONS`). With a size table it carries `sizesAsWritten: true` and `sizes`: the sizes that a written
   formula reads, plus the sizes those formulas read. A ticked size that nothing reads is left out (see `dropped`).
   Without a table the recipe has no `sizes`, and no marker.
 

@@ -3150,24 +3150,37 @@ looks at those bodies and not at every body of the component (`_writes_flat`).
 ### 3.7 How a draft is translated
 
 `draft.handle` (`lib/translator/finishes/draft.py`) writes a recipe `draft` step: the faces (picked by points), the neutral plane
-and one angle.
+and one angle. A Symmetric draft with faces on both sides of the plane also writes a second angle, `angleTwoDeg`.
 
 The difficulty: Fusion's API does not say which way its angle and its flip lean a face. So the copy reads it from the
 part:
 
-1. Every drafted face must lie on one side of the neutral plane. Else the draft is left out ("This draft leans faces
-   on both sides of its plane, so the way it leans cannot be checked.").
+1. Every drafted face must lie on one side of the neutral plane, or the draft must be Symmetric (see step 5). Else the
+   draft is left out ("This draft leans faces on both sides of its plane, so the way it leans cannot be checked.").
 2. The volume must change. A draft that takes material off leans the faces in on that side. One that adds material
    leans them out. So the sign of the recipe angle comes from `volume_after < volume_before` and the side.
-3. The angle must be under 30 degrees (`MAX_ANGLE_DEG`, the app's cap). Two different angles are left out. Two angles
-   from the same formula are fine.
+3. The angle must be under 30 degrees (`MAX_ANGLE_DEG`, the app's cap). Two angles from the same formula are fine.
 4. The angle follows its parameter. Its range is cut to stay above zero and under 30 degrees, so the default range of
    a 3 degree draft becomes about 0.01 to 29.98.
-5. The neutral plane follows sizes like a mirror plane.
+5. A Symmetric draft with faces on both sides of the plane leans the part of each face on the pull side and the part
+   on the other side by the same angle, away from the plane or both toward it. So both parts take material off, or
+   both add it, and the sign comes from the volume change alone, with no side. The recipe step gets `angleDeg` and
+   `angleTwoDeg` with the same value and the same sign. Both follow the same size. This is the only step that needs
+   recipe version 17 (`DRAFT_VERSIONS` in `translate.py`). A Symmetric draft with all faces on one side stays a step
+   with one angle, so it needs no new version.
+6. A Two Sides draft with two different angles is left out ("This draft gives each side of its plane its own angle,
+   and the copy cannot tell which angle leans which side."). Fusion says only "the first side" and "the second side"
+   of the plane, not which one is the side the pull direction points to. One volume cannot tell it. The copy does not
+   guess, because a wrong guess is a wrong part. A Two Sides draft with two equal angles and faces on one side stays as
+   it was: the volume gives the sign. With faces on both sides it is left out, since Fusion does not say that two equal
+   angles lean like a Symmetric draft.
+7. The neutral plane follows sizes like a mirror plane.
 
 Example: two side walls of a 40 by 20 by 10 block are drafted by `Taper = 3` degrees about the bottom plane. The
 volume goes from 8000 to 7900 mm3. The walls lie above the plane, so the copy leans them in: `angleDeg: { "expr":
-"Taper" }`.
+"Taper" }`. With a Symmetric draft about a plane at half height, the walls lie on both sides of the plane. The volume
+goes from 8000 to 7900 mm3, so both sides take material off: `angleDeg` and `angleTwoDeg` are both `{ "expr": "Taper" }`
+and the recipe is version 17.
 
 ### 3.8 How a sweep is translated
 
@@ -3279,7 +3292,7 @@ A step becomes a gap (left out, recipe still written):
 - it is a modelled thread or a coil that the copy cannot hold (a profile that is not a 60 degree form, a taper, a spiral,
   a cap that is passed, a step in a tool body: see 3.12 and 3.13);
 - its handler answers a `Refusal` (an extrude with a taper on a face, a revolve axis it cannot use, a draft with two
-  angles);
+  different angles);
 - it reaches into another component in a way the copy cannot follow (`foreign` records). An export from before 0.10.6
   marked the part's own sketches and planes, when seen through an occurrence, as records of another component. A step
   whose only such records are sketch outlines, planes or axes with none of the place data of the current reader is left
