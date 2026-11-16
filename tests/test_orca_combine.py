@@ -114,6 +114,20 @@ class CombineTest(unittest.TestCase):
         self.assertEqual(len(result.recipe.features), 2)
         self.assertEqual(verdict_of(result, 3)["verdict"], "skipped")
 
+    def test_a_step_of_a_tool_that_cannot_be_copied_is_named_with_the_tool(self):
+        def edit(capture):
+            cut = copy.deepcopy(capture["items"][3])
+            cut.update(index=4, name="Cut3")
+            cut["data"].update(operation="cut", participants=[{"token": "t2", "name": "Body2"}],
+                               target_box_before={"min": [15, 5, -2], "max": [25, 15, 12]})
+            cut["data"]["profiles"][0]["loops"][0]["curves"][0]["center"] = [100, 100]
+            capture["items"][4]["index"] = 5
+            capture["items"].insert(4, cut)
+        (gap,) = run("combine_join", edit).left_out
+        self.assertEqual((gap["name"], gap["cause"]), ("Combine1", causes.MISSES_PART))
+        # The reason of the cut names the tool body it misses, not the exported part.
+        self.assertIn("meet the tool body Body2", gap["reason"])
+
     def test_a_second_tool_that_cannot_be_copied_undoes_the_first(self):
         def edit(capture):
             capture["items"][-1]["data"]["intersect_model"] = "every"

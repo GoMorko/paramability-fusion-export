@@ -61,9 +61,9 @@ def _refusal(data):
     """A Skip for a loft setting the copy does not follow, else None."""
     operation = data.get("operation")
     if operation == "newComponent":
-        return Skip("This loft makes a new component, which is not copied yet.", gap_hints.NEW_COMPONENT)
+        return Skip("This loft makes a new component, which is not copied.", gap_hints.NEW_COMPONENT)
     if operation not in _SOLID_MODES:
-        return Skip("This kind of loft is not copied yet.")
+        return Skip("This kind of loft is not copied.")
     if data.get("solid") is False:
         return Skip(shared.LOFT_SURFACE, gap_hints.SURFACE)
     flags = (data.get("solid"), data.get("closed"), data.get("rails"), data.get("sections"), data.get("profiles"))
@@ -97,7 +97,7 @@ def _profile_problem(profile):
     if profile.get("text"):
         return "Sketch text is not copied to Orca yet."
     if profile.get("foreign"):
-        return "This loft uses a sketch of another component, which is not copied yet."
+        return "This loft uses a sketch of another component, which is not copied."
     if profile.get("space") not in (None, "sketch", "model") or not isinstance(profile.get("frame"), dict) \
             or outlines_of(profile) is None:
         return "An outline of this loft could not be read."

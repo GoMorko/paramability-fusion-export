@@ -247,13 +247,39 @@ def _side_leans(feature, z):
     return leans or None
 
 
-def extrude_after(feature, ctx, data):
-    """end_offset: signed distance from the first profile's sketch plane to a point on the first end face.
+def _face_normal(face):
+    """The unit normal of a face at `pointOnFace` (`SurfaceEvaluator.getNormalAtPoint`), or None when it cannot be
+    read."""
+    found = geo.safe(lambda: face.evaluator.getNormalAtPoint(face.pointOnFace), None)
+    if not isinstance(found, (tuple, list)) or len(found) != 2 or not found[0] or found[1] is None:
+        return None
+    return geo.safe(lambda: geo.unit_vector(found[1]), None)
 
-    end_area: the area of that face in mm2 (with profile_area, it shows which way a taper goes). side_leans: how
-    far each side face leans along the first profile's sketch normal (the taper check for several outlines).
-    volume_after: for an extrude of text or spline outlines, the volume that was measured before the item is
-    compared with (the target's, or the new bodies' summed for a new body).
+
+def _end_face(faces, z):
+    """The face of `endFaces` to measure, with its normal: the first one whose normal is parallel to the sketch
+    normal `z` (an end cap), else the first one. Fusion can list a face that is not a cap first, such as a wall a cut
+    made where it went through a rib."""
+    normals = [_face_normal(face) for face in faces[:MAX_SIDE_FACES]]
+    for face, normal in zip(faces, normals):
+        if normal is not None and z is not None and abs(abs(vec.dot(normal, z)) - 1.0) <= _PARALLEL_TOL:
+            return face, normal
+    return faces[0], normals[0] if normals else None
+
+
+# A face normal this close to the sketch normal (1 - |cos|) is parallel to it.
+_PARALLEL_TOL = 1e-6
+
+
+def extrude_after(feature, ctx, data):
+    """end_offset: signed distance from the first profile's sketch plane to a point on the end face (`_end_face`: the
+    first face of `endFaces` parallel to the sketch plane, else the first one).
+
+    end_area: the area of that face in mm2 (with profile_area, it shows which way a taper goes), and end_normal its
+    unit normal at that point (null when it cannot be read). side_leans: how far each side face leans along the first
+    profile's sketch normal (the taper check for several outlines). volume_after: for an extrude of text or spline
+    outlines, the volume that was measured before the item is compared with (the target's, or the new bodies' summed
+    for a new body).
     """
     faces = geo.collection_items(geo.safe(lambda: feature.endFaces, None))
     profiles = data.get("profiles") or []
@@ -268,10 +294,12 @@ def extrude_after(feature, ctx, data):
             out["side_leans"] = leans
     if not faces:
         return out
-    out["end_area"] = geo.safe(lambda: round(faces[0].area * 100.0, 6) + 0.0, None)
+    face, normal = _end_face(faces, vec.unit(frame["z"]) if frame is not None else None)
+    out["end_area"] = geo.safe(lambda: round(face.area * 100.0, 6) + 0.0, None)
+    out["end_normal"] = normal
     if frame is None:
         return out
-    p = geo.safe(lambda: geo.point(faces[0].pointOnFace), None)
+    p = geo.safe(lambda: geo.point(face.pointOnFace), None)
     if p is None:
         return out
     offset = vec.dot([a - b for a, b in zip(p, frame["origin"])], frame["z"])

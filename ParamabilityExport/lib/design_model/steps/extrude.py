@@ -21,7 +21,7 @@ The direction of a side (`sign`, +1 along the sketch normal):
   the stored ones (the end face of a two sided extrude can lie on either side).
 
 The checks against what Fusion measured are facts too: where the measured end face lies against the lengths
-(`end_check`), whether the side walls and the end face show the taper (`taper_problem`), and whether the volume of an
+(`end_check`, and `passes_box` for a face nearer than its side's end), whether the side walls and the end face show the taper (`taper_problem`), and whether the volume of an
 extrude of text or free curves agrees with its outlines (`volume_problem`). A `Problem` (`design_model/problem.py`)
 says why the extrude cannot be read or placed, in one plain sentence, with its `code` below. Each destination decides what it copies from these facts.
 Pure: it reads capture dicts only.
@@ -32,6 +32,7 @@ from typing import Optional
 
 from ...capture_model import gap_hints
 from ...geometry import vec
+from ...geometry.combine_volume import profile_area
 from ..problem import Problem
 from ..values import Quantity
 from .. import words
@@ -50,6 +51,14 @@ LEAN_TOL = 1e-4
 AREA_RELATIVE_TOL = 1e-6
 VOLUME_RELATIVE_TOL = 0.01
 VOLUME_ABSOLUTE_TOL = 1e-3
+# A measured end face is an end cap when its area is an outline's area within this share plus this many mm2
+# (`end_is_cap`). Fusion's face area and the area of the captured outline agree far closer; a face the extrude made
+# that is not a cap (a wall it cut, a cap merged with a face of the part or partly in air) misses by more.
+CAP_RELATIVE_TOL = 1e-3
+CAP_ABSOLUTE_TOL = 1e-3
+# A recorded end face normal is parallel to the sketch normal when the sine between them is at most this (the reader
+# rounds unit vectors).
+CAP_NORMAL_TOL = 1e-6
 
 # Problem codes.
 UNREADABLE = "unreadable"
@@ -70,6 +79,7 @@ TAPER_WAY_UNMEASURED = "taperWayUnmeasured"
 TAPER_NO_CHANGE = "taperNoChange"
 VOLUME_UNMEASURED = "volumeUnmeasured"
 VOLUME_DIFFERS = "volumeDiffers"
+WAY_UNSURE = "wayUnsure"
 
 _THROUGH_KINDS = ("throughAll", "all")
 # What a face or plane is to the extrude, by the capture field that holds it.
@@ -95,6 +105,7 @@ _WORDS = {
     TAPER_NO_CHANGE: (words.TAPER_NO_CHANGE, None),
     VOLUME_UNMEASURED: (words.VOLUME_UNMEASURED, None),
     VOLUME_DIFFERS: (words.VOLUME_DIFFERS, None),
+    WAY_UNSURE: (words.EXTRUDE_WAY_UNSURE, None),
 }
 
 
@@ -335,16 +346,66 @@ def _two_ways(first, second):
     return found
 
 
+def _number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _tapered(data):
+    """True when a side of the extrude may be tapered (a taper angle that is not zero or cannot be read)."""
+    for slot in ("side_one", "side_two", "symmetric"):
+        side = data.get(slot)
+        if isinstance(side, dict) and "taper_deg" in side and side["taper_deg"] != 0:
+            return True
+    return any(path.endswith(".taper_deg") and (not isinstance(held, dict) or held.get("value"))
+               for path, held in (data.get("params") or {}).items())
+
+
+def end_is_cap(data, z):
+    """Whether the measured end face (`endFaces[0]`, `end_offset`) is an end cap of the extrude: True, False, or None
+    when the capture cannot tell.
+
+    Fusion can list a face that is not a cap first, such as a wall that a cut made where it went through a rib of the
+    part. Such a face lies anywhere on the extrude's way and tells nothing about its length or direction. A face whose
+    normal the reader recorded (`end_normal`) is a cap when that normal is parallel to the unit sketch normal `z`.
+    Without it, the face is a cap when its area (`end_area`) is the area of an outline, or of all outlines together,
+    within `CAP_RELATIVE_TOL` and `CAP_ABSOLUTE_TOL`. A tapered or thin extrude has caps of other areas, and an outline
+    whose area cannot be worked out (text, free curves) gives no area to compare: both are None."""
+    normal = data.get("end_normal")
+    if isinstance(normal, list) and len(normal) == 3 and all(_number(n) for n in normal) and vec.length(normal) > 0:
+        return vec.length(vec.cross(vec.unit(normal), z)) <= CAP_NORMAL_TOL
+    end = data.get("end_area")
+    if not _number(end) or data.get("thin") or _tapered(data):
+        return None
+    profiles = data.get("profiles") or []
+    listed = data.get("areas") if isinstance(data.get("areas"), list) else []
+    areas = []
+    for n, profile in enumerate(profiles):
+        area = profile_area(profile) if isinstance(profile, dict) else None
+        if area is None and n < len(listed) and _number(listed[n]):
+            area = float(listed[n])
+        if area is None and n == 0 and _number(data.get("profile_area")):
+            area = float(data["profile_area"])
+        if area is None or area <= 0:
+            return None
+        areas.append(area)
+    if not areas:
+        return None
+    candidates = areas + ([sum(areas)] if len(areas) > 1 else [])
+    return any(abs(end - area) <= CAP_RELATIVE_TOL * area + CAP_ABSOLUTE_TOL for area in candidates)
+
+
 def read_sides(data, frame, shift=0.0):
     """The sides of the extrude in `data` as `SidePlan`s, or a Problem. `frame` is the sketch frame of its first
     outline and `shift` (mm) where it starts along the sketch normal from that sketch plane (`Start.shift`)."""
     extent = data.get("extent_type", "one")
     if extent not in ("one", "two", "symmetric"):
         return problem(EXTENT_KIND)
-    measured = data.get("end_offset")
-    if measured is not None:
-        measured = measured - shift
     z = vec.unit(frame["z"])
+    measured = data.get("end_offset")
+    # A face that is not an end cap is no measure: the stored direction and length stand (`end_is_cap`).
+    not_cap = measured is not None and end_is_cap(data, z) is False
+    if measured is not None:
+        measured = None if not_cap else measured - shift
     origin = vec.add(frame["origin"], vec.scale(z, shift))
 
     if extent == "symmetric":
@@ -401,6 +462,11 @@ def read_sides(data, frame, shift=0.0):
     plan = _side(data, side, "side_one", origin, z, measured)
     if isinstance(plan, Problem):
         return plan
+    if not_cap and not plan.fixed and abs(data["end_offset"] - shift) > LENGTH_TOL and (
+            plan.stored is None or sign_of(data["end_offset"] - shift) != plan.stored):
+        # Fusion can store the direction of one side two ways, and the measured end face would decide it, but that
+        # face is not an end cap: the direction is not known for sure.
+        return problem(WAY_UNSURE, "side_one")
     sign = _one_way(plan)
     if sign is None:
         return problem(UNREADABLE, "side_one")
@@ -450,6 +516,21 @@ def end_check(sides):
     if -LENGTH_TOL <= at < length:
         return EndCheck(SHORT, side, sign, at, length)
     return EndCheck(ELSEWHERE, side, sign, at, length)
+
+
+def passes_box(box, start, z, way, length):
+    """True when a side `length` (mm) long from `start` along the unit sketch normal `z` (against it for a negative
+    `way`) ends past every corner of `box` (`{"min", "max"}`); False without a box.
+
+    A side of a cut that ends past the part makes no end face of its own: the measured end face on that side is then a
+    wall the cut went through, nearer than the side's end (SHORT in `end_check`). The measured face tells nothing about
+    a side on the other side of the sketch, so only the side that the face lies on (`EndCheck.side`, `way` and
+    `length`) can excuse a SHORT face."""
+    if not box:
+        return False
+    lo, hi = box["min"], box["max"]
+    corners = [[x, y, c] for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for c in (lo[2], hi[2])]
+    return length > max(way * vec.dot(vec.sub(corner, start), z) for corner in corners) + LENGTH_TOL
 
 
 def _expected_leans(sides, operation):

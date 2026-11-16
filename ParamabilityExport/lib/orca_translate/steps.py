@@ -108,23 +108,13 @@ def _holds(ctx, data, frame, shift, sign, taper):
     box = data.get("target_box_before")
 
     def holds(low, high):
-        if _past(box, origin, frame["z"], sign, high if sign > 0 else -low):
+        if dm.passes_box(box, origin, vec.unit(frame["z"]), sign, high if sign > 0 else -low):
             return False
         if tools is None or ctx.left_out:
             return True
         return any(ctx.solid.meets(t, sure=False) for t in tools(low, high))
 
     return holds
-
-
-def _past(box, origin, normal, sign, length):
-    """True when `length` along `normal` (against it for a negative `sign`) from `origin` lies past every corner of
-    `box`."""
-    if not box:
-        return False
-    lo, hi = box["min"], box["max"]
-    corners = [[x, y, z] for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])]
-    return length > max(sign * vec.dot(vec.sub(c, origin), vec.unit(normal)) for c in corners) + SIDE_TOL
 
 
 def _length(ctx, item, side, z):
@@ -137,10 +127,12 @@ def _length(ctx, item, side, z):
 def _end_gap(ctx, data, frame, shift, read, operation):
     """A Skip when the measured end face is not where the sides put it (`dm.end_check`), else None.
 
-    A side of a cut that leaves the part before its end makes no end face of its own: the face Fusion measures is then
-    a wall the cut went through, nearer than the end. A nearer face is accepted where the cut leaves the part:
-    `holds(low, high)` (`_holds`) must find no material inside the cut's outlines past the face on its side, or (for
-    two sides) a side must end past the whole Fusion part. A face at no side's end, or past it, is not accepted."""
+    A side of a cut that leaves the part before its end makes no end face of its own: the face Fusion measures on that
+    side is then a wall the cut went through, nearer than the side's end. Such a face is accepted only when the side it
+    lies on leaves the part before its end: `holds(low, high)` (`_holds`) finds no material inside the cut's outlines
+    past the face on that side, because the side ends past the whole Fusion part (`dm.passes_box`) or the part the
+    copy built has none there. The other side of a two sided cut does not excuse the face. A face at no side's end, or
+    past it, is not accepted."""
     found = dm.end_check(read)
     if found is None or found.fact == dm.AT_END:
         return None
@@ -148,11 +140,6 @@ def _end_gap(ctx, data, frame, shift, read, operation):
         near = max(0.0, found.at) + SIDE_TOL
         holds = _holds(ctx, data, frame, shift, found.way, found.side.taper)
         if not holds(*((near, found.length) if found.way > 0 else (-found.length, -near))):
-            return None
-        origin = vec.add(frame["origin"], vec.scale(vec.unit(frame["z"]), shift))
-        box = data.get("target_box_before")
-        if len(read) == 2 and any(_past(box, origin, frame["z"], side.sign, side.length.n)
-                                  for side in read if side.length is not None):
             return None
     return Skip(shared.END_DIFFERS)
 
@@ -176,11 +163,11 @@ def _sides(ctx, item, data, frame, shift):
     if operation not in ("cut", "intersect") and (through(one) or (kind == "two" and through(two))):
         return Skip(_THROUGH_ADDS, causes.THROUGH_ALL_ADDS)
     if kind == "two" and one and two and not (through(one) and through(two)) and shift:
-        return Skip("A two sided extrude that starts away from its sketch is not copied yet.")
+        return Skip("A two sided extrude that starts away from its sketch is not copied.")
 
     read = dm.read_sides(data, frame, shift)
     if is_problem(read):
-        return Skip.of(read)
+        return extents.reader_skip(read, item)
     first = read[0]
     if first.kind == dm.THROUGH_BOTH:
         if any(side.taper for side in read):
@@ -290,9 +277,9 @@ def _shape(side, role, frame, piece):
 def misses_reason(ctx, what):
     """(reason, cause) for a tool that does not meet the part the copy built."""
     gap = bool(ctx.left_out)
-    return ("This %s does not meet the part as the Orca copy builds it%s, and Orca stops the whole rebuild on a %s "
+    return ("This %s does not meet %s as the Orca copy builds it%s, and Orca stops the whole rebuild on a %s "
             "that removes nothing, so it is left out." % (
-                what, " (a step before it is left out)" if gap else "", what),
+                what, ctx.body_words, " (a step before it is left out)" if gap else "", what),
             gap_hints.AFTER_GAP if gap else causes.MISSES_PART)
 
 
@@ -307,7 +294,7 @@ def _profile_check(profile):
     if profile.get("text"):
         return "Sketch text is not copied to Orca yet."
     if profile.get("foreign"):
-        return "This extrude uses a sketch of another component, which is not copied yet."
+        return "This extrude uses a sketch of another component, which is not copied."
     if profile.get("space") not in (None, "sketch", "model") or not isinstance(profile.get("frame"), dict):
         return "The outline of this extrude could not be read."
     return None
@@ -339,7 +326,7 @@ def extrude(ctx, item):
     data = _data(item)
     operation = data.get("operation")
     if operation == "newComponent":
-        return Skip("This extrude makes a new component, which is not copied yet.", gap_hints.NEW_COMPONENT)
+        return Skip("This extrude makes a new component, which is not copied.", gap_hints.NEW_COMPONENT)
     if data.get("thin") is None and "thin" in data:
         return Skip(shared.EXTRUDE_UNREADABLE)
     if data.get("thin"):
@@ -352,7 +339,7 @@ def extrude(ctx, item):
         if problem:
             return Skip(problem)
     if operation not in ("newBody", "join", "cut", "intersect"):
-        return Skip("This kind of extrude is not copied yet.")
+        return Skip("This kind of extrude is not copied.")
     if not ctx.has_body and operation in ("cut", "intersect"):
         return Skip("The part this %s works on is not in the copy." % ("cut" if operation == "cut" else "intersect"),
                     gap_hints.AFTER_GAP)

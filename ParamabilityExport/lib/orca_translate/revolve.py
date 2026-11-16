@@ -40,7 +40,7 @@ def _profile_problem(profile):
     if profile.get("text"):
         return "Sketch text is not copied to Orca yet."
     if profile.get("foreign"):
-        return "This revolve uses a sketch of another component, which is not copied yet."
+        return "This revolve uses a sketch of another component, which is not copied."
     if profile.get("space") not in (None, "sketch", "model") or not isinstance(profile.get("frame"), dict):
         return "The outline of this revolve could not be read."
     return None
@@ -104,9 +104,9 @@ def revolve(ctx, item):
     data = data_of(item)
     operation = data.get("operation")
     if operation == "newComponent":
-        return Skip("This revolve makes a new component, which is not copied yet.", gap_hints.NEW_COMPONENT)
+        return Skip("This revolve makes a new component, which is not copied.", gap_hints.NEW_COMPONENT)
     if operation not in _SOLID_MODES:
-        return Skip("This kind of revolve is not copied yet.")
+        return Skip("This kind of revolve is not copied.")
     if not ctx.has_body and operation in ("cut", "intersect"):
         return Skip("The part this %s works on is not in the copy." % ("cut" if operation == "cut" else "intersect"),
                     gap_hints.AFTER_GAP)

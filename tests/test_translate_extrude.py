@@ -281,15 +281,40 @@ class MeasuredLengthTest(unittest.TestCase):
         ok = variant("extrude_two_sides", lambda d: d.update(end_offset=-4.0))
         self.assertEqual(ok.recipe["features"][0]["sketch"]["on"]["normal"], [0, 0, 1])
 
-    def test_a_nearer_face_of_a_two_sided_cut_needs_a_side_that_passes_the_part(self):
-        def cut(reach):
+    def test_a_nearer_face_is_accepted_only_when_its_own_side_passes_the_part(self):
+        def cut(low, high):
             return lambda d: d.update(extent_type="two", end_offset=-4.0, target_box_before={
-                "min": [-reach, 0.0, 0.0], "max": [reach, 20.0, 10.0]},
+                "min": [low, 0.0, 0.0], "max": [high, 20.0, 10.0]},
                 side_one={"kind": "distance", "distance": 60.0, "taper_deg": 0.0},
                 side_two={"kind": "distance", "distance": 10.0, "taper_deg": 0.0})
-        # Side one passes the part, so a face on side two may be a wall the cut went through.
-        self.assertEqual(len(under_test(variant("extrude_cut_through_one", cut(40.0)), 3)), 2)
-        self.assertIsNotNone(left_out(variant("extrude_cut_through_one", cut(80.0)), 3))
+        # The face 4 behind the sketch lies on side two (10 long). Side one (60 long) passing says nothing about it.
+        for low, high, copied in ((-8.0, 40.0, True), (-40.0, 40.0, False), (-40.0, 80.0, False)):
+            with self.subTest(low=low, high=high):
+                result = variant("extrude_cut_through_one", cut(low, high))
+                if copied:
+                    self.assertEqual(len(under_test(result, 3)), 2)
+                else:
+                    self.assertIsNotNone(left_out(result, 3))
+
+    def test_a_measured_face_that_is_not_an_end_cap_is_no_measure(self):
+        def cut(**face):
+            return lambda d: d.update(extent_type="two", end_offset=-4.0, target_box_before={
+                "min": [-40.0, 0.0, 0.0], "max": [40.0, 20.0, 10.0]},
+                side_one={"kind": "distance", "distance": 60.0, "taper_deg": 0.0},
+                side_two={"kind": "distance", "distance": 10.0, "taper_deg": 0.0}, **face)
+        # A small wall the cut made where it went through a rib: the stored lengths stand.
+        self.assertEqual(len(under_test(variant("extrude_cut_through_one", cut(end_area=0.5)), 3)), 2)
+        self.assertEqual(len(under_test(variant("extrude_cut_through_one", cut(end_normal=[0, 0, 1])), 3)), 2)
+        # A face parallel to the sketch is a cap, and it is nearer than the end of a side inside the part.
+        self.assertIsNotNone(left_out(variant("extrude_cut_through_one", cut(end_normal=[-1, 0, 0])), 3))
+
+    def test_a_nearer_face_of_a_symmetric_cut_is_accepted_when_its_half_passes_the_part(self):
+        def cut(low):
+            return lambda d: d.update(extent_type="symmetric", end_offset=-4.0, side_one=None, target_box_before={
+                "min": [low, 0.0, 0.0], "max": [40.0, 20.0, 10.0]},
+                symmetric={"distance": 10.0, "full_length": False, "taper_deg": 0.0})
+        self.assertEqual(len(under_test(variant("extrude_cut_through_one", cut(-8.0)), 3)), 1)
+        self.assertIsNotNone(left_out(variant("extrude_cut_through_one", cut(-40.0)), 3))
 
     def test_a_two_sided_cut_turns_only_for_a_face_that_the_stored_direction_cannot_reach(self):
         def cut(end):

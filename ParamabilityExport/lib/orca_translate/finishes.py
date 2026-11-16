@@ -189,29 +189,32 @@ def _finish_parts(ctx, item, kind, parts, notes):
 
 def _finish(ctx, item, kind, records, value, notes):
     """The Orca feature that makes `kind` of `value` on the face group the Fusion `records` name, or a Skip."""
+    body_words = ctx.body_words
+    named = body_words[:1].upper() + body_words[1:]
     if not ctx.has_body:
-        return Skip("The part this %s is on is not in the copy." % kind.noun, gap_hints.AFTER_GAP)
+        return Skip("%s this %s is on is not in the copy." % (named, kind.noun), gap_hints.AFTER_GAP)
     earlier = finish_body.earlier(ctx.scope, ctx.features)
     if any(done["group"] is None for done in earlier):
-        return Skip("The part has a thread before this %s, and Orca would also %s the edges of the thread, so it is "
-                    "left out." % (kind.noun, kind.verb), causes.EDGES_CHANGED)
+        return Skip("%s has a thread before this %s, and Orca would also %s the edges of the thread, so it is "
+                    "left out." % (named, kind.noun, kind.verb), causes.EDGES_CHANGED)
     if any(done["pieces"] != len(ctx.solid.pieces) for done in earlier):
-        return Skip("The part changed after an earlier round or chamfer, and the Orca copy cannot tell its edges "
-                    "any more, so this %s is left out." % kind.noun, causes.EDGES_CHANGED)
+        return Skip("%s changed after an earlier round or chamfer, and the Orca copy cannot tell its edges "
+                    "any more, so this %s is left out." % (named, kind.noun), causes.EDGES_CHANGED)
     body = finish_body.body_of(ctx.solid)
     if isinstance(body, str):
-        return Skip("Orca can %s only whole groups of edges, and the Orca copy cannot tell the edges of this part "
-                    "(%s), so this %s is left out." % (kind.verb, body, kind.noun), causes.EDGES_UNKNOWN)
+        return Skip("Orca can %s only whole groups of edges, and the Orca copy cannot tell the edges of %s "
+                    "(%s), so this %s is left out." % (kind.verb, body_words, body, kind.noun), causes.EDGES_UNKNOWN)
     chosen = finish_body.picked(body, records)
     if chosen is None:
         gap = bool(ctx.left_out)
-        return Skip("The edges of this %s are not on the part as the Orca copy builds it%s, so it is left out."
-                    % (kind.noun, " (a step before it is left out)" if gap else ""),
+        return Skip("The edges of this %s are not on %s as the Orca copy builds it%s, so it is left out."
+                    % (kind.noun, body_words, " (a step before it is left out)" if gap else ""),
                     gap_hints.AFTER_GAP if gap else causes.EDGES_NOT_ON_COPY)
     found = finish_body.matching_group(body, ctx.place.direction, chosen)
     if found is None:
-        return Skip("This %s is on hand-picked edges. Orca can %s only all edges of the part, or all its top, "
-                    "bottom or side edges, so it is left out." % (kind.noun, kind.verb), causes.HAND_PICKED)
+        return Skip("This %s is on hand-picked edges. Orca can %s only all edges of %s, or all its top, "
+                    "bottom or side edges, so it is left out." % (kind.noun, kind.verb, body_words),
+                    causes.HAND_PICKED)
     group, taken = found
     if earlier and (group not in (finish_body.TOP, finish_body.BOTTOM)
                     or any(done["group"] not in (finish_body.TOP, finish_body.BOTTOM) or done["group"] == group
@@ -225,12 +228,12 @@ def _finish(ctx, item, kind, records, value, notes):
     total = value.n + sum(done["size"] for done in earlier)
     why = finish_body.room(body, total, len(ends))
     if why:
-        return Skip("This %s is too big for Orca to make safely on this part (%s), and a %s Orca cannot make stops "
-                    "the whole rebuild, so it is left out." % (kind.noun, why, kind.noun), causes.NO_ROOM)
+        return Skip("This %s is too big for Orca to make safely on %s (%s), and a %s Orca cannot make stops "
+                    "the whole rebuild, so it is left out." % (kind.noun, body_words, why, kind.noun), causes.NO_ROOM)
     outlines = corner_hosts.rebuilt(ctx, ctx.solid)
     if outlines is None:
-        return Skip("The part has rounded corners whose sizes follow parameters, and the Orca copy cannot tell how "
-                    "far they may change before this %s no longer fits, so it is left out." % kind.noun,
+        return Skip("%s has rounded corners whose sizes follow parameters, and the Orca copy cannot tell how "
+                    "far they may change before this %s no longer fits, so it is left out." % (named, kind.noun),
                     causes.NO_ROOM)
     name = _label(item)
     feature = CadFeature(type=kind.type, name=name, face_group=group, thread_major_nominal=True,

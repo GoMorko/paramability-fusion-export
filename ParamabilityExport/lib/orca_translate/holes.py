@@ -44,7 +44,7 @@ def hole(ctx, item):
     if isinstance(tap, Problem):
         return Skip.of(tap)
     if data.get("foreign"):
-        return Skip("This hole is placed on another component, which is not copied yet.",
+        return Skip("This hole is placed on another component, which is not copied.",
                     gap_hints.OTHER_COMPONENT)
     problem = hole_facts.placed(data)
     if problem:

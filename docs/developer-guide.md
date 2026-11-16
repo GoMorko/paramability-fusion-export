@@ -1800,7 +1800,10 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   - `brought`: the item with the geometry of other components brought in (`borrowed.bring_in`, then
     `refs.bring_in`). Only a step of the component of the body is brought in (the roles `BUILDS` and `HELPER`).
     `foreign` is true when a record of another component stays in `brought`. `old_export` and `why_foreign` say
-    more about it (`refs.from_old_export`, `refs.why_foreign`).
+    more about it (`refs.from_old_export`, `refs.why_foreign`). The Orca output gives the sentence of
+    `why_foreign` for an extrude that starts from or reaches to a face or plane of another component that it cannot
+    place (`orca_translate/extents.reader_skip`). The sentence says if the face is curved or if its place is not
+    known.
   - `events`: the doubts, notes and followed components that the bring in recorded, in order. The bring in records
     them on a `Tally`, not on the context of the translation. `replay(step, ctx)` records them on the context. Each
     walk calls `replay` where it brings the step in, inside the recording or the checkpoint of the step. This makes
@@ -1986,9 +1989,36 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     a side but nearer than its end (`SHORT`), or at another place (`ELSEWHERE`). For two sides, the reader compares
     the face with the side on the same side of the sketch as the face. For a symmetric extrude, it compares the face
     with half the length. Each output decides what a `SHORT` face of a cut means. A side of a cut that goes out of
-    the part makes no end face, and Fusion then measures a wall that the cut went through. The recipe output accepts
-    the face when a side of the cut passes the whole part (`target_box_before`). The Orca output accepts the face when
-    no material is past the face on its side in the part that it built, or when a side passes the whole part.
+    the part makes no end face, and Fusion then measures a wall that the cut went through. Only the side that the
+    face lies on can make the face acceptable. The other side of a two sided cut tells nothing about the face, because
+    the face is not on its way. `passes_box(box, start, z, way, length)` is the fact that a side ends past every
+    corner of the part box (`target_box_before`). The recipe output accepts the face only when the side of the face
+    passes the whole part. The Orca output accepts the face only when no material is past the face on the side of the
+    face. No material is there when that side passes the whole part, or when the part that the copy built has no
+    material there.
+  - `end_is_cap(data, z)` tells if the measured end face is an end cap of the extrude. Fusion can list a face that
+    is not an end cap first in `endFaces`. An example is a small wall that a two sided cut made where it went through
+    a rib of the part. Such a face can lie anywhere on the way of the extrude, so it tells nothing about the length or
+    the direction. The answer is True, False, or None when the capture cannot tell:
+    - When the reader recorded the normal of the face (`end_normal`), the face is an end cap only when the normal is
+      parallel to the sketch normal (the sine between them is 1e-6 or less).
+    - Without the normal, the face is an end cap only when its area (`end_area`) is the area of one outline, or of
+      all outlines together. The area of each outline comes from its loops (`geometry.combine_volume.profile_area`),
+      else from `areas` or `profile_area`. `profile_area` puts the lines and arcs of a loop in order first
+      (`footprint.closed_chain`), because the capture can list the curves of a loop in any order and direction. The
+      volume checks of a Combine use the same area. The tolerance is 0.1 % of the outline area plus 0.001 mm2
+      (`CAP_RELATIVE_TOL`, `CAP_ABSOLUTE_TOL`). The area that Fusion measures and the area of the captured outline
+      agree much better than this. A face that is not an end cap, an end cap that merges with a face of the part, or
+      an end cap that is partly outside the part, has a different area.
+    - A tapered extrude or a thin extrude has end caps with other areas. An outline without an area that the code
+      can calculate (text, free curves) gives no area. In these cases the answer is None, and the face stays a
+      measure, as before.
+    `read_sides` uses a face that is not an end cap as no measure: `measured` is None, the stored direction and the
+    stored lengths stand, and `end_check` gives None. The other checks stay, for example the check of Orca that a cut
+    through all goes to the side with material. One case is different. A face that is not an end cap can show a
+    direction of one side that is not the stored direction. Fusion can store the direction of one side in two ways,
+    and the measured face usually decides. A face that is not an end cap cannot decide, so the extrude is a problem
+    (`WAY_UNSURE`).
   - `taper_problem`, `leans_problem` and `walls_confirm` compare the taper of the sides with the measured side walls
     (`side_leans`) or, for one outline, with the area of the end face. `volume_problem` compares the volume of an
     extrude of text or spline outlines with the outline area times the length. Both outputs use these checks.
@@ -2680,6 +2710,13 @@ that turns with it").
 
 A tool that cannot be built makes the whole Combine one gap. The reason names the step that stops the tool: "The tool
 body Body3 cannot be copied: Thicken1 (thicken): ...".
+
+The Orca output gives the same fact in other words: "The tool body Body3 cannot be copied, because its step Thicken1
+is left out: ...". The reason of the step follows the colon. It is not put in parentheses, so a reason that has
+parentheses of its own stays easy to read. The handlers of the Orca output name the body that they work on with
+`Context.body_words`. On the part, this is "the part". While the Orca output builds a tool body, this is "the tool
+body Body3". So the reason of a round, a chamfer or a cut in a tool body names the tool body and not the part (see
+`docs/orca-output.md`).
 
 A tool may not hold a thread or a coil together with other steps. The recipe keeps these kinds out of a tool body
 (`RecipeKind.in_tool`, 1.9.2), since they build on the whole part. A Combine, or a pattern of bodies, whose tool walk

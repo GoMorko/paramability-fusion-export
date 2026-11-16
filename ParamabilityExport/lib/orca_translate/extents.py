@@ -34,6 +34,7 @@ from ..geometry import vec
 from ..geometry.footprint import arc_span, is_full, polyline
 from ..orca_recipe.enums import SketchShape
 from ..params.expressions.text import format_number
+from ..design_model import refs
 from ..design_model.reach import construction_sizes, offset_param, on_part, reach_sizes
 from ..design_model.problem import is_problem
 from ..design_model.steps import extrude as dm
@@ -224,13 +225,24 @@ def _touches(shape, point):
 
 # ---- From and To --------------------------------------------------------------------------------------------------
 
+def reader_skip(found, item):
+    """The Skip of a Problem of the extrude reader (`dm.start_of`, `dm.read_sides`). A face or plane of another
+    component that stays foreign gets the shared sentence of why it cannot be placed, a curved face or one of no known
+    place (`refs.why_foreign`, as `ResolvedStep.why_foreign` gives it for the step)."""
+    if found.code == dm.FOREIGN:
+        why = refs.why_foreign(item)
+        if why:
+            return Skip(why, found.cause or gap_hints.REFUSED)
+    return Skip.of(found)
+
+
 def start(ctx, item, data, frame):
     """How far along the sketch normal (mm) the extrude starts from its sketch plane (`dm.start_of`), or a Skip. The
     sizes that move a start offset, or the face or plane it starts from, are marked: Orca keeps the sketch plane in
     place."""
     found = dm.start_of(data, frame)
     if is_problem(found):
-        return Skip.of(found)
+        return reader_skip(found, item)
     if found.kind == dm.OFFSET and found.shift:
         ctx.doubt(ctx.quantity(item, found.path, found.shift).reads,
                   "%s starts away from its sketch, and Orca cannot move a sketch with a variable" % _label(item))

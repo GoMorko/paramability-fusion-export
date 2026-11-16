@@ -60,7 +60,7 @@ def cut_toward_material(ctx, plan, data, profiles, shift, combine):
     walls of a tapered cut lean the way that direction gives and not the other (they show where Fusion cut). Only an
     extrude of one side turns: turning one side of two would send both the same way."""
     box = data.get("target_box_before")
-    if combine != "cut" or data.get("end_offset") is not None or not box or len(plan) != 1:
+    if combine != "cut" or any(e.read.measured is not None for e in plan) or not box or len(plan) != 1:
         return
     reach = vec.length(vec.sub(box["max"], box["min"])) + 1.0
     for entry in plan:

@@ -172,6 +172,44 @@ class TwoSidesTest(unittest.TestCase):
         self.assertEqual((found.code, found.cause), (dm.SAME_SIDE, dm.problem(dm.SAME_SIDE).cause))
 
 
+def square(side):
+    """A profile record of a square of `side` (mm), its four lines listed out of order and direction."""
+    s = float(side)
+    lines = [((0, 0), (s, 0)), ((0, s), (s, s)), ((s, 0), (s, s)), ((0, 0), (0, s))]
+    return {"frame": FRAME, "loops": [{"outer": True, "curves": [
+        {"kind": "line", "start": list(a), "end": list(b)} for a, b in lines]}]}
+
+
+class EndCapTest(unittest.TestCase):
+    def test_a_recorded_normal_decides(self):
+        data = {"end_area": 1.0, "profiles": [square(10)]}
+        self.assertTrue(dm.end_is_cap(dict(data, end_normal=[0, 0, -1]), [0, 0, 1]))
+        self.assertFalse(dm.end_is_cap(dict(data, end_normal=[1, 0, 0]), [0, 0, 1]))
+
+    def test_without_a_normal_the_area_must_be_an_outline_area(self):
+        def cap(area, **more):
+            return dm.end_is_cap(dict({"end_area": area, "profiles": [square(10), square(2)]}, **more), [0, 0, 1])
+        self.assertTrue(cap(100.0))
+        self.assertTrue(cap(4.0))
+        self.assertTrue(cap(104.0))  # one face over both outlines
+        self.assertFalse(cap(0.96))  # a wall the cut made
+        # A taper or a thin wall gives a cap of another area; no area to compare is no answer.
+        self.assertIsNone(cap(0.96, side_one=distance(5.0, taper_deg=3.0)))
+        self.assertIsNone(cap(0.96, thin=True))
+        self.assertIsNone(cap(None))
+        self.assertIsNone(dm.end_is_cap({"end_area": 0.96, "profiles": [{"frame": FRAME, "text": True}]}, [0, 0, 1]))
+
+    def test_a_face_that_is_not_a_cap_is_no_measure(self):
+        wall = {"end_area": 0.96, "profiles": [square(10)]}
+        # Two sides: the stored direction and lengths stand, and nothing is checked against the face.
+        found = sides(two(distance(30.0), distance(10.0), end_offset=-4.0, **wall))
+        self.assertEqual((ways(found), found[0].measured), ([(dm.DISTANCE, 1, 30.0), (dm.DISTANCE, -1, 10.0)], None))
+        self.assertIsNone(dm.end_check(found))
+        # One side: a face that would turn the stored direction cannot, so the direction is not known.
+        self.assertEqual(sides(one(distance(5.0), end_offset=-3.0, **wall)).code, dm.WAY_UNSURE)
+        self.assertEqual(ways(sides(one(distance(5.0), end_offset=3.0, **wall))), [(dm.DISTANCE, 1, 5.0)])
+
+
 class EndCheckTest(unittest.TestCase):
     def test_one_side(self):
         self.assertEqual(dm.end_check(sides(one(distance(5.0), end_offset=5.0))).fact, dm.AT_END)

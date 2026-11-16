@@ -426,6 +426,19 @@ class ExtrudeDataTest(unittest.TestCase):
         unknown = self.read()
         self.assertEqual((unknown["profile_area"], unknown["end_area"]), (None, None))
 
+    def test_the_end_face_parallel_to_the_sketch_is_measured_with_its_normal(self):
+        def face(z, area, normal):
+            return Obj("fusion::BRepFace", pointOnFace=P(5, 5, z), area=area,
+                       evaluator=Obj(getNormalAtPoint=lambda p: (True, Obj(x=normal[0], y=normal[1], z=normal[2]))))
+        wall, cap = face(3, 0.5, (1, 0, 0)), face(10, 8.0, (0, 0, 1))
+        data = self.read(endFaces=Coll([wall, cap]))
+        self.assertEqual((data["end_offset"], data["end_area"], data["end_normal"]), (10.0, 800.0, [0, 0, 1]))
+        # No face is parallel: the first one is measured, and its normal shows that it is not a cap.
+        data = self.read(endFaces=Coll([wall]))
+        self.assertEqual((data["end_offset"], data["end_normal"]), (3.0, [1, 0, 0]))
+        # A normal that cannot be read is null.
+        self.assertIsNone(self.read(endFaces=Coll([Obj(pointOnFace=P(5, 5, 10), area=7.0)]))["end_normal"])
+
     def test_side_walls_give_their_lean_along_the_sketch_normal(self):
         def wall(nz):
             normal = Obj(x=math.sqrt(1 - nz * nz), y=0, z=nz)
