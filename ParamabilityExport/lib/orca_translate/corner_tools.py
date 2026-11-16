@@ -72,6 +72,7 @@ class Spec:
         self.phi_a = self.side_a.direction
         self.phi_b = self.side_b.direction
         self.tau = None
+        self._cuts = self._chord = None
 
     def settle(self, env):
         """Fix the branch of the turn at the corner so that it lies between -180 and 180 degrees at `env`, and the
@@ -80,6 +81,7 @@ class Spec:
         self.phi_b = self.phi_b - num(360.0 * round(now / 360.0))
         self.tau = self.phi_b - self.phi_a
         self.sign = 1 if self.tau.value(env) > 0 else -1
+        self._cuts = self._chord = None
 
     # ---- the formulas ------------------------------------------------------------------------------------------
 
@@ -92,6 +94,11 @@ class Spec:
     def cuts(self):
         """The half-planes of the tool, each `(angle, offset, what)`: it keeps the points `p` with `n . p <= offset`,
         `n` the unit vector at `angle` (degrees). `what` names the line."""
+        if self._cuts is None:
+            self._cuts = self._made_cuts()
+        return list(self._cuts)
+
+    def _made_cuts(self):
         s = float(self.sign)
         px, py = self.corner
         reach = self.reach()
@@ -112,6 +119,11 @@ class Spec:
     def chord(self):
         """`(angle, offset)` of the half-plane on the corner's side of the line through the two points where the
         round or chamfer meets the sides."""
+        if self._chord is None:
+            self._chord = self._made_chord()
+        return self._chord
+
+    def _made_chord(self):
         s = float(self.sign)
         px, py = self.corner
         angle = self.phi_a + self.tau * 0.5 + num(90.0 * s)
@@ -208,8 +220,15 @@ def _holds(node, inside, forced, value):
         return value
     if node[0] == "lit":
         return inside[node[1]]
-    answers = (_holds(kid, inside, forced, value) for kid in node[1])
-    return all(answers) if node[0] == "and" else any(answers)
+    if node[0] == "and":
+        for kid in node[1]:
+            if not _holds(kid, inside, forced, value):
+                return False
+        return True
+    for kid in node[1]:
+        if _holds(kid, inside, forced, value):
+            return True
+    return False
 
 
 # ---- the checks ------------------------------------------------------------------------------------------------
@@ -253,15 +272,33 @@ def _gap(line, x):
     return d[0] * (x[1] - a[1]) - d[1] * (x[0] - a[0])
 
 
+# What `_cells_hold` answered, by everything it reads written out: the same tool on the same outline at the same
+# numbers always gives the same answer, and the limit walks ask for the same ones again and again.
+_CELLS = {}
+_CELLS_MAX = 50000
+
+
 def _cells_hold(planned, spec, points, env, node):
     """True when, at `env`, the body of `node` is the corner of its two sides (both sides' half-planes for a convex
     corner, either for an inward one) where the tool of `spec` changes it (`Spec.region`), and the outline's formula
     passes that body on unchanged there."""
     cuts = _lines_at(spec.region(), env)
+    key = repr((planned.tree, spec.label, points, cuts, spec.sign, spec.side_a.index, spec.side_b.index))
+    found = _CELLS.get(key)
+    if found is None:
+        found = _cells_checked(planned, spec, points, cuts, node)
+        if len(_CELLS) >= _CELLS_MAX:
+            _CELLS.clear()
+        _CELLS[key] = found
+    return found
+
+
+def _cells_checked(planned, spec, points, cuts, node):
     corners = _corners_of(cuts)
     if corners is None:
         return False
     sides = _side_lines(points)
+    flat = [(a[0], a[1], d[0], d[1]) for a, d in sides]
     size = max(max(abs(c) for c in p) for p in points) or 1.0
     crossing = []
     for line in sides:
@@ -270,10 +307,12 @@ def _cells_hold(planned, spec, points, env, node):
             crossing.append(line)
     tool = [((k * n[0], k * n[1]), (-n[1], n[0])) for n, k in cuts]
     a, b = spec.side_a.index, spec.side_b.index
+    bound = [(n[0], n[1], k - _INSIDE) for n, k in cuts]
     for x in halfplanes.line_samples(crossing + tool, size):
-        if any(n[0] * x[0] + n[1] * x[1] > k - _INSIDE for n, k in cuts):
+        x0, x1 = x
+        if any(n0 * x0 + n1 * x1 > limit for n0, n1, limit in bound):
             continue
-        inside = [_gap(line, x) > 0 for line in sides]
+        inside = [dx * (x1 - ay) - dy * (x0 - ax) > 0 for ax, ay, dx, dy in flat]
         local = (inside[a] and inside[b]) if spec.sign > 0 else (inside[a] or inside[b])
         if halfplanes.holds(node, inside) != local:
             return False

@@ -1,4 +1,5 @@
 """The value of a written formula over named numbers, to check it against the number Fusion reports."""
+import functools
 import math
 
 from .errors import ExpressionError
@@ -60,12 +61,19 @@ def eval_tree(node, env):
     return a / b
 
 
+@functools.lru_cache(maxsize=4096)
+def _parsed(formula):
+    """The parsed tree of a formula text, kept: the same text is worked out again at many settings. The tree is only
+    read."""
+    return parse_formula(formula)
+
+
 def evaluate(formula, env):
     """Value of a written formula over `env` (name to number), with the app's function semantics.
 
     Reads what `render` writes. Only the branch a choice takes is worked out, as in the app.
     """
-    return evaluate_tree(parse_formula(formula), env)
+    return evaluate_tree(_parsed(formula), env)
 
 
 def evaluate_tree(tree, env):
