@@ -3,7 +3,8 @@ the copy follows makes a different outline, and where the part came apart into s
 
 `built_ranges` cuts a free size's range on each side to the farthest value that built, kept the outline and stayed in
 one piece, since a form should not offer a value the design cannot take. Only a failure in a step the part is built
-from counts (`part_step`). Where a sketch the copy follows makes a different outline (`Motion.spans` `kept`,
+from counts (`part_step`). A try where such a step showed a new warning counts as one that did not build (the probe
+keeps it in `Motion.spans` `failed`, and in `warned` too): Fusion may have built another shape there than the copy. Where a sketch the copy follows makes a different outline (`Motion.spans` `kept`,
 `probe.build.outline_windows`), the range stops at the farthest value tried that kept it, and where Fusion built the
 part in several separate pieces (`Motion.spans` `split`, `probe.pieces`), at the farthest value tried that kept it in
 one. These are facts of the tries, so the recipe translator and the probe both read them here. An end the person typed
@@ -99,9 +100,12 @@ def built_ranges(table, motion, capture=None):
         if not span or not size or "min" not in size:
             continue
         low, high, found = failure_cut(table, e, span, mine)
+        warnings = {tuple(w) for w in span.get("warned") or ()}
+        warned = {side: f for side, f in found.items() if tuple(f) in warnings}
+        found = {side: f for side, f in found.items() if side not in warned}
         kept_low, kept_high, changed = outline_cut(table, e, span)
         split_low, split_high, split = split_cut(table, e, span)
-        cut = (Cut(low, high, found).meet(Cut(kept_low, kept_high, changed=changed))
+        cut = (Cut(low, high, found, warned=warned).meet(Cut(kept_low, kept_high, changed=changed))
                .meet(Cut(split_low, split_high, split=split)))
         if (cut[0], cut[1]) != (size["min"], size["max"]) and cut[1] - cut[0] > SAME_SIZE:
             out[e.name] = cut

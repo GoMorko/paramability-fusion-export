@@ -35,14 +35,20 @@ def number_text(value):
 _TRY_KINDS = (("failed", True), ("changed", False), ("split", None))
 
 
+# The `broke` of a try that built with a new warning on a step (`Motion.spans` `warned`, also in `failed`).
+_WARNED = "warned"
+
+
 def _nearest_tries(span, now, kinds=("failed", "changed", "split")):
     """`(value, name, broke)` of the try nearest to `now` on each side, lowest first, among the `kinds` of
-    `Motion.spans`: the values that did not rebuild (`failed`, `broke` true, `name` the step), that changed an outline
-    (`changed`, `name` the sketch) or that left the part in several pieces (`split`, `broke` None, `name` the number
-    of pieces)."""
+    `Motion.spans`: the values that did not rebuild (`failed`, `broke` true, `name` the step; `_WARNED` for a step
+    that showed a new warning there), that changed an outline (`changed`, `name` the sketch) or that left the part in
+    several pieces (`split`, `broke` None, `name` the number of pieces)."""
+    warned = {(v, name) for v, name in span.get("warned") or ()}
     out = []
     for side in (-1, 1):
-        seen = [(v, name, broke) for key, broke in _TRY_KINDS if key in kinds
+        seen = [(v, name, _WARNED if broke is True and (v, name) in warned else broke)
+                for key, broke in _TRY_KINDS if key in kinds
                 for v, name in span.get(key) or () if (v - now) * side > 0]
         if seen:
             out.append(min(seen, key=lambda f: abs(f[0] - now)))
@@ -52,20 +58,24 @@ def _nearest_tries(span, now, kinds=("failed", "changed", "split")):
 def _try_why(value, name, broke):
     if broke is None:
         return split_why([(value, name)])
+    if broke == _WARNED:
+        return warned_why([(value, name)])
     return not_rebuilt_why([(value, name)]) if broke else outline_changed_why([(value, name)])
 
 
 def not_built_why(span):
-    """Why a size was not measured: Fusion rebuilt the design at none of the values tried, or only in several pieces.
+    """Why a size was not measured: Fusion rebuilt the design at none of the values tried, or only in several pieces
+    or with a new warning on a step.
     Names the value nearest to the value now on each side and the step that failed there."""
     seen = _nearest_tries(span, span["low"], ("failed", "split"))
     tried = ["%s%s" % (number_text(v), " (%s)" % clip(step, MAX_NAME) if step else "")
-             for v, step, broke in seen if broke]
-    split = [split_why([(v, count)]) for v, count, broke in seen if broke is None]
-    if not split:
+             for v, step, broke in seen if broke is True]
+    other = [split_why([(v, count)]) for v, count, broke in seen if broke is None]
+    other += [warned_why([(v, step)]) for v, step, broke in seen if broke == _WARNED]
+    if not other:
         return "the design does not rebuild in Fusion at %s, the nearest values tried, so it could not be measured" % (
             " or ".join(tried) or "the values tried")
-    parts = (["the design does not rebuild in Fusion at %s" % " or ".join(tried)] if tried else []) + split
+    parts = (["the design does not rebuild in Fusion at %s" % " or ".join(tried)] if tried else []) + other
     return "%s, the nearest values tried, so it could not be measured" % " and ".join(parts)
 
 
@@ -130,6 +140,13 @@ def not_rebuilt_why(failures):
     (Chamfer3) or 0.5 (Fillet2)"."""
     return "Fusion did not rebuild the design at %s" % " or ".join(
         "%s%s" % (number_text(v), " (%s)" % clip(step, MAX_NAME) if step else "") for v, step in failures)
+
+
+def warned_why(warnings):
+    """What the size probe saw at the cut ends, from `(value, step)` of each: "Fusion shows a warning on Revolve1 at
+    12.5"."""
+    return " and ".join("Fusion shows a warning on %s at %s" % (clip(step or "a step", MAX_NAME), number_text(v))
+                        for v, step in warnings)
 
 
 def outline_changed_why(changes):

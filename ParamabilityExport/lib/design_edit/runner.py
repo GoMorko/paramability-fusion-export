@@ -2,7 +2,7 @@
 import os
 
 from ..package.caps import check_step_size, check_total_size
-from .apply import RowBuildError, apply_row_values, measure_baseline, new_errors
+from .apply import RowBuildError, apply_row_values, measure_baseline, new_errors, new_warnings
 from .errors import StepExportError
 from .restore import restore_parameters
 
@@ -95,7 +95,8 @@ class RowExport:
 
         With tolerate_build_errors a row Fusion cannot build gives {'name', 'values': None, 'step_file': None,
         'error': sentence, 'detail': why} and the run goes on (`why` is RowBuildError.detail). The next row must
-        then set every parameter it needs.
+        then set every parameter it needs. A row that builds with timeline items in warning that were not in warning
+        or in error in the baseline (`apply.new_warnings`) also gives 'warned': their names, in timeline order.
         A row without a STEP gives 'step_file': None as well.
         """
         if self._saved is None:
@@ -127,11 +128,15 @@ class RowExport:
                                         "detail": exc.detail})
                         continue
                     raise RowBuildError(f"Size \"{row['name']}\": {exc}", exc.detail) from exc
+                warned = new_warnings(self.store, self._baseline) if tolerate_build_errors else []
                 self.current_row = row["name"]
                 self.current_key = row_key(row)
+                result = {"name": row["name"], "values": values, "step_file": None}
+                if warned:
+                    result["warned"] = warned
                 if row.get("step") is False:
                     self.export_step(None)
-                    results.append({"name": row["name"], "values": values, "step_file": None})
+                    results.append(result)
                 else:
                     path = os.path.join(tmpdir, f"{index:02d}.step")
                     self.export_step(path)
@@ -141,7 +146,7 @@ class RowExport:
                     self._total += size
                     check_step_size(f"Size \"{row['name']}\"", size)
                     check_total_size(self._total)
-                    results.append({"name": row["name"], "values": values, "step_file": path})
+                    results.append(dict(result, step_file=path))
             return results
         finally:
             failed = restore_parameters(self.store, self._saved)

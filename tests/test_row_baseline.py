@@ -123,6 +123,13 @@ class FusionDesignBaselineTest(unittest.TestCase):
         self.assertEqual(DesignParameterStore(FakeDesign(self.PARAMS, timeline)).error_entries(),
                          [(0, "Extrude1"), (2, "Extrude1")])
 
+    def test_warning_entries_read_steps_in_warning_that_are_on(self):
+        timeline = [dict(name="Revolve1", isSuppressed=False, healthState=1),
+                    dict(name="Fillet1", isSuppressed=True, healthState=1),
+                    dict(name="Extrude1", isSuppressed=False, healthState=2)]
+        self.assertEqual(DesignParameterStore(FakeDesign(self.PARAMS, timeline)).warning_entries(),
+                         [(0, "Revolve1")])
+
     def test_computeall_false_with_nothing_new_in_error_passes_through_the_design_wrapper(self):
         class Warned(FakeDesign):
             def computeAll(self):
@@ -150,6 +157,25 @@ class BatchDesign(FakeDesign):
         for parameter, value in zip(parameters, values):
             parameter.expression = value
         return True
+
+
+class WarningRowTest(unittest.TestCase):
+    """A try that builds with a step newly in warning says which step; a warning the design had before does not."""
+
+    def run_try(self, warns):
+        store = FakeStore({"w": "5 mm"}, warns=warns)
+        job = RowExport(store, UNITS, lambda path: None)
+        return job.run([{"name": "A", "values": {"w": 7.0}, "step": False}], "", lambda *a: True,
+                       tolerate_build_errors=True)[0]
+
+    def test_a_step_that_warns_only_at_the_try_is_named(self):
+        result = self.run_try(lambda exprs: [(4, "Revolve1")] if exprs["w"] != "5 mm" else [])
+        self.assertEqual(result.get("warned"), ["Revolve1"])
+        self.assertEqual(result["values"], {"w": 7.0})
+
+    def test_a_warning_the_design_had_before_the_tries_is_not(self):
+        result = self.run_try(lambda exprs: [(4, "Revolve1")])
+        self.assertNotIn("warned", result)
 
 
 class FormulaOfNumbersTest(unittest.TestCase):

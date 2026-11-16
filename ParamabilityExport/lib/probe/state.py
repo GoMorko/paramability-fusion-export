@@ -29,6 +29,8 @@ class ProbeState:
     put_back: the read once a sketch left on its other solution was put back before the row ran, or None.
     again: True for a row run a second time from a checked start.
     changed: True when the row's own size changed a followed outline (set by `marked_states` for `plan`).
+    warned: True when Fusion built the part there but a step it is built from shows a new warning: the state counts as
+      one that did not build, `failed` names that step.
     """
 
     values: dict = field(default_factory=dict)
@@ -41,6 +43,7 @@ class ProbeState:
     again: bool = False
     changed: bool = False
     pieces: object = None
+    warned: bool = False
 
     @classmethod
     def from_json(cls, data):
@@ -50,7 +53,8 @@ class ProbeState:
                    e0=bool(data.get("e0")), failed=data.get("failed"),
                    start=start if isinstance(start, dict) else None,
                    put_back=put_back if isinstance(put_back, dict) else None,
-                   again=bool(data.get("again")), changed=bool(data.get("changed")), pieces=data.get("pieces"))
+                   again=bool(data.get("again")), changed=bool(data.get("changed")), pieces=data.get("pieces"),
+                   warned=bool(data.get("warned")))
 
     def json(self):
         """The state as `report.json` keeps it: the reads only with `REPORT_READ_KEYS`."""
@@ -59,6 +63,8 @@ class ProbeState:
             out["failed"] = self.failed
         if self.pieces:
             out["pieces"] = self.pieces
+        if self.warned:
+            out["warned"] = True
         if self.e0:
             out["e0"] = True
         if self.again:

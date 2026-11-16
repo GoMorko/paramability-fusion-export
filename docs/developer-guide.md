@@ -2760,6 +2760,18 @@ is nearer." The far end 80 is still tried later, since a far end that builds giv
 
 - Only a failure in a step the part is built from counts (`tried_ranges.part_step`): an item of the body's component, or a step
   that built a tool body. A failure in another component cuts nothing.
+- A row that Fusion builds can still be wrong. A step can show a warning: for example, a revolve whose outline crosses
+  its axis. Fusion then builds a shape that the copy cannot match. Thus a step of the part that shows a new warning
+  counts as a failure. The runner reads the steps in warning after each try (`apply.new_warnings`, through the store's
+  `warning_entries`, which reads `TimelineObject.healthState`). A step that was in warning or in error before the
+  first try (the baseline) does not count. When a step reads in warning after a rebuild of only the changed steps,
+  the design is recomputed in full once and read again, as for errors. The result of the row then has `warned`, the
+  names of those steps. `SizeProbe.add_states` keeps such a row as a state that did not build, with `failed` the first
+  of those steps that the part is built from, and `warned` true. Thus the rows nearer to the value now and the halving
+  run as for a failure, and the range stops at the farthest value that built without a new warning. The span keeps
+  the try in `failed`, and in `warned` too, so the reason says what Fusion showed: "Height: the range stops at 11.8,
+  since Fusion shows a warning on Revolve1 at 12.5." (`Cut.warned`, `notes.warned_why`). A warning on a step of
+  another component changes nothing.
 - A typed end is never cut. Then the size keeps its typed range and says "it was followed between A and B; beyond that
   it could not be tried".
 - A size whose row changed a followed outline is cut in the same way, at the farthest value that kept the outline
@@ -4478,8 +4490,8 @@ nothing in the part changed.
 | Key | Meaning |
 | --- | --- |
 | `request` | What each state read: sketch tokens, point and line tokens, parameter names, references, faces, borrowed sketches. |
-| `states` | One record per state, as `ProbeState.json()` writes it (`lib/probe/state.py`). The first has `e0: true`. Each has `values` (the sizes this row set, by Fusion name, in mm or degrees), `built`, `failed` (the first step in error when it did not build), `read` (what was read), and when they happened `start` (the read before the row), `put_back` (the read after a sketch was put back) and `again` (a row run a second time). A try where the part came apart has `pieces` (the count) and no `read`. `read.pieces` is `{ lumps, others }` (1.8). `read.patterns` holds the copies of each symmetric pattern: `{ key: { count: [n1, n2], elements } }` (3.11). |
-| `dropped` | The rows that did not build, with Fusion's error detail (`reason`: `expression_refused`, `recompute_raised`, `recompute_failed` or `new_errors`, and `items`). A try where the part came apart is listed too, with the `error` "the part came apart into N separate pieces" and no detail. |
+| `states` | One record per state, as `ProbeState.json()` writes it (`lib/probe/state.py`). The first has `e0: true`. Each has `values` (the sizes this row set, by Fusion name, in mm or degrees), `built`, `failed` (the first step in error when it did not build), `warned` (true when the row built but `failed` showed a new warning, so it counts as not built), `read` (what was read), and when they happened `start` (the read before the row), `put_back` (the read after a sketch was put back) and `again` (a row run a second time). A try where the part came apart has `pieces` (the count) and no `read`. `read.pieces` is `{ lumps, others }` (1.8). `read.patterns` holds the copies of each symmetric pattern: `{ key: { count: [n1, n2], elements } }` (3.11). |
+| `dropped` | The rows that did not build, with Fusion's error detail (`reason`: `expression_refused`, `recompute_raised`, `recompute_failed`, `new_errors` or `new_warnings`, and `items`). A try where the part came apart is listed too, with the `error` "the part came apart into N separate pieces" and no detail. |
 | `untried` | Sizes that move a sketch but got no near rows (the 64 row cap). |
 | `restore_gap_mm` | The largest difference between E0 and the read after the parameters went back. |
 | `motion` | The motion file (below). |
@@ -4495,7 +4507,7 @@ The motion file (`probe.motion`):
 | Key | Meaning |
 | --- | --- |
 | `values` | Key to a fitted value: `{ const, terms }` (Affine), `{ const, sum }` (Terms) or `{ stuck, cause, sketch, rest }` (Stuck). A key that is not listed did not move. |
-| `spans` | Per size the probe set: `low`, `high` (the values that built), `failed` (`[value, step]`), `split` (`[value, pieces]`, only when a row left the part in several pieces), and `kept`, `changed` when a row changed an outline. |
+| `spans` | Per size the probe set: `low`, `high` (the values that built), `failed` (`[value, step]`), `warned` (the entries of `failed` where the step showed a new warning, only when there is one), `split` (`[value, pieces]`, only when a row left the part in several pieces), and `kept`, `changed` when a row changed an outline. |
 | `unmeasured` | Sketch name to why the probe could not measure it. |
 | `untried` | Sizes left without rows. |
 | `timed_out` | Sizes that the time limit left without a try. They are in `untried` too. |

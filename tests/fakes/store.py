@@ -15,12 +15,13 @@ class FakeStore:
     stuck: names that change but are never set back to their first expression.
     answers: what recompute returns, in turn (the last one repeats); an answer that is an exception is raised.
     errors: `(index, name)` of the steps in error (`error_entries`), in place of `bad_when` and `breaks`.
+    warns(exprs): `(index, name)` of the steps in warning (`warning_entries`) while the expressions are `exprs`.
     on_recompute(store): called at every recompute, before it answers.
     `sets` lists every `(name, expression)` asked of set_expression, `recomputes` counts the recomputes.
     """
 
     def __init__(self, expressions, bad_when=None, reject=(), flaky=(), bad_item="Fillet1", breaks=None, stuck=(),
-                 answers=(True,), errors=None, on_recompute=None):
+                 answers=(True,), errors=None, on_recompute=None, warns=None):
         self.exprs = dict(expressions)
         self.first = dict(expressions)
         self.bad_when = bad_when or (lambda exprs: False)
@@ -32,6 +33,7 @@ class FakeStore:
         self.answers = list(answers)
         self.errors = None if errors is None else list(errors)
         self.on_recompute = on_recompute
+        self.warns = warns or (lambda exprs: [])
         self.sets = []
         self.recomputes = 0
 
@@ -79,6 +81,9 @@ class FakeStore:
         if self.errors is not None:
             return list(self.errors)
         return {name: name for name in self.error_items()}
+
+    def warning_entries(self):
+        return list(self.warns(self.exprs))
 
     def set_expressions(self, expressions):
         return False

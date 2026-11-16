@@ -7,6 +7,8 @@ NOT_TRIED = "not tried: the export tries only a limited number of parameters of 
 NOT_READ_TRY = "not tried: the design could not be read at the value tried"
 NOT_TRIED_STOPPED = "not tried: the tries stopped early, after a try left a step in error"
 NOT_TRIED_TIME = "not tried: the tries ran out of time"
+# Why a try that Fusion built is kept as one that did not: a step of the part shows a new warning there.
+WARNED_TRY = "Fusion shows a warning on %s at this size"
 
 
 def not_built_try(value, step):

@@ -678,8 +678,9 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     plane make a 40 x 20 mm box with its corner at the origin, extruded `Height` up. Sketch on its top face a line on
     the top front edge (y = 0, from x = 0 to 40), coincident with that edge. On the XZ plane draw a rectangle from
     x = 0 to 10, z = 12 to 15. Revolve it 90 degrees about the line, Join, toward +Y (the ends lie on the top face).
-    Export: tick `Height`. The range of `Height` stops at 11.99 with the reason "the outline of Revolve1 would reach
-    its axis", and the revolve is copied. In Paramability set `Height` to 11.99: the copy matches Fusion at that
+    Export: tick `Height`. The range of `Height` stops at 11.99 or lower, and the revolve is copied. The reason is
+    "the outline of Revolve1 would reach its axis", or "Fusion shows a warning on Revolve1 at ..." when a try near
+    12 mm made Revolve1 show a warning (`probe.states` has `warned: true` there). In Paramability set `Height` to 11.99: the copy matches Fusion at that
     value. In Fusion set `Height` to 15 and to 20: the revolve turns into the box, which is why the range stops. Then
     export again with the range of `Height` typed as 4 to 20 mm: the revolve is left out with the tip "Type size
     ranges that keep the outline on one side of the axis, or leave the ranges to the add-in." Afterwards the design
