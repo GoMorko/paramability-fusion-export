@@ -2,6 +2,7 @@
 from ..capture_model import lineage, step_kinds
 from ..capture_model.capture import validate_capture
 from ..design_model.values import Sized, number
+from ..design_model import tried_ranges
 from ..design_model.reach import joint_reasons, probed_sizes
 from ..geometry import rigid
 from ..params import geometry_links
@@ -22,7 +23,7 @@ from .gaps import gap_file, gap_measures, gap_place, stops
 from .notes import (
     BODY_MOVED_WHY, TIMED_OUT_WHY, dropped_reason, fixed_reason, loose_reason, tried_unmoved_reason, unmoved_link_reason,
     unmoved_reason, unused_reason)
-from .ranges import kept_ranges, range_check
+from .ranges import range_check
 from .result import TranslateResult
 from .sketch.sketch_crossings import OutlineChecks
 from .sizes import text_reasons, untried_reasons, used_sizes
@@ -184,8 +185,8 @@ def _translate(capture, handlers=None, size_table=None, motion=None, timer=None)
     not a size and is listed in `result.dropped` with the reason (as is every ticked size no step reads). After the walk
     an audit (`audit.py`) marks the sizes a copied step reads that no handler named. The ranges are the table's, cut
     where the size probe saw Fusion fail to rebuild or a followed sketch make a different outline
-    (`kept_ranges.built_ranges`) and where a written value would be refused (`Context.cut`). A formula too long to
-    copy fixes its sizes (`result.fixed`, as `{ name, reason }`).
+    (`design_model.tried_ranges.built_ranges`) and where a written value would be refused (`Context.cut`). A formula
+    too long to copy fixes its sizes (`result.fixed`, as `{ name, reason }`).
 
     The walk runs twice when some value cannot follow. The first walk fixes every size such a value reads, to learn
     which sizes and reasons there are. The second keeps them free.
@@ -214,7 +215,7 @@ def _translate(capture, handlers=None, size_table=None, motion=None, timer=None)
         return _walk(capture, table, None, cache=cache)[0]
     if not size_table.links:
         size_table = size_table.with_links(geometry_links.reach(capture))
-    size_table = size_table.with_narrowed(kept_ranges.built_ranges(size_table, motion, capture))
+    size_table = size_table.with_narrowed(tried_ranges.built_ranges(size_table, motion, capture))
     upfront = joint_reasons(size_table) if motion is not None else untried_reasons(size_table)
     for name, why in text_reasons(size_table, capture).items():
         upfront.setdefault(name, why)

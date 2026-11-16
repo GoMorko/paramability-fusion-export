@@ -11,7 +11,7 @@ a piece when its box comes within `PIECE_GAP_MM` of the box of the target at E0 
 E0 already are not pieces of the part (kept tool bodies, a second body of the design), and there are never more such
 pieces than bodies that are new since E0 (a lid laid out next to a box that grows toward it is no piece). A state where the part came apart while it was one
 piece at E0 counts as a try that did not build: nothing is fitted to it, and the range of the size stops before it
-(`translator.ranges.kept_ranges.split_cut`).
+(`design_model.tried_ranges.split_cut`).
 """
 # The `error` of a try that left the part in several pieces, as `report.json` lists it with the tries that did not build.
 APART_ERROR = "the part came apart into %d separate pieces"

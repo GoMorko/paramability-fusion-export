@@ -13,6 +13,7 @@ from lib.probe import build
 from lib.translator import translate
 from lib.translator.result import Refusal
 from lib.geometry import spline_fit
+from lib.design_model import loops as shared_loops
 from lib.translator.sketch import loops
 
 EDGE = "extrude_spline_edge"
@@ -110,7 +111,7 @@ class SplineRefusalTest(unittest.TestCase):
 
     def test_a_spline_counts_its_points_toward_the_cap(self):
         segments = [{"kind": "line", "to": [1, 0]}, {"kind": "spline", "through": [[2, 1], [3, 1]], "to": [4, 0]}]
-        self.assertEqual(loops.segments_cost(segments), 4)
+        self.assertEqual(shared_loops.segments_cost(segments), 4)
 
 
 def translate_reason(name):
@@ -123,9 +124,9 @@ class FlipTest(unittest.TestCase):
     def test_a_reversed_placement_mirrors_every_point_of_a_spline(self):
         loop = {"kind": "profile", "start": [0, 0], "segments": [
             {"kind": "spline", "through": [[2, 1], [3, 2]], "to": [5, 0]}, {"kind": "line", "to": [0, 0]}]}
-        flipped = loops.flip_y(loop)
+        flipped = shared_loops.flip_y(loop)
         self.assertEqual(flipped["segments"][0]["through"], [[2, -1], [3, -2]])
-        self.assertEqual(loops.flip_y(flipped), loop)
+        self.assertEqual(shared_loops.flip_y(flipped), loop)
 
 
 class MergedProfilesTest(unittest.TestCase):

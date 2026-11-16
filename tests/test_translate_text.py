@@ -11,7 +11,7 @@ from lib.params import size_table
 from lib.probe import build
 from lib.translator import translate
 from lib.geometry import spline_fit
-from lib.translator.sketch import loops
+from lib.design_model import loops
 
 EMBOSS = "emboss_text"
 EXTRUDE = "extrude_text"

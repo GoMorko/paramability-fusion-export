@@ -162,7 +162,8 @@ problem that both outputs give goes into `design_model/words.py` (or `design_mod
 what the design has and that it is not copied; it names no output and has no "yet". Each output shows it as it is.
 
 A step that takes sketch outlines checks each profile record with `loops.outline_refusal` (sketch text that could not
-be read, a flat face or an unknown entity is not an outline) and gets its loops from `loops.profile_loops`. Only the
+be read, a flat face or an unknown entity is not an outline) and gets its loops from `loops.profile_loops`. These are
+in `translator/sketch/loops.py`: the shared loop writer `design_model/loops.py`, with its problems as refusals. Only the
 extrude takes a flat face as its outline, through `face_outline.prepare`, which marks the sizes the face may follow. Its reader
 reads them with `read_sketch.read_outlines(raw, ctx)`, which gives the profile records and one area per record: a
 sketch text becomes one record per outer outline, so the list can be longer than the feature's own list of profiles.

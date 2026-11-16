@@ -29,7 +29,10 @@ package may import only packages above it in this list (not every one of them). 
   the copy keeps them in place); `borrowed.py` the outlines taken from another component's sketch; `roles.py` what
   each timeline item is for the body a walk builds (a sketch, an assembly item, a step of another component, a step of
   the body or of another body), the body before and after it, the measures of that body (`seen_on`) and the other
-  pieces of a split; `words.py` the sentences both outputs give for the same fact (a problem of a reader, a refusal
+  pieces of a split; `loops.py` the loop writer (sketch curves to recipe loops, or a `Problem`) that the translator writes with and the
+  probe measures through, so a measured value is the value the translator writes; `tried_ranges.py` the range cuts
+  where the size probe saw the design not rebuild, change a followed outline or come apart (`built_ranges`);
+  `words.py` the sentences both outputs give for the same fact (a problem of a reader, a refusal
   both outputs word alike); `reach.py` which sizes may move a sketch, a plane, a face or
   a joint; `dimension_sizes.py` the sketch dimensions as formulas of the sizes and the size settings a sketch is tried
   at; `problem.py` the answer of a reader that cannot read, place or build the design (`Problem`: a code, plain words
@@ -50,7 +53,7 @@ package may import only packages above it in this list (not every one of them). 
   the corner pairings).
 - `results`: the shape of a verdict and of the record of a step left out, for both translators and the dialogs (`verdicts.py`, `left_out.py`). It holds shapes and the words of a verdict kind, not facts about the design.
 - `translator`: a capture dict in, a recipe plus verdicts out (one handler per step type, mapped in `handlers.py`). `translate.py`, `walk.py`, `context.py`, `result.py`, `values.py` (the policy: ranges, pins, the audit) and `sizes.py` are the driver; the rest sits in folders by job: `extrude/` (also emboss), `sweep/` and `paths/` (the recipe caps on a path, the path that follows sizes), `loft/`, `revolve/`, `hole/`, `repeat/` (patterns and mirrors), `combine/` (also tool bodies), `finishes/` (fillet, chamfer, shell, draft, offset faces), `bodies/` (move, paste, split), `faces/` (the faces steps make and the picks that follow sizes), `sketch/` (outlines and sketch values), `ranges/` (formulas over the size ranges) and `gaps/`.
-- `probe`: measures sketches and the places of other components' planes, axes and points at other size values and fits the motion file. It still reads the translator for what the recipe writes (`sketch/loops.profile_loops` and its `Refusal`, and `ranges.kept_ranges`); everything else it reads is in `design_model`.
+- `probe`: measures sketches and the places of other components' planes, axes and points at other size values and fits the motion file. It does not import the translator: what it reads of the recipe (the loop writer and the range cuts of its tries) is in `design_model`.
 - `orca_translate`: a capture in, an OrcaSlicer Design tab recipe (`orca_recipe`) plus a verdict per step out, for Export for Orca (experimental): one handler module per kind of step, and the shape of the part built so far for the checks of cuts. It imports neither the recipe translator nor the probe. The modules are listed in `docs/orca-output.md`.
 - `export_plan`: the export itself: the pipeline (one body or several), the put back of the design at its end (`pipeline/put_back.py`), the recipe and its notes, the probe run, size offers. The try runner (`pipeline/probe_run.py`) calls the probe through one declared interface (`probe_flow/interface.py`) that the probe of one part (`probe_flow/size_probe.py`) and the group of several parts (`probe_flow/probe_group.py`) both have.
 - `dialog_model`: what the dialogs show, as plain data (rows, Sizes table, result view, stop warning, and the result view and the left out preview of Export for Orca).

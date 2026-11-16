@@ -21,6 +21,7 @@ The extrude's own length, taper and operation follow their parameters in every c
 """
 import copy
 
+from ...design_model import loops
 from ...design_model.values import Quantity, numbers_of
 from ...design_model.words import face_outline_label
 from ...geometry import vec
@@ -29,7 +30,7 @@ from ...sketch_values import keys
 from ...sketch_values.motion import Stuck
 from ..faces.slabs import cleaned
 from ..result import Refusal
-from . import loops, sketch_motion
+from . import loops as recipe_loops, sketch_motion
 from .curved import combine
 
 PARALLEL_TOL = 1e-9
@@ -79,7 +80,7 @@ def prepare(ctx, item, profiles):
     if found is not None:
         return found
     plain = {k: v for k, v in face.items() if k != "face"}
-    measured = loops.profile_loops(plain)
+    measured = recipe_loops.profile_loops(plain)
     if isinstance(measured, Refusal):
         return measured
     drawn = _followed(ctx, item, plain, measured)

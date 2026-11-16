@@ -866,8 +866,8 @@ The driver is `translate()` in `lib/translator/translate.py`. In order:
 1. `validate_capture` checks the capture number and the main keys. A bad capture raises `CaptureError`.
 2. `_placement_refusal`: a part from a linked design, or a place in the assembly that cannot be read, stops here.
 3. The size table gets the capture's geometry links when it has none.
-4. `kept_ranges.built_ranges` (`translator/ranges/kept_ranges.py`) cuts the ranges where the probe saw Fusion fail to rebuild, or saw a followed sketch
-   change its outline (see 3.2).
+4. `tried_ranges.built_ranges` (`design_model/tried_ranges.py`) cuts the ranges where the probe saw Fusion fail to
+   rebuild, or saw a followed sketch change its outline (see 3.2).
 5. It collects "upfront doubts": sizes behind a joint, sizes that change sketch text, sizes the probe saw changing the
    body in a way the copy does not follow (`BODY_MOVED_WHY`), sizes that did not rebuild at any value tried.
 6. It walks the capture (`_settle`), maybe several times (see 1.9.5).
@@ -1617,7 +1617,7 @@ order. The table below follows that order, lowest layer first. `commands` is on 
 | `design_model` | `capture_model`, `geometry`, `package`, `params`, `sketch_solve`, `sketch_values` | The shared layer: facts about the design that every output needs, and doubts about sizes. It does not refuse a step. It records what it finds through a recorder (`recorder.py`). See 2.2. |
 | `results` | `design_model` | The shape of what an output says about a timeline item, for both outputs and the dialogs: the verdict (`verdicts.py`: `verdict` and the verdict kinds) and the record of a step left out (`left_out.py`: `left_out`, `item_name`). It holds shapes and the words of a verdict kind, not facts about the design. See 1.9. |
 | `translator` | `capture_model`, `design_model`, `geometry`, `package`, `params`, `results`, `sketch_values`, `timing` | A capture in, a recipe and verdicts out. One handler per step kind. |
-| `probe` | `capture_model`, `design_model`, `geometry`, `package`, `params`, `sketch_solve`, `sketch_values`, `translator` | Plans the rows, matches the reads with the capture, fits the motion file. It still reads the translator for what the recipe writes: `sketch/loops.profile_loops` and its `Refusal` (the recipe loops of an outline, which `match.py` measures values against and `plan/covered.py` tests) and `ranges.kept_ranges` (`build.py`). |
+| `probe` | `capture_model`, `design_model`, `geometry`, `package`, `params`, `sketch_solve`, `sketch_values` | Plans the rows, matches the reads with the capture, fits the motion file. It does not import the translator. It measures the sketch values through the loop writer of the shared layer (`design_model/loops.py`), which the translator also writes with. Thus a measured value is the value that the translator writes. The range cuts of the tries (`design_model/tried_ranges.py`) are also in the shared layer. |
 | `orca_translate` | `capture_model`, `design_model`, `geometry`, `orca_recipe`, `params`, `results`, `sketch_solve`, `sketch_values` | A capture in, an OrcaSlicer Design tab recipe and verdicts out. It does not import the recipe translator or the probe: what both need is in `design_model`. |
 | `export_plan` | `capture_model`, `design_edit`, `design_model`, `geometry`, `orca_recipe`, `orca_translate`, `package`, `params`, `probe`, `results`, `sketch_values`, `timing`, `translator` | The export itself: the pipelines, the put back, body scope, size offers, the probe flow, marker roll, timeline trim, reach pass, health, package plan. |
 | `dialog_model` | `design_model`, `export_plan`, `package`, `params`, `results`, `translator` | What the dialogs show, as plain data: rows, stop warning, result view. |
@@ -1747,7 +1747,8 @@ one folder per family of steps.
   `placer.py` (the placer protocol), `placer_makers.py`, `moved_placer.py`, `tool_placer.py`, `slabs.py`, `shells.py`,
   `offset_faces.py`, `end_caps.py`, `thin_wall.py`, `crossings.py`, `copy_counts.py`, `meets_part.py` and `floating.py`
   (joins that would float).
-- Sketch values, `sketch/`: `loops.py`, `written_loops.py`, `sketch_motion.py` (sketch values from the motion file),
+- Sketch values, `sketch/`: `loops.py` (the shared loop writer `design_model/loops.py`, with each problem as a
+  `Refusal`), `written_loops.py`, `sketch_motion.py` (sketch values from the motion file),
   `curved.py` (formulas with sines and products), `sketch_crossings.py` (`order_ranges` and
   `simple_ranges`, an outline that would cross itself or have a hole reach its edge, and `OutlineChecks`, the shared
   time of these checks), `rect_corners.py` (the corners of a rectangle loop as numbers and as raw size values), `inner_pick.py` (a face picked inside an end face follows one corner; an edge keeps the
@@ -1755,7 +1756,8 @@ one folder per family of steps.
   can move an outline from another component's sketch in a sweep or a loft, from the `borrowed_movers` key of the
   profile. The outline itself is brought in by `design_model/borrowed.py`).
 - Checks over the size ranges, `ranges/`: `range_check.py` (`recipe_size_values` gives the value of every size at a setting) and
-  `kept_ranges.py` (range cuts, `part_step`, `built_ranges`).
+  `kept_ranges.py` (`holding_ranges`, `holding_ranges_where`, `past_reasons`). The range cuts of the size probe's tries
+  (`part_step`, `built_ranges`) are in `design_model/tried_ranges.py`.
 - Gaps, `gaps/`: `stops.py` (the gap record, the gap names, `stop_reason`, `MAX_GAPS`), `gap_place.py`,
   `gap_measures.py` (`to_recipe`, the move of a gap in recipe form), `gap_file.py`, `finishing.py` (the `finishing` flag). The causes and hints are not here: they are in `capture_model` (`gap_hints.py`,
   `gap_picks.py`).
@@ -1936,6 +1938,22 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   person a tip, or None. `code` names the problem, so a caller can tell two of them apart. The layer does not refuse a
   step. The recipe translator turns a `Problem` into a `Refusal` with the same sentence and cause. The Orca output turns
   it into a `Skip` (the cause `refused` when `cause` is None). `is_problem(found)` tells a record from a problem.
+- `loops.py`: the loop writer. It changes the curves of a sketch outline into the loops that the recipe writes:
+  circle, ellipse, rect, polygon or profile. `loop_of` changes one loop. `profile_loops` changes one outline record into
+  its outer loop and its inner loops. `outline_problem` finds an outline record that is not a drawn sketch outline
+  (text without outlines, a flat face, or an entity that the reader does not know). `flip_y` mirrors a loop across the
+  x axis of the sketch. When an outline cannot be written as loops, the writer gives a `Problem`. The recipe
+  translator reads the loop writer through `translator/sketch/loops.py`, which turns each `Problem` into a `Refusal`
+  with the same sentence. The probe reads the loop writer directly (`probe/match.py`, `probe/plan/covered.py`). The
+  probe measures a sketch value through the same loops that the translator writes. Thus a measured value is the
+  value that the translator writes.
+- `tried_ranges.py`: the range cuts that come from the tries of the size probe. `built_ranges` cuts the range of a
+  free size on each side, to the farthest value that Fusion rebuilt (`failure_cut`), that kept each followed outline
+  (`outline_cut`) and that kept the part in one piece (`split_cut`). Only a failure in a step that the part is built
+  from counts (`part_step`). An end that the person typed is not cut. The recipe translator cuts its size table with
+  `built_ranges` before the walk, and so does the export of several parts (`export_plan/pipeline/parts.py`). The probe
+  uses the same cuts to find a size that kept no value other than its value now (`probe/build.py`,
+  `outline_windows`).
 - `steps/`: one reader for each kind of timeline step. A reader gives facts that any output needs. It has no value, no
   range, no recorder and no output word in it. A fact that it cannot read is a `Problem`. There are readers for
   extrudes, holes and threads, patterns, mirrors, moves and splits, rounds and chamfers, sweeps and lofts.
@@ -2397,7 +2415,7 @@ not a reason to drop it (see 3.2).
 
 The probe keeps the span of `Width`: `low` 20, `high` 68.75, and `failed` `[[80, "Fillet2"], [72.5, "Fillet2"]]`.
 
-The translator (`kept_ranges.built_ranges`, `failure_cut`) then cuts the range to 20 to 68.75. The reason comes from
+The translator (`tried_ranges.built_ranges`, `failure_cut`) then cuts the range to 20 to 68.75. The reason comes from
 `notes.cut_reason`:
 
 "Width: the range stops at 68.75, since Fusion did not rebuild the design at 72.5 (Fillet2)."
@@ -2412,14 +2430,14 @@ is nearer." The far end 80 is still tried later, since a far end that builds giv
 
 #### The rules around the cut
 
-- Only a failure in a step the part is built from counts (`kept_ranges.part_step`): an item of the body's component, or a step
+- Only a failure in a step the part is built from counts (`tried_ranges.part_step`): an item of the body's component, or a step
   that built a tool body. A failure in another component cuts nothing.
 - A typed end is never cut. Then the size keeps its typed range and says "it was followed between A and B; beyond that
   it could not be tried".
 - A size whose row changed a followed outline is cut in the same way, at the farthest value that kept the outline
   (`outline_cut`). Reason: "Width: the range stops at 55, since Sketch3 makes a different outline at 60."
 - A size whose row left the part in several separate pieces is cut in the same way, at the farthest value tried in one
-  piece (`kept_ranges.split_cut`, `Motion.spans[size].split`, `Cut.split`). Reason: "Width: the range stops at 55, since
+  piece (`tried_ranges.split_cut`, `Motion.spans[size].split`, `Cut.split`). Reason: "Width: the range stops at 55, since
   the part comes apart into 2 separate pieces in Fusion at 60." This happens when copies of a pattern or a join no
   longer touch the part, or when a cut cuts the part in two. The app builds a part only in one piece. The reasons
   "no value other than 40 could be copied" and "could not be measured" name such tries too. A typed end is never cut,

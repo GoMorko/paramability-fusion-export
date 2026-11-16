@@ -22,11 +22,7 @@ ALLOWED_IMPORTS = {
     "results": {"design_model"},
     "translator": {"capture_model", "design_model", "geometry", "package", "params", "results", "sketch_values",
                    "timing"},
-    # `probe` still reads the translator for what the recipe writes: `profile_loops` and its `Refusal` (the recipe
-    # loops of an outline, which `probe.match` measures values against and `probe.plan.covered` tests), and the kept
-    # ranges (`probe.build`).
-    "probe": {"capture_model", "design_model", "geometry", "package", "params", "sketch_solve", "sketch_values",
-              "translator"},
+    "probe": {"capture_model", "design_model", "geometry", "package", "params", "sketch_solve", "sketch_values"},
     "orca_translate": {"capture_model", "design_model", "geometry", "orca_recipe", "params", "results", "sketch_solve",
                        "sketch_values"},
     "export_plan": {"capture_model", "design_edit", "design_model", "geometry", "orca_recipe", "orca_translate",

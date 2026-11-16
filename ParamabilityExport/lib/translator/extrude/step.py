@@ -1,5 +1,6 @@
 """The handler of an extrude feature: checks it and writes one recipe extrude step per outline and side."""
 from ...capture_model import gap_hints
+from ...design_model.loops import flip_y
 from ...design_model.values import Quantity
 from ...geometry import vec
 from ...package.numbers import round9
@@ -103,7 +104,7 @@ def handle(item, ctx):
             outer, inner = drawn.written(ctx)
         reverse = entry.sign < 0
         on = placement.reversed_of(base) if reverse else base
-        pick = (lambda loop: loops.flip_y(loop)) if reverse else (lambda loop: loop)
+        pick = flip_y if reverse else (lambda loop: loop)
         sketch = {"on": on, "outer": pick(outer)}
         if inner:
             sketch["inner"] = [pick(loop) for loop in inner]

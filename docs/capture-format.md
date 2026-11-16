@@ -1718,13 +1718,13 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
   size that no formula reads after that is not a size: it is left out and listed in `TranslateResult.dropped` with its
   reason. The ranges are the table's, with two cuts. First, on a side where the probe saw Fusion fail to rebuild
   the design with only that size changed, an untyped range stops at the farthest value that built
-  (`kept_ranges.built_ranges`, before the walk; a `size_table.Cut`, which keeps the nearest failure behind each cut
+  (`tried_ranges.built_ranges`, before the walk; a `size_table.Cut`, which keeps the nearest failure behind each cut
   end). A failure counts only when its step is one the part is built from: an item of the target's component or a
   step that made a Combine tool body, or a failure with no step name; a step of another component, or a name no
   capture item has, cuts nothing and the size keeps the "followed between A and B" mark. Where a followed sketch made
   a different outline with only that size changed, the range stops the same way at the farthest value that kept it
   (`spans.kept`, `Cut.changed`), and where Fusion built the part in several separate pieces, at the farthest value
-  tried in one piece (`spans.split`, `Cut.split`, `kept_ranges.split_cut`; the reason says "the part comes apart into
+  tried in one piece (`spans.split`, `Cut.split`, `tried_ranges.split_cut`; the reason says "the part comes apart into
   2 separate pieces in Fusion at 40"). Second, a value that
   Paramability refuses past some size value (a taper of 45 degrees or more) cuts the ranges of the untyped sizes it
   reads (`Context.cut`). `TranslateResult.cuts` lists each cut size as `{ name, reason, words, why, min, max }`
@@ -1986,7 +1986,7 @@ and still, measured and moved (the keys), or not measured (`translator.sizes.ske
   every followed outline, nearer than the nearest value that changed one; the states that set the size past it are
   left out of the fit, and `spans` records `kept` (`[low, high]`, null on a side without a change or with a typed end)
   and `changed` (`[value, sketch]` of each such row). The translator cuts the range there like a failure in Fusion
-  (`kept_ranges.outline_cut`; the cut reason says "LidRail makes a different outline at 2.5"). When this limit and the
+  (`tried_ranges.outline_cut`; the cut reason says "LidRail makes a different outline at 2.5"). When this limit and the
   failures leave only the value now, nothing is left out: the size stays stuck, `kept` is the value now at both ends,
   and its reason says "no value other than 12 could be copied, since ..." with the nearest failure or different
   outline on each side. While the rows run, a row that changed an outline counts as one that did not build, so the
@@ -2181,7 +2181,7 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
   state or at E0, less as many as did so at E0 (a cut that cuts a body in two, or a join that does not reach it, leaves
   new bodies next to it). A try where the part is in several pieces while it was one at E0 is kept as a try that did
   not build, with `pieces` (the count) in its state and an entry in `probe.dropped`: nothing is fitted to it, and the
-  size's range stops at the farthest value tried in one piece (`Motion.spans` `split`, `kept_ranges.split_cut`).
+  size's range stops at the farthest value tried in one piece (`Motion.spans` `split`, `tried_ranges.split_cut`).
   Reading them recomputes nothing.
 - A sketch of another component that a step borrows is requested with the optional `borrowed`: `{ "<sketch token>":
   { "path": "<fullPathName the capture recorded>" } }`. It is found by token, read native, and its place is found

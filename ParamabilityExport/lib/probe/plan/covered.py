@@ -1,11 +1,11 @@
 """The sketches and flat faces the probe can follow: which capture records name them, and which it leaves alone."""
 from ...capture_model.step_kinds import AXIS, HOLE_POINTS, OUTLINE_FACE, PATH, PROFILES, step_type
 from ...design_model import design
+from ...design_model.loops import profile_loops
+from ...design_model.problem import is_problem
 from ...design_model.steps import emboss
 from ...design_model.words import face_outline_label
 from ...sketch_values import keys
-from ...translator.result import Refusal
-from ...translator.sketch.loops import profile_loops
 
 _CURVES = ("line", "arc", "circle", "ellipse")
 _PATH_CURVES = ("line", "arc", "circle")
@@ -39,7 +39,7 @@ def _profile_ok(profile):
     curves = [c for loop in profile["loops"] for c in (loop.get("curves") or [])]
     if not curves or any(c.get("kind") not in _CURVES or not c.get("entity") for c in curves):
         return False
-    return not isinstance(profile_loops(profile), Refusal)
+    return not is_problem(profile_loops(profile))
 
 
 def _stray_tokens(node, out):
@@ -175,7 +175,7 @@ def outline_face(data):
     if not curves or any(not isinstance(c, dict) or c.get("kind") not in _CURVES for c in curves):
         return None
     plain = {k: v for k, v in record.items() if k != "face"}
-    return None if isinstance(profile_loops(plain), Refusal) else record
+    return None if is_problem(profile_loops(plain)) else record
 
 
 def _scan_face(out, index, data):

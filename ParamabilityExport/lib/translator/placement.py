@@ -1,7 +1,7 @@
 """Sketch frames to recipe placements.
 
 A recipe placement is `{ origin, normal, xDir }`; the sketch y axis is `normal x xDir`. Flipping the normal while
-keeping `xDir` mirrors the sketch y axis, so the loops of a flipped placement go through `loops.flip_y`.
+keeping `xDir` mirrors the sketch y axis, so the loops of a flipped placement go through `design_model.loops.flip_y`.
 """
 from ..geometry import vec
 

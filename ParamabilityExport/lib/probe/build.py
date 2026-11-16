@@ -25,7 +25,7 @@ A different outline that a size makes on its own is a limit of its range, not a 
 on that side the range keeps the farthest value tried alone that built and kept every outline, nearer than the nearest
 value that changed one. The states that set a size past such a limit are left out of the fit, and `Motion.spans`
 records the limits (`kept`) and the values that changed an outline (`changed`), so the translator cuts the range there
-(`translator.ranges.kept_ranges.built_ranges`). When no value but the value now remains, nothing is left out: the size
+(`design_model.tried_ranges.built_ranges`). When no value but the value now remains, nothing is left out: the size
 stays stuck, and `kept` is the value now at both ends.
 """
 from ..design_model.dimension_sizes import size_values
@@ -36,7 +36,7 @@ from .state import ProbeState, as_states
 from ..geometry.tolerances import SAME_SIZE
 from ..sketch_values import coverage
 from ..sketch_values.motion import SHAPE, UNREAD, Motion
-from ..translator.ranges import kept_ranges
+from ..design_model import tried_ranges
 
 
 class StateRun:
@@ -285,10 +285,10 @@ def outline_windows(run, table, spans, capture=None):
     """`{Fusion name: {"kept": [low, high], "changed": [[value, sketch]]}}` of the free sizes whose own try changed a
     followed outline: `changed` lists those values, `kept` the farthest value on each side that kept every outline
     (`_limit`; None on a side with no change or an end the person typed). When that range and the cuts where Fusion did
-    not rebuild or the part came apart (`kept_ranges.failure_cut`, `split_cut`, over `spans`) leave only the value now,
+    not rebuild or the part came apart (`tried_ranges.failure_cut`, `split_cut`, over `spans`) leave only the value now,
     `kept` is the value now at both ends."""
     entries = {e.name: e for e in table.entries}
-    mine = kept_ranges.part_step(capture)
+    mine = tried_ranges.part_step(capture)
     out = {}
     for name, tries in _alone_tries(run).items():
         e = entries.get(name)
@@ -299,9 +299,9 @@ def outline_windows(run, table, spans, capture=None):
         now, typed = run.current[name], table.typed_ends(name)
         kept = [None if typed[at] else _limit(tries, now, sign) for at, sign in ((0, -1), (1, 1))]
         span = dict(spans[name], kept=kept, changed=changed)
-        low, high, _ = kept_ranges.failure_cut(table, e, span, mine)
-        o_low, o_high, _ = kept_ranges.outline_cut(table, e, span)
-        s_low, s_high, _ = kept_ranges.split_cut(table, e, span)
+        low, high, _ = tried_ranges.failure_cut(table, e, span, mine)
+        o_low, o_high, _ = tried_ranges.outline_cut(table, e, span)
+        s_low, s_high, _ = tried_ranges.split_cut(table, e, span)
         if min(high, o_high, s_high) - max(low, o_low, s_low) <= SAME_SIZE:
             kept = [now, now]
         out[name] = {"kept": kept, "changed": changed}

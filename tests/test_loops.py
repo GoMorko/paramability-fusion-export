@@ -4,8 +4,8 @@ import unittest
 from tests import context  # noqa: F401
 from tests.translator_helpers import close
 
-from lib.translator.result import Refusal
-from lib.translator.sketch import loops
+from lib.design_model import loops
+from lib.design_model.problem import Problem
 
 
 def line(a, b):
@@ -100,26 +100,26 @@ class ChainTest(unittest.TestCase):
         self.assertEqual(arcs[0]["to"], [10, 10])
 
 
-class RefusalTest(unittest.TestCase):
+class ProblemTest(unittest.TestCase):
     def test_open_chain_names_the_sketch(self):
         refusal = loops.loop_of([line((0, 0), (10, 0)), line((10, 0), (10, 10)), line((10, 10), (0, 9))], "Sketch7")
-        self.assertIsInstance(refusal, Refusal)
-        self.assertIn("Sketch7", refusal.reason)
-        self.assertIn("not closed", refusal.reason)
+        self.assertIsInstance(refusal, Problem)
+        self.assertIn("Sketch7", refusal.words)
+        self.assertIn("not closed", refusal.words)
 
     def test_two_lines_do_not_close_an_area(self):
-        self.assertIsInstance(loops.loop_of([line((0, 0), (10, 0)), line((10, 0), (0, 0))]), Refusal)
+        self.assertIsInstance(loops.loop_of([line((0, 0), (10, 0)), line((10, 0), (0, 0))]), Problem)
 
     def test_lines_back_and_forth_on_one_line_have_no_area(self):
         flat = [line((0, 0), (5, 0)), line((5, 0), (2, 0)), line((2, 0), (0, 0))]
-        self.assertIn("no area", loops.loop_of(flat, "Side").reason)
+        self.assertIn("no area", loops.loop_of(flat, "Side").words)
 
     def test_spline_curves_refuse(self):
         refusal = loops.loop_of([{"kind": "other", "type": "NurbsCurve3D", "start": [0, 0], "end": [0, 0], "samples": []}])
-        self.assertIsInstance(refusal, Refusal)
+        self.assertIsInstance(refusal, Problem)
 
     def test_circle_mixed_with_lines_refuses(self):
-        self.assertIsInstance(loops.loop_of([{"kind": "circle", "center": [0, 0], "radius": 1}, line((0, 0), (1, 0))]), Refusal)
+        self.assertIsInstance(loops.loop_of([{"kind": "circle", "center": [0, 0], "radius": 1}, line((0, 0), (1, 0))]), Problem)
 
 
 class FlipYTest(unittest.TestCase):
