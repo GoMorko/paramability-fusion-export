@@ -20,7 +20,7 @@ crossing, the outline clear of the tightest bend and of the other parts of the p
 Left out: a twist or a taper, an outline kept in one direction along a path that turns, guide rails and surfaces, part
 of a path, a path that bends out of one plane, a free curve Orca cannot draw exactly (one without its exact
 definition, as a body edge, one `splines` refuses, or a spline the planner cut open inside), a closed path that
-holds a spline (live, Orca crashed while it built one), sharp corners, an
+holds a spline (live, Orca crashed while it built one), sharp corners (also a corner inside a spline), an
 outline with holes along a bent path, an outline that is not square to the path where it starts, and a new body
 whose measured volume or end face does not match the outline and path (`design_model.steps.sweep`).
 
@@ -181,8 +181,11 @@ def sweep(ctx, step):
 
 
 def _sharp(found):
-    """True when two parts of a flat path (and the seam of a closed one) meet at a corner."""
+    """True when two parts of a flat path (and the seam of a closed one) meet at a corner, or a spline of the path
+    turns at a joint of its own pieces (`sweep_splines`, `inner_turn_deg`)."""
     curves = found.curves
+    if any((c.get("inner_turn_deg") or 0.0) > _SMOOTH_DEG for c in curves):
+        return True
     pairs = list(zip(curves, curves[1:])) + ([(curves[-1], curves[0])] if found.closed else [])
     for before, after in pairs:
         a, b = tangents(before)[1], tangents(after)[0]

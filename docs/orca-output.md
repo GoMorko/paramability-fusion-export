@@ -552,7 +552,9 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   without its definition, one of the splines left out below, or a spline the planner cut open where a closed path
   meets the outline), a closed path that holds a spline (`sweepPath`: live, Orca 2.5.1 crashed in OCCT's
   `BRepFill_Pipe::MakeShape` while it built a closed track of two lines and two splines), a sharp corner (`sharpCorner`: live, Orca built 286 mm3
-  where Fusion's mitred wire has 384, and 202 for a closed square path against 439), holes along a bent path
+  where Fusion's mitred wire has 384, and 202 for a closed square path against 439), also a corner inside a spline
+  (`sharpCorner`: a joint of its Bezier pieces where the curve turns by more than 0.01 degrees, as at an inner knot
+  that a cubic has three times or at a corner of a degree one spline; `splines.joint_turns`), holes along a bent path
   (`outlineHoles`), guide rails and surfaces, part of a path, an outline of another component whose place is not
   known, a path in another component and the outlines of
   different planes.
@@ -576,8 +578,9 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   knot inserted up to the degree), and each piece is one Orca entity of 4 poles (3 for degree two), the same curve.
   The pieces must start and end where Fusion's curve does and pass within 0.002 mm of every measured point. Left
   out: a closed (periodic) spline, differing weights, a degree over three, knots not clamped at both ends, a break
-  in the curve, and a spline read without its definition (older captures). The same pieces draw a spline of a sweep
-  path.
+  in the curve, and a spline read without its definition (older captures). An inner knot as many times as the degree
+  can make a corner in the curve; Orca draws the same corner, so an outline keeps it. The same pieces draw a spline
+  of a sweep path, where such a corner leaves the sweep out (see above).
 - Live with OrcaSlicer 2.5.1 on 2026-11-16: the fixtures `sweep_pipe`, `sweep_far_end`, `sweep_closed_rim`,
   `sweep_ring`, `sweep_straight`, `sweep_edges`, `loft_two_squares` and `loft_on_plate` built with the capture's box
   and volume (1857.8, 1857.8, 420.5, 2261.9, 2400.0, the box only, 7000.0, 15000.0); the captures of

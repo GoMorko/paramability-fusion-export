@@ -4,10 +4,11 @@ Orca builds the wire of a path sketch from the same entities as an outline (`Ske
 path spline is written as the Bezier pieces of `splines.py`: the same curve, no fit. A sketch path's curve carries its
 exact definition in its `flat` record (`nurbs`, in the path sketch's 2D frame); a body edge has none and stays out.
 
-- `with_exact_splines` gives each spline of a sketch path its definition in the capture's coordinates (`nurbs3d`)
-  and its exact end directions (from the first and last poles of a clamped curve), so the planner and the corner
-  check see whether the spline meets its neighbours smoothly. The measured points only give those directions to
-  within a fraction of a degree.
+- `with_exact_splines` gives each spline of a sketch path its definition in the capture's coordinates (`nurbs3d`),
+  its exact end directions (from the first and last poles of a clamped curve), so the planner and the corner check
+  see whether the spline meets its neighbours smoothly (the measured points only give those directions to within a
+  fraction of a degree), and the sharpest turn at a joint of its own pieces (`inner_turn_deg`, `splines.joint_turns`),
+  so the corner check also sees a corner inside the spline.
 - `flat_spline` turns such a curve into a curve of the path's 2D frame, run the way the planned path runs. A curve the
   planner cut (a closed path opened inside the spline) no longer starts and ends at the definition's ends and is None.
 - `tightest` is the radius of the tightest bend of the Bezier pieces, read along them, which the planner's fitted
@@ -32,11 +33,12 @@ _EPS = 1e-12
 
 
 def _exact(curve, frame):
-    """`nurbs3d`, `tangent_start` and `tangent_end` for a path curve whose `flat` record holds a definition Orca
-    draws exactly and whose ends match it (either way round), else None."""
+    """`nurbs3d`, `tangent_start`, `tangent_end` and `inner_turn_deg` for a path curve whose `flat` record holds a
+    definition Orca draws exactly and whose ends match it (either way round), else None."""
     flat = curve.get("flat")
     nurbs = flat.get("nurbs") if isinstance(flat, dict) else None
-    if not isinstance(nurbs, dict) or not splines.bezier_pieces(nurbs):
+    turns = splines.joint_turns(nurbs) if isinstance(nurbs, dict) else None
+    if turns is None:
         return None
     try:
         poles = [vec.frame_apply(frame, [float(p[0]), float(p[1]), 0.0]) for p in nurbs["poles"]]
@@ -54,7 +56,7 @@ def _exact(curve, frame):
     if first is None or last is None:
         return None
     return {"nurbs3d": dict(nurbs, poles=poles), "tangent_start": vec.unit(vec.sub(first, poles[0])),
-            "tangent_end": vec.unit(vec.sub(poles[-1], last))}
+            "tangent_end": vec.unit(vec.sub(poles[-1], last)), "inner_turn_deg": max(turns, default=0.0)}
 
 
 def with_exact_splines(path):

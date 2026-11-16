@@ -2258,7 +2258,11 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   fit, so that it takes the same paths as the recipe output. The Orca output does not write the fitted curve. It
   writes each spline of the path exactly, as the pieces of its definition. Before it plans the path, it gives each
   spline its exact end directions (`orca_translate/sweep_splines.py`). Thus the check for sharp corners uses the
-  exact directions, and not the directions between two measured points.
+  exact directions, and not the directions between two measured points. A spline can also have a corner inside it,
+  at a joint between two of its pieces. This occurs when an inner knot occurs as many times as the degree (three
+  times in a cubic spline, or any inner knot of a spline of degree one). `sweep_splines` gives the largest turn at
+  these joints (`inner_turn_deg`, from `splines.joint_turns`), and the check for sharp corners uses it too. An
+  outline keeps such a corner, because Orca draws the same corner.
 - `steps/`: one reader for each kind of step:
   - `sweep.py`: the settings of a sweep: `settings_problem` gives the problem of a guide surface, a guide rail, a
     setting that Fusion did not give, or an orientation that is not perpendicular or parallel, and `cover_problem`
