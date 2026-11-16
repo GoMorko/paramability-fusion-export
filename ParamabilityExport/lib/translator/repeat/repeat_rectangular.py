@@ -8,7 +8,7 @@ kept by a `when` on the count.
 import math
 from itertools import product
 
-from ...design_model.steps.repeat import (FIT_TOL_MM, FUSION_EXTRA_SIDE, in_component, is_identity,
+from ...design_model.steps.repeat import (FIT_TOL_MM, FUSION_EXTRA_SIDE, data_in_component, is_identity,
                                           is_identity_rotation, kept_elements, reach as reach_of, solve_lattice)
 from ...design_model.values import Quantity, wrapped
 from ...design_model import words as shared
@@ -202,15 +202,16 @@ def _tried_places(axes, axis):
     return places_at
 
 
-def rectangular(item, ctx, sources=None):
-    """`sources` is `(solid step ids, finish steps)` when the caller wrote what the pattern repeats."""
-    item = in_component(item, ctx.component_frame(), merge=True)
-    data = item.get("data") or {}
+def rectangular(ctx, step, sources=None):
+    """The pattern of the resolved step `step`. `sources` is `(solid step ids, finish steps)` when the caller wrote what
+    the pattern repeats."""
+    item = step.brought
+    data = data_in_component(step.brought_data, ctx.component_frame(), merge=True)
     sources = split_sources(data, ctx, "pattern") if sources is None else sources
     if isinstance(sources, Refusal):
         return sources
     solids, finishes = sources
-    axes = lattice_axes(item, ctx)
+    axes = lattice_axes(item, data, ctx)
     if isinstance(axes, Refusal):
         return axes
     kept = kept_elements(data)
@@ -264,12 +265,13 @@ def rectangular(item, ctx, sources=None):
     left_out = any(left for _, _, left in grids)
     steps = []
     for (parts, skip, _), motions in zip(grids, owned):
-        step = {"kind": "pattern"}
+        recipe_step = {"kind": "pattern"}
         for key, part in zip(("linear", "linear2"), parts):
-            step[key] = {"dir": round_vec(part["dir"]), "count": part["count"], "step": round9(part["axis"]["step"])}
+            recipe_step[key] = {"dir": round_vec(part["dir"]), "count": part["count"],
+                                "step": round9(part["axis"]["step"])}
         if skip:
-            step["skip"] = skip
-        steps.append((step, motions))
+            recipe_step["skip"] = skip
+        steps.append((recipe_step, motions))
     counted = _counted_finishes(ctx, item, finishes, grids, axes) if solids else None
     result = build(ctx, item, solids, [] if counted is not None else finishes, steps, "pattern")
     if isinstance(result, Refusal):
@@ -277,10 +279,10 @@ def rectangular(item, ctx, sources=None):
     if counted is not None:
         result.extend(StepResult.of(counted).entries)
     keep_pattern_fixed(ctx, item, left_out, [] if counted is not None else finishes, ("quantity_one", "quantity_two"))
-    for (parts, skip, _), (step, _) in zip(grids, steps):
+    for (parts, skip, _), (recipe_step, _) in zip(grids, steps):
         for key, part in zip(("linear", "linear2"), parts):
             # A skip list names copies by number, so the app wants a fixed count beside it.
             sized = part["count_q"].sized and not skip
-            step[key]["count"] = part["count_q"].json() if sized else part["count"]
-            step[key]["step"] = part["axis"]["step_q"].json()
+            recipe_step[key]["count"] = part["count_q"].json() if sized else part["count"]
+            recipe_step[key]["step"] = part["axis"]["step_q"].json()
     return result

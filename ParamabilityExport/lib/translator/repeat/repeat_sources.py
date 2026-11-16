@@ -8,7 +8,7 @@ from .. import notes as wording
 from ..result import Refusal
 from ...capture_model import gap_hints, tool_items
 from ...capture_model.step_kinds import FINISH, SOLID, recipe_kind
-from ...design_model import tool_chains, words as shared
+from ...design_model import design, tool_chains, words as shared
 from ..step_walk import moved_later
 
 MAX_REFERENCES = 64
@@ -17,28 +17,34 @@ MAX_REFERENCES = 64
 UNCOPYABLE_FINISH_KEYS = ("sizeEnd",)
 
 
-def _tools_of(item):
-    """The tool bodies of a Combine item (its data lists `tools`), else an empty list."""
-    tools = (item.get("data") or {}).get("tools")
+def _tools_of(data):
+    """The tool bodies of a Combine item from its data (`tools`), else an empty list."""
+    tools = data.get("tools")
     return [tool for tool in tools if isinstance(tool, dict)] if isinstance(tools, list) else []
 
 
 def _combines(ctx):
-    """`(item, [(tool name, indexes that built the tool)])` for each Combine of the timeline (`tool_items.built_by`).
-    It depends on the capture alone, so it is worked out once per translation."""
+    """`(item, data, [(tool name, indexes that built the tool)])` for each Combine of the timeline
+    (`tool_items.built_by`), with the data of the item as read. It depends on the capture alone, so it is worked out
+    once per translation."""
     cache = ctx.cache.setdefault(__name__, {})
     if "combines" not in cache:
-        cache["combines"] = [
-            (item, [(tool_chains.name_of(tool), tool_items.built_by(ctx.timeline, tool, item)) for tool in tools])
-            for item, tools in ((item, _tools_of(item)) for item in ctx.timeline) if tools]
+        found = []
+        for item in ctx.timeline:
+            data = design.as_read(item).brought_data
+            tools = _tools_of(data)
+            if tools:
+                found.append((item, data, [(tool_chains.name_of(tool), tool_items.built_by(ctx.timeline, tool, item))
+                                           for tool in tools]))
+        cache["combines"] = found
     return cache["combines"]
 
 
 def _written_combines(ctx):
     """The `_combines` entries of the Combines of this walk's body that wrote steps."""
-    for item, tools in _combines(ctx):
-        if ctx.steps_of(item["index"]) and ctx.is_target(item["data"].get("target")):
-            yield item, tools
+    for item, data, tools in _combines(ctx):
+        if ctx.steps_of(item["index"]) and ctx.is_target(data.get("target")):
+            yield item, data, tools
 
 
 def _combined_tools(indexes, ctx, what):
@@ -49,10 +55,10 @@ def _combined_tools(indexes, ctx, what):
     follow. A Combine that keeps only what its tools share with the part cannot be repeated."""
     chosen, covered = set(indexes), set()
     combines = list(_written_combines(ctx))
-    for item, tools in combines:
+    for item, data, tools in combines:
         if item["index"] not in chosen:
             continue
-        if (item.get("data") or {}).get("operation") == "intersect":
+        if data.get("operation") == "intersect":
             return Refusal(shared.REPEAT_TOOL_KEEPS
                            % (item.get("name") or "A Combine", what))
         for name, found in tools:
@@ -60,7 +66,7 @@ def _combined_tools(indexes, ctx, what):
                 return Refusal("This %s copies %s but not every step that builds its tool body %s, which is not "
                                "copied yet." % (what, item.get("name") or "a Combine", name))
             covered |= found
-    for item, tools in combines:
+    for item, _, tools in combines:
         for name, found in tools:
             if item["index"] not in chosen and any(not ctx.steps_of(i) for i in (found & chosen) - covered):
                 return Refusal("This %s copies steps that build the tool body %s without %s, which uses it. That is "

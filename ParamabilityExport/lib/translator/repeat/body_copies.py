@@ -21,7 +21,7 @@ from ...capture_model.capture import outside_component, same_body
 from ...capture_model.step_kinds import SOLID, recipe_kind
 from ...geometry import vec
 from ...geometry.rigid import move_from_frame
-from ...design_model import refs, roles, tool_chains
+from ...design_model import design, roles, tool_chains
 from ...results.verdicts import TRANSLATED
 from ...design_model.steps.repeat import is_identity, kept_elements, mirror_plane
 from .. import ref_motion, repeat, values, walk
@@ -103,9 +103,9 @@ def match(data):
 # ---------------------------------------------------------------- one body at a time
 
 
-def _mark_layout(item, ctx, paths):
-    """The copy's place is written as numbers: every size behind the layout is marked."""
-    data = item.get("data") or {}
+def _mark_layout(item, data, ctx, paths):
+    """The copy's place is written as numbers: every size behind the layout is marked. `data` is the data of the
+    pattern `item`."""
     name = item.get("name") or "A pattern"
     why = "each copy of %s is written on its own, so it cannot follow this" % name
     for path in paths:
@@ -122,9 +122,9 @@ def _mark_layout(item, ctx, paths):
             ref_motion.check_own_direction(ctx, item, which, "spreads copies along")
 
 
-def _in_walk(item, ctx, paths):
-    """The pattern as the walk of one body sees it."""
-    data = item.get("data") or {}
+def _in_walk(ctx, step, paths):
+    """The pattern of the resolved step `step` as the walk of one body sees it."""
+    item, data = step.brought, step.brought_data
     if any(ctx.is_target(source) for source in data.get("source_bodies") or ()):
         return StepResult()
     copies = match(data)
@@ -139,32 +139,29 @@ def _in_walk(item, ctx, paths):
     if isinstance(tool, Refusal):
         return tool
     with tool.ctx.recording() as marked:
-        _mark_layout(item, tool.ctx, paths)
+        _mark_layout(item, data, tool.ctx, paths)
     out = paste.written_again(tool)
     out.join(marked)
     out.add(move.written(found.motion), [MoveMaker(found.motion)])
     return out
 
 
-def _of_bodies(item):
-    return (item.get("data") or {}).get("entity_type") == "bodies"
+def _of_bodies(data):
+    return data.get("entity_type") == "bodies"
 
 
 def rectangular(ctx, step):
-    item = step.brought
-    return _in_walk(item, ctx, GRID_PATHS) if _of_bodies(item) else repeat.rectangular(item, ctx)
+    return _in_walk(ctx, step, GRID_PATHS) if _of_bodies(step.brought_data) else repeat.rectangular(ctx, step)
 
 
 def circular(ctx, step):
-    item = step.brought
-    return _in_walk(item, ctx, TURN_PATHS) if _of_bodies(item) else repeat.circular(item, ctx)
+    return _in_walk(ctx, step, TURN_PATHS) if _of_bodies(step.brought_data) else repeat.circular(ctx, step)
 
 
 def mirror(ctx, step):
-    item = step.brought
-    if _of_bodies(item) and not (item.get("data") or {}).get("combine"):
-        return _in_walk(item, ctx, ())
-    return repeat.mirror(item, ctx)
+    if _of_bodies(step.brought_data) and not step.brought_data.get("combine"):
+        return _in_walk(ctx, step, ())
+    return repeat.mirror(ctx, step)
 
 
 # ---------------------------------------------------------------- a whole pattern in a Combine
@@ -177,11 +174,14 @@ def _listed(body, tools):
 def _pattern_that_made(ctx, tool, before):
     """The pattern item that made the copy `tool`, when nothing changed the copy since; else None."""
     chain = tool_chains.made_by(ctx.timeline, tool, before, ctx.component)
-    if len(chain) != 1 or not _of_bodies(chain[0]) or not roles.copies_bodies(chain[0]):
+    if len(chain) != 1:
+        return None
+    data = design.as_read(chain[0]).brought_data
+    if not _of_bodies(data) or not roles.copies_bodies(chain[0]):
         return None
     if tool_chains.unseen_change(ctx.timeline, tool, before, ctx.component) is not None:
         return None
-    results = (chain[0].get("data") or {}).get("result_bodies") or []
+    results = data.get("result_bodies") or []
     return chain[0] if _listed(tool, results) else None
 
 
@@ -193,9 +193,10 @@ def _stays_as_copied(ctx, body, pattern, before):
 
 def _whole(ctx, combine_item, pattern, tools, combine):
     """The `Group` of a pattern whose every body the Combine takes, or None."""
-    data = pattern.get("data") or {}
+    read = design.as_read(pattern)
+    data = read.brought_data
     copies = match(data)
-    if copies is None or outside_component(pattern) or refs.is_foreign(data):
+    if copies is None or outside_component(pattern) or read.foreign:
         return None
     for source in data["source_bodies"]:
         if ctx.is_target(source):
@@ -291,7 +292,8 @@ def write(ctx, combine_item, group, combine, number):
     where = walked[0].ctx if walked else ctx
     with ctx.recording() as recorded:
         walk.fix_construction(where, group.item)
-        copies = _repeater(group.item["data"])(group.item, where, (ids, []))
+        read = design.as_read(group.item)
+        copies = _repeater(read.brought_data)(where, read, (ids, []))
         if not isinstance(copies, Refusal):
             _mark_counts(ctx, group.item)
     if isinstance(copies, Refusal):

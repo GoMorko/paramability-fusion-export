@@ -5,7 +5,7 @@ to both sides of the original is written as a part turning each way (`repeat/sym
 """
 import math
 
-from ...design_model.steps.repeat import FIT_TOL_MM, in_component, kept_elements, reach as reach_of
+from ...design_model.steps.repeat import FIT_TOL_MM, data_in_component, kept_elements, reach as reach_of
 from ...design_model.values import Quantity
 from ...design_model import words as shared
 from ...geometry import vec
@@ -132,7 +132,7 @@ def _measured_places(setup):
     if any(k is None for _, k in steps):
         return None, shared.PATTERN_UNEVEN_ROUND
     every = []
-    for element in setup["data"]["elements"]:
+    for element in setup["pattern"]["elements"]:
         turn = _turn_about(element["frame"], direction)
         if turn is not None and vec.close(vec.frame_apply(element["frame"], point), point, FIT_TOL_MM):
             k = _signed_copy(turn, delta, count)
@@ -160,7 +160,7 @@ def _centred_places(setup):
     Fusion's own transforms of a symmetric turn do not always show the copies behind the original on their side, so
     an odd count is taken as centred when every copy is listed and kept, the original is among them, and each copy
     still turns by a whole number of steps."""
-    count, delta, data = setup["count"], setup["delta"], setup["data"]
+    count, delta, data = setup["count"], setup["delta"], setup["pattern"]
     elements = data["elements"]
     left_out = set(data.get("suppressed_ids") or [])
     if count % 2 == 0 or len(elements) != count or any(
@@ -223,10 +223,11 @@ def _symmetric_circular(item, ctx, setup):
     return result
 
 
-def circular(item, ctx, sources=None):
-    """`sources` is `(solid step ids, finish steps)` when the caller wrote what the pattern repeats."""
-    item = in_component(item, ctx.component_frame())
-    data = item.get("data") or {}
+def circular(ctx, step, sources=None):
+    """The pattern of the resolved step `step`. `sources` is `(solid step ids, finish steps)` when the caller wrote what
+    the pattern repeats."""
+    item = step.brought
+    data = data_in_component(step.brought_data, ctx.component_frame())
     sources = split_sources(data, ctx, "pattern") if sources is None else sources
     if isinstance(sources, Refusal):
         return sources
@@ -263,7 +264,7 @@ def circular(item, ctx, sources=None):
         angle_q = values.quantity(ctx, item, "total_angle_deg", total_deg, dim="angle",
                                   sign=-1 if raw_total < 0 else 1, absolute=True)
         return _symmetric_circular(item, ctx, {
-            "data": data, "solids": solids, "finishes": finishes, "axis": axis, "count": count, "delta": delta,
+            "pattern": data, "solids": solids, "finishes": finishes, "axis": axis, "count": count, "delta": delta,
             "point": point, "direction": direction, "turns": turns, "count_q": count_q, "angle_q": angle_q})
 
     sign = next((s for s in (1, -1) if all(_copy_number(t, delta, s, count, full) is not None for _, t in turns)), 0)

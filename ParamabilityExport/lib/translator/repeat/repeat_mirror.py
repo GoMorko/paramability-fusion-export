@@ -52,9 +52,10 @@ def _step_by_step(ctx, item, data, plane, written):
     return [step["id"] for step in ctx.steps]
 
 
-def mirror(item, ctx, sources=None):
-    """`sources` is `(solid step ids, finish steps)` when the caller wrote what the mirror repeats."""
-    data = item.get("data") or {}
+def mirror(ctx, step, sources=None):
+    """The mirror of the resolved step `step`. `sources` is `(solid step ids, finish steps)` when the caller wrote what
+    the mirror repeats."""
+    item, data = step.brought, step.brought_data
     plane = mirror_plane(data)
     if plane is None:
         return Refusal(shared.MIRROR_PLANE)
