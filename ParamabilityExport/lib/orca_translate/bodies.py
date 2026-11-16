@@ -6,13 +6,13 @@ far side is copied.
   (`cut_keep_upper` or `cut_keep_lower`). The capture must show the part's piece on one side and every other piece
   of the same body on the other.
 - By a solid body: that body is written as a tool (`tools.build`) and the part keeps what lies inside it (an
-  intersect) or outside it (a cut), as the capture's `inside` answers say (`split_inside.resolve`).
+  intersect) or outside it (a cut), as the capture's `inside` answers say (`design_model/steps/split.py`).
 - Anything else (a curved face, a sketch curve) is left out.
 A split is left out too when a later step changes another of its pieces together with the part (`roles.used_later`):
 the copy keeps only the part's piece, so what that step brings back would be missing. For a tool body only the steps
 before the item that takes the tool count.
 
-Move: the body's first vertices before and after the step give the rigid move (`move.fit`). Orca's Transform turns
+Move: the body's first vertices before and after the step give the rigid move (`design_model/steps/move.py`). Orca's Transform turns
 about an axis, then moves. A Move that turns about an axis writes that axis and binds `xf_angle_deg` to the angle;
 any other move is written as its measured turn and shift. Orca cannot tie a move distance to a variable, so such
 sizes keep their numbers.
@@ -24,8 +24,8 @@ from ..capture_model.capture import same_body
 from ..design_model import roles
 from ..geometry import vec
 from ..orca_recipe.enums import BooleanMode, FeatureType
-from ..translator.bodies.move import fit
-from ..translator.bodies.split_inside import resolve as inside_of
+from ..design_model.steps.move import fit
+from ..design_model.steps.split import resolve as inside_of
 from . import causes
 from .solid import INTERSECT, HalfSpace
 from .steps import Skip
@@ -183,7 +183,7 @@ def move(ctx, item):
     if motion is None:
         return Skip("The points of the part before and after this Move do not show a turn and a shift.")
     rows = [list(row) for row in motion.rows]
-    offset = [q.n for q in motion.shift]
+    offset = list(motion.offset)
     turn = _axis_angle(rows)
     if turn is None and vec.length(offset) <= NO_MOVE_MM:
         return Pass("It leaves this part where it is.")

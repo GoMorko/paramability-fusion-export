@@ -890,7 +890,7 @@ sides of its plane, two different angles, an angle of 30 degrees or more, or no 
 - `elements`: every `PatternElement` (`id`, `isSuppressed`, `transform` as a frame). The original is the element with
   the identity frame; in a symmetric direction it is not the first one. The frames are in assembly space, so for a
   part placed in the assembly the translator carries them into the component's frame first
-  (`repeat_elements.in_component`, using the target's `placement`). In a symmetric circular pattern the frames of the
+  (`design_model/steps/repeat.py`, `in_component`, using the target's `placement`). In a symmetric circular pattern the frames of the
   copies behind the original have been seen as unturned and the one ahead as turned too far, while the part itself
   had them centred; an odd count with every copy listed is therefore taken as centred (`repeat/repeat_circular.py`), but
   only when no copy is suppressed or left out by number (`suppressed_ids`), the original is among the copies and every
@@ -986,7 +986,7 @@ body's volume (within a thousandth: Fusion measures each curved piece on its own
 later step changes another piece together with the part (`lib/translator/bodies/split_rules.py`, with the facts from
 `lib/design_model/roles.py`). A split by a solid
 body whose pieces lack an `inside` answer is completed only when the body came apart into exactly two pieces
-(`lib/translator/bodies/split_inside.py`): the missing answer is the opposite of the other piece's, else it comes from
+(`lib/design_model/steps/split.py`): the missing answer is the opposite of the other piece's, else it comes from
 the boxes and volumes of the tool and the pieces (a piece that does not fit the tool's box, or is larger than the tool,
 cannot lie inside it). The boxes never replace an answer the reader gave: a disagreement stops the copy. With three or
 more pieces only the reader's answers count, since part minus tool can leave several pieces on one side. A tool of
@@ -1122,7 +1122,7 @@ The handler (`translator/bodies/paste.py`) walks the source up to the paste (`to
 with ids of their own, in the list of the pasted body. It needs as many sources as results, a result among
 `result_bodies`, and a pasted body that has no steps yet. Several sources are paired with the results by their points:
 one at the same place first, else one rigid move apart; a result with no single source refuses. The first vertices of source and result must be the same points (a paste in place) or one
-rigid move apart (`move.fit`); then a `move` step in plain numbers follows, and the sizes that could change that place
+rigid move apart (`design_model/steps/move.py`, `fit`); then a `move` step in plain numbers follows, and the sizes that could change that place
 are marked.
 
 **MoveFeature** (`inputEntities`, `definition`, with the marker before the item and again after it):
@@ -2210,7 +2210,7 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
   (`probe_patterns.read_patterns`). A pattern that cannot be read gives `unread` `{ key: reason }`. Built states keep
   these reads in `Motion.states[n].patterns`. The translator uses them to learn where Fusion puts the copies for an
   even count (`translator/repeat/symmetric.py`, "Symmetric patterns"). Like the captured copies, their frames are in assembly
-  space; the translator carries them into the frame of the part (`repeat_elements.read_in_component`) before it
+  space; the translator carries them into the frame of the part (`design_model/steps/repeat.py`, `read_in_component`) before it
   compares them, so a part turned in the assembly reads the extra copy on its own side. The start reads of a flipped
   sketch skip them.
 - Nothing raises. A part that cannot be read has no key, which the fit treats as unread.

@@ -22,6 +22,7 @@ from ...capture_model.step_kinds import SOLID, recipe_kind
 from ...geometry import vec
 from ...geometry.rigid import move_from_frame
 from ...design_model import refs, roles
+from ...design_model.steps.repeat import is_identity, kept_elements, mirror_plane
 from .. import ref_motion, repeat, values, walk
 from ..bodies import move, paste
 from ..combine import tool_walk
@@ -64,12 +65,12 @@ def _is_mirror(data):
 def _element_motions(data):
     """The `Motion` of each copy a pattern or mirror keeps, the original left out; None when they were not read."""
     if _is_mirror(data):
-        plane = repeat.mirror_plane(data)
+        plane = mirror_plane(data)
         return None if plane is None else [Motion.mirror(plane["origin"], plane["normal"])]
-    kept = repeat.kept_elements(data)
+    kept = kept_elements(data)
     if kept is None:
         return None
-    moves = [move_from_frame(e["frame"]) for e in kept if not repeat.is_identity(e["frame"])]
+    moves = [move_from_frame(e["frame"]) for e in kept if not is_identity(e["frame"])]
     return [Motion(found.rows, found.offset) for found in moves]
 
 

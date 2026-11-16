@@ -7,24 +7,17 @@ cut across the plane, a body on both sides) everything written so far is gathere
 repeats that, which is the body joined with its image by definition.
 """
 from ...capture_model.step_kinds import SOLID, recipe_kind
+from ...design_model.steps.repeat import mirror_plane
 from ...design_model.values import Quantity
-from ...geometry import vec
 from ..combine import tool_walk
 from ..faces import follow
 from ..faces.follow import Motion
 from ..faces.tool_placer import wrap_body
 from ..result import Refusal
 from ..step_walk import nesting
-from .repeat_build import build, round_vec
+from .repeat_build import build
 from .repeat_mirror_reach import body_mirror_problem, keep_one_side, side_of_plane
 from .repeat_sources import MAX_REFERENCES, split_sources
-
-
-def mirror_plane(data):
-    plane = data.get("plane")
-    if not plane or "point" not in plane or "normal" not in plane or vec.length(plane["normal"]) < 1e-9:
-        return None
-    return {"origin": round_vec(plane["point"]), "normal": round_vec(vec.unit(plane["normal"]))}
 
 
 def _mirror_plane_at(plane, shift):

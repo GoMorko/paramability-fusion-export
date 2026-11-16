@@ -10,7 +10,7 @@ when it keeps its token, else the body the split made.
 - A split by a solid body becomes a cut by that body when the piece lies outside it, or an intersect when it lies
   inside, written by the Combine machinery (`combine.step.write_tools`). Fusion keeps the tool body. The capture says
   which pieces lie inside the tool; when it does not (an older export, or a read that failed) and the body came apart
-  into exactly two pieces, the boxes decide (`split_inside.py`).
+  into exactly two pieces, the boxes decide (`design_model/steps/split.py`).
 - A split by anything else (a curved face, a surface body, a sketch curve) stops the copy.
 
 The capture must show that the piece is the whole of its side: it lies on one side of the plane (or inside or outside
@@ -19,13 +19,13 @@ Anything that cannot be shown stops the copy, since the body after the split wou
 """
 from ...capture_model import lineage
 from ...capture_model.capture import same_body
+from ...design_model.steps.split import resolve as inside_of
 from ...geometry import vec
 from ..combine import step as combine_step
 from ..faces import follow
 from ..faces.tool_placer import ToolMaker
 from ..repeat.repeat_build import round_vec
 from ..result import Refusal, StepResult
-from . import split_inside
 
 # A piece's box may reach this far (mm) past the plane on the side it does not lie on.
 SIDE_TOL_MM = 0.01
@@ -151,7 +151,7 @@ def _by_body(ctx, item, tool, parent, piece, others):
     body = tool.get("body") or {}
     if not tool.get("solid"):
         return _stop("This split cuts along a surface, which is not copied yet.")
-    inside = split_inside.resolve(body, piece, others)
+    inside = inside_of(body, piece, others)
     if inside is None:
         return _stop("The copy could not tell which pieces of this split lie inside its tool body.")
     operation = "intersect" if inside else "cut"

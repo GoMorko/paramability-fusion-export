@@ -8,6 +8,9 @@ kept by a `when` on the count.
 import math
 from itertools import product
 
+from ...capture_model import tool_items
+from ...design_model.steps.repeat import (FIT_TOL_MM, FUSION_EXTRA_SIDE, in_component, is_identity,
+                                          is_identity_rotation, kept_elements, reach as reach_of, solve_lattice)
 from ...design_model.values import Quantity, wrapped
 from ...geometry import vec
 from ...package.numbers import round9
@@ -16,8 +19,7 @@ from ..ranges import range_check
 from ..result import Refusal, StepResult
 from . import symmetric
 from .repeat_build import build, finish_copies, keep_pattern_fixed, round_vec
-from .repeat_elements import FIT_TOL_MM, in_component, is_identity, is_identity_rotation, kept_elements
-from .repeat_lattice import lattice_axes, solve_lattice
+from .repeat_lattice import lattice_axes
 from .repeat_sources import split_sources
 
 # Most copies whose rounds and chamfers are written one by one for every count a size may give (`_counted_finishes`).
@@ -169,7 +171,7 @@ def _symmetric_reach(axes, data):
     for axis, found in zip(axes, places):
         if not axis["symmetric"]:
             continue
-        reach = symmetric.reach(found, axis["count"])
+        reach = reach_of(found, axis["count"])
         if reach is None:
             return Refusal("The copies of this pattern do not spread to both sides of the first one by the rule that "
                            "was expected.")
@@ -203,7 +205,7 @@ def _tried_places(axes, axis):
 
 def rectangular(item, ctx, sources=None):
     """`sources` is `(solid step ids, finish steps)` when the caller wrote what the pattern repeats."""
-    item = in_component(item, ctx, merge=True)
+    item = in_component(item, tool_items.component_frame(ctx), merge=True)
     data = item.get("data") or {}
     sources = split_sources(data, ctx, "pattern") if sources is None else sources
     if isinstance(sources, Refusal):
@@ -252,7 +254,7 @@ def rectangular(item, ctx, sources=None):
         if axis["symmetric"]:
             axis["side"] = symmetric.extra_side(ctx, item, axis["count_q"], axis["count"],
                                                 (axis["back"], axis["forward"]), _tried_places(axes, axis),
-                                                default=symmetric.FUSION_EXTRA_SIDE * axis["sign"])
+                                                default=FUSION_EXTRA_SIDE * axis["sign"])
     _parts(axes)
 
     grids = _grids(axes, {tuple(indexes) for _, indexes in placed})

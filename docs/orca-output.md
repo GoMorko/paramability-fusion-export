@@ -398,7 +398,7 @@ not judged to meet material where Orca removes nothing.
   move them with the variable, so the hole keeps its place too (`tools.hold_place`, after the whole pattern is
   written) and its sizes get the reason. Else a variable change would move the hole and leave a copy at the old
   place. Inside a tool body such a pattern is left out, since a later step of the tool can still undo it.
-- Rectangular: the copies are fitted to the grid of the measured elements (`repeat_lattice.solve_lattice`), each
+- Rectangular: the copies are fitted to the grid of the measured elements (`design_model/steps/repeat.py`, `solve_lattice`), each
   direction with more than one copy gets its own Pattern on a plane whose x axis is that direction. A spacing distance
   is `pattern_spacing`; an extent distance becomes `distance / max(count - 1, 1)`. Copies that run against the stored
   direction turn it. A direction to both sides of the original is two runs from the original, one each way, each on
@@ -421,13 +421,13 @@ not judged to meet material where Orca removes nothing.
   steps of the body it came from, and those steps read the measures of that body, `design_model.roles`) must lie on one side of the plane and every other piece of that body on the other.
   Orca's Cut keeps the side its plane normal points to (`cut_keep_upper`) or the other one. A split by a solid body
   writes that body as a tool and keeps what lies inside it (Intersect) or outside it (Cut), from the pieces' `inside`
-  answers (`split_inside.resolve`). A split is left out (cause `pieceUsedLater`) when a later step changes another of
+  answers (`design_model/steps/split.py`, `resolve`). A split is left out (cause `pieceUsedLater`) when a later step changes another of
   its pieces together with the part (`roles.other_pieces`, `roles.used_later`, the same facts that stop the recipe
   walk): the copy keeps only the part's piece, so the material that step brings back would be missing. A later
   Combine that takes such a piece as a tool does not count; its own handler builds that tool. Inside a tool body only
   the steps before the item that takes the tool count. Later steps that meet the part where the split would have cut
   are judged against the part as the copy builds it (cause `afterGap` when they miss it after a left out step).
-- Move: the rigid move is fitted from the body's first vertices before and after (`bodies.move.fit`). A Move that
+- Move: the rigid move is fitted from the body's first vertices before and after (`design_model/steps/move.py`, `fit`). A Move that
   turns about an axis and agrees with the points becomes a Transform about that axis with `xf_angle_deg` bound to its
   angle (Orca turns by a positive angle, so a negative one turns about the reversed axis and its formula is
   negated); any other move a Transform by the fitted turn (about the component origin) and shift. Orca cannot tie a move

@@ -1688,14 +1688,15 @@ one folder per family of steps.
     the helix), `coil_section.py` (the wire's section from an end face), `coil_operation.py` (new body, join or cut from
     the volumes), `coil_values.py` (the sizes of the coil as formulas) and `coil_limits.py` (the caps and the refusal
     texts).
-  - `repeat/`: patterns and mirrors. `body_copies.py` (bodies), `repeat_*.py` (sources, build, elements, lattice, the
-    three kinds, the mirror reach) and `symmetric.py` (copies on both sides: `extra_side`, `value_at`,
-    `FUSION_EXTRA_SIDE`). The package `__init__` is the entry point the walk imports.
+  - `repeat/`: patterns and mirrors. `body_copies.py` (bodies), `repeat_*.py` (sources, build, lattice, the
+    three kinds, the mirror reach) and `symmetric.py` (copies on both sides: `extra_side`, `value_at`). The reading of
+    the copies, the grid index, the reach of a symmetric direction and the mirror plane is in
+    `design_model/steps/repeat.py`. The package `__init__` is the entry point the walk imports.
   - `combine/`: `step.py` (`handle`) and `tool_walk.py` (the walk of a tool body, `cannot_copy`).
   - `finishes/`: `finish.py` (fillet, chamfer, shell), `draft.py`, `offset.py`.
-  - `bodies/`: `move.py`, `paste.py`, `split.py`, `split_rules.py` (`stop_reason`: when a split stops the copy, from
-    the split facts of `design_model/roles.py`) and `split_inside.py` (which pieces of a split by a body lie inside the
-    tool, when the reader could not say, see 3.4).
+  - `bodies/`: `move.py` (the fit of the move is in `design_model/steps/move.py`), `paste.py`, `split.py`, `split_rules.py` (`stop_reason`: when a split stops the copy, from
+    the split facts of `design_model/roles.py`) and `design_model/steps/split.py` (which pieces of a split by a body lie
+    inside the tool, when the reader could not say, see 3.4).
 - Picks and faces that follow sizes, `faces/`: `follow.py` (picks, faces and planes that follow sizes), `picks.py`,
   `placer.py` (the placer protocol), `placer_makers.py`, `moved_placer.py`, `tool_placer.py`, `slabs.py`, `shells.py`,
   `offset_faces.py`, `end_caps.py`, `thin_wall.py`, `crossings.py`, `copy_counts.py`, `meets_part.py` and `floating.py`
@@ -1731,6 +1732,13 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
 - `borrowed.py`: outlines of another component's sketch (`usable`, `bring_in`, `BORROWED_KEYS`). This came from
   `translator/sketch/borrowed.py`. The probe flow reads `usable` and `BORROWED_KEYS` (`export_plan/probe_flow/
   borrowed_view.py`).
+- `steps/`: one reader per kind of step, as facts. `steps/repeat.py`: the copies a pattern kept (`kept_elements`), their
+  frames in the frame of the part (`in_component`, `read_in_component`), the grid index of a copy (`solve_lattice`),
+  the steps a symmetric direction runs each way (`reach`, `FUSION_EXTRA_SIDE`) and the plane of a mirror
+  (`mirror_plane`). `steps/move.py`: the rigid move that carried a body, fitted from its corners before and after
+  (`fit`). `steps/split.py`: which piece of a split lies inside the tool body (`resolve`). These came from
+  `translator/repeat/`, `translator/bodies/move.py` and `translator/bodies/split_inside.py`. How a copy is written
+  and what it does about a size stay in each translator.
 - `roles.py`: what each timeline item is for the body that a walk builds, and which measures of that body apply to
   the item. These came from `translator/walk.py`, `translator/bodies/body_states.py` and
   `translator/bodies/split_rules.py`. The walk of the recipe and the walk of the Orca output both read them:
@@ -2344,7 +2352,7 @@ ways:
 
 Exports of the add-in from before 0.10.6 have no `inside` at all.
 
-The translator takes the answers in `bodies/split_inside.py` (`resolve`). The kept piece outside the tool becomes a cut by
+The translator takes the answers in `design_model/steps/split.py` (`resolve`). The kept piece outside the tool becomes a cut by
 the tool. The kept piece inside the tool becomes an intersect with the tool. The Combine code writes it
 (`combine.write_tools`). A split by a surface or a curved face stops the copy.
 
@@ -2602,7 +2610,7 @@ decides it:
 Two more details:
 
 - The frames of the copies are in assembly space. For a part placed in the assembly, the translator first carries them
-  into the part's frame (`repeat_elements.in_component`, with `tool_items.component_frame`). The probe's reads of the
+  into the part's frame (`design_model/steps/repeat.py`, `in_component`, with `tool_items.component_frame`). The probe's reads of the
   copies are carried the same way (`read_in_component`).
 - A direction with a distance of 0 makes copies on top of one another. Fusion keeps a count of 3 in an unused second
   direction, for example. The translator ignores that direction and merges such copies.

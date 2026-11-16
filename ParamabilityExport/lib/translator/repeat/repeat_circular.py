@@ -5,6 +5,8 @@ to both sides of the original is written as a part turning each way (`repeat/sym
 """
 import math
 
+from ...capture_model import tool_items
+from ...design_model.steps.repeat import FIT_TOL_MM, in_component, kept_elements, reach as reach_of
 from ...design_model.values import Quantity
 from ...geometry import vec
 from ...package.numbers import round9
@@ -14,7 +16,6 @@ from ..faces.follow import Motion
 from ..result import Refusal
 from . import symmetric
 from .repeat_build import build, keep_pattern_fixed, round_vec
-from .repeat_elements import FIT_TOL_MM, in_component, kept_elements
 from .repeat_lattice import gaps_between
 from .repeat_sources import split_sources
 
@@ -139,7 +140,7 @@ def _measured_places(setup):
                 every.append(k)
     if 0 not in every:
         return None, "The original sits between two copies of this pattern, which is not copied yet."
-    if symmetric.reach(every, count) is None:
+    if reach_of(every, count) is None:
         return None, ("The copies of this pattern do not spread to both sides of the first one by the rule that was "
                       "expected.")
     return steps, every
@@ -183,7 +184,7 @@ def _symmetric_circular(item, ctx, setup):
             return Refusal(every)
         every = centred
         steps = [(None, k) for k in every]
-    reach = symmetric.reach(every, count)
+    reach = reach_of(every, count)
     back, forward = reach
     count_q, angle_q = setup["count_q"], setup["angle_q"]
     side = symmetric.extra_side(ctx, item, count_q, count, (back, forward),
@@ -225,7 +226,7 @@ def _symmetric_circular(item, ctx, setup):
 
 def circular(item, ctx, sources=None):
     """`sources` is `(solid step ids, finish steps)` when the caller wrote what the pattern repeats."""
-    item = in_component(item, ctx)
+    item = in_component(item, tool_items.component_frame(ctx))
     data = item.get("data") or {}
     sources = split_sources(data, ctx, "pattern") if sources is None else sources
     if isinstance(sources, Refusal):

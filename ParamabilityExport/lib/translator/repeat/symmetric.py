@@ -7,37 +7,19 @@ behind it. The copies stay where Fusion measured them, and the places follow thi
   odd count   the original is the middle copy: `count // 2` steps each way.
   even count  the original is one of the two middle copies: `count // 2` steps one way and one less the other. The
               side with the extra step is the same for every even count. Fusion's rectangular patterns put it ahead
-              of the original (`FUSION_EXTRA_SIDE`, seen at counts 4, 6 and 8, by spacing and by extent).
+              of the original (`FUSION_EXTRA_SIDE` in `design_model/steps/repeat.py`, seen at counts 4, 6 and 8, by spacing and by extent).
 
 A count that follows sizes writes the two part counts as formulas of it (`part_counts`). The side of the extra step
 is read from the measured copies when the count is even. When it is odd, the copies the probe read at the tries with
 an even count tell it (`extra_side`); without such a try the side Fusion was seen to use is taken (rectangular
 patterns only), and when the copies at a try break the rule the sizes that can make the count even are marked.
 """
+from ...capture_model import tool_items
+from ...design_model.steps.repeat import read_in_component, reach
 from ...design_model.values import Quantity, wrapped
 from ...params.expressions.errors import ExpressionError
 from ...params.expressions.evaluation import evaluate
 from ..ranges import range_check
-from .repeat_elements import read_in_component
-
-
-# Where Fusion puts the extra copy of a rectangular pattern with an even count, as seen in its exports: ahead of the
-# original, along the direction of the pattern (the way its distance points, so against the direction when the
-# distance is negative).
-FUSION_EXTRA_SIDE = 1
-
-
-def reach(places, count):
-    """`(back, forward)`: the steps the measured copies run behind and ahead of the original, or None when they do not
-    follow the rule for `count` copies. `places` are the signed steps of every copy, the original (0) included."""
-    if not places:
-        return None
-    back, forward = -min(places), max(places)
-    if back < 0 or forward < 0 or back + forward + 1 != count:
-        return None
-    half = count // 2
-    allowed = {(half, half)} if count % 2 else {(half, half - 1), (half - 1, half)}
-    return (back, forward) if (back, forward) in allowed else None
 
 
 def part_counts(count_q, back, forward, side=0):
@@ -90,7 +72,7 @@ def _tried_side(ctx, item, count_q, places_at):
         read = (state.get("patterns") or {}).get(key)
         if read is None or state.get("built") is False:
             continue
-        read = read_in_component(read, ctx)
+        read = read_in_component(read, tool_items.component_frame(ctx))
         env = _setting(ctx.table, state.get("values"))
         count = None if env is None else value_at(count_q, env)
         if count is None or abs(count - round(count)) > 1e-9 or count < 2:

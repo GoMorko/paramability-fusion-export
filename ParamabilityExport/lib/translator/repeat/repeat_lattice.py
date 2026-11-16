@@ -1,10 +1,10 @@
 """The grid of a rectangular pattern: how Fusion measured its distance, and the directions, spacing and copy counts
 that follow from the measured copies.
 """
+from ...design_model.steps.repeat import FIT_TOL_MM, kept_elements, solve_lattice
 from ...design_model.values import Quantity, wrapped
 from ...geometry import vec
 from .. import ref_motion, values
-from .repeat_elements import FIT_TOL_MM, kept_elements
 from ..result import Refusal
 
 
@@ -82,23 +82,6 @@ def gaps_between(count_q):
     if not count_q.sized:
         return count_q.plus(-1)
     return Quantity(count_q.n - 1, "max(%s - 1, 1)" % count_q.text, count_q.reads)
-
-
-def solve_lattice(offset, axes):
-    """Lattice indexes of an offset and the leftover distance in mm. `axes` are (unit dir, step)."""
-    if len(axes) == 1:
-        coords = [vec.dot(offset, axes[0][0])]
-    else:
-        d1, d2 = axes[0][0], axes[1][0]
-        g12 = vec.dot(d1, d2)
-        det = 1.0 - g12 * g12
-        b1, b2 = vec.dot(offset, d1), vec.dot(offset, d2)
-        coords = [(b1 - g12 * b2) / det, (b2 - g12 * b1) / det]
-    indexes = [int(round(c / step)) for c, (_, step) in zip(coords, axes)]
-    fitted = [0.0, 0.0, 0.0]
-    for index, (direction, step) in zip(indexes, axes):
-        fitted = vec.add(fitted, vec.scale(direction, index * step))
-    return indexes, vec.length(vec.sub(offset, fitted))
 
 
 def lattice_axes(item, ctx):

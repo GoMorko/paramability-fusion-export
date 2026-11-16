@@ -20,15 +20,14 @@ A mirror plane or a turning axis that sits on a face or edge of the part moves w
 cannot be followed fixes the sizes written so far. A plane or axis of another component moves as the probe measured
 it (`ref_motion`).
 
-The handlers live in `repeat_*.py` modules, one concern each (sources, the steps built, elements, the grid, the three
+The handlers live in `repeat_*.py` modules, one concern each (sources, the steps built, the grid, the three
 kinds of repeat, the mirror reach check); this module is the entry point the walk imports.
 """
 from .repeat_build import MAX_COPIED_BODIES, copied_bodies
 from .repeat_circular import axis_shift, circular, turn_motion
-from .repeat_elements import is_identity, kept_elements
-from .repeat_mirror import mirror, mirror_plane
+from .repeat_mirror import mirror
 from .repeat_rectangular import rectangular
 from .repeat_sources import MAX_REFERENCES
 
-__all__ = ["MAX_COPIED_BODIES", "MAX_REFERENCES", "axis_shift", "circular", "copied_bodies", "is_identity",
-           "kept_elements", "mirror", "mirror_plane", "rectangular", "turn_motion"]
+__all__ = ["MAX_COPIED_BODIES", "MAX_REFERENCES", "axis_shift", "circular", "copied_bodies", "mirror",
+           "rectangular", "turn_motion"]

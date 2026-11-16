@@ -31,11 +31,9 @@ from ..capture_model.capture import same_body
 from ..geometry import vec
 from ..orca_recipe.enums import BooleanMode, FeatureType
 from ..params.expressions.text import format_number
-from ..translator.repeat.repeat_elements import FIT_TOL_MM, in_component, is_identity, is_identity_rotation
-from ..translator.repeat.repeat_lattice import solve_lattice
-from ..translator.repeat.repeat_mirror import mirror_plane
-from ..translator.repeat.symmetric import reach as symmetric_reach
 from . import causes
+from ..design_model.steps.repeat import (FIT_TOL_MM, in_component, is_identity, is_identity_rotation, mirror_plane,
+                                        reach as symmetric_reach, solve_lattice)
 from ..design_model.values import Quantity
 from .solid import ADD, Moved, Solid
 from .steps import Skip
@@ -242,7 +240,7 @@ def write(ctx, item, groups, layouts, copies, what):
 
 
 def _frames(ctx):
-    """What `repeat_elements.in_component` reads of a walk: the capture and no outer walk."""
+    """What `tool_items.component_frame` reads of a walk: the capture and no outer walk."""
     return SimpleNamespace(outer=None, capture=ctx.capture, target=ctx.target)
 
 
@@ -384,7 +382,7 @@ def rectangular(ctx, item):
     groups = sources(ctx, item, "pattern")
     if isinstance(groups, Skip):
         return groups
-    item = in_component(item, _frames(ctx), merge=True)
+    item = in_component(item, tool_items.component_frame(_frames(ctx)), merge=True)
     data = item["data"]
     elements = data.get("elements") or []
     if not elements:
@@ -478,7 +476,7 @@ def circular(ctx, item):
     if not full and not 0 < abs(raw) < FULL_TURN_DEG:
         return Skip("The angle of this pattern could not be read.")
     delta = FULL_TURN_DEG / n if full else abs(raw) / (n - 1)
-    item = in_component(item, _frames(ctx))
+    item = in_component(item, tool_items.component_frame(_frames(ctx)))
     data = item["data"]
     elements = data.get("elements") or []
     if not elements:
