@@ -89,7 +89,7 @@ def build(ctx, record, anchor):
     # The steps read what the reader measured on the tool itself, not on the exported part (`roles.seen_on`).
     exported = any(same_body(record, b) for b in roles.held(ctx.capture["target"], lineage.of(ctx.capture),
                                                                anchor.get("index", 0)))
-    body = ctx.push(Body(record, name))
+    body = ctx.push(Body(record, name, anchor))
     try:
         for item in chain:
             why = _why(item)

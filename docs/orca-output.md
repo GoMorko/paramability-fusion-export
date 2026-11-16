@@ -116,7 +116,9 @@ Left out, with the reason in the result window and the report: every other step 
 path pattern, pasted body...), the sweeps and lofts in "Sweeps, lofts and splines", the cases in "Patterns, mirrors, Combine, split, move and revolve", fillets and chamfers on hand-picked edges that do not all run along straight extrudes, thin extrudes, the tapers and faces in "Extents", join and new body extrudes through all (Fusion
 ends them where the part ends, which no Orca length follows), sketch text as outlines, outlines of another component whose place is not known, ellipses and splines Fusion does not give exactly, cuts that split
 the part, tapered tapped holes, tapped holes with a counterbore or countersink and a modeled thread, left hand threads,
-threads whose ends the copy cannot judge, holes up to a face. A left out step changes the shape Orca builds; later steps are still
+threads whose ends the copy cannot judge, holes up to a face, a split whose other piece a later step changes together
+with the part (cause `pieceUsedLater`), a step that lists another body with the part's name (cause `bodyLost`: the
+part may have a new token, so the copy cannot tell whether the step changes it). A left out step changes the shape Orca builds; later steps are still
 copied. A cut or intersect while no body is in the copy yet is left out too. A step that is left out keeps nothing
 that its handler wrote before it found the reason: the walk (`translate._walk`) takes a `Context.checkpoint` before
 each handler and goes back to it (`Context.rollback`) on a Skip, so its features, notes, bound fields, followed
@@ -419,7 +421,12 @@ not judged to meet material where Orca removes nothing.
   steps of the body it came from, and those steps read the measures of that body, `design_model.roles`) must lie on one side of the plane and every other piece of that body on the other.
   Orca's Cut keeps the side its plane normal points to (`cut_keep_upper`) or the other one. A split by a solid body
   writes that body as a tool and keeps what lies inside it (Intersect) or outside it (Cut), from the pieces' `inside`
-  answers (`split_inside.resolve`).
+  answers (`split_inside.resolve`). A split is left out (cause `pieceUsedLater`) when a later step changes another of
+  its pieces together with the part (`roles.other_pieces`, `roles.used_later`, the same facts that stop the recipe
+  walk): the copy keeps only the part's piece, so the material that step brings back would be missing. A later
+  Combine that takes such a piece as a tool does not count; its own handler builds that tool. Inside a tool body only
+  the steps before the item that takes the tool count. Later steps that meet the part where the split would have cut
+  are judged against the part as the copy builds it (cause `afterGap` when they miss it after a left out step).
 - Move: the rigid move is fitted from the body's first vertices before and after (`bodies.move.fit`). A Move that
   turns about an axis and agrees with the points becomes a Transform about that axis with `xf_angle_deg` bound to its
   angle (Orca turns by a positive angle, so a negative one turns about the reversed axis and its formula is

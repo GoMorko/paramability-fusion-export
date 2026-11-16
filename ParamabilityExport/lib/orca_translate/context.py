@@ -290,11 +290,13 @@ def _names_in(text):
 
 class Body:
     """One body of the copy: the capture record it stands for (`target`), its shape so far (`solid`), whether a step
-    has made it yet, and its place in Orca's list of bodies (`index`, None until a step makes it)."""
+    has made it yet, and its place in Orca's list of bodies (`index`, None until a step makes it). `anchor`: for a
+    tool body, the timeline item that takes it (the body is built as it is just before that item), else None."""
 
-    def __init__(self, target, label=""):
+    def __init__(self, target, label="", anchor=None):
         self.target = target
         self.label = label
+        self.anchor = anchor
         self.solid = Solid()
         self.has_body = False
         self.index = None

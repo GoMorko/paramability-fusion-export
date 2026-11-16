@@ -1748,7 +1748,14 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     another component, or an item that the reader did not measure on that body.
   - `other_pieces(item, before, kept)` and `used_later(timeline, item, body, target, chain)`: the pieces that a
     split leaves in addition to the piece that the walk follows, and the first later step that changes one of them
-    together with the body. The recipe walk stops on such a step (`split_rules.stop_reason`).
+    together with the body. The recipe walk stops on such a step (`split_rules.stop_reason`). The Orca output
+    leaves the split out (`orca_translate/bodies.py`, cause `pieceUsedLater`). The Orca copy keeps only the piece of
+    the part, so the material that the later step adds back is not in the copy. In a tool body, the Orca output looks
+    only at the steps before the item that takes the tool (`context.Body.anchor`). Steps after that item do not
+    change the tool as the item uses it.
+  - `lost` in the `Role`: the item lists a body with the name of the exported body but another token. The recipe walk
+    stops on such an item. The Orca output leaves the item out (cause `bodyLost`). The copy cannot tell if the item
+    changes the part.
   - `copies_bodies`, `changes_named_bodies`, `only_splits_faces`, `existing_bodies`: smaller facts that the walks
     and some handlers use.
 - `values.py`: `Quantity`, the one value type of both outputs, and the helpers that work on it. These came from

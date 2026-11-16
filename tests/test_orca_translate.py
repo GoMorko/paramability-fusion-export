@@ -173,6 +173,18 @@ class ExtrudeTest(unittest.TestCase):
                 gaps = translate(load_capture(name)).left_out
                 self.assertEqual([g["cause"] for g in gaps], [cause])
 
+    def test_a_step_that_lists_another_body_with_the_parts_name_is_left_out(self):
+        result = translate(load_capture("extrude_target_token_changes"))
+        self.assertEqual([(g["index"], g["cause"]) for g in result.left_out], [(3, causes.BODY_LOST)])
+        # A new body named like the part, that lists no body of the part: not passed by as helper geometry.
+        capture = copy.deepcopy(load_capture("extrude_plate"))
+        step = copy.deepcopy(capture["items"][1])
+        step.update(index=2, name="Extrude2", bodies_before=[capture["items"][1]["bodies_after"][0]],
+                    bodies_after=[{"token": "t9", "name": capture["target"]["name"]}])
+        step["data"].update(operation="newBody", participants=[])
+        capture["items"].append(step)
+        self.assertEqual([(g["index"], g["cause"]) for g in translate(capture).left_out], [(2, causes.BODY_LOST)])
+
     def test_an_extrude_through_all_that_adds_material_is_left_out(self):
         # Fusion ends it where the part ends, which moves with the sizes; no Orca length follows that.
         def joined(kind):

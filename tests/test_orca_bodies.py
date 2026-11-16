@@ -6,7 +6,7 @@ import unittest
 from unittest import mock
 
 from tests import context  # noqa: F401
-from tests.orca_sized import fixture, split_by_body, split_by_plane, table_of
+from tests.orca_sized import B1, B2, B3, fixture, split_by_body, split_by_plane, table_of
 from tests.translator_helpers import verdict_of
 
 from lib.orca_recipe.enums import BooleanMode, FeatureType
@@ -19,6 +19,39 @@ orca_walk = importlib.import_module("lib.orca_translate.translate")
 
 def of_type(result, kind):
     return [f for f in result.recipe.features if f.type == kind]
+
+
+def _bridge(capture, index):
+    """A join extrude at `index` that changes Body1 and Body2 together (it lists both as participants)."""
+    join = copy.deepcopy(capture["items"][1])
+    join.update(index=index, name="Bridge", bodies_before=[B1, B2], bodies_after=[B1])
+    join["data"].update(operation="join", participants=[B1, B2])
+    return join
+
+
+PLATE = {"token": "t9", "name": "Plate"}
+
+
+def _split_tool(bridge_first):
+    """`split_by_plane` as a tool: a plate (Plate, exported) is extruded and Body1 cut from it by Combine1. The Bridge
+    join, which changes Body1 and Body2 together, comes before the plate when `bridge_first`, else after Combine1."""
+    capture = split_by_plane("t1")
+    plate = copy.deepcopy(capture["items"][1])
+    plate.update(name="Plate", bodies_after=[PLATE])
+    plate["data"].update(participants=[])
+    plate["data"]["profiles"][0]["loops"][0]["curves"] = [
+        {"kind": "line", "start": a, "end": b} for a, b in
+        (([-10, -10], [50, -10]), ([50, -10], [50, 30]), ([50, 30], [-10, 30]), ([-10, 30], [-10, -10]))]
+    combine = {"name": "Combine1", "type": "CombineFeature", "suppressed": False, "health": "ok",
+               "in_target_component": True, "bodies_before": [PLATE, B1, B2], "bodies_after": [PLATE, B2],
+               "data": {"target": PLATE, "tools": [dict(B1, volume=5000.0)], "operation": "cut",
+                        "keep_tools": False, "volume_before": 24000.0, "volume_after": 19000.0}}
+    steps = [_bridge(capture, 0), plate, combine] if bridge_first else [plate, combine, _bridge(capture, 0)]
+    for index, step in enumerate(steps, start=3):
+        step["index"] = index
+    capture["items"] += steps
+    capture["target"] = dict(PLATE, box={"min": [-10, -10, 0], "max": [50, 30, 10]}, volume_mm3=19000.0)
+    return capture
 
 
 class SplitTest(unittest.TestCase):
@@ -66,6 +99,19 @@ class SplitTest(unittest.TestCase):
             (boolean,) = of_type(result, FeatureType.BOOLEAN)
             self.assertEqual((boolean.mode, boolean.target_body, boolean.bool_tool_body), (mode, 0, 1))
             self.assertEqual(verdict_of(result, 3)["verdict"], "copied")
+
+    def test_a_split_whose_other_piece_is_later_changed_with_the_part_is_left_out(self):
+        capture = split_by_plane("t1")
+        capture["items"].append(_bridge(capture, 3))
+        result = translate(capture)
+        self.assertEqual([g["cause"] for g in result.left_out if g["index"] == 2], [causes.PIECE_USED_LATER])
+        self.assertEqual(of_type(result, FeatureType.CUT), [])
+
+    def test_a_split_inside_a_tool_body_counts_only_the_steps_before_the_combine_that_takes_the_tool(self):
+        before = translate(_split_tool(bridge_first=True))
+        self.assertEqual([g["cause"] for g in before.left_out if g["index"] == 5], [causes.PIECE_USED_LATER])
+        after = translate(_split_tool(bridge_first=False))
+        self.assertEqual(verdict_of(after, 4)["verdict"], "copied")
 
     def test_a_split_by_a_curved_face_is_left_out(self):
         capture = split_by_plane("t1")

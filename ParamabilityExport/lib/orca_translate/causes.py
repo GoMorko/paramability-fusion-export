@@ -42,6 +42,9 @@ HOLE_PLACE_IN_TOOL = "holePlaceInTool"
 INTERSECT_RULE = "intersectRule"
 OTHER_BODY = "otherBody"
 SPLIT_SIDES = "splitSides"
+# A split whose other piece a later step changes together with the part (`roles.used_later`): the copy keeps only the
+# part's piece, so what that step brings back would be missing.
+PIECE_USED_LATER = "pieceUsedLater"
 MOVE_MISMATCH = "moveMismatch"
 
 # Rounds, chamfers and threads.
@@ -71,6 +74,9 @@ ROUND_UNBINDS = "roundUnbinds"
 # a corner the formulas do not give, another side in the tool), or the copy cannot tell how far a variable may go
 # with them.
 CORNER_TOOLS = "cornerTools"
+# A step that lists a body with the part's name under another token (`roles.lost`): the part may have a new token,
+# so the copy cannot tell whether the step changes it.
+BODY_LOST = "bodyLost"
 # A step whose handler stopped on an error the copy did not expect: the step is left out, the error goes to the
 # report (`orca.left_out[].error`), and the rest of the copy goes on.
 INTERNAL_ERROR = "internalError"

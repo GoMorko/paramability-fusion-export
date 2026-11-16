@@ -128,6 +128,10 @@ def _walk(ctx):
             else:
                 ctx.items.append(_verdict(item, "skipped", "In another component."))
             continue
+        if role.lost:
+            leave_out(item, "This step lists another body with the part's name, so the copy cannot tell whether it "
+                      "changes the part.", causes.BODY_LOST)
+            continue
         if item.get("bodies_after") is None and not changed:
             leave_out(item, "The bodies this step changes could not be read.", gap_hints.REFUSED)
             continue

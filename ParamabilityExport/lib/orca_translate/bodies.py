@@ -8,6 +8,9 @@ far side is copied.
 - By a solid body: that body is written as a tool (`tools.build`) and the part keeps what lies inside it (an
   intersect) or outside it (a cut), as the capture's `inside` answers say (`split_inside.resolve`).
 - Anything else (a curved face, a sketch curve) is left out.
+A split is left out too when a later step changes another of its pieces together with the part (`roles.used_later`):
+the copy keeps only the part's piece, so what that step brings back would be missing. For a tool body only the steps
+before the item that takes the tool count.
 
 Move: the body's first vertices before and after the step give the rigid move (`move.fit`). Orca's Transform turns
 about an axis, then moves. A Move that turns about an axis writes that axis and binds `xf_angle_deg` to the angle;
@@ -18,6 +21,7 @@ import math
 
 from ..capture_model import gap_hints, lineage
 from ..capture_model.capture import same_body
+from ..design_model import roles
 from ..geometry import vec
 from ..orca_recipe.enums import BooleanMode, FeatureType
 from ..translator.bodies.move import fit
@@ -57,6 +61,25 @@ def _pieces(ctx, item, data):
     return parent, piece, others
 
 
+def _used_later(ctx, item, parent, piece):
+    """A Skip when a later step changes another piece of the split `item` together with the body the copy builds,
+    else None."""
+    timeline = ctx.capture["items"]
+    if len(ctx.scopes) > 1:
+        anchor = (ctx.scope.anchor or {}).get("index")
+        timeline = [i for i in timeline if anchor is None or i.get("index", 0) < anchor]
+        target, chain = ctx.target, ()
+    else:
+        target, chain = ctx.capture["target"], lineage.of(ctx.capture)
+    for body in roles.other_pieces(item, parent, piece):
+        later = roles.used_later(timeline, item, body, target, chain)
+        if later is not None:
+            return Skip("%s later changes %s, another piece of this split, together with the part. The Orca copy "
+                        "keeps only the part's piece, so this split is left out."
+                        % (later.get("name") or "A step", body.get("name") or "a body"), causes.PIECE_USED_LATER)
+    return None
+
+
 def split(ctx, item):
     data = data_of(item)
     tool = data.get("tool")
@@ -68,6 +91,9 @@ def split(ctx, item):
     if isinstance(found, Skip):
         return found
     parent, piece, others = found
+    later = _used_later(ctx, item, parent, piece)
+    if later is not None:
+        return later
     if tool.get("kind") == "plane":
         return _by_plane(ctx, item, tool, piece, others)
     if tool.get("kind") == "body":
