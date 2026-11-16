@@ -189,6 +189,8 @@ THREAD_OFFSET = "A thread that starts away from the end of its face is not copie
 THREAD_LENGTH_UNREAD = "How long this thread runs could not be read."
 THREAD_HOLE_MISMATCH = "The thread size of %s does not match the hole that was measured."
 THREAD_DEPTH_UNREAD = "How deep the thread of this hole runs could not be read."
+THREAD_HOLE_SPAN = ("The thread of this hole does not start at the top of the hole and run as deep as Fusion says, "
+                    "so it is not copied.")
 THREAD_HOLE_ENDS_UNREAD = "The depth of this threaded hole could not be measured."
 THREAD_LONGER_THAN_FACE = "The thread is longer than its face."
 THREAD_DEEPER_THAN_HOLE = "The thread is deeper than its hole."

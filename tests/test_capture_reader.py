@@ -728,9 +728,14 @@ class ThreadReadTest(unittest.TestCase):
 class HoleThreadReadTest(unittest.TestCase):
     def read(self, **kw):
         target = body()
-        thread = Obj(isModeled=True, isFullLength=False, threadDepth=0.5, threadType="ANSI Unified Screw Threads",
-                     threadPitch=0.1, majorDiameter=0.6, minorDiameter=0.5, isRightHanded=True)
+        # Fusion keeps the numbers in `tappedHoleInfo` (a ThreadInfo) and the length in the hidden thread feature.
+        info = Obj(threadType="ANSI Unified Screw Threads", threadPitch=0.1, majorDiameter=0.6, minorDiameter=0.5,
+                   isInternal=True)
+        corners = [Obj(geometry=P(10, 10, z)) for z in (9.8, 5.2)]
+        thread = Obj(isModeled=True, isFullLength=False, threadLength=param(0.5), threadOffset=param(0.0),
+                     isRightHanded=True, threadInfo=info, faces=Coll([Obj(vertices=Coll(corners))]))
         base = dict(holeType="SimpleHoleType", holeTapType="TappedHoleTapType", holeDiameter=param(0.6),
+                    tappedHoleInfo=info,
                     tipAngle=param(math.radians(118)), direction=Obj(x=0.0, y=0.0, z=-1.0), position=P(10, 10, 10),
                     holePositionDefinition=Obj("fusion::PointHolePositionDefinition"), thread=thread,
                     extentDefinition=Obj("fusion::DistanceExtentDefinition", distance=param(0.8)))
@@ -743,7 +748,9 @@ class HoleThreadReadTest(unittest.TestCase):
         thread = self.read()["thread"]
         self.assertEqual((thread["thread_type"], thread["pitch"], thread["major_diameter"], thread["minor_diameter"]),
                          ("ANSI Unified Screw Threads", 1.0, 6.0, 5.0))
-        self.assertEqual((thread["full_length"], thread["depth"], thread["right_hand"]), (False, 5.0, True))
+        self.assertEqual((thread["full_length"], thread["depth"], thread["offset"], thread["right_hand"]),
+                         (False, 5.0, 0.0, True))
+        self.assertEqual(thread["made_span"], [0.2, 4.8])
 
     def test_a_plain_hole_has_no_thread_record(self):
         self.assertIsNone(self.read(holeTapType="SimpleHoleTapType")["thread"])

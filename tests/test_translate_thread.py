@@ -182,7 +182,8 @@ class TappedHoleTest(unittest.TestCase):
         self.assertIsNone(steps_of(result.recipe, "hole")[0]["depth"])
 
     def test_a_part_depth_thread_and_several_holes(self):
-        (step,) = steps_of(tapped_hole(thread=dict(HOLE_INFO, full_length=False, depth=5.0)).recipe, "thread")
+        (step,) = steps_of(tapped_hole(thread=dict(HOLE_INFO, full_length=False, depth=5.0,
+                                                          made_span=[0.0, 5.0])).recipe, "thread")
         self.assertEqual(step["length"], 5)
         result = tapped_hole("hole_three_points")
         self.assertEqual(len(steps_of(result.recipe, "thread")), 3)

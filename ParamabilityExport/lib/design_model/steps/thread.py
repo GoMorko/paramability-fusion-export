@@ -210,13 +210,22 @@ def hole_spec(data, what, drill, pitches=None):
 
 
 def hole_depth(data):
-    """The `Depth` of the thread of a tapped hole, or a Problem when Fusion's info does not say."""
+    """The `Depth` of the thread of a tapped hole, or a Problem when Fusion's info does not say. The measured faces of
+    the thread (`made_span`, depths below the mouth) must start at the mouth, and a thread over part of the hole must
+    end at its depth; a thread over part of the hole without them is a Problem."""
     info = data.get("thread") or {}
     full = info.get("full_length")
+    made = info.get("made_span")
+    reach = float(info.get("pitch") or 0.0) + 0.5
+    if made and abs(made[0]) > reach:
+        return Problem("threadSpan", words.THREAD_HOLE_SPAN)
     if full is True:
         return Depth(True, None)
     if full is False and info.get("depth"):
-        return Depth(False, float(info["depth"]))
+        depth = float(info["depth"])
+        if not made or abs(made[1] - depth) > reach:
+            return Problem("threadSpan", words.THREAD_HOLE_SPAN)
+        return Depth(False, depth)
     return Problem("depthUnread", words.THREAD_DEPTH_UNREAD)
 
 
