@@ -46,6 +46,9 @@ StepType("EmbossFeature", "emboss", reader="read_emboss", sketches=(PROFILES, OU
   emboss), or `FINISHING_UNMODELED` for a thread whose data says it is not modeled. It sets the gap's `finishing` flag,
   which lets the app show the copy as the part when only such steps are missing. Leave it out for a step that can
   change the size of the part.
+- `facts`: the shared step reader that reads facts of the type from its data alone (`ROUND_SETS`, `CHAMFER_SETS`),
+  when there is one. The resolved step of `design_model/design.py` then gives them as `facts`; a new name needs its
+  reader in `FACT_READERS`.
 
 A step that writes a recipe kind the table does not have needs a `RecipeKind` too: the recipe version that brought
 the kind, the paths to its points and directions (so `place.place` can move the part into the assembly), and how

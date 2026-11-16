@@ -17,7 +17,7 @@ import copy
 
 from ..capture_model import gap_hints, lineage, tool_items
 from ..capture_model.capture import outside_component, same_body
-from ..design_model import refs, roles, tool_chains
+from ..design_model import design, refs, roles, tool_chains
 from ..geometry import rigid
 from ..orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType, SketchShape
 from ..orca_recipe.feature import CadFeature
@@ -63,10 +63,11 @@ def _handlers():
     return HANDLERS
 
 
-def _why(item, owner):
-    """The reason a step that builds a tool cannot be copied, or None. `owner` is the token of the other component
-    whose tool body the step builds ("" for the part's component): such a step must have been read in that
-    component's coordinates (`helper_of`)."""
+def _why(step, owner):
+    """The reason the resolved step `step` (`design.ResolvedStep`) that builds a tool cannot be copied, or None.
+    `owner` is the token of the other component whose tool body the step builds ("" for the part's component): such a
+    step must have been read in that component's coordinates (`helper_of`)."""
+    item = step.item
     if owner and not item.get("helper_of"):
         return "it could not be read from Fusion", gap_hints.REFUSED
     if owner and tool_chains.sketch_by_name_only(item):
@@ -76,9 +77,9 @@ def _why(item, owner):
         return "a split in a tool body of another component is not copied to Orca yet", gap_hints.OTHER_COMPONENT
     if not owner and (item.get("helper_of") or outside_component(item)):
         return "it is in another component", gap_hints.OTHER_COMPONENT
-    if item.get("health") == "error":
+    if step.has(design.FAILS):
         return "it does not build in Fusion", gap_hints.REFUSED
-    if data_of(item).get("read_error") or item.get("helper_unread"):
+    if step.has(design.UNREAD) or item.get("helper_unread"):
         return "it could not be read from Fusion", gap_hints.REFUSED
     if _handlers().get(item.get("type")) is None:
         return "steps of type %s are not copied to Orca yet" % type_words(item.get("type") or ""), \
@@ -145,14 +146,16 @@ def build(ctx, record, anchor):
     body = ctx.push(Body(record, name, anchor))
     try:
         for item in found.items:
-            why = _why(item, found.owner)
+            # Steps of another component are named with it: their names may repeat the part's own.
+            seen = dict(item, name="%s of %s" % (label(item), tool_items.component_name(holder))) \
+                if found.owner else item
+            step = design.resolve(seen, ctx)
+            why = _why(step, found.owner)
             made = None
             start = len(body.solid.pieces)
             if why is None:
-                # Steps of another component are named with it: their names may repeat the part's own.
-                seen = dict(item, name="%s of %s" % (label(item), tool_items.component_name(holder))) \
-                    if found.owner else item
-                brought = other_components.bring_in(ctx, seen)
+                design.replay(step, ctx)
+                brought = step.brought
                 made = _handlers()[item["type"]](ctx, brought)
                 if isinstance(made, Skip):
                     why = (made.reason.rstrip("."), made.cause)

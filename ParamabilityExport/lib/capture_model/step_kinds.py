@@ -31,6 +31,10 @@ OUTLINE_FACE = "face"   # a flat face used as the outline: one in data.profiles,
 FINISHING_ALWAYS = "always"       # a round, a bevel, a draft, an emboss
 FINISHING_UNMODELED = "unmodeled"  # a thread drawn as a cosmetic thread: data.modeled is false
 
+# The facts a shared step reader gives from the data of a step alone (`StepType.facts`).
+ROUND_SETS = "roundSets"      # the sets of a round (`design_model/steps/finish.py`)
+CHAMFER_SETS = "chamferSets"  # the sets of a chamfer
+
 # How a pattern or mirror treats a recipe step it repeats.
 SOLID = "solid"         # repeated by the pattern or mirror step itself (`of`)
 FINISH = "finish"       # copied as its own step with its pick points moved to each copy
@@ -64,6 +68,8 @@ class StepType:
       mirror.
     finishing: FINISHING_ALWAYS or FINISHING_UNMODELED when a missing step of this type changes neither the size of
       the part nor which bodies exist, so the gap's `finishing` flag is true (`translator/gaps/finishing.py`).
+    facts: ROUND_SETS or CHAMFER_SETS when a shared step reader gives facts of the type from its data alone
+      (`design_model/design.py`, `FACT_READERS`).
     """
 
     name: str
@@ -81,6 +87,7 @@ class StepType:
     pattern: str = None
     repeats_sources: bool = False
     finishing: str = None
+    facts: str = None
 
 
 @dataclass(frozen=True)
@@ -122,8 +129,8 @@ STEP_TYPES = (
     StepType("HoleFeature", "hole", reader="read_solid", sketches=(HOLE_POINTS,)),
     StepType("ThreadFeature", "thread", reader="read_thread", finishing=FINISHING_UNMODELED),
     StepType("CombineFeature", "combine", reader="read_solid", reaches_bodies=True),
-    StepType("FilletFeature", "fillet", reader="read_finish", finishing=FINISHING_ALWAYS),
-    StepType("ChamferFeature", "chamfer", reader="read_finish", finishing=FINISHING_ALWAYS),
+    StepType("FilletFeature", "fillet", reader="read_finish", finishing=FINISHING_ALWAYS, facts=ROUND_SETS),
+    StepType("ChamferFeature", "chamfer", reader="read_finish", finishing=FINISHING_ALWAYS, facts=CHAMFER_SETS),
     StepType("ShellFeature", "shell", reader="read_finish"),
     StepType("DraftFeature", "draft", reader="read_finish", finishing=FINISHING_ALWAYS),
     StepType("OffsetFacesFeature", "offset faces", reader="read_offset"),

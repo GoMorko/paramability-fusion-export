@@ -49,6 +49,37 @@ PRIVATE_REACHES_IN_TESTS = {
     "test_translate_tool_body.py": {"_over_caps"},
 }
 
+# Modules above the shared design layer that still take the data of a timeline step from the item itself
+# (`item["data"]`, `item.get("data")`, or a `data_of` or `_data` helper), by path under `lib`. A module that gets
+# that data handed in is reached through one of these. The shared layer (`design_model`), the reader
+# (`fusion_reader`) and the capture model (`capture_model`) read it on purpose. This list may only shrink: a module
+# that moves to the facts of `design_model` leaves it, and no module joins it.
+RAW_STEP_DATA = {
+    "export_plan/body_scope.py", "export_plan/marker_roll.py", "export_plan/probe_flow/borrowed_view.py",
+    "geometry/combine_volume.py",
+    "orca_translate/bodies.py", "orca_translate/combine.py", "orca_translate/context.py",
+    "orca_translate/finishes.py", "orca_translate/holes.py", "orca_translate/lofts.py", "orca_translate/repeat.py",
+    "orca_translate/revolve.py", "orca_translate/steps.py", "orca_translate/sweeps.py", "orca_translate/threads.py",
+    "orca_translate/tools.py",
+    "params/geometry_links.py",
+    "probe/plan/covered.py", "probe/plan/request.py",
+    "translator/audit.py", "translator/bodies/move.py", "translator/bodies/paste.py", "translator/bodies/split.py",
+    "translator/bodies/split_rules.py", "translator/coil/step.py", "translator/combine/step.py",
+    "translator/combine/tool_walk.py", "translator/extrude/emboss.py", "translator/extrude/step.py",
+    "translator/faces/floating.py", "translator/finishes/draft.py", "translator/finishes/finish.py",
+    "translator/finishes/offset.py", "translator/gaps/gap_file.py", "translator/gaps/gap_measures.py",
+    "translator/hole/step.py", "translator/hole/thread.py", "translator/loft/step.py",
+    "translator/repeat/body_copies.py", "translator/repeat/repeat_circular.py", "translator/repeat/repeat_lattice.py",
+    "translator/repeat/repeat_mirror.py", "translator/repeat/repeat_rectangular.py",
+    "translator/repeat/repeat_sources.py", "translator/revolve/step.py", "translator/sketch/sketch_motion.py",
+    "translator/sweep/step.py", "translator/values.py",
+}
+_READS_DATA_ITSELF = ("design_model", "fusion_reader", "capture_model")
+_DATA_HELPERS = ("data_of", "_data")
+# Names of one output that the shared layer must not use: its refusals, skips and translation contexts.
+_DESTINATION_NAMES = {"Refusal", "Skip", "Pass", "StepResult", "Context"}
+_DESTINATIONS = {"translator", "orca_translate", "orca_recipe"}
+
 
 def _python_files(folder):
     for dirpath, dirnames, names in os.walk(folder):
@@ -123,6 +154,42 @@ def _private_reaches(path):
     return found
 
 
+def _reads_step_data(path):
+    """True when the file takes the data of a step from an item: `x["data"]`, `x.get("data")` or a data helper."""
+    with open(path, encoding="utf-8") as f:
+        tree = ast.parse(f.read())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant) and node.slice.value == "data":
+            return True
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if (isinstance(func, ast.Attribute) and func.attr == "get" and node.args
+                and isinstance(node.args[0], ast.Constant) and node.args[0].value == "data"):
+            return True
+        name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+        if name in _DATA_HELPERS:
+            return True
+    return False
+
+
+def _names_used(path):
+    """Every name, attribute and imported name of a file."""
+    with open(path, encoding="utf-8") as f:
+        tree = ast.parse(f.read())
+    found = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            found.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            found.add(node.attr)
+        elif isinstance(node, (ast.ClassDef, ast.FunctionDef)):
+            found.add(node.name)
+        elif isinstance(node, ast.alias):
+            found.add((node.asname or node.name).split(".")[-1])
+    return found
+
+
 class BoundaryTest(unittest.TestCase):
     def test_every_package_is_listed_and_has_more_than_one_module(self):
         lib = os.path.join(context.ADDIN_DIR, "lib")
@@ -183,6 +250,27 @@ class BoundaryTest(unittest.TestCase):
         for name in ("parameters.py", "rows.py"):
             with open(os.path.join(context.ADDIN_DIR, "lib", "fusion_reader", name), encoding="utf-8") as f:
                 self.assertIsNone(pattern.search(f.read()), name)
+
+
+
+class DesignLayerTest(unittest.TestCase):
+    def test_only_the_listed_modules_take_step_data_from_an_item(self):
+        lib = os.path.join(context.ADDIN_DIR, "lib")
+        found = set()
+        for path in _python_files(lib):
+            rel = os.path.relpath(path, lib).replace(os.sep, "/")
+            if rel.split("/")[0] not in _READS_DATA_ITSELF and _reads_step_data(path):
+                found.add(rel)
+        self.assertEqual(found - RAW_STEP_DATA, set(), "new modules read the data of a step from the item")
+        self.assertEqual(RAW_STEP_DATA - found, set(), "these modules no longer do: take them off the list")
+
+    def test_the_design_layer_has_no_destination_words_or_contexts(self):
+        # Its public functions take a recorder (`design_model.recorder.Recorder`); `tests/test_interfaces.py` checks
+        # that the layer asks a recorder only for its declared members.
+        for path in _python_files(os.path.join(context.ADDIN_DIR, "lib", "design_model")):
+            where = os.path.relpath(path, context.ADDIN_DIR)
+            self.assertEqual(_names_used(path) & _DESTINATION_NAMES, set(), where)
+            self.assertEqual(_imported_zones(path) & _DESTINATIONS, set(), where)
 
 
 if __name__ == "__main__":

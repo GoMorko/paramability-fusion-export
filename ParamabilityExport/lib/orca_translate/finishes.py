@@ -310,12 +310,12 @@ def draft(ctx, item):
                 "the bottom of the part, so this draft is left out.", causes.FACE_BY_NUMBER)
 
 
-def note_left_out(ctx, item):
-    """Measure a round or chamfer that is left out, so that a later round of side edges can tell whether it came near
-    (`outline_rounds.note_left_out`)."""
-    handler = HANDLERS.get(item.get("type"))
+def note_left_out(ctx, step):
+    """Measure a round or chamfer that is left out (`step`, a `design_model.design.ResolvedStep`), so that a later
+    round of side edges can tell whether it came near (`outline_rounds.note_left_out`)."""
+    handler = HANDLERS.get(step.type)
     if handler in (fillet, chamfer):
-        outline_rounds.note_left_out(ctx, item, handler is chamfer)
+        outline_rounds.note_left_out(ctx, step.item, step.facts, handler is chamfer)
 
 
 HANDLERS = {"FilletFeature": fillet, "ChamferFeature": chamfer, "ShellFeature": shell, "DraftFeature": draft}

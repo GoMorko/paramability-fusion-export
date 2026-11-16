@@ -3,16 +3,17 @@
 The same loop copies the exported body and each tool body of a Combine. The context says what it builds
 (`Context.target`, `Context.capture`, `Context.handlers`), so a handler always sees the body it works on as its target.
 
-What each item is for the body (a sketch, an assembly item, a step of another component, a step of the body or of
-another body) and the body before and after it come from the shared layer (`design_model/roles.py`); the walk decides
-from them. An item the copy cannot hold either stops the copy or, when its effect stays on the body and the rest of
-the timeline still reads right, is left out as a gap (gaps/stops.py). A gap is a step type with no handler, a
+The walk reads the items as the shared layer resolves them (`design_model/design.py`): what each item is for the body
+(a sketch, an assembly item, a step of another component, a step of the body or of another body), the body before
+and after it, what about it cannot be read, and the item with the geometry of other components it can use brought
+in. The walk decides from these facts. An item the copy cannot hold either stops the copy or, when its effect stays
+on the body and the rest of the timeline still reads right, is left out as a gap (gaps/stops.py). A gap is a step type with no handler, a
 handler's Refusal, a step that reaches into another component, and a step that picks faces a gap made. What a left
 out item would have recorded (doubts, notes) is dropped with it. Anything that leaves the body unknown still stops
 the copy.
 """
 from ..capture_model import gap_hints, gap_picks, step_kinds
-from ..design_model import borrowed, refs, roles
+from ..design_model import design, roles
 from ..design_model.reach import construction_fixes
 from . import notes as wording
 from .bodies import split_rules
@@ -36,11 +37,6 @@ def _refusal(item, reason, note=None, cause=None):
 
 def _label(item):
     return wording.step_label(item.get("name"), item.get("type")) or "A step"
-
-
-def _data(item):
-    data = item.get("data")
-    return data if isinstance(data, dict) else {}
 
 
 def fix_construction(ctx, item):
@@ -121,12 +117,12 @@ def walk_items(ctx, result):
 
     made_in_component = False
 
-    def visit(item):
-        """One item: False when it stops the copy, else None (a step forced to a gap while diagnosing too)."""
+    def visit(step):
+        """One resolved item: False when it stops the copy, else None (a step forced to a gap while diagnosing
+        too)."""
         nonlocal made_in_component
+        item, role = step.item, step.role
         ctx.enter(item)
-        item = ctx.current = roles.seen_before_split(item, ctx.target, ctx.lineage)
-        role = roles.role_of(item, ctx.target, ctx.lineage)
         if role.kind in (roles.SUPPRESSED, roles.NOT_A_STEP):
             note = "Suppressed in Fusion." if role.kind == roles.SUPPRESSED else ""
             result.items.append(make_verdict(item, "skipped", note=note))
@@ -163,12 +159,12 @@ def walk_items(ctx, result):
 
         if role.lost:
             return refuse(item, "The body could not be followed through the timeline.")
-        if item.get("bodies_after") is None:
-            return refuse(item, "The bodies this step changes could not be read.")
+        if step.has(design.BODIES_UNREAD):
+            return refuse(item, step.problem(design.BODIES_UNREAD).words)
 
         touches = role.touches
-        if item.get("health") == "error" and (touches or not item.get("bodies_after")):
-            return refuse(item, "This step does not build in Fusion.")
+        if step.has(design.FAILS) and (touches or not item.get("bodies_after")):
+            return refuse(item, step.problem(design.FAILS).words)
 
         handler = ctx.handlers.get(item.get("type"))
         if not touches and not item["bodies_after"] and (handler is None or roles.changes_named_bodies(item)):
@@ -203,8 +199,8 @@ def walk_items(ctx, result):
             result.items.append(make_verdict(item, "skipped", note=note))
             result.notes.append(note)
             return None
-        if _data(item).get("read_error"):
-            return refuse(item, "This step could not be read from Fusion.")
+        if step.has(design.UNREAD):
+            return refuse(item, step.problem(design.UNREAD).words)
         if handler is None:
             if not leave_out(item, _unsupported_reason(item), _gap_ids(ctx, item), cause=_type_cause(item)):
                 return False
@@ -212,16 +208,16 @@ def walk_items(ctx, result):
             return None
         picked, sure = gap_picks.picked_gaps(ctx, item)
         with ctx.recording() as brought:
-            item = ctx.current = refs.bring_in(borrowed.bring_in(item, ctx))
-        if refs.is_foreign(_data(item)):
-            if refs.from_old_export(item):
+            design.replay(step, ctx)
+        item = ctx.current = step.brought
+        if step.foreign:
+            if step.old_export:
                 reason, note, cause = (
                     "This step reaches into another component, or was read by an older version of the add-in "
                     "that could not tell its own geometry apart. Export again with this version.",
                     wording.old_export_note(_label(item)), gap_hints.OLD_EXPORT)
             else:
-                reason = (refs.why_foreign(item)
-                          or "This step reaches into another component, which is not copied yet.")
+                reason = step.why_foreign or "This step reaches into another component, which is not copied yet."
                 note, cause = wording.reaches_component_note(_label(item)), gap_hints.OTHER_COMPONENT
             if not leave_out(item, reason, [gap.id for gap in picked], note, cause=cause):
                 return False
@@ -273,8 +269,8 @@ def walk_items(ctx, result):
         result.notes.extend(notes)
         return None
 
-    for item in ctx.capture["items"]:
-        if visit(item) is False:
+    for step in design.read(ctx.capture, ctx.table, ctx.motion, ctx.lineage, ctx.cache):
+        if visit(step) is False:
             return False
     ctx.current = None
     return True

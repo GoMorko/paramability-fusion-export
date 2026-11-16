@@ -861,9 +861,23 @@ The driver is `translate()` in `lib/translator/translate.py`. In order:
 The item loop is `walk_items(ctx, result)` in `lib/translator/walk.py`. It visits every item of the capture in
 timeline order.
 
-Before the walk makes a decision, it gets the role of the item from the shared layer (`roles.role_of` in
-`lib/design_model/roles.py`). The role is a set of facts. It does not tell the walk to copy or to stop. The role
-gives:
+Before the walk starts, it reads the design from the shared layer: `design.read` in `lib/design_model/design.py`
+gives one resolved step (`ResolvedStep`) for each item. The walk of the Orca output reads the same steps (see
+`docs/orca-output.md`). A resolved step is a set of facts. It does not tell the walk to copy or to stop. It holds:
+
+- the item as the walk reads it. Before the split that made the exported body, the item has the measures of the body
+  that was split (`roles.seen_before_split`);
+- the role of the item (`roles.role_of` in `lib/design_model/roles.py`, see below);
+- the problems of the item: the reader could not read the step (`UNREAD`), the step does not build in Fusion
+  (`FAILS`), or the reader could not read the bodies after the step (`BODIES_UNREAD`). Each problem has a plain
+  sentence. The walk uses that sentence when it stops;
+- the item with the geometry of other components brought in (see below), and whether a record of another component
+  stays in it (`foreign`);
+- the doubts, the notes and the followed components that the bring in recorded (`events`). The shared layer does not
+  record them on the context. The walk replays them (`design.replay`) at the point where it brings the step in, inside
+  the recording of the step. This makes sure that a step that is not copied keeps none of them.
+
+The role gives:
 
 - the kind of the item: suppressed, not a step (a sketch or construction geometry), an assembly item, a step of
   another component that builds a tool body, another step of another component, a step that builds the body, or a
@@ -898,7 +912,8 @@ The walk then makes one of these decisions from the role. The first rule that ma
 | otherwise | the handler runs |
 
 Before the check for `foreign` records, the walk brings in the geometry of other components that the step can use as
-its own. The shared layer does this (`lib/design_model/`, see 2.2):
+its own. The shared layer did this when it read the design (`design.read`), for each step of the component of the
+body (`lib/design_model/`, see 2.2). The walk takes the brought in item and replays the recorded doubts and notes:
 
 - `borrowed.bring_in` takes each outline of another component's sketch whose place is known. It removes `foreign` and
   writes the name of the component in `borrowed`. It also records the sizes that move that sketch, or the component
@@ -935,7 +950,9 @@ assembly), the reader module (in `lib/fusion_reader`), the sketch records the pr
 (`makes_bodies`, `moves_bodies`, `splits_bodies`, `splits_faces`, `reaches_bodies`, `pattern`, `repeats_sources`).
 `repeats_sources` marks the pattern and mirror types; `finishes/finish.py` uses it to see whether a later step repeats
 the edges of a round or a chamfer. A type with no handler has `unsupported` (the plain reason) and, when the reason has
-a tip for the person, `gap_cause`.
+a tip for the person, `gap_cause`. `facts` names the shared step reader that reads facts of the type from its data
+alone (`ROUND_SETS`, `CHAMFER_SETS`). The resolved step of the shared layer gives these facts (`design_model/design.py`,
+see 2.2).
 
 The table holds no handler. The handlers are in `lib/translator/handlers.py`: `HANDLERS` maps a capture type to a
 function `handle(item, ctx)`. The table never imports translator code, and only the translator reads `HANDLERS`.
@@ -1745,6 +1762,36 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   (`fit`). `steps/split.py`: which piece of a split lies inside the tool body (`resolve`). These came from
   `translator/repeat/`, `translator/bodies/move.py` and `translator/bodies/split_inside.py`. How a copy is written
   and what it does about a size stay in each translator.
+- `design.py`: the design as the walks read it. `read(capture, table, motion, chain, cache)` gives one
+  `ResolvedStep` for each item of the capture, in timeline order. The walk of the recipe (also for a tool body), the
+  walk of the Orca output and the probe plan (`probe/plan/covered.py`) read these steps. A `ResolvedStep` has these
+  facts:
+  - `index`, `name` and `type` of the item. `raw` is the item as the capture holds it. `item` is the item with the
+    measures of the body that the walk builds before the split that made the exported body
+    (`roles.seen_before_split`).
+  - `role`: the `roles.Role` of the item (see `roles.py` below).
+  - `outside`: the item is in another component. `helper`: the reader read the item in the coordinates of its own
+    component, for a tool body of a Combine (`helper_of`).
+  - `problems`: a `Problem` for each thing that the reader could not read. The codes are `UNREAD` (`read_error`),
+    `FAILS` (the step is in error in Fusion) and `BODIES_UNREAD` (`bodies_after` is null). The words are in
+    `words.py`. `has(code)` and `problem(code)` find one.
+  - `brought`: the item with the geometry of other components brought in (`borrowed.bring_in`, then
+    `refs.bring_in`). Only a step of the component of the body is brought in (the roles `BUILDS` and `HELPER`).
+    `foreign` is true when a record of another component stays in `brought`. `old_export` and `why_foreign` say
+    more about it (`refs.from_old_export`, `refs.why_foreign`).
+  - `events`: the doubts, notes and followed components that the bring in recorded, in order. The bring in records
+    them on a `Tally`, not on the context of the translation. `replay(step, ctx)` records them on the context. Each
+    walk calls `replay` where it brings the step in, inside the recording or the checkpoint of the step. This makes
+    sure that the doubts and notes of a step count only when the walk copies the step. `error` is an exception that the bring in
+    raised. `replay` raises it again, at the same point where the bring in raised it before.
+  - `facts`: the facts that a shared step reader reads from the data of the step alone (`FACT_READERS`). The step
+    kind table says which reader applies to a type (`StepType.facts` in `capture_model/step_kinds.py`). The sets of
+    a round or a chamfer step (`steps/finish.py`) are such facts. The Orca output reads them when it measures a
+    round or a chamfer that it leaves out (`finishes.note_left_out`). For another kind, `facts` is None. The handlers
+    still call the step readers themselves. A handler also runs on items that no walk resolved: the sources of a
+    pattern, the steps of a tool body that are written on the part, and items that a handler writes again.
+  `resolve(item, ctx, role)` gives the `ResolvedStep` of one item. The Orca output uses it for each step of a tool
+  body (`tools.build`), without a role.
 - `roles.py`: what each timeline item is for the body that a walk builds, and which measures of that body apply to
   the item. These came from `translator/walk.py`, `translator/bodies/body_states.py` and
   `translator/bodies/split_rules.py`. The walk of the recipe and the walk of the Orca output both read them:

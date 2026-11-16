@@ -10,9 +10,9 @@ a bound field reads. Each ticked parameter ends in one of: it follows a variable
 in some places only ("partly"), nowhere because Orca cannot follow what it moves ("fixed"), or it is not used by any
 copied step ("unused").
 """
-from ..capture_model import gap_hints, lineage, step_kinds
+from ..capture_model import gap_hints, step_kinds
 from ..capture_model.capture import CaptureError, validate_capture
-from ..design_model import reach, roles
+from ..design_model import design, reach, roles
 from ..orca_recipe.recipe import Recipe
 from ..params.size_table import FREE
 from ..translator.words import type_words
@@ -95,25 +95,22 @@ def _item_sizes(ctx, item):
 
 
 def _walk(ctx):
-    target = ctx.capture["target"]
-    chain = lineage.of(ctx.capture)
-
-    def leave_out(item, reason, cause, error=None):
+    def leave_out(step, reason, cause, error=None):
+        item = step.item
         ctx.items.append(_verdict(item, "leftOut", reason))
         gap = {"index": item.get("index"), "name": item.get("name", ""), "type": item.get("type", ""),
                "reason": reason, "cause": cause}
         if error is not None:
             gap["error"] = "%s: %s" % (type(error).__name__, error)
         ctx.left_out.append(gap)
-        finishes.note_left_out(ctx, item)
+        finishes.note_left_out(ctx, step)
         ctx.doubt(_item_sizes(ctx, item), "%s uses it, and %s is left out of the Orca copy" % (
             item.get("name") or "a step", item.get("name") or "that step"))
 
-    for item in ctx.capture["items"]:
-        kind = item.get("type")
-        # Before the split that made the part, a step of the body it was split from reads that body's measures.
-        item = roles.seen_before_split(item, target, chain)
-        role = roles.role_of(item, target, chain)
+    # Before the split that made the part, a step of the body it was split from reads that body's measures
+    # (`design.read`).
+    for step in design.read(ctx.capture, ctx.table, ctx.motion, cache=ctx.cache):
+        item, role, kind = step.item, step.role, step.type
         if role.kind == roles.SUPPRESSED:
             ctx.items.append(_verdict(item, "skipped", "Suppressed in Fusion."))
             continue
@@ -123,33 +120,33 @@ def _walk(ctx):
         changed = role.changed is True
         if role.kind in (roles.ASSEMBLY, roles.TOOL_ELSEWHERE, roles.OTHER_COMPONENT):
             if changed:
-                leave_out(item, "This step changes the part from another component, which is not copied yet.",
+                leave_out(step, "This step changes the part from another component, which is not copied yet.",
                           gap_hints.CHANGED_FROM_OTHER_COMPONENT)
             else:
                 ctx.items.append(_verdict(item, "skipped", "In another component."))
             continue
         if role.lost:
-            leave_out(item, "This step lists another body with the part's name, so the copy cannot tell whether it "
+            leave_out(step, "This step lists another body with the part's name, so the copy cannot tell whether it "
                       "changes the part.", causes.BODY_LOST)
             continue
-        if item.get("bodies_after") is None and not changed:
-            leave_out(item, "The bodies this step changes could not be read.", gap_hints.REFUSED)
+        if step.has(design.BODIES_UNREAD) and not changed:
+            leave_out(step, step.problem(design.BODIES_UNREAD).words, gap_hints.REFUSED)
             continue
         # A body made by a split is built like the body it was split from, up to that split.
         ctx.part.target = role.before
         if role.kind == roles.HELPER and not changed:
             ctx.items.append(_verdict(item, "skipped", "Helper geometry, not part of the exported body."))
             continue
-        if item.get("health") == "error":
-            leave_out(item, "This step does not build in Fusion.", gap_hints.REFUSED)
+        if step.has(design.FAILS):
+            leave_out(step, step.problem(design.FAILS).words, gap_hints.REFUSED)
             continue
-        if (item.get("data") or {}).get("read_error"):
-            leave_out(item, "This step could not be read from Fusion.", gap_hints.REFUSED)
+        if step.has(design.UNREAD):
+            leave_out(step, step.problem(design.UNREAD).words, gap_hints.REFUSED)
             continue
         handler = HANDLERS.get(kind)
         if handler is None:
             reason, cause = _unsupported(item)
-            leave_out(item, reason, cause)
+            leave_out(step, reason, cause)
             continue
         start = len(ctx.solid.pieces)
         # A handler may write features, notes, bound fields and doubts before it finds that its step cannot be
@@ -158,17 +155,18 @@ def _walk(ctx):
         mark = ctx.checkpoint()
         earlier = {id(f) for f in ctx.features}
         try:
-            brought = other_components.bring_in(ctx, item)
+            design.replay(step, ctx)
+            brought = step.brought
             made = handler(ctx, brought)
             if made and not isinstance(made, (Skip, Pass)):
                 other_components.mark_refs(ctx, brought)
         except Exception as error:  # an error in one step's copy leaves that step out, never the whole output
             ctx.rollback(mark)
-            leave_out(item, _INTERNAL, causes.INTERNAL_ERROR, error)
+            leave_out(step, _INTERNAL, causes.INTERNAL_ERROR, error)
             continue
         if isinstance(made, Skip):
             ctx.rollback(mark)
-            leave_out(item, made.reason, made.cause)
+            leave_out(step, made.reason, made.cause)
             continue
         if isinstance(made, Pass):
             ctx.rollback(mark)

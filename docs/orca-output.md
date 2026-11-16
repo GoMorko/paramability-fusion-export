@@ -37,9 +37,11 @@ The modules of `lib/orca_translate/`:
 
 - `translate.py`: the walk over the timeline. It passes by the steps that do not build the body, gives every other
   step to the handler of its kind (`HANDLERS`, gathered from the handler modules) and keeps the verdict of each step.
-  What each step is for the body (a sketch, an assembly item, a step of another component, a step of the body or of
-  another body) and the body before and after it come from the shared layer (`design_model.roles`), the same facts
-  the recipe walk reads.
+  It reads the design from the shared layer (`design_model.design.read`), the same resolved steps the recipe walk
+  reads: what each step is for the body (a sketch, an assembly item, a step of another component, a step of the body
+  or of another body) and the body before and after it (`design_model.roles`), what about it cannot be read (the
+  step, its bodies, or a step in error in Fusion), and the step with the geometry of other components brought in. A
+  left out round or chamfer is measured from the sets in the resolved step (`facts`).
 - `context.py`: what one translation keeps while it walks: the recipe so far, the formulas it bound, the sizes that
   keep their numbers and why, and the part built so far. Its `Context` is a `design_model.recorder.Recorder`
   (`cache`, `motion` always None, `doubt`, `note`, `follow_component`), so the shared layer can record on it. A value
@@ -762,9 +764,12 @@ A step can use geometry of another component: a plane, face, axis or direction, 
 of another component's sketch. The Orca copy reads no motion file, so it writes each one where the capture places it,
 as numbers in the part's coordinates (`orca_translate/other_components.py`, with the shared layer `design_model`):
 
-- Before each handler, inside the step's checkpoint, the walk and `tools.build` bring the step in (`bring_in`): an
-  outline of another component's sketch whose place is known (`design_model.borrowed`), and a flat face or plane that
-  an extrude starts from or reaches to or that a hole sits on (`design_model.refs`), lose `foreign`. The reader already
+- The shared layer brings each step in when it reads the design (`design_model.design`; `design.resolve` for each
+  step of a tool body in `tools.build`): an outline of another component's sketch whose place is known
+  (`design_model.borrowed`), and a flat face or plane that an extrude starts from or reaches to or that a hole sits on
+  (`design_model.refs`), lose `foreign`. The doubts and notes this records wait in the resolved step: before each
+  handler, inside the step's checkpoint, the walk and `tools.build` replay them (`design.replay`), so a step left out
+  keeps none of them. The reader already
   gives mirror planes, split planes, revolve and pattern axes and pattern directions of other components in the part's
   coordinates (`assembly: true`). So these are copied: a mirror across a plane of another component, a pattern along
   its axis or edge or about its axis, a revolve about its axis, a split by its plane, an extrude to or from its flat

@@ -21,7 +21,10 @@ package may import only packages above it in this list (not every one of them). 
 - `sketch_solve`: reads a sketch's dimensions and constraints from the capture into formulas for its points, without Fusion. Export for Orca uses its extended reading (`extended=True`), which the recipe output does not use.
 - `design_edit`: setting parameter values row by row, restoring them, the timeline marker, the temporary copy, and the declared interface of the parameter store (`store.py`).
 - `design_model`: the shared layer both translators read: facts about the design that every output needs and doubts
-  about sizes, never a refusal. `recorder.py` declares what it asks of a translation; `refs.py` holds the planes,
+  about sizes, never a refusal. `design.py` reads the design as the walks read it (`read`: one resolved step per
+  timeline item with its role, what about it cannot be read, the step with the geometry of other components brought
+  in and the doubts that waits for the walk to replay, and the facts of its kind); `recorder.py` declares what it asks
+  of a translation; `refs.py` holds the planes,
   faces, axes and points of other components (which records a step can use, which sizes may move them, the doubt when
   the copy keeps them in place); `borrowed.py` the outlines taken from another component's sketch; `roles.py` what
   each timeline item is for the body a walk builds (a sketch, an assembly item, a step of another component, a step of
@@ -87,8 +90,11 @@ export them and open each one in the Paramability app to see how much of the des
 
 Everything under `lib/` except `fusion_reader/` and `fusion_ui/` is pure Python and runs without Fusion. The Fusion
 reading code is tested with fakes. Anything that touches `adsk` stays in `lib/fusion_reader/`, `lib/fusion_ui/` and
-`commands/`. `tests/test_boundary.py` checks that, which package may import which (so imports only go one way), and
-that no module imports an underscore name from another module. `tests/test_interfaces.py` checks that the Fusion
+`commands/`. `tests/test_boundary.py` checks that, which package may import which (so imports only go one way),
+that no module imports an underscore name from another module, that the shared layer (`design_model`) uses no name
+of an output (`Refusal`, `Skip`, `Context`) and imports no output, and which modules above the shared layer still
+take the data of a step from the item itself (`RAW_STEP_DATA`). That list may only shrink: a module that reads the
+facts of `design_model` instead leaves it, and a new module must not join it. `tests/test_interfaces.py` checks that the Fusion
 parameter store, the two Fusion ports and the shared fakes have every member declared for a store or a port (in
 `design_edit/store.py` and `export_plan/pipeline/port.py`) with the declared parameters, that both probes have every
 member declared for a probe (in `export_plan/probe_flow/interface.py`), that both translation contexts have every member

@@ -624,15 +624,15 @@ def _follows(ctx, sketch):
 
 # ---- rounds and chamfers left out between the extrude and a round --------------------------------------------------
 
-def note_left_out(ctx, item, chamfer):
+def note_left_out(ctx, item, sets, chamfer):
     """Measure a round (`chamfer` False) or chamfer step that is left out, on the part the copy has built before it,
     and keep its regions in `ctx.left_corners` when every edge is a whole straight side edge of a copied extrude at a
-    corner that fits it. A step that cannot be measured so is not kept, and every later round counts it."""
-    data = item.get("data") if isinstance(item.get("data"), dict) else {}
-    if not ctx.has_body or not data.get("sets"):
+    corner that fits it. `sets` are the step's round or chamfer sets (`design_model.steps.finish`). A step that cannot
+    be measured so is not kept, and every later round counts it."""
+    if not ctx.has_body or not sets:
         return
     picks = []
-    for one in (sets_of.chamfer_sets if chamfer else sets_of.round_sets)(data):
+    for one in sets:
         size = one.reach if one.edges else None
         if size is None or one.follows_step or one.foreign:
             return

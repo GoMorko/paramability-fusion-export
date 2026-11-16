@@ -1,5 +1,6 @@
 """The sketches and flat faces the probe can follow: which capture records name them, and which it leaves alone."""
 from ...capture_model.step_kinds import AXIS, HOLE_POINTS, OUTLINE_FACE, PATH, PROFILES, step_type
+from ...design_model import design
 from ...sketch_values import keys
 from ...translator.extrude import emboss
 from ...translator.result import Refusal
@@ -59,10 +60,9 @@ def scan(capture):
     """The `Scan` of a capture: its items in the target's component, and the steps of tool bodies from other
     components (`helper_of`), that carry a profile, a hole or a revolve axis."""
     out = Scan()
-    for item in capture.get("items") or []:
-        data = item.get("data") or {}
-        if (item.get("suppressed") or (item.get("in_target_component") is False and not item.get("helper_of"))
-                or "read_error" in data):
+    for step in design.read(capture):
+        item, data = step.raw, design.data_of(step.raw)
+        if item.get("suppressed") or (step.outside and not step.helper) or step.has(design.UNREAD):
             continue
         spec = step_type(item.get("type"))
         records = spec.sketches if spec is not None else ()

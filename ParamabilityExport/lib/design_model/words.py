@@ -49,3 +49,9 @@ def sketch_copied(step, sketches, fixed):
     """The note of a step that uses sketches of other components (`sketches`: "<sketch> of <component>" each)."""
     return "%s uses the sketch %s; its outline is copied in place%s." % (
         step, ", ".join(sorted(set(sketches))), " as fixed numbers" if fixed else "")
+
+
+# What about a timeline item cannot be read (`design.py`).
+STEP_UNREAD = "This step could not be read from Fusion."
+STEP_FAILS = "This step does not build in Fusion."
+BODIES_UNREAD = "The bodies this step changes could not be read."
