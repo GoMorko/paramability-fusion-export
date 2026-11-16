@@ -278,6 +278,11 @@ _CELLS = {}
 _CELLS_MAX = 50000
 
 
+def forget_answers():
+    """Drop every stored answer of `_cells_hold`: a translation starts with none, and none outlives its export."""
+    _CELLS.clear()
+
+
 def _cells_hold(planned, spec, points, env, node):
     """True when, at `env`, the body of `node` is the corner of its two sides (both sides' half-planes for a convex
     corner, either for an inward one) where the tool of `spec` changes it (`Spec.region`), and the outline's formula
