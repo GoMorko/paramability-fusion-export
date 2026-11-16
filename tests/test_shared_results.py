@@ -1,5 +1,7 @@
 """One shape for the answer of both outputs: the verdict of each timeline item, the record of a step left out, the
 sentence of a shared problem, and the tips and the preview that read the records."""
+import ast
+import os
 import unittest
 
 from tests import context  # noqa: F401
@@ -8,12 +10,13 @@ from tests.translator_helpers import load_capture
 from lib.capture_model import gap_hints
 from lib.capture_model.gap_hints import hint as gap_hint
 from lib.capture_model.step_kinds import step_type
-from lib.design_model import verdicts, words
+from lib.design_model import words
 from lib.design_model.paths import words as path_words
 from lib.dialog_model import left_out_preview, orca_result
 from lib.dialog_model.result_rows import section_lines
 from lib.export_plan.recipe_export import translate_capture
 from lib.orca_translate import causes, translate as orca_translate
+from lib.results import left_out as left_out_record
 
 VERDICT_KEYS = {"index", "name", "type", "verdict", "note"}
 LEFT_OUT_KEYS = {"name", "type", "reason"}
@@ -45,12 +48,12 @@ class RecordShapeTest(unittest.TestCase):
         self.assertEqual(gap["hint"], record["hint"])
 
     def test_the_name_of_an_unnamed_step_is_its_type_in_words(self):
-        record = verdicts.left_out({"name": "  ", "type": "ThickenFeature"}, "Because.")
+        record = left_out_record.left_out({"name": "  ", "type": "ThickenFeature"}, "Because.")
         self.assertEqual(record["name"], step_type("ThickenFeature").words)
 
     def test_a_record_has_a_hint_only_when_one_is_given(self):
-        self.assertNotIn("hint", verdicts.left_out({"name": "A", "type": "X"}, "Because."))
-        self.assertEqual(verdicts.left_out({"name": "A", "type": "X"}, "Because.", "Do this.")["hint"], "Do this.")
+        self.assertNotIn("hint", left_out_record.left_out({"name": "A", "type": "X"}, "Because."))
+        self.assertEqual(left_out_record.left_out({"name": "A", "type": "X"}, "Because.", "Do this.")["hint"], "Do this.")
 
 
 class SharedSentenceTest(unittest.TestCase):
@@ -61,7 +64,22 @@ class SharedSentenceTest(unittest.TestCase):
         self.assertEqual(record["reason"], gap["reason"])
         self.assertEqual(record["cause"], gap_hints.EXTRUDE_END_FACE)
 
+    def test_a_problem_of_the_shared_layer_takes_its_sentence_from_the_words_modules(self):
+        # A sentence typed into a reader would escape the check below, so the readers hold none.
+        folder = os.path.join(context.ADDIN_DIR, "lib", "design_model")
+        paths = [os.path.join(dirpath, name) for dirpath, _, names in os.walk(folder) for name in names
+                 if name.endswith(".py")]
+        self.assertTrue(paths)
+        for path in paths:
+            with open(path, encoding="utf-8") as f:
+                tree = ast.parse(f.read())
+            for node in ast.walk(tree):
+                if (isinstance(node, ast.Call) and getattr(node.func, "id", None) == "Problem"
+                        and len(node.args) > 1 and isinstance(node.args[1], (ast.Constant, ast.JoinedStr))):
+                    self.fail("%s:%d writes the sentence of a Problem itself" % (os.path.basename(path), node.lineno))
+
     def test_a_shared_sentence_names_no_output_and_promises_nothing(self):
+        # Only the text of a sentence can show a destination name or a promise, so this one reads the text.
         for module in (words, path_words):
             for name, text in vars(module).items():
                 if name.isupper() and isinstance(text, str) and " " in text:
@@ -78,12 +96,16 @@ class OrcaTipTest(unittest.TestCase):
         for cause in (gap_hints.COIL, gap_hints.THREAD_LIMITS, gap_hints.CHANGED_FROM_OTHER_COMPONENT):
             self.assertIsNone(causes.tip(cause))
 
-    def test_no_tip_shown_for_orca_names_the_app(self):
-        shown = [causes.tip(cause) for cause in gap_hints.HINTS if causes.tip(cause)]
-        self.assertTrue(shown)
-        for text in shown:
-            self.assertNotIn("assistant", text.lower())
-            self.assertNotIn("parts together", text.lower())
+    def test_a_tip_is_shown_for_orca_only_for_a_cause_that_was_checked_to_fit_it(self):
+        # Each tip in this list was read to name no feature of the Paramability app. A new cause is not shown for Orca
+        # until its tip is read and added here and in `causes`.
+        shown = {cause for cause in gap_hints.HINTS if causes.tip(cause)}
+        self.assertEqual(shown, {
+            gap_hints.DELETE_FACE, gap_hints.SURFACE, gap_hints.EXTRUDE_END_FACE, gap_hints.TAPER_STEEP,
+            gap_hints.THIN_OUTLINE, gap_hints.ROUND_KIND, gap_hints.REPEAT_FACES, gap_hints.SHARP_CORNER,
+            gap_hints.LOFT_KIND, gap_hints.SCALE, gap_hints.REPLACE_FACE, gap_hints.RIB_WEB, gap_hints.PATH_PATTERN,
+            gap_hints.BOUNDARY_FILL, gap_hints.NEW_COMPONENT, gap_hints.OTHER_COMPONENT,
+            gap_hints.MADE_IN_OTHER_COMPONENT, gap_hints.AFTER_GAP})
 
     def test_a_cause_of_orca_alone_has_no_tip(self):
         self.assertIsNone(causes.tip(causes.TAPER_SHAPE))

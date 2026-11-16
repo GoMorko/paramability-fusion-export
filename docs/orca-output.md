@@ -142,7 +142,7 @@ error in `orca.left_out[].error`), goes back to the state before the step as for
 goes on with the next step.
 
 Each step left out has a record in the report (`orca.left_out[]`) with the shape that the recipe gaps share
-(`design_model/verdicts.left_out`): `name` (the type in words when the item has no name), `type`, `reason`, and the Orca
+(`results/left_out.left_out`): `name` (the type in words when the item has no name), `type`, `reason`, and the Orca
 keys `index` and `cause` (and `error` for a step that failed). The cause is a cause of `capture_model/gap_hints.py`
 when the recipe translator gives the same one, else one of `orca_translate/causes.py` for a rule of the Orca copy
 only (a cut that misses the part, copies Orca cannot repeat, a revolve axis off the sketch plane...). The Orca output

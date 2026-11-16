@@ -7,6 +7,7 @@ cut across the plane, a body on both sides) everything written so far is gathere
 repeats that, which is the body joined with its image by definition.
 """
 from ...capture_model.step_kinds import SOLID, recipe_kind
+from ...design_model import tool_chains
 from ...design_model.steps.repeat import mirror_plane
 from ...design_model.values import Quantity
 from ...design_model import words as shared
@@ -68,7 +69,8 @@ def mirror(item, ctx, sources=None):
         solids, finishes = _step_by_step(ctx, item, data, plane, written), []
         if solids is None:
             if ctx.depth + 1 + nesting(ctx.steps) > tool_walk.MAX_DEPTH:
-                return Refusal("The body %s is built from tools nested too deep to mirror." % tool_walk.name_of(ctx.target))
+                return Refusal("The body %s is built from tools nested too deep to mirror."
+                               % tool_chains.name_of(ctx.target))
             wrapped = "%sbody_%s" % (ctx.id_prefix, item["index"])
             out = build(ctx, item, [wrapped], [], [({"kind": "mirror", "plane": written},
                                                     [_mirror_motion(plane, moved, item.get("name", ""))])], "mirror")

@@ -12,7 +12,7 @@ applies to the translation that uses the answer.
 The read is asked about the steps left out for their own reason, also inside tool bodies. A step left out only because
 it may pick faces of another gap is not one of them: the read tests it as a picking step instead.
 """
-from ..design_model.verdicts import LEFT_OUT
+from ..results.verdicts import LEFT_OUT
 
 
 def _own_gaps(verdicts):

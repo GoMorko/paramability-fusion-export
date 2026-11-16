@@ -22,8 +22,8 @@ Arguments:
   extra   settings ({recipe size name: value}) tested besides the corners, for example states the probe built.
 
 `middles` gives settings inside the ranges (every size at its middle, alone or with the others at their ends) for a rule
-that is not a formula and can fail between the ends. `size_env` gives the values of every size at a setting; `largest_share` finds where a rule stops holding while a range
-is moved toward its value.
+that is not a formula and can fail between the ends. `recipe_size_values` gives the values of every size at a setting;
+`largest_share` finds where a rule stops holding while a range is moved toward its value.
 
 A formula that is more than sums and products (`abs`, a division by a size, `min`, `max`, `mod`, a choice, a
 function such as `sin` or `sqrt`) can have its extreme or its failure inside a range. For such a formula `sweep`
@@ -54,7 +54,7 @@ STEPS = 40
 _FAILURES = (ExpressionError, ValueError, ZeroDivisionError, OverflowError)
 
 
-def size_env(table, overrides):
+def recipe_size_values(table, overrides):
     """Size values by recipe name: the free sizes (with `overrides`), then every derived size."""
     env = {name: size["value"] for name, size in table.sizes.items() if "value" in size}
     env.update(overrides)
@@ -240,7 +240,7 @@ def _crossings(table, tree_terms, ends):
             xs = [lo] + [lo + f * (hi - lo) for f in INNER_FRACTIONS] + [hi]
             for rest in ({}, low, high):
                 try:
-                    signs = [_sign(value_of(term, size_env(table, dict(rest, **{n: x})))) for x in xs]
+                    signs = [_sign(value_of(term, recipe_size_values(table, dict(rest, **{n: x})))) for x in xs]
                 except _FAILURES:
                     continue
                 for (x0, s0), (x1, s1) in zip(zip(xs, signs), zip(xs[1:], signs[1:])):
@@ -263,7 +263,7 @@ def _bisect(table, term, rest, name, x0, x1, s0):
     for _ in range(STEPS):
         mid = (x0 + x1) / 2.0
         try:
-            s = _sign(value_of(term, size_env(table, dict(rest, **{name: mid}))))
+            s = _sign(value_of(term, recipe_size_values(table, dict(rest, **{name: mid}))))
         except _FAILURES:
             break
         if s == 0:
@@ -296,7 +296,7 @@ def sweep(table, formula, reads, bounds=None, extra=()):
     low = high = None
     for setting in settings + list(extra):
         try:
-            value = value_of(tree, size_env(table, setting))
+            value = value_of(tree, recipe_size_values(table, setting))
         except _FAILURES:
             failed = True
             continue

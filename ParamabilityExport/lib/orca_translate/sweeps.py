@@ -33,11 +33,10 @@ from ..design_model.paths.checks import bend_problem, overlap_problem
 from ..design_model.paths.curves import tangents
 from ..design_model.paths.model import PathOptions
 from ..design_model.problem import is_problem
-from ..design_model.steps.sweep import end_check, profile_points, volume_problem
+from ..design_model.steps.sweep import cover_problem, end_check, profile_points, settings_problem, volume_problem
 from ..geometry import spline_fit, vec
 from ..orca_recipe.enums import BooleanMode, FeatureType
 from ..geometry.footprint import polyline
-from ..translator.sweep.sweep_settings import settings_refusal
 from . import causes, extents, limits, revolve, sketch_sizes, steps
 from ..design_model.values import Quantity
 from ..design_model import words as shared
@@ -68,10 +67,6 @@ _SHARP = "The path of this sweep has a sharp corner, which the Orca copy does no
 _HOLES = "Orca's sweep cannot carry an outline with holes along a bent path, so this sweep is left out."
 _NOT_SQUARE = "The outline of this sweep is not square to its path, which the Orca copy cannot build the same way."
 _PATH_FIXED = "%s: Orca cannot tie the path of a sweep to a variable, so the path keeps its drawn numbers"
-
-
-def _skip(refusal):
-    return Skip(refusal.reason, refusal.cause or gap_hints.REFUSED)
 
 
 def _profile_problem(profile):
@@ -126,9 +121,9 @@ def sweep(ctx, item):
             return Skip(problem)
     if len(profiles) > 1 and operation == "intersect":
         return Skip(shared.SWEEP_SEVERAL_OUTLINES)
-    refusal = settings_refusal(data)
-    if refusal is not None:
-        return _skip(refusal)
+    problem = settings_problem(data) or cover_problem(data)
+    if problem is not None:
+        return Skip.of(problem)
     if abs(data["twist_deg"]) > _ZERO or abs(data["taper_deg"]) > _ZERO:
         return Skip(_TWIST, causes.SWEEP_SHAPE)
     path = data.get("path")

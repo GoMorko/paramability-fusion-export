@@ -201,6 +201,17 @@ def turn_degrees(arc):
     return math.degrees(arc_of(arc)[3])
 
 
+def swept_degrees(arc):
+    """The angle in degrees an arc (`start`, `mid`, `end`, `center` in 2D) turns from its start through its middle to
+    its end, read from the points of the capture."""
+    a, m, e = ([arc[k][c] - arc["center"][c] for c in range(2)] for k in ("start", "mid", "end"))
+
+    def turn(u, v):
+        return math.atan2(u[0] * v[1] - u[1] * v[0], u[0] * v[0] + u[1] * v[1])
+
+    return math.degrees(abs(turn(a, m)) + abs(turn(m, e)))
+
+
 def tightest_radius(curves):
     """The radius of the tightest arc of a chain of lines and arcs (infinity when it has none)."""
     return min([arc_of(c)[1] for c in curves if c["kind"] == "arc"] or [math.inf])

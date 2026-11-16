@@ -87,7 +87,7 @@ def keep_open(ctx, item, entry, profiles, outlines, max_lean):
             if len(answers) >= MAX_OPEN_TESTS or time.monotonic() - began > MAX_OPEN_SECONDS:
                 raise _OverBudget()
             try:
-                env = range_check.size_env(table, setting)
+                env = range_check.recipe_size_values(table, setting)
                 lean = evaluate(q.text, env) if sized else (entry.taper or 0.0)
                 lean = min(lean, max_lean)
                 answers[key] = all(_open(profile if shape is None else profile_at(shape[0], shape[1], env),

@@ -18,7 +18,7 @@ from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.sketch_values.motion import Motion
 from lib.translator import translate
-from lib.design_model import roles
+from lib.design_model import roles, tool_chains
 from lib.translator.combine import tool_walk
 from lib.translator.context import Context
 from lib.translator.faces import follow
@@ -65,6 +65,10 @@ def reaching(z, body=None):
     data.update(side_one=reach(z, body), end_offset=z - 3.0, params={})
     capture["items"][4]["data"]["sets"][0]["edges"][0]["points"] = [[25, 10, z]]
     return capture
+
+
+def unseen_change(ctx, body, before):
+    return tool_chains.unseen_change(ctx.timeline, body, before, ctx.component)
 
 
 class WrittenToolTest(unittest.TestCase):
@@ -161,12 +165,12 @@ class WrittenToolTest(unittest.TestCase):
                 "place": {"frame": FRAME}, "volume": None}
         capture["items"][4]["data"]["tools"].append(twin)
         capture["items"][4]["bodies_after"].append({"token": "p2", "name": "Body2"})
-        self.assertIsNone(tool_walk.unseen_change(Context(capture), TOOL, 8))
+        self.assertIsNone(unseen_change(Context(capture), TOOL, 8))
 
     def test_a_combine_of_another_component_that_keeps_the_tool_does_not_change_it(self):
         capture = load_capture("combine_kept_tool_grows")
         capture["items"][4].update(in_target_component=False, component="rod")
-        self.assertIsNone(tool_walk.unseen_change(Context(capture), TOOL, 8))
+        self.assertIsNone(unseen_change(Context(capture), TOOL, 8))
 
     def test_a_split_face_inside_a_tool_is_skipped(self):
         capture = load_capture("combine_tool_chamfer")

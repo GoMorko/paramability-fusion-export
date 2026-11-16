@@ -19,7 +19,7 @@ from lib.sketch_values.motion import Affine, Motion
 
 from lib.params.expressions import evaluate
 from lib.translator import translate
-from lib.translator.ranges.range_check import size_env
+from lib.translator.ranges.range_check import recipe_size_values
 from lib.translator.translate import _fix_long_formulas
 from lib.design_model.values import Sized
 
@@ -49,7 +49,7 @@ def at(recipe, table, value, sizes=None):
     """A written number or formula worked out at the default sizes, or at `sizes` (recipe name to value)."""
     if not isinstance(value, dict):
         return value
-    return round(evaluate(value["expr"], size_env(table, sizes or {})), 6)
+    return round(evaluate(value["expr"], recipe_size_values(table, sizes or {})), 6)
 
 
 def tab(start=None, side_one=None, index=10):

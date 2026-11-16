@@ -62,7 +62,7 @@ def outgrown_reads(table, loop, start, limit):
         return ()
     try:
         for setting in range_check.corners(table, reads):
-            if reach_of(loop, range_check.size_env(table, setting), start) >= limit * REACH_SHARE:
+            if reach_of(loop, range_check.recipe_size_values(table, setting), start) >= limit * REACH_SHARE:
                 return reads
     except (ExpressionError, KeyError, TypeError, ValueError, ZeroDivisionError):
         return reads

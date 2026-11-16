@@ -35,7 +35,7 @@ from ..design_model.steps.repeat import (FIT_TOL_MM, in_component, is_identity, 
                                         reach as symmetric_reach, solve_lattice)
 from ..design_model.values import Quantity
 from ..design_model import words as shared
-from ..design_model.verdicts import LEFT_OUT, SKIPPED
+from ..results.verdicts import LEFT_OUT, SKIPPED
 from .solid import ADD, Moved, Solid
 from .steps import Skip
 from .tools import OPERATIONS, Pass, boolean, build, data_of, feature, hold_place, label, of_steps, step_mode

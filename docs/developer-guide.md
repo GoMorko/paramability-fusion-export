@@ -9,9 +9,7 @@ The guide is for a developer who knows Fusion as a user and knows Python. The de
 goal is that the developer can find and fix a problem alone.
 
 The guide describes the code as it is on `main` of the add-in repository, version 0.12.0.
-Version 0.11.1 was the architecture refactor. The refactor changed where the code sits and how the parts talk
-to each other. It did not change what an export writes. The new layout is in section 2. The short rules of the layout
-are in the add-in `README.md`, part "Code layout".
+The layout of the code is in section 2. The short rules of the layout are in `docs/development.md`, part "Code layout".
 
 What version 0.12.0 added, with the sections that explain it:
 
@@ -852,12 +850,12 @@ The translator gets the capture, the size table and the motion file. It returns 
 (`lib/translator/result.py`): the recipe or a refusal, a verdict per item, notes, and the sizes in four lists:
 `fixed`, `loose`, `cuts` and `dropped`. It may also return `gaps` and `after_stop`.
 
-A verdict has the same shape in the recipe output and in the Orca output (`design_model/verdicts.py`, `verdict`): the
+A verdict has the same shape in the recipe output and in the Orca output (`results/verdicts.py`, `verdict`): the
 `index`, the `name` and the `type` of the item, the `verdict` and a `note`. The recipe output adds `steps` (the ids of
 the recipe steps that the item wrote) and, for a step left out, `gap` (the id of its gap) and `cause` (`own`, `picks`
 or `stop`). The Orca output adds nothing. The words of a verdict differ in one place: a step that is copied is
 `translated` or `translatedWithNote` in the recipe output and `copied` in the Orca output. `skipped` and `leftOut` mean
-the same in both. The record of a step that is left out has one shape too (`verdicts.left_out`): the `name` (the type in
+the same in both. The record of a step that is left out has one shape too (`results/left_out.py`, `left_out`): the `name` (the type in
 words when the item has no name), the `type`, the `reason` and a `hint` when the output has a tip for the cause. The gap
 of the recipe output (`gaps/gap_file.record`) and the left out record of the Orca output (`orca.left_out[]`) add their
 own keys after these. The dialogs read the shared keys only (`export_plan.messages.left_out_line`,
@@ -1609,17 +1607,20 @@ order. The table below follows that order, lowest layer first. `commands` is on 
 | --- | --- | --- |
 | `package` | nothing | The `.paramability` file: units, manifest builders and checks, caps, file names, zip writer, gaps file bytes. |
 | `geometry` | nothing | Pure geometry that the translator, the probe and the reader share: vector helpers (`vec`), the rigid map of a frame (`rigid`: `Move`, `move_for`, `frame_problem`), sketch outlines (`outlines`, `text_outlines`, `footprint`), 2D helpers on points (`plane2d`), the volume checks of a Combine (`combine_volume`) and the tolerances (`tolerances`). |
+| `orca_recipe` | nothing | The OrcaSlicer 2.5 Design tab recipe (features, sketch entities, enums) and its 3MF writer. |
 | `capture_model` | `geometry` | What a capture and a recipe step are made of: the step kind table (`step_kinds`), the capture checks (`capture`: `validate_capture`, `CaptureError`, `same_body`), the chain of splits (`lineage`), the items that build tool bodies (`tool_items`), and the gap causes, hints and picks (`gap_hints`, `gap_picks`). |
 | `timing` | nothing | Stopwatch helpers and the `timing` block of `report.json`. |
 | `params` | `package` | Fusion parameters as sizes: names, defaults and ranges, the expression parser, the dependency graph, geometry links, the size table, the parameter listing. |
 | `sketch_values` | `package` | The motion file (`Affine`, `Stuck`, `Terms`), its keys and the "measured / not measured" answers (`coverage`). |
-| `sketch_solve` | `package`, `sketch_values` | A small sketch solver for the shadow check `derived`. `slots.slot_text(slot)` names a solver slot in words. |
+| `sketch_solve` | `package`, `sketch_values` | A small sketch solver for the shadow check `derived` and for the Orca output. `slots.slot_text(slot)` names a solver slot in words. `constants.constants_of` says which projected entities no size moves. |
 | `design_edit` | `package`, `params` | Changing the design for a while: apply a row, restore parameters, the timeline marker, the timeline health, the temporary copy, and the declared interface of the parameter store (`store.py`). |
 | `design_model` | `capture_model`, `geometry`, `package`, `params`, `sketch_solve`, `sketch_values` | The shared layer: facts about the design that every output needs, and doubts about sizes. It does not refuse a step. It records what it finds through a recorder (`recorder.py`). See 2.2. |
-| `translator` | `capture_model`, `design_model`, `geometry`, `package`, `params`, `sketch_values`, `timing` | A capture in, a recipe and verdicts out. One handler per step kind. |
-| `probe` | `capture_model`, `design_model`, `geometry`, `package`, `params`, `sketch_solve`, `sketch_values`, `translator` | Plans the rows, matches the reads with the capture, fits the motion file. |
-| `export_plan` | `capture_model`, `design_edit`, `design_model`, `geometry`, `package`, `params`, `probe`, `sketch_values`, `timing`, `translator` | The export itself: the pipelines, the put back, body scope, size offers, the probe flow, marker roll, timeline trim, reach pass, health, package plan. |
-| `dialog_model` | `design_model`, `export_plan`, `package`, `params`, `translator` | What the dialogs show, as plain data: rows, stop warning, result view. |
+| `results` | `design_model` | The shape of what an output says about a timeline item, for both outputs and the dialogs: the verdict (`verdicts.py`: `verdict` and the verdict kinds) and the record of a step left out (`left_out.py`: `left_out`, `item_name`). It holds shapes and the words of a verdict kind, not facts about the design. See 1.9. |
+| `translator` | `capture_model`, `design_model`, `geometry`, `package`, `params`, `results`, `sketch_values`, `timing` | A capture in, a recipe and verdicts out. One handler per step kind. |
+| `probe` | `capture_model`, `design_model`, `geometry`, `package`, `params`, `sketch_solve`, `sketch_values`, `translator` | Plans the rows, matches the reads with the capture, fits the motion file. It still reads the translator for what the recipe writes: `sketch/loops.profile_loops` and its `Refusal` (the recipe loops of an outline, which `match.py` measures values against and `plan/covered.py` tests) and `ranges.kept_ranges` (`build.py`). |
+| `orca_translate` | `capture_model`, `design_model`, `geometry`, `orca_recipe`, `params`, `results`, `sketch_solve`, `sketch_values` | A capture in, an OrcaSlicer Design tab recipe and verdicts out. It does not import the recipe translator or the probe: what both need is in `design_model`. |
+| `export_plan` | `capture_model`, `design_edit`, `design_model`, `geometry`, `orca_recipe`, `orca_translate`, `package`, `params`, `probe`, `results`, `sketch_values`, `timing`, `translator` | The export itself: the pipelines, the put back, body scope, size offers, the probe flow, marker roll, timeline trim, reach pass, health, package plan. |
+| `dialog_model` | `design_model`, `export_plan`, `package`, `params`, `results`, `translator` | What the dialogs show, as plain data: rows, stop warning, result view. |
 | `fusion_reader` | `capture_model`, `design_edit`, `geometry`, `package`, `params`, `timing` | Reads the design with `adsk`: the capture, the probe states, the reach, the STEP export, the parameter store. It does not import the translator. |
 | `fusion_ui` | `dialog_model`, `export_plan`, `fusion_reader`, `package` | Draws the dialogs with `adsk` and handles their events; the log and message boxes. |
 | `commands` | `design_edit`, `dialog_model`, `export_plan`, `fusion_reader`, `fusion_ui`, `package`, `timing` | The two buttons, their flows and the panel. |
@@ -1753,7 +1754,7 @@ one folder per family of steps.
   centre of all corners), `face_outline.py` (`may_change`, `doubt`) and `borrowed.py` (`mark_unchecked`: the sizes of
   an outline from another component's sketch in a sweep or a loft. The outline itself is brought in by
   `design_model/borrowed.py`).
-- Checks over the size ranges, `ranges/`: `range_check.py` (`size_env` gives the value of every size at a setting) and
+- Checks over the size ranges, `ranges/`: `range_check.py` (`recipe_size_values` gives the value of every size at a setting) and
   `kept_ranges.py` (range cuts, `part_step`, `built_ranges`).
 - Gaps, `gaps/`: `stops.py` (the gap record, the gap names, `stop_reason`, `MAX_GAPS`), `gap_place.py`,
   `gap_measures.py` (`to_recipe`, the move of a gap in recipe form), `gap_file.py`, `finishing.py` (the `finishing` flag). The causes and hints are not here: they are in `capture_model` (`gap_hints.py`,
@@ -1781,8 +1782,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   frames in the frame of the part (`in_component`, `read_in_component`), the grid index of a copy (`solve_lattice`),
   the steps a symmetric direction runs each way (`reach`, `FUSION_EXTRA_SIDE`) and the plane of a mirror
   (`mirror_plane`). `steps/move.py`: the rigid move that carried a body, fitted from its corners before and after
-  (`fit`). `steps/split.py`: which piece of a split lies inside the tool body (`resolve`). These came from
-  `translator/repeat/`, `translator/bodies/move.py` and `translator/bodies/split_inside.py`. How a copy is written
+  (`fit`). `steps/split.py`: which piece of a split lies inside the tool body (`resolve`). How a copy is written
   and what it does about a size stay in each translator.
 - `design.py`: the design as the walks read it. `read(capture, table, motion, chain, cache)` gives one
   `ResolvedStep` for each item of the capture, in timeline order. The walk of the recipe (also for a tool body), the
@@ -1815,8 +1815,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   `resolve(item, ctx, role)` gives the `ResolvedStep` of one item. The Orca output uses it for each step of a tool
   body (`tools.build`), without a role.
 - `roles.py`: what each timeline item is for the body that a walk builds, and which measures of that body apply to
-  the item. These came from `translator/walk.py`, `translator/bodies/body_states.py` and
-  `translator/bodies/split_rules.py`. The walk of the recipe and the walk of the Orca output both read them:
+  the item. The walk of the recipe and the walk of the Orca output both read them:
   - `role_of(item, target, chain)` gives a `Role`: the kind of the item (`SUPPRESSED`, `NOT_A_STEP`, `ASSEMBLY`,
     `TOOL_ELSEWHERE`, `OTHER_COMPONENT`, `BUILDS`, `HELPER`), the body before and after the item, the bodies that
     the walk builds around the item (`held`), `touches`, `new_bodies`, `copies`, `changed` and `lost`. See 1.9.1.
@@ -1841,8 +1840,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     changes the part.
   - `copies_bodies`, `changes_named_bodies`, `only_splits_faces`, `existing_bodies`: smaller facts that the walks
     and some handlers use.
-- `values.py`: `Quantity`, the one value type of both outputs, and the helpers that work on it. These came from
-  `translator/values.py` and `orca_translate/context.py` (the Orca output had its own `Value`). It has no output in it:
+- `values.py`: `Quantity`, the one value type of both outputs, and the helpers that work on it. It has no output in it:
   - `Quantity(n, text, reads)` is a measured number `n` with, when sizes move it, a formula `text` over the sizes and
     the Fusion names `reads` of those sizes. When `text` is None, no size moves the value. `scaled`, `plus`, `times`,
     `divided_by` and `magnitude` give a new `Quantity` and keep the formula in step with the number. A sum with a
@@ -1856,8 +1854,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   (`quantity`, `pin`, `handled`, the checks of ranges and the audit). The Orca output uses `Context.quantity` and
   `Context.bind`, which turn the formula into an Orca formula. The formula text of a result can differ between the
   two outputs. The value that it gives at every size is the same.
-- `steps/finish.py`: the sets of a round or a chamfer step, as facts. It came from `translator/finishes/finish.py`,
-  `orca_translate/finishes.py`, `orca_translate/left_corners.py` and `orca_translate/outline_rounds.py`. A step holds
+- `steps/finish.py`: the sets of a round or a chamfer step, as facts. A step holds
   one or more sets. Each set has the edges that Fusion picked (records with measured points), a kind, and sizes. The
   module says what is known about a set. It does not say if a set is copied, and it does not name the edges. Each
   output does both:
@@ -1899,10 +1896,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   in the recipe and in the Orca copy, and the Orca output shows the sentence of a `Problem` as it is (`Skip.of`). A
   refusal that comes from a limit of only one output stays in that output. `type_words` (a step type in words) and
   `unsupported_type` (the reason of a step of a type that has no handler) are here too.
-- `verdicts.py`: the shape of a verdict and of the record of a step left out, for both outputs (see 1.9). `verdict`,
-  `left_out`, `item_name` and the verdict kinds. The recipe output (`translator/result.make_verdict`,
-  `gaps/gap_file.record`) and the Orca output (`translate._walk`) build their records with it.
-- `reach.py`: which ticked sizes can move something that a step uses. This came from `translator/sizes.py`. Each
+- `reach.py`: which ticked sizes can move something that a step uses. Each
   function reads the size table and the capture only. No function says what a copy does about a size. The recipe
   output, the Orca output and the probe plan decide that for themselves. The functions are in five groups:
   - The sizes behind the model parameters of the design. `sketch_params` and `sketch_sizes` give the sizes behind the
@@ -1942,8 +1936,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     `start_end` say if the thread runs the whole face and at which end it starts. `read_feature` does all of these and
     the checks of the side and the size in order, and gives a `Feature`. For a tapped hole, `hole_spec` gives the
     `Spec` and checks it against the measured bore, `hole_depth` gives how deep the thread runs (`Depth`), and
-    `measured_ends` gives the measured end of each position. These came from `translator/hole/thread.py` and
-    `orca_translate/threads.py`, which each had a copy.
+    `measured_ends` gives the measured end of each position.
   - `steps/hole.py`: the HoleFeature. `placed` checks the position, the direction and the diameter. `kind_of` gives the
     `Kind` (simple, counterbore or countersink, with its record), `tap_of` says if the tap is plain, tapped or
     tapered, and `extent_of` gives the depth as a distance, through all or up to a face. `direction_of` gives the unit
@@ -1952,8 +1945,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     hole: the widest measured cylinder that is not wider than the stored size. `size_differs` says that the measured
     cylinders disagree with the stored size. `end_shape` gives the measured end of the hole (cone, plane or mixed).
     `reach_depth` gives the measured depth of a hole that ends at a face. `tapped_bore` gives the diameter at which
-    the bore is cut and the thread `Spec` (None for a cosmetic thread). These came from `translator/hole/step.py` and
-    `orca_translate/holes.py` and `threads.py`.
+    the bore is cut and the thread `Spec` (None for a cosmetic thread).
   Each output decides what to do with these facts: the recipe translator checks the thread caps and follows the sizes,
   the Orca output checks the limits of Orca and the part that it built.
 - `steps/extrude.py`: the reader of an extrude. The recipe output (`translator/extrude/plan.py`) and the Orca output
@@ -2028,9 +2020,8 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   What each output does with these facts is in 3.5 (the recipe) and in `docs/orca-output.md` (the Orca output).
 - `dimension_sizes.py`: the dimensions of a sketch graph as formulas of the sizes (`dimension_formulas`), the size
   settings a sketch is tried at (`moving_sizes`, `override_sets`, `near_values`) and the value of every size at one
-  setting (`size_values`, `size_env`). This came from `probe/derived_sizes.py`, and `near_values` and `size_values`
-  came from the probe plan and the probe columns. The shadow check of the probe and the Orca output both read it.
-- `paths/`: the path of a sweep. This came from `translator/paths/`. The recipe output and the Orca output both plan
+  setting (`size_values`, `size_env`, which takes overrides by the Fusion name of a size). The shadow check of the probe and the Orca output both read it.
+- `paths/`: the path of a sweep. The recipe output and the Orca output both plan
   the path here:
   - `planner.plan(path, profile_frame, profile_points, options)` gives a `PathPlan` or a `Problem`. It chains the
     curves of the path, turns the chain so that it starts on the plane of the outline, and names the kind of path
@@ -2047,14 +2038,20 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   The recipe caps stay in `translator/paths/path_limits.py`. The Orca output gives the same caps and the same spline
   fit, so that it takes the same paths as the recipe output.
 - `steps/`: one reader for each kind of step:
-  - `sweep.py`: the points of a sweep outline (`profile_points`), its loops (`loop_polygon`, `outline_shapes`) and
-    its centroid. Also the volume of a new body (`made_volume`) and the check of that volume against the outline and
+  - `sweep.py`: the settings of a sweep: `settings_problem` gives the problem of a guide surface, a guide rail, a
+    setting that Fusion did not give, or an orientation that is not perpendicular or parallel, and `cover_problem`
+    gives the problem of a sweep that covers only part of its path (`runs_both_ways` says that the second side runs
+    the whole closed path too). The limits of twist and taper are not here: each output sets its own (the recipe
+    output in `translator/sweep/sweep_settings.py`). The module also holds the points of a sweep outline
+    (`profile_points`), its loops (`loop_polygon`, `outline_shapes`) and its centroid. Also the volume of a new body (`made_volume`) and the check of that volume against the outline and
     the path (`volume_problem`), and the check of the end face that Fusion made against the end of the planned path
-    (`end_check`). A result that does not agree gives the problem `MISMATCH`. This came from
-    `translator/sweep/sweep_outline.py`, `sweep_volume.py` and `sweep_ends.py`.
+    (`end_check`). A result that does not agree gives the problem `MISMATCH`.
+  - `emboss.py`: the check of an emboss against what Fusion measured (`volume_check`: the change of the part against
+    the outline area times the depth, or the end face area times the depth when the outline runs past its face) and
+    the face an outline is trimmed to (`trimmed_face`). The recipe output and the probe plan both read it.
   - `loft.py`: the volumes of a ruled loft between two parallel outlines of straight lines, one for each pairing of
     corners that the kernel can choose (`ruled_volumes`), and the check of a measured volume against them
-    (`matches`). This came from `translator/loft/loft_volume.py`.
+    (`matches`).
 
 #### capture_model and geometry
 
@@ -2164,8 +2161,8 @@ Things to note:
 ### 2.4 Pure parts and Fusion parts
 
 Pure (tested directly, no Fusion needed): `package`, `geometry`, `capture_model`, `params`, `sketch_values`,
-`sketch_solve`, `timing`, `design_edit` (it works on any object with the right methods), `translator`, `probe`,
-`export_plan`, `dialog_model`.
+`sketch_solve`, `timing`, `design_edit` (it works on any object with the right methods), `design_model`, `results`,
+`translator`, `orca_translate`, `orca_recipe`, `probe`, `export_plan`, `dialog_model`.
 
 Fusion facing (tested with fakes, and by hand in Fusion): `fusion_reader`, `fusion_ui`, `commands`.
 
@@ -3830,7 +3827,7 @@ the named test after each.
 
 #### A new step type
 
-Follow `docs/adding-a-step-type.md` in the add-in repository. The short version, with the places after the refactor:
+Follow `docs/adding-a-step-type.md` in the add-in repository. The short version:
 
 1. Add one entry to the step kind table, `lib/capture_model/step_kinds.py`. A step that writes a new recipe kind also
    needs a `RecipeKind` entry in the same file. Set `finishing` when a missing step of the type only finishes surfaces

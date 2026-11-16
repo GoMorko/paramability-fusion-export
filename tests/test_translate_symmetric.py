@@ -85,7 +85,7 @@ def offsets(recipe, env=None, axis=0):
 
 def at(table, **overrides):
     """The sizes of a table with some recipe sizes changed."""
-    return range_check.size_env(table, {table.size_name(name): v for name, v in overrides.items()})
+    return range_check.recipe_size_values(table, {table.size_name(name): v for name, v in overrides.items()})
 
 
 def in_assembly(place, frame):

@@ -21,8 +21,8 @@ from ...capture_model.capture import outside_component, same_body
 from ...capture_model.step_kinds import SOLID, recipe_kind
 from ...geometry import vec
 from ...geometry.rigid import move_from_frame
-from ...design_model import refs, roles
-from ...design_model.verdicts import TRANSLATED
+from ...design_model import refs, roles, tool_chains
+from ...results.verdicts import TRANSLATED
 from ...design_model.steps.repeat import is_identity, kept_elements, mirror_plane
 from .. import ref_motion, repeat, values, walk
 from ..bodies import move, paste
@@ -171,10 +171,10 @@ def _listed(body, tools):
 
 def _pattern_that_made(ctx, tool, before):
     """The pattern item that made the copy `tool`, when nothing changed the copy since; else None."""
-    chain = tool_walk.chain_of(ctx, tool, before)
+    chain = tool_chains.made_by(ctx.timeline, tool, before, ctx.component)
     if len(chain) != 1 or not _of_bodies(chain[0]) or not roles.copies_bodies(chain[0]):
         return None
-    if tool_walk.unseen_change(ctx, tool, before) is not None:
+    if tool_chains.unseen_change(ctx.timeline, tool, before, ctx.component) is not None:
         return None
     results = (chain[0].get("data") or {}).get("result_bodies") or []
     return chain[0] if _listed(tool, results) else None
@@ -182,7 +182,8 @@ def _pattern_that_made(ctx, tool, before):
 
 def _stays_as_copied(ctx, body, pattern, before):
     """True when no item after the pattern and before `before` changed the source `body`."""
-    return all(item["index"] <= pattern["index"] for item in tool_walk.chain_of(ctx, body, before))
+    chain = tool_chains.made_by(ctx.timeline, body, before, ctx.component)
+    return all(item["index"] <= pattern["index"] for item in chain)
 
 
 def _whole(ctx, combine_item, pattern, tools, combine):
@@ -236,7 +237,7 @@ def _own_steps(ctx, out, item):
     if refused:
         return refused
     if ctx.depth + 1 + nesting(ctx.steps) > tool_walk.MAX_DEPTH:
-        return Refusal("The body %s is built from tools nested too deep to copy." % tool_walk.name_of(ctx.target))
+        return Refusal("The body %s is built from tools nested too deep to copy." % tool_chains.name_of(ctx.target))
     step_id = "%sbody_%s" % (ctx.id_prefix, item["index"])
     out.wraps_body = wrap_body(step_id, ctx.target.get("name"))
     return [step_id]

@@ -42,16 +42,6 @@ LENGTH_TOL = 1e-3     # a formula gives the measured length (mm) or angle (degre
 _POINTS = {"line": ("start", "end"), "arc": ("start", "mid", "end"), "circle": ()}
 
 
-def swept_degrees(arc):
-    """The angle in degrees an arc (`start`, `mid`, `end`, `center` in 2D) turns from its start through its middle."""
-    a, m, e = ([arc[k][c] - arc["center"][c] for c in range(2)] for k in ("start", "mid", "end"))
-
-    def turn(u, v):
-        return math.atan2(u[0] * v[1] - u[1] * v[0], u[0] * v[0] + u[1] * v[1])
-
-    return math.degrees(abs(turn(a, m)) + abs(turn(m, e)))
-
-
 _tree = lru_cache(maxsize=4096)(parse_formula)
 
 
@@ -131,7 +121,7 @@ class _Raw:
             if curve["kind"] != "line":
                 found["radius"] = sketch_motion.raw(ctx, prefix + "radius", float(flat["radius"]), self.sketch)
             if curve["kind"] == "arc":
-                found["turn"] = sketch_motion.raw(ctx, prefix + "turn", swept_degrees(flat), self.sketch)
+                found["turn"] = sketch_motion.raw(ctx, prefix + "turn", path_curves.swept_degrees(flat), self.sketch)
             self.fields.append(found)
             self.anchors += [(flat[name], found[name]) for name in _POINTS[curve["kind"]]]
 

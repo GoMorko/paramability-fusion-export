@@ -73,7 +73,7 @@ def _keep_path_valid(ctx, item, profile, found, followed, drawn, options, form):
         if tested[0] > MAX_PATH_TESTS or time.monotonic() - began > MAX_PATH_SECONDS:
             raise _OverBudget()
         try:
-            env = range_check.size_env(ctx.table, setting)
+            env = range_check.recipe_size_values(ctx.table, setting)
             curves = followed.curves_at(env)
             if followed.disagrees_at(env, curves):
                 answers[key] = True

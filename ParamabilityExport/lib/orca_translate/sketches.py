@@ -18,7 +18,7 @@ from ..design_model.dimension_sizes import dimension_formulas, leaf_values, movi
 from ..orca_recipe.enums import EntityType, FeatureType, SketchShape
 from ..orca_recipe.feature import CadFeature
 from ..orca_recipe.sketch import SketchEntity
-from ..probe.derived import constants_of
+from ..sketch_solve.constants import constants_of
 from ..sketch_solve.solve import solve_sketch
 from ..sketch_values.expr import ExprDomainError
 from . import splines

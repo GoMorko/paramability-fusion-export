@@ -22,6 +22,7 @@ The extrude's own length, taper and operation follow their parameters in every c
 import copy
 
 from ...design_model.values import Quantity, numbers_of
+from ...design_model.words import face_outline_label
 from ...geometry import vec
 from ...geometry.footprint import Footprint, polyline
 from ...sketch_values import keys
@@ -43,11 +44,6 @@ class FaceOutline:
 
     def __init__(self, profile, loops_, drawn=None):
         self.profile, self.loops, self.drawn = profile, loops_, drawn
-
-
-def label(item):
-    """How reasons name the flat face the step `item` uses as its outline (the probe names it so too)."""
-    return "the face %s starts on" % (item.get("name") or "a step")
 
 
 def followed(ctx, item, face):
@@ -101,7 +97,7 @@ def _followed(ctx, item, face, measured):
     if not followed(ctx, item, face):
         return None
     return sketch_motion.measured_outline(ctx, keys.face(item.get("index")), face["frame"],
-                                          [measured[0]] + list(measured[1]), label(item))
+                                          [measured[0]] + list(measured[1]), face_outline_label(item))
 
 
 def may_change(ctx, face):
@@ -114,7 +110,7 @@ def may_change(ctx, face):
 
 
 def _untried(ctx, item, names):
-    return [name for name in names if not sketch_motion.tried(ctx.motion, label(item), name)]
+    return [name for name in names if not sketch_motion.tried(ctx.motion, face_outline_label(item), name)]
 
 
 def doubt(ctx, item, names):

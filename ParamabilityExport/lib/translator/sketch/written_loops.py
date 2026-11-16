@@ -1,8 +1,8 @@
 """A loop as the recipe writes it (`rect`, `circle`, `ellipse`, `polygon`, `profile`; numbers or `{ "expr" }`
 formulas), worked out at one size setting.
 
-`env` holds the size values by recipe name (`range_check.size_env`). `curves_at` gives the loop as capture curves
-(sketch 2D mm), so the checks made on captured outlines (`footprint.Footprint`) run on it at other sizes too.
+`env` holds the size values by recipe name (`range_check.recipe_size_values`). `curves_at` gives the loop as capture
+curves (sketch 2D mm), so the checks made on captured outlines (`footprint.Footprint`) run on it at other sizes too.
 """
 import math
 

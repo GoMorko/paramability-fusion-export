@@ -336,7 +336,7 @@ def order_ranges(table, loops, raw_loops, sketch="", motion=None):
 
     def above_at(setting):
         try:
-            env = range_check.size_env(table, setting)
+            env = range_check.recipe_size_values(table, setting)
             return all(range_check.value_of(tree, env) > LEAST for tree in trees)
         except _FAILURES:
             return False
@@ -573,7 +573,7 @@ def _holding(table, shapes, reads, states, late):
 
     def _simple_at(setting):
         try:
-            env = range_check.size_env(table, setting)
+            env = range_check.recipe_size_values(table, setting)
             rings = []
             for shape in shapes:
                 if shape is None:

@@ -213,7 +213,7 @@ def keep_one_side(ctx, item, plane, steps, side):
     current = None
     for setting in range_check.corners(table, reads):
         try:
-            as_numbers = _evaluated(range_check.size_env(table, setting))
+            as_numbers = _evaluated(range_check.recipe_size_values(table, setting))
             slack = _slack(known, as_numbers(plane["origin"]), plane["normal"], side, as_numbers)
         except (ExpressionError, ValueError, ZeroDivisionError, OverflowError):
             ctx.doubt(reads, "%s mirrors the whole part, and its sizes cannot be tried at the ends of their ranges"

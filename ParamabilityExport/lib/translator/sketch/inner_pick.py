@@ -48,7 +48,7 @@ class Samples:
         self.footprints = []
         try:
             for setting in settings:
-                env = range_check.size_env(table, setting)
+                env = range_check.recipe_size_values(table, setting)
                 self.footprints.append((env, Footprint(profile_at(outer, inners, env))))
         except _FAILURES:
             self.footprints = None

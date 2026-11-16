@@ -2,7 +2,7 @@
 from dataclasses import dataclass, field
 from typing import Optional
 
-from ..design_model import verdicts
+from ..results import verdicts
 
 
 class Refusal:
@@ -131,7 +131,7 @@ VERDICTS = (verdicts.TRANSLATED, verdicts.NOTED, verdicts.SKIPPED, verdicts.UNSU
 
 
 def make_verdict(item, verdict, steps=(), note=""):
-    """The verdict of an item (`design_model.verdicts.verdict`) with the recipe steps it wrote."""
+    """The verdict of an item (`results.verdicts.verdict`) with the recipe steps it wrote."""
     return verdicts.verdict(item, verdict, note, steps=list(steps))
 
 

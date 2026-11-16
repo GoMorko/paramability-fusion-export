@@ -55,7 +55,7 @@ def _setting(table, values):
         if size and "value" in table.sizes.get(size, {}):
             found[size] = value
     try:
-        return range_check.size_env(table, found)
+        return range_check.recipe_size_values(table, found)
     except ExpressionError:
         return None
 

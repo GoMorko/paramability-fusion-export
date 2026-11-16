@@ -3,7 +3,7 @@
 The dialog shows them as soon as a body is picked, the message after the export repeats the same first line, and
 the Fusion status line uses the short form. All of them name the step the same way: "Extrude9 (extrude)".
 """
-from ..design_model.verdicts import NOTED
+from ..results.verdicts import NOTED
 from ..package.text import clip
 from ..translator import CaptureError
 from ..translator.notes import step_label

@@ -144,7 +144,7 @@ plain reason. A size the written path cannot follow is marked on the sweep's sid
 sizes behind the path sketch (its plane, face or projected curves), behind a plane that moves the outline away from
 the path, and behind an outline that could reach past the tightest bend (`sweep/sweep_reach.py`).
 
-The sweep code is split by concern. `sweep/step.py` is the handler. `sweep_settings` (twist, taper, direction, rail),
+The sweep code is split by concern. `sweep/step.py` is the handler. `sweep_settings` (the recipe's limits on twist and taper, on top of the plain settings that `design_model/steps/sweep.py` reads: direction, rail, guide surface),
 `sweep_outline` (the one outline the recipe takes), `sweep_taper`, `sweep_marks` (sizes the copy cannot follow),
 `sweep_rules` (the path's rules held over the size ranges) and `sweep_write` (the extrude, revolve or `sweep` step
 written) each hold one part, and `sweep_limits` holds the refusal texts. `loft/step.py` is the loft handler.

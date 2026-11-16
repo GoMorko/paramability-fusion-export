@@ -1,9 +1,12 @@
-"""What a sweep step is, read from the capture for any destination: the points and loops of its outline, the volume
-a new body must have from the outline and the path, and the end face it must have where the planned path ends
-(`design_model.paths`). A result that does not match is the problem `MISMATCH`; each destination turns it into its
-own refusal. Pure."""
+"""What a sweep step is, read from the capture for any destination: its settings (`settings_problem`,
+`cover_problem`: guide rail, guide surface, orientation, how much of the path it covers), the points and loops of its
+outline, the volume a new body must have from the outline and the path, and the end face it must have where the
+planned path ends (`design_model.paths`). A result that does not match is the problem `MISMATCH`; each destination
+turns a problem into its own refusal. The limits a destination puts on twist and taper stay with the destination.
+Pure."""
 import math
 
+from ...capture_model import gap_hints
 from ...geometry import vec
 from ...geometry.footprint import closed_chain, is_full, polyline
 from ...package.numbers import is_number
@@ -23,6 +26,80 @@ NOT_MATCHING = words.SWEEP_NOT_MATCHING
 END_UNCHECKED = words.SWEEP_END_UNCHECKED
 # The problem of a sweep whose new body or end face does not match its outline and path.
 MISMATCH = Problem("not_matching", NOT_MATCHING)
+ORIENTATIONS = ("perpendicular", "parallel")
+
+
+# ---- the settings --------------------------------------------------------------------------------------------------
+
+def settings_problem(data):
+    """The problem of a sweep whose guide rail, guide surface, orientation, twist, taper or length along the path is
+    not a plain one or could not be read: a guide surface, a guide rail (unread or drawn), a setting read as null, an
+    orientation other than perpendicular or parallel. None when the settings are read and plain."""
+    guided = _guide_surface_problem(data)
+    if guided is not None:
+        return guided
+    rail = data.get("rail")
+    if isinstance(rail, dict) and rail.get("kind") == "unread":
+        return Problem("rail_unread", words.SWEEP_RAIL_UNREAD)
+    if rail is not None:
+        return Problem("rail", words.SWEEP_RAIL, gap_hints.SWEEP_KIND)
+    numbers = (data.get("twist_deg"), data.get("taper_deg"), data.get("distance_one"))
+    if not all(is_number(value) for value in numbers) or data.get("orientation") is None:
+        return Problem("unread", _unread_words(data))
+    if data["orientation"] not in ORIENTATIONS:
+        return Problem("other_kind", words.SWEEP_KIND)
+    return None
+
+
+def _guide_surface_problem(data):
+    """A guide surface problem. When the capture does not say (an older capture, or Fusion would not give the guide
+    surfaces), Fusion's answer for the other settings tells: on such a sweep it fails the orientation with an
+    InternalValidationError and gives no twist and no taper."""
+    guide = data.get("guide_surfaces")
+    if isinstance(guide, list):
+        return Problem("guide_surface", words.SWEEP_GUIDE_SURFACE, gap_hints.GUIDE_SURFACE) if guide else None
+    said = data.get("unread") or {}
+    if (all(key in said for key in ("orientation", "twist_deg", "taper_deg"))
+            and "InternalValidationError" in str(said["orientation"])):
+        return Problem("guide_surface", words.SWEEP_GUIDE_SURFACE_LIKELY, gap_hints.GUIDE_SURFACE)
+    return None
+
+
+_SETTING_WORDS = (("orientation", "orientation"), ("twist_deg", "twist"), ("taper_deg", "taper"),
+                  ("distance_one", "length along its path"))
+
+
+def _unread_words(data):
+    """The sentence for the settings read as null, naming them (and what Fusion said, when the capture has it)."""
+    missing = [name for key, name in _SETTING_WORDS
+               if (data.get(key) is None if key == "orientation" else not is_number(data.get(key)))]
+    if not missing:
+        return words.SWEEP_UNREAD
+    return words.sweep_settings_unread(missing, sorted(set((data.get("unread") or {}).values())))
+
+
+def runs_both_ways(data):
+    """True when the sweep also runs its whole closed path with its second side (`distance_two` 1, Fusion's default
+    along a closed path), which makes the same ring as the first side unless the outline twists."""
+    two = data.get("distance_two")
+    return (is_number(two) and abs(two - 1.0) <= ZERO_TOL and (data.get("path") or {}).get("closed") is True
+            and abs(data.get("distance_one", 1.0) - 1.0) <= ZERO_TOL)
+
+
+_PART_OF_PATH = Problem("part_of_path", words.SWEEP_PART_OF_PATH, gap_hints.PART_OF_PATH)
+
+
+def cover_problem(data):
+    """The problem of a sweep that covers only part of its path, or None when its first side covers the whole path
+    and its second side adds nothing or runs the whole closed path (`runs_both_ways`). Settings must be read first
+    (`settings_problem`)."""
+    one, two = data.get("distance_one"), data.get("distance_two")
+    if abs(one - 1.0) > ZERO_TOL:
+        return _PART_OF_PATH
+    if not is_number(two) or abs(two) <= ZERO_TOL or runs_both_ways(data):
+        return None
+    return _PART_OF_PATH
+
 
 
 # ---- the outline ---------------------------------------------------------------------------------------------------

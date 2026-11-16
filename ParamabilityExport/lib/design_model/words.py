@@ -157,6 +157,32 @@ SWEEP_PATH_MIXED = "The path of this sweep mixes sketch curves and body edges, w
 SWEEP_SEVERAL_OUTLINES = "Sweeps that intersect the part with several outlines at once are not copied."
 SWEEP_PATH_TOO_LONG = "The path of this sweep has more parts than can be read, so it is not copied."
 SWEEP_KIND = "This kind of sweep is not copied."
+SWEEP_RAIL = "Sweeps with a guide rail are not copied."
+SWEEP_RAIL_UNREAD = "The guide rail of this sweep could not be read from Fusion."
+SWEEP_GUIDE_SURFACE = "Sweeps with a guide surface are not copied."
+SWEEP_GUIDE_SURFACE_LIKELY = (
+    "This sweep likely has a guide surface (Fusion did not give its orientation, twist and taper), and sweeps with a "
+    "guide surface are not copied.")
+SWEEP_PART_OF_PATH = "This sweep covers only part of its path, which is not copied."
+
+
+def sweep_settings_unread(missing, said):
+    """The sentence for sweep settings read as null: `missing` names them (a list of words), `said` is what Fusion
+    said about them (a sorted list of texts, may be empty)."""
+    named = missing[0] if len(missing) == 1 else "%s and %s" % (", ".join(missing[:-1]), missing[-1])
+    tail = " (Fusion said: %s)" % "; ".join(said) if said else ""
+    return "Fusion did not give the %s of this sweep%s, so it is not copied." % (named, tail)
+
+
+def face_outline_label(item):
+    """How reasons name the flat face the step `item` uses as its outline (the probe names it so too)."""
+    return "the face %s starts on" % (item.get("name") or "a step")
+
+
+# Embosses.
+EMBOSS_UNMEASURED = "The change this emboss makes to the part could not be measured, so it is not copied."
+EMBOSS_NOT_MATCHING = "The result of this emboss does not match its outline and depth, so it is not copied."
+EMBOSS_WRONG_WAY = "This emboss does not raise or sink its outline the way its depth says, so it is not copied."
 
 # Lofts, revolves and shaping steps.
 LOFT_UNREAD = "A setting of this loft could not be read from Fusion."

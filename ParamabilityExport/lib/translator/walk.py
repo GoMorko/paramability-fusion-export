@@ -20,7 +20,7 @@ from .bodies import split_rules
 from .faces import floating
 from .gaps import stops
 from .result import Refusal, StepResult, make_verdict
-from ..design_model.verdicts import LEFT_OUT, NOTED, SKIPPED, TRANSLATED, UNSUPPORTED
+from ..results.verdicts import LEFT_OUT, NOTED, SKIPPED, TRANSLATED, UNSUPPORTED
 from ..design_model.words import type_words
 from ..design_model import words as shared
 

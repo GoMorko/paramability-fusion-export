@@ -10,14 +10,14 @@ The walk records a `Gap` with the ids of the steps it wrote before it. The rest 
 """
 from ...package.text import clip
 from .. import notes as wording
-from ...design_model import verdicts
+from ...results import left_out as left_out_record
 
 # The app refuses a whole gaps file that breaks one of these (`RECIPE_GAPS_CAPS` in the app's recipe package); the
 # caps of the gaps file's own fields are in `gaps/gap_file.py`. MAX_GAPS is the count a gaps file holds (versions 2 and 3): a part
 # with more gaps than that stops the copy.
 MAX_GAPS = 256
 MAX_ID = 64
-MAX_NAME = verdicts.MAX_NAME
+MAX_NAME = left_out_record.MAX_NAME
 
 
 class Gap:
@@ -49,7 +49,7 @@ class Gap:
     @property
     def name(self):
         """The item's name, or its type in words when the name is empty or only spaces."""
-        return verdicts.item_name(self.item, MAX_NAME)
+        return left_out_record.item_name(self.item, MAX_NAME)
 
 
 def gap_id(ctx, item):

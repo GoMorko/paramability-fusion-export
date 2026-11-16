@@ -11,11 +11,11 @@ so its curves pair by kind and by their place along the loop.
 """
 import math
 
+from ..design_model.paths.curves import swept_degrees
 from ..geometry import vec
 from ..geometry.tolerances import POINT_TOLERANCE_MM
 from ..sketch_values import keys
 from ..sketch_values.motion import SHAPE, TURNS, UNREAD
-from ..translator.paths.path_motion import swept_degrees
 from ..translator.result import Refusal
 from ..translator.sketch.loops import profile_loops
 

@@ -65,30 +65,13 @@ class ToolBuild:
         out.gaps.extend(self.gaps)
 
 
-def name_of(body):
-    """The tool in plain words, with its component when it lives in another one."""
-    return tool_chains.name_of(body)
-
-
 def cannot_copy(body, item, why, cause=None):
     """The refusal that names the step of a tool that stops the copy, and what it is. `cause` is that step's
     `gap_hints` cause, so the gap gets its hint."""
     operation = (item.get("data") or {}).get("operation")
     kind = operation if operation in ("cut", "intersect") else type_words(item.get("type") or "")
-    return Refusal("The tool body %s cannot be copied: %s (%s): %s" % (name_of(body), item.get("name"), kind, why),
-                   cause=cause)
-
-
-def chain_of(ctx, body, before):
-    """The items before `before` that made or changed `body`, in the component that holds it
-    (`tool_chains.made_by`)."""
-    return tool_chains.made_by(ctx.timeline, body, before, ctx.component)
-
-
-def unseen_change(ctx, body, before):
-    """`(item, why)` for an item before `before` that may have changed `body` but that `chain_of` cannot see
-    (`tool_chains.unseen_change`), or None."""
-    return tool_chains.unseen_change(ctx.timeline, body, before, ctx.component)
+    return Refusal("The tool body %s cannot be copied: %s (%s): %s"
+                   % (tool_chains.name_of(body), item.get("name"), kind, why), cause=cause)
 
 
 def _exported(ctx, body):
@@ -102,17 +85,17 @@ def build(ctx, body, before, depth, place=0):
     it. `depth` is the tool's nesting level, 1 for a tool of the exported body. `place` is its place among the tools
     of its Combine, which keeps the ids of its steps apart from those of the other tools."""
     if depth > MAX_DEPTH:
-        return Refusal("The tool body %s is built from tools nested too deep to copy." % name_of(body))
+        return Refusal("The tool body %s is built from tools nested too deep to copy." % tool_chains.name_of(body))
     found = tool_chains.read(ctx.timeline, body, before, ctx.component, _exported(ctx, body))
     if found.unseen is not None:
         return cannot_copy(body, *found.unseen)
     chain = list(found.items)
     if not chain:
-        return Refusal("The tool body %s is built in a way that cannot be copied." % name_of(body))
+        return Refusal("The tool body %s is built in a way that cannot be copied." % tool_chains.name_of(body))
     for item in chain:
         if item.get("helper_unread"):
             return Refusal("The tool body %s cannot be copied: %s could not be read: %s"
-                           % (name_of(body), item.get("name"), item["helper_unread"]))
+                           % (tool_chains.name_of(body), item.get("name"), item["helper_unread"]))
     child = ctx.child(body, "%st%s_%s_" % (ctx.id_prefix, before, place), chain, depth)
     child.lineage = list(found.links)
     walked = TranslateResult()
@@ -122,7 +105,7 @@ def build(ctx, body, before, depth, place=0):
         stopped = next(item for item in chain if item["index"] == walked.refusal["index"])
         return cannot_copy(body, stopped, walked.refusal["reason"], walked.refusal_cause)
     if not child.steps:
-        return Refusal("The tool body %s is built in a way that cannot be copied." % name_of(body))
+        return Refusal("The tool body %s is built in a way that cannot be copied." % tool_chains.name_of(body))
     return ToolBuild(body, chain, child, walked.items, walked.notes)
 
 

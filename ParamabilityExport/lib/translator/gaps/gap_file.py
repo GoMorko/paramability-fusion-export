@@ -6,7 +6,7 @@ import json
 import math
 
 from ...capture_model import gap_hints
-from ...design_model import verdicts
+from ...results import left_out as left_out_record
 from .finishing import is_finishing
 from .gap_measures import moved_measure
 from ...design_model.words import type_words
@@ -119,7 +119,7 @@ def record(gap, table, move):
     one (`gap_hints`). `finishing` says the step only finishes surfaces (`finishing.is_finishing`)."""
     after, before, owner = gap.place
     data, trimmed = trimmed_data(gap.item.get("data"))
-    left_out = verdicts.left_out(gap.item, gap.reason, gap_hints.hint(gap.cause), type_limit=MAX_WORDS)
+    left_out = left_out_record.left_out(gap.item, gap.reason, gap_hints.hint(gap.cause), type_limit=MAX_WORDS)
     out = {
         "id": gap.id,
         "name": left_out["name"],

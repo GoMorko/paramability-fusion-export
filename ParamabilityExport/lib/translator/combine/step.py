@@ -108,9 +108,9 @@ def _unusable(ctx, body):
         return Refusal("The tool body of %s is in another component, which is not copied yet."
                        % (body.get("name") or "a body"))
     if tool_items.is_foreign_tool(body) and ctx.component is not None:
-        return Refusal(shared.TOOL_NESTED_ELSEWHERE % tool_walk.name_of(body))
+        return Refusal(shared.TOOL_NESTED_ELSEWHERE % tool_chains.name_of(body))
     if tool_key(body) in ctx.used_tools:
-        return Refusal("The tool body %s was used up by an earlier combine." % tool_walk.name_of(body))
+        return Refusal("The tool body %s was used up by an earlier combine." % tool_chains.name_of(body))
     return None
 
 

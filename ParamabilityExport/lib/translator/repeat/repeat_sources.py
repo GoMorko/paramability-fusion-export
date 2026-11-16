@@ -5,11 +5,10 @@ their own copies. A Combine among the sources is repeated by the steps it wrote,
 Sources the copy cannot repeat give a Refusal.
 """
 from .. import notes as wording
-from ..combine import tool_walk
 from ..result import Refusal
 from ...capture_model import gap_hints, tool_items
 from ...capture_model.step_kinds import FINISH, SOLID, recipe_kind
-from ...design_model import words as shared
+from ...design_model import tool_chains, words as shared
 from ..step_walk import moved_later
 
 MAX_REFERENCES = 64
@@ -30,7 +29,7 @@ def _combines(ctx):
     cache = ctx.cache.setdefault(__name__, {})
     if "combines" not in cache:
         cache["combines"] = [
-            (item, [(tool_walk.name_of(tool), tool_items.built_by(ctx.timeline, tool, item)) for tool in tools])
+            (item, [(tool_chains.name_of(tool), tool_items.built_by(ctx.timeline, tool, item)) for tool in tools])
             for item, tools in ((item, _tools_of(item)) for item in ctx.timeline) if tools]
     return cache["combines"]
 

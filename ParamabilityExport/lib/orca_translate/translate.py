@@ -13,10 +13,11 @@ copied step ("unused").
 from ..capture_model import gap_hints, step_kinds
 from ..capture_model.capture import CaptureError, validate_capture
 from ..design_model import design, reach, roles
-from ..design_model.verdicts import COPIED, LEFT_OUT, SKIPPED, left_out, verdict
 from ..design_model import words as shared
 from ..orca_recipe.recipe import Recipe
 from ..params.size_table import FREE
+from ..results.left_out import left_out
+from ..results.verdicts import COPIED, LEFT_OUT, SKIPPED, verdict
 from .context import Context
 from .place import BED_CENTRE, Placement
 from .steps import HANDLERS, Skip
@@ -47,8 +48,8 @@ class OrcaResult:
     """What a translation made.
 
     recipe: the `orca_recipe.Recipe`. place: the `place.Placement` (the mesh takes `place.root_to_orca`).
-    items: a verdict per timeline item (`design_model.verdicts.verdict`) with `verdict` "copied", "leftOut" or
-    "skipped". left_out: a record (`design_model.verdicts.left_out`) per step left out, with its `index` and `cause`.
+    items: a verdict per timeline item (`results.verdicts.verdict`) with `verdict` "copied", "leftOut" or
+    "skipped". left_out: a record (`results.left_out.left_out`) per step left out, with its `index` and `cause`.
     parameters: per ticked parameter `{name, variable, outcome, follows, reasons}`. variables: the recipe's variables.
     bound: `{feature, field, formula, reads}` per field that follows variables. notes: plain sentences about the
     copy.

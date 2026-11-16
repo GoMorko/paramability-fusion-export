@@ -21,7 +21,7 @@ from ..design_model import design, refs, roles, tool_chains
 from ..geometry import rigid
 from ..orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType, SketchShape
 from ..orca_recipe.feature import CadFeature
-from ..design_model.verdicts import COPIED, SKIPPED
+from ..results.verdicts import COPIED, SKIPPED
 from ..design_model.words import type_words
 from ..design_model import words as shared
 from . import causes, corner_hosts, other_components, outline_cuts

@@ -22,6 +22,7 @@ read, flat faces following it by Tangent Chain).
 """
 import copy
 
+from ...design_model.steps.emboss import volume_check
 from ...design_model.values import Quantity
 from ...geometry import vec
 from .. import extrude, placement, values
@@ -32,8 +33,6 @@ PLANE_TOL = 1e-4
 ZERO_TOL = 1e-6
 SIGN_TOL = 1e-9
 PARALLEL_TOL = 1e-9
-VOLUME_RELATIVE_TOL = 0.01
-VOLUME_ABSOLUTE_TOL = 1e-3
 
 UNREADABLE = "A setting of this emboss could not be read from Fusion."
 
@@ -75,42 +74,10 @@ def _tilted(profiles, normal):
     return any(isinstance(p.get("frame"), dict) and not _parallel(p["frame"]["z"], normal) for p in profiles)
 
 
-def _matches(change, expected):
-    return abs(abs(change) - expected) <= VOLUME_RELATIVE_TOL * expected + VOLUME_ABSOLUTE_TOL
-
-
 def _volume_check(data, depth):
-    """(refusal, trimmed): a Refusal when the measured change of the part is neither the outline area times the depth
-    nor, with an end face smaller than the outline, the end face area times the depth, or goes the way the sign of the
-    depth does not say; `trimmed` is True when Fusion kept only what lies on the face."""
-    areas, before, after = data.get("areas"), data.get("volume_before"), data.get("volume_after")
-    if (not isinstance(areas, list) or len(areas) != len(data["profiles"]) or any(a is None for a in areas)
-            or before is None or after is None):
-        return Refusal("The change this emboss makes to the part could not be measured, so it is not copied."), False
-    expected = sum(areas) * abs(depth)
-    change = after - before
-    trimmed = False
-    if not _matches(change, expected):
-        end = data.get("end_area")
-        if not (isinstance(end, (int, float)) and end < sum(areas) and _matches(change, end * abs(depth))):
-            return Refusal("The result of this emboss does not match its outline and depth, so it is not copied "
-                           "yet."), False
-        trimmed = True
-    if (change > 0) != (depth > 0):
-        return Refusal("This emboss does not raise or sink its outline the way its depth says, so it is not "
-                       "copied."), False
-    return None, trimmed
-
-
-def trimmed_face(data):
-    """The outline record of the lone face an emboss is trimmed to (written as `within`), or None."""
-    faces, depth = data.get("faces"), data.get("depth")
-    if (not isinstance(faces, list) or len(faces) != 1 or not isinstance(faces[0], dict)
-            or not isinstance(depth, (int, float)) or abs(depth) <= ZERO_TOL or not data.get("profiles")):
-        return None
-    refusal, trimmed = _volume_check(data, depth)
-    outline = faces[0].get("outline")
-    return outline if refusal is None and trimmed and isinstance(outline, dict) else None
+    """`(refusal, trimmed)` of the shared volume check (`design_model.steps.emboss.volume_check`)."""
+    problem, trimmed = volume_check(data, depth)
+    return (None if problem is None else Refusal(problem.words)), trimmed
 
 
 def _on_plane(face, plane):

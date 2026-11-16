@@ -145,7 +145,7 @@ class HoldingRangesWhereTest(unittest.TestCase):
         def holds(bounds, only=None):
             settings = (range_check.corners(self.TABLE, ("a", "b", "c"), bounds) if only is None
                         else [{}, {only[0]: bounds[only[0]][only[1]]}])
-            return all(rule(range_check.size_env(self.TABLE, setting)) for setting in settings)
+            return all(rule(range_check.recipe_size_values(self.TABLE, setting)) for setting in settings)
         return holds
 
     def cut(self, rule, balanced=True):
@@ -176,7 +176,7 @@ class HoldingRangesWhereTest(unittest.TestCase):
         def holds(bounds, only=None):
             settings = (range_check.corners(table, ("a", "b"), bounds) if only is None
                         else [{}, {only[0]: bounds[only[0]][only[1]]}])
-            return all(range_check.size_env(table, setting)["a"] < 7.505 for setting in settings)
+            return all(range_check.recipe_size_values(table, setting)["a"] < 7.505 for setting in settings)
         found = kept_ranges.holding_ranges_where(table, ("a", "b"), holds)
         self.assertEqual(list(found), ["a"])
 

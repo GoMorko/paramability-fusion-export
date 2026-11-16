@@ -19,7 +19,8 @@ solution = solve_sketch(record, settings=None, constants=(), tol=1e-6, extended=
   keeps measured inputs where they are. A caller that knows how the sizes tie the dimensions together (two
   dimensions that read one user parameter) should pass settings made from user parameter values.
 - `constants`: refs `("point", id)` or `("curve", id)` of projected entities that do not move with any size; they
-  become numbers instead of measured inputs.
+  become numbers instead of measured inputs. `constants.constants_of(record, linked)` lists them: the projections of
+  another component when no parameter reaches the sketch through that component (`linked` false), and the origin's axes.
 - `extended`: the reading the Orca copy uses (`orca_translate.sketches`); the recipe export and `probe.derived` keep
   the default, so their output does not change with it (`tests/test_sketch_solve_extended.py`). It reads a driving
   distance dimension between two lines as keeping them parallel, tests angle dimensions and the parallel lines of a

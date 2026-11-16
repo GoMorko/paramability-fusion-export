@@ -1048,7 +1048,7 @@ copied stops that walk, and the Combine is refused with the reason naming the to
 - A tool the Combine keeps (`keep_tools`) stays usable: a later Combine walks it again up to its own index. A tool
   the Combine does not keep is used up, and a second Combine that lists it is refused. A Combine that keeps the
   exported body as a tool and changes another body is skipped.
-- A tool is refused when a step its walk cannot see may have changed it (`tool_walk.unseen_change`): a step of another
+- A tool is refused when a step its walk cannot see may have changed it (`design_model/tool_chains.unseen_change`): a step of another
   component that lists it, or a step that lists its name under another token after the tool first appears.
 - A Combine inside a tool of another component that takes a tool of yet another component is refused: the place of
   that tool is read against the exported body, not against the component that holds the Combine.
@@ -2488,7 +2488,7 @@ calls Fusion no more. A capture without graphs has no `derived`.
   below and above its value (as the first tries), then all low and all high. Two dimensions that read one size move
   together. The solver checks its redundant rules and choices at these settings, and the formulas are fitted over them.
   Settings where a value has no number (a square root of a negative value) leave the key without a formula.
-- Constants (`derived.constants_of`): a projected entity from another component that no parameter reaches through
+- Constants (`sketch_solve/constants.constants_of`): a projected entity from another component that no parameter reaches through
   `geometry_links.reach`, and an implicit line through the sketch origin (an origin axis). Other projected entities
   (from the body's own edges or sketches) are measured inputs: the solver leaves them where they are, the fit moves
   each one up and down by a quarter of its value (at most 40 inputs, `derived.MAX_INPUTS`), and a derived value that

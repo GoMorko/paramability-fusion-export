@@ -283,6 +283,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     edges of 1 mm and a chamfer of the bottom edges of 2 mm, and a note that the copy makes one chamfer for each size.
     In Orca the part has the volume of the Fusion part (7712 mm3). Pick one top edge with 1 mm and the other three with
     2 mm instead: the step is left out with the reason of the different sizes.
+
 29. EX1, extrude sides that the measured end face checks. Model a 40 x 40 x 20 mm box with its base on the XY plane.
     On a sketch on the XZ plane at the box's middle (y = 20) draw a 10 mm circle at x = 20, z = 10 and cut it with
     Extrude, Two Sides: side one 30 mm (past the box), side two 10 mm (it ends inside the box). Add a second box with
@@ -294,6 +295,7 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     ends on the plane. The extrude from the face with an offset is left out with "This extrude starts at a distance
     from a face or plane, which is not copied."; note which way Fusion moved its start (along the sketch normal
     or along the face's normal), so a later copy can follow it.
+
 30. OR3, the left out steps under the body picker of Export for Orca. Model a 40 x 20 x 10 mm plate with its corner at the
     origin, then add a Thicken step on one of its faces (a type that the copy does not make), and a Coil step.
     Export: open Export for Orca and pick the plate. Under the body picker the dialog lists "Likely left out of the

@@ -8,7 +8,7 @@ faces of one of those waits for the face read of the export, so it is not listed
 instead (`find`). The Orca translation decides every step it leaves out by itself, so its list is whole (`find_orca`).
 Each line reads like the one in the result window after the export (`export_plan.messages.left_out_line`).
 """
-from ..design_model.verdicts import LEFT_OUT
+from ..results.verdicts import LEFT_OUT
 from ..export_plan.messages import left_out_line
 from ..package.text import clip
 
@@ -28,7 +28,7 @@ class Found:
 
 
 def _step(index, record):
-    """The step of a left out record (`design_model.verdicts.left_out`)."""
+    """The step of a left out record (`results.left_out.left_out`)."""
     return {"index": index, "name": record.get("name") or "A step",
             "reason": " ".join(str(record.get("reason") or "").split()), "hint": record.get("hint") or ""}
 
