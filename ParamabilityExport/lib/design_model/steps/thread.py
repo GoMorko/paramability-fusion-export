@@ -150,14 +150,17 @@ def is_full(data, span, length):
 
 def start_end(data, span, pitch, full):
     """0 when the thread starts at the low end of the span, 1 at the high end, or a Problem. A full length thread
-    starts at the low end; a partial one at the end the faces it made touch."""
-    if full:
-        return 0
+    starts at the low end; a partial one at the end the faces it made touch. The faces a full length thread made,
+    when measured, must reach both ends."""
     made = data.get("made_span")
+    reach = pitch + 0.5
+    if full:
+        if made and (abs(made[0] - span[0]) > reach or abs(span[1] - made[1]) > reach):
+            return Problem("startUnclear", words.THREAD_START_UNCLEAR)
+        return 0
     if not made:
         return Problem("startUnread", words.THREAD_START_UNREAD)
     low, high = abs(made[0] - span[0]), abs(span[1] - made[1])
-    reach = pitch + 0.5
     if low <= reach and low + END_TOL < high:
         return 0
     if high <= reach and high + END_TOL < low:
@@ -181,11 +184,12 @@ def read_feature(data, what, pitches=None):
     if abs(2.0 * found.radius - (spec.minor if internal else spec.major)) > DIAMETER_TOL:
         return Problem("cylinderSize", words.THREAD_SIZE_MISMATCH)
     offset, length = data.get("offset"), data.get("length")
-    if offset is None or abs(offset) > OFFSET_TOL:
-        return Problem("offset", words.THREAD_OFFSET)
     full = is_full(data, found.span, length)
     if full is None:
         return Problem("lengthUnread", words.THREAD_LENGTH_UNREAD)
+    # Fusion uses the offset only for a thread that is not full length, and may give none for a full one.
+    if not full and (offset is None or abs(offset) > OFFSET_TOL):
+        return Problem("offset", words.THREAD_OFFSET)
     start = start_end(data, found.span, spec.pitch, full)
     if isinstance(start, Problem):
         return start
