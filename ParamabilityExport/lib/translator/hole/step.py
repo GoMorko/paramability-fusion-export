@@ -240,7 +240,7 @@ def hole(ctx, step):
     moved = ref_motion.hole_moves(ctx, item, data)
     direction = _direction(data, ctx)
     _check_size(data, ctx, len(data["positions"]), diameter)
-    points = _moved_points(ctx, item, data["positions"], moved)
+    points = _moved_points(ctx, item, data, moved)
     depth_q = None
     if up_to:
         depth_q = _up_to_depth(item, ctx, data, direction, points)
@@ -315,9 +315,10 @@ def _up_to_depth(item, ctx, data, direction, points):
     return depth
 
 
-def _moved_points(ctx, item, rows, moved):
-    """The written hole points, each moved by the formulas of `moved` (how far the place it sits on moves)."""
-    points = sketch_motion.points(ctx, item, rows)
+def _moved_points(ctx, item, data, moved):
+    """The written hole points (`data.positions`), each moved by the formulas of `moved` (how far the place it sits on
+    moves)."""
+    points = sketch_motion.points(ctx, item, data, data["positions"])
     for point, move in zip(points, moved):
         for c, q in enumerate(move):
             if q.sized:

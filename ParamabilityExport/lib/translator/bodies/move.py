@@ -196,8 +196,8 @@ def handle(ctx, step):
     found = way(item, ctx, data, *points)
     if isinstance(found, Refusal):
         return found
-    step, motion = found
+    recipe_step, motion = found
     out = StepResult()
-    if step is not None:
-        out.add(step, [MoveMaker(motion)])
+    if recipe_step is not None:
+        out.add(recipe_step, [MoveMaker(motion)])
     return out

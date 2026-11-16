@@ -58,8 +58,7 @@ PRIVATE_REACHES_IN_TESTS = {
 RAW_STEP_DATA = {
     "translator/gaps/gap_file.py", "translator/repeat/body_copies.py", "translator/repeat/repeat_circular.py",
     "translator/repeat/repeat_lattice.py", "translator/repeat/repeat_mirror.py",
-    "translator/repeat/repeat_rectangular.py", "translator/repeat/repeat_sources.py", "translator/revolve/step.py",
-    "translator/sketch/sketch_motion.py",
+    "translator/repeat/repeat_rectangular.py", "translator/repeat/repeat_sources.py",
 }
 _READS_DATA_ITSELF = ("design_model", "fusion_reader", "capture_model")
 _DATA_HELPERS = ("data_of", "_data")

@@ -183,16 +183,17 @@ def _keep_in_plane(ctx, item, coords, outlines):
                       "the plane of its sketch, and the copy cannot follow that" % item.get("name", "a step"))
 
 
-def _turned_sized(ctx, item, drawn, dir3, point3, degrees, axis=None):
+def _turned_sized(ctx, item, data, drawn, dir3, point3, degrees, axis=None):
     """The sketch origin turned about the axis when the plane or the axis moves with sizes: R o + (I - R) a, as
-    written values; None when neither moves. `axis` is the raw axis point when it comes from another component."""
+    written values; None when neither moves. `data` is the data of the revolve `item`. `axis` is the raw axis point
+    when it comes from another component."""
     if axis is None:
-        axis = sketch_motion.axis_raw(ctx, item)
+        axis = sketch_motion.axis_raw(ctx, item, data.get("axis"))
     moving_axis = axis is not None and any(not (isinstance(a, sketch_motion.Affine) and a.is_constant) for a in axis)
     still = isinstance(drawn.plane, sketch_motion.Affine) and drawn.plane.is_constant if drawn is not None else True
     if drawn is None or (not moving_axis and still):
         return None
-    if moving_axis and (item.get("data") or {}).get("project_axis"):
+    if moving_axis and data.get("project_axis"):
         ctx.doubt([n for a in axis for n in sketch_motion.movers(ctx.table, a)],
                   notes.stuck_reason("turns", drawn.sketch))
         return None
@@ -296,7 +297,7 @@ def handle(ctx, step):
     for profile, (outer, inners), (point2, dir2, point3, dir3), drawn in built:
         on = placement.from_frame(profile["frame"])
         if mode == "symmetric":
-            moved = _turned_sized(ctx, item, drawn, dir3, point3, -angle / 2.0, coords)
+            moved = _turned_sized(ctx, item, data, drawn, dir3, point3, -angle / 2.0, coords)
             on = _turned(on, dir3, point3, -angle / 2.0)
             if moved is not None:
                 on["origin"] = moved
@@ -307,14 +308,14 @@ def handle(ctx, step):
         sketch = {"on": on, "outer": outer}
         if inners:
             sketch["inner"] = inners
-        step = {
+        recipe_step = {
             "kind": "revolve",
             "sketch": sketch,
-            "axis": {"point": sketch_motion.axis_point(ctx, item, profile["frame"], point2, coords),
+            "axis": {"point": sketch_motion.axis_point(ctx, item, axis, profile["frame"], point2, coords),
                      "dir": _pt([sign * dir2[0], sign * dir2[1]])},
             "combine": combine if not steps else ("add" if combine == "new" else combine),
         }
         if mode != "full":
-            step["angleDeg"] = angle_value.json()
-        steps.append(step)
+            recipe_step["angleDeg"] = angle_value.json()
+        steps.append(recipe_step)
     return StepResult.of(steps)

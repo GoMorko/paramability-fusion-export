@@ -108,26 +108,26 @@ def handle(ctx, step):
         sketch = {"on": on, "outer": pick(outer)}
         if inner:
             sketch["inner"] = [pick(loop) for loop in inner]
-        step = {
+        recipe_step = {
             "kind": "extrude",
             "sketch": sketch,
             "combine": combine if not out.entries else ("add" if combine == "new" else combine),
             "extent": entry.extent,
         }
         if entry.distance is not None:
-            step["distance"] = entry.q.json() if entry.q else round9(entry.distance)
+            recipe_step["distance"] = entry.q.json() if entry.q else round9(entry.distance)
         if entry.taper:
-            step["taperDeg"] = entry.taper_q.json() if entry.taper_q else round9(entry.taper)
+            recipe_step["taperDeg"] = entry.taper_q.json() if entry.taper_q else round9(entry.taper)
         placers = []
         if thin_step is not None:
             side, thickness_q = thin_step
-            step["thin"] = {"thickness": thickness_q.json(), "side": side}
+            recipe_step["thin"] = {"thickness": thickness_q.json(), "side": side}
             placers.append(ThinWallMaker(on, entry.extent, entry.q or Quantity(entry.distance), profile,
                                          side, thickness_q.n))
-            out.add(step, placers, repeatable=False)
+            out.add(recipe_step, placers, repeatable=False)
             continue
         if entry.extent in ("oneSide", "symmetric"):
             placers.append(SlabMaker(on, entry.extent, entry.q or Quantity(entry.distance), profile,
                                      entry.taper_q or Quantity(entry.taper or 0.0), drawn))
-        out.add(step, placers, repeatable=not entry.adjusts)
+        out.add(recipe_step, placers, repeatable=not entry.adjusts)
     return out
