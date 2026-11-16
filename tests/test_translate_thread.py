@@ -7,6 +7,7 @@ from tests.test_translate_sized import TICKED, on_fixture, param, run
 from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of, verdict_of
 
 from lib.capture_model import gap_hints
+from lib.params.expressions import evaluate
 from lib.translator import translate
 from lib.translator.step_walk import tool_refusal
 
@@ -194,6 +195,32 @@ class TappedHoleTest(unittest.TestCase):
         result, _ = run(capture, ticked)
         self.assertEqual(steps_of(result.recipe, "hole")[0]["depth"], {"expr": "wall_mm * 4"})
         self.assertEqual(steps_of(result.recipe, "thread")[0]["length"], {"expr": "wall_mm * 4"})
+
+    def test_the_thread_of_a_counterbore_or_countersink_hole_starts_at_the_bottom_of_the_recess(self):
+        # A counterbore 3 mm deep; a 90 degree countersink 10 mm across that narrows to the 5 mm bore 2.5 mm down.
+        bores = [{"origin": [10, 10, 10], "axis": [0, 0, -1], "radius": r} for r in (2.5, 4.5)]
+        cases = [("hole_counterbore_blind", 3.0, 5.0, dict(side_cylinders=bores, end_face_types=["plane"])),
+                 ("hole_countersink_through", 2.5, 7.5, {})]
+        for name, start, length, more in cases:
+            with self.subTest(name):
+                made = dict(HOLE_INFO, made_span=[start, start + length])
+                (step,) = steps_of(tapped_hole(name, thread=made, **more).recipe, "thread")
+                self.assertEqual((step["axis"]["origin"], step["length"]), ([10, 10, 10 - start], length))
+                # Fusion's thread starts at the top of the hole: not what the recess shows.
+                result = tapped_hole(name, thread=dict(HOLE_INFO, made_span=[0.0, start + length]), **more)
+                self.assertIsNotNone(left_out(result))
+
+    def test_the_thread_below_a_counterbore_follows_its_depth(self):
+        bores = [{"origin": [10, 10, 10], "axis": [0, 0, -1], "radius": r} for r in (2.5, 4.5)]
+        edit = tapped(thread=dict(HOLE_INFO, made_span=[3.0, 8.0]), side_cylinders=bores, end_face_types=["plane"])
+        capture, ticked = on_fixture("hole_counterbore_blind", edit, TICKED)
+        capture["items"][-1]["data"]["params"] = {"extent.depth": param("d8", "wall_mm * 4", 8.0),
+                                                  "counterbore.depth": param("d9", "wall_mm * 1.5", 3.0)}
+        result, _ = run(capture, ticked)
+        (step,) = steps_of(result.recipe, "thread")
+        for wall in (2.0, 3.0):
+            self.assertAlmostEqual(evaluate(step["axis"]["origin"][2]["expr"], {"wall_mm": wall}), 10 - 1.5 * wall)
+            self.assertAlmostEqual(evaluate(step["length"]["expr"], {"wall_mm": wall}), 2.5 * wall)
 
     def test_a_tapped_hole_that_cannot_get_its_thread_is_left_out(self):
         cases = {

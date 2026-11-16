@@ -806,7 +806,9 @@ against `samples`.
   the mouth of the first hole the vertices of the thread's faces (`thread.faces`) reach along `direction`, `[low,
   high]` in mm, or null. Null for a hole that is not tapped. `params["thread.depth"]` holds the length parameter. A
   modeled thread is copied as a hole at the minor diameter plus an internal `thread` step for each position when its
-  faces start at the mouth and, for a thread over part of the hole, end at `depth`.
+  faces start at the mouth of the thread and, for a thread over part of the hole, end `depth` below it. The mouth is
+  the hole's position, the bottom of a counterbore, or the depth where the cone of a countersink narrows to the
+  minor diameter (`design_model/steps/thread.py`, `thread_mouth`).
 - `counterbore`: `{ "diameter", "depth" }`; `countersink`: `{ "diameter", "angle_deg" }`.
 - `positions`: one point per `SketchPointsHolePositionDefinition.sketchPoints` item, or the one
   `SketchPointHolePositionDefinition.sketchPoint` (`worldGeometry`), else `[position]`. Points of another component's sketch are brought into the target's coordinates; such a hole gets

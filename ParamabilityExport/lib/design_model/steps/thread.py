@@ -11,6 +11,7 @@ Unified threads are the 60 degree form; other profiles and tapered threads are a
 `THREAD_PROFILE`. A pitch outside the range a destination passes is a `Problem` with the cause `THREAD_LIMITS`. How a
 destination cuts, limits or follows the thread is not here.
 """
+import math
 from typing import NamedTuple
 
 from ...capture_model import gap_hints
@@ -66,10 +67,12 @@ class Feature(NamedTuple):
 
 
 class Depth(NamedTuple):
-    """How deep the thread of a tapped hole runs: the whole hole (`full`), or `length` mm from its mouth."""
+    """How deep the thread of a tapped hole runs: the whole hole (`full`), or `length` mm from where it starts.
+    `start` is how far below the hole's position the thread starts (mm along the hole's direction, `thread_mouth`)."""
 
     full: bool
     length: object
+    start: float = 0.0
 
 
 def _profile(info, what):
@@ -209,23 +212,52 @@ def hole_spec(data, what, drill, pitches=None):
     return spec
 
 
-def hole_depth(data):
-    """The `Depth` of the thread of a tapped hole, or a Problem when Fusion's info does not say. The measured faces of
-    the thread (`made_span`, depths below the mouth) must start at the mouth, and a thread over part of the hole must
-    end at its depth; a thread over part of the hole without them is a Problem."""
+def _number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def thread_mouth(data, bore):
+    """How far below its position (mm along its direction) the thread of a tapped hole starts, or None when the
+    recess does not read: 0 for a simple hole, the depth of a counterbore, or for a countersink the depth where its
+    cone narrows to the drilled bore (`bore`, its diameter). The recess is wider than the thread, so the thread cannot
+    start above it."""
+    name = data.get("hole_type", "simple")
+    if name == "simple":
+        return 0.0
+    recess = data.get(name)
+    if not isinstance(recess, dict):
+        return None
+    if name == "counterbore":
+        depth = recess.get("depth")
+        return float(depth) if _number(depth) and depth > 0 else None
+    if name == "countersink":
+        wide, angle = recess.get("diameter"), recess.get("angle_deg")
+        if not (_number(wide) and _number(angle) and _number(bore) and 0 < angle < 180 and wide > bore > 0):
+            return None
+        return (wide - bore) / 2.0 / math.tan(math.radians(angle) / 2.0)
+    return None
+
+
+def hole_depth(data, bore=None):
+    """The `Depth` of the thread of a tapped hole, or a Problem when Fusion's info does not say. The thread starts at
+    the bottom of a counterbore or countersink (`thread_mouth`, with `bore` the drilled diameter), else at the top of
+    the hole. The measured faces of the thread (`made_span`, depths below the hole's position) must start there, and a
+    thread over part of the hole must end its length below there; a thread over part of the hole without them is a
+    Problem."""
     info = data.get("thread") or {}
     full = info.get("full_length")
     made = info.get("made_span")
     reach = float(info.get("pitch") or 0.0) + 0.5
-    if made and abs(made[0]) > reach:
+    start = thread_mouth(data, bore)
+    if start is None or (made and abs(made[0] - start) > reach):
         return Problem("threadSpan", words.THREAD_HOLE_SPAN)
     if full is True:
-        return Depth(True, None)
+        return Depth(True, None, start)
     if full is False and info.get("depth"):
         depth = float(info["depth"])
-        if not made or abs(made[1] - depth) > reach:
+        if not made or abs(made[1] - start - depth) > reach:
             return Problem("threadSpan", words.THREAD_HOLE_SPAN)
-        return Depth(False, depth)
+        return Depth(False, depth, start)
     return Problem("depthUnread", words.THREAD_DEPTH_UNREAD)
 
 

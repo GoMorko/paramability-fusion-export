@@ -542,3 +542,13 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     the moves of the copies from the original. Then set `Count` to 4 in Fusion: note whether Fusion puts the fourth
     hole past the end of the line, leaves it out, or fails (the copy keeps the copies on the path). Afterwards the
     design is as before.
+52. TD3, a tapped hole with a counterbore and one with a countersink. Make a plate 40 x 40 x 12 mm. Add a Hole at
+    (10, 20) on the top face: Counterbore, counterbore 10 mm across and 3 mm deep, "Tapped", "Modeled" ticked,
+    M6x1, 10 mm deep, full length thread. Add a Hole at (30, 20): Countersink, 12 mm across at 90 degrees, tapped
+    and modeled M6x1, through all. Add a user parameter `Bore` = 3 mm and set the counterbore depth to `Bore`.
+    Export: tick `Bore`. In `report.json` note `thread.made_span` of each hole: expect it to start near 3 mm for the
+    counterbore hole and near 3.5 mm for the countersink hole (where the cone narrows to the 5 mm bore). Both holes
+    are copied with a `thread` step that starts at the bottom of the recess and match the STEP. In Paramability,
+    change `Bore` to 5 mm: the thread of the counterbore hole starts 5 mm down and ends at the bottom of the hole.
+    When `made_span` starts at 0 instead, Fusion starts its thread at the top: the holes are left out with "does not
+    start at the top of the hole (or below its counterbore or countersink)". Afterwards the design is as before.

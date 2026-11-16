@@ -3380,20 +3380,39 @@ keeps its number, and its sizes are marked.
 
 A Hole step with a tapped thread that is modelled is written as two things: a hole at the minor diameter of the thread,
 and an internal `thread` step for each hole position (`design_model/steps/thread.py` `hole_spec`, and `hole/thread.py` `hole_threads`). Before, such a hole was
-a gap. This path is unproven until hand check TD2 passes (see the end of this part). The depth of each thread:
+a gap. This path is unproven until hand checks TD2 and TD3 pass (see the end of this part). The depth of each thread:
 
-- a through hole: measured from the entry to the end faces (`end_points`);
-- a blind hole: the depth of the hole;
+- a through hole: measured from the entry to the end faces (`end_points`), less the start of the thread (see below);
+- a blind hole: the depth of the hole, less the start of the thread;
 - a thread over part of the length: `thread.depth` (a parameter that can follow a size);
 - when it cannot be told whether the thread is full length, the hole is left out.
 
-The reader also measures the faces that the thread made (`made_span`). It gives how deep below the mouth of the first
-hole the vertices of these faces are, along the direction of the hole. `hole_depth` in `design_model/steps/thread.py`
-uses these numbers as a check:
+The thread starts at the mouth of its bore (`thread_mouth` in `design_model/steps/thread.py`). The mouth is not always
+the top of the hole:
 
-- The faces must start at the mouth of the hole, within one pitch and 0.5 mm. Else the hole is left out.
-- A thread over part of the hole must have measured faces, and they must end at `thread.depth`, within one pitch and
-  0.5 mm. Else the hole is left out.
+- A simple hole: the mouth is at the position of the hole.
+- A counterbore hole: the counterbore is wider than the thread, so the thread cannot start in it. The mouth is at the
+  bottom of the counterbore, at the counterbore depth below the position.
+- A countersink hole: the cone of the countersink is wider than the thread down to the depth where the cone narrows
+  to the drilled bore. The mouth is at that depth: (countersink diameter - bore diameter) / 2 / tan(countersink angle
+  / 2). The bore diameter is the minor diameter of the thread.
+
+The reader also measures the faces that the thread made (`made_span`). It gives how deep below the position of the
+first hole the vertices of these faces are, along the direction of the hole. `hole_depth` in
+`design_model/steps/thread.py` uses these numbers as a check. Thus the copy does not assume where Fusion starts the
+thread. It copies the thread only when the measured faces agree with the mouth:
+
+- The faces must start at the mouth, within one pitch and 0.5 mm. Else the hole is left out.
+- A thread over part of the hole must have measured faces, and they must end at the mouth plus `thread.depth`, within
+  one pitch and 0.5 mm. Else the hole is left out. Thus a thread length that Fusion counts from the top of the hole
+  gives a gap, not a thread that is too long.
+
+`hole/thread.py` (`hole_threads`) writes each thread from the mouth: the position of the hole moved along the
+direction of the hole by the start. `hole/step.py` (`_thread_start`) gives the start as a value that follows the
+sizes: the counterbore depth, or the cone depth from the countersink diameter and the hole diameter. Thus the start
+and the length of the thread follow a size that changes the counterbore depth. The countersink angle is pinned
+already, so the cone depth stays exact. The Orca output still leaves out a tapped hole with a counterbore or a
+countersink (cause `tappedRecess`).
 
 The measured bore must also be at the minor diameter of the thread (`hole_spec`). Fusion can keep the "Modeled" flag on
 and still make no thread, so that the bore stays at the full size. Such a hole is left out.

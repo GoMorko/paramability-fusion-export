@@ -149,12 +149,29 @@ def feature(ctx, step):
 
 # ---- the thread of a tapped hole -------------------------------------------------------------------------------
 
-def hole_threads(ctx, item, data, spec, points, direction, depth, through):
+def _below(point, direction, start):
+    """`point` (numbers or formulas) moved `start` (a Quantity) along the unit `direction`."""
+    if not start.n and not start.sized:
+        return list(point)
+    out = []
+    for c, d in zip(point, direction):
+        out.append(as_quantity(c).plus(start.scaled(d)).json() if abs(d) > 1e-9 else c)
+    return out
+
+
+def hole_threads(ctx, item, data, spec, points, direction, depth, through, start):
     """The thread steps of a tapped hole, one per position, after the hole's own steps. `depth` is the hole's depth as
-    a Quantity (None for a through hole, measured from the end faces instead). A Refusal when it cannot be written."""
+    a Quantity (None for a through hole, measured from the end faces instead). `start` is where the thread starts
+    below each position, as a Quantity: the bottom of a counterbore or countersink (`facts.thread_mouth`), else zero.
+    A Refusal when it cannot be written."""
     capped = _fit_caps(ctx, len(points))
     if capped:
         return capped
+    reach = facts.hole_depth(data, spec.minor)
+    if isinstance(reach, Problem):
+        return refusal(reach)
+    if abs(reach.start - start.n) > 1e-6:
+        return refusal(Problem("threadSpan", shared.THREAD_HOLE_SPAN))
     if through:
         ends = facts.measured_ends(data, len(points))
         if isinstance(ends, Problem):
@@ -164,9 +181,7 @@ def hole_threads(ctx, item, data, spec, points, direction, depth, through):
         sizes = [_length_along(direction, p, e) for p, e in zip(points, ends)]
     else:
         sizes = [depth] * len(points)
-    reach = facts.hole_depth(data)
-    if isinstance(reach, Problem):
-        return refusal(reach)
+    sizes = [size.plus(start.scaled(-1)) for size in sizes]
     if reach.full:
         values.handled(ctx, item, "thread.depth")
     else:
@@ -179,6 +194,6 @@ def hole_threads(ctx, item, data, spec, points, direction, depth, through):
         size = _limit_length(ctx, item, spec, size, len(points))
         if isinstance(size, Refusal):
             return size
-        out.append(write(point, direction, size, spec, True))
+        out.append(write(_below(point, direction, start), direction, size, spec, True))
     ctx.note(STARTS_NOTE)
     return out

@@ -129,6 +129,20 @@ class ThreadOfAHoleTest(unittest.TestCase):
         self.assertIsInstance(thread.hole_depth({"thread": {"full_length": False}}), Problem)
         self.assertIsInstance(thread.hole_depth({"thread": {}}), Problem)
 
+    def test_a_thread_below_a_recess_runs_its_length_from_the_bottom_of_the_recess(self):
+        part = {"full_length": False, "depth": 5, "pitch": 1.0}
+        bored = {"hole_type": "counterbore", "counterbore": {"diameter": 9.0, "depth": 3.0}}
+        self.assertEqual(thread.hole_depth(dict(bored, thread=dict(part, made_span=[3.0, 8.0]))),
+                         thread.Depth(False, 5.0, 3.0))
+        # A length counted from the top of the hole is not what Fusion's thread length says.
+        self.assertIsInstance(thread.hole_depth(dict(bored, thread=dict(part, made_span=[3.0, 5.0]))), Problem)
+        sunk = {"hole_type": "countersink", "countersink": {"diameter": 10.0, "angle_deg": 90.0}}
+        found = thread.hole_depth(dict(sunk, thread=dict(part, made_span=[2.5, 7.5])), 5.0)
+        self.assertEqual((found.full, found.length), (False, 5.0))
+        self.assertAlmostEqual(found.start, 2.5)
+        # Without the drilled diameter the cone gives no start.
+        self.assertIsInstance(thread.hole_depth(dict(sunk, thread=dict(part, made_span=[2.5, 7.5]))), Problem)
+
     def test_each_position_needs_a_measured_end(self):
         self.assertEqual(thread.measured_ends({"end_points": [[0, 0, 1], [1, 0, 1]]}, 2), [[0, 0, 1], [1, 0, 1]])
         self.assertIsInstance(thread.measured_ends({"end_points": [[0, 0, 1]]}, 2), Problem)
