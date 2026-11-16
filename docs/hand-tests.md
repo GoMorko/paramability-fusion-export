@@ -514,6 +514,8 @@ mm, `corner` in mm, `holes` as a count), one favourite and one formula parameter
       to 64 sizes". Unticking one brings back the count line.
 - [ ] **Counts.** A parameter that drives a pattern quantity is a whole number size (the form steps by 1), also when
       its role text does not say "quantity". Set it to 2.5 in the app: the recipe still builds.
+      A unitless `Ratio = 2` read by a quantity only as `ceil(Ratio * 3)`: its row has no "whole numbers" note and
+      Min 1, Max 4 take decimals; in the app it is a slider, not a stepper.
 - [ ] **Long name.** A user parameter with a name over 64 characters that drives a joint: the export saves, and the
       message names the size that may give unexpected results without stopping.
 - [ ] **Not used.** Tick a parameter no step reads: in the result window its row says "not used", and the message

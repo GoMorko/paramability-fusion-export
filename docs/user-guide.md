@@ -194,7 +194,8 @@ outline to nothing. Such a size is loose, as above.
 
 Each size has a range: you can type it in the table. It starts from a comment such as `Wall [1..6]` on the parameter,
 otherwise from half to double the current value (a count goes from 1 to twice its value). A parameter that sets how
-many copies a pattern makes is a whole number.
+many copies a pattern makes is a whole number. A parameter that the pattern count reads only inside `round`,
+`floor` or `ceil`, or only in a test such as `if(N > 2; 3; 5)`, keeps its decimals.
 
 A size is labelled in plain words (`lib/params/labels.py`). A short comment on the parameter is the label (its first
 sentence, without a `[min..max]` hint); a longer comment is a description, and the label is then the parameter name

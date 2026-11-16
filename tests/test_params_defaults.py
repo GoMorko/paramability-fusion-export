@@ -67,6 +67,22 @@ class TickedTest(unittest.TestCase):
         self.assertEqual(defaults.count_names(params, self.model(W, role="Quantity")), {W})
         self.assertEqual(defaults.count_names(params, self.model(W, role="Distance")), set())
 
+    def test_a_unitless_parameter_read_only_through_rounding_or_a_test_is_no_count(self):
+        def unitless(name, expression, value):
+            return dict(p(name, value, "", kind="count"), expression=expression, dependency_parameters=[])
+
+        params = [unitless("N", "4", 4.0), unitless("Ratio", "2", 2.0), unitless("Limit", "3", 3.0)]
+        quantity = [{"name": "d9", "expression": "N * 2 + ceil(Ratio * 1.5) + if(Limit > 2; 1; 0)",
+                     "dependency_parameters": ["N", "Ratio", "Limit"]}]
+        counts = defaults.count_names(params, [], quantity)
+        self.assertEqual(counts, {"N"})
+        self.assertEqual(defaults.size_kind(params[1], counts), "number")
+
+    def test_a_quantity_formula_the_parser_refuses_keeps_every_name_it_reads(self):
+        params = [dict(p("N", 4.0, "", kind="count"), expression="4", dependency_parameters=[])]
+        quantity = [{"name": "d9", "expression": "ceil(N ?", "dependency_parameters": ["N"]}]
+        self.assertEqual(defaults.count_names(params, [], quantity), {"N"})
+
     def test_size_kind(self):
         self.assertEqual(defaults.size_kind(p("n", 3.0, "", kind="count"), {"n"}), "count")
         self.assertEqual(defaults.size_kind(p("n", 1.8, "", kind="count"), {"n"}), "number")

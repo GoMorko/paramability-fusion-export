@@ -7,6 +7,8 @@ import re
 
 from ..package.units import unit_kind
 from .dependencies import Graph, names_in
+from .expressions.errors import ExpressionError
+from .expressions.reading import parse, referenced_names
 from .expressions.text import is_constant_expression, is_plain_number
 from .expressions.translation import unit_scale
 from .expressions.units import internal_factor
@@ -98,18 +100,60 @@ def names_read_by(params, model_params):
     return graph.closure([m["name"] for m in model_params]) & {p["name"] for p in params}
 
 
+# A name read only inside these keeps the result whole at any value of it: `ceil(Ratio * 4)`, `if(N > 2; 3; 5)`.
+_ROUNDING = ("round", "floor", "ceil")
+_TESTS = ("cmp", "logic", "not")
+
+
+def whole_reads(expression):
+    """Names an expression reads where a fraction would reach its result: every name outside the argument of
+    round, floor or ceil and outside a comparison. None when the parser refuses the expression."""
+    try:
+        tree = parse(expression or "")
+    except ExpressionError:
+        return None
+    out, stack = [], [tree]
+    while stack:
+        node = stack.pop()
+        kind = node[0]
+        if kind == "name":
+            if node[1] not in out:
+                out.append(node[1])
+        elif kind in _TESTS or (kind == "call" and node[1] in _ROUNDING):
+            continue
+        else:
+            stack.extend(reversed([part for part in node[1:] if isinstance(part, tuple)]
+                                  + [arg for part in node[1:] if isinstance(part, list) for arg in part]))
+    return out
+
+
 def count_names(params, model_params, quantity_refs=()):
-    """User parameters read by a model parameter that sets a pattern quantity.
+    """User parameters a pattern quantity reads as a count: a fraction of one would make the quantity a fraction.
 
     `quantity_refs` are the model parameters the steps use as a pattern quantity (`{ name, expression }`, from the
     capture). A model parameter whose role text names a quantity counts as well; the role strings of Fusion are not
     all verified, so that match is on the word "quantity".
+
+    The walk follows the names each formula reads (`whole_reads`): a name read only through round, floor or ceil or in
+    a comparison can take a fraction, so it is no count. A formula the parser refuses, or one that reads a parameter the
+    capture does not hold (whose own formula is unknown), is followed through every name it reads (`Graph.reads`).
     """
     refs = {ref["name"]: ref for ref in quantity_refs}
     model = list(model_params) + [ref for name, ref in refs.items() if name not in {m["name"] for m in model_params}]
     graph = Graph(params, model)
-    starts = list(refs) + [m["name"] for m in model_params if "quantity" in (m.get("role") or "").lower()]
-    return graph.closure(starts) & {p["name"] for p in params}
+    stack = list(refs) + [m["name"] for m in model_params if "quantity" in (m.get("role") or "").lower()]
+    seen = set()
+    while stack:
+        name = stack.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        found = graph.params.get(name)
+        reads = whole_reads(found.get("expression")) if found is not None else None
+        if reads is None or any(r not in graph.params for r in referenced_names(found.get("expression") or "")):
+            reads = graph.reads(name)
+        stack.extend(r for r in reads if r != name)
+    return seen & {p["name"] for p in params}
 
 
 def is_offered(p):
