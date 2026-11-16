@@ -186,8 +186,7 @@ class _Sizes:
         self.counterbore, self.countersink = counterbore, countersink
 
 
-def _sizes(item, ctx, diameter, depth, counterbore, countersink, depth_q=None):
-    data = item["data"]
+def _sizes(item, data, ctx, diameter, depth, counterbore, countersink, depth_q=None):
     if facts.tap_of(data) != facts.PLAIN:
         values.pin(ctx, item, "diameter", "the thread of %s sets the drill size" % item.get("name", "a hole"))
         diameter_q = Quantity(diameter)
@@ -248,7 +247,7 @@ def hole(ctx, step):
         if isinstance(depth_q, Refusal):
             return depth_q
         depth = depth_q.n
-    sizes = _sizes(item, ctx, diameter, depth, counterbore, countersink, depth_q)
+    sizes = _sizes(item, data, ctx, diameter, depth, counterbore, countersink, depth_q)
 
     tip = data.get("tip_angle_deg")
     tipped = False
@@ -331,6 +330,6 @@ def _moved_points(ctx, item, rows, moved):
 def thread(ctx, step):
     """A cosmetic thread changes no solid: it makes no step. A modeled one is `thread.feature`."""
     if step.brought_data.get("modeled"):
-        return threads.feature(step.brought, ctx)
+        return threads.feature(ctx, step)
     ctx.note("The thread is not copied; the exported shape has none either.")
     return StepResult()
