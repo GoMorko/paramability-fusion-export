@@ -865,7 +865,7 @@ against `samples`.
   `mid_count`, the number of `midPositions`), `chordLength` (`ChordLengthFilletEdgeSet`: `chord_length` from
   `chordLength`), `asymmetric`, `other`. `continuity` is read for every kind but `other`. A value that cannot be
   read is null. The parameters are in `params` as `sets.<n>.radius`, `sets.<n>.chord_length`,
-  `sets.<n>.start_radius` and `sets.<n>.end_radius`. Captures of add-in 0.13.0-preview.8 and older have none of the
+  `sets.<n>.start_radius` and `sets.<n>.end_radius`. Captures of add-in 0.13.0-preview.9 and older have none of the
   `variable` and `chordLength` keys.
 - The reader expands the input: a face gives its `BRepFace.edges`; a tangent chain gives
   `BRepEdge.tangentiallyConnectedEdges`. A feature as input is listed in `input_kinds` as `feature` and not
