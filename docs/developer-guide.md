@@ -2323,6 +2323,10 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     direction of one side that is not the stored direction. Fusion can store the direction of one side in two ways,
     and the measured face usually decides. A face that is not an end cap cannot decide. When the body that a join made
     shows the direction (`joined_side`), that direction is used. Else the extrude is a problem (`WAY_UNSURE`).
+    For all other extrudes with one side, the direction from the stored data, a face or the measured end face must
+    agree with `joined_side` when it gives a direction. Else the extrude is a problem (`WAY_UNSURE`). Example. A join
+    merges its end cap into the part, so there is no measured end face, and the stored direction says up. The body
+    after the step lies wholly below the start plane. The two do not agree, so the step is left out.
   - `joined_side(data, bodies, origin, z)` gives the side of the start plane that a join with one side went to, or
     None. `bodies` is the body before and after the step (`target_before` and `target_after` of the timeline item,
     with `box` and `volume_mm3`). The callers give it to `read_sides` (`bodies`). A join merges all its material
@@ -3827,6 +3831,14 @@ with the box that the outline sweeps:
 When the two directions fit, the material that the revolve added is inside the box of the part before the step, and
 the boxes do not show the direction. The revolve is then left out. A box that is larger than the body before the
 step lets more directions fit. Thus it cannot give the wrong direction: it can only cause the revolve to be left out.
+
+Fusion does not promise that the box of a curved face or a curved body is tight. The box can be larger than the
+shape. A box that is too large can stand out of the swept box of the correct direction. Then the code could rule out
+the correct direction and keep the wrong direction. Thus `_box_holds` rules out a direction only when a measured box
+stands out of its swept box by more than a margin: 0.5 mm plus 2 percent of the largest side of the measured box
+(`BOX_LOOSE_MM`, `BOX_LOOSE_SHARE`). The code assumes that the boxes of Fusion are not larger than the shape by more
+than this margin. Hand check RC1 measures this. When the part grows by less than the margin, the two directions fit,
+and the revolve is left out.
 
 A symmetric revolve looks the same in the two directions. `symmetric_ok` checks only that each measured cap sits at the
 angle before or after the sketch plane. This check also shows that Fusion counts the angle on each side. When a cap is
