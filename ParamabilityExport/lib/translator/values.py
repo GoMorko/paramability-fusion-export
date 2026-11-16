@@ -126,6 +126,14 @@ def stays_below(ctx, item, q, limit, why):
     return Quantity(q.n)
 
 
+def stays_above(ctx, item, q, limit, why):
+    """`q` when it stays at or above `limit` over the size range; else its number, with its sizes fixed for `why`."""
+    if not q.sized or _stays_in_range(ctx.table, q.text, q.reads, 1, limit):
+        return q
+    ctx.doubt(q.reads, why)
+    return Quantity(q.n)
+
+
 def stays_positive(table, q):
     """True when a sized Quantity stays above zero over the size range."""
     return _stays_in_range(table, q.text, q.reads, 1, 1e-9)

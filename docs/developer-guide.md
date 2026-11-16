@@ -449,7 +449,7 @@ export (see checklist 4.10.5).
 
 Each step type has a pair of reader functions `(before, after)`. The pairs are in the `READERS` dict of a module in
 `lib/fusion_reader/` (`read_solid.py`, `read_hole.py`, `read_finish.py`, `read_repeat.py`, `read_sweep.py`, `read_split.py`,
-`read_move.py`, `read_paste.py`, `read_offset.py`, `read_emboss.py`, `read_thread.py`, `read_coil.py`). The step kind table
+`read_move.py`, `read_paste.py`, `read_scale.py`, `read_offset.py`, `read_emboss.py`, `read_thread.py`, `read_coil.py`). The step kind table
 (`lib/capture_model/step_kinds.py`) says which module reads which type.
 
 `read_solid.py` reads the extrude, the revolve and the combine. `read_hole.py` reads the hole. Both need the same facts
@@ -1003,6 +1003,7 @@ imports translator code, and only the translator reads `HANDLERS`.
 | `PathPatternFeature` | `repeat.body_copies.path` (see 3.17) |
 | `SplitBodyFeature` | `bodies.split.handle` |
 | `CopyPasteBody`, `MoveFeature` | `bodies.paste.handle`, `bodies.move.handle` |
+| `ScaleFeature` | `bodies.scale.handle` (see 3.18) |
 | `EmbossFeature` | `extrude.emboss.handle` |
 | `SweepFeature`, `LoftFeature` | `sweep.step.handle`, `loft.step.handle` |
 | `CoilFeature` | `coil.step.handle` (see 3.13) |
@@ -1019,19 +1020,20 @@ types that the add-in does not copy, with the reason and the cause of the hint (
 | `StitchFeature` | "Steps of type stitch are not copied." | `surface` |
 | `OffsetFeature` (surface offset) | "Offsetting a surface is not copied." | `surface` |
 | `BoundaryFillFeature` | "Boundary Fill is not copied." | `boundaryFill` |
-| `ScaleFeature` | "Scaling a body is not copied." | `scale` |
 | `ReplaceFaceFeature` | "Replace Face is not copied." | `replaceFace` |
 | `RibFeature`, `WebFeature` | "Rib is not copied.", "Web is not copied." | `ribWeb` |
 
 Scale, Replace Face, Rib, Web and the surface Offset also have the flag `reaches_bodies`. The Path Pattern has it too. They can change
 or take bodies of another component, so the capture walk measures the body around them also when they sit in another
-component. A coil, a modelled thread and a path pattern are copied, so they are not in this table (3.12, 3.13 and 3.17). A path
-pattern that is left out keeps the cause `pathPattern`.
+component. A coil, a modelled thread, a path pattern and a scale are copied, so they are not in this table (3.12, 3.13, 3.17 and
+3.18). A path pattern that is left out keeps the cause `pathPattern`. A scale that is left out keeps the cause `scale`.
 
 A second table, `RECIPE_KINDS`, lists the recipe step kinds the translator writes (`extrude`, `revolve`, `hole`,
 `round`, `bevel`, `shell`, `offsetFaces`, `pattern`, `mirror`, `toolBody`, `move`, `loft`, `sweep`, `draft`, `thread`,
-`coil`). Each kind has the recipe version that brought it, and the paths of its points and directions (so `place.place`
+`coil`, `scale`). Each kind has the recipe version that brought it, and the paths of its points and directions (so `place.place`
 can move the recipe into the assembly and turn it for Y up). The `thread` and the `coil` use the base recipe version.
+The `scale` kind (version 17) also has `factors`: the path of its per-axis factors. `place.place` does not move these
+values. It puts each factor on the axis that the map turns its axis to.
 
 A kind can also say that it may not stand inside a tool body (`in_tool` is false). This holds for `thread` and `coil`,
 and for `skin` and `bevelGear`, which the translator never writes. These kinds build on the whole part. `tool_words` is
@@ -1152,7 +1154,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `coilLimit` | more than 8 coils, or more than 100 turns of coils and threads in all | A copy holds up to 8 coils and 100 turns of coils and threads in all. Your AI assistant can add the rest. |
 | `coilHalf` | revolutions that end in a half turn | Use revolutions that do not end in a half, such as 3.25 or 4. |
 | `coilTool` | a coil that would stand in a tool body with other steps | Join the coil to the part with a combine before you move or change it. |
-| `scale` | the step type Scale | Change the sizes in the sketches instead of scaling the body. |
+| `scale` | a Scale that is left out (it also scales sketches, it cannot be read, or the measured body does not agree with it), and every Scale in the Orca copy | Change the sizes in the sketches instead of scaling the body. |
 | `replaceFace` | the step type Replace Face | Cut the shape with an extrude, or extrude the face up to the shape you want. |
 | `ribWeb` | the step types Rib and Web | Draw the rib or web outline in a sketch and extrude it. |
 | `pathPattern` | a path pattern that is not copied (a path that is not one line, arc or circle, copies on both sides of the start point, copies that keep their direction on a round path, copies past the end of the path) | Use a rectangular or circular pattern, or a mirror. |
@@ -1761,11 +1763,11 @@ one folder per family of steps.
     `design_model/steps/path_pattern.py` (see 3.17). The package `__init__` is the entry point the walk imports.
   - `combine/`: `step.py` (`handle`) and `tool_walk.py` (the walk of a tool body, `cannot_copy`).
   - `finishes/`: `finish.py` (fillet, chamfer, shell; it reads the sets of rounds and chamfers from `design_model/steps/finish.py`), `measured_rounds.py` (rounds by chord length and rounds with a changing radius, see 3.16), `draft.py`, `offset.py`.
-  - `bodies/`: `move.py` (the fit of the move is in `design_model/steps/move.py`), `paste.py`, `split.py`, `split_rules.py` (`stop_reason`: when a split stops the copy, from
+  - `bodies/`: `move.py` (the fit of the move is in `design_model/steps/move.py`), `scale.py` (see 3.18), `paste.py`, `split.py`, `split_rules.py` (`stop_reason`: when a split stops the copy, from
     the split facts of `design_model/roles.py`) and `design_model/steps/split.py` (which pieces of a split by a body lie
     inside the tool, when the reader could not say, see 3.4).
 - Picks and faces that follow sizes, `faces/`: `follow.py` (picks, faces and planes that follow sizes), `picks.py`,
-  `placer.py` (the placer protocol), `placer_makers.py`, `moved_placer.py`, `tool_placer.py`, `slabs.py`, `shells.py`,
+  `placer.py` (the placer protocol), `placer_makers.py`, `moved_placer.py`, `scaled_placer.py`, `tool_placer.py`, `slabs.py`, `shells.py`,
   `offset_faces.py`, `end_caps.py`, `thin_wall.py`, `crossings.py`, `copy_counts.py`, `meets_part.py` and `floating.py`
   (joins that would float).
 - Sketch values, `sketch/`: `loops.py` (the shared loop writer `design_model/loops.py`, with each problem as a
@@ -3999,6 +4001,63 @@ The Orca output has no handler for a path pattern, so it leaves the step out.
 Example, made up: a sketch line of 30 mm, a hole at its start, a count of 3 and a spacing of 15 mm. The recipe gets a
 `pattern` step with `linear: {dir: [1, 0, 0], count: 3, step: 15}`. The travel is 2 x 15 = 30 mm, which is the room.
 Thus the ranges of the count and the spacing stop at their values now.
+
+### 3.18 How a scale is translated
+
+`scale.handle` (`lib/translator/bodies/scale.py`) writes a recipe `scale` step. The step has a factor and a point.
+The app scales all the steps before the `scale` step in the same list about the point. The list is the main list of
+the part, or the `features` list of a tool body.
+
+The reader (`lib/fusion_reader/read_scale.py`) reads these items with the marker before the Scale:
+
+- The input entities. The copy can use only bodies. When a sketch is an input too, `input_kind` is `sketches`.
+- The point that stays in place. This point is the origin point of the component, a sketch point, a construction
+  point, or a corner of a body.
+- The factor. A uniform Scale has one factor. A non-uniform Scale has one factor for each axis.
+- The box and the volume of each body.
+
+The reader reads the box and the volume of each body again with the marker after the Scale.
+
+The handler does these checks in this sequence. When a check fails, the Scale becomes a gap with the cause `scale`:
+
+1. All the inputs must be bodies. A Scale that also scales a sketch is left out. A later step can use the scaled
+   sketch, and the copy cannot change that sketch.
+2. The point and the factors must be readable. A point of another component is left out.
+3. Each factor must be from 0.001 to 1000. This is the range that the app accepts.
+4. The copy must have a step before the Scale in the same list. The app does not accept a `scale` step as the first
+   step of a list.
+5. For a non-uniform Scale, the map that moves the recipe into the assembly must turn each axis onto an axis
+   (`place.axis_turn`). This map comes from the place of the component and from the Y up turn. When the component
+   is turned by an angle that is not a quarter turn, the factors have no axes in the assembly, so the Scale is left
+   out.
+6. The measured body must agree with the Scale. The volume after the Scale must be the volume before it, multiplied
+   by the three factors. Each side of the box must move as the factors and the point move it. This check finds a
+   point or an axis that the reader did not read correctly. If the body was not measured, the Scale is left out.
+
+Then the handler writes the step:
+
+- The factors follow their parameters (`values.quantity`, without a unit). A factor must stay above zero, at or above
+  0.001 and at or below 1000 in the size ranges. When the formula of a factor can go out of that range, the copy
+  writes the factor as a number. The sizes in that formula are marked.
+- The point is written where Fusion measured it. When the point is the origin, no size can move it. For a sketch
+  point, a construction point or a corner, `reach.reference_sizes` gives the sizes that can move the point. The copy
+  marks these sizes "may give unexpected results".
+
+After the `scale` step, the placers of the steps before it become `ScaledPlacer` (`faces/scaled_placer.py`). A
+`ScaledPlacer` knows where the material is: it moves a point back through the Scale before it asks the old placer.
+But it does not place picks. Thus a round, a chamfer or an offset after the Scale that picks a face made before the
+Scale keeps its measured points, and the sizes are marked.
+
+The recipe is carried into the assembly by `place.place`. The point moves like every other position. A factor list
+`[x, y, z]` is put on the new axes: for a Y up design, `[1, 2, 0.5]` becomes `[1, 0.5, 2]`.
+
+The Orca copy leaves every Scale out (`orca_translate/bodies.py`), because Orca's Design tab has no step that scales
+a body. The cause is `scale`, and the Orca result shows its tip.
+
+Example: a block of 40 by 20 by 10 mm is scaled by the user parameter `Grow` = 1.5 about the origin. The volume goes
+from 8000 mm3 to 27000 mm3, which is 8000 multiplied by 1.5 three times. The box goes from (40, 20, 10) to
+(60, 30, 15). The copy writes `{ "kind": "scale", "factor": { "expr": "Grow" }, "point": [0, 0, 0] }`. The recipe has
+version 17.
 
 ## 4. Debugging
 

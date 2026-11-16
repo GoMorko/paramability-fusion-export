@@ -549,7 +549,7 @@ def reference_sizes(table, timeline, item, record):
     `item` uses as a place (a split plane, a mirror plane, a turning axis, the face a thread is cut on), in table order:
     - the sizes behind the construction planes and axes of `record` and of what it is built on (a record without a
       token stands for every one of its kind);
-    - for a line of a sketch, those of `sketch_line_sizes`;
+    - for a line or point of a sketch, those of `sketch_line_sizes`;
     - for a face, an edge, construction geometry built on the part (`on_part`) and a record that does not say what it
       is, also every size an item of the body's component reads before the step (for construction geometry, before
       it was made).
@@ -570,7 +570,7 @@ def reference_sizes(table, timeline, item, record):
             names |= set(construction_sizes(table, kind, entry.get("token") or ""))
             pending.extend(entry.get("built_on") or ())
     entity = _record_kind(record)
-    if entity == "SketchLine" and record.get("sketch"):
+    if entity in ("SketchLine", "SketchPoint") and record.get("sketch"):
         names |= sketch_line_sizes(table, timeline, item, record["sketch"], record.get("sketch_reference"),
                                    record.get("sketch_projected"))
     elif entity not in _CONSTRUCTION or on_part(dict(record, entity_type=entity)):

@@ -16,6 +16,8 @@ Move: the body's first vertices before and after the step give the rigid move (`
 about an axis, then moves. A Move that turns about an axis writes that axis and binds `xf_angle_deg` to the angle;
 any other move is written as its measured turn and shift. Orca cannot tie a move distance to a variable, so such
 sizes keep their numbers.
+
+Scale: Orca's Design tab has no step that scales a body, so a Scale of the part is left out.
 """
 import math
 
@@ -207,4 +209,8 @@ def move(ctx, step):
     return [made]
 
 
-HANDLERS = {"SplitBodyFeature": split, "MoveFeature": move}
+def scale(ctx, step):
+    return Skip("Orca has no step that scales a body.", gap_hints.SCALE)
+
+
+HANDLERS = {"SplitBodyFeature": split, "MoveFeature": move, "ScaleFeature": scale}

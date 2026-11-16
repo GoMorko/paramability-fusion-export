@@ -110,6 +110,7 @@ class RecipeKind:
     tool_words, tool_cause: for a kind with `in_tool` false, its plain name in the refusal "cannot be part of a tool
       body", and the `gap_hints` cause that gives the hint for it.
     written: False for kinds the recipe schema has but the translator never writes.
+    factors: paths to per-axis factors `[x, y, z]`, which `place.place` puts on the axes its map turns them to.
     """
 
     name: str
@@ -124,6 +125,7 @@ class RecipeKind:
     tool_words: str = None
     tool_cause: str = None
     written: bool = True
+    factors: tuple = ()
 
 
 STEP_TYPES = (
@@ -151,8 +153,8 @@ STEP_TYPES = (
              gap_cause=gap_hints.SURFACE),
     StepType("BoundaryFillFeature", "boundary fill", unsupported="Boundary Fill is not copied.",
              gap_cause=gap_hints.BOUNDARY_FILL),
-    StepType("ScaleFeature", "scale", unsupported="Scaling a body is not copied.", gap_cause=gap_hints.SCALE,
-             reaches_bodies=True, turns_faces=True),
+    StepType("ScaleFeature", "scale", reader="read_scale", gap_cause=gap_hints.SCALE, reaches_bodies=True,
+             turns_faces=True),
     StepType("ReplaceFaceFeature", "replace face", unsupported="Replace Face is not copied.",
              gap_cause=gap_hints.REPLACE_FACE, reaches_bodies=True, turns_faces=True),
     StepType("RibFeature", "rib", unsupported="Rib is not copied.", gap_cause=gap_hints.RIB_WEB,
@@ -223,6 +225,7 @@ RECIPE_KINDS = (
     RecipeKind("draft", version=8, positions=(("faces", "near", "[]"), ("neutral", "origin")),
                directions=(("neutral", "normal"),)),
     RecipeKind("bevelGear", in_tool=False, tool_words="gear", written=False),
+    RecipeKind("scale", version=17, positions=(("point",),), factors=(("factor",),)),
 )
 
 _TYPES = {t.name: t for t in STEP_TYPES}
