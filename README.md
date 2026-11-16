@@ -79,14 +79,16 @@ or if an error occurs.
 - The design must have history (a parametric design).
 - The add-in cannot copy all Fusion steps. `docs/limits.md` gives the full list.
 - Paramability opens up to 256 MB for each size and 1 GB for each file.
-- This is version 0.12.0. Use a current Paramability build to open its files.
+- This is version 0.13.0-preview.6. Use a current Paramability build to open its files.
 
 ## More information
 
 | Document | Contents |
 | --- | --- |
 | `docs/user-guide.md` | All dialogs, the result window, several bodies, steps that the copy leaves out |
+| `docs/orca-output.md` | Export for Orca: what it copies, what it leaves out, the report |
 | `docs/limits.md` | What the copy can and cannot do, step by step |
+| `docs/feature-support.md` | Which Fusion actions each export copies, and what could be copied later |
 | `docs/development.md` | Code layout and tests |
 | `docs/developer-guide.md` | How an export works step by step, the code map, worked examples, how to debug with `report.json` |
 | `docs/capture-format.md`, `docs/expressions.md`, `docs/recipe-gaps.md` | File formats and how formulas are copied |

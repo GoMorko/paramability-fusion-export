@@ -6,7 +6,7 @@ from tests import context  # noqa: F401
 from tests.translator_helpers import load_capture
 
 from lib.capture_model import gap_hints
-from lib.design_model.words import ToolStop, sentence
+from lib.design_model.words import ToolStop
 from lib import orca_translate
 from lib.translator import translate
 from lib.translator.combine import tool_walk
@@ -17,22 +17,15 @@ from lib.translator.result import Refusal
 class ToolStopTest(unittest.TestCase):
     def test_a_step_that_stops_the_tool_is_named_with_its_reason(self):
         stop = ToolStop.through("Body2", "Sweep1", "Surface sweeps are not copied.")
-        self.assertIn("Body2", stop.reason)
+        self.assertEqual((stop.tool, stop.step, stop.inside), ("Body2", "Sweep1", None))
         self.assertEqual(stop.reason.count("Sweep1"), 1)
-        self.assertTrue(stop.reason.endswith("Surface sweeps are not copied."))
-
-    def test_a_reason_without_an_end_mark_gets_one(self):
-        self.assertEqual(sentence("It does not build"), "It does not build.")
-        self.assertEqual(sentence("Done?"), "Done?")
 
     def test_a_tool_of_a_tool_names_the_step_that_really_stops_it_once(self):
         inner = ToolStop.through("Body3", "Sweep2", "Surface sweeps are not copied.")
         outer = ToolStop.through("Body2", "Cut1", inner.reason, inner)
+        self.assertEqual((outer.tool, outer.step, outer.inside), ("Body2", "Sweep2", "Body3"))
         self.assertEqual(outer.reason.count("Sweep2"), 1)
-        self.assertIn("Body2", outer.reason)
-        self.assertIn("Body3", outer.reason)
         self.assertNotIn("Cut1", outer.reason)
-        self.assertEqual(outer.reason.count("cannot be copied"), 1)
 
     def test_three_levels_still_name_the_innermost_step_and_its_tool(self):
         first = ToolStop.through("Body4", "Sweep3", "Surface sweeps are not copied.")
@@ -44,8 +37,7 @@ class ToolStopTest(unittest.TestCase):
 
     def test_a_step_without_a_name_is_still_a_sentence(self):
         stop = ToolStop.through("Body2", None, "This step could not be read from Fusion.")
-        self.assertIn("Body2", stop.reason)
-        self.assertNotIn("None", stop.reason)
+        self.assertEqual((stop.tool, stop.step, stop.inside), ("Body2", "", None))
 
 
 class CannotCopyTest(unittest.TestCase):

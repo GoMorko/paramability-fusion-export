@@ -278,6 +278,11 @@ _CHECKED = {}
 _CHECKED_MAX = 50000
 
 
+def forget_answers():
+    """Drop every stored answer of `check`: a translation starts with none, and none outlives its export."""
+    _CHECKED.clear()
+
+
 def check(points, node):
     """True when the formula gives the polygon at a point of every cell of the edge lines."""
     key = repr((node, points))

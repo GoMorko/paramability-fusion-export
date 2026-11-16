@@ -1,22 +1,28 @@
-"""Edges and faces of the part matched to the straight extrude that made them: which sizes may turn a pattern
+"""Edges and faces of the part matched to the straight extrudes that made them: which sizes may turn a pattern
 direction taken from one, and which may change the thickness a tapped hole goes through.
 
 Both outputs write such a direction and such a thread length as numbers. In general every size read before the step
-may change them (`reach.reference_sizes`, `reach.hole_end_sizes`). The capture can show less:
+may change them (`reach.reference_sizes`, `reach.hole_end_sizes`). The capture can show less, but only for a part
+that is plain before the step (`_plain_body`): every step of the body's component before it is a straight extrude, a
+simple hole through all (round faces and round edges only), a sketch or construction geometry. Any other step (a
+revolve, a loft, a sweep, a pattern, a round, a move, a step the step kind table does not know) may make an edge or a
+face where an extrude's would lie, so the general sizes stay.
 
-- a side edge of a straight extrude (along its axis), and a flat end face across that axis, turn only with the
-  extrude's sketch plane (`reach.placement_sizes`);
-- an edge across the axis that lies over a line of the extrude's outline runs along that line, and a flat side face
-  over such a line stands square to it: they turn only with the sketch plane and with the line, and the line keeps
-  its direction at every size when the sketch solver gives its two ends a gap of zero across or along, or a constant
-  gap (`sketch_solve`, default reading);
-- the thickness between the two end faces of a one sided straight extrude changes only with its length.
+An extrude is straight here when it starts on its sketch plane (or at an offset from it), has no taper, each side
+ends at a distance, its outlines are read in full and lie in one plane, and its measured end face (`end_offset`)
+shows where its end caps lie. In a plain part:
 
-An extrude is straight here when it starts on its sketch plane (or at an offset from it), has no taper and each side
-ends at a distance. The match is by where the edge or face lies now. A step between the extrude and the step that
-moves bodies, may turn faces (`StepType.turns_faces`) or is not in the step kind table voids the match, and so does a
-sketch graph that cannot be solved. Without a match the general sizes stay. Several matching extrudes give the sizes of
-all of them.
+- a side edge (along the axis, over a corner of an outline, between the end caps), an end face (across the axis,
+  inside the outline, at an end cap), an edge across the axis over a line of an outline at an end cap, and a flat
+  side face over such a line between the end caps were made by that extrude. They turn only with the sketch planes
+  (`reach.placement_sizes`; of every extrude of the part, since an edge where two extrudes meet turns with both) and
+  with the line, which keeps its direction at every size when the sketch solver gives its two ends a gap of zero
+  across or along, or a constant gap (`sketch_solve`, default reading). A sketch graph that cannot be solved keeps
+  the general sizes;
+- when every extrude is one sided, makes or joins material along the hole and spans the same two planes, and each
+  hole goes in at one of these planes and out at the other inside an outline, the part is that thick wherever a hole
+  can go (outside every outline it cuts nothing). The thickness then changes only with the lengths and sketch planes
+  of the extrudes (a plane may tilt against the hole) and, for several extrudes, with their start offsets.
 """
 from ..capture_model import step_kinds
 from ..geometry import footprint, plane2d, vec
@@ -26,6 +32,8 @@ from . import reach
 
 # How far (mm) a point may lie from where an outline puts it.
 TOL_MM = 1e-4
+# How far (mm) a point may lie from an end cap, and a measured end cap from where the extrude's length puts it.
+CAP_TOL = 1e-3
 # How far from 1 the cosine of two directions may be for them to count as one line.
 PARALLEL_TOL = 1e-6
 
@@ -35,41 +43,95 @@ def _data(item):
     return data if isinstance(data, dict) else {}
 
 
-def _straight(data):
-    if not isinstance(data.get("profiles"), list) or "extent_type" not in data or data.get("thin"):
-        return False
-    if (data.get("start") or {}).get("kind", "profilePlane") not in ("profilePlane", "offset"):
-        return False
-    sides = [data.get("side_one")] + ([data["side_two"]] if data.get("side_two") is not None else [])
-    return all(isinstance(s, dict) and s.get("kind") == "distance" and not s.get("taper_deg") for s in sides)
+def _number(value):
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
-def _voids(item):
-    """True for a step that may move, turn or reshape what an earlier extrude made."""
-    if item.get("suppressed") or item.get("in_target_component") is False:
-        return False
+def _usable(profile):
+    """True for an outline of the part's own sketch with its frame read."""
+    frame = profile.get("frame") if isinstance(profile, dict) else None
+    return (isinstance(frame, dict) and all(isinstance(frame.get(k), list) for k in ("origin", "x", "y", "z"))
+            and not profile.get("face") and not profile.get("foreign") and not profile.get("borrowed"))
+
+
+def _one_plane(profiles):
+    """True when every outline lies in the plane of the first."""
+    first = profiles[0]["frame"]
+    return all(_along(p["frame"]["z"], first["z"])
+               and abs(vec.dot(vec.sub(p["frame"]["origin"], first["origin"]), vec.unit(first["z"]))) <= TOL_MM
+               for p in profiles)
+
+
+def _records(item):
+    """The sketch records the step kind table lists for the type of `item`."""
     spec = step_kinds.step_type(item.get("type"))
-    if spec is None:
-        return True
-    return spec.role == step_kinds.MODELING and (spec.moves_bodies or spec.turns_faces)
+    return spec.sketches if spec is not None else ()
 
 
-def _profiles(timeline, before):
-    """`(extrude item, profile)` of the straight extrudes of the body's component before timeline index `before`
-    with no step between them and `before` that voids a match, each profile with its sketch frame."""
+def _caps(item):
+    """The end caps `(low, high)` of a straight extrude (a step with outlines and the extent of an extrude) along the
+    normal of its first outline's sketch, or None."""
+    data = _data(item)
+    profiles = data.get("profiles")
+    if (step_kinds.PROFILES not in _records(item) or "extent_type" not in data or data.get("thin")
+            or not isinstance(profiles, list) or not profiles or not all(_usable(p) for p in profiles)
+            or not _one_plane(profiles)):
+        return None
+    begin = data.get("start") or {}
+    kind = begin.get("kind", "profilePlane")
+    start = _number(begin.get("offset")) if kind == "offset" else 0.0 if kind == "profilePlane" else None
+    one, two = data.get("side_one"), data.get("side_two")
+    sides = [one] + ([two] if two is not None else [])
+    end = _number(data.get("end_offset"))
+    if start is None or end is None or not all(
+            isinstance(s, dict) and s.get("kind") == "distance" and not s.get("taper_deg")
+            and _number(s.get("distance")) is not None for s in sides):
+        return None
+    first = abs(one["distance"])
+    if data.get("extent_type") == "one" and two is None:
+        return tuple(sorted((start, end))) if abs(abs(end - start) - first) <= CAP_TOL else None
+    if data.get("extent_type") == "two" and two is not None and kind == "profilePlane" \
+            and one["distance"] > 0 and two["distance"] > 0:
+        # The sides run either way from the sketch plane; the measured end face tells which side runs along +z.
+        sign = 1.0 if end > 0 else -1.0
+        if abs(abs(end) - first) <= CAP_TOL:
+            return tuple(sorted((sign * first, -sign * two["distance"])))
+        if abs(abs(end) - two["distance"]) <= CAP_TOL:
+            return tuple(sorted((-sign * first, sign * two["distance"])))
+    return None
+
+
+def _through_hole(item):
+    """True for a simple hole through all: it makes round faces and round edges only."""
+    data = _data(item)
+    return (step_kinds.HOLE_POINTS in _records(item) and data.get("hole_type") == "simple"
+            and not data.get("counterbore") and not data.get("countersink")
+            and (data.get("extent") or {}).get("kind") == "throughAll")
+
+
+def _plain_body(timeline, before):
+    """`[(extrude item, caps)]` of the straight extrudes of the body's component before timeline index `before`, or
+    None when another step before it may have made or changed an edge or face (see the module text)."""
+    if not isinstance(before, int):
+        return None
     out = []
     for item in timeline:
         index = item.get("index")
-        if (not isinstance(index, int) or index >= before or item.get("suppressed")
-                or item.get("in_target_component") is False or not _straight(_data(item))):
+        if not isinstance(index, int) or index >= before or item.get("suppressed"):
             continue
-        if any(isinstance(i.get("index"), int) and index < i["index"] < before and _voids(i) for i in timeline):
+        kind = item.get("type")
+        if step_kinds.makes_no_body(kind):
             continue
-        for profile in _data(item)["profiles"]:
-            frame = profile.get("frame") if isinstance(profile, dict) else None
-            if (isinstance(frame, dict) and all(isinstance(frame.get(k), list) for k in ("origin", "x", "y", "z"))
-                    and not profile.get("face") and not profile.get("foreign") and not profile.get("borrowed")):
-                out.append((item, profile))
+        if item.get("in_target_component") is False:
+            if step_kinds.keeps_to_own_bodies(kind):
+                continue
+            return None
+        if _through_hole(item):
+            continue
+        caps = _caps(item)
+        if caps is None:
+            return None
+        out.append((item, caps))
     return out
 
 
@@ -100,6 +162,14 @@ def _along(a, b):
 
 def _across(a, b):
     return abs(vec.dot(vec.unit(a), vec.unit(b))) <= PARALLEL_TOL
+
+
+def _at_cap(z, caps):
+    return any(abs(z - c) <= CAP_TOL for c in caps)
+
+
+def _between(z, caps):
+    return caps[0] - CAP_TOL <= z <= caps[1] + CAP_TOL
 
 
 def _graph(capture, profile):
@@ -139,45 +209,6 @@ def _keeps_direction(capture, table, profile, line):
     return any(zero) or all(g.is_constant for g in gaps)
 
 
-def _turners(capture, table, timeline, item, profile, line=None):
-    """The sizes that may turn what lies along the extrude's axis or across it (`line`: over that outline line), or
-    None when the line may turn."""
-    if line is not None and not _keeps_direction(capture, table, profile, line):
-        return None
-    return set(reach.placement_sizes(table, timeline, profile, item.get("index")))
-
-
-def _edge_match(capture, table, timeline, step, record, direction):
-    """The sizes that may turn an edge of the part (`record`, with `edge_points`: the middle of an open edge) that
-    runs along `direction`, or None without a match."""
-    points = [p for p in record.get("edge_points") or [] if isinstance(p, (list, tuple)) and len(p) == 3]
-    if not points:
-        return None
-    found, matched = set(), False
-    for item, profile in _profiles(timeline, step.get("index")):
-        frame = profile["frame"]
-        local = [vec.frame_to_local(frame, p) for p in points]
-        if _along(direction, frame["z"]):
-            corners = [c[k] for c in _curves(profile) for k in ("start", "end") if isinstance(c.get(k), list)]
-            if not all(any(abs(p[0] - c[0]) <= TOL_MM and abs(p[1] - c[1]) <= TOL_MM for c in corners)
-                       for p in local):
-                continue
-            names = _turners(capture, table, timeline, item, profile)
-        elif _across(direction, frame["z"]):
-            line = next((c for c in _curves(profile) if c.get("kind") == "line" and _runs_along(frame, c, direction)
-                         and all(plane2d.to_segment(p[:2], c["start"], c["end"]) <= TOL_MM for p in local)), None)
-            if line is None:
-                continue
-            names = _turners(capture, table, timeline, item, profile, line)
-        else:
-            continue
-        if names is None:
-            return None
-        found |= names
-        matched = True
-    return found if matched else None
-
-
 def _runs_along(frame, line, direction):
     """True when the outline `line` (sketch coordinates) runs along the model `direction`."""
     run = vec.sub(vec.frame_apply(frame, list(line["end"]) + [0.0]),
@@ -185,42 +216,84 @@ def _runs_along(frame, line, direction):
     return vec.length(run) > TOL_MM and _along(run, direction)
 
 
-def _face_match(capture, table, timeline, step, record, direction):
-    """The sizes that may turn a flat face of the part whose normal is `direction`: an end face across the axis of a
-    straight extrude (its point inside the outline), or a side face over a line of its outline. None without a match."""
+def _outlines(body):
+    """`(profile, caps)` of each outline of the straight extrudes `body`."""
+    return [(profile, caps) for item, caps in body for profile in _data(item)["profiles"]]
+
+
+def _edge_match(capture, table, body, record, direction):
+    """True when an edge of the part (`record`, with `edge_points`: the middle of an open edge) that runs along
+    `direction` lies where a straight extrude of `body` made it, and every outline line it lies over keeps its
+    direction."""
+    points = [p for p in record.get("edge_points") or [] if isinstance(p, (list, tuple)) and len(p) == 3]
+    if not points:
+        return False
+    matched = False
+    for profile, caps in _outlines(body):
+        frame = profile["frame"]
+        local = [vec.frame_to_local(frame, p) for p in points]
+        if _along(direction, frame["z"]):
+            corners = [c[k] for c in _curves(profile) for k in ("start", "end") if isinstance(c.get(k), list)]
+            if not all(_between(p[2], caps) and any(abs(p[0] - c[0]) <= TOL_MM and abs(p[1] - c[1]) <= TOL_MM
+                                                    for c in corners) for p in local):
+                continue
+        elif _across(direction, frame["z"]):
+            line = next((c for c in _curves(profile) if c.get("kind") == "line" and _runs_along(frame, c, direction)
+                         and all(_at_cap(p[2], caps) and plane2d.to_segment(p[:2], c["start"], c["end"]) <= TOL_MM
+                                 for p in local)), None)
+            if line is None:
+                continue
+            if not _keeps_direction(capture, table, profile, line):
+                return False
+        else:
+            continue
+        matched = True
+    return matched
+
+
+def _face_match(capture, table, body, record, direction):
+    """True when a flat face of the part whose normal is `direction` lies where a straight extrude of `body` made
+    it: an end cap (its point inside the outline) or a side face over a line of the outline that keeps its
+    direction."""
     point = record.get("face_point")
     if record.get("surface") not in (None, "Plane") or not isinstance(point, (list, tuple)) or len(point) != 3:
-        return None
-    found, matched = set(), False
-    for item, profile in _profiles(timeline, step.get("index")):
+        return False
+    matched = False
+    for profile, caps in _outlines(body):
         frame = profile["frame"]
         local = vec.frame_to_local(frame, point)
         if _along(direction, frame["z"]):
             ring = _ring(profile)
-            if not ring or not plane2d.inside_ring(local[:2], ring):
+            if not _at_cap(local[2], caps) or not ring or not plane2d.inside_ring(local[:2], ring):
                 continue
-            names = _turners(capture, table, timeline, item, profile)
         elif _across(direction, frame["z"]):
             line = next((c for c in _curves(profile) if c.get("kind") == "line"
                          and _runs_along(frame, c, vec.cross(frame["z"], direction))
                          and plane2d.to_segment(local[:2], c["start"], c["end"]) <= TOL_MM), None)
-            if line is None:
+            if line is None or not _between(local[2], caps):
                 continue
-            names = _turners(capture, table, timeline, item, profile, line)
+            if not _keeps_direction(capture, table, profile, line):
+                return False
         else:
             continue
-        if names is None:
-            return None
-        found |= names
         matched = True
-    return found if matched else None
+    return matched
+
+
+def _plane_sizes(table, timeline, body):
+    """The sizes that may move the sketch plane of any extrude of `body`."""
+    found = set()
+    for item, _ in body:
+        for profile in _data(item)["profiles"]:
+            found |= set(reach.placement_sizes(table, timeline, profile, item.get("index")))
+    return found
 
 
 def direction_sizes(table, capture, item, which):
     """Fusion names of the ticked sizes that may turn the direction `which` ("one" or "two") of the rectangular
-    pattern `item`, in table order. A direction taken from an edge or a face of the part that matches a straight
-    extrude (see the module text) turns with that extrude's sketch plane, and with its outline line when that line may
-    turn; any other one gives `reach.direction_sizes`."""
+    pattern `item`, in table order. A direction taken from an edge or a face that a straight extrude of a plain part
+    made (see the module text) turns with the sketch planes of the part's extrudes; any other one gives
+    `reach.direction_sizes`."""
     if table is None:
         return []
     timeline = capture.get("items") or []
@@ -229,58 +302,69 @@ def direction_sizes(table, capture, item, which):
     direction = data.get("direction_%s" % which)
     if isinstance(place, dict) and place.get("own") and isinstance(direction, (list, tuple)) \
             and vec.length(direction) > 0:
+        body = _plain_body(timeline, item.get("index"))
         kind = place.get("entity_type")
-        found = None
-        if kind == "BRepEdge":
-            found = _edge_match(capture, table, timeline, item, place, list(direction))
-        elif kind == "BRepFace":
-            found = _face_match(capture, table, timeline, item, place, list(direction))
-        if found is not None:
+        matched = False
+        if body and kind == "BRepEdge":
+            matched = _edge_match(capture, table, body, place, list(direction))
+        elif body and kind == "BRepFace":
+            matched = _face_match(capture, table, body, place, list(direction))
+        if matched:
+            found = _plane_sizes(table, timeline, body)
             return [name for name in table.ticked if name in found]
     return reach.direction_sizes(table, timeline, item, which)
 
 
 def through_sizes(table, timeline, item, data):
     """Fusion names of the ticked sizes that may change how thick the part is where the holes of `item` (its `data`)
-    go through, in table order. When every hole goes in at one end face of a one sided straight extrude across its
-    axis and comes out at the other (`positions` and `end_points`), only the sizes of that extrude's length; else
+    go through, in table order. In a plain part that is as thick wherever the holes can go (see the module text), the
+    sizes of the extrudes' lengths and sketch planes (and, for several extrudes, their start offsets); else
     `reach.hole_end_sizes`."""
     if table is None:
         return []
-    positions = [p for p in data.get("positions") or [] if isinstance(p, (list, tuple)) and len(p) == 3]
-    ends = [p for p in data.get("end_points") or [] if isinstance(p, (list, tuple)) and len(p) == 3]
-    normal = data.get("direction")
-    if positions and len(ends) == len(positions) and isinstance(normal, (list, tuple)) and vec.length(normal) > 0:
-        for extrude, profile in _profiles(timeline, item.get("index")):
-            found = _length_sizes(table, extrude, profile, positions, ends, list(normal))
-            if found is not None:
-                return [name for name in table.ticked if name in found]
+    found = _even_sizes(table, timeline, item, data)
+    if found is not None:
+        return [name for name in table.ticked if name in found]
     return reach.hole_end_sizes(table, timeline, item, data)
 
 
-def _length_sizes(table, extrude, profile, positions, ends, normal):
-    """The sizes of the extrude's length when every hole runs from one of its end faces to the other, else None."""
-    data = _data(extrude)
-    length = data.get("end_offset")
-    if (data.get("extent_type") != "one" or not isinstance(length, (int, float))
-            or not _along(normal, profile["frame"]["z"])):
+def _even_sizes(table, timeline, item, data):
+    """The sizes that may change the thickness of a plain part made of one sided extrudes that all span the two
+    planes each hole goes in and comes out at (`positions`, `end_points`), or None."""
+    positions = [p for p in data.get("positions") or [] if isinstance(p, (list, tuple)) and len(p) == 3]
+    ends = [p for p in data.get("end_points") or [] if isinstance(p, (list, tuple)) and len(p) == 3]
+    normal = data.get("direction")
+    if not positions or len(ends) != len(positions) or not isinstance(normal, (list, tuple)) \
+            or vec.length(normal) <= 0:
         return None
-    begin = data.get("start") or {}
-    start = float(begin.get("offset") or 0.0) if begin.get("kind") == "offset" else 0.0
-    # The measured end face is the far end cap when it lies a side's length from the start.
-    if abs(abs(float(length) - start) - abs(float(data["side_one"].get("distance") or 0.0))) > 1e-3:
+    body = _plain_body(timeline, item.get("index"))
+    if not body:
         return None
-    caps = (start, float(length))
-    ring = _ring(profile)
-    if not ring:
-        return None
+    axis = vec.unit(list(normal))
+    span = None
+    for extrude, caps in body:
+        frame = _data(extrude)["profiles"][0]["frame"]
+        if (_data(extrude).get("operation") not in ("newBody", "join") or _data(extrude).get("extent_type") != "one"
+                or not _along(axis, frame["z"])):
+            return None
+        planes = sorted(vec.dot(vec.add(frame["origin"], vec.scale(frame["z"], c)), axis) for c in caps)
+        if span is not None and any(abs(a - b) > CAP_TOL for a, b in zip(span, planes)):
+            return None
+        span = planes
+    outlines = [(profile, _ring(profile)) for profile, _ in _outlines(body)]
     for a, b in zip(positions, ends):
-        za, zb = vec.frame_to_local(profile["frame"], a), vec.frame_to_local(profile["frame"], b)
-        if not plane2d.inside_ring(za[:2], ring) or not plane2d.inside_ring(zb[:2], ring):
+        low, high = sorted((vec.dot(a, axis), vec.dot(b, axis)))
+        if abs(low - span[0]) > CAP_TOL or abs(high - span[1]) > CAP_TOL:
             return None
-        if sorted((abs(za[2] - caps[0]) <= TOL_MM, abs(zb[2] - caps[0]) <= TOL_MM)) != [False, True] \
-                or not any(abs(z - caps[1]) <= TOL_MM for z in (za[2], zb[2])):
+        if not any(ring and plane2d.inside_ring(vec.frame_to_local(profile["frame"], a)[:2], ring)
+                   for profile, ring in outlines):
             return None
-    found = (data.get("params") or {}).get("side_one.distance")
-    return set(table.depends(found["name"])) & set(table.ticked) if isinstance(found, dict) and found.get("name") \
-        else set()
+    keys = ("side_one.distance", "start.offset") if len(body) > 1 else ("side_one.distance",)
+    found = _plane_sizes(table, timeline, body)
+    for extrude, _ in body:
+        params = _data(extrude).get("params") or {}
+        for key in keys:
+            entry = params.get(key)
+            if isinstance(entry, dict) and entry.get("name"):
+                found |= set(table.depends(entry["name"]))
+    return found & set(table.ticked)

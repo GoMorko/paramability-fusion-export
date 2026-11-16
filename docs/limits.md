@@ -37,6 +37,9 @@ What the copy can and cannot do, step by step. The README lists only the main li
   that may move it is marked "may give unexpected results" with the step named. When the export cannot tell what such
   a place is, or what a construction plane or axis is built on (for example in a file from an older add-in), every
   size that the steps before it use is marked.
+- A revolve whose axis is not in the plane of its sketch (or is not square to that plane) is left out too, unless Fusion
+  itself projects the axis onto the sketch plane.
+- A round with two different radii (Fusion's "asymmetric" rounds) is left out by both exports.
 - One solid body per part. Several bodies go in one file as parts (see "Several bodies in one file").
 - A body inside a component (at any depth) exports as a recipe with sizes, like a root body, and lands where Fusion
   shows it. If the part was moved by hand, capture its position first (Position, Capture Position); the export asks
@@ -183,7 +186,7 @@ What the copy can and cannot do, step by step. The README lists only the main li
   ("puts its tool at the place of Rod that turns with it") may give unexpected results. The message after the export
   names the step and the component of a tool that cannot be copied. A tool from another component that reaches to a
   face becomes a tool step. A Combine inside such a tool that takes a body from yet another component makes the Combine that takes the tool a left out step.
-- Sketch outlines with a spline edge, an elliptical arc or another free curve are copied as spline segments. The add-in
+- A sketch outline that is one full ellipse is written as an ellipse outline. Sketch outlines with a spline edge, an elliptical arc or another free curve are copied as spline segments. The add-in
   reads the Fusion curve as a fine chain of points and picks points for the app's own smooth curve so that it stays
   within 0.005 mm of that chain, also between its points (a long or tight curve is split into several segments). A size that moves a sketch
   holding such a curve cannot be followed: it stays loose with the reason, or is left out of the sizes, because the
@@ -226,4 +229,4 @@ What the copy can and cannot do, step by step. The README lists only the main li
 - Paramability opens up to 256 MB per size and 1 GB per file. The export stops with a message above that.
 - The design needs history (a parametric design).
 - Made for the current Fusion release.
-- This is version 0.12.0. It copies coils and modelled threads, stops size ranges where the part comes apart, has a time limit for the size tries and readable size labels, and lists the steps the copy leaves out before the export. Like 0.11.2, it writes recipe version 16 when a sweep needs it, which needs a Paramability build that opens version 16. A package with left out steps holds a gaps file of version 3 (each step says whether it only finishes surfaces), which needs a Paramability build that reads version 3. Version 0.11.1 wrote gaps files of version 1 or 2. The Fusion side has not been run by a tool: see `docs/hand-tests.md`.
+- This is version 0.13.0-preview.6. It copies coils and modelled threads, stops size ranges where the part comes apart, has a time limit for the size tries and readable size labels, and lists the steps the copy leaves out before the export. Like 0.11.2, it writes recipe version 16 when a sweep needs it, which needs a Paramability build that opens version 16. A package with left out steps holds a gaps file of version 3 (each step says whether it only finishes surfaces), which needs a Paramability build that reads version 3. Version 0.11.1 wrote gaps files of version 1 or 2. The Fusion side has not been run by a tool: see `docs/hand-tests.md`.

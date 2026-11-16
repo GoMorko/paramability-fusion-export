@@ -302,16 +302,13 @@ class DirectionAndHoleEndTest(unittest.TestCase):
         unused = self.pattern(direction_one=[1, 0, 0], quantity_one=1)
         self.assertEqual(reach.direction_sizes(self.table, timeline + [unused], unused, "one"), [])
 
-    def test_the_sizes_only_the_hole_sketch_reads_are_left_out_when_it_comes_just_before_the_hole(self):
+    def test_the_sizes_that_place_the_holes_move_their_ends_too(self):
+        # On a part that is not equally thick everywhere, a hole that moves comes out at another face.
         base = step(0, "Base", reads=["gap_mm"])
         sketch = dict(step(1, "Holes", kind="Sketch"), data={})
         hole = step(3, "Hole1", kind="HoleFeature")
         data = {"sketch": "Holes"}
-        self.assertEqual(reach.hole_end_sizes(self.table, [base, sketch, hole], hole, data), ["gap_mm"])
-        between = step(2, "Plane1", kind="ConstructionPlane")
-        self.assertEqual(reach.hole_end_sizes(self.table, [base, sketch, between, hole], hole, data),
-                         ["h_mm", "gap_mm"])
-        self.assertEqual(reach.hole_end_sizes(self.table, [base, sketch, hole], hole, {}), ["h_mm", "gap_mm"])
+        self.assertEqual(reach.hole_end_sizes(self.table, [base, sketch, hole], hole, data), ["h_mm", "gap_mm"])
         self.assertEqual(reach.hole_end_sizes(None, [base, sketch, hole], hole, data), [])
 
 

@@ -319,6 +319,22 @@ def pipe_along_spline(radius=2.0, drawn_back=False):
     return _along_spline("Pipe", circle(radius), math.pi * radius ** 2, radius, radius, BEND_SPLINE, drawn_back)
 
 
+# Splines from (20, 0) along +x that turn at a joint of their pieces: a cubic whose middle knot is there three times
+# (10 degrees at (35, 0)), and a degree one spline (a polyline) with a corner at (30, 0); `STRAIGHT_POLYLINE` has its
+# poles on one line, so its joint is no corner.
+_TURN = math.radians(10.0)
+KINKED_SPLINE = {"degree": 3, "knots": [0, 0, 0, 0, 0.5, 0.5, 0.5, 1, 1, 1, 1],
+                 "poles": [(20.0, 0.0), (25.0, 0.0), (30.0, 0.0), (35.0, 0.0)]
+                 + [(35.0 + k * math.cos(_TURN), k * math.sin(_TURN)) for k in (5.0, 10.0, 15.0)]}
+CORNERED_POLYLINE = {"degree": 1, "knots": [0, 0, 0.5, 1, 1], "poles": [(20.0, 0.0), (30.0, 0.0), (40.0, 5.0)]}
+STRAIGHT_POLYLINE = dict(CORNERED_POLYLINE, poles=[(20.0, 0.0), (30.0, 0.0), (40.0, 0.0)])
+
+
+def pipe_along(spec, radius=0.5):
+    """A circle of `radius` swept along a line and the spline `spec` (`_along_spline`)."""
+    return _along_spline("Pipe", circle(radius), math.pi * radius ** 2, radius, radius, spec)
+
+
 def bar_along_s_spline(width=4.0, height=1.5):
     """A `width` (in the path's plane) by `height` rectangle swept along a line and `S_SPLINE` (`_along_spline`): a
     rectangle that flipped at the turning point would stand `width` high there."""

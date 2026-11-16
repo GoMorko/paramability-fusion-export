@@ -10,6 +10,10 @@ copy writes one entity per piece, the same curve with no approximation.
 Left as None (the outline stays out of the copy): a closed (periodic) spline, a rational one with weights that
 differ, a degree over three, knots that are not clamped at both ends, and a curve whose pieces do not pass through
 the points Fusion measured along it (`samples`), which catches a definition read wrong.
+
+A spline may turn at a joint of its pieces: an inner knot as many times as the degree (three times in a cubic, every
+inner knot of a degree one spline) lets the curve leave the joint in another direction. Orca draws the same corner,
+so an outline keeps it; `joint_turns` gives these turns to a copy that must not have corners (a sweep path).
 """
 import math
 
@@ -24,6 +28,8 @@ _DRAW = 32
 # Narrowing steps when the nearest point of a piece is looked for.
 _NARROW = 40
 _KNOT_TOL = 1e-12
+# Two poles this close (mm) count as one when the direction a piece leaves a pole in is read.
+_POLE_TOL = 1e-12
 _WEIGHT_TOL = 1e-9
 
 
@@ -92,6 +98,33 @@ def bezier_pieces(nurbs):
     if len(pieces) != len(distinct) - 1:
         return None
     return pieces
+
+
+def _leaving(poles):
+    """The direction a Bezier piece leaves its first pole in: toward the first pole that differs from it, or None."""
+    for p in poles[1:]:
+        if math.dist(p, poles[0]) > _POLE_TOL:
+            return (p[0] - poles[0][0], p[1] - poles[0][1])
+    return None
+
+
+def joint_turns(nurbs):
+    """The turn (degrees) at each joint between the Bezier pieces of a spline, in order (pieces of no length passed
+    by), or None when Orca cannot draw the spline exactly."""
+    pieces = bezier_pieces(nurbs)
+    if not pieces:
+        return None
+    turns, arriving = [], None
+    for piece in pieces:
+        leaving = _leaving(piece)
+        if leaving is None:
+            continue
+        if arriving is not None:
+            cross = arriving[0] * leaving[1] - arriving[1] * leaving[0]
+            turns.append(math.degrees(math.atan2(abs(cross), arriving[0] * leaving[0] + arriving[1] * leaving[1])))
+        back = _leaving(list(reversed(piece)))
+        arriving = (-back[0], -back[1])
+    return turns
 
 
 def _bezier(piece, t):

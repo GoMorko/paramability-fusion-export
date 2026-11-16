@@ -14,7 +14,7 @@ ALLOWED_IMPORTS = {
     "capture_model": {"geometry"},
     "timing": set(),
     "orca_recipe": set(),
-    "params": {"capture_model", "package"},
+    "params": {"package"},
     "sketch_values": {"package"},
     "sketch_solve": {"package", "sketch_values"},
     "design_edit": {"package", "params"},
@@ -135,11 +135,13 @@ def _private_reaches(path):
 
 
 def _reads_step_data(path):
-    """True when the file takes the data of a step from an item: `x["data"]`, `x.get("data")` or a data helper."""
+    """True when the file takes the data of a step from an item: a load of `x["data"]`, `x.get("data")` or a data helper.
+    A store such as `out["data"] = ...` writes a record and is not a read."""
     with open(path, encoding="utf-8") as f:
         tree = ast.parse(f.read())
     for node in ast.walk(tree):
-        if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant) and node.slice.value == "data":
+        if (isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Load)
+                and isinstance(node.slice, ast.Constant) and node.slice.value == "data"):
             return True
         if not isinstance(node, ast.Call):
             continue

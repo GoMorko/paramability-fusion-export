@@ -1,10 +1,11 @@
-"""Edges and faces of the part matched to the straight extrude that made them (`design_model/edges.py`): which sizes
+"""Edges and faces of the part matched to the straight extrudes that made them (`design_model/edges.py`): which sizes
 may turn a pattern direction taken from one, and which may change the thickness a hole goes through."""
 import copy
 import unittest
 
 from tests import context  # noqa: F401
-from tests.orca_sized import placed_hole_pattern, table_of
+from tests.orca_sized import placed_hole_pattern, second_extrude, table_of
+from tests.probe_helpers import model
 from tests.test_orca_holes import BOX_TICKED
 
 from lib.design_model import edges, reach
@@ -19,6 +20,11 @@ def edge(point):
 
 def face(point):
     return {"own": True, "entity_type": "BRepFace", "surface": "Plane", "face_point": list(point)}
+
+
+def step(name, kind, **more):
+    return dict({"index": 2, "name": name, "type": kind, "suppressed": False, "in_target_component": True,
+                 "data": {}}, **more)
 
 
 class DirectionTest(unittest.TestCase):
@@ -53,8 +59,7 @@ class DirectionTest(unittest.TestCase):
             graph["constraints"] = [c for c in graph["constraints"] if c["id"] != 0]
 
         def moved(capture):
-            capture["items"].insert(2, {"index": 2, "name": "Move1", "type": "MoveFeature", "suppressed": False,
-                                        "in_target_component": True, "data": {}})
+            capture["items"].insert(2, step("Move1", "MoveFeature"))
         cases = (("no outline there", edge((10, 0, 5)), (0, 1, 0), None),
                  ("a line that may turn", edge((0, -30, 32)), (1, 0, 0), unsolved),
                  ("a move between", edge((40, -30, 10)), (0, 0, 1), moved),
@@ -62,10 +67,49 @@ class DirectionTest(unittest.TestCase):
         for name, place, direction, edit in cases:
             self.assertEqual(self.sizes(place, direction, edit), EVERY, name)
 
+    def test_a_place_another_step_may_have_made_keeps_the_general_sizes(self):
+        # A step other than a straight extrude or a simple hole through all, before the pattern, may make an edge or
+        # face where the box's would lie.
+        def before(item):
+            return lambda capture: capture["items"].insert(2, item)
+
+        def tapered(capture):
+            second_extrude(capture, (0, -10, 20, 10), 32, 42)["items"][2]["data"]["side_one"]["taper_deg"] = 5.0
+
+        def counterbored(capture):
+            next(i for i in capture["items"] if i["type"] == "HoleFeature")["data"]["hole_type"] = "counterbore"
+        side = (edge((40, -30, 10)), (0, 0, 1))
+        cases = (("a revolve", before(step("Revolve1", "RevolveFeature"))), ("a tapered extrude", tapered),
+                 ("a counterbored hole", counterbored),
+                 ("a combine of another component",
+                  before(step("Combine1", "CombineFeature", in_target_component=False))))
+        for name, edit in cases:
+            self.assertEqual(self.sizes(*side, edit), EVERY, name)
+
+    def test_a_place_off_the_end_caps_keeps_the_general_sizes(self):
+        cases = (("edge over a line between the caps", edge((40, 0, 10)), (0, 1, 0)),
+                 ("face across the axis between the caps", face((0, 0, 10)), (0, 0, 1)),
+                 ("side edge past the top cap", edge((40, -30, 50)), (0, 0, 1)),
+                 ("side face past the top cap", face((40, 0, 50)), (1, 0, 0)))
+        for name, place, direction in cases:
+            self.assertEqual(self.sizes(place, direction), EVERY, name)
+
+    def test_an_edge_of_one_extrude_turns_with_the_planes_of_every_extrude(self):
+        # Where two extrudes meet, an edge turns with both sketch planes.
+        def boss(capture):
+            reference = {"kind": "constructionPlane", "token": "p1", "definition": "Offset",
+                         "built_on": [{"origin": True}]}
+            second_extrude(capture, (0, -10, 20, 10), 32, 42, reference=reference)
+            capture["parameters"]["model"].append(model("d21", "cube_mm", 1.0, kind="constructionPlane",
+                                                        token="p1"))
+        self.assertEqual(self.sizes(edge((40, -30, 10)), (0, 0, 1), boss), ["cube_mm"])
+
 
 class ThroughTest(unittest.TestCase):
-    def sizes(self, end):
+    def sizes(self, end, edit=None):
         capture = placed_hole_pattern()
+        if edit:
+            edit(capture)
         hole = next(i for i in capture["items"] if i["type"] == "HoleFeature")
         data = dict(hole["data"], positions=[[-20, 0, 32]], end_points=[list(end)], direction=[0, 0, -1])
         return edges.through_sizes(table_of(capture, BOX_TICKED), capture["items"], hole, data), \
@@ -78,6 +122,17 @@ class ThroughTest(unittest.TestCase):
         found, general = self.sizes((-20, 0, 10))
         self.assertEqual(found, general)
         self.assertIn("box_count", found)
+
+    def test_a_stepped_part_marks_what_places_the_hole(self):
+        # A boss on top over x 0..20: the hole at x = -20 goes through 32 mm now, but `pipe_offset_mm` can move it
+        # under the boss.
+        found, general = self.sizes((-20, 0, 0), lambda c: second_extrude(c, (0, -10, 20, 10), 32, 42))
+        self.assertEqual(found, general)
+        self.assertIn("pipe_offset_mm", found)
+
+    def test_extrudes_that_span_the_same_planes_give_the_lengths_of_all(self):
+        found, _ = self.sizes((-20, 0, 0), lambda c: second_extrude(c, (-40, -30, 40, 30), 0, 32, reads="depth_mm"))
+        self.assertEqual(found, ["depth_mm", "height_mm"])
 
 
 if __name__ == "__main__":

@@ -4,7 +4,8 @@ import copy
 
 from tests import context  # noqa: F401
 from tests.derived_fixtures import box_capture, dimension
-from tests.probe_helpers import user
+from tests.orca_extents import rect
+from tests.probe_helpers import model, user
 from tests.sketch_solve_helpers import P, Sketch
 from tests.translator_helpers import load_capture
 
@@ -147,4 +148,21 @@ def placed_hole_pattern():
                            elements=[{"id": n + 1, "suppressed": False, "frame": dict(UP, origin=[0, 20 * n, 0])}
                                      for n in range(2)])
     capture["items"].append(pattern)
+    return capture
+
+
+def second_extrude(capture, corners, low, high, reads=None, **profile):
+    """A capture of `box_capture` (the box at timeline index 1) with a straight join extrude at index 2: the rectangle
+    `corners` (x0, y0, x1, y1) on a sketch at z = `low`, up to `high`, its length read from the size `reads`."""
+    extrude = copy.deepcopy(capture["items"][1])
+    extrude.update(index=2, name="Extrude2")
+    data = extrude["data"]
+    data["profiles"][0].update(dict({"sketch": "Sketch3", "sketch_token": "s3", "frame": dict(UP, origin=[0, 0, low]),
+                                     "loops": [{"outer": True, "curves": rect(*corners)}]}, **profile))
+    data.update(operation="join", end_offset=high - low, params={})
+    data["side_one"] = dict(data["side_one"], distance=high - low)
+    if reads:
+        capture["parameters"]["model"].append(model("d20", reads, high - low, kind="feature"))
+        data["params"]["side_one.distance"] = {"name": "d20", "expression": reads, "value": high - low}
+    capture["items"].insert(2, extrude)
     return capture
