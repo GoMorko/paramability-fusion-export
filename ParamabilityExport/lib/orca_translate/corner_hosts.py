@@ -30,7 +30,8 @@ from ..orca_recipe.feature import CadFeature, shift_refs
 from ..params.expressions.errors import ExpressionError
 from ..sketch_values.expr import num
 from . import causes, corner_tools, halfplanes, limits, outline_cuts
-from .context import Body, Value
+from ..design_model.values import Quantity
+from .context import Body
 from .formulas import OrcaFormulaError
 from .sketches import rectangle_of
 from .skip import Skip
@@ -237,9 +238,9 @@ def _square(ctx, host, name):
 def _checked(ctx):
     """A binder that writes the number and checks that Orca can hold the formula, without binding it."""
     def bind(feature, field, value, where):
-        setattr(feature, field, value.number)
-        if value.formula is not None:
-            ctx.orca_formula(value.formula)
+        setattr(feature, field, float(value.n))
+        if value.text is not None:
+            ctx.orca_formula(value.text)
     return bind
 
 
@@ -247,10 +248,10 @@ def _quiet(ctx):
     """A binder for a tool written again (a pattern's tool): it binds the formula without a new line for the
     parameters, as `outline_cuts.again` does."""
     def bind(feature, field, value, where):
-        setattr(feature, field, value.number)
-        if value.formula is None:
+        setattr(feature, field, float(value.n))
+        if value.text is None:
             return
-        text = ctx.orca_formula(value.formula)
+        text = ctx.orca_formula(value.text)
         feature.bind(field, text)
         ctx.bound.append({"feature": feature.name, "field": field, "formula": text, "reads": list(value.reads)})
     return bind
@@ -341,13 +342,13 @@ def _specs(ctx, host, item, on, its, chamfer, noun):
                         "is left out." % noun, causes.CORNER_TOOLS)
         label = corner_tools.meeting(host.planned.tree, (k - 1) % n, k)
         size = corner.pick.value
-        if size.formula is not None:
+        if size.text is not None:
             try:
-                ctx.orca_formula(size.formula)
+                ctx.orca_formula(size.text)
             except OrcaFormulaError as exc:
                 ctx.doubt(size.reads, "%s: its size stays a number in Orca: %s" % (
                     item.get("name") or "the step", str(exc).rstrip(".")))
-                size = Value(size.number)
+                size = Quantity(size.n)
         spec = corner_tools.Spec(host.planned, k, chamfer, size, item.get("index"), label,
                                  len(host.specs) + len(out), corner.pick.by_angle)
         spec.settle(env)

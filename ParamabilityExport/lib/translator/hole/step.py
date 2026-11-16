@@ -11,6 +11,7 @@ flat face, of another component moves with that place (ref_motion.py).
 import math
 
 from ...capture_model import gap_hints
+from ...design_model.values import Quantity, Sized
 from ...geometry import vec
 from ...package.numbers import round9
 
@@ -20,7 +21,6 @@ from ..faces.slabs import as_quantity
 from ..ranges import range_check
 from ..result import Refusal, StepResult
 from ..sketch import sketch_motion
-from ..values import Quantity
 from . import thread as threads
 
 
@@ -371,7 +371,7 @@ def _moved_points(ctx, item, rows, moved):
         for c, q in enumerate(move):
             if q.sized:
                 at = point[c]
-                base = Quantity(at.n, at["expr"], at.reads) if isinstance(at, values.Sized) else Quantity(float(at))
+                base = Quantity(at.n, at["expr"], at.reads) if isinstance(at, Sized) else Quantity(float(at))
                 point[c] = base.plus(q).json()
     return points
 

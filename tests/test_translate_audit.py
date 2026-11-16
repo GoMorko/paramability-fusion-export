@@ -9,7 +9,7 @@ from lib.params import size_table
 from lib.translator import translate
 from lib.translator.extrude import handle as extrude_handle
 from lib.translator.result import Refusal
-from lib.translator.values import numbers_of
+from lib.design_model.values import numbers_of
 
 TRAY = "filter_tray_sized"
 COUNT = "FilterBox_$_height__contains_CeramicMedium"

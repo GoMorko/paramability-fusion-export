@@ -12,7 +12,7 @@ from lib.translator import translate
 from lib.translator.faces import meets_part
 from lib.translator.faces.placer import ADD
 from lib.translator.faces.thin_wall import ThinWall
-from lib.translator.values import Quantity
+from lib.design_model.values import Quantity
 
 BOX = "thin_wall_box"
 EXTRUDE = 1

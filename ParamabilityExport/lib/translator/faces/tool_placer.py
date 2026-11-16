@@ -4,12 +4,12 @@ A tool step holds a list of steps of its own. Seen from the list that holds it, 
 the placers of the tool's walk, and the material it leaves comes from the tool's solid and its `combine`. Its slabs are
 copies owned by the tool step, so a selector outside the tool never names a step inside it.
 """
+from ...design_model.values import reads_in
 from . import follow
 from .moved_placer import carried
 from .placer import ADD, CUT, Placer
 from ..result import Entry
 from .slabs import Motion
-from ..values import reads_in
 
 
 class ToolPlacer(Placer):

@@ -11,7 +11,7 @@ from ..capture_model import lineage as body_lineage, tool_items
 from ..capture_model.capture import same_body
 from .result import Doubt, StepResult
 from ..capture_model.step_kinds import recipe_kind
-from .values import reads_in
+from ..design_model.values import reads_in
 
 MAX_ID = 64
 MAX_LABEL = 120

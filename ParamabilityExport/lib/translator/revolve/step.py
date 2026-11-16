@@ -12,6 +12,7 @@ the angle (`extent.quantity`) gives them as they are.
 import math
 
 from ...capture_model import gap_hints
+from ...design_model.values import Quantity
 from ...geometry import vec
 from ...package.numbers import round9
 
@@ -217,7 +218,7 @@ def _angle_value(ctx, item, mode, angle, given=None):
     if mode == "part":
         return values.quantity(ctx, item, "extent.angle_deg", angle, dim="angle", absolute=True)
     values.pin(ctx, item, "extent.angle_deg", "a %s turn in %s cannot follow it" % (mode, item.get("name", "a step")))
-    return values.Quantity(angle)
+    return Quantity(angle)
 
 
 # What a revolve axis the copy cannot use is, by the Fusion type the reader recorded.
@@ -299,7 +300,7 @@ def handle(item, ctx):
             if moved is not None:
                 on["origin"] = moved
         elif drawn is not None:
-            on["origin"] = drawn.origin(ctx, values.Quantity(0.0))
+            on["origin"] = drawn.origin(ctx, Quantity(0.0))
         if drawn is not None:
             outer, inners = drawn.written(ctx)
         sketch = {"on": on, "outer": outer}

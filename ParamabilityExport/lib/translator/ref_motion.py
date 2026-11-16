@@ -17,6 +17,7 @@ The first translation of an export (`OPTIMISTIC`) writes the measured place and 
 `reach_motion` reads a face or plane of the part itself the same way (`own` records, with the sizes it names).
 """
 from ..design_model import refs, words
+from ..design_model.values import Quantity
 from ..design_model.refs import AXIS, DIRECTION, PLANE, PLANE_TYPES, POINT
 from ..geometry import vec
 from ..params import geometry_links
@@ -24,7 +25,6 @@ from ..sketch_values import coverage, keys
 from ..sketch_values.motion import Affine, Stuck
 from .sketch import sketch_motion
 from .sketch.curved import Curved, Poly
-from .values import Quantity
 
 _KEYS = {PLANE: 1, AXIS: 3, POINT: 3, DIRECTION: 1}
 

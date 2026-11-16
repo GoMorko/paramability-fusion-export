@@ -5,13 +5,13 @@ to both sides of the original is written as a part turning each way (`repeat/sym
 """
 import math
 
+from ...design_model.values import Quantity
 from ...geometry import vec
 from ...package.numbers import round9
 from .. import ref_motion, values
 from ..faces import follow
 from ..faces.follow import Motion
 from ..result import Refusal
-from ..values import Quantity
 from . import symmetric
 from .repeat_build import build, keep_pattern_fixed, round_vec
 from .repeat_elements import FIT_TOL_MM, in_component, kept_elements

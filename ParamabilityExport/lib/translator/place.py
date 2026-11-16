@@ -11,8 +11,8 @@ are zero or plus or minus one are snapped, so a part that is only moved keeps pl
 import copy
 
 from ..capture_model.step_kinds import RECIPE_KINDS
+from ..design_model.values import Quantity, Sized
 from .step_walk import all_steps
-from .values import Quantity, Sized
 
 # Step kind -> paths to positions, and to directions (turned, not moved), from the step kind table.
 POSITIONS = {k.name: list(k.positions) for k in RECIPE_KINDS if k.positions}

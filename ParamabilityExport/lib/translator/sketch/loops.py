@@ -7,12 +7,12 @@ and splines). A free curve (`kind: other`, with its dense `samples`) becomes spl
 """
 import math
 
+from ...design_model.values import Sized, negated
 from ...geometry.tolerances import CHAIN_TOL
 from ...package.numbers import round9
 
 from . import spline_fit
 from ..result import Refusal
-from ..values import Sized, negated
 
 RIGHT_ANGLE_TOL = 1e-6
 ANGLE_TOL_DEG = 1e-6

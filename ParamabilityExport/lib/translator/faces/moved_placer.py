@@ -7,9 +7,9 @@ about the point carried back, so `material_at` and the checks that rely on it (`
 working. It cannot place a pick on its faces, so a round or chamfer that picks one marks its sizes instead of landing on
 a guessed face.
 """
+from ...design_model.values import Quantity
 from .placer import Placer
 from .slabs import Motion, Slab
-from ..values import Quantity
 
 
 def carried(placer, owner, motion):

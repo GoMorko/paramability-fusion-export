@@ -11,6 +11,7 @@ Without a motion file, or with `OPTIMISTIC`, nothing here runs and the sketch is
 """
 import math
 
+from ...design_model.values import Quantity
 from ...geometry import vec
 from ...geometry.footprint import nearest_point
 from ...sketch_values import keys
@@ -24,7 +25,7 @@ from ..result import Refusal
 from ...design_model.reach import placement_sizes
 from ..sizes import unmeasured_sizes
 from .sketch_crossings import OUT_OF_TIME, Sources, checks_of, keeps_order, order_ranges, simple_ranges
-from ..values import Quantity, stays_positive
+from ..values import stays_positive
 
 POSITIVE_FIELDS = ("width", "height", "radius", "radiusX", "radiusY")
 _SKIP = ("angleDeg",)

@@ -5,9 +5,9 @@ that diameter) and the rise (`Revolutions` with `Height` or `Pitch`, or `Height`
 they combine, so each formula is tried against what was measured and written only when it gives the measured number.
 A value that matches no formula stays a number and marks the sizes behind it.
 """
+from ...design_model.values import Quantity
 from .. import values
 from ..ranges import kept_ranges
-from ..values import Quantity
 from . import coil_limits as limits
 
 # Where the wire sits against the diameter, as a multiple of its half size: inside, on, and outside the diameter.

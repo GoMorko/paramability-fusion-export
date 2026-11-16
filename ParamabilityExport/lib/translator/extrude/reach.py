@@ -1,10 +1,10 @@
 """How far an extrude goes: the distance of a side, where it starts and the length of a side that reaches to a face."""
 from ...capture_model import gap_hints
+from ...design_model.values import Quantity
 from ...geometry import vec
 from .. import placement, values
 from ..ranges import kept_ranges
 from ..result import Refusal
-from ..values import Quantity
 from . import reach_motion
 from .common import LENGTH_TOL, UNREADABLE, parallel, sign_of
 

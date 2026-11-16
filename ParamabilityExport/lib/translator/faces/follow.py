@@ -22,11 +22,11 @@ A point on the inner wall of a shell is placed through the outer wall it was mov
 a face that an offsetFaces step moved through the face before the move (faces/offset_faces.py). An edge where the walls of
 two steps cross is placed on both walls (faces/crossings.py).
 """
+from ...design_model.values import Quantity
 from ...geometry import vec
 from .. import notes, ref_motion, values
 from ...design_model.reach import offset_param, on_part
 from ..sketch import sketch_motion
-from ..values import Quantity
 from . import crossings, picks, shells
 from .copy_counts import stays_at_least
 from .placer import ADD

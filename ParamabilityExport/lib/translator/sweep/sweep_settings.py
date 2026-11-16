@@ -3,6 +3,7 @@ and the sizes it pins."""
 import math
 
 from ...capture_model import gap_hints
+from ...design_model.values import Quantity
 from . import sweep_taper
 from .. import values
 from ..extrude import MAX_TAPER_DEG, keep_angle_within
@@ -13,7 +14,6 @@ from .sweep_limits import (
     TWIST_AND_TAPER, TWIST_LONG, UNREADABLE, ZERO_TOL,
 )
 from .sweep_outline import loop_polygon
-from ..values import Quantity
 
 
 def is_number(value):

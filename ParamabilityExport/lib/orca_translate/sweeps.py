@@ -41,7 +41,7 @@ from ..translator.sweep.sweep_outline import profile_points
 from ..translator.sweep.sweep_settings import settings_refusal
 from ..translator.sweep.sweep_volume import volume_refusal
 from . import causes, extents, limits, revolve, sketch_sizes, steps
-from .context import Value
+from ..design_model.values import Quantity
 from .sketches import entities_of, graph_for, outline_sketch, outlines_of
 from .skip import Skip
 from .solid import ADD, CUT, INTERSECT, Prism, Solid, Turned
@@ -318,7 +318,7 @@ def _as_sweep(ctx, item, data, profiles, found):
         at = ctx.add(made.feature)
         out.append(made.feature)
         for field, (formula, reads) in made.bound.items():
-            ctx.bind(made.feature, field, Value(getattr(made.feature, field), formula, reads),
+            ctx.bind(made.feature, field, Quantity(getattr(made.feature, field), formula, reads),
                      "%s %s" % (made.feature.name, field))
         made.feature.thread_major_nominal = made.feature.pattern_inclusive = True
         if path_at is None:

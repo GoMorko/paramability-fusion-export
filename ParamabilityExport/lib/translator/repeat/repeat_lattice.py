@@ -1,11 +1,11 @@
 """The grid of a rectangular pattern: how Fusion measured its distance, and the directions, spacing and copy counts
 that follow from the measured copies.
 """
+from ...design_model.values import Quantity, wrapped
 from ...geometry import vec
 from .. import ref_motion, values
 from .repeat_elements import FIT_TOL_MM, kept_elements
 from ..result import Refusal
-from ..values import Quantity
 
 
 def _distance_kind(data):
@@ -57,7 +57,7 @@ def _extent_step_q(data, which, distance, count_q):
         return distance.divided_by(gaps_between(count_q))
     if not count_q.sized:
         return distance.divided_by(Quantity(float(max(int(count_q.n) // 2, 1))))
-    text = "max(floor(%s / 2), 1)" % values.wrapped(count_q.text)
+    text = "max(floor(%s / 2), 1)" % wrapped(count_q.text)
     return distance.divided_by(Quantity(float(max(int(count_q.n) // 2, 1)), text, count_q.reads))
 
 

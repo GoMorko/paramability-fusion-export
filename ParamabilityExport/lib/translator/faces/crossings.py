@@ -7,12 +7,12 @@ wall bounds the edge.
 """
 import math
 
+from ...design_model.values import Quantity
 from ...geometry import vec
 from ...geometry.footprint import curve_length
 from ...geometry.vec import POINT_TOL
 from .shells import InnerPlace
 from .slabs import Place, cleaned
-from ..values import Quantity
 
 # Walls closer to parallel than this (sine of the angle between them) do not make an edge.
 PARALLEL_SINE = 0.05

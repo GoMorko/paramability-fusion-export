@@ -33,7 +33,7 @@ from ..translator.loft.loft_volume import matches, ruled_volumes
 from ..translator.sweep.sweep_outline import loop_polygon
 from ..translator.sweep.sweep_volume import made_volume
 from . import causes, sketch_sizes, steps
-from .context import Value
+from ..design_model.values import Quantity
 from .sketches import circle_of, outline_sketch, outlines_of
 from .skip import Skip
 from .solid import ADD, CUT, INTERSECT, ahead, box_of, traced
@@ -360,7 +360,7 @@ def loft(ctx, item):
         refs.append(ctx.add(made.feature))
         out.append(made.feature)
         for field, (formula, reads) in made.bound.items():
-            ctx.bind(made.feature, field, Value(getattr(made.feature, field), formula, reads),
+            ctx.bind(made.feature, field, Quantity(getattr(made.feature, field), formula, reads),
                      "%s %s" % (made.feature.name, field))
         made.feature.thread_major_nominal = made.feature.pattern_inclusive = True
     step = feature(FeatureType.LOFT, name, loft_profile_refs=refs, loft_ruled=True)

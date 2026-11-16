@@ -9,7 +9,7 @@ from tests.test_translate_tool_body import sized, tool_of
 from tests.translator_helpers import assert_schema_ok, left_out, load_capture, steps_of, verdict_of
 
 from lib.translator import translate
-from lib.translator.values import number
+from lib.design_model.values import number
 
 # The tray's height at other sizes (recipe size names).
 TALLER = {"FilterBox___height__contains_CeramicMedium": 2.5, CUBE: 30}

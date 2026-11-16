@@ -7,31 +7,12 @@ its number, and the sizes are recorded with the reason (`doubt`), so the result 
 import re
 
 from ..design_model import reach
+from ..design_model.values import Quantity
 from ..orca_recipe.enums import BooleanMode, FeatureType
 from ..params.expressions.text import format_number
 from ..params.size_table import DERIVED, FREE
 from .formulas import OrcaFormulaError, to_orca, variable_names
 from .solid import Solid
-
-
-class Value:
-    """A number to write and, when sizes move it, the app formula over size names and the Fusion names it reads."""
-
-    def __init__(self, number, formula=None, reads=()):
-        self.number = float(number)
-        self.formula = formula
-        self.reads = tuple(reads)
-
-    def scaled(self, factor):
-        """The value times a number; the formula keeps up."""
-        if self.formula is None or factor == 1:
-            return Value(self.number * factor, self.formula, self.reads)
-        if factor == -1:
-            return Value(-self.number, "-(%s)" % self.formula, self.reads)
-        return Value(self.number * factor, "%r * (%s)" % (float(factor), self.formula), self.reads)
-
-    def magnitude(self):
-        return self.scaled(-1) if self.number < 0 else self
 
 
 class Context:
@@ -159,31 +140,31 @@ class Context:
     # ---- values ------------------------------------------------------------------------------------------------
 
     def quantity(self, item, path, number, dim="length"):
-        """The `Value` of a feature value that Fusion keeps as a model parameter (`data.params[path]`). A value whose
+        """The `Quantity` of a feature value that Fusion keeps as a model parameter (`data.params[path]`). A value whose
         expression reads no size is its number; one whose formula cannot be written is its number with a doubt."""
         if self.table is None:
-            return Value(number)
+            return Quantity(float(number))
         found = ((item.get("data") or {}).get("params") or {}).get(path)
         if not isinstance(found, dict) or not isinstance(found.get("expression"), str):
-            return Value(number)
+            return Quantity(float(number))
         unit = self.table.unit_of(found.get("name") or "")
         tr = self.table.translate(found["expression"], expected=float(found.get("value", number)), dim=dim,
                                   unit=unit)
         if not tr.reads:
-            return Value(number)
+            return Quantity(float(number))
         if not tr.ok:
             self.doubt(tr.reads, "%s: %s" % (item.get("name") or "a step", tr.reason))
-            return Value(number)
-        return Value(number, tr.formula, tr.reads)
+            return Quantity(float(number))
+        return Quantity(float(number), tr.formula, tr.reads)
 
     def bind(self, feature, field, value, where):
         """Write `value` into the feature's field and, when it follows sizes and Orca can hold its formula, bind the
         field to it. Otherwise the number stays and the sizes get the reason."""
-        setattr(feature, field, value.number)
-        if value.formula is None:
+        setattr(feature, field, float(value.n))
+        if value.text is None:
             return False
         try:
-            text = self.orca_formula(value.formula)
+            text = self.orca_formula(value.text)
         except OrcaFormulaError as exc:
             self.doubt(value.reads, "%s stays a number in Orca: %s" % (where, exc))
             return False

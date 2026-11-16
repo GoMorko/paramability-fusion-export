@@ -11,6 +11,7 @@ made thread touches. The start and the length follow the sizes that move the cyl
 (`faces/follow.py`); a size that changes the cylinder's diameter is marked, since a thread fits one diameter.
 """
 from ...capture_model import gap_hints
+from ...design_model.values import Quantity
 from ...geometry import vec
 from .. import values
 from ..faces import follow
@@ -19,7 +20,6 @@ from ..ranges import range_check
 from ..result import Refusal, StepResult
 from ..step_walk import all_steps
 from .. import turn_budget
-from ..values import Quantity
 
 # The recipe's thread caps (feature-recipe caps.ts): threads per recipe, turns in all, pitch range in mm.
 MAX_THREADS = 8

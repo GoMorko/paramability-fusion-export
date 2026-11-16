@@ -6,13 +6,13 @@ its coordinates as Quantities that follow the slab's start, its length and the s
 """
 import math
 
+from ...design_model.values import Quantity, Sized
 from ...geometry import vec
 from ...geometry.footprint import Footprint, polyline
 from ...geometry.rigid import IDENTITY_ROWS
 from ...sketch_values.motion import Stuck
 from .placer import ADD, CUT, Placer
 from ..sketch.sketch_motion import combine, rendered
-from ..values import Quantity, Sized
 
 ROW_SNAP = 1e-12
 

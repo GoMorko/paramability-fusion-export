@@ -14,11 +14,11 @@ brought in that way, because it would shrink to its value or because the person 
 (`Context.doubt`).
 """
 from . import follow, shells
+from ...design_model.values import Quantity
 from ...geometry import vec
 from ...geometry.footprint import polyline
 from ..ranges.kept_ranges import holding_ranges, past_reasons
 from .slabs import Place, Slab
-from ..values import Quantity
 
 REACH = 2.0
 ON_TOL = 1e-3

@@ -26,7 +26,7 @@ from ..geometry import vec
 from ..orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType
 from ..orca_recipe.feature import CadFeature
 from . import causes, drilled, extents, outline_cuts
-from .context import Value
+from ..design_model.values import Quantity
 from .skip import Skip
 from .sketch_sizes import sketch_doubts, sketch_formulas
 from .sketches import Outline, outline_sketch, outlines_of
@@ -61,21 +61,21 @@ class _Side:
         self.taper, self.taper_path, self.through = taper, taper_path, through
 
     def ends(self, feature=None):
-        """The `context.Value`s of the lowest and highest height the side covers, or None for through all. With the
+        """The `Quantity`s of the lowest and highest height the side covers, or None for through all. With the
         Orca `feature` written from the side, a length whose field is not bound there (Orca could not hold its
         formula, or `limits.guard` unbound it) is its number, so an end follows only what Orca follows."""
         if self.through or self.end == ExtrudeEnd.THROUGH_ALL:
             return None
         distance, distance2 = self.distance, self.distance2
         if feature is not None:
-            distance = distance if "distance" in feature.expr else Value(distance.number)
+            distance = distance if "distance" in feature.expr else Quantity(distance.n)
             if distance2 is not None and "distance2" not in feature.expr:
-                distance2 = Value(distance2.number)
+                distance2 = Quantity(distance2.n)
         if self.end == ExtrudeEnd.SYMMETRIC:
             return distance.scaled(-0.5), distance.scaled(0.5)
         if self.end == ExtrudeEnd.TWO_SIDED:
             return distance2.scaled(-1.0), distance
-        return (distance.scaled(-1.0), Value(0.0)) if self.flip else (Value(0.0), distance)
+        return (distance.scaled(-1.0), Quantity(0.0)) if self.flip else (Quantity(0.0), distance)
 
 
 def _sign(value):
@@ -104,7 +104,7 @@ def behind(box, origin, normal, sign):
 
 
 def _length(ctx, item, side, which, origin, z, sign=None):
-    """`(sign, length Value)` of a side with a distance or one that reaches to a face or plane, or a Skip. `sign`
+    """`(sign, length Quantity)` of a side with a distance or one that reaches to a face or plane, or a Skip. `sign`
     sets the direction of a second side."""
     if side.get("kind") == "toEntity":
         return extents.reach(ctx, item, which, side, origin, z, sign)
@@ -119,12 +119,12 @@ def _length(ctx, item, side, which, origin, z, sign=None):
 
 def _measured_side(ctx, data, frame, end_offset, sides, operation):
     """A Skip when the measured end face of a two sided extrude is not where the side on its side of the sketch puts
-    it, else None. `sides` are the `(length Value, way, taper)` of both sides; each side is checked against the end
+    it, else None. `sides` are the `(length Quantity, way, taper)` of both sides; each side is checked against the end
     on its own side only, never against the end of the other side."""
     if abs(end_offset) <= SIDE_TOL:
         return Skip("The measured end of this extrude does not match its length, so it is not copied.")
     length, way, taper = next(side for side in sides if side[1] == _sign(end_offset))
-    return extents.measured_gap(data, 0.0, length.number, way, operation,
+    return extents.measured_gap(data, 0.0, length.n, way, operation,
                                 _holds(ctx, data, frame, 0.0, way, taper))
 
 
@@ -217,7 +217,7 @@ def _sides(ctx, item, data, frame, shift):
         sign, first = first
         if one.get("kind") == "distance" and two.get("kind") == "distance" and end_offset is not None \
                 and abs(end_offset) > SIDE_TOL and _sign(end_offset) != sign \
-                and abs(abs(end_offset) - first.number) <= SIDE_TOL \
+                and abs(abs(end_offset) - first.n) <= SIDE_TOL \
                 and abs(abs(end_offset) - abs(float(two["distance"]))) > SIDE_TOL:
             sign = -sign
         second = _length(ctx, item, two, "side_two", origin, z, -sign)
@@ -258,7 +258,7 @@ def _sides(ctx, item, data, frame, shift):
             sign = toward_material(ctx, item, _extrude_tools(data.get("profiles") or [], shift), sign)
         if not behind(before, origin, frame["z"], sign):
             return [_Side(ExtrudeEnd.THROUGH_ALL)]
-        return [_Side(ExtrudeEnd.BLIND, flip=sign < 0, distance=Value(LONG), through=True)]
+        return [_Side(ExtrudeEnd.BLIND, flip=sign < 0, distance=Quantity(LONG), through=True)]
     taper = extents.taper_of(data, one, "side_one")
     if taper is None:
         return Skip(_UNREAD)
@@ -268,7 +268,7 @@ def _sides(ctx, item, data, frame, shift):
             return found
         sign = _direction(float(one["distance"]), end_offset, shift)
         if (data.get("start") or {}).get("kind") == "fromEntity":
-            gap = extents.measured_gap(data, shift, found[1].number, sign, operation,
+            gap = extents.measured_gap(data, shift, found[1].n, sign, operation,
                                        _holds(ctx, data, frame, shift, sign, taper))
             if gap is not None:
                 return gap
@@ -279,7 +279,7 @@ def _sides(ctx, item, data, frame, shift):
         if isinstance(found, Skip):
             return found
         sign, length = found
-        gap = extents.measured_gap(data, shift, length.number, sign, operation,
+        gap = extents.measured_gap(data, shift, length.n, sign, operation,
                                    _holds(ctx, data, frame, shift, sign, taper))
         if gap is not None:
             return gap
@@ -330,7 +330,7 @@ def _heights(side, role):
     if side.through:
         return (-LONG, 0.0) if side.flip else (0.0, LONG)
     low, high = side.ends()
-    return low.number, high.number
+    return low.n, high.n
 
 
 def _shape(side, role, frame, piece):
@@ -494,7 +494,7 @@ def extrude(ctx, item):
                 taper = None
                 if side.taper and role != "hole":
                     taper = extents.taper(ctx, item, side.taper_path, side.taper, side.flip, outline,
-                                          side.distance.number)
+                                          side.distance.n)
                     if isinstance(taper, Skip):
                         return taper
                 shape = _shape(side, role, frame, piece)
@@ -532,7 +532,7 @@ def extrude(ctx, item):
             sketches[id(made)] = ctx.add(made.feature)
             out.append(made.feature)
             for field, (formula, reads) in made.bound.items():
-                ctx.bind(made.feature, field, Value(getattr(made.feature, field), formula, reads),
+                ctx.bind(made.feature, field, Quantity(getattr(made.feature, field), formula, reads),
                          "%s %s" % (made.feature.name, field))
             made.feature.thread_major_nominal = made.feature.pattern_inclusive = True
         feature = CadFeature(type=FeatureType.EXTRUDE, name=name, sketch_ref=sketches[id(made)], extrude_end=side.end,

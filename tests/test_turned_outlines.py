@@ -18,7 +18,7 @@ from lib.translator import notes, translate
 from lib.translator.ranges import kept_ranges
 from lib.translator.sketch import sketch_crossings
 from lib.translator.sketch.loops import profile_loops
-from lib.translator.values import Quantity
+from lib.design_model.values import Quantity
 
 
 def angle(name, deg):

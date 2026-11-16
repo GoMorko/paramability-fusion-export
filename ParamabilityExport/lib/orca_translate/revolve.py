@@ -17,7 +17,7 @@ from ..geometry.footprint import polyline
 from ..orca_recipe.enums import BooleanMode, EntityType, FeatureType
 from ..orca_recipe.sketch import SketchEntity
 from . import causes
-from .context import Value
+from ..design_model.values import Quantity
 from .sketches import entities_of, outlines_of
 from .solid import ADD, CUT, INTERSECT, Turned
 from .sketch_sizes import profile_sizes, projection_doubts
@@ -46,7 +46,7 @@ def _profile_problem(profile):
 
 
 def _angle(ctx, item, extent):
-    """`(Value of the angle, symmetric)` or a Skip."""
+    """`(Quantity of the angle, symmetric)` or a Skip."""
     kind = (extent or {}).get("kind")
     if kind == "twoSidesAngle":
         return Skip("Revolves turned to both sides by two angles are not copied to Orca yet.",
@@ -58,14 +58,14 @@ def _angle(ctx, item, extent):
         return Skip("This revolve turns by an angle that is not copied.")
     value = ctx.quantity(item, "extent.angle_deg", angle, "angle").magnitude()
     if angle >= FULL_TURN_DEG - 1e-9:
-        if value.formula is not None:
+        if value.text is not None:
             ctx.doubt(value.reads, "%s turns a full circle only while its angle is 360" % label(item))
-        return Value(FULL_TURN_DEG), False
+        return Quantity(FULL_TURN_DEG), False
     symmetric = bool(extent.get("symmetric"))
-    if symmetric and value.formula is not None:
+    if symmetric and value.text is not None:
         ctx.doubt(value.reads, "%s turns to both sides of its sketch, so its angle keeps its number in Orca"
                   % label(item))
-        value = Value(angle)
+        value = Quantity(angle)
     return value, symmetric
 
 
@@ -149,13 +149,13 @@ def revolve(ctx, item):
         return Skip("The outline of this revolve has a curve the Orca copy cannot draw yet (it draws lines, arcs, "
                         "circles and splines Fusion gives exactly).")
     sense = 1.0
-    if angle.number < FULL_TURN_DEG:
+    if angle.n < FULL_TURN_DEG:
         sense = _sense(data, operation, frame, outline.outer, point, direction)
         if isinstance(sense, Skip):
             return sense
     turn_axis = vec.scale(direction, sense)
-    start = -angle.number / 2.0 if symmetric else 0.0
-    tool = Turned(frame, [outline.outer], point, turn_axis, angle.number, start)
+    start = -angle.n / 2.0 if symmetric else 0.0
+    tool = Turned(frame, [outline.outer], point, turn_axis, angle.n, start)
     if operation in ("cut", "intersect") and not ctx.solid.meets(tool):
         gap = bool(ctx.left_out)
         what = "cut" if operation == "cut" else "intersect"

@@ -5,6 +5,7 @@ sets later for a tool body. So the handler adds a maker to the step's `Entry` (`
 calls `make(ctx, step_id, step)` once the step is written. A maker registers its placers on the context
 (`Context.add_placer`, `Context.add_slab`).
 """
+from ...design_model.values import reads_in
 from . import follow, meets_part
 from .end_caps import Cap, EndCaps
 from .offset_faces import MovedFaces
@@ -12,7 +13,6 @@ from .picks import face_points
 from .shells import Shell
 from .slabs import Slab
 from .thin_wall import ThinWall
-from ..values import reads_in
 
 
 class SlabMaker:

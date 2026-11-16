@@ -11,6 +11,7 @@ follows them only when both come from the same formula. The faces are picked by 
 follows sizes like a mirror plane.
 """
 from ...capture_model import gap_hints
+from ...design_model.values import Quantity
 from ...geometry import vec
 from .. import values
 from ..bodies.split import SIDE_TOL_MM
@@ -44,7 +45,7 @@ def _angle(ctx, item, data, angle):
             item.get("name") or "A draft")
         for path in ("angle_deg", "angle_two_deg"):
             values.pin(ctx, item, path, why)
-        return values.Quantity(abs(angle))
+        return Quantity(abs(angle))
     size = values.quantity(ctx, item, "angle_deg", abs(angle), dim="angle", sign=1 if angle > 0 else -1,
                            absolute=True)
     if size.sized:

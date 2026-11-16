@@ -1,13 +1,13 @@
 """What a sweep is written as: the extrude or revolve it equals, or a `sweep` step with its twist, taper and placer."""
 import copy
 
+from ...design_model.values import Quantity
 from ...geometry import vec
 from .. import extrude, placement
 from ..faces.placer_makers import EndCapsMaker
 from ..result import Refusal, StepResult
 from ..revolve import step as revolve
 from ..sketch import loops, sketch_motion
-from ..values import Quantity
 from . import sweep_frames, sweep_reach
 from .sweep_marks import keep_outline_in_bends
 

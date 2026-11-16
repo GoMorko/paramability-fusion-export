@@ -64,7 +64,7 @@ def plan_sides(item, data, frame, shift_q, combine, ctx, plane_q):
 
     `sign` is the travel direction relative to the sketch normal. extent is oneSide, symmetric or through. A distance
     side that carries `direction` (+1 or -1 along the sketch normal) travels that way instead of the measured end. One
-    that carries `quantity` (a `values.Quantity`) writes that for its distance instead of a parameter's.
+    that carries `quantity` (a `Quantity`) writes that for its distance instead of a parameter's.
     """
     extent_type = data.get("extent_type", "one")
     if extent_type not in ("one", "two", "symmetric"):

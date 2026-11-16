@@ -40,7 +40,8 @@ from ..orca_recipe.feature import CadFeature
 from ..params.size_table import FREE
 from ..sketch_values.expr import ExprDomainError, cos, num, sin
 from . import halfplanes, limits
-from .context import Body, Value
+from ..design_model.values import Quantity
+from .context import Body
 from .formulas import OrcaFormulaError
 from .sketches import reads_input
 
@@ -374,8 +375,8 @@ class _Writer:
 
     def _value(self, expr):
         if expr.is_constant:
-            return Value(expr.const)
-        return Value(expr.value(self.env), expr.text(), self.planned.formulas.free_reads(expr))
+            return Quantity(expr.const)
+        return Quantity(expr.value(self.env), expr.text(), self.planned.formulas.free_reads(expr))
 
     def run(self, side, mode):
         """`(features, block sketch, block extrude, whether the block is the body itself)`."""

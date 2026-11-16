@@ -22,11 +22,11 @@ read, flat faces following it by Tangent Chain).
 """
 import copy
 
+from ...design_model.values import Quantity
 from ...geometry import vec
 from .. import extrude, placement, values
 from ..result import Refusal, StepResult
 from ..sketch import face_outline, loops
-from ..values import Quantity
 
 PLANE_TOL = 1e-4
 ZERO_TOL = 1e-6

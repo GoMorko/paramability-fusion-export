@@ -65,7 +65,7 @@ class Prism:
     to `high` (either may be infinite).
 
     A copied extrude also says how its end faces follow variables, so a later step that reaches to one of them can
-    follow it: `ends` holds the `context.Value` of `low` and `high` (None for a hole or a cut through all), and
+    follow it: `ends` holds the `Quantity` of `low` and `high` (None for a hole or a cut through all), and
     `plane_sizes` the Fusion names of the sizes that may move its sketch plane, which Orca keeps in place."""
 
     def __init__(self, frame, loops, low, high):

@@ -8,11 +8,12 @@ need no special case. Curved faces and moves that were not measured are refused.
 import math
 
 from ..faces import follow
+from ...design_model.values import Quantity, number
 from ...geometry import vec
 from ...geometry.footprint import Footprint
 from ..faces.placer_makers import MovedFacesMaker
 from ..result import Refusal, StepResult
-from ..values import Quantity, number, quantity, stays_positive
+from ..values import quantity, stays_positive
 
 
 MOVE_TOL_MM = 1e-3

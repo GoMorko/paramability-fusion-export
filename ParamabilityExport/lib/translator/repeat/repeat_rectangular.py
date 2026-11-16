@@ -8,13 +8,12 @@ kept by a `when` on the count.
 import math
 from itertools import product
 
+from ...design_model.values import Quantity, wrapped
 from ...geometry import vec
 from ...package.numbers import round9
-from .. import values
 from ..faces.follow import Motion
 from ..ranges import range_check
 from ..result import Refusal, StepResult
-from ..values import Quantity
 from . import symmetric
 from .repeat_build import build, finish_copies, keep_pattern_fixed, round_vec
 from .repeat_elements import FIT_TOL_MM, in_component, is_identity, is_identity_rotation, kept_elements
@@ -142,7 +141,7 @@ def _counted_finishes(ctx, item, finishes, grids, axes):
                     shift = [q.plus(part["axis"]["step_q"].scaled(n * d)) if abs(d) > 1e-12 else q
                              for q, d in zip(shift, part["dir"])]
                     if part["count_q"].sized:
-                        needs.append("%s >= %d" % (values.wrapped(part["count_q"].text), n + 1))
+                        needs.append("%s >= %d" % (wrapped(part["count_q"].text), n + 1))
             copies.append((" && ".join(needs), Motion(shift=shift, by=name)))
     if len(copies) > MAX_COUNTED_COPIES:
         return None

@@ -21,7 +21,7 @@ from lib.params.expressions import evaluate
 from lib.translator import translate
 from lib.translator.ranges.range_check import size_env
 from lib.translator.translate import _fix_long_formulas
-from lib.translator.values import Sized
+from lib.design_model.values import Sized
 
 HEIGHT = "FilterBox_height_mm"
 TOP = [40, 30, 32]

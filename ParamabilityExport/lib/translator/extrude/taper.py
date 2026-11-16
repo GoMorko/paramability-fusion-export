@@ -1,9 +1,9 @@
 """The taper of an extrude: Fusion's angle as the recipe writes it, and the limit that keeps it under the steepest lean."""
 from ...capture_model import gap_hints
+from ...design_model.values import Quantity
 from .. import values
 from ..ranges import kept_ranges
 from ..result import Refusal
-from ..values import Quantity
 from .common import UNREADABLE
 
 

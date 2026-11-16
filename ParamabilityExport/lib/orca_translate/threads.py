@@ -38,7 +38,7 @@ from ..orca_recipe.feature import CadFeature
 from ..translator.hole.thread import spec_of
 from ..translator.result import Refusal
 from . import causes, finish_body, limits
-from .context import Value
+from ..design_model.values import Quantity
 from .sketches import entities_of
 from .solid import CUT, Prism
 from .skip import Skip
@@ -94,11 +94,8 @@ def orca_limits(major, minor, pitch, height):
 
 
 def inset(length, pitch):
-    """The length of the Orca thread inside a Fusion thread of `length` (a `Value`)."""
-    cut = 2.0 * INSET * pitch
-    if length.formula is None:
-        return Value(length.number - cut)
-    return Value(length.number - cut, "(%s) - %r" % (length.formula, cut), length.reads)
+    """The length of the Orca thread inside a Fusion thread of `length` (a `Quantity`)."""
+    return length.plus(-2.0 * INSET * pitch)
 
 
 def _ring_lines(point, axis, low, high):
@@ -187,18 +184,18 @@ def _lead(ctx, name, ends, n, spec, internal, place=None):
     point, inward = ends.points[n], vec.scale(ends.rise, 1.0 if n == 0 else -1.0)
     prism = _lead_prism(point, inward, spec, internal)
     ctx.solid.add(CUT, prism)
-    deep = Value(INSET * spec.pitch - LEAD_SHORT)
+    deep = Quantity(INSET * spec.pitch - LEAD_SHORT)
     label = "%s lead-in%s" % (name, "" if n == 0 else " (end)")
     if internal:
         if place is not None:
             plane, xy = _hole_end_plane(ctx, place, point, n)
         else:
-            plane, xy = ctx.place.plane(point, prism.x, prism.y, inward), (Value(0.0), Value(0.0))
+            plane, xy = ctx.place.plane(point, prism.x, prism.y, inward), (Quantity(0.0), Quantity(0.0))
         feature = CadFeature(type=FeatureType.HOLE, name=label, plane=plane, hole_style=0, hole_through=False,
                              thread_major_nominal=True, pattern_inclusive=True)
         ctx.bind(feature, "hole_x", xy[0], "%s place" % label)
         ctx.bind(feature, "hole_y", xy[1], "%s place" % label)
-        ctx.bind(feature, "hole_diameter", Value(spec.major + LEAD_WIDER), label)
+        ctx.bind(feature, "hole_diameter", Quantity(spec.major + LEAD_WIDER), label)
         ctx.bind(feature, "hole_depth", deep, label)
         ctx.add(feature)
         return [feature]
@@ -213,7 +210,7 @@ def _lead(ctx, name, ends, n, spec, internal, place=None):
 
 
 def _hole_end_plane(ctx, place, point, n):
-    """The plane and the (x, y) `Value`s of a lead-in at end `n` of a tapped hole: the hole's own plane at its
+    """The plane and the (x, y) `Quantity`s of a lead-in at end `n` of a tapped hole: the hole's own plane at its
     start, and at its far end that plane moved to the end and turned to face back into the part."""
     if n == 0:
         moved = copy.copy(place)
@@ -265,7 +262,7 @@ def _groove(origin, axis, spec, height):
 
 
 def _feature(ctx, name, plane, spec, height, internal, xy=None, longest=None):
-    """Write one Orca thread. `height` is a `Value`; `xy` the (x, y) `Value`s of its axis on the plane, or None;
+    """Write one Orca thread. `height` is a `Quantity`; `xy` the (x, y) `Quantity`s of its axis on the plane, or None;
     `longest` how long it may get (mm) when a variable sets its length."""
     feature = CadFeature(type=FeatureType.THREAD, name=name, plane=plane, thread_radius=spec.major / 2.0,
                          thread_pitch=spec.pitch, thread_depth=(spec.major - spec.minor) / 2.0,
@@ -371,24 +368,24 @@ def thread(ctx, item):
     if isinstance(start, Skip):
         return start
     if full:
-        height = Value(span[1] - span[0])
+        height = Quantity(span[1] - span[0])
     else:
         height = ctx.quantity(item, "length", float(length))
-        if height.number > span[1] - span[0] + 1e-3:
+        if height.n > span[1] - span[0] + 1e-3:
             return Skip("The thread is longer than its face.")
     if not ctx.has_body:
         return Skip("The part this thread is on is not in the copy.", gap_hints.AFTER_GAP)
     rise = axis if start == 0 else vec.scale(axis, -1.0)
     first = vec.add(origin, vec.scale(axis, span[0] if start == 0 else span[1]))
-    ends = _ends(ctx, first, rise, height.number, spec, internal, radius, what)
+    ends = _ends(ctx, first, rise, height.n, spec, internal, radius, what)
     if isinstance(ends, Skip):
         return ends
     height = inset(height, spec.pitch)
-    problem = _check(spec, height.number, what)
+    problem = _check(spec, height.n, what)
     if problem:
         return problem
     begin = vec.add(first, vec.scale(rise, INSET * spec.pitch))
-    if not ctx.solid.meets(_groove(begin, rise, spec, height.number)):
+    if not ctx.solid.meets(_groove(begin, rise, spec, height.n)):
         return _misses(ctx)
     x = _perpendicular(rise)
     plane = ctx.place.plane(begin, x, vec.cross(rise, x), rise)
@@ -428,20 +425,20 @@ def tapped(item, data):
 
 
 def hole_lengths(item, data, spec, positions, normal, depth, ctx):
-    """The length of the thread of each hole of a tapped hole as Fusion has it (`Value`s), or a Skip. `depth` is the
-    hole's depth `Value`, None for a hole through all (its length is then measured from the end faces)."""
+    """The length of the thread of each hole of a tapped hole as Fusion has it (`Quantity`s), or a Skip. `depth` is the
+    hole's depth `Quantity`, None for a hole through all (its length is then measured from the end faces)."""
     info = data.get("thread") or {}
     if depth is None:
         ends = [p for p in data.get("end_points") or [] if isinstance(p, (list, tuple))]
         if len(ends) != len(positions):
             return Skip("The depth of this threaded hole could not be measured.")
-        lengths = [Value(abs(vec.dot(vec.sub(list(e), list(p)), normal))) for p, e in zip(positions, ends)]
+        lengths = [Quantity(abs(vec.dot(vec.sub(list(e), list(p)), normal))) for p, e in zip(positions, ends)]
     else:
         lengths = [depth] * len(positions)
     full = info.get("full_length")
     if full is False and info.get("depth"):
         part = ctx.quantity(item, "thread.depth", float(info["depth"]))
-        if any(part.number > s.number + 1e-6 for s in lengths):
+        if any(part.n > s.n + 1e-6 for s in lengths):
             return Skip("The thread is deeper than its hole.")
         lengths = [part] * len(positions)
     elif full is not True:
@@ -452,10 +449,10 @@ def hole_lengths(item, data, spec, positions, normal, depth, ctx):
 def hole_ends(ctx, where, spec, length, what):
     """The `Ends` of the thread of one tapped hole (`where`, its `hole_place.Place`, drilled along its normal), or a
     Skip. Asked before the hole is cut: the ends are judged by the part around the hole."""
-    problem = _check(spec, inset(length, spec.pitch).number, what)
+    problem = _check(spec, inset(length, spec.pitch).n, what)
     if problem:
         return problem
-    return _ends(ctx, where.centre(), where.normal, length.number, spec, True, spec.minor / 2.0, what)
+    return _ends(ctx, where.centre(), where.normal, length.n, spec, True, spec.minor / 2.0, what)
 
 
 def hole_thread(ctx, name, where, spec, length, ends):

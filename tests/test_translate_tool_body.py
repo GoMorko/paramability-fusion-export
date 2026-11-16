@@ -30,7 +30,7 @@ from lib.translator.step_walk import all_steps
 from lib.translator.translate import _over_caps as over_caps
 
 translate_module = importlib.import_module("lib.translator.translate")
-from lib.translator.values import Quantity
+from lib.design_model.values import Quantity
 
 PLATE = {"token": "t1", "name": "Body1"}
 TOOL = {"token": "t2", "name": "Body2"}

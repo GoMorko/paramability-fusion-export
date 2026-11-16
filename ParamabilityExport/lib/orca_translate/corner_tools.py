@@ -34,7 +34,7 @@ from ..params.expressions.evaluation import evaluate
 from ..params.size_table import FREE
 from ..sketch_values.expr import ExprDomainError, cos, name, num, sin, tan
 from . import halfplanes, limits
-from .context import Value
+from ..design_model.values import Quantity
 
 # How far (mm) a tool reaches past each side of the corner, so that its faces never lie on the faces of the body.
 DELTA = 0.05
@@ -54,7 +54,7 @@ _MATH_ERRORS = (ExprDomainError, ExpressionError, ZeroDivisionError, OverflowErr
 
 class Spec:
     """One corner tool on a planned outline (`outline_cuts.Planned`): corner `k` (where side `k - 1` ends and side
-    `k` starts), a round or an even chamfer (`chamfer`) of `size` (a `context.Value` over size names), `square` when
+    `k` starts), a round or an even chamfer (`chamfer`) of `size` (a `Quantity` over size names), `square` when
     the chamfer is set by a distance and 45 degrees and so needs a square corner, the timeline index `step` of the step
     that made it, and the `label` of the node of the half-plane formula whose body it is cut from. `settle` gives it
     the corner's kind `sign` (1 convex, -1 pointing into the outline); `number` makes the name of its size unique."""
@@ -67,8 +67,8 @@ class Spec:
         self.side_a, self.side_b = planned.sides[(k - 1) % n], planned.sides[k]
         self.corner = planned.corners[k]
         # A size that follows sizes enters the formulas as a name of its own, written as its formula.
-        self.placeholder = "corner_size_%d_" % number if size.formula is not None else None
-        self.r = name(self.placeholder) if self.placeholder else num(size.number)
+        self.placeholder = "corner_size_%d_" % number if size.text is not None else None
+        self.r = name(self.placeholder) if self.placeholder else num(size.n)
         self.phi_a = self.side_a.direction
         self.phi_b = self.side_b.direction
         self.tau = None
@@ -135,22 +135,22 @@ class Spec:
         """`env` with the size's own name, when it has one."""
         if self.placeholder is None:
             return env
-        return dict(env, **{self.placeholder: evaluate(self.size.formula, env)})
+        return dict(env, **{self.placeholder: evaluate(self.size.text, env)})
 
     def value(self, expr, formulas, env):
-        """The `context.Value` of a formula of this corner at the sizes now (`env`): its number, and its formula and
+        """The `Quantity` of a formula of this corner at the sizes now (`env`): its number, and its formula and
         the Fusion names it reads when sizes move it."""
         number = expr.value(self.env(env))
         if expr.is_constant:
-            return Value(number)
+            return Quantity(number)
         names = [n for n in expr.names() if n != self.placeholder]
         reads = list(formulas.free_reads(_names_only(names)))
         if self.placeholder in expr.names():
             reads += [n for n in self.size.reads if n not in reads]
         if not reads:
-            return Value(number)
-        text = expr.text(lambda n: self.size.formula if n == self.placeholder else n)
-        return Value(number, text, reads)
+            return Quantity(number)
+        text = expr.text(lambda n: self.size.text if n == self.placeholder else n)
+        return Quantity(number, text, reads)
 
 
 def _names_only(names):

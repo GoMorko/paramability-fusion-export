@@ -26,6 +26,7 @@ them.
 import copy
 
 from ...capture_model import step_kinds, tool_items
+from ...design_model.values import Quantity, reads_in
 from ...geometry import rigid
 from ...geometry.combine_volume import exceeds, exceeds_tools, rule_unproven
 from ...design_model import refs, roles
@@ -35,7 +36,6 @@ from ..faces.tool_placer import ToolMaker
 from ..repeat import body_copies
 from ..result import Refusal, StepResult
 from ..step_walk import tool_refusal
-from ..values import Quantity, reads_in
 from . import tool_walk
 
 

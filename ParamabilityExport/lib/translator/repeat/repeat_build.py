@@ -5,6 +5,7 @@ Copies of rounds and chamfers are placed point by point, so a repeat whose copie
 angle fixes the sizes behind them (`keep_pattern_fixed`).
 """
 from ...capture_model.step_kinds import recipe_kind
+from ...design_model.values import number
 from ...geometry import vec
 from ...geometry.vec import POINT_TOL
 from ...package.numbers import round9
@@ -13,7 +14,6 @@ from ..faces import follow
 from ..faces.picks import MAX_NEAR_POINTS
 from ..faces.placer_makers import CopiesMaker
 from ..result import Refusal, StepResult
-from ..values import number
 
 MAX_COPIED_BODIES = 256
 

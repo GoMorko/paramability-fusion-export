@@ -42,7 +42,10 @@ The modules of `lib/orca_translate/`:
   the recipe walk reads.
 - `context.py`: what one translation keeps while it walks: the recipe so far, the formulas it bound, the sizes that
   keep their numbers and why, and the part built so far. Its `Context` is a `design_model.recorder.Recorder`
-  (`cache`, `motion` always None, `doubt`, `note`, `follow_component`), so the shared layer can record on it.
+  (`cache`, `motion` always None, `doubt`, `note`, `follow_component`), so the shared layer can record on it. A value
+  that follows sizes is a `design_model.values.Quantity`, the same type the recipe translator uses: `Context.quantity`
+  reads it from the capture, and `Context.bind` turns its formula into an Orca formula (`formulas.to_orca`) and
+  writes it into the field.
 - `other_components.py`: geometry of other components (see "Other components" below).
 - Handler modules, one per kind of step: `steps.py` (extrude), `holes.py` (hole), `revolve.py`, `sweeps.py`,
   `lofts.py`, `repeat.py` (patterns and mirrors), `combine.py`, `bodies.py` (split and move), `finishes.py` (fillet
@@ -172,7 +175,7 @@ not judged to meet material where Orca removes nothing.
 - The distance follows the sizes that move the plane, where the copy can tell how: an origin plane stays; an offset
   plane moves with its own distance when one size sets it (`design_model.reach.offset_param`, its sign from the
   measured place) and with what it is built on; a face follows the end of a copied extrude it lies on
-  (`solid.Prism.ends`: the end's length Value), when no later shape of that body touches the measured point. The
+  (`solid.Prism.ends`: the end's length `Quantity`), when no later shape of that body touches the measured point. The
   length is then the measured length plus the plane's move, so the end stays where Fusion puts it. A plane or face
   that sizes may move in any other way keeps its length, and every size that may move it is marked
   (`design_model.reach.reach_sizes`: the sizes read before the step, and those behind the planes of the chain).

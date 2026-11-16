@@ -13,13 +13,13 @@ After the step, the walk's placers stand where the Move put them (`moved_placer.
 import math
 
 from ...capture_model import tool_items
+from ...design_model.values import Quantity
 from ...geometry import rigid, vec
 from ...package.numbers import round9
 from .. import repeat, values
 from ..faces.moved_placer import MoveMaker
 from ..faces.slabs import IDENTITY_ROWS, Motion
 from ..result import Refusal, StepResult
-from ..values import Quantity
 
 FIT_TOL_MM = 1e-3
 ROTATION_TOL = 1e-6

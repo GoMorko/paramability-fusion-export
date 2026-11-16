@@ -38,7 +38,7 @@ from ..geometry.footprint import is_full, polyline
 from ..orca_recipe.feature import feature_refs
 from . import causes, corner_hosts, finish_body, left_corners
 from .skip import Skip
-from .context import Value
+from ..design_model.values import Quantity
 from .sketches import entities_of
 from .solid import ADD, CUT, Moved, Prism, Solid, intersect, subtract, union
 
@@ -65,7 +65,7 @@ _GRID = 6
 
 
 class Pick:
-    """One set of a round or chamfer: its edge records, its size (`context.Value`), and whether it is a chamfer
+    """One set of a round or chamfer: its edge records, its size (`Quantity`), and whether it is a chamfer
     given by a distance and 45 degrees (even only at a square corner)."""
 
     def __init__(self, records, value, by_angle=False):
@@ -314,7 +314,7 @@ def _shapes(corners, chamfer, noun):
         d2, _ = _away(line_b, corner.point)
         if d1[0] * d2[0] + d1[1] * d2[1] < -1 + 1e-9:
             return Skip("This %s is on an edge between two sides that run straight on." % noun, causes.CORNER_CHANGED)
-        size = corner.pick.value.number
+        size = corner.pick.value.n
         shape = _Shape(corner.point, d1, d2, size, chamfer)
         if corner.pick.by_angle and abs(math.degrees(shape.angle) - 90.0) > 1e-6:
             return Skip("This chamfer is set by a distance and an angle on a corner that is not square, so its two "
@@ -636,7 +636,7 @@ def note_left_out(ctx, item, chamfer):
         size = left_corners.gap_size(entry, chamfer) if edges else None
         if size is None or "feature" in (entry.get("input_kinds") or []) or any(e.get("foreign") for e in edges):
             return
-        picks.append(Pick(edges, Value(size)))
+        picks.append(Pick(edges, Quantity(size)))
     corners = _find(ctx, picks)
     if not isinstance(corners, list) or any(c.mode not in (ADD, CUT) for c in corners):
         return

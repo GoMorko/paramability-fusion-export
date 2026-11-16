@@ -16,7 +16,7 @@ from ..geometry import vec
 from ..orca_recipe.enums import FeatureType
 from ..orca_recipe.feature import CadFeature
 from . import causes, finish_body, hole_place, threads
-from .context import Value
+from ..design_model.values import Quantity
 from .skip import Skip
 from .solid import CUT, Prism
 from .steps import LONG, SIDE_TOL, behind, misses_reason, toward_material
@@ -59,7 +59,7 @@ def hole(ctx, item):
         bore, spec = found
         held = ctx.quantity(item, "diameter", float(data["diameter"]))
         ctx.doubt(held.reads, "%s: the thread size stays as drawn in Orca" % label(item))
-        diameter = Value(bore)
+        diameter = Quantity(bore)
     else:
         diameter = ctx.quantity(item, "diameter", float(data["diameter"]))
     normal = vec.unit(list(direction))
@@ -91,7 +91,7 @@ def hole(ctx, item):
     if spec is not None and style:
         return Skip("This tapped hole has a %s, and the copy cannot tell where Fusion starts its thread then, so it is "
                     "left out." % ("counterbore" if style == 1 else "countersink"), causes.TAPPED_RECESS)
-    radius = diameter.number / 2.0
+    radius = diameter.n / 2.0
     if depth is None and not (ends and len(ends) == len(positions)):
         if toward_material(ctx, item, lambda low, high: [_bore(p, normal, radius, low, high) for p in positions],
                             1) < 0:
@@ -104,7 +104,7 @@ def hole(ctx, item):
     drilled, measured = [], []
     for n, position in enumerate(positions):
         if depth is not None:
-            reach = (0.0, depth.number)
+            reach = (0.0, depth.n)
         elif behind(box, position, normal, 1):
             reach = (0.0, LONG)
         else:
@@ -148,7 +148,7 @@ def hole(ctx, item):
             ctx.bind(feature, "hole_depth", depth, "%s depth" % name)
         elif behind(box, position, normal, 1):
             feature.hole_through = False
-            ctx.bind(feature, "hole_depth", Value(LONG), name)
+            ctx.bind(feature, "hole_depth", Quantity(LONG), name)
         else:
             feature.hole_through = True
         for field, words, value in extra:

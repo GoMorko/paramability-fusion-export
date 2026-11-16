@@ -14,11 +14,11 @@ is read from the measured copies when the count is even. When it is odd, the cop
 an even count tell it (`extra_side`); without such a try the side Fusion was seen to use is taken (rectangular
 patterns only), and when the copies at a try break the rule the sizes that can make the count even are marked.
 """
+from ...design_model.values import Quantity, wrapped
 from ...params.expressions.errors import ExpressionError
 from ...params.expressions.evaluation import evaluate
 from ..ranges import range_check
 from .repeat_elements import read_in_component
-from ..values import Quantity, wrapped
 
 
 # Where Fusion puts the extra copy of a rectangular pattern with an even count, as seen in its exports: ahead of the

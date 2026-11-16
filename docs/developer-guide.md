@@ -1207,7 +1207,8 @@ value that a parameter may drive. It does this:
 6. A length that the step needs above zero (`absolute=True`) must stay above zero over the whole size range. The check
    tries every mix of the range ends (`range_check.sweep`). An angle the step needs above zero has its ranges cut
    instead (`_angle_above_zero`).
-7. It returns a `Quantity`: the number plus the formula and the Fusion names it reads. `.json()` writes
+7. It returns a `Quantity` (`lib/design_model/values.py`, shared with the Orca output): the number plus the formula and
+   the Fusion names it reads. `.json()` writes
    `{ "expr": "..." }` or a plain number.
 
 Some formulas are built later from several values, for example a plane's move minus another plane's move. They can
@@ -1750,6 +1751,21 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     together with the body. The recipe walk stops on such a step (`split_rules.stop_reason`).
   - `copies_bodies`, `changes_named_bodies`, `only_splits_faces`, `existing_bodies`: smaller facts that the walks
     and some handlers use.
+- `values.py`: `Quantity`, the one value type of both outputs, and the helpers that work on it. These came from
+  `translator/values.py` and `orca_translate/context.py` (the Orca output had its own `Value`). It has no output in it:
+  - `Quantity(n, text, reads)` is a measured number `n` with, when sizes move it, a formula `text` over the sizes and
+    the Fusion names `reads` of those sizes. When `text` is None, no size moves the value. `scaled`, `plus`, `times`,
+    `divided_by` and `magnitude` give a new `Quantity` and keep the formula in step with the number. A sum with a
+    plain number keeps the number apart (`core`, `const`), so a later sum folds the numbers into one. `json()` gives
+    the form that the recipe writes: a plain number, or a `Sized`.
+  - `Sized` is `{ "expr": formula }` that remembers its number and its `reads`. It is a normal dict for JSON.
+    `number`, `negated`, `reads_in` and `numbers_of` read and change written values and steps.
+  - `negated_text` and `wrapped` write the text of a formula for a minus sign or for another operation, without
+    extra brackets.
+  The decision of how a value follows the sizes stays in each output. The recipe output uses `translator/values.py`
+  (`quantity`, `pin`, `handled`, the checks of ranges and the audit). The Orca output uses `Context.quantity` and
+  `Context.bind`, which turn the formula into an Orca formula. The formula text of a result can differ between the
+  two outputs. The value that it gives at every size is the same.
 - `words.py`: the texts of these facts (the noun of a reference, "may move with it", the note of a borrowed outline,
   the reasons of `why_foreign`). Both outputs give the same sentence for the same fact.
 - `reach.py`: which ticked sizes can move something that a step uses. This came from `translator/sizes.py`. Each

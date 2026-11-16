@@ -38,7 +38,7 @@ from ..translator.extrude.side import SidePlan
 from ..translator.extrude.taper import FUSION_TAPER_SIGN
 from ..design_model.reach import construction_sizes, offset_param, on_part, reach_sizes
 from . import causes, limits
-from .context import Value
+from ..design_model.values import Quantity
 from .skip import Skip
 from .solid import Prism
 
@@ -65,44 +65,33 @@ def _label(item):
 
 # ---- values ------------------------------------------------------------------------------------------------------
 
-def plus(*values):
-    """The sum of `context.Value`s; the formula keeps up."""
-    number = sum(v.number for v in values)
-    if all(v.formula is None for v in values):
-        return Value(number)
-    parts = ["(%s)" % v.formula if v.formula is not None else format_number(v.number) for v in values
-             if v.formula is not None or v.number]
-    reads = dict.fromkeys(name for v in values for name in v.reads)
-    return Value(number, " + ".join(parts), tuple(reads))
-
-
-class Reach(Value):
+class Reach(Quantity):
     """The length of a side that ends on a face or plane ("To"). Orca extrudes the other way when a variable takes
     it to zero or below, where Fusion stops."""
 
 
 def change(value):
     """How a value moves from its number now: zero, with the formula `value - number` when sizes move it."""
-    if value.formula is None:
-        return Value(0.0)
-    return Value(0.0, "(%s) - %s" % (value.formula, format_number(value.number)), value.reads)
+    if value.text is None:
+        return Quantity(0.0)
+    return Quantity(0.0, "(%s) - %s" % (value.text, format_number(value.n)), value.reads)
 
 
 # ---- how a face or plane moves -------------------------------------------------------------------------------------
 
 def plane_move(ctx, item, record, z, what):
     """How the face or plane `record` (a capture TARGET: an extrude's `start`, `side_one` or `side_two`) moves along
-    the unit sketch normal `z` when sizes change: a Value of zero whose formula is that move (none when it stays), or
+    the unit sketch normal `z` when sizes change: a Quantity of zero whose formula is that move (none when it stays), or
     None when sizes may move it in a way the copy cannot follow. Those sizes are then marked; `what` words the reason
     ("reaches to", "starts from")."""
     if ctx.table is None:
-        return Value(0.0)
+        return Quantity(0.0)
     found = _move(ctx, item, record, z)
     if found is not None:
         return found
     names = reach_sizes(ctx.table, ctx.capture.get("items") or [], item, record)
     if not names:
-        return Value(0.0)
+        return Quantity(0.0)
     ctx.doubt(names, "%s %s a face or plane that may move with it, and the Orca copy cannot follow that"
               % (_label(item), what))
     return None
@@ -110,11 +99,11 @@ def plane_move(ctx, item, record, z, what):
 
 def _move(ctx, item, record, z):
     if record.get("origin"):
-        return Value(0.0)
+        return Quantity(0.0)
     if record.get("assembly"):
         # A face or plane of another component stays where the capture places it; the walk marks the sizes that act
         # on its component (`other_components.mark_refs`).
-        return Value(0.0)
+        return Quantity(0.0)
     if record.get("foreign"):
         return None
     kind = record.get("entity_type")
@@ -139,7 +128,7 @@ def _plane(ctx, item, record, z):
     # A plane without a token stands for every construction plane.
     own = construction_sizes(ctx.table, "constructionPlane", record.get("token") or "")
     if not _chain_sizes(ctx.table, record) and not on_part(record):
-        return Value(0.0)
+        return Quantity(0.0)
     base = record.get("built_on") or []
     if "offset" not in (record.get("definition") or "").lower() or len(base) != 1:
         return None
@@ -167,7 +156,7 @@ def _plane(ctx, item, record, z):
     own_item = {"name": item.get("name"), "data": {"params": {"plane.offset": {
         "name": param["name"], "expression": param["expression"], "value": distance}}}}
     q = ctx.quantity(own_item, "plane.offset", distance)
-    return plus(under, change(q).scaled(sign * vec.dot(vec.unit(normal), z)))
+    return under.plus(change(q).scaled(sign * vec.dot(vec.unit(normal), z)))
 
 
 def _chain_sizes(table, record):
@@ -201,7 +190,7 @@ def _face(ctx, item, record, z):
 
 
 def _cap(ctx, record, point):
-    """(prism, Value of the end) for the end face of a copied extrude that `point` lies on, when no later shape of
+    """(prism, Quantity of the end) for the end face of a copied extrude that `point` lies on, when no later shape of
     that body touches the point; else None."""
     owner = record.get("body")
     bodies = []
@@ -262,7 +251,7 @@ def start_shift(ctx, item, start, frame):
         return Skip("This extrude starts at a distance from a face or plane, which is not copied to Orca yet.",
                     gap_hints.EXTRUDE_END_FACE)
     move = plane_move(ctx, item, start, z, "starts from")
-    if move is not None and move.formula is not None:
+    if move is not None and move.text is not None:
         ctx.doubt(move.reads, "%s starts from a face or plane that moves with it, and Orca cannot move a sketch plane "
                   "with a variable" % _label(item))
     return vec.dot(vec.sub(plane["point"], frame["origin"]), z)
@@ -305,7 +294,7 @@ def taper_of(data, side, which):
 
 def reach(ctx, item, which, side, origin, z, sign=None):
     """`(sign, length)` of the side `which` ("side_one", "side_two") that reaches to a face or plane: the direction
-    along the unit sketch normal `z` and the length from `origin` (where the extrude starts) as a Value that follows
+    along the unit sketch normal `z` and the length from `origin` (where the extrude starts) as a Quantity that follows
     the plane where the copy can; or a Skip. A side whose direction is set by the other side passes `sign`."""
     plane = _flat_target(side, z, "reaches to")
     if isinstance(plane, Skip):
@@ -320,13 +309,13 @@ def reach(ctx, item, which, side, origin, z, sign=None):
     if side.get("offset") is None:
         return Skip(_UNREAD)
     offset = ctx.quantity(item, which + ".offset", float(side["offset"]))
-    if not abs(to) + offset.number > 0:
+    if not abs(to) + offset.n > 0:
         return Skip("This extrude has no length.")
     move = plane_move(ctx, item, side, z, "reaches to")
-    length = plus(Value(abs(to)), offset)
+    length = Quantity(abs(to)).plus(offset)
     if move is not None:
-        length = plus(length, move.scaled(found))
-    return found, Reach(length.number, length.formula, length.reads)
+        length = length.plus(move.scaled(found))
+    return found, Reach(length.n, length.text, length.reads)
 
 
 def measured_gap(data, shift, length, sign, operation, holds=None):
@@ -400,7 +389,7 @@ def drawn_loop(sketch, outer, width, height, radius):
 
 def taper(ctx, item, path, deg, flip, outline, length):
     """The Orca `taper_deg` of a blind side whose Fusion taper is `deg` (degrees; positive widens the outline going
-    away from the sketch), as a Value; None for no taper; or a Skip. `flip` says the side runs against the sketch
+    away from the sketch), as a Quantity; None for no taper; or a Skip. `flip` says the side runs against the sketch
     normal (Orca then moves the outline the other way for the same angle), `outline` is the `sketches.Outline` and
     `length` the side's length now (mm). A taper whose sign a size could turn keeps its number when the outline has
     sharp corners, since Orca would then round them."""
@@ -416,10 +405,10 @@ def taper(ctx, item, path, deg, flip, outline, length):
     if isinstance(found, str):
         return Skip(found, causes.TAPER_SHAPE)
     q = ctx.quantity(item, path, float(deg), "angle")
-    if q.formula is not None and found:
+    if q.text is not None and found:
         ctx.doubt(q.reads, "%s: the taper stays a number in Orca, since the other way Orca would round the corners "
                   "of its outline" % _label(item))
-        q = Value(float(deg))
+        q = Quantity(float(deg))
     return q.scaled(-1.0 if flip else 1.0)
 
 
@@ -429,7 +418,7 @@ def taper_measured(data, sides, outlines):
     None. The same check as for a recipe (`translator.extrude.checks.check_taper`)."""
     if not any(side.taper for side in sides):
         return None
-    plan = [SidePlan("oneSide", -1 if side.flip else 1, side.distance.number, FUSION_TAPER_SIGN * side.taper)
+    plan = [SidePlan("oneSide", -1 if side.flip else 1, side.distance.n, FUSION_TAPER_SIGN * side.taper)
             for side in sides]
     refusal = check_taper(plan, data, COMBINE.get(data.get("operation"), "add"), outlines)
     return Skip(refusal.reason) if refusal is not None else None

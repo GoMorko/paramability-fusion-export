@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Optional
 
+from ...design_model.values import Quantity, Sized, reads_in
 from ...geometry import vec
 from ...params.expressions.evaluation import evaluate_tree
 from ...params.expressions.formula import parse_formula
@@ -32,7 +33,6 @@ from . import path_curves, path_limits, path_rebuilt
 from ..ranges import range_check
 from ..sketch import sketch_motion
 from ..sketch.curved import combine
-from ..values import Quantity, Sized, reads_in
 
 MATCH_TOL = 1e-4      # a written point is a curve's point when this close (mm), as curves join in `path_curves.chain`
 FRAME_TOL = 1e-6      # the written placement is the sketch's own when this close

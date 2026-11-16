@@ -11,7 +11,7 @@ from lib.params.expressions import evaluate
 from lib.sketch_values.motion import Motion
 from lib.translator import translate
 from lib.translator.ranges.range_check import size_env
-from lib.translator.values import Quantity, _gives_whole_numbers
+from lib.translator.values import _gives_whole_numbers
 
 TRAY = "filter_tray_sized"
 H = "FilterBox_$_height__contains_CeramicMedium"
@@ -435,16 +435,6 @@ def _turn(degrees):
     import math
     c, s = math.cos(math.radians(degrees)), math.sin(math.radians(degrees))
     return {"origin": [20 - 20 * c + 10 * s, 10 - 20 * s - 10 * c, 0], "x": [c, s, 0], "y": [-s, c, 0], "z": [0, 0, 1]}
-
-
-class QuantityTest(unittest.TestCase):
-    def test_operations_keep_formulas_readable(self):
-        q = Quantity(10.0, "a + b", ("a",))
-        self.assertEqual(q.scaled(0.5).text, "0.5 * (a + b)")
-        self.assertEqual(q.scaled(-1).text, "-(a + b)")
-        self.assertEqual(q.plus(-2).text, "a + b - 2")
-        self.assertEqual(Quantity(1.0).plus(q).text, "1 + (a + b)")
-        self.assertEqual(q.divided_by(Quantity(4.0, "n", ("n",))).text, "(a + b) / n")
 
 
 class WholeCountTest(unittest.TestCase):

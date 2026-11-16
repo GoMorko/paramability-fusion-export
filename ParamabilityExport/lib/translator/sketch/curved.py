@@ -7,9 +7,9 @@ part plus square roots, products and quotients of other values. `render` writes 
 """
 import math
 
+from ...design_model.values import Quantity, wrapped
 from ...package.numbers import round9
 from ...sketch_values.motion import UNREAD, Affine, Stuck, Terms
-from ..values import Quantity, wrapped
 
 _EPS = 1e-12
 

@@ -26,7 +26,6 @@ from ..faces.tool_placer import ToolMaker
 from ..repeat.repeat_build import round_vec
 from ..result import Refusal, StepResult
 from . import split_inside
-from ..values import Quantity
 
 # A piece's box may reach this far (mm) past the plane on the side it does not lie on.
 SIDE_TOL_MM = 0.01

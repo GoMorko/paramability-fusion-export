@@ -65,7 +65,7 @@ def _set_check(entry, kind):
 
 
 def _one_size(ctx, item, kind, sizes):
-    """The `Value` of the size every set shares (`sizes`: (param path, number) per set), or a Skip. Sets with their own
+    """The `Quantity` of the size every set shares (`sizes`: (param path, number) per set), or a Skip. Sets with their own
     parameter keep the first set's: their sizes get the reason."""
     first_path, first = sizes[0]
     if any(abs(number - first) > SIZE_TOL for _, number in sizes[1:]):
@@ -74,7 +74,7 @@ def _one_size(ctx, item, kind, sizes):
     value = ctx.quantity(item, first_path, first)
     for path, number in sizes[1:]:
         other = ctx.quantity(item, path, number)
-        if other.formula != value.formula:
+        if other.text != value.text:
             ctx.doubt(other.reads, "%s: Orca makes every edge with the size of its first edges" % _label(item))
     return value
 
@@ -208,7 +208,7 @@ def _finish(ctx, item, kind, records, value, notes):
     ends = {body.edges[n].faces[0] for n in taken if body.edges[n].kind == "end"}
     for done in earlier:
         ends |= done["ends"]
-    total = value.number + sum(done["size"] for done in earlier)
+    total = value.n + sum(done["size"] for done in earlier)
     why = finish_body.room(body, total, len(ends))
     if why:
         return Skip("This %s is too big for Orca to make safely on this part (%s), and a %s Orca cannot make stops "
@@ -224,7 +224,7 @@ def _finish(ctx, item, kind, records, value, notes):
     ctx.bind(feature, "dressup_size", value, "%s size" % name)
     sized = _part_sized(ctx)
     ctx.add(feature)
-    finish_body.finished(ctx.scope, feature, group, value.number,
+    finish_body.finished(ctx.scope, feature, group, value.n,
                          {body.edges[n].faces[0] for n in taken if body.edges[n].kind == "end"})
     features = ctx.features
     finish_body.unsure(ctx.scope, body, taken, total, lambda: any(f is feature for f in features))

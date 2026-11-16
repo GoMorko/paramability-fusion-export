@@ -12,6 +12,7 @@ left out as gaps. A coil is never part of a tool body with other steps: the reci
 """
 import math
 
+from ...design_model.values import Quantity
 from ...geometry import vec
 from ...package.numbers import round9
 from .. import placement, turn_budget, values
@@ -73,7 +74,7 @@ def _centre(frame, axis, rho, measured):
         return [round9(v) for v in vec.frame_to_local(frame, measured)[:2]]
     point = vec.frame_to_local(frame, axis["point"])
     radial = [vec.dot(axis["radial"], frame["x"]), vec.dot(axis["radial"], frame["y"])]
-    return [(values.Quantity(round9(point[i])).plus(rho.scaled(radial[i])).json() if abs(radial[i]) > 1e-9
+    return [(Quantity(round9(point[i])).plus(rho.scaled(radial[i])).json() if abs(radial[i]) > 1e-9
              else round9(point[i])) for i in range(2)]
 
 

@@ -12,6 +12,7 @@ outside or rounded shells.
 import math
 
 from ...capture_model import gap_hints, step_kinds
+from ...design_model.values import Sized, number, reads_in
 from ...geometry import vec
 from ...package.numbers import is_number
 
@@ -20,7 +21,6 @@ from ..faces import follow, picks
 from ..faces.placer_makers import ShellMaker
 from ..ranges import range_check
 from ..result import Entry, Refusal, StepResult
-from ..values import Sized
 
 SIZE_TOL = 1e-9
 ANGLE_TOL = 1e-6
@@ -71,7 +71,7 @@ def _edge_steps(ctx, item, kind, edges, sizes, extra=None, sets=()):
     picked = _input_pick(ctx, item, edges, sets) if even else None
     if picked is not None:
         step = dict({"kind": kind, "edges": picked, "size": sizes[0].json()}, **extra)
-        return [_with_plain(step, edges, values.reads_in(picked), always=True)]
+        return [_with_plain(step, edges, reads_in(picked), always=True)]
     steps, at = [], 0
     for group in picks.edge_groups(edges):
         count = sum(len(edge["points"]) for edge in group)
@@ -88,7 +88,7 @@ def _with_plain(step, edges, reads=None, always=False):
     """The Entry of the step: with a pick that follows sizes it hands the measured points over, for patterns and
     mirrors that copy it. `reads` are the sizes the pick follows (default: those its points read). `always` hands them
     over for a pick with no point per edge, whose copies need one."""
-    reads = values.reads_in(step["edges"]) if reads is None else reads
+    reads = reads_in(step["edges"]) if reads is None else reads
     if reads or always:
         written = None if always else step["edges"].get("near")
         return Entry(step, picks={"near": picks.near_points(edges), "reads": reads, "written": written})
@@ -142,7 +142,7 @@ def _always_equal(ctx, a, b):
         return False
     reads = tuple(dict.fromkeys(ra + rb))
     if not reads or ctx.table is None:
-        return abs(values.number(a) - values.number(b)) <= SLOT_TOL
+        return abs(number(a) - number(b)) <= SLOT_TOL
     span = range_check.sweep(ctx.table, "%s - %s" % (ta, tb), reads)
     return not span.failed and span.low is not None and max(abs(span.low), abs(span.high)) <= SLOT_TOL
 
@@ -187,7 +187,7 @@ def _slot_outline(ctx, item, edges, size):
     if outer.get("kind") != "rect" or sketch.get("inner"):
         return None
     width, height = outer["width"], outer["height"]
-    long_, short, turn = (width, height, 0.0) if values.number(width) >= values.number(height) else (height, width, 90.0)
+    long_, short, turn = (width, height, 0.0) if number(width) >= number(height) else (height, width, 90.0)
     diameter = Sized(expr="2 * %s" % _formula(size.json())[0]) if size.sized else 2.0 * size.n
     if size.sized:
         diameter.n, diameter.reads = 2.0 * size.n, size.reads

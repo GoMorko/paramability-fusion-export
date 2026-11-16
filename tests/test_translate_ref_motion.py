@@ -20,7 +20,7 @@ from lib.params import size_table
 from lib.params.expressions import evaluate
 from lib.sketch_values.motion import OPTIMISTIC, Motion
 from lib.translator import ref_motion, translate
-from lib.translator.values import Quantity
+from lib.design_model.values import Quantity
 
 MOTION = os.path.join(os.path.dirname(FIXTURES), "motion")
 SIZES = ["gap_mm", "ear_mm", "lid_mm"]

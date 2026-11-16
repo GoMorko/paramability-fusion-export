@@ -13,14 +13,14 @@ without taper, and the whole body lies on the side it extrudes to, so the hole g
 from ..geometry import vec
 from ..orca_recipe.enums import ExtrudeEnd, FeatureType
 from ..orca_recipe.feature import CadFeature
-from .context import Value
+from ..design_model.values import Quantity
 from .hole_place import Place
 from .sketches import reads_input
 
 
 def drill(made, formulas, frame, side):
     """Turn a circle hole (`sketches.SketchOut`) whose centre moves into a drilled one: sets `made.drill` (the
-    `hole_place.Place` and the diameter `Value`), adds the place to `made.bound` and clears `made.moves`. Returns
+    `hole_place.Place` and the diameter `Quantity`), adds the place to `made.bound` and clears `made.moves`. Returns
     whether it did; it does not when the extrude is not one sided without taper, or a centre or radius formula cannot
     be written exactly."""
     if made.shape != "circle" or not made.moves or formulas is None or made.centre is None:
@@ -36,21 +36,21 @@ def drill(made, formulas, frame, side):
         if found is None and formulas.why:
             formulas.why = ""
             return False
-        coordinates.append(Value(number) if found is None else Value(number, *found))
+        coordinates.append(Quantity(number) if found is None else Quantity(number, *found))
     sign = -1.0 if side.flip else 1.0
     radius = made.feature.radius
-    diameter = Value(2.0 * radius)
+    diameter = Quantity(2.0 * radius)
     if "radius" in made.bound:
         formula, reads = made.bound["radius"]
-        diameter = Value(2.0 * radius, "2 * (%s)" % formula, reads)
+        diameter = Quantity(2.0 * radius, "2 * (%s)" % formula, reads)
     x = vec.unit(list(frame["x"]))
     y = vec.scale(vec.unit(list(frame["y"])), sign)
     normal = vec.scale(vec.unit(list(frame["z"])), sign)
     place = Place(frame["origin"], x, y, normal, coordinates[0], coordinates[1].scaled(sign))
     made.drill = (place, diameter)
     for field, value in (("hole_x", place.x_value), ("hole_y", place.y_value)):
-        if value.formula is not None:
-            made.bound[field] = (value.formula, value.reads)
+        if value.text is not None:
+            made.bound[field] = (value.text, value.reads)
     made.moves = ()
     return True
 

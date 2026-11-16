@@ -17,7 +17,7 @@ from ..design_model import reach
 from ..design_model.dimension_sizes import size_env
 from ..geometry import vec
 from ..sketch_values.expr import ExprDomainError
-from .context import Value
+from ..design_model.values import Quantity
 from .sketches import UNCONFIRMED, SketchFormulas, reads_input
 
 # A hole point lies on its sketch plane, and matches a graph point, when it is this close (mm).
@@ -26,16 +26,16 @@ POINT_TOL = 1e-4
 
 class Place:
     """The plane of one hole (capture coordinates: `origin`, unit `x`, `y` and `normal`, the drilling direction) and
-    the hole's place on it (`x_value`, `y_value`, `Value`s)."""
+    the hole's place on it (`x_value`, `y_value`, `Quantity`s)."""
 
     def __init__(self, origin, x, y, normal, x_value=None, y_value=None):
         self.origin, self.x, self.y, self.normal = list(origin), list(x), list(y), list(normal)
-        self.x_value = x_value or Value(0.0)
-        self.y_value = y_value or Value(0.0)
+        self.x_value = x_value or Quantity(0.0)
+        self.y_value = y_value or Quantity(0.0)
 
     def centre(self):
-        return vec.add(self.origin, vec.add(vec.scale(self.x, self.x_value.number),
-                                            vec.scale(self.y, self.y_value.number)))
+        return vec.add(self.origin, vec.add(vec.scale(self.x, self.x_value.n),
+                                            vec.scale(self.y, self.y_value.n)))
 
     def plane(self, place):
         """The Orca sketch plane (`place.Placement.plane`)."""
@@ -90,27 +90,27 @@ def _free_reads(table, size_names):
 
 
 def _coordinate(ctx, formulas, pair, k, number):
-    """(`Value` of one sketch coordinate, the reason it keeps its number although sizes may move it, the Fusion names
+    """(`Quantity` of one sketch coordinate, the reason it keeps its number although sizes may move it, the Fusion names
     of the sizes held at their value). Sizes an earlier step does not follow (`ctx.held`) are held."""
     if pair is None or not pair[k].derived:
-        return Value(number), (pair[k].reason if pair is not None and pair[k].reason else "it has no formula"), ()
+        return Quantity(number), (pair[k].reason if pair is not None and pair[k].reason else "it has no formula"), ()
     formulas.why = ""
     over = formulas.over_sizes(pair[k].expr)
     if over is None:
-        return Value(number), formulas.why or "it has no formula", ()
+        return Quantity(number), formulas.why or "it has no formula", ()
     env = size_env(ctx.table, {})
     held = [n for n in over.names() if any(ctx.held(r) for r in _free_reads(ctx.table, (n,)))]
     held_reads = _free_reads(ctx.table, held)
     over = over.substitute({n: env[n] for n in held if n in env})
     if over.is_constant:
-        return Value(number), None, held_reads
+        return Quantity(number), None, held_reads
     try:
         now = over.value(env)
     except (ExprDomainError, KeyError):
-        return Value(number), "its formula cannot be worked out", held_reads
+        return Quantity(number), "its formula cannot be worked out", held_reads
     if abs(now - number) > 1e-6 * max(1.0, abs(number)):
-        return Value(number), "its formula does not give its place", held_reads
-    return Value(number, over.text(), _free_reads(ctx.table, over.names())), None, held_reads
+        return Quantity(number), "its formula does not give its place", held_reads
+    return Quantity(number, over.text(), _free_reads(ctx.table, over.names())), None, held_reads
 
 
 def _followed(ctx, item, data, normal, positions):

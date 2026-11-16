@@ -15,6 +15,7 @@ corners (`loft_volume`). A new body that has another volume is refused, since Fu
 Where the volume cannot be told, outlines of the same corners that are turned against each other get a note.
 """
 from ...capture_model import gap_hints
+from ...design_model.values import Quantity
 from ...geometry import vec
 from ...geometry.footprint import polyline
 from .. import placement
@@ -23,7 +24,6 @@ from ..faces.placer_makers import EndCapsMaker
 from ..result import Refusal, StepResult
 from ..sketch import borrowed, loops, sketch_motion
 from ..sweep.sweep_volume import made_volume
-from ..values import Quantity
 from . import loft_sections, loft_volume
 
 PLANE_TOL = 1e-6

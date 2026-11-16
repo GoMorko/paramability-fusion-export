@@ -36,7 +36,7 @@ from ..translator.repeat.repeat_lattice import solve_lattice
 from ..translator.repeat.repeat_mirror import mirror_plane
 from ..translator.repeat.symmetric import reach as symmetric_reach
 from . import causes
-from .context import Value
+from ..design_model.values import Quantity
 from .solid import ADD, Moved, Solid
 from .steps import Skip
 from .tools import OPERATIONS, Pass, boolean, build, data_of, feature, hold_place, label, of_steps, step_mode
@@ -48,15 +48,15 @@ LEAVES_COPIES_OUT = "Some copies of this %s are suppressed, and Orca's pattern c
 
 
 def _text(value):
-    return value.formula if value.formula is not None else format_number(value.number)
+    return value.text if value.text is not None else format_number(value.n)
 
 
 def _divided(value, by, text):
     """`value / by`, where `by` is a number and `text` its formula (or None)."""
-    number = value.number / by
-    if value.formula is None and text is None:
-        return Value(number)
-    return Value(number, "(%s) / (%s)" % (_text(value), text or format_number(by)), value.reads)
+    number = value.n / by
+    if value.text is None and text is None:
+        return Quantity(number)
+    return Quantity(number, "(%s) / (%s)" % (_text(value), text or format_number(by)), value.reads)
 
 
 def _square(n):
@@ -95,7 +95,7 @@ def _reflection(point, normal):
 
 def _bind_count(ctx, made, value, where):
     ctx.bind(made, "pattern_count", value, where)
-    made.pattern_count = int(round(value.number))
+    made.pattern_count = int(round(value.n))
 
 
 def _params_doubt(ctx, item, used, why):
@@ -328,16 +328,16 @@ def _parts(ctx, item, direction, kind, step, places):
     if kind == "spacing":
         step_value = distance_value
     elif not symmetric:
-        text = "max((%s) - 1, 1)" % _text(count_value) if count_value.formula is not None else None
+        text = "max((%s) - 1, 1)" % _text(count_value) if count_value.text is not None else None
         step_value = _divided(distance_value, n - 1, text)
         if text is not None:
             step_value.reads = tuple(dict.fromkeys(step_value.reads + count_value.reads))
     else:
         step_value = _divided(distance_value, n // 2, None)
-        if count_value.formula is not None:
+        if count_value.text is not None:
             ctx.doubt(count_value.reads, "%s spreads its copies over a set reach to both sides, which Orca follows "
                       "only at this count" % name)
-            count_value = Value(n)
+            count_value = Quantity(n)
     if not symmetric:
         if places and max(places) <= 0:
             # Fusion can run the copies against the direction it stores.
@@ -356,8 +356,8 @@ def _parts(ctx, item, direction, kind, step, places):
     out = []
     for sign, steps, formula in ((1.0, ahead, longer if extra_ahead else shorter),
                                  (-1.0, back, shorter if extra_ahead else longer)):
-        value = Value(steps + 1, formula, count_value.reads) if count_value.formula is not None else Value(steps + 1)
-        if steps or value.formula is not None:
+        value = Quantity(steps + 1, formula, count_value.reads) if count_value.text is not None else Quantity(steps + 1)
+        if steps or value.text is not None:
             out.append(_Part(vec.scale(forward, sign), steps + 1, value, step, step_value))
     return out
 
@@ -512,7 +512,7 @@ def circular(ctx, item):
         back, ahead = found
         ctx.doubt(count_value.reads + angle_value.reads, "%s turns copies to both sides of the first one, which "
                   "Orca writes with fixed numbers" % name)
-        layouts = [(vec.scale(axis_dir, s), steps + 1, Value(steps + 1), steps * delta, Value(steps * delta))
+        layouts = [(vec.scale(axis_dir, s), steps + 1, Quantity(steps + 1), steps * delta, Quantity(steps * delta))
                    for s, steps in ((1.0, ahead), (-1.0, back)) if steps]
 
     def copies(ctx_, tool, layout, tag):

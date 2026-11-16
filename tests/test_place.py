@@ -11,7 +11,7 @@ from tests.translator_helpers import FIXTURES, assert_schema_ok, load_capture, s
 from lib.geometry import rigid
 from lib.translator import CaptureError, translate
 from lib.translator import place
-from lib.translator.values import Sized
+from lib.design_model.values import Sized
 
 POS_VEC_REFS = ("#/$defs/Pos3", "#/$defs/Vec3")
 TWO_D_ONLY = ("#/$defs/SketchLoop",)
