@@ -36,6 +36,8 @@ SELECTOR_VERSIONS = {"chain": 14, "faceEdges": 14}
 # Sweep step fields (and the flat path's `closed`) newer than RECIPE_VERSION, the same way.
 SWEEP_VERSIONS = {"twistDeg": 16, "taperDeg": 16, "orientation": 16}
 SWEEP_PATH_VERSIONS = {"closed": 16}
+# A shell that grows outward, rounds its corners or has no open faces needs this version.
+SHELL_VERSION = 17
 MAX_FEATURES = 400
 MAX_PATTERN_COPIES = 256
 # Recipes before version 15 take at most 64 copies per pattern count (both linear counts together for a grid).
@@ -491,6 +493,13 @@ def _sweep_version(step):
     return max(fields, default=0)
 
 
+def _shell_version(step):
+    """SHELL_VERSION for a shell step that grows outward, rounds its corners or has no open faces, else 0."""
+    if step.get("kind") != "shell":
+        return 0
+    return SHELL_VERSION if "outside" in step or "corners" in step or "openFaces" not in step else 0
+
+
 def _walk(capture, table, size_table, motion=None, cache=None):
     """One walk over the items: (TranslateResult, Context). `cache` is shared by the walks of one translation."""
     ctx = Context(capture, size_table, motion, cache, table)
@@ -506,7 +515,8 @@ def _walk(capture, table, size_table, motion=None, cache=None):
     version = max([RECIPE_VERSION] + [step_kinds.recipe_kind(step["kind"]).version for step in written]
                   + [SELECTOR_VERSIONS.get(key, 0) for step in written for key in (step.get("edges") or {})]
                   + [_counts_version(step, ctx.table) for step in written]
-                  + [_sweep_version(step) for step in written])
+                  + [_sweep_version(step) for step in written]
+                  + [_shell_version(step) for step in written])
     recipe = {"schema": "paramability.recipe", "version": version, "features": ctx.steps}
     over = _over_caps(recipe, ctx)
     if over:

@@ -223,6 +223,7 @@ RECIPE_KINDS = (
     RecipeKind("draft", version=8, positions=(("faces", "near", "[]"), ("neutral", "origin")),
                directions=(("neutral", "normal"),)),
     RecipeKind("bevelGear", in_tool=False, tool_words="gear", written=False),
+    RecipeKind("scale", version=17, written=False),
 )
 
 _TYPES = {t.name: t for t in STEP_TYPES}

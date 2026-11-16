@@ -24,7 +24,7 @@ from ...geometry.footprint import polyline
 from .moved_placer import MovedPlacer
 from .offset_faces import MovedFaces
 from .placer_makers import SlabMaker
-from .shells import Shell
+from .shells import OutsideShell, Shell
 from .slabs import Slab
 from .thin_wall import ThinWall
 from .tool_placer import ToolPlacer
@@ -280,7 +280,7 @@ def _material_boxes(placers, motion=None):
     step), or _UNKNOWN when the box of one cannot be told. `motion` carries the boxes of a moved step's placers."""
     found = []
     for placer in placers:
-        if isinstance(placer, (Shell, EndCaps)):
+        if isinstance(placer, (Shell, OutsideShell, EndCaps)):
             continue
         if isinstance(placer, Slab):
             if placer.combine not in ("new", "add"):
@@ -341,11 +341,11 @@ def _finishes(step):
 
 
 def _only_removes(step):
-    """True for a step that never adds material the model lacks: a hole, a shell, a cut or intersect, and an
-    offsetFaces step (whose moved faces are in the model)."""
+    """True for a step that never adds material the model lacks: a hole, a shell that goes inward, a cut or intersect,
+    and an offsetFaces step (whose moved faces are in the model)."""
     kind = step.get("kind")
-    return (step_kinds.recipe_kind(kind).always_cuts or kind == "shell" or kind == "offsetFaces"
-            or step.get("combine") in ("cut", "intersect"))
+    return (step_kinds.recipe_kind(kind).always_cuts or (kind == "shell" and not step.get("outside"))
+            or kind == "offsetFaces" or step.get("combine") in ("cut", "intersect"))
 
 
 def _own_size(step):
@@ -429,6 +429,8 @@ def _bound(ctx, step, placers, modeled, by_id, after=0.0):
         return [] if step.get("id") in modeled else _UNKNOWN
     if kind == "draft":
         return _draft_bound(step, placers)
+    if kind == "shell":
+        return _outside_shell_bound(step, placers)
     if kind == "sweep":
         return _sweep_bound(ctx, step)
     if step_kinds.recipe_kind(kind).repeats:
@@ -439,6 +441,15 @@ def _bound(ctx, step, placers, modeled, by_id, after=0.0):
                 return _UNKNOWN
         return []
     return _UNKNOWN
+
+
+def _outside_shell_bound(step, placers):
+    """A shell that grows outward adds its wall outside the material its walk holds, no further than its thickness."""
+    thickness = _number(step.get("thickness"))
+    box = _adding_slabs_box(placers)
+    if thickness is None or box is None:
+        return _UNKNOWN
+    return [_grown(box, thickness)]
 
 
 def _draft_bound(step, placers):

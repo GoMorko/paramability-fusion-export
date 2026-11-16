@@ -578,3 +578,29 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     mm: each chain keeps its radius, as in Fusion. Then add a third set picked by the top face (radius 1 mm): the
     fillet is written with a point per edge and `Width` is marked "may give unexpected results". Afterwards the design
     is as before.
+54. SH1, a shell that grows outward. Add a user parameter `Wall` = 2 mm. Sketch a 40 x 20 mm rectangle with its corner
+    at the origin on the XY plane and extrude it 10 mm. Make a Shell: pick the top face, direction Outside, thickness
+    `Wall`, type Sharp. Fusion keeps the box as the hollow and adds the wall outside it, with the top open.
+    Export: tick `Wall`. The recipe has a `shell` step with `outside: true`, `thickness` `{ "expr": "Wall" }` and
+    `openFaces`, and the recipe version is 17. In `report.json` the shell data has `inside` 0, `outside` 2 and
+    `shell_type` `sharp`, and `volume_before` is more than `volume_after`. In Paramability: the part is 44 mm by 24
+    mm by 12 mm over all, open at the top, and the hollow is the 40 x 20 x 10 mm box. Change `Wall` to 3 mm: the
+    outside grows to 46 x 26 mm, as in Fusion. Then add a Join extrude of a 4 x 4 mm square that starts 11 mm above
+    the base plane (inside the wall height) at the corner of the part: the join stays in the copy. Afterwards the
+    design is as before. On another copy set the Shell direction to Both Sides: the shell is left out with a reason
+    and the tip "Shell one way only, inward or outward, with sharp or rounded corners."
+55. SH2, a closed hollow. Sketch a 40 x 20 mm rectangle with its corner at the origin and extrude it 10 mm. Make a
+    Shell: pick the body (not a face), direction Inside, thickness 2 mm, type Sharp. The body becomes a closed hollow
+    with a 36 x 16 x 6 mm cavity.
+    Export: the recipe has a `shell` step with no `openFaces` and no `outside`, and the recipe version is 17. In
+    `report.json` the shell data has `bodies_input` true, no faces, and `volume_after` below `volume_before`. In
+    Paramability: the part is a closed hollow; cut it with a section view and see the cavity. Add a Fillet on the
+    four vertical outer edges after the shell: the fillet is copied. Afterwards the design is as before.
+56. SH3, a shell with rounded corners. Sketch a 40 x 20 mm rectangle with its corner at the origin and extrude it 10
+    mm. Make a Shell: pick the top face, direction Outside, thickness 2 mm, type Rounded. Fusion rounds the outside
+    corners and edges of the wall with a radius of 2 mm. On another copy use direction Inside and type Rounded.
+    Export: the recipe has a `shell` step with `corners: "round"` (and `outside: true` on the first copy), and the
+    recipe version is 17. In `report.json` the shell data has `shell_type` `rounded`. In Paramability: the outer
+    corners of the wall are round as in Fusion, and the volumes of the copy and the STEP agree within 1 percent. When
+    they do not agree, note which of the two types differs and by how much: the rounded type of Fusion and of the
+    app may round different edges. On the inside copy the shape that Fusion makes is the one to match.

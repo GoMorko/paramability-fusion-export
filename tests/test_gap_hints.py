@@ -58,8 +58,8 @@ class GapHintTest(unittest.TestCase):
         self.assertEqual(hint_of(result, "RectangularPattern1"), gap_hints.HINTS[gap_hints.AFTER_GAP])
 
     def test_a_refusal_with_a_cause_gets_its_hint_and_one_without_gets_none(self):
-        for change, expected in (({"bodies_input": True}, gap_hints.HINTS[gap_hints.SHELL_KIND]),
-                                 ({"shell_type": "rounded"}, None)):
+        for change, expected in (({"outside": 1.0}, gap_hints.HINTS[gap_hints.SHELL_KIND]),
+                                 ({"faces": []}, None)):
             with self.subTest(change=change):
                 result = translate(tray(lambda c: c["items"][SHELL]["data"].update(change)))
                 self.assertEqual(hint_of(result, "Shell1"), expected)

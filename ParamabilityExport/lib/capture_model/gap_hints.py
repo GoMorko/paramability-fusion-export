@@ -63,7 +63,7 @@ HINTS = {
     THIN_OUTLINE: "Draw one closed outline for the wall, or shell a solid body.",
     ROUND_KIND: "Use a fillet with one radius.",
     ROUND_CHANGING: "Give the changing radius a fillet of its own with one edge and no radii between the ends.",
-    SHELL_KIND: "Shell inward, with the open faces picked.",
+    SHELL_KIND: "Shell one way only, inward or outward, with sharp or rounded corners.",
     REPEAT_FACES: "Pattern or mirror the feature or the body.",
     SWEEP_KIND: "Use a twist or a taper alone, or a loft between two outlines.",
     TWIST_LONG: "Use a twist of 3600 degrees or less.",

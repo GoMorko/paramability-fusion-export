@@ -10,7 +10,7 @@ from . import follow, meets_part
 from .end_caps import Cap, EndCaps
 from .offset_faces import MovedFaces
 from .picks import face_points
-from .shells import Shell
+from .shells import OutsideShell, Shell
 from .slabs import Slab
 from .thin_wall import ThinWall
 
@@ -62,12 +62,16 @@ class ThinWallMaker:
 
 
 class ShellMaker:
-    """A shell: `thickness` a Quantity, `faces` the capture faces it opens."""
+    """A shell: `thickness` a Quantity, `faces` the capture faces it opens (none for a closed hollow), `outward` when
+    the wall grows outside the part."""
 
-    def __init__(self, thickness, faces):
-        self.thickness, self.faces = thickness, faces
+    def __init__(self, thickness, faces, outward=False):
+        self.thickness, self.faces, self.outward = thickness, faces, outward
 
     def make(self, ctx, step_id, step):
+        if self.outward:
+            ctx.add_placer(OutsideShell(self.thickness, ctx.placers))
+            return
         opened = [follow.locate(ctx, p) for p in face_points(self.faces)]
         ctx.add_placer(Shell(self.thickness, ctx.slabs, [o for o in opened if o is not None]))
 

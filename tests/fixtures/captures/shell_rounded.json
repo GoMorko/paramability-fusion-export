@@ -177,7 +177,9 @@
         "bodies_input": false,
         "inside": 2.0,
         "outside": 0.0,
-        "shell_type": "rounded"
+        "shell_type": "rounded",
+        "volume_before": 8000.0,
+        "volume_after": 3500.0
       }
     }
   ]

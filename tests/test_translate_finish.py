@@ -6,8 +6,9 @@ from tests.translator_helpers import left_out
 from tests.translator_helpers import (
     assert_schema_ok, edited, load_capture, steps_of, translate_fixture, variant, verdict_of)
 
-from tests.test_translate_sized import on_fixture, param, run
+from tests.test_translate_sized import on_fixture, on_tray, param, run
 
+from lib.capture_model import gap_hints
 from lib.geometry import vec
 from lib.translator import translate
 
@@ -289,19 +290,88 @@ class ChamferTest(unittest.TestCase):
         self.assertEqual(verdict_of(result, 2)["verdict"], "translatedWithNote")
 
 
+def _wall(**data):
+    """An edit of the data of `shell_open_top` that sets the wall."""
+    def edit(found):
+        found.update(data)
+    return edit
+
+
 class ShellTest(unittest.TestCase):
     def test_open_top(self):
         result = translate_fixture("shell_open_top")
         (step,) = steps_of(result.recipe, "shell")
         self.assertEqual((step["thickness"], step["openFaces"]), (2, {"near": [[20, 10, 10]]}))
+        self.assertEqual(result.recipe["version"], 12)
         assert_schema_ok(self, result.recipe)
 
-    def test_refusals(self):
-        for name, word in (("shell_outside", "outward"), ("shell_closed", "Closed hollow"),
-                           ("shell_rounded", "rounded")):
-            result = translate_fixture(name)
-            self.assertIsNotNone(left_out(result), name)
-            self.assertIn(word, left_out(result)["reason"], name)
+    def test_a_wall_that_grows_outward_is_written_with_the_version_that_reads_it(self):
+        result = variant("shell_open_top", _wall(inside=0.0, outside=1.5, volume_before=8000.0, volume_after=3000.0))
+        (step,) = steps_of(result.recipe, "shell")
+        self.assertEqual((step["thickness"], step["outside"], step["openFaces"]),
+                         (1.5, True, {"near": [[20, 10, 10]]}))
+        self.assertNotIn("corners", step)
+        self.assertEqual(result.recipe["version"], 17)
+        assert_schema_ok(self, result.recipe)
+
+    def test_a_closed_hollow_has_no_open_faces(self):
+        result = translate_fixture("shell_closed")
+        (step,) = steps_of(result.recipe, "shell")
+        self.assertEqual((step["thickness"], "openFaces" in step, "outside" in step, "corners" in step),
+                         (2, False, False, False))
+        self.assertEqual(result.recipe["version"], 17)
+        assert_schema_ok(self, result.recipe)
+
+    def test_rounded_corners_are_written_with_the_version_that_reads_them(self):
+        result = translate_fixture("shell_rounded")
+        (step,) = steps_of(result.recipe, "shell")
+        self.assertEqual((step["corners"], step["openFaces"], "outside" in step), ("round", {"near": [[20, 10, 10]]}, False))
+        self.assertEqual(result.recipe["version"], 17)
+        assert_schema_ok(self, result.recipe)
+
+    def test_a_closed_hollow_that_grows_outward_with_rounded_corners_writes_all_three(self):
+        result = variant("shell_closed", _wall(inside=0.0, outside=1.0, shell_type="rounded", volume_after=3000.0))
+        (step,) = steps_of(result.recipe, "shell")
+        self.assertEqual((step["outside"], step["corners"], "openFaces" in step), (True, "round", False))
+        assert_schema_ok(self, result.recipe)
+
+    def test_shells_the_recipe_cannot_say_are_left_out_with_the_shell_hint(self):
+        for label, edit in (("both ways", _wall(inside=2.0, outside=1.0)),
+                            ("corners that are neither sharp nor rounded", _wall(shell_type="other")),
+                            ("corners that could not be read", _wall(shell_type=None))):
+            with self.subTest(label):
+                (gap,) = variant("shell_open_top", edit).gaps
+                self.assertEqual(gap["hint"], gap_hints.HINTS[gap_hints.SHELL_KIND])
+
+    def test_an_outside_wall_that_could_not_be_read_is_not_taken_for_an_inward_one(self):
+        self.assertIsNotNone(left_out(variant("shell_open_top", _wall(outside=None))))
+
+    def test_a_body_and_faces_together_are_left_out(self):
+        self.assertIsNotNone(left_out(variant("shell_closed", _wall(faces=[{"token": "f1", "point": [20, 10, 10]}]))))
+
+    def test_a_shell_that_grows_outward_or_rounds_needs_the_part_measured(self):
+        self.assertIsNotNone(left_out(variant("shell_rounded", _wall(volume_before=None, volume_after=None))))
+        self.assertIsNotNone(left_out(variant("shell_open_top", _wall(inside=0.0, outside=1.0))))
+
+    def test_a_volume_that_does_not_fit_the_shell_leaves_it_out(self):
+        for label, name, edit in (
+                ("inward, part grew", "shell_open_top", _wall(volume_before=8000.0, volume_after=9000.0)),
+                ("inward, part unchanged", "shell_open_top", _wall(volume_before=8000.0, volume_after=8000.0)),
+                ("outward, part unchanged", "shell_open_top",
+                 _wall(inside=0.0, outside=1.0, volume_before=8000.0, volume_after=8000.0)),
+                ("nothing left", "shell_open_top", _wall(volume_before=8000.0, volume_after=0.0))):
+            with self.subTest(label):
+                self.assertIsNotNone(left_out(variant(name, edit)))
+
+    def test_an_outward_wall_follows_its_own_parameter(self):
+        def outward(capture):
+            data = capture["items"][2]["data"]
+            data.update(inside=0.0, outside=2.0, volume_before=90000.0, volume_after=20000.0,
+                        params={"outside": data["params"]["inside"]})
+        result, _ = run(on_tray(outward))
+        (step,) = steps_of(result.recipe, "shell")
+        self.assertEqual((step["thickness"], step["outside"]), ({"expr": "wall_mm"}, True))
+        self.assertEqual(result.recipe["version"], 17)
 
     def test_no_faces_no_thickness_or_too_many_faces_refuse(self):
         many = [{"token": "f%d" % i, "point": [i, 0, 10]} for i in range(33)]
