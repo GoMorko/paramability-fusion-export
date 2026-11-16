@@ -37,6 +37,7 @@ from ..orca_recipe.enums import BooleanMode, ExtrudeEnd, FeatureType
 from ..orca_recipe.feature import CadFeature
 from . import causes, finish_body, kept_refs, limits
 from ..design_model.problem import Problem
+from ..design_model.edges import through_sizes
 from ..design_model.steps import hole as hole_facts, thread as facts
 from ..design_model.values import Quantity
 from ..design_model import words as shared
@@ -354,6 +355,19 @@ def hole_lengths(item, data, spec, positions, normal, depth, ctx):
             return Skip(shared.THREAD_DEEPER_THAN_HOLE)
         lengths = [part] * len(positions)
     return lengths
+
+
+def mark_through_length(ctx, item, data):
+    """Mark the sizes that may move the faces a tapped hole through all goes in and comes out at
+    (`edges.through_sizes`), when its thread runs the whole hole: the thread length is the part's thickness now,
+    written as a number. Asked after the hole centres are placed, so these marks do not hold the hole's own centre."""
+    found = facts.hole_depth(data)
+    if ctx.table is None or isinstance(found, Problem) or not found.full:
+        return
+    names = through_sizes(ctx.table, ctx.capture.get("items") or [], item, data)
+    if names:
+        ctx.doubt(names, "%s: its thread runs through the part as thick as it is now, and Orca keeps that length"
+                  % (item.get("name") or "a hole"))
 
 
 def hole_ends(ctx, where, spec, length, what):

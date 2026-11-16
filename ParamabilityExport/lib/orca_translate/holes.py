@@ -126,6 +126,8 @@ def hole(ctx, step):
         ctx.notes.append("%s: %d of its holes do not meet the part as the Orca copy builds it and are left out."
                          % (label(item), len(positions) - len(drilled)))
     found = hole_place.places(ctx, item, data, normal, positions)
+    if spec is not None and depth is None:
+        threads.mark_through_length(ctx, item, data)
     ends = {}
     for n, _, _ in drilled if spec is not None else ():
         ends[n] = threads.hole_ends(ctx, found[n], spec, lengths[n], label(item))

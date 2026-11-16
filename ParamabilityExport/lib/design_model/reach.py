@@ -11,7 +11,8 @@ destination (the recipe, the Orca output, the probe plan) decides that. The fact
   component `borrowed_plane_sizes`): the sizes behind its construction plane and, for a plane on a face or on
   geometry built on the part, every size an earlier step reads;
 - a face or plane a step starts from or reaches to (`moving_reaches`, `reach_sizes`, `any_face_sizes`), and any
-  other plane, axis or face of the body's component that a step uses as a place (`reference_sizes`);
+  other plane, axis or face of the body's component that a step uses as a place (`reference_sizes`), and what may
+  turn the direction of a rectangular pattern (`direction_sizes`);
 - the offset plane whose own distance one size sets (`offset_param`, `on_part`), and the construction geometry a
   step uses itself (`construction_fixes`);
 - the sizes a step reads (`step_sizes`, `item_reads`) and the sizes the probe has to try (`probed_sizes`,
@@ -535,6 +536,50 @@ def reference_sizes(table, timeline, item, record):
         if entity in _CONSTRUCTION and isinstance(record.get("made_by"), int):
             bound = record["made_by"] if bound is None else min(bound, record["made_by"])
         names |= _reads_before(table, timeline, bound)
+    return [name for name in table.ticked if name in names]
+
+
+def direction_sizes(table, timeline, item, which):
+    """Fusion names of the ticked sizes that may turn the direction `which` ("one" or "two") of the rectangular
+    pattern `item`, in table order: for a direction taken from an edge, axis or face of the body's component
+    (`direction_<which>_place` with `own`), the sizes that may move it (`reference_sizes`); for one taken from a
+    sketch line (`direction_<which>_sketch`), the sizes of that sketch. Empty for a direction of another component
+    (its measured reference says what moves it) and for one the capture does not describe."""
+    if table is None:
+        return []
+    data = item.get("data") if isinstance(item.get("data"), dict) else {}
+    place = data.get("direction_%s_place" % which)
+    if isinstance(place, dict) and place.get("own"):
+        return reference_sizes(table, timeline, item, place)
+    source = data.get("direction_%s_sketch" % which)
+    return sketch_sizes(table, source.get("sketch") or "") if isinstance(source, dict) else []
+
+
+def direction_kind(item, which):
+    """The Fusion type of what the direction `which` of the rectangular pattern `item` is taken from: the type of an
+    edge, axis or face of the body's component, "SketchLine" for a sketch line, else None."""
+    data = item.get("data") if isinstance(item.get("data"), dict) else {}
+    place = data.get("direction_%s_place" % which)
+    if isinstance(place, dict) and place.get("own"):
+        return place.get("entity_type")
+    return "SketchLine" if isinstance(data.get("direction_%s_sketch" % which), dict) else None
+
+
+def hole_end_sizes(table, timeline, item, data):
+    """Fusion names of the ticked sizes that may move the faces where the holes of `item` (its `data`) go in and come
+    out of the part, in table order: every size an item of the body's component reads before the step, except the
+    sizes that only the hole's own sketch reads. Those place the hole centres and change no face, but only when the
+    sketch is the item just before the hole: an item between them could take the sketch's geometry (a projection) into
+    a face of the part, so then no size is left out."""
+    if table is None:
+        return []
+    index = item.get("index")
+    sketch = data.get("sketch") if isinstance(data, dict) else None
+    at = _sketch_item(timeline, sketch, index) if sketch and isinstance(index, int) else None
+    if at is not None and any(isinstance(i.get("index"), int) and at < i["index"] < index and not i.get("suppressed")
+                              for i in timeline):
+        at = None
+    names = _reads_before(table, [i for i in timeline if at is None or i.get("index") != at], index)
     return [name for name in table.ticked if name in names]
 
 

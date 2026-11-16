@@ -637,14 +637,25 @@ Sweep and Loft, `SketchEngine::make_sweep`, `make_loft`, `entities_to_wires`) an
   before the step is marked. The centres' sketch coordinates still follow their sizes.
 - Orca writes some places of a step as the numbers the capture measured: the plane of a split, the plane of a
   mirror, the axis of a circular pattern, of a revolve and of a Move that turns, the direction of a rectangular
-  pattern taken from a sketch line, and the cylinder face a ThreadFeature is cut on. A size that may move such a
+  pattern taken from an edge, an axis or a sketch line, the cylinder face a ThreadFeature is cut on, and the thread
+  length of a tapped hole through all. A size that may move such a
   place is marked with a reason ("Split1 cuts along a plane that may move with it, and the copy cannot follow
   that"), so it never reads as "not used" or as following everywhere (`kept_refs.mark`, `kept_refs.mark_faces`).
   Which sizes may move a place is a fact of the shared layer (`design_model.reach.reference_sizes`): the sizes behind
   a construction plane or axis and behind what it is built on, and, for a face, an edge, a sketch line or
-  construction geometry built on the part, every size read before the step. For a direction taken from a sketch
-  line, the sizes of that sketch (`reach.sketch_sizes`). For a thread, every size read before the step
-  (`reach.any_face_sizes`). An origin plane or axis gives no size. A record of an older capture that does not say
+  construction geometry built on the part, every size read before the step. For a direction of a rectangular pattern
+  taken from an edge or axis of the part, the same (the `own` place of the capture). For a direction taken from a
+  sketch line, the sizes of that sketch. An edge or face that lies where a straight extrude made it (a side edge
+  along its axis, an edge over a fixed line of its outline, an end face or a side face) turns only with that
+  extrude's sketch plane (`design_model.edges.direction_sizes`), so a pattern along an edge of a plain box marks no
+  box size. For a thread, every size read before the step (`reach.any_face_sizes`). The thread of a tapped hole
+  through all runs the part's thickness now ("Hole1: its thread runs through the part as thick as it is now, and Orca
+  keeps that length", `threads.mark_through_length`). When each hole goes from one end face of a one sided straight
+  extrude to the other, only the sizes of that extrude's length are marked (`edges.through_sizes`); else every size
+  read before the hole, except the sizes that only the hole's own sketch reads when that sketch comes just before the
+  hole (`reach.hole_end_sizes`). Those sizes place the hole centres, which follow them, and they change no face.
+  The mark is made after the centres are placed, so it does not hold the hole's own
+  centre. An origin plane or axis gives no size. A record of an older capture that does not say
   what it is gives no size either, as in the recipe output. A place of another component is marked by
   `other_components.mark_refs`. A marked size counts as held for a later hole centre (`Context.held`).
 - Each ticked parameter ends as "follows the Orca variable" (everywhere it is used), "follows ... but not everywhere"

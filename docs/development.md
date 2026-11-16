@@ -36,7 +36,9 @@ package may import only packages above it in this list (not every one of them). 
   where the size probe saw the design not rebuild, change a followed outline or come apart (`built_ranges`);
   `words.py` the sentences both outputs give for the same fact (a problem of a reader, a refusal
   both outputs word alike); `reach.py` which sizes may move a sketch, a plane, a face or
-  a joint; `dimension_sizes.py` the sketch dimensions as formulas of the sizes and the size settings a sketch is tried
+  a joint; `edges.py` an edge or a face of the part matched to the straight extrude that made it (which sizes may
+  turn a pattern direction taken from it, and which may change the thickness a hole goes through);
+  `dimension_sizes.py` the sketch dimensions as formulas of the sizes and the size settings a sketch is tried
   at; `problem.py` the answer of a reader that cannot read, place or build the design (`Problem`: a code, plain words
   and a gap cause; each output turns it into its own refusal); `values.py` the one value type, `Quantity` (a number
   and, when sizes move it, a formula), with `Sized` (the written form) and the helpers that work on them; `tool_chains.py` the tool bodies of a Combine (which items build one, through splits and in another component, where a tool of another component sits, and the frame of the
