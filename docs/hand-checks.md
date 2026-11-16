@@ -517,6 +517,11 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     `0.707106781 * Chord`, and `Chord` is a size. Change `Chord` to 5 in Paramability: the round grows like Fusion's.
     Export the second box: the radius is 3 / (2 sin(a / 2)), where a is the angle between the slanted face and the
     face beside it, and matches the measured `radius`. If the measured radius differs, note both numbers.
+    On a third part, extrude a circle of diameter 30 mm up 10 mm and round its top edge with a Chord Length fillet of
+    `Chord`; on a fourth, round the top edge of a 40 x 20 x 10 mm box whose top was cut by a sphere of radius 60 mm.
+    Export the third part with `Chord` ticked: in `report.json` the cylinder in `side_faces` has an `axis` along Z and
+    the round follows `Chord`. Export the fourth: the radius is a number, `Chord` is not a size, and the reason says
+    the round sits on a face that curves across the edge.
 50. VR1, a variable radius: is Fusion's change even? Model a 60 x 20 x 20 mm box with its corner at the origin.
     Round the front top edge (along X) with a fillet whose type is Variable Radius: 1 mm at the start, 5 mm at the
     end, no radii between them. On a copy, round the same edge with 5 mm at the start and 1 mm at the end.

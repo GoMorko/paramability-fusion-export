@@ -3704,7 +3704,8 @@ edge than along it. The other curvature comes from the bend of the edge itself. 
 measure has a null radius.
 
 The reader also reads the kind of curve of the edge (`curve`). For a chord length set, it records the two faces of
-the edge (`side_faces`): a point on each face, the surface kind and the outward normal.
+the edge (`side_faces`): a point on each face, the surface kind and the outward normal. For a cylinder or a cone, it
+also records the direction of the axis (`axis`, null when the reader cannot read it).
 
 #### A chord length set
 
@@ -3725,19 +3726,41 @@ The handler (`finishes/measured_rounds.py`, `chord_sizes`) does these steps for 
 
 Edges with different angles get different radii. The step then writes `edgeSizes`.
 
-The radius follows the size of the chord length only when no size can turn the faces. The handler asks
-`design_model/edges.py` (`angle_sizes`) for the sizes that can change the angle between the faces of each edge:
+The formula is exact only when each face is straight across the edge. Look at a cut through the part that is
+square to the edge. In this cut, each face must be a straight line. Then the round is a circle that touches two
+lines, and only the angle between the lines sets the factor between the chord length and the radius. These faces are
+straight across the edge (`finish.straight_across`):
 
-- When there are no such sizes, the radius is the chord length times a constant number (1 / (2 sin(a / 2))). The
-  formula is exact at all sizes.
-- When there are such sizes, the radius is written as a number. The chord length is pinned
-  (`values.pin`): its sizes are not sizes of the copy, and the reason says that the copy writes the radius. Each
-  size that can turn the faces is marked "may give unexpected results". The first translation of an export marks
-  nothing.
+- a flat face;
+- a cylinder or a cone whose axis is square to the edge at each sample. The edge then goes round the axis, for
+  example the top edge of a round boss. The cut square to the edge holds the axis, and it cuts the face along a
+  straight line.
+
+Other faces curve across the edge: a sphere, a torus, or a cylinder whose axis is along the edge. On such a face, the
+factor also changes with the radius of the face. When the reader did not read the surface kind or the axis, the
+handler also counts the face as curved.
+
+The radius follows the size of the chord length only when both faces are straight across the edge and no size can
+turn the faces. The handler asks `design_model/edges.py` (`angle_sizes`) for the sizes that can change the angle
+between the faces of each edge:
+
+- When both faces are straight across the edge and there are no such sizes, the radius is the chord length times a
+  constant number (1 / (2 sin(a / 2))). The formula is exact at all sizes.
+- When a face curves across the edge, or when there are such sizes, the radius is written as a number. The chord
+  length is pinned (`values.pin`): its sizes are not sizes of the copy, and the reason says that the copy writes the
+  radius. Each size that can turn the faces is marked "may give unexpected results". For a face that is not flat,
+  `angle_sizes` gives every size that the steps before the round read, so the sizes that can bend the face are also
+  marked. The first translation of an export marks nothing.
 
 The handler writes one point for each edge. It does not use the picks that Fusion was given (the faces of the set, or
 a tangent chain). At other sizes, such a pick can include an edge that has a different angle, and thus a different
-radius.
+radius. The copy cannot give that edge its own radius.
+
+But a pick of Fusion can also hold more or fewer edges at other sizes. The copy with one point for each edge does not
+see these edges. Thus, when a set was picked from faces or from a tangent chain (`input_kinds` has `face`, or
+`tangent_chain` is true), the handler marks the sizes that can change which edges the pick holds
+(`finish._mark_own_picks`). These are all the sizes that the steps before the round read (`reach.any_face_sizes`).
+Each one is marked "may give unexpected results". The same rule applies to a round with a changing radius.
 
 #### A changing radius set
 
@@ -4275,7 +4298,7 @@ The calls with most risk, since they change the design or depend on Fusion's exa
 | `Feature.faces` | `read_gap_reach.py` | May not list every face after later steps. An empty or short list counts as "reached". |
 | `TemporaryBRepManager` | `read_intersect.py`, `read_split.py` | Tests an intersect on copies: the volumes of a Combine, and which pieces of a split lie inside the tool when no face tells. It must never touch the design. A boolean that fails gives no answer. |
 | `ThreadFeature.threadInfo`, `isFullLength`, `threadLength`, `threadOffset`, `inputCylindricalFaces`; the thread of `HoleFeature` | `read_thread.py`, `read_solid.py` | The member names and the units come from the API reference. Where a tapped hole keeps its thread (`thread`, `threadInfo` or the hole itself) is not confirmed: hand check TD2. A member that is missing reads as null, and the thread is left out. |
-| `ChordLengthFilletEdgeSet.chordLength`, `VariableRadiusFilletEdgeSet.startRadius`, `endRadius`, `midPositions`, `CurveEvaluator3D.getTangent`, `SurfaceEvaluator.getCurvature` | `read_finish.py` | The radius of the round is measured from the curvature of the face that the step made. Hand checks CR1 and VR1 confirm the rule of a chord length and the change of a changing radius. A member that is missing reads as null, and the round is left out. |
+| `ChordLengthFilletEdgeSet.chordLength`, `VariableRadiusFilletEdgeSet.startRadius`, `endRadius`, `midPositions`, `CurveEvaluator3D.getTangent`, `SurfaceEvaluator.getCurvature`, `Cylinder.axis`, `Cone.axis` | `read_finish.py` | The radius of the round is measured from the curvature of the face that the step made. The axis of a cylinder or cone beside a chord length edge tells if the face is straight across the edge. Hand checks CR1 and VR1 confirm the rule of a chord length and the change of a changing radius. A member that is missing reads as null: the round is left out, or, for an axis, the chord length keeps its number. |
 | `CoilFeature.faces`, `Edge.evaluator`, `ModelParameter.role`, `ModelParameter.createdBy` | `read_coil.py` | The API gives a coil no type, axis or hand. The reader takes the parameter roles, the faces and points along the edges. A member that is missing leaves the coil out. |
 | `BRepBody.lumps`, `Component.bRepBodies` | `probe_state.py` | Read at each try for the pieces of the part. Nothing is recomputed. |
 | `createForAssemblyContext`, `Occurrence.transform2` | `placement.py`, `probe_refs.py` | Places of other components. A wrong frame gives `placement.error` and a fixed shape. |

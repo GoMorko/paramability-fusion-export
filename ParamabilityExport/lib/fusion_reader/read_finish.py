@@ -153,9 +153,13 @@ SAMPLED_KINDS = ("chordLength", "variable")
 
 
 def _side_face(face):
-    """A face of an edge: a point on it, the kind of its surface and its outward normal at that point."""
-    return {"face_point": geo.point(face.pointOnFace), "surface": geo.surface_kind(face),
-            "normal": geo.outward_normal(face)}
+    """A face of an edge: a point on it, the kind of its surface and its outward normal at that point; for a cylinder
+    or a cone also the direction of its axis (null when it cannot be read)."""
+    found = {"face_point": geo.point(face.pointOnFace), "surface": geo.surface_kind(face),
+             "normal": geo.outward_normal(face)}
+    if found["surface"] in ("Cylinder", "Cone"):
+        found["axis"] = geo.safe(lambda: geo.unit_vector(face.geometry.axis), None)
+    return found
 
 
 def _samples(edge, record, sides=False):

@@ -50,9 +50,15 @@ What the copy can and cannot do, step by step. The README lists only the main li
 - A round with two different radii (Fusion's "asymmetric" rounds) is left out by both exports.
 - A round set by chord length is copied as a plain round. Its radius is the one the chord length gives at the angle
   where the two faces meet. That angle must be the same along each edge, and the radius Fusion made must match.
-  The radius follows the chord length size only while no size can turn the faces (faces of plain extrudes of the
-  part). Otherwise the copy writes the radius as a number: the chord length is not a size, and each size that may
-  turn the faces is marked "may give unexpected results".
+  The radius follows the chord length size only while both faces are flat, or round faces that the edge goes
+  round (the top edge of a round boss), and no size can turn the faces (faces of plain extrudes of the part).
+  Otherwise the copy writes the radius as a number: the chord length is not a size, and each size that may turn or
+  bend the faces is marked "may give unexpected results". On a ball shaped or ring shaped face, and on a round face
+  along the edge, the radius also depends on how the face curves.
+- When Fusion picked the edges of a round set by chord length, or of a round whose radius changes along the edge,
+  from faces or from a chain of edges that touch smoothly, the copy picks the edges one by one. The sizes read before
+  the step are then marked "may give unexpected results": at other sizes the faces or the chain may hold other
+  edges, which the copy does not round.
 - A round whose radius changes along its edge is copied only on one straight or arc edge, alone in its fillet, with
   no radii set between the two ends, and only when the radius Fusion made changes evenly from one end to the other
   (Fusion may blend it in a curve). The copy cannot repeat it in a pattern or mirror, and leaves it out inside a

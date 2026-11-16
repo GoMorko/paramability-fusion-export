@@ -208,6 +208,19 @@ class MeasuredRoundTest(unittest.TestCase):
         self.assertEqual(record["side_faces"][1], {"face_point": [20, 0, 5], "surface": "Plane", "normal": [0, -1, 0]})
         self.assertEqual({s["radius"] for s in record["samples"]}, {1.5})
 
+    def test_a_cylinder_beside_a_chord_length_edge_gives_its_axis(self):
+        cylinder = Obj("fusion::BRepFace", pointOnFace=P(20, 0, 5),
+                       geometry=Obj("core::Cylinder", axis=Obj(x=0.0, y=0.0, z=2.0)),
+                       evaluator=Obj(getNormalAtPoint=lambda p: (True, Obj(x=0, y=-1, z=0))))
+        edge_set = with_edges("ChordLengthFilletEdgeSet", [top_front_edge([flat_face((20, 10, 10), (0, 0, 1)),
+                                                                            cylinder])],
+                              chordLength=Obj(value=0.2, name="d5", expression="chord_mm"))
+        data = read_data(feature("FilletFeature", "Fillet1", edgeSets=Coll([edge_set]),
+                                 faces=Coll([round_face(lambda x: 1.5)])))
+        flat, curved = data["sets"][0]["edges"][0]["side_faces"]
+        self.assertNotIn("axis", flat)
+        self.assertEqual((curved["surface"], curved["axis"]), ("Cylinder", [0, 0, 1]))
+
     def test_a_changing_radius_set_reads_both_radii_its_mid_points_and_the_radius_along_the_edge(self):
         edge_set = with_edges("VariableRadiusFilletEdgeSet", [top_front_edge([])], startRadius=param(0.1),
                               endRadius=param(0.3), midPositions=Coll([]))
