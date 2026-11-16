@@ -2040,30 +2040,51 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     Both outputs write the direction as a number, so both mark these sizes. They read them through
     `edges.direction_sizes` (see `edges.py` below): the recipe output in `ref_motion.check_own_direction` (not in the
     first translation of an export), the Orca output in `repeat._mark_directions`.
-  - The faces where a hole goes in and comes out. `hole_end_sizes` gives every size that an earlier step reads,
-    except the sizes that only the sketch of the hole reads. These sizes only place the hole centres. The function
-    leaves them out only when the sketch is the item just before the hole. If an item is between them, that item can
-    project the sketch into a face of the part, so the function leaves out no size. The Orca output marks these sizes
-    for the thread of a tapped hole through all, because the thread length is the thickness of the part now. It
-    reads them through `edges.through_sizes` (see `edges.py` below).
-- `edges.py`: edges and faces of the part, matched to the straight extrude that made them. An extrude is straight
-  when it starts on its sketch plane or at an offset from it, has no taper, and each side ends at a distance. The
-  match is by the place of the edge or the face now:
-  - A side edge along the axis of the extrude. Its middle point lies over a corner of the outline.
-  - An edge across the axis. Its middle point lies over a line of the outline, and it runs along that line.
-  - An end face across the axis. Its point lies inside the outline.
-  - A side face. Its point lies over a line of the outline, and its normal is square to that line.
-  A side edge and an end face turn only with the sketch plane of the extrude (`reach.placement_sizes`). An edge
-  across the axis and a side face also turn with their line. The line does not turn when the sketch solver (the
-  default reading, `sketch_solve`) gives its two ends a gap of zero across or along, or a constant gap. Otherwise
-  the line can turn, and the general sizes stay. A step between the extrude and the pattern voids the match when it
-  moves bodies, when it can turn faces (`StepType.turns_faces`: a draft, a scale, a replace face, a delete face), or
-  when the step kind table does not know it. Without a match, `direction_sizes` gives `reach.direction_sizes`. When
-  several extrudes match, it gives the sizes of all of them.
-  `through_sizes` gives the sizes that can change the thickness of the part where a hole goes through. When each
-  hole goes in at one end face of a one sided straight extrude and comes out at the other end face, these are the
-  sizes of the length of that extrude. The far end face counts only when the measured end face (`end_offset`) lies
-  one length from the start. Otherwise `through_sizes` gives `reach.hole_end_sizes`.
+  - The faces where a hole goes in and comes out. `hole_end_sizes` gives every size that an earlier step reads. This
+    includes the sizes of the sketch of the hole. These sizes move the hole centres. If the part does not have the
+    same thickness everywhere, a hole that moves goes in and comes out at different faces. For example, a size can
+    move a hole from a thin plate to a position below a boss. The Orca output marks these sizes for the thread of a
+    tapped hole through all, because the thread length is the thickness of the part now. It reads them through
+    `edges.through_sizes` (see `edges.py` below).
+- `edges.py`: edges and faces of the part, matched to the straight extrudes that made them. The match applies only
+  to a plain part (`_plain_body`). A part is plain before a step when each step of its component before that step is
+  one of these:
+  - a straight extrude;
+  - a simple hole through all (it makes only round faces and round edges);
+  - a sketch or construction geometry;
+  - a step of another component that cannot change the bodies of this component.
+  Any other step (a revolve, a loft, a sweep, a pattern, a round, a move, or a step that the step kind table does not
+  know) can make an edge or a face at the same place as an edge or a face of an extrude. Then there is no match.
+  An extrude is straight when all of these conditions are true:
+  - it starts on its sketch plane or at an offset from it;
+  - it has no taper, and each side ends at a distance;
+  - its outlines are read fully and lie in one plane;
+  - the measured end face (`end_offset`) shows where its two end caps are.
+  The match uses the place of the edge or the face now:
+  - A side edge along the axis of the extrude. Its middle point lies over a corner of the outline, between the end
+    caps.
+  - An edge across the axis. Its middle point lies over a line of the outline, at an end cap, and the edge runs
+    along that line.
+  - An end face across the axis. Its point lies inside the outline, at an end cap.
+  - A side face. Its point lies over a line of the outline, between the end caps, and its normal is perpendicular to
+    that line.
+  A matched edge or face turns only with the sketch planes of the extrudes (`reach.placement_sizes`). The function
+  uses the sketch planes of all extrudes of the part, because an edge where two extrudes meet turns with the two
+  planes. An edge across the axis and a side face also turn with their line. The line does not turn when the sketch
+  solver (the default reading, `sketch_solve`) gives its two ends a gap of zero across or along, or a constant gap.
+  Otherwise the line can turn, and the general sizes stay. Without a match, `direction_sizes` gives
+  `reach.direction_sizes`.
+  `through_sizes` gives the sizes that can change the thickness of the part where a hole goes through. The thickness
+  is the same at all positions of the hole only when all of these conditions are true:
+  - the part is plain before the hole;
+  - each extrude is one sided, and makes a new body or joins;
+  - the axis of each extrude is parallel to the hole;
+  - all extrudes start and end on the same two planes;
+  - each hole goes in at one of these planes and comes out at the other, inside an outline.
+  Then the sizes are the sizes of the lengths and of the sketch planes of the extrudes (a plane can tilt against the
+  hole). For more than one extrude, the sizes of the start offsets are also included. A hole that moves out of all
+  outlines cuts no material. The sizes that move the plane of the holes are not included, because the Orca output
+  marks them for the hole itself. Otherwise `through_sizes` gives `reach.hole_end_sizes`.
   - The sizes that a step reads. `step_sizes` gives the sizes behind the values of one step and behind the sketches it
     uses (the sketch graphs and the dimensions of an outline brought in from another component included).
     `profile_sizes` gives the sizes that move the sketch of one outline. An outline of another component gives none:
