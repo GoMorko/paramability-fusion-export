@@ -9,11 +9,18 @@ from ...design_model import design
 from ...geometry import vec
 from ...geometry.footprint import polyline
 from . import material_boxes as mbox
+from .moved_placer import MovedPlacer
+from .shells import OutsideShell
 from .slabs import Slab
+from .thin_wall import shape_of
 from .tool_placer import ToolPlacer
 
 # Steps of a large angle (a draft, a sweep's taper) are not bounded.
 MAX_LEAN_DEG = 45.0
+# A sharp corner that turns by more than this (degrees) has a mitre too long to bound.
+MAX_MITRE_TURN_DEG = 150.0
+# Added to the box of a wall, in mm, so a point on its outer face is inside.
+WALL_TOL = 1e-3
 
 
 def number(value):
@@ -133,12 +140,96 @@ def bound(ctx, step, placers, modeled, by_id, after=0.0):
 
 
 def outside_shell_bound(step, placers):
-    """A shell that grows outward adds its wall outside the material its walk holds, no further than its thickness."""
-    thickness = number(step.get("thickness"))
-    box = adding_slabs_box(placers)
-    if thickness is None or box is None:
-        return mbox.UNKNOWN
-    return [mbox.grown(box, thickness)]
+    """A shell that grows outward adds its wall within the box its placer worked out when the shell was written
+    (`OutsideShell.wall_box`, carried with a moved placer)."""
+    for placer in placers:
+        motion = None
+        if isinstance(placer, MovedPlacer):
+            placer, motion = placer.inner, placer.motion
+        if isinstance(placer, OutsideShell) and placer.step_id == step.get("id"):
+            box = placer.wall_box
+            if box is None:
+                return mbox.UNKNOWN
+            return [box if motion is None else mbox.moved(motion, box, [])[0]]
+    return mbox.UNKNOWN
+
+
+def outside_wall_box(ctx, thickness, rounded):
+    """The box that holds the wall of a shell that grows outward by `thickness` (mm) around the part the walk `ctx` has
+    written so far, or None when it cannot be told.
+
+    The part lies in the box of the material of its placers and the bounds of the steps the model does not hold,
+    grown by the largest round or bevel. A rounded wall lies no further than the thickness from the part. A sharp wall
+    reaches further at a corner (its mitre), so it is bounded only for a part that is a stack of straight extrudes
+    (`_mitre_factor`)."""
+    steps, placers = getattr(ctx, "steps", None), getattr(ctx, "placers", None)
+    if steps is None or placers is None or not thickness > 0:
+        return None
+    held = mbox.material_boxes(placers)
+    lacked = bounds(ctx, steps, placers, 0.0)
+    finish = finish_size(steps)
+    if mbox.UNKNOWN in (held, lacked, finish):
+        return None
+    parts = [box for box, _ in held] + lacked
+    if not parts:
+        return None
+    factor = 1.0 if rounded else _mitre_factor(steps, placers)
+    if factor is None:
+        return None
+    return mbox.grown(mbox.union(parts), finish + thickness * factor + WALL_TOL)
+
+
+def _flat_placers(placers):
+    """The placers of a walk with the placers inside each tool that adds, or None for a tool that cuts or intersects."""
+    out = []
+    for placer in placers:
+        if isinstance(placer, ToolPlacer):
+            if placer.combine not in ("new", "add"):
+                return None
+            inner = _flat_placers(placer.placers)
+            if inner is None:
+                return None
+            out += inner
+        else:
+            out.append(placer)
+    return out
+
+
+def _mitre_factor(steps, placers):
+    """How far a sharp outward wall of thickness 1 can reach past the box of the part along any axis, or None.
+
+    It is told only for a part that only straight extrudes add (also in tools, patterns and mirrors) along one axis,
+    without a taper: each face is then a cap across that axis or a side wall along it. A corner of a side wall that
+    turns by an angle a moves out by 1 / cos(a / 2) across the axis (the mitre), and 1 along the axis at a cap, so no
+    point of the wall lies further than sqrt(factor^2 + 1). A cut, a round or bevel, or any other step can leave a
+    sharper corner, so it gives None."""
+    for step in all_steps(steps):
+        kind = step.get("kind")
+        if kind != "extrude" and kind != "toolBody" and not step_kinds.recipe_kind(kind).repeats:
+            return None
+    flat = _flat_placers(placers)
+    if not flat:
+        return None
+    axis, factor = None, 1.0
+    for slab in flat:
+        if not isinstance(slab, Slab) or slab.combine not in ("new", "add") or slab.taper is not None:
+            return None
+        turned = slab.motion.turn_vector(slab.axis)
+        if abs(abs(vec.dot(slab.frame["z"], slab.axis)) - 1.0) > 1e-9:
+            return None
+        if axis is None:
+            axis = turned
+        elif abs(abs(vec.dot(axis, turned)) - 1.0) > 1e-9:
+            return None
+        for loop in slab.profile.get("loops") or []:
+            shape = shape_of(loop.get("curves") or [])
+            if shape is None:
+                return None
+            for turn in shape[2]:
+                if abs(turn) > math.radians(MAX_MITRE_TURN_DEG):
+                    return None
+                factor = max(factor, 1.0 / math.cos(abs(turn) / 2.0))
+    return math.sqrt(factor * factor + 1.0)
 
 
 def draft_bound(step, placers):

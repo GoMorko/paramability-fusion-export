@@ -110,6 +110,25 @@ class FloatingJoinTest(unittest.TestCase):
         self.assertEqual(join_verdict(translate(capture(join_z=12.0, shell=inward)))["verdict"], "leftOut")
         self.assertEqual(join_verdict(translate(capture(join_z=20.0, shell=outward)))["verdict"], "leftOut")
 
+    def test_an_outward_wall_also_grows_material_that_is_not_a_plain_extrude(self):
+        # The sweep's bound reaches x = 31 mm; a rounded outward wall of 3 mm around it reaches x = 34 mm.
+        rounded = dict(inside=0.0, outside=3.0, shell_type="rounded", volume_after=3000.0)
+        verdicts = [join_verdict(translate(capture(base="sweep_sharp_corner", join_z=0.0, corner=(x, 10.0),
+                                                   shell=rounded)))["verdict"] for x in (32.5, 40.0)]
+        self.assertEqual(verdicts, ["translated", "leftOut"])
+
+    def test_a_sharp_outward_wall_reaches_past_its_thickness_at_a_sharp_corner(self):
+        # A 60 degree corner of a triangle at (40, 0): its sharp 3 mm wall reaches about 5.2 mm out along x.
+        triangle = [[0.0, 0.0], [40.0, 0.0], [20.0, 34.641016]]
+        sharp = dict(inside=0.0, outside=3.0, volume_after=3000.0)
+        found = capture(join_z=2.0, corner=(44.5, -3.0), shell=sharp)
+        profile = found["items"][1]["data"]["profiles"][0]
+        profile["loops"][0]["curves"] = [{"kind": "line", "start": triangle[n], "end": triangle[(n + 1) % 3]}
+                                         for n in range(3)]
+        self.assertEqual(join_verdict(translate(found))["verdict"], "translated")
+        self.assertEqual(join_verdict(translate(capture(join_z=2.0, corner=(50.0, -3.0), shell=sharp)))["verdict"],
+                         "leftOut")
+
 
 if __name__ == "__main__":
     unittest.main()

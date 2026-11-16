@@ -63,6 +63,22 @@ class OutsideShellTest(unittest.TestCase):
             self.assertFalse(holder.claims(ORIGINAL_FACE))
         self.assertIsNone(tool.place(OUTER_WALL, False))
 
+    def test_a_shell_inside_a_tool_claims_only_points_near_its_own_wall(self):
+        tool_walk = Context({"target": {"token": "t"}, "items": []})
+        tool_walk.enter({"index": 1})
+        tool_walk.add_slab(Slab("b", ON, "oneSide", Quantity(10.0), block(100, 110)))
+        ShellMaker(Quantity(WALL), [], True).make(tool_walk, "tool_shell", {})
+        ctx = part(False)
+        ctx.add_placer(ToolPlacer("tool", tool_walk.placers, "add", ()))
+        self.assertIsNotNone(follow.locate(ctx, ORIGINAL_FACE))
+        self.assertIsNone(follow.locate(ctx, [110 + WALL, 10, 5]))
+
+    def test_a_shell_whose_wall_cannot_be_bounded_claims_every_point_outside_the_part(self):
+        # The cut of `part` can leave a sharper corner than the outline shows, so the sharp wall is not bounded.
+        shell = part(True).placers[-1]
+        self.assertIsNone(shell.wall_box)
+        self.assertTrue(shell.claims([500, 500, 500]))
+
     def test_an_inward_shell_claims_nothing(self):
         self.assertFalse(part(False).placers[-1].claims(OUTER_WALL))
 

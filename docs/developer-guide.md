@@ -4144,16 +4144,33 @@ How later steps find faces after a shell. Each step that makes faces is kept as 
   open face.
 - A shell that goes outward is the placer `OutsideShell`. The faces of the part before it stay where they are, and a
   pick on one of them is placed as before. The new outer faces are not placed. A point that lies outside the part as it
-  was is "claimed" by the placer (`Placer.claims`). Then `follow.locate` stops and gives no place. Without it, an
-  earlier step could place such a point by chance: for example, a cut that reaches 2 mm past the top of the part has an
-  end face where the new outer wall is. A pick with no place is written as measured points, and every size that an
-  earlier step reads is marked, as for any pick the copy cannot follow. A tool placer and a moved placer pass the claim
-  of the placer inside them.
+  was, and inside the box of the wall, is "claimed" by the placer (`Placer.claims`). Then `follow.locate` stops and
+  gives no place. Without it, an earlier step could place such a point by chance: for example, a cut that reaches 2 mm
+  past the top of the part has an end face where the new outer wall is. A pick with no place is written as measured
+  points, and every size that an earlier step reads is marked, as for any pick the copy cannot follow. A tool placer
+  and a moved placer pass the claim of the placer inside them.
+- The box of the wall (`OutsideShell.wall_box`) limits the claim to points near the new wall. This is important for a
+  shell inside a tool body. The part as it was before the tool does not belong to the tool, so every point on a face
+  of the part lies outside the material of the tool. Without the box, the shell in the tool claims these points too,
+  and a later pick on a face of the part gets no place. `added_bounds.outside_wall_box` makes the box when the shell
+  is written. It starts from the box of all the material that the walk has written before the shell: the material
+  of the placers (`material_boxes.material_boxes`) and the bounds of the steps that have no placer for their
+  material, for example a sweep (`added_bounds.bounds`). It grows this box by the largest round or bevel and then by
+  the wall:
+  - A rounded wall lies no further than the thickness from the part. The box grows by the thickness.
+  - A sharp wall reaches further at a sharp corner (the mitre). A corner that turns by an angle a moves out by the
+    thickness divided by cos(a / 2). The copy can find all the corners only when the part is a stack of straight
+    extrudes along one axis, without a taper, cut, round, bevel or other step (also in tools, patterns and mirrors).
+    Then the box grows by the thickness multiplied by sqrt(f * f + 1), where f is the largest mitre factor of the
+    outline corners. A corner that turns by more than 150 degrees has no box.
+  When one part of this cannot be told, the shell has no box. It then claims every point outside the part as it was,
+  as before. This gives more picks without a place, but it never places a pick on a wrong face.
 - `OutsideShell` knows the hollow (the part before it, as material that is removed) and does not know the wall. It is
   `opaque`: a later step on the sketch of another part says it cannot check that it still meets the wall.
 - The check for a join that would float (`faces/floating.py`) treats an outward shell as a step that may add material.
-  The material lies no further than the thickness from the material the copy holds, so a join on the outer wall stays.
-  An inward shell only removes material.
+  The material lies in the box of the wall (`added_bounds.outside_shell_bound`), so a join on the outer wall stays.
+  A shell without a box is a step that the check cannot bound: every later join stays. An inward shell only removes
+  material.
 
 An outward shell, a closed hollow and a rounded shell cannot be checked in Fusion's tests. They have hand checks in
 `docs/hand-checks.md` (SH1, SH2 and SH3). The Orca output leaves every shell out (`orca_translate/finishes.py`).
