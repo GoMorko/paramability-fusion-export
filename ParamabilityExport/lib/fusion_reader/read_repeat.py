@@ -1,4 +1,4 @@
-"""Rectangular pattern, circular pattern and mirror features as plain dicts (docs/capture-format.md).
+"""Rectangular, circular and path pattern and mirror features as plain dicts (docs/capture-format.md).
 
 The inputs and numbers are read with the timeline marker just before the item. The pattern elements (the measured
 transform of every copy) exist only once the feature is computed, so they are read with the marker just after it.
@@ -8,6 +8,9 @@ would look like a pattern with every copy suppressed.
 The mirror plane, the circular pattern axis and a rectangular pattern direction taken from an edge or construction
 axis of the part also say what they are (origin, face, edge, construction geometry and what it is built on; see
 read_reference.py), so the translators can tell whether sizes move them.
+
+The path of a path pattern is read as a sweep path is (`read_sweep.path_record`); a path of one body edge also says
+what it is (`path_place`). Each setting of a path pattern that cannot be read is null, and the translators refuse it.
 """
 from . import read_geometry as geo
 from . import read_solid
@@ -17,6 +20,7 @@ from .read_bodies import result_bodies, with_points
 from .read_finish import strict_items
 from .read_reference import add_reference, axis_with_reference, reference_of
 from .read_sketch import sketch_place
+from .read_sweep import path_record
 
 _ENTITY_TYPES = [
     ("feature", "features"),
@@ -215,6 +219,51 @@ def circular_before(feature, ctx):
                        .add("total_angle_deg", lambda: feature.totalAngle, "angle").found)
 
 
+def _path_place(path, ctx):
+    """`{ "own": true, ...what it is }` of a path that is one body edge of the target's component
+    (`read_reference.reference_of`), else None."""
+    entities = geo.safe(lambda: [path.item(i) for i in range(int(path.count))], None)
+    if not entities or len(entities) != 1:
+        return None
+    edge = geo.safe(lambda: geo.native_input(entities[0].entity, ctx), None)
+    if geo.type_name(edge) != "BRepEdge" or geo.safe(lambda: bool(geo.foreign(edge, ctx)), True):
+        return None
+    found = geo.safe(lambda: reference_of(edge, ctx), None)
+    return dict(found, own=True) if found else None
+
+
+def _flag(read):
+    """A true or false setting, or None when it cannot be read."""
+    return geo.safe(lambda: bool(read()), None)
+
+
+def path_before(feature, ctx):
+    data = _common(feature, ctx)
+    path = geo.safe(lambda: feature.path, None)
+    start = geo.safe(lambda: float(feature.startPoint), None)
+    data.update({
+        "path": geo.safe(lambda: path_record(path, ctx), None),
+        "quantity": geo.safe(lambda: _number(feature.quantity, None), None),
+        "distance": geo.safe(lambda: geo.length(feature.distance), None),
+        "distance_type": geo.pick_by_text(
+            geo.safe(lambda: geo.enum_name(feature.patternDistanceType, "PatternDistanceType", "PatternDistanceTypes"), ""),
+            _DISTANCE_TYPES, "other"),
+        # Where on the path (0 its start, 1 its end) the distance is counted from.
+        "start_point": start if start is not None and 0.0 <= start <= 1.0 else None,
+        "flip": _flag(lambda: feature.isFlipDirection),
+        "symmetric": _flag(lambda: feature.isSymmetric),
+        # True: each copy turns with the path; false: every copy keeps the original's direction.
+        "along_path": _flag(lambda: feature.isOrientationAlongPath),
+        "elements": [],
+        "suppressed_ids": [],
+    })
+    place = _path_place(path, ctx) if path is not None else None
+    if place is not None:
+        data["path_place"] = place
+    return with_params(data, Params().add("quantity", lambda: feature.quantity, "scalar")
+                       .add("distance", lambda: feature.distance).found)
+
+
 def pattern_after(feature, ctx, data):
     found = {"elements": pattern_elements(feature), "suppressed_ids": _suppressed_ids(feature)}
     found.update(_result_bodies(feature, ctx, data))
@@ -255,5 +304,6 @@ def mirror_after(feature, ctx, data):
 READERS = {
     "RectangularPatternFeature": (rectangular_before, pattern_after),
     "CircularPatternFeature": (circular_before, pattern_after),
+    "PathPatternFeature": (path_before, pattern_after),
     "MirrorFeature": (mirror_before, mirror_after),
 }

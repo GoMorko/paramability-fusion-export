@@ -995,6 +995,7 @@ imports translator code, and only the translator reads `HANDLERS`.
 | `DraftFeature` | `finishes.draft.handle` |
 | `OffsetFacesFeature` | `finishes.offset.handle` |
 | `RectangularPatternFeature`, `CircularPatternFeature`, `MirrorFeature` | `repeat.body_copies.rectangular`, `.circular`, `.mirror` |
+| `PathPatternFeature` | `repeat.body_copies.path` (see 3.14) |
 | `SplitBodyFeature` | `bodies.split.handle` |
 | `CopyPasteBody`, `MoveFeature` | `bodies.paste.handle`, `bodies.move.handle` |
 | `EmbossFeature` | `extrude.emboss.handle` |
@@ -1016,11 +1017,11 @@ types that the add-in does not copy, with the reason and the cause of the hint (
 | `ScaleFeature` | "Scaling a body is not copied." | `scale` |
 | `ReplaceFaceFeature` | "Replace Face is not copied." | `replaceFace` |
 | `RibFeature`, `WebFeature` | "Rib is not copied.", "Web is not copied." | `ribWeb` |
-| `PathPatternFeature` | "Path Pattern is not copied." | `pathPattern` |
 
-Scale, Replace Face, Rib, Web, Path Pattern and the surface Offset also have the flag `reaches_bodies`. They can change
+Scale, Replace Face, Rib, Web and the surface Offset also have the flag `reaches_bodies`. The Path Pattern has it too. They can change
 or take bodies of another component, so the capture walk measures the body around them also when they sit in another
-component. A coil and a modelled thread are copied, so they are not in this table (3.12 and 3.13).
+component. A coil, a modelled thread and a path pattern are copied, so they are not in this table (3.12, 3.13 and 3.14). A path
+pattern that is left out keeps the cause `pathPattern`.
 
 A second table, `RECIPE_KINDS`, lists the recipe step kinds the translator writes (`extrude`, `revolve`, `hole`,
 `round`, `bevel`, `shell`, `offsetFaces`, `pattern`, `mirror`, `toolBody`, `move`, `loft`, `sweep`, `draft`, `thread`,
@@ -1148,7 +1149,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `scale` | the step type Scale | Change the sizes in the sketches instead of scaling the body. |
 | `replaceFace` | the step type Replace Face | Cut the shape with an extrude, or extrude the face up to the shape you want. |
 | `ribWeb` | the step types Rib and Web | Draw the rib or web outline in a sketch and extrude it. |
-| `pathPattern` | the step type Path Pattern | Use a rectangular or circular pattern, or a mirror. |
+| `pathPattern` | a path pattern that is not copied (a path that is not one line, arc or circle, copies on both sides of the start point, copies that keep their direction on a round path, copies past the end of the path) | Use a rectangular or circular pattern, or a mirror. |
 | `boundaryFill` | the step type Boundary Fill | Build the solid with extrudes and cuts instead of filling a boundary. |
 | `newComponent` | an extrude, revolve, loft or sweep that makes a new component | Make the body in the component that holds the part. |
 | `otherComponent` | a step that reaches into another component (the walk) | Use sketches, planes and faces of the part's own component. |
@@ -1745,9 +1746,10 @@ one folder per family of steps.
     the volumes), `coil_values.py` (the sizes of the coil as formulas) and `coil_limits.py` (the caps and the refusal
     texts).
   - `repeat/`: patterns and mirrors. `body_copies.py` (bodies), `repeat_*.py` (sources, build, lattice, the
-    three kinds, the mirror reach) and `symmetric.py` (copies on both sides: `extra_side`, `value_at`). The reading of
-    the copies, the grid index, the reach of a symmetric direction and the mirror plane is in
-    `design_model/steps/repeat.py`. The package `__init__` is the entry point the walk imports.
+    rectangular, circular and path patterns, the mirror, the mirror reach) and `symmetric.py` (copies on both sides:
+    `extra_side`, `value_at`). The reading of the copies, the grid index, the reach of a symmetric direction and the
+    mirror plane is in `design_model/steps/repeat.py`. The plain pattern that a path pattern equals is in
+    `design_model/steps/path_pattern.py` (see 3.14). The package `__init__` is the entry point the walk imports.
   - `combine/`: `step.py` (`handle`) and `tool_walk.py` (the walk of a tool body, `cannot_copy`).
   - `finishes/`: `finish.py` (fillet, chamfer, shell; it reads the sets of rounds and chamfers from `design_model/steps/finish.py`), `draft.py`, `offset.py`.
   - `bodies/`: `move.py` (the fit of the move is in `design_model/steps/move.py`), `paste.py`, `split.py`, `split_rules.py` (`stop_reason`: when a split stops the copy, from
@@ -1816,7 +1818,9 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   frames in the frame of the part (`data_in_component` for the data of a pattern, `read_in_component` for a probe
   read), the grid index of a copy (`solve_lattice`), the steps a symmetric direction runs each way (`reach`,
   `FUSION_EXTRA_SIDE`), the plane of a mirror (`mirror_plane`) and the timeline items that a pattern or a mirror
-  repeats (`repeated_items`). `steps/move.py`: the rigid move that carried a body, fitted from its corners before and after
+  repeats (`repeated_items`). `steps/path_pattern.py`: the plain pattern that a path pattern on one line, arc or
+  circle equals (`layout`), how far its copies can run before they pass an end of the path (`room`), and which way a
+  measured copy runs along the path (`run_of`, `turn_deg`). `steps/move.py`: the rigid move that carried a body, fitted from its corners before and after
   (`fit`). `steps/split.py`: which piece of a split lies inside the tool body (`resolve`). How a copy is written
   and what it does about a size stay in each translator.
 - `design.py`: the design as the walks read it. `read(capture, table, motion, chain, cache)` gives one
@@ -3422,6 +3426,79 @@ them, every value is a number and its sizes are marked.
 
 A coil is not repeatable: a pattern or a mirror of a coil is a gap. The handler writes the step with `repeatable=False`,
 and the `coil` kind has no repeat rule.
+
+### 3.14 How a path pattern is translated
+
+A path pattern (`PathPatternFeature`) puts copies along a path. The recipe has no pattern along a path. But two kinds
+of path give a pattern that the recipe has:
+
+- A straight line. Each copy moves along the line by the distance. A copy does not turn on a line. Thus the pattern is
+  a rectangular pattern with one direction: the direction of the line.
+- An arc or a circle. Each copy turns with the path, about the centre of the arc. Thus the pattern is a circular
+  pattern about the axis of the arc. The axis goes through the centre of the arc and is normal to its plane. The
+  distance along the arc gives the angle: angle in degrees = distance x 180 / (pi x radius).
+
+The reader (`fusion_reader/read_repeat.py`, `path_before`) reads the path as the sweep reader reads a path
+(`read_sweep.path_record`). It also reads the count (`quantity`), the distance, the distance type (`extent` or
+`spacing`), the start point (from 0 to 1 along the path), the flip, the symmetric flag and the orientation
+(`along_path`). A setting that cannot be read is null. For a path of one body edge, `path_place` says what the edge is.
+With the marker after the step, the reader reads the copies (`elements`), as for the other patterns.
+
+The shared reader `design_model/steps/path_pattern.py` (`layout`) gives the plain pattern, or a problem:
+
+1. The path must be one line, one arc or one circle. Another curve, or more than one curve, is a problem (cause
+   `pathPattern`).
+2. Copies on both sides of the start point (`symmetric`) are a problem.
+3. On an arc or a circle, the copies must turn with the path (`along_path` is true). Copies that keep their direction
+   only slide along the arc. No plain pattern does that, so it is a problem. On a line, the setting changes nothing.
+4. A setting that cannot be read is a problem.
+
+`layout` also gives `room`: how far the copies can go from the start point to each end of the path. On a closed path
+(a circle), the room is the length of the path. It is not known what Fusion does with copies past an end of the path.
+Thus the translator keeps the copies on the path.
+
+The handler is `translator/repeat/repeat_path.py`, `path`. It does these steps:
+
+1. It refuses the problems of `layout` with their words.
+2. It checks the way the copies run. Fusion counts the distance toward the end of the path, or toward its start when
+   the flip is set. On a line, a measured copy that runs the other way leaves the step out. On an arc, the handler
+   tries the measured turns both ways (`_measured_turn`).
+3. It finds how far the last copy goes along the path (the travel). For an `extent` distance, the travel is the
+   distance. For a `spacing` distance, it is the distance x (count - 1). A travel that is longer than the room leaves
+   the step out. When the count or the distance follows sizes, the travel can grow. Then the handler cuts the ranges
+   of those sizes to where the copies stay on the path (`_keep_on_path`). When no cut can do that, it marks the sizes.
+4. It marks the sizes that may move or turn the path (`_mark_path`). For a sketch path, these are the sizes of the
+   sketch, the sizes that move the plane of the sketch, and the sizes before a sketch with projected geometry
+   (`reach.sketch_line_sizes`). For an edge of the part, these are the sizes of the steps before it
+   (`reach.reference_sizes`). The path is written as numbers.
+5. It writes the data of the plain pattern and gives it to the rectangular or the circular handler. The item keeps its
+   index and name.
+
+For a line, the data has `direction_one` (the line), `quantity_one`, `distance_one` and the distance type. The
+parameters of the count and the distance go under the new names. The sketch or the edge of the path goes in as
+`direction_one_sketch` or `direction_one_place`. Thus the rectangular handler marks the sizes that may turn the line,
+as it does for a direction of its own (`ref_motion.check_own_direction`).
+
+For an arc or a circle, the data has the axis (marked `fixed`, because the handler marked the sizes of the path), the
+count and the total angle. The radius is read rounded. Thus the handler takes the turn between copies from the
+measured copies. The measured turn must agree with the turn from the distance and the radius to 1 part in 10 000
+(`TURN_SHARE`). Else the step is left out. The circular handler takes a function for the total angle
+(`total_angle`). The function writes the angle as a formula of the distance (and of the count for a `spacing`
+distance). Thus the angle follows the sizes. A path pattern that goes round a whole circle is written as a full turn.
+Its distance then stays a number, and its sizes are marked.
+
+The rectangular and the circular handler check the measured copies against the pattern that they write. Thus a copy
+that Fusion put in another place leaves the step out. A refusal that has no cause of its own gets the cause
+`pathPattern`, unless it comes from an earlier gap.
+
+The step kind table gives the path pattern `sketches=(PATH,)`. Thus the size probe follows the path sketch as it
+follows a sweep path. The probe does not read the copies again (no `pattern` value): a pattern with copies on both
+sides is not copied. A path pattern of bodies or faces is refused by the pattern handler, as for the other patterns.
+The Orca output has no handler for a path pattern, so it leaves the step out.
+
+Example, made up: a sketch line of 30 mm, a hole at its start, a count of 3 and a spacing of 15 mm. The recipe gets a
+`pattern` step with `linear: {dir: [1, 0, 0], count: 3, step: 15}`. The travel is 2 x 15 = 30 mm, which is the room.
+Thus the ranges of the count and the spacing stop at their values now.
 
 ## 4. Debugging
 

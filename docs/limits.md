@@ -58,6 +58,13 @@ What the copy can and cannot do, step by step. The README lists only the main li
   was measured odd and can become even inside its size range follows the sizes for a rectangular pattern (Fusion puts
   the extra copy of an even count ahead of the original, as seen in its exports); a circular one may give unexpected
   results at an even count, and so may a pattern whose tries show the copies elsewhere.
+- A path pattern is copied when its path is one straight line, one arc or one circle. On a line it becomes a row of
+  copies along the line. On an arc or a circle the copies must turn with the path, and it becomes a pattern round the
+  centre of the arc. Its count and distance can follow sizes. The copies must stay on the path: when a size can move
+  them past an end of the path, its range stops there. The path itself is copied as it is now, so a size that moves
+  or turns the path may give unexpected results. These are left out: a path of another curve or of more than one
+  curve, copies on both sides of the start point, copies that keep their direction on a round path, and copies past
+  the end of the path. A path pattern is not copied to Orca.
 - A mirror plane, pattern or revolve axis, a flat face or plane an extrude starts from or reaches to, a hole on sketch
   points or on a flat face of another component, and a pattern direction taken from one, are copied and follow the
   sizes the tries measured (see above). Where the tries could not measure the place, or it turns, the size that may move

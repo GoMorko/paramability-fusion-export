@@ -68,7 +68,7 @@ class GapHintTest(unittest.TestCase):
     def test_each_listed_kind_that_does_not_copy_gets_its_own_reason_and_hint(self):
         kinds = {"ScaleFeature": gap_hints.SCALE, "ReplaceFaceFeature": gap_hints.REPLACE_FACE,
                  "RibFeature": gap_hints.RIB_WEB, "WebFeature": gap_hints.RIB_WEB,
-                 "PathPatternFeature": gap_hints.PATH_PATTERN, "BoundaryFillFeature": gap_hints.BOUNDARY_FILL}
+                 "BoundaryFillFeature": gap_hints.BOUNDARY_FILL}
         generic = translate(tray(unsupported(SHELL, "MadeUpFeature"))).gaps[0]["reason"]
         for type_name, cause in kinds.items():
             with self.subTest(type_name):

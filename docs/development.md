@@ -51,7 +51,8 @@ package may import only packages above it in this list (not every one of them). 
   and length, and the checks against what Fusion measured: end face, side walls, volume), `steps/hole.py` and
   `steps/thread.py` (the kind, the direction, the measured sizes and the thread of a hole and of a
   ThreadFeature), `steps/repeat.py` (the copies a pattern kept and their frames, the grid index of a copy, the reach of
-  a symmetric direction, the plane of a mirror, the items a pattern or a mirror repeats), `steps/move.py` (the rigid move fitted from the corners of a body),
+  a symmetric direction, the plane of a mirror, the items a pattern or a mirror repeats), `steps/path_pattern.py` (the
+  plain pattern a path pattern on one line, arc or circle equals, and the room its copies have on the path), `steps/move.py` (the rigid move fitted from the corners of a body),
   `steps/split.py` (which piece of a split lies inside the tool), `steps/finish.py` (the sets of a round or a chamfer:
   kinds, sizes, the face of the first distance of an uneven chamfer, edges of one size; each translator keeps its own
   picks of the edges), `steps/sweep.py` (the settings that are not plain, the outline points, the volume and end face

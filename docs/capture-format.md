@@ -964,6 +964,25 @@ sides of its plane, two different angles, an angle of 30 degrees or more, or no 
 `symmetric` (circular): the copies turn to both sides of the original. It matters for a part turn only; on a full
 circle the copies are the ordinary full circle.
 
+**PathPatternFeature** (`inputEntities`, `patternEntityType`, `path`, `quantity`, `distance`, `patternDistanceType`,
+`startPoint`, `isFlipDirection`, `isSymmetric`, `isOrientationAlongPath`, `patternElements`, `suppressedElementsIds`):
+
+```json
+{ "entity_type": "features", "sources": [3], "path": PATH, "quantity": 3, "distance": 15.0, "distance_type": "spacing",
+  "start_point": 0.0, "flip": false, "symmetric": false, "along_path": true, "elements": [...], "suppressed_ids": [],
+  "path_place": { "own": true, "entity_type": "BRepEdge", "edge_points": [...] } }
+```
+
+`path` is read as the path of a sweep (`read_sweep.path_record`: `closed`, `kind`, `curves` with `opposed`, `edges`,
+and for a sketch path `sketch`, `sketch_token`, `frame`, `reference`, `projected`; see SweepFeature below).
+`start_point` is where on the path the distance is counted from (0 its start, 1 its end; null outside that range).
+`flip`: the copies run toward the start of the path. `symmetric`: the copies spread to both sides of the start point.
+`along_path`: each copy turns with the path; false when every copy keeps the direction of the original. `path_place`
+is written only for a path of one body edge of the target's component (`read_reference.reference_of`). Each setting
+that cannot be read is null, and the handler leaves the step out. `quantity` and `distance` have `params`. The
+translator writes a path of one line as a rectangular pattern and a path of one arc or circle as a circular pattern
+(`design_model/steps/path_pattern.py`, developer guide 3.14).
+
 **MirrorFeature** (`inputEntities`, `mirrorPlane`, `isCombine`):
 
 ```json
@@ -1651,6 +1670,7 @@ plain number, a retired member) adds nothing, and `params` is absent when nothin
 | ShellFeature | `inside` |
 | RectangularPatternFeature | `quantity_one`, `quantity_two`, `distance_one`, `distance_two` |
 | CircularPatternFeature | `quantity`, `total_angle_deg` |
+| PathPatternFeature | `quantity`, `distance` (on a round path the distance gives the angle; on a whole circle it is not followed) |
 | CoilFeature | `diameter`, `section_size`, `taper_deg`, `revolutions`, `height`, `pitch` (each followed only where its formula gives the measured number; the taper is not followed) |
 | EmbossFeature | `depth` (read like an extrude length; a negative depth is written negated), `offset_x`, `offset_y`, `rotation_deg` (not followed: the copy needs them to be zero, and a size behind them is pinned) |
 
@@ -2596,6 +2616,13 @@ face outlines: `BRepFace` (`loops`, `geometry`, `evaluator`, `pointOnFace`, `ent
 `Arc3D`, `Circle3D`, `Ellipse3D`, `NurbsCurve3D` (`controlPointCount`, `degree`), `Component.features`,
 `Features.extrudeFeatures`, `Feature.timelineObject`, `TimelineObject.index`, `ExtrudeFeature` (`startFaces`,
 `endFaces`, `sideFaces`; the stub says the start faces of a symmetric extrude are on the positive normal side).
+
+Read in the same stubs on 2026-11-16 for Path Pattern: `PathPatternFeature` (`inputEntities`, `patternEntityType`,
+`path`, `quantity`, `distance`, `startPoint`, `isFlipDirection`, `patternDistanceType`, `isSymmetric`,
+`isOrientationAlongPath`, `suppressedElementsIds`, `patternElements`), `Path` (`count`, `item`, `isClosed`),
+`PathEntity` (`entity`, `curve`, `isOpposedToEntity`), `PatternElement` (`id`, `isSuppressed`, `transform`). Not run:
+what `startPoint` counts from on an opposed path, what Fusion does with copies past an end of the path, and whether
+an element transform of a path pattern is the move of the copy from the original (hand check PP1).
 
 Read in the same stubs on 2026-11-12 for Split Body (hand tests SB1 and SB2; exports of 0.10.5 on Fusion 2706.1.17
 confirm a split by an origin plane, by an offset plane and by a body, and that `splittingTool` gives nothing with
