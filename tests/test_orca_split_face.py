@@ -2,13 +2,20 @@
 import unittest
 
 from tests import context  # noqa: F401
-from tests.test_translate_other_bodies import BODY, _item, tray_with
+from tests.translator_helpers import load_capture
 
 from lib.orca_translate import translate
 
 
+BODY = {"token": "t1", "name": "Body1"}
+
+
 def _split_face(changed):
-    return tray_with(_item(7, "SplitFace1", "SplitFaceFeature", [BODY], target_changed=changed))
+    capture = load_capture("filter_tray_sized")
+    capture["items"].append({
+        "index": 7, "name": "SplitFace1", "type": "SplitFaceFeature", "suppressed": False, "health": "ok",
+        "message": "", "in_target_component": True, "bodies_after": [BODY], "data": {}, "target_changed": changed})
+    return capture
 
 
 class OrcaSplitFaceTest(unittest.TestCase):
