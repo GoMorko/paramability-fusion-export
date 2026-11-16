@@ -22,7 +22,7 @@ from ..results.verdicts import COPIED, LEFT_OUT, SKIPPED, verdict
 from .context import Context
 from .place import BED_CENTRE, Placement
 from .steps import HANDLERS, Skip
-from . import causes, finishes, other_components
+from . import causes, corner_tools, finishes, halfplanes, other_components
 from .finishes import HANDLERS as FINISH_HANDLERS
 from .threads import HANDLERS as THREAD_HANDLERS
 from .bodies import HANDLERS as BODY_HANDLERS
@@ -229,6 +229,8 @@ def translate(capture, size_table=None, bed=BED_CENTRE):
     """`OrcaResult` for a capture. `size_table` is the export's size table (None: every value a number). Raises
     `CaptureError` for a capture the translator cannot read, and for a part whose place in the assembly is not
     known (the plate mesh and the recipe would not meet)."""
+    corner_tools.forget_answers()
+    halfplanes.forget_answers()
     validate_capture(capture)
     placement = capture["target"].get("placement")
     if isinstance(placement, dict) and not isinstance(placement.get("frame"), dict):
