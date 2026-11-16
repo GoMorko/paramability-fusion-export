@@ -1,14 +1,22 @@
 """The recipe loops of a sketch outline as the translator asks for them: the shared loop writer
 (`design_model.loops`) with each of its problems turned into a Refusal. The helpers that cannot fail (`flip_y`,
-`segments_cost`, the caps and the text words) are read from `design_model.loops` itself."""
+`segments_cost`, the caps) are read from `design_model.loops` itself."""
 from ...design_model import loops as shared
 from ...design_model.problem import is_problem
 from ..result import Refusal
 
+# The recipe's own words for two outlines it does not copy yet, by problem code. The other problems keep the shared
+# sentence (`design_model.words`).
+FACE_OUTLINE = "A flat face used as a sketch outline is not copied yet."
+TEXT_OVERLAP = "This text has overlapping outlines, so it is not copied yet."
+OWN_WORDS = {"face": FACE_OUTLINE, "text_overlap": TEXT_OVERLAP}
+
 
 def _refused(found):
     """`found` with a problem of the loop writer turned into its Refusal; anything else as it is."""
-    return Refusal(found.words, cause=found.cause) if is_problem(found) else found
+    if not is_problem(found):
+        return found
+    return Refusal(OWN_WORDS.get(found.code, found.words), cause=found.cause)
 
 
 def loop_of(curves, sketch="", text=False):

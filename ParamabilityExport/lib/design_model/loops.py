@@ -14,13 +14,13 @@ from ..geometry.tolerances import CHAIN_TOL
 from ..package.numbers import round9
 
 from ..geometry import spline_fit
+from . import words
 from .problem import Problem
 from .values import Sized, negated
 
 RIGHT_ANGLE_TOL = 1e-6
 ANGLE_TOL_DEG = 1e-6
 MAX_LOOP_POINTS = 1000
-TEXT_TOO_BIG = "This text has too many outline points to copy."
 MIN_AREA_MM2 = 1e-6
 
 
@@ -30,10 +30,6 @@ def _pt(p):
 
 def _dist(a, b):
     return math.hypot(a[0] - b[0], a[1] - b[1])
-
-
-def _where(sketch):
-    return "An outline in %s" % sketch if sketch else "An outline"
 
 
 def _area(chain):
@@ -85,9 +81,9 @@ def loop_of(curves, sketch="", text=False):
     """Chain one profile loop's capture curves (sketch 2D mm) into a recipe loop dict, or a Problem. `text` words
     the problems for a loop of sketch text."""
     if not curves:
-        return Problem("no_curves", "%s has no curves." % _where(sketch))
+        return Problem("no_curves", words.OUTLINE_NO_CURVES % words.outline_in(sketch))
     if any(c.get("kind") == "other" and not _readable(c) for c in curves):
-        return Problem("unread_curve", "%s has a curve that could not be read closely enough to copy." % _where(sketch))
+        return Problem("unread_curve", words.OUTLINE_UNREAD_CURVE % words.outline_in(sketch))
     if len(curves) == 1 and curves[0]["kind"] in ("circle", "ellipse"):
         c = curves[0]
         if c["kind"] == "circle":
@@ -104,27 +100,26 @@ def loop_of(curves, sketch="", text=False):
         c = curves[0]
         return {"kind": "circle", "center": _pt(c["center"]), "radius": round9(c["radius"])}
     if any(c.get("kind") not in ("line", "arc", "other") for c in curves):
-        return Problem("open", "%s is not closed." % _where(sketch))
+        return Problem("open", words.OUTLINE_OPEN % words.outline_in(sketch))
     chain = closed_chain(curves)
     if chain is None or len(chain) < 3 and all(link["kind"] == "line" for link in chain):
-        return Problem("open", "%s is not closed." % _where(sketch))
+        return Problem("open", words.OUTLINE_OPEN % words.outline_in(sketch))
     if len(chain) > MAX_LOOP_POINTS:
         return _too_big(sketch, text)
     if abs(_area(chain)) <= MIN_AREA_MM2:
-        return Problem("flat", "%s has no area." % _where(sketch))
+        return Problem("flat", words.OUTLINE_FLAT % words.outline_in(sketch))
     if all(link["kind"] == "line" for link in chain):
         rect = _as_rect(chain)
         if rect:
             return rect
         return {"kind": "polygon", "points": [_pt(link["start"]) for link in chain]}
     if len(chain) < 2 and chain[0]["kind"] != "other":
-        return Problem("open", "%s is not closed." % _where(sketch))
+        return Problem("open", words.OUTLINE_OPEN % words.outline_in(sketch))
     segments = []
     for link in chain:
         drawn = _segments_of(link)
         if drawn is None:
-            return Problem("complex_curve",
-                           "%s has a curve that is too complex to copy closely enough." % _where(sketch))
+            return Problem("complex_curve", words.OUTLINE_COMPLEX_CURVE % words.outline_in(sketch))
         segments.extend(drawn)
     if segments_cost(segments) > MAX_LOOP_POINTS:
         return _too_big(sketch, text)
@@ -133,8 +128,8 @@ def loop_of(curves, sketch="", text=False):
 
 def _too_big(sketch, text):
     if text:
-        return Problem("too_many_points", TEXT_TOO_BIG)
-    return Problem("too_many_points", "%s has too many points." % _where(sketch))
+        return Problem("too_many_points", words.TEXT_TOO_BIG)
+    return Problem("too_many_points", words.OUTLINE_TOO_MANY_POINTS % words.outline_in(sketch))
 
 
 def segments_cost(segments):
@@ -198,25 +193,16 @@ def flip_y(loop):
 MAX_INNER_LOOPS = 256
 
 
-# Why a sketch text record without outlines (`problem`) is not copied.
-TEXT_PROBLEMS = {
-    "too_many": TEXT_TOO_BIG,
-    "open": "The outlines of this text could not be closed, so it is not copied.",
-    "overlap": "This text has overlapping outlines, so it is not copied yet.",
-    "space": "The place of this text on its sketch could not be told with certainty, so it is not copied.",
-    "unread": "The outlines of this text could not be read from Fusion, so it is not copied.",
-}
-
-
 def outline_problem(profile):
     """A Problem when a capture profile record is not a drawn sketch outline (text without outlines, a flat face or
     an entity the reader does not know), else None."""
     if profile.get("text") and "loops" not in profile:
-        return Problem("text", TEXT_PROBLEMS.get(profile.get("problem"), TEXT_PROBLEMS["unread"]))
+        problem = profile.get("problem") if profile.get("problem") in words.TEXT_PROBLEMS else "unread"
+        return Problem("text_" + problem, words.TEXT_PROBLEMS[problem])
     if profile.get("face"):
-        return Problem("face", "A flat face used as a sketch outline is not copied yet.")
+        return Problem("face", words.OUTLINE_FACE)
     if "loops" not in profile:
-        return Problem("unread", "An outline of this step could not be read from Fusion, so it is not copied.")
+        return Problem("unread", words.OUTLINE_UNREAD)
     return None
 
 
@@ -232,8 +218,7 @@ def profile_loops(profile):
         return problem
     sketch = profile.get("sketch", "")
     if profile.get("space", "sketch") not in ("sketch", "model"):
-        return Problem("space",
-                       "%s could not be placed on its plane with certainty, so it is not copied." % _where(sketch))
+        return Problem("space", words.OUTLINE_UNPLACED % words.outline_in(sketch))
     outers, inners = [], []
     for raw in profile["loops"]:
         loop = loop_of(raw.get("curves") or [], sketch, bool(profile.get("text")))
@@ -241,8 +226,8 @@ def profile_loops(profile):
             return loop
         (outers if raw.get("outer") else inners).append(loop)
     if len(outers) != 1:
-        return Problem("outer_loops", "%s does not have exactly one outer loop." % _where(sketch))
+        return Problem("outer_loops", words.OUTLINE_NOT_ONE_OUTER % words.outline_in(sketch))
     if len(inners) > MAX_INNER_LOOPS:
-        return Problem("too_many_holes",
-                       TEXT_TOO_BIG if profile.get("text") else "%s has too many holes." % _where(sketch))
+        return Problem("too_many_holes", words.TEXT_TOO_BIG if profile.get("text")
+                       else words.OUTLINE_TOO_MANY_HOLES % words.outline_in(sketch))
     return outers[0], inners

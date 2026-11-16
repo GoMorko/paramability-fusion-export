@@ -1942,9 +1942,11 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   circle, ellipse, rect, polygon or profile. `loop_of` changes one loop. `profile_loops` changes one outline record into
   its outer loop and its inner loops. `outline_problem` finds an outline record that is not a drawn sketch outline
   (text without outlines, a flat face, or an entity that the reader does not know). `flip_y` mirrors a loop across the
-  x axis of the sketch. When an outline cannot be written as loops, the writer gives a `Problem`. The recipe
-  translator reads the loop writer through `translator/sketch/loops.py`, which turns each `Problem` into a `Refusal`
-  with the same sentence. The probe reads the loop writer directly (`probe/match.py`, `probe/plan/covered.py`). The
+  x axis of the sketch. When an outline cannot be written as loops, the writer gives a `Problem`. Its sentence is
+  in `words.py` (`OUTLINE_...`, `TEXT_PROBLEMS`). The recipe translator reads the loop writer through
+  `translator/sketch/loops.py`, which turns each `Problem` into a `Refusal` with the same sentence. Two outlines are
+  limits of the recipe, not facts of the design: a flat face used as an outline, and text with overlapping outlines.
+  For these two codes the translator gives its own sentence (`OWN_WORDS`). The probe reads the loop writer directly (`probe/match.py`, `probe/plan/covered.py`). The
   probe measures a sketch value through the same loops that the translator writes. Thus a measured value is the
   value that the translator writes.
 - `tried_ranges.py`: the range cuts that come from the tries of the size probe. `built_ranges` cuts the range of a
