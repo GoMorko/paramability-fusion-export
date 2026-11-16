@@ -1840,7 +1840,8 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     sure that the doubts and notes of a step count only when the walk copies the step. `error` is an exception that the bring in
     raised. `replay` raises it again, at the same point where the bring in raised it before.
   - `brought_data`: the data of `brought`. It is an empty dict when the item has no data. A handler copies the step
-    from this data.
+    from this data. `data` is the data of `item`, and `raw_data` is the data of `raw`. The probe plan reads
+    `raw_data`, because it reads the sketches of the step as the capture holds them.
   - `facts`: the facts that a shared step reader reads from the data of the step alone (`FACT_READERS`). The step
     kind table says which reader applies to a type (`StepType.facts` in `capture_model/step_kinds.py`). The sets of
     a round or a chamfer step (`steps/finish.py`) are such facts. The Orca handlers of a round and of a chamfer
@@ -1874,9 +1875,24 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
      the frame of the component, from the data alone. The policy of the output (the limits, the checks of the part,
      the choice to leave a step out) stays in the output.
 
+  Some modules do not copy steps. They read all the items of a capture to find facts: the steps of the picked body
+  (`export_plan/body_scope.py`), the items that the tries need (`export_plan/marker_roll.py`), the sketches of other
+  components (`export_plan/probe_flow/borrowed_view.py`) and the patterns with a sized count
+  (`probe/plan/request.py`). These modules read the data of each item through `as_read(item)`. They do not read
+  `item["data"]`. The probe plan (`probe/plan/covered.py`) reads the steps of `read` and their `raw_data`.
+
+  The packages below the shared layer (`geometry`, `params`) cannot import it. Thus they do not read the data of a
+  step from an item:
+  - A function of `geometry` gets the data of the step. Example: `combine_volume.exceeds(data, tools)` gets the data
+    of the Combine and the data of each tool step. The caller reads the data through `as_read`.
+  - A function of `params` gets plain values. The shared layer reads the steps and gives these values. Example:
+    `params/geometry_links.reach` gets the names of the parameters that can place an occurrence. The function
+    `design_model/step_links.reach` reads them from the steps and calls it.
+
   `tests/test_boundary.py` keeps the list of the modules that still take the data of a step from the item
   (`RAW_STEP_DATA`). A module that follows the rule above leaves that list. The modules of `orca_translate` follow the
-  rule. The modules of `translator`, `probe` and `export_plan` do not follow it yet.
+  rule, and so do the modules of `probe`, `export_plan`, `geometry` and `params`. Some modules of `translator` do not
+  follow it yet.
 - `roles.py`: what each timeline item is for the body that a walk builds, and which measures of that body apply to
   the item. The walk of the recipe and the walk of the Orca output both read them:
   - `role_of(item, target, chain)` gives a `Role`: the kind of the item (`SUPPRESSED`, `NOT_A_STEP`, `ASSEMBLY`,

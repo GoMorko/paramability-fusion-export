@@ -1,13 +1,13 @@
 """The borrowed sketches of a capture and the view of it the probe works on."""
 from ...probe import plan
-from ...design_model import borrowed
+from ...design_model import borrowed, design
 
 
 def _profile_lists(capture):
     """(item, profiles) of each item that has a profile list."""
     for item in capture.get("items") or []:
-        data = item.get("data")
-        if isinstance(data, dict) and isinstance(data.get("profiles"), list):
+        data = design.as_read(item).data
+        if isinstance(data.get("profiles"), list):
             yield item, data["profiles"]
 
 
@@ -43,8 +43,8 @@ def probe_view(capture):
         return capture
     items = []
     for item in capture.get("items") or []:
-        data = item.get("data")
-        if isinstance(data, dict) and isinstance(data.get("profiles"), list) and any(
+        data = design.as_read(item).data
+        if isinstance(data.get("profiles"), list) and any(
                 map(_is_borrowed, data["profiles"])):
             profiles = [_as_own(p) if _is_borrowed(p) else p for p in data["profiles"]]
             item = dict(item, data=dict(data, profiles=profiles))
