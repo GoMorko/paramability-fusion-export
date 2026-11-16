@@ -846,7 +846,8 @@ pipelines make it at the start of the export. `_Pipeline._measure` (in `pipeline
 2. `probe.finish(read_now(), labels)` builds the motion file from the states (`probe/build.py`). It also lists the
    sizes the probe cannot follow: sizes left without rows by the cap (`untried`), sizes that the time limit left
    without a try (`timed_out`, also in `untried`), sizes that change a borrowed sketch it could not follow, and sizes
-   that changed the body but moved nothing the probe follows (`body_moved`).
+   that changed the body but moved nothing the probe follows (`body_moved`). The motion file also keeps, for each
+   size that a try set alone, whether the body changed at that try (`body_changes`, `probe/build.py`).
 3. `finish` compares the sketches read after the restore with E0 (`measure_restore`). The largest difference is
    `restore_gap_mm`. The end of the export reads and compares once more (see 1.11).
 
@@ -1242,6 +1243,20 @@ handler forgot gives a warning, not a wrong part.
 The audit also drops a sketch size that the probe measured and that moves nothing ("changes nothing in the copied
 steps"), and a size that the probe tried and that changed nothing in the part ("it was tried at other values, and it
 changes nothing in this part").
+
+The text "changes nothing" must be true. Thus the translator looks at the body that the probe read at each try that
+set that size alone (`Motion.body_changes`, `translate._dropped`):
+
+- The body read the same at each such try. Then the size is dropped with "it was tried at other values, and it
+  changes nothing in this part" (`used` false, `tried` true).
+- The body changed at one such try, and no written formula reads the size. Then the copy cannot follow the size. The
+  size is dropped with "it changes this part in a way the copy does not follow" (`used` true). The copy keeps the
+  value now, so the part is correct at that value.
+- The probe did not read the body at such a try (an older motion file). Then the size gets the plain reason "is not
+  used by any copied step" (`used` false, no `tried`).
+
+A try where a sketch landed on another solution (`apart`), or where a size is past the values where its outlines
+hold (`outside`), does not count. The body change there does not come from the size alone.
 
 A size that only gaps read stays a size. It is loose with "Fusion uses it only in Extrude5, a step the export could
 not copy, so it changes nothing in the copy yet." (`_gap_sizes`). So the missing step can use it later.
@@ -2392,9 +2407,11 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   `history.py` (what earlier states show). The package re-exports the names the rest of the add-in reads as
   `plan.<name>`. The choice of which sizes get rows is not here any more: it is in `export_plan/probe_flow/sizes.py`.
 - `state.py`: `ProbeState`, the record of one probe state (`json()`, `from_json()`, `as_states()`,
-  `REPORT_READ_KEYS`). `build.py`, `plan` and `derived` take these records, or the report dicts. Rows stay dicts
-  (`design_edit.runner.row_key(row)` gives the key of a row).
-- `build.py`: from the states to the motion file (`build`), the spans (`spans`), the outline limits. `build`, `StateRun` and the plan entry functions (`probe_rows`, `nearer_rows` and the others) turn report dicts into `ProbeState` records once, with `as_states`. The helpers in `plan/history.py` and `spans` take `ProbeState` records only.
+  `REPORT_READ_KEYS`), and the comparison of the body in two reads (`box_numbers`, `body_changed`). `build.py`,
+  `plan` and `derived` take these records, or the report dicts. Rows stay dicts (`design_edit.runner.row_key(row)`
+  gives the key of a row).
+- `build.py`: from the states to the motion file (`build`), the spans (`spans`), the outline limits, the body change
+  of each size tried alone (`body_changes`). `build`, `StateRun` and the plan entry functions (`probe_rows`, `nearer_rows` and the others) turn report dicts into `ProbeState` records once, with `as_states`. The helpers in `plan/history.py` and `spans` take `ProbeState` records only.
 - `match.py`: which read profile stands for which captured profile, values of a state (`state_values`).
 - `pieces.py`: how many separate pieces the part is in at a state (`count`, `came_apart`, see 1.8).
 - `fit.py`: the straight line fit (`fit_value`, `least_squares`, `fit_residual`, `snap_coefficients`).
@@ -4136,6 +4153,7 @@ The motion file (`probe.motion`):
 | `refs` | Per measured reference key: an empty text when measured, else why not. |
 | `faces` | The outline faces that were measured. |
 | `body_moved` | Sizes that changed the body but moved nothing the probe follows. |
+| `body_changes` | Per size that a try set alone: `true` when the body changed at one such try, `false` when it read the same at all of them. A try on another sketch solution (`apart`) or past an outline limit does not count. |
 | `apart` | State numbers where a sketch was solved another way, so a different outline blames no size. |
 | `flipped` | Sketches that stayed on another outline after the values went back. |
 | `box_max` | The union of the body boxes over the states (used by cuts through all). |

@@ -1996,7 +1996,11 @@ the lowest and at the highest value it was measured at, the curved
 ones at their value now, so the formula over those sizes is checked by a state that changes several of them. A state that did not build keeps the
 first step that failed (`failed`). A ticked size the probe set to other values that no formula reads at the end is dropped with
 "it was tried at other values, and it changes nothing in this part" (`used` false, `tried` true), with "between A and
-B; beyond that it could not be tried" when the rows that built cover less than its range. A size that reaches a sketch
+B; beyond that it could not be tried" when the rows that built cover less than its range, but only when the body's box
+(and volume) read the same at every try that set it alone (`Motion.body_changes`, `probe.build.body_changes`; a try on
+another sketch solution, `apart`, or past an outline limit does not count). When the body changed at such a try, it is
+dropped with "it changes this part in a way the copy does not follow" (`used` true); when no such try read the body
+(an older motion file), it gets the plain "not used by any copied step" reason without `tried`. A size that reaches a sketch
 or a measured place (`design_model.reach.probed_sizes`) and whose rows all failed to build was not measured: it is
 doubted up front with "the design does not rebuild in Fusion at A (step) or B (step), the nearest values tried, so it
 could not be measured" (loose when a formula reads it, else dropped with `used` true), never called unchanging. A

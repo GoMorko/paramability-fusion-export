@@ -24,7 +24,8 @@ learning only.
 1. The add-in reads the steps of the body in the Fusion timeline: sketches, extrudes, holes, fillets and more.
 2. It changes your parameters for a short time and lets Fusion rebuild. This shows which sketches each parameter
    moves, and how much.
-3. It sets all parameters back to their values. Your design does not change.
+3. It sets all parameters back to their values. Your design does not change. A parameter that no copied step uses
+   is reported as "changes nothing" only when the body stayed the same each time the add-in changed it.
 4. It writes the steps and the parameters to a `.paramability` file. The file also holds a STEP file of the body as
    Fusion made it.
 5. Paramability builds the part from the steps and compares it with the STEP shape.

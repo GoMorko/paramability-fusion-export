@@ -216,10 +216,10 @@ def _mm(store, name):
 
 
 def pipe_port(still=False, bad_when=None, bad_item="Fillet1", outline_when=None, apart_when=None):
-    """Fusion where the box outline follows width and depth and the hole follows the pipe (unless `still`). With
-    `outline_when`, the pipe hole's sketch reads with one more loop (another outline) when it holds for the pipe
-    diameter in mm; with `apart_when`, the body reads as two solids then. `varied` lists the parameters away from
-    their start at every read."""
+    """Fusion where the box outline (and the body's box) follows width and depth and the hole follows the pipe (unless
+    `still`). With `outline_when`, the pipe hole's sketch reads with one more loop (another outline) when it holds for
+    the pipe diameter in mm; with `apart_when`, the body reads as two solids then. `varied` lists the parameters away
+    from their start at every read."""
     def read(request):
         out = copy.deepcopy(port.e0)
         scale = {"s1": (_mm(port.store, "width_mm") / 40.0, _mm(port.store, "depth_mm") / 30.0),
@@ -233,6 +233,7 @@ def pipe_port(still=False, bad_when=None, bad_item="Fillet1", outline_when=None,
                     if "radius" in curve:
                         curve["radius"] *= sx
         port.varied.append({n for n in START if port.store.exprs[n] != START[n]})
+        out["box"] = {"min": [0, 0, 0], "max": [_mm(port.store, "width_mm"), _mm(port.store, "depth_mm"), 10]}
         if outline_when is not None and outline_when(_mm(port.store, "pipe_d_mm")):
             loops = out["sketches"]["s2"]["profiles"][0]["loops"]
             inner = copy.deepcopy(loops[0])
@@ -241,7 +242,6 @@ def pipe_port(still=False, bad_when=None, bad_item="Fillet1", outline_when=None,
                 curve["entity"] = curve.get("entity", "") + "x"
             loops.append(inner)
         if apart_when is not None:
-            out["box"] = {"min": [0, 0, 0], "max": [40, 30, 10]}
             out["pieces"] = {"lumps": 2 if apart_when(_mm(port.store, "pipe_d_mm")) else 1, "others": []}
         return out
 
@@ -369,6 +369,21 @@ class PlacedComponentTest(unittest.TestCase):
         outcomes = {p["name"]: p["outcome"] for p in orca_translate.translate(self.capture, table).parameters}
         self.assertNotEqual(outcomes["move_x"], "unused")
         self.assertEqual(outcomes["body_x"], "unused")
+
+
+class UnreadTriedSizeTest(unittest.TestCase):
+    """spare_mm is read by no step, and the probe tried it alone."""
+
+    def test_only_a_size_whose_tries_kept_the_body_as_it_was_is_called_unchanging(self):
+        for label, body, want in (("body changed", {"spare_mm": True}, (True, None)),
+                                  ("body the same", {"spare_mm": False}, (False, True)),
+                                  ("body not read", {}, (False, None))):
+            with self.subTest(label):
+                motion = motion_of(NAME)
+                motion.states.append({"values": {"spare_mm": 3.0}, "built": True})
+                motion.body_changes = body
+                found = dropped(run(CAPTURE, motion))["spare_mm"]
+                self.assertEqual((found["used"], found.get("tried")), want)
 
 
 class LinkOutcomeTest(unittest.TestCase):

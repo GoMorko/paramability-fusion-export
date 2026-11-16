@@ -69,7 +69,9 @@ that use that sketch, and those steps shape bodies of their component. A paramet
 is drawn around is ticked to start with and tried like a size behind a sketch dimension: if the sketch moves with it
 and the tries can follow, it is a free size and the outline follows it; if the outline changes in a way the tries
 cannot follow, it is "not followed" with the reason; if nothing in the part moves with it, it is "not used", with the
-reason that it was tried and changes nothing in this part. A parameter of a joint, or of a move that places a
+reason that it was tried and changes nothing in this part. The export says that only when the part itself stayed the
+same at each try of that parameter. When the part changed but no copied step follows the parameter, it is "not
+followed", with the reason that it changes this part in a way the copy does not follow; the copy keeps its value now. A parameter of a joint, or of a move that places a
 component, may move the pipe against the part, so it counts for every such sketch too. Up to 8 more ticked parameters that nothing seems to tie
 to the part are tried too, after the others, since you know your design.
 
