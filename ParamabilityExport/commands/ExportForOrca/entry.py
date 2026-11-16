@@ -7,7 +7,7 @@ from ... import config
 from ...lib.design_edit.marker import marker_note, read_marker
 from ...lib.dialog_model.orca_result import preview as left_out_preview
 from ...lib.design_edit.timeline_health import read_timeline
-from ...lib.export_plan.size_offers import offers as size_offers, table_for_body
+from ...lib.export_plan.size_offers import ORCA, offers as size_offers, table_for_body
 from ...lib.fusion_reader.design_info import default_length_unit, detect_up_axis
 from ...lib.fusion_reader.parameters import list_model_parameters, list_user_parameters
 from ...lib.fusion_reader.rows import DesignParameterStore
@@ -58,7 +58,8 @@ def _on_created(args):
     def offers_for(picked):
         """The dialog rows for the picked body: its own parameters when its steps can be read."""
         capture = captures.get(picked) if picked is not None else None
-        return size_offers(table_for_body(parameters, design_unit, model_params, capture), parameters, design_unit)
+        return size_offers(table_for_body(parameters, design_unit, model_params, capture), parameters, design_unit,
+                           destination=ORCA)
 
     up_axis = detect_up_axis(adsk.core.Application.get())
 

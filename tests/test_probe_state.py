@@ -207,6 +207,18 @@ class BorrowedSketchTest(unittest.TestCase):
         self.assertEqual(got["sketches"], {})
         self.assertIn("place", got["unread"]["skL"])
 
+    def test_a_sketch_of_the_root_is_placed_with_the_roots_own_frame(self):
+        from tests.test_capture_reader_component import Tray
+        tray = Tray()
+        design = tray.design([])
+        root_sketch = sketch("skR")
+        root_sketch.parentComponent = design.rootComponent
+        root_sketch.profiles = Coll([profile(root_sketch, SQUARE)])
+        design.findEntityByToken = lambda token: [root_sketch] if token == "skR" else []
+        request = {"sketches": ["skR"], "borrowed": {"skR": {"path": ""}}}
+        record = read_state(design, request, ReadContext(design, tray.proxy))["sketches"]["skR"]
+        self.assertEqual((record["frame"]["origin"], record["placement"]["source"]), ([-50, 100, 0], "root"))
+
     def test_a_place_that_does_not_match_the_points_leaves_the_sketch_out(self):
         self.occurrence.transform2 = self.matrix(turn_z(0, (99, 0, 0)))
         got = self.read(borrowed={"skL": {"path": "Lid:1"}})

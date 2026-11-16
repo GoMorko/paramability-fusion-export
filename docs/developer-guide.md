@@ -154,7 +154,9 @@ When the person clicks "Export for Paramability", Fusion calls `_on_created` in
    the capture once, without sizes. When a step stops the copy, the warning says "Copy stops at Extrude9 (extrude)."
    and "The part will be saved as a fixed shape". When the copy goes on, it lists up to three steps that are "Likely
    left out of the copy". A button "Show in timeline" selects the stopping step in Fusion.
-7. On OK, `export_flow.run_export` runs. It asks for the file name, reads the marker again, builds an
+7. On OK, `export_flow.run_export` runs. It asks for the file name (`package/naming.py`: the name of the component
+   that holds the bodies, else the name of the design; the root component gives the name of the design, because
+   Fusion names the root "(Unsaved)" before the first save), reads the marker again, builds an
    `ExportRequest` (title, writer text, up axis, parameters, ticked names, typed ranges, marker, "Faster tries", the
    time limit of the tries) and
    runs the pipeline inside `export_common.run_guarded`.
@@ -206,6 +208,11 @@ The wording of a line is shared with the result window (`export_plan.messages.le
 same before and after the export. The result of `summarize` has these keys: `hint`, `left_out` (a list of dicts
 `{ index, name, reason, hint }`) and `more_may_show`. For several bodies, `summarize_many` joins the lines of each
 body, with the name of the body in front, and adds "More may show after the export." once.
+
+The dialog of Export for Orca uses the same parameter table. Its offers name their destination
+(`size_offers.offers(..., destination=ORCA)`, the key `destination` of each offer). Thus the texts of the table name
+Orca's Design tab and not Paramability: the reason of a tick, the line under the table for a ticked row, the title of
+the status column ("In Orca", `dialog_rows.header`) and the tooltip of the up direction (`dialog_rows.up_tooltip`).
 
 The dialog of Export for Orca has the same box under the body picker. Its warning comes from `preview(capture, up_axis)`
 in `dialog_model/orca_result.py`, and `commands/ExportForOrca/entry.py` shows it through `recipe_dialog.show_stop`. The
@@ -1175,7 +1182,7 @@ The table of causes. The column "Given by" says which code gives the cause. The 
 | `boundaryFill` | the step type Boundary Fill | Build the solid with extrudes and cuts instead of filling a boundary. |
 | `newComponent` | an extrude, revolve, loft or sweep that makes a new component | Make the body in the component that holds the part. |
 | `otherComponent` | a step that reaches into another component (the walk) | Use sketches, planes and faces of the part's own component. |
-| `oldExport` | a step whose only records of another component are sketch outlines, planes or axes with none of the place data of the current reader (an export from before 0.10.6) | Export again with this version of the add-in. |
+| `oldExport` | a step whose only records of another component are sketch outlines, planes or axes, in a capture that an add-in before 0.10.6 read (`addin` of the capture, `refs.old_writer`) | Export again with this version of the add-in. |
 | `changedFromOtherComponent` | a step of another component that changes the part (a stop) | Make the step in the part's own component, or export both parts together. |
 | `madeInOtherComponent` | a body that was made in another component and moved here later (a stop) | Model the body in the component you export, or export the component that holds it. |
 | `afterGap` | a step that picks faces of a gap, repeats a gap, or sits on a floating join | Fix the step it builds on first. |
@@ -1839,7 +1846,7 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     of several components, so any ticked size can move the other component.
 - `refs.py`: planes, faces, axes, directions and points of other components. The shape names (`PLANE`, `AXIS`,
   `POINT`, `DIRECTION`), `BODY_LISTS`, `is_foreign`, `bring_in`, `acting_sizes`, `reaching`, `mark_all`,
-  `from_old_export` and `why_foreign`.
+  `old_writer`, `from_old_export` and `why_foreign`.
 - `step_links.py`: the facts of the steps that the geometry links (`params/geometry_links.py`) need. The geometry
   links tell which user parameters can move the part through the geometry of another component. That module is in
   `params`, below the shared layer, and it does not read the data of a step. This module reads the data and gives
@@ -2096,6 +2103,13 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
   - A face or plane that a step starts from or reaches to. `moving_reaches` lists the flat faces and planes of the part
     that can move, and that the probe can find again. `reach_sizes` gives the sizes that can move one of them.
     `any_face_sizes` gives the sizes that can change any face of the body: every size an earlier step reads.
+  - Geometry projected into a sketch. `projection_sizes` gives the sizes that can move it: every size that a step
+    before the sketch reads. A sketch takes its projections at its place in the timeline. Thus the dimensions of the
+    sketch and the steps after the sketch do not move them. The Orca output marks these sizes when an outline corner
+    or a hole centre follows projected geometry (`sketch_sizes.projection_doubts`, `hole_place`). A projection of the
+    origin point, an origin axis or an origin plane of the component of the sketch does not move with the sizes. The
+    reader marks it with `origin: true` in the sketch graph. The sketch solver then keeps it as a fixed number
+    (`sketch_solve/constants.py`, `own_origin`), as it keeps the origin of the sketch.
   - Another plane, axis or face of the component of the body that a step uses as a place: a split plane, a mirror
     plane, a turning axis. `reference_sizes` gives the sizes that can move it. These are the sizes behind a
     construction plane or axis and behind the construction geometry that it is built on. A record without a token
@@ -2104,7 +2118,9 @@ which sizes can move it) and doubts (sizes that can move something whose motion 
     geometry was made). For a line of a sketch, `sketch_line_sizes` gives the sizes. These are the sizes of that
     sketch and the sizes that can move the plane of that sketch. When the sketch holds projections, or when the
     capture does not tell, they also include every size that a step before the sketch reads. Projected geometry of
-    the part moves with those sizes. An origin plane or axis gives no size. A record of another component gives no
+    the part moves with those sizes. A projection of the origin point, an origin axis or an origin plane of the
+    component of the sketch is not counted as a projection (`read_sketch.holds_projection`), because it does not move
+    with the sizes. An origin plane or axis gives no size. A record of another component gives no
     size here, because its sizes come from its measured reference (`refs.mark_all`). A place that the step works out
     from another record (`fixed`, the axis of a sweep path arc) gives no size, because the step marks the sizes of
     that record. Unknown counts as "can move". A record that does not say what it is (an older capture) gives every
@@ -3074,6 +3090,16 @@ is true:
 Inside a tool of another component, the copies of a pattern are carried into the frame of that component
 (`Context.component_frame`).
 
+The reader gives an outline of another component's sketch in two ways. In the first way, Fusion gives the profile
+through the occurrence of that component. The reader then reads the place of the sketch through that occurrence. In
+the second way, Fusion gives the native profile, with no occurrence. This is the usual way for an extrude, a revolve,
+a loft or a sweep that a person made with the operation New Component. That step and its body are in the new
+component, but the sketch stays in the component that was active (often the root). Fusion reads the operation of such
+a step as New Body. The reader then reads the place of the sketch from the component of the sketch
+(`placement.native_sketch_placement`). A sketch of the root gets the frame of the root. A sketch of another component
+gets the place of the one occurrence of that component. When that component has more than one occurrence, the place
+is not known, and the step stays a gap. The size probe reads the place of the sketch in the same way at each try.
+
 An outline of another component's sketch follows the same rules (`design_model/borrowed.py`). When the motion file has
 values for the outline, the outline follows them like an outline of the part's own sketch. When it has none, the outline
 is written as numbers, and every size that can move that sketch is marked. `borrowed.movers` finds these sizes:
@@ -3409,11 +3435,13 @@ A step becomes a gap (left out, recipe still written):
   a cap that is passed, a step in a tool body: see 3.12 and 3.13);
 - its handler answers a `Refusal` (an extrude with a taper on a face, a revolve axis it cannot use, a draft with two
   angles);
-- it reaches into another component in a way the copy cannot follow (`foreign` records). An export from before 0.10.6
-  marked the part's own sketches and planes, when seen through an occurrence, as records of another component. A step
-  whose only such records are sketch outlines, planes or axes with none of the place data of the current reader is left
-  out with the cause `oldExport` and the tip to export again (`design_model/refs.py`, `from_old_export`). An edge or a face record
-  carries no place data in any version, so it is never taken for old;
+- it reaches into another component in a way the copy cannot follow (`foreign` records). An add-in before 0.10.6
+  marked the part's own sketches and planes, when seen through an occurrence, as records of another component. The
+  capture tells which add-in version read it (`addin`). When that version is before 0.10.6, a step whose only such
+  records are sketch outlines, planes or axes is left out with the cause `oldExport` and the tip to export again
+  (`design_model/refs.py`, `old_writer` and `from_old_export`). A capture with no version, or with a later one, is
+  never taken for old. A missing key of a record does not tell the version. An edge or a face record is never taken
+  for old;
 - it picks faces of a gap, or may pick them (`cause: picks`);
 - it is a pattern or mirror of a gap;
 - it is a Combine whose tool cannot be built;

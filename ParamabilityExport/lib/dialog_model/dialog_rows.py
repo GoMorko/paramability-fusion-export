@@ -10,12 +10,14 @@ import re
 from ..package.units import display_from_manifest, manifest_from_display, unit_kind
 from ..params.defaults import COUNT_CAP
 from ..params.expressions.text import format_number
-from ..export_plan.size_offers import MAX_TICKED, limit_message, range_unit
+from ..export_plan.size_offers import MAX_TICKED, ORCA, PARAMABILITY, limit_message, range_unit
 
 SIZE, KEEP, LOCKED, FORMULA = "size", "keep", "locked", "formula"
 
 HEADERS = {"tick": "", "name": "Parameter", "now": "Now", "min": "Min", "max": "Max",
            "status": "In Paramability"}
+# The title of the status column for an export to Orca.
+ORCA_STATUS = "In Orca"
 # The name column is the widest: long names stay on one line, the rest are shortened with a middle ellipsis.
 RATIOS = {"tick": 1, "name": 9, "now": 2, "min": 2, "max": 2, "status": 4}
 
@@ -57,10 +59,19 @@ def columns():
     return ("tick", "name", "now", "min", "max", "status")
 
 
-def header(key, design_unit="mm"):
-    """The column title. Min and Max name the design's length unit, since lengths are typed in it."""
+def header(key, design_unit="mm", destination=PARAMABILITY):
+    """The column title. Min and Max name the design's length unit, since lengths are typed in it. The status column
+    names where the numbers can be changed (`destination`, as in `size_offers.offers`)."""
     unit = design_unit if unit_kind(design_unit) == "length" else "mm"
+    if key == "status" and destination == ORCA:
+        return ORCA_STATUS
     return "%s (%s)" % (HEADERS[key], unit) if key in ("min", "max") else HEADERS[key]
+
+
+def up_tooltip(destination=PARAMABILITY):
+    """The tooltip of the design up direction, naming where the part is opened."""
+    where = "Orca" if destination == ORCA else destination
+    return "Starts from the Fusion setting for new designs. Pick Y up if the part lies on its side in %s." % where
 
 
 def column_ratio(keys):
@@ -206,10 +217,12 @@ def _detail_parts(offer, ticked, lo_text, hi_text):
         lines.append("Comment: %s" % offer["comment"])
     lo = default_range_texts(offer)[0] if lo_text is None else lo_text
     hi = default_range_texts(offer)[1] if hi_text is None else hi_text
-    if ticked:
+    if ticked and offer.get("destination") == ORCA:
+        lines.append("A variable in %s." % ORCA)
+    elif ticked:
         unit = _unit_of(offer)
         unit = " " + unit if unit_kind(unit) == "length" else ""
-        lines.append("Size in Paramability from %s to %s%s." % (lo, hi, unit))
+        lines.append("Size in %s from %s to %s%s." % (offer.get("destination") or PARAMABILITY, lo, hi, unit))
     else:
         lines.append("Stays a fixed number. Tick it to make it a size.")
     if offer.get("through"):

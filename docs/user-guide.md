@@ -33,7 +33,8 @@ Nothing is typed in Fusion.
    anyway. A line "Copied with a note" lists steps that were copied with a remark. The list comes from the steps the
    dialog already read for the body, with no extra read of the design and no size tries; the Text Commands window
    shows how long it took.
-5. Pick the design up direction, click OK and choose where to save the file.
+5. Pick the design up direction, click OK and choose where to save the file. The file name offered is the name of the
+   component that holds the body, or the name of the design for a body that is not in a component.
 6. A window then shows short sections, each starting with a `# Title` line. Sections with nothing to say are left out:
    - `# Result`: the file, what to do next, whether it is an editable copy (or one with steps left out) and how many
      parameters come along as variables. A file with several bodies has one line per body.
@@ -274,7 +275,8 @@ parameters become its variables.
 
 1. Click **Export for Orca (experimental)**. It is the third button of the add-in, next to Export for Paramability
    and Export size choices.
-2. Pick the body and tick the parameters you want as variables.
+2. Pick the body and tick the parameters you want as variables. The parameter table says "In Orca", and a ticked
+   row says it becomes a variable in Orca's Design tab. Min and Max are not used.
 3. Save the file. Open it in OrcaSlicer 2.5.
 
 This export is experimental. It copies fewer kinds of steps than Export for Paramability. A step it cannot copy is

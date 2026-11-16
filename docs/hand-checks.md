@@ -647,3 +647,19 @@ Longer wording and past results are in `docs/hand-tests.md` under the same id.
     of the box tool: 6 copies round the circle, 3 over 120 degrees, and 3 along X. Each copy matches the STEP. If
     a pattern is left out with "The copies of this pattern could not be matched to the bodies it made", note the
     frames and the body points.
+60. NC1, steps that make a new component. Add a user parameter `Len` = 30 mm. With the top level active, sketch a
+    30 x 20 mm rectangle on the XY plane, width `Len`, and extrude it 10 mm with the operation New Component. In the
+    same way revolve a 10 x 20 mm rectangle on the XZ plane (50 to 60 mm from the Z axis) a full turn about the Z axis,
+    and loft a 20 mm square on the XY plane to a 10 mm square on a plane 15 mm up, each with New Component.
+    Export: export the body of each new component, tick `Len` for the extrude. Each copy is written as a recipe and
+    matches the STEP, with no "older version of the add-in" reason. In Paramability, change `Len` to 40 mm: the
+    extrude grows like in Fusion. Then move the first new component 20 mm along X (Position, Capture Position) and
+    export it again: the copy still matches. Afterwards the design is as before.
+61. HO1, a hole placed from the projected origin. Add user parameters `Width` = 80 mm, `Depth` = 60 mm, `Height` = 30
+    mm and `HoleX` = 20 mm. Sketch a centred rectangle `Width` x `Depth` on the XY plane and extrude it `Height` up.
+    Sketch on the top face, project the origin point (Project, then the origin in the browser), add a sketch point
+    and dimension it `HoleX` along X from the projected origin, on the same line in Y. Add a simple 6 mm hole on
+    that point, 10 mm deep.
+    Export: Export for Orca, tick all four. `HoleX` is a variable of the hole place, not fixed, and no size has the
+    reason "placed by geometry projected into Sketch2". In Orca, change `HoleX` to 30 mm: the hole moves like in
+    Fusion. Afterwards the design is as before.

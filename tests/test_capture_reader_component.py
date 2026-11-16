@@ -242,6 +242,32 @@ class ForeignTest(unittest.TestCase):
                          ([110, 50, 32], 3))
         self.assertEqual(profile["sketch_params"], [{"name": "d7", "expression": "wall_mm * 2", "reads": ["wall_mm"]}])
 
+    def native_sketch_profile(self, root_sketch, occurrences):
+        """The profile an extrude of the Tray (made as a new component) reads from a native sketch of the root, or
+        of another component when `root_sketch` is false. `occurrences` are those of any component."""
+        profile = rect_profile(w=10, h=10)
+        ext = self.tray.extrude()
+        ext[0].profile = profile
+        design = self.tray.design([self.tray.feature("Sketch", "S"), ext])
+        design.rootComponent.allOccurrencesByComponent = lambda c: Coll(occurrences)
+        profile.parentSketch = Obj("fusion::Sketch", name="Sketch1", transform=profile.parentSketch.transform,
+                                   parentComponent=design.rootComponent if root_sketch else self.other,
+                                   sketchDimensions=Coll([]))
+        return read(design, self.tray.proxy)["items"][1]["data"]["profiles"][0]
+
+    def test_a_native_sketch_of_the_root_is_placed_through_the_targets_place(self):
+        profile = self.native_sketch_profile(True, [self.tray.occurrence])
+        self.assertTrue(profile["foreign"])
+        self.assertEqual((profile["placement"]["source"], profile["placement"]["path"]), ("root", ""))
+        self.assertEqual(profile["frame"], {"origin": [-50, 100, 0], "x": [0, -1, 0], "y": [1, 0, 0], "z": [0, 0, 1]})
+        self.assertEqual(profile["native_frame"]["origin"], [0, 0, 0])
+
+    def test_a_native_sketch_of_a_component_without_one_place_keeps_its_frame_and_the_reason(self):
+        profile = self.native_sketch_profile(False, [])
+        self.assertTrue(profile["foreign"])
+        self.assertIn("error", profile["placement"])
+        self.assertNotIn("native_frame", profile)
+
     def test_a_mirror_plane_of_the_root_is_brought_into_the_target(self):
         plane = Obj("fusion::ConstructionPlane", parentComponent=Obj(entityToken="root"),
                     geometry=Obj("core::Plane", origin=P(0, 0, 0), normal=Obj(x=1, y=0, z=0)))

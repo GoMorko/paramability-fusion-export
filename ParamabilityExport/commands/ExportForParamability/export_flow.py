@@ -42,7 +42,7 @@ def _read_capture(design, current, timer=None):
     """The capture, or the exception that stopped it. Only a lost timeline marker is not swallowed. `timer` is the
     `CaptureTimer` that gets the time of the read."""
     try:
-        return read_capture(design, current, timer=timer)
+        return read_capture(design, current, timer=timer, addin=export_common.addin_release())
     except MarkerError:
         raise
     except Exception as exc:

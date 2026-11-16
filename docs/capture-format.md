@@ -30,6 +30,7 @@ that lacks `capture`, `target` or `items`, with a `CaptureError`.
 ```json
 {
   "capture": 3,
+  "addin": "0.13.0",
   "fusion": "2.0.21508",
   "design": "Cable clip",
   "up_axis": "z",
@@ -44,6 +45,11 @@ that lacks `capture`, `target` or `items`, with a `CaptureError`.
   "reach": REACH
 }
 ```
+
+`addin` is the version of the add-in that read the capture (from its `.manifest`). It is optional: captures read
+before it was kept do not have it, and the replay of a saved report or package takes it from the report's `writer`
+text. The translator reads it only to tell an export of an add-in before 0.10.6 (see "Old exports" in the part on
+other components).
 
 `sketch_graphs` (section 2, "Sketch graphs") is optional, is kept in `report.json` with the rest of the capture and
 nothing reads it yet: it holds the points, curves,
@@ -322,7 +328,10 @@ curves). A borrowed sketch is read through its native object, so its numbers are
 - Per entity: `fixed` is `isFixed`; `free` is `not isFullyConstrained`; `linked` is `isLinked`; `construction` is
   `SketchCurve.isConstruction`. `reference` is `null` for own geometry, else
   `{ "source": "own" | "other" | "none", "component", "token" }` from `referencedEntity`: `own` is a source in the
-  target's component, `other` one in another component, `none` a reference with no source (not parametric).
+  target's component, `other` one in another component, `none` a reference with no source (not parametric). A
+  projection of the origin point (`Component.originConstructionPoint`), an origin axis or an origin plane of the
+  component named in `component` also has `"origin": true` (`placement.is_component_origin`). A projected origin of
+  the sketch's own component sits still in the sketch, whatever the sizes (`sketch_solve.constants.own_origin`).
 - Curve kinds: `line` (`points`: start, end; `center_line`), `arc` (`center`, `points`: start, end, counter clockwise;
   `radius`), `circle` (`center`, `radius`), and for curves the reader does not tabulate `ellipse`, `elliptical_arc`,
   `conic`, `spline` or `other` (with `name`, the class name); these carry no geometry beyond the common fields.
@@ -552,8 +561,11 @@ z = 0). In the plane z = 0 with a sketch frame other than the identity, the read
 `ProfileCurve.sketchEntity`; if that cannot decide it writes `ambiguous` and the translator refuses the profile. A
 loop whose chained curves enclose no area is refused.
 
-A profile of another component's sketch (Fusion hands it over through that component's occurrence) is read from its
-`nativeObject`, so `loops` are in that sketch's own 2D frame, and it keeps `"foreign": true`. It adds:
+A profile of another component's sketch is read from its native object, so `loops` are in that sketch's own 2D frame,
+and it keeps `"foreign": true`. Fusion hands such a profile over in two ways: through that component's occurrence
+(`nativeObject` gives the native profile), or native, without an occurrence. The second way is the usual one for an
+extrude, revolve, loft or sweep made with the operation New Component: the step and its body belong to the new
+component, while its sketch stays in the component that was active (often the root). It adds:
 
 - `native_frame`: the sketch frame in its own component's coordinates;
 - `frame`: the same frame brought into the target's coordinates through the assembly (that component's `placement`,
@@ -561,7 +573,12 @@ A profile of another component's sketch (Fusion hands it over through that compo
 - `component`: `{ token, name }` of the sketch's component;
 - `placement`: like the target's placement (section 2), read for the occurrence the profile came through. Its point
   check compares `SketchPoint.worldGeometry` of up to three native sketch points with the same points made for the
-  occurrence (`SketchPoint.createForAssemblyContext`). Without a match it holds `error` and no `frame`;
+  occurrence (`SketchPoint.createForAssemblyContext`). Without a match it holds `error` and no `frame`. A profile
+  handed over native has no occurrence: a sketch of the root gets the root's own frame
+  (`{ "path": "", "frame": identity, "source": "root", "checked_points": 0 }`), and a sketch of another component
+  is placed through the one occurrence of that component (`Component.allOccurrencesByComponent`, then the same point
+  check). A component with several occurrences gives `error` (`native_sketch_placement` in
+  `lib/fusion_reader/placement.py`);
 - `sketch_params`: one `{ name, expression, reads }` per sketch dimension (`Sketch.sketchDimensions`,
   `SketchDimension.parameter`), where `reads` lists every parameter it reads, directly or through others
   (`dependencyParameters`).
@@ -635,7 +652,10 @@ against `samples`.
 ```
 
 - `operation`: `join`, `cut`, `intersect`, `newBody`, `newComponent` (from `FeatureOperations`). A new body from
-  several profiles is copied only when `bodies_after` lists one body (the profiles touch).
+  several profiles is copied only when `bodies_after` lists one body (the profiles touch). A feature made with the
+  operation New Component belongs to the new component, and Fusion reads its operation back as
+  `NewBodyFeatureOperation` (Fusion 2706): the capture of a body of that component reads `newBody`, and its profile
+  is a profile of another component's sketch handed over native (section 4).
 - `profiles`: section 4. A flat face of a body as the outline is a face record (section 4); the extrude's own
   length, taper and operation are read and followed as for a sketch outline.
 - `start`: `{ "kind": "profilePlane" }`, `{ "kind": "offset", "offset": mm }` (`OffsetStartDefinition.offset`),
@@ -763,7 +783,8 @@ against `samples`.
   `edge_points`, `made_by`, `definition`, `built_on`; see MirrorFeature below, `read_reference.axis_with_reference`).
   An axis from a sketch line of the body's component also has `sketch_reference`, what its sketch sits on (as a
   profile's `reference`, null when it cannot be read), and `sketch_projected`, true when that sketch holds projected
-  curves or points (`read_sketch.holds_projection`; null when that cannot be read). Older captures leave these keys
+  curves or points other than projections of its own component's origin point, axes and planes
+  (`read_sketch.holds_projection`; null when that cannot be read). Older captures leave these keys
   out; the translators then count the axis as one that may move with every size read before the step (a record
   with `entity` and `sketch_token` counts as a sketch line whose plane and projections are unknown).
 - `extent`: `{ "kind": "angle", "angle_deg", "symmetric" }` (`AngleExtentDefinition.angle`, `isSymmetric`),
@@ -1674,11 +1695,11 @@ or belongs to the root is read in the root's coordinates. The reader brings it i
 of another component loses `entity`, `sketch_token` and `sketch` (the probe follows only the target's own sketch
 lines); the sketch is named in its `ref`.
 
-A step whose only foreign records are sketch outlines, planes or axes with none of that place data (`component`,
-`placement`, `ref`, `assembly`) comes from an add-in before 0.10.6, which marked the part's own sketches and planes seen
-through an occurrence as foreign. The translator leaves such a step out with the cause `oldExport` and the tip to export
-again (`design_model/refs.py`, `from_old_export`). Edges and faces carry no place data in any version, so they are never taken for
-old.
+Old exports: add-ins before 0.10.6 marked the part's own sketches and planes seen through an occurrence as foreign.
+When the capture names such a version in `addin`, a step whose only foreign records are sketch outlines, planes or
+axes is left out with the cause `oldExport` and the tip to export again (`design_model/refs.py`, `from_old_export`).
+A capture that names no version, or a later one, is never taken for old: a missing place key does not tell the
+version. Edges and faces are never taken for old.
 
 The translator also records which other components' sizes the copy follows (`TranslateResult.follows_components`,
 `{ token, name }` each): a measured reference or a borrowed outline that moves with a size, and a sketch tied to a
@@ -2358,7 +2379,8 @@ entity is found with `Design.findEntityByToken` (the match without `assemblyCont
 - A sketch of another component that a step borrows is requested with the optional `borrowed`: `{ "<sketch token>":
   { "path": "<fullPathName the capture recorded>" } }`. It is found by token, read native, and its place is found
   again at every state: the occurrence of its component with that path (the only one when there is no path), then the
-  placement check of section 4 (native sketch points against the same points through the occurrence). Its `frame` is
+  placement check of section 4 (native sketch points against the same points through the occurrence). A sketch of
+  the root (path empty) has the root's own frame. Its `frame` is
   brought into the target's coordinates (that place, then the inverse of the target's, read once per capture), so
   it compares with the capture profile's brought-in `frame`; it adds `native_frame` and `placement` (`{ path, source }`).
   When it cannot be read or placed, it has no key under `sketches` and `unread` (only then present) gives
