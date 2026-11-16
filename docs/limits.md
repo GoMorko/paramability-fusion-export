@@ -96,6 +96,11 @@ What the copy can and cannot do, step by step. The README lists only the main li
   it is marked "may give unexpected results" with the step named. An origin plane or axis of another component is treated the same way, since it moves with that component. A parameter of a joint, or of a move that places a component, counts as one that may move every such place, and every sketch of the part drawn around another component, since the export cannot tell which component it places. A hole placed
   on an edge of another component, and an extrude that starts from or reaches to a curved face of one, are left out of
   the copy.
+- A flat face of another body of the part (a helper body) that an extrude starts from or reaches to follows the sizes
+  the tries measured. A face of this body that lies at the same place is never used instead. Where the tries could
+  not measure the face, the sizes that the steps before the extrude use are marked "may give unexpected results",
+  with the extrude named. When the tries saw a face or plane move in another way than the copied steps say, the copy
+  follows what the tries saw.
 - A link to another component is found only through the sketch itself: a projected curve or point, a constraint to
   one, or a sketch drawn on that component's face. A sketch that follows another component in another way (through
   a construction plane or axis built on it, or a pattern reaching into it) is not linked; the tries of unticked

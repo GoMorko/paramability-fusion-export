@@ -2819,6 +2819,45 @@ top edges, and `Shell1` opens the top face.
 - A point that no slab places "may sit on geometry that moves". Then every size the steps before it read is marked
   loose, with the step named in the reason.
 
+#### A face of another body
+
+An extrude can start from a face of another body, or reach to it. That other body is often a helper body: the designer
+uses it only to give the extrude a place.
+
+Example. `Body1` is a helper box. Its height is `Height` (10 mm). `Body2` is the exported body. The extrude of
+`Body2` starts 3 mm above the top face of `Body1` (`Lift`).
+
+- The walk builds `Body2` only. It does not write the steps of `Body1`, so it keeps no slab for `Body1`.
+- The capture keeps the body of each face that a step uses (`body` in the face record). When that body is not the
+  body that the walk builds (`Context.is_target`), the face is never "on this body" (`follow._beyond_tool`). This
+  is also true when a slab of `Body2` has a face at the same place. That slab face is not the face that the step
+  uses.
+- No slab places the face. Thus every size that the items before the step read can move it
+  (`reach.any_face_sizes`). These sizes are marked, and the face counts as a face that the copy cannot follow.
+- When the probe measured the face, the measured move is written instead (see the next part). In the example, the
+  sketch origin of `Body2` gets `z = { "expr": "Height + Lift" }`. Both sizes stay free.
+- This rule is for a step outside a tool. In a tool, the walk that holds the tool places a face that is not on the
+  tool (`_beyond_tool`, see the tool walk).
+
+#### A face that the probe measured
+
+The probe reads a flat face or a construction plane again at every try when an extrude starts from it or reaches to
+it (`reach.moving_reaches`). The slabs can also give a move for that face. Two answers are then available. The
+translator uses the move of the slabs only when these two conditions are true (`extrude/reach_motion.py`,
+`target_shift`):
+
+1. The slabs place the face without a doubt.
+2. The move of the slabs is equal to the measured move at each try that built and that set the free sizes inside
+   their ranges (`_agrees`). The tolerance is 0.001 mm (`AGREE_TOL`).
+
+When one condition is false, the translator writes the measured move (`_measured_shift`). It also writes the
+measured move when the measured move is stuck, because then the two answers cannot be compared. Thus a move that
+the slabs work out never wins over a move that the probe saw.
+
+Example. The slabs say that a face does not move, because nothing that the walk wrote reads a size yet. The probe
+tried `Height` at 7.5 mm and at 12.5 mm, and the face moved by -2.5 mm and +2.5 mm. The two answers are different
+at these tries. So the translator writes the measured move, `Height - 10`, and `Height` stays free.
+
 #### The picks that Fusion was given: faces and tangent chains
 
 A round or chamfer set can get its edges from faces (every edge around each face) or from a tangent chain (every edge

@@ -1791,9 +1791,12 @@ How the translator uses them (`translate(capture, size_table=table, motion=motio
     through chains of planes. An origin plane, or one made from parameters alone, stays. Any other plane built on the part (at an angle, through an edge, tangent, along a
     path) marks the sizes read before the step, and so does a plane the capture does not describe (an older add-in).
     When the steps cannot place the face or plane (a side wall whose sketch line moves, a face of a step the copy
-    does not model, a plane built on such a face), the probe's measure of it decides instead
+    does not model, a face of another body than the one walked (its `body`, `follow._beyond_tool`), a plane built on
+    such a face), or when the move they give differs from the probe's measure at a try that built, the probe's
+    measure of it decides instead
     (`lib/translator/extrude/reach_motion.py`, "Measured references in the motion file"): its move is written as a formula, a
-    size that does not move it is not marked, and only a size it cannot follow is marked;
+    size that does not move it is not marked, and only a size it cannot follow is marked. Without a measure, a face
+    of another body marks every size the items before the step read (`design_model.reach.any_face_sizes`);
   - a start offset that follows sizes, or a "from entity" start on a moving end face, moves the sketch placement
     along its normal (`sketch.on.origin` as formulas), and the picks on that extrude follow it too. A side that
     reaches "to" a face from such a start keeps its end on the face: its length is the face's move less the start's.
@@ -2253,8 +2256,10 @@ the same way when it may move with the part (a face, or a plane built on the par
 (`design_model.reach.moving_reaches`, `plan.own_reaches`). Its request carries `"own": true`, and the reader reads it natively, in
 the part's coordinates like the capture. The sizes tried for it are every size an item of the body's component reads
 before the step (for a plane, before the plane was made) and the sizes behind the planes of a chain
-(`design_model.reach.reach_sizes`, part of `plane_sizes.plane_driven`). The translator uses the measure only when the steps written
-before cannot place the face without a doubt (`reach_motion.target_shift`); then those same sizes get the three
+(`design_model.reach.reach_sizes`, part of `plane_sizes.plane_driven`). The translator uses the measure when the steps written
+before cannot place the face without a doubt, or when the move they give differs from the measure by more than 0.001 mm
+at a try that built and set the free sizes inside their ranges, or when the measure is stuck (`reach_motion.target_shift`,
+`_agrees`); then those same sizes get the three
 answers below, and the formula keeps its constant apart so the extrude length folds into one number.
 
 | Reference | Keys | Meaning |
